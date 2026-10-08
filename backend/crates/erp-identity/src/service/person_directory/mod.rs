@@ -31,6 +31,9 @@ impl PersonDirectoryService {
     ///
     /// # 返回
     /// 返回人员目录服务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
         Self { db, rbac }
     }

@@ -28,20 +28,38 @@ pub trait CostExt {
 
     /// 获取 `cost_entry` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `CostEntryRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn cost_entries(&self) -> CostEntryRepository<'_>;
 
     /// 获取 `cost_allocation` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `CostAllocationRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn cost_allocations(&self) -> CostAllocationRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `CostRepository` 实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn cost(&self) -> CostRepository<'_>;
 }
 

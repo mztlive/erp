@@ -25,8 +25,19 @@ pub struct ResumeCommand {
 
 /// 将旧 `BLOCKED` 执行置为 `SUPERSEDED`，并以 `ASSIGNEE_RECOVERY` 进入同一节点。
 ///
+/// # 参数
+/// * `instance` - 受阻流程实例
+/// * `current` - 当前受阻执行
+/// * `assignee` - 该节点的实例审批人绑定
+/// * `graph` - 与实例冻结定义一致的定义图
+/// * `command` - 新执行身份、已恢复资格与调用方时间
+///
+/// # 返回
+/// 返回旧执行已替换、并在同一轮同一节点进入新活动执行的迁移计划。
+///
 /// # 错误
-/// 非人员失效阻塞、绑定不再等于定义快照或原审批人资格仍失效时返回错误。
+/// 实例或执行不是人员失效受阻、绑定或资格不属于原审批人、定义图与冻结事实不一致、
+/// 新执行序号未递增或主键重复、资格仍失效，或进入节点失败时返回错误。
 pub fn resume(
     instance: ApprovalProcessInstance,
     mut current: ApprovalNodeExecution,

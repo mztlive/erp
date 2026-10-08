@@ -26,40 +26,70 @@ pub struct BackofficeAuthResult {
 impl BackofficeAuthResult {
     /// 返回账号 ID。
     ///
-    /// # 返回值
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
     /// 返回认证成功的账号 ID。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn account_id(&self) -> &str {
         self.account_id.as_str()
     }
 
     /// 返回规范化后的登录账号。
     ///
-    /// # 返回值
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
     /// 返回认证成功的登录账号。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn account(&self) -> &str {
         self.account.as_str()
     }
 
     /// 返回本次认证已读取的账号名称，不增加额外账号查询。
     ///
-    /// # 返回值
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
     /// 返回认证成功时的名称。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn name(&self) -> &str {
         &self.name
     }
 
     /// 返回后台账号类型。
     ///
-    /// # 返回值
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
     /// 返回认证成功的账号类型。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn account_kind(&self) -> DomainAccountKind {
         self.account_kind
     }
 
     /// 返回签发身份时的账号持久化版本。
     ///
-    /// # 返回值
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
     /// 返回用于撤销旧 token 的账号版本。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn account_version(&self) -> u64 {
         self.account_version
     }
@@ -91,8 +121,11 @@ impl BackofficeAuthService {
     /// # 参数
     /// * `db` - 数据库实例
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回认证服务实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
@@ -106,7 +139,7 @@ impl BackofficeAuthService {
     /// # 参数
     /// * `request` - 账号、密码和后台账号类型
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回不含密码哈希的后台身份信息。
     ///
     /// # 错误
@@ -150,7 +183,7 @@ impl BackofficeAuthService {
     /// * `account_kind` - token 中的后台账号类型
     /// * `account_version` - token 签发时的账号版本
     ///
-    /// # 返回值
+    /// # 返回
     /// 当前身份仍可使用时返回最小后台身份信息。
     ///
     /// # 错误

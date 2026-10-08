@@ -90,8 +90,14 @@ pub(crate) fn ensure_valid_window(valid_from: BusinessDate, valid_to: Option<Bus
 pub trait PartyOwned {
     /// 返回实体所属 Party ID。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回稳定 Party ID 引用。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn party_id(&self) -> &PartyId;
 
     /// 校验实体属于指定 Party。

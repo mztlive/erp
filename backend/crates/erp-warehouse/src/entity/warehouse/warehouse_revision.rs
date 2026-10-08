@@ -77,16 +77,28 @@ impl SensitiveText {
 
     /// 返回加密列密文。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回密文字符串（调用方负责按权限展示）。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn encrypted(&self) -> &str {
         &self.encrypted
     }
 
     /// 返回带密钥 HMAC 查询指纹。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回指纹字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn fingerprint_value(&self) -> &str {
         &self.fingerprint
     }
@@ -190,6 +202,9 @@ impl WarehouseRevision {
     ///
     /// # 返回
     /// 业务日落在 `[effective_from, effective_to)` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_effective_on(&self, business_day: BusinessDate) -> bool {
         WarehouseSkuPolicyPeriod::new(self.effective_from, self.effective_to)
             .is_ok_and(|period| period.contains(business_day))

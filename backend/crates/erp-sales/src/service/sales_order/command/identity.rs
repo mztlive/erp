@@ -1,10 +1,21 @@
-//! Stable sales command receipt identities and payload fingerprints.
+//! 销售命令收据身份与请求载荷指纹。
 use sha2::{Digest, Sha256};
 
 use crate::dto::sales_order::{HandoverSalesOrderRequest, SubmitSalesOrderRequest};
 use crate::{Error, Result};
 
 /// 为销售提交幂等命令生成不泄露原始幂等键的稳定收据 ID。
+///
+/// # 参数
+/// * `actor_id` - 操作人。
+/// * `sales_order_id` - 销售单。
+/// * `idempotency_key` - 原始幂等键，不参与明文输出。
+///
+/// # 返回
+/// 返回 `sales-order-submit-` 前缀的十六进制摘要。
+///
+/// # 错误
+/// 不返回错误。
 pub fn sales_submission_audit_id(actor_id: &str, sales_order_id: &str, idempotency_key: &str) -> String {
     format!(
         "sales-order-submit-{}",
@@ -13,6 +24,14 @@ pub fn sales_submission_audit_id(actor_id: &str, sales_order_id: &str, idempoten
 }
 
 /// 锁定同一幂等键可重放的完整请求身份。
+///
+/// # 参数
+/// * `actor_id` - 操作人。
+/// * `sales_order_id` - 销售单。
+/// * `request` - 完整提交请求。
+///
+/// # 返回
+/// 返回操作人、销售单和请求一起序列化后的十六进制摘要。
 ///
 /// # 错误
 /// 请求序列化失败时返回内部错误。
@@ -26,9 +45,19 @@ pub fn sales_submission_fingerprint(
     Ok(hex::encode(Sha256::digest(payload)))
 }
 
-/// Compute the unchanged sales command identity from its complete original input.
+/// 由操作人与幂等键生成建单收据 ID；不序列化请求，也不落库或绑定审批。
 ///
-/// Errors preserve serialization failure; no persistence or approval binding occurs here.
+/// 幂等键先 `trim` 再参与摘要。
+///
+/// # 参数
+/// * `actor_id` - 操作人。
+/// * `idempotency_key` - 原始幂等键。
+///
+/// # 返回
+/// 返回 `sales-order-create-` 前缀的十六进制摘要。
+///
+/// # 错误
+/// 不返回错误。
 pub fn sales_order_create_audit_id(actor_id: &str, idempotency_key: &str) -> String {
     let mut digest = Sha256::new();
     for part in [actor_id, idempotency_key.trim()] {
@@ -38,9 +67,17 @@ pub fn sales_order_create_audit_id(actor_id: &str, idempotency_key: &str) -> Str
     format!("sales-order-create-{}", hex::encode(digest.finalize()))
 }
 
-/// Compute the unchanged sales command identity from its complete original input.
+/// 锁定同一建单幂等键可重放的操作人与完整请求载荷；不落库，也不绑定审批。
 ///
-/// Errors preserve serialization failure; no persistence or approval binding occurs here.
+/// # 参数
+/// * `actor_id` - 操作人。
+/// * `request` - 完整建单请求。
+///
+/// # 返回
+/// 返回操作人与请求一起序列化后的十六进制摘要。
+///
+/// # 错误
+/// 请求序列化失败时返回 `Internal`。
 pub fn sales_order_create_fingerprint<T: serde::Serialize>(actor_id: &str, request: &T) -> Result<String> {
     let payload = serde_json::to_vec(&(actor_id, request))
         .map_err(|error| Error::Internal(format!("销售建单命令序列化失败: {error}")))?;
@@ -48,6 +85,17 @@ pub fn sales_order_create_fingerprint<T: serde::Serialize>(actor_id: &str, reque
 }
 
 /// 为销售责任交接幂等命令生成不泄露原始幂等键的稳定收据 ID。
+///
+/// # 参数
+/// * `actor_id` - 操作人。
+/// * `sales_order_id` - 销售单。
+/// * `idempotency_key` - 原始幂等键，不参与明文输出。
+///
+/// # 返回
+/// 返回 `sales-order-handover-` 前缀的十六进制摘要。
+///
+/// # 错误
+/// 不返回错误。
 pub fn sales_handover_audit_id(actor_id: &str, sales_order_id: &str, idempotency_key: &str) -> String {
     format!(
         "sales-order-handover-{}",
@@ -56,6 +104,14 @@ pub fn sales_handover_audit_id(actor_id: &str, sales_order_id: &str, idempotency
 }
 
 /// 锁定同一幂等键可重放的完整交接请求身份。
+///
+/// # 参数
+/// * `actor_id` - 操作人。
+/// * `sales_order_id` - 销售单。
+/// * `request` - 完整交接请求。
+///
+/// # 返回
+/// 返回操作人、销售单和请求一起序列化后的十六进制摘要。
 ///
 /// # 错误
 /// 请求序列化失败时返回内部错误。

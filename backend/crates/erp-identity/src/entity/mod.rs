@@ -1,4 +1,4 @@
-//! Identity entities and value objects.
+//! 身份领域的实体与值对象。
 
 pub mod access_control;
 pub mod account_core;

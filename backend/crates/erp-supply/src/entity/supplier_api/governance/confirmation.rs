@@ -84,7 +84,14 @@ pub struct BusinessCapabilityConfirmation {
 impl BusinessCapabilityConfirmation {
     /// 构造不可变业务确认事实。
     ///
-    /// # Errors
+    /// # 参数
+    /// * `id` - 确认记录主键
+    /// * `data` - 业务确认创建数据
+    ///
+    /// # 返回
+    /// 返回字段已规范化的不可变业务确认。
+    ///
+    /// # 错误
     /// 必填字段为空、引用过长、证据超限或对象版本为零时返回错误。
     pub fn new(id: impl Into<String>, data: BusinessCapabilityConfirmationData) -> Result<Self> {
         if data.connection_version == 0 || data.capability_version == 0 {
@@ -132,6 +139,9 @@ impl BusinessCapabilityConfirmation {
     ///
     /// # 返回
     /// 采购确认仍可用于当前能力配置时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn covers(&self, capability: &SupplierApiCapability) -> bool {
         if self.capability_code != capability.capability_code
             || self.requirement != BusinessCapabilityRequirement::Required
@@ -150,6 +160,9 @@ impl BusinessCapabilityConfirmation {
     ///
     /// # 返回
     /// 返回首个匹配确认；没有时返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn latest_for(confirmations: &[Self], capability_code: SupplierApiCapabilityCode) -> Option<&Self> {
         confirmations.iter().find(|confirmation| confirmation.capability_code == capability_code)
     }

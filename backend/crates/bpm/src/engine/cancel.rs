@@ -24,8 +24,17 @@ pub struct CancelCommand {
 /// 本函数不区分业务撤回与受阻取消；调用方必须先完成权限与 blocker 分类校验。
 /// 无法形成合法取消快照时返回不可提交错误。
 ///
+/// # 参数
+/// * `instance` - 当前流程实例
+/// * `current` - 待结束的当前节点执行
+/// * `command` - 取消人、原因、是否关闭开放任务与调用方时间
+///
+/// # 返回
+/// 返回提交类别为 `CommitRequired::Cancelled` 的迁移计划。
+///
 /// # 错误
-/// 终态、缺少当前执行或原因非法时返回错误。
+/// 实例已终态、当前执行不是活动或受阻、缺少当前执行、执行不是当前令牌、
+/// 原因空白，或模型拒绝取消快照时返回错误。
 pub fn cancel(
     mut instance: ApprovalProcessInstance,
     mut current: ApprovalNodeExecution,

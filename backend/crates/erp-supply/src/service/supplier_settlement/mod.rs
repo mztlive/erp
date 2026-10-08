@@ -38,6 +38,9 @@ impl SupplierSettlementService {
     ///
     /// # 返回
     /// 返回服务实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db, data_scope: FailClosedSettlementDataScopePort::shared() }
     }
@@ -49,12 +52,24 @@ impl SupplierSettlementService {
     ///
     /// # 返回
     /// 返回绑定范围 Port 的服务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_data_scope(mut self, data_scope: Arc<dyn SettlementDataScopePort>) -> Self {
         self.data_scope = data_scope;
         self
     }
 
     /// 构造本域范围访问器。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回绑定当前数据库和范围 Port 的 `SettlementAccess`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn access(&self) -> SettlementAccess {
         SettlementAccess::new(self.db.clone(), self.data_scope.clone())
     }
@@ -62,12 +77,14 @@ impl SupplierSettlementService {
     ///
     /// # 参数
     /// * `id` - 结算单 ID
+    /// * `executor` - 调用方执行器
     ///
     /// # 返回
     /// 返回结算单实体。
     ///
     /// # 错误
     /// * `NotFound` - 结算单不存在
+    /// 仓储读取失败时返回对应错误。
     pub async fn load_statement(
         &self,
         id: &str,
@@ -80,6 +97,16 @@ impl SupplierSettlementService {
             .ok_or_else(|| Error::NotFound("供应商结算单不存在".to_string()))
     }
     /// 加载结算单全部冻结明细。
+    ///
+    /// # 参数
+    /// * `id` - 结算单主键。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回该结算单的明细；没有明细时为空向量。
+    ///
+    /// # 错误
+    /// 仓储读取失败时返回对应错误。
     pub async fn load_statement_items(
         &self,
         id: &str,
@@ -88,6 +115,16 @@ impl SupplierSettlementService {
         shared::load_statement_items(&self.db, id, executor).await
     }
     /// 加载结算明细关联的全部正式差异。
+    ///
+    /// # 参数
+    /// * `items` - 已加载的结算明细。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回这些明细上的差异；没有差异时为空向量。
+    ///
+    /// # 错误
+    /// 仓储读取失败时返回对应错误。
     pub async fn load_statement_differences(
         &self,
         items: &[SupplierSettlementItem],
@@ -96,6 +133,16 @@ impl SupplierSettlementService {
         shared::load_statement_differences(&self.db, items, executor).await
     }
     /// 按原 CAS 更新结算单，不开启事务或追加外域副作用。
+    ///
+    /// # 参数
+    /// * `statement` - 待按 CAS 写回的结算单。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 无返回值。结算单已写回。
+    ///
+    /// # 错误
+    /// 仓储更新失败时返回对应错误。
     pub async fn persist_statement(
         &self,
         statement: &mut SupplierSettlementStatement,

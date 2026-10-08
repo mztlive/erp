@@ -54,11 +54,14 @@ impl SalesOrderLine {
 
     /// 将行标记为被后续版本移除（终态）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 迁移成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 行已移除时返回 [`Error::InvalidStateTransition`]。
+    /// 行状态不能迁到 `Removed` 时返回 [`Error::InvalidStateTransition`]。已是 `Removed` 时幂等成功。
     pub fn remove(&mut self) -> Result<()> {
         ensure_transition(self.line_status, LineStatus::Removed)?;
         self.line_status = LineStatus::Removed;

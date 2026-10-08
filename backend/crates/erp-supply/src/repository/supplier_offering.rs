@@ -166,6 +166,21 @@ impl Default for SupplierOfferingFilter {
 }
 
 impl QueryFilter for SupplierOfferingFilter {
+    /// 编译未删除供给查询；授权范围与筛选取交集，供应商 SKU 编码与关键词 SKU 取并集。
+    ///
+    /// 始终写入未删除的 `deleted_at`。供给主键、公司 SKU、供应商、状态、来源、维护人与业务组织按字段追加。
+    /// `scope` 与已有条件组成 `$and`。只给出 `supplier_sku_code` 时按字面量正则匹配；只给出
+    /// `keyword_sku_ids` 时按 `sku_id` 的 `$in`，空集合也写入。两者同时为 `Some` 时组成 `$or`，
+    /// 但空的关键词 SKU 不进入该 `$or`。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回编译后的查询文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(offering_ids) = &self.offering_ids {
@@ -634,6 +649,9 @@ impl<'a> SupplierOfferingDomainRepository<'a> {
     ///
     /// # 返回
     /// 返回仓储实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
@@ -728,6 +746,7 @@ impl<'a> SupplierOfferingDomainRepository<'a> {
     }
 }
 
+/// 白名单外的排序字段回退 `created_at`，避免把任意字段名透传给数据库。
 fn sort_doc(sort_by: Option<&str>, whitelist: &[&str], sort_ascending: bool) -> Document {
     let field = sort_by.filter(|field| whitelist.contains(field)).unwrap_or("created_at");
     doc! { field: if sort_ascending { 1 } else { -1 } }

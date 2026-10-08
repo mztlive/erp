@@ -1,4 +1,4 @@
-//! Composition adapters that bind consumer ports to providing domains.
+//! 把消费方端口接到提供方领域的组合 adapter。
 
 mod approval_materials;
 mod catalog;
@@ -56,12 +56,31 @@ pub use supplier_data_scope::{
 pub(crate) use warehouse::MongoWarehouseIdentity;
 pub use warehouse::warehouse_service;
 
-/// Construct a party service with audit and supplier-role adapters.
+/// 装配带审计与供应商角色 adapter 的主体服务。
+///
+/// # 参数
+/// * `db` - 主体集合所在数据库。
+///
+/// # 返回
+/// 返回已注入审计与供应商角色 Port 的主体服务。
+///
+/// # 错误
+/// 不返回错误。
 pub fn party_service(db: Database) -> PartyService {
     PartyService::new(db.clone(), MongoPartyAudit::shared(db.clone()), MongoSupplierRole::shared(db))
 }
 
-/// Construct a party contact service with composition adapters.
+/// 装配带审计、供应商角色与敏感数据编解码的主体联系人服务。
+///
+/// # 参数
+/// * `db` - 主体集合所在数据库。
+/// * `sensitive_data` - 联系人敏感字段编解码器。
+///
+/// # 返回
+/// 返回主体联系人服务。
+///
+/// # 错误
+/// 不返回错误。
 pub fn party_contact_service(db: Database, sensitive_data: Arc<SensitiveDataCodec>) -> PartyContactService {
     PartyContactService::new(
         db.clone(),
@@ -71,7 +90,17 @@ pub fn party_contact_service(db: Database, sensitive_data: Arc<SensitiveDataCode
     )
 }
 
-/// Construct a party address service with composition adapters.
+/// 装配带审计、供应商角色与敏感数据编解码的主体地址服务。
+///
+/// # 参数
+/// * `db` - 主体集合所在数据库。
+/// * `sensitive_data` - 地址敏感字段编解码器。
+///
+/// # 返回
+/// 返回主体地址服务。
+///
+/// # 错误
+/// 不返回错误。
 pub fn party_address_service(db: Database, sensitive_data: Arc<SensitiveDataCodec>) -> PartyAddressService {
     PartyAddressService::new(
         db.clone(),
@@ -81,7 +110,17 @@ pub fn party_address_service(db: Database, sensitive_data: Arc<SensitiveDataCode
     )
 }
 
-/// Construct a party bank-account service with composition adapters.
+/// 装配带审计、供应商角色与敏感数据编解码的主体银行账户服务。
+///
+/// # 参数
+/// * `db` - 主体集合所在数据库。
+/// * `sensitive_data` - 银行账户敏感字段编解码器。
+///
+/// # 返回
+/// 返回主体银行账户服务。
+///
+/// # 错误
+/// 不返回错误。
 pub fn party_bank_account_service(
     db: Database,
     sensitive_data: Arc<SensitiveDataCodec>,
@@ -94,7 +133,16 @@ pub fn party_bank_account_service(
     )
 }
 
-/// Construct a party tax-profile service with composition adapters.
+/// 装配带审计与供应商角色 adapter 的主体税务档案服务。
+///
+/// # 参数
+/// * `db` - 主体集合所在数据库。
+///
+/// # 返回
+/// 返回主体税务档案服务。
+///
+/// # 错误
+/// 不返回错误。
 pub fn party_tax_profile_service(db: Database) -> PartyTaxProfileService {
     PartyTaxProfileService::new(
         db.clone(),
@@ -198,7 +246,16 @@ pub fn scoped_customer_assignment_service(
     )
 }
 
-/// Construct a supplier list/detail service with party facts.
+/// 装配带主体事实 Port 的供应商列表与详情服务。
+///
+/// # 参数
+/// * `db` - 供应商与主体集合所在数据库。
+///
+/// # 返回
+/// 返回供应商服务。
+///
+/// # 错误
+/// 不返回错误。
 pub fn supplier_service(db: Database) -> SupplierService {
     SupplierService::new(db.clone(), MongoSupplierPartyFacts::shared(db))
 }

@@ -26,8 +26,14 @@ pub enum SettlementStatus {
 impl SettlementStatus {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -41,8 +47,14 @@ impl SettlementStatus {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "DRAFT",
@@ -58,8 +70,14 @@ impl SettlementStatus {
 impl SupplierSettlementStatement {
     /// 判断结算单是否仍处于可编辑草稿阶段。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 草稿、待对账或有差异状态返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_editable(&self) -> bool {
         matches!(
             self.status,
@@ -71,20 +89,35 @@ impl SupplierSettlementStatement {
 
     /// 判断结算单是否已经作废。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为 `VOIDED` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_voided(&self) -> bool {
         self.status == SettlementStatus::Voided
     }
 
     /// 判断结算单是否正在等待财务复核。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为 `PENDING_REVIEW` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_pending_review(&self) -> bool {
         self.status == SettlementStatus::PendingReview
     }
     /// 作废尚未提交复核的可编辑结算草稿。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 状态推进到 `VOIDED` 时返回 `Ok(())`。
@@ -101,6 +134,12 @@ impl SupplierSettlementStatement {
     /// 将当前冻结主题提交财务复核。
     ///
     /// 本方法只形成结算单状态事实；应用服务必须把唯一复核任务与审计写入同一事务。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 状态推进到 `PENDING_REVIEW` 时返回 `Ok(())`。
     ///
     /// # 错误
     /// 非草稿、待对账或有差异状态时返回错误。
@@ -121,6 +160,9 @@ impl SupplierSettlementStatement {
     /// # 参数
     /// * `status` - 新的状态
     /// * `payable_account_id` - 应付账户（推进到已确认时必填）
+    ///
+    /// # 返回
+    /// 状态已写入时返回 `Ok(())`；推进到已确认时记下应付账户，并在确认时间为空时补记当前时间。
     ///
     /// # 错误
     /// 推进到已确认但缺少应付账户时返回错误。
@@ -146,8 +188,11 @@ impl SupplierSettlementStatement {
 /// * `from` - 迁移前状态
 /// * `to` - 目标状态
 ///
+/// # 返回
+/// `from == to`，或守卫允许的迁移，返回 `Ok(())`。
+///
 /// # 错误
-/// 已作废再变更、或已确认迁移到已确认以外的状态时返回错误。
+/// 已作废后再变更，或已确认迁移到 `VOIDED` 以外的状态时返回错误。
 pub(super) fn ensure_status_move(from: SettlementStatus, to: SettlementStatus) -> Result<()> {
     if from == to {
         return Ok(());

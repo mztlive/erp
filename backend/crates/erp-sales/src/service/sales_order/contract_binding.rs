@@ -66,6 +66,7 @@ impl SalesOrderService {
         }
     }
 
+    /// 只采用归属本单的当前生效版本条款；版本缺失或串单时拒绝补录。
     async fn contract_revision_basis(
         &self,
         order: &SalesOrder,
@@ -91,6 +92,7 @@ impl SalesOrderService {
         })
     }
 
+    /// 审批中只接受仍在审的最新提交，并核对客户与结算主体仍与销售单一致。
     async fn contract_submission_basis(
         &self,
         order: &SalesOrder,

@@ -1,4 +1,4 @@
-//! Customer receipt, refund and receipt-reversal object facts.
+//! 客户回款、退款与回款冲正的对象事实。
 
 use std::collections::HashSet;
 
@@ -10,7 +10,18 @@ use super::mapping;
 use crate::errors::Result;
 
 impl super::super::WorkItemFactsReader {
-    /// Load customer-receipt identity, creator, counterparty and impact.
+    /// 装载客户回款的身份、创建人、往来方与影响；同一入口也装载开票申请。
+    ///
+    /// # 参数
+    /// * `keys` - 本批对象键。有开票申请键时先写入申请事实；没有回款键时就此返回。
+    /// * `facts` - 输出事实表。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 成功时写入读到的开票申请与回款。回款往来方取主体法定名称；回款为空时不继续查名称。
+    ///
+    /// # 错误
+    /// 开票申请、回款或主体名称读取失败时返回错误。
     pub(in crate::workbench) async fn load_customer_receipt_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -49,7 +60,18 @@ impl super::super::WorkItemFactsReader {
         Ok(())
     }
 
-    /// Load customer-refund identity, creator, counterparty and impact.
+    /// 装载客户退款的身份、创建人、往来方与影响。
+    ///
+    /// # 参数
+    /// * `keys` - 本批对象键；没有退款键时不读取。
+    /// * `facts` - 输出事实表。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 成功时写入读到的退款。往来方优先客户显示名，否则回退原回款或应收分录上的名称。
+    ///
+    /// # 错误
+    /// 退款、客户名称或来源名称读取失败时返回错误。
     pub(in crate::workbench) async fn load_customer_refund_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -85,7 +107,18 @@ impl super::super::WorkItemFactsReader {
         Ok(())
     }
 
-    /// Load receipt-reversal identity, creator, counterparty and impact.
+    /// 装载回款冲正的身份、创建人、往来方与影响。
+    ///
+    /// # 参数
+    /// * `keys` - 本批对象键；没有冲正键时不读取。
+    /// * `facts` - 输出事实表。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 成功时写入读到的冲正，往来方只取原回款上已有的名称。
+    ///
+    /// # 错误
+    /// 冲正或原回款名称读取失败时返回错误。
     pub(in crate::workbench) async fn load_receipt_reversal_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,

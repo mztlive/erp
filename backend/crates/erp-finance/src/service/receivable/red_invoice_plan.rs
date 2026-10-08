@@ -1,4 +1,4 @@
-//! Red-invoice reversal plans and stable per-account delta aggregation.
+//! 红字发票冲减计划，以及按账户稳定聚合的差额。
 
 use std::collections::HashMap;
 
@@ -145,6 +145,12 @@ fn sales_red_invoice_allocation_reversals(
 ///
 /// # 返回
 /// 返回按账户去重、首次出现顺序的 `(account_id, gross合计)`。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # Panics
+/// 首次出现顺序中的账户在合计表缺失时 `expect` 会 panic；该分支只表示内部聚合不变量被破坏。
 pub fn aggregate_reversal_deltas(lines: &[RedInvoiceAllocationLine]) -> Vec<(String, Amount)> {
     let mut order = Vec::new();
     let mut sums: HashMap<String, Amount> = HashMap::new();

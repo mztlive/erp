@@ -30,6 +30,9 @@ pub const DIFFERENCE_INITIAL_SUBJECT_VERSION: &str = "0";
 ///
 /// # 返回
 /// 返回固定的责任角色代码，全矩阵覆盖，无失败分支。
+///
+/// # 错误
+/// 不返回错误。
 pub fn error_owner_role(error_class: ErrorClass) -> &'static str {
     match error_class {
         ErrorClass::CapabilityGap | ErrorClass::MappingError => W29_OPERATIONS_ROLE,
@@ -49,6 +52,9 @@ pub fn error_owner_role(error_class: ErrorClass) -> &'static str {
 ///
 /// # 返回
 /// 结果未知使用结果未知任务类型，其余使用业务异常任务类型。
+///
+/// # 错误
+/// 不返回错误。
 pub fn error_work_item_type(error_class: ErrorClass) -> IntegrationResponsibilityKind {
     if error_class == ErrorClass::ResultUnknown {
         IntegrationResponsibilityKind::IntegrationResultUnknown
@@ -64,6 +70,9 @@ pub fn error_work_item_type(error_class: ErrorClass) -> IntegrationResponsibilit
 ///
 /// # 返回
 /// 返回固定的任务优先级，全矩阵覆盖，无失败分支。
+///
+/// # 错误
+/// 不返回错误。
 pub fn error_priority(error_class: ErrorClass) -> IntegrationResponsibilityPriority {
     match error_class {
         ErrorClass::AuthSignature | ErrorClass::ResultUnknown => IntegrationResponsibilityPriority::Urgent,
@@ -157,6 +166,15 @@ pub struct IntegrationResponsibilitySpec {
 /// 从错误事实提取固定责任，不生成 ID、不取时、不提前验证任务字段。
 ///
 /// 处理人及其内部组织必须已写入错误任务；本层不再写入公司占位。
+///
+/// # 参数
+/// * `task` - 已登记的集成错误任务。
+///
+/// # 返回
+/// 返回固定责任事实。处理人缺失时 `owner_user_id` 为空字符串，不在此失败。
+///
+/// # 错误
+/// 不返回错误。
 pub fn error_responsibility(task: &IntegrationErrorTask) -> IntegrationResponsibilitySpec {
     IntegrationResponsibilitySpec {
         task_kind: error_work_item_type(task.error_class),
@@ -173,6 +191,12 @@ pub fn error_responsibility(task: &IntegrationErrorTask) -> IntegrationResponsib
 }
 
 /// 从差异事实提取固定责任；仅保留原固定责任注册校验，初始主题版本为 0。
+///
+/// # 参数
+/// * `difference` - 已登记的对账差异。
+///
+/// # 返回
+/// 返回任务类型为业务异常、优先级为高、主题版本为 `0` 的固定责任事实。
 ///
 /// # 错误
 /// 差异类型未注册固定责任规则时返回原错误。

@@ -1,4 +1,4 @@
-//! Import application services for batch/row queries.
+//! 导入应用服务：批次与行查询。
 
 pub mod legacy_import;
 

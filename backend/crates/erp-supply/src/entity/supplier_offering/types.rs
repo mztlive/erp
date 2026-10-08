@@ -17,8 +17,14 @@ pub enum OfferingSourceType {
 impl OfferingSourceType {
     /// 返回持久化与查询使用的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回大写稳定代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Excel => "EXCEL",
@@ -29,8 +35,14 @@ impl OfferingSourceType {
 
     /// 返回面向用户的中文标签。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回来源标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(self) -> &'static str {
         match self {
             Self::Excel => "Excel",
@@ -70,8 +82,14 @@ impl OfferingStatus {
 
     /// 返回持久化与查询使用的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回大写稳定代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Active => "ACTIVE",
@@ -82,8 +100,14 @@ impl OfferingStatus {
 
     /// 返回面向用户的中文标签。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回状态标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(self) -> &'static str {
         match self {
             Self::Active => "启用",
@@ -134,8 +158,14 @@ pub enum AvailabilityStatus {
 impl AvailabilityStatus {
     /// 返回持久化与查询使用的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回大写稳定代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Available => "AVAILABLE",
@@ -147,8 +177,14 @@ impl AvailabilityStatus {
 
     /// 返回面向用户的中文标签。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回状态标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(self) -> &'static str {
         match self {
             Self::Available => "可供",

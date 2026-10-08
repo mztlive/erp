@@ -40,8 +40,14 @@ pub enum AddressType {
 impl AddressType {
     /// 返回类型的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Registered => "注册地址",
@@ -52,8 +58,14 @@ impl AddressType {
 
     /// 返回类型的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Registered => "registered",
@@ -64,8 +76,14 @@ impl AddressType {
 
     /// 判断地址内容是否属于敏感值。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 履约地址返回 `true`（§4.5.5 加密列 + 带密钥 HMAC）。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_sensitive(&self) -> bool {
         matches!(self, Self::Fulfillment)
     }
@@ -144,7 +162,7 @@ pub struct PartyAddress {
 }
 
 impl fmt::Debug for PartyAddress {
-    /// Redacted Debug：不输出地址密文与指纹（明文字段永不进入 Debug 输出）。
+    /// 脱敏 `Debug`：不输出地址密文与指纹（明文字段永不进入 `Debug` 输出）。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("PartyAddress")
@@ -164,7 +182,7 @@ impl fmt::Debug for PartyAddress {
 }
 
 impl fmt::Debug for PartyAddressData {
-    /// Redacted Debug：地址明文不进入任何输出。
+    /// 脱敏 `Debug`：地址明文不进入任何输出。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("PartyAddressData")
@@ -193,6 +211,9 @@ impl PartyAddress {
     ///
     /// # 返回
     /// 返回指纹字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn address_fingerprint(plain: &str, key: &[u8]) -> String {
         hmac_sha256_hex(key, normalize_address(plain).as_bytes())
     }
@@ -241,20 +262,6 @@ impl PartyAddress {
         })
     }
 
-    /// 更新地址（仅限生命周期字段）。
-    ///
-    /// 地址内容变更必须通过新的有效期事实行追加（W03）；原地更新
-    /// 只允许切换启停状态（固定状态机）、结束有效期与调整默认标记。
-    ///
-    /// # 参数
-    /// * `update` - 更新数据
-    /// * `updated_by` - 本次更新执行人
-    ///
-    /// # 返回
-    /// 更新成功返回 `Ok(())`。
-    ///
-    /// # 错误
-    /// 当状态迁移非法或 `valid_to` 不晚于 `valid_from` 时返回错误。
     /// 校验期望版本与当前版本一致（erp-party-008）。
     ///
     /// 冲突文案与主体 `ensure_version` 同源（见 [`super::ensure_base_version`]），
@@ -272,6 +279,20 @@ impl PartyAddress {
         super::ensure_base_version(&self.base, expected)
     }
 
+    /// 更新地址（仅限生命周期字段）。
+    ///
+    /// 地址内容变更必须通过新的有效期事实行追加（W03）；原地更新
+    /// 只允许切换启停状态（固定状态机）、结束有效期与调整默认标记。
+    ///
+    /// # 参数
+    /// * `update` - 更新数据
+    /// * `updated_by` - 本次更新执行人
+    ///
+    /// # 返回
+    /// 更新成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当状态迁移非法或 `valid_to` 不晚于 `valid_from` 时返回错误。
     pub fn update(&mut self, update: PartyAddressUpdate, updated_by: impl Into<String>) -> Result<()> {
         if let Some(to) = update.status {
             self.status.transition_to(to)?;
@@ -289,8 +310,14 @@ impl PartyAddress {
 
     /// 判断地址是否处于启用状态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为 `Active` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         self.status.is_active()
     }

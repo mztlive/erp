@@ -25,7 +25,17 @@ fn company_filter(params: &CompanyListParams) -> Document {
 pub trait PartyRepositoryCompanyExt {
     /// 查询公司列表，稳定排序且有界分页。
     ///
-    /// # Errors
+    /// 页码缺省为 1，并限制在 `1..=1_000_000`；每页缺省 30，并限制在 `1..=100`。
+    /// 结果按 `party_no`、`id` 升序，且只包含未软删除、带 `company_profile` 对象的主体。
+    ///
+    /// # 参数
+    /// * `params` - 关键词、状态与分页条件。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 返回当前页主体与满足筛选条件的总数。
+    ///
+    /// # 错误
     /// 查询或计数失败时返回仓储错误。
     async fn companies(
         &self,
@@ -33,10 +43,19 @@ pub trait PartyRepositoryCompanyExt {
         executor: &mut dyn Executor,
     ) -> Result<PageResult<Party>>;
 
-    /// 精确解析公司全称、简称或别名；不使用模糊结果猜测身份。
+    /// 精确解析启用公司的全称、简称或别名；不使用模糊结果猜测身份。
     ///
-    /// # Errors
-    /// 查询失败返回仓储错误；已停用或无匹配返回空值。
+    /// 名称经 `identity_name` 规范化后与 `company_profile.names` 相等，且 `status` 为 `active`。
+    ///
+    /// # 参数
+    /// * `name` - 公司全称、简称或别名。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 命中启用公司时返回该主体；无匹配或已停用时返回 `None`。
+    ///
+    /// # 错误
+    /// 查询失败时返回仓储错误。
     async fn company_by_name(&self, name: &str, executor: &mut dyn Executor) -> Result<Option<Party>>;
 }
 

@@ -68,7 +68,7 @@ impl std::error::Error for CapabilityEligibilityViolation {}
 /// * `SupplierDisabled` - 供应商已停用
 /// * `CapabilityDisabled` - 能力已停用
 /// * `RevisionDisabled` - 修订状态非 `Active`
-/// * `OwnershipMismatch` - 修订 `supplier_id` 与供应商主键不一致，或修订能力代码与能力代码不一致
+/// * `OwnershipMismatch` - 修订 `supplier_id` 或能力 `supplier_id` 与供应商主键不一致，或修订能力代码与能力代码不一致
 /// * `NotCurrentRevision` - 能力的 `current_revision_id` 与修订主键不一致
 /// * `NotYetValid` - 业务日早于 `valid_from`
 /// * `Expired` - 业务日已超过 `valid_to`
@@ -115,8 +115,16 @@ pub fn ensure_capability_qualified(
 /// 已关联合同须至少有一份可用于当前业务日，未知日期不构成有效合同。
 ///
 /// 没有已关联合同时保留当前阶段的临时放行政策，不推断必备资质。
-/// # Errors
-/// 已有关联合同但均未核实、停用、未生效或到期时拒绝。
+///
+/// # 参数
+/// * `contracts` - 已关联到该项能力的合同资质
+/// * `on_date` - 当前业务日
+///
+/// # 返回
+/// 没有合同，或至少一份合同在 `on_date` 上可用时返回 `Ok(())`。
+///
+/// # 错误
+/// 已有关联合同但均未核实、停用、未生效或到期时返回业务错误。
 pub fn ensure_linked_contracts_qualified(
     contracts: &[super::SupplierQualification],
     on_date: BusinessDate,
@@ -136,7 +144,17 @@ pub enum OfferingProductKind {
     Voucher,
 }
 /// 供给所需能力的唯一供应商政策。
-/// 卡券与虚拟商品共用Virtual能力，其余逐类对应。
+///
+/// 卡券与虚拟商品共用 `CapabilityCode::Virtual`，实物对应 `Physical`，线下服务对应 `OfflineService`。
+///
+/// # 参数
+/// * `kind` - 公司商品类型
+///
+/// # 返回
+/// 返回该项供给必须具备的供应商能力代码。
+///
+/// # 错误
+/// 不返回错误。
 pub fn required_offering_capability(kind: OfferingProductKind) -> crate::entity::supplier::CapabilityCode {
     use crate::entity::supplier::CapabilityCode;
     match kind {

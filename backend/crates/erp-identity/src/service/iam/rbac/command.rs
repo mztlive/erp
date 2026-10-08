@@ -20,7 +20,7 @@ impl RbacService {
     /// * `params` - 创建角色参数
     /// * `actor` - 已通过鉴权的审计操作人
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回创建后的角色实体。
     ///
     /// # 错误
@@ -46,7 +46,7 @@ impl RbacService {
     /// * `params` - 可选名称与权限更新
     /// * `actor` - 已通过鉴权的审计操作人
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回更新后的角色实体。
     ///
     /// # 错误
@@ -88,7 +88,7 @@ impl RbacService {
     /// * `id` - 待删除角色 ID
     /// * `actor` - 已通过鉴权的审计操作人
     ///
-    /// # 返回值
+    /// # 返回
     /// 角色实体与关联 policy 原子删除成功时返回 `Ok(())`。
     ///
     /// # 错误
@@ -138,6 +138,18 @@ impl RbacService {
     ///
     /// 角色写触碰会递增版本与更新时间，使权限更新、角色绑定和角色删除在多实例部署下
     /// 对同一角色产生写冲突，避免删除后遗留 policy 引用。
+    ///
+    /// # 参数
+    /// * `role_id` - 角色 ID。
+    /// * `permissions` - 替换后的完整直接权限。
+    /// * `audit` - 可选的已准备资源审计；有值时与权限写入同一事务。
+    /// * `expected_revision` - 授权快照要求的 policy 版本；为空时不比较版本。
+    ///
+    /// # 返回
+    /// 返回写触碰后的角色。
+    ///
+    /// # 错误
+    /// 角色不存在、policy 版本不匹配或角色、权限、审计写入失败时返回错误。
     pub(super) async fn replace_role_permissions(
         self: &Arc<Self>,
         role_id: &str,
@@ -168,6 +180,19 @@ impl RbacService {
     /// 使用指定 ID 在同一事务中创建角色实体并写入完整权限规则。
     ///
     /// 仅内建角色初始化或经授权的显式种子命令可以指定固定 ID；普通管理入口由 [`Self::create_role`] 生成 ID。
+    ///
+    /// # 参数
+    /// * `id` - 指定的角色 ID。
+    /// * `data` - 角色展示数据。
+    /// * `permissions` - 首次写入的完整直接权限。
+    /// * `audit` - 可选的已准备资源审计。
+    /// * `expected_revision` - 授权快照要求的 policy 版本；为空时不比较版本。
+    ///
+    /// # 返回
+    /// 返回已创建的角色。
+    ///
+    /// # 错误
+    /// 角色数据不合法、ID 冲突、policy 版本不匹配或权限、审计写入失败时返回错误。
     pub(super) async fn create_role_with_id(
         self: &Arc<Self>,
         id: String,
@@ -196,6 +221,15 @@ impl RbacService {
     }
 
     /// 读取角色自身的直接权限，不展开继承关系。
+    ///
+    /// # 参数
+    /// * `role_id` - 角色 ID。
+    ///
+    /// # 返回
+    /// 返回该角色的直接权限集。
+    ///
+    /// # 错误
+    /// Enforcer 无法刷新，或策略行无法解析为权限时返回错误。
     pub(super) async fn direct_role_permissions(&self, role_id: &str) -> Result<PermissionSet> {
         let enforcer = self.fresh_enforcer().await?.read().await;
         permissions_for_role(&enforcer, role_id).map(PermissionSet::new)
@@ -226,6 +260,16 @@ impl RbacService {
     }
 
     /// 原子修复内建 root 角色元数据与完整权限。
+    ///
+    /// # 参数
+    /// * `role` - 当前 root 角色，允许处于软删除状态。
+    /// * `root_permission` - 要写回的 `*:*` 权限。
+    ///
+    /// # 返回
+    /// 返回已恢复为系统角色、启用且只保留该权限的角色。
+    ///
+    /// # 错误
+    /// 角色恢复、更新或权限替换失败时返回错误。
     pub(super) async fn repair_root_role(
         self: &Arc<Self>,
         mut role: Role,

@@ -30,6 +30,17 @@ use crate::sales_center::materials::revision_materials;
 use crate::{Error, Result};
 
 /// 在采购提交原事务冻结准确销售版本与材料，不依赖采购人的全局销售/文件权限。
+///
+/// # 参数
+/// * `db` - 当前数据库。
+/// * `snapshot` - 本次采购提交快照。
+/// * `executor` - 原提交事务执行器。
+///
+/// # 返回
+/// 返回来源销售修订的展示快照，以及成功读到的材料文件。材料按 `material_unavailable` 关闭时仍返回展示，并写明暂不可读。
+///
+/// # 错误
+/// 来源修订、提交或行校验失败，以及材料读取中未被关闭的错误，原样返回。
 pub(super) async fn capture(
     db: &Database,
     snapshot: &ApprovalSubjectSnapshot,
@@ -58,6 +69,15 @@ pub(super) async fn capture(
 }
 
 /// 历史材料单独关闭；来源版本与摘要仍由严格读取证明，基础设施故障继续传播。
+///
+/// # 参数
+/// * `error` - 读取修订材料时的错误。
+///
+/// # 返回
+/// `NotFound`、`ConflictError`、`Forbidden`、`ValidationError` 与 `Logic` 视为材料不可用，返回 `Ok(())`。
+///
+/// # 错误
+/// 其余错误原样返回。
 pub(super) fn material_unavailable(error: Error) -> Result<()> {
     match error {
         Error::NotFound(_)

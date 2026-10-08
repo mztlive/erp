@@ -97,7 +97,7 @@ impl SalesSelectionDisplayItem {
     /// 返回售价由后端加总的套餐陈列。
     ///
     /// # 错误
-    /// 成员重复、无封面或金额溢出时拒绝。
+    /// 成员快照非法、SKU 重复、没有成员或售价合计溢出时拒绝。本方法不校验封面。
     pub fn package(
         id: SalesSelectionDisplayItemId,
         booklet_id: SalesSelectionBookletId,
@@ -160,7 +160,7 @@ impl SalesSelectionDisplayItem {
     /// 无。
     ///
     /// # 返回
-    /// 单品可能无图；套餐必须有主图。
+    /// 单品无图时返回 `None`，有图时返回资产身份。套餐始终返回主图资产身份。
     ///
     /// # 错误
     /// 无。

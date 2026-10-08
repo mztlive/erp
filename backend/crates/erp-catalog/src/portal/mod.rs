@@ -1,4 +1,4 @@
-//! Supplier new-product proposals; formal writes join the caller's transaction.
+//! 供应商新品提报；正式写入加入调用方事务。
 
 mod category_mapping;
 mod category_mapping_service;

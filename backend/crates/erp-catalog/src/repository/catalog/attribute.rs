@@ -77,8 +77,16 @@ impl Default for SkuAttributeFilter {
 impl QueryFilter for SkuAttributeFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回查询条件文档。
+    /// 返回查询条件文档。始终写入未删除的 `deleted_at`。`attribute_code` 有值时精确匹配；
+    /// `value_type` 与 `status` 有值时按稳定代码精确匹配；`name` 有值时写入忽略大小写的字面量正则。
+    /// 分页与排序字段不进入条件。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(code) = &self.attribute_code {
@@ -96,10 +104,16 @@ impl QueryFilter for SkuAttributeFilter {
 }
 
 impl Pagination for SkuAttributeFilter {
-    /// 返回页码与单页条数。
+    /// 返回规格属性列表的页码与单页条数，不做页码归一或条数钳制。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组：第一项为 `page`，第二项为 `page_size` 转成的 `u64`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -217,8 +231,16 @@ impl Default for SkuAttributeValueFilter {
 impl QueryFilter for SkuAttributeValueFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回查询条件文档。
+    /// 返回查询条件文档。始终写入未删除的 `deleted_at`。`attribute_id` 与 `value_code` 有值时精确匹配；
+    /// `display_value` 有值时写入忽略大小写的字面量正则；`status` 有值时按稳定代码精确匹配。
+    /// 分页与排序字段不进入条件。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(attribute_id) = &self.attribute_id {
@@ -236,10 +258,16 @@ impl QueryFilter for SkuAttributeValueFilter {
 }
 
 impl Pagination for SkuAttributeValueFilter {
-    /// 返回页码与单页条数。
+    /// 返回规格属性值列表的页码与单页条数，不做页码归一或条数钳制。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组：第一项为 `page`，第二项为 `page_size` 转成的 `u64`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }

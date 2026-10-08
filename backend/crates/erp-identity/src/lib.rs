@@ -1,4 +1,4 @@
-//! Identity domain: accounts, IAM/RBAC, Casbin and access control.
+//! 身份领域：账号、IAM/RBAC、Casbin 与访问控制。
 
 pub mod dto;
 pub mod entity;

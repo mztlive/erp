@@ -20,6 +20,9 @@ impl ReturnsReadService {
     ///
     /// # 返回
     /// 返回契约形状的分页视图。
+    ///
+    /// # 错误
+    /// 参数校验或排序白名单失败时返回 `ValidationError`。处理单或明细读取失败时返回对应错误。
     pub async fn sales_return_case_list(
         &self,
         params: &SalesReturnCaseListParams,
@@ -54,6 +57,7 @@ impl ReturnsReadService {
     ///
     /// # 错误
     /// * `NotFound` - 处理单不存在
+    /// 仓储读取失败时返回对应错误。
     pub async fn sales_return_case_detail(&self, id: &str) -> Result<SalesReturnCaseView> {
         self.sales_return_case_view(id.to_string()).await
     }
@@ -74,6 +78,7 @@ impl ReturnsReadService {
     ///
     /// # 错误
     /// * `NotFound` - 处理单不存在
+    /// 仓储读取失败时返回对应错误。
     async fn sales_return_case_view(&self, id: String) -> Result<SalesReturnCaseView> {
         let case = self
             .db

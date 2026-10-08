@@ -22,10 +22,10 @@ pub struct BankReceiptEvidencePolicy;
 impl BankReceiptEvidencePolicy {
     /// 校验银行回单证据可用（FIN-E05 唯一规则入口）。
     ///
-    /// pending 路径传入登记元数据（`destroyed = false`），stored 路径传入
+    /// 待登记路径传入登记元数据（`destroyed = false`），已落库路径传入
     /// `FileAsset` 已落库元数据（`destroyed = destroyed_at.is_some()`）；
-    /// 两种输入适配得到相同结论。校验不依赖当前时间：point-in-time
-    /// 过期判定不属于本策略（FIN-E10 另行承担）。
+    /// 两种输入适配得到相同结论。校验不依赖当前时间：按某一时点
+    /// 判断过期不属于本策略（FIN-E10 另行承担）。
     ///
     /// # 参数
     /// * `content_type` - 文件内容类型（大小写敏感精确匹配）

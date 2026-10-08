@@ -128,6 +128,9 @@ impl WorkItemRepositoryFinanceExt for Repository<'_, WorkItem> {
 pub trait FinanceResponsibilityRuleRepositoryExt {
     /// 查询全部未删除财务责任规则。
     ///
+    /// # 参数
+    /// * `executor` - 数据访问执行器。
+    ///
     /// # 返回
     /// 返回按业务、匹配层级和创建时间稳定排序的规则。
     ///

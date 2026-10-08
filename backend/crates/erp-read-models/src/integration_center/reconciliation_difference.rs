@@ -44,6 +44,7 @@ impl IntegrationCenterReadService {
         self.assemble_difference_detail(difference, history).await
     }
 
+    /// 差异不存在时返回 `NotFound`，存在后再按负责人重验可见性。
     async fn load_visible_difference(
         &self,
         id: &str,
@@ -65,6 +66,7 @@ impl IntegrationCenterReadService {
         Ok(difference)
     }
 
+    /// 最近一条决议覆盖状态与版本；终态不再附证据策略。
     async fn assemble_difference_detail(
         &self,
         difference: ReconciliationDifference,
@@ -95,6 +97,7 @@ impl IntegrationCenterReadService {
         })
     }
 
+    /// 多个正式责任关联时返回 `ConflictError`。
     async fn has_difference_work_item(&self, difference_id: &str) -> Result<bool> {
         let items = self
             .db

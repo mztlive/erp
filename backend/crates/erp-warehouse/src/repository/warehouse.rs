@@ -42,8 +42,16 @@ macro_rules! filter_pagination {
         impl Pagination for $filter {
             /// 返回页码与单页条数。
             ///
+            /// 直接取筛选条件上的 `page` 与 `page_size`，不把小于 1 的页码归一。
+            ///
+            /// # 参数
+            /// 无。
+            ///
             /// # 返回
-            /// 返回 `(page, page_size)` 元组。
+            /// 返回 `(page, page_size)` 元组。`page_size` 由 `u32` 转为 `u64`。
+            ///
+            /// # 错误
+            /// 不返回错误。
             fn page_and_size(&self) -> (u64, u64) {
                 (self.page, u64::from(self.page_size))
             }
@@ -131,8 +139,18 @@ filter_default!(WarehouseFilter {
 impl QueryFilter for WarehouseFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// 已设置的 `warehouse_code`、`warehouse_id` 精确匹配；`status` 写入 `EnableStatus::as_str`。
+    /// `authorized_ids` 为 `Some` 时以 `$and` 追加 `id` 的 `$in`。`require_inbound_handler` 为真时要求
+    /// `inbound_handler_user_id` 为含非空白字符的字符串。不读取 `q` 与排序字段。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(code) = &self.warehouse_code {
@@ -249,10 +267,17 @@ impl QueryFilter for WarehouseRevisionFilter {
     /// 转换为 MongoDB 查询条件。
     ///
     /// 修订表不提供软删除方法，但落库文档仍有 `deleted_at`；查询继续写入
-    /// `deleted_at: NOT_DELETED`，与既有文档形态一致。
+    /// `deleted_at: NOT_DELETED`，与既有文档形态一致。`warehouse_id` 为 `Some` 时精确匹配。
+    /// `name` 为 `Some` 时按字面量、忽略大小写匹配；`None` 不写入该字段。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(warehouse_id) = &self.warehouse_id {
@@ -353,8 +378,17 @@ pub struct WarehouseSkuPolicyFilter {
 impl QueryFilter for WarehouseSkuPolicyFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// 已设置的 `warehouse_id`、`sku_id` 精确匹配；`status` 写入 `EnableStatus::as_str`。
+    /// 未设置的字段不进入条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(warehouse_id) = &self.warehouse_id {
@@ -464,6 +498,9 @@ impl<'a> WarehouseDomainRepository<'a> {
     ///
     /// # 返回
     /// 返回仓储实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
@@ -571,6 +608,9 @@ impl<'a> WarehouseDomainRepository<'a> {
     /// * `warehouse` - 待写入的仓库（首修订链入后写库）
     /// * `revision` - 待写入的仓库首个修订
     /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 返回
+    /// 无返回值。成功时两个集合都已写入，且 `warehouse` 的当前修订指针指向 `revision`。
     ///
     /// # 错误
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射

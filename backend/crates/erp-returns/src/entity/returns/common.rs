@@ -94,6 +94,16 @@ pub(crate) fn validate_exclusive_target<T, U>(
 }
 
 /// 校验纠错金额为正数（零与负数均拒绝，文案由调用方保持原语义）。
+///
+/// # 参数
+/// * `amount` - 待校验金额。
+/// * `message` - 非正数时的错误说明。
+///
+/// # 返回
+/// 金额为正时返回成功。
+///
+/// # 错误
+/// 金额为零或负数时按 `message` 返回 `LogicError`。
 pub(crate) fn ensure_positive_amount(amount: Amount, message: &str) -> Result<()> {
     if amount.to_decimal().is_sign_negative() || amount.to_decimal().is_zero() {
         return Err(Error::from(message));
@@ -102,16 +112,45 @@ pub(crate) fn ensure_positive_amount(amount: Amount, message: &str) -> Result<()
 }
 
 /// 规范化创建人标识（trim/非空/长度，规则与文案四单据一致）。
+///
+/// # 参数
+/// * `created_by` - 创建人标识。
+///
+/// # 返回
+/// 返回去掉首尾空白后的创建人标识。
+///
+/// # 错误
+/// 空白或超过 `CREATOR_ID_MAX_LEN` 时返回 `LogicError`。
 pub(crate) fn normalize_created_by(created_by: impl Into<String>) -> Result<String> {
     normalize_required_text(created_by.into(), "创建人不能为空", CREATOR_ID_MAX_LEN, "创建人标识过长")
 }
 
 /// 递增审批提交版本（checked add，溢出文案四单据一致）。
+///
+/// # 参数
+/// * `current` - 当前审批提交版本。
+///
+/// # 返回
+/// 返回 `current + 1`。
+///
+/// # 错误
+/// `current` 为 `u32::MAX` 时返回 `LogicError`。
 pub(crate) fn next_approval_version(current: u32) -> Result<u32> {
     current.checked_add(1).ok_or_else(|| Error::from("审批提交版本溢出"))
 }
 
 /// 校验单据仍是从未提交审批的初始草稿（文案由调用方保持原语义）。
+///
+/// # 参数
+/// * `is_draft` - 当前是否为草稿。
+/// * `version` - 当前审批提交版本。
+/// * `message` - 不满足时的错误说明。
+///
+/// # 返回
+/// 草稿且版本为 0 时返回成功。
+///
+/// # 错误
+/// 非草稿或 `version` 不是 0 时按 `message` 返回 `LogicError`。
 pub(crate) fn ensure_initial_approval(is_draft: bool, version: u32, message: &str) -> Result<()> {
     if !is_draft || version != 0 {
         return Err(Error::from(message));

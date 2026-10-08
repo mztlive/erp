@@ -22,8 +22,14 @@ pub enum RuntimeInstanceListView {
 impl RuntimeInstanceListView {
     /// 返回稳定 view 名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `mine` / `started` / `managed` / `blocked`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Mine => "mine",
@@ -51,8 +57,14 @@ pub enum RuntimeInstanceStatusFilter {
 impl RuntimeInstanceStatusFilter {
     /// 返回稳定状态码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回 `RUNNING` 等。
+    /// 返回 `RUNNING`、`APPROVED`、`CANCELLED` 或 `BLOCKED`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Running => "RUNNING",

@@ -1,4 +1,4 @@
-//! Owned proposal collection and supplier-scoped pagination.
+//! 本域拥有的提报集合与按供应商分页。
 
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
@@ -36,7 +36,7 @@ pub trait CatalogPortalExt {
     const NEW_PRODUCT_DRAFTS: &'static str = "supplier_new_product_drafts";
     const SUPPLIER_CATEGORY_MAPPINGS: &'static str = "supplier_category_mappings";
 
-    /// Access proposals through the standard optimistic repository.
+    /// 通过标准乐观锁仓储访问提报。
     /// # 参数
     /// 无。
     /// # 返回

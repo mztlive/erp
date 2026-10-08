@@ -51,8 +51,14 @@ pub enum ElectronicDeliveryState {
 impl ElectronicDeliveryState {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -63,8 +69,14 @@ impl ElectronicDeliveryState {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "DRAFT",
@@ -75,24 +87,42 @@ impl ElectronicDeliveryState {
 
     /// 判断是否可编辑（仅草稿）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 草稿状态返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_editable(&self) -> bool {
         matches!(self, Self::Draft)
     }
 
     /// 判断当前状态能否执行首次确认。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 仅草稿状态返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_confirmable(self) -> bool {
         self.is_editable()
     }
 
     /// 判断当前状态能否作为客户验收履约事实。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 已确认状态返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_acceptance_eligible(self) -> bool {
         matches!(self, Self::Confirmed)
     }
@@ -100,6 +130,16 @@ impl ElectronicDeliveryState {
 
 impl DocumentState for ElectronicDeliveryState {
     /// 固定邻接矩阵（§7.5 定向链，`REVERSED` 为不可逆终态）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Draft` 只允许进入 `Confirmed`；`Confirmed` 只允许进入 `Reversed`；
+    /// `Reversed` 没有后继。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft => &[Self::Confirmed],
@@ -126,8 +166,14 @@ pub enum FulfillmentResult {
 impl FulfillmentResult {
     /// 返回结果的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Success => "成功",
@@ -138,8 +184,14 @@ impl FulfillmentResult {
 
     /// 返回结果的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Success => "SUCCESS",
@@ -297,6 +349,9 @@ impl ElectronicDelivery {
     ///
     /// # 返回
     /// 返回 64 位小写十六进制指纹。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn recipient_snapshot_fingerprint(plain: &str, key: &[u8]) -> String {
         hmac_sha256_hex(key, plain.as_bytes())
     }
@@ -376,6 +431,9 @@ impl ElectronicDelivery {
 
     /// 返回单据注册与无审批绑定重验使用的组织上下文。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回所属销售稳定明细主键。
     ///
@@ -390,6 +448,9 @@ impl ElectronicDelivery {
     }
 
     /// 校验记录可执行首次确认。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 草稿状态返回 `Ok(())`。
@@ -409,10 +470,10 @@ impl ElectronicDelivery {
     /// * `sales_order_line_id` - 验收行所属销售稳定明细
     ///
     /// # 返回
-    /// 已确认且销售明细一致时返回交付数量。
+    /// 已确认、履约结果不是 `Failure` 且销售明细一致时返回交付数量。
     ///
     /// # 错误
-    /// 状态无效或销售明细关联不一致时返回错误。
+    /// 未确认、履约结果为 `Failure`，或销售明细不一致时返回错误。
     pub fn acceptance_quantity(&self, sales_order_line_id: &SalesOrderLineId) -> Result<Quantity> {
         if !self.status.is_acceptance_eligible() || self.result == FulfillmentResult::Failure {
             return Err(Error::from("电子交付事实状态无效"));
@@ -455,7 +516,7 @@ impl ElectronicDelivery {
     /// 校验全部成功后写入事实，不改变身份、数量与版本。
     ///
     /// # 错误
-    /// 非草稿、数量不匹配、对象或指纹非法时拒绝，保留原草稿。
+    /// 非草稿、数量与当前数量不一致、缺少交付凭证，或快照、指纹、必填字段或记录时间不合法时拒绝，并保留原草稿。
     pub fn apply_confirmation(&mut self, data: ElectronicDeliveryData) -> Result<()> {
         self.ensure_editable()?;
         if data.quantity != self.quantity {
@@ -477,11 +538,14 @@ impl ElectronicDelivery {
 
     /// 确认电子交付（草稿 → 已确认）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 迁移成功返回 `Ok(())`。
+    /// 迁移成功返回 `Ok(())`。已确认再次确认按幂等成功。
     ///
     /// # 错误
-    /// 当前状态不允许迁移（非草稿）时返回错误。
+    /// 已冲正不能确认时返回错误。
     pub fn confirm(&mut self) -> Result<()> {
         ensure_transition(self.status, ElectronicDeliveryState::Confirmed)?;
         self.status = ElectronicDeliveryState::Confirmed;
@@ -493,11 +557,14 @@ impl ElectronicDelivery {
     /// `REVERSED` 表示存在正式反向事实，不删除原记录（§4.5.1、§7.5）；
     /// 反向事实由 P3 形成。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 迁移成功返回 `Ok(())`。
+    /// 迁移成功返回 `Ok(())`。已冲正再次冲正按幂等成功。
     ///
     /// # 错误
-    /// 当前状态不允许迁移（草稿或已冲正）时返回错误。
+    /// 草稿不能直接冲正时返回错误。
     pub fn reverse(&mut self) -> Result<()> {
         ensure_transition(self.status, ElectronicDeliveryState::Reversed)?;
         self.status = ElectronicDeliveryState::Reversed;
@@ -506,8 +573,14 @@ impl ElectronicDelivery {
 
     /// 判断当前状态是否可编辑。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 草稿状态返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_editable(&self) -> bool {
         self.status.is_editable()
     }

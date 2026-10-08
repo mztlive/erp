@@ -100,6 +100,20 @@ async fn execute<P: CancelWritePort>(port: &mut P, executor: &mut dyn Executor) 
     port.audit(executor).await?;
     Ok(())
 }
+
+/// 在调用方事务内按 Apply 或 Replay 写回取消结果。
+///
+/// Apply 先更新运行事实并关闭任务，再写单据与审计。Replay 不更新运行事实，仍写单据与审计。任一步失败即停止。
+///
+/// # 参数
+/// * `port` - 取消计划、开放任务、单据与审计。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 成功时无返回值。
+///
+/// # 错误
+/// 运行事实、任务、单据或审计写入失败时返回对应错误。
 pub(super) async fn persist(mut port: MongoCancelWrite<'_>, executor: &mut dyn Executor) -> Result<()> {
     execute(&mut port, executor).await
 }

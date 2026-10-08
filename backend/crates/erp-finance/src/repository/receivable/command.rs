@@ -29,6 +29,15 @@ pub struct ReceivableListScope {
 
 impl ReceivableListScope {
     /// 无作用域时返回 `true`（不得触发关联扫描）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `sales_order_id` 与 `receivable_account_id` 都为 `None` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_empty(&self) -> bool {
         self.sales_order_id.is_none() && self.receivable_account_id.is_none()
     }
@@ -155,6 +164,9 @@ impl<'a> ReceivableRepository<'a> {
     /// * `account` - 待写入的应收往来子账
     /// * `entry` - 待写入的原始应收分录
     /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 返回
+    /// 子账与原始分录都写入成功时返回 `Ok(())`。
     ///
     /// # 错误
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射

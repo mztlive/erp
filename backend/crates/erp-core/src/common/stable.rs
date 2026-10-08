@@ -36,6 +36,9 @@ impl<Status: Copy + PartialEq> StableBase<Status> {
     /// # 返回
     /// 返回公共字段实例：`updated_by` 与 `created_by` 相同，
     /// `current_revision_id` 为 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(status: Status, created_by: impl Into<String>) -> Self {
         let created_by = created_by.into();
         Self { status, current_revision_id: None, updated_by: created_by.clone(), created_by }
@@ -48,14 +51,23 @@ impl<Status: Copy + PartialEq> StableBase<Status> {
     ///
     /// # 返回
     /// 无返回值；仅更新 `updated_by` 字段。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn touch(&mut self, updated_by: impl Into<String>) {
         self.updated_by = updated_by.into();
     }
 
     /// 读取当前业务状态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回当前状态（`Copy`，不产生克隆语义）。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn status(&self) -> Status {
         self.status
     }

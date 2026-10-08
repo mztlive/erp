@@ -30,7 +30,7 @@ impl RoleData {
     /// 返回描述为空、非系统角色的创建数据。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn new(name: impl Into<String>) -> Self {
         Self { name: name.into(), description: None, system: false }
     }
@@ -44,7 +44,7 @@ impl RoleData {
     /// 返回更新后的创建数据。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
@@ -59,7 +59,7 @@ impl RoleData {
     /// 返回更新后的创建数据。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn with_system(mut self, system: bool) -> Self {
         self.system = system;
         self
@@ -91,6 +91,13 @@ pub struct Role {
 impl Role {
     /// 创建角色并校验角色 ID 与展示字段。
     ///
+    /// # 参数
+    /// * `id` - 角色 ID，须通过 [`RoleId::parse`]。
+    /// * `data` - 名称、描述和是否系统角色。
+    ///
+    /// # 返回
+    /// 返回未停用的新角色。
+    ///
     /// # 错误
     /// 当角色 ID、名称或描述非法时返回错误。
     pub fn new(id: String, data: RoleData) -> Result<Self> {
@@ -106,8 +113,14 @@ impl Role {
 
     /// 更新角色展示信息与启用状态。
     ///
+    /// # 参数
+    /// * `update` - 可选的名称、描述和停用标记；缺省字段保持不变。
+    ///
+    /// # 返回
+    /// 校验通过后就地更新。
+    ///
     /// # 错误
-    /// 当名称或描述非法时返回错误。
+    /// 当名称或描述非法时返回错误。停用标记本身不产生错误。
     pub fn update(&mut self, update: RoleUpdate) -> Result<()> {
         if let Some(name) = update.name {
             self.name = normalize_required_text(name, "角色名称不能为空", NAME_MAX_LEN, "角色名称过长")?;
@@ -123,6 +136,12 @@ impl Role {
 
     /// 校验当前角色是否允许删除。
     ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 非系统角色时无返回值。
+    ///
     /// # 错误
     /// 系统角色属于内建安全边界，禁止删除时返回业务错误。
     pub fn ensure_deletable(&self) -> Result<()> {
@@ -134,6 +153,12 @@ impl Role {
 
     /// 校验当前角色是否允许通过普通管理接口修改。
     ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 非系统角色时无返回值。
+    ///
     /// # 错误
     /// 系统角色属于内建安全边界，禁止修改时返回业务错误。
     pub fn ensure_mutable(&self) -> Result<()> {
@@ -144,6 +169,12 @@ impl Role {
     }
 
     /// 校验当前角色是否允许通过普通管理接口分配。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 非系统且未停用时无返回值。
     ///
     /// # 错误
     /// 系统角色或已停用角色不能分配时返回业务错误。

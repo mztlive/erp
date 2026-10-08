@@ -16,7 +16,7 @@ pub trait RoleRepositoryExt {
     /// * `id` - 角色 ID
     /// * `executor` - 调用方事务或非事务执行器
     ///
-    /// # 返回值
+    /// # 返回
     /// 角色存在且未软删除时返回 `true`。
     ///
     /// # 错误
@@ -28,7 +28,7 @@ pub trait RoleRepositoryExt {
     /// # 参数
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回全部未删除且启用的角色。
     ///
     /// # 错误
@@ -41,7 +41,7 @@ pub trait RoleRepositoryExt {
     /// * `role_ids` - 待校验的角色 ID
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回存在且启用的角色，并按角色 ID 排序。
     ///
     /// # 错误
@@ -57,7 +57,7 @@ pub trait RoleRepositoryExt {
     /// * `role_ids` - 待查询的角色 ID
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回存在的未删除角色，并按角色 ID 排序。
     ///
     /// # 错误
@@ -72,8 +72,8 @@ pub trait RoleRepositoryExt {
     /// * `id` - 角色 ID
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回值
-    /// 返回匹配的角色记录。
+    /// # 返回
+    /// 返回匹配的角色记录，包含已软删除记录；不存在时返回 `None`。
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
@@ -124,7 +124,7 @@ impl RoleRepositoryExt for Repository<'_, Role> {
 /// * `only_enabled` - 为 `true` 时只返回未停用角色
 /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
 ///
-/// # 返回值
+/// # 返回
 /// 返回存在的未删除角色，并按角色 ID 排序。
 ///
 /// # 错误

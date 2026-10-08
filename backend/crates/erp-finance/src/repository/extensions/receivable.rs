@@ -24,6 +24,15 @@ pub trait ReceivableExt {
     /// 销项开票申请集合。
     const SALES_INVOICE_REQUESTS: &'static str = "sales_invoice_requests";
     /// 返回开票申请拥有仓储。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 `SalesInvoiceRequestRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn sales_invoice_requests(&self) -> SalesInvoiceRequestRepository<'_>;
     /// `receivable_account` 集合名。
     const RECEIVABLE_ACCOUNTS: &'static str = "receivable_accounts";
@@ -51,50 +60,98 @@ pub trait ReceivableExt {
 
     /// 获取 `receivable_account` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `ReceivableAccountRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn receivable_accounts(&self) -> ReceivableAccountRepository<'_>;
 
     /// 获取 `receivable_entry` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `ReceivableEntryRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn receivable_entries(&self) -> ReceivableEntryRepository<'_>;
 
     /// 获取 `receivable_entry_offset` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `ReceivableEntryOffsetRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn receivable_entry_offsets(&self) -> ReceivableEntryOffsetRepository<'_>;
 
     /// 获取 `customer_receipt` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `CustomerReceiptRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn customer_receipts(&self) -> CustomerReceiptRepository<'_>;
 
     /// 获取 `receipt_allocation` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `ReceiptAllocationRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn receipt_allocations(&self) -> ReceiptAllocationRepository<'_>;
 
     /// 获取 `invoice` 集合的 Repository（D19 通过本访问器复用）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `InvoiceRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn invoices(&self) -> InvoiceRepository<'_>;
 
     /// 获取 `sales_invoice_allocation` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SalesInvoiceAllocationRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn sales_invoice_allocations(&self) -> SalesInvoiceAllocationRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `ReceivableRepository` 实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn receivable(&self) -> ReceivableRepository<'_>;
 }
 

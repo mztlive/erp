@@ -53,8 +53,16 @@ fn verified_window_filter() -> Document {
 impl QueryFilter for SupplierQualificationFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回查询条件文档。
+    /// 返回查询条件文档。始终写入未删除的 `deleted_at`。
+    /// `supplier_id`、`qualification_type`、`status` 为 `Some` 时分别按字符串或 `as_str()` 精确写入；
+    /// 为 `None` 时不筛选。分页与排序字段不进入条件。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(supplier_id) = &self.supplier_id {
@@ -73,8 +81,14 @@ impl QueryFilter for SupplierQualificationFilter {
 impl Pagination for SupplierQualificationFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组。`page_size` 由 `u32` 展成 `u64`，不把 `0` 归一成第一页。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -177,7 +191,15 @@ pub trait SupplierQualificationRepositoryExt {
 
     /// 读取指定供应商能力已经关联的合同，沿用调用方执行器。
     ///
-    /// # Errors
+    /// # 参数
+    /// * `supplier_id` - 供应商角色 ID
+    /// * `capability_id` - 能力 ID
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 返回该能力关联、且属于该供应商的合同资质；没有关联时为空集合。
+    ///
+    /// # 错误
     /// 关联或资质读取失败时返回错误，不将读取失败当作没有合同。
     async fn linked_contracts(
         &self,
@@ -282,7 +304,14 @@ impl SupplierQualificationRepositoryExt for Repository<'_, SupplierQualification
 pub trait SupplierQualificationCapabilityRepositoryExt {
     /// 批量读取指定资质的适用能力关联。
     ///
-    /// # Errors
+    /// # 参数
+    /// * `qualification_ids` - 资质 ID；空集合不访问数据库
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回命中的关联行；入参为空时为空集合。
+    ///
+    /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     async fn list_by_qualification_ids(
         &self,
@@ -342,7 +371,16 @@ fn qualification_type_filter(qualification_types: &[QualificationType]) -> Docum
 impl<'a> SupplierRepository<'a> {
     /// 查询已登记但日期不完整的合同所属供应商。
     ///
-    /// # Errors
+    /// 只查合同。类型列表非空且不含合同时直接返回空集合，不把其他类型或未登记资质算进来。
+    ///
+    /// # 参数
+    /// * `qualification_types` - 资质类型；空集合表示不按类型排除合同
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回去重、稳定排序后的供应商角色 ID；类型范围排除合同时为空集合。
+    ///
+    /// # 错误
     /// 数据库读取失败时返回错误；不与未登记资质混淆。
     pub async fn list_supplier_ids_by_unverified_qualifications(
         &self,

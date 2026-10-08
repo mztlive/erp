@@ -11,8 +11,14 @@ macro_rules! status_display {
         impl $type {
             /// 返回中文展示名。
             ///
+            /// # 参数
+            /// 无。
+            ///
             /// # 返回
             /// 返回面向用户的中文标签。
+            ///
+            /// # 错误
+            /// 不返回错误。
             pub fn label(&self) -> &'static str {
                 match self {
                     $(Self::$variant => $label,)*
@@ -21,8 +27,14 @@ macro_rules! status_display {
 
             /// 返回稳定代码。
             ///
+            /// # 参数
+            /// 无。
+            ///
             /// # 返回
             /// 返回用于持久化与查询的稳定字符串。
+            ///
+            /// # 错误
+            /// 不返回错误。
             pub fn as_str(&self) -> &'static str {
                 match self {
                     $(Self::$variant => $code,)*
@@ -76,6 +88,9 @@ status_display!(FulfillmentResponsibility, {
 
 impl FulfillmentResponsibility {
     /// 返回采购单责任人后续直接执行的履约对象类型。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 供应商直发、电子交付和线下服务返回对应履约对象；入仓由仓库入库经办人负责，返回 `None`。

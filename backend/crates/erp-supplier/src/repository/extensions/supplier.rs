@@ -61,61 +61,124 @@ pub trait SupplierExt {
 
     /// 获取 `supplier_account` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SupplierAccountRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_accounts(&self) -> SupplierAccountRepository<'_>;
 
     /// 获取 `supplier_commercial_profile_revision` 集合的 Repository（追加式修订）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SupplierCommercialProfileRevisionRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_commercial_profile_revisions(&self) -> SupplierCommercialProfileRevisionRepository<'_>;
 
     /// 获取 `supplier_capability` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SupplierCapabilityRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_capabilities(&self) -> SupplierCapabilityRepository<'_>;
 
     /// 获取 `supplier_capability_revision` 集合的 Repository（追加式修订）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `persistence_core::Repository<'_, crate::entity::supplier::SupplierCapabilityRevision>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_capability_revisions(&self) -> persistence_core::Repository<'_, SupplierCapabilityRevision>;
 
     /// 获取 `supplier_qualification` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SupplierQualificationRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_qualifications(&self) -> SupplierQualificationRepository<'_>;
 
     /// 获取 `supplier_qualification_revision` 集合的 Repository（追加式修订）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `persistence_core::Repository<'_, crate::entity::supplier::SupplierQualificationRevision>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_qualification_revisions(
         &self,
     ) -> persistence_core::Repository<'_, SupplierQualificationRevision>;
 
     /// 获取 `supplier_qualification_capability` 集合的 Repository（纯关联行）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SupplierQualificationCapabilityRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_qualification_capabilities(&self) -> SupplierQualificationCapabilityRepository<'_>;
 
     /// 获取 `supplier_rating_revision` 集合的 Repository（追加式修订）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `persistence_core::Repository<'_, crate::entity::supplier::SupplierRatingRevision>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_rating_revisions(&self) -> persistence_core::Repository<'_, SupplierRatingRevision>;
 
     /// 获取供应商资料根级命令去重仓储。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 `SupplierProfileCommandRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_profile_commands(&self) -> SupplierProfileCommandRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SupplierRepository` 实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier(&self) -> SupplierRepository<'_>;
 }
 

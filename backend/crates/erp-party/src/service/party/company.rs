@@ -6,8 +6,16 @@ use crate::repository::prelude::*;
 impl PartyService {
     /// 分页查询我方公司，直接返回可选择的完整名称。
     ///
-    /// # Errors
-    /// 查询失败或持久化公司角色损坏时返回错误。
+    /// 响应中的页码与每页条数按请求值钳制：页码缺省 1 且不超过 `1_000_000`，每页缺省 30 且不超过 100。
+    ///
+    /// # 参数
+    /// * `params` - 关键词、状态与分页条件。
+    ///
+    /// # 返回
+    /// 返回公司视图分页。
+    ///
+    /// # 错误
+    /// 仓储查询失败时返回对应错误。主体缺少 `company_profile` 时，`TryFrom` 返回 `NotFound`。
     pub async fn company_list(&self, params: &CompanyListParams) -> Result<PageView<CompanyView>> {
         let page = self.db.parties().companies(params, &mut NoTransaction).await?;
         Ok(PageView {
@@ -20,16 +28,32 @@ impl PartyService {
 
     /// 回读公司，包括停用公司供历史资料回显。
     ///
-    /// # Errors
-    /// 主体不存在、不是我方公司或查询失败时返回错误。
+    /// # 参数
+    /// * `id` - 主体 ID。
+    ///
+    /// # 返回
+    /// 返回公司视图。
+    ///
+    /// # 错误
+    /// 主体不存在时返回 `NotFound`；主体没有 `company_profile` 时 `TryFrom` 返回 `NotFound`；查询失败时返回仓储错误。
     pub async fn company_detail(&self, id: &str) -> Result<CompanyView> {
         self.load_party(id).await?.try_into()
     }
 
     /// 创建公司；稳定编号支持结果未知后的同内容回读。
     ///
-    /// # Errors
-    /// 编号占用、名称别名冲突、校验或事务失败时返回错误。
+    /// 编号已存在、未删除，且公司资料、统一社会信用代码与状态都相同时，直接返回既有公司。
+    ///
+    /// # 参数
+    /// * `req` - 公司资料；`party_no` 创建后不可复用为另一份内容。
+    /// * `actor` - 已鉴权操作人。
+    ///
+    /// # 返回
+    /// 返回新建或可安全回读的公司视图。
+    ///
+    /// # 错误
+    /// 名称或别名校验失败时返回 `ValidationError`。编号已占用且内容不一致、已删除或不是同一公司时返回 `ConflictError`。
+    /// 创建事务、唯一索引冲突或随后回读失败时返回对应错误。
     pub async fn create_company(&self, req: SaveCompanyRequest, actor: &AuditActor) -> Result<CompanyView> {
         let profile = req.profile()?;
         if let Some(existing) =
@@ -59,8 +83,19 @@ impl PartyService {
 
     /// 更新公司资料或启停状态，旧引用继续保留同一主体身份。
     ///
-    /// # Errors
-    /// 缺少版本、编号变更、非公司身份或事务失败时返回错误。
+    /// 期望版本低于当前版本，且名称、别名、统一社会信用代码与状态都未变化时，直接返回当前公司，不再写入。
+    ///
+    /// # 参数
+    /// * `id` - 公司主体 ID。
+    /// * `req` - 整份公司资料；更新必须携带 `version`。
+    /// * `actor` - 已鉴权操作人。
+    ///
+    /// # 返回
+    /// 返回更新后或可安全回读的公司视图。
+    ///
+    /// # 错误
+    /// 主体不存在或不是公司时返回 `NotFound`。编号被修改、资料校验失败或缺少版本时返回 `ValidationError`。
+    /// 更新事务或随后回读失败时返回对应错误。
     pub async fn update_company(
         &self,
         id: &str,

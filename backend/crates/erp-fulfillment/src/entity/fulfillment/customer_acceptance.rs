@@ -41,8 +41,14 @@ pub enum CustomerAcceptanceState {
 impl CustomerAcceptanceState {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -53,8 +59,14 @@ impl CustomerAcceptanceState {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "DRAFT",
@@ -65,8 +77,14 @@ impl CustomerAcceptanceState {
 
     /// 判断是否可编辑（仅草稿）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 草稿状态返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_editable(&self) -> bool {
         matches!(self, Self::Draft)
     }
@@ -74,6 +92,16 @@ impl CustomerAcceptanceState {
 
 impl DocumentState for CustomerAcceptanceState {
     /// 固定邻接矩阵（§7.5 定向链，`REVERSED` 为不可逆终态）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Draft` 只允许进入 `Posted`；`Posted` 只允许进入 `Reversed`；
+    /// `Reversed` 没有后继。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft => &[Self::Posted],
@@ -100,8 +128,14 @@ pub enum AcceptanceResult {
 impl AcceptanceResult {
     /// 返回结果的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Passed => "通过",
@@ -113,8 +147,14 @@ impl AcceptanceResult {
 
     /// 返回结果的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Passed => "PASSED",
@@ -221,7 +261,7 @@ impl CustomerAcceptance {
     /// 更新成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 状态不可编辑时返回错误。
+    /// 状态不可编辑，或签收凭证身份为空白时返回错误。
     pub fn update(&mut self, update: CustomerAcceptanceUpdate) -> Result<()> {
         self.ensure_editable()?;
         if let Some(id) = update.evidence_attachment_id {
@@ -262,6 +302,9 @@ impl CustomerAcceptance {
     ///
     /// # 返回
     /// 销售单一致，且提供单号时单号也一致，返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn matches_business_identity(
         &self,
         sales_order_id: &SalesOrderId,
@@ -273,8 +316,14 @@ impl CustomerAcceptance {
 
     /// 判断验收单是否已经过账。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为 `Posted` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_posted(&self) -> bool {
         self.status == CustomerAcceptanceState::Posted
     }
@@ -300,6 +349,9 @@ impl CustomerAcceptance {
     }
 
     /// 校验验收单仍为草稿。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 草稿状态返回 `Ok(())`。
@@ -358,11 +410,14 @@ impl CustomerAcceptance {
     /// 过账时写 `acceptance_fulfillment_allocation` 的 `APPLY`/`REVERSE` 并重算
     /// 两侧净数量上限——由 P3 在过账事务中完成（§8.2 第 5 条）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 迁移成功返回 `Ok(())`。
+    /// 迁移成功返回 `Ok(())`。已过账再次过账按幂等成功。
     ///
     /// # 错误
-    /// 当前状态不允许迁移（非草稿）时返回错误。
+    /// 已冲正不能过账时返回错误。
     pub fn mark_posted(&mut self) -> Result<()> {
         ensure_transition(self.status, CustomerAcceptanceState::Posted)?;
         self.status = CustomerAcceptanceState::Posted;
@@ -381,7 +436,7 @@ impl CustomerAcceptance {
     /// 迁移成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 当前状态不允许迁移，或反向验收引用与自身相同/为空时返回错误。
+    /// 当前状态不允许迁移到已冲正，或反向验收引用与自身相同时返回错误。已冲正再次冲正不因状态失败。
     pub fn reverse(&mut self, reversal_of_acceptance_id: CustomerAcceptanceId) -> Result<()> {
         ensure_transition(self.status, CustomerAcceptanceState::Reversed)?;
         if reversal_of_acceptance_id.as_ref() == self.base.id {
@@ -394,8 +449,14 @@ impl CustomerAcceptance {
 
     /// 判断当前状态是否可编辑。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 草稿状态返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_editable(&self) -> bool {
         self.status.is_editable()
     }

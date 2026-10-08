@@ -1,4 +1,4 @@
-//! Consumer ports for audit persistence and supplier-role facts.
+//! 审计持久化与供应商角色事实的消费方端口。
 
 mod audit;
 mod supplier_role;

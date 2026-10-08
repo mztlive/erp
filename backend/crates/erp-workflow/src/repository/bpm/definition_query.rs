@@ -18,6 +18,13 @@ use super::{
 impl<'a> BpmWorkflowRepository<'a> {
     /// 查询同一流程种类当前唯一已发布定义。
     ///
+    /// # 参数
+    /// * `process_kind` - 流程种类。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 返回当前已发布定义；没有时返回 `None`。
+    ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     pub async fn find_published_by_process_kind(
@@ -60,6 +67,13 @@ impl<'a> BpmWorkflowRepository<'a> {
 
     /// 列出同一流程种类的历史定义版本，按业务版本倒序且有上限。
     ///
+    /// # 参数
+    /// * `process_kind` - 流程种类。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 按业务版本倒序返回至多 `MAX_DEFINITION_VERSIONS` 条未删除定义。
+    ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     pub async fn list_definition_versions(
@@ -79,6 +93,13 @@ impl<'a> BpmWorkflowRepository<'a> {
 
     /// 查询同一流程种类当前活动草稿。
     ///
+    /// # 参数
+    /// * `process_kind` - 流程种类。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 返回当前活动草稿；没有时返回 `None`。
+    ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     pub async fn find_active_draft(
@@ -90,6 +111,13 @@ impl<'a> BpmWorkflowRepository<'a> {
     }
 
     /// 批量读取定义及其节点、连线，禁止按节点 N+1。
+    ///
+    /// # 参数
+    /// * `definition_id` - 流程定义 ID。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 定义不存在时返回 `None`；否则返回定义及其有界节点、连线。
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
@@ -178,6 +206,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         Ok(Some(DefinitionGraph { definition, nodes, transitions }))
     }
 
+    /// 按定义 ID 有界读取节点，不超过 `MAX_DEFINITION_GRAPH_DOCS`。
     async fn load_definition_nodes(
         &self,
         definition_id: &ApprovalProcessDefinitionId,
@@ -193,6 +222,7 @@ impl<'a> BpmWorkflowRepository<'a> {
         .await
     }
 
+    /// 按定义 ID 有界读取连线，上限为节点上限的两倍。
     async fn load_definition_transitions(
         &self,
         definition_id: &ApprovalProcessDefinitionId,
@@ -209,6 +239,7 @@ impl<'a> BpmWorkflowRepository<'a> {
     }
 }
 
+/// 已发布种类过滤；软删除由 `Repository::find_one` 追加，本函数不写 `deleted_at`。
 fn published_kind_filter(process_kind: ProcessKind) -> Document {
     doc! {
         "process_kind": process_kind.as_str(),
@@ -235,6 +266,7 @@ pub(super) fn published_kind_docs_filter(process_kind: ProcessKind) -> Document 
     filter
 }
 
+/// 活动草稿过滤；软删除由 `Repository::find_one` 追加。
 fn active_draft_filter(process_kind: ProcessKind) -> Document {
     doc! {
         "process_kind": process_kind.as_str(),
@@ -242,6 +274,16 @@ fn active_draft_filter(process_kind: ProcessKind) -> Document {
     }
 }
 
+/// 构造节点或连线的定义子文档过滤，并显式带上软删除约束。
+///
+/// # 参数
+/// * `definition_id` - 所属流程定义 ID。
+///
+/// # 返回
+/// 返回含 `process_definition_id` 与 `deleted_at` 的查询文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn definition_child_filter(definition_id: &ApprovalProcessDefinitionId) -> Document {
     doc! {
         "process_definition_id": definition_id.as_ref(),
@@ -256,6 +298,9 @@ pub(super) fn definition_child_filter(definition_id: &ApprovalProcessDefinitionI
 ///
 /// # 返回
 /// 返回含 `process_kind` 与软删除约束的查询文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn definition_versions_filter(process_kind: ProcessKind) -> Document {
     doc! {
         "process_kind": process_kind.as_str(),
@@ -480,8 +525,14 @@ fn definition_versions_limit(limit: u32) -> i64 {
 
 /// 返回定义连线一次批量读取上限（节点上限的两倍）。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回 `MAX_DEFINITION_GRAPH_DOCS.saturating_mul(2)`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn definition_graph_transition_limit() -> i64 {
     MAX_DEFINITION_GRAPH_DOCS.saturating_mul(2)
 }

@@ -162,6 +162,9 @@ impl SupplierFulfillmentItem {
     ///
     /// # 返回
     /// 归属一致时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn belongs_to_order(&self, order_id: &SupplierFulfillmentOrderId) -> bool {
         self.supplier_fulfillment_order_id == *order_id
     }

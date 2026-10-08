@@ -1,4 +1,4 @@
-//! Consumer port for Party identity facts required by customer commands.
+//! 客户命令所需的主体身份事实消费端口。
 
 use async_trait::async_trait;
 use erp_core::ids::PartyId;
@@ -21,21 +21,42 @@ pub struct PartyIdentityFact {
 /// Port customer uses to read Party existence and identity facts.
 #[async_trait]
 pub trait PartyFactPort: Send + Sync {
-    /// Reject when the Party does not exist.
+    /// 主体不存在时拒绝。
     ///
-    /// # Parameters
-    /// * `party_id` - Party stable id
+    /// # 参数
+    /// * `party_id` - 主体稳定 ID。
     ///
-    /// # Errors
-    /// Missing Party maps to `NotFound`.
+    /// # 返回
+    /// 主体存在时无返回值。
+    ///
+    /// # 错误
+    /// 主体不存在时返回 `NotFound`。适配器读取失败时返回对应错误。
     async fn ensure_exists(&self, party_id: &PartyId) -> Result<()>;
 
-    /// Return identity facts for the given Party ids.
+    /// 返回给定主体 ID 的身份事实。
     ///
-    /// Missing Parties are omitted; callers treat gaps as silent degradation.
+    /// 缺失的主体省略；调用方把缺口当作静默降级。
+    ///
+    /// # 参数
+    /// * `party_ids` - 待读取的主体 ID。
+    ///
+    /// # 返回
+    /// 返回能读到的身份事实；缺失主体不出现在结果中。
+    ///
+    /// # 错误
+    /// 主体事实读取失败时返回对应错误。
     async fn identities_by_ids(&self, party_ids: &[PartyId]) -> Result<Vec<PartyIdentityFact>>;
 
-    /// Return Party ids whose current legal name, short name or unified credit code matches `keyword`.
+    /// 返回当前法定名称、简称或统一社会信用代码匹配 `keyword` 的主体 ID。
+    ///
+    /// # 参数
+    /// * `keyword` - 名称或统一社会信用代码关键词。
+    ///
+    /// # 返回
+    /// 返回命中的主体 ID；无命中时为空集合。
+    ///
+    /// # 错误
+    /// 主体检索失败时返回对应错误。
     async fn matching_ids_by_name(&self, keyword: &str) -> Result<Vec<String>>;
 }
 

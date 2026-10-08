@@ -20,6 +20,9 @@ use crate::{Error, Result};
 /// * `receipt` - 同事务写入的原审批命令回执。
 /// # 返回
 /// 返回库存领域验证回放所需的完整命令身份。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn cancellation_identity(receipt: &ApprovalCommandReceipt) -> CancellationCommandIdentity {
     CancellationCommandIdentity {
         receipt_id: receipt.base.id.clone(),

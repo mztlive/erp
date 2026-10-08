@@ -66,9 +66,10 @@ impl StructuredCommandReceipt {
     /// # 参数
     /// 无。
     /// # 返回
-    /// 合法时返回空结果。
+    /// 合法时无返回值。
+    ///
     /// # 错误
-    /// 必填身份缺失或指纹非法时返回错误。
+    /// `schema_version` 不是 1、`command_id` / `actor_id` / `action` / `resource_type` 去空白后为空、`scope_id` 为空白，或 `fingerprint` / `idempotency_key_hash` 不是合法 v1 指纹时返回错误。
     pub fn validate(&self) -> Result<()> {
         if self.schema_version != 1
             || [&self.command_id, &self.actor_id, &self.action, &self.resource_type]

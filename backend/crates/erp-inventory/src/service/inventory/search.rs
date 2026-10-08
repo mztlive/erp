@@ -10,6 +10,18 @@ use crate::ports::CatalogFactsPort;
 use crate::repository::{InventoryExt, InventorySearch};
 
 /// 关键词无命中必须形成空集合条件，不能退回不筛选。
+///
+/// # 参数
+/// * `catalog` - SKU 字面量匹配端口。
+/// * `q` - 关键词；`None` 时不调用端口，`Some` 时原样交给端口。
+/// * `sku` - 显式 SKU；`None` 表示未指定。
+/// * `executor` - 调用方选择的数据访问执行器。
+///
+/// # 返回
+/// 返回关键词命中集合与显式 SKU 的交集搜索条件。
+///
+/// # 错误
+/// 商品匹配端口失败时返回对应错误。
 pub(super) async fn sku_filter(
     catalog: &dyn CatalogFactsPort,
     q: Option<&str>,
@@ -24,6 +36,19 @@ pub(super) async fn sku_filter(
 }
 
 /// 余额数量与定位条件由拥有库存集合的仓储解析。
+///
+/// # 参数
+/// * `db` - 库存数据库。
+/// * `search` - 已求交的 SKU 搜索条件。
+/// * `id` - 精确余额主键；`None` 表示不按主键收窄。
+/// * `availability` - 可用量条件。
+/// * `executor` - 调用方选择的数据访问执行器。
+///
+/// # 返回
+/// 返回仓储解析后的余额搜索条件。
+///
+/// # 错误
+/// 读取有效预占维度失败时返回仓储错误。
 pub(super) async fn balance_filter(
     db: &Database,
     search: InventorySearch,
@@ -35,6 +60,18 @@ pub(super) async fn balance_filter(
 }
 
 /// 调整单按全部明细匹配 SKU，不能只检查列表首行。
+///
+/// # 参数
+/// * `db` - 库存数据库。
+/// * `search` - 已求交的 SKU 搜索条件。
+/// * `id` - 精确调整单主键；`None` 表示不按主键收窄。
+/// * `executor` - 调用方选择的数据访问执行器。
+///
+/// # 返回
+/// 返回解析到调整单主键集合后的搜索条件。
+///
+/// # 错误
+/// 读取调整明细失败时返回仓储错误。
 pub(super) async fn adjustment_filter(
     db: &Database,
     search: InventorySearch,

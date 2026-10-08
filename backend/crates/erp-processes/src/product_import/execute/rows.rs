@@ -10,14 +10,44 @@ use crate::Result;
 /// 导入行的业务写入与结果保存；单行保存必须原子推进明细和任务版本。
 #[async_trait]
 pub(super) trait ImportRowExecution: Send {
-    /// 执行一行并返回原始业务结果，失败行也必须持久化其结果。
+    /// 执行一行并返回可持久化的业务结果；失败行也必须带上结果，而不是中断整批。
+    ///
+    /// # 参数
+    /// * `row_number` - 源表行号。
+    ///
+    /// # 返回
+    /// 返回该行的状态、错误码、摘要和可选商品身份。
+    ///
+    /// # 错误
+    /// 不返回错误。
     async fn import(&mut self, row_number: u32) -> RecordedOutcome;
 
     /// 保存当前行和任务进度；取消或其他执行器写入必须通过版本冲突拒绝。
+    ///
+    /// # 参数
+    /// * `job` - 当前导入任务，保存成功后反映新进度。
+    /// * `item` - 已写入本行结果的明细。
+    ///
+    /// # 返回
+    /// 明细与任务版本已原子推进。
+    ///
+    /// # 错误
+    /// 仓储失败时返回对应错误。
     async fn persist(&mut self, job: &mut BackgroundJob, item: BackgroundJobItem) -> Result<()>;
 }
 
 /// 跳过已有结果，只逐行执行未完成项；保存失败时禁止继续执行后续行。
+///
+/// # 参数
+/// * `execution` - 单行导入与进度保存。
+/// * `job` - 当前导入任务。
+/// * `items` - 任务明细；已有 `status` 的行跳过。
+///
+/// # 返回
+/// 未完成行均已执行并保存，或遇到并发认领后停止。
+///
+/// # 错误
+/// 行结果无法写入明细，或保存失败且不是并发认领时返回对应错误。
 pub(super) async fn execute_rows(
     execution: &mut impl ImportRowExecution,
     job: &mut BackgroundJob,

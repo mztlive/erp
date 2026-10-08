@@ -60,6 +60,17 @@ struct StockAllocationAdapter<'a> {
 #[async_trait]
 impl StockAllocationPort for StockAllocationAdapter<'_> {
     /// 复用库存领域仓储的余额 CAS。
+    ///
+    /// # 参数
+    /// * `id` - 库存余额主键。
+    /// * `quantity` - 本次增加的预占数量。
+    /// * `executor` - 调用方事务执行器。
+    ///
+    /// # 返回
+    /// 可用量充足且余额命中时返回 `true`；可用量不足或余额不存在时返回 `false`，且不修改余额。
+    ///
+    /// # 错误
+    /// 余额仓储写入失败时返回对应错误。
     async fn reserve_quantity(
         &self,
         id: &str,
@@ -69,6 +80,16 @@ impl StockAllocationPort for StockAllocationAdapter<'_> {
         Ok(self.db.stock_balances().reserve_quantity(id, quantity, executor).await?)
     }
     /// 经库存领域仓储批量保存预占，不直接操作集合。
+    ///
+    /// # 参数
+    /// * `reservations` - 已构造的预占实体，按入参顺序保存。
+    /// * `executor` - 调用方事务执行器。
+    ///
+    /// # 返回
+    /// 预占批量保存成功。
+    ///
+    /// # 错误
+    /// 仓储批量写入失败时返回对应错误。
     async fn create_reservations(
         &self,
         reservations: &[StockReservation],
@@ -78,6 +99,16 @@ impl StockAllocationPort for StockAllocationAdapter<'_> {
         Ok(())
     }
     /// 经库存领域仓储批量保存分录，并传递同一执行器。
+    ///
+    /// # 参数
+    /// * `entries` - 与预占对应的分录，按入参顺序保存。
+    /// * `executor` - 与预占写入相同的执行器。
+    ///
+    /// # 返回
+    /// 分录批量保存成功。
+    ///
+    /// # 错误
+    /// 仓储批量写入失败时返回对应错误。
     async fn create_entries(
         &self,
         entries: &[StockReservationEntry],

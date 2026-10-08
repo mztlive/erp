@@ -88,6 +88,18 @@ pub(super) struct ApprovalNodeSpec {
 }
 
 /// 返回进程内只解析一次的演示基础规格。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回嵌入的 `dev-foundation.json` 解析结果。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # Panics
+/// 嵌入 JSON 无法反序列化为 `FoundationFile` 时 panic。该文件随编译嵌入，解析失败表示规格损坏。
 pub(super) fn foundation_spec() -> &'static FoundationFile {
     static SPEC: OnceLock<FoundationFile> = OnceLock::new();
     SPEC.get_or_init(|| {

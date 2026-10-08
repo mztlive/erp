@@ -50,6 +50,9 @@ use self::hash::normalize_sha256;
 ///
 /// # 返回
 /// 返回 64 位小写 SHA-256 十六进制摘要。
+///
+/// # 错误
+/// 不返回错误。
 pub fn statement_digest_parts(parts: &[String]) -> String {
     self::hash::digest_parts(parts)
 }
@@ -340,14 +343,23 @@ impl SupplierSettlementStatement {
     ///
     /// # 返回
     /// 对账负责人一致时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_prepared_by(&self, actor_id: &str) -> bool {
         self.prepared_by == actor_id
     }
 
     /// 返回当前差异处理人；存量空值回退对账负责人。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回差异处理人 ID。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn difference_handler(&self) -> &str {
         if self.difference_handler_user_id.is_empty() {
             &self.prepared_by
@@ -363,13 +375,22 @@ impl SupplierSettlementStatement {
     ///
     /// # 返回
     /// 差异处理人一致时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_difference_handler(&self, actor_id: &str) -> bool {
         self.difference_handler() == actor_id
     }
     /// 使用新的服务端来源证据批次替换尚未提交复核的草稿快照。
     ///
+    /// # 参数
+    /// * `update` - 服务端来源快照更新
+    ///
+    /// # 返回
+    /// 账单身份、金额、摘要和可编辑状态写回后返回 `Ok(())`。
+    ///
     /// # 错误
-    /// 非草稿态、账单身份/金额/摘要非法时返回错误；供应商、期间与期间策略不可改变。
+    /// 已提交复核或进入终态，或外部账单号、版本、金额、来源摘要非法时返回错误。本方法不改供应商、期间与期间策略。
     pub fn refresh_snapshot(&mut self, update: SupplierSettlementSnapshotUpdate) -> Result<()> {
         if !matches!(
             self.status,

@@ -1,4 +1,4 @@
-//! Supplier party-fact, sensitive-token and file-asset adapters.
+//! 供应商主体事实、敏感令牌与文件资产 adapter。
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -18,19 +18,37 @@ use erp_support::FileAssetExt;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
-/// MongoDB adapter that reads party facts for supplier queries.
+/// 为供应商查询读取主体事实的 Mongo adapter。
 #[derive(Clone)]
 pub struct MongoSupplierPartyFacts {
     db: Database,
 }
 
 impl MongoSupplierPartyFacts {
-    /// Bind the adapter to `db`.
+    /// 绑定主体集合所在数据库，构造时不读取。
+    ///
+    /// # 参数
+    /// * `db` - 主体集合所在数据库。
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的 adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// Wrap the adapter as a shared port.
+    /// 包装为供应商域可注入的主体事实 Port。
+    ///
+    /// # 参数
+    /// * `db` - 主体集合所在数据库。
+    ///
+    /// # 返回
+    /// 返回共享的主体事实 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn PartyFactsPort> {
         Arc::new(Self::new(db))
     }
@@ -166,14 +184,23 @@ impl PartyFactsPort for MongoSupplierPartyFacts {
     }
 }
 
-/// Adapter that issues party-owned sensitive reveal tokens for supplier facts.
+/// 为主体敏感字段签发供应商揭示令牌的 adapter。
 #[derive(Clone)]
 pub struct MongoSupplierSensitiveTokens {
     codec: Arc<SensitiveDataCodec>,
 }
 
 impl MongoSupplierSensitiveTokens {
-    /// Wrap a codec as the supplier token port.
+    /// 把敏感数据编解码器包装为供应商令牌 Port。
+    ///
+    /// # 参数
+    /// * `codec` - 主体敏感字段编解码器。
+    ///
+    /// # 返回
+    /// 返回共享的敏感令牌 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(codec: Arc<SensitiveDataCodec>) -> Arc<dyn SensitiveTokenPort> {
         Arc::new(Self { codec })
     }
@@ -193,19 +220,37 @@ impl SensitiveTokenPort for MongoSupplierSensitiveTokens {
     }
 }
 
-/// MongoDB adapter that reads qualification attachment facts from support.
+/// 从支持域读取资质附件事实的 Mongo adapter。
 #[derive(Clone)]
 pub struct MongoSupplierFileAssets {
     db: Database,
 }
 
 impl MongoSupplierFileAssets {
-    /// Bind the adapter to `db`.
+    /// 绑定文件资产集合所在数据库，构造时不读取。
+    ///
+    /// # 参数
+    /// * `db` - 文件资产集合所在数据库。
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的 adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// Wrap the adapter as a shared port.
+    /// 包装为供应商域可注入的文件资产事实 Port。
+    ///
+    /// # 参数
+    /// * `db` - 文件资产集合所在数据库。
+    ///
+    /// # 返回
+    /// 返回共享的文件资产事实 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn FileAssetFactsPort> {
         Arc::new(Self::new(db))
     }

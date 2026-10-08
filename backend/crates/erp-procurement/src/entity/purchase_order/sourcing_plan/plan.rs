@@ -527,6 +527,9 @@ fn exceeds_any_cap(
 ///
 /// # 关键业务约束
 /// 只用于边界比较，不代表缺失业务数量。
+///
+/// # Panics
+/// 数量文本 `"0"` 无法解析时 panic；零数量是合法数量，panic 只表示数量类型不变量被破坏。
 pub(super) fn zero_quantity() -> Quantity {
     Quantity::from_str("0").expect("零数量合法")
 }

@@ -159,6 +159,17 @@ impl InventoryAdjustmentService {
     /// 本端口只承认精确存在且能通过 receipt → instance → snapshot → frozen
     /// binding → actor/current scope 验证的收据；不存在或错 key 返回 `NotFound`，
     /// 不得依据当前单据状态推断原命令成功。
+    ///
+    /// # 参数
+    /// * `id` - 调整单主键。
+    /// * `query` - 期望主题版本与幂等键。
+    /// * `actor` - 当前认证操作人。
+    ///
+    /// # 返回
+    /// 返回原命令实例对应的当前可读详情。
+    ///
+    /// # 错误
+    /// 查询参数非法、事务内解析失败、结果不存在，或详情读取失败时返回对应错误。
     pub async fn stock_adjustment_submit_result(
         &self,
         id: &str,

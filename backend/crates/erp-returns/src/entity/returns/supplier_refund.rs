@@ -39,8 +39,14 @@ pub enum SupplierRefundStatus {
 impl SupplierRefundStatus {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -52,8 +58,14 @@ impl SupplierRefundStatus {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "draft",
@@ -69,6 +81,16 @@ impl DocumentState for SupplierRefundStatus {
     ///
     /// 复核态唯一为 `IN_APPROVAL`；草稿不得直接过账；审批中可过账或受控
     /// 撤回回草稿；`REVERSED` 是终态。审批导致的业务 `REJECTED` 已删除。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Draft` 的后继只有 `InApproval`；`InApproval` 的后继是 `Posted` 与 `Draft`；
+    /// `Posted` 的后继只有 `Reversed`；`Reversed` 没有后继。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft => &[Self::InApproval],
@@ -192,7 +214,7 @@ impl SupplierRefund {
     /// # 返回
     /// 经办人与复核岗位分离且本人发起时返回成功。
     /// # 错误
-    /// 非经办人或岗位未分离时返回业务规则错误。
+    /// 非经办人或岗位未分离时返回 `LogicError`。
     pub fn ensure_submitter(&self, actor_id: &str) -> Result<()> {
         if self.handled_by == actor_id && self.reviewed_by != actor_id {
             return Ok(());
@@ -262,8 +284,14 @@ impl SupplierRefund {
 
     /// 校验供应商退款仍是从未提交审批的初始草稿。
     ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 仍是初始草稿时返回成功。
+    ///
     /// # 错误
-    /// 非草稿或审批主题版本已经递增时返回错误。
+    /// 非草稿或审批主题版本已经递增时返回 `LogicError`。
     pub fn ensure_initial_approval_state(&self) -> Result<()> {
         ensure_initial_approval(
             self.status == SupplierRefundStatus::Draft,
@@ -332,11 +360,14 @@ impl SupplierRefund {
     ///
     /// 版本使用 checked add，成功后不回退。不得改写 `BaseModel.version`。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回冻结后的提交版本。
     ///
     /// # 错误
-    /// 非草稿或版本溢出时返回冲突。
+    /// 非草稿或审批版本溢出时返回 `LogicError`。
     pub fn start_approval(&mut self) -> Result<u32> {
         if self.status != SupplierRefundStatus::Draft {
             return Err(Error::from("只有草稿状态的供应商退款单可以提交审批"));
@@ -349,8 +380,14 @@ impl SupplierRefund {
 
     /// 撤回审批：回到草稿，且 `approval_subject_version` 不回退。
     ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 成功时单据回到草稿，审批版本不回退。
+    ///
     /// # 错误
-    /// 非审批中时返回冲突。
+    /// 非审批中时返回 `LogicError`。
     pub fn cancel_approval(&mut self) -> Result<()> {
         if self.status != SupplierRefundStatus::InApproval {
             return Err(Error::from("只有审批中的供应商退款单可以撤回审批"));
@@ -360,8 +397,14 @@ impl SupplierRefund {
 
     /// 最终通过过账：仅 `IN_APPROVAL` 可进入 `POSTED`。
     ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 成功时状态变为 `Posted`。
+    ///
     /// # 错误
-    /// 状态不是审批中时返回冲突。
+    /// 状态不是审批中时返回 `LogicError`。
     pub fn mark_posted(&mut self) -> Result<()> {
         if self.status != SupplierRefundStatus::InApproval {
             return Err(Error::from("只有审批中的供应商退款单可以由最终通过动作过账"));
@@ -371,8 +414,14 @@ impl SupplierRefund {
 
     /// 判断退款是否已过账。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为 `Posted` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_posted(&self) -> bool {
         self.status == SupplierRefundStatus::Posted
     }

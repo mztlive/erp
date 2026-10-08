@@ -1,4 +1,4 @@
-//! Financial accounts, invoices, payments and cost facts.
+//! 财务账户、发票、付款与成本事实。
 
 pub mod dto;
 pub mod entity;

@@ -63,7 +63,16 @@ pub struct SupplierConnectionOwnedImpact {
     pub open_supplier_orders: u64,
 }
 impl SupplierConnectionOwnedImpact {
-    /// 与调用方取得的权威任务计数组成原治理规则输入。
+    /// 消耗 `self`，把本域供给与订单计数和活动同步任务数合成治理影响。
+    ///
+    /// # 参数
+    /// * `active_sync_jobs` - 调用方取得的活动同步任务数
+    ///
+    /// # 返回
+    /// 返回包含活动供给数、未完成订单数和活动同步任务数的 `SupplierConnectionImpact`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_active_sync_jobs(self, active_sync_jobs: u64) -> SupplierConnectionImpact {
         SupplierConnectionImpact {
             active_offerings: self.active_offerings,
@@ -102,6 +111,9 @@ impl<'a> SupplierApiRepository<'a> {
     ///
     /// # 返回
     /// 返回仓储实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
@@ -332,6 +344,9 @@ impl<'a> SupplierApiRepository<'a> {
     /// * `connection` - 待写入的连接配置
     /// * `capabilities` - 待写入的能力声明清单
     /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 返回
+    /// 连接与能力清单都写入成功时无返回值。
     ///
     /// # 错误
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射

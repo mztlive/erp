@@ -24,6 +24,9 @@ use crate::{Error, Result};
 ///
 /// # 返回
 /// 返回可派生的进度及剩余可验收标记；None 表示不得刷新销售。
+///
+/// # 错误
+/// 销售单不存在、没有生效版本或生效版本不存在时返回 `NotFound`。仓储读取或行资格投影失败时返回对应错误。
 pub async fn load_customer_acceptance_progress(
     db: &Database,
     session: &mut dyn persistence_core::Executor,

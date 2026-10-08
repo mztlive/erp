@@ -161,6 +161,9 @@ impl SupplierSettlementStatement {
     }
     /// 标记当前可编辑结算草稿仍存在正式差异。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态推进到 `HAS_DIFFERENCE` 时返回 `Ok(())`。
     ///
@@ -178,8 +181,16 @@ impl SupplierSettlementStatement {
     /// 确认形成应付并进入终态；驳回必须携带结构化原因，且只能回到草稿或有差异。
     /// 经办人与复核人岗位分离由本实体再次固化。
     ///
+    /// # 参数
+    /// * `decision` - 确认或驳回决定
+    /// * `reviewed_by` - 复核人
+    /// * `reviewed_at` - 复核时间
+    ///
+    /// # 返回
+    /// 复核结果、原因和状态写回后返回 `Ok(())`。
+    ///
     /// # 错误
-    /// 非待复核状态、岗位冲突、驳回原因非法或目标状态非法时返回错误。
+    /// 非待复核、复核人为空或超长、与经办人相同、驳回目标不是草稿或有差异，或复核说明超长时返回错误。
     pub fn record_review(
         &mut self,
         decision: SettlementReviewDecision,
@@ -229,6 +240,9 @@ impl SupplierSettlementStatement {
     ///
     /// # 参数
     /// * `reviewed_by` - 新的复核人
+    ///
+    /// # 返回
+    /// 复核人写入成功时返回 `Ok(())`。
     ///
     /// # 错误
     /// 复核人为空/超长或与经办人相同时返回错误。

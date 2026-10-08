@@ -393,6 +393,9 @@ impl<'a> SalesOrderDomainRepository<'a> {
     /// * `voucher_lines` - 待写入的卡券行版本
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
+    /// # 返回
+    /// 正式版本、版本行与销售单均写入成功时无返回值。
+    ///
     /// # 错误
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）、乐观锁冲突或
     /// MongoDB 写入失败时返回错误。

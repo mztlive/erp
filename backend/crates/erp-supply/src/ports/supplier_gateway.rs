@@ -77,6 +77,9 @@ pub trait SupplierGateway: Send + Sync {
     ///
     /// # 返回
     /// 返回分类后的处理结果；实现内部完成超时与重试，不直接失败。
+    ///
+    /// # 错误
+    /// 不返回错误。传输或业务失败只体现在 `DispatchOutcome`。
     fn dispatch<'a>(
         &'a self,
         action: &'a SupplierOrderAction,
@@ -88,6 +91,17 @@ pub trait SupplierGateway: Send + Sync {
     ///
     /// 实现必须使用原动作身份查询，不得创建新订单或改用新供应商幂等键。只有
     /// 外部系统明确返回“原请求未形成结果”时才能开放安全重放。
+    ///
+    /// # 参数
+    /// * `target_action` - 被调查的原供应商动作。
+    /// * `order` - 所属供应商子订单。
+    /// * `connection` - 供应商 API 连接。
+    ///
+    /// # 返回
+    /// 返回 `InvestigationOutcome`。只有外部系统明确证明原请求未形成结果时才应为 `VerifiedNoResult`，否则为 `ResultUnknown`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn investigate<'a>(
         &'a self,
         target_action: &'a SupplierOrderAction,

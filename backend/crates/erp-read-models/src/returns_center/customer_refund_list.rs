@@ -94,6 +94,7 @@ impl CustomerRefundListFacts {
 ///
 /// # 返回
 /// 返回 `document_id -> approval_binding` 映射；缺行不出现在结果中。
+/// 值为 `None` 表示该注册行没有冻结绑定。
 ///
 /// # 错误
 /// 不返回错误。

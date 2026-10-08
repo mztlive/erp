@@ -36,50 +36,98 @@ pub trait SupplierFulfillmentExt {
 
     /// 获取 `supplier_fulfillment_order` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SupplierFulfillmentOrderRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_fulfillment_orders(&self) -> SupplierFulfillmentOrderRepository<'_>;
 
     /// 获取 `supplier_fulfillment_item` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SupplierFulfillmentItemRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_fulfillment_items(&self) -> SupplierFulfillmentItemRepository<'_>;
 
     /// 获取 `supplier_order_action` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SupplierOrderActionRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_order_actions(&self) -> SupplierOrderActionRepository<'_>;
 
     /// 获取 `supplier_order_action_line` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SupplierOrderActionLineRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_order_action_lines(&self) -> SupplierOrderActionLineRepository<'_>;
 
     /// 获取 `supplier_order_status_history` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SupplierOrderStatusHistoryRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_order_status_histories(&self) -> SupplierOrderStatusHistoryRepository<'_>;
 
     /// 获取 `supplier_refund_fact` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SupplierRefundFactRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_refund_facts(&self) -> SupplierRefundFactRepository<'_>;
 
     /// 获取 `supplier_refund_allocation` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SupplierRefundAllocationRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_refund_allocations(&self) -> SupplierRefundAllocationRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SupplierFulfillmentRepository` 实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_fulfillment(&self) -> SupplierFulfillmentRepository<'_>;
 }
 

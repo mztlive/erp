@@ -106,7 +106,17 @@ impl SupplierPortalReadService {
         })
     }
 
-    /// 按服务端绑定取得本供应商，不授予任何内部DataScope。
+    /// 按服务端绑定取得本供应商，不授予任何内部 `DataScope`。
+    ///
+    /// # 参数
+    /// * `actor` - 已验证的门户身份。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回仍有效的供应商账户。
+    ///
+    /// # 错误
+    /// 账户不存在或已停用时返回 `Unauthenticated`。仓储读取失败时返回对应错误。
     pub(super) async fn portal_supplier(
         &self,
         actor: &PortalActor,

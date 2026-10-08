@@ -83,11 +83,16 @@ pub struct AssignUserRoleRequest {
 impl AssignUserRoleRequest {
     /// 转换为实体创建数据。
     ///
+    /// 未提供生效时间时使用当前时刻。
+    ///
     /// # 参数
     /// * `assigned_by` - 分配人（账号或系统身份）
     ///
     /// # 返回
     /// 返回实体层创建数据。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn into_data(self, assigned_by: &str) -> UserRoleData {
         UserRoleData {
             user_id: self.user_id,
@@ -119,8 +124,14 @@ pub struct RevokeUserRoleRequest {
 impl RevokeUserRoleRequest {
     /// 转换为实体撤权数据。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回实体层撤权数据。
+    /// 返回实体层撤权数据；没有原因说明时不写入说明。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn into_revoke_data(self) -> UserRoleRevokeData {
         let data = UserRoleRevokeData::new(self.revoke_reason_code);
         match self.revoke_reason_text {

@@ -1,4 +1,4 @@
-//! Import domain: legacy import batches, rows, confirmations and apply-result facts.
+//! 导入领域：旧数据导入批次、行、确认与应用结果事实。
 
 pub mod dto;
 pub mod entity;

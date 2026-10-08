@@ -34,6 +34,18 @@ pub(crate) fn distinct_sorted_customer_ids(ids: impl IntoIterator<Item = String>
 /// 构造用户对目标客户的当前有效归属查询条件。
 ///
 /// 有效期采用半开区间 `[valid_from, valid_to)`；`valid_to = null` 表示长期有效。
+/// 角色限定为 `OWNER` 与 `COLLABORATOR`。
+///
+/// # 参数
+/// * `customer_id` - 客户角色 ID
+/// * `user_id` - 销售人员 ID
+/// * `as_of` - 业务日期
+///
+/// # 返回
+/// 返回含半开有效期的 MongoDB 过滤文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn active_customer_user_assignment_filter(
     customer_id: &str,
     user_id: &str,
@@ -67,6 +79,9 @@ pub(crate) fn active_customer_user_assignment_filter(
 ///
 /// # 返回
 /// 返回含半开窗口的 MongoDB 过滤文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn active_window_filter(as_of: &BusinessDate, owned: Option<Document>) -> Document {
     let as_of = as_of.to_string();
     let mut filter = owned.unwrap_or_default();
@@ -87,6 +102,9 @@ pub(crate) fn active_window_filter(as_of: &BusinessDate, owned: Option<Document>
 ///
 /// # 返回
 /// 返回排序条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     let field = sort_by.filter(|candidate| allowed.contains(candidate)).unwrap_or("created_at");
@@ -94,6 +112,17 @@ pub(crate) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&
 }
 
 /// 构造当前主责查询：未删除归属和未删除客户共同受有效期及可见边界限制。
+///
+/// # 参数
+/// * `customer_ids` - 可见客户边界；`None` 不按客户收窄
+/// * `owner_ids` - 额外收窄的负责人；`None` 不按人员收窄
+/// * `as_of` - 归属有效期判定业务日期
+///
+/// # 返回
+/// 返回聚合管道：匹配当前 `OWNER` 窗口、关联未删除客户并去掉关联数组。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn current_owner_pipeline(
     customer_ids: Option<&[String]>,
     owner_ids: Option<&[String]>,
@@ -119,8 +148,14 @@ pub(crate) fn current_owner_pipeline(
 
 /// 客户角色列表投影字段。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回投影条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn customer_account_projection() -> Document {
     doc! {
         "id": 1,
@@ -136,8 +171,14 @@ pub(crate) fn customer_account_projection() -> Document {
 
 /// 客户归属列表投影字段。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回投影条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn customer_assignment_projection() -> Document {
     doc! {
         "id": 1,

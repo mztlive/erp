@@ -409,8 +409,20 @@ pub(super) struct RuntimeSubject<'a> {
 
 /// 将启动计划写入 BPM 集合、不可变快照和入口 WorkItem。
 ///
+/// # 参数
+/// * `db` - 数据库。
+/// * `writes` - 已规划的启动写入。
+/// * `subject` - 单据类型与提交快照。
+/// * `owner_role` - 入口任务责任角色。
+/// * `organization_id` - 单据责任组织。
+/// * `now` - 启动时刻。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 运行时、快照和入口任务写入成功时无返回值。
+///
 /// # 错误
-/// 计划缺少入口执行或写入失败时返回错误。
+/// 计划缺少入口执行、快照构造、展示捕获或任一步写入失败时返回错误。
 pub(super) async fn persist_runtime_writes(
     db: &Database,
     writes: &erp_workflow::service::approval::execution::apply_plan::PlannedWrites,

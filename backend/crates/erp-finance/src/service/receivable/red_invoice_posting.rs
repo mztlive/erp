@@ -1,4 +1,4 @@
-//! Red invoice and receivable/payable reversal writes in the caller's transaction.
+//! 在调用方事务中写入红字发票及应收或应付冲减。
 
 use erp_core::ids::{
     InvoiceId, PayableAccountId, PurchaseInvoiceAllocationId, ReceivableAccountId, SalesInvoiceAllocationId,
@@ -17,11 +17,26 @@ use crate::repository::prelude::*;
 use crate::repository::{PayableExt, ReceivableExt};
 use crate::{Error, Result};
 
-/// Write the registered red invoice and apply the validated reversal plan atomically.
+/// 写入已登记的红字发票，并按已校验的冲减计划更新进度与分配。
 ///
-/// Preserves invoice creation, optional original status update, account deltas and
-/// allocation order. Returns affected receivable identities for workflow/sales steps.
-/// The supplied executor is used for every operation; no transaction is opened here.
+/// 保持发票创建、必要时更新原票状态、账户差额与分配的原顺序。
+/// 返回受影响的应收账户身份，供流程与销售后续步骤使用。
+/// 全部操作使用传入的执行器，本函数不开启事务。
+///
+/// # 参数
+/// * `db` - 财务领域数据库。
+/// * `red_invoice` - 待创建的红字发票。
+/// * `original_invoice` - 原票；全额冲减时就地标为已红冲。
+/// * `allocation_plan` - 已校验的红冲分配计划。
+/// * `actor_id` - 执行人。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 销项时返回受影响的应收账户 ID；进项时返回空列表。
+///
+/// # 错误
+/// 红冲金额超过已开票或已收票进度时返回 `BusinessLogicError`；
+/// 分配实体构造失败或仓储写入失败时返回对应错误。
 pub async fn persist_red_invoice(
     db: &Database,
     red_invoice: &Invoice,

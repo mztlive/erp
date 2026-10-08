@@ -25,8 +25,14 @@ pub enum ImportExecutionAction {
 impl ImportExecutionAction {
     /// 返回稳定的 wire code。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回 `START_APPLY` / `CANCEL_PENDING` / `RETRY_FAILED`。
+    /// 返回 `START_APPLY`、`CANCEL_PENDING` 或 `RETRY_FAILED`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::StartApply => "START_APPLY",

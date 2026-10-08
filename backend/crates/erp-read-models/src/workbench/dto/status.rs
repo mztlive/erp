@@ -1,7 +1,6 @@
-//! Work-item query status and filter DTOs.
+//! 工作项查询状态与筛选 DTO。
 //!
-//! Canonical types live in `erp-workflow`; this module re-exports them so HTTP
-//! field names and serde shapes stay unchanged.
+//! 权威类型在 `erp-workflow`；本模块再导出它们，以保持 HTTP 字段名和 serde 形状不变。
 
 pub use erp_workflow::dto::work_item::{
     ProcessingBlockerView, ProcessingState, WORK_ITEM_TYPES, WorkItemAllowedAction, WorkItemFamily,

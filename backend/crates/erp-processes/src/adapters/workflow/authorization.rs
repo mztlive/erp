@@ -28,7 +28,7 @@ use crate::errors::{Error, Result};
 use crate::supplier_portal::authorization::request_readable as portal_request_readable;
 use crate::supplier_portal::request_reviewable as portal_request_reviewable;
 
-/// Shared RBAC adapter consumed by workflow command and definition services.
+/// 工作流命令与定义服务使用的共享 RBAC adapter。
 #[derive(Clone)]
 pub struct WorkflowAuth {
     db: Database,
@@ -36,7 +36,17 @@ pub struct WorkflowAuth {
 }
 
 impl WorkflowAuth {
-    /// Wrap a shared RBAC service as the workflow authorization port.
+    /// 把共享 RBAC 包装为工作流授权端口，构造时不查询。
+    ///
+    /// # 参数
+    /// * `db` - 身份与业务集合所在数据库。
+    /// * `rbac` - 现有 RBAC 快照服务。
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的授权 adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
         Self { db, rbac }
     }
@@ -78,6 +88,17 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
         portal_request_readable(&self.db, &self.rbac, actor, request_id, executor).await.map_err(map_service)
     }
     /// 同阶段复用首次身份范围事实；末尾版本校验仍由原队列入口独立执行。
+    ///
+    /// # 参数
+    /// * `actor` - 当前操作人。
+    /// * `include_version` - 为真时让下层读取授权版本。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 成功时返回 `Some`，内含队列访问事实。本实现不返回 `None`。无 `work_item:manage` 时受管负责人列表为空向量；公司范围时该字段为 `None`。
+    ///
+    /// # 错误
+    /// 授权版本、角色、参与单据或范围解析失败时返回映射后的工作流错误。负责人超过 20000 时返回校验错误。
     async fn queue_access_facts(
         &self,
         actor: &AuditActor,
@@ -104,7 +125,8 @@ impl WorkflowAuthorizationPort for WorkflowAuth {
     /// 在提交原执行器中复用合同详情授权，来源客户责任由合同领域解释。
     ///
     /// # 参数
-    /// * `actor` / `contract_id` - 当前提交者及提交锁定的合同。
+    /// * `actor` - 当前提交者。
+    /// * `contract_id` - 提交锁定的合同。
     /// * `executor` - 原业务提交执行器。
     /// # 返回
     /// 当前合同动作及来源边界已证明时返回 true；不可见时返回 false。

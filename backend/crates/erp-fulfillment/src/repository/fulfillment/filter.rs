@@ -6,8 +6,14 @@
 
 /// 未删除过滤文档（五类列表 `to_doc` 共用前缀；查询语义不变）。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回仅含未删除条件的查询文档；调用方追加业务条件。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn active_filter() -> mongodb::bson::Document {
     mongodb::bson::doc! { "deleted_at": entity_core::NOT_DELETED_TIMESTAMP_BSON }
 }
@@ -20,6 +26,9 @@ pub(crate) fn active_filter() -> mongodb::bson::Document {
 ///
 /// # 返回
 /// 返回 `(page, page_size)` 元组。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn page_and_size(page: u64, page_size: u32) -> (u64, u64) {
     (page, u64::from(page_size))
 }

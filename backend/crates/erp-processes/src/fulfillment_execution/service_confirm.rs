@@ -34,7 +34,7 @@ impl FulfillmentProcess {
     /// # 参数
     /// * `id` - 记录主键
     /// * `req` - 现场事实、乐观锁版本与图片凭证
-    /// * `asset_requests` - 本次 multipart 待登记文件
+    /// * `pending_assets` - 本次待登记的图片凭证批次
     /// * `actor` - 已通过鉴权的审计操作人
     ///
     /// # 返回
@@ -394,6 +394,17 @@ impl ServiceConfirmationPort for MongoServiceConfirmation<'_> {
     }
 
     /// 实际服务成本与首次确认、任务和验收可用事实共享同一 Executor。
+    ///
+    /// # 参数
+    /// * `record` - 已确认的服务履约。数量、分配、销售行和证据取自该记录；发生时间优先用 `service_ended_at`。
+    /// * `purchase` - 成本所属采购单。
+    /// * `executor` - 与确认共用的执行器。
+    ///
+    /// # 返回
+    /// 实际成本及销售明细分配写入成功。
+    ///
+    /// # 错误
+    /// 采购销售分配或采购版本明细不存在时返回 `NotFound`；成本准备或成本写入失败时返回对应错误。
     async fn cost(
         &self,
         record: &Self::Record,

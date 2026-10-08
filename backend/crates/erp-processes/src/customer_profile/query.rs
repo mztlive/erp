@@ -20,8 +20,14 @@ use crate::{Error, Result};
 impl CustomerProfileService {
     /// 查询客户资料对象中心的当前事实、历史版本与敏感字段揭示入口。
     ///
-    /// # Errors
-    /// 客户、Party 或当前名称修订不存在，或任一仓储查询失败时返回错误。
+    /// # 参数
+    /// * `customer_id` - 客户角色主键。
+    ///
+    /// # 返回
+    /// 返回客户、主体、修订、归属、当前事实和敏感字段令牌入口。归属人没有显示名时回退为账号 ID。
+    ///
+    /// # 错误
+    /// 客户或关联主体不存在、当前名称修订无法解析、敏感令牌无法签发，或任一仓储查询失败时返回错误。
     pub async fn detail(&self, customer_id: &str) -> Result<CustomerProfileDetailView> {
         let account = self.load_customer(customer_id).await?;
         let party = self.load_party(&account.party_id).await?;
@@ -62,7 +68,16 @@ impl CustomerProfileService {
         Ok(detail)
     }
 
-    /// 加载客户角色。
+    /// 按主键加载客户角色。
+    ///
+    /// # 参数
+    /// * `id` - 客户角色主键。
+    ///
+    /// # 返回
+    /// 返回找到的客户角色。
+    ///
+    /// # 错误
+    /// 客户不存在时返回未找到；查询失败时返回仓储错误。
     pub(super) async fn load_customer(&self, id: &str) -> Result<CustomerAccount> {
         self.db
             .customer_accounts()
@@ -71,7 +86,16 @@ impl CustomerProfileService {
             .ok_or_else(|| Error::NotFound("客户不存在".to_string()))
     }
 
-    /// 加载客户关联 Party。
+    /// 加载客户关联的主体。
+    ///
+    /// # 参数
+    /// * `party_id` - 客户角色上的主体主键。
+    ///
+    /// # 返回
+    /// 返回对应主体。
+    ///
+    /// # 错误
+    /// 主体不存在时返回未找到；查询失败时返回仓储错误。
     pub(super) async fn load_party(&self, party_id: &PartyId) -> Result<Party> {
         self.db
             .parties()
@@ -145,6 +169,15 @@ fn build_detail(parts: ProfileDetailParts) -> CustomerProfileDetailView {
 }
 
 /// 返回客户状态产生的业务动作阻断原因。
+///
+/// # 参数
+/// * `status` - 客户角色状态。
+///
+/// # 返回
+/// 客户有效时返回空列表；已停用时返回上传合同和创建销售单两条阻断。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn customer_status_blockers(status: CustomerAccountStatus) -> Vec<CustomerActionBlockerView> {
     if status.is_active() {
         return Vec::new();

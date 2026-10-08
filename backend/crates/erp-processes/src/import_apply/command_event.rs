@@ -34,6 +34,9 @@ pub(super) fn import_event_context(
 /// * `target_id` - 当前命令正式结果目标。
 /// # 返回
 /// 返回允许持久化的最小成功投影。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn import_event_content(target_id: String) -> BusinessEventContent {
     BusinessEventContent {
         target_id,

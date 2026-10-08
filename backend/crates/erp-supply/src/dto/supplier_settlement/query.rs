@@ -99,11 +99,14 @@ impl SupplierSettlementStatementListParams {
     ///
     /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
     ///
     /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    /// 排序字段不在白名单或排序方向非法、期间日期非法、期间开始晚于结束，或人员筛选包含 `me` 时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<StatementListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, STATEMENT_SORT_FIELDS)?;
         let period_from = optional_business_date(self.period_from.as_deref(), "期间开始")?;
@@ -136,6 +139,7 @@ impl SupplierSettlementStatementListParams {
     }
 }
 
+/// 人员筛选出现忽略大小写的 `me` 时拒绝。
 fn reject_me_ids(ids: Option<&application_core::QueryIds>) -> Result<()> {
     if ids.is_some_and(|ids| ids.as_slice().iter().any(|id| id.eq_ignore_ascii_case("me"))) {
         return Err(crate::Error::ValidationError("人员筛选必须为稳定 ID，不能使用 me".into()));
@@ -143,6 +147,7 @@ fn reject_me_ids(ids: Option<&application_core::QueryIds>) -> Result<()> {
     Ok(())
 }
 
+/// 空白期间视为未填；其余文本必须能解析为业务日期。
 fn optional_business_date(value: Option<&str>, field: &str) -> Result<Option<BusinessDate>> {
     value
         .map(str::trim)
@@ -301,6 +306,9 @@ impl SupplierSettlementItemListParams {
     ///
     /// 分页取默认值、排序字段过白名单校验。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
     ///
@@ -391,6 +399,9 @@ impl SupplierSettlementDifferenceListParams {
     /// 归一化结算差异列表查询参数。
     ///
     /// 分页取默认值、排序字段过白名单校验。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。

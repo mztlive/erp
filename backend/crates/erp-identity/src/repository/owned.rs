@@ -1,6 +1,6 @@
-//! Collection-scoped aliases for [`persistence_core::Repository`].
+//! 按集合别名包装 [`persistence_core::Repository`]。
 //!
-//! Domain-specific methods are extension traits on the generic repository.
+//! 领域特有方法是通用仓储上的扩展 trait。
 
 pub type PersonalBusinessGrantRepository<'a> =
     persistence_core::Repository<'a, crate::entity::access_control::personal_grant::PersonalBusinessGrant>;

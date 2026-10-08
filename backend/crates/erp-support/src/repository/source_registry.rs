@@ -25,10 +25,19 @@ use crate::entity::source_registry::{
     RelationRole, SourceSystem, SourceSystemId, SourceSystemStatus, SourceSystemType, TargetStatus,
 };
 
-/// Encode an external identity comparison key as BSON Binary (Generic).
+/// 把外部身份比较键编码为 BSON Binary（Generic）。
 ///
-/// The unique index `uk_external_identity_maps_identity` is built on this
-/// binary field. Callers must use this helper instead of entity-level BSON.
+/// 唯一索引 `uk_external_identity_maps_identity` 建在该二进制字段上。
+/// 调用方必须使用本函数，不要在实体层自行编码 BSON。
+///
+/// # 参数
+/// * `key` - 外部身份比较键
+///
+/// # 返回
+/// 返回子类型为 Generic 的 BSON 二进制值，字节与 `key` 相同。
+///
+/// # 错误
+/// 不返回错误。
 pub fn external_id_key_bson(key: &ExternalIdKey) -> mongodb::bson::Binary {
     mongodb::bson::Binary {
         subtype: mongodb::bson::spec::BinarySubtype::Generic,
@@ -101,8 +110,17 @@ impl Default for SourceSystemFilter {
 impl QueryFilter for SourceSystemFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// `code` 为 `Some` 时精确匹配。`system_type`、`status` 为 `Some` 时分别写入
+    /// 对应字段的 `as_str()`。分页与排序字段不进入条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(code) = &self.code {
@@ -119,10 +137,16 @@ impl QueryFilter for SourceSystemFilter {
 }
 
 impl Pagination for SourceSystemFilter {
-    /// 返回页码与单页条数。
+    /// 返回来源系统筛选保存的页码与单页条数，不把小于 1 的页码归一成第一页。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组；`page_size` 由 `u32` 转为 `u64`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -244,8 +268,17 @@ pub struct ExternalIdentityMapFilter {
 impl QueryFilter for ExternalIdentityMapFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// `source_system_id` 为 `Some` 时写入其 `to_string()`。`mapping_status` 为
+    /// `Some` 时写入 `as_str()`。分页与排序字段不进入条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(source_system_id) = &self.source_system_id {
@@ -259,10 +292,16 @@ impl QueryFilter for ExternalIdentityMapFilter {
 }
 
 impl Pagination for ExternalIdentityMapFilter {
-    /// 返回页码与单页条数。
+    /// 返回外部身份映射筛选保存的页码与单页条数，不把小于 1 的页码归一成第一页。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组；`page_size` 由 `u32` 转为 `u64`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -582,6 +621,9 @@ impl<'a> SourceRegistryRepository<'a> {
     ///
     /// # 返回
     /// 返回仓储实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
@@ -656,6 +698,9 @@ impl<'a> SourceRegistryRepository<'a> {
     /// * `map` - 待写入的外部身份映射
     /// * `target` - 待写入的映射目标（谱系记录）
     /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 返回
+    /// 映射与目标全部写入成功时无返回值。
     ///
     /// # 错误
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射

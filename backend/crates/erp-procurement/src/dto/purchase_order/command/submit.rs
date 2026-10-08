@@ -54,6 +54,16 @@ impl SubmitPurchaseOrderRequest {
 /// 历史提交指纹直接使用 Rust Debug 派生输出（`format!("{:?}|{:?}", ...)`），
 /// DTO 字段改名会静默改变指纹并破坏存量收据回放；本函数按字段顺序显式重放
 /// 同一字节形态，字段改名不再影响指纹。
+///
+/// # 参数
+/// * `payment_term_code` - 付款条件；按 `Debug` 编码进形态文本。
+/// * `line_patches` - 草稿行补丁；按字段顺序拼成历史 Debug 形态。
+///
+/// # 返回
+/// 返回付款条件的 `Debug` 文本、竖线，以及方括号包裹的补丁列表。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn submit_request_shape(
     payment_term_code: &Option<String>,
     line_patches: &[SavePurchaseOrderLinePatch],

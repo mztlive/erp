@@ -97,8 +97,16 @@ impl Default for SelectionBookFilter {
 impl QueryFilter for SelectionBookFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// 未删除条件与 `authorized_scope` 始终放入 `$and`。授权客户、负责人、业务组织有值时按 `$in` 追加；客户、形态、状态、提交方式有值时按等值追加。客户名称关键字去空白后按字面量正则匹配 `customer_name`。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut and: Vec<Document> = Vec::new();
         push_undeleted(&mut and);
@@ -135,8 +143,14 @@ impl QueryFilter for SelectionBookFilter {
 impl Pagination for SelectionBookFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `(page, page_size)` 元组。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -166,8 +180,16 @@ pub struct SelectionProposalFilter {
 impl QueryFilter for SelectionProposalFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// 写入未删除条件；授权客户有值时按 `customer_id` 的 `$in` 追加，客户与选品册有值时按等值追加。`authorized_scope`、`owner_user_ids`、`org_unit_ids` 不进入文档。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut and: Vec<Document> = Vec::new();
         push_undeleted(&mut and);
@@ -188,8 +210,14 @@ impl QueryFilter for SelectionProposalFilter {
 impl Pagination for SelectionProposalFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `(page, page_size)` 元组。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -247,6 +275,9 @@ impl<'a> SalesSelectionDomainRepository<'a> {
     ///
     /// # 返回
     /// 返回仓储实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }

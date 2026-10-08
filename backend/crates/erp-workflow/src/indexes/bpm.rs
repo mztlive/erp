@@ -20,6 +20,9 @@ const RECEIPTS: &str = <mongodb::Database as BpmExt>::APPROVAL_COMMAND_RECEIPTS;
 /// # 参数
 /// * `db` - 目标 MongoDB 数据库
 ///
+/// # 返回
+/// 无返回值。
+///
 /// # 错误
 /// 既有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {

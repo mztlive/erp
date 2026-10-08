@@ -14,7 +14,7 @@ pub trait StockAdjustmentCancellationExt {
     /// # 返回
     /// 返回本域不可变事实仓储。
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     fn stock_adjustment_cancellations(&self) -> Repository<'_, StockAdjustmentCancellation>;
 }
 

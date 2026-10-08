@@ -155,6 +155,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         persisted_command_view_with_executor(&self.db, instance_id, commit, replay, &mut NoTransaction).await
     }
 
+    /// 实例缺失时隐藏存在性；当前 blocker 不允许该动作时返回冲突。
     async fn require_recovery_action(&self, instance_id: &str, wanted: RuntimeRecoveryAction) -> Result<()> {
         let instance = self
             .db
@@ -231,6 +232,9 @@ async fn revalidate_resume_with_executor(
 }
 
 /// 原审批人恢复回放先按当前账号与责任组织授权，再允许读取和比较收据。
+///
+/// # Panics
+/// 已加载收据被分类为 `Fresh` 时 `unreachable!`，表示分类器与查询结果矛盾。
 async fn replay_resume_apply(
     db: &Database,
     rbac: &impl WorkflowAuthorizationPort,

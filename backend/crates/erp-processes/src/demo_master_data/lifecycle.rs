@@ -26,8 +26,11 @@ fn is_active(base: &BaseModel) -> bool {
 /// * `product_id` - 商品 ID
 /// * `sku_ids` - 创建时记下的 SKU ID
 ///
+/// # 返回
+/// 商品及其记下的 SKU 已是有效记录，或已在同一审计事务中恢复时无返回值。
+///
 /// # 错误
-/// 商品不存在或写入失败时返回错误。
+/// 商品不存在时返回 `NotFound`。审计构造、SKU 读取或恢复写入失败时返回对应错误。
 pub(super) async fn restore_product_graph(
     db: &Database,
     actor: &AuditActor,
@@ -78,6 +81,17 @@ async fn load_skus(db: &Database, product_id: &str, sku_ids: &[String]) -> Resul
 }
 
 /// 恢复仓库。记录不存在时返回未找到。
+///
+/// # 参数
+/// * `db` - 目标数据库。
+/// * `actor` - 当前操作人，用于恢复审计。
+/// * `id` - 仓库 ID。
+///
+/// # 返回
+/// 仓库已有效或已恢复时无返回值。
+///
+/// # 错误
+/// 仓库不存在时返回 `NotFound`。审计构造或恢复写入失败时返回对应错误。
 pub(super) async fn restore_warehouse(db: &Database, actor: &AuditActor, id: &str) -> Result<()> {
     let entity = load_warehouse(db, id)
         .await?
@@ -96,6 +110,17 @@ async fn load_warehouse(db: &Database, id: &str) -> Result<Option<Warehouse>> {
 }
 
 /// 恢复客户角色。记录不存在时返回未找到。
+///
+/// # 参数
+/// * `db` - 目标数据库。
+/// * `actor` - 当前操作人，用于恢复审计。
+/// * `id` - 客户角色 ID。
+///
+/// # 返回
+/// 客户已有效或已恢复时无返回值。
+///
+/// # 错误
+/// 客户不存在时返回 `NotFound`。审计构造或恢复写入失败时返回对应错误。
 pub(super) async fn restore_customer(db: &Database, actor: &AuditActor, id: &str) -> Result<()> {
     let entity = db
         .customer_accounts()
@@ -112,6 +137,17 @@ pub(super) async fn restore_customer(db: &Database, actor: &AuditActor, id: &str
 }
 
 /// 恢复供应商角色。记录不存在时返回未找到。
+///
+/// # 参数
+/// * `db` - 目标数据库。
+/// * `actor` - 当前操作人，用于恢复审计。
+/// * `id` - 供应商角色 ID。
+///
+/// # 返回
+/// 供应商已有效或已恢复时无返回值。
+///
+/// # 错误
+/// 供应商不存在时返回 `NotFound`。审计构造或恢复写入失败时返回对应错误。
 pub(super) async fn restore_supplier(db: &Database, actor: &AuditActor, id: &str) -> Result<()> {
     let entity = db
         .supplier_accounts()
@@ -128,6 +164,17 @@ pub(super) async fn restore_supplier(db: &Database, actor: &AuditActor, id: &str
 }
 
 /// 恢复主体。记录不存在时返回未找到。
+///
+/// # 参数
+/// * `db` - 目标数据库。
+/// * `actor` - 当前操作人，用于恢复审计。
+/// * `id` - 主体 ID。
+///
+/// # 返回
+/// 主体已有效或已恢复时无返回值。
+///
+/// # 错误
+/// 主体不存在时返回 `NotFound`。审计构造或恢复写入失败时返回对应错误。
 pub(super) async fn restore_party(db: &Database, actor: &AuditActor, id: &str) -> Result<()> {
     let entity = db
         .parties()
@@ -144,6 +191,18 @@ pub(super) async fn restore_party(db: &Database, actor: &AuditActor, id: &str) -
 }
 
 /// 恢复品牌、分类或计量单位。
+///
+/// # 参数
+/// * `db` - 目标数据库。
+/// * `actor` - 当前操作人，用于恢复审计。
+/// * `kind` - 要恢复的字典种类。
+/// * `id` - 字典记录 ID。
+///
+/// # 返回
+/// 记录已有效或已恢复时无返回值。
+///
+/// # 错误
+/// 记录不存在时返回 `NotFound`。审计构造或恢复写入失败时返回对应错误。
 pub(super) async fn restore_dictionary(
     db: &Database,
     actor: &AuditActor,

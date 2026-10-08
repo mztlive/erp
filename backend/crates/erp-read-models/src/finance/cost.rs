@@ -38,13 +38,27 @@ pub struct CostReadModel {
 impl CostReadModel {
     /// 绑定应用数据库及身份服务，不保存授权缓存。
     ///
+    /// # 参数
+    /// * `db` - 应用数据库。
+    /// * `rbac` - 身份服务；不在此缓存授权。
+    ///
     /// # 返回
     /// 返回成本读取服务；构造不执行 I/O。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
         Self { db, rbac }
     }
 
     /// 以同一份授权分配生成列表、总数及稳定分页。
+    ///
+    /// # 参数
+    /// * `params` - 成本列表筛选。
+    /// * `actor` - 认证用户。
+    ///
+    /// # 返回
+    /// 返回带范围版本的成本分页。
     ///
     /// # 错误
     /// 无权限、范围变化、业务参数非法或候选超限时拒绝。
@@ -71,6 +85,13 @@ impl CostReadModel {
 
     /// 独立详情重新解析成本详情动作及销售对象读取范围。
     ///
+    /// # 参数
+    /// * `id` - 成本身份。
+    /// * `actor` - 认证用户。
+    ///
+    /// # 返回
+    /// 返回单条授权成本及范围元信息。
+    ///
     /// # 错误
     /// 不可见与不存在统一为 NotFound；撤权后不交付旧宽范围事实。
     pub async fn detail(&self, id: &str, actor: &AuditActor) -> Result<CostReadResult<ScopedCostEntryView>> {
@@ -81,6 +102,13 @@ impl CostReadModel {
         Ok(snapshot.result(row))
     }
     /// 分配列表使用自己的读取权限，只输出当前授权且匹配业务条件的行。
+    ///
+    /// # 参数
+    /// * `params` - 分配列表筛选。
+    /// * `actor` - 认证用户。
+    ///
+    /// # 返回
+    /// 返回当前授权且匹配条件的分配分页。
     ///
     /// # 错误
     /// 动作缺失、范围版本变化或候选超限时拒绝，不按成本整笔金额推导份额。

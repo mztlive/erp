@@ -42,6 +42,16 @@ impl FulfillmentReadService {
     }
 
     /// 沿用调用方授权事务读取剩余验收事实。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 销售单身份
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 返回销售行分组与验收历史。
+    ///
+    /// # 错误
+    /// 销售单不存在、没有生效版本或生效版本不存在时返回 `NotFound`。销售、履约仓储读取失败，或行资格投影失败时返回对应错误。
     pub(super) async fn load_acceptance_eligibility(
         &self,
         sales_order_id: &str,
@@ -152,6 +162,9 @@ impl FulfillmentReadService {
 ///
 /// # 返回
 /// 返回销售稳定明细 ID 集合。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn so_line_ids(
     revision_lines: &[erp_sales::entity::sales_order::SalesOrderRevisionLine],
 ) -> Vec<SalesOrderLineId> {
@@ -197,6 +210,15 @@ pub(crate) struct EligibilityGroupSources<'a> {
 }
 
 /// 将外域销售实体明确映射为履约消费的最小事实，复用唯一数量规则。
+///
+/// # 参数
+/// * `sources` - 版本行、履约集合与分配
+///
+/// # 返回
+/// 返回按销售稳定明细组织的行级资格投影。
+///
+/// # 错误
+/// 下层行资格投影失败时返回对应错误。
 pub(crate) fn build_line_eligibilities(
     sources: &EligibilityGroupSources<'_>,
 ) -> Result<Vec<AcceptanceLineEligibility>> {

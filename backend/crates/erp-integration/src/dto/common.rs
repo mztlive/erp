@@ -36,7 +36,7 @@ pub(crate) fn reject_me_ids(ids: &[String], field: &str) -> crate::Result<()> {
     Ok(())
 }
 
-/// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。///
+/// 校验排序参数（白名单 + 方向），返回归一化排序字段与方向。
 /// # 参数
 /// * `sort_by` - 可选排序字段；空白视为未提供
 /// * `sort_dir` - 可选排序方向；空白视为未提供
@@ -139,6 +139,9 @@ pub(crate) fn normalize_handler_filters(
 ///
 /// # 返回
 /// 返回组织 ID 列表；未提供时为空（表示不按组织收窄）。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn normalize_org_filter(org_unit_ids: &Option<application_core::QueryIds>) -> Vec<String> {
     org_unit_ids.as_ref().map(application_core::QueryIds::as_slice).unwrap_or(&[]).to_vec()
 }

@@ -1,4 +1,4 @@
-//! Warehouse application services.
+//! 仓库应用服务。
 
 pub mod warehouse;
 

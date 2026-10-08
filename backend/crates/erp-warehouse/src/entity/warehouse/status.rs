@@ -23,8 +23,14 @@ pub enum EnableStatus {
 impl EnableStatus {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Active => "启用",
@@ -34,8 +40,14 @@ impl EnableStatus {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Active => "active",
@@ -45,8 +57,14 @@ impl EnableStatus {
 
     /// 判断是否处于启用状态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 处于 `Active` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         matches!(self, Self::Active)
     }
@@ -54,6 +72,15 @@ impl EnableStatus {
 
 impl DocumentState for EnableStatus {
     /// 返回合法后继状态：启用 ↔ 停用 双向可迁移。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Active` 返回只含 `Disabled` 的静态切片，`Disabled` 返回只含 `Active` 的静态切片。自身不在后继中。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Active => &[Self::Disabled],

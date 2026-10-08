@@ -7,6 +7,17 @@ pub(crate) struct FinancialDraftEditPolicy;
 
 impl FinancialDraftEditPolicy {
     /// 校验原经办人发起命令的职责，不依赖提交后的单据状态。
+    ///
+    /// # 参数
+    /// * `handled_by` - 原单经办人。
+    /// * `reviewed_by` - 原单复核人。
+    /// * `actor_id` - 当前提交人。
+    ///
+    /// # 返回
+    /// 原经办人本人提交且与复核人分离时返回成功。
+    ///
+    /// # 错误
+    /// 提交人为空、不是原经办人或兼任复核人时返回 `Forbidden`。
     pub(crate) fn ensure_submitter(handled_by: &str, reviewed_by: &str, actor_id: &str) -> Result<()> {
         if actor_id.is_empty() || handled_by != actor_id || reviewed_by == actor_id {
             return Err(Error::Forbidden("仅原财务经办人可以提交冲正，且不得兼任复核人".into()));

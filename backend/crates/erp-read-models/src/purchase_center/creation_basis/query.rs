@@ -35,6 +35,9 @@ impl PurchaseOrderReadService {
     /// 只展示当前账号拥有的开放任务冻结行；客户端不能看到或创建其他采购负责人的范围。
     /// 供给、修订、可供投影与供应商结算事实按全部任务涉及 SKU 一次批量读取，
     /// 查询次数不随任务数、销售行数或供给数线性增长。
+    ///
+    /// # Panics
+    /// 本函数刚写入 `coverage_by_order` 的销售单缺少覆盖时 panic；该键只来自同一次装载。
     pub async fn creation_basis_list(
         &self,
         params: &CreationBasisListParams,

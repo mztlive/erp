@@ -58,11 +58,13 @@ impl AllocationVersion {
     /// 保留原分配主键、分配版本、带类型来源关联键及来源版本哈希。
     ///
     /// # 参数
-    /// 原指纹 hasher。
+    /// * `fingerprint` - 调用方持有的指纹 hasher。
+    ///
     /// # 返回
-    /// 按既有协议追加当前记录与来源版本。
+    /// 按既有协议把分配主键、版本、来源键和来源版本写入 `fingerprint`。
+    ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn hash_into(&self, fingerprint: &mut impl Hasher) {
         self.id.hash(fingerprint);
         self.version.hash(fingerprint);
@@ -75,11 +77,13 @@ impl AllocationSnapshot {
     /// 最终已授权匹配超过原 9999 条保护时整体拒绝，禁止截断。
     ///
     /// # 参数
-    /// 最终授权快照。
+    /// 无。
+    ///
     /// # 返回
-    /// 未达到原查询上限时返回成功。
+    /// 版本条数少于 10000 时成功。
+    ///
     /// # 错误
-    /// 最终匹配达到 10000 条时返回原查询保护错误。
+    /// `versions` 达到 10000 条时返回校验错误，文案为收票查询超过上限。
     pub fn ensure_bounded(&self) -> Result<()> {
         if self.versions.len() >= 10_000 {
             return Err(Error::ValidationError("收票查询超过上限，请收窄组织或负责人条件".into()));
@@ -90,11 +94,13 @@ impl AllocationSnapshot {
     /// 读取同一最终条件的数据库总数，空集合为零。
     ///
     /// # 参数
-    /// 当前快照。
-    /// # 返回
-    /// 数据库最终授权条件的计数。
-    /// # 错误
     /// 无。
+    ///
+    /// # 返回
+    /// 数据库最终授权条件的计数；计数分支为空时为零。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn total(&self) -> u64 {
         self.total.first().map_or(0, |row| row.count)
     }
@@ -102,11 +108,13 @@ impl AllocationSnapshot {
     /// 全部已授权分配沿原正反事实归并，结算来源无负责人时进入未分配分区。
     ///
     /// # 参数
-    /// 首拍金额事实及完整范围版本。
+    /// * `version` - 本次范围版本，写入汇总视图。
+    ///
     /// # 返回
-    /// 原定点算法归并的授权份额与整单金额资格。
+    /// 按原份额顺序归并的授权份额；结算来源没有负责人时进入未分配。整单金额为份额方向金额之和。
+    ///
     /// # 错误
-    /// 必要事实损坏时拒绝；金额越界保留原金额类型的溢出行为。
+    /// 不返回错误。本函数没有失败分支。
     pub fn summary(&self, version: &str) -> Result<FundsSummaryView> {
         let mut triples = Vec::new();
         let mut owners = HashMap::new();
@@ -128,11 +136,18 @@ impl AllocationSnapshot {
 /// 来源授权与人员筛选在页面、完整版本与汇总分支之前完成。
 ///
 /// # 参数
-/// 数据库、规范化查询、已解析授权、业务条件、首拍标记和原执行器。
+/// * `db` - 进项分配集合所在数据库。
+/// * `query` - 已规范化的进项分配查询。
+/// * `authorization` - 已解析授权。
+/// * `condition` - 负责人、经办人与组织条件。
+/// * `materialize` - 为 true 时同时读取当前页和金额流。
+/// * `executor` - 调用方执行器。
+///
 /// # 返回
-/// 最终授权分配页、计数和完整版本；首拍同时读取必要金额流。
+/// 最终授权分配页、计数和完整版本；`materialize` 为 false 时页与金额流为空。
+///
 /// # 错误
-/// 持久化、解码或最终匹配超限时拒绝。
+/// 聚合、解码失败，分页投影缺失，或版本达到 10000 条时拒绝。
 pub(in crate::finance::funds_scope) async fn allocation_snapshot(
     db: &Database,
     query: &PurchaseInvoiceAllocationListQuery,

@@ -22,8 +22,14 @@ pub enum EnableStatus {
 impl EnableStatus {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Active => "启用",
@@ -33,8 +39,14 @@ impl EnableStatus {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Active => "active",
@@ -44,8 +56,14 @@ impl EnableStatus {
 
     /// 判断是否处于启用状态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 处于 `Active` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         matches!(self, Self::Active)
     }
@@ -53,6 +71,15 @@ impl EnableStatus {
 
 impl DocumentState for EnableStatus {
     /// 返回合法后继状态：启用 ↔ 停用 双向可迁移。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Active` 返回只含 `Disabled` 的切片；`Disabled` 返回只含 `Active` 的切片。不含自身。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Active => &[Self::Disabled],
@@ -77,8 +104,14 @@ pub enum ListingStatus {
 impl ListingStatus {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的上架状态标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Listed => "已上架",
@@ -88,8 +121,14 @@ impl ListingStatus {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Listed => "listed",
@@ -99,8 +138,14 @@ impl ListingStatus {
 
     /// 判断是否已上架。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为 `Listed` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_listed(&self) -> bool {
         matches!(self, Self::Listed)
     }
@@ -130,6 +175,9 @@ impl ProductListingStatus {
     ///
     /// # 返回
     /// 返回全上架、部分上架或全下架状态。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn inherited(listed_sku_count: u32, sku_count: u32) -> Self {
         if sku_count > 0 && listed_sku_count == sku_count {
             return Self::Listed;
@@ -142,8 +190,14 @@ impl ProductListingStatus {
 
     /// 返回用于查询与传输的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `listed`、`partially_listed` 或 `unlisted`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Listed => "listed",
@@ -177,6 +231,9 @@ impl SkuCoverageStatus {
     ///
     /// # 返回
     /// 返回完整、部分或无覆盖状态。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn inherited(covered_sku_count: u32, sku_count: u32) -> Self {
         if sku_count > 0 && covered_sku_count == sku_count {
             return Self::Complete;
@@ -189,8 +246,14 @@ impl SkuCoverageStatus {
 
     /// 返回用于查询与传输的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `complete`、`partial` 或 `none`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Complete => "complete",

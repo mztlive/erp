@@ -25,10 +25,15 @@ pub trait AuditAttemptSink: Send + Sync {
 pub struct MongoAuditAttemptSink<'a>(&'a Database);
 impl<'a> MongoAuditAttemptSink<'a> {
     /// 绑定原命令数据库，不复用已经结束的事务执行器。
+    ///
     /// # 参数
     /// * `db` - 审计领域所在数据库。
+    ///
     /// # 返回
     /// 返回独立尝试写入器。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self(db)
     }

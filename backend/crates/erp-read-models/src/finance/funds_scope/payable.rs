@@ -17,6 +17,17 @@ use crate::{Error, Result};
 
 impl FundsAccess {
     /// 分页查询应付往来子账范围行：来源采购单当前采购负责人查询。
+    ///
+    /// # 参数
+    /// * `params` - 应付子账列表请求。
+    /// * `actor` - 已认证操作人。
+    /// * `purchase_access` - 采购访问器；本链路解析时不读取它。
+    ///
+    /// # 返回
+    /// 最终授权应付子账页及同口径汇总。
+    ///
+    /// # 错误
+    /// 参数校验、范围版本、授权或读取失败时返回对应错误。
     pub async fn payable_account_list_scoped(
         &self,
         params: &erp_finance::dto::payable::PayableAccountListParams,
@@ -33,6 +44,17 @@ impl FundsAccess {
     }
 
     /// 独立详情重新解析应付子账详情动作；不可见与不存在统一为 NotFound。
+    ///
+    /// # 参数
+    /// * `id` - 应付往来子账主键。
+    /// * `actor` - 已认证操作人。
+    /// * `purchase_access` - 采购访问器。
+    ///
+    /// # 返回
+    /// 当前详情动作允许的应付子账行。
+    ///
+    /// # 错误
+    /// 授权或读取失败时返回对应错误；子账不存在或来源责任不允许时返回 `NotFound`。
     pub async fn payable_account_detail_scoped(
         &self,
         id: &str,
@@ -55,6 +77,19 @@ impl FundsAccess {
     }
 
     /// 返回前重读授权及候选事实版本；变化时拒绝交付原结果。
+    ///
+    /// # 参数
+    /// * `params` - 原始列表请求。
+    /// * `query` - 已规范化的列表查询。
+    /// * `actor` - 已认证操作人。
+    /// * `purchase_access` - 采购访问器。
+    /// * `expected` - 调用方回传的范围版本；首页可为 `None`。
+    ///
+    /// # 返回
+    /// 两次版本一致时返回第一次应付子账页。
+    ///
+    /// # 错误
+    /// 首次版本失配或复核版本变化时返回范围变化冲突错误；授权或读取失败时返回对应错误。
     pub(super) async fn checked_payable_accounts(
         &self,
         params: &erp_finance::dto::payable::PayableAccountListParams,
@@ -72,6 +107,18 @@ impl FundsAccess {
     }
 
     /// 身份和业务事实均使用调用方同一事务，不缓存权限解析结果。
+    ///
+    /// # 参数
+    /// * `params` - 原始列表请求。
+    /// * `query` - 已规范化的列表查询。
+    /// * `actor` - 已认证操作人。
+    /// * `purchase_access` - 采购访问器。
+    ///
+    /// # 返回
+    /// 同一事务内形成的授权应付子账页。
+    ///
+    /// # 错误
+    /// 事务、授权或读取失败时返回对应错误。
     pub(super) async fn snapshot_payable_accounts(
         &self,
         params: &erp_finance::dto::payable::PayableAccountListParams,
@@ -96,6 +143,19 @@ impl FundsAccess {
     }
 
     /// 分页查询应付子账范围行：采购来源按当前采购负责人，结算来源按当前对账负责人。
+    ///
+    /// # 参数
+    /// * `params` - 原始列表请求，用于比对范围版本。
+    /// * `query` - 已规范化的列表查询。
+    /// * `actor` - 已认证操作人。
+    /// * `purchase_access` - 采购访问器。
+    /// * `executor` - 调用方事务。
+    ///
+    /// # 返回
+    /// 无可见范围时返回空页；否则返回数据库分页、计数与同口径汇总。
+    ///
+    /// # 错误
+    /// 授权、聚合、版本不一致或当前页名称读取失败时返回对应错误。
     pub(super) async fn load_payable_accounts(
         &self,
         params: &erp_finance::dto::payable::PayableAccountListParams,
@@ -164,6 +224,16 @@ impl FundsAccess {
     }
 
     /// 应付子账关联筛选条件：采购负责人与组织分别精确匹配，只收窄授权结果。
+    ///
+    /// # 参数
+    /// * `query` - 已规范化的应付列表查询。
+    /// * `executor` - 调用方事务。
+    ///
+    /// # 返回
+    /// 采购负责人与展开组织的精确条件；经办人条件为空。
+    ///
+    /// # 错误
+    /// 组织展开失败时返回对应错误。
     pub(super) async fn payable_account_condition(
         &self,
         query: &erp_finance::dto::payable::PayableAccountListQuery,
@@ -213,6 +283,18 @@ impl FundsAccess {
     }
 
     /// 应付子账详情同一事务内解析、取数与裁剪；版本绑定来源采购单。
+    ///
+    /// # 参数
+    /// * `id` - 应付往来子账主键。
+    /// * `actor` - 已认证操作人。
+    /// * `purchase_access` - 采购访问器。
+    /// * `executor` - 调用方事务。
+    ///
+    /// # 返回
+    /// 整单可读的应付子账行，含分录、供应商名称和收款方。
+    ///
+    /// # 错误
+    /// 授权或读取失败时返回对应错误；子账不存在或来源责任不允许时返回 `NotFound`。
     pub(super) async fn load_payable_account_detail(
         &self,
         id: &str,
@@ -327,6 +409,17 @@ fn payable_summary(rows: &[AccountSummaryRow], version: &str) -> Result<FundsSum
 }
 
 /// 应付子账单行裁剪；整单金额仅整单资格返回，否则为 null。
+///
+/// # 参数
+/// * `row` - 应付子账行。
+/// * `fact` - 真实来源责任；缺失时负责人和单号为空。
+/// * `whole` - 是否返回整单金额。
+///
+/// # 返回
+/// 可见已结份额始终取 `settled_total`；`whole` 为 false 时整单金额为 `None`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn cut_payable_account_row(
     row: &PayableAccountRow,
     fact: Option<&LinkedPurchaseFact>,

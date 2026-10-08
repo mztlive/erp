@@ -252,6 +252,9 @@ pub(crate) fn format_business_due_label(due: BusinessDate) -> String {
 ///
 /// # 错误
 /// 无。偏移常量合法。
+///
+/// # Panics
+/// 东八区偏移被 `FixedOffset::east_opt` 拒绝时 panic。8 小时在允许范围内，常量合法。
 fn shanghai_offset() -> FixedOffset {
     FixedOffset::east_opt(8 * 3600).expect("东八区偏移必须合法")
 }

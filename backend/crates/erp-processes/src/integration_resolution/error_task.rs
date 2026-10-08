@@ -17,8 +17,15 @@ use crate::Result;
 impl IntegrationResolutionProcess {
     /// 登记集成错误任务。
     ///
+    /// # 参数
+    /// * `req` - 错误任务登记请求。
+    /// * `actor` - 已通过鉴权的审计操作人。
+    ///
+    /// # 返回
+    /// 新建错误任务的视图。
+    ///
     /// # 错误
-    /// 请求非法、关联消息不存在或唯一性冲突时返回错误。
+    /// 请求非法、关联消息不存在、责任组织无法解析、任务或正式责任构造失败、唯一性冲突或事务写入失败时返回对应错误。
     pub async fn create_error_task(
         &self,
         req: CreateErrorTaskRequest,

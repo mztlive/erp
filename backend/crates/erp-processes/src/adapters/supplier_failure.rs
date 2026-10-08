@@ -2,6 +2,15 @@
 use erp_integration::entity::integration_ops::ErrorClass;
 use erp_supply::entity::failure::SupplierFailureClass;
 /// 将供应商失败事实交集成领域执行其权威政策。
+///
+/// # 参数
+/// * `class` - 供应商失败分类。
+///
+/// # 返回
+/// 返回同名的集成 `ErrorClass`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn integration_class(class: SupplierFailureClass) -> ErrorClass {
     match class {
         SupplierFailureClass::CapabilityGap => ErrorClass::CapabilityGap,
@@ -15,6 +24,15 @@ pub fn integration_class(class: SupplierFailureClass) -> ErrorClass {
     }
 }
 /// 将已分类集成结果转换为供应商外部调用事实。
+///
+/// # 参数
+/// * `class` - 集成错误分类。
+///
+/// # 返回
+/// 返回同名的 `SupplierFailureClass`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn supplier_class(class: ErrorClass) -> SupplierFailureClass {
     match class {
         ErrorClass::CapabilityGap => SupplierFailureClass::CapabilityGap,

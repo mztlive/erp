@@ -174,6 +174,9 @@ pub fn build_draft_replacement(
 ///
 /// # 返回
 /// 返回校验、业务或冲突错误，文案与既有实现一致。
+///
+/// # 错误
+/// 不返回错误。本函数构造错误值，不产生 `Result`。
 pub fn map_draft_edit_violation(violation: DraftLineEditViolation) -> Error {
     match violation {
         DraftLineEditViolation::SourceLineCountChanged
@@ -196,6 +199,19 @@ pub fn map_draft_edit_violation(violation: DraftLineEditViolation) -> Error {
     }
 }
 /// 在调用方事务内依次替代旧草稿、创建新提交与行、更新采购单；失败停止并保留原错误。
+///
+/// # 参数
+/// * `db` - 采购数据库
+/// * `order` - 已带期望版本的采购单
+/// * `old_draft` - 待更新的旧草稿
+/// * `replacement` - 新提交、新行和金额
+/// * `session` - 调用方事务执行器
+///
+/// # 返回
+/// 四类写入都成功时无返回值。
+///
+/// # 错误
+/// 任一步仓储写入或 CAS 失败时返回对应错误，不再继续后续写入。
 pub async fn persist_replacement(
     db: &mongodb::Database,
     order: &mut PurchaseOrder,

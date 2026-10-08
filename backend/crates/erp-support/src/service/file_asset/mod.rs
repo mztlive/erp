@@ -53,6 +53,9 @@ impl FileAssetService {
     ///
     /// # 返回
     /// 返回服务实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(
         db: Database,
         audit: Arc<dyn SupportAuditPort>,
@@ -124,8 +127,15 @@ impl FileAssetService {
     /// 实际对象存储读取仍由 HTTP handler 在事务外执行；本方法只负责元数据
     /// 存在性校验与读取行为审计。
     ///
-    /// # Errors
-    /// 文件不存在或审计日志写入失败时返回错误。
+    /// # 参数
+    /// * `id` - 文件资产 ID
+    /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 返回完整资产视图。
+    ///
+    /// # 错误
+    /// 资产不存在、读取失败，或审计准备与写入失败时返回错误。
     pub async fn file_asset_preview(&self, id: &str, actor: &AuditActor) -> Result<FileAssetView> {
         let view = self.file_asset_detail(id).await?;
         let audit =

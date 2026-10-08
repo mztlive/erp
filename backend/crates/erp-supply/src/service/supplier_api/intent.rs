@@ -9,6 +9,18 @@ use crate::repository::SupplierApiExt;
 use crate::{Error, Result};
 impl SupplierApiService {
     /// 在任务 ID 生成之前执行原连接版本与能力治理资格。
+    ///
+    /// # 参数
+    /// * `id` - 供应商连接主键。
+    /// * `expected_version` - 调用方持有的连接版本。
+    /// * `action` - 待校验资格的连接动作。
+    /// * `executor` - 调用方事务的执行器。
+    ///
+    /// # 返回
+    /// 返回通过资格校验的连接及其能力列表。
+    ///
+    /// # 错误
+    /// 连接不存在、版本不一致或能力读取失败时返回对应错误；治理规则给出阻塞时返回 `BusinessLogicError`。
     pub async fn prepare_job_target(
         &self,
         id: &str,
@@ -35,6 +47,20 @@ impl SupplierApiService {
         Ok((connection, capabilities))
     }
     /// 在原后台任务构造之后生成健康运行快照，不接完整 support job。
+    ///
+    /// # 参数
+    /// * `connection` - 已通过资格校验的连接。
+    /// * `capabilities` - 连接能力；仅启用态进入版本快照。
+    /// * `job_id` - 已生成的后台任务身份。
+    /// * `check_type` - 健康检查类型。
+    /// * `actor_id` - 发起人。
+    /// * `identity` - 命令幂等摘要与请求指纹。
+    ///
+    /// # 返回
+    /// 返回尚未持久化的健康运行记录。
+    ///
+    /// # 错误
+    /// 健康运行实体构造失败时返回对应错误。
     pub fn prepare_health_run(
         connection: &SupplierApiConnection,
         capabilities: &[SupplierApiCapability],
@@ -65,6 +91,16 @@ impl SupplierApiService {
         )?)
     }
     /// 持久化健康运行事实，调用方控制与后台任务及回执的写序。
+    ///
+    /// # 参数
+    /// * `run` - 已构造的健康运行记录。
+    /// * `executor` - 调用方事务的执行器。
+    ///
+    /// # 返回
+    /// 无返回值。健康运行事实已写入。
+    ///
+    /// # 错误
+    /// 仓储写入失败时返回对应错误。
     pub async fn create_health_run(
         &self,
         run: &SupplierHealthCheckRun,
@@ -74,6 +110,20 @@ impl SupplierApiService {
         Ok(())
     }
     /// 原 receipt 构造器，不构造或写入审计。
+    ///
+    /// # 参数
+    /// * `connection` - 回执所属连接。
+    /// * `action` - 命令动作。
+    /// * `identity` - 命令幂等摘要、指纹和稳定回执身份。
+    /// * `outcome` - 命令结果。
+    /// * `job_id` - 关联后台任务；无任务时为 `None`。
+    /// * `actor_id` - 操作人。
+    ///
+    /// # 返回
+    /// 返回尚未持久化的命令回执。
+    ///
+    /// # 错误
+    /// 回执实体构造失败时返回对应错误。
     pub fn prepare_command_receipt(
         connection: &SupplierApiConnection,
         action: SupplierConnectionAction,
@@ -98,6 +148,16 @@ impl SupplierApiService {
         )?)
     }
     /// 在调用方事务写入命令回执，审计和 job_no 读取由外层随后执行。
+    ///
+    /// # 参数
+    /// * `receipt` - 已构造的命令回执。
+    /// * `executor` - 调用方事务的执行器。
+    ///
+    /// # 返回
+    /// 无返回值。回执已写入。
+    ///
+    /// # 错误
+    /// 仓储写入失败时返回对应错误。
     pub async fn persist_command_receipt(
         &self,
         receipt: &SupplierConnectionCommandReceipt,

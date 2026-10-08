@@ -71,8 +71,14 @@ crate::entity::enum_str!(SourceSystemStatus {
 impl SourceSystemStatus {
     /// 判断是否处于启用状态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 处于 `Active` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         matches!(self, Self::Active)
     }
@@ -197,14 +203,23 @@ impl ExternalIdKey {
     ///
     /// # 返回
     /// 返回比较键实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(bytes: Vec<u8>) -> Self {
         Self(bytes)
     }
 
     /// 返回比较键的字节切片。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回规范化后的 UTF-8 字节。仓储层把该字节编码为 Generic BSON Binary。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
     }
@@ -218,15 +233,37 @@ impl fmt::Display for ExternalIdKey {
 }
 
 impl Serialize for ExternalIdKey {
-    /// 序列化比较键：human-readable（JSON）输出字节数组；
-    /// 非 human-readable（MongoDB 驱动）通过 `serialize_bytes` 输出 Generic BSON Binary。
+    /// 序列化比较键。
+    ///
+    /// 一律调用 `serialize_bytes`。可读格式序列化器输出字节数组；
+    /// MongoDB 驱动输出 Generic BSON Binary。
+    ///
+    /// # 参数
+    /// * `serializer` - 调用方序列化器
+    ///
+    /// # 返回
+    /// 返回序列化器的成功值。
+    ///
+    /// # 错误
+    /// 序列化器拒绝这些字节时返回 `S::Error`。
     fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
         serializer.serialize_bytes(&self.0)
     }
 }
 
 impl<'de> Deserialize<'de> for ExternalIdKey {
-    /// 反序列化比较键：JSON 形态接受字节数组；BSON 形态接受二进制字节。
+    /// 反序列化比较键。
+    ///
+    /// `is_human_readable` 为真时按字节序列读取，否则按二进制字节读取。
+    ///
+    /// # 参数
+    /// * `deserializer` - 调用方反序列化器
+    ///
+    /// # 返回
+    /// 返回比较键。
+    ///
+    /// # 错误
+    /// 输入不是字节序列或二进制字节时返回 `D::Error`。
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
         if deserializer.is_human_readable() {
             deserializer.deserialize_seq(ExternalIdKeyVisitor)
@@ -242,12 +279,32 @@ struct ExternalIdKeyVisitor;
 impl<'de> Visitor<'de> for ExternalIdKeyVisitor {
     type Value = ExternalIdKey;
 
-    /// 描述期望的 JSON 形态。
+    /// 描述期望的字节序列形态。
+    ///
+    /// JSON 与 BSON 共用这一访问器，因此说明不限于 JSON。
+    ///
+    /// # 参数
+    /// * `formatter` - 错误信息格式化器
+    ///
+    /// # 返回
+    /// 成功写入说明后无额外返回值。
+    ///
+    /// # 错误
+    /// 格式化器写入失败时返回 `fmt::Error`。
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("外部身份比较键的 UTF-8 字节序列")
     }
 
     /// 从字节序列构造比较键。
+    ///
+    /// # 参数
+    /// * `seq` - 逐个 `u8` 元素的序列
+    ///
+    /// # 返回
+    /// 返回由全部元素组成的比较键。
+    ///
+    /// # 错误
+    /// 某个元素不是 `u8` 或序列读取失败时返回 `A::Error`。
     fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> std::result::Result<Self::Value, A::Error> {
         let mut bytes = Vec::new();
         while let Some(byte) = seq.next_element::<u8>()? {
@@ -256,12 +313,30 @@ impl<'de> Visitor<'de> for ExternalIdKeyVisitor {
         Ok(ExternalIdKey(bytes))
     }
 
-    /// 接受驱动以 human-readable 形态暴露的二进制值。
+    /// 接受可读格式下暴露的字节缓冲区。
+    ///
+    /// # 参数
+    /// * `bytes` - 已拥有的字节
+    ///
+    /// # 返回
+    /// 返回对应的比较键。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn visit_byte_buf<E>(self, bytes: Vec<u8>) -> std::result::Result<Self::Value, E> {
         Ok(ExternalIdKey(bytes))
     }
 
-    /// 接受非 human-readable 形态的原始字节。
+    /// 接受非可读格式下的原始字节。
+    ///
+    /// # 参数
+    /// * `bytes` - 原始字节切片
+    ///
+    /// # 返回
+    /// 返回复制后的比较键。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn visit_bytes<E>(self, bytes: &[u8]) -> std::result::Result<Self::Value, E> {
         Ok(ExternalIdKey(bytes.to_vec()))
     }
@@ -375,8 +450,14 @@ impl SourceSystem {
 
     /// 判断系统是否处于启用状态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为 `Active` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         self.stable.status().is_active()
     }
@@ -496,6 +577,9 @@ impl ExternalIdentityMap {
     ///
     /// # 返回
     /// 返回去除首尾空白后按 UTF-8 编码的字节。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn external_id_key(external_id: &str) -> ExternalIdKey {
         ExternalIdKey::new(external_id.trim().as_bytes().to_vec())
     }
@@ -503,6 +587,16 @@ impl ExternalIdentityMap {
     /// 将既有来源身份确认为已映射。
     ///
     /// 该方法只推进映射头状态；目标历史由 [`ExternalIdentityTarget`] 追加维护。
+    ///
+    /// # 参数
+    /// * `mapped_at` - 确认时间（秒级时间戳）
+    /// * `mapped_by` - 映射责任人
+    ///
+    /// # 返回
+    /// 状态改为 `Mapped` 并写入确认时间与责任人后无额外返回值。
+    ///
+    /// # 错误
+    /// `mapped_by` 为空或超过长度上限时返回领域校验错误。
     pub fn confirm_mapping(&mut self, mapped_at: u64, mapped_by: String) -> Result<()> {
         let mapped_by =
             normalize_required_text(mapped_by, "映射责任人不能为空", ACTOR_MAX_LEN, "映射责任人过长")?;
@@ -614,6 +708,12 @@ impl ExternalIdentityTarget {
     }
 
     /// 关闭当前有效目标，保留不可覆盖的谱系历史。
+    ///
+    /// # 参数
+    /// * `valid_to` - 失效时间（秒级时间戳）
+    ///
+    /// # 返回
+    /// 状态改为 `Expired` 并写入 `valid_to` 后无额外返回值。
     ///
     /// # 错误
     /// 仅有效目标可关闭，且失效时间必须晚于生效时间。

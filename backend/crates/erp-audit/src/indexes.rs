@@ -9,13 +9,16 @@ use crate::repository::AuditAttemptExt;
 
 const AUDIT_LOGS: &str = "audit_logs";
 
-/// 创建审计日志集合的幂等命名索引。
+/// 为 `audit_logs` 与 `audit_attempts` 创建幂等命名索引。
 ///
 /// # 参数
-/// * `db` - 目标 MongoDB 数据库
+/// * `db` - 目标 MongoDB 数据库。
+///
+/// # 返回
+/// 两个集合的索引都创建完成时返回 `Ok(())`。
 ///
 /// # 错误
-/// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
+/// 已有数据违反唯一约束，或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     db.collection::<Document>(AUDIT_LOGS).create_indexes(audit_log_indexes()).await?;
     db.collection::<Document>(<Database as AuditAttemptExt>::AUDIT_ATTEMPTS)

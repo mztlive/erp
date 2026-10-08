@@ -69,11 +69,29 @@ impl SupplierImportResult {
 
 impl SupplierImportRow {
     /// 读取去掉前后空白的模板列。
+    ///
+    /// # 参数
+    /// * `index` - 模板列下标，从 0 起
+    ///
+    /// # 返回
+    /// 返回去空白后的单元格文本；下标超出列数时返回空字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn cell(&self, index: usize) -> &str {
         self.cells.get(index).map(String::as_str).unwrap_or("").trim()
     }
 
     /// 不含源文件编号的稳定导入去重键；同名供应商跨文件只创建一次。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回由供应商全称规范化后计算的 `supplier-import-v1:` SHA-256 十六进制键。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn command_key(&self) -> String {
         let name: String = self
             .cell(1)
@@ -90,6 +108,15 @@ impl SupplierImportRow {
     }
 
     /// 返回主体互补后的公司名称；两项都缺失时保持空值。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 `(签约主体, 付款主体)`；其中一项为空时改用另一项，两项都空时都是空字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn company_names(&self) -> (&str, &str) {
         let signing = self.cell(7);
         let payment = self.cell(8);
@@ -101,8 +128,15 @@ impl SupplierImportRow {
 
     /// 校验必填和不允许静默丢失的数据。
     ///
-    /// # Errors
-    /// 缺失、格式错误或无法导入的附件返回失败；调用前不写任何业务数据。
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 列数、行号与不允许静默丢失的字段均合法时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 列数或行号不符、存在解析错误、单元格过长、必填缺失、成对字段不齐，
+    /// 或附件列含文件引用时返回 `ValidationError`；调用前不写任何业务数据。
     pub fn validate(&self) -> Result<()> {
         if self.cells.len() != 23 || self.row_number < 2 {
             return invalid("模板必须包含原有 23 列并保留数据行号");
@@ -198,6 +232,7 @@ impl SupplierImportRow {
         })
     }
 
+    /// 联系人姓名为空则不提交联系人。
     fn contact(&self) -> Option<SupplierProfileContactInput> {
         optional(self.cell(2)).map(|contact_name| SupplierProfileContactInput {
             contact_name,
@@ -206,10 +241,12 @@ impl SupplierImportRow {
             email: None,
         })
     }
+    /// 经营地址为空则不提交地址。
     fn address(&self) -> Option<SupplierProfileAddressInput> {
         optional(self.cell(6))
             .map(|address| SupplierProfileAddressInput { address, contact_name: optional(self.cell(2)) })
     }
+    /// 开户行为空则不提交银行账户。
     fn bank_account(&self) -> Option<SupplierProfileBankAccountInput> {
         optional(self.cell(5)).map(|bank_name| SupplierProfileBankAccountInput {
             bank_name,
@@ -273,6 +310,15 @@ fn score(raw: &str) -> Result<Option<u8>> {
 }
 
 /// 模板使用百分数；Excel 原生百分比由解析端按显示语义转换。
+///
+/// # 参数
+/// * `raw` - 模板中的发票税点文本，多项可用顿号、逗号或分号分隔
+///
+/// # 返回
+/// 空白输入返回空集合；否则返回去掉百分号并除以 100 后、经规范化去重的税率。
+///
+/// # 错误
+/// 无法解析为数字、不能构成 `Rate`，或规范化失败时返回 `ValidationError`。
 pub fn import_tax_rates(raw: &str) -> Result<Vec<Rate>> {
     if raw.trim().is_empty() {
         return Ok(vec![]);
@@ -297,6 +343,15 @@ pub fn import_tax_rates(raw: &str) -> Result<Vec<Rate>> {
 }
 
 /// 受支持模板结算名称；周期条件默认期末后 15 天。
+///
+/// # 参数
+/// * `raw` - 模板结算方式原文
+///
+/// # 返回
+/// 返回结算方式、对账周期和付款条件代码。`代发月结` 与 `月结` 相同。
+///
+/// # 错误
+/// 名称不在支持列表，或对应付款条件代码无法解析时返回 `ValidationError`。
 pub fn import_settlement(raw: &str) -> Result<(SettlementMode, ReconciliationCycle, String)> {
     let (mode, cycle, code) = match raw {
         "周结" => (SettlementMode::Weekly, ReconciliationCycle::Weekly, "PERIOD_WEEK_15"),
@@ -314,6 +369,7 @@ pub fn import_settlement(raw: &str) -> Result<(SettlementMode, ReconciliationCyc
     Ok((mode, cycle, term.code()))
 }
 
+/// 把模板发票名称映射为发票类型；无法识别时拒绝。
 fn import_invoice_type(raw: &str) -> Result<InvoiceType> {
     match raw {
         "专票" | "增值税专用发票" => Ok(InvoiceType::VatSpecial),

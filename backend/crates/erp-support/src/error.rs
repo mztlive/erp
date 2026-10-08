@@ -1,8 +1,8 @@
-//! Support-domain application errors with the original service mapping.
+//! 支撑领域应用错误，保留原服务层映射。
 
 use application_core::ErrorClass;
 
-/// Support-domain result alias.
+/// 支撑领域结果别名。
 pub type Result<T> = std::result::Result<T, Error>;
 
 impl From<application_core::Error> for Error {
@@ -15,7 +15,7 @@ impl From<application_core::Error> for Error {
     }
 }
 
-/// Source registry, bulk job and file asset errors.
+/// 来源注册、批量任务与文件资产的错误。
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("系统内部错误: {0}")]
@@ -56,7 +56,18 @@ pub enum Error {
 }
 
 impl Error {
-    /// Stable error class used by HTTP mapping; do not parse display text.
+    /// 返回供 HTTP 映射使用的稳定错误类别；不要解析展示文案。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Internal`、`Logic`、`RepositoryError` 与 `OutcomeUnknown` 返回 `Internal`；
+    /// 冲突类变体返回 `Conflict`；业务规则、校验失败与不存在返回 `BusinessRule`；
+    /// `Forbidden` 与 `Unauthenticated` 返回 `Forbidden`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn class(&self) -> ErrorClass {
         match self {
             Self::Internal(_) | Self::Logic(_) | Self::RepositoryError(_) => ErrorClass::Internal,

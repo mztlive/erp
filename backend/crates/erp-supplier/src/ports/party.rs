@@ -1,4 +1,4 @@
-//! Consumer snapshots and port for party facts needed by supplier queries.
+//! 供应商查询所需的主体事实快照与端口。
 
 use std::collections::HashMap;
 
@@ -22,6 +22,15 @@ pub enum PartyStatusFact {
 
 impl PartyStatusFact {
     /// 主体是否启用。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Active` 时返回 `true`，`Disabled` 时返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_active(self) -> bool {
         matches!(self, Self::Active)
     }
@@ -40,6 +49,15 @@ pub enum EffectiveRecordStatusFact {
 
 impl EffectiveRecordStatusFact {
     /// 事实行是否启用。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Active` 时返回 `true`，`Disabled` 时返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_active(self) -> bool {
         matches!(self, Self::Active)
     }
@@ -263,13 +281,16 @@ pub struct PartyBankAccountFact {
 
 /// 选择当前默认且启用的事实行；无默认时回落到第一条启用记录。
 ///
-/// # Parameters
+/// # 参数
 /// * `items` - 已加载事实行
 /// * `is_default` - 默认标记
 /// * `is_active` - 启用判定
 ///
-/// # Returns
-/// 命中的事实行；全部停用时返回 `None`。
+/// # 返回
+/// 返回当前默认且启用的行；没有默认时返回第一条启用行；全部停用时返回 `None`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn select_current_default<T>(
     items: &[T],
     is_default: impl Fn(&T) -> bool,
@@ -343,6 +364,9 @@ pub trait PartyFactsPort: Send + Sync {
     /// * `party_id` - 主体 ID
     /// * `executor` - 调用方选择的执行器
     ///
+    /// # 返回
+    /// 返回该主体的联系人历史；没有记录时为空集合。
+    ///
     /// # 错误
     /// 主体查询失败时返回仓储或映射错误。
     async fn list_contacts(
@@ -356,6 +380,9 @@ pub trait PartyFactsPort: Send + Sync {
     /// # 参数
     /// * `party_id` - 主体 ID
     /// * `executor` - 调用方选择的执行器
+    ///
+    /// # 返回
+    /// 返回该主体的地址历史；没有记录时为空集合。
     ///
     /// # 错误
     /// 主体查询失败时返回仓储或映射错误。
@@ -371,6 +398,9 @@ pub trait PartyFactsPort: Send + Sync {
     /// * `party_id` - 主体 ID
     /// * `executor` - 调用方选择的执行器
     ///
+    /// # 返回
+    /// 返回该主体的税务资料历史；没有记录时为空集合。
+    ///
     /// # 错误
     /// 主体查询失败时返回仓储或映射错误。
     async fn list_tax_profiles(
@@ -384,6 +414,9 @@ pub trait PartyFactsPort: Send + Sync {
     /// # 参数
     /// * `party_id` - 主体 ID
     /// * `executor` - 调用方选择的执行器
+    ///
+    /// # 返回
+    /// 返回该主体的银行账户历史；没有记录时为空集合。
     ///
     /// # 错误
     /// 主体查询失败时返回仓储或映射错误。

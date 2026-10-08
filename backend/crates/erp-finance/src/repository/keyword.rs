@@ -42,6 +42,15 @@ pub struct FinanceKeywordRepository<'a> {
 
 impl<'a> FinanceKeywordRepository<'a> {
     /// 构造只读仓储；不执行数据库访问。
+    ///
+    /// # 参数
+    /// * `db` - 目标数据库。
+    ///
+    /// # 返回
+    /// 返回尚未访问数据库的仓储。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
@@ -49,6 +58,17 @@ impl<'a> FinanceKeywordRepository<'a> {
     /// 返回完整的关键词命中身份，后续必须与列表结构化条件取交集。
     ///
     /// 未命中返回空集合，查询失败返回错误，禁止截取部分候选充当完整结果。
+    ///
+    /// # 参数
+    /// * `target` - 搜索返回对象，决定沿哪一侧财务关系匹配。
+    /// * `facts` - 外域给出的关键词命中事实。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回完整命中身份；未命中时返回空列表。
+    ///
+    /// # 错误
+    /// 任一集合查询失败时返回仓储错误。
     pub async fn matching_ids(
         &self,
         target: FinanceSearchTarget,

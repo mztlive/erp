@@ -38,6 +38,7 @@ impl CasbinRule {
         Self { id: Self::id(sec, ptype, &values), sec: sec.to_string(), ptype: ptype.to_string(), values }
     }
 
+    /// 用单元分隔符拼接 `sec`、`ptype` 与取值，作为规则文档 `_id`。
     fn id(sec: &str, ptype: &str, values: &[String]) -> String {
         format!("{sec}\u{1f}{ptype}\u{1f}{}", values.join("\u{1f}"))
     }
@@ -53,13 +54,30 @@ pub struct MongoCasbinAdapter {
 impl MongoCasbinAdapter {
     /// 创建 MongoDB Casbin Adapter。
     ///
-    /// # 返回值
-    /// 返回绑定指定数据库的 Adapter。
+    /// # 参数
+    /// * `db` - 存放 Casbin 规则与策略版本的数据库
+    ///
+    /// # 返回
+    /// 返回绑定该数据库、且未处于过滤加载状态的 Adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db, filtered: false }
     }
 
     /// 保留 admin 的直接 root 绑定、全量动作权限和策略版本，不保留其他授权。
+    ///
+    /// # 参数
+    /// * `account_id` - admin 账号 ID，用于拼出主体键
+    /// * `retained` - 全库重置必须保留的文档集合
+    /// * `executor` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 两条规则和策略版本文档都登记为保留后无额外返回值。
+    ///
+    /// # 错误
+    /// 保留登记或仓储读取失败时返回错误。
     pub(crate) async fn retain_root_authorization(
         &self,
         account_id: &str,
@@ -97,6 +115,7 @@ impl MongoCasbinAdapter {
         AdapterError(Box::new(error)).into()
     }
 
+    /// 模型中没有对应 `sec` 或 `ptype` 时跳过该行，不报错。
     fn load_rule(model: &mut dyn Model, rule: CasbinRule) {
         let Some(section) = model.get_mut_model().get_mut(&rule.sec) else {
             return;
@@ -107,6 +126,7 @@ impl MongoCasbinAdapter {
         assertion.get_mut_policy().insert(rule.values);
     }
 
+    /// 过滤值为空表示该列不限制；`sec` 不是 `p` 或 `g` 时不匹配。
     fn matches_filter(rule: &CasbinRule, filter: &Filter<'_>) -> bool {
         let values = if rule.sec == "p" {
             &filter.p
@@ -121,6 +141,7 @@ impl MongoCasbinAdapter {
         })
     }
 
+    /// 只把非空过滤值写入 `values.N`，空值不构成条件。
     fn filtered_query(sec: &str, ptype: &str, field_index: usize, field_values: &[String]) -> Document {
         let mut filter = doc! {
             "sec": sec,
@@ -176,6 +197,7 @@ impl MongoCasbinAdapter {
             .collect()
     }
 
+    /// 在自有事务中覆盖全部规则，并因必然变更而递增策略版本。
     async fn replace_policy(&self, rules: Vec<CasbinRule>) -> casbin::Result<()> {
         self.run_policy_write(true, move |adapter, session| {
             Box::pin(async move {
@@ -234,7 +256,7 @@ impl MongoCasbinAdapter {
     /// # 参数
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回单调递增的已提交 policy 版本。
     ///
     /// # 错误
@@ -259,7 +281,7 @@ impl MongoCasbinAdapter {
     /// * `subject` - Casbin 主体标识
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回已排序、去重的 Casbin 角色键。
     ///
     /// # 错误
@@ -345,7 +367,7 @@ impl MongoCasbinAdapter {
     /// # 参数
     /// * `executor` - 数据访问执行器，policy 写入必须传入事务执行器
     ///
-    /// # 返回值
+    /// # 返回
     /// 版本递增成功时返回 `Ok(())`。
     ///
     /// # 错误
@@ -371,7 +393,7 @@ impl MongoCasbinAdapter {
     /// * `expected_revision` - 授权检查使用的 policy 版本
     /// * `executor` - 数据访问执行器，policy 写入必须传入事务执行器
     ///
-    /// # 返回值
+    /// # 返回
     /// 版本比较并递增成功时返回 `Ok(())`。
     ///
     /// # 错误
@@ -410,7 +432,7 @@ impl MongoCasbinAdapter {
     /// * `role_keys` - 目标 Casbin 角色键
     /// * `executor` - 数据访问执行器，多步骤写入必须传入事务执行器
     ///
-    /// # 返回值
+    /// # 返回
     /// 角色绑定替换成功时返回 `Ok(())`。
     ///
     /// # 错误
@@ -446,7 +468,7 @@ impl MongoCasbinAdapter {
     /// * `subject` - Casbin 主体标识
     /// * `executor` - 数据访问执行器，多步骤写入必须传入事务执行器
     ///
-    /// # 返回值
+    /// # 返回
     /// 角色绑定清除成功时返回 `Ok(())`。
     ///
     /// # 错误
@@ -465,7 +487,7 @@ impl MongoCasbinAdapter {
     /// * `permissions` - 目标权限的 `(resource, action)` 集合
     /// * `executor` - 数据访问执行器，多步骤写入必须传入事务执行器
     ///
-    /// # 返回值
+    /// # 返回
     /// 权限规则全部替换成功时返回 `Ok(())`。
     ///
     /// # 错误
@@ -493,7 +515,7 @@ impl MongoCasbinAdapter {
     /// * `role_key` - Casbin 角色键
     /// * `executor` - 数据访问执行器，多步骤写入必须传入事务执行器
     ///
-    /// # 返回值
+    /// # 返回
     /// 相关规则全部删除成功时返回 `Ok(())`。
     ///
     /// # 错误
@@ -511,7 +533,7 @@ impl MongoCasbinAdapter {
     /// * `rules` - 覆盖后的全量规则
     /// * `executor` - 数据访问执行器，全量覆盖必须传入事务执行器
     ///
-    /// # 返回值
+    /// # 返回
     /// 全量覆盖成功时返回 `Ok(())`。
     ///
     /// # 错误

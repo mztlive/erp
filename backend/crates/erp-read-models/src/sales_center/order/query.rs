@@ -38,7 +38,10 @@ type StageOwnerSnapshot = HashMap<String, (Option<String>, Option<String>, Optio
 /// 返回目标、覆盖、剩余和进度均为零的视图。
 ///
 /// # 错误
-/// 无。
+/// 不返回错误。
+///
+/// # Panics
+/// 零数量与零进度字面量必须可解析。`expect` 只在这些常量本身非法时触发。
 ///
 /// # 关键业务约束
 /// 零值只用于未生效销售单，不掩盖已生效销售单的当前版本缺失。

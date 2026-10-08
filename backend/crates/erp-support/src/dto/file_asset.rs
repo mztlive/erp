@@ -163,6 +163,9 @@ impl FileAssetListParams {
     ///
     /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
     ///
@@ -272,6 +275,9 @@ impl AttachToDocumentRequest {
     ///
     /// # 返回
     /// 返回实体层创建数据。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(crate) fn into_data(self, created_by: &str) -> DocumentAttachmentData {
         DocumentAttachmentData {
             document_id: self.document_id,

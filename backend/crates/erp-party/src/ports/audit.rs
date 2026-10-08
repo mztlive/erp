@@ -1,4 +1,4 @@
-//! Consumer port for cross-domain audit persistence from party commands.
+//! 主体命令跨域审计持久化的消费方端口。
 
 use std::num::NonZeroU32;
 
@@ -10,25 +10,24 @@ use persistence_core::Executor;
 
 use crate::error::{Error, Result};
 
-/// Prepared successful resource audit that party can persist through a port.
+/// 主体可通过端口持久化的、已准备好的成功资源审计。
 ///
-/// Party never depends on `erp-audit` types. Composition-root adapters convert
-/// this fact into an `AuditLog` and write it on the same [`Executor`].
+/// 主体不依赖 `erp-audit` 的类型。组合根适配器把该事实转换成 `AuditLog`，并写到同一个 [`Executor`]。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreparedPartyAudit {
-    /// Stable audit document id.
+    /// 稳定的审计文档 ID。
     pub id: String,
-    /// Optimistic-lock version captured at construction.
+    /// 构造时捕获的乐观锁版本。
     pub version: u64,
-    /// Creation timestamp captured at construction.
+    /// 构造时捕获的创建时间戳。
     pub created_at: u64,
-    /// Update timestamp captured at construction.
+    /// 构造时捕获的更新时间戳。
     pub updated_at: u64,
-    /// Soft-delete marker captured at construction.
+    /// 构造时捕获的软删除标记。
     pub deleted_at: u64,
-    /// Actor account id.
+    /// 操作人账号 ID。
     pub actor_id: String,
-    /// Actor login account.
+    /// 操作人登录账号。
     pub actor_account: String,
     /// 事件发生时已捕获的安全操作人名称；未知保持缺失。
     pub actor_name_snapshot: Option<String>,
@@ -36,17 +35,17 @@ pub struct PreparedPartyAudit {
     pub request_id: Option<String>,
     /// 同一业务命令内事件的正整数序号。
     pub event_sequence: NonZeroU32,
-    /// Actor kind.
+    /// 操作人类型。
     pub actor_type: AccountKind,
-    /// Business action name.
+    /// 业务动作名称。
     pub action: String,
-    /// Resource type.
+    /// 资源类型。
     pub resource_type: String,
-    /// Resource id.
+    /// 资源 ID。
     pub resource_id: Option<String>,
-    /// Success flag; party only prepares successful resource audits.
+    /// 是否成功；主体只准备成功的资源审计。
     pub success: bool,
-    /// Optional business message.
+    /// 可选的业务说明。
     pub message: Option<String>,
 }
 
@@ -96,24 +95,24 @@ impl PreparedPartyAudit {
         self
     }
 
-    /// Capture party-side fields from an already-validated audit entity snapshot.
+    /// 从已经校验的审计实体快照捕获主体侧字段。
     ///
     /// # 参数
-    /// * `base` - persistence metadata of the constructed audit
-    /// * `actor_id` - actor id
-    /// * `actor_account` - actor login
-    /// * `actor_type` - actor kind
-    /// * `action` - action name
-    /// * `resource_type` - resource type
-    /// * `resource_id` - resource id
-    /// * `success` - success flag
-    /// * `message` - optional message
+    /// * `base` - 构造时的持久化元数据。
+    /// * `actor_id` - 操作人 ID。
+    /// * `actor_account` - 操作人登录账号。
+    /// * `actor_type` - 操作人类型。
+    /// * `action` - 动作名称。
+    /// * `resource_type` - 资源类型。
+    /// * `resource_id` - 资源 ID。
+    /// * `success` - 是否成功。
+    /// * `message` - 可选说明。
     ///
     /// # 返回
     /// 返回稍后持久化的预制审计事实。
     ///
     /// # 错误
-    /// 无；输入字段由调用方预先校验。
+    /// 不返回错误；输入字段由调用方预先校验。
     #[allow(clippy::too_many_arguments)]
     pub fn from_validated(
         base: &BaseModel,
@@ -189,10 +188,22 @@ impl PreparedPartyAudit {
     }
 }
 
-/// Port party uses to prepare and persist resource audits on a caller executor.
+/// 主体用来在调用方执行器上准备并持久化资源审计的端口。
 #[async_trait]
 pub trait PartyAuditPort: Send + Sync {
-    /// Validate and prepare a success resource audit before the transaction.
+    /// 在事务开始前校验并准备一条成功的资源审计。
+    ///
+    /// # 参数
+    /// * `actor` - 已鉴权操作人。
+    /// * `action` - 业务动作。
+    /// * `resource_type` - 资源类型。
+    /// * `resource_id` - 业务资源 ID。
+    ///
+    /// # 返回
+    /// 返回可交给 [`Self::persist`] 的预制审计事实。
+    ///
+    /// # 错误
+    /// 无法形成该审计事实时返回对应错误。
     fn resource_log(
         &self,
         actor: AuditActor,
@@ -201,11 +212,21 @@ pub trait PartyAuditPort: Send + Sync {
         resource_id: String,
     ) -> Result<PreparedPartyAudit>;
 
-    /// Persist a previously prepared audit on the caller-chosen executor.
+    /// 在调用方选定的执行器上写入此前准备好的审计。
+    ///
+    /// # 参数
+    /// * `audit` - 已准备的审计事实。
+    /// * `executor` - 调用方选定的数据访问执行器。
+    ///
+    /// # 返回
+    /// 写入完成后返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 持久化失败时返回对应错误。
     async fn persist(&self, audit: &PreparedPartyAudit, executor: &mut dyn Executor) -> Result<()>;
 }
 
-/// Fail-closed audit port used when composition has not injected an adapter.
+/// 组合根未注入适配器时使用的失败关闭审计端口。
 #[derive(Debug, Default, Clone, Copy)]
 pub struct FailClosedAuditPort;
 
@@ -221,6 +242,17 @@ impl PartyAuditPort for FailClosedAuditPort {
         PreparedPartyAudit::resource(actor, action, resource_type, resource_id)
     }
 
+    /// 组合根未注入适配器时拒绝写入。
+    ///
+    /// # 参数
+    /// * `_audit` - 已准备的审计事实；本实现不读取。
+    /// * `_executor` - 调用方执行器；本实现不使用。
+    ///
+    /// # 返回
+    /// 不返回成功。
+    ///
+    /// # 错误
+    /// 始终返回 `Internal`，提示审计端口未接线。
     async fn persist(&self, _audit: &PreparedPartyAudit, _executor: &mut dyn Executor) -> Result<()> {
         Err(Error::Internal("审计端口未接线".to_string()))
     }

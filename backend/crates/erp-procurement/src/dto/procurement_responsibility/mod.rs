@@ -33,6 +33,9 @@ pub struct CreateProcurementResponsibilityRuleRequest {
 impl CreateProcurementResponsibilityRuleRequest {
     /// 转换为实体创建数据。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回保持选择器语义的实体数据。
     ///
@@ -77,6 +80,9 @@ pub struct UpdateProcurementResponsibilityRuleRequest {
 
 impl UpdateProcurementResponsibilityRuleRequest {
     /// 转换为实体整项更新数据。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 返回期望版本与实体数据。

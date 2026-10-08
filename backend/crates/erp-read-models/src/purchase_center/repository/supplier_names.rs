@@ -1,4 +1,4 @@
-//! Remaining-call-site helper: supplier account ids to current legal names.
+//! 把供应商账号身份解析为当前法定名称的剩余调用点辅助。
 
 use std::collections::HashMap;
 
@@ -8,15 +8,18 @@ use erp_supplier::SupplierExt;
 use mongodb::Database;
 use persistence_core::{Executor, Result};
 
-/// Load current legal names for supplier accounts by composing supplier refs and party names.
+/// 按供应商账号组装当前法定名称；缺失的主体或修订不进入结果。
 ///
-/// # Parameters
-/// * `db` - MongoDB database
-/// * `supplier_ids` - supplier account ids
-/// * `executor` - caller-chosen executor
+/// # 参数
+/// * `db` - 目标数据库。
+/// * `supplier_ids` - 供应商账号身份。
+/// * `executor` - 调用方执行器。
 ///
-/// # Returns
-/// Map of supplier account id to current legal name. Missing parties or revisions are omitted.
+/// # 返回
+/// 返回供应商账号身份到当前法定名称的映射；主体或修订缺失的账号省略。
+///
+/// # 错误
+/// 供应商引用或主体名称读取失败时返回对应错误。
 pub async fn current_legal_names_by_account_ids(
     db: &Database,
     supplier_ids: &[SupplierAccountId],

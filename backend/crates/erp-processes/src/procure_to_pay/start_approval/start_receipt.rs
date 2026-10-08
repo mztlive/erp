@@ -121,6 +121,21 @@ pub(crate) async fn load_start_receipt(
 }
 
 /// 在 fresh 事务快照内按完整 V3/legacy 身份回读已提交的采购启动结果。
+///
+/// # 参数
+/// * `db` - 审批运行时数据库。
+/// * `subject` - 采购单主体引用。
+/// * `subject_version` - 冻结提交版本。
+/// * `idempotency_key` - 尚未规范化的幂等键。
+/// * `binding` - 创建时冻结的定义绑定。
+/// * `actor_id` - 启动人。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 没有匹配收据时返回 `None`；同键同载荷且运行事实一致时返回审批实例 ID。
+///
+/// # 错误
+/// 幂等键非法、同键异载荷、收据引用的实例不存在、收据与冻结运行事实不一致，或仓储读取失败时返回错误。
 pub(crate) async fn replay_purchase_order_start_with_executor(
     db: &Database,
     subject: &SubjectRef,

@@ -117,7 +117,7 @@ impl StockBalance {
     /// 更新成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 更新后任一数量为负（可用量不足）时返回错误。
+    /// 重算后的可用数量超出数量精度，或任一数量为负时返回错误。
     pub fn update(&mut self, update: StockBalanceUpdate) -> Result<()> {
         let on_hand = update.on_hand_quantity.unwrap_or(self.on_hand_quantity);
         let reserved = update.reserved_quantity.unwrap_or(self.reserved_quantity);
@@ -146,6 +146,9 @@ impl StockBalance {
     ///
     /// # 返回
     /// 当前版本等于期望版本时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn matches_version(&self, expected: u64) -> bool {
         self.base.version == expected
     }
@@ -157,7 +160,10 @@ impl StockBalance {
     /// * `lines` - 调整单全部明细
     ///
     /// # 返回
-    /// 仓库一致且所有明细 SKU 都等于余额 SKU 时返回 `true`。
+    /// 仓库一致、每条明细都属于该调整单、且明细 SKU 都等于余额 SKU 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn matches_adjustment_dimensions(
         &self,
         adjustment: &StockAdjustment,

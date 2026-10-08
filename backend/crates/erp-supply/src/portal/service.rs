@@ -236,6 +236,7 @@ impl PortalOfferingService {
         self.prepare_availability(supplier_id, actor, id, req, executor).await?;
         Ok(())
     }
+    /// 在内存中套用可供变更并返回前后事实，此处不写库。
     async fn prepare_availability(
         &self,
         supplier_id: &str,
@@ -374,6 +375,7 @@ impl PortalOfferingService {
             },
         }
     }
+    /// 订货编码已占用时改成条款修订快照，否则重验报价资格与可供填报。
     async fn prepare_quote_snapshot(
         &self,
         supplier_id: &str,

@@ -23,6 +23,15 @@ pub struct MongoIntegrationEvidenceAuthority {
 }
 impl MongoIntegrationEvidenceAuthority {
     /// 保存组合根数据库；方法不自开事务或外发请求。
+    ///
+    /// # 参数
+    /// * `db` - 组合根数据库。
+    ///
+    /// # 返回
+    /// 证据适配器。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }

@@ -1,4 +1,4 @@
-//! Final dictionary mapping checks belong to the catalog domain.
+//! 最终字典映射核对属于商品域。
 
 use persistence_core::Executor;
 
@@ -11,6 +11,19 @@ use crate::repository::CatalogExt;
 use crate::{Error, Result};
 
 impl CatalogPortalService {
+    /// 核对草稿里已经成对选择的品牌、分类和单位。
+    ///
+    /// 未同时给出标识与版本的字典跳过；已选分类还会核对商品类型和分类路径。
+    ///
+    /// # 参数
+    /// * `input` - 新品原稿
+    /// * `executor` - 当前读取执行器
+    ///
+    /// # 返回
+    /// 已选项均有效时返回空结果。
+    ///
+    /// # 错误
+    /// 所选字典不存在、已停用、版本变化、分类与商品类型不兼容、分类路径非法、单位精度超出或仓储读取失败时返回对应错误。
     pub(super) async fn ensure_selected_dictionaries(
         &self,
         input: &NewProductInput,
@@ -66,6 +79,18 @@ impl CatalogPortalService {
         Ok(())
     }
 
+    /// 按已确认映射复验品牌、分类层级和每个 SKU 单位。
+    ///
+    /// # 参数
+    /// * `input` - 新品原稿
+    /// * `mapped` - 内部确认的字典与 SKU 映射
+    /// * `executor` - 当前读取执行器
+    ///
+    /// # 返回
+    /// 映射与当前字典事实一致时返回空结果。
+    ///
+    /// # 错误
+    /// 原稿与映射不一致、分类或品牌未匹配、字典停用或版本变化、未知品牌与无品牌混用、分类路径变化、SKU 映射或单位核对失败，以及仓储读取失败时返回对应错误。
     pub(super) async fn ensure_dictionaries(
         &self,
         input: &NewProductInput,

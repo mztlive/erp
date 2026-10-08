@@ -58,8 +58,14 @@ pub enum SubmissionStatus {
 impl SubmissionStatus {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::InReview => "审核中",
@@ -71,8 +77,14 @@ impl SubmissionStatus {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::InReview => "IN_REVIEW",
@@ -85,6 +97,15 @@ impl SubmissionStatus {
 
 impl DocumentState for SubmissionStatus {
     /// 审核中可被通过、驳回或因新提交失效；其余为终态（§6.5）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `InReview` 的后继为 `Approved`、`Rejected`、`Superseded`；`Approved`、`Rejected`、`Superseded` 返回空切片。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::InReview => &[Self::Approved, Self::Rejected, Self::Superseded],
@@ -468,6 +489,9 @@ impl SalesChangeSubmission {
 
     /// 将变更提交表头快照转为正式销售版本所需的 D13 快照入参。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回销售单域表头快照入参。
     ///
@@ -694,6 +718,9 @@ impl SalesChangeSubmissionLine {
 
     /// 还原实物及服务字段组。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于正式版本行构造的完整实物及服务字段组。
     ///
@@ -733,6 +760,9 @@ impl SalesChangeSubmissionLine {
     }
 
     /// 还原卡券字段组。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 返回用于正式版本行构造的完整卡券字段组。

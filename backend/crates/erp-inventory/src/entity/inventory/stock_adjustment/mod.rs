@@ -53,8 +53,14 @@ pub enum StockAdjustmentState {
 impl StockAdjustmentState {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -69,8 +75,14 @@ impl StockAdjustmentState {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "DRAFT",
@@ -85,16 +97,28 @@ impl StockAdjustmentState {
 
     /// 判断是否可编辑（草稿与驳回）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 草稿或驳回状态返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_editable(&self) -> bool {
         matches!(self, Self::Draft | Self::Rejected)
     }
 
     /// 返回尚未过账且会影响库存详情展示的状态集合。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回草稿与审批中状态。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn pending_posting() -> &'static [Self] {
         &[Self::Draft, Self::InApproval]
     }
@@ -104,6 +128,18 @@ impl DocumentState for StockAdjustmentState {
     /// 固定邻接矩阵（§6.7/§7.5 定向链；`REVERSED` 为不可逆终态）。
     ///
     /// `REJECTED` 可在修改后重新提交仓储复核（§6.5.5 再次提交审核）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回当前状态的静态后继切片，不含自身：`Draft` 为 `PendingWarehouseReview` 与 `InApproval`；
+    /// `InApproval` 为 `Posted` 与 `Draft`；`PendingWarehouseReview` 为 `PendingFinanceReview` 与
+    /// `Rejected`；`PendingFinanceReview` 为 `Posted` 与 `Rejected`；`Rejected` 为
+    /// `PendingWarehouseReview`；`Posted` 为 `Reversed`；`Reversed` 为空切片。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft => &[Self::PendingWarehouseReview, Self::InApproval],
@@ -132,8 +168,14 @@ pub enum AdjustmentReasonType {
 impl AdjustmentReasonType {
     /// 返回类型的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::StockGain => "盘盈",
@@ -144,8 +186,14 @@ impl AdjustmentReasonType {
 
     /// 返回类型的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::StockGain => "STOCK_GAIN",
@@ -156,8 +204,14 @@ impl AdjustmentReasonType {
 
     /// 返回该调整原因要求的库存方向。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 盘盈返回增加，盘亏与损坏返回减少。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn movement_direction(self) -> MovementDirection {
         match self {
             Self::StockGain => MovementDirection::Increase,
@@ -167,8 +221,14 @@ impl AdjustmentReasonType {
 
     /// 返回该调整原因对应的正式流水类型。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回盘盈、盘亏或损坏流水类型。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn movement_type(self) -> MovementType {
         match self {
             Self::StockGain => MovementType::StockGain,
@@ -281,7 +341,7 @@ impl StockAdjustment {
     /// 返回新建的调整单实体。
     ///
     /// # 错误
-    /// 调整单号、经办人或创建人为空/超长时返回错误。
+    /// 调整单号、经办人或创建人为空或超长，或原因说明超长时返回错误。
     pub fn new(
         id: StockAdjustmentId,
         data: StockAdjustmentData,
@@ -327,6 +387,12 @@ impl StockAdjustment {
     }
 
     /// 校验库存调整仍是从未提交审批的初始草稿。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 状态为草稿且 `approval_subject_version` 为 0 时成功。
     ///
     /// # 错误
     /// 非草稿或审批主题版本已经递增时返回错误。
@@ -386,6 +452,9 @@ impl StockAdjustment {
     /// 仅草稿可提交。版本递增与状态迁移在全部校验成功后一起写入，
     /// 因此版本溢出或状态非法时实体保持不变。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回本次冻结的审批主题版本。
     ///
@@ -404,6 +473,9 @@ impl StockAdjustment {
     }
 
     /// 撤回审批并回到草稿，审批主题版本保持不变。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 撤回成功返回 `Ok(())`。
@@ -424,8 +496,11 @@ impl StockAdjustment {
     /// 该方法只执行专用状态守卫，不修改调整单。库存流水、余额及最终状态
     /// 仍由 Service 在同一事务内持久化。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 当前状态为审批中时返回 `Ok(())`。
+    /// 当前状态为审批中且允许迁到已过账时返回 `Ok(())`。
     ///
     /// # 错误
     /// 当前状态不是审批中时返回错误；旧人工财务复核状态不得通过该守卫。
@@ -486,17 +561,19 @@ impl StockAdjustment {
         Ok(())
     }
 
-    /// 过账库存调整（待财务确认 → 已过账）。
+    /// 过账库存调整，把状态迁到已过账。
     ///
-    /// 盘盈、盘亏和损坏一律经过财务成本影响确认后才能过账（§6.7，允许结论
-    /// 为零成本影响但不得跳过财务确认）；过账时写库存流水、余额和必要预占
-    /// 释放由 P3 在同一事务完成（§8.2 第 3 条），原出入库流水不改写。
+    /// 本方法只检查邻接矩阵：审批中或待财务确认可以进入已过账。它不检查财务确认人，
+    /// 也不写库存流水、余额或预占。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 迁移成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 当前状态不允许迁移（未经财务确认）时返回错误。
+    /// 当前状态不能迁到已过账时返回错误。
     pub fn mark_posted(&mut self) -> Result<()> {
         ensure_transition(self.status, StockAdjustmentState::Posted)?;
         self.status = StockAdjustmentState::Posted;
@@ -506,6 +583,9 @@ impl StockAdjustment {
     /// 驳回调整单（待仓储复核/待财务确认 → 驳回）。
     ///
     /// 驳回后修改调整单并重新提交仓储复核（§6.5.5 流程）。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 迁移成功返回 `Ok(())`。
@@ -521,7 +601,10 @@ impl StockAdjustment {
     /// 冲正库存调整（已过账 → 已冲正，终态）。
     ///
     /// `REVERSED` 表示存在正式反向事实（冲正流水），不删除原调整单
-    /// （§4.5.1、§7.5）；反向事实由 P3 形成。
+    /// （§4.5.1、§7.5）；反向事实由调用方形成。本方法只迁移状态。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 迁移成功返回 `Ok(())`。
@@ -536,8 +619,14 @@ impl StockAdjustment {
 
     /// 判断当前状态是否可编辑。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 草稿或驳回状态返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_editable(&self) -> bool {
         self.status.is_editable()
     }
@@ -549,6 +638,9 @@ impl StockAdjustment {
     ///
     /// # 返回
     /// 当前版本等于期望版本时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn matches_version(&self, expected: u64) -> bool {
         self.base.version == expected
     }
@@ -662,11 +754,14 @@ impl StockAdjustment {
 
     /// 校验当前状态可编辑。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 可编辑返回 `Ok(())`。
     ///
     /// # 错误
-    /// 待复核/待确认/已过账/已冲正不可编辑时返回错误。
+    /// 非草稿且非驳回时返回错误，包括审批中、待复核、待财务确认、已过账和已冲正。
     fn ensure_editable(&self) -> Result<()> {
         if !self.is_editable() {
             return Err(Error::from("待复核、待财务确认、已过账或已冲正的库存调整单不可编辑"));

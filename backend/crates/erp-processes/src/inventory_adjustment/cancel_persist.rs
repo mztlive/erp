@@ -233,6 +233,20 @@ fn cancel_audit(
 }
 
 /// 在同一事务快照内重读并校验普通撤回需要关闭的开放任务。
+///
+/// # 参数
+/// * `db` - 执行与任务所在数据库。
+/// * `instance` - 待撤回的审批实例。
+/// * `expected_execution` - 事务外加载的当前执行。
+/// * `expected_tasks` - 事务外加载的开放任务。
+/// * `authorization` - 已证明的撤回授权，提供责任组织。
+/// * `executor` - 当前事务执行器。
+///
+/// # 返回
+/// 返回事务内重读且与预期身份、版本一致的开放任务。
+///
+/// # 错误
+/// 取消策略、当前执行、任务数量或任务身份变化，或适配器登记不完整时返回冲突或下层错误。仓储读取失败时返回对应错误。
 pub(crate) async fn revalidate_cancel_open_tasks(
     db: &Database,
     instance: &ApprovalProcessInstance,
@@ -357,8 +371,18 @@ pub(crate) async fn persist_stock_adjustment_cancel_notifications(
 
 /// 在审批运行时持有的事务内撤回库存调整审批。
 ///
+/// # 参数
+/// * `db` - 调整单与运行事实所在数据库。
+/// * `context` - 审批运行时冻结的受阻取消上下文。
+/// * `action` - 合同强类型领域动作。
+/// * `actor` - 已认证的运行时操作人。
+/// * `executor` - 审批运行时持有的事务执行器。
+///
+/// # 返回
+/// 调整单已撤回并写入审计时无返回值。
+///
 /// # 错误
-/// 调整单不存在、动作不匹配、状态迁移或 CAS 写入失败时返回错误。
+/// 缺少事务会话、上下文或受阻运行事实不匹配、调整单不存在、主题版本变化、动作不允许，或单据与审计写入失败时返回对应错误。
 pub async fn cancel_stock_adjustment_approval_apply(
     db: &Database,
     context: &ApprovalActionContext,
@@ -401,6 +425,19 @@ pub async fn cancel_stock_adjustment_approval_apply(
 }
 
 /// 校验受阻取消动作仍精确指向同一 BLOCKED 实例、执行和无任务事实。
+///
+/// # 参数
+/// * `db` - 实例、绑定、快照与任务所在数据库。
+/// * `context` - 审批运行时冻结的受阻取消上下文。
+/// * `actor` - 已认证的运行时操作人。
+/// * `subject_version` - 已从上下文解析的主题版本。
+/// * `executor` - 当前事务执行器。
+///
+/// # 返回
+/// 实例、执行、绑定、快照一致且没有开放任务时无返回值。
+///
+/// # 错误
+/// 执行缺失、实例或执行不存在、绑定或快照不一致、状态不是阻塞、操作人不一致，或仍有开放任务时返回 `ConflictError`。仓储读取失败时返回对应错误。
 pub(crate) async fn validate_blocked_cancel_runtime_context(
     db: &Database,
     context: &ApprovalActionContext,

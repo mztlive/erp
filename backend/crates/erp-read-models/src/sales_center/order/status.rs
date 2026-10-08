@@ -13,6 +13,18 @@ use super::dto;
 /// 防御性的字符串兜底分支——后端只会产出这里覆盖到的枚举组合（`Draft` 恒配
 /// `NotSubmitted`，`PendingReview` 恒配非 `NotSubmitted` 的审核轨阶段，见
 /// `SalesOrder::submit_for_review`/`return_to_draft` 的不变式，两者不会交叉）。
+///
+/// # 参数
+/// * `commercial` - 商业主状态。
+/// * `review` - 审核轨状态。
+/// * `close` - 结案状态。
+/// * `fulfillment` - 履约进度。
+///
+/// # 返回
+/// 返回当前阶段的 `(code, label, tone)`。关闭和作废优先于商业与审核状态。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn stage_code_label_tone(
     commercial: CommercialStatus,
     review: ReviewStatus,
@@ -111,6 +123,18 @@ pub(super) fn close_eligibility_view(assessment: SalesOrderClosureAssessment) ->
 ///
 /// 已生效单不可直接编辑；ERP 开单的已生效单可发起销售变更。历史商城来源单据
 /// （卡券同步遗留）、尚在确认/审批中的单据、已有进行中变更单的单据均不可发起。
+///
+/// # 参数
+/// * `origin_system` - 开单来源。
+/// * `stage_code` - `stage_code_label_tone` 给出的阶段码。
+/// * `stage_label` - 同一阶段的中文名，只用于阻断说明。
+/// * `has_active_change_order` - 是否已有进行中的销售变更单。
+///
+/// # 返回
+/// 第一项为是否可以发起。可以发起时第二项为 `None`；否则为阻断说明。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn compute_can_start_sales_change(
     origin_system: OriginSystem,
     stage_code: &str,

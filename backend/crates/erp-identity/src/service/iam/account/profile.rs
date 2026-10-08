@@ -44,8 +44,11 @@ impl AccountProfileService {
     /// * `db` - 数据库实例
     /// * `rbac` - 共享 Casbin RBAC 服务
     ///
-    /// # 返回值
-    /// 返回账号信息服务实例
+    /// # 返回
+    /// 返回账号信息服务实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
         Self { db, rbac }
     }
@@ -56,11 +59,11 @@ impl AccountProfileService {
     /// * `user_id` - 账号ID
     /// * `account_kind` - 账号类型
     ///
-    /// # 返回值
-    /// 返回账号信息
+    /// # 返回
+    /// 返回当前账号的资料、角色、权限以及策略和组织版本。
     ///
     /// # 错误
-    /// 当账号不存在时返回错误。
+    /// 账号不存在或类型不符时返回 `NotFound`；账号已失效时返回 `Forbidden`；读取期间策略版本变化时返回 `ConflictError`。数据库、角色或组织版本读取失败时返回对应错误。
     pub async fn account_profile(&self, user_id: &str, account_kind: AccountKind) -> Result<AccountProfile> {
         let policy_version = self.rbac.current_policy_revision().await?;
         let account = account_of_kind(

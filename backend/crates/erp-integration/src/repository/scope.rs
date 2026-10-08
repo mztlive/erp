@@ -62,8 +62,14 @@ impl IntegrationScopeClause {
 
     /// 判断条款是否构成有效责任条件（与 [`is_empty`](Self::is_empty) 互为否定）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 公司、本人处理或处理人组织任一命中条件存在时为 true。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn has_scope_rules(&self) -> bool {
         self.company || self.owner_user_id.is_some() || !self.owner_org_unit_ids.is_empty()
     }
@@ -190,6 +196,9 @@ fn empty_ids() -> Document {
 }
 
 /// 将同角色条款按并集组合；没有任何条款时明确无结果。
+///
+/// # Panics
+/// `len == 1` 时迭代器必然还有元素；`expect` 只在该契约被破坏时触发。
 fn scope_union(conditions: Vec<Document>) -> Document {
     match conditions.len() {
         0 => empty_ids(),

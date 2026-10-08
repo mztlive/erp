@@ -62,6 +62,19 @@ impl SalesChangePostingPort for DatabasePosting<'_> {
 }
 
 /// 使用传入 Executor 执行真实销售变更写入路径。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `write` - 已准备的生效写入。
+/// * `delta` - 非零应收差额；没有差额时为 `None`。
+/// * `audit` - 同一执行器中最后写入的审计日志。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 无返回值。顺序为销售修订、应收差额及任务、变更状态、审计。
+///
+/// # 错误
+/// 任一步失败时返回该错误并停止后续写入。
 pub(super) async fn persist_effective_writes(
     db: &Database,
     write: EffectiveChangeWrite,
@@ -94,6 +107,17 @@ async fn write_receivable_delta(
 }
 
 /// 在原销售准备完成后读取主应收子账，保持 NoTransaction 和财务取时位置。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `write` - 已准备的生效写入。
+/// * `actor` - 当前操作人，写入应收更新人。
+///
+/// # 返回
+/// 非零差额的应收写入。新旧金额相等时为 `None`，不产生分录。
+///
+/// # 错误
+/// 生效事实无法读取、金额不合法、正式应收子账缺失或仓储读取失败时返回对应错误。
 pub(super) async fn prepare_receivable_delta(
     db: &Database,
     write: &EffectiveChangeWrite,

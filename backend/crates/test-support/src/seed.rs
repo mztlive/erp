@@ -46,11 +46,11 @@ const SEED_PERMISSIONS: &[(&str, &str)] = &[("role", "list"), ("admin", "list"),
 /// # 参数
 /// * `db` - 目标数据库
 ///
-/// # 返回值
+/// # 返回
 /// 返回新生成的账号 ID（用于 `mint_jwt` 签发凭据）。
 ///
 /// # 错误
-/// 当任一集合写入失败时返回错误。
+/// 集合写入失败时返回 MongoDB 错误；`Role::new` 校验失败时返回 `Error::Entity`。
 pub async fn seed_admin_account(db: &Database) -> Result<String> {
     let account_id = new_account_id();
     let login = seed_login(&account_id);
@@ -132,10 +132,13 @@ fn new_account_id() -> String {
 /// 同一规则，否则 `validate_session` 会拒绝签发身份。
 ///
 /// # 参数
-/// * `account_id` - 种子账号 ID
+/// * `account_id` - 种子账号 ID。
 ///
-/// # 返回值
+/// # 返回
 /// 返回与账号 ID 一一对应的登录账号。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn seed_login(account_id: &str) -> String {
     format!("test_admin_{account_id}")
 }

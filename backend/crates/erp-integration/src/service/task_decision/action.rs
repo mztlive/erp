@@ -99,6 +99,21 @@ fn verified_refs(verified: Vec<VerifiedEvidence>) -> Vec<ControlledEvidenceRef> 
 }
 
 /// 执行已绑定正式任务的本域动作，所有读写和证据均使用传入执行器。
+///
+/// # 参数
+/// * `db` - 目标数据库
+/// * `authority` - 权威证据端口
+/// * `command` - 非终结任务动作命令
+/// * `receipt_id` - 命令回执 ID；差异分支用作决定记录主键
+/// * `actor_id` - 当前操作人
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 返回本域动作事实；`next_subject_version` 为写入后的主题版本。
+///
+/// # 错误
+/// 对象不存在、已终结、版本或开放状态不符、重放前置不满足、证据或补偿校验失败、
+/// 权威端口失败、决定序号溢出或仓储写入失败时返回对应错误。
 pub async fn execute_task_action(
     db: &Database,
     authority: &dyn IntegrationEvidenceAuthority,
@@ -204,6 +219,7 @@ fn unknown_action_fact() -> ActionFact {
 /// 动作证据摘要上限（字节口径；摘要为 ASCII 固定前缀 + 紧凑证据编码，字节 == 字符）。
 const ACTION_SUMMARY_MAX_BYTES: usize = 512;
 
+/// 组装动作摘要；紧凑证据非法或结果超过 512 字节时失败。
 fn error_action_summary(action: &IntegrationNonTerminalTaskAction, fact: &ActionFact) -> Result<String> {
     let evidence = compact_evidence(&action.evidence_refs)?;
     let summary = format!(
@@ -297,6 +313,21 @@ fn pending_direct_fact(
     }
 }
 
+/// 按非终结动作种类构造差异决定事实，不在此写入决定记录。
+///
+/// # 参数
+/// * `authority` - 权威证据端口
+/// * `difference` - 对账差异
+/// * `action` - 非终结动作
+/// * `receipt_id` - 查询原结果分支写入的命令回执 ID
+/// * `actor_id` - 当前操作人
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 返回尚未持久化的 `DirectFact`。
+///
+/// # 错误
+/// 权威查询、重放、归集或证据验证失败，补偿证据缺失，或回执引用 grammar 非法时返回对应错误。
 pub(super) async fn difference_action_fact(
     authority: &dyn IntegrationEvidenceAuthority,
     difference: &ReconciliationDifference,
@@ -409,6 +440,15 @@ async fn difference_link_compensation_fact(
 }
 
 /// 关联补偿必须携带补偿结果证据（两处决定入口共用，见 [`super::direct`]）。
+///
+/// # 参数
+/// * `refs` - 客户端证据引用
+///
+/// # 返回
+/// 至少一条为 `CompensationResult` 时成功。
+///
+/// # 错误
+/// 没有任何补偿结果证据时返回 `ValidationError`。
 pub(super) fn ensure_compensation_evidence(refs: &[ControlledEvidenceRef]) -> Result<()> {
     if refs.iter().any(|evidence| evidence.kind == ControlledEvidenceKind::CompensationResult) {
         Ok(())
@@ -444,6 +484,9 @@ pub fn command_receipt_reference(receipt_id: &str) -> Result<String> {
 ///
 /// # 返回
 /// 返回下一开放动作代码。
+///
+/// # 错误
+/// 不返回错误。
 pub fn next_allowed_actions(
     item_type: IntegrationItemType,
     outcome: IntegrationActionOutcome,

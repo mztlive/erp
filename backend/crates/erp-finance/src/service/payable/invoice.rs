@@ -106,6 +106,9 @@ impl PayableService {
 ///
 /// # 返回
 /// 返回响应视图。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn purchase_invoice_allocation_view(
     allocation: &PurchaseInvoiceAllocation,
 ) -> crate::dto::payable::PurchaseInvoiceAllocationView {
@@ -123,6 +126,17 @@ pub(super) fn purchase_invoice_allocation_view(
 }
 
 /// 为供应商主体事实构建进项发票；调用者先完成命令幂等和供应商存在校验。
+///
+/// # 参数
+/// * `req` - 进项发票登记请求。
+/// * `party_id` - 已确认的供应商往来主体。
+/// * `actor_id` - 登记人。
+///
+/// # 返回
+/// 返回方向为进项、种类为蓝字、尚未登记状态迁移的发票。舍入调整额为零。
+///
+/// # 错误
+/// 发票实体构造失败时返回对应错误。
 pub fn prepare_purchase_invoice(
     req: &RegisterPurchaseInvoiceRequest,
     party_id: PartyId,
@@ -151,6 +165,18 @@ pub fn prepare_purchase_invoice(
 }
 /// 在调用方 Executor 内按原顺序校验号码、构建分配计划并批量读取应付账户。
 /// 供应商主体一致性由流程使用这些财务账户事实完成，之后才可调用持久化接口。
+///
+/// # 参数
+/// * `db` - 财务领域数据库。
+/// * `req` - 含分配行的登记请求。
+/// * `invoice_for_tx` - 已构造、尚未持久化的进项发票。
+/// * `session` - 调用方事务执行器。
+///
+/// # 返回
+/// 返回分配计划，以及计划涉及的应付子账；本函数不校验账户是否齐全。
+///
+/// # 错误
+/// 同方向规范化号码已登记时返回 `ConflictError`；分配计划构造失败或账户查询失败时返回对应错误。
 pub async fn prepare_purchase_invoice_allocations(
     db: &Database,
     req: &RegisterPurchaseInvoiceRequest,
@@ -199,6 +225,20 @@ pub async fn prepare_purchase_invoice_allocations(
     Ok((plan, accounts))
 }
 /// 使用原 Executor 更新收票额度、发票状态与分配事实，禁止在此写工作项或审计。
+///
+/// # 参数
+/// * `db` - 财务领域数据库。
+/// * `invoice_for_tx` - 待登记的进项发票。
+/// * `plan` - 已校验的分配计划。
+/// * `actor_id` - 登记人。
+/// * `session` - 调用方事务执行器。
+///
+/// # 返回
+/// 返回已标记登记并完成持久化的发票。
+///
+/// # 错误
+/// 任一子账剩余可收票额度不足时返回 `BusinessLogicError`，且不写发票与分配；
+/// 状态迁移或仓储写入失败时返回对应错误。
 pub async fn persist_purchase_invoice(
     db: &Database,
     invoice_for_tx: Invoice,

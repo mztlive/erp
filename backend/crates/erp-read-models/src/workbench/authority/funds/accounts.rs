@@ -1,4 +1,4 @@
-//! Receivable and payable account object facts.
+//! 应收与应付账户的对象事实。
 
 use std::collections::HashSet;
 
@@ -10,7 +10,18 @@ use super::mapping;
 use crate::errors::Result;
 
 impl super::super::WorkItemFactsReader {
-    /// Load receivable-account identity, counterparty and impact.
+    /// 装载应收子账的身份、往来方与影响。
+    ///
+    /// # 参数
+    /// * `keys` - 本批对象键；没有应收子账键时不读取。
+    /// * `facts` - 输出事实表。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 成功时写入读到的账户。往来方取主体法定名称，影响按来源修订是否卡券决定。账户为空时不继续查名称。
+    ///
+    /// # 错误
+    /// 账户、主体名称或来源修订读取失败时返回错误。
     pub(in crate::workbench) async fn load_receivable_account_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -40,7 +51,18 @@ impl super::super::WorkItemFactsReader {
         Ok(())
     }
 
-    /// Load payable-account identity, counterparty and unpaid impact.
+    /// 装载应付账户的身份、往来方与未付影响。
+    ///
+    /// # 参数
+    /// * `keys` - 本批对象键；没有应付账户键时不读取。
+    /// * `facts` - 输出事实表。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 成功时写入读到的账户。标题优先用来源采购单号，往来方取供应商显示名，影响为未付金额。
+    ///
+    /// # 错误
+    /// 账户、供应商名称或采购单号读取失败时返回错误。
     pub(in crate::workbench) async fn load_payable_account_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,

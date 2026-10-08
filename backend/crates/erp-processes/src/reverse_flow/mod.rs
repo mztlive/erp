@@ -40,11 +40,31 @@ pub struct ReturnsProcess {
 }
 impl ReturnsProcess {
     /// 使用原共享 RBAC 和失败关闭对象读取端口构造命令入口。
+    ///
+    /// # 参数
+    /// * `db` - 组合根数据库。
+    ///
+    /// # 返回
+    /// 返回命令入口。对象读取端口为失败关闭实现。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         let rbac = crate::adapters::identity::shared_rbac_service(db.clone());
         Self { db, rbac, object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort) }
     }
     /// 注入组合根已配置的对象读取授权能力。
+    ///
+    /// 消耗 `self`。
+    ///
+    /// # 参数
+    /// * `object_read` - 组合根已配置的对象读取端口。
+    ///
+    /// # 返回
+    /// 返回换入该端口后的命令入口。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_object_read(
         mut self,
         object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
@@ -53,23 +73,57 @@ impl ReturnsProcess {
         self
     }
     /// 注入组合根持有的共享 RBAC，保持所有命令使用同一授权提供方。
+    ///
+    /// 消耗 `self`。
+    ///
+    /// # 参数
+    /// * `rbac` - 组合根持有的共享 RBAC。
+    ///
+    /// # 返回
+    /// 返回换入该 RBAC 后的命令入口。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_rbac(mut self, rbac: SharedRbacService) -> Self {
         self.rbac = rbac;
         self
     }
+    /// 用当前数据库构造退货退款领域服务。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回绑定当前数据库的 `ReturnsService`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn domain(&self) -> ReturnsService {
         ReturnsService::new(self.db.clone())
     }
+
+    /// 用当前数据库构造退货退款读模型。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回绑定当前数据库的 `ReturnsReadService`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn reads(&self) -> ReturnsReadService {
         ReturnsReadService::new(self.db.clone())
     }
 }
 
-/// 在审批运行时的外层事务内执行退款或冲正最终动作。
+/// 在审批运行时的外层事务内执行客户退款或供应商退款的最终过账。
+///
+/// 只接受 `DocumentType::CustomerRefund` 与 `DocumentType::SupplierRefund`。回款冲正和付款冲正不在此分派。
 ///
 /// # 参数
 /// * `db` - 数据库实例
-/// * `document_type` - 退款或冲正单据类型
+/// * `document_type` - 退款单据类型
 /// * `business_object_id` - 业务对象 ID
 /// * `actor` - 已认证操作人
 /// * `executor` - 审批运行时持有的执行器
@@ -78,7 +132,7 @@ impl ReturnsProcess {
 /// 领域过账、业务审计与全部关联事实写入成功时返回 `Ok(())`。
 ///
 /// # 错误
-/// 单据类型不属于退货退款域，或领域状态/额度/持久化不变量失败时返回错误。
+/// 单据类型不是客户退款或供应商退款时返回 `BusinessLogicError`。领域状态、额度或持久化失败时返回对应错误。
 pub async fn finalize_approved_return(
     db: &Database,
     document_type: DocumentType,
@@ -113,6 +167,17 @@ pub async fn finalize_approved_return(
 }
 
 /// 在审批运行时持有的事务内撤回资金纠错单审批。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `document_type` - 客户退款、供应商退款、回款冲正或付款冲正。
+/// * `id` - 单据主键。
+/// * `action` - 合同强类型领域动作。
+/// * `actor` - 已认证操作人。
+/// * `executor` - 审批运行时持有的执行器。
+///
+/// # 返回
+/// 成功时无返回值。单据已按动作写回，并追加撤回审计。
 ///
 /// # 错误
 /// 单据不存在、类型与动作不匹配、状态迁移或 CAS 写入失败时返回错误。

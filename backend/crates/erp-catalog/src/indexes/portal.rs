@@ -1,4 +1,4 @@
-//! Proposal identity and bounded supplier queues.
+//! 提报身份与有界供应商队列。
 
 use mongodb::bson::{Document, doc};
 use mongodb::options::IndexOptions;
@@ -7,7 +7,7 @@ use persistence_core::Result;
 
 use crate::portal::CatalogPortalExt;
 
-/// Register the catalog-owned proposal indexes.
+/// 登记商品域拥有的提报索引。
 /// # 参数
 /// `db` 为目标数据库。
 /// # 返回

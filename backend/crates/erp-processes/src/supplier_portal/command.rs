@@ -25,6 +25,20 @@ use crate::{Error, Result};
 type WriteFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
 
 impl SupplierPortalProcess {
+    /// 在门户会话事务中执行一次命令；已有回执时只返回原结果。
+    ///
+    /// # 参数
+    /// * `actor` - 当前门户身份。
+    /// * `action` - 命令动作。
+    /// * `key` - 幂等键。
+    /// * `payload` - 纳入命令指纹的载荷。
+    /// * `write` - 尚无回执时执行的业务写入。
+    ///
+    /// # 返回
+    /// 返回本次写入或原回执解码后的结果。
+    ///
+    /// # 错误
+    /// 门户身份不可写、会话失效、命令构造失败、回执损坏或业务写入失败时返回对应错误。事务失败原样传播。
     pub(super) async fn portal_command<T, P, F>(
         &self,
         actor: &PortalActor,
@@ -43,6 +57,20 @@ impl SupplierPortalProcess {
         Ok(self.portal_command_outcome(actor, action, key, payload, write).await?.0)
     }
 
+    /// 与 `portal_command` 相同，并标明结果是本次新写入还是回放。
+    ///
+    /// # 参数
+    /// * `actor` - 当前门户身份。
+    /// * `action` - 命令动作。
+    /// * `key` - 幂等键。
+    /// * `payload` - 纳入命令指纹的载荷。
+    /// * `write` - 尚无回执时执行的业务写入。
+    ///
+    /// # 返回
+    /// 返回结果，以及是否本次新写入。回放原回执时第二个值为 `false`。
+    ///
+    /// # 错误
+    /// 与 `portal_command` 相同。
     pub(super) async fn portal_command_outcome<T, P, F>(
         &self,
         actor: &PortalActor,
@@ -88,6 +116,21 @@ impl SupplierPortalProcess {
             .await
     }
 
+    /// 在内部账号事务中执行一次命令；已有回执时只解码原结果。
+    ///
+    /// # 参数
+    /// * `actor` - 内部操作人。
+    /// * `supplier_id` - 命令作用域中的供应商。
+    /// * `action` - 命令动作。
+    /// * `key` - 幂等键。
+    /// * `payload` - 纳入命令指纹的载荷。
+    /// * `write` - 尚无回执时执行的业务写入。
+    ///
+    /// # 返回
+    /// 返回本次写入或原回执解码后的结果。
+    ///
+    /// # 错误
+    /// 供应商范围、内部权限、命令构造、回执解码或业务写入失败时返回对应错误。事务失败原样传播。
     pub(super) async fn internal_command<T, P, F>(
         &self,
         actor: &AuditActor,
@@ -233,6 +276,20 @@ fn decode<T: DeserializeOwned>(value: serde_json::Value) -> Result<T> {
     serde_json::from_value(value).map_err(|error| Error::Internal(format!("门户命令回执结果损坏: {error}")))
 }
 
+/// 构造绑定操作人、供应商、动作和载荷指纹的门户命令回执身份。
+///
+/// # 参数
+/// * `actor_id` - 操作人账号 ID。
+/// * `supplier_id` - 供应商角色 ID，作为资源范围。
+/// * `action` - 命令动作。
+/// * `key` - 幂等键。
+/// * `payload` - 纳入指纹的载荷。
+///
+/// # 返回
+/// 返回尚未落库的 `CommandReceipt`。
+///
+/// # 错误
+/// 载荷或命令身份无法构造时返回对应错误。
 pub(super) fn scoped_command<P: Serialize>(
     actor_id: &str,
     supplier_id: &str,

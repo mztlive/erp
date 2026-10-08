@@ -29,10 +29,17 @@ const CONFIRM_CAPABILITY_ACTION: &str = "CONFIRM_BUSINESS_CAPABILITY_REQUIREMENT
 const UPDATE_CAPABILITIES_ACTION: &str = "UPDATE_CAPABILITIES";
 
 impl SupplierApiReadService {
-    /// 按当前操作人的权限与服务端业务事实返回连接分页投影。
+    /// 按查询参数与服务端连接事实返回分页投影。
     ///
-    /// # Errors
-    /// 查询、授权源或动作投影失败时返回错误。
+    /// # 参数
+    /// * `params` - 连接列表查询参数。
+    /// * `_actor` - 保留的操作人。当前不参与过滤或动作投影。
+    ///
+    /// # 返回
+    /// 返回带能力摘要和供应商名称的连接分页。空关键词不按名称收窄。
+    ///
+    /// # 错误
+    /// 参数校验失败时返回 `ValidationError`。供应商名称、连接或能力读取失败时返回对应错误。
     pub async fn connection_list_for_actor(
         &self,
         params: &SupplierApiConnectionListParams,
@@ -108,8 +115,15 @@ impl SupplierApiReadService {
 
     /// 返回服务端权威动作、阻塞原因和安全引用投影的连接详情。
     ///
-    /// # Errors
-    /// 连接不存在、查询失败或 RBAC 无法取得稳定快照时返回错误。
+    /// # 参数
+    /// * `id` - 连接主键。
+    /// * `actor` - 已认证操作人，用于动作和引用元数据权限。
+    ///
+    /// # 返回
+    /// 返回连接详情投影。
+    ///
+    /// # 错误
+    /// 连接不存在时返回 `NotFound`。查询或 RBAC 判定失败时返回对应错误。
     pub async fn connection_detail_for_actor(
         &self,
         id: &str,

@@ -20,6 +20,9 @@ pub(in crate::purchase_center) const RECENT_HISTORY_LIMIT: usize = 8;
 ///
 /// # 返回
 /// 返回有界只读审批结构。
+///
+/// # 错误
+/// 不返回错误。
 pub fn document_approval_view(
     binding: Option<&ApprovalDefinitionBinding>,
     instance: Option<DocumentApprovalInstanceView>,
@@ -68,6 +71,9 @@ pub fn document_approval_view_with_definition(
 ///
 /// # 返回
 /// 返回定义 id、名称、版本与有序节点。
+///
+/// # 错误
+/// 不返回错误。
 pub(in crate::purchase_center) fn definition_view_from_binding(
     binding: &ApprovalDefinitionBinding,
     graph: Option<&DefinitionGraph>,

@@ -57,11 +57,14 @@ pub(super) struct SalesChangeOrderAdapter {
 
 /// 返回销售变更单的完整适配器登记。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回已校验完整性的规格与显式字段声明。
 ///
 /// # 错误
-/// 政策缺失或三类动作不互异时返回部署不变量错误。
+/// 政策缺失或三类动作不互异时返回部署不变量错误。字段与合同签署值不一致时返回内部错误。
 pub(super) fn sales_change_order_adapter() -> Result<SalesChangeOrderAdapter> {
     let spec = adapter_spec_of(DocumentType::SalesChangeOrder)?;
     ensure_adapter_spec_complete(&spec)?;
@@ -107,6 +110,9 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<SalesChangeOrderAdapte
 /// # 参数
 /// * `business_object_id` - 变更单主键
 ///
+/// # 返回
+/// 销售变更单的 `SubjectRef`。
+///
 /// # 错误
 /// 主键为空或超长时返回校验错误。
 pub(super) fn sales_change_order_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
@@ -118,6 +124,12 @@ pub(super) fn sales_change_order_subject_ref(business_object_id: &str) -> Result
 }
 
 /// 无已绑定定义的必须审批单据不得提交。
+///
+/// # 参数
+/// * `binding` - 创建时冻结的定义绑定；缺失时为 `None`。
+///
+/// # 返回
+/// 已存在的绑定。
 ///
 /// # 错误
 /// 绑定缺失时返回冲突。
@@ -155,6 +167,9 @@ pub(super) struct SalesChangeOrderStartCommand {
 ///
 /// # 返回
 /// 返回不含定义 ID 或审批人的目标启动命令。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn sales_change_start_command(
     change_order_id: &str,
     subject_version: u32,
@@ -176,7 +191,10 @@ pub(super) fn sales_change_start_command(
 /// * `_command` - 目标启动命令
 ///
 /// # 返回
-/// 返回 `START_APPROVAL`。
+/// 返回 `START_APPROVAL`。参数不参与计算。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn start_approval_command_kind(
     _command: &SalesChangeOrderStartCommand,
 ) -> bpm::model::types::ApprovalCommandKind {
@@ -189,6 +207,9 @@ pub(super) fn start_approval_command_kind(
 /// * `order` - 业务实体
 /// * `action` - 合同强类型动作
 /// * `updated_by` - 操作人
+///
+/// # 返回
+/// 无返回值。生效动作只校验可生效；撤回动作把单据改回草稿。
 ///
 /// # 错误
 /// 动作不属于本类型或状态不允许时返回错误。
@@ -237,7 +258,7 @@ pub fn sales_change_order_object_readable(organization_id: &str, assignee_user_i
 /// 责任组织取结算主体，不得用空串或当前登录人组织补位。
 ///
 /// # 参数
-/// * `sales_order` - 原销售单
+/// * `settlement_party_id` - 原销售单结算主体。空值不能当作责任组织。
 ///
 /// # 返回
 /// 返回非空责任组织。
@@ -265,6 +286,9 @@ pub(super) fn sales_change_responsible_org_id(
 /// * `lines` - 提交明细
 /// * `submitted_by` - 提交人
 /// * `submitted_at` - 提交时间
+///
+/// # 返回
+/// 按当前变更单、原销售单和冻结提交构成的审批主体快照。
 ///
 /// # 错误
 /// 明细为空、金额/数量非法或组织为空时返回校验错误。

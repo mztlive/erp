@@ -68,7 +68,7 @@ impl DocumentType {
     /// 返回全部已登记单据类型的权威穷尽集合。
     ///
     /// # 返回
-    /// 按审批政策矩阵的稳定顺序提供全部二十个单据类型。
+    /// 按审批政策矩阵的稳定顺序提供全部二十一个单据类型。
     ///
     /// # 约束
     /// 解析、审批政策目录和穷尽测试必须复用本集合，不维护第二份变体清单。
@@ -98,8 +98,14 @@ impl DocumentType {
 
     /// 返回类型的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::SalesOrder => "销售单",
@@ -128,8 +134,14 @@ impl DocumentType {
 
     /// 返回类型的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::SalesOrder => "sales_order",
@@ -198,6 +210,9 @@ impl ApprovalDefinitionBinding {
     /// * `approval_definition_version` - 定义业务版本
     /// * `approval_definition_bound_at` - 绑定时间
     ///
+    /// # 返回
+    /// 返回绑定版本为 1 的完整绑定。
+    ///
     /// # 错误
     /// 定义版本为零时返回错误。
     pub fn new(
@@ -224,8 +239,11 @@ impl ApprovalDefinitionBinding {
     /// * `expected_binding_version` - 期望的当前绑定版本
     /// * `at` - 升级时间
     ///
+    /// # 返回
+    /// 返回绑定版本加一后的新绑定。
+    ///
     /// # 错误
-    /// 版本不匹配或新定义版本为零时返回错误。
+    /// 当前绑定版本与期望不一致、新定义版本为零或绑定版本溢出时返回错误。
     pub fn upgrade(
         &self,
         approval_process_definition_id: ApprovalProcessDefinitionId,
@@ -369,8 +387,11 @@ impl BusinessDocument {
     /// * `document_no` - 正式编号
     /// * `at` - 分配时间
     ///
+    /// # 返回
+    /// 无返回值；写入正式编号和分配时间。
+    ///
     /// # 错误
-    /// 编号为空/超长，或已经分配过时返回错误。
+    /// 编号为空或超长，或已经分配过时返回错误。
     pub fn assign_document_no(&mut self, document_no: impl Into<String>, at: Instant) -> Result<()> {
         if !self.document_no.is_empty() || self.document_no_assigned_at.is_some() {
             return Err(Error::from("单据编号只能分配一次"));
@@ -390,6 +411,9 @@ impl BusinessDocument {
     ///
     /// # 参数
     /// * `binding` - 整体绑定值对象
+    ///
+    /// # 返回
+    /// 无返回值；写入审批绑定。
     ///
     /// # 错误
     /// 已经存在绑定时返回错误。
@@ -437,8 +461,11 @@ impl BusinessDocument {
     /// * `expected_binding_version` - 期望的当前绑定版本
     /// * `at` - 升级时间
     ///
+    /// # 返回
+    /// 无返回值；用升级后的绑定替换当前绑定。
+    ///
     /// # 错误
-    /// 尚无绑定或版本不匹配时返回错误。
+    /// 尚无绑定，或 [`ApprovalDefinitionBinding::upgrade`] 因版本不匹配、定义版本为零、绑定版本溢出而失败时返回错误。
     pub fn upgrade_approval_binding(
         &mut self,
         approval_process_definition_id: ApprovalProcessDefinitionId,
@@ -557,6 +584,9 @@ impl BusinessDocument {
     ///
     /// # 返回
     /// 无返回值；首次调用写入 `formalized_at`，后续调用保持原值。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn formalize(&mut self, at: Instant) {
         if self.formalized_at.is_none() {
             self.formalized_at = Some(at);
@@ -767,7 +797,7 @@ mod tests {
         assert_eq!(doc.formalized_at.unwrap(), first);
     }
 
-    /// 验证全部二十个冻结代码都能精确解析。
+    /// 验证全部二十一个冻结代码都能精确解析。
     ///
     /// # 参数
     /// 无。

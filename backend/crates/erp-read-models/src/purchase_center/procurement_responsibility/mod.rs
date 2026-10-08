@@ -17,6 +17,15 @@ pub struct ProcurementResponsibilityReadService {
 }
 impl ProcurementResponsibilityReadService {
     /// 构造本身无查询和权限副作用，入口保留原 RBAC 与参数校验。
+    ///
+    /// # 参数
+    /// * `db` - 目标数据库。
+    ///
+    /// # 返回
+    /// 返回读服务；构造不查询、不校验权限。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: mongodb::Database) -> Self {
         Self { db }
     }

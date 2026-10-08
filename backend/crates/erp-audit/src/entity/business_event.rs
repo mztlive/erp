@@ -78,7 +78,16 @@ enum AuditValueInput {
 }
 
 impl<'de> Deserialize<'de> for AuditValue {
-    /// 从白名单安全值读取历史事件，拒绝未知字段及任意文本值。
+    /// 从封闭的安全值变体反序列化，拒绝未知字段和任意文本值。
+    ///
+    /// # 参数
+    /// * `deserializer` - serde 反序列化器。
+    ///
+    /// # 返回
+    /// 返回对应的 `AuditValue`。`Changed` 只接受空对象。
+    ///
+    /// # 错误
+    /// `kind` 未知、字段类型不匹配、出现未知字段，或 `Changed` 附带字段时返回反序列化错误。
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
         Ok(match AuditValueInput::deserialize(deserializer)? {
             AuditValueInput::Code { code, label } => Self::Code { code, label },
@@ -215,6 +224,7 @@ impl AuditAction {
         Ok(())
     }
 
+    /// 未登记字段不能进入审计投影。
     fn field(&self, code: &str) -> Result<&AuditField> {
         self.allowed_fields
             .iter()
@@ -234,7 +244,8 @@ impl BusinessEventContext {
     /// 返回已完成静态元数据校验的事件上下文。
     ///
     /// # 错误
-    /// 操作人身份或动作元数据无效时返回校验错误。
+    /// 操作人 ID 或账号去空白后为空或超长，或名称快照、请求号超长时返回 `Error::Logic`。
+    /// 身份含控制字符，或动作代码、标签、版本、字段白名单无效时返回 `Error::ValidationError`。
     pub fn new(actor: AuditActor, action: AuditAction) -> Result<Self> {
         action.validate()?;
         let actor_name_snapshot = actor.actor_name_snapshot().map(str::to_string);
@@ -266,7 +277,7 @@ impl BusinessEventContext {
     /// # 返回
     /// 返回带安全目标的上下文。
     /// # 错误
-    /// 目标含非法文本或超长时拒绝。
+    /// 目标或业务编号超长时返回 `Error::Logic`。含控制字符时返回 `Error::ValidationError`。空白视为缺失，不报错。
     pub fn with_target(mut self, target_id: Option<String>, target_number: Option<String>) -> Result<Self> {
         self.target_id = normalized_snapshot(target_id, "业务对象编号")?;
         self.target_number = normalized_snapshot(target_number, "业务编号")?;
@@ -279,7 +290,7 @@ impl BusinessEventContext {
     /// # 返回
     /// 返回新身份的安全尝试实体，目标缺失保持缺失。
     /// # 错误
-    /// 无；上下文已在写入前完成校验。
+    /// 不返回错误。上下文已在写入前完成校验。
     pub fn attempt(&self, result: AuditAttemptResult) -> AuditAttempt {
         AuditAttempt {
             base: BaseModel::new(next_id()),
@@ -310,7 +321,7 @@ impl BusinessEventContext {
     /// 返回事件编号的借用，可同事务保存于独立命令回执。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn event_id(&self) -> &str {
         &self.event_id
     }
@@ -337,7 +348,7 @@ impl BusinessEventContext {
     /// 返回保存名称快照的上下文。
     ///
     /// # 错误
-    /// 名称超长或含控制字符时返回校验错误。
+    /// 名称超长时返回 `Error::Logic`。含控制字符时返回 `Error::ValidationError`。空白视为缺失，不报错。
     pub fn with_actor_name_snapshot(mut self, name: Option<String>) -> Result<Self> {
         self.actor_name_snapshot = normalized_snapshot(name, "操作人名称")?;
         Ok(self)
@@ -352,7 +363,7 @@ impl BusinessEventContext {
     /// 返回保存命令关联的上下文。
     ///
     /// # 错误
-    /// 编号超长或含控制字符时返回校验错误。
+    /// 编号超长时返回 `Error::Logic`。含控制字符时返回 `Error::ValidationError`。空白视为缺失，不报错。
     pub fn with_command_id(mut self, command_id: Option<String>) -> Result<Self> {
         self.command_id = normalized_snapshot(command_id, "命令编号")?;
         Ok(self)
@@ -367,7 +378,7 @@ impl BusinessEventContext {
     /// 返回保存请求关联的上下文。
     ///
     /// # 错误
-    /// 编号超长或含控制字符时返回校验错误。
+    /// 编号超长时返回 `Error::Logic`。含控制字符时返回 `Error::ValidationError`。空白视为缺失，不报错。
     pub fn with_request_id(mut self, request_id: Option<String>) -> Result<Self> {
         self.request_id = normalized_snapshot(request_id, "请求编号")?;
         Ok(self)
@@ -382,7 +393,9 @@ impl BusinessEventContext {
     /// 返回兼容旧字段并附带结构化事件的审计日志。
     ///
     /// # 错误
-    /// 目标缺失、投影重复、字段未登记或值不符合登记白名单时返回错误。
+    /// 目标为空、超长或含控制字符，业务编号超长或含控制字符，投影超过上限、字段重复或未登记，
+    /// 字段值不符合登记类型，或审计消息等文本无法通过 `AuditLog::new` 时返回错误。
+    /// 文本超长映射为 `Error::Logic`，其余校验为 `Error::ValidationError`。
     pub fn log(&self, content: BusinessEventContent) -> Result<AuditLog> {
         let event = self.event(content)?;
         let mut log = AuditLog::new(
@@ -404,6 +417,7 @@ impl BusinessEventContext {
         Ok(log)
     }
 
+    /// 持久化前先收紧目标和编号，避免自由文本进入结构化事件。
     fn event(&self, content: BusinessEventContent) -> Result<BusinessAuditEvent> {
         let resource_id =
             normalize_required_text(content.target_id, "资源ID不能为空", 64, "资源ID长度不符合要求")?;
@@ -432,6 +446,7 @@ impl BusinessEventContext {
         })
     }
 
+    /// 限制投影规模，并阻止重复或未登记字段进入事件。
     fn projection(
         &self,
         changes: Vec<AuditFieldChange>,
@@ -466,6 +481,7 @@ impl BusinessEventContext {
         Ok((projected_changes, projected_facts))
     }
 
+    /// 同一事件里每个字段代码只能出现一次。
     fn checked_field<'a>(&'a self, code: &str, used: &mut HashSet<String>) -> Result<&'a AuditField> {
         if !used.insert(code.to_string()) {
             return Err(validation_error("审计投影字段重复"));
@@ -481,7 +497,7 @@ impl BusinessAuditEvent {
     /// # 返回
     /// 返回稳定中文动作、执行结果及已登记字段事实。
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn message(&self) -> String {
         let actor = self.actor_name_snapshot.as_deref().unwrap_or(&self.actor_account);
         let target = self.resource_number_snapshot.as_deref().unwrap_or(&self.resource_id);
@@ -501,6 +517,7 @@ impl BusinessAuditEvent {
 }
 
 impl AuditValue {
+    /// 展示只使用登记过的中文标签和安全值，金额保留两位小数。
     fn display(&self) -> String {
         match self {
             Self::Code { label, .. } => label.clone(),
@@ -511,6 +528,7 @@ impl AuditValue {
     }
 }
 
+/// 枚举字段必须有不重复的合法状态，避免空白名单或重复代码。
 fn validate_field_kind(kind: AuditFieldKind) -> Result<()> {
     let AuditFieldKind::Code(values) = kind else {
         return Ok(());
@@ -529,6 +547,7 @@ fn validate_field_kind(kind: AuditFieldKind) -> Result<()> {
     Ok(())
 }
 
+/// 拒绝与登记类型不符的值，避免任意文本入库。
 fn validate_value(kind: AuditFieldKind, value: &AuditValue) -> Result<()> {
     let allowed = match (kind, value) {
         (AuditFieldKind::Code(values), AuditValue::Code { code, label }) => {
@@ -546,6 +565,7 @@ fn validate_value(kind: AuditFieldKind, value: &AuditValue) -> Result<()> {
     }
 }
 
+/// 稳定代码限制为有限字符集，避免自由文本充当动作或字段身份。
 fn validate_code(code: &str) -> Result<()> {
     if code.is_empty()
         || code.len() > CODE_MAX_LEN
@@ -556,6 +576,7 @@ fn validate_code(code: &str) -> Result<()> {
     Ok(())
 }
 
+/// 展示标签必须是有限长度的中文，避免空白或控制字符。
 fn validate_label(label: &str) -> Result<()> {
     if label.trim() != label
         || label.chars().count() > DISPLAY_MAX_LEN
@@ -566,6 +587,7 @@ fn validate_label(label: &str) -> Result<()> {
     validate_plain_text(label)
 }
 
+/// 快照只保留有限安全文本，空白表示当时未知。
 fn normalized_snapshot(value: Option<String>, field: &str) -> Result<Option<String>> {
     let value = normalize_optional_text(value, field, DISPLAY_MAX_LEN)?;
     if let Some(value) = &value {

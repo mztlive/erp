@@ -1,6 +1,6 @@
-//! 通用Repository实现
+//! 通用 Repository 实现。
 //!
-//! 提供MongoDB数据库操作的通用接口，包括基础CRUD操作和各实体的特化方法
+//! 提供 MongoDB 数据库操作的通用接口，包括基础 CRUD。
 
 use entity_core::{BaseModel, HasBaseModel, NOT_DELETED_TIMESTAMP, NOT_DELETED_TIMESTAMP_BSON};
 use mongodb::bson::{Document, deserialize_from_slice, doc, serialize_to_vec};
@@ -12,45 +12,66 @@ use serde::de::DeserializeOwned;
 use crate::errors::{Error, Result};
 use crate::{Executor, mongo_ops};
 
-/// Defines filter behavior for database queries
+/// 定义数据库查询的过滤条件。
 ///
-/// This trait should be implemented by types that provide filtering criteria
-/// for database queries.
+/// 由提供查询过滤条件的类型实现。
 pub trait QueryFilter {
-    /// Converts the filter to a MongoDB document
+    /// 将过滤条件转换为 MongoDB 文档。
     ///
-    /// # Returns
+    /// # 参数
+    /// 无。
     ///
-    /// A MongoDB Document representing the filter criteria
+    /// # 返回
+    /// 表示过滤条件的 MongoDB `Document`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document;
 }
 
-/// Defines pagination behavior for database queries
+/// 定义数据库查询的分页参数。
 ///
-/// This trait should be implemented by types that provide pagination parameters
-/// for database queries.
+/// 由提供分页参数的类型实现。
 pub trait Pagination {
-    /// Returns the requested page number and page size.
+    /// 返回请求的页码与每页条数。
     ///
-    /// Page numbers are one-based. Implementations may return `0`; the
-    /// default offset calculation normalizes it to the first page.
+    /// 页码从 1 开始。实现可以返回 `0`；默认偏移计算会把它归一为第一页。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `(页码, 每页条数)`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64);
 
-    /// Returns number of items to skip
+    /// 返回结果集应跳过的文档数。
     ///
-    /// # Returns
+    /// # 参数
+    /// 无。
     ///
-    /// The number of documents to skip in the result set
+    /// # 返回
+    /// 默认实现按 `(page.max(1) - 1) * page_size` 计算。页码小于 1 时跳过数为 0。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn skip(&self) -> u64 {
         let (page, page_size) = self.page_and_size();
         (page.max(1) - 1) * page_size
     }
 
-    /// Returns maximum number of items to return
+    /// 返回单页最多返回的文档数。
     ///
-    /// # Returns
+    /// # 参数
+    /// 无。
     ///
-    /// The maximum number of documents to return
+    /// # 返回
+    /// 默认实现返回 `page_and_size` 的每页条数；超出 `i64` 范围时钳制为 `i64::MAX`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn limit(&self) -> i64 {
         let (_, page_size) = self.page_and_size();
         saturating_i64(page_size)
@@ -188,22 +209,31 @@ impl<'a, T> Repository<'a, T>
 where
     T: Serialize + DeserializeOwned + Send + Sync,
 {
-    /// 创建新的Repository实例
+    /// 创建新的 Repository 实例。
     ///
     /// # 参数
-    /// * `db` - 数据库实例
-    /// * `collection_name` - 集合名称
+    /// * `db` - 数据库实例。
+    /// * `collection_name` - 集合名称。
     ///
     /// # 返回
     /// 返回创建的实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: &'a Database, collection_name: &'a str) -> Self {
         Self { db, collection_name, _phantom: std::marker::PhantomData }
     }
 
-    /// Returns the MongoDB database handle bound to this repository.
+    /// 返回本仓储绑定的 MongoDB 数据库句柄。
     ///
-    /// # Returns
-    /// The database handle used to construct this repository.
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 构造本仓储时使用的数据库句柄。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn database(&self) -> &'a Database {
         self.db
     }
@@ -215,10 +245,10 @@ where
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
-    /// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
+    /// 无返回值。实体已插入集合。
     ///
     /// # 错误
-    /// 当唯一索引冲突或底层写入失败时返回错误。
+    /// 唯一索引冲突或底层写入失败时返回对应错误。
     pub async fn create(&self, entity: &T, executor: &mut dyn Executor) -> Result<()> {
         mongo_ops::insert_one(&self.collection(), entity, executor).await
     }
@@ -318,10 +348,10 @@ where
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
-    /// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
+    /// 无返回值。写入命中后推进内存中的 `version` 与 `updated_at`。
     ///
     /// # 错误
-    /// 当实体已删除、版本冲突或底层写入失败时返回错误。
+    /// 实体已删除或版本未命中时返回 `OptimisticLockingError`。版本或 `updated_at` 超出范围时返回 `EntityMetadataOutOfRange`。实体无法编码为 BSON 时返回 `BsonError`。底层写入失败时返回对应错误。
     pub async fn update(&self, entity: &mut T, executor: &mut dyn Executor) -> Result<()>
     where
         T: HasBaseModel,
@@ -352,10 +382,10 @@ where
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
-    /// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
+    /// 无返回值。写入命中后推进内存中的 `version` 与 `updated_at`，并把 `deleted_at` 设为同一时间。
     ///
     /// # 错误
-    /// 当实体已删除、版本冲突或底层写入失败时返回错误。
+    /// 实体已删除或版本未命中时返回 `OptimisticLockingError`。版本或 `updated_at` 超出范围时返回 `EntityMetadataOutOfRange`。底层写入失败时返回对应错误。
     pub async fn soft_delete(&self, entity: &mut T, executor: &mut dyn Executor) -> Result<()>
     where
         T: HasBaseModel,
@@ -383,10 +413,10 @@ where
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
-    /// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
+    /// 无返回值。写入命中后推进内存中的 `version` 与 `updated_at`，并把 `deleted_at` 写回 `NOT_DELETED_TIMESTAMP`。
     ///
     /// # 错误
-    /// 当实体未删除、版本冲突或底层写入失败时返回错误。
+    /// 实体未删除或版本未命中时返回 `OptimisticLockingError`。版本或 `updated_at` 超出范围时返回 `EntityMetadataOutOfRange`。底层写入失败时返回对应错误。
     pub async fn restore(&self, entity: &mut T, executor: &mut dyn Executor) -> Result<()>
     where
         T: HasBaseModel,
@@ -533,8 +563,8 @@ where
     /// * `filter` - 过滤条件
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回值
-    /// 存在匹配实体时返回 `true`。
+    /// # 返回
+    /// 存在匹配的活跃实体时返回 `true`，否则返回 `false`。
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
@@ -544,12 +574,14 @@ where
 
     /// 分页检索实体。
     ///
-    /// # 参数
-    /// * `filter` - 过滤与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    /// 结果固定按 `created_at` 降序。过滤条件原样使用，不附加软删除约束。
     ///
-    /// # 返回值
-    /// 返回当前页实体与匹配总数。
+    /// # 参数
+    /// * `filter` - 过滤与分页条件。
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中。
+    ///
+    /// # 返回
+    /// 返回当前页实体与匹配总数。总数超出 `i64` 范围时钳制为 `i64::MAX`。
     ///
     /// # 错误
     /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
@@ -576,8 +608,14 @@ where
 
     /// 获取当前实体对应的 MongoDB 集合（内部使用）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回按实体类型参数化的集合句柄。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn collection(&self) -> Collection<T> {
         self.db.collection::<T>(self.collection_name)
     }

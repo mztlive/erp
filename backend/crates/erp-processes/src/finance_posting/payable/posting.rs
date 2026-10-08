@@ -19,6 +19,18 @@ use crate::{Error, Result};
 /// [`erp_finance::entity::payable::PaymentAllocationLedger`] 完成；子账进度按账户聚合后批量条件更新，
 /// 分配行批量插入。供应商一致性、事务、任务同步与审计仍在本方法编排。
 ///
+/// # 参数
+/// * `db` - 数据库。
+/// * `payment` - 待过账的供应商付款。
+/// * `pending` - 本次付款的待核销分配。
+/// * `facts` - 已装载的付款结算事实。
+/// * `audit` - 过账业务事件上下文。
+/// * `actor` - 已认证操作人。
+/// * `session` - 调用方事务执行器，各步骤共用。
+///
+/// # 返回
+/// 余额、任务、付款与审计全部写入成功时无返回值。
+///
 /// # 错误
 /// 付款状态、供应商、应付开放余额、分配金额或仓储写入不合法时返回错误。
 pub(super) async fn post_supplier_payment(
@@ -75,6 +87,15 @@ impl MongoPaymentPosting<'_> {
 #[async_trait]
 impl PaymentPostingSteps for MongoPaymentPosting<'_> {
     /// 复用付款任务事实执行财务领域原核销规则及条件写入。
+    ///
+    /// # 参数
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 核销结果留在 `settlement`，供后续步骤读取。
+    ///
+    /// # 错误
+    /// 核销规则或条件写入失败时返回对应错误，且不留下核销结果。
     async fn settle_accounts(&mut self, executor: &mut dyn Executor) -> Result<()> {
         self.settlement = Some(
             settle_supplier_payment_with_facts(
@@ -91,6 +112,15 @@ impl PaymentPostingSteps for MongoPaymentPosting<'_> {
     }
 
     /// 按余额更新后实际应用的账户顺序同步付款任务。
+    ///
+    /// # 参数
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 已应用账户的付款任务均已同步。
+    ///
+    /// # 错误
+    /// 尚无核销结果时返回 `Internal`。任一账户的任务同步失败时返回对应错误，并停止后续账户。
     async fn synchronize_tasks(&mut self, executor: &mut dyn Executor) -> Result<()> {
         for account_id in &self.settlement()?.applied_account_ids {
             payment_task::sync_purchase_payment_task(self.db, account_id, executor).await?;
@@ -99,6 +129,15 @@ impl PaymentPostingSteps for MongoPaymentPosting<'_> {
     }
 
     /// 在任务同步成功后登记付款状态与核销行。
+    ///
+    /// # 参数
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 付款状态与核销分配已写入。
+    ///
+    /// # 错误
+    /// 尚无核销结果时返回 `Internal`。付款状态或核销行写入失败时返回对应错误。
     async fn persist_payment(&mut self, executor: &mut dyn Executor) -> Result<()> {
         let settlement = self
             .settlement
@@ -109,6 +148,15 @@ impl PaymentPostingSteps for MongoPaymentPosting<'_> {
     }
 
     /// 为成功过账记录最后一条业务审计。
+    ///
+    /// # 参数
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 成功过账的审计已写入。
+    ///
+    /// # 错误
+    /// 审计内容构造或日志保存失败时返回对应错误。
     async fn write_audit(&mut self, executor: &mut dyn Executor) -> Result<()> {
         let audit = self.audit.log(BusinessEventContent {
             target_id: self.payment.base.id.clone(),

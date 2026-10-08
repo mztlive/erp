@@ -32,13 +32,16 @@ impl CustomerScope {
     /// 装配目录范围标签（纯展示规则下沉自 Service）。
     ///
     /// # 参数
-    /// * `assignments` - 同一客户的归属行；协作销售不再生成目录标签
+    /// * `_assignments` - 同一客户的归属行；协作销售不再生成目录标签，当前未使用
     /// * `owner_user_id` - 已解析的主负责人
     /// * `actor_user_id` - 当前账号
     /// * `requested` - 页面请求的目录范围
     ///
     /// # 返回
     /// 返回命中原因标签，保证包含请求范围。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(crate) fn tags_for(
         _assignments: &[CustomerAssignment],
         owner_user_id: Option<&str>,
@@ -197,6 +200,9 @@ impl CustomerView {
     ///
     /// # 返回
     /// 返回待 hydrate 的客户视图。
+    ///
+    /// # 错误
+    /// 不返回错误。
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_account_parts(
         id: String,
@@ -281,11 +287,14 @@ impl CustomerListParams {
     ///
     /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
     ///
     /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    /// 排序字段不在白名单、排序方向非法，或 `include_descendants` 为真但未提供 `org_unit_ids` 时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<CustomerListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, CUSTOMER_SORT_FIELDS)?;
         if self.include_descendants == Some(true) && self.org_unit_ids.is_none() {

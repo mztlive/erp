@@ -59,8 +59,16 @@ pub struct ElectronicDeliveryFilter {
 impl QueryFilter for ElectronicDeliveryFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// 有值时写入 `sales_order_line_id` 与 `status`；二者皆空时只保留未删除条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = super::active_filter();
         if let Some(sales_order_line_id) = &self.sales_order_line_id {
@@ -76,8 +84,14 @@ impl QueryFilter for ElectronicDeliveryFilter {
 impl Pagination for ElectronicDeliveryFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组；`page_size` 由 `u32` 加宽为 `u64`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         super::page_and_size(self.page, self.page_size)
     }

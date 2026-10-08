@@ -21,6 +21,12 @@ pub(crate) const FINGERPRINT_HEX_LEN: usize = 64;
 ///
 /// # 返回
 /// 返回 64 位小写十六进制指纹。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # Panics
+/// `Hmac::new_from_slice` 对任意长度密钥恒成功；若该约定被破坏则 panic。
 pub(crate) fn hmac_sha256_hex(key: &[u8], data: &[u8]) -> String {
     let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("HMAC-SHA256 accepts any key length");
     mac.update(data);

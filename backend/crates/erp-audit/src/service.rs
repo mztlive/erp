@@ -17,9 +17,41 @@ use crate::repository::{AuditExt, AuditLogFilter};
 /// 由审计领域消费 [`AuditActor`] 构造可持久化审计日志。
 pub trait AuditActorLogs {
     /// 在业务写入前构造并验证成功资源审计日志。
+    ///
+    /// 生成新的稳定 ID，并保留操作人上已经捕获的名称快照和请求号。最终摘要来自已登记动作，不接受自由正文。
+    ///
+    /// # 参数
+    /// * `action` - 已登记的稳定动作代码。
+    /// * `resource_type` - 与动作配对的资源类型代码。
+    /// * `resource_id` - 资源业务 ID。
+    ///
+    /// # 返回
+    /// 返回 `success` 为真、并带结构化事件的审计日志。
+    ///
+    /// # 错误
+    /// `resource_id` 去空白后为空时返回 `Error::ValidationError`。
+    /// 操作人、动作或资源类型为空或超长，或资源 ID 超长时返回 `Error::Logic`。
+    /// 动作未登记、与资源类型不匹配、登记元数据无效，或身份、目标含控制字符时返回 `Error::ValidationError`。
     fn resource_log(self, action: &str, resource_type: &str, resource_id: String) -> Result<AuditLog>;
 
-    /// 使用服务端生成的稳定 ID 构造成功资源审计日志。
+    /// 使用调用方给出的稳定 ID 构造成功资源审计日志。
+    ///
+    /// `message` 只参与长度校验，成功后会被结构化中文摘要替换。保留操作人上已经捕获的名称快照和请求号。
+    ///
+    /// # 参数
+    /// * `id` - 调用方提供的审计日志 ID。
+    /// * `action` - 已登记的稳定动作代码。
+    /// * `resource_type` - 与动作配对的资源类型代码。
+    /// * `resource_id` - 资源业务 ID。
+    /// * `message` - 可选自由说明，不会写入最终摘要。
+    ///
+    /// # 返回
+    /// 返回使用该 `id`、`success` 为真并带结构化事件的审计日志。
+    ///
+    /// # 错误
+    /// `resource_id` 去空白后为空时返回 `Error::ValidationError`。
+    /// 操作人、动作或资源类型为空或超长，资源 ID 或 `message` 超长时返回 `Error::Logic`。
+    /// 动作未登记、与资源类型不匹配、登记元数据无效，或身份、目标含控制字符时返回 `Error::ValidationError`。
     fn resource_log_with_id(
         self,
         id: String,
@@ -29,7 +61,23 @@ pub trait AuditActorLogs {
         message: Option<String>,
     ) -> Result<AuditLog>;
 
-    /// 在业务写入前构造并验证带业务说明的成功资源审计日志。
+    /// 生成新的稳定 ID，并构造成功资源审计日志。
+    ///
+    /// `message` 只参与长度校验，成功后会被结构化中文摘要替换。保留操作人上已经捕获的名称快照和请求号。
+    ///
+    /// # 参数
+    /// * `action` - 已登记的稳定动作代码。
+    /// * `resource_type` - 与动作配对的资源类型代码。
+    /// * `resource_id` - 资源业务 ID。
+    /// * `message` - 可选自由说明，不会写入最终摘要。
+    ///
+    /// # 返回
+    /// 返回新 ID 的成功审计日志。
+    ///
+    /// # 错误
+    /// `resource_id` 去空白后为空时返回 `Error::ValidationError`。
+    /// 操作人、动作或资源类型为空或超长，资源 ID 或 `message` 超长时返回 `Error::Logic`。
+    /// 动作未登记、与资源类型不匹配、登记元数据无效，或身份、目标含控制字符时返回 `Error::ValidationError`。
     fn resource_log_with_message(
         self,
         action: &str,
@@ -76,12 +124,17 @@ impl AuditActorLogs for AuditActor {
 }
 
 /// 将普通资源日志转换为已登记的安全业务事件；自由正文不属于事实投影。
+///
 /// # 参数
 /// * `log` - 事务前已准备的动作、操作人与目标快照。
+///
 /// # 返回
-/// 返回保留事件身份和时间的结构化中文记录。
+/// 返回保留事件身份和时间的结构化中文记录。已有结构化事件时只重写摘要。
+///
 /// # 错误
-/// 未登记动作、资源错配、目标缺失或结构化身份不一致时拒绝。
+/// 动作未登记、与资源类型不匹配或登记元数据无效时返回 `Error::ValidationError`。
+/// 已有结构化事件在 schema、动作版本、动作、资源、操作人或成功标记上与日志不一致时同样拒绝。
+/// 没有结构化事件时，操作人或目标无法通过静态校验，或目标缺失，也会拒绝。
 pub fn prepare_business_log(log: &AuditLog) -> Result<AuditLog> {
     let action = registered_action(&log.action, &log.resource_type)?;
     if let Some(event) = &log.structured_event {
@@ -121,12 +174,18 @@ pub fn prepare_business_log(log: &AuditLog) -> Result<AuditLog> {
 }
 
 /// 从已验证业务日志提取事务外尝试所需的安全静态上下文。
+///
+/// 不读取自由正文。目标缺失时保持缺失。
+///
 /// # 参数
 /// * `log` - 普通事件准备记录。
+///
 /// # 返回
-/// 返回保留安全目标、命令及请求关联的尝试上下文。
+/// 返回保留安全目标、命令及请求关联的尝试上下文。没有结构化事件时不复制命令、请求和名称快照。
+///
 /// # 错误
-/// 未登记动作或身份无效时拒绝，不读取自由正文。
+/// 动作未登记、与资源类型不匹配或登记元数据无效时拒绝。
+/// 操作人身份、目标、业务编号、命令编号、请求编号或操作人名称超长或含控制字符时拒绝。
 pub fn attempt_context(log: &AuditLog) -> Result<BusinessEventContext> {
     let actor = AuditActor::new(log.actor_id.clone(), log.actor_account.clone(), log.actor_type);
     let mut context = BusinessEventContext::new(actor, registered_action(&log.action, &log.resource_type)?)?;
@@ -155,21 +214,29 @@ impl AuditLogService {
     /// 创建审计日志服务实例。
     ///
     /// # 参数
-    /// * `db` - 数据库实例
+    /// * `db` - 数据库实例。
     ///
-    /// # 返回值
-    /// 返回审计日志服务实例
+    /// # 返回
+    /// 返回绑定该数据库的服务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// 写入审计日志。
+    /// 写入一条审计日志。
+    ///
+    /// 不把自由正文转换成结构化业务事件。
     ///
     /// # 参数
-    /// * `data` - 审计日志数据
+    /// * `data` - 审计日志创建数据。
     ///
-    /// # 返回值
-    /// 返回写入后的审计日志实体
+    /// # 返回
+    /// 返回已写入、且 `structured_event` 为空的审计日志。
+    ///
+    /// # 错误
+    /// `AuditLog::new` 校验失败时返回 `Error::Logic`。仓储写入失败时按持久化错误映射为回执重复、冲突、暂态事务、结果未知或 `RepositoryError`。
     pub async fn create(&self, data: AuditLogData) -> Result<AuditLog> {
         let id = next_id();
         let log = AuditLog::new(id, data)?;
@@ -177,13 +244,16 @@ impl AuditLogService {
         Ok(log)
     }
 
-    /// 获取审计日志列表。
+    /// 按查询参数返回审计日志分页。
     ///
     /// # 参数
-    /// * `params` - 查询参数
+    /// * `params` - 列表查询参数。
     ///
-    /// # 返回值
-    /// 返回分页后的审计日志集合
+    /// # 返回
+    /// 返回校验通过并完成文本归一化后的 `AuditLogItem` 页；`total` 来自仓储计数。
+    ///
+    /// # 错误
+    /// `params` 校验失败时返回 `Error::ValidationError`。仓储查询失败时返回对应错误。
     pub async fn audit_log_list(&self, params: &AuditLogListParams) -> Result<Page<AuditLogItem>> {
         params.validate()?;
         let filter = AuditLogFilter::from(params);

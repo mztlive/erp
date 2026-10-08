@@ -1,4 +1,4 @@
-//! Catalog HTTP/application DTOs reused by handlers.
+//! 供 Handler 复用的商品 HTTP 与应用 DTO。
 
 pub mod catalog;
 

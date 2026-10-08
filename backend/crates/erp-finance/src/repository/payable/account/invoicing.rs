@@ -231,6 +231,9 @@ impl PayableAccountInvoicingExt for persistence_core::Repository<'_, PayableAcco
 ///
 /// # 返回
 /// 返回未删除账户的收票额度守卫文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn invoicing_guard(id: &str, amount: &Bson) -> Document {
     doc! {
         "id": id,

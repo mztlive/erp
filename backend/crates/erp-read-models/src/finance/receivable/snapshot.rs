@@ -1,4 +1,4 @@
-//! Sales snapshot adapter for finance posting and receivable detail composition.
+//! 销售快照适配：供财务过账与应收详情组装使用。
 
 use erp_core::ids::ReceivableAccountId;
 use erp_finance::entity::receivable::ReceivableAccount;
@@ -11,7 +11,18 @@ use persistence_core::Executor;
 
 use crate::{Error, Result};
 
-/// 读取 当前销售版本、账户分录与票款分配。
+/// 读取当前销售版本、账户分录与票款分配。
+///
+/// # 参数
+/// * `db` - 目标数据库。
+/// * `account` - 应收子账。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 返回当前销售版本、账户分录与票款分配快照。
+///
+/// # 错误
+/// 来源销售单或当前正式版本不存在、销售单缺少当前正式版本、引用的回款或发票数量与事实不符，或仓储读取失败时返回错误。
 pub async fn load_receivable_snapshot(
     db: &Database,
     account: &ReceivableAccount,

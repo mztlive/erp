@@ -85,6 +85,9 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
     ///
     /// # 返回
     /// 返回仓储实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
@@ -115,18 +118,20 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
 
     /// 提交采购草稿并形成不可变提交（跨集合多步骤写入）。
     ///
-    /// 依次写入 `purchase_order_submission`、`purchase_order_submission_line`（批量）
-    /// 并乐观锁更新采购主表（提交序号、状态、当前提交指针，§6.6：进入待审核时
-    /// 头、行冻结），保证「提交 + 明细 + 主表指针」原子可见。
-    /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction` 时
-    /// 提交与明细各自自动提交，主表 CAS 失败会留下只有提交没有指针的半成品；
-    /// Service 必须通过 `persistence_core::Transactional::with_transaction` 传入事务会话。
+    /// 依次插入 `purchase_order_submission`、`purchase_order_submission_line`，
+    /// 再乐观锁更新调用方已经改好的采购主表。本方法不改状态、不调用
+    /// `submit_for_review`，也不构成原子边界。传入 `NoTransaction` 时各笔写入各自提交，
+    /// 主表 CAS 失败会留下只有提交没有指针的半成品；调用方必须通过
+    /// `persistence_core::Transactional::with_transaction` 传入事务会话。
     ///
     /// # 参数
-    /// * `order` - 已执行 `PurchaseOrder::submit_for_review` 的采购主表（带期望版本）
+    /// * `order` - 已带期望版本、待一并更新的采购主表
     /// * `submission` - 待写入的不可变提交
     /// * `lines` - 待写入的提交明细
     /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 返回
+    /// 三笔写入都成功时无返回值。
     ///
     /// # 错误
     /// 当提交序号唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）、主表版本
@@ -156,8 +161,8 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
 
     /// 形成采购生效版本（跨集合多步骤写入）。
     ///
-    /// 财务审核通过时把已通过提交原样复制为 `purchase_order_revision` 与
-    /// `purchase_order_revision_line`（§6.6/§8.1 第 4 条），保证版本与明细原子可见。
+    /// 依次插入调用方已构造的 `purchase_order_revision` 与
+    /// `purchase_order_revision_line`。本方法不从提交复制内容。
     /// **必须收到事务执行器**：传入 `NoTransaction` 时两笔写入各自自动提交，
     /// 中途失败会留下只有版本没有明细的半成品。
     ///
@@ -165,6 +170,9 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
     /// * `revision` - 待写入的生效版本
     /// * `lines` - 待写入的版本明细
     /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 返回
+    /// 两笔写入都成功时无返回值。
     ///
     /// # 错误
     /// 当版本号唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB
@@ -203,6 +211,9 @@ impl<'a> PurchaseOrderDomainRepository<'a> {
     /// * `submission` - 待写入的变更提交
     /// * `lines` - 待写入的变更提交明细
     /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 返回
+    /// 三笔写入都成功时无返回值。
     ///
     /// # 错误
     /// 当提交序号唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）、变更单

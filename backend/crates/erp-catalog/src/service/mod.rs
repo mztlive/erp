@@ -1,4 +1,4 @@
-//! Catalog application services.
+//! 商品域应用服务。
 
 pub mod catalog;
 

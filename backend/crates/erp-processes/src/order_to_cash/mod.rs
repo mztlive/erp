@@ -1,4 +1,4 @@
-//! Sales lifecycle, approval and financial formalization processes.
+//! 销售生命周期、审批与财务形式化流程。
 
 use crate::audit::persist_log;
 
@@ -34,15 +34,43 @@ pub struct SalesOrderCommandProcess {
     object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
 }
 impl SalesOrderCommandProcess {
-    /// Construct with fail-closed approval binding defaults; performs no I/O.
+    /// 用失败关闭的审批绑定默认值构造，不执行 I/O。
+    ///
+    /// # 参数
+    /// * `db` - 业务数据库。
+    ///
+    /// # 返回
+    /// 返回未注入授权源、对象读取失败关闭的命令流程。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db, rbac: None, object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort) }
     }
-    /// Construct with an authorization source while retaining fail-closed object-read defaults.
+    /// 用授权源构造，对象读取仍默认失败关闭。
+    ///
+    /// # 参数
+    /// * `db` - 业务数据库。
+    /// * `rbac` - 授权源。
+    ///
+    /// # 返回
+    /// 返回已注入授权源的命令流程。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_rbac(db: Database, rbac: SharedRbacService) -> Self {
         Self { rbac: Some(rbac), ..Self::new(db) }
     }
-    /// Inject the composition root's object-read provider for approval binding.
+    /// 注入组合根的对象读取端口，供审批绑定使用。
+    ///
+    /// # 参数
+    /// * `port` - 组合根配置的审批对象读取端口。
+    ///
+    /// # 返回
+    /// 返回替换对象读取端口后的命令流程。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_object_read(
         mut self,
         port: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
@@ -50,6 +78,7 @@ impl SalesOrderCommandProcess {
         self.object_read = port;
         self
     }
+    /// 未注入授权源时拒绝，避免审批绑定退回无范围读取。
     fn require_rbac(&self) -> Result<&SharedRbacService> {
         self.rbac.as_ref().ok_or_else(|| Error::Internal("销售单审批绑定需要授权源".into()))
     }
@@ -75,6 +104,7 @@ fn document_type_of_sales_business(business_type: BusinessType) -> DocumentType 
         BusinessType::Voucher => DocumentType::VoucherSalesOrder,
     }
 }
+/// 按业务性质生成审批主体引用；种类无法映射时返回校验错误。
 fn subject_ref_for_sales_business(business_type: BusinessType, id: &str) -> Result<bpm::SubjectRef> {
     erp_workflow::entity::approval_integration::subject_ref_for(
         document_type_of_sales_business(business_type),
@@ -83,9 +113,22 @@ fn subject_ref_for_sales_business(business_type: BusinessType, id: &str) -> Resu
     .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
-/// Cancel the sales approval state within the workflow runtime's existing transaction.
+/// 在审批运行时已有事务内取消销售审批状态。
 ///
-/// The workflow action is checked against the sales type before sales writes and audit.
+/// 写销售单和审计之前，先按销售类型核对工作流动作。
+///
+/// # 参数
+/// * `db` - 业务数据库。
+/// * `id` - 销售单主键。
+/// * `action` - 审批领域动作。
+/// * `actor` - 审计操作人。
+/// * `executor` - 审批运行时已有执行器。
+///
+/// # 返回
+/// 销售单状态与审计都写入后返回。
+///
+/// # 错误
+/// 销售单不存在、动作不属于该类型、状态不允许或仓储写入失败时返回错误。
 pub async fn cancel_approval(
     db: &Database,
     id: &str,

@@ -1,4 +1,4 @@
-//! Contract customer, identity, attachment and audit adapters.
+//! 合同客户、身份、参与与审计 adapter。
 
 use std::collections::HashMap;
 use std::num::NonZeroU32;
@@ -27,19 +27,37 @@ use persistence_core::{Executor, NoTransaction};
 use super::contract_data_scope::MongoContractDataScope;
 use crate::audit::persist_log;
 
-/// MongoDB adapter that converts contract audit facts into `erp-audit` writes.
+/// 把合同审计事实写入 `erp-audit` 的 Mongo adapter。
 #[derive(Clone)]
 pub struct MongoContractAudit {
     db: Database,
 }
 
 impl MongoContractAudit {
-    /// Bind the adapter to `db`.
+    /// 绑定审计日志所在数据库，构造时不写库。
+    ///
+    /// # 参数
+    /// * `db` - 持久化审计日志的数据库。
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的 adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// Wrap the adapter as a shared port.
+    /// 包装为合同域可注入的共享审计 Port。
+    ///
+    /// # 参数
+    /// * `db` - 持久化审计日志的数据库。
+    ///
+    /// # 返回
+    /// 返回共享的合同审计 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn ContractAuditPort> {
         Arc::new(Self::new(db))
     }
@@ -69,19 +87,37 @@ impl ContractAuditPort for MongoContractAudit {
     }
 }
 
-/// MongoDB adapter that reads customer identity facts for contract commands.
+/// 为合同命令读取客户身份事实的 Mongo adapter。
 #[derive(Clone)]
 pub struct MongoContractCustomers {
     db: Database,
 }
 
 impl MongoContractCustomers {
-    /// Bind the adapter to `db`.
+    /// 绑定客户账户集合所在数据库，构造时不读取。
+    ///
+    /// # 参数
+    /// * `db` - 客户账户集合所在数据库。
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的 adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// Wrap the adapter as a shared port.
+    /// 包装为合同域可注入的客户事实 Port。
+    ///
+    /// # 参数
+    /// * `db` - 客户账户集合所在数据库。
+    ///
+    /// # 返回
+    /// 返回共享的客户事实 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn CustomerFactsPort> {
         Arc::new(Self::new(db))
     }
@@ -119,19 +155,37 @@ impl CustomerFactsPort for MongoContractCustomers {
     }
 }
 
-/// MongoDB adapter that reads assignment visibility for contract lists.
+/// 为合同列表读取归属可见性的 Mongo adapter。
 #[derive(Clone)]
 pub(crate) struct MongoContractAssignments {
     db: Database,
 }
 
 impl MongoContractAssignments {
-    /// Bind the adapter to `db`.
+    /// 绑定客户归属集合所在数据库，构造时不读取。
+    ///
+    /// # 参数
+    /// * `db` - 客户归属集合所在数据库。
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的 adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// Wrap the adapter as a shared port.
+    /// 包装为合同域可注入的客户归属事实 Port。
+    ///
+    /// # 参数
+    /// * `db` - 客户归属集合所在数据库。
+    ///
+    /// # 返回
+    /// 返回共享的客户归属事实 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn CustomerAssignmentFactsPort> {
         Arc::new(Self::new(db))
     }
@@ -202,14 +256,14 @@ impl CustomerAssignmentFactsPort for MongoContractAssignments {
     }
 }
 
-/// MongoDB adapter that reads legal document participation for contract reads.
+/// 为合同读取法律文书参与事实的 Mongo adapter。
 #[derive(Clone)]
 pub(crate) struct MongoContractParticipants {
     db: Database,
 }
 
 impl MongoContractParticipants {
-    /// Bind the adapter to `db`.
+    /// 绑定工作流参与集合所在数据库，构造时不读取。
     ///
     /// # 参数
     /// * `db` - 工作流参与集合所在数据库
@@ -226,7 +280,7 @@ impl MongoContractParticipants {
         Self { db }
     }
 
-    /// Wrap the adapter as a shared port.
+    /// 包装为合同域可注入的参与 Port。
     ///
     /// # 参数
     /// * `db` - 工作流参与集合所在数据库
@@ -259,19 +313,37 @@ impl ContractParticipantPort for MongoContractParticipants {
     }
 }
 
-/// MongoDB adapter that reads account display names for contract lists.
+/// 为合同列表读取账号显示名的 Mongo adapter。
 #[derive(Clone)]
 pub struct MongoContractAccounts {
     db: Database,
 }
 
 impl MongoContractAccounts {
-    /// Bind the adapter to `db`.
+    /// 绑定身份账号集合所在数据库，构造时不读取。
+    ///
+    /// # 参数
+    /// * `db` - 身份账号集合所在数据库。
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的 adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// Wrap the adapter as a shared port.
+    /// 包装为合同域可注入的账号名称 Port。
+    ///
+    /// # 参数
+    /// * `db` - 身份账号集合所在数据库。
+    ///
+    /// # 返回
+    /// 返回共享的账号名称 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn AccountNamePort> {
         Arc::new(Self::new(db))
     }

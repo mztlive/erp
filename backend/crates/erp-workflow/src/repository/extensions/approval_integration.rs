@@ -15,14 +15,26 @@ pub trait ApprovalIntegrationExt {
 
     /// 返回业务对象快照仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `ApprovalSubjectSnapshotRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn approval_subject_snapshots(&self) -> ApprovalSubjectSnapshotRepository<'_>;
 
     /// 返回通知 outbox 仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `ApprovalNotificationOutboxRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn approval_notification_outbox(&self) -> ApprovalNotificationOutboxRepository<'_>;
 }
 

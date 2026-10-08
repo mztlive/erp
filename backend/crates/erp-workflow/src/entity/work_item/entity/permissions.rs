@@ -20,30 +20,78 @@ pub struct WorkflowAccountFact {
 }
 
 impl WorkflowAccountFact {
-    /// Construct an account fact.
+    /// 构造账号事实；显示名和登录账号初始为空。
+    ///
+    /// # 参数
+    /// * `id` - 稳定账号 ID。
+    /// * `kind` - 账号类型。
+    /// * `can_login` - 是否允许登录。
+    ///
+    /// # 返回
+    /// 返回尚未附带显示名和登录账号的事实。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(id: impl Into<String>, kind: AccountKind, can_login: bool) -> Self {
         Self { id: id.into(), kind, can_login, display_name: String::new(), login_account: String::new() }
     }
 
-    /// Attach a display name.
+    /// 附上显示名。
+    ///
+    /// # 参数
+    /// * `display_name` - 工作项投影使用的显示名。
+    ///
+    /// # 返回
+    /// 返回写入显示名后的事实。消耗 `self`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_display_name(mut self, display_name: impl Into<String>) -> Self {
         self.display_name = display_name.into();
         self
     }
 
-    /// Attach a login account.
+    /// 附上登录账号。
+    ///
+    /// # 参数
+    /// * `login_account` - 候选人选择使用的登录账号。
+    ///
+    /// # 返回
+    /// 返回写入登录账号后的事实。消耗 `self`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_login_account(mut self, login_account: impl Into<String>) -> Self {
         self.login_account = login_account.into();
         self
     }
 
-    /// Whether the account may hold backoffice responsibilities.
+    /// 判断账号是否可以承担后台责任。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 账号类型为 `Admin` 且允许登录时返回 `true`，否则返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_active_backoffice(&self) -> bool {
         self.kind == AccountKind::Admin && self.can_login
     }
 }
 
-/// Casbin subject key for an account.
+/// 返回账号的 Casbin 主体键。
+///
+/// # 参数
+/// * `account_kind` - 账号类型。
+/// * `account_id` - 账号 ID。
+///
+/// # 返回
+/// 返回 `user:{kind}:{account_id}`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn casbin_subject(account_kind: AccountKind, account_id: &str) -> String {
     format!("user:{}:{account_id}", account_kind.as_str())
 }
@@ -94,16 +142,28 @@ impl AvailableWorkItemAccount {
 
     /// 返回稳定账号 ID。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回统一账号主键。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn account_id(&self) -> &str {
         &self.account_id
     }
 
     /// 返回账号类型。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回当前已验证账号类型。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn kind(&self) -> AccountKind {
         self.kind
     }
@@ -112,8 +172,14 @@ impl AvailableWorkItemAccount {
 impl WorkItemType {
     /// 判断转派候选人校验是否必须携带完整工作面执行权限快照。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 履约、财务和供应商申请等受控执行任务返回 `true`。
+    /// 履约、客户验收、供应商付款、销项开票、卡券票款复核或供应商申请确认返回 `true`，其余返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn requires_full_execution_permissions(self) -> bool {
         matches!(
             self,
@@ -165,6 +231,9 @@ impl WorkItemType {
     ///
     /// # 返回
     /// `CUSTOMER_ACCEPTANCE_REGISTRATION + sales_order` 返回完整权限；其它组合返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn customer_acceptance_execution_permissions(
         self,
         business_object_type: &str,
@@ -188,6 +257,9 @@ impl WorkItemType {
     ///
     /// # 返回
     /// `SUPPLIER_PAYMENT_EXECUTION + payable_account` 返回完整权限；其它组合返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn supplier_payment_execution_permissions(
         self,
         business_object_type: &str,
@@ -212,6 +284,9 @@ impl WorkItemType {
     ///
     /// # 返回
     /// `SALES_INVOICE_EXECUTION + receivable_account` 返回完整权限；其它组合返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn sales_invoice_execution_permissions(
         self,
         business_object_type: &str,
@@ -233,10 +308,16 @@ impl WorkItemType {
 
     /// 返回任务类型与业务对象组合所需的完整执行权限集合。
     ///
+    /// # 参数
+    /// * `business_object_type` - 任务固定对象类型。
+    ///
     /// # 返回
     /// 需要完整执行权限的已注册组合返回非空集合；普通任务返回空集合；要求
     /// 完整权限但对象组合未注册时返回 `None`。BusinessException 的对象特例
     /// 由 Service 跨聚合政策追加，不在本通用映射中解释。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn required_execution_permissions(
         self,
         business_object_type: &str,
@@ -261,8 +342,14 @@ impl WorkItemType {
 
     /// 判断任务是否以系统解析出的具体个人责任作为参与依据。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 冻结单人审批、供应商申请确认、导入确认、供给分配、履约操作、付款与开票执行返回 `true`。
+    /// 单据审批、供应商申请确认、导入确认、供给分配、履约、客户验收、付款执行、销项开票或供应商结算复核返回 `true`，其余返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn uses_explicit_owner_authorization(self) -> bool {
         matches!(
             self,

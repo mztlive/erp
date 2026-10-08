@@ -60,6 +60,17 @@ pub(super) async fn load_bound_definition_graph(
 }
 
 /// 使用调用方执行器加载绑定定义图，供创建并提交的同一事务复用。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `binding` - 创建时冻结的定义绑定。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 返回已转成引擎图的已持久化定义图。
+///
+/// # 错误
+/// 定义不存在时返回冲突；仓储失败时返回对应错误。
 pub(super) async fn load_bound_definition_graph_with_executor(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
@@ -417,8 +428,10 @@ pub(super) use erp_sales::service::sales_order::lifecycle::SalesOrderWorkingCopy
 /// 提交启动后原子写入销售单、提交快照与运行事实。
 ///
 /// # 参数
-/// * `db` - 数据库
-/// * `input` - 提交写入集合
+/// * `db` - 数据库。
+/// * `access` - 原命令授权检查器，事务内重验关联、责任与版本。
+/// * `expected_order_version` - 预读时的销售单版本。
+/// * `input` - 提交写入集合。
 ///
 /// # 返回
 /// 返回提交快照视图。

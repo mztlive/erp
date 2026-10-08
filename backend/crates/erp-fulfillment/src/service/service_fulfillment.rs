@@ -115,6 +115,16 @@ impl From<ServiceFulfillment> for ServiceFulfillmentView {
 
 impl FulfillmentService {
     /// 在调用方事务中写入已准备的线下服务履约草稿；不创建第二事务。
+    ///
+    /// # 参数
+    /// * `record` - 已准备的线下服务履约草稿
+    /// * `executor` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 写入成功时无返回值。
+    ///
+    /// # 错误
+    /// 仓储写入失败时返回对应错误。
     pub async fn persist_created_service_fulfillment(
         &self,
         record: &ServiceFulfillment,

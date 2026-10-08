@@ -32,16 +32,18 @@ pub struct BaseModel {
 }
 
 impl BaseModel {
-    /// 创建 BaseModel 实例。
+    /// 用调用方主键构造活动实例：版本从 1 开始，创建与更新时间相同，且未删除。
+    ///
+    /// 时间取当前 Unix 秒；负值钳制为 [`NOT_DELETED_TIMESTAMP`]。
     ///
     /// # 参数
-    /// * `id` - 标识符
+    /// * `id` - 实体主键，由调用方生成。
     ///
     /// # 返回
-    /// 返回创建的实例。
+    /// 返回未删除的活动实例，`created_at` 与 `updated_at` 相等。
     ///
     /// # 错误
-    /// 无；时间戳钳制到零值后仍能构造。
+    /// 不返回错误。
     pub fn new(id: String) -> Self {
         Self::active(id, clamp_unix_timestamp(Utc::now().timestamp()))
     }
@@ -55,7 +57,7 @@ impl BaseModel {
     /// 已删除返回 `true`，否则返回 `false`。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn is_deleted(&self) -> bool {
         self.deleted_at != NOT_DELETED_TIMESTAMP
     }
@@ -69,7 +71,7 @@ impl BaseModel {
     /// 返回与 `new` 相同不变式的固定测试实例。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn fake() -> Self {
         Self::active("fake".to_string(), FAKE_TIMESTAMP)
     }
@@ -102,7 +104,7 @@ pub trait HasBaseModel {
     /// 返回引用，生命周期与持有者一致。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     fn base(&self) -> &BaseModel;
 
     /// 返回实体持久化元数据的可变引用。
@@ -114,7 +116,7 @@ pub trait HasBaseModel {
     /// 返回可变引用，生命周期与持有者一致。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     fn base_mut(&mut self) -> &mut BaseModel;
 
     /// 判断实体是否已被软删除。
@@ -126,7 +128,7 @@ pub trait HasBaseModel {
     /// 已删除返回 `true`，否则返回 `false`。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     fn is_deleted(&self) -> bool {
         self.base().is_deleted()
     }
@@ -140,7 +142,7 @@ pub trait HasBaseModel {
     /// 返回主键字符串引用。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     fn id(&self) -> &str {
         &self.base().id
     }
@@ -154,7 +156,7 @@ pub trait HasBaseModel {
     /// 返回当前版本号。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     fn version(&self) -> u64 {
         self.base().version
     }

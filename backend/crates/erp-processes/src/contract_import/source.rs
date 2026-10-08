@@ -59,6 +59,20 @@ impl ContractImportProcess {
         .await
     }
 
+    /// 在当前执行器内登记源文件和导入任务；同人同请求键重放时不写新记录。
+    ///
+    /// # 参数
+    /// * `command` - 导入控制信息。
+    /// * `asset` - 已构造的源文件资产。
+    /// * `digest` - 原文件 SHA256 与页数。
+    /// * `actor` - 认证人。
+    /// * `executor` - 创建事务执行器。
+    ///
+    /// # 返回
+    /// 任务视图，以及本次对象是否被接纳。重放命中时第二项为 `false`。
+    ///
+    /// # 错误
+    /// 重放载荷不一致、追加目标无权更新、任务构造失败，或文件与任务仓储写入失败时返回对应错误。
     pub(super) async fn create_task(
         &self,
         command: ImportCommand,
@@ -106,6 +120,17 @@ impl ContractImportProcess {
         self.require_source(&task, &mut NoTransaction).await
     }
 
+    /// 读取任务绑定的源文件，并拒绝已销毁、拒绝或隔离的文件。
+    ///
+    /// # 参数
+    /// * `task` - 已归属的导入任务。
+    /// * `executor` - 读取所用执行器。
+    ///
+    /// # 返回
+    /// 可继续读取的源文件。
+    ///
+    /// # 错误
+    /// 文件不存在时返回 `NotFound`；已销毁、扫描拒绝或隔离时返回 `BusinessLogicError`；仓储读取失败时返回对应错误。
     pub(super) async fn require_source(
         &self,
         task: &ContractImport,

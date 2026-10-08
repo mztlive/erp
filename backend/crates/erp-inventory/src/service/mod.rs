@@ -1,4 +1,4 @@
-//! Inventory application services for queries and in-transaction stock writes.
+//! 库存应用服务：查询与事务内库存写入。
 
 pub mod inventory;
 

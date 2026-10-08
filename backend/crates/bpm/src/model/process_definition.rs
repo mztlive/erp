@@ -69,8 +69,11 @@ impl ApprovalProcessDefinition {
     /// * `created_by` - 创建人
     /// * `at` - 创建时间
     ///
+    /// # 返回
+    /// 返回状态为草稿、名称与入口键已规范化的定义。
+    ///
     /// # 错误
-    /// 版本为零、名称为空/超长或入口键非法时返回错误。
+    /// 版本为零、名称为空或超长、入口键非法，或调用方时间无法持久化时返回错误。
     pub fn new_draft(
         id: ApprovalProcessDefinitionId,
         process_kind: ProcessKind,
@@ -105,8 +108,14 @@ impl ApprovalProcessDefinition {
 
     /// 返回草稿并发修改使用的乐观锁版本。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `base.version`，不与 `definition_version` 混用。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn definition_lock_version(&self) -> u64 {
         self.base.version
     }
@@ -150,6 +159,12 @@ impl ApprovalProcessDefinition {
 
     /// 草稿仍可修改时返回成功。
     ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 当前为草稿时返回 `Ok(())`。
+    ///
     /// # 错误
     /// 已发布或已退役时返回 [`ModelError::InvalidStatus`]。
     pub fn ensure_mutable(&self) -> ModelResult<()> {
@@ -182,8 +197,11 @@ impl ApprovalProcessDefinition {
     /// * `name` - 新名称
     /// * `at` - 调用方时间
     ///
+    /// # 返回
+    /// 无返回值。成功时写回名称并推进乐观锁版本。
+    ///
     /// # 错误
-    /// 非草稿或名称为空/超长时返回错误。
+    /// 非草稿、名称为空或超长、时间无法持久化或版本溢出时返回错误。
     pub fn rename_draft(&mut self, name: impl Into<String>, at: Timestamp) -> ModelResult<()> {
         self.ensure_mutable()?;
         self.name = Self::normalize_name(name)?;
@@ -196,8 +214,11 @@ impl ApprovalProcessDefinition {
     /// * `entry_node_key` - 入口节点键
     /// * `at` - 调用方时间
     ///
+    /// # 返回
+    /// 无返回值。成功时写回入口键并推进乐观锁版本。
+    ///
     /// # 错误
-    /// 非草稿或入口键非法时返回错误。
+    /// 非草稿、入口键为空或超长、时间无法持久化或版本溢出时返回错误。
     pub fn set_entry_node_draft(
         &mut self,
         entry_node_key: impl Into<String>,
@@ -215,8 +236,11 @@ impl ApprovalProcessDefinition {
     /// * `actor` - 发布人
     /// * `at` - 发布时间
     ///
+    /// # 返回
+    /// 无返回值。成功时把状态改为已发布，并写入发布人、发布时间与新的乐观锁版本。
+    ///
     /// # 错误
-    /// 当前不是草稿时返回错误。
+    /// 当前不是草稿、时间无法持久化或版本溢出时返回错误。
     pub fn publish(&mut self, actor: ParticipantId, at: Timestamp) -> ModelResult<()> {
         self.ensure_mutable()?;
         self.status = ApprovalDefinitionStatus::Published;
@@ -263,8 +287,11 @@ impl ApprovalProcessDefinition {
     /// * `actor` - 退役人
     /// * `at` - 退役时间
     ///
+    /// # 返回
+    /// 无返回值。成功时把状态改为已退役，并写入退役人、退役时间与新的乐观锁版本。
+    ///
     /// # 错误
-    /// 当前不是已发布状态时返回错误。
+    /// 当前不是已发布、时间无法持久化或版本溢出时返回错误。
     pub fn retire(&mut self, actor: ParticipantId, at: Timestamp) -> ModelResult<()> {
         if self.status != ApprovalDefinitionStatus::Published {
             return Err(ModelError::InvalidStatus("只有已发布定义可以退役"));

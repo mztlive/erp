@@ -20,6 +20,20 @@ pub(crate) struct DocumentRuntime {
 }
 
 /// 当前启用账号和角色授予的静态动作资格，不以对象读取范围代替操作权限。
+///
+/// # 参数
+/// * `db` - 应用数据库
+/// * `rbac` - 当前 RBAC 快照服务
+/// * `actor` - 已认证操作人
+/// * `resource` - 权限资源
+/// * `action` - 权限动作
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 账号具备该静态动作权限时返回 `true`。
+///
+/// # 错误
+/// `resource` 与 `action` 拼不出合法 `resource:action`，或身份域授权读取失败时返回对应错误。
 pub(crate) async fn has_document_permission(
     db: &Database,
     rbac: &SharedRbacService,

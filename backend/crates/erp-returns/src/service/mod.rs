@@ -16,6 +16,15 @@ pub struct ReturnsService {
 }
 impl ReturnsService {
     /// 使用调用者数据库句柄构造本域服务。
+    ///
+    /// # 参数
+    /// * `db` - 本域仓储使用的数据库句柄。
+    ///
+    /// # 返回
+    /// 返回只持有该句柄的服务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }

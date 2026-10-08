@@ -1,4 +1,4 @@
-//! Identity-domain application errors with the original IAM/auth/access-control mapping.
+//! 身份领域应用错误，保留原来的 IAM、认证与访问控制映射。
 
 use application_core::ErrorClass;
 
@@ -59,7 +59,16 @@ pub enum Error {
 }
 
 impl Error {
-    /// Stable error class used by HTTP mapping; do not parse display text.
+    /// 返回 HTTP 映射使用的稳定错误类别；不要解析展示文案。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 冲突、业务规则、禁止或内部错误类别。`OutcomeUnknown` 归入内部错误。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn class(&self) -> ErrorClass {
         match self {
             Self::Internal(_) | Self::Logic(_) | Self::Rbac(_) | Self::RepositoryError(_) => {

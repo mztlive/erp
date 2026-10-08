@@ -133,11 +133,14 @@ impl SupplierFulfillmentOrderListParams {
     ///
     /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
     ///
     /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    /// 排序字段不在白名单、排序方向非法，或 `view` 不是 `actionable`、`all`、`recent_completed` 时返回 `ValidationError`。
     pub fn normalized(&self) -> Result<FulfillmentOrderListQuery> {
         let (sort_by, sort_dir) =
             normalize_sort(&self.sort_by, &self.sort_dir, FULFILLMENT_ORDER_SORT_FIELDS)?;

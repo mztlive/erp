@@ -9,8 +9,11 @@ const MIN_SHARDED_TRANSACTION_WIRE_VERSION: i64 = 8;
 /// 连接 MongoDB 并返回共享客户端及目标数据库句柄。
 ///
 /// # 参数
-/// * `uri` - MongoDB 连接地址
-/// * `db_name` - 目标数据库名
+/// * `uri` - MongoDB 连接地址。
+/// * `db_name` - 目标数据库名。
+///
+/// # 返回
+/// 成功时返回共享的 `Client`，以及名为 `db_name` 的 `Database`。
 ///
 /// # 错误
 /// 当客户端创建或连接参数解析失败时返回错误。
@@ -25,8 +28,8 @@ pub async fn connect(uri: &str, db_name: &str) -> Result<(Client, Database)> {
 /// # 参数
 /// * `database` - 已配置的目标数据库
 ///
-/// # 返回值
-/// 副本集或支持事务的分片集群返回成功。
+/// # 返回
+/// 无返回值。副本集或支持事务的分片集群校验通过。
 ///
 /// # 错误
 /// 连接、命令执行失败，或目标为 standalone/不支持会话与事务时返回错误。

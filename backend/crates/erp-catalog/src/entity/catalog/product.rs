@@ -129,6 +129,9 @@ impl Product {
     ///
     /// # 返回
     /// 更新成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 函数体不产生失败，始终返回 `Ok(())`。
     pub fn update(&mut self, update: ProductUpdate, updated_by: impl Into<String>) -> Result<()> {
         if let Some(status) = update.status {
             self.stable.status = status;
@@ -139,8 +142,14 @@ impl Product {
 
     /// 判断商品是否处于启用状态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为 `Active` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         self.stable.status().is_active()
     }
@@ -265,7 +274,8 @@ impl Product {
     /// 责任确有变化时返回 `true`。
     ///
     /// # 错误
-    /// 目标为空或与当前完全一致时拒绝。
+    /// 目标维护人或显式目标组织为空或超长、保留原组织但原组织为空，
+    /// 或维护人与组织均未变化时返回错误。
     ///
     /// # 关键业务约束
     /// 只改维护人与业务组织，不改创建人、SKU 或审批任务。

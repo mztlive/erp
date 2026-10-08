@@ -200,6 +200,9 @@ impl CommercialProfileView {
     ///
     /// # 返回
     /// 无返回值；视图在原地更新。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(crate) fn fill_entity_names(&mut self, names: &HashMap<String, String>) {
         self.signing_entity_name =
             self.signing_entity_party_id.as_ref().and_then(|party_id| names.get(party_id)).cloned();

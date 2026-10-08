@@ -162,6 +162,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
 }
 
 /// 受阻取消先按实例终态证明原操作人并重验当前授权，再允许查询和比较收据。
+///
+/// # Panics
+/// 已加载收据被分类为 `Fresh` 时 `unreachable!`，表示分类器与查询结果矛盾。
 async fn replay_cancel_blocked(
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
@@ -296,6 +299,18 @@ async fn load_cancel_blocked_terminal_facts(
 }
 
 /// 只有原操作人、原因、版本与历史任务事实全部相同时，终态才证明当前取消载荷。
+///
+/// # 参数
+/// * `instance` - 已取消实例。
+/// * `facts` - 已加载的终态事实。
+/// * `command` - 本次受阻取消命令。
+/// * `actor_id` - 当前操作人。
+///
+/// # 返回
+/// 实例版本、执行版本、操作人、原因和任务版本都匹配时返回 `true`；期望版本溢出时返回 `false`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn cancel_blocked_terminal_facts_match(
     instance: &ApprovalProcessInstance,
     facts: &CancelBlockedTerminalFacts,
@@ -320,6 +335,16 @@ pub(super) fn cancel_blocked_terminal_facts_match(
 }
 
 /// 复用 Fresh 受阻取消的实例版本与可恢复状态判定，隐藏收据是否存在。
+///
+/// # 参数
+/// * `instance` - 已加载实例。
+/// * `command` - 受阻取消命令。
+///
+/// # 返回
+/// 版本一致且当前 blocker 只允许受阻取消时无返回值。
+///
+/// # 错误
+/// 实例版本不一致或当前 blocker 不允许受阻取消时返回冲突。
 pub(super) fn ensure_cancel_blocked_instance_preconditions(
     instance: &ApprovalProcessInstance,
     command: &ApprovalCancelBlockedCommand,

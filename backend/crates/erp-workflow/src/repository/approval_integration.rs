@@ -39,6 +39,13 @@ pub(crate) fn facet_total_or_empty(count: Option<i64>, scope: &'static str) -> R
 pub trait ApprovalSubjectSnapshotRepositoryExt {
     /// 插入启动时冻结的业务对象快照；写后不得再更新。
     ///
+    /// # 参数
+    /// * `snapshot` - 启动时冻结的业务对象快照。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 插入成功时无返回值。
+    ///
     /// # 错误
     /// 同一实例已有快照或 MongoDB 写入失败时返回错误。
     async fn create_immutable_snapshot(
@@ -63,6 +70,13 @@ pub trait ApprovalSubjectSnapshotRepositoryExt {
     ) -> Result<Vec<ApprovalSubjectSnapshot>>;
 
     /// 按审批实例读取唯一快照。
+    ///
+    /// # 参数
+    /// * `approval_process_instance_id` - 审批实例 ID。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回该实例的快照；没有时返回 `None`。
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
@@ -134,6 +148,7 @@ impl ApprovalSubjectSnapshotRepositoryExt for Repository<'_, ApprovalSubjectSnap
     }
 }
 
+/// 只按审批实例 ID 过滤；软删除由 `find_one` 追加。
 fn snapshot_by_process_instance_filter(approval_process_instance_id: &str) -> Document {
     doc! { "approval_process_instance_id": approval_process_instance_id }
 }

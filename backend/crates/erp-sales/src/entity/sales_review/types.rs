@@ -51,6 +51,9 @@ impl From<VoucherLineDraft> for crate::entity::sales_order::types::VoucherLineDr
     ///
     /// # 返回
     /// 返回销售单域卡券草稿字段组。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn from(value: VoucherLineDraft) -> Self {
         Self {
             face_value: value.face_value,
@@ -73,6 +76,9 @@ impl From<crate::entity::sales_order::types::VoucherLineDraft> for VoucherLineDr
     ///
     /// # 返回
     /// 返回审核域卡券草稿字段组。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn from(value: crate::entity::sales_order::types::VoucherLineDraft) -> Self {
         Self {
             face_value: value.face_value,

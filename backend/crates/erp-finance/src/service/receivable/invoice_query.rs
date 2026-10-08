@@ -1,4 +1,4 @@
-//! Invoice lists and details assembled exclusively from finance facts.
+//! 只根据财务事实装配发票列表与详情。
 
 use std::collections::HashMap;
 
@@ -28,7 +28,8 @@ impl ReceivableService {
     /// 返回契约形状的分页视图。
     ///
     /// # 错误
-    /// * `ValidationError` - 分页参数非法或排序字段不在白名单
+    /// 分页、排序、范围版本或其他请求字段校验失败，或包含下级但未提供组织时返回 `ValidationError`；
+    /// 发票或分配的仓储读取失败时返回对应错误。
     pub async fn invoice_list(
         &self,
         params: &InvoiceListParams,
@@ -134,7 +135,7 @@ impl ReceivableService {
     /// 返回发票视图。
     ///
     /// # 错误
-    /// * `NotFound` - 发票不存在
+    /// 发票不存在时返回 `NotFound`；发票或分配的仓储读取失败时返回对应错误。
     pub async fn invoice_detail(&self, id: &str) -> Result<InvoiceView> {
         self.invoice_view(id.to_string()).await
     }

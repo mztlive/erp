@@ -302,6 +302,7 @@ pub struct VerifiedBasisInput<'a> {
 /// # 参数
 /// * `db` - MongoDB 数据库
 /// * `rbac` - 审批绑定授权源
+/// * `object_read` - 创建并提交时证明采购对象范围的读取端口
 /// * `input` - guard 重算后的事务内创建输入（销售单、依据范围、本次行与事实）
 /// * `command` - 原始请求、命令收据与审计操作人
 /// * `executor` - 数据访问执行器

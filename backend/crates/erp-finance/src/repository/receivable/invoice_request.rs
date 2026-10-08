@@ -62,6 +62,14 @@ pub trait SalesInvoiceRequestRepositoryExt {
     ) -> Result<Vec<SalesInvoiceRequest>>;
 
     /// 查找与财务任务一一关联的申请；缺失表示任务没有申请授权。
+    ///
+    /// # 参数
+    /// * `task_id` - 财务任务身份，对应 `work_item_id`。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回关联申请；不存在时返回 `None`。
+    ///
     /// # 错误
     /// 仓储读取或反序列化失败时返回错误。
     async fn find_for_task(
@@ -71,6 +79,14 @@ pub trait SalesInvoiceRequestRepositoryExt {
     ) -> Result<Option<SalesInvoiceRequest>>;
 
     /// 按相同过滤条件读取列表和总数；固定时间及主键排序。
+    ///
+    /// # 参数
+    /// * `query` - 与普通列表相同的过滤与分页条件。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回按 `created_at`、`id` 倒序的当前页与总数。
+    ///
     /// # 错误
     /// 仓储或分页读取失败时返回错误。
     async fn page(
@@ -80,6 +96,14 @@ pub trait SalesInvoiceRequestRepositoryExt {
     ) -> Result<PageResult<SalesInvoiceRequest>>;
 
     /// 查询占用当前应收额度的申请，供同一应收写锁内计算可用额度。
+    ///
+    /// # 参数
+    /// * `id` - 应收子账身份。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回该子账上状态为 `in_approval` 或 `approved` 的申请；没有时返回空列表。
+    ///
     /// # 错误
     /// 仓储读取失败时返回错误。
     async fn reserved_for_account(
@@ -91,6 +115,16 @@ pub trait SalesInvoiceRequestRepositoryExt {
 
 impl SalesInvoiceRequestRepositoryExt for persistence_core::Repository<'_, SalesInvoiceRequest> {
     /// 使用普通列表的过滤合同，仅装载有界候选并保留稳定排序。
+    ///
+    /// # 参数
+    /// * `query` - 与普通列表相同的来源、状态和字面量关键词条件；分页字段不参与过滤。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 按 `created_at`、`id` 倒序返回最多 10001 条；没有匹配时返回空列表。
+    ///
+    /// # 错误
+    /// 查询或反序列化失败时返回仓储错误。
     async fn scope_candidates(
         &self,
         query: &InvoiceRequestQuery,

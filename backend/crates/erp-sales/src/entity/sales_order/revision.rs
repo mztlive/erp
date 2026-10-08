@@ -54,8 +54,14 @@ pub enum RevisionSource {
 impl RevisionSource {
     /// 返回来源的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::ErpApproval => "ERP 审批",
@@ -65,8 +71,14 @@ impl RevisionSource {
 
     /// 返回来源的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::ErpApproval => "ERP_APPROVAL",
@@ -179,7 +191,7 @@ impl SalesOrderRevision {
     /// 返回新建的销售版本实体。
     ///
     /// # 错误
-    /// 必填为空、超长、关联不一致或金额三元组不成立时返回错误。
+    /// 版本号为零、必填为空、超长、卡券类目与履约期限只提供其一，或金额三元组不成立时返回错误。
     pub fn new(id: SalesOrderRevisionId, data: SalesOrderRevisionData) -> Result<Self> {
         if data.revision_no == 0 {
             return Err(Error::from("版本号必须为正整数"));
@@ -249,6 +261,9 @@ impl SalesOrderRevision {
     ///
     /// # 返回
     /// 当前版本号与期望版本号一致时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn matches_revision_no(&self, expected_revision_no: u32) -> bool {
         self.revision.revision_no == expected_revision_no
     }
@@ -270,6 +285,9 @@ impl SalesOrderRevision {
     /// 返回卡券执行投影所需的表头履约期限。
     ///
     /// 卡券投影要求类目 SKU 与履约期限同时存在；任一缺失即不可投影。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 返回表头履约期限。
@@ -585,7 +603,7 @@ impl SalesOrderVoucherLineRevision {
     /// 返回新建的卡券行版本。
     ///
     /// # 错误
-    /// 卡张数为零或成交金额为零时返回错误。
+    /// 卡张数为零、成交金额为零，或面额小计、成交金额、配赠金额、配赠率无法落入值对象时返回错误。
     pub fn new(id: SalesOrderVoucherLineRevisionId, data: SalesOrderVoucherLineRevisionData) -> Result<Self> {
         if data.card_count == 0 {
             return Err(Error::from("卡券行卡张数必须为正整数"));

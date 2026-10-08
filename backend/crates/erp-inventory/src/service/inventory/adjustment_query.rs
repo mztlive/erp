@@ -28,9 +28,10 @@ impl InventoryService {
     /// 返回带范围信封的分页视图，投影经办、申请人与当前审批人。
     ///
     /// # 错误
-    /// * `ValidationError` - 分页或人员参数非法
-    /// * `ConflictError` - 跨页 `scope_version` 不一致
-    /// * `RepositoryError` - 数据库查询失败
+    /// 分页、排序、人员筛选或 `scope_version` 非法时返回 `ValidationError`。
+    /// 跨页 `scope_version` 不一致时返回 `ConflictError`。
+    /// 账号未激活时返回 `Forbidden`。
+    /// 授权、商品、人员或仓储查询失败时返回对应错误。
     #[tracing::instrument(
         name = "inventory.stock_adjustment_list",
         skip_all,
@@ -56,6 +57,7 @@ impl InventoryService {
         ))
     }
 
+    /// 在同一事务快照内按授权、人员交集和 SKU 条件分页查询调整单。
     async fn search_stock_adjustments(
         &self,
         query: &StockAdjustmentListQuery,
@@ -123,6 +125,17 @@ impl InventoryService {
     }
 
     /// 在同一快照内加载表头并验证对象读取范围；拒绝结果隐藏资源存在性。
+    ///
+    /// # 参数
+    /// * `id` - 调整单主键。
+    /// * `actor` - 当前认证操作人。
+    ///
+    /// # 返回
+    /// 返回未删除且落在读取范围内的调整单。
+    ///
+    /// # 错误
+    /// 调整单不存在、账号未激活或仓库不在读取范围时返回 `Error::NotFound`。
+    /// 授权或仓储查询失败时返回对应错误。
     pub async fn readable_stock_adjustment(&self, id: &str, actor: &AuditActor) -> Result<StockAdjustment> {
         let db = self.db.clone();
         let authorization_port = std::sync::Arc::clone(&self.authorization);
@@ -149,10 +162,16 @@ impl InventoryService {
             .await
     }
 
-    /// 按主键读取库存调整单。
+    /// 按主键读取库存调整单，不做仓库范围校验。
+    ///
+    /// # 参数
+    /// * `id` - 调整单主键。
+    ///
+    /// # 返回
+    /// 返回未删除的调整单。
     ///
     /// # 错误
-    /// 不存在时返回 `NotFound`。
+    /// 不存在时返回 `Error::NotFound`。仓储查询失败时返回对应错误。
     pub async fn load_stock_adjustment(&self, id: &str) -> Result<StockAdjustment> {
         self.db
             .inventory()
@@ -195,6 +214,7 @@ impl InventoryService {
     }
 }
 
+/// 申请人与当前审批人按 AND 求交；任一侧未筛选则不收窄该侧。
 async fn people_object_ids(
     people: &dyn crate::ports::AdjustmentPeopleFactsPort,
     query: &StockAdjustmentListQuery,
@@ -281,7 +301,13 @@ impl StockAdjustmentView {
     /// 用审批快照申请人与当前开放审批人覆盖列表/详情投影。
     ///
     /// # 参数
-    /// * `fact` - 人员事实；缺字段保持为空，不得填入 `created_by`
+    /// * `fact` - 人员事实；缺字段保持为空，不得填入 `created_by`。
+    ///
+    /// # 返回
+    /// 无返回值。用事实覆盖 `submitted_by` 与 `current_assignee`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn apply_people(&mut self, fact: &AdjustmentPeopleFact) {
         self.submitted_by = fact.submitted_by.clone();
         self.current_assignee = fact.current_assignee.clone();

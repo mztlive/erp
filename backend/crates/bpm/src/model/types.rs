@@ -57,8 +57,14 @@ pub enum ApprovalDefinitionStatus {
 impl ApprovalDefinitionStatus {
     /// 返回稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `DRAFT`、`PUBLISHED` 或 `RETIRED`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Draft => "DRAFT",
@@ -69,8 +75,14 @@ impl ApprovalDefinitionStatus {
 
     /// 判断定义是否仍可修改草稿字段。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 仅草稿返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_draft(self) -> bool {
         matches!(self, Self::Draft)
     }
@@ -104,8 +116,14 @@ pub enum ApprovalNodeType {
 impl ApprovalNodeType {
     /// 返回稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `USER_APPROVAL`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         "USER_APPROVAL"
     }
@@ -124,8 +142,14 @@ pub enum ApprovalTransitionEvent {
 impl ApprovalTransitionEvent {
     /// 返回稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `APPROVE` 或 `REJECT`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Approve => "APPROVE",
@@ -145,8 +169,14 @@ pub enum ApprovalTerminalResult {
 impl ApprovalTerminalResult {
     /// 返回稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `APPROVED`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         "APPROVED"
     }
@@ -165,8 +195,14 @@ pub enum ApprovalDecision {
 impl ApprovalDecision {
     /// 返回稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `APPROVE` 或 `REJECT`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Approve => "APPROVE",
@@ -192,8 +228,14 @@ pub enum ApprovalProcessInstanceStatus {
 impl ApprovalProcessInstanceStatus {
     /// 返回稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `RUNNING`、`APPROVED`、`CANCELLED` 或 `BLOCKED`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Running => "RUNNING",
@@ -205,8 +247,14 @@ impl ApprovalProcessInstanceStatus {
 
     /// 判断实例是否已进入不可再推进的终态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 最终通过或取消时返回 `true`。
+    /// 最终通过或取消时返回 `true`。受阻与运行中返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_terminal(self) -> bool {
         matches!(self, Self::Approved | Self::Cancelled)
     }
@@ -233,8 +281,14 @@ pub enum ApprovalNodeExecutionStatus {
 impl ApprovalNodeExecutionStatus {
     /// 返回稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回固定执行状态代码。
+    /// 返回 `ACTIVE`、`APPROVED`、`REJECTED`、`CANCELLED`、`BLOCKED` 或 `SUPERSEDED`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Active => "ACTIVE",
@@ -248,16 +302,28 @@ impl ApprovalNodeExecutionStatus {
 
     /// 判断执行是否已结束。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// `ACTIVE` 与 `BLOCKED` 以外的状态返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_ended(self) -> bool {
         !matches!(self, Self::Active | Self::Blocked)
     }
 
     /// 判断执行是否可作为实例当前令牌。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 仅 `ACTIVE` 与 `BLOCKED` 返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_current(self) -> bool {
         matches!(self, Self::Active | Self::Blocked)
     }
@@ -274,8 +340,14 @@ pub enum ApprovalAssigneeBindingSource {
 impl ApprovalAssigneeBindingSource {
     /// 返回稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `DEFINITION`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Definition => "DEFINITION",
@@ -296,8 +368,14 @@ pub enum ApprovalExecutionAssignmentSource {
 impl ApprovalExecutionAssignmentSource {
     /// 返回稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `DEFINITION` 或 `ASSIGNEE_RECOVERY`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Definition => "DEFINITION",
@@ -317,8 +395,14 @@ pub enum ApprovalExecutionEndReason {
 impl ApprovalExecutionEndReason {
     /// 返回稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `ASSIGNEE_RECOVERED`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::AssigneeRecovered => "ASSIGNEE_RECOVERED",
@@ -358,8 +442,14 @@ pub enum ApprovalBlockerCode {
 impl ApprovalBlockerCode {
     /// 返回稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回合同第 12.2 节固定 blocker 代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ApproverAccountInactive => "APPROVER_ACCOUNT_INACTIVE",
@@ -378,8 +468,14 @@ impl ApprovalBlockerCode {
 
     /// 判断是否属于允许恢复原审批人的人员失效类别。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 前六类人员资格阻塞返回 `true`，其余结构或一致性阻塞返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn allows_assignee_recovery(self) -> bool {
         matches!(
             self,
@@ -433,8 +529,14 @@ impl ApprovalCommandKind {
 
     /// 返回稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回命令种类代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::DefinitionWrite => "DEFINITION_WRITE",
@@ -491,6 +593,9 @@ pub(crate) fn base_model_at(id: impl Into<String>, at: Timestamp) -> ModelResult
 /// * `base` - 持久化元数据
 /// * `at` - 调用方提供的时间
 ///
+/// # 返回
+/// 无返回值。成功时把 `updated_at` 写成调用方时间的非负秒，并把 `version` 加一。
+///
 /// # 错误
 /// 时间为负或版本溢出时返回错误。
 pub(crate) fn touch_base(base: &mut BaseModel, at: Timestamp) -> ModelResult<()> {
@@ -501,6 +606,12 @@ pub(crate) fn touch_base(base: &mut BaseModel, at: Timestamp) -> ModelResult<()>
 
 /// 把调用方时间转为非负秒。
 ///
+/// # 参数
+/// * `at` - 调用方提供的时间
+///
+/// # 返回
+/// 返回可写入持久化元数据的非负秒。
+///
 /// # 错误
 /// 负秒返回 [`ModelError::InvalidTimestamp`]。
 pub(crate) fn persistence_stamp(at: Timestamp) -> ModelResult<u64> {
@@ -508,6 +619,15 @@ pub(crate) fn persistence_stamp(at: Timestamp) -> ModelResult<u64> {
 }
 
 /// 规范化必填短文本。
+///
+/// # 参数
+/// * `value` - 原始文本
+/// * `empty` - 去空白后为空时的错误说明
+/// * `max_len` - UTF-8 字节长度上限
+/// * `too_long` - 超长错误说明
+///
+/// # 返回
+/// 返回去除首尾空白后的文本；原本无首尾空白时复用原字符串。
 ///
 /// # 错误
 /// 空值或超长返回 [`ModelError::InvalidField`]。
@@ -552,6 +672,14 @@ pub(crate) fn trim_required<'a>(
 }
 
 /// 规范化可选短文本。
+///
+/// # 参数
+/// * `value` - 原始可选文本
+/// * `max_len` - UTF-8 字节长度上限
+/// * `too_long` - 超长错误说明
+///
+/// # 返回
+/// `None` 或去空白后为空时返回 `None`，否则返回去除首尾空白后的文本。
 ///
 /// # 错误
 /// 去空白后超长返回 [`ModelError::InvalidField`]。

@@ -1,4 +1,4 @@
-//! Proposal lifecycle steps execute under the process-owned transaction.
+//! 提报生命周期步骤在流程持有的事务中执行。
 
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
@@ -15,7 +15,7 @@ use crate::{CatalogService, Error, Result};
 /// Catalog delegates all opaque supply commercial terms to their owning domain.
 #[async_trait]
 pub trait PortalSupplyTermsPort: Send + Sync {
-    /// Validate a submitted commercial snapshot without copying supply rules.
+    /// 校验已提交的商务快照，不复制供给规则。
     /// # 参数
     /// `snapshot` 是供应商原始报价，`executor` 是当前事务。
     /// # 返回
@@ -24,7 +24,7 @@ pub trait PortalSupplyTermsPort: Send + Sync {
     /// 非法金额、税率、数量或供货规则返回错误。
     async fn validate(&self, snapshot: &Value, executor: &mut dyn Executor) -> Result<()>;
 
-    /// Validate the original package price through the supply domain.
+    /// 通过供给域校验原包装报价。
     /// # 参数
     /// `packaging` 为供应商确认保留的原始包装报价，`executor` 为当前事务。
     /// # 返回
@@ -50,7 +50,7 @@ pub struct CatalogDraftSubmitCommand {
 }
 
 impl CatalogPortalService {
-    /// Bind the same catalog authorization source used by internal maintenance.
+    /// 绑定与内部维护相同的商品授权来源。
     /// # 参数
     /// `db` 是目标数据库，`catalog` 必须注入商品范围授权。
     /// # 返回
@@ -61,7 +61,7 @@ impl CatalogPortalService {
         Self { db, catalog }
     }
 
-    /// Save an incomplete proposal without creating formal master data.
+    /// 保存未完成的提报，不创建正式主数据。
     /// # 参数
     /// `id` 为预生成身份，其余参数为服务端供应商、真实操作人、草稿和事务。
     /// # 返回
@@ -81,7 +81,7 @@ impl CatalogPortalService {
         Ok(draft)
     }
 
-    /// Update only the authenticated supplier's editable draft.
+    /// 只更新已认证供应商仍可编辑的草稿。
     /// # 参数
     /// `id`、`supplier_id`、`version` 为对象边界和版本；`input` 为新草稿。
     /// # 返回
@@ -102,7 +102,7 @@ impl CatalogPortalService {
         Ok(draft)
     }
 
-    /// Freeze a complete submission and bind its concrete internal review task.
+    /// 冻结完整提交，并绑定具体的内部审核任务。
     /// # 参数
     /// `draft` 必须已由当前供应商读取；标识、版本、提交人及Port由Process提供。
     /// # 返回
@@ -152,7 +152,7 @@ impl CatalogPortalService {
         Ok(())
     }
 
-    /// Withdraw a supplier's pending submission while preserving its history.
+    /// 撤回供应商待审核的提交，并保留其历史。
     /// # 参数
     /// 标识、供应商、版本、真实操作人及调用方事务。
     /// # 返回
@@ -174,7 +174,7 @@ impl CatalogPortalService {
         Ok(draft)
     }
 
-    /// Record a supplier-visible return decision in the original review transaction.
+    /// 在原审核事务中记录供应商可见的退回决定。
     /// # 参数
     /// 对象、版本、退回原因、内部真实操作人及事务。
     /// # 返回
@@ -196,7 +196,7 @@ impl CatalogPortalService {
         Ok(draft)
     }
 
-    /// Store a final result only after formal catalog, supply and task writes succeed.
+    /// 仅在正式商品、供给和任务写入成功后保存最终结果。
     /// # 参数
     /// `command` 含对象版本、内部映射、全部正式结果、内部操作人及真实核对说明。
     /// # 返回
@@ -216,7 +216,7 @@ impl CatalogPortalService {
         Ok(draft)
     }
 
-    /// Save a separate internal mapping while preserving the frozen supplier input.
+    /// 保存独立的内部映射，并保留已冻结的供应商输入。
     /// # 参数
     /// 精确对象版本、内部规范化映射及当前审核事务。
     /// # 返回
@@ -237,7 +237,7 @@ impl CatalogPortalService {
         Ok(draft)
     }
 
-    /// Read a proposal through the authenticated supplier boundary.
+    /// 按已认证供应商边界读取提报。
     /// # 参数
     /// `supplier_id` 只能取自已校验会话。
     /// # 返回
@@ -257,7 +257,7 @@ impl CatalogPortalService {
         Ok(draft)
     }
 
-    /// Read an internal review subject; the Process must validate task and permission.
+    /// 读取内部审核对象；流程必须自行校验任务与权限。
     /// # 参数
     /// `id` 为精确申请标识，`executor` 为当前事务。
     /// # 返回
@@ -272,7 +272,7 @@ impl CatalogPortalService {
             .ok_or_else(|| Error::NotFound("新品申请不存在".into()))
     }
 
-    /// List only the supplier selected by the authenticated server context.
+    /// 只列出已认证服务端上下文选定的供应商。
     /// # 参数
     /// `filter` 必须使用服务端供应商，分页上限100。
     /// # 返回

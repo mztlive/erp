@@ -40,6 +40,15 @@ pub enum IntegrationTaskActionKind {
 
 impl IntegrationTaskActionKind {
     /// 返回审计与持久化使用的稳定代码。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回与 `SCREAMING_SNAKE_CASE` 序列化形态一致的静态代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::QueryOriginalResult => "QUERY_ORIGINAL_RESULT",
@@ -69,6 +78,15 @@ pub enum ControlledEvidenceKind {
 
 impl ControlledEvidenceKind {
     /// 返回稳定代码。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回与 `SCREAMING_SNAKE_CASE` 序列化形态一致的静态代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ExternalCaseResult => "EXTERNAL_CASE_RESULT",
@@ -131,6 +149,17 @@ pub struct IntegrationTaskActionCommand {
 
 impl IntegrationTaskActionCommand {
     /// 校验命令边界与字段长度。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 任务身份、动作字段与证据引用均合法时成功。
+    ///
+    /// # 错误
+    /// 任务 ID、业务主题版本、幂等键、业务项 ID 或操作 ID 为空或超长，
+    /// 任务版本不是大于 0 的十进制整数，原因代码或备注非法，
+    /// 证据超过 8 条或证据记录 ID、标签为空或超长时返回 `ValidationError`。
     pub fn validate(&self) -> Result<()> {
         validate_command_identity(
             &self.work_item_id,
@@ -179,6 +208,15 @@ pub enum IntegrationResolutionReasonCode {
 
 impl IntegrationResolutionReasonCode {
     /// 返回审计使用的稳定代码。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 `TERMINAL_EVIDENCE_VERIFIED`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::TerminalEvidenceVerified => "TERMINAL_EVIDENCE_VERIFIED",
@@ -222,6 +260,16 @@ pub struct IntegrationTaskCompletionCommand {
 
 impl IntegrationTaskCompletionCommand {
     /// 校验命令边界与字段长度。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 任务身份、完成决定与至少一条终态证据均合法时成功。
+    ///
+    /// # 错误
+    /// 身份或决定字段为空或超长、任务版本不是大于 0 的十进制整数、
+    /// 证据策略版本为 0、证据引用非法或为空时返回 `ValidationError`。
     pub fn validate(&self) -> Result<()> {
         validate_command_identity(
             &self.work_item_id,
@@ -305,6 +353,15 @@ pub enum DifferenceReasonCode {
 
 impl DifferenceReasonCode {
     /// 返回固定原因代码。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回与 `SCREAMING_SNAKE_CASE` 序列化形态一致的静态代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::SourceCorrectedAndReattributed => "SOURCE_CORRECTED_AND_REATTRIBUTED",
@@ -385,6 +442,17 @@ pub struct DirectReconciliationCommand {
 
 impl DirectReconciliationCommand {
     /// 校验路径外命令边界与字段长度。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 差异身份、操作身份与决定字段均合法时成功。
+    ///
+    /// # 错误
+    /// 差异 ID、操作 ID 或幂等键为空或超长，差异版本不是十进制整数（允许 0），
+    /// 终态分支的注册表版本为 0 或注册身份为空，备注或证据引用非法，
+    /// 或终态证据为空时返回 `ValidationError`。
     pub fn validate(&self) -> Result<()> {
         required(&self.difference_id, "差异 ID", ID_MAX_LEN)?;
         decimal_version(&self.expected_difference_version, true, "差异版本")?;
@@ -446,8 +514,14 @@ pub enum IntegrationActionOutcome {
 impl IntegrationActionOutcome {
     /// 返回稳定的 wire 编码（与 `SCREAMING_SNAKE_CASE` 序列化形态一致）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回持久化摘要与 wire 共用的稳定代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::TerminalEvidenceFound => "TERMINAL_EVIDENCE_FOUND",
@@ -547,6 +621,7 @@ pub struct DirectReconciliationResult {
     pub business_result_reference: Option<String>,
 }
 
+/// 校验任务身份，任务版本必须是大于 0 的十进制整数。
 fn validate_command_identity(
     work_item_id: &str,
     task_version: &str,
@@ -567,6 +642,7 @@ fn validate_action(action: &IntegrationNonTerminalTaskAction) -> Result<()> {
     validate_evidence_refs(&action.evidence_refs)
 }
 
+/// 证据最多 8 条，且每条记录 ID 与标签去空白后非空且不超长。
 fn validate_evidence_refs(refs: &[ControlledEvidenceRef]) -> Result<()> {
     if refs.len() > EVIDENCE_REF_MAX_COUNT {
         return Err(Error::ValidationError("证据引用数量超过上限".to_string()));
@@ -578,6 +654,18 @@ fn validate_evidence_refs(refs: &[ControlledEvidenceRef]) -> Result<()> {
     Ok(())
 }
 
+/// 把版本字符串解析为 `u64`。
+///
+/// # 参数
+/// * `value` - 原始版本字符串，允许首尾空白
+/// * `allow_zero` - 为 false 时拒绝 0
+/// * `label` - 写入校验文案的字段名
+///
+/// # 返回
+/// 返回解析后的版本。
+///
+/// # 错误
+/// 去空白后为空、超长、非十进制 `u64`，或不允许 0 却为 0 时返回 `ValidationError`。
 pub(super) fn decimal_version(value: &str, allow_zero: bool, label: &str) -> Result<u64> {
     required(value, label, VERSION_MAX_LEN)?;
     let version = value

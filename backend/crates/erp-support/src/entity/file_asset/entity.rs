@@ -37,6 +37,13 @@ const HMAC_HEX_LEN: usize = 64;
 ///
 /// # 返回
 /// 返回 64 位小写十六进制 HMAC-SHA256 指纹。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # Panics
+/// HMAC-SHA256 接受任意长度密钥，半字节也恒可编码为十六进制。这两处 `expect`
+/// 只在该算法不变量被破坏时触发。
 pub fn content_fingerprint(plain: &str, key: &[u8]) -> String {
     let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("HMAC 接受任意长度密钥");
     mac.update(plain.as_bytes());
@@ -77,8 +84,14 @@ impl ContentHmac {
 
     /// 返回指纹字符串。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回小写十六进制指纹。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -172,8 +185,14 @@ crate::entity::enum_str!(RetentionClass {
 impl RetentionClass {
     /// 判断保留策略是否要求显式到期时间。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 非长期保留策略返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn requires_expiry(self) -> bool {
         !matches!(self, Self::LongTerm)
     }
@@ -426,6 +445,9 @@ impl FileAsset {
     ///
     /// # 返回
     /// 可用时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_usable_at(&self, now: Instant) -> bool {
         matches!(self.security_scan_status, SecurityScanStatus::ContentChecked | SecurityScanStatus::Passed)
             && self.destroyed_at.is_none()

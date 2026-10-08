@@ -9,6 +9,16 @@ pub(super) const SKU_REVISIONS: &str = <mongodb::Database as CatalogExt>::SKU_RE
 pub(super) const SUPPLIER_OFFERINGS: &str = <mongodb::Database as SupplierOfferingExt>::SUPPLIER_OFFERINGS;
 
 /// 主排序字段后追加 `id`，避免同一秒批量写入时 skip/limit 分页重叠。
+///
+/// # 参数
+/// * `field` - 主排序字段名。
+/// * `sort_ascending` - 为真时升序，否则降序；`id` 使用同一方向。
+///
+/// # 返回
+/// 返回含主字段与 `id` 的排序文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn sort_doc(field: &str, sort_ascending: bool) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     doc! { field: direction, "id": direction }

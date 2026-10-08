@@ -1,4 +1,4 @@
-//! Sales-owned frozen snapshot queries.
+//! 销售本域冻结快照查询。
 use std::collections::HashMap;
 
 use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderRevisionLineId};
@@ -11,7 +11,7 @@ use crate::dto::sales_order::{RevisionView, SalesOrderWorkingCopyLineView, Worki
 use crate::entity::sales_order::{SalesOrderRevision, SalesOrderRevisionLine, SalesOrderWorkingCopy};
 use crate::repository::SalesOrderExt;
 use crate::repository::prelude::*;
-/// Group already loaded frozen rows once and retain line-number order within every revision.
+/// 按正式版本归组已加载的冻结行，并在每组内按行号排序。
 fn group_revision_lines(lines: Vec<SalesOrderRevisionLine>) -> HashMap<String, Vec<SalesOrderRevisionLine>> {
     let mut grouped: HashMap<String, Vec<SalesOrderRevisionLine>> = HashMap::new();
     for line in lines {
@@ -23,7 +23,7 @@ fn group_revision_lines(lines: Vec<SalesOrderRevisionLine>) -> HashMap<String, V
     grouped
 }
 
-/// Resolve predecessor numbers solely from the loaded historical revisions, without current-data lookup.
+/// 只根据已加载的历史版本解析前一版本号；前一版本不在本次结果中则跳过，不回查当前数据。
 fn previous_revision_numbers(revisions: &[SalesOrderRevision]) -> HashMap<String, u32> {
     let by_id: HashMap<&str, u32> =
         revisions.iter().map(|row| (row.base.id.as_str(), row.revision.revision_no)).collect();

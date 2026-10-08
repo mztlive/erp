@@ -66,7 +66,7 @@ pub struct SkuRevisionRow {
     pub created_at: u64,
 }
 
-/// SKU 修订列表筛选条件（修订表追加写入，无软删除过滤）。
+/// SKU 修订列表筛选条件（修订表追加写入；查询仍排除已软删除修订）。
 #[derive(Debug, Clone)]
 pub struct SkuRevisionFilter {
     /// 所属稳定 SKU；`None` 表示不筛选。
@@ -114,10 +114,18 @@ impl Default for SkuRevisionFilter {
 }
 
 impl QueryFilter for SkuRevisionFilter {
-    /// 转换为 MongoDB 查询条件（修订表不参与软删除）。
+    /// 转换为 MongoDB 查询条件，并追加未删除的 `deleted_at` 条件。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
-    /// 返回查询条件文档。
+    /// 返回查询条件文档。`sku_id` 有值时精确匹配；`name` 有值时按字面量正则匹配；
+    /// `barcode` 有值时先去掉首尾空白，再按规范化结果精确匹配；`status` 有值时按稳定代码精确匹配。
+    /// 分页与排序字段不进入条件。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(sku_id) = &self.sku_id {
@@ -135,10 +143,16 @@ impl QueryFilter for SkuRevisionFilter {
 }
 
 impl Pagination for SkuRevisionFilter {
-    /// 返回页码与单页条数。
+    /// 返回 SKU 修订列表的页码与单页条数，不做页码归一或条数钳制。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组：第一项为 `page`，第二项为 `page_size` 转成的 `u64`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -339,11 +353,30 @@ impl SkuRevisionRepositoryExt for persistence_core::Repository<'_, SkuRevision> 
 }
 
 /// 构建 SKU 修订排序文档（白名单：`created_at`/`revision_no`）。
+///
+/// # 参数
+/// * `sort_by` - 请求的排序字段；不在白名单时回退 `created_at`
+/// * `sort_ascending` - 升序为 `true`，降序为 `false`
+///
+/// # 返回
+/// 返回排序文档；同一方向同时作用于排序字段与 `id`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn sku_revision_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     sort_doc(whitelisted_sort(sort_by, SKU_REVISION_SORT_FIELDS), sort_ascending)
 }
 
 /// SKU 修订列表投影字段。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回身份、文案、规格、条码、物流、价格、生效区间、版本与创建时间的投影文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn sku_revision_projection() -> Document {
     doc! {
         "id": 1,
@@ -369,7 +402,20 @@ pub(super) fn sku_revision_projection() -> Document {
     }
 }
 
-/// SKU 当前修订的名称匹配；仅库存搜索包含规格，保留既有调用方语义。
+/// 构造未删除 SKU 修订的名称字面量匹配条件。
+///
+/// `include_specification` 为真时名称与规格满足其一即可；为假时只匹配名称。
+/// 本函数不限定当前修订，调用方再按 `current_revision_id` 收窄。
+///
+/// # 参数
+/// * `keyword` - 名称或规格的字面量关键字
+/// * `include_specification` - 是否把规格纳入匹配
+///
+/// # 返回
+/// 返回带 `deleted_at` 过滤的查询文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn sku_revision_keyword_filter(keyword: &str, include_specification: bool) -> Document {
     let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
     let mut name = Document::new();
@@ -388,6 +434,16 @@ pub(super) fn sku_revision_keyword_filter(keyword: &str, include_specification: 
 ///
 /// 优先当前修订指针，缺失回退最大修订号；判定内核见共享
 /// [`select_current_revision`](super::shared::select_current_revision)。
+///
+/// # 参数
+/// * `sku` - 稳定 SKU，读取其当前修订指针
+/// * `revisions` - 同一 SKU 的修订集合
+///
+/// # 返回
+/// 指针命中时返回该修订；否则返回修订号最大的一条；没有修订时返回 `None`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn select_current_sku_revision<'a>(
     sku: &Sku,
     revisions: &'a [SkuRevision],
@@ -436,6 +492,9 @@ pub(super) fn select_current_sku_revisions(
 ///
 /// # 返回
 /// 返回去除首尾空白后的规范化值。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn normalized_barcode(barcode: &str) -> &str {
     barcode.trim()
 }

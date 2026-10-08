@@ -282,6 +282,7 @@ impl ReceivableProcess {
     }
 }
 
+/// 只加载可过账的销项草稿；非草稿或规范化号码已被其他发票占用时返回冲突。
 async fn load_postable_invoice(db: &Database, id: &str, executor: &mut dyn Executor) -> Result<Invoice> {
     let invoice = db
         .invoices()
@@ -455,8 +456,19 @@ async fn persist_unbound_invoice_document(
 
 /// 为已构造发票登记 `BusinessDocument` 并调用统一绑定端口。
 ///
+/// # 参数
+/// * `db` - 数据库。
+/// * `rbac` - 授权源。
+/// * `object_read` - 审批对象读取端口。
+/// * `invoice` - 已构造、尚未登记单据的发票。
+/// * `actor` - 登记人。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 无绑定单据登记成功时无返回值。
+///
 /// # 错误
-/// 绑定端口或注册写入失败时返回错误。
+/// 绑定命令构造、绑定端口或注册写入失败时返回错误。
 pub(super) async fn register_created_invoice_document(
     db: &Database,
     rbac: &SharedRbacService,

@@ -73,6 +73,9 @@ impl SupplierFulfillmentProcess {
     /// # 返回
     /// 返回服务实例。
     /// 构造时不读取、授权或调用供应商。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(
         db: Database,
         gateway: Arc<dyn SupplierGateway>,
@@ -90,6 +93,18 @@ impl SupplierFulfillmentProcess {
     }
 
     /// 按动作重验普通订单范围；任务专用入口单独证明任务、责任与版本。
+    ///
+    /// # 参数
+    /// * `id` - 供应商履约订单 ID。
+    /// * `actor` - 当前操作人。
+    /// * `action` - 本次范围动作。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回当前动作可见的订单。
+    ///
+    /// # 错误
+    /// 开放处理人查询失败，或订单不在该动作范围内时返回对应错误。
     pub async fn require_scoped_order(
         &self,
         id: &str,

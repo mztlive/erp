@@ -162,6 +162,12 @@ pub struct ResolvedFinanceResponsibility {
 impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkItemService<A> {
     /// 查询全部财务责任规则。
     ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回除卡资金复核以外的规则视图。
+    ///
     /// # 错误
     /// 规则、账号或往来方读取失败时返回错误。
     pub async fn finance_responsibility_rule_list(self) -> Result<Vec<FinanceResponsibilityRuleView>> {
@@ -367,6 +373,12 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
 
     /// 列出可作为付款或销项开票负责人的有效管理账号。
     ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回至少具备付款或销项开票所需权限的有效管理账号，按显示名与账号 ID 排序。
+    ///
     /// # 错误
     /// 账号或权限数据读取失败时返回错误。
     pub async fn finance_responsibility_owner_options(
@@ -422,6 +434,14 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     }
 
     /// 在业务事务内按精确往来方、默认规则顺序解析并重验具体负责人。
+    ///
+    /// # 参数
+    /// * `operation` - 财务责任操作
+    /// * `counterparty_id` - 往来方 ID
+    /// * `executor` - 业务事务执行器
+    ///
+    /// # 返回
+    /// 返回冻结的负责人账号与责任键。
     ///
     /// # 错误
     /// 往来方失效、规则零/多命中、账号不可用或权限不足时失败关闭。

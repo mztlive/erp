@@ -103,6 +103,7 @@ fn zero_summary() -> Result<CustomerCenterReceivableRow> {
     })
 }
 
+/// 按客户汇总未删除子账的开放余额与可开票余额，并扣减冲销后计算逾期未核销额。
 fn receivable_pipeline(customer_id: &str, today: &str) -> Vec<Document> {
     let zero = zero_decimal();
     vec![

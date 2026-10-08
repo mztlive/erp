@@ -9,6 +9,16 @@ pub(super) struct RenderedPage {
     pub blank: bool,
 }
 
+/// 解码完整 PNG，并判断是否每个像素都是不透明白色。
+///
+/// # 参数
+/// * `bytes` - 单页渲染得到的 PNG 字节。
+///
+/// # 返回
+/// 原字节及是否空白页。
+///
+/// # 错误
+/// 图片无法在宽高 3200、分配 64 MB 限制内完整解码时返回 `OCR_RENDER_FAILED`。
 pub(super) fn inspect(bytes: Vec<u8>) -> Result<RenderedPage, ImportFailure> {
     let mut reader = ImageReader::with_format(Cursor::new(&bytes), ImageFormat::Png);
     let mut limits = Limits::default();

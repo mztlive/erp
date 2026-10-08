@@ -31,6 +31,13 @@ use crate::{Error, Result};
 impl PurchaseOrderProcess {
     /// 读取并完成采购形式化的事务外领域计算。
     ///
+    /// # 参数
+    /// * `id` - 采购单主键。
+    /// * `actor` - 最终通过的审计操作人。
+    ///
+    /// # 返回
+    /// 返回尚未落库的形式化写入计划与审核结果。
+    ///
     /// # 错误
     /// 单据、提交或来源事实不完整时返回错误。
     pub async fn prepare_formalized_order(
@@ -410,7 +417,16 @@ async fn create_service_fulfillment_draft_for_order(
 }
 
 impl PreparedFormalizedOrder {
-    /// 将计算结果与一次性写入计划交给采购形式化流程。
+    /// 消耗 `self`，把写入计划与审核结果交给采购形式化流程。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回形式化持久化计划与审核结果。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn into_parts(self) -> (FormalizedOrderPersist, PurchaseReviewResult) {
         (self.persist, self.result)
     }
@@ -427,11 +443,30 @@ pub struct FormalizedPurchaseEffects {
 
 impl FormalizedOrderPersist {
     /// 本次正式化的采购单标识，供组合层创建原成功审计。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回采购单主键。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn order_id(&self) -> &str {
         &self.order.base.id
     }
 
     /// 重验采购来源、持久化正式版本和销售分配并推进采购状态。
+    ///
+    /// 消耗 `self`，只能在调用方事务内执行一次。
+    ///
+    /// # 参数
+    /// * `db` - 采购与销售事实所在数据库。
+    /// * `actor` - 生效操作人。
+    /// * `session` - 调用方唯一事务执行器。
+    ///
+    /// # 返回
+    /// 返回供应付、成本与履约继续消费的冻结事实。
     ///
     /// # 错误
     /// 来源、版本或 CAS 校验失败时，在调用方唯一事务内传播错误。
@@ -483,6 +518,15 @@ impl FormalizedOrderPersist {
 
 impl FormalizedPurchaseEffects {
     /// 本次原始应付账户与分录；须先写入后创建付款工作项。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回应付子账与原始应付分录。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn payable(
         &self,
     ) -> &(erp_finance::entity::payable::PayableAccount, erp_finance::entity::payable::PayableEntry) {
@@ -490,11 +534,30 @@ impl FormalizedPurchaseEffects {
     }
 
     /// 按原采购提交顺序产生的确认成本分录。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回确认成本分录切片。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn cost_entries(&self) -> &[erp_finance::entity::cost::CostEntry] {
         &self.cost_entries
     }
 
     /// 财务成功后按冻结履约责任创建原履约草稿及履约任务。
+    ///
+    /// 消耗 `self`。
+    ///
+    /// # 参数
+    /// * `db` - 履约集合所在数据库。
+    /// * `actor_id` - 电子交付与服务草稿的登记人。
+    /// * `session` - 调用方事务执行器。
+    ///
+    /// # 返回
+    /// 对应履约责任的草稿与任务已写入。
     ///
     /// # 错误
     /// 履约事实不完整或持久化失败时传播给调用方事务。

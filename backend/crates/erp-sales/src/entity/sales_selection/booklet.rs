@@ -120,7 +120,7 @@ impl SalesSelectionBooklet {
     /// 返回草稿状态的选品册。
     ///
     /// # 错误
-    /// 缺少客户、形态、提交方式或档位不合规时拒绝。
+    /// 创建人、客户编号、客户名称、销售负责人或业务组织为空或超长，或档位与形态不合规时拒绝。
     pub fn new(id: SalesSelectionBookletId, data: SalesSelectionBookletData) -> Result<Self> {
         let created = normalize_actor(&data.created_by, "创建人不能为空")?;
         let customer_no = normalize_required_text(data.customer_no, "客户编号不能为空", 64, "客户编号过长")?;
@@ -175,7 +175,7 @@ impl SalesSelectionBooklet {
     /// 成功时更新规则。
     ///
     /// # 错误
-    /// 非草稿、来源类型变化或档位非法时拒绝。
+    /// 非草稿、来源类型变化、档位非法，或操作人为空、超长时拒绝。
     pub fn update_draft_rules(
         &mut self,
         pool_source: PoolSource,
@@ -227,7 +227,8 @@ impl SalesSelectionBooklet {
     /// 册进入准备中。
     ///
     /// # 错误
-    /// 状态不允许、已有活动任务或单品请求组合重生成时拒绝。
+    /// 已有活动任务、当前状态不能准备、单品请求组合重生成、草稿不是首次准备、
+    /// 待发布发起首次准备，或操作人为空、超长时拒绝。
     pub fn begin_prepare(&mut self, task_id: &str, kind: PrepareKind, actor_id: &str) -> Result<()> {
         self.ensure_no_active_task()?;
         if !self.status.allows_prepare() {
@@ -262,7 +263,7 @@ impl SalesSelectionBooklet {
     /// 册进入待发布并清除活动任务。
     ///
     /// # 错误
-    /// 当前不是准备中时拒绝。
+    /// 当前不是准备中，或操作人为空、超长时拒绝。
     pub fn complete_prepare(
         &mut self,
         batch_id: &str,
@@ -289,7 +290,7 @@ impl SalesSelectionBooklet {
     /// 首次准备回草稿；从待发布发起则恢复待发布。
     ///
     /// # 错误
-    /// 当前不是准备中时拒绝。
+    /// 当前不是准备中，或操作人为空、超长时拒绝。
     pub fn fail_prepare(&mut self, reason: &str, actor_id: &str) -> Result<()> {
         let restore = self.pre_prepare_status.unwrap_or(BookletStatus::Draft);
         ensure_transition(self.status, restore)?;
@@ -311,7 +312,7 @@ impl SalesSelectionBooklet {
     /// 册进入已发布，有效期为 30 天。
     ///
     /// # 错误
-    /// 非待发布或缺少有效批次时拒绝。
+    /// 非待发布、缺少有效批次，或发布人、操作人为空或超长时拒绝。
     pub fn publish(
         &mut self,
         token_hash: String,
@@ -348,7 +349,7 @@ impl SalesSelectionBooklet {
     /// 令牌版本递增。
     ///
     /// # 错误
-    /// 非已发布状态时拒绝。
+    /// 非已发布状态，或操作人为空、超长时拒绝。
     pub fn rotate_link(
         &mut self,
         token_hash: String,
@@ -374,7 +375,7 @@ impl SalesSelectionBooklet {
     /// 册进入已关闭。
     ///
     /// # 错误
-    /// 非已发布时拒绝。已提交不得关闭为已关闭。
+    /// 非已发布时拒绝。已提交不得关闭为已关闭。操作人为空或超长时也拒绝。
     pub fn close(&mut self, now: Instant, actor_id: &str) -> Result<()> {
         ensure_transition(self.status, BookletStatus::Closed)?;
         self.status = BookletStatus::Closed;
@@ -392,7 +393,7 @@ impl SalesSelectionBooklet {
     /// 不改变已提交状态，不删除方案。
     ///
     /// # 错误
-    /// 非已提交时拒绝。
+    /// 非已提交，或操作人为空、超长时拒绝。
     pub fn revoke_access(&mut self, actor_id: &str) -> Result<()> {
         if self.status != BookletStatus::Submitted {
             return Err(Error::from("只有已提交的选品册可以撤销链接访问"));
@@ -411,7 +412,7 @@ impl SalesSelectionBooklet {
     /// 册进入已作废。
     ///
     /// # 错误
-    /// 状态不允许作废时拒绝。
+    /// 状态不允许作废，或操作人为空、超长时拒绝。
     pub fn void(&mut self, now: Instant, actor_id: &str) -> Result<()> {
         if !self.status.allows_void() {
             return Err(Error::from("当前状态不能作废"));
@@ -537,10 +538,10 @@ impl SalesSelectionBooklet {
     /// * `actor_id` - 操作人
     ///
     /// # 返回
-    /// 无。
+    /// 写入操作人后无业务返回值。
     ///
     /// # 错误
-    /// 操作人为空时拒绝。
+    /// 操作人为空或超长时拒绝。
     pub fn record_display_edit(&mut self, actor_id: &str) -> Result<()> {
         self.touch(actor_id)
     }
@@ -551,10 +552,10 @@ impl SalesSelectionBooklet {
     /// * `actor_id` - 操作人
     ///
     /// # 返回
-    /// 无。
+    /// 写入更新人后返回 `Ok(())`。
     ///
     /// # 错误
-    /// 操作人为空时拒绝。
+    /// 操作人为空或超长时拒绝。
     fn touch(&mut self, actor_id: &str) -> Result<()> {
         self.updated_by = normalize_actor(actor_id, "操作人不能为空")?;
         Ok(())
@@ -624,7 +625,7 @@ fn normalize_form_tiers(form: SelectionForm, tiers: Vec<TierRule>) -> Result<Vec
 /// 返回去空白身份。
 ///
 /// # 错误
-/// 为空时拒绝。
+/// 为空或超过 64 个字符时拒绝。
 fn normalize_actor(actor_id: &str, empty_message: &str) -> Result<String> {
     normalize_required_text_ref(actor_id, empty_message, 64, "操作人身份过长")
 }

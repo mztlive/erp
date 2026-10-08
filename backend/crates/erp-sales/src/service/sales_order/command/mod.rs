@@ -1,4 +1,4 @@
-//! Sales command identity contracts.
+//! 销售命令身份约定。
 pub mod identity;
 #[cfg(test)]
 use identity::{

@@ -4,6 +4,17 @@ use serde::Serialize;
 use super::*;
 use crate::repository::supplier_offering::write::{self as repository_write, OfferingWritePort};
 /// 原同域写入顺序；每步使用同一调用方Executor。
+///
+/// # 参数
+/// * `port` - 供给写入端口。
+/// * `prepared` - 已准备的供给、首版、可供和命令。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 无返回值。先写供给三元组，再写命令。
+///
+/// # 错误
+/// 任一步写入失败时返回对应错误。
 pub(super) async fn created<P: OfferingWritePort>(
     port: &P,
     prepared: &PreparedCreate,
@@ -21,6 +32,17 @@ pub(super) async fn created<P: OfferingWritePort>(
     Ok(())
 }
 /// 原同域写入顺序；每步使用同一调用方Executor。
+///
+/// # 参数
+/// * `port` - 供给写入端口。
+/// * `prepared` - 已准备的修订；响应在修订写入后构造。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 返回修订身份、修订号、状态和写入前的期望版本。
+///
+/// # 错误
+/// 修订写入、命令构造或命令写入失败时返回对应错误。
 pub(super) async fn revised<P: OfferingWritePort>(
     port: &P,
     prepared: &mut PreparedRevision,
@@ -62,6 +84,17 @@ async fn store_command<P: OfferingWritePort, T: Serialize>(
     Ok(())
 }
 /// 原同域写入顺序；每步使用同一调用方Executor。
+///
+/// # 参数
+/// * `port` - 供给写入端口。
+/// * `prepared` - 已准备的可供更新；响应在 CAS 后构造。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 返回可供状态、结果版本和来源更新时间。
+///
+/// # 错误
+/// 可供更新、命令构造或命令写入失败时返回对应错误。
 pub(super) async fn availability<P: OfferingWritePort>(
     port: &P,
     prepared: &mut PreparedAvailability,

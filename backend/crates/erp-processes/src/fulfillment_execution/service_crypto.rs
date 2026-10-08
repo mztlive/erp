@@ -16,6 +16,16 @@ impl ServiceLocationCryptoPort for ServiceCryptoAdapter<'_> {
 }
 
 /// 将附件提供方枚举逐项映射为服务证据的最小事实。
+///
+/// # 参数
+/// * `sensitivity` - 附件敏感级别。
+/// * `retention` - 附件保留级别。
+///
+/// # 返回
+/// 敏感级别逐项对应。`LongTerm` 保留为长期；`ThirtyDays` 与 `SevenDays` 都映射为 `Other`。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn evidence_metadata(
     sensitivity: SensitivityClass,
     retention: RetentionClass,

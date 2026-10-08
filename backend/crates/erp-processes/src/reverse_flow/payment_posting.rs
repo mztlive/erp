@@ -27,6 +27,16 @@ pub struct PaymentReversalProcess {
 }
 impl PaymentReversalProcess {
     /// 绑定组合根数据库；审批运行时已完成授权。
+    ///
+    /// # 参数
+    /// * `db` - 组合根数据库。
+    /// * `_rbac` - 与组合根装配签名一致；本流程不读取该参数。
+    ///
+    /// # 返回
+    /// 返回付款冲正最终过账流程。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database, _rbac: SharedRbacService) -> Self {
         Self { db }
     }
@@ -71,6 +81,17 @@ impl PaymentReversalProcess {
     }
 
     /// 在审批最终通过持有的唯一事务内执行付款冲正。
+    ///
+    /// # 参数
+    /// * `id` - 冲正单 ID。
+    /// * `actor` - 已通过鉴权的审计操作人。
+    /// * `executor` - 审批最终通过持有的执行器；本函数不再开启事务。
+    ///
+    /// # 返回
+    /// 成功时无返回值。冲正过账已写入该执行器。
+    ///
+    /// # 错误
+    /// 非审批中、原付款不存在、累计冲正超额或仓储写入失败时返回错误。
     pub async fn post_payment_reversal_apply(
         &self,
         id: &str,

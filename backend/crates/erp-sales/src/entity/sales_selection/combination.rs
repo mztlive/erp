@@ -99,7 +99,7 @@ where
 /// 返回可交付套餐与逐档报告。任一档 0 套时返回错误，调用方不得提交部分新结果。
 ///
 /// # 错误
-/// 池为空、SKU 数超过池大小、某档 0 套或金额溢出时失败。
+/// 池为空、SKU 数超过池大小、某档 0 套、金额溢出，或可交付套餐超过 200 时失败。
 pub fn search_packages(
     pool: &[SkuSnapshot],
     tiers: &[TierRule],
@@ -536,7 +536,7 @@ fn max_overlap(indexes: &[usize], accepted: &[String], pool: &[SkuSnapshot]) -> 
 /// * `pool` - 商品池
 ///
 /// # 返回
-/// 返回成员售价之和；测试数据不会溢出。
+/// 返回成员售价之和；合计失败时返回零。
 ///
 /// # 错误
 /// 无。

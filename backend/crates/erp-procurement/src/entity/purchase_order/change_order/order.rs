@@ -50,8 +50,14 @@ status_display!(PurchaseChangeOrderStatus, {
 impl PurchaseChangeOrderStatus {
     /// 判断状态是否代表尚未结束的采购变更。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 草稿或审批中返回 `true`，已生效或作废返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_in_progress(self) -> bool {
         matches!(self, Self::Draft | Self::InApproval)
     }
@@ -183,6 +189,9 @@ impl PurchaseChangeOrder {
 
     /// 校验变更单仍可冻结新的审批提交。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 草稿状态返回 `Ok(())`。
     ///
@@ -245,7 +254,7 @@ impl PurchaseChangeOrder {
     /// 更新成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 状态不是草稿，或更新字段校验失败时返回错误。
+    /// 更新包含内容字段且状态不是草稿，或原因、内容指纹为空或超长时返回错误。
     pub fn update(&mut self, update: PurchaseChangeOrderUpdate, updated_by: impl Into<String>) -> Result<()> {
         self.apply_content(update, updated_by)
     }
@@ -257,7 +266,7 @@ impl PurchaseChangeOrder {
     /// * `updated_by` - 本次更新执行人
     ///
     /// # 错误
-    /// 状态不是草稿，或原因/内容指纹校验失败时返回错误。
+    /// 更新包含内容字段且状态不是草稿，或原因、内容指纹为空或超长时返回错误。
     fn apply_content(
         &mut self,
         update: PurchaseChangeOrderUpdate,
@@ -332,6 +341,9 @@ impl PurchaseChangeOrder {
     /// # 参数
     /// * `updated_by` - 撤回人
     ///
+    /// # 返回
+    /// 审批中变更单回到草稿时返回 `Ok(())`。
+    ///
     /// # 错误
     /// 非审批中时返回冲突。
     pub fn cancel_approval(&mut self, updated_by: impl Into<String>) -> Result<()> {
@@ -348,6 +360,9 @@ impl PurchaseChangeOrder {
     /// # 参数
     /// * `effective_revision_id` - 生效后形成的新采购版本
     /// * `updated_by` - 最终通过执行人
+    ///
+    /// # 返回
+    /// 写入生效版本并进入 `EFFECTIVE` 时返回 `Ok(())`。
     ///
     /// # 错误
     /// 状态不是审批中时返回冲突。

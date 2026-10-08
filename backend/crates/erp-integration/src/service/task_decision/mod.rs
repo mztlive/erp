@@ -85,6 +85,12 @@ fn append_resolution(
 /// * `record_id` - 记录主键（调用方收据 ID）
 /// * `actor_id` - 决定人
 /// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 返回新决定序号的十进制字符串，即下一主题版本。
+///
+/// # 错误
+/// 序号溢出时返回 `ConflictError`；其他领域约束失败返回 `Logic`；仓储写入失败时返回对应错误。
 pub(super) async fn persist_appended_resolution(
     db: &mongodb::Database,
     difference: &ReconciliationDifference,

@@ -94,8 +94,17 @@ impl RoleItem {
 
     /// 从角色实体与直接权限策略构建响应项。
     ///
-    /// # 返回值
+    /// 系统标记取角色的 `system`，或角色 ID 等于 `ROOT_ROLE_ID`。
+    ///
+    /// # 参数
+    /// * `role` - 角色实体
+    /// * `permissions` - 直接权限策略
+    ///
+    /// # 返回
     /// 返回不暴露内部持久化字段的角色响应项。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn from_role(role: Role, permissions: Vec<Permission>) -> Self {
         Self {
             system: role.system || role.base.id == crate::ROOT_ROLE_ID,

@@ -112,6 +112,9 @@ fn group_facts_by_line(
 ///
 /// # 返回
 /// 返回按首次出现顺序的（稳定明细、应履约数量、空事实）三元组。
+///
+/// # Panics
+/// `Quantity::from_str("0")` 对字面量 `0` 必然合法；解析失败时 panic，避免把非法零数量传入资格计算。
 fn group_revision_quantities(
     sources: &EligibilitySources<'_>,
 ) -> Vec<(String, Quantity, Vec<AcceptanceFactEligibility>)> {

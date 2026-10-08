@@ -44,8 +44,14 @@ pub enum ConfirmationStatus {
 impl ConfirmationStatus {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Pending => "待确认",
@@ -57,8 +63,14 @@ impl ConfirmationStatus {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Pending => "PENDING",
@@ -91,8 +103,14 @@ pub enum ConfirmationDecision {
 impl ConfirmationDecision {
     /// 返回决策的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::ConfirmScope => "确认本范围",
@@ -102,8 +120,14 @@ impl ConfirmationDecision {
 
     /// 返回决策的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::ConfirmScope => "CONFIRM_SCOPE",
@@ -190,8 +214,14 @@ impl ConfirmationScope {
 
     /// 返回固定范围代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于确认矩阵与持久化的稳定大写代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Sales => "SALES",
@@ -204,8 +234,14 @@ impl ConfirmationScope {
 
     /// 返回固定责任角色。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回该确认范围唯一对应的 RBAC 责任角色。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn owner_role(self) -> &'static str {
         match self {
             Self::Sales => "role-sales",
@@ -377,7 +413,10 @@ impl LegacyImportConfirmation {
     /// * `rule_version` - 导入规则版本
     ///
     /// # 返回
-    /// 返回稳定的 `batch/trial/rule` 组合版本。
+    /// 返回稳定的 `batch/trial/rule` 组合版本。`rule_version` 会先去首尾空白。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn subject_version(batch_version: u32, trial_version: u32, rule_version: &str) -> String {
         format!("batch:{batch_version};trial:{trial_version};rule:{}", rule_version.trim())
     }
@@ -390,7 +429,10 @@ impl LegacyImportConfirmation {
     /// * `rule_version` - 导入规则版本
     ///
     /// # 返回
-    /// 三项版本一致且确认未失效时返回 `true`。
+    /// 三项版本一致且确认未失效时返回 `true`。规则版本按原文字比较，不去空白。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn belongs_to_snapshot(&self, batch_version: u32, trial_version: u32, rule_version: &str) -> bool {
         self.batch_version == batch_version
             && self.trial_version == trial_version
@@ -400,8 +442,14 @@ impl LegacyImportConfirmation {
 
     /// 判断确认事实是否仍等待责任人决策。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为待确认时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_pending(&self) -> bool {
         self.status == ConfirmationStatus::Pending
     }
@@ -413,7 +461,10 @@ impl LegacyImportConfirmation {
     /// * `rule_version` - 当前导入规则版本
     ///
     /// # 返回
-    /// 返回未失效确认中的最大试算版本；没有匹配事实时返回 `None`。
+    /// 返回未失效确认中的最大试算版本；没有匹配事实时返回 `None`。`rule_version` 先去首尾空白再比较。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn latest_active_trial(confirmations: &[Self], rule_version: &str) -> Option<u32> {
         confirmations
             .iter()
@@ -435,6 +486,9 @@ impl LegacyImportConfirmation {
     ///
     /// # 返回
     /// 返回属于该快照且未失效的确认事实副本。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn current_matrix(
         confirmations: &[Self],
         batch_version: u32,
@@ -501,6 +555,9 @@ impl LegacyImportConfirmation {
     ///
     /// # 返回
     /// 返回等待其他确认、开始应用或修复重验之一。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn matrix_decision(
         decision: ConfirmationDecision,
         confirmations: &[Self],
@@ -527,6 +584,9 @@ impl LegacyImportConfirmation {
     ///
     /// # 返回
     /// 无退回且全部必要范围均已确认时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_matrix_confirmed(
         confirmations: &[Self],
         required_scopes: &BTreeSet<ConfirmationScope>,
@@ -546,7 +606,10 @@ impl LegacyImportConfirmation {
     /// * `required_scopes` - 批次必要责任范围
     ///
     /// # 返回
-    /// 当前试算矩阵完整且全部确认时返回 `true`。
+    /// 当前试算矩阵完整且全部确认时返回 `true`。`rule_version` 先去首尾空白再比较。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_trial_confirmed(
         confirmations: &[Self],
         trial_version: u32,
@@ -600,6 +663,9 @@ impl LegacyImportConfirmation {
     ///
     /// # 返回
     /// 返回按范围稳定排序的状态摘要。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn matrix_summary(trial_version: u32, confirmations: &[Self]) -> String {
         let states = confirmations
             .iter()
@@ -620,6 +686,9 @@ impl LegacyImportConfirmation {
     ///
     /// # 返回
     /// 当前仍待确认且试算版本更低时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_replaced_by(&self, replacement_trial_version: u32) -> bool {
         self.status == ConfirmationStatus::Pending && self.trial_version < replacement_trial_version
     }
@@ -691,10 +760,10 @@ impl LegacyImportConfirmation {
     /// * `invalidated_at` - 失效时间
     ///
     /// # 返回
-    /// 失效操作返回 `Ok(())`。
+    /// 失效操作返回 `Ok(())`。当前已是 `Invalidated` 时幂等成功，并覆盖失效时间与替代事实。
     ///
     /// # 错误
-    /// 非待确认状态时返回错误（已完成确认永久保留，不可失效）。
+    /// 当前是 `Confirmed` 或 `Rejected` 时，`ensure_transition` 返回 `InvalidStateTransition`。
     pub fn invalidate(
         &mut self,
         replacement_confirmation_id: erp_core::ids::LegacyImportConfirmationId,

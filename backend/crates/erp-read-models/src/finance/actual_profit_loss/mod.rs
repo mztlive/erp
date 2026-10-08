@@ -33,10 +33,22 @@ impl ActualProfitLossReadModel {
     ///
     /// # 返回
     /// 返回执行一致快照查询的读模型。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database, rbac: erp_identity::SharedRbacService) -> Self {
         Self { db, rbac }
     }
     /// 提供已实现的口径，由用户显式选择，不伪装已配置财务收入确认规则。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回已实现的销售单生效日口径。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn period_basis() -> PeriodBasisConfig {
         PeriodBasisConfig { configuration_version: query::FORMULA_VERSION.into(), allowed_period_bases: vec![PeriodBasisOption { code: query::PERIOD_BASIS.into(), label: query::BASIS_LABEL.into(), explanation: "按上海自然日的销售单首次生效日期选单，采用当前正式收入与查询时点累计实际成本；后补费用会更新原订单盈亏。".into() }] }
     }
@@ -44,6 +56,9 @@ impl ActualProfitLossReadModel {
     ///
     /// # 参数
     /// `query` 为业务筛选；`actor` 为认证用户；`access` 不能替代事务内的对象授权。
+    ///
+    /// # 返回
+    /// 返回同一筛选下的分页视图；指标、趋势和覆盖率按全量匹配订单计算。
     ///
     /// # 错误
     /// 参数非法、缺少同角色完整权限、范围版本变化或来源读取失败时返回错误。
@@ -56,6 +71,11 @@ impl ActualProfitLossReadModel {
         self.read(query, access, actor, false).await
     }
     /// 重新查询当前授权下全部匹配行并同步生成 CSV；不接受客户端水印和金额。
+    ///
+    /// # 参数
+    /// * `query` - 业务筛选；分页参数不截断导出行。
+    /// * `access` - 入口成本详情资格，不能替代事务内的对象授权。
+    /// * `actor` - 认证用户。
     ///
     /// # 返回
     /// 返回当前筛选的全量 CSV，分页参数不截断行集合。

@@ -20,6 +20,15 @@ pub struct SupplierApiGovernanceProcess {
 }
 impl SupplierApiGovernanceProcess {
     /// 复用应用数据库，未注入的授权和引用元数据保持失败关闭。
+    ///
+    /// # 参数
+    /// * `db` - 应用数据库。
+    ///
+    /// # 返回
+    /// 引用注册表为不可用实现、且未注入 RBAC 的流程。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self {
             db,
@@ -27,12 +36,30 @@ impl SupplierApiGovernanceProcess {
             rbac: None,
         }
     }
-    /// 注入应用已有的权威 RBAC。
+    /// 注入应用已有的权威 RBAC。消耗 `self`。
+    ///
+    /// # 参数
+    /// * `rbac` - 共享 RBAC 服务。
+    ///
+    /// # 返回
+    /// 换上该授权源后的流程。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_rbac(mut self, rbac: SharedRbacService) -> Self {
         self.rbac = Some(rbac);
         self
     }
-    /// 复用组合根的引用注册表；不创建新的外部连接器。
+    /// 复用组合根的引用注册表；不创建新的外部连接器。消耗 `self`。
+    ///
+    /// # 参数
+    /// * `registry` - 组合根已有的供应商引用注册表。
+    ///
+    /// # 返回
+    /// 换上该注册表后的流程。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_reference_registry(mut self, registry: Arc<dyn SupplierReferenceRegistry>) -> Self {
         self.reference_registry = registry;
         self

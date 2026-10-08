@@ -1,4 +1,4 @@
-//! Composition adapter: support reads registered business-document ids via workflow.
+//! 支持域经工作流读取已注册业务单据编号。
 
 use std::sync::Arc;
 
@@ -8,25 +8,37 @@ use erp_workflow::DocumentRegistryExt;
 use mongodb::Database;
 use persistence_core::Executor;
 
-/// MongoDB adapter that exposes registered document ids without workflow types.
+/// 只暴露已注册单据编号、不泄漏工作流类型的 Mongo adapter。
 #[derive(Clone)]
 pub struct MongoBusinessDocument {
     db: Database,
 }
 
 impl MongoBusinessDocument {
-    /// Bind the adapter to `db`.
+    /// 绑定单据注册表所在数据库，构造时不读取。
     ///
-    /// # Parameters
-    /// * `db` - MongoDB database used to read the document registry
+    /// # 参数
+    /// * `db` - 读取单据注册表的数据库。
     ///
-    /// # Returns
-    /// Adapter implementing [`BusinessDocumentPort`].
+    /// # 返回
+    /// 返回未执行 I/O 的 adapter，而不是共享 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// Wrap the adapter as a shared port.
+    /// 包装为支持域可注入的业务单据 Port。
+    ///
+    /// # 参数
+    /// * `db` - 读取单据注册表的数据库。
+    ///
+    /// # 返回
+    /// 返回实现 `BusinessDocumentPort` 的共享 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn BusinessDocumentPort> {
         Arc::new(Self::new(db))
     }

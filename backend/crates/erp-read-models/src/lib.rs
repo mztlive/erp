@@ -1,4 +1,4 @@
-//! Cross-domain read models: workbench, customer center and fulfillment queue.
+//! 跨域读模型。
 
 mod approval_runtime;
 mod errors;

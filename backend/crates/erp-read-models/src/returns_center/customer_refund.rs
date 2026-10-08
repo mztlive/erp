@@ -26,6 +26,9 @@ impl ReturnsReadService {
     ///
     /// # 返回
     /// 返回契约形状的分页视图。
+    ///
+    /// # 错误
+    /// 参数校验或排序白名单失败时返回 `ValidationError`。退款或审批注册读取失败时返回对应错误。
     pub async fn customer_refund_list(
         &self,
         params: &CustomerRefundListParams,
@@ -81,6 +84,7 @@ impl ReturnsReadService {
     ///
     /// # 错误
     /// * `NotFound` - 退款单不存在
+    /// 仓储或审批绑定读取失败时返回对应错误。
     pub async fn customer_refund_detail(&self, id: &str) -> Result<CustomerRefundView> {
         self.customer_refund_view(id.to_string()).await
     }
@@ -101,6 +105,7 @@ impl ReturnsReadService {
     ///
     /// # 错误
     /// * `NotFound` - 退款单不存在
+    /// 仓储或审批绑定读取失败时返回对应错误。
     async fn customer_refund_view(&self, id: String) -> Result<CustomerRefundView> {
         let refund = self
             .db

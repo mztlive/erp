@@ -120,6 +120,17 @@ impl PurchaseSupplyWarningReader {
 }
 
 /// 只根据当前提供方解释的中断事实产生提示，正常可供不产生警告。
+///
+/// # 参数
+/// * `id` - 供给身份。
+/// * `offering` - 当前供给；缺失表示正式关系未知。
+/// * `fact` - 当前可供事实；缺失且供给未自述中断时记为可供未知。
+///
+/// # 返回
+/// 需要提示时返回警告。供给存在且状态与可供事实都未中断时返回 `None`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn current_warning(
     id: &str,
     offering: Option<&SupplierOffering>,

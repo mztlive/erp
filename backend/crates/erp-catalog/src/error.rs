@@ -1,8 +1,8 @@
-//! Catalog-domain application errors with the original unique-index mapping.
+//! 商品域应用错误，并保留原有唯一索引冲突映射。
 
 use application_core::ErrorClass;
 
-/// Catalog-domain result alias.
+/// 商品域结果别名。
 pub type Result<T> = std::result::Result<T, Error>;
 
 impl From<application_core::Error> for Error {
@@ -15,7 +15,7 @@ impl From<application_core::Error> for Error {
     }
 }
 
-/// Catalog dictionary, product, SKU and voucher-category errors.
+/// 商品字典、商品、SKU 与卡券类目错误。
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("系统内部错误: {0}")]
@@ -56,7 +56,16 @@ pub enum Error {
 }
 
 impl Error {
-    /// Stable error class used by HTTP mapping; do not parse display text.
+    /// 返回 HTTP 映射使用的稳定错误类别，不得解析展示文案。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回该变体对应的 `ErrorClass`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn class(&self) -> ErrorClass {
         match self {
             Self::Internal(_) | Self::Logic(_) | Self::RepositoryError(_) => ErrorClass::Internal,
@@ -101,8 +110,8 @@ fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
 
 /// 将商品域唯一索引名称映射为面向用户的冲突提示。
 ///
-/// Catalog unique indexes currently share the generic conflict copy from the
-/// original `services::Error` mapping; do not invent field-specific messages.
+/// `uk_sku_barcode_claims_barcode` 与 `uk_sku_barcode_claims_id` 返回条码占用文案；
+/// 其余索引返回通用「数据已存在」文案，不要再编造字段级提示。
 fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
     match index_name {
         Some("uk_sku_barcode_claims_barcode" | "uk_sku_barcode_claims_id") => {

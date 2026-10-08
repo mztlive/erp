@@ -1,4 +1,4 @@
-//! Customer receipt read projections with immutable approval bindings.
+//! 客户回款读投影，审批绑定保持创建时的不可变快照。
 
 use std::collections::HashMap;
 

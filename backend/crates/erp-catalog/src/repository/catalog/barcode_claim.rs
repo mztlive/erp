@@ -15,7 +15,9 @@ impl CatalogRepository<'_> {
     /// # 返回
     /// 空条码不产生占用；同一 SKU 的历次修订复用并更新占用版本。
     /// # 错误
-    /// 不同 SKU 归属、历史歧义、唯一键争用、乐观锁或数据库错误时拒绝。
+    /// 执行器没有事务会话时返回 [`Error::Internal`]；SKU 标识为空或条码、SKU 标识过长时返回校验错误；
+    /// 其他 SKU 占用或历史歧义时返回冲突错误；唯一键争用、乐观锁或数据库读写失败时返回对应错误。
+    /// 空条码直接返回 `Ok(())`，不建立占用。
     pub async fn claim_sku_barcode(&self, revision: &SkuRevision, executor: &mut dyn Executor) -> Result<()> {
         let Some(barcode) = revision.barcode.as_deref().map(str::trim).filter(|value| !value.is_empty())
         else {
@@ -46,7 +48,7 @@ impl CatalogRepository<'_> {
     /// # 返回
     /// 唯一归属核对与修订写入成功。
     /// # 错误
-    /// 条码归属冲突、事务缺失或数据库错误。
+    /// 条码校验失败、归属冲突、执行器缺少事务会话，或修订写入失败时返回错误。
     pub async fn create_sku_revision(
         &self,
         revision: &SkuRevision,

@@ -27,6 +27,9 @@ impl DefinitionManagementVisibility {
     ///
     /// # 返回
     /// 返回类型级可见范围，不含单据 对象范围。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn from_type_permissions(
         definition_admin_types: Vec<DocumentType>,
         runtime_admin_types: Vec<DocumentType>,
@@ -41,6 +44,9 @@ impl DefinitionManagementVisibility {
     ///
     /// # 返回
     /// 拥有 `definition_admin_permission` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn can_define(&self, document_type: DocumentType) -> bool {
         self.definition_admin_types.contains(&document_type)
     }
@@ -52,22 +58,37 @@ impl DefinitionManagementVisibility {
     ///
     /// # 返回
     /// 拥有定义管理或运行管理权限时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn can_read_detail(&self, document_type: DocumentType) -> bool {
         self.can_define(document_type) || self.runtime_admin_types.contains(&document_type)
     }
 
     /// 返回具备定义管理权的类型切片。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回类型级管理范围。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn definition_admin_types(&self) -> &[DocumentType] {
         &self.definition_admin_types
     }
 
     /// 返回具备运行管理权的类型切片。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回类型级运行管理范围。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn runtime_admin_types(&self) -> &[DocumentType] {
         &self.runtime_admin_types
     }
@@ -79,6 +100,9 @@ impl DefinitionManagementVisibility {
     ///
     /// # 返回
     /// 返回两端都具备的类型集合。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn intersect(&self, other: &Self) -> Self {
         Self::from_type_permissions(
             self.definition_admin_types.iter().copied().filter(|item| other.can_define(*item)).collect(),
@@ -326,6 +350,16 @@ pub async fn require_approval_management_with_executor(
 ///
 /// Handler 必须把返回值原样注入恢复命令；运行时在同一恢复事务内重新读取账号、
 /// 角色绑定、启用角色和 policy 版本；具体恢复命令另验类型管理与真实业务来源。
+///
+/// # 参数
+/// * `rbac` - 授权端口
+/// * `actor` - 已认证操作人
+///
+/// # 返回
+/// 账号可登录、具备恢复权限且策略版本在读取前后未变化时返回授权锚点。
+///
+/// # 错误
+/// 账号失效、缺少恢复权限、授权读取失败，或有限次重试后策略版本仍在变化时返回错误。
 pub async fn approval_recovery_authorization(
     rbac: &impl WorkflowAuthorizationPort,
     actor: &AuditActor,
@@ -364,7 +398,6 @@ pub(crate) struct ApprovalBindingUpgradeAuthorization {
 /// 在调用方事务快照中形成绑定升级的三重授权证明。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库
 /// * `rbac` - 共享 RBAC 服务
 /// * `actor` - 已在同一事务中重验为有效的操作人
 /// * `document_type` - 强业务对象证明的精确单据类型

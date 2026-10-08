@@ -73,6 +73,9 @@ impl AccessControlService {
     ///
     /// # 返回
     /// 返回服务实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db, rbac: None, targets: None }
     }
@@ -83,6 +86,9 @@ impl AccessControlService {
     /// * `targets` - 组合层提供的业务身份端口
     /// # 返回
     /// 返回已装配服务；未装配的外部目标配置失败关闭。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_scope_targets(mut self, targets: Arc<dyn ScopeTargetPort>) -> Self {
         self.targets = Some(targets);
         self
@@ -90,8 +96,14 @@ impl AccessControlService {
 
     /// 装配范围配置所需的现有 RBAC。
     ///
+    /// # 参数
+    /// * `rbac` - 现有 RBAC 服务
+    ///
     /// # 返回
     /// 返回可执行范围变更的服务；未装配时变更失败关闭。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_rbac(mut self, rbac: crate::SharedRbacService) -> Self {
         self.rbac = Some(rbac);
         self

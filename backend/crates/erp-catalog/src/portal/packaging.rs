@@ -27,6 +27,15 @@ pub struct PackagingInput {
 
 impl PackagingInput {
     /// 草稿允许尚未完成的包装声明，只限制文本尺寸。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 原包装单位、基础单位和原报价都未超长时返回空结果。
+    ///
+    /// # 错误
+    /// 任一文本超过长度上限时返回 `ValidationError`。
     pub(super) fn validate_storage(&self) -> Result<()> {
         bounded(&self.original_unit, "原包装单位", 64)?;
         bounded(&self.base_unit, "包装基础单位", 64)?;
@@ -35,6 +44,15 @@ impl PackagingInput {
     }
 
     /// 提交要求包装依据完整且由供应商明确确认，不执行换算。
+    ///
+    /// # 参数
+    /// * `row_unit` - 本行 SKU 本次填写的单位原文
+    ///
+    /// # 返回
+    /// 包装依据完整、数量为正、基础单位与本行一致且已确认时返回空结果。
+    ///
+    /// # 错误
+    /// 文本超长或为空、每个包装的基础单位数量不大于零、基础单位与本行不一致或供应商未确认时返回 `ValidationError`。
     pub(super) fn validate_submission(&self, row_unit: &str) -> Result<()> {
         self.validate_storage()?;
         required(&self.original_unit, "原包装单位", 64)?;

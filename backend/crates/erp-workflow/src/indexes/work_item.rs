@@ -17,6 +17,12 @@ pub const FINANCE_RESPONSIBILITY_RULES: &str =
 
 /// 幂等创建任务责任合同要求的命名索引。
 ///
+/// # 参数
+/// * `db` - 目标 MongoDB 数据库。
+///
+/// # 返回
+/// 无返回值。
+///
 /// # 错误
 /// 既有数据违反开放唯一性，或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {

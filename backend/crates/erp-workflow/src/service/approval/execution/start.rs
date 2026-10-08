@@ -43,8 +43,11 @@ pub struct StartExecutionInput {
 /// # 参数
 /// * `input` - 启动输入
 ///
+/// # 返回
+/// 同载荷返回 `PreparedExecution::Replay`；否则返回待应用的启动计划。
+///
 /// # 错误
-/// 异载荷冲突或引擎失败时返回错误。
+/// 命令身份或 scope 不合法、异载荷冲突、引擎失败或收据构造失败时返回错误。
 pub fn prepare_start(input: StartExecutionInput) -> Result<PreparedExecution> {
     let identity = start_identity(StartIdentityParams {
         idempotency_key: input.command.idempotency_key.clone(),
@@ -63,6 +66,16 @@ pub fn prepare_start(input: StartExecutionInput) -> Result<PreparedExecution> {
 ///
 /// 专属启动载荷可以扩展 digest 字段，但必须复用统一 Start kind、规范 key 与
 /// V3 scope；本入口在调用 BPM 前固定验证这些不可变身份。
+///
+/// # 参数
+/// * `input` - 启动输入。
+/// * `identity` - 调用方已签署的启动命令身份。
+///
+/// # 返回
+/// 同载荷返回 `PreparedExecution::Replay`；否则返回待应用的启动计划。
+///
+/// # 错误
+/// 身份种类、幂等键或 scope 与输入不一致、缺少 V3 scope、异载荷冲突、引擎失败或收据构造失败时返回错误。
 pub fn prepare_start_with_identity(
     input: StartExecutionInput,
     identity: PreparedCommandIdentity,
@@ -121,6 +134,15 @@ fn build_receipt(
 }
 
 /// 将引擎错误映射为服务错误。不可提交错误为内部错误。
+///
+/// # 参数
+/// * `error` - BPM 引擎错误。
+///
+/// # 返回
+/// `Uncommittable` 映射为 `Internal`，`InvalidCommand` 映射为 `ValidationError`，`GraphCorrupted` 映射为受阻审批码，`Model` 映射为 `BusinessLogicError`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn map_engine_error(error: bpm::engine::EngineError) -> Error {
     match error {
         bpm::engine::EngineError::Uncommittable(message) => Error::Internal(message.to_string()),

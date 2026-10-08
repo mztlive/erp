@@ -15,8 +15,11 @@ pub(crate) const HANDLER_ORG_UNIT_ID_MAX_LEN: usize = 128;
 /// # 参数
 /// * `owner` - 已规范化的处理人 ID
 ///
+/// # 返回
+/// 不是 `me` 占位时返回 `Ok(())`。
+///
 /// # 错误
-/// 为 `me` 时返回领域校验错误。
+/// 为 `me`（大小写不敏感）时返回领域校验错误。
 pub(crate) fn reject_me_handler(owner: &str) -> Result<()> {
     if owner.eq_ignore_ascii_case("me") {
         return Err(Error::from("处理人不得使用 me 作为人员 ID"));
@@ -28,6 +31,9 @@ pub(crate) fn reject_me_handler(owner: &str) -> Result<()> {
 ///
 /// # 参数
 /// * `raw` - 原始组织 ID
+///
+/// # 返回
+/// 返回去首尾空白后的内部组织 ID。
 ///
 /// # 错误
 /// 为空、超长或为 `company` 占位时返回领域校验错误。

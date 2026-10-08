@@ -4,15 +4,12 @@
 //! - 仓库创建与修订追加：跨集合（warehouses + warehouse_revisions + 审计）→
 //!   `persistence_core::Transactional::with_transaction`，保证「仓库身份 + 当前修订指针 +
 //!   修订快照」原子可见（数据模型 §6.3）；
-//! - 仓库-SKU 预警策略单集合 CRUD → `&mut NoTransaction`（审计日志按 D01
-//!   既有写法独立写入）。
+//! - 仓库-SKU 预警策略更新与删除：读取使用 `NoTransaction`，写入与审计放在同一事务内。
 //!
-//! 业务规则来自 entities（`Warehouse::new`/`WarehouseRevision::new` 完成校验与
+//! 业务规则来自实体（`Warehouse::new`/`WarehouseRevision::new` 完成校验与
 //! 规范化，`WarehouseSkuPolicy` 封装生效区间与重叠规则，`SensitiveText` 封装
-//! 敏感列），Service 只编排字典存在性校验、修订序号查询与事务写入。地址/联系人指纹复用
-//! `erp_support::content_fingerprint`（数据模型 §4.5.5 唯一实现）；
-//! 跨域只调对方 Repository（D10 `skus` 校验策略引用的 SKU；D02 `audit_logs`
-//! 写审计），禁止 Service 依赖 Service。
+//! 敏感列），Service 编排经办人资格、修订序号查询与事务写入。地址与联系人指纹经
+//! `AttachmentFingerprintPort` 计算；跨域只经本 crate 端口，禁止 Service 依赖 Service。
 
 use std::future::Future;
 use std::sync::Arc;
@@ -99,6 +96,9 @@ impl WarehouseService {
     ///
     /// # 返回
     /// 返回服务实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(
         db: Database,
         identity: Arc<dyn IdentityFactPort>,
@@ -302,6 +302,9 @@ impl WarehouseService {
 
     /// 列出仓库收发责任配置可选的具体账号。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回可登录管理账号及其入库、仓发权限资格。
     ///
@@ -379,6 +382,10 @@ impl WarehouseService {
     /// # 错误
     /// * `NotFound` - 策略不存在
     /// * `ConflictError` - 期望版本与当前版本不一致
+    /// * `BusinessLogicError` - 同一仓库和 SKU 的启用区间重叠
+    ///
+    /// 请求体校验失败时返回 `ValidationError`；预警阈值为负数或启停迁移被拒绝时返回实体错误；
+    /// 写入或审计持久化失败时返回仓储或下层错误。
     pub async fn warehouse_sku_policy_update(
         &self,
         id: &str,
@@ -506,8 +513,14 @@ async fn map_search_page<Row, View>(
 impl WarehouseListQuery {
     /// 转为仓储筛选；`sort_by` 保持 `Some(白名单字段)`。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回与规范化查询字段一一对应的 [`WarehouseFilter`]。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(crate) fn into_filter(self) -> WarehouseFilter {
         WarehouseFilter {
             authorized_ids: None,
@@ -527,8 +540,14 @@ impl WarehouseListQuery {
 impl WarehouseRevisionListQuery {
     /// 转为仓储筛选；`sort_by` 保持 `Some(白名单字段)`。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回与规范化查询字段一一对应的 [`WarehouseRevisionFilter`]。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(crate) fn into_filter(self) -> WarehouseRevisionFilter {
         WarehouseRevisionFilter {
             warehouse_id: self.warehouse_id,
@@ -544,8 +563,14 @@ impl WarehouseRevisionListQuery {
 impl WarehouseSkuPolicyListQuery {
     /// 转为仓储筛选；`sort_by` 保持 `Some(白名单字段)`。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回与规范化查询字段一一对应的 [`WarehouseSkuPolicyFilter`]。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(crate) fn into_filter(self) -> WarehouseSkuPolicyFilter {
         WarehouseSkuPolicyFilter {
             warehouse_id: self.warehouse_id,
@@ -562,8 +587,14 @@ impl WarehouseSkuPolicyListQuery {
 impl WarehouseView {
     /// 由列表投影行构造响应视图（不搬迁行上的 `#[serde(default)]`）。
     ///
+    /// # 参数
+    /// * `row` - 仓库列表投影行。
+    ///
     /// # 返回
     /// 返回契约形状的仓库视图。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(crate) fn from_row(row: WarehouseRow) -> Self {
         Self {
             id: row.id,
@@ -580,8 +611,14 @@ impl WarehouseView {
 impl WarehouseRevisionView {
     /// 由列表投影行构造响应视图。
     ///
+    /// # 参数
+    /// * `row` - 仓库修订列表投影行。
+    ///
     /// # 返回
     /// 返回不含敏感字段的修订视图。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(crate) fn from_row(row: WarehouseRevisionRow) -> Self {
         Self {
             id: row.id,
@@ -600,8 +637,14 @@ impl WarehouseRevisionView {
 impl WarehouseSkuPolicyView {
     /// 由列表投影行构造响应视图。
     ///
+    /// # 参数
+    /// * `row` - 预警策略列表投影行。
+    ///
     /// # 返回
     /// 返回策略列表视图。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(crate) fn from_row(row: WarehouseSkuPolicyRow) -> Self {
         Self {
             id: row.id,
@@ -618,6 +661,18 @@ impl WarehouseSkuPolicyView {
 }
 
 /// 校验身份事实是否满足仓库经办人资格，并保留原错误文案。
+///
+/// # 参数
+/// * `fact` - 身份端口返回的事实；`None` 表示账号不存在或已停用。
+/// * `duty` - 入库或仓发责任。
+///
+/// # 返回
+/// 账号可登录且具备对应资格时返回 `Ok(())`。
+///
+/// # 错误
+/// `fact` 为 `None` 时返回 `BusinessLogicError`，文案为「{入库|仓发}经办人账号不存在或已停用，请重新选择」；
+/// 不可登录时文案为「{入库|仓发}经办人账号不可用，请重新选择」；
+/// 缺少对应资格时文案为「{入库|仓发}经办人缺少对应操作权限，请先调整角色或重新选择」。
 pub(crate) fn ensure_handler_fact_eligible(
     fact: Option<&HandlerIdentityFact>,
     duty: HandlerDuty,
@@ -635,7 +690,18 @@ pub(crate) fn ensure_handler_fact_eligible(
     Err(Error::BusinessLogicError(format!("{label}经办人缺少对应操作权限，请先调整角色或重新选择")))
 }
 
-/// 把身份事实投影为经办人选项；跳过不可登录且两项资格都没有的账号。
+/// 把身份事实投影为经办人选项。
+///
+/// 只保留可登录且具备入库或仓发至少一项资格的账号，再按显示名、账号 ID 排序。
+///
+/// # 参数
+/// * `facts` - 全公司经办人身份事实。
+///
+/// # 返回
+/// 返回经办人选项；不可登录，或两项资格都没有的账号不会出现。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn handler_option_views(
     mut facts: Vec<HandlerIdentityFact>,
 ) -> Vec<WarehouseFulfillmentHandlerOptionView> {

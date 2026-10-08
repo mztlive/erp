@@ -65,6 +65,19 @@ impl PurchaseOrderProcess {
         )?)
     }
     /// 保留原行校验/金额、付款代码解析、提交序号查询及 ID 分配的顺序。
+    ///
+    /// # 参数
+    /// * `change` - 待提交的采购变更单。
+    /// * `order` - 来源采购单。
+    /// * `base_revision` - 变更基准版本。
+    /// * `_supplier_name` - 调用方传入的供应商名称；本函数不读取。
+    /// * `req` - 变更提交请求。
+    ///
+    /// # 返回
+    /// 返回已冻结的采购变更提交。
+    ///
+    /// # 错误
+    /// 行或金额校验失败、付款条件无法解析，或提交构造失败时返回对应错误。
     pub(super) async fn build_change_submission(
         &self,
         change: &PurchaseChangeOrder,

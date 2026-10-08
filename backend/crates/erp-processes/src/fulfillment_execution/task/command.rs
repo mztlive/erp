@@ -48,6 +48,7 @@ impl TaskCommandPort for MongoTaskCommand<'_> {
         Ok(())
     }
 }
+/// 先形成任务内存事实，再重验当前责任人权限并写回同一执行器。
 async fn execute(
     port: &dyn TaskCommandPort,
     object: FulfillmentTaskObject<'_>,
@@ -68,6 +69,21 @@ async fn execute(
     port.update(&mut task, executor).await?;
     Ok(())
 }
+/// 在调用方执行器内记录履约任务活动。
+///
+/// 先形成活动事实，再重验当前责任人权限并写回。
+///
+/// # 参数
+/// * `db` - 业务数据库。
+/// * `object` - 冻结责任身份的履约对象。
+/// * `actor_id` - 当前操作人。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 活动写入成功时返回。
+///
+/// # 错误
+/// 开放任务缺失或重复、责任身份不一致、操作人无执行权限，或领域事实与写入失败时返回错误。
 pub(super) async fn record(
     db: &Database,
     object: FulfillmentTaskObject<'_>,
@@ -76,6 +92,21 @@ pub(super) async fn record(
 ) -> Result<()> {
     execute(&MongoTaskCommand { db }, object, actor_id, CommandKind::Activity, executor).await
 }
+/// 在调用方执行器内完成履约执行任务。
+///
+/// 先形成完成事实，再重验当前责任人权限并写回。
+///
+/// # 参数
+/// * `db` - 业务数据库。
+/// * `object` - 冻结责任身份的履约对象。
+/// * `actor_id` - 当前操作人。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 完成事实写入成功时返回。
+///
+/// # 错误
+/// 开放任务缺失或重复、责任身份不一致、操作人无执行权限，或领域事实与写入失败时返回错误。
 pub(super) async fn complete(
     db: &Database,
     object: FulfillmentTaskObject<'_>,

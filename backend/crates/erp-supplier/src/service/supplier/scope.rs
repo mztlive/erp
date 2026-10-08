@@ -149,11 +149,30 @@ impl SupplierService {
 }
 
 /// 构造可被 HTTP 边界识别的范围变化冲突。
+///
+/// # 参数
+/// * `detail` - 拼在 `DATA_SCOPE_CHANGED：` 后的说明
+///
+/// # 返回
+/// 返回 `ConflictError`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn data_scope_changed(detail: &str) -> Error {
     Error::ConflictError(format!("DATA_SCOPE_CHANGED：{detail}"))
 }
 
 /// 后续页必须携带当前范围版本。
+///
+/// # 参数
+/// * `page` - 页码
+/// * `version` - 客户端回传的范围版本
+///
+/// # 返回
+/// 第一页，或后续页带有非空版本时返回 `Ok(())`。
+///
+/// # 错误
+/// `page` 大于 1 且版本缺失或为空字符串时返回范围变化冲突。
 pub(super) fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
     if page > 1 && version.is_none_or(str::is_empty) {
         return Err(data_scope_changed("请从第一页刷新后继续查询"));
@@ -162,6 +181,16 @@ pub(super) fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
 }
 
 /// 客户端回传的范围版本必须与当前快照一致。
+///
+/// # 参数
+/// * `expected` - 客户端版本；`None` 表示未回传
+/// * `actual` - 当前快照版本
+///
+/// # 返回
+/// 未回传或与 `actual` 相同时返回 `Ok(())`。
+///
+/// # 错误
+/// 回传值与 `actual` 不同时返回范围变化冲突。
 pub(super) fn ensure_scope_version(expected: Option<&str>, actual: &str) -> Result<()> {
     if expected.is_some_and(|value| value != actual) {
         return Err(data_scope_changed("数据范围已变化，请从第一页刷新"));
@@ -170,6 +199,16 @@ pub(super) fn ensure_scope_version(expected: Option<&str>, actual: &str) -> Resu
 }
 
 /// 同一查询内两次快照的范围版本必须一致。
+///
+/// # 参数
+/// * `first` - 第一次快照版本
+/// * `second` - 第二次快照版本
+///
+/// # 返回
+/// 两次版本相同时返回 `Ok(())`。
+///
+/// # 错误
+/// 版本不同时返回范围变化冲突。
 pub(super) fn ensure_stable_snapshot(first: &str, second: &str) -> Result<()> {
     if first != second {
         return Err(data_scope_changed("数据范围或供应商资料已变化，请刷新"));
@@ -198,6 +237,7 @@ fn to_list_view(snapshot: SupplierSnapshot) -> SupplierListView {
     }
 }
 
+/// 展开组织筛选并按名称关键词解析主体；业务日取当天。
 async fn build_list_input(
     query: &SupplierListQuery,
     scope: &SupplierReadScope,
@@ -226,6 +266,7 @@ async fn build_list_input(
     Ok(input)
 }
 
+/// 用当前筛选下的身份版本重算范围指纹；超过一万条时拒绝。
 async fn fingerprint_scope(
     db: &mongodb::Database,
     context: &mut SupplierResolvedScope,
@@ -295,6 +336,7 @@ struct HydrateArgs<'a> {
     executor: &'a mut dyn persistence_core::Executor,
 }
 
+/// 在同一执行器内水合主体、维护人名称与能力资质，再装配当前页。
 async fn hydrate_snapshot(args: HydrateArgs<'_>) -> Result<SupplierSnapshot> {
     let HydrateArgs { bundle, party, accounts, context, no_scope, page, page_size, executor } = args;
     let total = bundle.page.total;
@@ -316,6 +358,7 @@ async fn hydrate_snapshot(args: HydrateArgs<'_>) -> Result<SupplierSnapshot> {
     Ok(SupplierSnapshot { no_scope, items, total, page, page_size, context })
 }
 
+/// 要求包含下级时必须给出组织；展开失败沿用端口错误。
 async fn expand_org_filter(
     data_scope: &dyn crate::ports::SupplierDataScopePort,
     org_ids: Option<&[String]>,

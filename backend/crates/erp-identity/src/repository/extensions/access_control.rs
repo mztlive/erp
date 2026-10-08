@@ -20,12 +20,28 @@ pub trait AccessControlExt {
     /// 人员唯一有效范围集合。
     const PERSON_DATA_SCOPES: &'static str = "person_data_scopes";
     /// 获取人员范围仓储。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 `PersonDataScopeRepository`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn person_data_scopes(&self) -> PersonDataScopeRepository<'_>;
     /// 独立个人业务扩展授权集合。
     const PERSONAL_BUSINESS_GRANTS: &'static str = "personal_business_grants";
     /// 获取个人业务授权仓储。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 本领域集合仓储。
+    /// 返回本领域个人业务授权集合仓储。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn personal_business_grants(&self) -> PersonalBusinessGrantRepository<'_>;
     /// `permission` 集合名。
     const PERMISSIONS: &'static str = "permissions";
@@ -47,46 +63,88 @@ pub trait AccessControlExt {
     /// 审计事件列表筛选条件类型（定义见 `repository::access_control`）。
     type AuditEventFilter;
 
-    /// 获取统一账号Repository
+    /// 获取统一账号仓储。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
-    /// 返回 `AccountCoreRepository<'_>` 结果。
+    /// 返回 `AccountCoreRepository`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn accounts(&self) -> AccountCoreRepository<'_>;
 
-    /// 获取角色 Repository。
+    /// 获取角色仓储。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
-    /// 返回 `RoleRepository<'_>`。
+    /// 返回 `RoleRepository`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn roles(&self) -> RoleRepository<'_>;
 
-    /// 获取 `permission` 集合的 Repository。
+    /// 获取 `permission` 集合的仓储。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
-    /// 返回 `PermissionRepository<'_>`。
+    /// 返回 `PermissionRepository`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn permissions(&self) -> PermissionRepository<'_>;
 
-    /// 获取 `user_role` 集合的 Repository。
+    /// 获取 `user_role` 集合的仓储。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
-    /// 返回 `UserRoleRepository<'_>`。
+    /// 返回 `UserRoleRepository`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn user_roles(&self) -> UserRoleRepository<'_>;
 
-    /// 获取 `data_scope` 集合的 Repository。
+    /// 获取 `data_scope` 集合的仓储。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
-    /// 返回 `DataScopeRepository<'_>`。
+    /// 返回 `DataScopeRepository`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn data_scopes(&self) -> DataScopeRepository<'_>;
 
-    /// 获取 `audit_event` 集合的 Repository。
+    /// 获取 `audit_event` 集合的仓储。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
-    /// 返回 `AuditEventRepository<'_>`。
+    /// 返回 `AuditEventRepository`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn audit_events(&self) -> AuditEventRepository<'_>;
 
     /// 获取人员查询资格仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `PersonQueryQualificationRepository`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn person_query_qualifications(&self) -> PersonQueryQualificationRepository<'_>;
 }
 
@@ -101,18 +159,30 @@ impl AccessControlExt for Database {
     type DataScopeFilter = DataScopeFilter;
     type AuditEventFilter = AuditEventFilter;
 
-    /// 获取统一账号Repository。
+    /// 获取统一账号Repository，固定打开集合 `accounts`。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 返回 `AccountCoreRepository<'_>` 结果。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn accounts(&self) -> AccountCoreRepository<'_> {
         AccountCoreRepository::new(self, "accounts")
     }
 
-    /// 获取角色 Repository。
+    /// 获取角色 Repository，固定打开集合 `roles`。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 返回角色仓储。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn roles(&self) -> RoleRepository<'_> {
         RoleRepository::new(self, "roles")
     }

@@ -1,4 +1,4 @@
-//! Identity consumer and composition-root ports.
+//! 身份领域供消费方与组合根使用的端口。
 
 mod audit;
 mod authorization;

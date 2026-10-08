@@ -81,8 +81,17 @@ impl Default for StockBalanceFilter {
 impl QueryFilter for StockBalanceFilter {
     /// 转换为 MongoDB 查询条件（余额不设业务软删除，恒为未删除）。
     ///
+    /// 基底来自 `scoped_base_filter`（未删除，以及 `warehouse_ids`：`None` 不限仓库，空集合保持空 `$in`）。
+    /// 有值时精确匹配 `sku_id`，最后并入 `search`。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = scoped_base_filter(self.warehouse_ids.as_deref());
         if let Some(sku_id) = &self.sku_id {
@@ -96,8 +105,16 @@ impl QueryFilter for StockBalanceFilter {
 impl Pagination for StockBalanceFilter {
     /// 返回页码与单页条数。
     ///
+    /// 原样返回 `page`，并把 `page_size` 从 `u32` 拓宽为 `u64`；不在此处把小于 1 的页码归一。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `(page, page_size)` 元组。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }

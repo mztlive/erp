@@ -45,6 +45,9 @@ pub(crate) const SUPPLIER_REFUND_ALLOCATIONS: &str =
 /// # 参数
 /// * `db` - 目标 MongoDB 数据库
 ///
+/// # 返回
+/// 履约订单、明细、动作、动作行、状态历史、退款事实和退款分配索引都登记成功时返回 `Ok(())`。
+///
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {

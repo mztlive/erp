@@ -1,4 +1,4 @@
-//! Sales-order object facts for remaining-domain work-item authorization.
+//! 销售单对象事实，供其余领域的工作项授权使用。
 
 use std::collections::HashSet;
 
@@ -13,7 +13,18 @@ use super::{ObjectFact, ObjectFactMap, ObjectKind, object_ids};
 use crate::errors::Result;
 
 impl super::WorkItemFactsReader {
-    /// Load sales-order identity, customer and impact for authorization facts.
+    /// 装载销售单身份、客户与影响，供授权事实使用。
+    ///
+    /// # 参数
+    /// * `keys` - 本批对象键；没有销售单键时不读取。
+    /// * `facts` - 输出事实表。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 成功时写入读到的销售单；没有提交时仍写入身份事实。
+    ///
+    /// # 错误
+    /// 销售单或提交读取失败时返回错误。
     pub(in crate::workbench) async fn load_sales_order_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -71,6 +82,17 @@ fn insert_sales_order_facts(
     }
 }
 
+/// 从已读销售单和提交构造权威事实。
+///
+/// # 参数
+/// * `order` - 销售单。
+/// * `submissions` - 本批销售提交。
+///
+/// # 返回
+/// 返回销售单号标题与创建人。优先挂上该单最新审核中提交的客户名和影响；没有审核中时回退最新提交；没有提交则只保留身份。
+///
+/// # 错误
+/// 不返回错误。
 pub(in crate::workbench) fn sales_order_fact(
     order: &SalesOrder,
     submissions: &[SalesOrderSubmission],

@@ -1,4 +1,4 @@
-//! Cross-domain object facts used by work-item authorization.
+//! 工作项授权使用的跨域对象事实。
 
 use std::collections::{HashMap, HashSet};
 
@@ -31,8 +31,14 @@ pub enum OrderTaskSource {
 impl OrderTaskSource {
     /// 返回适用 S2 订单读取重验的审批对象种类。
     ///
+    /// # 参数
+    /// * `document_type` - 审批单据类型。
+    ///
     /// # 返回
-    /// 非订单审批属于其他阶段，返回 None；不得将其伪装成销售单。
+    /// 销售、卡券销售、采购及其变更单返回对应对象种类；其他类型返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn approval_kind(document_type: DocumentType) -> Option<ObjectKind> {
         match document_type {
             DocumentType::SalesOrder | DocumentType::VoucherSalesOrder => Some(ObjectKind::SalesOrder),
@@ -44,8 +50,14 @@ impl OrderTaskSource {
     }
     /// 校验订单种类与任务注册关系一致，拒绝空主键和来源类型错配。
     ///
+    /// # 参数
+    /// * `kind` - 任务注册的对象种类。
+    ///
     /// # 返回
-    /// 精确匹配时为 true；展示根节点不能作为缺失来源的替代。
+    /// 主键非空白且种类与销售或采购来源的注册关系一致时返回 `true`，否则返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn matches_kind(&self, kind: ObjectKind) -> bool {
         match self {
             Self::Sales(id) => {
@@ -70,8 +82,14 @@ impl OrderTaskSource {
     }
     /// 判断对象注册类型是否必须提供订单来源。
     ///
+    /// # 参数
+    /// * `kind` - 对象注册种类。
+    ///
     /// # 返回
-    /// S2 订单及其关联履约对象返回 true；其他阶段资源另行接入。
+    /// 销售、采购、其变更单，以及收货、发货、电子交付或服务履约返回 `true`，其余返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn required_for(kind: ObjectKind) -> bool {
         matches!(
             kind,
@@ -145,7 +163,18 @@ pub struct ObjectFact {
 }
 
 impl ObjectFact {
-    /// Construct an identity-only object fact.
+    /// 构造只含身份的对象事实；订单来源、版本约束和摘要为空。
+    ///
+    /// # 参数
+    /// * `root_document_id` - 工作面根对象 ID。
+    /// * `label` - 面向用户的对象标题。
+    /// * `created_by` - 用于参与校验的创建人。
+    ///
+    /// # 返回
+    /// 返回不限制对象版本的事实。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(
         root_document_id: impl Into<String>,
         label: impl Into<String>,
@@ -165,8 +194,14 @@ impl ObjectFact {
 
     /// 附加由业务实体证明的 S2 订单来源。
     ///
+    /// # 参数
+    /// * `source` - 业务实体证明的订单来源。
+    ///
     /// # 返回
-    /// 返回带独立订单读取依据的对象事实，不改变展示或参与关系。
+    /// 返回带独立订单读取依据的对象事实，不改变展示或参与关系。消耗 `self`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_order_source(mut self, source: OrderTaskSource) -> Self {
         self.order_scope_source = Some(source);
         self
@@ -183,7 +218,17 @@ pub struct W29CloseFact {
 }
 
 impl W29CloseFact {
-    /// Historical evidence reference persisted on the domain object.
+    /// 返回写入领域对象的历史证据引用。
+    ///
+    /// # 参数
+    /// * `work_item_id` - 被关闭的工作项 ID。
+    /// * `command_receipt_id` - 命令收据 ID。
+    ///
+    /// # 返回
+    /// 有替代任务时包含替代工作项；否则只包含工作项和命令收据。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn evidence_reference(&self, work_item_id: &str, command_receipt_id: &str) -> String {
         match &self.replacement_work_item_id {
             Some(replacement) => format!(
@@ -197,18 +242,50 @@ impl W29CloseFact {
 /// Loads cross-domain object facts for work-item authorization.
 #[async_trait]
 pub trait ObjectFactPort: Send + Sync {
-    /// Load facts for the requested object keys.
+    /// 按请求的对象键加载事实。
+    ///
+    /// # 参数
+    /// * `keys` - 对象种类与主键。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回已加载的对象事实映射。
+    ///
+    /// # 错误
+    /// 实现无法读取对象事实时返回错误。
     async fn load_object_facts(
         &self,
         keys: &HashSet<ObjectFactKey>,
         executor: &mut dyn Executor,
     ) -> Result<ObjectFactMap>;
 
-    /// Whether a customer or supplier counterparty is active.
+    /// 判断客户或供应商往来方是否有效。
+    ///
+    /// # 参数
+    /// * `kind` - 往来方种类。
+    /// * `id` - 往来方 ID。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 有效时返回 `true`，否则返回 `false`。
+    ///
+    /// # 错误
+    /// 实现无法确认往来方状态时返回错误。
     async fn counterparty_is_active(&self, kind: &str, id: &str, executor: &mut dyn Executor)
     -> Result<bool>;
 
-    /// Display numbers for counterparties of one kind (`supplier` or `customer`).
+    /// 返回同一往来方种类的展示编号。
+    ///
+    /// # 参数
+    /// * `kind` - `supplier` 或 `customer`。
+    /// * `ids` - 往来方 ID。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回 ID 到展示编号的映射。
+    ///
+    /// # 错误
+    /// 实现无法读取展示编号时返回错误。
     async fn counterparty_numbers(
         &self,
         kind: &str,
@@ -216,17 +293,48 @@ pub trait ObjectFactPort: Send + Sync {
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, String>>;
 
-    /// Whether an external identity map id exists.
+    /// 判断外部身份映射 ID 是否存在。
+    ///
+    /// # 参数
+    /// * `id` - 外部身份映射 ID。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 存在时返回 `true`，否则返回 `false`。
+    ///
+    /// # 错误
+    /// 实现无法确认映射是否存在时返回错误。
     async fn external_identity_map_exists(&self, id: &str, executor: &mut dyn Executor) -> Result<bool>;
 
-    /// Actors that must stay separated from a reassignment candidate.
+    /// 返回必须与转派候选人保持分离的操作人。
+    ///
+    /// # 参数
+    /// * `item` - 待转派的工作项。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回不得接收该任务的账号 ID。
+    ///
+    /// # 错误
+    /// 实现无法解析分离对象时返回错误。
     async fn assignment_separation_actors(
         &self,
         item: &WorkItem,
         executor: &mut dyn Executor,
     ) -> Result<Vec<String>>;
 
-    /// Load open fulfillment tasks for a purchase-order responsibility key after domain gates.
+    /// 在领域门禁之后，按采购单责任键加载开放履约任务。
+    ///
+    /// # 参数
+    /// * `selected` - 当前选中的工作项。
+    /// * `purchase_order_id` - 采购单 ID。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回责任键，以及该键下的开放履约任务。
+    ///
+    /// # 错误
+    /// 实现无法完成加载时返回错误。
     async fn purchase_order_fulfillment_scope(
         &self,
         selected: &WorkItem,
@@ -234,7 +342,19 @@ pub trait ObjectFactPort: Send + Sync {
         executor: &mut dyn Executor,
     ) -> Result<(String, Vec<WorkItem>)>;
 
-    /// Reassign the purchase-order owner on the same executor as work-item writes.
+    /// 在与工作项写入相同的执行器上改派采购单负责人。
+    ///
+    /// # 参数
+    /// * `purchase_order_id` - 采购单 ID。
+    /// * `target_user_id` - 新负责人。
+    /// * `actor_id` - 当前操作人。
+    /// * `executor` - 与工作项写入相同的执行器。
+    ///
+    /// # 返回
+    /// 无返回值；采购单负责人已改派。
+    ///
+    /// # 错误
+    /// 实现无法完成改派时返回错误。
     async fn reassign_purchase_order_owner(
         &self,
         purchase_order_id: &str,
@@ -262,7 +382,18 @@ pub trait ObjectFactPort: Send + Sync {
         executor: &mut dyn Executor,
     ) -> Result<()>;
 
-    /// Validate a W29 close reason without I/O.
+    /// 校验 W29 关闭原因，不执行 I/O。
+    ///
+    /// # 参数
+    /// * `reason_code` - 关闭原因代码。
+    /// * `comment` - 可选关闭说明。
+    /// * `replacement_work_item_id` - 重复关闭时的替代任务 ID。
+    ///
+    /// # 返回
+    /// 返回规范化后的关闭事实。
+    ///
+    /// # 错误
+    /// 关闭原因无法通过校验时返回错误。
     fn prepare_w29_close(
         &self,
         reason_code: &str,
@@ -270,7 +401,22 @@ pub trait ObjectFactPort: Send + Sync {
         replacement_work_item_id: Option<&str>,
     ) -> Result<W29CloseFact>;
 
-    /// Persist W29 domain evidence on the same executor as the work-item close.
+    /// 在与工作项关闭相同的执行器上写入 W29 领域证据。
+    ///
+    /// # 参数
+    /// * `item` - 被关闭的工作项。
+    /// * `decision` - 已校验的关闭事实。
+    /// * `evidence_reference` - 写入领域对象的证据引用。
+    /// * `actor_id` - 关闭操作人。
+    /// * `receipt_id` - 命令收据 ID。
+    /// * `closed_at` - 关闭时间。
+    /// * `executor` - 与工作项关闭相同的执行器。
+    ///
+    /// # 返回
+    /// 无返回值；领域证据已写入。
+    ///
+    /// # 错误
+    /// 实现无法写入证据时返回错误。
     // 事务内证据写入：db 经执行器 + 审计字段 + 收据标识顺序敏感，拆包会破坏调用点可读性；告警逐项压制。
     #[allow(clippy::too_many_arguments)]
     async fn persist_w29_close(

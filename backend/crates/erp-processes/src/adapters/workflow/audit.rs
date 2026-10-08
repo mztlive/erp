@@ -126,17 +126,22 @@ impl AuditEventSink for WorkflowEventSink<'_> {
     }
 }
 
-/// Persist workflow audits through `erp-audit`.
+/// 经 `erp-audit` 持久化工作流审计。
 #[derive(Clone)]
 pub struct WorkflowAudit {
     db: Database,
 }
 impl WorkflowAudit {
     /// 绑定业务事务所在数据库。
+    ///
     /// # 参数
     /// * `db` - 原用例数据库。
+    ///
     /// # 返回
     /// 返回同事务审计 adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }

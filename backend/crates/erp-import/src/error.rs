@@ -1,8 +1,8 @@
-//! Import-domain application errors with the original unique-index mapping.
+//! 导入领域应用错误，并保留原唯一索引冲突映射。
 
 use application_core::ErrorClass;
 
-/// Import-domain result alias.
+/// 导入领域结果别名。
 pub type Result<T> = std::result::Result<T, Error>;
 
 impl From<application_core::Error> for Error {
@@ -15,7 +15,7 @@ impl From<application_core::Error> for Error {
     }
 }
 
-/// Legacy import batch, row and confirmation errors.
+/// 旧数据导入批次、行与确认错误。
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("系统内部错误: {0}")]
@@ -56,7 +56,19 @@ pub enum Error {
 }
 
 impl Error {
-    /// Stable error class used by HTTP mapping; do not parse display text.
+    /// 返回供 HTTP 映射使用的稳定错误分类，调用方不得解析 `Display` 文案。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Internal`、`Logic`、`RepositoryError` 与 `OutcomeUnknown` 返回 [`ErrorClass::Internal`]；
+    /// `ConflictError`、`ReceiptDuplicate` 与 `TransientTransaction` 返回 [`ErrorClass::Conflict`]；
+    /// `BusinessLogicError`、`ValidationError` 与 `NotFound` 返回 [`ErrorClass::BusinessRule`]；
+    /// `Forbidden` 与 `Unauthenticated` 返回 [`ErrorClass::Forbidden`]。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn class(&self) -> ErrorClass {
         match self {
             Self::Internal(_) | Self::Logic(_) | Self::RepositoryError(_) => ErrorClass::Internal,

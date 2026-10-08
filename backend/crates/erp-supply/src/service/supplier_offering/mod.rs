@@ -1,7 +1,7 @@
 //! 域 D24 供应商供给服务。
 //!
 //! 公司 SKU 是唯一商品主数据。服务只编排“公司 SKU → 供应商供给”：新增供给时
-//! 原子写入稳定身份、首版商业条款、实时可供投影、审计与幂等结果；改价只追加
+//! 在调用方事务内写入稳定身份、首版商业条款、实时可供投影与幂等命令；改价只追加
 //! 商业条款修订；库存与可供状态只更新独立投影。
 
 //! 供给单域命令：身份、商业修订、实时可供及命令重放。
@@ -82,6 +82,9 @@ impl SupplierOfferingService {
     ///
     /// # 返回
     /// 返回服务实例；范围 Port 缺省失败关闭。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db, data_scope: FailClosedOfferingDataScopePort::shared() }
     }
@@ -119,6 +122,18 @@ impl SupplierOfferingService {
     }
     /// 按原validate/replay/identity/source/terms/qualification顺序准备创建。
     /// 回放返回原结果；任何错误停止后续读取，执行器由调用方决定。
+    ///
+    /// # 参数
+    /// * `req` - 创建供给请求。
+    /// * `actor` - 已认证操作人。
+    /// * `qualification` - 供应资格 Port；仅在构造条款后调用。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 同一幂等键且载荷可重放时返回 `CommandPreparation::Replay`。否则返回待写入的供给、首版、可供和命令。
+    ///
+    /// # 错误
+    /// 参数、指纹、身份冲突、范围、SKU 重复、来源连接、条款构造或资格检查失败时返回对应错误。同一幂等键载荷不同返回 `ConflictError`；已存结果无法解码返回 `Internal`。
     pub async fn prepare_create<P: QualificationPort + ?Sized>(
         &self,
         req: &CreateSupplierOfferingRequest,
@@ -190,6 +205,16 @@ impl SupplierOfferingService {
         }))
     }
     /// 同一执行器写入供给、首版、可供与原命令；审计由process随后写入。
+    ///
+    /// # 参数
+    /// * `prepared` - 已准备的创建事实和命令。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 无返回值。供给、首版、可供和命令已写入。
+    ///
+    /// # 错误
+    /// 仓储写入失败时返回对应错误。
     pub async fn persist_created(
         &self,
         prepared: &PreparedCreate,
@@ -203,6 +228,19 @@ impl SupplierOfferingService {
         .await
     }
     /// 加载最大修订并构造新版本；仅Active目标状态读取资格。
+    ///
+    /// # 参数
+    /// * `id` - 供给主键。
+    /// * `req` - 修订请求。
+    /// * `actor` - 已认证操作人。
+    /// * `qualification` - 供应资格 Port；仅目标状态为 `Active` 时调用。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 同一幂等键且载荷可重放时返回 `CommandPreparation::Replay`。否则返回待写入的新修订和已改状态的供给。
+    ///
+    /// # 错误
+    /// 参数、指纹、范围或修订构造失败时返回对应错误。供给缺少维护人或组织时返回 `BusinessLogicError`。期望修订号与当前最大修订不一致时返回 `ConflictError`。同一幂等键载荷不同返回 `ConflictError`；已存结果无法解码返回 `Internal`。
     pub async fn prepare_revise<P: QualificationPort + ?Sized>(
         &self,
         id: &str,
@@ -255,6 +293,16 @@ impl SupplierOfferingService {
         }))
     }
     /// 新修订insert、供给CAS后构造原响应与命令并写入；不另开事务。
+    ///
+    /// # 参数
+    /// * `prepared` - 已准备的修订；命令在写入时构造。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回修订后的供给、修订身份、修订号、状态和版本。
+    ///
+    /// # 错误
+    /// 修订写入、供给 CAS 或命令写入失败时返回对应错误。
     pub async fn persist_revised(
         &self,
         prepared: &mut PreparedRevision,
@@ -268,6 +316,18 @@ impl SupplierOfferingService {
         .await
     }
     /// 按原投影版本、来源时间和数量顺序准备可供更新。
+    ///
+    /// # 参数
+    /// * `id` - 供给主键。
+    /// * `req` - 可供更新请求。
+    /// * `actor` - 已认证操作人。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 同一幂等键且载荷可重放时返回 `CommandPreparation::Replay`。否则返回已应用但未写回的可供状态。
+    ///
+    /// # 错误
+    /// 参数、指纹、范围或可供构造失败时返回对应错误。供给缺少维护人或组织时返回 `BusinessLogicError`。可供记录不存在时返回 `NotFound`。期望版本不一致时返回 `ConflictError`。同一幂等键载荷不同返回 `ConflictError`；已存结果无法解码返回 `Internal`。
     pub async fn prepare_availability(
         &self,
         id: &str,
@@ -321,6 +381,16 @@ impl SupplierOfferingService {
         }))
     }
     /// 可供CAS后构造原响应与命令并写入，保留命令ID生成时点。
+    ///
+    /// # 参数
+    /// * `prepared` - 已准备的可供更新。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回可供状态、版本和来源更新时间。
+    ///
+    /// # 错误
+    /// 可供 CAS 或命令写入失败时返回对应错误。
     pub async fn persist_availability(
         &self,
         prepared: &mut PreparedAvailability,
@@ -333,6 +403,7 @@ impl SupplierOfferingService {
         )
         .await
     }
+    /// 同一供应商 SKU 已有供给时拒绝创建。
     async fn ensure_identity_available(
         &self,
         offering: &SupplierOffering,
@@ -348,6 +419,7 @@ impl SupplierOfferingService {
         }
         Ok(())
     }
+    /// 来源连接若存在，必须属于该供应商且为启用态；未绑定连接则跳过。
     async fn ensure_source_connection(
         &self,
         offering: &SupplierOffering,
@@ -390,6 +462,22 @@ impl SupplierOfferingService {
             .map_err(Into::into)
     }
     /// 回收任意事务错误后读取原命令；重读失败优先于原事务错误。
+    ///
+    /// 事务成功时返回 `intended_result`，不读取命令。
+    ///
+    /// # 参数
+    /// * `transaction_result` - 事务提交结果；成功值为 `()`。
+    /// * `intended_result` - 事务成功时直接返回的结果。
+    /// * `idempotency_key` - 原命令幂等键。
+    /// * `operation` - 期望的命令操作名。
+    /// * `fingerprint` - 本次请求指纹。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 事务成功或找到可重放命令时返回 `intended_result` 或已存结果。
+    ///
+    /// # 错误
+    /// 没有原命令时返回原事务错误。重读失败、指纹冲突或结果无法解码时，该错误优先于原事务错误。
     pub async fn resolve_command_result<T, E>(
         &self,
         transaction_result: std::result::Result<(), E>,
@@ -414,6 +502,21 @@ impl SupplierOfferingService {
         .await
     }
     /// 回收任意事务错误后读取原命令；重读失败优先于原事务错误。
+    ///
+    /// 与 [`Self::resolve_command_result`] 不同，成功值来自事务结果本身。
+    ///
+    /// # 参数
+    /// * `transaction_result` - 事务提交结果；成功时即返回该值。
+    /// * `idempotency_key` - 原命令幂等键。
+    /// * `operation` - 期望的命令操作名。
+    /// * `fingerprint` - 本次请求指纹。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 事务成功时返回其成功值；失败但找到可重放命令时返回已存结果。
+    ///
+    /// # 错误
+    /// 没有原命令时返回原事务错误。重读失败、指纹冲突或结果无法解码时，该错误优先于原事务错误。
     pub async fn resolve_written_result<T, E>(
         &self,
         transaction_result: std::result::Result<T, E>,

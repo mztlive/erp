@@ -64,11 +64,14 @@ impl ReplayOriginalReference {
 
     /// 返回 inbox canonical 引用。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `inbox_message:id:vN:requeued` 对应的值对象。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     ///
     /// # 约束
     /// 只读；不重新编码事实键。
@@ -78,11 +81,14 @@ impl ReplayOriginalReference {
 
     /// 返回不透明业务事实键。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回构造时冻结的事实键，含 `|` 等原字符。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     ///
     /// # 约束
     /// 不得把返回值当作证据 ID 再解析。
@@ -92,11 +98,14 @@ impl ReplayOriginalReference {
 
     /// 消费并返回可写入业务结果引用的编码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `{inbox};business_fact_key:{key}`。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     ///
     /// # 约束
     /// 不把整串交给 [`super::EvidenceReferenceSet`]；事实键保持原文。

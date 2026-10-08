@@ -224,6 +224,9 @@ pub struct CustomerActionBlockerView {
 ///
 /// # 返回
 /// 启用客户返回空集合；停用客户返回禁止新合同和新销售单的稳定阻断原因。
+///
+/// # 错误
+/// 不返回错误。
 pub fn customer_status_blockers(status: CustomerAccountStatus) -> Vec<CustomerActionBlockerView> {
     status
         .blocked_actions()

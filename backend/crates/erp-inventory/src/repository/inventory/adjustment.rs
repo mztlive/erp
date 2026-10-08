@@ -99,8 +99,18 @@ impl Default for StockAdjustmentFilter {
 impl QueryFilter for StockAdjustmentFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// 基底来自 `scoped_base_filter`（未删除，以及 `warehouse_ids`：`None` 不限仓库，空集合保持空 `$in`）。
+    /// 有值时按稳定代码匹配 `status`；`prepared_by_ids`、`id_in` 为 `Some` 时分别对 `prepared_by`、`id`
+    /// 做 `$in`（空集合无命中）。最后并入 `search`。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = scoped_base_filter(self.warehouse_ids.as_deref());
         if let Some(status) = self.status {
@@ -120,8 +130,16 @@ impl QueryFilter for StockAdjustmentFilter {
 impl Pagination for StockAdjustmentFilter {
     /// 返回页码与单页条数。
     ///
+    /// 原样返回 `page`，并把 `page_size` 从 `u32` 拓宽为 `u64`；不在此处把小于 1 的页码归一。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `(page, page_size)` 元组。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -375,6 +393,9 @@ impl<'a> InventoryRepository<'a> {
     /// * `adjustment` - 待写入的调整单表头
     /// * `lines` - 待写入的调整明细集合
     /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 返回
+    /// 表头与明细都写入完成。
     ///
     /// # 错误
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入

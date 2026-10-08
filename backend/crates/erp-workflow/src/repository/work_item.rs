@@ -147,8 +147,14 @@ impl WorkItemFilter {
 impl QueryFilter for WorkItemFilter {
     /// 构造与责任队列索引一致的 MongoDB 查询条件。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回包含软删除约束的查询文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_enum_filter(&mut filter, "status", &self.statuses, WorkItemStatus::as_str);
@@ -201,8 +207,14 @@ impl QueryFilter for WorkItemFilter {
 impl Pagination for WorkItemFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `(page, page_size)`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -274,6 +286,7 @@ fn insert_due_range(filter: &mut Document, due_from: Option<Instant>, due_before
     }
 }
 
+/// 将检索串按字面量转义后，在对象、原因和影响摘要上做忽略大小写匹配。
 fn literal_query_filter(query: &str) -> Document {
     let literal = regex::escape(query.trim());
     doc! {
@@ -287,6 +300,7 @@ fn literal_query_filter(query: &str) -> Document {
     }
 }
 
+/// 空对象形状失败关闭；否则按任务类型与对象类型成对匹配。
 fn object_access_shape_filter(shapes: &[(WorkItemType, String)]) -> Document {
     if shapes.is_empty() {
         return doc! { "id": { "$exists": false } };

@@ -147,8 +147,11 @@ impl ProductImportProcess {
     /// * `upload_id` - 分片上传标识
     /// * `request_id` - 幂等请求身份（须与对象键绑定）
     ///
+    /// # 返回
+    /// 分片上传已取消；上传已不存在也视为成功。
+    ///
     /// # 错误
-    /// 对象键与请求身份不一致或取消失败时返回错误；上传已不存在视为成功。
+    /// 对象键与请求身份不一致或取消失败时返回错误。
     pub async fn abort_direct_upload(
         &self,
         object_key: &str,

@@ -1,4 +1,4 @@
-//! Returns-domain application errors with the original unique-index mapping.
+//! 退货逆向领域错误，并保留原唯一索引冲突映射。
 
 use application_core::ErrorClass;
 use tracing::debug;
@@ -59,7 +59,16 @@ pub enum Error {
 }
 
 impl Error {
-    /// Stable error class used by HTTP mapping; do not parse display text.
+    /// 返回供 HTTP 映射使用的稳定错误类别；不要解析展示文案。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 `ErrorClass`。内部、`Logic` 与仓储错误为 `Internal`；冲突、回款重复与瞬态事务为 `Conflict`；业务、校验与不存在为 `BusinessRule`；权限与认证失败为 `Forbidden`；结果未知为 `Internal`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn class(&self) -> ErrorClass {
         match self {
             Self::Internal(_) | Self::Logic(_) | Self::RepositoryError(_) => ErrorClass::Internal,

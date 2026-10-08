@@ -21,6 +21,15 @@ pub struct PurchaseOrderService {
 }
 impl PurchaseOrderService {
     /// 使用给定数据库构造采购单域服务；事务由调用方执行器明确传入。
+    ///
+    /// # 参数
+    /// * `db` - 采购单所在数据库
+    ///
+    /// # 返回
+    /// 返回只持有数据库句柄的服务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }

@@ -53,8 +53,14 @@ pub enum ErrorClass {
 impl ErrorClass {
     /// 返回错误分类的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::CapabilityGap => "能力不足",
@@ -70,8 +76,14 @@ impl ErrorClass {
 
     /// 返回错误分类的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::CapabilityGap => "capability_gap",
@@ -90,8 +102,14 @@ impl ErrorClass {
     /// §7.7：网络超时、临时不可用和限流可按规则自动重试；参数/映射错误、业务明确
     /// 拒绝、鉴权或签名失败不自动重试；结果未知先查询原请求，不盲目重试。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 属于可自动重试分类时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn can_auto_retry(&self) -> bool {
         matches!(self, Self::TransientFailure | Self::RateLimited)
     }
@@ -101,8 +119,14 @@ impl ErrorClass {
     /// 结果未知必须先查询原结果；确认不存在后可安全重放。临时故障与限流
     /// 同样允许沿原业务事实键重放，其余分类失败关闭。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 允许在无结果结论后重放时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn allows_replay_after_no_result(self) -> bool {
         self.can_auto_retry() || self == Self::ResultUnknown
     }
@@ -128,8 +152,14 @@ pub enum ErrorTaskStatus {
 impl ErrorTaskStatus {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Pending => "待处理",
@@ -142,8 +172,14 @@ impl ErrorTaskStatus {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Pending => "pending",
@@ -163,6 +199,17 @@ impl DocumentState for ErrorTaskStatus {
     /// - 自动重试中因重试耗尽、鉴权失败或结果未知转人工，取得可验证终态则解决；
     /// - 重复或误派任务（含待处理/自动重试中/待人工）经证据核对后关闭；
     /// - 已解决/已关闭是终态，无出边。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回不含自身的静态后继切片：`Pending` 为 `AutoRetrying`、`ManualRequired`、
+    /// `Resolved`、`Closed`；`AutoRetrying` 为 `ManualRequired`、`Resolved`、`Closed`；
+    /// `ManualRequired` 为 `Resolved`、`Closed`；`Resolved` 与 `Closed` 为空切片。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Pending => &[Self::AutoRetrying, Self::ManualRequired, Self::Resolved, Self::Closed],
@@ -192,8 +239,14 @@ pub enum ResolutionType {
 impl ResolutionType {
     /// 返回解决方式的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::QueryConfirm => "查询确认",
@@ -206,8 +259,14 @@ impl ResolutionType {
 
     /// 返回解决方式的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::QueryConfirm => "query_confirm",
@@ -228,6 +287,9 @@ impl ResolutionType {
     ///
     /// # 返回
     /// 返回唯一解决方式。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn from_verified_evidence(has_compensation: bool, has_business_verification: bool) -> Self {
         if has_compensation {
             Self::Compensate
@@ -315,7 +377,8 @@ impl IntegrationErrorTask {
     /// 返回新建的错误任务实体。
     ///
     /// # 错误
-    /// 当消息与业务对象都为空、业务对象 ID 超长或责任字段超长时返回错误。
+    /// 消息与业务对象都缺失、业务对象 ID 或责任角色超长、处理人为空或为 `me`、
+    /// 或处理人组织为空、超长或为 `company` 时返回领域校验错误。
     pub fn new(id: IntegrationErrorTaskId, data: IntegrationErrorTaskData) -> Result<Self> {
         let business_object_id =
             normalize_optional_text(data.business_object_id, "业务对象ID", BUSINESS_OBJECT_ID_MAX_LEN)?;
@@ -357,6 +420,9 @@ impl IntegrationErrorTask {
     /// * `owner_user_id` - 当前处理人
     /// * `owner_org_unit_id` - 处理人内部组织
     ///
+    /// # 返回
+    /// 返回状态为待处理的错误任务；责任角色取该错误分类的固定角色。
+    ///
     /// # 错误
     /// 关联缺失、处理人/组织非法时返回领域校验错误。
     pub fn with_derived_owner_role(
@@ -391,7 +457,7 @@ impl IntegrationErrorTask {
     /// 更新成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 当责任字段超长时返回错误。
+    /// 责任角色超长，或给出的处理人为空、为 `me` 或超长时返回领域校验错误。
     pub fn update(&mut self, update: IntegrationErrorTaskUpdate) -> Result<()> {
         self.owner_role = normalize_optional_text(update.owner_role, "责任角色", OWNER_ROLE_MAX_LEN)?;
         if update.owner_user_id.is_some() {
@@ -445,7 +511,7 @@ impl IntegrationErrorTask {
     /// 记录成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 终态（已解决/已关闭）任务不允许再记录尝试时返回错误。
+    /// 任务已是已解决或已关闭，或最近尝试结果超长时返回领域校验错误。
     pub fn record_attempt(&mut self, at: Instant, summary: Option<String>) -> Result<()> {
         if self.is_terminal() {
             return Err(Error::from("终态任务不允许再记录尝试"));
@@ -501,16 +567,28 @@ impl IntegrationErrorTask {
 
     /// 判断任务是否处于终态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为已解决或已关闭时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_terminal(&self) -> bool {
         matches!(self.status, ErrorTaskStatus::Resolved | ErrorTaskStatus::Closed)
     }
 
     /// 判断最近一次动作是否已由服务端确认原动作无结果。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 最近摘要同时包含查询原结果动作与无结果结论时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn prior_query_confirmed_no_result(&self) -> bool {
         self.last_attempt_summary.as_deref().is_some_and(|summary| {
             summary.contains("w29_action=QUERY_ORIGINAL_RESULT")
@@ -520,8 +598,14 @@ impl IntegrationErrorTask {
 
     /// 判断当前任务是否满足人工重放的全部纯领域前置条件。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 服务端已确认原动作无结果，且错误分类允许重放时返回 `true`。
+    /// 任务尚未终态、服务端已确认原动作无结果，且错误分类允许重放时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn can_replay_original(&self) -> bool {
         !self.is_terminal()
             && self.prior_query_confirmed_no_result()
@@ -535,6 +619,9 @@ impl IntegrationErrorTask {
     ///
     /// # 返回
     /// 去除首尾空白后与当前乐观锁版本一致时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn has_subject_version(&self, expected: &str) -> bool {
         self.base.version.to_string() == expected.trim()
     }
@@ -544,8 +631,14 @@ impl IntegrationErrorTask {
     /// 要求错误分类可自动重试（§7.7）且任务仍处于待处理/自动重试中（转人工后由
     /// 人工决定，人工重放仍使用原幂等键）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 允许自动重试时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn can_auto_retry(&self) -> bool {
         self.error_class.can_auto_retry()
             && matches!(self.status, ErrorTaskStatus::Pending | ErrorTaskStatus::AutoRetrying)

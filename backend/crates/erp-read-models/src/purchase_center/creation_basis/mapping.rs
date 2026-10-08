@@ -69,6 +69,18 @@ pub(super) fn build_basis_view(
 }
 
 /// 构造一个现有库存供给依据视图。
+///
+/// # 参数
+/// * `order` - 销售稳定单。
+/// * `group` - 现有库存供给分组。
+/// * `sales_owner_name` - 销售负责人展示名。
+/// * `work_item_id` - 冻结本依据责任范围的开放任务。
+///
+/// # 返回
+/// 返回现有库存供给依据视图。
+///
+/// # 错误
+/// 履约期限无法转换为业务日期时返回错误。
 pub(super) fn build_stock_basis_view(
     order: &SalesOrderBasisFact,
     group: &StockBasisGroup,

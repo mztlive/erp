@@ -207,8 +207,18 @@ impl<'a> PartyDomainRepository<'a> {
 
     /// 精确匹配当前法定名称，兼容空白及全半角括号。
     ///
-    /// # Errors
-    /// 名称查询或主体读取失败时返回仓储错误。
+    /// 去掉空白后为空时不查询。匹配忽略大小写，括号同时接受全角与半角。
+    /// 只保留 `current_revision_id` 指向命中修订的主体。
+    ///
+    /// # 参数
+    /// * `name` - 法定名称。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 返回命中的主体 ID；空白名称或没有命中修订时返回空列表。
+    ///
+    /// # 错误
+    /// 修订或主体查询失败时返回仓储错误。
     pub async fn exact_current_party_ids_by_name(
         &self,
         name: &str,
@@ -301,6 +311,10 @@ impl<'a> PartyDomainRepository<'a> {
     /// * `updated_by` - 本次变更执行人
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
+    /// # 返回
+    /// 成功时无额外返回值：修订已插入，且主体当前修订指针已切换。
+    /// 插入成功后会先改写内存中的 `party`；随后的 CAS 更新失败时，该内存改动仍保留。
+    ///
     /// # 错误
     /// 当修订违反 `(party_id, revision_no)` 唯一索引（透出
     /// [`persistence_core::Error::DuplicateKey`]）、主体版本冲突（返回
@@ -323,7 +337,18 @@ impl<'a> PartyDomainRepository<'a> {
 impl PartyDomainRepository<'_> {
     /// 按当前名称或统一社会信用代码查找未删除主体。
     ///
-    /// 返回去重主体 ID；名称复用当前修订规则。数据库错误向调用方传播。
+    /// 名称复用当前修订匹配。信用代码对未删除主体的 `unified_credit_code` 做字面量正则匹配。
+    /// 两路结果合并、去重，并按 ID 字符串排序。
+    ///
+    /// # 参数
+    /// * `keyword` - 名称或统一社会信用代码关键词。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 返回去重并排序后的主体 ID。
+    ///
+    /// # 错误
+    /// 名称查询或信用代码 `distinct` 失败时返回仓储错误。
     pub async fn matching_current_party_ids(
         &self,
         keyword: &str,

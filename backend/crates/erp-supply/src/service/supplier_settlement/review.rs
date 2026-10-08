@@ -36,6 +36,9 @@ pub fn review_owner_organization_id(statement: &SupplierSettlementStatement) -> 
 ///
 /// # 返回
 /// 角色与内部组织均匹配时为 `true`；公司根或组织不一致为 `false`。
+///
+/// # 错误
+/// 不返回错误。组织非法时视为不匹配。
 pub fn review_task_identity_matches(
     owner_role: &str,
     owner_organization_id: &str,
@@ -45,6 +48,19 @@ pub fn review_task_identity_matches(
         && review_owner_organization_id(statement).is_ok_and(|org| owner_organization_id == org)
 }
 
+/// 校验经办人仍可编辑结算单，且冻结明细存在、差异已纳入当前主题。
+///
+/// # 参数
+/// * `db` - 结算集合所在数据库。
+/// * `statement` - 待提交复核的结算单。
+/// * `actor_id` - 操作人。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 可以提交时无返回值。
+///
+/// # 错误
+/// 操作人不是经办人或结算单不可编辑时返回 `ConflictError`。没有冻结明细时返回 `BusinessLogicError`。主题与差异结论不一致时返回 `BusinessLogicError` 或 `ConflictError`。仓储读取失败时返回对应错误。
 pub async fn ensure_review_submission_ready(
     db: &Database,
     statement: &SupplierSettlementStatement,
@@ -62,6 +78,17 @@ pub async fn ensure_review_submission_ready(
     ensure_current_subject_and_resolved_differences(statement, &differences)
 }
 
+/// 校验提交动作是 `SubmitReview`，且主题摘要与刷新截止策略仍是当前快照。
+///
+/// # 参数
+/// * `statement` - 当前结算单。
+/// * `req` - 提交复核请求。
+///
+/// # 返回
+/// 快照一致时无返回值。
+///
+/// # 错误
+/// 动作不是提交复核时返回 `ValidationError`。主题或截止策略已变化时返回 `ConflictError`。
 pub fn validate_review_submission_snapshot(
     statement: &SupplierSettlementStatement,
     req: &SubmitSettlementReviewRequest,
@@ -78,6 +105,17 @@ pub fn validate_review_submission_snapshot(
         .map_err(|_| Error::ConflictError("结算主题或刷新截止策略已变化，请刷新后重试".to_string()))
 }
 
+/// 校验结算主题摘要与当前差异结论一致。
+///
+/// # 参数
+/// * `statement` - 当前结算单。
+/// * `differences` - 结算明细上的正式差异。
+///
+/// # 返回
+/// 主题与差异一致时无返回值。
+///
+/// # 错误
+/// 仍有待处理差异时，主题校验失败返回 `BusinessLogicError`。没有待处理差异但摘要不一致时返回 `ConflictError`。
 pub fn ensure_current_subject_and_resolved_differences(
     statement: &SupplierSettlementStatement,
     differences: &[SupplierSettlementDifference],
@@ -91,6 +129,18 @@ pub fn ensure_current_subject_and_resolved_differences(
     })
 }
 
+/// 构造复核动作阻塞视图，不另加资格判断。
+///
+/// # 参数
+/// * `action` - 被阻塞的动作名。
+/// * `code` - 阻塞代码。
+/// * `message` - 阻塞说明。
+///
+/// # 返回
+/// 返回复核动作阻塞视图。
+///
+/// # 错误
+/// 不返回错误。
 pub fn review_blocker(action: &str, code: &str, message: &str) -> dto::SettlementReviewActionBlockerView {
     dto::SettlementReviewActionBlockerView {
         action: action.to_string(),
@@ -99,6 +149,18 @@ pub fn review_blocker(action: &str, code: &str, message: &str) -> dto::Settlemen
     }
 }
 
+/// 按资格、岗位分离和任务归属投影复核动作。
+///
+/// # 参数
+/// * `owned` - 当前账号是否负责该复核任务。
+/// * `eligible` - 当前账号是否具备财务角色和组织范围。
+/// * `separation_satisfied` - 当前账号是否不是结算经办人。
+///
+/// # 返回
+/// 返回允许的动作名和阻塞原因。不具备资格、岗位分离不满足或不负责任务时动作为空。三者都满足时允许 `REJECT` 与 `CONFIRM`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn settlement_review_access(
     owned: bool,
     eligible: bool,
@@ -132,6 +194,17 @@ pub fn settlement_review_access(
         vec![review_blocker("REVIEW_DECISION", "CURRENT_OWNER_MISMATCH", "该复核任务当前由其他账号负责")],
     )
 }
+/// 拒绝结算经办人复核自己的结算单。
+///
+/// # 参数
+/// * `statement` - 当前结算单。
+/// * `actor_id` - 复核操作人。
+///
+/// # 返回
+/// 操作人不是经办人时无返回值。
+///
+/// # 错误
+/// 操作人是经办人时返回 `Forbidden`。
 pub fn ensure_reviewer_separation(statement: &SupplierSettlementStatement, actor_id: &str) -> Result<()> {
     if statement.is_prepared_by(actor_id) {
         return Err(Error::Forbidden("结算经办人不得复核自己的结算单".to_string()));

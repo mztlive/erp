@@ -1,6 +1,6 @@
-//! Collection-scoped aliases for [`persistence_core::Repository`].
+//! [`persistence_core::Repository`] 的按集合别名。
 //!
-//! Domain-specific methods are extension traits on the generic repository.
+//! 领域方法是泛型仓储上的扩展 trait。
 
 pub type StockAdjustmentRepository<'a> =
     persistence_core::Repository<'a, crate::entity::inventory::StockAdjustment>;

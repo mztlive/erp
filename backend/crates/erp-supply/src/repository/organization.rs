@@ -9,6 +9,15 @@ use crate::entity::supplier_fulfillment::{CancelStatus, FulfillmentStatus, Refun
 
 /// 检查组织是否仍持有未完成履约、在途动作或未确认结算。
 ///
+/// # 参数
+/// * `db` - 目标数据库
+/// * `org` - 业务组织标识
+/// * `executor` - 数据访问执行器
+///
+/// # 返回
+/// 存在未确认且未作废的结算单、未结履约订单，或这些订单上状态不是
+/// `SUCCEEDED`/`FAILED` 的动作时返回 `true`；否则返回 `false`。
+///
 /// # 错误
 /// 数据库读取失败时拒绝完成停用检查。
 pub async fn has_unsettled_business_org(
@@ -48,6 +57,7 @@ pub async fn has_unsettled_business_org(
         .await
 }
 
+/// 取消或退款仍在途，或主状态未终态且尚未取消、尚未全额退款时，订单仍算未结。
 fn unsettled_order(main: FulfillmentStatus, cancel: CancelStatus, refund: RefundStatus) -> bool {
     matches!(cancel, CancelStatus::CancelPending | CancelStatus::Manual)
         || matches!(refund, RefundStatus::RefundPending | RefundStatus::Manual)

@@ -1,4 +1,4 @@
-//! Independent dictionary candidates and internal authorized duplicate hints.
+//! 独立字典候选与经授权的内部重复提示。
 
 use std::collections::HashSet;
 
@@ -128,7 +128,7 @@ impl Pagination for CandidateFilter {
 }
 
 impl CatalogPortalService {
-    /// Query enabled dictionary values independently from any product result list.
+    /// 独立于商品结果列表，查询已启用的字典值。
     /// # 参数
     /// `kind` 为字典类型，`q` 为字面搜索；分类可按商品类型收窄。
     /// # 返回
@@ -203,6 +203,17 @@ impl CatalogPortalService {
         Ok(candidates)
     }
 
+    /// 拼接当前分类从根到自身的路径文本。
+    ///
+    /// # 参数
+    /// * `category` - 目标分类
+    /// * `executor` - 当前读取执行器
+    ///
+    /// # 返回
+    /// 返回完整分类路径。
+    ///
+    /// # 错误
+    /// 目标或祖先停用、缺失、类型不一致、路径循环或数据库错误时返回对应错误。
     pub(super) async fn category_path(
         &self,
         category: &ProductCategory,
@@ -252,7 +263,7 @@ impl CatalogPortalService {
         Ok(nodes)
     }
 
-    /// Return internal duplicate hints only after catalog object authorization.
+    /// 仅在商品对象授权通过后返回内部重复提示。
     /// # 参数
     /// `q` 为商品、型号、SKU规格或条码的字面搜索，`actor` 为当前内部审核人。
     /// # 返回

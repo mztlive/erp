@@ -177,8 +177,18 @@ pub struct SupplierSettlementStatementStatsRow {
 impl QueryFilter for SupplierSettlementStatementFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// 供应商、状态、期间上下界与结算单号按字段写入。关键词、授权范围、对账负责人、差异处理人、
+    /// 复核人与业务组织经 `narrowing_conditions` 以 `$and` 收窄。`handler_user_ids` 为 `Some` 时
+    /// 只按 `handler_open_statement_ids` 收窄；该集合为空则条件为 `$expr: false`。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(supplier_id) = &self.supplier_id {
@@ -270,8 +280,14 @@ fn handler_clause(open_ids: &[String]) -> Document {
 impl Pagination for SupplierSettlementStatementFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组。`page_size` 由 `u32` 转为 `u64`，页码不在此方法内归一。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -289,6 +305,9 @@ pub trait SupplierSettlementStatementRepositoryExt {
     ///
     /// # 返回
     /// 不存在或不在范围内均返回 `None`。
+    ///
+    /// # 错误
+    /// 仓储查询失败时返回对应错误。
     ///
     /// # 关键业务约束
     /// ID 条件不能替换范围交集；空授权不得返回文档。
@@ -401,6 +420,20 @@ pub trait SupplierSettlementStatementRepositoryExt {
     ) -> Result<Option<SupplierSettlementStatement>>;
 
     /// 按列表完全相同的过滤条件计算跨页状态和确认金额汇总。
+    ///
+    /// 用 `filter` 的查询文档做 `$match`，再汇总 `PENDING_RECONCILIATION`、
+    /// `HAS_DIFFERENCE`、`PENDING_REVIEW` 的笔数，以及状态为 `CONFIRMED` 的
+    /// `erp_amount`。有会话时走同一会话。
+    ///
+    /// # 参数
+    /// * `filter` - 与列表相同的筛选条件
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回聚合的第一行；管道没有结果行时返回 `None`。
+    ///
+    /// # 错误
+    /// 聚合执行、游标读取或结果反序列化失败时返回对应错误。
     async fn aggregate_supplier_settlement_statement_stats(
         &self,
         filter: &SupplierSettlementStatementFilter,
@@ -409,7 +442,18 @@ pub trait SupplierSettlementStatementRepositoryExt {
 
     /// 按业务编号返回全部匹配身份，供跨域列表在分页前筛选。
     ///
-    /// 只投影 ID、排除软删除；数据库错误向上返回。
+    /// 对 `statement_no` 与 `external_bill_no` 做忽略大小写的字面量匹配，
+    /// 排除软删除后用 `distinct` 取 `id`。
+    ///
+    /// # 参数
+    /// * `keyword` - 业务编号字面量
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回匹配到的字符串 ID；非字符串值会被丢弃。
+    ///
+    /// # 错误
+    /// 查询失败时返回对应错误。
     async fn matching_ids_by_number(&self, keyword: &str, executor: &mut dyn Executor)
     -> Result<Vec<String>>;
 }
@@ -582,6 +626,16 @@ impl SupplierSettlementStatementRepositoryExt for SupplierSettlementStatementRep
 #[allow(async_fn_in_trait)]
 pub trait SupplierSettlementSourceEvidenceRepositoryExt {
     /// 按稳定请求 ID 查找不可变来源证据批次。
+    ///
+    /// # 参数
+    /// * `request_id` - 稳定请求 ID
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回匹配批次；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 查询失败时返回对应错误。
     async fn find_by_request_id(
         &self,
         request_id: &str,
@@ -589,6 +643,22 @@ pub trait SupplierSettlementSourceEvidenceRepositoryExt {
     ) -> Result<Option<SupplierSettlementSourceEvidence>>;
 
     /// 读取供应商、周期与策略版本下最新的完整来源证据批次。
+    ///
+    /// 排除软删除，按 `source_version`、`created_at`、`id` 降序只取一条。
+    ///
+    /// # 参数
+    /// * `supplier_id` - 结算供应商
+    /// * `period_start` - 结算期间开始
+    /// * `period_end` - 结算期间结束
+    /// * `period_policy_id` - 期间策略 ID
+    /// * `period_policy_version` - 期间策略版本
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回最新一条；没有匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 查询失败时返回对应错误。
     async fn latest_for_period(
         &self,
         supplier_id: &SupplierAccountId,
@@ -600,6 +670,20 @@ pub trait SupplierSettlementSourceEvidenceRepositoryExt {
     ) -> Result<Option<SupplierSettlementSourceEvidence>>;
 
     /// 读取供应商与周期下最近登记的完整来源证据，用于创建前服务端预检。
+    ///
+    /// 不按策略版本过滤。排除软删除，按 `created_at`、`source_version`、`id` 降序只取一条。
+    ///
+    /// # 参数
+    /// * `supplier_id` - 结算供应商
+    /// * `period_start` - 结算期间开始
+    /// * `period_end` - 结算期间结束
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回最近一条；没有匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 查询失败时返回对应错误。
     async fn latest_for_scope(
         &self,
         supplier_id: &SupplierAccountId,

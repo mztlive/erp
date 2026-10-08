@@ -23,6 +23,9 @@ type HmacSha256 = Hmac<Sha256>;
 ///
 /// # 返回
 /// 返回 32 字节摘要。
+///
+/// # Panics
+/// `HmacSha256::new_from_slice` 对任意长度密钥应成功；若该前提不成立则 `expect` panic。
 fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; 32] {
     let mut mac = HmacSha256::new_from_slice(key).expect("HMAC-SHA256 accepts any key length");
     mac.update(data);
@@ -37,6 +40,9 @@ fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; 32] {
 ///
 /// # 返回
 /// 返回 64 位小写 hex 指纹。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn hmac_sha256_hex(key: &[u8], data: &[u8]) -> String {
     hmac_sha256(key, data).iter().map(|b| format!("{b:02x}")).collect()
 }
@@ -48,6 +54,9 @@ pub(crate) fn hmac_sha256_hex(key: &[u8], data: &[u8]) -> String {
 ///
 /// # 返回
 /// 返回可用于指纹与精确查询的规范化账号。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn normalize_account_number(plain: &str) -> String {
     plain
         .chars()
@@ -64,6 +73,9 @@ pub(crate) fn normalize_account_number(plain: &str) -> String {
 ///
 /// # 返回
 /// 返回可用于指纹与精确查询的规范化手机号。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn normalize_mobile(plain: &str) -> String {
     plain.trim().to_string()
 }
@@ -75,6 +87,9 @@ pub(crate) fn normalize_mobile(plain: &str) -> String {
 ///
 /// # 返回
 /// 返回可用于指纹与精确查询的规范化地址。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn normalize_address(plain: &str) -> String {
     plain.split_whitespace().collect::<Vec<_>>().join(" ").trim().to_string()
 }

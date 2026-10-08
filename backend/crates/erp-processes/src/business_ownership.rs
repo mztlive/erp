@@ -12,8 +12,16 @@ use crate::{Error, Result};
 
 /// 解析有效后台责任人的唯一主属组织，不默认放入根组织或系统账号。
 ///
+/// # 参数
+/// * `db` - 账号与组织所在数据库。
+/// * `user` - 业务负责人账号。
+/// * `executor` - 调用方读或事务执行器。
+///
+/// # 返回
+/// 返回仍启用的主属组织 ID。
+///
 /// # 错误
-/// 账号、成员或组织事实缺失及失效时阻断业务创建。
+/// 账号不是有效后台账号、缺少有效主属组织、组织树无法构造或所属组织已停用时返回业务错误。仓储失败时返回对应错误。
 pub async fn required_business_org(db: &Database, user: &str, executor: &mut dyn Executor) -> Result<String> {
     db.accounts()
         .find_by_id(user, executor)
@@ -32,8 +40,17 @@ pub async fn required_business_org(db: &Database, user: &str, executor: &mut dyn
 
 /// 在正式写入事务中重验预先采集的组织，调岗后不得提交旧建单计划。
 ///
+/// # 参数
+/// * `db` - 账号与组织所在数据库。
+/// * `user` - 业务负责人账号。
+/// * `org` - 预先采集的主属组织 ID。
+/// * `executor` - 正式写入事务的执行器。
+///
+/// # 返回
+/// 当前主属组织仍等于 `org` 时返回。
+///
 /// # 错误
-/// 组织变化或责任事实失效时拒绝并由根事务回滚。
+/// 责任事实失效时返回 `required_business_org` 的错误；组织已变化时返回冲突。
 pub async fn ensure_creation_org(
     db: &Database,
     user: &str,
@@ -48,8 +65,19 @@ pub async fn ensure_creation_org(
 
 /// 按单据负责销售和业务组织采集历史归属，组织路径包含根至当前节点。
 ///
+/// 不按人员当前组织补写。
+///
+/// # 参数
+/// * `db` - 账号与组织所在数据库。
+/// * `order` - 提供负责销售和业务组织的销售单。
+/// * `at` - 归属采集时刻。
+/// * `executor` - 调用方读或事务执行器。
+///
+/// # 返回
+/// 返回含人员姓名、组织路径和组织版本的归属快照。
+///
 /// # 错误
-/// 缺账号、业务组织或完整路径时拒绝首次生效，不按人员当前组织补写。
+/// 负责销售已失效、业务组织缺失或停用、组织树或路径无法解析，或快照与单据字段不一致时返回错误。仓储失败时返回对应错误。
 pub async fn sales_attribution(
     db: &Database,
     order: &SalesOrder,
@@ -86,10 +114,18 @@ pub async fn sales_attribution(
     Ok(snapshot)
 }
 
-/// 生效事务重验准备阶段的归属事实，快照失败时不允许提交单据生效。
+/// 生效事务重验准备阶段的归属事实，快照不一致时不允许提交单据生效。
+///
+/// # 参数
+/// * `db` - 账号与组织所在数据库。
+/// * `order` - 已带归属快照的销售单。
+/// * `executor` - 生效事务的执行器。
+///
+/// # 返回
+/// 按原归属时刻重算的快照与冻结快照一致时返回。
 ///
 /// # 错误
-/// 人员更名、组织移动或责任事实变化均要求重新准备生效计划。
+/// 缺少冻结快照、重算失败，或人员、组织、路径等事实已变化时返回错误。
 pub async fn ensure_attribution(
     db: &Database,
     order: &SalesOrder,

@@ -43,7 +43,7 @@ const ACCOUNT_KIND_ADMIN: &str = "admin";
 /// * `secret` - 与 web-api 配置一致的 JWT 密钥（至少 32 字节）
 /// * `exp_seconds` - token 有效期（秒）
 ///
-/// # 返回值
+/// # 返回
 /// 返回可直接放入 `Authorization: Bearer <token>` 的 JWT。
 ///
 /// # 错误

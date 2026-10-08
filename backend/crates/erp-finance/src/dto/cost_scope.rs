@@ -8,8 +8,18 @@ use super::cost::{CostEntryView, ScopedCostEntryView};
 impl CostEntryView {
     /// 根据独立整笔资格及可见销售分配生成读取视图。
     ///
+    /// 本方法消耗 `self`。
+    ///
+    /// # 参数
+    /// * `whole` - 是否具备整笔读取资格。
+    /// * `orders` - 可见销售单 ID。
+    ///
     /// # 返回
-    /// 无整笔资格且无可见分配返回 None；部分金额保持原始分配正反事实。
+    /// 无整笔资格且无可见分配返回 `None`；部分金额保持原始分配正反事实。
+    /// 无整笔资格时整笔金额与来源单据字段为 `None`，范围金额只合计可见分配。
+    ///
+    /// # 错误
+    /// 可见份额合计超出金额上限时返回 `ValidationError`；合计无法构成金额时返回 `Logic`。
     pub fn restrict(
         self,
         whole: bool,

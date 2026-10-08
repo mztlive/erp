@@ -34,6 +34,16 @@ pub(super) enum TimeoutSource {
 }
 
 impl TimeoutSource {
+    /// 返回超时发生阶段的稳定诊断名。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `connect`、`response_headers` 或 `response_body`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn as_str(self) -> &'static str {
         match self {
             Self::Connect => "connect",
@@ -49,6 +59,17 @@ pub(super) struct BoundedHttp {
 }
 
 impl BoundedHttp {
+    /// 构造不跟随重定向、不重试、连接超时 5 秒的 HTTP 客户端。
+    ///
+    /// # 参数
+    /// * `timeout` - 整次请求超时。
+    /// * `diagnostics` - 随响应写入的诊断记录。
+    ///
+    /// # 返回
+    /// 有界传输客户端。
+    ///
+    /// # 错误
+    /// 客户端构建失败时返回 `Failure::Unavailable`。
     pub(super) fn new(timeout: Duration, diagnostics: Diagnostics) -> Result<Self, Failure> {
         Client::builder()
             .connect_timeout(Duration::from_secs(5))

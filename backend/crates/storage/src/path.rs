@@ -3,6 +3,18 @@ use std::path::{Component, Path};
 use crate::{Error, Result};
 
 /// 将相对路径转换为跨平台 S3 对象键。
+///
+/// 跳过 `.` 分量，其余正常分量原样保留。
+///
+/// # 参数
+/// * `path` - 待转换的相对路径。
+///
+/// # 返回
+/// 成功时返回以 `/` 连接的对象键。
+///
+/// # 错误
+/// 路径为空或为绝对路径、正常分量不是 UTF-8 或含 `\`、遇到 `ParentDir`、`RootDir` 或 `Prefix`，
+/// 或没有正常分量时，返回 `Error::PathError`。
 pub(super) fn object_key_path(path: &Path) -> Result<String> {
     if path.as_os_str().is_empty() || path.is_absolute() {
         return Err(Error::PathError("存储路径必须是非空相对路径".to_string()));
@@ -38,12 +50,30 @@ pub(super) fn object_key_path(path: &Path) -> Result<String> {
     Ok(key)
 }
 
-/// 空或带首尾空白的配置值一律拒绝，与上传键约束同口径。
+/// 判断配置值是否为空，或带有首尾空白。
+///
+/// # 参数
+/// * `value` - 待检查的配置文本。
+///
+/// # 返回
+/// `trim` 后为空，或 `trim` 结果与原值不同时返回 `true`，否则返回 `false`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn is_blank_or_padded(value: &str) -> bool {
     value.trim().is_empty() || value.trim() != value
 }
 
-/// 将可选对象键前缀规范为不带首尾分隔符的相对键。
+/// 校验可选对象键前缀；合法时原样返回，不裁剪、不改写。
+///
+/// # 参数
+/// * `prefix` - 配置中的对象键前缀。`None` 表示不使用前缀。
+///
+/// # 返回
+/// `prefix` 为 `None` 时返回 `Ok(None)`。格式合法时返回 `Ok(Some(prefix))`，内容与入参相同。
+///
+/// # 错误
+/// 前缀为空白或含首尾空白、以 `/` 开头或结尾、含 `\`，或任一段为空、`.` 或 `..` 时，返回 `Error::InvalidConfig`。
 pub(super) fn normalize_prefix(prefix: Option<String>) -> Result<Option<String>> {
     let Some(prefix) = prefix else {
         return Ok(None);

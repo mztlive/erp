@@ -1,4 +1,4 @@
-//! Consumer port for party-owned sensitive-field reveal tokens.
+//! 主体持有的敏感字段揭示令牌消费方端口。
 
 use crate::error::{Error, Result};
 
@@ -19,13 +19,16 @@ pub enum SensitiveFieldKindFact {
 pub trait SensitiveTokenPort: Send + Sync {
     /// 签发受字段、事实行和供应商约束的短时令牌。
     ///
-    /// # Parameters
+    /// # 参数
     /// * `kind` - 敏感字段种类
     /// * `record_id` - 事实行 ID
     /// * `supplier_id` - 供应商角色 ID
     /// * `expires_at` - 过期 Unix 秒
     ///
-    /// # Errors
+    /// # 返回
+    /// 成功时返回令牌字符串。
+    ///
+    /// # 错误
     /// 令牌序列化或签名失败时返回内部错误。
     fn issue_reveal_token(
         &self,

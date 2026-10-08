@@ -43,7 +43,10 @@ impl InitializeSuperAdminParams {
     ///
     /// 账号与名称会按各自领域规则去除首尾空白，密码保持原值。
     ///
-    /// # 返回值
+    /// # 参数
+    /// 消耗 `self`。
+    ///
+    /// # 返回
     /// 返回规范化后的登录账号、密码与管理员名称。
     ///
     /// # 错误
@@ -89,7 +92,10 @@ impl ResetAdminPasswordParams {
     ///
     /// 账号按登录账号规则去除首尾空白，密码保持原值。
     ///
-    /// # 返回值
+    /// # 参数
+    /// 消耗 `self`。
+    ///
+    /// # 返回
     /// 返回规范化后的登录账号与明文密码。
     ///
     /// # 错误
@@ -248,8 +254,11 @@ impl AdminItem {
     /// * `account` - 管理员统一账号实体
     /// * `role_ids` - 管理员角色ID集合
     ///
-    /// # 返回值
-    /// 返回管理员响应结构
+    /// # 返回
+    /// 返回管理员响应结构。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn from_account(account: AccountCore, role_ids: Vec<String>) -> Self {
         Self {
             id: account.base.id,

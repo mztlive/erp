@@ -30,6 +30,12 @@ pub(crate) const APPROVAL_HTTP_ACTION_PERMISSIONS: &[&str] = &[
 
 /// 将仍保持领取/诊断/恢复种子的角色精确升级到 11 个审批动作权限。
 ///
+/// # 参数
+/// * `rbac` - 共享 RBAC 服务。
+///
+/// # 返回
+/// 全部预定义角色检查或升级完成后无返回值。
+///
 /// # 错误
 /// 权限解析或 Casbin 写入失败时返回错误。
 pub(crate) async fn upgrade_approval_http_permissions(rbac: &SharedRbacService) -> Result<()> {
@@ -38,8 +44,15 @@ pub(crate) async fn upgrade_approval_http_permissions(rbac: &SharedRbacService) 
 
 /// 从当前目标权限还原删除领取/诊断权限前的精确快照。
 ///
+/// # 参数
+/// * `role_id` - 预定义角色 ID；本快照不按角色区分。
+/// * `desired` - 当前推荐权限。
+///
+/// # 返回
+/// 返回去掉本轮审批 HTTP 动作后的权限列表。
+///
 /// # 错误
-/// 旧权限字符串无法解析时返回错误。
+/// 没有失败路径，总是返回 `Ok`。
 pub(crate) fn approval_http_legacy_snapshot(
     role_id: &str,
     desired: &[Permission],
@@ -50,6 +63,15 @@ pub(crate) fn approval_http_legacy_snapshot(
 }
 
 /// 将仍保持旧工作流权限种子的角色收紧为显式最小动作。
+///
+/// # 参数
+/// * `rbac` - 共享 RBAC 服务。
+///
+/// # 返回
+/// 全部预定义角色检查或升级完成后无返回值。
+///
+/// # 错误
+/// 权限解析或 Casbin policy 写入失败时返回错误。
 pub(crate) async fn upgrade_workflow_permissions(rbac: &SharedRbacService) -> Result<()> {
     upgrade_all_roles_from_snapshot(rbac, legacy_workflow_permission_snapshot).await
 }
@@ -103,6 +125,16 @@ async fn upgrade_roles_by_removing(
 }
 
 /// 从当前目标权限确定性还原 D03 落地前的工作流权限快照。
+///
+/// # 参数
+/// * `role_id` - 预定义角色 ID，用来决定补回的旧工作流权限。
+/// * `desired` - 当前推荐权限。
+///
+/// # 返回
+/// 返回去掉当前审批与工作项细项、并补回旧通配或审批动作后的权限。
+///
+/// # 错误
+/// 补回的旧权限字符串无法解析时返回错误。
 pub(crate) fn legacy_workflow_permission_snapshot(
     role_id: &str,
     desired: &[Permission],
@@ -131,6 +163,15 @@ pub(crate) fn legacy_workflow_permission_snapshot(
 }
 
 /// 仅将仍保持历史默认种子的销售角色收紧为公司商品池只读权限。
+///
+/// # 参数
+/// * `rbac` - 共享 RBAC 服务。
+///
+/// # 返回
+/// 各历史快照都尝试升级后无返回值；未精确命中旧种子时不改权限。
+///
+/// # 错误
+/// 权限解析或 Casbin policy 写入失败时返回错误。
 pub(crate) async fn upgrade_sales_role_permissions(rbac: &SharedRbacService) -> Result<()> {
     let desired = parse_permissions(SALES_PERMISSIONS)?;
     for previous in sales_legacy_permission_snapshots(&desired)? {
@@ -140,6 +181,15 @@ pub(crate) async fn upgrade_sales_role_permissions(rbac: &SharedRbacService) -> 
 }
 
 /// 构造销售角色已知历史默认权限快照，管理员自定义权限不在匹配范围内。
+///
+/// # 参数
+/// * `desired` - 当前销售推荐权限。
+///
+/// # 返回
+/// 按从近到远的顺序返回选品、商品池和客户边界三份旧快照。
+///
+/// # 错误
+/// 补回的旧权限字符串无法解析时返回错误。
 pub(crate) fn sales_legacy_permission_snapshots(desired: &[Permission]) -> Result<Vec<Vec<Permission>>> {
     let before_selection = remove_permissions(
         desired,
@@ -191,6 +241,15 @@ pub(crate) fn sales_legacy_permission_snapshots(desired: &[Permission]) -> Resul
 ///
 /// 登记回款/销项发票的往来主体选择器调用 `GET /admin/parties`（`party:list`），
 /// 财务角色缺该权限时无法选择结算主体（E2E flow-01 W11 复现）。
+///
+/// # 参数
+/// * `rbac` - 共享 RBAC 服务。
+///
+/// # 返回
+/// 各历史快照都尝试升级后无返回值；未精确命中旧种子时不改权限。
+///
+/// # 错误
+/// 权限解析或 Casbin policy 写入失败时返回错误。
 pub(crate) async fn upgrade_finance_role_party_read_permissions(rbac: &SharedRbacService) -> Result<()> {
     let desired = parse_permissions(FINANCE_PERMISSIONS)?;
     for previous in finance_legacy_permission_snapshots(&desired)? {
@@ -204,6 +263,15 @@ pub(crate) const FINANCE_PARTY_READ_GAP_PERMISSIONS: &[&str] =
     &["party:list", "party:detail", "party_revision:list"];
 
 /// 构造可安全识别的历史财务默认权限快照。
+///
+/// # 参数
+/// * `desired` - 当前财务推荐权限。
+///
+/// # 返回
+/// 返回去掉不同历史缺口后的多份旧快照。
+///
+/// # 错误
+/// 不返回错误；移除权限不会解析新的权限字符串。
 pub(crate) fn finance_legacy_permission_snapshots(desired: &[Permission]) -> Result<Vec<Vec<Permission>>> {
     Ok(vec![
         remove_permissions(desired, &["party_revision:list"]),
@@ -227,6 +295,15 @@ pub(crate) fn finance_legacy_permission_snapshots(desired: &[Permission]) -> Res
 }
 
 /// 仅为仍保持历史默认种子的采购角色补齐当前供应商维护权限。
+///
+/// # 参数
+/// * `rbac` - 共享 RBAC 服务。
+///
+/// # 返回
+/// 各历史快照都尝试升级后无返回值；未精确命中旧种子时不改权限。
+///
+/// # 错误
+/// 权限解析或 Casbin policy 写入失败时返回错误。
 pub(crate) async fn upgrade_procurement_role_permissions(rbac: &SharedRbacService) -> Result<()> {
     let desired = parse_permissions(PROCUREMENT_PERMISSIONS)?;
     for previous in procurement_legacy_permission_snapshots(&desired)? {
@@ -262,6 +339,15 @@ pub(crate) const PROCUREMENT_DUTY_GAP_PERMISSIONS: &[&str] = &[
 ];
 
 /// 构造可安全识别的历史采购默认权限快照。
+///
+/// # 参数
+/// * `desired` - 当前采购推荐权限。
+///
+/// # 返回
+/// 返回商品池、敏感字段、旧目录和职责缺口四份历史快照。
+///
+/// # 错误
+/// 补回的旧目录权限字符串无法解析时返回错误。
 pub(crate) fn procurement_legacy_permission_snapshots(
     desired: &[Permission],
 ) -> Result<Vec<Vec<Permission>>> {
@@ -294,6 +380,15 @@ pub(crate) fn procurement_legacy_permission_snapshots(
 }
 
 /// 仅为仍保持旧默认种子的角色收紧客户范围并补齐字段级权限。
+///
+/// # 参数
+/// * `rbac` - 共享 RBAC 服务。
+///
+/// # 返回
+/// 财务、销售领导和管理层角色检查或升级完成后无返回值。
+///
+/// # 错误
+/// 权限解析或 Casbin policy 写入失败时返回错误。
 pub(crate) async fn upgrade_customer_role_boundaries(rbac: &SharedRbacService) -> Result<()> {
     upgrade_roles_by_removing(
         rbac,
@@ -318,6 +413,15 @@ pub(crate) async fn upgrade_customer_role_boundaries(rbac: &SharedRbacService) -
 }
 
 /// 为仍保持旧默认种子的公司商品池读者补齐独立查询权限。
+///
+/// # 参数
+/// * `rbac` - 共享 RBAC 服务。
+///
+/// # 返回
+/// 运营和仓储角色检查或升级完成后无返回值。
+///
+/// # 错误
+/// 权限解析或 Casbin policy 写入失败时返回错误。
 pub(crate) async fn upgrade_sellable_sku_reader_permissions(rbac: &SharedRbacService) -> Result<()> {
     upgrade_roles_by_removing(
         rbac,
@@ -328,6 +432,15 @@ pub(crate) async fn upgrade_sellable_sku_reader_permissions(rbac: &SharedRbacSer
 }
 
 /// 为仍保持旧默认种子的 W18 五类业务责任角色补齐强类型确认权限。
+///
+/// # 参数
+/// * `rbac` - 共享 RBAC 服务。
+///
+/// # 返回
+/// 五类角色检查或升级完成后无返回值。
+///
+/// # 错误
+/// 权限解析或 Casbin policy 写入失败时返回错误。
 pub(crate) async fn upgrade_import_confirmation_permissions(rbac: &SharedRbacService) -> Result<()> {
     upgrade_roles_by_removing(
         rbac,
@@ -348,6 +461,15 @@ pub(crate) async fn upgrade_import_confirmation_permissions(rbac: &SharedRbacSer
 }
 
 /// 仅为仍保持上一版默认种子的 W29 固定责任角色补齐两项强命令权限。
+///
+/// # 参数
+/// * `rbac` - 共享 RBAC 服务。
+///
+/// # 返回
+/// 销售、采购、运营、财务和系统管理员角色检查或升级完成后无返回值。
+///
+/// # 错误
+/// 权限解析或 Casbin policy 写入失败时返回错误。
 pub(crate) async fn upgrade_integration_task_permissions(rbac: &SharedRbacService) -> Result<()> {
     upgrade_roles_by_removing(
         rbac,
@@ -374,6 +496,16 @@ pub(crate) const INTEGRATION_TASK_GAP_PERMISSIONS: &[&str] =
     &["integration_task:process", "integration_task:complete"];
 
 /// 从预定义权限集合中移除指定稳定权限代码。
+///
+/// # 参数
+/// * `permissions` - 当前权限。
+/// * `removed` - 要剔除的 `resource:action` 代码。
+///
+/// # 返回
+/// 返回剔除后的权限副本，不修改入参。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn remove_permissions(permissions: &[Permission], removed: &[&str]) -> Vec<Permission> {
     permissions
         .iter()
@@ -383,6 +515,18 @@ pub(crate) fn remove_permissions(permissions: &[Permission], removed: &[&str]) -
 }
 
 /// 执行一次仅匹配旧种子的安全权限升级。
+///
+/// # 参数
+/// * `rbac` - 共享 RBAC 服务。
+/// * `role_id` - 预定义角色 ID。
+/// * `previous` - 可安全识别的旧默认权限。
+/// * `desired` - 当前推荐权限。
+///
+/// # 返回
+/// 命中旧种子并完成替换，或未命中因而保持原权限后无返回值。
+///
+/// # 错误
+/// 旧工作流快照无法解析，或 Casbin policy 写入失败且冲突后仍未对齐时返回错误。
 pub(crate) async fn upgrade_exact(
     rbac: &SharedRbacService,
     role_id: &str,

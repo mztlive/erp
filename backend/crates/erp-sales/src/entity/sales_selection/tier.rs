@@ -76,7 +76,7 @@ impl TierRule {
 /// 返回规范化后的档位列表。
 ///
 /// # 错误
-/// 数量超限、名称重复或单档非法时拒绝。
+/// 数量超限、名称或身份重复，或单档非法时拒绝。
 pub fn normalize_tiers(tiers: Vec<TierRule>) -> Result<Vec<TierRule>> {
     if tiers.len() < super::limits::TIER_COUNT_MIN || tiers.len() > super::limits::TIER_COUNT_MAX {
         return Err(Error::from("套餐形态必须填写 1 到 10 个档位"));

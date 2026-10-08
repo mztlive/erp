@@ -23,9 +23,11 @@ impl InventoryService {
     /// 返回更新后调整单的响应视图。
     ///
     /// # 错误
-    /// * `NotFound` - 调整单不存在
-    /// * `ConflictError` - 期望版本与当前版本不一致
-    /// * `ValidationError` - 请求体校验失败
+    /// 请求体或明细数量非法时返回 `ValidationError`。
+    /// 调整单不存在、账号未激活、仓库不在更新范围，或明细行未命中时返回 `NotFound`。
+    /// 期望版本不一致时返回 `ConflictError`。
+    /// 状态不可编辑、文本过长、行重复或方向不一致时返回 `Error::Logic`。
+    /// 授权、审计或仓储写入失败时返回对应错误。
     #[tracing::instrument(
         name = "inventory.stock_adjustment_update",
         skip_all,

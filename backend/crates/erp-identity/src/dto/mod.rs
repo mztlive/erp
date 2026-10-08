@@ -1,4 +1,4 @@
-//! Identity, IAM, auth and access-control DTOs.
+//! 身份、IAM、认证与访问控制 DTO。
 
 mod access_control;
 mod auth;

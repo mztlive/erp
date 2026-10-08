@@ -30,8 +30,14 @@ pub struct WorkItemSubjectVersions {
 impl WorkItemSubjectVersions {
     /// 创建不限制对象版本的关系。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回接受任意任务对象版本的空约束。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn unrestricted() -> Self {
         Self::default()
     }
@@ -72,15 +78,24 @@ impl WorkItemSubjectVersions {
     /// * `actual` - 工作项冻结的对象版本
     ///
     /// # 返回
-    /// 无约束或命中权威版本集合时返回 `true`。
+    /// 无约束或命中权威版本集合时返回 `true`，否则返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn accepts(&self, actual: &str) -> bool {
         self.values.is_empty() || self.values.iter().any(|expected| expected == actual)
     }
 
     /// 返回已规范化的权威版本集合。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 无约束时返回空切片，否则返回排序去重后的版本。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_slice(&self) -> &[String] {
         &self.values
     }
@@ -121,8 +136,15 @@ impl WorkItem {
     /// 开放任务必须给出唯一责任人，并立即形成 `assigned_at` 与
     /// `current_assignment_at`。
     ///
+    /// # 参数
+    /// * `id` - 任务主键。
+    /// * `data` - 任务责任与业务对象快照。
+    ///
+    /// # 返回
+    /// 返回以当前时间为责任形成时间、且不带责任键和行范围的任务。
+    ///
     /// # 错误
-    /// 必填字段为空、字段超长或缺少个人责任人时返回错误。
+    /// 必填字段为空或超长，或该任务类型不能走不带责任键和行范围的通用构造时返回错误。
     pub fn new(id: WorkItemId, data: WorkItemData) -> Result<Self> {
         Self::new_at_with_optional_responsibility(id, data, None, Vec::new(), Instant::now())
     }
@@ -131,6 +153,14 @@ impl WorkItem {
     ///
     /// 责任维度在创建时规范化并冻结；后续转交不得修改。
     /// 客户端输入不得直接调用本入口，应用服务只能传入已注册的固定维度。
+    ///
+    /// # 参数
+    /// * `id` - 任务主键。
+    /// * `data` - 任务责任与业务对象快照。
+    /// * `responsibility_key` - 服务端责任维度。
+    ///
+    /// # 返回
+    /// 返回已冻结责任键、行范围为空的任务。
     ///
     /// # 错误
     /// 责任维度为空、字段超长，或任务基础数据无效时返回错误。
@@ -181,8 +211,16 @@ impl WorkItem {
 
     /// 使用确定时间创建任务，供事务编排和确定性测试使用。
     ///
+    /// # 参数
+    /// * `id` - 任务主键。
+    /// * `data` - 任务责任与业务对象快照。
+    /// * `at` - 责任形成时间。
+    ///
+    /// # 返回
+    /// 返回不带责任键和行范围的任务。
+    ///
     /// # 错误
-    /// 必填字段为空、字段超长或分派模式与个人责任不匹配时返回错误。
+    /// 必填字段为空或超长，或该任务类型不能走不带责任键和行范围的通用构造时返回错误。
     pub fn new_at(id: WorkItemId, data: WorkItemData, at: Instant) -> Result<Self> {
         Self::new_at_with_optional_responsibility(id, data, None, Vec::new(), at)
     }
@@ -200,7 +238,7 @@ impl WorkItem {
     /// 返回初始状态为开放且已指定到人的任务。
     ///
     /// # 错误
-    /// 任务基础数据不合法或误用通用路径创建审批任务时返回错误。
+    /// 必填字段为空或超长，或任务类型与责任键、行范围不满足固定创建路径时返回错误。
     pub(super) fn new_at_with_optional_responsibility(
         id: WorkItemId,
         data: WorkItemData,
@@ -408,6 +446,27 @@ impl NormalizedWorkItemData {
 impl TryFrom<WorkItemData> for NormalizedWorkItemData {
     type Error = Error;
 
+    /// 把 `WorkItemData` 规范成创建任务用的字段快照。
+    ///
+    /// # 参数
+    /// * `data` - 尚未规范化的任务创建数据。
+    ///
+    /// # 返回
+    /// 成功时返回 `NormalizedWorkItemData`。必填文本去掉首尾空白；`reason_code` 与
+    /// `impact_summary` 缺省或去掉空白后为空时为 `None`。`work_item_type`、
+    /// `assignment_source`、`priority` 与 `due_at` 原样保留。
+    ///
+    /// # 错误
+    /// 必填文本去掉空白后为空或超过长度上限时，按字段返回对应文案：
+    /// `business_object_type` 为「业务对象类型不能为空」或「业务对象类型过长」；
+    /// `business_object_id` 为「业务对象ID不能为空」或「业务对象ID过长」；
+    /// `subject_version` 为「对象版本不能为空」或「对象版本过长」；
+    /// `owner_role` 为「责任角色不能为空」或「责任角色过长」；
+    /// `owner_organization_id` 为「责任组织不能为空」或「责任组织过长」；
+    /// `owner_user_id` 为「责任人不能为空」或「责任人过长」。
+    /// `reason_code` 超过 `REASON_CODE_MAX_LEN` 时返回「原因代码长度不符合要求」；
+    /// `impact_summary` 超过 `IMPACT_SUMMARY_MAX_LEN` 时返回「影响摘要长度不符合要求」。
+    /// 这两项缺省或空白不是错误。
     fn try_from(data: WorkItemData) -> Result<Self> {
         Ok(Self {
             work_item_type: data.work_item_type,

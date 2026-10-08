@@ -1,4 +1,4 @@
-//! In-transaction stock writes for posted inventory adjustments.
+//! 已过账库存调整的事务内库存写入。
 
 use application_core::AuditActor;
 use erp_core::common::source::SourceType;
@@ -30,7 +30,10 @@ use crate::repository::prelude::*;
 /// 全部明细过账并标记调整单后返回 `Ok(())`。
 ///
 /// # 错误
-/// 明细为空、方向不匹配、余额不足或任一库存写入失败。
+/// 明细为空时返回 `ValidationError`。
+/// 方向与原因不一致、流水或分录构造不合法，或当前状态不能迁到已过账时返回 `Error::Logic`。
+/// 余额不存在、可用量不足、预占与余额不一致，或释放数量超出精度时返回 `Error::BusinessLogicError`。
+/// 仓储写入失败时返回对应错误。
 pub async fn apply_posted_adjustment(
     db: &Database,
     adjustment: &mut StockAdjustment,

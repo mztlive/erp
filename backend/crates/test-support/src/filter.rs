@@ -5,17 +5,23 @@ use serde_json::Value;
 /// 以固定 JSON 样本验证仓储生成的查询条件。
 ///
 /// # 参数
-/// * `filter` - 仓储编译的条件
-/// * `object` - 测试样本，不含登录态或授权政策
+/// * `filter` - 仓储编译的条件。
+/// * `object` - 测试样本，不含登录态或授权政策。
+///
 /// # 返回
 /// 样本是否满足条件；仅构成内存逻辑证据，不证明 MongoDB 实际执行计划或事务。
+///
+/// # 错误
+/// 不返回错误。
+///
 /// # Panics
-/// 样本无法转换或条件含未支持的操作时失败，禁止静默忽略未知查询操作。
+/// 样本无法转换成 BSON 文档，或条件含未支持的操作时 panic，禁止静默忽略未知查询操作。
 pub fn matches_filter(filter: &Document, object: &Value) -> bool {
     let object = serialize_to_document(object).expect("测试样本必须是可序列化对象");
     matches(filter, &object)
 }
 
+/// 只认 `$and`、`$or`、布尔 `$expr`、单键 `$in` 和字段等值；其余操作 panic，避免把未知条件当成不匹配。
 fn matches(filter: &Document, object: &Document) -> bool {
     filter.iter().all(|(key, condition)| match (key.as_str(), condition) {
         ("$and", Bson::Array(parts)) => {

@@ -17,8 +17,15 @@ use crate::repository::owned::SupplierProfileCommandRepository;
 pub trait SupplierProfileCommandRepositoryExt {
     /// 按客户端幂等键读取已成功命令结果。
     ///
-    /// # Errors
-    /// MongoDB 查询失败时返回错误。
+    /// # 参数
+    /// * `idempotency_key` - 客户端幂等键
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 命中时返回命令；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
     async fn find_by_idempotency_key(
         &self,
         idempotency_key: &str,
@@ -74,6 +81,9 @@ impl<'a> SupplierRepository<'a> {
     /// * `revision` - 待写入的首个商务结算版本
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
+    /// # 返回
+    /// 商务版本与供应商角色都写入成功时无返回值。
+    ///
     /// # 错误
     /// 当供应商编号或主体归属违反唯一索引（透出 [`persistence_core::Error::DuplicateKey`]）
     /// 或 MongoDB 写入失败时返回错误。
@@ -96,8 +106,17 @@ impl<'a> SupplierRepository<'a> {
     /// 在同一事务内整体替换一份资质的适用能力集合。
     ///
     /// 调用方必须先校验能力均属于同一供应商，并传入事务执行器。
+    /// 本方法不构成原子边界，也不检查关联是否属于该资质的供应商。
     ///
-    /// # Errors
+    /// # 参数
+    /// * `qualification_id` - 被替换关联的资质 ID
+    /// * `links` - 替换后的完整关联；空集合会在删除后仍调用批量插入
+    /// * `executor` - 数据访问执行器，由调用方置于事务中
+    ///
+    /// # 返回
+    /// 旧关联删除且新关联写入成功时无返回值。
+    ///
+    /// # 错误
     /// 删除旧关联或写入新关联失败时返回错误。
     pub async fn replace_qualification_capabilities(
         &self,

@@ -50,6 +50,9 @@ impl CostService {
     ///
     /// # 返回
     /// 返回服务实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
@@ -66,7 +69,8 @@ impl CostService {
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
     ///
     /// # 错误
-    /// * `ValidationError` - 分页参数非法或排序字段不在白名单
+    /// 分页、范围版本非法或排序字段不在白名单时返回 `ValidationError`；
+    /// 成本事实或分配的仓储读取失败时返回对应错误。
     pub async fn cost_entry_list(&self, params: &CostEntryListParams) -> Result<PageView<CostEntryView>> {
         let filter = cost_entry_filter(params)?;
         let page = self.db.cost_entries().search_cost_entries(&filter, &mut NoTransaction).await?;
@@ -92,7 +96,7 @@ impl CostService {
     /// 返回完整成本视图。
     ///
     /// # 错误
-    /// * `NotFound` - 成本事实不存在
+    /// 成本事实不存在时返回 `NotFound`；仓储读取失败时返回对应错误。
     pub async fn cost_entry_detail(&self, id: &str) -> Result<CostEntryView> {
         self.cost_entry_view(id.to_string()).await
     }
@@ -104,6 +108,9 @@ impl CostService {
     ///
     /// # 返回
     /// 返回契约形状的分页视图。
+    ///
+    /// # 错误
+    /// 分页、范围版本或排序参数非法时返回 `ValidationError`；仓储查询失败时返回对应错误。
     pub async fn cost_allocation_list(
         &self,
         params: &CostAllocationListParams,
@@ -245,6 +252,9 @@ pub fn cost_entry_filter(params: &CostEntryListParams) -> Result<CostEntryFilter
 ///
 /// # 返回
 /// 返回完整成本事实列表视图。
+///
+/// # 错误
+/// 不返回错误。
 pub fn cost_entry_row_view(row: CostEntryRow, allocations: Vec<CostAllocation>) -> CostEntryView {
     CostEntryView {
         id: row.id,
@@ -336,6 +346,15 @@ pub struct PreparedCostEntry {
     pub allocations: Vec<CostAllocation>,
 }
 /// 校验请求和已停用的商城范围；必须在外域存在性查询之前调用。
+///
+/// # 参数
+/// * `req` - 待创建的成本事实请求。
+///
+/// # 返回
+/// 校验通过时无返回值。
+///
+/// # 错误
+/// 请求字段校验失败时返回 `ValidationError`；`cost_scope` 为 `MallConsumption` 时返回 `BusinessLogicError`。
 pub fn validate_create_cost_entry(req: &CreateCostEntryRequest) -> Result<()> {
     req.validate()?;
     // 商城已移除：拒绝商城消费范围的新增写入口；历史数据仅可读。
@@ -345,6 +364,15 @@ pub fn validate_create_cost_entry(req: &CreateCostEntryRequest) -> Result<()> {
     Ok(())
 }
 /// 在销售存在事实确认后构建金额守恒的成本事实与分配，不开始事务。
+///
+/// # 参数
+/// * `req` - 已通过前置校验的创建请求。
+///
+/// # 返回
+/// 返回尚未持久化的成本事实与分配。
+///
+/// # 错误
+/// 分配金额不守恒或成本实体构造失败时返回对应错误。
 pub fn prepare_cost_entry(req: CreateCostEntryRequest) -> Result<PreparedCostEntry> {
     // 金额守恒与尾差归属由计划 VO 一次性验证与解析，失败不产生部分计划；
     // Service 只注入已确认的销售事实并编排事务。
@@ -403,6 +431,17 @@ pub fn prepare_cost_entry(req: CreateCostEntryRequest) -> Result<PreparedCostEnt
     Ok(PreparedCostEntry { entry, allocations })
 }
 /// 用调用方的 Executor 原子写入成本与分配；审计由组合层随后执行。
+///
+/// # 参数
+/// * `db` - 财务领域数据库。
+/// * `prepared` - 已构建的成本事实与分配。
+/// * `executor` - 调用方事务执行器；本函数不另开事务。
+///
+/// # 返回
+/// 写入成功时无返回值。
+///
+/// # 错误
+/// 仓储写入失败时返回对应错误。
 pub async fn persist_cost_entry(
     db: &Database,
     prepared: PreparedCostEntry,

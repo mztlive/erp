@@ -225,14 +225,23 @@ impl Error {
     ///
     /// # 返回
     /// 返回已带稳定码的应用错误。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub const fn from_approval_code(code: WorkflowErrorCode) -> Self {
         Self::Coded(code)
     }
 
     /// 返回结构化应用错误码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 仅结构化错误返回稳定码；普通业务文案不得被反向解析。
+    /// 仅结构化错误返回稳定码；普通业务文案不得被反向解析。`Coded` 为 `Some`，其余变体为 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub const fn code(&self) -> Option<WorkflowErrorCode> {
         match self {
             Self::Coded(code) => Some(*code),

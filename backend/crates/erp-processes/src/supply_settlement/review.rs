@@ -38,8 +38,16 @@ impl SupplierSettlementProcess {
     /// 命令重验结算单版本、服务端主题摘要、刷新截止策略与完整差异结论；结算单
     /// 进入待复核、`SUPPLIER_SETTLEMENT_REVIEW` 任务和幂等审计在同一事务写入。
     ///
+    /// # 参数
+    /// * `id` - 路径中的结算单 ID。
+    /// * `req` - 提交复核命令。
+    /// * `actor` - 当前经办人。
+    ///
+    /// # 返回
+    /// 返回已提交的结算单与新建复核任务；同一命令重放返回原结果。
+    ///
     /// # 错误
-    /// 路径身份、版本、主题、策略或差异状态不一致时 fail-closed。
+    /// 路径身份、版本、主题、策略或差异状态不一致时失败关闭。请求校验、范围、复核人资格或事务写入失败时返回对应错误。
     pub async fn submit_review(
         &self,
         id: &str,
@@ -146,8 +154,16 @@ impl SupplierSettlementProcess {
     /// 财务角色/组织范围与岗位分离；业务事实、任务完成、审计以及确认形成的应付
     /// 和成本差额在同一事务写入。
     ///
+    /// # 参数
+    /// * `id` - 路径中的结算单 ID。
+    /// * `req` - 复核决定命令。
+    /// * `actor` - 当前复核人。
+    ///
+    /// # 返回
+    /// 返回复核决定结果；同一命令重放返回原结果。
+    ///
     /// # 错误
-    /// 任务、责任、主题、结算版本或正式业务前置条件不一致时 fail-closed。
+    /// 任务、责任、主题、结算版本或正式业务前置条件不一致时失败关闭。请求校验或事务写入失败时返回对应错误。
     pub async fn decide_review(
         &self,
         id: &str,
@@ -418,6 +434,20 @@ fn review_work_item_binds_statement(item: &WorkItem, statement: &SupplierSettlem
         && review_task_identity_matches(&item.owner_role, &item.owner_organization_id, statement)
 }
 
+/// 校验结算复核任务仍绑定当前结算单、版本和责任人。
+///
+/// # 参数
+/// * `item` - 正式复核任务。
+/// * `statement` - 当前结算单。
+/// * `expected_task_version` - 命令锁定的任务版本。
+/// * `expected_subject_version` - 命令锁定的主题摘要。
+/// * `actor` - 当前复核人。
+///
+/// # 返回
+/// 绑定、版本和责任一致时无返回值。
+///
+/// # 错误
+/// 任务版本或主题变化时返回 `ConflictError`。任务与结算单不匹配或结算单不在待复核时返回 `BusinessLogicError`。当前账号不是责任人时返回 `Forbidden`。
 pub fn validate_settlement_review_work_item(
     item: &WorkItem,
     statement: &SupplierSettlementStatement,

@@ -30,8 +30,17 @@ pub struct SettlementCostDelta {
 impl SettlementCostDelta {
     /// 返回零差额。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回三项均为零的差额。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    ///
+    /// # Panics
+    /// `Decimal::ZERO` 是合法金额；只有构造失败才 panic，正常路径不会发生。
     pub fn zero() -> Self {
         let zero = Amount::try_from(Decimal::ZERO).expect("零是合法金额");
         Self { gross: zero, net: zero, tax: zero }
@@ -41,6 +50,12 @@ impl SettlementCostDelta {
     ///
     /// # 参数
     /// * `other` - 待累加差额
+    ///
+    /// # 返回
+    /// 无返回值。含税、不含税和税额分别精确相加。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn add_assign(&mut self, other: Self) {
         self.gross = self.gross.checked_add(other.gross);
         self.net = self.net.checked_add(other.net);
@@ -49,13 +64,22 @@ impl SettlementCostDelta {
 
     /// 判断三项差额是否均为零。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 三项均为零时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_zero(self) -> bool {
         self == Self::zero()
     }
 
     /// 校验差额满足 `gross = net + tax`。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 恒等成立时返回 `Ok(())`。
@@ -153,7 +177,7 @@ impl SupplierSettlementItem {
     /// 返回新建的结算明细实体。
     ///
     /// # 错误
-    /// 任一金额为负或构成恒等不成立时返回错误。
+    /// 数量不大于零、任一金额为负或构成恒等不成立时返回错误。
     pub fn new(id: SupplierSettlementItemId, data: SupplierSettlementItemData) -> Result<Self> {
         if data.quantity.to_decimal() <= Decimal::ZERO {
             return Err(Error::from("结算明细数量必须大于零"));
@@ -215,11 +239,17 @@ impl SupplierSettlementItem {
     ///
     /// # 返回
     /// 归属一致时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn belongs_to_statement(&self, statement_id: &SupplierSettlementStatementId) -> bool {
         self.statement_id == *statement_id
     }
 
     /// 从冻结的供应商账单与 ERP 三元组派生成本差额。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 返回供应商账单减 ERP 计算值的含税、不含税和税额差额。

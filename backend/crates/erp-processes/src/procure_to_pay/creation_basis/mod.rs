@@ -19,6 +19,15 @@ pub use erp_read_models::purchase_center::repository::{
     basis_groups_and_facts, load_effective_sales_order, stock_basis_groups_for_order,
 };
 /// 保持跨域命令原冲突类别。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回采购领域构造的供给数量变化冲突，类别经 `Into` 转入流程错误。
+///
+/// # 错误
+/// 不返回错误。
 pub fn procurement_quantity_changed() -> crate::Error {
     erp_procurement::service::purchase_order::creation_basis::procurement_quantity_changed().into()
 }

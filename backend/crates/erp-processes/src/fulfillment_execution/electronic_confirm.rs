@@ -66,6 +66,7 @@ impl FulfillmentProcess {
     }
 }
 
+/// 在新事务中确认电子交付；任一步失败则整体回滚。
 async fn persist(
     db: &Database,
     id: ElectronicDeliveryId,
@@ -83,6 +84,7 @@ async fn persist(
     Ok(record.into())
 }
 
+/// 版本、采购资格和凭证通过后才写入确认事实并完成后继。
 async fn confirm(
     db: &Database,
     id: &ElectronicDeliveryId,
@@ -111,6 +113,7 @@ async fn confirm(
     Ok(record)
 }
 
+/// 采购单须可履约、过先款门槛，且分配仍指向本销售明细。
 async fn purchase_context(
     db: &Database,
     record: &ElectronicDelivery,

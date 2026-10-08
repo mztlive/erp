@@ -159,8 +159,15 @@ fn structural_enter_without_node(node_key: &str) -> EngineResult<TransitionPlan>
 
 /// 读取当前节点的通过与驳回连线，必须各恰好一条。
 ///
+/// # 参数
+/// * `graph` - 定义图
+/// * `from_node_key` - 当前节点键
+///
+/// # 返回
+/// 返回该节点唯一的通过连线与唯一的驳回连线。
+///
 /// # 错误
-/// 缺失或重复时返回图损坏。
+/// 连线缺失或重复时返回 [`EngineError::GraphCorrupted`]。连线形状非法时返回模型错误。
 pub(crate) fn require_decision_edges<'a>(
     graph: &'a DefinitionGraph,
     from_node_key: &str,

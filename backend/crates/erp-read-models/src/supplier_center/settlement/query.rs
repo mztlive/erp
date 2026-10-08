@@ -24,7 +24,8 @@ impl SupplierSettlementReadService {
     /// 查询供应商结算单详情（结算单 + 全部明细 + 全部差异）。
     ///
     /// # 参数
-    /// * `id` - 结算单 ID
+    /// * `id` - 结算单 ID。
+    /// * `actor` - 已认证操作人，用于复核任务的岗位分离与动作投影。
     ///
     /// # 返回
     /// 返回详情视图。
@@ -32,6 +33,8 @@ impl SupplierSettlementReadService {
     /// # 错误
     /// * `NotFound` - 结算单不存在
     /// * `RepositoryError` - 数据库查询失败
+    /// * `Logic` - 成本差额计算失败
+    /// * `Internal` - 已确认唯一的复核任务随后缺失
     pub async fn supplier_settlement_statement_detail(
         &self,
         id: &str,
@@ -200,7 +203,14 @@ impl SupplierSettlementReadService {
 impl SupplierSettlementReadService {
     /// 结算列表在分页前解析供应商名称，保留本域日期/状态与统计口径。
     ///
-    /// 参数或任一关联查询失败时返回错误。
+    /// # 参数
+    /// * `params` - 结算列表查询参数。
+    ///
+    /// # 返回
+    /// 返回结算列表视图。空关键词不按名称收窄。
+    ///
+    /// # 错误
+    /// 参数校验失败时返回 `ValidationError`。供应商名称或结算列表读取失败时返回对应错误。
     pub async fn supplier_settlement_statement_list(
         &self,
         params: &dto::SupplierSettlementStatementListParams,

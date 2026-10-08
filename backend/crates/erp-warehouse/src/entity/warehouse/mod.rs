@@ -1,7 +1,7 @@
 //! 域 D11 `warehouse`：warehouse、warehouse_revision、warehouse_sku_policy
 //! （页面：W14、W10）。
 //!
-//! 实体层无跨域依赖：只引用 `entities::ids` 的 ID newtype 与 `common` 基元。
+//! 实体层无跨域依赖：只引用 `erp_core::ids` 的 ID newtype 与 `common` 基元。
 //! 字段字典与唯一约束见数据模型 §6.3；公共字段归属按 §4.3 判定：
 //! - `warehouse` 是「稳定基础资料」→ 组合 [`erp_core::common::StableBase`]；
 //! - `warehouse_revision` 是不可变修订 → 用 [`erp_core::common::RevisionBase`]
@@ -19,7 +19,7 @@ pub mod warehouse_entity;
 pub mod warehouse_revision;
 pub mod warehouse_sku_policy;
 
-// 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 entities::ids）。
+// 域内 ID newtype 的统一出口（实体层无跨域依赖，只引用 `erp_core::ids`）。
 pub use erp_core::ids::{WarehouseId, WarehouseRevisionId, WarehouseSkuPolicyId};
 pub use status::EnableStatus;
 pub use warehouse_entity::{Warehouse, WarehouseFulfillmentOperation};

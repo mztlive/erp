@@ -24,6 +24,19 @@ pub(super) struct HistorySnapshotOutput {
 
 impl super::CustomerQualityReadModel {
     /// 在调用方事务内完成历史授权、冻结筛选与事实装载。
+    ///
+    /// # 参数
+    /// * `query` - 历史口径筛选；其中的范围版本用于和本次快照比对
+    /// * `actor` - 已认证操作人
+    /// * `bounds` - 已校验的期间边界
+    /// * `export` - 为真时不按页截断行
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 返回历史视图、原查询，以及销售范围与订单集合合成的版本指纹。销售范围为空时仍成功，视图 `empty_reason` 为 `no_scope`。
+    ///
+    /// # 错误
+    /// 销售授权解析失败、订单或展示名读取失败，或已带的范围版本与本次快照不一致时返回错误。超限时由装载返回 `ValidationError`。
     pub(super) async fn snapshot_history(
         &self,
         query: &HistoryQualityQuery,
@@ -55,6 +68,17 @@ impl super::CustomerQualityReadModel {
     }
 
     /// 在新的读取事务内重验销售范围与业务责任集合，防止返回旧宽范围文件。
+    ///
+    /// # 参数
+    /// * `query` - 与快照相同的历史筛选
+    /// * `actor` - 已认证操作人
+    /// * `expected` - 快照事务返回的版本指纹
+    ///
+    /// # 返回
+    /// 重算版本与 `expected` 一致时无返回值。
+    ///
+    /// # 错误
+    /// 重验事务内的授权、筛选或事实读取失败时返回错误。重算版本与 `expected` 不一致时返回范围变化错误。
     pub(super) async fn recheck_history(
         &self,
         query: &HistoryQualityQuery,

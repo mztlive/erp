@@ -403,6 +403,16 @@ pub(super) struct PaymentLink {
 
 impl FundsAccess {
     /// 批量读取关联销售单当前责任；缺失单据按无责任处理，调用方跳过该行。
+    ///
+    /// # 参数
+    /// * `ids` - 销售单主键；重复值会去重。
+    /// * `executor` - 调用方事务。
+    ///
+    /// # 返回
+    /// 销售单 ID 到当前负责人、业务组织与版本；查不到的单据不进入映射。
+    ///
+    /// # 错误
+    /// 销售单读取失败时返回对应错误。
     pub(super) async fn sales_fact_map(
         &self,
         ids: &[String],
@@ -428,6 +438,16 @@ impl FundsAccess {
     }
 
     /// 批量读取关联采购单当前责任；责任人缺失的老单保留组织事实。
+    ///
+    /// # 参数
+    /// * `ids` - 采购单主键或带类型的结算关联键。
+    /// * `executor` - 调用方事务。
+    ///
+    /// # 返回
+    /// 采购单与结算来源的责任事实；含 `:` 的键不按采购单查询。
+    ///
+    /// # 错误
+    /// 采购单或结算单读取失败时返回对应错误。
     pub(super) async fn purchase_fact_map(
         &self,
         ids: &[String],
@@ -455,6 +475,18 @@ impl FundsAccess {
 }
 
 /// 多关联单据行的条件匹配：负责人与组织任一关联命中，操作人按单据事实判定。
+///
+/// # 参数
+/// * `orders` - 关联单据责任元组。
+/// * `operators` - 第一经办人。
+/// * `secondary` - 第二经办人。
+/// * `condition` - 负责人、经办人与组织条件。
+///
+/// # 返回
+/// 已提供的经办条件都命中，且在提供了负责人或组织时至少一条关联同时命中时返回 true。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn matches_multi_condition(
     orders: &[LinkedOrderRow],
     operators: &[String],
@@ -492,6 +524,16 @@ use erp_finance::entity::receivable::AllocationAction as ReceivableAllocationAct
 
 impl FundsAccess {
     /// 回款分配按核销分录反查所属子账与销售单；金额按正反动作记方向。
+    ///
+    /// # 参数
+    /// * `receipt_ids` - 客户回款主键。
+    /// * `executor` - 调用方事务。
+    ///
+    /// # 返回
+    /// 回款 ID 到分配关联；冲正金额为负，找不到销售单时 `order` 为 `None`。
+    ///
+    /// # 错误
+    /// 分配、分录或子账读取失败时返回对应错误。
     pub(super) async fn receipt_matched_links(
         &self,
         receipt_ids: &[String],
@@ -533,6 +575,16 @@ impl FundsAccess {
     }
 
     /// 销项发票分配按子账反查销售单；含税金额按正反动作记方向。
+    ///
+    /// # 参数
+    /// * `invoice_ids` - 发票主键。
+    /// * `executor` - 调用方事务。
+    ///
+    /// # 返回
+    /// 发票 ID 到销项分配关联；冲正金额为负。
+    ///
+    /// # 错误
+    /// 分配或应收子账读取失败时返回对应错误。
     pub(super) async fn sales_invoice_matched_links(
         &self,
         invoice_ids: &[String],
@@ -564,6 +616,16 @@ impl FundsAccess {
     }
 
     /// 付款核销按应付分录反查子账与采购单；结算来源保留自身责任边界。
+    ///
+    /// # 参数
+    /// * `payment_ids` - 供应商付款主键。
+    /// * `executor` - 调用方事务。
+    ///
+    /// # 返回
+    /// 付款 ID 到核销关联；来源键带真实来源类型，冲正金额为负。
+    ///
+    /// # 错误
+    /// 分配、应付分录或子账读取失败时返回对应错误。
     pub(super) async fn payment_matched_links(
         &self,
         payment_ids: &[String],
@@ -609,6 +671,16 @@ impl FundsAccess {
     }
 
     /// 工作项当前处理人；已关闭任务回退完成人，缺失任务按无处理人。
+    ///
+    /// # 参数
+    /// * `work_item_ids` - 工作项主键；空 ID 会被去掉。
+    /// * `executor` - 调用方事务。
+    ///
+    /// # 返回
+    /// 工作项 ID 到处理人；优先负责人，否则完成人。查不到的任务不进入映射。
+    ///
+    /// # 错误
+    /// 工作项读取失败时返回对应错误。
     pub(super) async fn work_item_handlers(
         &self,
         work_item_ids: &[String],
@@ -638,11 +710,33 @@ fn handlers_from_work_items(items: Vec<WorkItem>) -> HashMap<String, String> {
 }
 
 /// 分配金额求和的零值；与应收映射保持同一零金额口径。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 应收映射使用的零金额。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn zero_amount() -> Amount {
     erp_finance::service::receivable::mapping::zero_amount()
 }
 
 /// 同一快照的匹配份额汇总；未分配单列，整单合计部分授权为 null。
+///
+/// # 参数
+/// * `matched` - 分配主键、方向金额与来源单。
+/// * `owner_of` - 来源单到负责人。
+/// * `whole_total` - 整单合计；部分授权时由调用方传入 `None`。
+/// * `scope_version` - 本次范围版本。
+/// * `permission_limited` - 为 true 时丢掉没有来源单的份额。
+///
+/// # 返回
+/// 按负责人排序的可见份额、未分配金额和整单合计。
+///
+/// # 错误
+/// 不返回错误。金额归并始终成功。
 pub(super) fn build_summary(
     matched: &[(String, Amount, LinkedOrderId)],
     owner_of: &HashMap<String, String>,
@@ -862,6 +956,16 @@ mod tests {
 }
 
 /// 已存在的分配必须指向存在的来源；真正零分配单据单独由整账职责授权。
+///
+/// # 参数
+/// * `sources` - 分配上的来源主键；`None` 表示来源缺失。
+/// * `facts` - 已装载的来源事实。
+///
+/// # 返回
+/// 每个来源都非空且存在于 `facts` 时返回 true；空迭代器返回 true。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn linked_sources_exist<'a, T>(
     mut sources: impl Iterator<Item = Option<&'a str>>,
     facts: &HashMap<String, T>,

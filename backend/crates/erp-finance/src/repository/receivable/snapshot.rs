@@ -62,6 +62,9 @@ impl ReceivableSnapshotFacts {
     ///
     /// # 返回
     /// 返回字段搬运后的 [`ReceivableSnapshot`]。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn into_snapshot(
         self,
         current_sales_order_revision_id: String,

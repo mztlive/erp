@@ -97,8 +97,18 @@ impl Default for PartyContactFilter {
 impl QueryFilter for PartyContactFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// `party_id`、`status`、`is_default` 为 `None` 时不写入，有值时分别按主体 ID
+    /// 字符串、状态稳定代码和布尔值精确匹配。`keyword` 对 `contact_name` 做字面量
+    /// 正则且忽略大小写；`mobile_query_hmac` 按给定指纹精确匹配。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(party_id) = &self.party_id {
@@ -121,8 +131,14 @@ impl QueryFilter for PartyContactFilter {
 impl Pagination for PartyContactFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组。`page` 原样取出，`page_size` 由 `u32` 转为 `u64`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }

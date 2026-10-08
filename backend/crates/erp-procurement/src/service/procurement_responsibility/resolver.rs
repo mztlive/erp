@@ -39,6 +39,20 @@ impl ProcurementResponsibilityService {
     /// 按输入顺序解析候选责任；所有事实读取复用调用方执行器。
     ///
     /// 目录、规则或负责人事实缺失时立即失败，不执行授权或改变规则。
+    ///
+    /// # 参数
+    /// * `inputs` - 保持调用方顺序的解析行
+    /// * `port` - 目录与负责人事实端口
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 返回与输入顺序一致的候选负责人。
+    ///
+    /// # 错误
+    /// 行键不合法、目录映射不完整或规则解析失败时返回 `Logic`；目录端口失败，
+    /// 或构造后仍缺行事实时返回 `Internal`。规则或负责人读取的乐观锁冲突返回
+    /// `ConflictError`，其他仓储失败返回对应错误。负责人缺失或不可登录时返回
+    /// `ValidationError`。
     pub async fn resolve_candidates(
         &self,
         inputs: &[ResolutionInput],
@@ -149,7 +163,7 @@ fn unique_strings<'a>(values: impl Iterator<Item = &'a str>) -> Vec<String> {
 /// 全部 ID 均存在时返回 `Ok(())`。
 ///
 /// # 错误
-/// 任一目录事实缺失或已删除时返回校验错误。
+/// 任一请求 ID 不在 `map` 中时返回 `ValidationError`，文案为「{label}不存在或已删除：{id}」。
 fn ensure_all_ids_present<T>(label: &str, ids: &[String], map: &HashMap<String, T>) -> Result<()> {
     if let Some(missing) = ids.iter().find(|id| !map.contains_key(id.as_str())) {
         return Err(Error::ValidationError(format!("{label}不存在或已删除：{missing}")));
@@ -158,6 +172,9 @@ fn ensure_all_ids_present<T>(label: &str, ids: &[String], map: &HashMap<String, 
 }
 
 /// 批量加载并校验候选负责人的账号状态。
+///
+/// # Panics
+/// 完整性校验通过后账号仍不在映射中时 panic。
 async fn attach_owner_accounts(
     port: &dyn ProcurementResponsibilityFactsPort,
     selected: Vec<(String, &ProcurementResponsibilityRule)>,
@@ -184,6 +201,15 @@ async fn attach_owner_accounts(
 }
 
 /// 将身份提供方的窄事实验证为可登录后台负责人，展示姓名不参与资格判断。
+///
+/// # 参数
+/// * `account` - 身份提供方的当前账号事实
+///
+/// # 返回
+/// `can_login` 与 `is_admin` 均为真时返回负责人值对象。
+///
+/// # 错误
+/// 账号不可登录或不是后台管理员时返回 `ValidationError`，文案包含账号 ID。
 pub fn eligible_owner(account: &IdentityOwnerFact) -> Result<EligibleProcurementOwner> {
     EligibleProcurementOwner::from_account(account)
         .map_err(|_| Error::ValidationError(format!("采购负责人 {} 必须为可登录后台账号", account.id)))

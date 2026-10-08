@@ -84,7 +84,7 @@ impl StockAdjustmentApprovalSnapshot {
 /// 返回合计数量。
 ///
 /// # 错误
-/// 空行或合计超出数量标度时返回错误。
+/// 空行、十进制累加溢出或合计超出数量标度时返回错误。
 fn sum_line_quantity(lines: &[StockAdjustmentLine]) -> Result<Quantity> {
     let Some(first) = lines.first() else {
         return Err(Error::from("库存调整单没有明细，无法启动审批"));

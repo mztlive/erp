@@ -47,8 +47,14 @@ impl AccountKind {
 
     /// 返回账号类型字符串表示。
     ///
-    /// # 返回值
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
     /// 返回稳定的账号类型字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Admin => Self::ADMIN_CODE,
@@ -61,7 +67,7 @@ impl AccountKind {
     /// # 参数
     /// * `value` - 账号类型字符串
     ///
-    /// # 返回值
+    /// # 返回
     /// 成功返回账号类型。
     ///
     /// # 错误
@@ -85,7 +91,7 @@ impl TryFrom<&str> for AccountKind {
     /// # 参数
     /// * `value` - 账号类型字符串
     ///
-    /// # 返回值
+    /// # 返回
     /// 成功返回账号类型。
     ///
     /// # 错误

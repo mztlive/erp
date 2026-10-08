@@ -41,6 +41,18 @@ impl CustomerAcceptanceTaskReason {
 }
 
 /// 为销售单当前可验收交付建立唯一开放验收任务。
+///
+/// # 参数
+/// * `db` - 业务数据库。
+/// * `sales_order_id` - 销售单标识。
+/// * `reason` - 本次形成任务的业务原因。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 已有唯一匹配的开放任务时返回该任务；否则返回新建任务。
+///
+/// # 错误
+/// 销售单不存在、不是实物及服务单、开放任务重复或责任不一致，以及新建时负责人不合格或写入失败时返回错误。
 pub async fn ensure_customer_acceptance_task(
     db: &mongodb::Database,
     sales_order_id: &SalesOrderId,
@@ -66,6 +78,20 @@ pub async fn ensure_customer_acceptance_task(
 }
 
 /// 为验收正式命令加载当前任务并校验责任、任务身份和可选乐观锁。
+///
+/// # 参数
+/// * `db` - 业务数据库。
+/// * `sales_order_id` - 销售单标识。
+/// * `actor_id` - 当前操作人。
+/// * `work_item_id` - 调用方看到的任务主键；与 `expected_task_version` 必须同时有值或同时为空。
+/// * `expected_task_version` - 调用方看到的任务版本。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 返回已记录本次活动、但尚未在此函数内落库的任务。
+///
+/// # 错误
+/// 任务无法建立、主键与版本未成对提供或与当前任务不一致，或操作人不是当前销售责任人时返回错误。
 pub async fn prepare_customer_acceptance_task_command(
     db: &mongodb::Database,
     sales_order_id: &SalesOrderId,
@@ -88,6 +114,19 @@ pub async fn prepare_customer_acceptance_task_command(
 }
 
 /// 按过账后的剩余可验收事实持久化任务活动或完成事实。
+///
+/// # 参数
+/// * `db` - 业务数据库。
+/// * `task` - 已形成活动或待完成事实的验收任务。
+/// * `actor_id` - 当前操作人。
+/// * `has_remaining_eligible` - 过账后是否仍有可验收事实。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 任务更新写入成功时返回。没有剩余可验收事实时先把任务标为完成。
+///
+/// # 错误
+/// 完成事实非法或仓储更新失败时返回错误。
 pub async fn persist_customer_acceptance_task_after_posting(
     db: &mongodb::Database,
     mut task: WorkItem,
@@ -102,6 +141,7 @@ pub async fn persist_customer_acceptance_task_after_posting(
     Ok(())
 }
 
+/// 校验当前销售负责人资格后创建唯一验收任务。
 async fn create_customer_acceptance_task(
     db: &mongodb::Database,
     order: &SalesOrder,
@@ -133,6 +173,7 @@ async fn create_customer_acceptance_task(
     Ok(task)
 }
 
+/// 只接受实物及服务销售单；卡券单不形成验收任务。
 async fn load_goods_service_order(
     db: &mongodb::Database,
     sales_order_id: &SalesOrderId,
@@ -163,6 +204,7 @@ async fn open_customer_acceptance_tasks(
         .collect())
 }
 
+/// 开放任务的责任必须与销售单当前负责销售一致，否则失败关闭。
 fn ensure_task_identity(task: &WorkItem, order: &SalesOrder) -> Result<()> {
     let matches = task.work_item_type == WorkItemType::CustomerAcceptanceRegistration
         && task.matches_business_object(OBJECT_TYPE, &order.base.id)
@@ -178,6 +220,7 @@ fn ensure_task_identity(task: &WorkItem, order: &SalesOrder) -> Result<()> {
     ))
 }
 
+/// 任务主键与期望版本必须同时提供，且与当前开放任务一致。
 fn ensure_command_identity(
     task: &WorkItem,
     work_item_id: Option<&str>,
@@ -199,6 +242,7 @@ fn responsibility_key(sales_order_id: &str) -> String {
     format!("sales_order:{sales_order_id}:customer_acceptance")
 }
 
+/// 销售责任人账号可用且具备完整验收操作权限，才允许形成任务。
 async fn ensure_customer_acceptance_owner_eligible(
     db: &mongodb::Database,
     rbac: &SharedRbacService,
@@ -226,6 +270,7 @@ async fn ensure_customer_acceptance_owner_eligible(
     Err(Error::BusinessLogicError("销售责任人缺少客户验收完整操作权限，请先调整角色或责任配置".to_string()))
 }
 
+/// 操作人须具备验收权限和销售单 detail 范围，并且是任务当前负责人。
 async fn ensure_current_owner_execution_access(
     db: &mongodb::Database,
     task: &WorkItem,

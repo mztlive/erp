@@ -29,9 +29,10 @@ impl InventoryService {
     /// 返回带范围信封的分页视图。
     ///
     /// # 错误
-    /// * `ValidationError` - 分页/时间区间/排序/人员参数非法
-    /// * `ConflictError` - 跨页 `scope_version` 不一致
-    /// * `RepositoryError` - 数据库查询失败
+    /// 分页、时间区间、排序、人员或 `scope_version` 非法时返回 `ValidationError`。
+    /// 跨页 `scope_version` 不一致时返回 `ConflictError`。
+    /// 账号未激活时返回 `Forbidden`。
+    /// 授权、商品、仓库、入库单号或仓储查询失败时返回对应错误。
     #[tracing::instrument(
         name = "inventory.stock_movement_list",
         skip_all,
@@ -63,6 +64,7 @@ impl InventoryService {
         ))
     }
 
+    /// 在同一事务快照内按授权和 SKU 条件分页查询流水。
     async fn search_stock_movements(
         &self,
         query: &StockMovementListQuery,
@@ -121,6 +123,16 @@ fn movement_filter(
     }
 }
 
+/// 由流水投影行组装视图；仓库名和来源单号留空，由调用方另补。
+///
+/// # 参数
+/// * `row` - 流水列表投影行。
+///
+/// # 返回
+/// 返回 `warehouse_name` 与 `source_document_no` 均为 `None` 的视图。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn movement_row_view(row: StockMovementRow) -> StockMovementView {
     StockMovementView {
         warehouse_name: None,
@@ -145,14 +157,15 @@ pub(super) fn movement_row_view(row: StockMovementRow) -> StockMovementView {
 /// 由前端回退显示来源主键。
 ///
 /// # 参数
-/// * `db` - 数据库实例
-/// * `movements` - 流水视图列表
+/// * `db` - 数据库实例。
+/// * `fulfillment` - 采购入库单号端口。
+/// * `movements` - 流水视图列表。
 ///
 /// # 返回
-/// 返回「来源单据主键 → 单据号」映射。
+/// 返回「来源单据主键 → 单据号」映射。未解析的来源不出现在映射中。
 ///
 /// # 错误
-/// 查询失败时返回 `RepositoryError`。
+/// 调整单查询或入库单号读取失败时返回对应错误。
 pub(super) async fn load_movement_source_document_nos(
     db: &Database,
     fulfillment: &dyn crate::ports::FulfillmentFactsPort,

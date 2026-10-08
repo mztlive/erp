@@ -15,6 +15,13 @@ use crate::{Error, Result};
 ///
 /// `GoodsService` 绑定 `SalesOrder`，`Voucher` 绑定 `VoucherSalesOrder`。
 ///
+/// # 参数
+/// * `order` - 待绑定销售单。
+/// * `actor` - 创建人。
+///
+/// # 返回
+/// 返回按业务性质分派的创建绑定命令。
+///
 /// # 错误
 /// 责任组织为空时返回校验错误。
 pub(super) fn sales_create_bind_command(
@@ -37,6 +44,18 @@ pub(super) fn sales_create_bind_command(
 }
 
 /// 查询发布定义、写入绑定并持久化注册行。
+///
+/// # 参数
+/// * `db` - 业务数据库。
+/// * `rbac` - 授权源。
+/// * `object_read` - 审批对象读取端口。
+/// * `document` - 待写入的单据注册行。
+/// * `bind_command` - 创建时绑定命令。
+/// * `actor` - 创建人。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 返回已写入注册行的发布定义绑定。
 ///
 /// # 错误
 /// 无发布定义或绑定失败时返回错误，调用方必须回滚。

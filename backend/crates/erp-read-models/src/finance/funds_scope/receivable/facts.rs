@@ -32,11 +32,29 @@ impl ReceivableFacts {
     }
 
     /// 返回该子账净额；无分录或无核销分配均为零。
+    ///
+    /// # 参数
+    /// * `account_id` - 应收子账主键。
+    ///
+    /// # 返回
+    /// 已装载的净核销额；没有记录时返回零金额。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn share(&self, account_id: &str) -> Amount {
         self.shares.get(account_id).copied().unwrap_or_else(Amount::zero)
     }
 
     /// 取走当前页分录，沿用按来源序号稳定排序的展示口径。
+    ///
+    /// # 参数
+    /// * `account_id` - 应收子账主键。
+    ///
+    /// # 返回
+    /// 移出该子账的分录视图，并按 `source_sequence` 排序；没有分录时为空。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn take_entries(&mut self, account_id: &str) -> Vec<ReceivableEntryView> {
         let mut entries = self.entries.remove(account_id).unwrap_or_default();
         entries.sort_by_key(|entry| entry.source_sequence);

@@ -48,8 +48,14 @@ pub enum ApprovalNotificationEventKind {
 impl ApprovalNotificationEventKind {
     /// 返回稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回合同第 16.5 节事件代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Started => "STARTED",
@@ -82,8 +88,14 @@ pub enum ApprovalNotificationDeliveryStatus {
 impl ApprovalNotificationDeliveryStatus {
     /// 返回稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回投递状态代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Pending => "PENDING",
@@ -196,6 +208,9 @@ impl ApprovalNotificationOutbox {
     /// * `template_params` - 有界模板参数
     /// * `at` - 入队时间
     ///
+    /// # 返回
+    /// 返回状态为待投递、尝试次数为 0 的 outbox 记录。
+    ///
     /// # 错误
     /// 去重键、收件人或模板字段非法时返回错误。
     pub fn enqueue(
@@ -234,8 +249,11 @@ impl ApprovalNotificationOutbox {
     /// * `now` - 当前时间
     /// * `lease_until` - 租约截止
     ///
+    /// # 返回
+    /// 无返回值；状态变为投递中并写入租约。
+    ///
     /// # 错误
-    /// 已投递、已死信或租约未到期时返回错误。
+    /// 已投递、已死信、尚未到下次尝试时间、租约未到期、租约截止不晚于当前时间，或持有者为空、过长时返回错误。
     pub fn acquire_lease(
         &mut self,
         worker_id: impl Into<String>,
@@ -259,6 +277,12 @@ impl ApprovalNotificationOutbox {
 
     /// 标记投递成功。成功后不得再次取得该消息。
     ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无返回值；状态变为已投递并清除租约。
+    ///
     /// # 错误
     /// 当前不是投递中时返回错误。
     pub fn mark_delivered(&mut self) -> Result<()> {
@@ -277,8 +301,11 @@ impl ApprovalNotificationOutbox {
     /// * `error_class` - 错误分类
     /// * `failed_at` - 失败时间
     ///
+    /// # 返回
+    /// 无返回值；未达尝试上限时回到待投递并安排下次时间，否则进入死信。
+    ///
     /// # 错误
-    /// 当前不是投递中或错误分类非法时返回错误。
+    /// 当前不是投递中、错误分类为空或过长，或尝试次数溢出时返回错误。
     pub fn mark_failure(&mut self, error_class: impl Into<String>, failed_at: Instant) -> Result<()> {
         if self.delivery_status != ApprovalNotificationDeliveryStatus::InFlight {
             return Err(Error::from("只有投递中的消息可以记录失败"));
@@ -378,6 +405,7 @@ fn next_attempt_at(attempt_count: u32, failed_at: Instant) -> Result<Instant> {
 
 /// 当前消息是否允许被领取。
 impl ApprovalNotificationOutbox {
+    /// 仅待投递且已到点，或投递中且租约已到期的消息可以再次取得。
     fn ensure_retryable(&self, now: Instant) -> Result<()> {
         match self.delivery_status {
             ApprovalNotificationDeliveryStatus::Delivered => Err(Error::from("已投递消息不得再次取得")),

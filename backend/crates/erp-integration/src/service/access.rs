@@ -86,7 +86,7 @@ impl IntegrationAccess {
     /// 存在唯一主属组织时返回其 ID。
     ///
     /// # 错误
-    /// 未装配、组织关系非法或缺少有效内部组织时拒绝。
+    /// 处理人 ID 为 `me` 时返回 `ValidationError`；未装配、组织关系非法或缺少有效内部组织时拒绝。
     pub async fn require_handler_org(
         &self,
         user_id: &str,
@@ -168,7 +168,7 @@ impl IntegrationAccess {
     /// 对象在范围内时成功。
     ///
     /// # 错误
-    /// 不可见对象返回 NotFound，不泄露存在性；未装配时失败关闭。
+    /// 无动作权限返回 `Forbidden`；不可见对象返回 `NotFound`，不泄露存在性；未装配时失败关闭。
     ///
     /// # 关键业务约束
     /// 列表授权不替代对象重验；历史处理人不构成详情可见。

@@ -17,8 +17,15 @@ type ErrorTaskFilter = <Database as IntegrationOpsExt>::IntegrationErrorTaskFilt
 impl IntegrationOpsService {
     /// 分页查询集成错误任务列表。
     ///
+    /// # 参数
+    /// * `params` - 列表查询参数
+    /// * `actor` - 已认证操作人
+    ///
+    /// # 返回
+    /// 返回带范围元数据的分页视图；角色无有效范围时条目为空且 `empty_reason` 为 `no_scope`。
+    ///
     /// # 错误
-    /// 查询参数非法、范围变化或仓储查询失败时返回错误。
+    /// 查询参数非法、范围版本变化、授权或组织展开失败、仓储查询或事务失败时返回对应错误。
     pub async fn error_task_list(
         &self,
         params: &ErrorTaskListParams,
@@ -38,6 +45,7 @@ impl IntegrationOpsService {
             .await
     }
 
+    /// 无有效范围时不查库，直接返回空页。
     async fn error_task_page(
         &self,
         query: dto::ErrorTaskListQuery,
@@ -63,6 +71,16 @@ impl IntegrationOpsService {
         Ok(error_task_list_view(page, &filter, scope.meta))
     }
 
+    /// 确认关联入站消息存在；不校验处理状态。
+    ///
+    /// # 参数
+    /// * `id` - 消息 ID
+    ///
+    /// # 返回
+    /// 消息存在时成功。
+    ///
+    /// # 错误
+    /// 消息不存在时返回 `NotFound`；仓储读取失败时返回对应错误。
     pub async fn ensure_message_exists(&self, id: &str) -> Result<()> {
         self.db
             .inbox_messages()
@@ -73,8 +91,16 @@ impl IntegrationOpsService {
     }
 }
 /// 由已校验请求构造原责任政策下的错误任务。
-/// # Errors
-/// 保留原实体字段和责任不变量错误。
+///
+/// # 参数
+/// * `req` - 错误任务登记请求
+/// * `owner_org_unit_id` - 处理人当前内部组织
+///
+/// # 返回
+/// 返回带派生责任角色的错误任务。
+///
+/// # 错误
+/// 实体字段或责任不变量失败时返回 `Logic`。
 pub fn prepare_error_task(
     req: &CreateErrorTaskRequest,
     owner_org_unit_id: String,
@@ -169,8 +195,17 @@ fn empty_error_task_page(filter: &ErrorTaskFilter, meta: ScopedIntegrationList) 
 }
 
 /// 在调用方事务内保存错误任务。
-/// # Errors
-/// 返回原仓储错误。
+///
+/// # 参数
+/// * `db` - 目标数据库
+/// * `task` - 待写入的错误任务
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 成功时任务已写入。
+///
+/// # 错误
+/// 仓储写入失败时返回对应错误。
 pub async fn persist_error_task(
     db: &Database,
     task: &IntegrationErrorTask,

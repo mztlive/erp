@@ -55,6 +55,15 @@ impl PendingFileReference {
     }
 
     /// 返回稳定字符串表示。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回已保留前缀的临时引用字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -118,6 +127,12 @@ impl PendingFileReferenceSet {
 
     /// 校验全部已上传文件恰好被业务命令消费一次。
     ///
+    /// # 参数
+    /// * `used` - 本命令已经消费的临时引用字符串
+    ///
+    /// # 返回
+    /// 已消费集合与登记引用一一对应时无返回值。
+    ///
     /// # 错误
     /// 存在未消费引用或调用方传入未知引用时返回领域校验错误。
     pub fn ensure_all_used(&self, used: &HashSet<String>) -> Result<()> {
@@ -130,11 +145,29 @@ impl PendingFileReferenceSet {
     }
 
     /// 判断正式资产 ID 是否属于本集合。
+    ///
+    /// # 参数
+    /// * `id` - 正式文件资产 ID
+    ///
+    /// # 返回
+    /// 该 ID 已登记敏感级别时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn contains_id(&self, id: &FileAssetId) -> bool {
         self.sensitivity_by_id.contains_key(id.as_ref())
     }
 
     /// 返回本集合中正式资产 ID 的敏感级别。
+    ///
+    /// # 参数
+    /// * `id` - 正式文件资产 ID
+    ///
+    /// # 返回
+    /// 已登记时返回敏感级别；ID 不属于本集合时返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn sensitivity(&self, id: &FileAssetId) -> Option<SensitivityClass> {
         self.sensitivity_by_id.get(id.as_ref()).copied()
     }

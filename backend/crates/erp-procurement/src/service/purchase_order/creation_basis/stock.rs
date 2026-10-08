@@ -7,6 +7,16 @@ use crate::entity::purchase_order::{
     SalesProcurementCoverage, SalesProcurementCoverageLine, StockBasisGroup, StockBasisLine,
 };
 /// 选取当前冻结责任范围内有剩余的实物销售行；保持原行顺序。
+///
+/// # 参数
+/// * `coverage` - 销售当前采购覆盖
+/// * `responsibility_scope_ids` - 允许进入库存依据的稳定销售行 ID
+///
+/// # 返回
+/// 返回商品类型为实物、行 ID 在范围内且剩余数量大于零的覆盖行。
+///
+/// # 错误
+/// 不返回错误。
 pub fn physical_stock_lines(
     coverage: &SalesProcurementCoverage,
     responsibility_scope_ids: &[String],
@@ -24,6 +34,22 @@ pub fn physical_stock_lines(
         .collect::<Vec<_>>()
 }
 /// 按最新余额与启用仓库形成库存依据，行按稳定销售行、组按余额身份排序。
+///
+/// 只保留启用仓库中、且至少有一条 SKU 相同的实物行的余额。行的可建数量取剩余量与可用量的较小值。
+/// 仓库名缺失时回退仓库 ID。
+///
+/// # 参数
+/// * `coverage` - 提供销售修订头，写入每个库存组
+/// * `physical_lines` - 已按责任范围筛过的实物覆盖行
+/// * `balances` - 最新库存余额
+/// * `active_warehouse_ids` - 启用仓库 ID
+/// * `names` - 仓库 ID 到名称
+///
+/// # 返回
+/// 返回按余额 ID 排序的库存依据组；组内行按稳定销售行 ID 排序。
+///
+/// # 错误
+/// 不返回错误。
 pub fn stock_groups_from_facts(
     coverage: &SalesProcurementCoverage,
     physical_lines: &[SalesProcurementCoverageLine],

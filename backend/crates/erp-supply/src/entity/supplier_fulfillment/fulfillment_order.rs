@@ -378,11 +378,17 @@ impl SupplierFulfillmentOrder {
     ///
     /// # 返回
     /// 供应商一致时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn belongs_to_supplier(&self, supplier_id: &SupplierAccountId) -> bool {
         self.supplier_id == *supplier_id
     }
 
     /// 返回与履约完成状态一致的正式完成时间。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 已完成订单返回完成时间；尚未完成且没有完成时间时返回 `None`。
@@ -399,6 +405,9 @@ impl SupplierFulfillmentOrder {
     }
 
     /// 校验订单已经到达取消完成终态。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 取消状态为 `CANCELED` 时返回 `Ok(())`。
@@ -419,6 +428,9 @@ impl SupplierFulfillmentOrder {
     ///
     /// # 返回
     /// 订单与动作共同证明终态时返回对应结果；关系或状态不足时返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn verified_resolution(
         &self,
         action: &SupplierOrderAction,
@@ -465,6 +477,9 @@ impl SupplierFulfillmentOrder {
     ///
     /// # 返回
     /// 订单与动作均为结果未知的原下单请求时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn can_replay_place_action(&self, action: &SupplierOrderAction) -> bool {
         action.supplier_fulfillment_order_id.as_ref() == self.base.id
             && action.action_type == SupplierOrderActionType::Place

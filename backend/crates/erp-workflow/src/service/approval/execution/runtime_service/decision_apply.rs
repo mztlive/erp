@@ -183,6 +183,17 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
 }
 
 /// 执行与 Fresh 相同的任务前置；只有 `NotOpen` 才可继续证明终态回放。
+///
+/// # 参数
+/// * `item` - 已加载的审批任务。
+/// * `actor_id` - 当前操作人。
+/// * `expected_task_version` - 调用方持有的任务版本。
+///
+/// # 返回
+/// 任务仍开放且前置通过时返回 `Fresh`；已终结且仍有执行引用时返回 `Terminal`。
+///
+/// # 错误
+/// 非当前责任人、版本冲突、任务类型或执行引用不合法，或已终结但没有执行引用时返回稳定任务错误。
 pub(super) fn decision_receipt_lookup_gate(
     item: &WorkItem,
     actor_id: &str,
@@ -200,6 +211,15 @@ pub(super) fn decision_receipt_lookup_gate(
 }
 
 /// 终态任务的 Fresh 语义固定为稳定 `APPROVAL_TASK_NOT_OPEN`，不得暴露收据或授权差异。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回 `ApprovalTaskNotOpen`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn decision_terminal_fresh_error() -> Error {
     Error::from_approval_code(ErrorCode::ApprovalTaskNotOpen)
 }
@@ -244,6 +264,10 @@ async fn replay_decision(
     replay_terminal_receipt_view(db, actor, command, &item, &execution_id, executor).await
 }
 
+/// 终态决定在身份证明后按收据回放；缺失或不匹配时失败，不得当作未执行。
+///
+/// # Panics
+/// 已加载收据被分类为 `Fresh` 时 `unreachable!`，表示分类器与查询结果矛盾。
 async fn replay_terminal_receipt_view(
     db: &Database,
     actor: &AuditActor,
@@ -409,6 +433,16 @@ async fn verify_decision_receipt_runtime_identity(
 }
 
 /// 从任务不可逆终态与执行事实提取原决定人；不得把当前 owner 投影作为回放授权。
+///
+/// # 参数
+/// * `item` - 已终结或仍开放的任务。
+/// * `execution` - 任务所属执行。
+///
+/// # 返回
+/// 完成态要求决定人、决定与结束时间一致；关闭态要求受阻关闭人与当前审批人一致。不满足或任务仍开放时返回 `None`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn decision_terminal_actor<'a>(
     item: &'a WorkItem,
     execution: &'a ApprovalNodeExecution,
@@ -446,6 +480,18 @@ pub(super) fn decision_terminal_actor<'a>(
 }
 
 /// legacy 决定摘要只有在不可变终态执行与任务完整证明原命令时才允许回放。
+///
+/// # 参数
+/// * `item` - 终态任务。
+/// * `execution` - 终态执行。
+/// * `command` - 本次决定命令。
+/// * `actor_id` - 当前操作人，必须是原完成人。
+///
+/// # 返回
+/// 任务版本、决定、原因、决定人和结束时间全部一致时返回 `true`；期望版本溢出时返回 `false`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn legacy_decision_terminal_facts_match(
     item: &WorkItem,
     execution: &ApprovalNodeExecution,
@@ -473,6 +519,17 @@ pub(super) fn legacy_decision_terminal_facts_match(
 }
 
 /// 终态回放绑定原始任务与冻结主体，不要求该执行仍为实例当前节点。
+///
+/// # 参数
+/// * `item` - 原始任务。
+/// * `execution` - 该任务的执行。
+/// * `snapshot` - 冻结主体。
+///
+/// # 返回
+/// 任务类型、执行、单据、版本、责任组织和审批人都与快照一致时返回 `true`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn terminal_task_subject_matches(
     item: &WorkItem,
     execution: &ApprovalNodeExecution,
@@ -529,6 +586,7 @@ async fn authorize_decision_terminal_replay(
     Ok(())
 }
 
+/// 终态回放只接受与执行同实例的冻结主体和节点审批人，缺失时隐藏存在性。
 async fn load_decision_terminal_replay_facts(
     db: &Database,
     execution: &ApprovalNodeExecution,

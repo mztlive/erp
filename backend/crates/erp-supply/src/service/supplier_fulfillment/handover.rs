@@ -60,6 +60,16 @@ async fn persist_handover(
 }
 
 /// 构造交接响应。
+///
+/// # 参数
+/// * `order` - 已写回跟进人的履约订单。
+/// * `transferred_work_item_ids` - 已移交的工作项身份。
+///
+/// # 返回
+/// 返回订单、跟进人、业务组织、版本和工作项身份。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn handover_view(
     order: &SupplierFulfillmentOrder,
     transferred_work_item_ids: Vec<String>,

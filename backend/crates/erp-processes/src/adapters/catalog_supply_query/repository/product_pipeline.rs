@@ -9,6 +9,15 @@ use persistence_core::{Pagination, QueryFilter};
 use super::shared::{PRODUCT_REVISIONS, SKU_REVISIONS, SKUS, SUPPLIER_OFFERINGS, sort_doc};
 
 /// 构造商品列表的当前修订与 SKU 聚合管道。
+///
+/// # 参数
+/// * `filter` - 商品、当前修订与 SKU 聚合筛选。
+///
+/// # 返回
+/// 返回分页前完整筛选再加 facet 的管道。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn product_list_pipeline(filter: &ProductFilter) -> Vec<Document> {
     let mut pipeline = product_matching_pipeline(filter);
     pipeline.push(product_facet(filter));
@@ -16,6 +25,15 @@ pub(super) fn product_list_pipeline(filter: &ProductFilter) -> Vec<Document> {
 }
 
 /// 候选查询保留全部筛选，只投影身份；10001 为整体超限拒绝的探测条数。
+///
+/// # 参数
+/// * `filter` - 已规范化的商品筛选。
+///
+/// # 返回
+/// 返回按 `id` 升序并截断到 10001 条的身份投影管道。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn product_candidate_pipeline(filter: &ProductFilter) -> Vec<Document> {
     let mut pipeline = product_candidate_matching_pipeline(filter);
     pipeline.extend([

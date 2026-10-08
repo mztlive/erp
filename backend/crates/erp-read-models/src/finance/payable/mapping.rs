@@ -16,8 +16,16 @@ use crate::{Error, Result};
 
 /// 解析供应商在当前业务日唯一生效的默认收款账户。
 ///
+/// # 参数
+/// * `db` - 数据库实例。
+/// * `supplier_id` - 供应商账号身份。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 返回当前业务日唯一生效的默认收款账户。
+///
 /// # 错误
-/// 供应商不存在、未配置默认账户或出现多个默认账户时失败关闭。
+/// 供应商不存在、未配置默认账户、出现多个默认账户或仓储读取失败时返回错误。
 pub async fn resolve_current_payment_recipient(
     db: &Database,
     supplier_id: &SupplierAccountId,
@@ -58,6 +66,14 @@ pub async fn resolve_current_party_payment_recipient(
 /// 供应商已软删除或缺失时返回空，保证历史应付仍可读取；付款执行必须调用
 /// [`resolve_current_payment_recipient`] 并严格校验活跃供应商。
 ///
+/// # 参数
+/// * `db` - 数据库实例。
+/// * `supplier_id` - 供应商账号身份。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 返回当前默认收款账户；供应商缺失或未配置默认账户时返回 `None`。
+///
 /// # 错误
 /// 出现多个默认账户或仓储读取失败时返回错误。
 pub async fn resolve_optional_payment_recipient_for_read(
@@ -92,6 +108,15 @@ async fn resolve_optional_party_payment_recipient(
 }
 
 /// 构造不含敏感明文的收款账户摘要。
+///
+/// # 参数
+/// * `account` - 主体银行账户。
+///
+/// # 返回
+/// 返回掩码后的收款账户摘要。
+///
+/// # 错误
+/// 不返回错误。
 pub fn payment_recipient_view(account: &PartyBankAccount) -> PaymentRecipientView {
     PaymentRecipientView {
         bank_account_id: account.base.id.clone(),
@@ -104,6 +129,15 @@ pub fn payment_recipient_view(account: &PartyBankAccount) -> PaymentRecipientVie
 }
 
 /// 使用账号末四位构造不可恢复的工作台掩码。
+///
+/// # 参数
+/// * `last4` - 账号末四位；空白时不拼入掩码。
+///
+/// # 返回
+/// 返回 `********` 加末四位；末四位为空白时只返回 `********`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn masked_bank_account_number(last4: &str) -> String {
     let last4 = last4.trim();
     if last4.is_empty() { "********".to_string() } else { format!("********{last4}") }
@@ -111,8 +145,17 @@ pub fn masked_bank_account_number(last4: &str) -> String {
 
 /// 返回固定零金额。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回金额 `0.00`。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # Panics
+/// `Amount::from_str("0.00")` 失败时 panic；该固定字面量在金额格式不变时应可解析。
 pub fn zero_amount() -> Amount {
     Amount::from_str("0.00").expect("固定零金额必须可解析")
 }

@@ -58,16 +58,28 @@ impl ReceivableDelta {
 
     /// 返回差额方向。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// `Increase` 表示应收增加，`Decrease` 表示应收冲减。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn direction(self) -> EntryDirection {
         self.direction
     }
 
     /// 返回差额绝对金额。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 恒为正数 `Amount`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn absolute_amount(self) -> Amount {
         self.absolute_amount
     }

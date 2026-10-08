@@ -14,6 +14,16 @@ pub struct PeriodBounds {
 
 impl CurrentQualityQuery {
     /// 单次最多一年；现任分组下钻只接受现任人员或组织精确身份。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回上海自然日左闭右开的 UTC 秒边界：`from` 为开始日零点，`until` 为结束日次日零点。
+    ///
+    /// # 错误
+    /// 分页、排序、筛选文本、`dimension` 不在 `customer`／`owner_user`／`owner_org`、
+    /// `owner_group` 不是精确人员或组织身份，或期间颠倒、相隔超过 366 天、日期不是 `YYYY-MM-DD` 时返回 `ValidationError`。
     pub fn validate(&self) -> Result<PeriodBounds> {
         validate_paging(self.page, self.page_size, self.scope_version.as_deref())?;
         validate_sort(&self.sort, &["orderCount", "grossTotal", "customerNo", "label", "customerCount"])?;
@@ -28,6 +38,16 @@ impl CurrentQualityQuery {
 
 impl HistoryQualityQuery {
     /// 单次最多一年；历史下钻只接受冻结人员或组织的精确分组身份。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回上海自然日左闭右开的 UTC 秒边界：`from` 为开始日零点，`until` 为结束日次日零点。
+    ///
+    /// # 错误
+    /// 分页、排序、筛选文本、`dimension` 不在 `attribution_user`／`attribution_org`、
+    /// `attribution_group` 不是精确冻结人员或组织身份，或期间颠倒、相隔超过 366 天、日期不是 `YYYY-MM-DD` 时返回 `ValidationError`。
     pub fn validate(&self) -> Result<PeriodBounds> {
         validate_paging(self.page, self.page_size, self.scope_version.as_deref())?;
         validate_sort(&self.sort, &["orderCount", "grossTotal", "label"])?;

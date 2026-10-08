@@ -1,4 +1,4 @@
-//! Prepared file-asset batch that business commands persist on a shared executor.
+//! 业务命令在共享执行器上持久化之前准备好的文件资产批次。
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -21,7 +21,7 @@ use crate::Result;
 use crate::adapters::map_audit_to_support;
 use crate::audit::persist_logs;
 
-/// Files constructed before a business transaction, waiting to persist with that aggregate.
+/// 业务事务开始前构造、等待与聚合一起持久化的文件。
 #[derive(Debug)]
 pub struct PendingFileAssets {
     assets: Vec<FileAsset>,
@@ -31,14 +31,17 @@ pub struct PendingFileAssets {
 }
 
 impl PendingFileAssets {
-    /// Validate temporary references and registration metadata, then assign formal identities.
+    /// 校验临时引用和登记元数据，再分配正式文件身份。对象字节应已写入存储。
     ///
-    /// # Parameters
-    /// * `requests` - already stored object bytes with registration metadata
-    /// * `actor` - authenticated audit actor
+    /// # 参数
+    /// * `requests` - 已存储对象的登记请求。
+    /// * `actor` - 已认证的审计操作人。
     ///
-    /// # Errors
-    /// Invalid temporary references, registration validation failures, or duplicate tokens.
+    /// # 返回
+    /// 返回尚未落库的文件资产、审计和引用集合。
+    ///
+    /// # 错误
+    /// 临时引用无法解析、登记校验失败、正式资产或审计构造失败，或临时引用与正式资产 ID 重复时返回错误。
     pub fn prepare(requests: Vec<PendingFileAssetRequest>, actor: &AuditActor) -> Result<Self> {
         let mut manifest = Vec::new();
         let mut assets = Vec::with_capacity(requests.len());
@@ -68,7 +71,16 @@ impl PendingFileAssets {
         Ok(Self { assets, references: PendingFileReferenceSet::new(references)?, audits, manifest })
     }
 
-    /// Wrap the batch as a `'static` consumer port.
+    /// 消耗本批次，包装成 `'static` 的消费端口。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回可交给业务命令在同一事务中持久化的端口。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(self) -> Arc<dyn PendingAttachmentBatch> {
         Arc::new(self)
     }

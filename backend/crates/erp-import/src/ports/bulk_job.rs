@@ -1,21 +1,24 @@
-//! Consumer port for background-job identity facts owned by support.
+//! 由支撑域持有的后台任务身份事实消费端口。
 
 use async_trait::async_trait;
 use persistence_core::Executor;
 
 use crate::error::{Error, Result};
 
-/// Minimal background-job identity fact used by import batch views.
+/// 导入批次视图使用的最小后台任务身份事实。
 #[async_trait]
 pub trait BulkJobFactsPort: Send + Sync {
-    /// Look up a background job id by the import batch request identity.
+    /// 按导入批次请求身份查找后台任务 ID。
     ///
-    /// # Parameters
-    /// * `request_id` - import batch number used as job request id
-    /// * `executor` - caller-chosen data-access executor
+    /// # 参数
+    /// * `request_id` - 用作任务请求身份的导入批次号。
+    /// * `executor` - 调用方选择的数据访问执行器。
     ///
-    /// # Errors
-    /// Underlying job lookup failures.
+    /// # 返回
+    /// 找到时返回后台任务 ID；没有对应任务时返回 `None`。
+    ///
+    /// # 错误
+    /// 任务身份查询失败时返回对应错误。
     async fn background_job_id_by_request_id(
         &self,
         request_id: &str,
@@ -23,12 +26,23 @@ pub trait BulkJobFactsPort: Send + Sync {
     ) -> Result<Option<String>>;
 }
 
-/// Fail-closed bulk-job port used when composition has not injected an adapter.
+/// 组合根尚未注入适配器时使用的失败关闭后台任务端口。
 #[derive(Debug, Default, Clone, Copy)]
 pub struct FailClosedBulkJobFacts;
 
 #[async_trait]
 impl BulkJobFactsPort for FailClosedBulkJobFacts {
+    /// 拒绝查询且不编造任务身份。
+    ///
+    /// # 参数
+    /// * `_request_id` - 未使用；任意批次号都失败关闭。
+    /// * `_executor` - 未使用。
+    ///
+    /// # 返回
+    /// 不返回任务 ID。
+    ///
+    /// # 错误
+    /// 总是返回 [`Error::Internal`]，文案为导入后台任务端口未接线。
     async fn background_job_id_by_request_id(
         &self,
         _request_id: &str,

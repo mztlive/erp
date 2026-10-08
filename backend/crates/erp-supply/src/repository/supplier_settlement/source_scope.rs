@@ -144,6 +144,9 @@ impl<'a> SupplierSettlementRepository<'a> {
 ///
 /// # 返回
 /// 返回退款事实查询条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn refund_fact_scope_filter(
     supplier_id: &SupplierAccountId,
     start_secs: i64,
@@ -171,6 +174,9 @@ pub(super) fn refund_fact_scope_filter(
 ///
 /// # 返回
 /// 返回履约订单查询条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn order_scope_filter(
     supplier_id: &SupplierAccountId,
     order_ids: &BTreeSet<String>,
@@ -197,6 +203,9 @@ pub(super) fn order_scope_filter(
 ///
 /// # 返回
 /// 返回履约明细查询条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn item_scope_filter(
     order_ids: &BTreeSet<String>,
     requested_item_ids: &[SupplierFulfillmentItemId],

@@ -33,6 +33,9 @@ impl BusinessDate {
     ///
     /// # 返回
     /// 日期合法返回 `Some`，非法（如 2 月 30 日）返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。非法日期由 `None` 表示。
     pub fn from_ymd(year: i32, month: u32, day: u32) -> Option<Self> {
         NaiveDate::from_ymd_opt(year, month, day).map(Self)
     }
@@ -53,12 +56,22 @@ impl BusinessDate {
 
     /// 返回今天的业务自然日。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 以业务时区（Asia/Shanghai，+08:00）计算的今天。业务日期无时区语义，
     /// 前端与各类业务输入（客户/合同/单据的生效日期、到期日）均按中国业务
     /// 时区的自然日构造，这里必须与之一致，否则 00:00–08:00 期间以 UTC 计算
     /// 的“今天”会早于前端日期，导致归属范围查询（如客户列表）查不到当天
     /// 新建的数据。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    ///
+    /// # Panics
+    /// `BUSINESS_TZ_OFFSET_SECS` 不是合法固定偏移时，`expect` 会 panic。
+    /// 当前常量为 +08:00，处于 `FixedOffset` 允许范围内，正常不会触发。
     pub fn today() -> Self {
         let business_tz = FixedOffset::east_opt(BUSINESS_TZ_OFFSET_SECS).expect("+08:00 固定偏移量必然合法");
         Self(Utc::now().with_timezone(&business_tz).date_naive())
@@ -66,16 +79,28 @@ impl BusinessDate {
 
     /// 返回底层 `NaiveDate`。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回内部日期值。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_naive_date(self) -> NaiveDate {
         self.0
     }
 
     /// 拆分为年/月/日。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `(year, month, day)` 元组。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn ymd(self) -> (i32, u32, u32) {
         (self.0.year(), self.0.month(), self.0.day())
     }
@@ -109,6 +134,15 @@ impl FromStr for BusinessDate {
 
 impl Serialize for BusinessDate {
     /// 序列化为 `YYYY-MM-DD` 字符串。
+    ///
+    /// # 参数
+    /// * `serializer` - serde 序列化器。
+    ///
+    /// # 返回
+    /// 成功时写入 `YYYY-MM-DD` 字符串。
+    ///
+    /// # 错误
+    /// 序列化器写入失败时返回 serde 错误。
     fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
         serializer.serialize_str(&self.to_string())
     }
@@ -116,6 +150,15 @@ impl Serialize for BusinessDate {
 
 impl<'de> Deserialize<'de> for BusinessDate {
     /// 从 `YYYY-MM-DD` 字符串反序列化。
+    ///
+    /// # 参数
+    /// * `deserializer` - serde 反序列化器。
+    ///
+    /// # 返回
+    /// 解析成功时返回业务日期。
+    ///
+    /// # 错误
+    /// 输入不是字符串，或格式非法、日期不存在时返回 serde 错误。日期失败文案与 [`BusinessDate::from_str`] 相同。
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
         let value = String::deserialize(deserializer)?;
         Self::from_str(&value).map_err(de::Error::custom)
@@ -132,8 +175,14 @@ pub struct Instant(DateTime<Utc>);
 impl Instant {
     /// 返回当前时刻。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 UTC 当前时刻。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn now() -> Self {
         Self(Utc::now())
     }
@@ -145,6 +194,9 @@ impl Instant {
     ///
     /// # 返回
     /// 返回对应时刻。
+    ///
+    /// # 错误
+    /// 不返回错误。越界时 panic，见 `# Panics`。
     ///
     /// # Panics
     /// 时间戳超出 `DateTime<Utc>` 可表示范围时 panic（i64 秒在 ±2920 亿年范围
@@ -169,16 +221,28 @@ impl Instant {
 
     /// 返回 Unix 秒级时间戳。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回整秒时间戳（i64）。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn unix_secs(self) -> i64 {
         self.0.timestamp()
     }
 
     /// 返回底层 `DateTime<Utc>`。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回内部时刻值。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_utc(self) -> DateTime<Utc> {
         self.0
     }
@@ -186,6 +250,15 @@ impl Instant {
 
 impl Serialize for Instant {
     /// 序列化为秒级时间戳（i64 数字，与 `BaseModel.created_at` 的 JSON 形态一致）。
+    ///
+    /// # 参数
+    /// * `serializer` - serde 序列化器。
+    ///
+    /// # 返回
+    /// 成功时写入 `unix_secs()` 的 i64。
+    ///
+    /// # 错误
+    /// 序列化器写入失败时返回 serde 错误。
     fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
         serializer.serialize_i64(self.unix_secs())
     }
@@ -193,6 +266,18 @@ impl Serialize for Instant {
 
 impl<'de> Deserialize<'de> for Instant {
     /// 从秒级时间戳反序列化（接受 i64/u64/i32/u32，拒绝浮点）。
+    ///
+    /// # 参数
+    /// * `deserializer` - serde 反序列化器。
+    ///
+    /// # 返回
+    /// 整数时间戳落在 `DateTime<Utc>` 可表示范围时返回对应时刻。
+    ///
+    /// # 错误
+    /// 类型不是上述整数，或 `u64` 超出 i64 范围时返回 serde 错误。浮点数会被拒绝。
+    ///
+    /// # Panics
+    /// 整数能放进 i64、但超出 `DateTime<Utc>` 范围时，经 [`Instant::from_unix_secs`] panic。
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
         struct InstantVisitor;
 
@@ -203,10 +288,36 @@ impl<'de> Deserialize<'de> for Instant {
                 formatter.write_str("秒级 Unix 时间戳（整数）")
             }
 
+            /// 能表示则返回时刻；超出 `DateTime<Utc>` 时经 `from_unix_secs` panic，不转成 serde 错误。
+            ///
+            /// # 参数
+            /// * `value` - 秒级 Unix 时间戳。
+            ///
+            /// # 返回
+            /// 时间戳可表示时返回对应 `Instant`。
+            ///
+            /// # 错误
+            /// 不返回错误。越界不转成 serde 错误。
+            ///
+            /// # Panics
+            /// `value` 超出 `DateTime<Utc>` 可表示范围时，`Instant::from_unix_secs` 会 panic。
             fn visit_i64<E: de::Error>(self, value: i64) -> std::result::Result<Self::Value, E> {
                 Ok(Instant::from_unix_secs(value))
             }
 
+            /// `u64` 超出 i64 时返回 serde 错误；转入 i64 后仍越界则同样 panic。
+            ///
+            /// # 参数
+            /// * `value` - 秒级 Unix 时间戳。
+            ///
+            /// # 返回
+            /// `value` 能转入 `i64` 且时刻可表示时返回对应 `Instant`。
+            ///
+            /// # 错误
+            /// `value` 超出 `i64` 可表示范围时返回 serde 错误，文案为「时间戳超出 i64 可表示范围」。
+            ///
+            /// # Panics
+            /// 转入 `i64` 后仍超出 `DateTime<Utc>` 可表示范围时，`Instant::from_unix_secs` 会 panic。
             fn visit_u64<E: de::Error>(self, value: u64) -> std::result::Result<Self::Value, E> {
                 let secs =
                     i64::try_from(value).map_err(|_| de::Error::custom("时间戳超出 i64 可表示范围"))?;

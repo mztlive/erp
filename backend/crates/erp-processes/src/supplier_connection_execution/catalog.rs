@@ -16,6 +16,17 @@ use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl SupplierConnectionExecutionProcess {
+    /// 按启动前读取连接、启动事务、事务外目录同步、结果事务的顺序执行目录任务。
+    ///
+    /// # 参数
+    /// * `job` - 已登记的目录同步后台任务。
+    /// * `actor` - 结果事务使用的审计操作人。
+    ///
+    /// # 返回
+    /// 启动与结果事务都成功时返回；网关失败由结果事务登记。
+    ///
+    /// # 错误
+    /// 任务缺少连接 ID、加载连接失败，或启动与结果事务失败时返回错误。
     pub(super) async fn process_catalog_job(&self, job: BackgroundJob, actor: &AuditActor) -> Result<()> {
         execute(&CatalogExecution(self), job, actor).await
     }

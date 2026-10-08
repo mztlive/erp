@@ -14,6 +14,18 @@ use crate::finance::dto::{
 use crate::{Error, Result};
 
 /// 与完整回款视图共用原执行器装配运行事实，未提交时保持空实例。
+///
+/// # 参数
+/// * `db` - 目标数据库。
+/// * `receipt` - 客户回款。
+/// * `binding` - 创建时冻结的审批绑定；未注册时为空。
+/// * `executor` - 与完整回款视图相同的执行器。
+///
+/// # 返回
+/// 返回只读审批结构；未提交时实例为空，且不允许 `CANCEL`。
+///
+/// # 错误
+/// 运行事实读取失败，或实例主体版本与回款 `approval_subject_version` 不一致时返回 `ConflictError` 或下层错误。
 pub(super) async fn load_receipt_document_approval(
     db: &Database,
     receipt: &CustomerReceipt,

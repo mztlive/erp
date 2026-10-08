@@ -113,6 +113,9 @@ impl<'a> SupplierFulfillmentRepository<'a> {
     ///
     /// # 返回
     /// 返回仓储实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
@@ -177,6 +180,9 @@ impl<'a> SupplierFulfillmentRepository<'a> {
     /// * `action` - 待写入的首个 `PLACE` 动作
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
+    /// # 返回
+    /// 三笔写入都成功时无返回值。
+    ///
     /// # 错误
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
     /// 为幂等命中）或 MongoDB 写入失败时返回错误。
@@ -221,6 +227,9 @@ impl<'a> SupplierFulfillmentRepository<'a> {
     /// * `fact` - 待写入的退款事实头
     /// * `allocations` - 待写入的全部分配行
     /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 返回
+    /// 两笔写入都成功时无返回值。
     ///
     /// # 错误
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入
@@ -327,14 +336,6 @@ impl<'a> SupplierFulfillmentRepository<'a> {
     }
 }
 
-/// 构建履约订单排序文档（白名单映射，禁止透传任意字段名）。
-///
-/// # 参数
-/// * `sort_by` - 排序字段；`None` 或不在白名单内时默认 `created_at`
-/// * `sort_ascending` - 升序为 `true`，降序为 `false`
-///
-/// # 返回
-/// 返回排序条件文档。
 /// 按执行器语义执行聚合管道并收集全部结果行。
 ///
 /// 带会话时使用 `SessionCursor` 逐条读取，与非会话游标返回同样的结果集合。
@@ -403,6 +404,9 @@ async fn aggregate_single_total(
 ///
 /// # 返回
 /// 返回精确零金额。
+///
+/// # Panics
+/// `Amount::from_str("0.00")` 被当作恒合法；解析失败时 `expect` 会 panic。
 fn zero_total() -> Amount {
     Amount::from_str("0.00").expect("零是合法金额")
 }
@@ -460,13 +464,12 @@ fn ids_to_strings<T: ToString>(ids: &[T]) -> Vec<String> {
 
 /// 按事实头主键把分配行归组为退款事实快照（FUL-R04）。
 ///
-/// 事实头与分配行均已由调用方按主键稳定排序；本函数保持该顺序，只做
-/// 线性归组，不跨事实头泄漏分配行。无分配行的事实头保留为空集合。
+/// 事实头的输出顺序与输入一致。分配行按事实头归组后，每组再按主键排序，
+/// 不依赖分配行的输入顺序，也不跨事实头泄漏。无分配行的事实头保留为空集合。
 ///
 /// # 参数
-/// * `facts` - 已按主键稳定排序的退款事实头
-/// * `allocations` - 已按主键稳定排序的全部未软删除分配行；即使输入乱序，
-///   本函数仍按主键对每组分配行稳定排序，保证输出确定
+/// * `facts` - 退款事实头；输出顺序与此输入一致
+/// * `allocations` - 待归组的分配行；即使输入乱序，本函数仍按主键对每组稳定排序
 ///
 /// # 返回
 /// 返回与事实头一一对应的归组快照，顺序与输入事实头一致；每组分配行按主键

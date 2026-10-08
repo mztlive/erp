@@ -71,7 +71,7 @@ impl SupplierQualificationRevision {
     /// 创建资质修订。
     ///
     /// 完成证书编号必填校验与发证机构的规范化（去首尾空白、长度上限）；
-    /// 强制 `valid_to` 晚于 `valid_from`。
+    /// 日期窗口经 [`QualificationType::ensure_validity_window`]：非合同必须有开始日期，已知结束日期必须晚于开始日期。
     ///
     /// # 参数
     /// * `id` - 实体主键（`erp_core::ids::SupplierQualificationRevisionId`）
@@ -81,7 +81,7 @@ impl SupplierQualificationRevision {
     /// 返回新建的修订实体。
     ///
     /// # 错误
-    /// 当证书编号为空/超长、发证机构超长或生效区间倒挂时返回错误。
+    /// 证书编号为空或超长、发证机构超长、非合同缺少开始日期，或结束日期不晚于开始日期时返回错误。
     pub fn new(id: SupplierQualificationRevisionId, data: SupplierQualificationRevisionData) -> Result<Self> {
         let certificate_no = normalize_required_text(
             data.certificate_no,

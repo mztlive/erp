@@ -66,11 +66,14 @@ pub struct ProductImportJobListParams {
 impl ProductImportJobListParams {
     /// 归一化分页参数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回页码与单页条数。
+    /// 返回页码与单页条数；排序固定为 `created_at` 降序。
     ///
     /// # 错误
-    /// 无；非法值由 `Validate` 拦截。
+    /// 不返回错误；非法页码由 `Validate` 拦截。
     pub fn paging(&self) -> PageParams {
         PageParams {
             page: page_or_default(self.page),
@@ -95,11 +98,14 @@ pub struct ProductImportItemListParams {
 impl ProductImportItemListParams {
     /// 归一化分页参数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回页码与单页条数。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn paging(&self) -> (u64, u32) {
         (page_or_default(self.page), page_size_or_default(self.page_size))
     }

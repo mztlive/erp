@@ -36,6 +36,17 @@ pub struct PaymentReversalWrite {
 }
 
 /// 在冲正累计上限检查之前读取并确认原付款已过账。
+///
+/// # 参数
+/// * `db` - 财务领域数据库。
+/// * `payment_id` - 原付款单主键。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 返回状态为 `Posted` 的付款单。
+///
+/// # 错误
+/// 付款不存在时返回 `NotFound`；状态不是已过账时返回 `BusinessLogicError`；仓储读取失败时返回对应错误。
 pub async fn load_posted_payment_for_reversal(
     db: &Database,
     payment_id: &SupplierPaymentId,
@@ -55,6 +66,19 @@ pub async fn load_posted_payment_for_reversal(
 /// 读取分配、规划反转并回冲全部 settlement，返回原 HashSet 供流程逐账户同步任务。
 ///
 /// 调用方必须完成任务同步后才调用返回计划的 persist，不得重排反向分配写入。
+///
+/// # 参数
+/// * `db` - 财务领域数据库。
+/// * `payment` - 已过账的原付款。
+/// * `reversal` - 本次冲正金额与发生时间。
+/// * `actor_id` - 执行人。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 返回待持久化的冲正计划，以及本次回冲涉及的应付子账 ID。
+///
+/// # 错误
+/// 分配计划、序号、分录或账户缺失、超额冲减或仓储失败时返回对应错误。
 pub async fn prepare_payment_reversal(
     db: &Database,
     payment: SupplierPayment,
@@ -74,6 +98,18 @@ pub async fn prepare_payment_reversal(
 
 impl PaymentReversalWrite {
     /// 付款任务同步成功后，用同一 Executor 写反向分配并将原付款迁到 Reversed。
+    ///
+    /// 本方法消耗 `self`。
+    ///
+    /// # 参数
+    /// * `db` - 财务领域数据库。
+    /// * `executor` - 与回冲结算相同的调用方执行器。
+    ///
+    /// # 返回
+    /// 反向分配写入且原付款迁到 `Reversed` 后无返回值。
+    ///
+    /// # 错误
+    /// 反向分配写入、状态迁移或付款更新失败时返回对应错误。
     pub async fn persist(self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         persist_reverse_allocations(
             db,

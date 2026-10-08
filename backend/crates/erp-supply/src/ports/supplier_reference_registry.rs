@@ -19,9 +19,29 @@ pub struct ResolvedSupplierReference {
 /// 服务端不透明引用注册表端口。
 pub trait SupplierReferenceRegistry: Send + Sync {
     /// 判断当前进程是否已注入权威注册表。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 已注入权威注册表时为 `true`，否则为 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn is_available(&self) -> bool;
 
     /// 解析服务端签发的短时引用；实现必须校验种类、环境、用途和有效期。
+    ///
+    /// # 参数
+    /// * `kind` - 引用种类。
+    /// * `payload_reference` - 服务端签发的短时引用。
+    /// * `environment` - 连接环境。
+    ///
+    /// # 返回
+    /// 校验通过时返回仅供后端配置写入的 `ResolvedSupplierReference`。
+    ///
+    /// # 错误
+    /// 种类、环境、用途或有效期不通过时返回 `ClassifiedError`。
     fn resolve<'a>(
         &'a self,
         kind: SupplierReferenceKind,

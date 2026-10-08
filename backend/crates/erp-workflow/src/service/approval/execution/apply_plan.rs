@@ -59,6 +59,9 @@ pub struct PlannedWrites {
 ///
 /// # 返回
 /// 返回可在一个事务中应用的写入集合。
+///
+/// # 错误
+/// 不返回错误。
 pub fn apply_plan(
     plan: TransitionPlan,
     receipt: ApprovalCommandReceipt,
@@ -97,6 +100,9 @@ pub fn apply_plan(
 ///
 /// # 返回
 /// 终态通过且未登记最终动作时返回 `false`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn final_approve_requires_domain_action(writes: &PlannedWrites) -> bool {
     writes.commit != CommitRequired::TerminalApproved
         || writes.domain_action == Some(DomainActionKind::FinalApprove)

@@ -78,8 +78,11 @@ impl AdminService {
     /// * `db` - 数据库实例
     /// * `rbac` - 共享 Casbin RBAC 服务
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回管理员服务实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
         Self { db, rbac }
     }
@@ -91,6 +94,9 @@ impl AdminService {
     /// # 参数
     /// * `params` - 创建管理员所需参数
     /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 管理员账号与角色绑定写入完成后无返回值。
     ///
     /// # 错误
     /// * `ConflictError` - 账号已存在
@@ -126,7 +132,7 @@ impl AdminService {
     /// # 参数
     /// * `params` - 初始化参数，账号/密码/名称均必填
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回初始化执行结果
     ///
     /// # 错误
@@ -152,8 +158,14 @@ impl AdminService {
 
     /// 获取管理员列表。
     ///
-    /// # 返回值
-    /// * `Ok(Vec<AdminItem>)` - 包含角色 ID 的管理员集合
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回包含角色 ID 的管理员集合。
+    ///
+    /// # 错误
+    /// 账号列表或角色绑定读取失败时返回错误。
     pub async fn admin_list(&self) -> Result<Vec<AdminItem>> {
         let admins: Vec<AccountCore> =
             self.db.accounts().list_by_kind(AccountKind::Admin, &mut NoTransaction).await?;
@@ -176,6 +188,9 @@ impl AdminService {
     /// # 参数
     /// * `params` - 更新参数（包含管理员ID与可选更新字段）
     /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 管理员资料或角色绑定更新完成后无返回值。
     ///
     /// # 错误
     /// * `NotFound` - 管理员不存在
@@ -245,6 +260,9 @@ impl AdminService {
     /// * `params` - 包含管理员ID与新角色ID集合
     /// * `actor` - 已通过鉴权的审计操作人
     ///
+    /// # 返回
+    /// 角色绑定替换完成后无返回值。
+    ///
     /// # 错误
     /// * `NotFound` - 管理员不存在
     /// * `BusinessLogicError` - 角色不存在
@@ -284,6 +302,9 @@ impl AdminService {
     /// * `id` - 管理员ID
     /// * `actor` - 已通过鉴权的审计操作人
     ///
+    /// # 返回
+    /// 账号软删除且角色绑定清除后无返回值。
+    ///
     /// # 错误
     /// * `NotFound` - 管理员不存在
     pub async fn delete_admin(&self, id: String, actor: AuditActor) -> Result<()> {
@@ -305,8 +326,8 @@ impl AdminService {
     ///
     /// # 参数
     /// * `account` - 待创建管理员实体
-    /// * `role_ids` - 完整角色 ID 集合
-    /// * `audit` - 管理端调用的审计日志；仅系统初始化可传 `None`
+    /// * `grant` - 已校验的完整角色授予
+    /// * `audit` - 已准备的管理端资源审计
     ///
     /// # 返回值
     /// 返回已持久化的管理员实体。
@@ -337,8 +358,8 @@ impl AdminService {
     ///
     /// # 参数
     /// * `account` - 已应用领域更新的管理员实体
-    /// * `role_ids` - 替换后的完整角色 ID 集合
-    /// * `audit` - 管理端调用的审计日志；仅系统初始化可传 `None`
+    /// * `grant` - 已校验的替换后角色授予
+    /// * `audit` - 已准备的管理端资源审计
     ///
     /// # 返回值
     /// 返回已更新持久化元数据的管理员实体。
@@ -420,6 +441,7 @@ impl AdminService {
     /// # 参数
     /// * `account` - 待软删除管理员实体
     /// * `audit` - 已验证的管理操作审计日志
+    /// * `policy_revision` - 授权快照中的 policy 版本
     ///
     /// # 返回值
     /// 账号和绑定均删除成功时返回 `Ok(())`。
@@ -484,12 +506,14 @@ impl AdminService {
     ///
     /// # 参数
     /// * `current` - 已存在账号
+    /// * `password` - 要写回的明文密码
+    /// * `name` - 要写回的名称
     ///
     /// # 返回值
     /// 返回修复后的账号与实际写入状态。
     ///
     /// # 错误
-    /// 当账号不符合系统管理员约束时返回错误。
+    /// 账号不是系统管理员时返回业务错误；角色读取、密码处理或修复写入失败时返回对应错误。
     async fn ensure_existing_super_admin(
         &self,
         current: AccountCore,
@@ -530,7 +554,7 @@ impl AdminService {
     /// * `password` - 超级管理员密码
     /// * `name` - 超级管理员名称
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回新建的管理员账号
     ///
     /// # 错误

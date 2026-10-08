@@ -1,4 +1,4 @@
-//! Fulfillment-queue read model.
+//! 履约队列读模型。
 
 mod repository;
 

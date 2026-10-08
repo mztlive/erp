@@ -30,6 +30,15 @@ pub struct FulfillmentService {
 
 impl FulfillmentService {
     /// 使用数据库构造本域查询与事务内写入服务。
+    ///
+    /// # 参数
+    /// * `db` - 本域 MongoDB 数据库。
+    ///
+    /// # 返回
+    /// 返回履约本域服务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
@@ -65,34 +74,17 @@ pub(super) async fn map_search_page<Row, View>(
     })
 }
 
-/// 按主键加载表头，缺失时报领域 `NotFound`（五类详情共用）。
-///
-/// owned 仓储返回 `persistence_core::Result`，经 `Error::from` 统一转为领域错误.
-///
-/// # 参数
-/// * `header` - 表头主键查询 future
-/// * `message` - 表头缺失时的领域提示
-///
-/// # 返回
-/// 返回表头实体。
-///
-/// # 错误
-/// 表头不存在时返回 `NotFound`；查询失败时返回仓储错误。
-/// 排序方向映射为仓储筛选布尔值（五类列表共用；语义不变）。
-///
-/// # 参数
-/// * `sort_dir` - 归一化后的排序方向
-///
-/// # 返回
-/// 升序返回 `true`，降序返回 `false`。
-/// 草稿事实时间对（电子/服务交付共用；语义不变）.
-///
-/// # 返回
-/// 返回 `(occurred_at, recorded_at)`：发生时间由调用方传入秒级时间戳转换，
-/// 记录时间为当前时钟.
+/// 草稿事实时间对（电子/服务交付共用；语义不变）。
 ///
 /// # 参数
 /// * `occurred_at_secs` - 实际发生秒级时间戳
+///
+/// # 返回
+/// 返回 `(occurred_at, recorded_at)`：发生时间由调用方传入的秒级时间戳转换，
+/// 记录时间为当前时钟。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn draft_fact_times(
     occurred_at_secs: i64,
 ) -> (erp_core::common::time::Instant, erp_core::common::time::Instant) {
@@ -102,10 +94,33 @@ pub(super) fn draft_fact_times(
     )
 }
 
+/// 排序方向映射为仓储筛选布尔值（五类列表共用；语义不变）。
+///
+/// # 参数
+/// * `sort_dir` - 归一化后的排序方向
+///
+/// # 返回
+/// 升序返回 `true`，降序返回 `false`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn sort_ascending(sort_dir: crate::dto::SortDir) -> bool {
     matches!(sort_dir, crate::dto::SortDir::Asc)
 }
 
+/// 按主键加载表头，缺失时报领域 `NotFound`（五类详情共用）。
+///
+/// owned 仓储返回 `persistence_core::Result`，经 `Error::from` 统一转为领域错误。
+///
+/// # 参数
+/// * `header` - 表头主键查询 future
+/// * `message` - 表头缺失时的领域提示
+///
+/// # 返回
+/// 返回表头实体。
+///
+/// # 错误
+/// 表头不存在时返回 `NotFound`；查询失败时经 `Error::from` 返回对应领域错误。
 pub(super) async fn find_header_or_not_found<Header>(
     header: impl std::future::Future<Output = persistence_core::Result<Option<Header>>>,
     message: &str,

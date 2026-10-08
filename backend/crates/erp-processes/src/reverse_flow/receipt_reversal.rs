@@ -33,6 +33,15 @@ pub struct ReceiptReversalProcess {
 
 impl ReceiptReversalProcess {
     /// 绑定组合根数据库；审批运行时负责最终动作授权。
+    ///
+    /// # 参数
+    /// * `db` - 组合根数据库。
+    ///
+    /// # 返回
+    /// 返回回款冲正最终过账流程。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
@@ -74,6 +83,17 @@ impl ReceiptReversalProcess {
     }
 
     /// 复用审批最终通过的会话，禁止创建内层事务或延后销售刷新。
+    ///
+    /// # 参数
+    /// * `id` - 冲正单 ID。
+    /// * `actor` - 已通过鉴权的审计操作人。
+    /// * `executor` - 审批最终通过持有的执行器。
+    ///
+    /// # 返回
+    /// 成功时无返回值。财务冲正、过账、审计和销售刷新都写在该执行器上。
+    ///
+    /// # 错误
+    /// 非审批中、原回款不存在、累计冲正超额或仓储写入失败时返回错误。
     pub async fn post_receipt_reversal_apply(
         &self,
         id: &str,

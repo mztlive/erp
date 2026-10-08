@@ -1,4 +1,4 @@
-//! Customer application services.
+//! 客户应用服务。
 
 pub mod customer;
 

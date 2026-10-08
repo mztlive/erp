@@ -41,8 +41,14 @@ impl IntegrationResolvedClause {
 
     /// 判断条款是否为空（与 [`has_scope_rules`](Self::has_scope_rules) 互为否定）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 无公司、无本人处理且无组织目标时为 true。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_empty(&self) -> bool {
         !self.has_scope_rules()
     }

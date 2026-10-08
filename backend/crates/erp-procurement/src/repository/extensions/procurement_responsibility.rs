@@ -15,8 +15,14 @@ pub trait ProcurementResponsibilityExt {
 
     /// 获取采购责任规则 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回绑定 `procurement_responsibility_rules` 集合的 Repository。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn procurement_responsibility_rules(&self) -> ProcurementResponsibilityRuleRepository<'_>;
 }
 
@@ -25,8 +31,14 @@ impl ProcurementResponsibilityExt for Database {
 
     /// 获取采购责任规则 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回绑定 `procurement_responsibility_rules` 集合的 Repository。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn procurement_responsibility_rules(&self) -> ProcurementResponsibilityRuleRepository<'_> {
         ProcurementResponsibilityRuleRepository::new(self, Self::PROCUREMENT_RESPONSIBILITY_RULES)
     }

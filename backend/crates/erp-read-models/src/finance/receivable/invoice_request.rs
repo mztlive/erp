@@ -29,8 +29,15 @@ pub struct InvoiceRequestView {
 }
 impl ReceivableReadService {
     /// 分页读取申请；查询条件和总数保持一致。
+    ///
+    /// # 参数
+    /// * `query` - 开票申请列表条件。
+    ///
+    /// # 返回
+    /// 返回申请分页；列表不含审批运行详情。
+    ///
     /// # 错误
-    /// 仓储、绑定或来源单据读取失败时返回错误。
+    /// 仓储读取失败或来源销售单不存在时返回错误。
     pub async fn invoice_request_list(
         &self,
         query: &InvoiceRequestQuery,
@@ -45,6 +52,15 @@ impl ReceivableReadService {
         })
     }
     /// 读取申请及审批定义；不存在时返回 NotFound。
+    ///
+    /// # 参数
+    /// * `id` - 开票申请身份。
+    ///
+    /// # 返回
+    /// 返回含销售单号、申请人与审批结构的申请详情。
+    ///
+    /// # 错误
+    /// 申请或来源销售单不存在时返回 `NotFound`；审批绑定、流程实例或账号读取失败时返回对应错误。
     pub async fn invoice_request_detail(&self, id: &str) -> Result<InvoiceRequestView> {
         let request = self
             .db
@@ -55,6 +71,13 @@ impl ReceivableReadService {
         self.invoice_request_view(request).await
     }
     /// 汇总本应收的审批中、批准待开与可申请额度。
+    ///
+    /// # 参数
+    /// * `account_id` - 应收子账身份。
+    ///
+    /// # 返回
+    /// 返回审批中、批准待开、可申请与已开票金额。
+    ///
     /// # 错误
     /// 应收不存在或仓储失败时返回错误。
     pub async fn invoice_request_amounts(&self, account_id: &str) -> Result<InvoiceRequestAmounts> {

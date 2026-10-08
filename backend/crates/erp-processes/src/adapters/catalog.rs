@@ -1,4 +1,4 @@
-//! Catalog audit, file-asset and pending-attachment adapters.
+//! 商品审计、文件资产与待提交附件 adapter。
 
 use std::collections::HashSet;
 use std::num::NonZeroU32;
@@ -20,19 +20,37 @@ use persistence_core::Executor;
 
 use crate::audit::persist_log;
 
-/// MongoDB adapter that converts catalog audit facts into `erp-audit` writes.
+/// 把商品审计事实写入 `erp-audit` 的 Mongo adapter。
 #[derive(Clone)]
 pub struct MongoCatalogAudit {
     db: Database,
 }
 
 impl MongoCatalogAudit {
-    /// Bind the adapter to `db`.
+    /// 绑定审计日志所在数据库，构造时不写库。
+    ///
+    /// # 参数
+    /// * `db` - 持久化审计日志的数据库。
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的 adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// Wrap the adapter as a shared port.
+    /// 包装为商品域可注入的共享审计 Port。
+    ///
+    /// # 参数
+    /// * `db` - 持久化审计日志的数据库。
+    ///
+    /// # 返回
+    /// 返回共享的商品审计 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn CatalogAuditPort> {
         Arc::new(Self::new(db))
     }
@@ -76,19 +94,37 @@ impl CatalogAuditPort for MongoCatalogAudit {
     }
 }
 
-/// MongoDB adapter that reads file-asset existence for catalog media and logos.
+/// 为商品媒体与标识读取文件资产是否存在的 Mongo adapter。
 #[derive(Clone)]
 pub struct MongoCatalogFileAssets {
     db: Database,
 }
 
 impl MongoCatalogFileAssets {
-    /// Bind the adapter to `db`.
+    /// 绑定文件资产集合所在数据库，构造时不读取。
+    ///
+    /// # 参数
+    /// * `db` - 文件资产集合所在数据库。
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的 adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// Wrap the adapter as a shared port.
+    /// 包装为商品域可注入的文件资产事实 Port。
+    ///
+    /// # 参数
+    /// * `db` - 文件资产集合所在数据库。
+    ///
+    /// # 返回
+    /// 返回共享的文件资产事实 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn FileAssetFactsPort> {
         Arc::new(Self::new(db))
     }
@@ -123,13 +159,22 @@ impl FileAssetFactsPort for MongoCatalogFileAssets {
     }
 }
 
-/// Adapter that exposes a prepared support attachment batch through catalog's port.
+/// 把已准备的支持域附件批次暴露为商品端口。
 pub struct CatalogPendingAttachments {
     inner: Arc<dyn erp_support::PendingAttachmentBatch>,
 }
 
 impl CatalogPendingAttachments {
-    /// Wrap a support pending batch as catalog's in-transaction pending port.
+    /// 把支持域待提交批次包装为商品域事务内待提交端口。
+    ///
+    /// # 参数
+    /// * `inner` - 支持域已准备的待提交附件批次。
+    ///
+    /// # 返回
+    /// 返回商品域 `PendingAttachmentBatch`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn from_support(
         inner: Arc<dyn erp_support::PendingAttachmentBatch>,
     ) -> Arc<dyn PendingAttachmentBatch> {
@@ -160,7 +205,16 @@ impl PendingAttachmentBatch for CatalogPendingAttachments {
     }
 }
 
-/// Construct a catalog service with audit and file-asset adapters.
+/// 装配带审计与文件资产 adapter 的商品服务。
+///
+/// # 参数
+/// * `db` - 商品集合所在数据库。
+///
+/// # 返回
+/// 返回已注入审计与文件资产 Port 的商品服务。
+///
+/// # 错误
+/// 不返回错误。
 pub fn catalog_service(db: Database) -> CatalogService {
     CatalogService::new(db.clone(), MongoCatalogAudit::shared(db.clone()), MongoCatalogFileAssets::shared(db))
 }

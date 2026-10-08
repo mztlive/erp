@@ -1,12 +1,21 @@
-//! Audit-domain application errors with the original audit mapping.
+//! 审计领域应用错误，保留原有的审计错误映射。
 
 use application_core::ErrorClass;
 
-/// Audit-domain result alias.
+/// 审计领域结果别名。
 pub type Result<T> = std::result::Result<T, Error>;
 
 impl From<application_core::Error> for Error {
     /// 将应用合同错误映射为审计领域错误。
+    ///
+    /// # 参数
+    /// * `error` - 应用合同错误。
+    ///
+    /// # 返回
+    /// `Internal` 映射为 `Error::Internal`，`ValidationError` 映射为 `Error::ValidationError`，保留原文。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn from(error: application_core::Error) -> Self {
         match error {
             application_core::Error::Internal(message) => Self::Internal(message),
@@ -15,7 +24,7 @@ impl From<application_core::Error> for Error {
     }
 }
 
-/// Audit log and command-receipt errors.
+/// 审计日志与命令回执错误。
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("系统内部错误: {0}")]
@@ -56,7 +65,19 @@ pub enum Error {
 }
 
 impl Error {
-    /// Stable error class used by HTTP mapping; do not parse display text.
+    /// 返回供 HTTP 映射使用的稳定错误类别，调用方不要解析展示文案。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Internal`、`Logic`、`RepositoryError` 与 `OutcomeUnknown` 返回 `ErrorClass::Internal`。
+    /// `ConflictError`、`ReceiptDuplicate` 与 `TransientTransaction` 返回 `ErrorClass::Conflict`。
+    /// `BusinessLogicError`、`ValidationError` 与 `NotFound` 返回 `ErrorClass::BusinessRule`。
+    /// `Forbidden` 与 `Unauthenticated` 返回 `ErrorClass::Forbidden`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn class(&self) -> ErrorClass {
         match self {
             Self::Internal(_) | Self::Logic(_) | Self::RepositoryError(_) => ErrorClass::Internal,
@@ -74,6 +95,17 @@ impl Error {
 
 impl From<persistence_core::Error> for Error {
     /// 将仓储错误转换为审计领域错误。
+    ///
+    /// # 参数
+    /// * `error` - 持久化错误。
+    ///
+    /// # 返回
+    /// 重复键映射为 `ReceiptDuplicate`，乐观锁冲突映射为 `ConflictError`，
+    /// 暂态事务冲突映射为 `TransientTransaction`，提交结果未知映射为 `OutcomeUnknown`，
+    /// 其余映射为 `RepositoryError`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn from(error: persistence_core::Error) -> Self {
         match error {
             error @ persistence_core::Error::DuplicateKey(_) => Self::ReceiptDuplicate(error),
@@ -91,6 +123,15 @@ impl From<persistence_core::Error> for Error {
 
 impl From<validator::ValidationErrors> for Error {
     /// 从校验错误构建审计领域错误。
+    ///
+    /// # 参数
+    /// * `err` - `validator` 校验失败明细。
+    ///
+    /// # 返回
+    /// 返回 `Error::ValidationError`，正文为 `err` 的展示文本。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn from(err: validator::ValidationErrors) -> Self {
         Error::ValidationError(err.to_string())
     }

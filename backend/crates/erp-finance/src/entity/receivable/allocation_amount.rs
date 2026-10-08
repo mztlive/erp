@@ -27,8 +27,14 @@ pub(crate) fn net_receipt_allocated(allocations: &[ReceiptAllocation]) -> Result
 
 /// 返回固定零金额。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回 `0.00`。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn zero_amount() -> Amount {
     Amount::zero()
 }

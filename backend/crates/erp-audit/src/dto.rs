@@ -30,6 +30,9 @@ impl From<&AuditLogListParams> for crate::repository::AuditLogFilter {
     ///
     /// # 返回
     /// 返回仓储层过滤条件。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn from(params: &AuditLogListParams) -> Self {
         Self {
             actor_account: normalized_text(params.actor_account.as_deref()),
@@ -66,8 +69,11 @@ impl From<AuditLog> for AuditLogItem {
     /// # 参数
     /// * `log` - 审计日志实体
     ///
-    /// # 返回值
-    /// 返回审计日志响应结构
+    /// # 返回
+    /// 返回审计日志响应结构。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn from(log: AuditLog) -> Self {
         Self {
             id: log.base.id,

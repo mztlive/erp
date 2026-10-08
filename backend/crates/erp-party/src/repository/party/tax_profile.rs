@@ -55,8 +55,17 @@ pub struct PartyTaxProfileFilter {
 impl QueryFilter for PartyTaxProfileFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// `party_id`、`status`、`is_default` 为 `None` 时不写入；否则分别按主体 ID
+    /// 字符串、`status` 的稳定代码和布尔值精确匹配。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(party_id) = &self.party_id {
@@ -75,8 +84,14 @@ impl QueryFilter for PartyTaxProfileFilter {
 impl Pagination for PartyTaxProfileFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组。`page` 原样取出，`page_size` 由 `u32` 转为 `u64`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }

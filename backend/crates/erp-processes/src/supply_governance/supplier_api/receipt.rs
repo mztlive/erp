@@ -21,6 +21,18 @@ pub(super) struct CommandReceiptWrite<'a> {
     pub(super) job_id: Option<String>,
     pub(super) actor: &'a AuditActor,
 }
+/// 先写命令回执，再写审计；有后台任务时最后读取任务编号。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `write` - 连接、动作、命令身份、结果和操作人。
+/// * `executor` - 调用方执行器。回执、审计和任务读取共用它。
+///
+/// # 返回
+/// 含操作编号、连接版本和可选任务编号的命令结果。
+///
+/// # 错误
+/// 回执或审计构造失败、回执或审计写入失败时返回对应错误。给出任务 ID 时，读取任务编号失败同样返回错误。
 pub(super) async fn persist_command_receipt(
     db: &mongodb::Database,
     write: CommandReceiptWrite<'_>,

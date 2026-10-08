@@ -34,8 +34,16 @@ pub struct OrganizationService {
 impl OrganizationService {
     /// 装配组织用例和外域未结事实检查。
     ///
+    /// # 参数
+    /// * `db` - 身份数据库。
+    /// * `rbac` - 共享 RBAC 服务。
+    /// * `business` - 外域未结事实端口。
+    ///
     /// # 返回
     /// 返回无宽范围兜底的组织服务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database, rbac: SharedRbacService, business: Arc<dyn OrganizationBusinessPort>) -> Self {
         Self { db, rbac, business }
     }
@@ -73,6 +81,13 @@ impl OrganizationService {
 
     /// 预览通过同一校验准备的变更前后事实，不写入组织或业务任务。
     ///
+    /// # 参数
+    /// * `actor` - 已认证操作人。
+    /// * `request` - 含期望版本、幂等键和变更命令。
+    ///
+    /// # 返回
+    /// 返回可见边界内的变更回执。
+    ///
     /// # 错误
     /// 与正式提交相同的权限、版本和业务约束错误。
     pub async fn preview(
@@ -84,6 +99,13 @@ impl OrganizationService {
     }
 
     /// 原子提交组织关系、全局版本、幂等回执及前后值审计。
+    ///
+    /// # 参数
+    /// * `actor` - 已认证操作人。
+    /// * `request` - 含期望版本、幂等键和变更命令。
+    ///
+    /// # 返回
+    /// 返回已提交或幂等回放的变更回执。
     ///
     /// # 错误
     /// 并发或幂等异载荷冲突、越权及存储失败时全部回滚。

@@ -141,6 +141,9 @@ pub(crate) struct SalesReturnCaseListQuery {
 impl SalesReturnCaseListParams {
     /// 归一化销售退货处理单列表查询参数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
     ///
@@ -241,6 +244,9 @@ pub(crate) struct PurchaseReturnOrderListQuery {
 
 impl PurchaseReturnOrderListParams {
     /// 归一化采购退货单列表查询参数。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
@@ -618,6 +624,9 @@ pub(crate) struct CustomerRefundListQuery {
 
 impl CustomerRefundListParams {
     /// 归一化客户退款列表查询参数。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。

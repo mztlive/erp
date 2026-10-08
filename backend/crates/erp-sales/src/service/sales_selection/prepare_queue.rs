@@ -29,10 +29,17 @@ struct Prepared {
 
 impl SalesSelectionService {
     /// 原子建立排队任务和准备中状态，立即返回，不在请求内执行外部 I/O。
+    ///
     /// # 参数
-    /// req 为完整命令，actor_id 为当前用户；端口由 worker 执行时使用。
+    /// * `req` - 完整准备命令。
+    /// * `actor_id` - 当前用户。
+    /// * `_catalog` - 本方法不读取；后台任务另行取得商品池。
+    /// * `_images` - 本方法不读取；后台任务另行取得图片。
+    /// * `_generator` - 本方法不使用；后台计算另行选择套餐图生成器。
+    ///
     /// # 返回
     /// 返回可轮询的准备中详情；同请求重试返回已建立的任务事实。
+    ///
     /// # 错误
     /// 旧版本、非法规则或事务失败时整次拒绝。
     pub async fn start_prepare(
@@ -116,8 +123,14 @@ impl SalesSelectionService {
     }
 
     /// 领取排队任务并执行；运行中任务在重启后于截止时间明确失败，不重新取得商品快照。
+    ///
+    /// # 参数
+    /// * `catalog` - 商品池端口。
+    /// * `images` - 图片端口。
+    ///
     /// # 返回
     /// 本次处理的任务和到期关闭数量。
+    ///
     /// # 错误
     /// 仓储错误返回给 worker；单任务计算失败会原子记录并恢复业务状态。
     pub async fn run_due_prepare_tasks(
@@ -211,6 +224,17 @@ impl SalesSelectionService {
     }
 
     /// 阶段更新也校验任务仍活动且册版本未漂移。
+    ///
+    /// # 参数
+    /// * `book` - 正在准备的选品册。
+    /// * `stage` - 当前准备阶段。
+    /// * `completed` - 已完成档位数。
+    ///
+    /// # 返回
+    /// 心跳写回成功时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 没有活动任务、任务不存在、任务不可写、册与任务不匹配或仓储更新失败时返回对应错误。
     pub(super) async fn prepare_progress(
         &self,
         book: &SalesSelectionBooklet,

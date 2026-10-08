@@ -42,16 +42,41 @@ pub struct SalesChangeReceivableWrite {
 }
 impl SalesChangeReceivableWrite {
     /// 写入后的财务子账，供组合层继续处理开票任务。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回本次差额更新后的应收子账。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn account(&self) -> &ReceivableAccount {
         &self.account
     }
 
     /// 本次差额的正式版本号，用于追溯本次金额调整。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回差额分录的 `source_revision_id`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn subject_version(&self) -> &str {
         &self.entry.source_revision_id
     }
 
     /// 按原顺序先创建差额分录，再 CAS 更新账户；复用调用方 Executor。
+    ///
+    /// # 参数
+    /// * `db` - 财务领域数据库。
+    /// * `executor` - 调用方事务执行器。
+    ///
+    /// # 返回
+    /// 分录创建且账户更新成功时无返回值。
     ///
     /// # 错误
     /// 唯一键、CAS 与仓储错误保留原分类，由外层根事务回滚。
@@ -67,6 +92,14 @@ impl SalesChangeReceivableWrite {
 /// 子账必须先读取，即使新旧金额相等也保留原读取时点。零差额不产生分录；
 /// 非零差额而子账缺失表示正式事实链损坏，必须拒绝，不能补造兼容账户。
 /// 调用方显式提供原 NoTransaction 或已有 Executor，不暗中改变隔离边界。
+///
+/// # 参数
+/// * `db` - 财务领域数据库。
+/// * `input` - 新旧版本冻结金额与来源身份。
+/// * `executor` - 调用方显式传入的执行器。
+///
+/// # 返回
+/// 零差额返回 `None`；非零差额返回待在调用方事务内写入的账户与分录。
 ///
 /// # 错误
 /// 保留原缺子账 BusinessLogicError、金额 Logic 及仓储错误。

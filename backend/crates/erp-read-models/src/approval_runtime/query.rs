@@ -18,6 +18,21 @@ use super::{DocumentApprovalInstanceView, DocumentRuntime};
 use crate::{Error, Result};
 
 /// 在已授权业务快照内取得最新实例；缺失事实不补造审批对象。
+///
+/// # 参数
+/// * `db` - 应用数据库
+/// * `kind` - 业务单据类型
+/// * `id` - 业务单据身份
+/// * `binding` - 单据冻结的审批定义；缺失不能代替一致绑定
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 没有最新实例时返回 `None`。有实例且与主题、流程种类和冻结绑定一致时返回运行摘要。
+///
+/// # 错误
+/// 主题引用无法构造时返回 `ValidationError`。已有实例但 `binding` 为 `None`，或实例的主题、
+/// 流程种类、定义身份或定义版本与绑定不一致时返回 `ConflictError`。当前执行、开放任务或历史读取失败，
+/// 以及执行与任务不一致时返回对应错误。
 pub(crate) async fn load_document_runtime(
     db: &Database,
     kind: DocumentType,

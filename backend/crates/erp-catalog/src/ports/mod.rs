@@ -1,4 +1,4 @@
-//! Consumer ports for audit persistence, attachment facts and sellable supply queries.
+//! 审计持久化、附件事实与可售供给查询的消费端口。
 
 mod audit;
 mod data_scope;

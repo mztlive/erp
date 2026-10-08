@@ -113,6 +113,18 @@ impl CatalogService {
 }
 
 /// 解析商品命令中全部临时文件引用，并返回实际被引用的临时键集合。
+///
+/// # 参数
+/// * `carousel_media` - 轮播图输入；临时引用会被就地替换
+/// * `detail_media` - 详情图输入；临时引用会被就地替换
+/// * `skus` - SKU 输入；主图临时引用会被就地替换
+/// * `pending_assets` - 本次命令的待登记附件批次
+///
+/// # 返回
+/// 返回被实际解析到的临时键集合。
+///
+/// # 错误
+/// 临时引用无法解析时，下层错误映射为 `Error::Logic`。
 pub(super) fn resolve_product_file_references(
     carousel_media: &mut [ProductMediaInput],
     detail_media: &mut [ProductMediaInput],

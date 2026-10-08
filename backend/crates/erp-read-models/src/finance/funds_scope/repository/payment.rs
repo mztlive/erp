@@ -18,11 +18,16 @@ use crate::{Error, Result};
 /// 银行回单等整单附件只接收完整读取资格，部分核销份额不能取得整单资格。
 ///
 /// # 参数
-/// 付款身份、已解析当前付款详情授权与调用方执行器。
+/// * `db` - 付款集合所在数据库。
+/// * `id` - 付款单身份。
+/// * `authorization` - 已解析的当前付款详情授权。
+/// * `executor` - 调用方执行器。
+///
 /// # 返回
-/// 返回付款版本及覆盖授权、付款和全部实际来源版本的指纹。
+/// 付款版本，以及覆盖授权、付款和全部实际来源版本的指纹。
+///
 /// # 错误
-/// 不存在、来源损坏或没有完整读取资格统一返回 NotFound；读取失败保留错误。
+/// 聚合或解码失败时返回对应错误。没有整单资格行时返回 `NotFound`，文案为供应商付款单不存在。匹配行多于一条时返回 `Internal`。
 pub(in crate::finance::funds_scope) async fn full_read_qualification(
     db: &Database,
     id: &str,
@@ -56,11 +61,18 @@ fn full_read_version(scope: &str, rows: Vec<FlowVersion>) -> Result<(u64, String
 /// 同一最终条件返回当前页、总数、完整窄版本和授权份额摘要。
 ///
 /// # 参数
-/// 数据库、规范化筛选、当前来源授权与调用方事务执行器。
+/// * `db` - 付款集合所在数据库。
+/// * `query` - 已规范化的付款列表查询，提供页码、页大小和排序。
+/// * `filter` - 付款主表筛选。
+/// * `authorization` - 已解析来源授权。
+/// * `condition` - 负责人、经办人与组织条件。
+/// * `executor` - 调用方执行器。
+///
 /// # 返回
-/// 页面和计数由单独分页分支生成；完整版本与金额采用同事务独立游标。
+/// 当前页与计数。计数为零时直接返回该页；计数非零时再填入完整版本和授权份额摘要。
+///
 /// # 错误
-/// 数据库失败、候选超限或元信息集合与计数不一致时拒绝。
+/// 聚合、解码或金额流读取失败时返回对应错误。计数达到 10000 时返回校验错误，文案为付款查询超过上限。头信息条数与计数不一致时返回 `Internal`。
 pub(in crate::finance::funds_scope) async fn page(
     db: &Database,
     query: &SupplierPaymentListQuery,
@@ -93,11 +105,18 @@ pub(in crate::finance::funds_scope) async fn page(
 /// 第二次授权只取完整责任版本，页外金额和分配视图不重新生成。
 ///
 /// # 参数
-/// 原规范化筛选、当前来源授权与调用方事务执行器。
+/// * `db` - 付款集合所在数据库。
+/// * `query` - 已规范化的付款列表查询，只使用其排序。
+/// * `filter` - 付款主表筛选。
+/// * `authorization` - 已解析来源授权。
+/// * `condition` - 负责人、经办人与组织条件。
+/// * `executor` - 调用方执行器。
+///
 /// # 返回
-/// 按原主表排序返回全部匹配付款及获授权来源版本。
+/// 按原主表排序的全部匹配付款及获授权来源版本。
+///
 /// # 错误
-/// 数据库或投影解码失败时拒绝。
+/// 聚合或投影解码失败时返回对应错误。
 pub(in crate::finance::funds_scope) async fn versions(
     db: &Database,
     query: &SupplierPaymentListQuery,

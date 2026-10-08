@@ -57,7 +57,7 @@ impl StockAdjustmentLineUpdate {
     /// 返回完成主键规范化与数量解析的更新值对象。
     ///
     /// # 错误
-    /// 行主键为空/过长，或数量不是正数时返回错误。
+    /// 行主键为空或过长、数量无法解析，或数量不是正数时返回错误。
     pub fn new(
         line_id: impl Into<String>,
         quantity: &str,

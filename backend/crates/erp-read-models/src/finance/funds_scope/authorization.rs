@@ -40,7 +40,16 @@ pub struct FundsAuthorization {
 }
 
 impl FundsAuthorization {
-    /// 所有实际来源均无可见规则时返回空集。
+    /// 判断销售、采购、结算与整账职责是否都没有可见规则。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 没有整账读取，且销售范围为空、采购范围缺失或为空、结算角色条款为空时返回 true。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn empty(&self) -> bool {
         !self.ledger_read
             && self.sales.is_empty()
@@ -162,9 +171,15 @@ impl FundsAccess {
     /// 证明资金自身动作后，按采购及结算的实际来源边界解析。
     ///
     /// # 参数
-    /// 参数为调用人、目标资金动作、采购访问器及同一事务。
+    /// * `actor` - 已认证操作人。
+    /// * `resource` - 本次解析的资金资源。
+    /// * `action` - 该资源已注册动作。
+    /// * `_purchase_access` - 调用方传入的采购访问器；本方法不读取它。
+    /// * `executor` - 调用方执行器。
+    ///
     /// # 返回
     /// 返回与实际来源绑定的授权，不读取镜像资金范围。
+    ///
     /// # 错误
     /// 账号、目标动作或来源配置失效时拒绝。
     pub async fn resolve_with_purchase(
@@ -218,7 +233,7 @@ impl FundsAccess {
     /// 返回角色范围和个人上限共同允许的判定。
     ///
     /// # 错误
-    /// 责任事实损坏或授权 Port 未装配时拒绝。
+    /// 资源或动作尚未接入 DataScope 时返回校验错误。
     pub fn allows_purchase(access: &PurchaseResolvedScope, facts: &FundsLinkedFacts) -> Result<bool> {
         let consumer = registration(&access.resource, &access.action)?;
         let resolved = ResolvedScope {
@@ -248,7 +263,7 @@ impl FundsAccess {
     /// `None` 表示公司范围不限制关联单；`Some` 为必须命中的关联单集合。
     ///
     /// # 错误
-    /// 超过查询上限时整体拒绝。
+    /// 销售单 ID 查询失败时返回对应错误；结果超过 10000 条时返回校验错误并整体拒绝。
     ///
     /// # 关键业务约束
     /// 空集表示无可见对象；超限必须整体拒绝，不得截断汇总。
@@ -281,7 +296,7 @@ impl FundsAccess {
     /// `None` 表示公司范围不限制关联单；`Some` 为必须命中的关联单集合。
     ///
     /// # 错误
-    /// 超过查询上限时整体拒绝。
+    /// 采购来源 ID 解析失败时返回对应错误，其中包括超过查询上限。
     pub async fn authorized_purchase_ids(
         &self,
         purchase_access: &PurchaseAccess,
@@ -317,6 +332,15 @@ impl FundsAccess {
 }
 
 /// 把资金 Port 事实无损转回公共判定输入，不读取或重解释原始规则。
+///
+/// # 参数
+/// * `clause` - 已解析的资金范围条款。
+///
+/// # 返回
+/// 复制公司、本人、协作与组织字段后的公共 `ScopeClause`；其余字段保持默认。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn public_clause(clause: &FundsResolvedClause) -> ScopeClause {
     ScopeClause {
         company: clause.company,
@@ -328,6 +352,15 @@ pub(super) fn public_clause(clause: &FundsResolvedClause) -> ScopeClause {
 }
 
 /// 把采购 Port 事实无损转回公共判定输入；协作不映射为采购对象。
+///
+/// # 参数
+/// * `clause` - 已解析的采购范围条款。
+///
+/// # 返回
+/// 复制公司、本人与组织字段的公共 `ScopeClause`；`collaborative` 固定为 false。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn purchase_clause(clause: &erp_procurement::ports::PurchaseResolvedClause) -> ScopeClause {
     ScopeClause {
         company: clause.company,
@@ -346,11 +379,29 @@ pub(super) fn organization_version(version: u64) -> OrganizationState {
 
 impl FundsLinkedFacts {
     /// 判断当前操作人是否为关联单据的当前负责人。
+    ///
+    /// # 参数
+    /// * `user` - 待比较的用户 ID。
+    ///
+    /// # 返回
+    /// `owner_user_id` 等于 `user` 时返回 true；负责人为空时返回 false。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn owner_is(&self, user: &str) -> bool {
         self.owner_user_id.as_deref() == Some(user)
     }
 
     /// 返回关联单据业务版本，用于跨页版本绑定。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `{linked_document_id}:{linked_document_version}`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn version_part(&self) -> String {
         format!("{}:{}", self.linked_document_id, self.linked_document_version)
     }
@@ -401,7 +452,7 @@ pub fn matches_linked_condition(facts: &FundsLinkedFacts, condition: &FundsLinke
 /// 返回按负责人分组的份额合计与未分配余额；金额方向保持原事实正反。
 ///
 /// # 错误
-/// 金额合计溢出时拒绝。
+/// 不返回错误。金额相加使用 `Amount::checked_add`，本函数始终返回 `Ok`。
 pub fn summarize_matched_shares(
     allocations: &[(String, Amount, Option<String>)],
     owner_of: impl Fn(&str) -> Option<String>,
@@ -427,11 +478,31 @@ pub fn summarize_matched_shares(
 }
 
 /// 首页面后必须携带同一范围版本，禁止不同授权页拼接。
+///
+/// # 参数
+/// * `page` - 请求页码，从 1 起。
+/// * `version` - 调用方回传的范围版本。
+///
+/// # 返回
+/// 首页，或后续页携带非空版本时成功。
+///
+/// # 错误
+/// 后续页缺少范围版本或版本为空时返回范围变化冲突错误。
 pub fn ensure_page(page: u64, version: Option<&str>) -> Result<()> {
     crate::support::ensure_deep_page(page, version)
 }
 
 /// 版本不一致时返回可识别的范围变化错误并要求从第一页刷新。
+///
+/// # 参数
+/// * `expected` - 调用方回传的范围版本；`None` 表示不比对。
+/// * `actual` - 本次快照计算出的范围版本。
+///
+/// # 返回
+/// `expected` 为 `None` 或与 `actual` 相同时成功。
+///
+/// # 错误
+/// `expected` 有值且不等于 `actual` 时返回范围变化冲突错误。
 pub fn ensure_version(expected: Option<&str>, actual: &str) -> Result<()> {
     if expected.is_some_and(|version| version != actual) {
         return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
@@ -440,6 +511,16 @@ pub fn ensure_version(expected: Option<&str>, actual: &str) -> Result<()> {
 }
 
 /// 把授权与关联单据版本绑定为跨页凭据；不返回内部授权集合。
+///
+/// # 参数
+/// * `context` - 已解析的授权上下文，只取其 `scope_version`。
+/// * `parts` - 追加进指纹的关联单据版本片段。
+///
+/// # 返回
+/// 授权版本与 `parts` 的十六进制哈希。
+///
+/// # 错误
+/// 不返回错误。
 pub fn scope_version(context: &AuthorizedDataScope, parts: &[String]) -> String {
     let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
     context.scope_version.hash(&mut fingerprint);
@@ -450,15 +531,45 @@ pub fn scope_version(context: &AuthorizedDataScope, parts: &[String]) -> String 
 }
 
 /// 部分授权的受限金额统一为空并注明权限限制，不得写零或差额推导。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 始终返回 `None`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn restricted<T>() -> Option<T> {
     None
 }
 
 /// 整单读取才返回完整金额；部分授权统一返 null，禁止零值掩盖或差额推导。
+///
+/// # 参数
+/// * `whole` - 是否具备整单读取资格。
+/// * `amount` - 整单金额。
+///
+/// # 返回
+/// `whole` 为 true 时返回 `Some(amount)`，否则返回 `None`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn whole_amount(whole: bool, amount: Amount) -> Option<Amount> {
     whole.then_some(amount)
 }
 /// 空范围保持空集且版本可跨页回传，不得补公司范围。
+///
+/// # 参数
+/// * `authorization` - 已解析授权，用于回传范围版本与策略版本。
+/// * `reason` - 空结果原因。
+/// * `summary` - 面向客户端的范围摘要。
+///
+/// # 返回
+/// 第 1 页、页大小 20、总数 0 的空页；汇总标记权限受限且整单金额为空。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn empty_page<T>(
     authorization: &FundsAuthorization,
     reason: &'static str,
@@ -521,11 +632,15 @@ where
 /// 首次返回页面，第二次只重新解析资格并读取完整匹配集合的版本材料。
 ///
 /// # 参数
-/// 调用方版本、页面快照闭包及独立新事务的轻量版本重验闭包。
+/// * `expected` - 调用方回传的范围版本；首页可为 `None`。
+/// * `snapshot` - 产生第一次范围页的闭包，只调用一次。
+/// * `revalidate` - 独立重读范围版本的闭包；首次版本失配时不调用。
+///
 /// # 返回
 /// 两段版本比较都通过时交付第一次页面。
+///
 /// # 错误
-/// 调用方版本失配或第二轮授权/业务版本变化时拒绝；首次失配不执行重验。
+/// 调用方版本失配或第二轮授权/业务版本变化时返回范围变化冲突错误；首次失配不执行重验。
 pub(super) async fn checked_revalidated<T, F, Fut, V, VersionFut>(
     expected: Option<&str>,
     snapshot: F,
@@ -546,6 +661,15 @@ where
 }
 
 /// 版本不一致时返回可识别的范围变化错误并要求从第一页刷新。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回说明为「数据范围已变化，请从第一页刷新」的范围变化冲突错误。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn changed() -> Error {
     crate::support::data_scope_changed("数据范围已变化，请从第一页刷新")
 }

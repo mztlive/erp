@@ -34,8 +34,15 @@ impl QueryFilter for SupplierCommercialProfileFilter {
     /// 转换为 MongoDB 查询条件（修订集合无软删除，过滤条件为空时仍显式
     /// 追加未删除过滤，与基类语义保持一致）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回查询条件文档。
+    /// 返回查询条件文档。始终写入未删除的 `deleted_at`；
+    /// `supplier_id` 为 `Some` 时按字符串精确匹配，为 `None` 时不筛选。分页与排序字段不进入条件。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(supplier_id) = &self.supplier_id {
@@ -48,8 +55,14 @@ impl QueryFilter for SupplierCommercialProfileFilter {
 impl Pagination for SupplierCommercialProfileFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组。`page_size` 由 `u32` 展成 `u64`，不把 `0` 归一成第一页。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }

@@ -18,6 +18,16 @@ pub enum InvoiceRequestStatus {
 }
 impl InvoiceRequestStatus {
     /// 返回稳定状态代码。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Draft`、`InApproval`、`Approved`、`Completed` 分别返回
+    /// `draft`、`in_approval`、`approved`、`completed`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Draft => "draft",
@@ -27,6 +37,15 @@ impl InvoiceRequestStatus {
         }
     }
     /// 返回面向经办人的状态名称。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回「草稿」「审批中」「待开票」或「已开票」。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -49,8 +68,15 @@ pub struct InvoiceRequestData {
 }
 impl InvoiceRequestData {
     /// 规范化必填开票资料；金额必须为正且精确到分。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回裁剪空白后的开票资料。
+    ///
     /// # 错误
-    /// 空资料、超长资料、非正或超过两位小数的金额被拒绝。
+    /// 金额非正或超过两位小数，或抬头、税号、开票内容、申请事由为空或超长时返回错误。
     pub fn normalize(mut self) -> Result<Self> {
         if self.amount <= Amount::zero()
             || erp_core::money::round_to_cent(self.amount.to_decimal()) != self.amount.to_decimal()
@@ -84,8 +110,18 @@ pub struct SalesInvoiceRequest {
 }
 impl SalesInvoiceRequest {
     /// 创建固定销售应收来源的申请草稿。
+    ///
+    /// # 参数
+    /// * `id` - 申请标识，同时用于生成申请单号
+    /// * `account` - 来源销售应收子账
+    /// * `data` - 开票资料，构造时再做规范化
+    /// * `actor` - 申请人
+    ///
+    /// # 返回
+    /// 返回状态为 `Draft`、已开票金额为零、审批版本为 0 的申请。
+    ///
     /// # 错误
-    /// 资料无效或创建人为空时失败。
+    /// 开票资料无效，或申请人为空或超过 128 个字符时返回错误。
     pub fn new(
         id: SalesInvoiceRequestId,
         account: &super::ReceivableAccount,
@@ -109,10 +145,28 @@ impl SalesInvoiceRequest {
         })
     }
     /// 返回尚未执行的本次授权或申请额度。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回申请金额减去 `invoiced_amount` 的精确差。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn remaining(&self) -> Amount {
         self.data.amount.checked_sub(self.invoiced_amount)
     }
     /// 返回占用的额度。草稿和已完成申请不占用未开票额度。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `InApproval` 或 `Approved` 时返回 [`Self::remaining`]，其余状态返回零。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn reserved(&self) -> Amount {
         match self.status {
             InvoiceRequestStatus::InApproval | InvoiceRequestStatus::Approved => self.remaining(),
@@ -120,8 +174,15 @@ impl SalesInvoiceRequest {
         }
     }
     /// 提交申请并冻结新审批版本。
+    ///
+    /// # 参数
+    /// * `available` - 当前可申请开票金额
+    ///
+    /// # 返回
+    /// 无返回值。成功时状态变为 `InApproval`，且 `approval_subject_version` 加一。
+    ///
     /// # 错误
-    /// 非草稿、额度不足、版本溢出时失败，不改变实体。
+    /// 非草稿、申请金额超过 `available` 或版本溢出时返回错误，且不改变实体。
     pub fn submit(&mut self, available: Amount) -> Result<()> {
         if self.status != InvoiceRequestStatus::Draft {
             return Err(Error::from("只有草稿可以提交开票申请"));
@@ -136,8 +197,15 @@ impl SalesInvoiceRequest {
         Ok(())
     }
     /// 最终审批通过，仅授予开票额度。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无返回值。成功时状态变为 `Approved`。
+    ///
     /// # 错误
-    /// 非审批中状态时拒绝。
+    /// 状态不是 `InApproval` 时返回错误。
     pub fn approve(&mut self) -> Result<()> {
         if self.status != InvoiceRequestStatus::InApproval {
             return Err(Error::from("开票申请不在审批中"));
@@ -146,8 +214,15 @@ impl SalesInvoiceRequest {
         Ok(())
     }
     /// 撤回审批并释放额度，提交版本保持递增。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无返回值。成功时状态回到 `Draft`，`approval_subject_version` 不回退。
+    ///
     /// # 错误
-    /// 已批准或非审批中申请不得通过撤回绕过执行。
+    /// 状态不是 `InApproval` 时返回错误。
     pub fn cancel_approval(&mut self) -> Result<()> {
         if self.status != InvoiceRequestStatus::InApproval {
             return Err(Error::from("只有审批中的开票申请可以撤回"));
@@ -156,8 +231,15 @@ impl SalesInvoiceRequest {
         Ok(())
     }
     /// 消耗实际登记发票的授权金额；红冲不恢复原申请授权。
+    ///
+    /// # 参数
+    /// * `amount` - 本次登记的开票金额
+    ///
+    /// # 返回
+    /// 无返回值。成功时累加 `invoiced_amount`；剩余额度为零时状态变为 `Completed`。
+    ///
     /// # 错误
-    /// 未批准、非正数或超过剩余授权时拒绝。
+    /// 状态不是 `Approved`、金额非正或超过剩余授权时返回错误。
     pub fn record_invoice(&mut self, amount: Amount) -> Result<()> {
         if self.status != InvoiceRequestStatus::Approved {
             return Err(Error::from("开票申请尚未批准或已完成"));

@@ -26,7 +26,16 @@ pub enum EnableStatus {
 }
 
 impl EnableStatus {
-    /// User-facing label.
+    /// 返回面向用户的启停标签。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Active` 返回「启用」，`Disabled` 返回「停用」。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(self) -> &'static str {
         match self {
             Self::Active => "启用",
@@ -34,7 +43,16 @@ impl EnableStatus {
         }
     }
 
-    /// Stable code.
+    /// 返回稳定代码。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Active` 返回 `active`，`Disabled` 返回 `disabled`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Active => "active",
@@ -42,7 +60,16 @@ impl EnableStatus {
         }
     }
 
-    /// Whether the rule is active.
+    /// 判断规则是否处于启用状态。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Active` 返回 `true`，`Disabled` 返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_active(self) -> bool {
         matches!(self, Self::Active)
     }
@@ -76,6 +103,15 @@ pub enum FinanceResponsibilityOperation {
 
 impl FinanceResponsibilityOperation {
     /// 返回稳定持久化代码。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 `SUPPLIER_PAYMENT`、`SALES_INVOICE` 或 `CARD_FUNDS_REVIEW`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::SupplierPayment => "SUPPLIER_PAYMENT",
@@ -85,6 +121,15 @@ impl FinanceResponsibilityOperation {
     }
 
     /// 返回面向业务人员的操作名称。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回供应商付款、销项开票或卡券票款复核。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(self) -> &'static str {
         match self {
             Self::SupplierPayment => "供应商付款",
@@ -94,6 +139,15 @@ impl FinanceResponsibilityOperation {
     }
 
     /// 返回本操作精确规则使用的往来方类型名称。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 付款返回「供应商」，销项开票和卡券票款复核返回「客户」。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn counterparty_label(self) -> &'static str {
         match self {
             Self::SupplierPayment => "供应商",
@@ -103,12 +157,15 @@ impl FinanceResponsibilityOperation {
 
     /// 返回本操作负责人必须完整持有的执行权限代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回对应正式工作项登记的完整、有序权限代码；领域登记缺失时返回
     /// `None`，由应用层失败关闭并转换为内部配置错误。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     ///
     /// # 业务约束
     /// 权限合同必须与付款和销项开票工作项保持同一规则源。
@@ -136,6 +193,15 @@ pub enum FinanceResponsibilityScope {
 
 impl FinanceResponsibilityScope {
     /// 返回稳定持久化代码。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Counterparty` 返回 `COUNTERPARTY`，`Default` 返回 `DEFAULT`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Counterparty => "COUNTERPARTY",
@@ -185,6 +251,14 @@ pub struct FinanceResponsibilityRule {
 impl FinanceResponsibilityRule {
     /// 创建财务责任规则。
     ///
+    /// # 参数
+    /// * `id` - 规则主键。
+    /// * `data` - 操作、范围、往来方、负责人和启停状态。
+    /// * `created_by` - 创建人。
+    ///
+    /// # 返回
+    /// 返回选择键已按操作和范围冻结的规则；更新人与创建人相同。
+    ///
     /// # 错误
     /// 主键、操作人、负责人或匹配范围不合法时返回错误。
     pub fn new(
@@ -211,6 +285,13 @@ impl FinanceResponsibilityRule {
 
     /// 整项更新财务责任规则。
     ///
+    /// # 参数
+    /// * `data` - 替换后的操作、范围、往来方、负责人和启停状态。
+    /// * `updated_by` - 更新人。
+    ///
+    /// # 返回
+    /// 无返回值；整项替换匹配字段并重算选择键。
+    ///
     /// # 错误
     /// 操作人、负责人或匹配范围不合法时返回错误。
     pub fn update(
@@ -231,11 +312,29 @@ impl FinanceResponsibilityRule {
     }
 
     /// 判断规则当前是否参与责任解析。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 状态为启用时返回 `true`，否则返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         self.status.is_active()
     }
 
     /// 返回写入工作项的规则责任键。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 `finance:{operation}:{id}`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn work_item_responsibility_key(&self) -> String {
         format!("finance:{}:{}", self.operation.as_str(), self.base.id)
     }
@@ -248,14 +347,30 @@ pub struct FinanceResponsibilityRuleSet<'a> {
 
 impl<'a> FinanceResponsibilityRuleSet<'a> {
     /// 创建只读规则集。
+    ///
+    /// # 参数
+    /// * `rules` - 参与解析的规则；停用规则不参与命中。
+    ///
+    /// # 返回
+    /// 返回不复制规则的只读视图。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(rules: &'a [FinanceResponsibilityRule]) -> Self {
         Self { rules }
     }
 
     /// 按业务操作和精确往来方解析唯一负责人规则。
     ///
+    /// # 参数
+    /// * `operation` - 付款或销项开票等业务操作。
+    /// * `counterparty_id` - 精确往来方 ID。
+    ///
+    /// # 返回
+    /// 启用的精确规则优先；没有精确规则时返回唯一启用的默认规则。
+    ///
     /// # 错误
-    /// 精确层或默认层存在多条启用规则，或两个层级均未配置时返回错误。
+    /// 往来方为空或过长、同一层级有多条启用规则，或两个层级都没有启用规则时返回错误。
     pub fn resolve(
         &self,
         operation: FinanceResponsibilityOperation,
@@ -312,6 +427,16 @@ struct NormalizedRuleData {
 impl TryFrom<FinanceResponsibilityRuleData> for NormalizedRuleData {
     type Error = Error;
 
+    /// 校验并规范化财务责任规则的匹配形状。
+    ///
+    /// # 参数
+    /// * `data` - 尚未规范化的规则数据。
+    ///
+    /// # 返回
+    /// 返回往来方、负责人和选择键都已规范化的数据。
+    ///
+    /// # 错误
+    /// 精确规则缺少往来方、默认规则带了往来方，或往来方、负责人为空或过长时返回错误。
     fn try_from(data: FinanceResponsibilityRuleData) -> Result<Self> {
         let counterparty_id =
             normalize_optional_text(data.counterparty_id, "财务责任往来方", COUNTERPARTY_ID_MAX_LEN)?;
@@ -346,6 +471,7 @@ impl TryFrom<FinanceResponsibilityRuleData> for NormalizedRuleData {
     }
 }
 
+/// 精确规则的往来方已由调用方校验为 `Some`；缺失时 `expect`，因为那是内部形状被破坏。
 fn selector_key(
     operation: FinanceResponsibilityOperation,
     scope: FinanceResponsibilityScope,

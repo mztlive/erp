@@ -25,8 +25,28 @@ pub type WorkflowScopeObjects = HashMap<(DocumentType, String), WorkflowScopeObj
 
 /// 公共解析器产生的不可序列化对象判定接口。
 pub trait WorkflowScopePredicate: Send + Sync {
+    /// 判断当前对象是否落在已解析的正向范围内。
+    ///
+    /// # 参数
+    /// * `object` - 业务适配器提供的当前对象事实。
+    ///
+    /// # 返回
+    /// 允许访问时返回 `true`，否则返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allows(&self, object: &WorkflowScopeObject) -> bool;
     /// 角色责任只能使用该角色自己的正向条款。
+    ///
+    /// # 参数
+    /// * `role` - 待判定的角色 ID。
+    /// * `object` - 当前对象事实。
+    ///
+    /// # 返回
+    /// 该角色的正向条款允许时返回 `true`。默认实现返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allows_role(&self, _role: &str, _object: &WorkflowScopeObject) -> bool {
         false
     }
@@ -46,6 +66,21 @@ pub struct WorkflowDataScope {
 
 impl WorkflowDataScope {
     /// 接收公共解析器的结果；不得由前端载荷构造。
+    ///
+    /// # 参数
+    /// * `resource` - 已解析的资源。
+    /// * `action` - 已解析的动作。
+    /// * `policy_version` - 策略版本。
+    /// * `scope_version` - 范围版本。
+    /// * `granting_role_ids` - 授予该范围的角色。
+    /// * `has_role_scope` - 是否存在角色级范围。
+    /// * `predicate` - 只由生产 adapter 注入的对象判定。
+    ///
+    /// # 返回
+    /// 返回已绑定资源、动作和版本的范围。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(
         resource: String,
         action: String,
@@ -59,10 +94,30 @@ impl WorkflowDataScope {
     }
 
     /// 按业务域提供的当前事实执行公共判定；不允许历史参与补充写权限。
+    ///
+    /// # 参数
+    /// * `role` - 待判定的角色 ID。
+    /// * `object` - 当前对象事实。
+    ///
+    /// # 返回
+    /// 委托谓词的 `allows_role`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn allows_role(&self, role: &str, object: &WorkflowScopeObject) -> bool {
         self.predicate.allows_role(role, object)
     }
 
+    /// 按当前对象事实执行公共范围判定。
+    ///
+    /// # 参数
+    /// * `object` - 当前对象事实。
+    ///
+    /// # 返回
+    /// 委托谓词的 `allows`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn allows(&self, object: &WorkflowScopeObject) -> bool {
         self.predicate.allows(object)
     }

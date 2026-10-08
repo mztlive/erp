@@ -13,6 +13,15 @@ pub struct ProcurementResponsibilityService {
 
 impl ProcurementResponsibilityService {
     /// 使用采购拥有仓储创建领域服务。
+    ///
+    /// # 参数
+    /// * `db` - 采购责任规则所在数据库
+    ///
+    /// # 返回
+    /// 返回不持有外域端口的领域服务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }

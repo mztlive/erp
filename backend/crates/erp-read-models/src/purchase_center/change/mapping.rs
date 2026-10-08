@@ -13,6 +13,9 @@ use super::super::dto::PurchaseChangeOrderView;
 ///
 /// # 返回
 /// 返回视图。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn change_list_view(
     change: PurchaseChangeOrder,
     binding: Option<ApprovalDefinitionBinding>,

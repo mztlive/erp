@@ -260,11 +260,11 @@ pub enum BuiltinRoleState {
 impl BuiltinRoleState {
     /// 将包含软删除记录的角色读取结果映射为生成状态。
     /// # 参数
-    /// 按固定模板身份读取的角色。
+    /// * `role` - 按固定模板身份读取的角色；没有记录时为 `None`。
     /// # 返回
-    /// 只有 Missing 允许新建。
+    /// 没有记录为 `Missing`，已软删除为 `Deleted`，已停用为 `Disabled`，其余为 `Existing`。只有 `Missing` 允许新建。
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn from_role(role: Option<&Role>) -> Self {
         match role {
             None => Self::Missing,

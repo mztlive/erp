@@ -62,8 +62,16 @@ impl super::execution::DirectCommandPort for DirectCommand<'_> {
 impl IntegrationResolutionProcess {
     /// 对未关联任何正式任务的差异提交 decision-only 命令。
     ///
+    /// # 参数
+    /// * `path_id` - 路径中的差异 ID，必须与命令内身份一致。
+    /// * `command` - 直接决定命令。
+    /// * `actor` - 已通过鉴权的审计操作人。
+    ///
+    /// # 返回
+    /// 本次决定或同载荷重放的结果。
+    ///
     /// # 错误
-    /// 路径身份、差异版本、任务关联、终态证据或幂等校验失败时返回错误。
+    /// 请求非法、路径身份不一致、当前账号无权，或差异版本、任务关联、终态证据或幂等校验失败时返回错误。
     pub async fn decide_difference(
         &self,
         path_id: &str,

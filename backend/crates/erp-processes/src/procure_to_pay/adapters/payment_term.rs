@@ -2,6 +2,15 @@
 use erp_procurement::entity::facts::PaymentTermFact;
 use erp_supplier::{SupplierPaymentTerm, split_encoded_payment_term_snapshot};
 /// 解析采购单付款条件；保持提供方原校验与错误。
+///
+/// # 参数
+/// * `code` - 付款条件代码。
+///
+/// # 返回
+/// 返回规范代码、预付门禁、最低比例与到期规则。
+///
+/// # 错误
+/// 代码无法按供应商付款条件规则解析时返回对应错误。
 pub(crate) fn parse(code: &str) -> erp_core::Result<PaymentTermFact> {
     let term = SupplierPaymentTerm::parse(code)?;
     Ok(PaymentTermFact {
@@ -13,6 +22,15 @@ pub(crate) fn parse(code: &str) -> erp_core::Result<PaymentTermFact> {
     })
 }
 /// 先分离历史快照附带的经营类目，再按提供方付款条件规则解析。
+///
+/// # 参数
+/// * `code` - 可能附带经营类目的历史快照文本。
+///
+/// # 返回
+/// 返回分离经营类目后的付款条件事实。
+///
+/// # 错误
+/// 分离后的付款条件代码无法解析时返回对应错误。
 pub(crate) fn parse_snapshot(code: &str) -> erp_core::Result<PaymentTermFact> {
     parse(&split_encoded_payment_term_snapshot(code).payment_term_code)
 }

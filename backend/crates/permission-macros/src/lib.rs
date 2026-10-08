@@ -22,7 +22,7 @@ struct PermissionArgs {
 /// 返回 `TokenStream` 实例。
 ///
 /// # 错误
-/// 属性缺 `resource`/`action` 或其非字符串字面量时编译失败。
+/// 不返回 `Result`。属性不能解析为逗号分隔的 `name = value`、被标注项不是函数、缺少 `resource` 或 `action`、二者不是字符串字面量，或权限键格式非法时，展开结果包含编译错误。
 #[proc_macro_attribute]
 pub fn permission(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr with Punctuated::<MetaNameValue, Token![,]>::parse_terminated);
@@ -46,8 +46,17 @@ pub fn permission(attr: TokenStream, item: TokenStream) -> TokenStream {
 
         /// 返回处理器对应的权限键。
         ///
+        /// # 参数
+        /// 无。
+        ///
         /// # 返回
         /// 返回该处理器绑定的权限键。
+        ///
+        /// # 错误
+        /// 不返回错误。
+        ///
+        /// # Panics
+        /// `::erp_identity::Permission::parse` 拒绝 `resource` 与 `action` 的拼接结果时 panic。此函数只在展开期校验通过后生成，`expect` 仅兜底解析仍失败的情况。
         pub fn #permission_fn_ident() -> ::erp_identity::Permission {
             ::erp_identity::Permission::parse(concat!(#resource, ":", #action))
                 .expect(concat!("invalid permission key for handler ", #handler_name))

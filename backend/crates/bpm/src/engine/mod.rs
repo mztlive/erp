@@ -79,8 +79,14 @@ pub enum Eligibility {
 impl Eligibility {
     /// 返回资格对应的显示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回构造时写入的快照。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn name_snapshot(&self) -> &str {
         match self {
             Self::Eligible { assignee_name_snapshot, .. } | Self::Blocked { assignee_name_snapshot, .. } => {
@@ -89,10 +95,16 @@ impl Eligibility {
         }
     }
 
-    /// 返回人员失效阻塞码。
+    /// 返回受阻资格上的阻塞码。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
-    /// 有效时返回 `None`。
+    /// 有效资格返回 `None`；`Blocked` 返回其中的 [`ApprovalBlockerCode`]，不限人员失效。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn blocked_code(&self) -> Option<ApprovalBlockerCode> {
         match self {
             Self::Eligible { .. } => None,

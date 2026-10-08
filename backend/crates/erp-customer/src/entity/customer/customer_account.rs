@@ -32,8 +32,14 @@ pub enum CustomerAccountStatus {
 impl CustomerAccountStatus {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Active => "启用",
@@ -43,8 +49,14 @@ impl CustomerAccountStatus {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Active => "active",
@@ -54,8 +66,14 @@ impl CustomerAccountStatus {
 
     /// 判断是否处于启用状态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 处于 `Active` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         matches!(self, Self::Active)
     }
@@ -65,8 +83,14 @@ impl CustomerAccountStatus {
     /// 阻断口径的权威实现：DTO 的 `customer_status_blockers` 只负责组装
     /// 展示文案，动作集合以此处为准。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 启用时为空；停用时返回禁止新合同与新销售单的动作代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn blocked_actions(&self) -> &'static [&'static str] {
         match self {
             Self::Active => &[],
@@ -77,6 +101,15 @@ impl CustomerAccountStatus {
 
 impl DocumentState for CustomerAccountStatus {
     /// 返回合法后继：启用 ⇄ 停用。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Active` 的后继只有 `Disabled`，`Disabled` 的后继只有 `Active`。切片不含当前状态。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Active => &[Self::Disabled],
@@ -161,7 +194,7 @@ impl CustomerAccount {
     /// 返回新建的客户角色实体。
     ///
     /// # 错误
-    /// 当 customer_no 为空/超长时返回错误。
+    /// 当 `customer_no` 为空或超长，或付款条件引用超长时返回错误。
     pub fn new(
         id: CustomerAccountId,
         data: CustomerAccountData,
@@ -207,8 +240,14 @@ impl CustomerAccount {
 
     /// 判断客户角色是否处于启用状态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为 `Active` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         self.stable.status().is_active()
     }

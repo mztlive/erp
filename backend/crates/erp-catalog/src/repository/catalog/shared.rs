@@ -24,6 +24,9 @@ pub(super) const SKU_REVISIONS: &str = <mongodb::Database as CatalogExt>::SKU_RE
 ///
 /// # 返回
 /// 返回批量查询条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn in_filter(field: &str, values: impl IntoIterator<Item = String>) -> Document {
     let values: Vec<Bson> = values.into_iter().map(Bson::String).collect();
     doc! { field: { "$in": values } }
@@ -41,6 +44,9 @@ pub(super) fn in_filter(field: &str, values: impl IntoIterator<Item = String>) -
 ///
 /// # 返回
 /// 空集合返回 `None`（调用方直接返回空集合）；否则返回批量查询条件。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn batch_ids_filter<Id: ToString>(field: &str, ids: &[Id]) -> Option<Document> {
     if ids.is_empty() {
         return None;
@@ -56,6 +62,9 @@ pub(super) fn batch_ids_filter<Id: ToString>(field: &str, ids: &[Id]) -> Option<
 ///
 /// # 返回
 /// 返回排序条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn sort_doc(field: &str, sort_ascending: bool) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     doc! { field: direction, "id": direction }
@@ -66,8 +75,14 @@ pub(super) fn sort_doc(field: &str, sort_ascending: bool) -> Document {
 /// 各 `*Filter::default` 的分页字面量唯一来源：页码 1、单页 20 条、
 /// 无排序字段、降序；各实现解构复用，避免多处复制。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回 `(页码, 单页条数, 排序字段, 是否升序)`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn default_paging() -> (u64, u32, Option<String>, bool) {
     (1, 20, None, false)
 }
@@ -84,6 +99,9 @@ pub(super) fn default_paging() -> (u64, u32, Option<String>, bool) {
 ///
 /// # 返回
 /// 白名单命中返回原字段；否则返回 `created_at`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn whitelisted_sort<'x>(sort_by: Option<&'x str>, allowed: &[&str]) -> &'x str {
     match sort_by {
         Some(field) if allowed.contains(&field) => field,
@@ -153,6 +171,9 @@ pub(super) async fn max_revision_no(
 ///
 /// # 返回
 /// 优先返回当前指针命中的修订；否则返回最大修订号；无修订时返回 `None`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn select_current_revision<'a, Revision>(
     current_revision_id: Option<&str>,
     revisions: &'a [Revision],

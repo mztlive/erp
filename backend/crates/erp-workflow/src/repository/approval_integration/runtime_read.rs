@@ -105,6 +105,9 @@ impl<'a> ApprovalRuntimeReadRepository<'a> {
     ///
     /// # 返回
     /// 返回不自行开启事务的只读仓储。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }

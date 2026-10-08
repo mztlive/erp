@@ -73,6 +73,9 @@ impl DemoMasterDataService {
     ///
     /// # 返回
     /// 返回未执行任何写入的服务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(
         db: mongodb::Database,
         sensitive: Arc<SensitiveDataCodec>,
@@ -84,11 +87,14 @@ impl DemoMasterDataService {
 
     /// 返回各类演示主数据的计划数量和当前数量。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 环境关闭时仍返回数量，`enabled` 为 false。
     ///
     /// # 错误
-    /// 清单查询失败时返回错误。
+    /// 清单查询或嵌入种子校验失败时返回错误。
     pub async fn status(&self) -> Result<DemoStatus> {
         let records = record::load_all(&self.db).await?;
         let rows = records

@@ -1,6 +1,6 @@
 //! 域 D17 `inventory` 仓储：按库存集合能力与跨域聚合读取拆分。
 //!
-//! 单一集合 CRUD 与乐观锁直接复用 [`super::Repository`] 基类；库存余额与预占热点写入
+//! 单一集合 CRUD 与乐观锁直接复用 `persistence_core::Repository`；库存余额与预占热点写入
 //! 保持原子条件更新，事务边界与执行器选择仍由 Service 负责。
 
 mod adjustment;
@@ -51,6 +51,9 @@ impl<'a> InventoryRepository<'a> {
     ///
     /// # 返回
     /// 返回仓储实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }

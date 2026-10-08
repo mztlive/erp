@@ -30,6 +30,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
     /// * `request` - 发布请求
     /// * `actor` - 已认证操作人
     ///
+    /// # 返回
+    /// 返回发布后的定义详情；同载荷回放返回已发布结果。
+    ///
     /// # 错误
     /// 图、用途、账号或权限校验失败时零写入返回错误。
     pub async fn publish_definition(
@@ -129,7 +132,7 @@ struct PublishTxInput<'a> {
     actor: &'a AuditActor,
     /// 已规范化的当前命令身份及精确旧格式候选。
     identity: &'a PreparedDefinitionIdentity,
-    /// Injected audit port.
+    /// 注入的审计端口。
     audit: &'a dyn crate::ports::WorkflowAuditPort,
 }
 

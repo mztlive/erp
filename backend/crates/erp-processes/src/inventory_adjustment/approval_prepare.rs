@@ -68,6 +68,17 @@ pub async fn load_bound_definition_graph(
 }
 
 /// 在调用方数据库快照内加载冻结绑定对应的定义图。
+///
+/// # 参数
+/// * `db` - 审批定义所在数据库。
+/// * `binding` - 创建时冻结的定义绑定。
+/// * `executor` - 调用方数据库快照。
+///
+/// # 返回
+/// 返回已持久化并转成引擎形状的定义图。
+///
+/// # 错误
+/// 定义不存在时返回 `ConflictError`；仓储读取失败时返回对应错误。
 pub(super) async fn load_bound_definition_graph_with_executor(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
@@ -96,6 +107,16 @@ fn engine_graph(graph: erp_workflow::repository::bpm::DefinitionGraph) -> Defini
 }
 
 /// 使用完整库存提交身份规划启动；禁止调用方在规划后覆盖 receipt digest。
+///
+/// # 参数
+/// * `input` - 已构造的启动执行输入。
+/// * `req` - 库存调整提交载荷，用于计算命令身份。
+///
+/// # 返回
+/// 返回引擎规划后的 `PreparedExecution`。
+///
+/// # 错误
+/// 启动输入与提交载荷不一致、命令身份无法构造，或 `prepare_start_with_identity` 失败时返回对应错误。
 pub fn prepare_stock_adjustment_start(
     input: StartExecutionInput,
     req: &SubmitStockAdjustmentRequest,
@@ -136,6 +157,20 @@ async fn find_stock_adjustment_start_receipt(
 }
 
 /// 在同一数据库快照内先按稳定作用域解析启动收据，再重验当前权限与结果事实。
+///
+/// # 参数
+/// * `db` - 收据、实例与调整单所在数据库。
+/// * `rbac` - 重验提交权限使用的 RBAC。
+/// * `adjustment_id` - 库存调整单主键。
+/// * `req` - 原提交载荷，含期望主题版本与幂等键。
+/// * `actor` - 当前认证操作人。
+/// * `executor` - 调用方数据库快照。
+///
+/// # 返回
+/// 同一载荷的启动收据已存在时返回审批实例 ID；没有收据时返回 `None`。
+///
+/// # 错误
+/// 幂等键或作用域非法、收据与实例、快照或绑定不一致、操作人不是原提交人、载荷冲突、调整单不存在，或当前提交授权失败时返回对应错误。仓储失败原样传播。
 pub async fn reconcile_stock_adjustment_start_receipt(
     db: &Database,
     rbac: &SharedRbacService,
@@ -235,6 +270,21 @@ pub async fn reconcile_stock_adjustment_start_receipt(
 /// 按稳定 StartApproval 作用域与幂等键只读解析已提交结果。
 ///
 /// 收据是第一读；不存在时必须返回 `None`，不得根据当前单据状态推断命令成功。
+///
+/// # 参数
+/// * `db` - 收据与实例所在数据库。
+/// * `rbac` - 重验提交权限使用的 RBAC。
+/// * `adjustment_id` - 库存调整单主键。
+/// * `expected_subject_version` - 原命令冻结的主题版本。
+/// * `idempotency_key` - 原命令幂等键。
+/// * `actor` - 当前认证操作人。
+/// * `executor` - 调用方数据库快照。
+///
+/// # 返回
+/// 收据通过身份、快照、绑定与当前授权校验时返回实例 ID；没有收据时返回 `None`。
+///
+/// # 错误
+/// 幂等键或作用域非法、收据身份或实例事实不一致、原提交人不是当前操作人、缺少快照或绑定、调整单不存在或版本早于结果，或当前提交授权失败时返回对应错误。仓储失败原样传播。
 pub async fn find_stock_adjustment_start_result(
     db: &Database,
     rbac: &SharedRbacService,
@@ -382,6 +432,19 @@ async fn legacy_balance_versions_match(
 }
 
 /// 在给定数据库快照内重验库存调整提交人的账号、动作权限、对象读取与范围。
+///
+/// # 参数
+/// * `db` - 授权与调整单所在数据库。
+/// * `rbac` - 动作权限与对象读取使用的 RBAC。
+/// * `adjustment` - 待提交的库存调整单。
+/// * `actor` - 当前认证操作人。
+/// * `executor` - 调用方数据库快照。
+///
+/// # 返回
+/// 授权通过时无返回值。
+///
+/// # 错误
+/// 账号未激活、不是制单人、没有 `stock_adjustment:submit`，或对象不可读时返回 `Forbidden`。授权读取失败时返回对应错误。
 pub async fn ensure_stock_adjustment_submit_authorized_with_executor(
     db: &Database,
     rbac: &SharedRbacService,
@@ -413,6 +476,18 @@ pub async fn ensure_stock_adjustment_submit_authorized_with_executor(
 }
 
 /// 当前调用人是否可获得库存调整提交命令令牌。
+///
+/// # 参数
+/// * `db` - 授权所在数据库。
+/// * `rbac` - 提交授权使用的 RBAC。
+/// * `adjustment` - 待判断的库存调整单。
+/// * `actor` - 当前认证操作人。
+///
+/// # 返回
+/// 提交授权通过时返回 `true`；明确拒绝时返回 `false`。
+///
+/// # 错误
+/// 授权读取失败且不是 `Forbidden` 时返回对应错误。
 pub async fn actor_can_submit(
     db: &Database,
     rbac: &SharedRbacService,
@@ -473,23 +548,25 @@ pub struct StockAdjustmentStartInput<'a> {
 
 /// 由定义图与单据组织构造启动输入。
 ///
-/// 审批人取自已发布节点，不接受客户端选择。对象读取权失败时收敛为 BLOCKED，
-/// `prepare_start` 会拒绝创建实例。
+/// 审批人取自已发布节点，不接受客户端选择。
 ///
 /// # 用途
 /// 把启动参数收敛为引擎 `prepare_start` 输入。
 ///
 /// # 参数
-/// * `input` - 定义图、绑定、主体与提交人
+/// * `db` - 账号与授权所在数据库。
+/// * `rbac` - 候选人权限使用的 RBAC。
+/// * `input` - 定义图、绑定、主体、提交人与幂等键。
+/// * `executor` - 调用方数据库快照。
 ///
 /// # 返回
 /// 返回可交给 `prepare_start` 的输入。
 ///
 /// # 错误
-/// 入口缺失、审批人非法、幂等键非法或读取权校验失败时返回错误。
+/// 定义版本与冻结绑定不一致、幂等键或提交人非法、候选人重验失败、入口节点或入口绑定缺失时返回对应错误。
 ///
 /// # 关键业务约束
-/// 定义版本必须与冻结绑定一致；对象读取权失败时收敛为 BLOCKED。
+/// 定义版本必须与冻结绑定一致。
 pub async fn build_stock_adjustment_start_input(
     db: &Database,
     rbac: &SharedRbacService,
@@ -543,17 +620,21 @@ pub async fn build_stock_adjustment_start_input(
     })
 }
 
-/// 为定义全部节点冻结启动绑定，并按单据组织重验对象读取权。
+/// 为定义全部节点冻结启动绑定，并重验候选人账号、权限与职责分离。
 ///
 /// # 参数
-/// * `graph` - 定义图
-/// * `organization_id` - 单据责任组织
+/// * `db` - 账号与授权所在数据库。
+/// * `rbac` - 候选人权限使用的 RBAC。
+/// * `graph` - 定义图。
+/// * `initiator_id` - 启动人，用于职责分离。
+/// * `organization_id` - 单据责任组织；这里只校验非空。
+/// * `executor` - 调用方数据库快照。
 ///
 /// # 返回
 /// 返回与节点一一对应的绑定。
 ///
 /// # 错误
-/// 节点审批人引用非法或显示名为空时返回校验错误。
+/// 责任组织为空、职责分离或候选人账号与权限不通过、定义为空、审批人引用或显示名非法时返回校验或冲突错误。读取失败时返回对应错误。
 async fn start_bindings_from_graph(
     db: &Database,
     rbac: &SharedRbacService,
@@ -577,7 +658,21 @@ async fn start_bindings_from_graph(
     Ok(bindings)
 }
 
-/// 在调用方快照内重验全部定义候选人的有效账号、决定权限、对象读取、范围与 SoD。
+/// 在调用方快照内重验责任组织非空、职责分离，以及候选人是有效后台账号且具备审批读取和决定权限。
+///
+/// # 参数
+/// * `db` - 账号与授权所在数据库。
+/// * `rbac` - 候选人权限使用的 RBAC。
+/// * `graph` - 已加载的审批定义图。
+/// * `initiator_id` - 启动人，用于职责分离。
+/// * `organization_id` - 单据责任组织；只校验非空。
+/// * `executor` - 调用方数据库快照。
+///
+/// # 返回
+/// 全部候选人通过时无返回值。
+///
+/// # 错误
+/// 责任组织为空、职责分离不满足、审批人账号无效或缺少审批读取和决定权限、定义为空时返回校验或冲突错误。账号与权限读取失败时返回对应错误。
 pub(super) async fn revalidate_stock_adjustment_start_candidates(
     db: &Database,
     rbac: &SharedRbacService,

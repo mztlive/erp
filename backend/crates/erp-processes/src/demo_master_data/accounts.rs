@@ -24,6 +24,19 @@ pub(super) struct PreparedAccounts {
 }
 
 impl DemoMasterDataService {
+    /// 按规格补齐岗位账号，并汇总新建、已有和改名数量。
+    ///
+    /// 已有账号不改密码。缺角色时补上，姓名与演示人名不一致时同步。
+    ///
+    /// # 参数
+    /// * `actor` - 当前操作人。
+    /// * `report` - 累计账号数量和提示；本函数会改写其中的账号计数与提示。
+    ///
+    /// # 返回
+    /// 返回规格键和登录名到账号 ID 的映射。
+    ///
+    /// # 错误
+    /// 账号创建、改名、角色补齐或按登录名读取失败时返回对应错误。
     pub(super) async fn ensure_accounts(
         &self,
         actor: &AuditActor,

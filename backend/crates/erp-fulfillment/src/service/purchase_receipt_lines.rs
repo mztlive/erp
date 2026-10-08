@@ -15,6 +15,9 @@ use crate::entity::fulfillment::PurchaseReceiptLineSpec;
 ///
 /// # 返回
 /// 返回带行 ID 的领域规格（行号与质量结果由实体工厂派生）。
+///
+/// # 错误
+/// 不返回错误。
 pub fn receipt_line_specs(inputs: &[PurchaseReceiptLineInput]) -> Vec<PurchaseReceiptLineSpec> {
     inputs
         .iter()

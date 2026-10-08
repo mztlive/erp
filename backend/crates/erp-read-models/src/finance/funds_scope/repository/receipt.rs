@@ -16,6 +16,20 @@ use super::{aggregate, linked_condition_document, source_stages};
 use crate::{Error, Result};
 
 /// 同一最终条件取当前页、总数、完整窄版本与份额摘要。
+///
+/// # 参数
+/// * `db` - 回款集合所在数据库。
+/// * `query` - 已规范化的回款列表查询。
+/// * `filter` - 回款主表筛选。
+/// * `authorization` - 已解析来源授权。
+/// * `condition` - 负责人、经办人与组织条件。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 当前页、计数、完整窄版本和授权份额摘要。聚合没有文档时页与计数为空，计数按零继续读取头信息。
+///
+/// # 错误
+/// 聚合、解码或回款金额流读取失败时返回对应错误。计数达到 10000 时返回校验错误，文案为回款查询超过上限。
 pub(in crate::finance::funds_scope) async fn page(
     db: &Database,
     query: &CustomerReceiptListQuery,
@@ -47,6 +61,20 @@ pub(in crate::finance::funds_scope) async fn page(
 }
 
 /// 二次授权只装载完整匹配责任版本，禁止复算页面金额和分配视图。
+///
+/// # 参数
+/// * `db` - 回款集合所在数据库。
+/// * `query` - 已规范化的回款列表查询，只使用其排序。
+/// * `filter` - 回款主表筛选。
+/// * `authorization` - 已解析来源授权。
+/// * `condition` - 负责人、经办人与组织条件。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 按原主表排序的全部匹配回款及获授权来源版本。
+///
+/// # 错误
+/// 聚合或投影解码失败时返回对应错误。
 pub(in crate::finance::funds_scope) async fn versions(
     db: &Database,
     query: &CustomerReceiptListQuery,

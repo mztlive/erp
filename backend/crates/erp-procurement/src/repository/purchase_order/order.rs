@@ -126,8 +126,20 @@ impl Default for PurchaseOrderFilter {
 impl QueryFilter for PurchaseOrderFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// `owner_user_ids` 为 `Some` 时按 `owner_user_id` 做 `$in`。`keyword_sales_order_ids` 或
+    /// `keyword_supplier_ids` 非空时，`$or` 固定包含这两侧的 `$in`，且仅当 `purchase_no` 为
+    /// `Some` 时再加入忽略大小写的字面量正则；两侧皆空时，该正则只在 `purchase_no` 为 `Some`
+    /// 时写在顶层。`sales_order_id` 与 `supplier_id` 为 `Some` 时按字符串精确匹配，`status` 为
+    /// `Some` 时写入其稳定代码。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(ids) = &self.owner_user_ids {
@@ -163,8 +175,16 @@ impl QueryFilter for PurchaseOrderFilter {
 impl Pagination for PurchaseOrderFilter {
     /// 返回页码与单页条数。
     ///
+    /// `page` 原样返回，`page_size` 由 `u32` 拓宽为 `u64`。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `(page, page_size)` 元组。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -314,11 +334,28 @@ pub trait PurchaseOrderRepositoryExt {
 
     /// 按业务编号返回全部匹配身份，供跨域列表在分页前筛选。
     ///
-    /// 只投影 ID、排除软删除；数据库错误向上返回。
+    /// 只取 `id`、排除软删除；`keyword` 按 `purchase_no` 的大小写不敏感字面量正则匹配。
+    ///
+    /// # 参数
+    /// * `keyword` - 采购单号关键字
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回命中的采购单 ID；没有命中时返回空向量。
+    ///
+    /// # 错误
+    /// MongoDB `distinct` 失败时返回仓储错误。
     async fn matching_ids_by_number(&self, keyword: &str, executor: &mut dyn Executor)
     -> Result<Vec<String>>;
 
     /// 判断组织是否仍有需要交接的未结单据。
+    ///
+    /// # 参数
+    /// * `org` - 业务组织单元 ID
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 存在未删除且状态不是 `COMPLETED` 或 `VOIDED` 的采购单时返回 `true`。
     ///
     /// # 错误
     /// 查询失败返回仓储错误；失败不得解释为没有业务。

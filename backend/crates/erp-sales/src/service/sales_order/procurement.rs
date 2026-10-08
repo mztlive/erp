@@ -1,4 +1,4 @@
-//! Stable sales-line facts required by procurement responsibility resolution.
+//! 采购责任解析所需的稳定销售行事实。
 use erp_core::ids::SkuId;
 
 use crate::entity::sales_order::{LineType, SalesOrderSubmissionLine, SalesOrderWorkingCopyLine};
@@ -13,6 +13,15 @@ pub struct SalesProcurementLineFact {
     pub service_region: Option<String>,
 }
 /// 从工作副本行构造稳定采购责任解析输入。
+///
+/// # 参数
+/// * `lines` - 工作副本行。
+///
+/// # 返回
+/// 返回与实物及服务行一一对应的责任解析输入；行键取稳定销售明细身份。
+///
+/// # 错误
+/// 含非实物服务行时返回冲突；任一行缺少 SKU 时返回校验错误。
 pub fn working_copy_inputs(lines: &[SalesOrderWorkingCopyLine]) -> Result<Vec<SalesProcurementLineFact>> {
     collect_procurement_facts(
         lines.iter().map(|line| ProcurementLineRef {
@@ -27,6 +36,15 @@ pub fn working_copy_inputs(lines: &[SalesOrderWorkingCopyLine]) -> Result<Vec<Sa
 }
 
 /// 从冻结提交行构造最终生效采购责任解析输入。
+///
+/// # 参数
+/// * `lines` - 冻结提交行。
+///
+/// # 返回
+/// 返回与实物及服务行一一对应的责任解析输入；行键取稳定销售明细身份。
+///
+/// # 错误
+/// 含非实物服务行时返回冲突；任一行缺少 SKU 时返回校验错误。
 pub fn submission_procurement_inputs(
     lines: &[SalesOrderSubmissionLine],
 ) -> Result<Vec<SalesProcurementLineFact>> {

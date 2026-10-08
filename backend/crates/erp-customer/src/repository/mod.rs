@@ -1,4 +1,4 @@
-//! Customer MongoDB repositories and accessors.
+//! 客户 MongoDB 仓储与访问器。
 
 pub mod customer;
 pub mod customer_shared;

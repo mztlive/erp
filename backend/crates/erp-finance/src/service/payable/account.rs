@@ -10,6 +10,16 @@ use crate::entity::payable::{
     EntryDirection, PayableAccount, PayableAccountData, PayableEntry, PayableEntryData, PayableEntryType,
 };
 /// 在来源事实校验后构建完整应付事实；不开始事务，也不写入外域。
+///
+/// # 参数
+/// * `req` - 应付子账创建请求；未给可收票额度时使用含税合计。
+/// * `actor_id` - 创建人。
+///
+/// # 返回
+/// 返回尚未持久化的应付子账与原始增加分录。已核销与已收票金额为零，过账时间为当前时刻。
+///
+/// # 错误
+/// 子账或分录实体构造失败时返回对应错误。
 pub fn prepare_payable_account(
     req: CreatePayableAccountRequest,
     actor_id: &str,

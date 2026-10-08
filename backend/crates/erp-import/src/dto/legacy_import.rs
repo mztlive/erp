@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
 
-/// Background-job status snapshot; wire code matches support `JobStatus`.
+/// 后台任务状态快照；wire code 与支撑域 `JobStatus` 一致。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ImportJobStatus {
@@ -53,16 +53,28 @@ pub struct PageParams {
 impl PageParams {
     /// 返回仓储筛选用的排序字段名（白名单已校验）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回归一化后的排序字段。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn sort_field(&self) -> String {
         self.sort_by.to_owned()
     }
 
     /// 判断排序是否为升序。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 升序返回 `true`，降序返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn sort_ascending(&self) -> bool {
         matches!(self.sort_dir, SortDir::Asc)
     }

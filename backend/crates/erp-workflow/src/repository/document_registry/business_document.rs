@@ -98,8 +98,14 @@ struct BusinessDocumentIdRow {
 impl QueryFilter for BusinessDocumentFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(document_type) = self.document_type {
@@ -113,8 +119,14 @@ impl QueryFilter for BusinessDocumentFilter {
 impl Pagination for BusinessDocumentFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `(page, page_size)` 元组。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -156,10 +168,21 @@ pub trait BusinessDocumentRepositoryExt {
 
     /// 在调用方已经加载并可能合法修改的注册实体上合并审批启动守卫后执行 CAS。
     ///
+    /// # 参数
+    /// * `document` - 调用方已加载、可能已合法修改的注册行。
+    /// * `document_type` - 启动命令已经证明的精确单据类型。
+    /// * `expected_definition_id` - 本次实例冻结的定义主键。
+    /// * `expected_definition_version` - 本次实例冻结的定义业务版本。
+    /// * `at` - 首次启动时间。
+    /// * `executor` - 调用方事务执行器。
+    ///
     /// # 返回
     /// 精确类型、定义绑定时返回 `true`：首次启动合并守卫并执行 CAS，曾启动
     /// 则保持首次时间且不写注册行；守卫不匹配时返回 `false`。CAS 或事务冲突
     /// 返回仓储错误。
+    ///
+    /// # 错误
+    /// 首次启动的 `update` 发生版本冲突或 MongoDB 写入失败时返回错误。守卫不匹配返回 `Ok(false)`。
     ///
     /// # 关键业务约束
     /// 创建并提交等同事务路径可用本入口把正式编号分配与启动守卫合并为一次
@@ -303,8 +326,18 @@ pub trait BusinessDocumentRepositoryExt {
     /// 成功时同时写入 `document_no_assigned_at`，不得覆盖已有编号。同载荷回读
     /// 同一结果；不同编号竞争只允许一个成功。
     ///
+    /// # 参数
+    /// * `id` - 单据注册行主键。
+    /// * `document_no` - 要写入的正式编号。
+    /// * `expected_version` - 预期乐观锁版本。
+    /// * `assigned_at` - 编号赋值时间。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 返回赋值成功、同载荷、编号冲突、版本冲突或目标缺失的分类。
+    ///
     /// # 错误
-    /// 元数据越界或 MongoDB 更新失败时返回错误。
+    /// 版本无法表示为 BSON 整数、更新失败，或未命中后的回读失败时返回错误。
     async fn assign_document_no(
         &self,
         id: &str,

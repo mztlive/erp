@@ -28,6 +28,15 @@ pub struct SupplierFulfillmentService {
 }
 impl SupplierFulfillmentService {
     /// 绑定本域数据访问；范围 Port 缺省失败关闭。
+    ///
+    /// # 参数
+    /// * `db` - 履约集合所在数据库。
+    ///
+    /// # 返回
+    /// 返回范围 Port 与处理人 Port 均为失败关闭的服务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self {
             db,
@@ -58,11 +67,29 @@ impl SupplierFulfillmentService {
     }
 
     /// 构造本域范围访问器。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回绑定当前数据库和范围 Port 的 `FulfillmentOrderAccess`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn access(&self) -> FulfillmentOrderAccess {
         FulfillmentOrderAccess::new(self.db.clone(), self.data_scope.clone())
     }
 
     /// 当前开放 W26 处理人端口。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回处理人 Port 的共享句柄。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn handlers(&self) -> Arc<dyn FulfillmentExceptionHandlerPort> {
         self.handlers.clone()
     }

@@ -19,6 +19,15 @@ impl SupplierFulfillmentService {
     /// 分页查询供应商履约订单列表（无范围时失败关闭）。
     ///
     /// 授权范围内的列表由组合层注入范围后调用 [`Self::search_fulfillment_orders`]。
+    ///
+    /// # 参数
+    /// * `params` - 列表查询参数。
+    ///
+    /// # 返回
+    /// 返回以默认空范围筛选后的分页视图。
+    ///
+    /// # 错误
+    /// 参数校验或规范化失败，以及仓储查询失败时返回对应错误。
     pub async fn supplier_fulfillment_order_list(
         &self,
         params: &SupplierFulfillmentOrderListParams,
@@ -56,6 +65,15 @@ impl SupplierFulfillmentService {
     }
 
     /// 按 ID 加载未删除供应商子订单。
+    ///
+    /// # 参数
+    /// * `id` - 供应商履约订单主键。
+    ///
+    /// # 返回
+    /// 返回订单实体。
+    ///
+    /// # 错误
+    /// 订单不存在时返回 `NotFound`；仓储读取失败时返回对应错误。
     pub async fn load_order(&self, id: &str) -> Result<SupplierFulfillmentOrder> {
         self.db
             .supplier_fulfillment_orders()
@@ -66,6 +84,15 @@ impl SupplierFulfillmentService {
 }
 
 /// 将规范化查询转换为仓储筛选；授权条件由调用方注入。
+///
+/// # 参数
+/// * `query` - 已规范化的列表查询。
+///
+/// # 返回
+/// 返回 `scope` 为 `None` 的仓储筛选。
+///
+/// # 错误
+/// 不返回错误。
 pub fn fulfillment_order_filter(query: &FulfillmentOrderListQuery) -> FulfillmentOrderFilter {
     FulfillmentOrderFilter {
         q: query.q.clone(),

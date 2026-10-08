@@ -1,4 +1,4 @@
-//! Consumer port for account display names required by contract lists.
+//! 合同列表所需账号显示名的消费方端口。
 
 use std::collections::HashMap;
 
@@ -9,13 +9,16 @@ use crate::error::{Error, Result};
 /// Port contract uses to resolve owner display names without depending on `erp-identity`.
 #[async_trait]
 pub trait AccountNamePort: Send + Sync {
-    /// Return display names keyed by account id. Missing accounts are omitted.
+    /// 按账号 ID 返回显示名。缺失的账号省略。
     ///
-    /// # Parameters
-    /// * `account_ids` - owner account ids collected from assignment facts
+    /// # 参数
+    /// * `account_ids` - 从归属事实收集的负责人账号 ID。
     ///
-    /// # Errors
-    /// Adapter query failures.
+    /// # 返回
+    /// 键为账号 ID、值为显示名的映射。未找到的账号不出现。
+    ///
+    /// # 错误
+    /// 适配器查询失败时返回对应错误。
     async fn names_by_ids(&self, account_ids: &[String]) -> Result<HashMap<String, String>>;
 }
 

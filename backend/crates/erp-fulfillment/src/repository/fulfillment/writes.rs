@@ -21,6 +21,9 @@ impl FulfillmentRepository<'_> {
     /// * `lines` - 待写入的入库行集合
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
+    /// # 返回
+    /// 表头与行写入成功时无返回值。
+    ///
     /// # 错误
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入
     /// 失败时返回错误。
@@ -57,6 +60,9 @@ impl FulfillmentRepository<'_> {
     /// * `lines` - 待写入的发货行集合
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
+    /// # 返回
+    /// 表头与行写入成功时无返回值。
+    ///
     /// # 错误
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入
     /// 失败时返回错误。
@@ -92,6 +98,9 @@ impl FulfillmentRepository<'_> {
     /// * `acceptance` - 待写入的验收单表头
     /// * `lines` - 待写入的验收行集合
     /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 返回
+    /// 表头与行写入成功时无返回值。
     ///
     /// # 错误
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）或 MongoDB 写入
@@ -169,6 +178,9 @@ impl FulfillmentRepository<'_> {
     /// * `acceptance_id` - 草稿验收单主键
     /// * `lines` - 完整的新验收行集合
     /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 返回
+    /// 旧行删除且新行插入成功时无返回值。
     ///
     /// # 错误
     /// 当删除或批量插入失败时返回错误。

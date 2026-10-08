@@ -46,8 +46,14 @@ pub enum CostType {
 impl CostType {
     /// 返回类型的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Product => "商品",
@@ -64,8 +70,14 @@ impl CostType {
 
     /// 返回类型的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Product => "product",
@@ -101,8 +113,14 @@ pub enum CostStage {
 impl CostStage {
     /// 返回阶段的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Expected => "预计",
@@ -114,8 +132,14 @@ impl CostStage {
 
     /// 返回阶段的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Expected => "expected",
@@ -127,8 +151,14 @@ impl CostStage {
 
     /// 判断是否进入一期实际盈亏。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 阶段为 `Actual` 或 `Reduction` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_profit_relevant(&self) -> bool {
         matches!(self, Self::Actual | Self::Reduction)
     }
@@ -151,8 +181,14 @@ pub enum CostScope {
 impl CostScope {
     /// 返回范围的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::NonVoucherFulfillment => "非卡券履约",
@@ -164,8 +200,14 @@ impl CostScope {
 
     /// 返回范围的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::NonVoucherFulfillment => "non_voucher_fulfillment",
@@ -194,8 +236,14 @@ pub enum CostBasis {
 impl CostBasis {
     /// 返回基础的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Actual => "实际",
@@ -206,8 +254,14 @@ impl CostBasis {
 
     /// 返回基础的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Actual => "actual",
@@ -384,6 +438,9 @@ impl CostEntry {
     ///
     /// # 返回
     /// 恒返回错误。
+    ///
+    /// # 错误
+    /// 任何调用都返回错误：正式事实过账后不可更新，须追加差额成本事实。
     pub fn update(&mut self, update: CostEntryData, updated_by: impl Into<String>) -> Result<()> {
         let _ = (update, updated_by);
         Err(Error::from("正式事实过账后不可更新，请追加差额成本事实"))
@@ -395,8 +452,14 @@ impl CostEntry {
     /// `cost_scope = NON_VOUCHER_FULFILLMENT` 且 `cost_stage IN (ACTUAL,
     /// REDUCTION)` 的不含税净额。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 满足一期实际盈亏口径时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_phase1_profit_relevant(&self) -> bool {
         self.cost_scope == CostScope::NonVoucherFulfillment && self.cost_stage.is_profit_relevant()
     }
@@ -415,7 +478,7 @@ impl CostEntry {
 /// 恒等成立返回 `Ok(())`。
 ///
 /// # 错误
-/// 分量非负或恒等不成立时返回错误。
+/// 分量为负或恒等不成立时返回错误。
 fn validate_amounts(gross: Amount, net: Amount, tax: Amount) -> Result<()> {
     if gross.to_decimal().is_sign_negative()
         || net.to_decimal().is_sign_negative()

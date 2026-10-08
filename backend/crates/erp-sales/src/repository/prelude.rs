@@ -1,4 +1,4 @@
-//! Extension traits for collection repositories.
+//! 集合仓储扩展 trait。
 
 pub use super::fulfillment_facts::SalesOrderRevisionLineRepositoryFulfillmentExt;
 pub use super::sales_order::{

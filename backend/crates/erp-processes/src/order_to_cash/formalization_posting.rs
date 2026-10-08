@@ -1,4 +1,4 @@
-//! Fixed first-formalization posting order within the caller's transaction.
+//! 在调用方事务内固定首次形式化的过账顺序。
 
 use async_trait::async_trait;
 use erp_audit::AuditLog;
@@ -16,7 +16,7 @@ use super::formalize::{FormalizedSubmissionWrite, persist_procurement_work_items
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
-/// Each variant is one existing side-effect boundary, in the original order below.
+/// 每个变体是既有副作用边界之一，顺序与下方生产顺序一致。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PostingStep {
     RevalidateProcurement,
@@ -31,11 +31,11 @@ enum PostingStep {
 
 #[async_trait]
 trait PostingSteps: Send {
-    /// Apply one existing step using exactly the caller's executor; stop on its original error.
+    /// 只用调用方执行器执行既有步骤之一，并在原错误处停止。
     async fn apply(&mut self, step: PostingStep, executor: &mut dyn Executor) -> Result<()>;
 }
 
-/// Execute the production sequence; it is also exercised by failure-injecting pure test doubles.
+/// 按生产顺序执行各步骤；失败注入的纯测试替身也走这条顺序。
 async fn execute(steps: &mut impl PostingSteps, executor: &mut dyn Executor) -> Result<()> {
     use PostingStep::*;
     for step in [
@@ -60,6 +60,17 @@ struct MongoPosting<'a> {
 
 #[async_trait]
 impl PostingSteps for MongoPosting<'_> {
+    /// 按步骤在同一执行器写入采购、销售、应收与审计，任一步失败即停止。
+    ///
+    /// # 参数
+    /// * `step` - 当前形式化过账步骤。
+    /// * `executor` - 调用方执行器；本实现不另开事务。
+    ///
+    /// # 返回
+    /// 该步写入完成。无采购计划时跳过重验、采购任务和采购同步；业务单据不存在时跳过登记。
+    ///
+    /// # 错误
+    /// 当前步骤失败时返回原错误，后续步骤不再执行。应收步骤在客户不存在时返回 `NotFound`。
     async fn apply(&mut self, step: PostingStep, executor: &mut dyn Executor) -> Result<()> {
         use PostingStep::*;
         let write = &mut self.write;

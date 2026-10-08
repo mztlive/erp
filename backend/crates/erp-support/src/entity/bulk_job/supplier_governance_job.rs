@@ -30,8 +30,14 @@ pub enum SupplierGovernanceJobKind {
 impl SupplierGovernanceJobKind {
     /// 返回领域任务类型代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回健康检查或目录同步的稳定类型代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn domain_job_type(self) -> &'static str {
         match self {
             Self::HealthCheck => SUPPLIER_HEALTH_CHECK_JOB_TYPE,
@@ -41,8 +47,14 @@ impl SupplierGovernanceJobKind {
 
     /// 返回任务编号前缀。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回健康检查 `W20-HC` 或目录同步 `W20-CS` 前缀。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn job_no_prefix(self) -> &'static str {
         match self {
             Self::HealthCheck => "W20-HC",

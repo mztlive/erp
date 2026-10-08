@@ -59,6 +59,16 @@ struct SupplyContext<'a> {
 }
 
 impl SupplierPortalProcess {
+    /// 组装绑定当前数据库和目录范围的新品门户服务。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回未额外缓存的 `CatalogPortalService`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn catalog_portal(&self) -> CatalogPortalService {
         CatalogPortalService::new(self.db.clone(), scoped_catalog_service(self.db.clone(), self.rbac.clone()))
     }
@@ -143,6 +153,19 @@ impl SupplierPortalProcess {
         .await
     }
 
+    /// 在调用方事务内冻结新品原稿并登记采购确认任务。
+    ///
+    /// # 参数
+    /// * `id` - 新品草稿 ID。
+    /// * `input` - 期望版本与幂等键。
+    /// * `actor` - 当前门户身份。
+    /// * `executor` - 调用方事务执行器。
+    ///
+    /// # 返回
+    /// 返回已提交、带确认任务的新品草稿。
+    ///
+    /// # 错误
+    /// 草稿不可见、图片或附件不合法、确认人资格不足、提交版本冲突，或任务创建失败时返回对应错误。
     pub(super) async fn submit_new_product(
         &self,
         id: &str,
@@ -496,6 +519,16 @@ fn validate_reported_times(input: &NewProductInput, confirmed: bool) -> Result<(
     Ok(())
 }
 
+/// 用当前提交编号构造新品任务主题。
+///
+/// # 参数
+/// * `draft` - 已加载的新品草稿。
+///
+/// # 返回
+/// 返回 `new_product:` 加当前提交编号。
+///
+/// # 错误
+/// 尚未提交时返回 `ConflictError`。
 pub(super) fn new_product_subject(draft: &NewProductDraft) -> Result<String> {
     draft
         .current_submission_id

@@ -12,6 +12,17 @@ use super::super::dto::{PurchaseSourceSalesLineView, PurchaseSourceSalesMaterial
 use crate::{Error, Result};
 
 /// 精确证明采购商品行身份及版本；多版本或缺失关系整体拒绝，物流费不产生销售价。
+///
+/// # 参数
+/// * `purchase_lines` - 采购行。
+/// * `sales_lines` - 被引用的销售版本公共行。
+/// * `creation_revision` - 建单时的销售版本；没有商品行引用时采用它。
+///
+/// # 返回
+/// 返回唯一销售版本身份；仅非商品行时返回 `creation_revision`。
+///
+/// # 错误
+/// 商品行缺少或对不上销售行、行类型不是实物服务，或同时关联多个销售版本时返回 `BusinessLogicError`。
 pub(super) fn source_revision_id(
     purchase_lines: &[PurchaseOrderLineView],
     sales_lines: &[SalesOrderRevisionLine],
@@ -40,6 +51,16 @@ pub(super) fn source_revision_id(
 }
 
 /// 版本公共行与实物服务子行按版本行身份一对一关联，保留成交价的精确十进制。
+///
+/// # 参数
+/// * `lines` - 销售版本公共行。
+/// * `goods` - 同一版本的实物服务子行。
+///
+/// # 返回
+/// 返回实物服务行视图，成交价保持原十进制字符串。
+///
+/// # 错误
+/// 实物服务公共行找不到对应子行时返回 `BusinessLogicError`。
 pub(super) fn sales_line_views(
     lines: &[SalesOrderRevisionLine],
     goods: &[SalesOrderGoodsServiceLineRevision],
@@ -66,6 +87,16 @@ pub(super) fn sales_line_views(
 }
 
 /// 安全目录只暴露文件展示字段；资产版本和 HMAC 留在服务器允许清单。
+///
+/// # 参数
+/// * `file` - 审批材料文件。
+/// * `contract_file` - 合同 PDF 的文件资产身份；匹配时种类为 `CONTRACT`。
+///
+/// # 返回
+/// 返回文件展示字段。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn material_view(
     file: &ApprovalMaterialFile,
     contract_file: Option<&str>,

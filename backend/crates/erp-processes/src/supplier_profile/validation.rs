@@ -17,6 +17,20 @@ use crate::{Error, Result};
 
 impl SupplierProfileService {
     /// 事务失败时查询同幂等键结果；并发首请求已提交时返回该稳定结果。
+    ///
+    /// # 参数
+    /// * `transaction_result` - 刚结束的业务事务结果。
+    /// * `intended_result` - 事务成功时要返回的视图。
+    /// * `idempotency_key` - 根资料命令幂等键。
+    /// * `operation` - 期望的命令操作名，用于核对重放。
+    /// * `supplier_id` - 更新时的供应商 ID；创建时为 `None`。
+    /// * `request_fingerprint` - 本次请求摘要。
+    ///
+    /// # 返回
+    /// 事务成功时返回原视图且 `assets_committed` 为 `true`。事务失败但同键同参命令已存在时返回该命令视图；只有原错误是 `OutcomeUnknown` 时把 `assets_committed` 标为可能已提交。
+    ///
+    /// # 错误
+    /// 幂等记录查询失败时返回该错误。已有命令与本次操作、供应商或摘要不一致时返回 `ConflictError`。没有可恢复命令时返回原事务错误。
     pub(super) async fn resolve_transaction_result_with_assets(
         &self,
         transaction_result: Result<()>,
@@ -140,7 +154,17 @@ impl SupplierProfileService {
     }
 }
 
-/// 解析供应商根命令中的临时资质文件引用。
+/// 解析供应商根命令中的临时资质文件引用，并把命中的临时 ID 换成正式 ID。
+///
+/// # 参数
+/// * `req` - 根资料请求，资质附件 ID 会被就地替换。
+/// * `pending_assets` - 同一次命令待登记的文件。
+///
+/// # 返回
+/// 本次命令实际用到的临时文件 ID。
+///
+/// # 错误
+/// 临时引用无法解析时返回 `pending_assets` 的错误。
 pub(super) fn resolve_supplier_file_references(
     req: &mut SaveSupplierProfileRequest,
     pending_assets: &dyn PendingAttachmentBatch,
@@ -155,6 +179,16 @@ pub(super) fn resolve_supplier_file_references(
 }
 
 /// 校验敏感事实行归属于令牌限定供应商的 Party。
+///
+/// # 参数
+/// * `actual` - 事实行上的主体 ID。
+/// * `expected` - 令牌供应商的主体 ID。
+///
+/// # 返回
+/// 两者相同时无额外值。
+///
+/// # 错误
+/// 主体不一致时返回校验错误。
 pub(super) fn ensure_sensitive_party(actual: &PartyId, expected: &PartyId) -> Result<()> {
     if actual != expected {
         return Err(Error::ValidationError("敏感字段令牌与供应商不匹配".to_string()));

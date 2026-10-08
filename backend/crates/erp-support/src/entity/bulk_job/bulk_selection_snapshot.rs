@@ -158,6 +158,9 @@ impl BulkSelectionSnapshot {
     ///
     /// 快照确认后目标集合、截止水位和预期版本不可修改（§6.1）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 无返回值。
     ///
@@ -171,6 +174,9 @@ impl BulkSelectionSnapshot {
 
     /// 开始执行。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 无返回值。
     ///
@@ -183,6 +189,9 @@ impl BulkSelectionSnapshot {
     }
 
     /// 标记完成。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 无返回值。
@@ -198,6 +207,9 @@ impl BulkSelectionSnapshot {
     /// 标记失效。
     ///
     /// 仅 `PENDING` / `CONFIRMED` 可失效；执行中的快照只能走向完成。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 无返回值。
@@ -216,15 +228,24 @@ impl BulkSelectionSnapshot {
     /// * `now` - 当前时刻
     ///
     /// # 返回
-    /// 未到 `expires_at` 且状态不是终态时返回 `true`。
+    /// 当前时刻不晚于 `expires_at` 且状态不是终态时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_valid_at(&self, now: Instant) -> bool {
         !self.is_terminal() && now <= self.expires_at
     }
 
     /// 判断快照是否已处于终态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// `COMPLETED` / `EXPIRED` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_terminal(&self) -> bool {
         matches!(self.status, SelectionStatus::Completed | SelectionStatus::Expired)
     }

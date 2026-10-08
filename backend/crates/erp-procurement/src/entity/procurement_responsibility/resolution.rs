@@ -93,8 +93,14 @@ impl<'a> ProcurementResponsibilityResolutionBatch<'a> {
 
     /// 返回保持调用方顺序的解析行。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回批量输入的只读切片。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn lines(self) -> &'a [ProcurementResponsibilityResolutionLine] {
         self.lines
     }
@@ -114,10 +120,10 @@ impl EligibleProcurementOwner {
     /// * `account` - 当前账号主数据
     ///
     /// # 返回
-    /// 账号为启用后台管理员时返回负责人身份与姓名。
+    /// `can_login` 与 `is_admin` 均为真时返回负责人身份与姓名。
     ///
     /// # 错误
-    /// 账号不可登录或不是后台管理员时返回错误。
+    /// 账号不可登录或不是后台管理员时返回 `LogicError`。
     pub fn from_account(account: &IdentityOwnerFact) -> Result<Self> {
         if !account.can_login || !account.is_admin {
             return Err(Error::from("采购负责人必须为可登录后台账号"));
@@ -127,16 +133,28 @@ impl EligibleProcurementOwner {
 
     /// 返回负责人账号 ID。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回稳定账号 ID。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn user_id(&self) -> &str {
         &self.user_id
     }
 
     /// 返回负责人展示姓名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回账号主数据中的当前姓名。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -301,6 +319,9 @@ impl<'a> ProcurementResponsibilityRuleSet<'a> {
     ///
     /// # 错误
     /// 同层多命中时返回错误。
+    ///
+    /// # Panics
+    /// 分类链为空时 panic。`new` 会拒绝空链，但字段公开，直接构造空链仍会走到这里。
     fn resolve_category_region(
         &self,
         context: &ProcurementResponsibilityContext,

@@ -25,6 +25,16 @@ pub struct BusinessConfirmationInput<'a> {
 }
 impl SupplierApiService {
     /// 复用原事务读取和首个连接 CAS；调用方随后构造审计并持久化确认。
+    ///
+    /// # 参数
+    /// * `input` - 确认命令、操作身份、幂等摘要、指纹和操作人。
+    /// * `executor` - 调用方事务的执行器。
+    ///
+    /// # 返回
+    /// 返回已推进版本的连接、匹配能力，以及尚未写入的确认实体。
+    ///
+    /// # 错误
+    /// 连接或能力不存在时返回 `NotFound`；连接或能力版本不一致时返回 `ConflictError`。确认实体构造或连接 CAS 失败时返回对应错误。
     pub async fn prepare_business_confirmation(
         &self,
         input: BusinessConfirmationInput<'_>,
@@ -70,6 +80,16 @@ impl SupplierApiService {
         Ok(PreparedBusinessConfirmation { connection, capability, confirmation })
     }
     /// 写入不可变确认，保留与审计的外层交错位置。
+    ///
+    /// # 参数
+    /// * `confirmation` - 已构造的业务能力确认。
+    /// * `executor` - 调用方事务的执行器。
+    ///
+    /// # 返回
+    /// 无返回值。确认已写入。
+    ///
+    /// # 错误
+    /// 仓储写入失败时返回对应错误。
     pub async fn persist_business_confirmation(
         &self,
         confirmation: &BusinessCapabilityConfirmation,

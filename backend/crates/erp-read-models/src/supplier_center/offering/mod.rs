@@ -52,7 +52,10 @@ impl SupplierOfferingReadService {
     /// * `procurement` - 采购负责人规则解析
     ///
     /// # 返回
-    /// 返回服务实例。
+    /// 返回服务实例。构造不执行查询。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(
         db: Database,
         data_scope: Arc<dyn OfferingDataScopePort>,
@@ -62,6 +65,16 @@ impl SupplierOfferingReadService {
     }
 }
 
+/// 把列表参数规范成仓储查询。
+///
+/// # 参数
+/// * `params` - 供给列表查询参数。
+///
+/// # 返回
+/// 返回尚未套用数据范围的 `OfferingListQuery`。
+///
+/// # 错误
+/// 参数校验失败、排序字段不在白名单或排序方向非法时返回 `ValidationError`。
 pub(super) fn prepare_list_query(params: &SupplierOfferingListParams) -> Result<OfferingListQuery> {
     params.validate()?;
     let (sort_by, sort_dir) = dto::normalize_sort(&params.sort_by, &params.sort_dir, OFFERING_SORT_FIELDS)?;
@@ -85,6 +98,18 @@ pub(super) fn prepare_list_query(params: &SupplierOfferingListParams) -> Result<
     })
 }
 
+/// 按已准备的查询读取一页供给及展示事实。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `query` - 已规范化的列表查询。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 返回当前页供给和跨域展示事实。
+///
+/// # 错误
+/// 仓储或下层读取失败时返回对应错误。
 pub(super) async fn repository_page(
     db: &Database,
     query: &OfferingListQuery,
@@ -93,6 +118,17 @@ pub(super) async fn repository_page(
     SupplierOfferingReadRepository::new(db).load_offering_list_page(query, executor).await.map_err(Into::into)
 }
 
+/// 把仓储页装配成供给视图页。
+///
+/// # 参数
+/// * `bundle` - 当前页供给及关联事实。
+/// * `query` - 提供页码和页大小的查询。
+///
+/// # 返回
+/// 返回装配后的分页视图。缺失关联保留空值。
+///
+/// # 错误
+/// 没有失败路径。
 pub(super) fn page_view(
     bundle: SupplierOfferingListBundle,
     query: &OfferingListQuery,

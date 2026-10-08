@@ -32,6 +32,9 @@ impl SettlementScopeClause {
     /// # 返回
     /// 公司、本人负责或业务组织任一命中即覆盖。
     ///
+    /// # 错误
+    /// 不返回错误。
+    ///
     /// # 关键业务约束
     /// 不得把创建人、差异处理人或复核人当作对账负责人。
     pub fn allows(&self, owner: &str, org: &str) -> bool {
@@ -64,8 +67,14 @@ impl SettlementScopeClause {
 impl SettlementReadScope {
     /// 判断完整结算集合是否已获授权，个人上限仍须允许公司范围。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 仅在角色公司授权且未被个人上限收窄时返回 true。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_company(&self) -> bool {
         self.roles.iter().any(|clause| clause.company)
             && self.user_limit.as_ref().is_none_or(|clause| clause.company)
@@ -73,8 +82,14 @@ impl SettlementReadScope {
 
     /// 判断授权规则是否确定不产生可见对象。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 仅证明空授权；非空规则仍可能因业务筛选而没有记录。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_empty(&self) -> bool {
         self.roles.iter().all(SettlementScopeClause::is_empty)
             || self.user_limit.as_ref().is_some_and(SettlementScopeClause::is_empty)
@@ -82,8 +97,14 @@ impl SettlementReadScope {
 
     /// 生成角色并集与个人上限交集。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回仓储读取条件，空角色集不产生全量授权。
+    ///
+    /// # 错误
+    /// 不返回错误。
     ///
     /// # 关键业务约束
     /// 历史参与不允许；差异处理人与复核人筛选不得写入本条件。
@@ -107,6 +128,9 @@ impl SettlementReadScope {
     ///
     /// # 返回
     /// 角色并集命中且个人上限允许时为 true。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn allows_object(&self, owner: &str, org: &str) -> bool {
         if self.is_company() {
             return true;

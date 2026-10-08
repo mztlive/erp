@@ -156,8 +156,17 @@ pub struct WorkItemView {
 impl WorkItemView {
     /// 设置服务端完成的处理状态与动作判断。
     ///
+    /// # 参数
+    /// * `processing_state` - 处理状态
+    /// * `processing_blocker` - 整体阻断；没有阻断时为 `None`
+    /// * `allowed_actions` - 允许动作
+    /// * `action_blockers` - 动作级阻断
+    ///
     /// # 返回
-    /// 返回更新后的投影。
+    /// 返回写入上述字段后的投影。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(crate) fn with_access(
         mut self,
         processing_state: ProcessingState,
@@ -178,7 +187,10 @@ impl WorkItemView {
     /// * `approval_context` - 服务层按节点执行批量解析的有界运行事实
     ///
     /// # 返回
-    /// 无。
+    /// 无返回值。已写入 `approval_context`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(crate) fn set_approval_context(&mut self, approval_context: WorkItemApprovalContextView) {
         self.approval_context = Some(approval_context);
     }
@@ -193,7 +205,7 @@ impl WorkItemView {
     /// 返回原因、影响和下一步均已翻译成业务语言的投影；处理人姓名仍可能是占位，由服务层补齐。
     ///
     /// # 错误
-    /// DocumentApproval 缺少已签署页面映射时返回错误。
+    /// 任务类型已退役、业务对象或责任角色未登记处理面、单据审批缺少已签署页面映射时返回 `Error::ValidationError`。
     pub(crate) fn from_fields(fields: WorkItemFields, queue_context_id: String) -> Result<Self> {
         let WorkItemFields { inner, brief_source } = fields;
         let route = handler_route(inner.work_item_type, &inner.business_object_type, &inner.owner_role)?;
@@ -323,7 +335,18 @@ impl From<erp_workflow::WorkItemRow> for WorkItemFields {
 
 /// 从工作台唯一任务路由规则投影处理器和目标工作面。
 ///
-/// 保留该规则对任务类型、业务对象和责任角色的验证及失败分类。
+/// 保留该规则对任务类型、业务对象和责任角色的验证及失败分类；不返回路由上下文。
+///
+/// # 参数
+/// * `work_item_type` - 任务类型
+/// * `business_object_type` - 业务对象稳定代码
+/// * `owner_role` - 责任角色码
+///
+/// # 返回
+/// 成功时返回处理器键和目标工作面 ID。
+///
+/// # 错误
+/// 对象未登记、导入确认责任角色未映射、单据审批缺少已签署页面映射或任务类型已退役时返回 `Error::ValidationError`。
 pub fn work_item_destination(
     work_item_type: WorkItemType,
     business_object_type: &str,
@@ -339,6 +362,18 @@ pub(super) struct HandlerRoute {
     pub(super) route_context: Option<WorkItemRouteContext>,
 }
 
+/// 按任务类型、业务对象和责任角色解析处理面与路由上下文。
+///
+/// # 参数
+/// * `work_item_type` - 任务类型
+/// * `business_object_type` - 业务对象稳定代码
+/// * `owner_role` - 责任角色码；只参与导入确认范围
+///
+/// # 返回
+/// 返回处理器键、目标工作面，以及导入确认范围或单据类型路由上下文。其他任务类型的上下文为 `None`。
+///
+/// # 错误
+/// 对象与固定处理面不符、异常来源未登记、单据审批缺少已签署页面映射、导入确认责任角色未登记或任务类型已退役时返回 `Error::ValidationError`。
 pub(super) fn handler_route(
     work_item_type: WorkItemType,
     business_object_type: &str,
@@ -519,6 +554,15 @@ fn seconds(value: Option<erp_core::common::time::Instant>) -> Option<u64> {
 ///
 /// 组织角色与审批责任角色（`approval/policy.rs` 的 `owner_role`）都会落到 `owner_role`
 /// 字段。未覆盖的码不得原样上屏——界面禁止展示实现标识符，回退到通用「责任人」。
+///
+/// # 参数
+/// * `role` - 责任角色码
+///
+/// # 返回
+/// 返回中文角色名；未覆盖的码返回「责任人」。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn role_label(role: &str) -> String {
     match role {
         "role-sales" | "sales" => "销售",

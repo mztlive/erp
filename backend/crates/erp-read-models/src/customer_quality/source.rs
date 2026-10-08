@@ -62,7 +62,18 @@ pub(super) struct HistorySnapshot {
 pub(super) struct CurrentSources;
 
 impl CurrentSources {
-    /// 有界装载期间正式销售单；调用方必须对超限结果整体拒绝。
+    /// 有界装载期间正式销售单；超过 `QUALITY_ORDER_LIMIT` 时整体拒绝，不把超限集合交给调用方。
+    ///
+    /// # 参数
+    /// * `db` - 应用数据库
+    /// * `filter` - 期间、客户与销售范围条件
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 返回未超限的正式销售单快照行。
+    ///
+    /// # 错误
+    /// 超过 `QUALITY_ORDER_LIMIT` 时返回 `ValidationError`；销售单读取失败时返回对应错误。
     pub async fn load_orders(
         db: &Database,
         filter: QualityOrderFilter,
@@ -72,6 +83,18 @@ impl CurrentSources {
     }
 
     /// 按明确客户集合批量读取现任归属，并附带订单金额与展示名。
+    ///
+    /// # 参数
+    /// * `db` - 应用数据库
+    /// * `customer_ids` - 要读取的客户身份；空集合不访问客户库
+    /// * `orders` - 用于附带版本金额的期间订单
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 返回现任客户事实、订单副本、版本含税金额和组织与账号展示名。
+    ///
+    /// # 错误
+    /// 客户数超过 `QUALITY_ORDER_LIMIT` 时返回 `ValidationError`；客户、主体、归属或名称读取失败时返回对应错误。
     pub async fn load_customers(
         db: &Database,
         customer_ids: Vec<String>,
@@ -88,6 +111,17 @@ impl CurrentSources {
 /// 历史快照装载器。
 impl HistorySnapshot {
     /// 装载授权销售单与客户展示名；客户展示只用于标签，不构成授权。
+    ///
+    /// # 参数
+    /// * `db` - 应用数据库
+    /// * `order_filter` - 期间、客户与销售范围条件
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 返回订单、版本含税金额，以及客户、账号和组织展示名。
+    ///
+    /// # 错误
+    /// 订单超过 `QUALITY_ORDER_LIMIT` 时返回 `ValidationError`；订单、客户名或归属名称读取失败时返回对应错误。
     pub async fn load(
         db: &Database,
         order_filter: QualityOrderFilter,
@@ -275,7 +309,7 @@ async fn owner_orgs(
     Ok(result)
 }
 
-/// 有界装载期间正式销售单；调用方必须对超限结果整体拒绝。
+/// 有界装载期间正式销售单；超过 `QUALITY_ORDER_LIMIT` 时整体拒绝，不截断也不交给调用方。
 async fn load_orders(
     db: &Database,
     filter: QualityOrderFilter,
@@ -318,6 +352,17 @@ async fn load_revision_gross(
 
 /// 两口径共用的订单过滤条件：生效正式非删除单 + 销售范围 + 客户交集。
 /// 条件编译在销售域仓储内完成；读模型只传递明确的授权与业务筛选。
+///
+/// # 参数
+/// * `bounds` - 已校验的期间边界
+/// * `customer_ids` - 客户交集；原样写入，由销售域解释 `None` 与空集
+/// * `scope` - 销售读取范围
+///
+/// # 返回
+/// 返回交给销售域仓储的过滤条件，不在此处执行查询。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn quality_order_filter(
     bounds: &super::query::PeriodBounds,
     customer_ids: Option<Vec<String>>,
@@ -332,6 +377,16 @@ pub(super) fn quality_order_filter(
 }
 
 /// 查询版本包含完整订单集合及责任版本，不返回订单身份集合。
+///
+/// # 参数
+/// * `scope_version` - 授权范围版本
+/// * `orders` - 参与指纹的订单；只用 `id` 与 `version`
+///
+/// # 返回
+/// 返回 `scope_version` 与订单身份、版本哈希组成的指纹。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn version(scope_version: &str, orders: &[QualityOrder]) -> String {
     use std::hash::{Hash, Hasher};
     let mut fingerprint = std::collections::hash_map::DefaultHasher::new();
@@ -347,6 +402,15 @@ fn today_shanghai() -> erp_core::common::time::BusinessDate {
 }
 
 /// 生效秒级时点转上海日期展示；缺失时点不伪造日期。
+///
+/// # 参数
+/// * `value` - UTC 秒；`None` 表示没有生效时点
+///
+/// # 返回
+/// `None` 表示缺失时点；`Some` 为上海自然日 `YYYY-MM-DD`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn effective_label(value: Option<i64>) -> Option<String> {
     value.map(|secs| {
         (Utc.timestamp_opt(secs, 0).single().unwrap_or_default() + chrono::Duration::hours(8))

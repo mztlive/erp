@@ -37,6 +37,15 @@ pub enum StockReservationSourceType {
 
 impl StockReservationSourceType {
     /// 返回用于持久化与查询的稳定代码。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 采购入库为 `PURCHASE_RECEIPT`，现有库存为 `EXISTING_STOCK`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::PurchaseReceipt => "PURCHASE_RECEIPT",
@@ -62,8 +71,14 @@ pub enum ReservationStatus {
 impl ReservationStatus {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Active => "有效",
@@ -75,8 +90,14 @@ impl ReservationStatus {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Active => "ACTIVE",
@@ -88,16 +109,28 @@ impl ReservationStatus {
 
     /// 返回仍允许消耗或释放的预占状态集合。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回有效与部分消耗两个可操作状态。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn operable() -> &'static [Self] {
         &[Self::Active, Self::PartiallyConsumed]
     }
 
     /// 判断当前预占状态是否仍可操作。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 有效或部分消耗状态返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_operable(self) -> bool {
         Self::operable().contains(&self)
     }
@@ -120,8 +153,14 @@ pub enum ReservationEntryType {
 impl ReservationEntryType {
     /// 返回类型的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Establish => "建立",
@@ -133,8 +172,14 @@ impl ReservationEntryType {
 
     /// 返回类型的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Establish => "ESTABLISH",
@@ -242,7 +287,9 @@ impl StockReservation {
     /// 返回新建的预占实体。
     ///
     /// # 错误
-    /// 数量为负或状态与数量不一致时返回错误。
+    /// 数量为负、状态与数量不一致，或来源字段与 `source_type` 不匹配时返回错误。
+    /// 采购入库必须有采购销售分配和入库行且不得带现有库存分配身份；
+    /// 现有库存必须有非空且未超长的分配身份，且不得带采购引用。
     pub fn new(id: StockReservationId, data: StockReservationData) -> Result<Self> {
         ensure_non_negative_quantities(
             data.reserved_quantity,
@@ -302,7 +349,7 @@ impl StockReservation {
     }
 }
 
-/// 校验并规范化预占来源字段。
+/// 按来源类型校验采购引用与现有库存分配身份互斥，并规范化分配身份。
 fn normalize_reservation_source(data: &StockReservationData) -> Result<Option<String>> {
     match data.source_type {
         StockReservationSourceType::PurchaseReceipt => {

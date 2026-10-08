@@ -11,6 +11,16 @@ use crate::sales_center::access::SalesAccess;
 
 impl ActualProfitLossReadModel {
     /// 在同一事务解析销售读取与成本动作权限，保留参与及个人上限规则。
+    ///
+    /// # 参数
+    /// * `actor` - 认证用户。
+    /// * `executor` - 调用方事务执行器。
+    ///
+    /// # 返回
+    /// 返回授权数据范围及销售读取范围。
+    ///
+    /// # 错误
+    /// `cost_entry:list` 权限解析失败，或销售范围解析失败时返回对应错误。
     pub(super) async fn authorized_scope(
         &self,
         actor: &AuditActor,

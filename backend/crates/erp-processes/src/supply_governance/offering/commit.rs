@@ -42,7 +42,19 @@ impl CommitPort for MongoCreated<'_> {
         persist_log(self.db, self.audit, executor).await.map_err(Into::into)
     }
 }
-/// 提交供给单域事实与原审计，复用传入的同一事务执行器。
+/// 提交新建供给的领域事实与原审计，复用传入的同一事务执行器。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `prepared` - 已准备的创建载荷。
+/// * `audit` - 同一执行器中写入的审计日志。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 无返回值。领域事实和审计都写入后完成。
+///
+/// # 错误
+/// 领域持久化或审计写入失败时返回该错误并停止后续写入。
 pub(super) async fn created(
     db: &Database,
     prepared: &PreparedCreate,
@@ -69,7 +81,19 @@ impl CommitPort for MongoRevised<'_> {
         persist_log(self.db, self.audit, executor).await.map_err(Into::into)
     }
 }
-/// 提交供给单域事实与原审计，复用传入的同一事务执行器。
+/// 提交供给修订的领域事实与原审计，复用传入的同一事务执行器。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `prepared` - 已准备的修订载荷，持久化时就地更新。
+/// * `audit` - 同一执行器中写入的审计日志。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 领域修订结果。审计在该结果产生之后写入。
+///
+/// # 错误
+/// 领域持久化或审计写入失败时返回该错误并停止后续写入。
 pub(super) async fn revised(
     db: &Database,
     prepared: &mut PreparedRevision,
@@ -96,7 +120,19 @@ impl CommitPort for MongoAvailability<'_> {
         persist_log(self.db, self.audit, executor).await.map_err(Into::into)
     }
 }
-/// 提交供给单域事实与原审计，复用传入的同一事务执行器。
+/// 提交可供状态的领域事实与原审计，复用传入的同一事务执行器。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `prepared` - 已准备的可供更新载荷，持久化时就地更新。
+/// * `audit` - 同一执行器中写入的审计日志。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 可供更新结果。审计在该结果产生之后写入。
+///
+/// # 错误
+/// 领域持久化或审计写入失败时返回该错误并停止后续写入。
 pub(super) async fn availability(
     db: &Database,
     prepared: &mut PreparedAvailability,

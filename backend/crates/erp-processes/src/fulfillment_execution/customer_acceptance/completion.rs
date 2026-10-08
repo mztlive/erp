@@ -40,6 +40,19 @@ impl CompletionKind {
 }
 
 /// 在刚写入的履约事实可见的同一 Executor 内完成原跨域副作用。
+///
+/// # 参数
+/// * `db` - 业务数据库。
+/// * `acceptance` - 刚写入、对当前执行器可见的验收事实。
+/// * `actor` - 审计操作人。
+/// * `kind` - 签收、过账或冲正；决定任务来源，以及是否写命令回执。
+/// * `executor` - 调用方执行器，不另开事务。
+///
+/// # 返回
+/// 销售进度、任务和业务审计写入成功时返回；过账不写命令回执。
+///
+/// # 错误
+/// 进度刷新、任务写入、审计或回执保存失败时返回错误并停止后续步骤。回执操作人与当前账号不一致时拒绝。
 pub(super) async fn complete_acceptance(
     db: &Database,
     acceptance: &CustomerAcceptance,
@@ -60,6 +73,7 @@ trait AcceptanceCompletion: Send {
     async fn command_receipt(&mut self, executor: &mut dyn Executor) -> Result<()>;
 }
 
+/// 先刷新销售进度并落任务，再写业务审计；过账不写命令回执。
 async fn finish(
     port: &mut impl AcceptanceCompletion,
     mode: CompletionMode,

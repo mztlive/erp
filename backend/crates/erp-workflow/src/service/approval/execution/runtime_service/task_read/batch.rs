@@ -42,6 +42,9 @@ struct RuntimeBatchFacts {
 /// # 关键业务约束
 /// 逐项保留账号、同角色授权及政策版本重验；不为权限拒绝项加载运行链。
 /// 原单任务入口复用此入口，运行事实不得跨批次或独立授权快照缓存。
+///
+/// # Panics
+/// 准入任务与主体结果必须等长且同序；`subjects.next()` 为 `None` 时 `expect`，表示本函数内部拼接被破坏。
 pub async fn approval_tasks_readable_with_executor(
     db: &Database,
     auth: &impl WorkflowAuthorizationPort,

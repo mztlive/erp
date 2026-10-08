@@ -202,6 +202,17 @@ impl BookletStatus {
 
 impl DocumentState for BookletStatus {
     /// 返回合法后继。准备失败恢复走 `Draft` 或 `PendingPublish`。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Draft` 的后继为 `Preparing`、`Voided`；`Preparing` 的后继为 `PendingPublish`、`Draft`；
+    /// `PendingPublish` 的后继为 `Preparing`、`Published`、`Voided`；`Published` 的后继为 `Submitted`、`Closed`。
+    /// `Submitted`、`Closed`、`Voided` 返回空切片。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft => &[Self::Preparing, Self::Voided],

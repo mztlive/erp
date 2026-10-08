@@ -84,6 +84,9 @@ impl PartyService {
     ///
     /// # 返回
     /// 返回服务实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(
         db: Database,
         audit: Arc<dyn PartyAuditPort>,
@@ -546,6 +549,16 @@ impl PendingPartyUpdate {
 ///
 /// 供应商的主体、联系人、地址、税务等事实必须由供应商资料根级命令统一维护，
 /// 以确保 Party 与 Supplier 双版本及其子事实位于同一事务边界。
+///
+/// # 参数
+/// * `supplier_roles` - 供应商角色事实端口。
+/// * `party_id` - 主体 ID。
+///
+/// # 返回
+/// 主体未挂供应商角色时返回 `Ok(())`。
+///
+/// # 错误
+/// 端口读取失败时返回该错误；已挂供应商角色时返回 `BusinessLogicError`。
 pub async fn ensure_outside_supplier_profile(
     supplier_roles: &dyn SupplierRolePort,
     party_id: &PartyId,

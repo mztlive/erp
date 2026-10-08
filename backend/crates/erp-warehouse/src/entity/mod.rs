@@ -1,4 +1,4 @@
-//! Warehouse entities and value objects.
+//! 仓库实体与值对象。
 
 pub mod warehouse;
 

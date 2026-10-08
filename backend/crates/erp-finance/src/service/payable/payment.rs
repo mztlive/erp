@@ -41,6 +41,9 @@ impl<'a> PaymentSettlementFacts<'a> {
     ///
     /// # 返回
     /// 返回仅借用本次执行阶段事实的核销输入。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(entries: &'a [PayableEntry], accounts: &'a [PayableAccount]) -> Self {
         Self { entries, accounts }
     }
@@ -49,7 +52,11 @@ impl<'a> PaymentSettlementFacts<'a> {
 /// 失败立即向调用者传播，后续任务与付款事实不得执行。
 ///
 /// # 参数
-/// 付款、分配、操作人和执行器均由当前财务用例提供。
+/// * `db` - 财务领域数据库。
+/// * `payment` - 当前付款单。
+/// * `pending` - 本次待核销分配。
+/// * `actor_id` - 执行人。
+/// * `session` - 调用方事务执行器。
 ///
 /// # 返回
 /// 返回已条件更新余额的核销结果。
@@ -76,8 +83,12 @@ pub async fn settle_supplier_payment(
 /// 既有付款分配仍在当前 Executor 重读，余额仍由仓储条件更新仲裁。
 ///
 /// # 参数
-/// * `facts` - 当前任务授权与完整覆盖阶段读取的财务事实
-/// * `session` - 读取以上事实时使用的调用方事务执行器
+/// * `db` - 财务领域数据库。
+/// * `payment` - 当前付款单。
+/// * `pending` - 本次待核销分配。
+/// * `facts` - 当前任务授权与完整覆盖阶段读取的财务事实。
+/// * `actor_id` - 执行人。
+/// * `session` - 读取以上事实时使用的调用方事务执行器。
 ///
 /// # 返回
 /// 返回已条件更新余额的核销结果。

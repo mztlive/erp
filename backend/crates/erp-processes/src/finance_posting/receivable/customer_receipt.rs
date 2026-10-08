@@ -246,8 +246,11 @@ impl ReceivableProcess {
 
     /// 客户端直接过账失败关闭。最终动作只能由审批运行时调用。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 恒返回冲突。
+    /// 不返回成功值。
     ///
     /// # 错误
     /// 恒返回 `ConflictError`。
@@ -394,6 +397,17 @@ impl ReceiptReplayPort for ReceiptCommitRecovery<'_> {
             .await?)
     }
 
+    /// 按读模型当前详情回读，不使用查证执行器。
+    ///
+    /// # 参数
+    /// * `id` - 回执确认的回款单 ID。
+    /// * `_executor` - 未使用。详情读取不走查证执行器。
+    ///
+    /// # 返回
+    /// 返回当前回款详情视图。
+    ///
+    /// # 错误
+    /// 回款单不存在时返回 `NotFound`；详情读取失败时返回对应错误。
     async fn current_result(&self, id: &str, _executor: &mut dyn Executor) -> Result<CustomerReceiptView> {
         Ok(self.0.read.customer_receipt_detail(id).await?)
     }

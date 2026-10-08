@@ -43,6 +43,15 @@ pub struct ApprovalListPage {
 impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 先由已装配的运行服务执行原列表授权，再批量补齐相同单据摘要。
     ///
+    /// # 参数
+    /// * `runtime` - 已装配的审批运行服务，负责原列表授权。
+    /// * `actor` - 当前账号。
+    /// * `query` - 运行实例列表查询。
+    /// * `executor` - 摘要与提交人姓名读取使用的执行器。
+    ///
+    /// # 返回
+    /// 返回原分页总数与游标，并为能解析到精确提交版本的实例附上单据摘要。
+    ///
     /// # 错误
     /// 保留运行服务的权限、参数错误；摘要仓储读取失败返回错误，不伪造完整数据。
     pub async fn approval_instance_list(
@@ -80,6 +89,16 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     }
 }
 /// 有提交级摘要时必须精确匹配版本，不得用当前提交覆盖历史审批。
+///
+/// # 参数
+/// * `fact` - 已装载的对象事实。
+/// * `version` - 审批实例上的提交版本。
+///
+/// # 返回
+/// 匹配到简报源时返回单据摘要。无提交级摘要时，`version` 缺失或不等于展示上的审批版本则返回 `None`；有提交级摘要时必须命中该版本，否则返回 `None`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn document_summary(
     fact: &WorkbenchObjectFact,
     version: Option<u32>,

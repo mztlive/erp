@@ -614,6 +614,9 @@ fn ensure_limit(count: usize, message: &str) -> Result<()> {
 ///
 /// # 返回
 /// 返回带长度前缀的规范字节串，仅用于同版本内快照比对，不做持久化字段。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn scope_fingerprint_input(
     owned: &[String],
     collaborating: &[String],
@@ -637,6 +640,15 @@ pub(super) fn scope_fingerprint_input(
 /// 范围指纹历史段的抽象：字符串列表或合同版本列表统一压入同一规范字节串。
 pub(super) trait ScopeFingerprintHistory {
     /// 把历史段按规范编码追加到 `out`。
+    ///
+    /// # 参数
+    /// * `out` - 累积中的规范字节串。
+    ///
+    /// # 返回
+    /// 无返回值。排序后的历史段写入 `out`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn push_section(self, out: &mut Vec<u8>);
 }
 
@@ -686,6 +698,9 @@ fn push_u64(out: &mut Vec<u8>, value: u64) {
 ///
 /// # 返回
 /// 返回 64 位指纹，仅用于同版本内快照比对。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn stable_fingerprint(input: &[u8]) -> u64 {
     let mut hash: u64 = 0xcbf29ce484222325;
     for byte in input {

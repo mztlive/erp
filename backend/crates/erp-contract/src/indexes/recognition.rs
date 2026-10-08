@@ -6,6 +6,16 @@ use persistence_core::Result;
 
 use crate::repository::recognition::IMPORTS;
 
+/// 为导入任务集合登记幂等命名索引。
+///
+/// # 参数
+/// * `db` - 目标 MongoDB 数据库。
+///
+/// # 返回
+/// 无返回值。身份、请求去重与本人历史分页索引已登记。
+///
+/// # 错误
+/// 已有数据违反唯一约束，或 MongoDB 无法创建索引时返回错误。
 pub(super) async fn ensure(db: &Database) -> Result<()> {
     let indexes = [
         ("uk_contract_imports_id", doc! { "id": 1 }, true),

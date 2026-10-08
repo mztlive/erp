@@ -18,7 +18,15 @@ pub struct SupplierImportJobRequest {
 impl SupplierImportJobRequest {
     /// 校验批次边界，行内业务错误留给后台逐行处理。
     ///
-    /// 返回校验结果；空批次、重复行号或超限输入返回校验错误。
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 请求标识、文件名、行数与行号均合法时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 请求标识非法、文件名不是 `.xlsx`、行数不在 1–500，或行号小于 2、重复时
+    /// 返回 `ValidationError`。
     pub fn validate(&self) -> Result<()> {
         if self.request_id.is_empty()
             || self.request_id.len() > 128

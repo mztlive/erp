@@ -84,8 +84,12 @@ impl SupplierFulfillmentService {
     /// * `order` - 供应商子订单
     /// * `req` - 动作提交请求
     ///
+    /// # 返回
+    /// 全部动作行都属于该子订单时无返回值。
+    ///
     /// # 错误
     /// * `BusinessLogicError` - 明细归属非法
+    /// 仓储读取明细失败时返回对应错误。
     pub async fn ensure_action_lines(
         &self,
         order: &SupplierFulfillmentOrder,
@@ -107,6 +111,16 @@ impl SupplierFulfillmentService {
         Ok(())
     }
     /// 沿原类型推进取消或退款状态；不附加旧代码不存在的版本/余额校验。
+    ///
+    /// # 参数
+    /// * `order` - 就地推进状态的供应商子订单。
+    /// * `action_type` - 售后动作类型。仅 `Cancel` 与 `Refund` 改变状态。
+    ///
+    /// # 返回
+    /// 无返回值。取消进入 `CancelPending`，退款进入 `RefundPending`；其他类型不改状态。
+    ///
+    /// # 错误
+    /// 订单状态迁移失败时返回对应错误。
     pub fn advance_after_sales(
         &self,
         order: &mut SupplierFulfillmentOrder,
@@ -121,6 +135,19 @@ impl SupplierFulfillmentService {
     }
 }
 /// 动作头、逐行写入、订单CAS复用调用方执行器。
+///
+/// # 参数
+/// * `db` - 履约集合所在数据库。
+/// * `action` - 待创建的动作头。
+/// * `lines` - 待逐行创建的动作行。
+/// * `order` - 待按 CAS 写回的子订单。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 无返回值。动作头、动作行和订单已按该顺序写入。
+///
+/// # 错误
+/// 任一步仓储写入失败时返回对应错误。
 pub async fn persist_after_sales(
     db: &Database,
     action: &SupplierOrderAction,

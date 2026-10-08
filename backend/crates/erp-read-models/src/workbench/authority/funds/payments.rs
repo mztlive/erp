@@ -1,4 +1,4 @@
-//! Supplier payment, refund and payment-reversal object facts.
+//! 供应商付款、退款与付款冲正的对象事实。
 
 use std::collections::HashSet;
 
@@ -10,7 +10,18 @@ use super::mapping;
 use crate::errors::Result;
 
 impl super::super::WorkItemFactsReader {
-    /// Load supplier-payment identity, creator, counterparty and impact.
+    /// 装载供应商付款的身份、创建人、往来方与影响。
+    ///
+    /// # 参数
+    /// * `keys` - 本批对象键；没有付款键时不读取。
+    /// * `facts` - 输出事实表。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 成功时写入读到的付款，往来方取供应商显示名。
+    ///
+    /// # 错误
+    /// 付款或供应商名称读取失败时返回错误。
     pub(in crate::workbench) async fn load_supplier_payment_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -34,7 +45,18 @@ impl super::super::WorkItemFactsReader {
         Ok(())
     }
 
-    /// Load supplier-refund identity, creator, counterparty and impact.
+    /// 装载供应商退款的身份、创建人、往来方与影响。
+    ///
+    /// # 参数
+    /// * `keys` - 本批对象键；没有退款键时不读取。
+    /// * `facts` - 输出事实表。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 成功时写入读到的退款。往来方优先供应商显示名，否则回退原付款或应付分录上的名称。
+    ///
+    /// # 错误
+    /// 退款、供应商名称或来源名称读取失败时返回错误。
     pub(in crate::workbench) async fn load_supplier_refund_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -70,7 +92,18 @@ impl super::super::WorkItemFactsReader {
         Ok(())
     }
 
-    /// Load payment-reversal identity, creator, counterparty and impact.
+    /// 装载付款冲正的身份、创建人、往来方与影响。
+    ///
+    /// # 参数
+    /// * `keys` - 本批对象键；没有冲正键时不读取。
+    /// * `facts` - 输出事实表。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 成功时写入读到的冲正，往来方只取原付款上已有的供应商名称。
+    ///
+    /// # 错误
+    /// 冲正或原付款名称读取失败时返回错误。
     pub(in crate::workbench) async fn load_payment_reversal_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,

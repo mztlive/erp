@@ -42,8 +42,14 @@ pub enum SalesChangeType {
 impl SalesChangeType {
     /// 返回类型的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Goods => "商品",
@@ -58,8 +64,14 @@ impl SalesChangeType {
 
     /// 返回类型的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Goods => "GOODS",
@@ -100,8 +112,14 @@ pub enum SalesChangeOrderStatus {
 impl SalesChangeOrderStatus {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -116,8 +134,14 @@ impl SalesChangeOrderStatus {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "DRAFT",
@@ -134,6 +158,16 @@ impl SalesChangeOrderStatus {
 impl DocumentState for SalesChangeOrderStatus {
     /// 合同 §4.4.1 / §4.4.2：草稿可提交进入审批或作废；审批中可最终生效或
     /// 撤回回草稿；残留确认/驳回态无新后继。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Draft` 的后继为 `InApproval`、`Voided`；`InApproval` 的后继为 `Effective`、`Draft`。
+    /// `Effective`、`Voided`、`PendingImpactConfirmation`、`PendingFinanceReview`、`Rejected` 返回空切片。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft => &[Self::InApproval, Self::Voided],
@@ -258,19 +292,31 @@ impl SalesChangeOrder {
     ///
     /// # 返回
     /// 当前版本与期望版本一致时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn matches_version(&self, expected_version: u64) -> bool {
         self.base.version == expected_version
     }
 
     /// 判断变更单是否处于可提交或可作废的草稿态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为 `Draft` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_draft(&self) -> bool {
         self.stable.status == SalesChangeOrderStatus::Draft
     }
 
     /// 返回当前冻结的变更提交身份。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 返回当前提交 ID。
@@ -288,6 +334,9 @@ impl SalesChangeOrder {
     ///
     /// # 返回
     /// 当前版本与变更单冻结基准版本一致时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn base_revision_matches(&self, current_revision_id: &str) -> bool {
         self.base_revision_id.as_ref() == current_revision_id
     }

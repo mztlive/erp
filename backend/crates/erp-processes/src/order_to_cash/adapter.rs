@@ -248,6 +248,12 @@ pub fn sales_approval_ports(business_type: BusinessType) -> Result<SalesApproval
 
 /// 无已绑定定义的必须审批单据不得提交。
 ///
+/// # 参数
+/// * `binding` - 创建时冻结的审批定义绑定。
+///
+/// # 返回
+/// 绑定存在时返回其引用。
+///
 /// # 错误
 /// 绑定缺失时返回冲突。
 pub fn require_frozen_binding(
@@ -285,6 +291,9 @@ pub struct SalesOrderStartCommand {
 ///
 /// # 返回
 /// 返回不含定义 ID 或审批人的目标启动命令。
+///
+/// # 错误
+/// 不返回错误。
 pub fn sales_order_start_command(
     document_type: DocumentType,
     sales_order_id: &str,
@@ -308,6 +317,9 @@ pub fn sales_order_start_command(
 ///
 /// # 返回
 /// 返回 `START_APPROVAL`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn start_approval_command_kind(
     _command: &SalesOrderStartCommand,
 ) -> bpm::model::types::ApprovalCommandKind {
@@ -321,6 +333,9 @@ pub fn start_approval_command_kind(
 /// * `order` - 业务实体
 /// * `action` - 合同强类型动作
 /// * `updated_by` - 操作人
+///
+/// # 返回
+/// 匹配的领域动作已应用到 `order` 时返回。最终通过只校验可形式化，不在此写入正式版本。
 ///
 /// # 错误
 /// 动作不属于本类型或状态不允许时返回错误。
@@ -344,6 +359,12 @@ pub fn execute_sales_order_domain_action(
 
 /// 卡券专用决定路径新写立即失败关闭。
 ///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 不返回成功值。
+///
 /// # 错误
 /// 恒返回冲突，不得回退 `CARD_SALES_APPROVAL` 或专用决定端口。
 pub fn reject_legacy_card_sales_decision() -> Result<()> {
@@ -354,6 +375,9 @@ pub fn reject_legacy_card_sales_decision() -> Result<()> {
 ///
 /// # 参数
 /// * `work_item_type` - 待写入的工作项类型稳定码
+///
+/// # 返回
+/// 非卡券专用类型时返回。
 ///
 /// # 错误
 /// 命中卡券专用类型时返回冲突。
@@ -411,6 +435,9 @@ pub fn sales_order_responsible_org_id(order: &SalesOrder) -> Result<String> {
 /// * `lines` - 提交明细
 /// * `submitted_by` - 提交销售
 /// * `submitted_at` - 提交时间
+///
+/// # 返回
+/// 返回冻结了单号、责任组织、客户、金额、数量和行数的快照。
 ///
 /// # 错误
 /// 明细为空、金额/数量非法或组织为空时返回校验错误。

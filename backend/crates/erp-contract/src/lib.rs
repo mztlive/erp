@@ -1,4 +1,4 @@
-//! Contract domain: stable contracts, immutable revisions and PDF associations.
+//! 合同领域：稳定合同、不可变修订与 PDF 关联。
 
 pub mod dto;
 pub mod entity;

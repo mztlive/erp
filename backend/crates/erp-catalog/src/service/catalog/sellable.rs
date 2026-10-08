@@ -155,6 +155,9 @@ fn specification_attribute_views(signature: &str) -> Vec<SellableSkuSpecificatio
 ///
 /// # 返回
 /// 返回可直接向业务调用方暴露的 fail-closed 错误。
+///
+/// # 错误
+/// 不返回错误。
 pub fn sellable_sku_invalid_error(sku_ids: &[String]) -> Error {
     Error::BusinessLogicError(format!(
         "销售商品已失效或修订已变化，请刷新公司商品池后重试: {}",
@@ -163,6 +166,15 @@ pub fn sellable_sku_invalid_error(sku_ids: &[String]) -> Error {
 }
 
 /// 校验分页、价格并在原时点解释资格日期。
+///
+/// # 参数
+/// * `params` - 公司商品池列表筛选
+///
+/// # 返回
+/// 返回规范化筛选；未传 `eligibility_as_of` 时使用 `BusinessDate::today`。
+///
+/// # 错误
+/// 分页、供应商数量上限等请求校验失败，或销售价为负、下限高于上限时返回 `ValidationError`。
 pub fn prepare_sellable_sku_list(params: &SellableSkuListParams) -> Result<SellableSkuFilter> {
     use application_core::{page_or_default, page_size_or_default};
 
@@ -189,6 +201,16 @@ pub fn prepare_sellable_sku_list(params: &SellableSkuListParams) -> Result<Sella
 }
 
 /// 投影可售行，保留历史非法规格签名为空属性的合同。
+///
+/// # 参数
+/// * `rows` - 已读取的可售 SKU 分页行
+/// * `filter` - 提供页码、单页条数和资格日期的筛选
+///
+/// # 返回
+/// 返回可售视图；`supplier_codes` 保持为空，规格属性由签名投影。
+///
+/// # 错误
+/// 不产生失败，始终返回 `Ok`。
 pub fn sellable_sku_page_view(
     rows: persistence_core::PageResult<crate::repository::SellableSkuRow>,
     filter: &SellableSkuFilter,

@@ -172,7 +172,7 @@ impl PortalActor {
     /// # 返回
     /// 真实外部操作人；不授予后台资格。
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn audit_actor(&self) -> AuditActor {
         AuditActor::new(self.account_id.clone(), self.account.clone(), AccountKind::Supplier)
     }

@@ -95,6 +95,10 @@ impl PurchaseLineInput {
     /// # 错误
     /// 商品行缺少数量或含税单价、物流费用行缺少含税金额时返回对应
     /// [`LineAmountViolation`]。
+    ///
+    /// # Panics
+    /// 物流行税额按分舍入后，税额与含税减税额都必须能构成 [`Amount`]。
+    /// 舍入结果超出金额精度时 panic；这是舍入不变量，不是调用方输入错误。
     pub fn compute_amounts(&self) -> std::result::Result<(Amount, Amount, Amount), LineAmountViolation> {
         let tax_rate = self.input_tax_rate.unwrap_or_else(zero_rate);
         match self.line_type {
@@ -237,11 +241,35 @@ pub fn compute_header_totals(
 }
 
 /// 零金额（crate 内金额汇总的唯一规范零值）。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回金额零值。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # Panics
+/// 金额类型拒绝零值时 panic；零金额是合法金额，panic 只表示金额类型不变量被破坏。
 pub(crate) fn zero_amount() -> Amount {
     Amount::try_from(rust_decimal::Decimal::ZERO).expect("零金额合法")
 }
 
 /// 零税率（缺省计税的唯一规范零值）。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回税率零值。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # Panics
+/// 税率类型拒绝零值时 panic；零税率是合法税率，panic 只表示税率类型不变量被破坏。
 pub(crate) fn zero_rate() -> Rate {
     Rate::try_from(rust_decimal::Decimal::ZERO).expect("零税率合法")
 }

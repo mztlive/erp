@@ -1,6 +1,6 @@
 //! 域 D18 `receivable` 的索引声明：receivable_account、receivable_entry、
 //! receivable_entry_offset、customer_receipt、
-//! receipt_allocation、invoice、sales_invoice_allocation。
+//! receipt_allocation、invoice、sales_invoice_allocation、sales_invoice_requests。
 //!
 //! 集合名常量取 `ReceivableExt` 关联常量（唯一权威来源，conventions §4.3）：
 //! `indexes/` 与 `repository/` 均为冻结声明下的私有子树，模块路径无法互相引用，
@@ -40,6 +40,9 @@ pub(crate) const SALES_INVOICE_ALLOCATIONS: &str =
 ///
 /// # 参数
 /// * `db` - 目标 MongoDB 数据库
+///
+/// # 返回
+/// 本域索引全部幂等创建成功时无返回值。
 ///
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。

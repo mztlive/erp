@@ -15,6 +15,7 @@ use super::electronic_delivery::FulfillmentResult;
 use super::fingerprint::normalize_precomputed_fingerprint;
 use super::service_fulfillment::{ServiceFulfillment, ServiceFulfillmentData};
 
+/// 空白与超长共用同一文案，避免两种指纹的失败提示在此处分叉。
 fn typed_fingerprint(label: &str, hex: String) -> Result<String> {
     normalize_precomputed_fingerprint(label, label, hex)
 }
@@ -48,6 +49,9 @@ impl ServiceRecipientFingerprint {
     ///
     /// # 返回
     /// 返回内部十六进制串的借用。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -82,6 +86,9 @@ impl ServiceLocationFingerprint {
     ///
     /// # 返回
     /// 返回内部十六进制串的借用。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &str {
         &self.0
     }

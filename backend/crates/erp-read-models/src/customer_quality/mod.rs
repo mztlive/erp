@@ -43,6 +43,9 @@ impl CustomerQualityReadModel {
     ///
     /// # 返回
     /// 返回执行双口径一致快照查询的读模型。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(
         db: Database,
         rbac: erp_identity::SharedRbacService,
@@ -56,6 +59,9 @@ impl CustomerQualityReadModel {
     /// # 参数
     /// * `query` - 现任负责人／组织／业务筛选
     /// * `actor` - 已认证操作人
+    ///
+    /// # 返回
+    /// 返回现任口径分页视图。
     ///
     /// # 错误
     /// 参数非法、无动作权限、范围版本变化或来源读取失败时返回错误。
@@ -73,6 +79,9 @@ impl CustomerQualityReadModel {
     /// * `query` - 历史人员／组织／业务筛选
     /// * `actor` - 已认证操作人
     ///
+    /// # 返回
+    /// 返回历史口径分页视图。
+    ///
     /// # 错误
     /// 参数非法、无动作权限、范围版本变化或来源读取失败时返回错误。
     pub async fn view_history(
@@ -89,6 +98,9 @@ impl CustomerQualityReadModel {
     /// * `query` - 与列表相同的现任筛选
     /// * `actor` - 已认证操作人
     ///
+    /// # 返回
+    /// 返回当前口径全量 CSV。
+    ///
     /// # 错误
     /// 与 [`Self::view_current`] 相同；返回前授权重验失败时不得交付文件。
     pub async fn export_current(
@@ -104,6 +116,9 @@ impl CustomerQualityReadModel {
     /// # 参数
     /// * `query` - 与列表相同的历史筛选
     /// * `actor` - 已认证操作人
+    ///
+    /// # 返回
+    /// 返回历史口径全量 CSV。
     ///
     /// # 错误
     /// 与 [`Self::view_history`] 相同；返回前授权重验失败时不得交付文件。

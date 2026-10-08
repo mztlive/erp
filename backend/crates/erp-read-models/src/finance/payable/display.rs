@@ -390,6 +390,9 @@ fn map_allocation_sources(
 ///
 /// # 返回
 /// 返回 `(供应商编号, 供应商名称)`。
+///
+/// # 错误
+/// 供应商、主体或主体修订读取失败时返回错误。
 pub(super) async fn resolve_supplier_display(
     db: &mongodb::Database,
     supplier_id: &str,

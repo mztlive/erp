@@ -1,4 +1,4 @@
-//! Sales orders, frozen submissions, revisions and sales changes.
+//! 销售单、冻结提交、正式版本与销售变更。
 
 pub mod dto;
 pub mod entity;

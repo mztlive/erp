@@ -22,6 +22,15 @@ const SKU_NO_MAX_LEN: usize = 64;
 /// 上架概念引入前的 SKU 均视为延续原有可售行为，读取时兼容为已上架。
 ///
 /// 仓储投影的 `serde default` 引用同一口径（erp-catalog-007）。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回 [`ListingStatus::Listed`]。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn legacy_listing_status() -> ListingStatus {
     ListingStatus::Listed
 }
@@ -201,6 +210,7 @@ impl Sku {
     ///
     /// `sku_no`、`product_id`、`base_unit_id` 与 `specification_signature` 是
     /// 创建后不可变的稳定身份，通用更新只允许修改启停状态。
+    /// 传入停用状态时同时把 `listing_status` 改为 `Unlisted`。
     ///
     /// # 参数
     /// * `update` - 更新数据
@@ -208,6 +218,9 @@ impl Sku {
     ///
     /// # 返回
     /// 更新成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 函数体不产生失败，始终返回 `Ok(())`。
     pub fn update(&mut self, update: SkuUpdate, updated_by: impl Into<String>) -> Result<()> {
         if let Some(status) = update.status {
             self.stable.status = status;
@@ -221,8 +234,14 @@ impl Sku {
 
     /// 判断 SKU 是否处于启用状态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为 `Active` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         self.stable.status().is_active()
     }
@@ -302,7 +321,7 @@ impl Sku {
     /// 关联成功返回 `Ok(())`，并同步启停状态、下架约束与当前修订指针。
     ///
     /// # 错误
-    /// 修订属于其他 SKU，或同步后的状态违反 SKU 不变式时返回领域错误。
+    /// 修订属于其他 SKU 时返回领域错误。`update` 本身不失败。
     pub fn attach_revision(&mut self, revision: &SkuRevision, updated_by: impl Into<String>) -> Result<()> {
         if revision.sku_id.as_ref() != self.base.id.as_str() {
             return Err("SKU 修订不属于目标 SKU".into());
@@ -321,7 +340,7 @@ impl Sku {
     /// 返回 `Ok(())`；重复停用保持幂等状态并刷新操作人。
     ///
     /// # 错误
-    /// 当前更新规则失败时返回领域错误。
+    /// 当前 `update` 不会失败，本方法始终返回 `Ok(())`。
     pub fn disable(&mut self, updated_by: impl Into<String>) -> Result<()> {
         self.update(SkuUpdate { status: Some(EnableStatus::Disabled) }, updated_by)
     }
@@ -345,8 +364,14 @@ impl Sku {
 
     /// 判断是否为无规格 SKU。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 规格签名为固定空规格签名时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_no_spec(&self) -> bool {
         self.specification_signature == crate::entity::catalog::specification::EMPTY_SPEC_SIGNATURE
     }

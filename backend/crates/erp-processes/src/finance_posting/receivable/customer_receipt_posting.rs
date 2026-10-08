@@ -187,8 +187,11 @@ pub async fn post_customer_receipt_apply(
 /// * `actor` - 已认证操作人
 /// * `executor` - 调用方执行器
 ///
+/// # 返回
+/// 回款单已撤回并写入审计时无返回值。
+///
 /// # 错误
-/// 回款单不存在、动作不匹配、状态迁移或 CAS 写入失败时返回错误。
+/// 回款单不存在、动作不匹配、状态不允许、回款单更新或审计写入失败时返回错误。
 pub async fn cancel_customer_receipt_approval_apply(
     db: &Database,
     receipt_id: &str,
@@ -223,8 +226,11 @@ pub async fn cancel_customer_receipt_approval_apply(
 /// * `receipt` - 新建回款候选
 /// * `actor` - 提交人
 ///
+/// # 返回
+/// 回款单、绑定与审计在同一事务提交成功时无返回值。
+///
 /// # 错误
-/// 无发布定义、人员重验失败或写入失败时返回错误。
+/// 责任组织无效、单据或审计构造失败、无发布定义、人员重验失败或事务写入失败时返回错误。
 pub(super) async fn persist_created_customer_receipt(
     db: &Database,
     rbac: &SharedRbacService,

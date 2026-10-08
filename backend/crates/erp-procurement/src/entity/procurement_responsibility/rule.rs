@@ -105,11 +105,17 @@ pub enum ProcurementResponsibilitySelectorReference<'a> {
 impl ProcurementResponsibilityRuleData {
     /// 返回当前规则选择器需要校验的目录引用。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// SKU 规则返回 SKU，分类规则返回分类，其余规则返回 `None`。
     ///
     /// # 错误
     /// 规则类型与选择器字段形状不一致或服务区域过长时返回错误。
+    ///
+    /// # Panics
+    /// 形状校验已通过后对应选择器字段仍缺失时 panic。
     pub fn selector_reference(&self) -> Result<ProcurementResponsibilitySelectorReference<'_>> {
         let service_region = normalize_service_region(self.service_region.clone())?;
         ensure_selector_shape(self, service_region.as_deref())?;
@@ -364,7 +370,10 @@ fn ensure_selector_shape(
 /// 返回不包含负责人且唯一表示规则层与选择器的字符串。
 ///
 /// # 错误
-/// 无；仅允许在选择器形状校验通过后调用。
+/// 不返回错误。仅允许在选择器形状校验通过后调用。
+///
+/// # Panics
+/// 形状未校验却缺少对应选择器字段时 panic。
 fn selector_key(data: &ProcurementResponsibilityRuleData, service_region: Option<&str>) -> String {
     match data.rule_type {
         ProcurementResponsibilityRuleType::Sku => {

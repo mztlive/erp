@@ -1,4 +1,4 @@
-//! Contract collection indexes.
+//! 合同集合索引。
 
 mod contract;
 mod recognition;
@@ -7,13 +7,16 @@ mod templates;
 use mongodb::Database;
 use persistence_core::Result;
 
-/// Create contract collection indexes.
+/// 登记合同、模板与识别集合的索引。
 ///
-/// # Parameters
-/// * `db` - target MongoDB database
+/// # 参数
+/// * `db` - 目标 MongoDB 数据库。
 ///
-/// # Errors
-/// Unique-constraint violations or MongoDB index creation failures.
+/// # 返回
+/// 无返回值。各集合的命名索引已登记。
+///
+/// # 错误
+/// 已有数据违反唯一约束，或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     contract::ensure(db).await?;
     templates::ensure(db).await?;

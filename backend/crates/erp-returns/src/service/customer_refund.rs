@@ -31,6 +31,16 @@ pub struct CustomerRefundSourceFact {
 }
 impl ReturnsService {
     /// 校验并构造客户退款草稿；保留身份、金额、双人复核及来源二选一规则。
+    ///
+    /// # 参数
+    /// * `req` - 创建请求。
+    /// * `actor_id` - 已认证创建人。
+    ///
+    /// # 返回
+    /// 返回初始草稿退款单。
+    ///
+    /// # 错误
+    /// 请求字段未通过 `Validate` 时返回 `ValidationError`；编号、原因、经办复核人、创建人、金额或原事实二选一不满足时返回 `Logic`。
     pub fn prepare_customer_refund(
         req: CreateCustomerRefundRequest,
         actor_id: &str,
@@ -57,6 +67,17 @@ impl ReturnsService {
         Ok(refund)
     }
     /// 原回款预读成功后，在原时点生成一次提交的退款身份、业务号与发生时间。
+    ///
+    /// # 参数
+    /// * `req` - 一次提交命令。
+    /// * `source` - 原回款窄事实。
+    /// * `actor_id` - 经办人，同时作为创建人。
+    ///
+    /// # 返回
+    /// 返回指向该原回款的草稿退款单；省略金额时沿用原回款金额。
+    ///
+    /// # 错误
+    /// 原回款没有经营客户时返回 `BusinessLogicError`；实体不变量不满足时返回 `Logic`。
     pub fn prepare_committed_customer_refund(
         req: &CommitCustomerRefundRequest,
         source: &CustomerRefundSourceFact,
@@ -89,8 +110,15 @@ impl ReturnsService {
     }
     /// 按主键读取客户退款单。
     ///
+    /// # 参数
+    /// * `id` - 退款单主键。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回读到的退款单。
+    ///
     /// # 错误
-    /// 不存在时返回 `NotFound`。
+    /// 不存在时返回 `NotFound`；仓储读取失败时返回对应错误。
     pub async fn load_customer_refund(
         &self,
         id: &str,
@@ -99,6 +127,16 @@ impl ReturnsService {
         or_not_found(self.db.customer_refunds().find_by_id(id, executor).await?, "客户退款单不存在")
     }
     /// 在调用方事务创建退款单；绑定和运行事实由流程保持原先后顺序。
+    ///
+    /// # 参数
+    /// * `refund` - 待写入的退款单。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 写入成功时无返回值。
+    ///
+    /// # 错误
+    /// 仓储写入失败时返回对应错误。
     pub async fn create_customer_refund(
         &self,
         refund: &CustomerRefund,
@@ -108,6 +146,16 @@ impl ReturnsService {
         Ok(())
     }
     /// 使用调用方执行器写回客户退款的原版本条件。
+    ///
+    /// # 参数
+    /// * `refund` - 待写回的退款单。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 写回成功时无返回值。
+    ///
+    /// # 错误
+    /// 仓储更新失败时返回对应错误。
     pub async fn persist_customer_refund(
         &self,
         refund: &mut CustomerRefund,
@@ -117,6 +165,16 @@ impl ReturnsService {
         Ok(())
     }
     /// 最终通过前读取并验证客户退款状态；已冲正错误优先于审批状态错误。
+    ///
+    /// # 参数
+    /// * `id` - 退款单主键。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回仍可过账的退款单。
+    ///
+    /// # 错误
+    /// 单据不存在时返回 `NotFound`；已冲正时返回 `BusinessLogicError`；非审批中时返回 `ConflictError`；仓储读取失败时返回对应错误。
     pub async fn prepare_customer_refund_final_post(
         &self,
         id: &str,
@@ -128,6 +186,15 @@ impl ReturnsService {
         Ok(refund)
     }
     /// 仅支持原回款来源；按原应收分录退款保留原失败说明。
+    ///
+    /// # 参数
+    /// * `refund` - 客户退款单。
+    ///
+    /// # 返回
+    /// 返回原回款 ID。
+    ///
+    /// # 错误
+    /// 没有原回款引用时返回 `BusinessLogicError`。
     pub fn customer_refund_receipt_id(refund: &CustomerRefund) -> Result<CustomerReceiptId> {
         refund
             .original_receipt_id
@@ -135,6 +202,18 @@ impl ReturnsService {
             .ok_or_else(|| Error::BusinessLogicError("按原应收分录退款由冲减分录完成".to_string()))
     }
     /// 按退款独立累计数据源校验金额上限；不合并回款冲正累计。
+    ///
+    /// # 参数
+    /// * `refund` - 本次退款单，其主键从累计中排除。
+    /// * `original_receipt_id` - 原回款。
+    /// * `receipt_amount` - 原回款金额。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 累计未超限时返回成功。
+    ///
+    /// # 错误
+    /// 已过账累计加上本次超过原回款金额时返回 `BusinessLogicError`；聚合失败时返回对应错误。
     pub async fn validate_customer_refund_amount(
         &self,
         refund: &CustomerRefund,
@@ -155,6 +234,16 @@ impl ReturnsService {
         )
     }
     /// 财务写入全部成功后才标记已过账并执行退款CAS。
+    ///
+    /// # 参数
+    /// * `refund` - 待标记过账的退款单。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 过账状态写回成功时无返回值。
+    ///
+    /// # 错误
+    /// 状态不是审批中时返回 `Logic`；仓储更新失败时返回对应错误。
     pub async fn persist_posted_customer_refund(
         &self,
         refund: &mut CustomerRefund,
@@ -165,8 +254,11 @@ impl ReturnsService {
     }
     /// 客户端直接过账失败关闭。最终动作只能由审批运行时调用。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 恒返回冲突。
+    /// 不返回成功值。
     ///
     /// # 错误
     /// 恒返回 `ConflictError`。
@@ -175,6 +267,16 @@ impl ReturnsService {
     }
 }
 /// 在创建退款的同一事务中复验原资金，版本错误必须早于Posted与缺客户错误。
+///
+/// # 参数
+/// * `source` - 事务内重读的原回款事实。
+/// * `expected_version` - 命令准备阶段看到的版本。
+///
+/// # 返回
+/// 版本一致、已过账且已关联经营客户时返回成功。
+///
+/// # 错误
+/// 版本变化时返回 `ConflictError`；未过账或缺少经营客户时返回 `BusinessLogicError`。
 pub fn ensure_customer_refund_source(source: &CustomerRefundSourceFact, expected_version: u64) -> Result<()> {
     super::shared::ensure_posted_source(
         source.version,

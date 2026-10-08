@@ -45,10 +45,12 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// # 参数
     /// * `actor` - 当前认证账号。
     /// * `instance_id` - 审批实例 ID。
+    ///
     /// # 返回
     /// 返回提交时冻结的版本、展示与材料安全元数据。
+    ///
     /// # 错误
-    /// 无权、主体链不一致或旧实例未保存展示快照时拒绝，不补读当前业务数据。
+    /// 无权、主体链不一致、展示或材料校验失败，或旧实例未保存展示快照时拒绝，不补读当前业务数据。
     pub async fn materials(&self, actor: &AuditActor, instance_id: &str) -> Result<ApprovalMaterialsView> {
         self.ensure_active_instance_reader(actor).await?;
         let subject = self.load_runtime_read_subject(instance_id).await?;
@@ -74,12 +76,15 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// 验证精确实例访问及冻结允许清单，返回仅供服务器比对的原始文件引用。
     ///
     /// # 参数
-    /// * `actor` / `instance_id` - 当前读者与审批实例。
+    /// * `actor` - 当前读者。
+    /// * `instance_id` - 审批实例 ID。
     /// * `file_id` - 请求预览的文件资产 ID。
+    ///
     /// # 返回
     /// 返回冻结元数据；调用方必须校验当前文件的版本、指纹及状态后才读取内容。
+    ///
     /// # 错误
-    /// 未授权、跨实例/版本文件、历史未冻结材料时拒绝。
+    /// 未授权、文件不在冻结允许清单或找不到该文件时隐藏为不存在；仓储失败时返回对应错误。
     pub async fn material_reference(
         &self,
         actor: &AuditActor,

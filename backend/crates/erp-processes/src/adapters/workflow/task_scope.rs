@@ -15,6 +15,24 @@ use persistence_core::Executor;
 use super::map_service;
 
 /// 首拍版本与管理范围共享同事务身份事实，权限和参与关系保留原查询及首错顺序。
+///
+/// # 参数
+/// * `db` - 身份与参与集合所在数据库。
+/// * `rbac` - 现有 RBAC 快照服务。
+/// * `auth` - 工作流授权端口，用于角色与权限代码。
+/// * `actor` - 当前操作人。
+/// * `include_version` - 为真时读取授权版本。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 返回队列访问事实。无 `work_item:manage` 时 `managed_owner_ids` 为空向量。
+/// 公司范围时该字段为 `None`。
+///
+/// # 错误
+/// 授权版本、角色、参与单据或范围解析失败时返回映射后的工作流错误。负责人超过 20000 时返回校验错误。
+///
+/// # Panics
+/// 固定权限码 `work_item:manage` 无法解析时 panic。
 pub(super) async fn queue_access(
     db: &Database,
     rbac: &SharedRbacService,
@@ -46,6 +64,9 @@ pub(super) async fn queue_access(
 }
 
 /// 与原工作台相同，角色、权限代码、参与单据、逐角色管理证明依次读取。
+///
+/// # Panics
+/// 已授予权限码或固定的 `work_item:manage` 无法解析时 panic。
 async fn access_inputs(
     db: &Database,
     auth: &impl WorkflowAuthorizationPort,
@@ -75,7 +96,19 @@ async fn access_inputs(
     })
 }
 
-/// None 是公共解析器证明的公司范围；空集合保持失败关闭。
+/// `None` 是公共解析器证明的公司范围；空集合保持失败关闭。
+///
+/// # 参数
+/// * `db` - 身份集合所在数据库。
+/// * `rbac` - 现有 RBAC 快照服务。
+/// * `actor` - 当前操作人。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 公司范围返回 `None`；否则返回允许管理的负责人编号。无权限时返回空向量。
+///
+/// # 错误
+/// 范围解析的非拒绝错误映射为工作流错误。负责人超过 20000 时返回校验错误。
 pub(super) async fn managed_owners(
     db: &Database,
     rbac: &SharedRbacService,

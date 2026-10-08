@@ -17,8 +17,11 @@ impl<T> Page<T> {
     /// * `items` - 当前页数据
     /// * `total` - 满足查询条件的数据总数
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回分页结果。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(items: Vec<T>, total: i64) -> Self {
         Self { items, total }
     }

@@ -15,6 +15,7 @@ use crate::entity::Permission;
 use crate::error::{Error, Result};
 
 impl RbacService {
+    /// 首次使用时从 MongoDB 装载 Enforcer；模型或策略加载失败则不缓存。
     async fn enforcer(&self) -> Result<&RwLock<Enforcer>> {
         self.enforcer
             .get_or_try_init(|| async {
@@ -32,6 +33,15 @@ impl RbacService {
     ///
     /// 上一次持久化或 reload 失败后，任何鉴权和 policy 查询都会先重试 reload；
     /// reload 继续失败时直接返回错误，禁止使用旧授权缓存。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回与当前数据库 policy 版本一致的 Enforcer 锁。
+    ///
+    /// # 错误
+    /// 提交结果未知、策略持续变化或重新加载失败时返回错误。
     pub(super) async fn fresh_enforcer(&self) -> Result<&RwLock<Enforcer>> {
         self.ensure_policy_consistency_known()?;
         let enforcer = self.enforcer().await?;
@@ -79,6 +89,12 @@ impl RbacService {
     /// reload 失败时服务保持 stale；后续鉴权和 policy 查询会先重试，
     /// 在恢复前不会继续使用旧缓存。
     ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 本地 Enforcer 已对齐当前 policy 时无返回值。
+    ///
     /// # 错误
     /// 当 MongoDB policy 无法重新加载时返回错误。
     pub(super) async fn refresh_policy(&self) -> Result<()> {
@@ -86,6 +102,13 @@ impl RbacService {
     }
 
     /// 判断账号是否具有指定权限。
+    ///
+    /// # 参数
+    /// * `subject` - Casbin 主体标识。
+    /// * `permission` - 待判断的资源动作。
+    ///
+    /// # 返回
+    /// 当前策略允许该主体执行该权限时返回 `true`。
     ///
     /// # 错误
     /// 当 Casbin policy 加载或匹配失败时返回错误。
@@ -99,6 +122,9 @@ impl RbacService {
     }
 
     /// 返回当前已稳定加载的授权策略版本。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 返回与本地 Enforcer 一致的 MongoDB policy revision。
@@ -125,6 +151,17 @@ impl RbacService {
     }
 
     /// 在一次 Enforcer 读锁下冻结账号角色及指定权限的逐角色授权结果。
+    ///
+    /// # 参数
+    /// * `account_kind` - 账号类型。
+    /// * `account_id` - 账号 ID。
+    /// * `permissions` - 需要逐角色核对的权限；为空时只冻结角色列表。
+    ///
+    /// # 返回
+    /// 返回角色、各角色命中的权限以及当时的 policy 版本。
+    ///
+    /// # 错误
+    /// Enforcer 无法刷新或权限匹配失败时返回错误。
     pub async fn role_permission_snapshot(
         &self,
         account_kind: AccountKind,
@@ -155,6 +192,16 @@ impl RbacService {
     }
 
     /// 证明冻结 Enforcer revision 与调用方事务快照可见 revision 完全一致。
+    ///
+    /// # 参数
+    /// * `expected_revision` - 冻结快照中的 policy 版本。
+    /// * `executor` - 调用方事务执行器。
+    ///
+    /// # 返回
+    /// 两个版本一致时无返回值。
+    ///
+    /// # 错误
+    /// 版本读取失败或两边不一致时返回错误。
     pub async fn ensure_policy_snapshot_with_executor(
         &self,
         expected_revision: u64,

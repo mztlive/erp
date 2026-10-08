@@ -41,29 +41,74 @@ pub trait SupplierApiExt {
 
     /// 获取 `supplier_api_connection` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SupplierApiConnectionRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_api_connections(&self) -> SupplierApiConnectionRepository<'_>;
 
     /// 获取 `supplier_api_capability` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SupplierApiCapabilityRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_api_capabilities(&self) -> SupplierApiCapabilityRepository<'_>;
 
     /// 获取追加式采购业务能力确认集合。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回当前数据库的业务能力确认仓储。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_api_business_confirmations(&self) -> BusinessCapabilityConfirmationRepository<'_>;
 
     /// 获取后台健康检查运行记录集合。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回当前数据库的健康检查运行记录仓储。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_api_health_check_runs(&self) -> SupplierHealthCheckRunRepository<'_>;
 
     /// 获取连接治理命令幂等回执集合。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回当前数据库的命令回执仓储。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_api_command_receipts(&self) -> SupplierConnectionCommandReceiptRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SupplierApiRepository` 实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_api(&self) -> SupplierApiRepository<'_>;
 }
 

@@ -63,7 +63,16 @@ impl SalesChangeProcess {
         Ok(self.rbac.clone())
     }
 
-    /// 创建时注入组合根的审批对象读取能力，未注入时失败关闭。
+    /// 换上组合根的审批对象读取能力。未调用时沿用构造时的失败关闭端口。消耗 `self`。
+    ///
+    /// # 参数
+    /// * `object_read` - 审批对象读取端口。
+    ///
+    /// # 返回
+    /// 绑定该端口后的流程。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_object_read(
         mut self,
         object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
@@ -113,8 +122,16 @@ impl SalesChangeProcess {
 
     /// 在审批运行时持有的事务内生效销售变更。
     ///
+    /// # 参数
+    /// * `id` - 变更单主键。
+    /// * `actor` - 已通过鉴权的审计操作人。
+    /// * `executor` - 审批运行时持有的事务执行器。
+    ///
+    /// # 返回
+    /// 无返回值。生效写入在该执行器内完成。
+    ///
     /// # 错误
-    /// 状态、基准版本、应收差额或持久化不变量失败时返回错误。
+    /// 状态、基准版本、应收差额、审计构造或持久化不变量失败时返回错误。
     pub async fn apply_effective_change_apply(
         &self,
         id: &str,
@@ -135,8 +152,18 @@ impl SalesChangeProcess {
 
 /// 在审批运行时持有的事务内撤回销售变更审批。
 ///
+/// # 参数
+/// * `db` - 数据库。
+/// * `id` - 变更单主键。
+/// * `action` - 审批域动作，只接受本域撤回。
+/// * `actor` - 已通过鉴权的审计操作人。
+/// * `executor` - 审批运行时持有的事务执行器。
+///
+/// # 返回
+/// 无返回值。变更单回到可撤回后的状态，并写入审计。
+///
 /// # 错误
-/// 变更单不存在、动作不属于本域、状态迁移或 CAS 失败时返回原错误。
+/// 变更单不存在、动作不属于本域、状态迁移、CAS 或审计写入失败时返回原错误。
 pub async fn cancel_approval(
     db: &Database,
     id: &str,

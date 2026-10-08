@@ -26,6 +26,18 @@ pub struct PurchaseCostLine {
     pub input_tax_rate: Option<Rate>,
 }
 /// 按采购提交原行序分配成本身份与发生时间，任一成本实体构造失败立即返回。
+///
+/// # 参数
+/// * `order_id` - 采购单身份，写入来源单据。
+/// * `supplier_id` - 冻结供应商身份。
+/// * `lines` - 按提交原序给出的成本行；缺省税率按零税率。
+/// * `revision_no` - 来源版本，转为来源版本字符串。
+///
+/// # 返回
+/// 返回尚未持久化的确认成本事实；不写分配。
+///
+/// # 错误
+/// 任一行 `CostEntry` 构造失败时立即返回对应错误。
 pub fn prepare(
     order_id: &str,
     supplier_id: &SupplierAccountId,
@@ -68,6 +80,17 @@ fn zero_rate() -> Rate {
     Rate::from_str("0").expect("零税率合法")
 }
 /// 逐行写入原确认成本，复用调用方事务并保留首个失败。
+///
+/// # 参数
+/// * `db` - 财务领域数据库。
+/// * `entries` - 已构造的确认成本；按原序写入，分配为空。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 全部写入成功时无返回值。
+///
+/// # 错误
+/// 首条仓储写入失败时返回对应错误，后续行不再写入。
 pub async fn persist(
     db: &mongodb::Database,
     entries: &[CostEntry],

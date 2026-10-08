@@ -51,7 +51,10 @@ impl<T> InventoryListPage<T> {
     /// * `ownership_basis` - 所有人口径
     ///
     /// # 返回
-    /// 返回带范围信封的列表页。
+    /// 返回带范围信封的列表页。`no_scope` 为真时 `empty_reason` 为 `no_scope`，否则为 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn from_page(
         page: PageView<T>,
         meta: &InventoryScopeMeta,
@@ -72,16 +75,16 @@ impl<T> InventoryListPage<T> {
     }
 }
 
-/// 规范化人员 ID 列表；`"me"` 与空集合均拒绝。
+/// 规范化人员 ID 列表。
 ///
 /// # 参数
-/// * `ids` - 查询参数中的人员 ID
+/// * `ids` - 查询参数中的人员 ID。
 ///
 /// # 返回
-/// 未提供时返回 `None`；否则返回去重后的稳定 ID。
+/// 未提供时返回 `None`；否则按原切片返回 ID，不去重。
 ///
 /// # 错误
-/// 包含 `me` 时返回 `ValidationError`。
+/// 任一项忽略大小写等于 `me` 时返回 `Error::ValidationError`。空集合不拒绝。
 pub fn normalized_user_ids(ids: Option<&QueryIds>) -> Result<Option<Vec<String>>> {
     let Some(ids) = ids else {
         return Ok(None);
@@ -112,15 +115,19 @@ pub fn normalized_scope_version(value: Option<&str>) -> Result<Option<String>> {
     Ok(Some(value.to_string()))
 }
 
-/// 第二页起必须携带当前 `scope_version`，冲突返回 409。
+/// 第二页起必须携带与当前授权指纹一致的 `scope_version`。
 ///
 /// # 参数
-/// * `page` - 请求页码
-/// * `expected` - 客户端回传版本
-/// * `current` - 当前授权指纹
+/// * `page` - 请求页码。
+/// * `expected` - 客户端回传版本。
+/// * `current` - 当前授权指纹。
+///
+/// # 返回
+/// 版本满足跨页约束时成功。
 ///
 /// # 错误
-/// 缺版本或版本不一致时返回 `ConflictError`（`DATA_SCOPE_CHANGED`）。
+/// `page` 大于 1 且 `expected` 为 `None`，或 `expected` 为 `Some` 且不等于 `current` 时，
+/// 返回 `Error::ConflictError`，文案带 `DATA_SCOPE_CHANGED`。
 pub fn ensure_scope_version(page: u64, expected: Option<&str>, current: &str) -> Result<()> {
     if page > 1 && expected.is_none() {
         return Err(Error::ConflictError("DATA_SCOPE_CHANGED：请从第一页刷新后继续查询".to_string()));

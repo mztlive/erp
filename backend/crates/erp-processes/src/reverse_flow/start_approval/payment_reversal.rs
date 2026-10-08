@@ -311,6 +311,18 @@ async fn replay_persisted_payment_reversal(
 
 /// 将付款冲正启动计划写入 BPM 集合、不可变快照和入口 WorkItem。
 ///
+/// # 参数
+/// * `db` - 数据库。
+/// * `writes` - 已准备的启动写入计划。
+/// * `snapshot_payload` - 冻结的主体快照。
+/// * `owner_role` - 入口任务责任角色。
+/// * `organization_id` - 入口任务责任组织。
+/// * `now` - 状态变更与任务创建时间。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 成功时无返回值。
+///
 /// # 错误
 /// 计划缺少入口执行或写入失败时返回错误。
 pub async fn persist_payment_reversal_runtime(

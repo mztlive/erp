@@ -10,6 +10,9 @@ use super::{DIFFERENCE_SORT_FIELDS, ITEM_SORT_FIELDS, STATEMENT_SORT_FIELDS};
 ///
 /// # 返回
 /// 返回排序条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn statement_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     sort_doc(STATEMENT_SORT_FIELDS, sort_by, sort_ascending)
 }
@@ -22,6 +25,9 @@ pub(super) fn statement_sort_doc(sort_by: Option<&str>, sort_ascending: bool) ->
 ///
 /// # 返回
 /// 返回排序条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn item_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     sort_doc(ITEM_SORT_FIELDS, sort_by, sort_ascending)
 }
@@ -34,6 +40,9 @@ pub(super) fn item_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Docu
 ///
 /// # 返回
 /// 返回排序条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn difference_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     sort_doc(DIFFERENCE_SORT_FIELDS, sort_by, sort_ascending)
 }
@@ -47,6 +56,9 @@ pub(super) fn difference_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -
 ///
 /// # 返回
 /// 返回排序条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn sort_doc(whitelist: &[&str], sort_by: Option<&str>, sort_ascending: bool) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     let field = sort_by.filter(|field| whitelist.contains(field)).unwrap_or("created_at");
@@ -55,8 +67,14 @@ pub(super) fn sort_doc(whitelist: &[&str], sort_by: Option<&str>, sort_ascending
 
 /// 供应商结算单列表投影字段。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回投影条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn supplier_settlement_statement_projection() -> Document {
     doc! {
         "id": 1,
@@ -96,8 +114,14 @@ pub(super) fn supplier_settlement_statement_projection() -> Document {
 
 /// 供应商结算明细列表投影字段。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回投影条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn supplier_settlement_item_projection() -> Document {
     doc! {
         "id": 1,
@@ -122,8 +146,14 @@ pub(super) fn supplier_settlement_item_projection() -> Document {
 
 /// 供应商结算差异列表投影字段。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回投影条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn supplier_settlement_difference_projection() -> Document {
     doc! {
         "id": 1,

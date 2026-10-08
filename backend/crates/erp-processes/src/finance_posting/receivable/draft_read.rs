@@ -51,6 +51,19 @@ impl ReceivableProcess {
 }
 
 /// 原单读资格已在调用方执行器证明；撤回动作仍须当前 cancel 静态资格。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `rbac` - 授权源。
+/// * `actor` - 当前已认证操作人。
+/// * `id` - 回款单 ID。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 返回回款视图；当前账号没有撤回静态资格时去掉 `CANCEL`。
+///
+/// # 错误
+/// 视图或撤回资格读取失败时返回错误。
 pub(super) async fn receipt_view_with_actions(
     db: &Database,
     rbac: &SharedRbacService,
@@ -73,6 +86,16 @@ pub(super) async fn receipt_view_with_actions(
 }
 
 /// 完整原单读取和提交回放仅允许非空的原登记人身份。
+///
+/// # 参数
+/// * `receipt` - 已读取的回款单。
+/// * `actor_id` - 当前操作人 ID。
+///
+/// # 返回
+/// 身份与 `created_by` 一致时无返回值。
+///
+/// # 错误
+/// 操作人身份为空或不是原登记人时返回 `Forbidden`。
 pub(super) fn ensure_receipt_owner(receipt: &CustomerReceipt, actor_id: &str) -> Result<()> {
     if actor_id.is_empty() || receipt.created_by != actor_id {
         return Err(Error::Forbidden("仅原回款登记人可以读取或重提本单".into()));

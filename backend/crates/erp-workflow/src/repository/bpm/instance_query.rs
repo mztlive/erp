@@ -63,6 +63,14 @@ impl<'a> BpmWorkflowRepository<'a> {
 
     /// 查询同一主体与提交版本的非终态实例。
     ///
+    /// # 参数
+    /// * `subject` - 业务对象引用。
+    /// * `subject_version` - 冻结提交版本。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 返回 `RUNNING|BLOCKED` 实例；没有时返回 `None`。
+    ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     pub async fn find_non_terminal_by_subject(
@@ -193,6 +201,17 @@ pub(super) fn cancellation_subject_filter(subject: &SubjectRef, subject_version:
     }
 }
 
+/// 构造同一主体与提交版本的非终态过滤；软删除由 `find_one` 追加。
+///
+/// # 参数
+/// * `subject` - 业务对象引用。
+/// * `subject_version` - 冻结提交版本。
+///
+/// # 返回
+/// 返回含主体键、提交版本和 `RUNNING|BLOCKED` 状态的查询文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn non_terminal_subject_filter(subject: &SubjectRef, subject_version: u32) -> Document {
     doc! {
         "subject.subject_kind": subject.subject_kind(),
@@ -225,6 +244,16 @@ pub(super) fn latest_subject_filter(subject: &SubjectRef) -> Document {
     }
 }
 
+/// 判断列表范围是否应在访问数据库前失败关闭为空结果。
+///
+/// # 参数
+/// * `filter` - 实例列表过滤条件。
+///
+/// # 返回
+/// `subject_ids` 为显式空集合，或 `Started` 视图没有非空 `started_by` 时返回 `true`。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn instance_list_scope_empty(filter: &ApprovalInstanceListFilter) -> bool {
     if filter.subject_ids.as_ref().is_some_and(Vec::is_empty) {
         return true;
@@ -337,6 +366,7 @@ pub(super) fn instance_text_query_or(text_query: &ApprovalInstanceTextQuery) -> 
     ]
 }
 
+/// `Blocked` 视图强制写入受阻状态，其它视图仅在调用方给出状态时过滤。
 fn insert_instance_status(document: &mut Document, filter: &ApprovalInstanceListFilter) {
     if filter.view == ApprovalInstanceListView::Blocked {
         document.insert("status", ApprovalProcessInstanceStatus::Blocked.as_str());
@@ -347,6 +377,16 @@ fn insert_instance_status(document: &mut Document, filter: &ApprovalInstanceList
     }
 }
 
+/// 按列表视图返回稳定排序；并列时用 `id` 降序断开。
+///
+/// # 参数
+/// * `filter` - 实例列表过滤条件；管理视图是否带状态决定排序字段。
+///
+/// # 返回
+/// `Started` 按 `started_at`，`Blocked` 按 `blocked_at`，带状态的 `Managed` 先按 `status` 再按 `updated_at`，其余 `Managed` 按 `updated_at`。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn instance_list_sort(filter: &ApprovalInstanceListFilter) -> Document {
     match filter.view {
         ApprovalInstanceListView::Started => doc! { "started_at": -1, "id": -1 },
@@ -358,6 +398,17 @@ pub(crate) fn instance_list_sort(filter: &ApprovalInstanceListFilter) -> Documen
     }
 }
 
+/// 构造当前视图排序时间上的稳定游标分支，不使用 `status` 字段。
+///
+/// # 参数
+/// * `view` - 决定比较 `started_at`、`blocked_at` 或 `updated_at`。
+/// * `cursor` - 上一页最后一条的排序时间与实例 ID。
+///
+/// # 返回
+/// 返回排序时间更小，或时间相同且 `id` 更小的两个 `$or` 分支。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn instance_cursor_or(
     view: ApprovalInstanceListView,
     cursor: &ApprovalInstanceListCursor,
@@ -373,6 +424,16 @@ pub(crate) fn instance_cursor_or(
     ]
 }
 
+/// 返回工作台使用的有界实例投影，不含执行历史。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回当前节点、当前审批人、最近驳回摘要、状态与时间字段的投影文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn instance_summary_projection() -> Document {
     doc! {
         "id": 1,
@@ -400,6 +461,15 @@ pub(crate) fn instance_summary_projection() -> Document {
 }
 
 /// 返回实例列表统一页大小上限。
+///
+/// # 参数
+/// * `limit` - 调用方请求条数；`0` 按 1 处理。
+///
+/// # 返回
+/// 返回夹紧到 `[1, MAX_INSTANCE_PAGE]` 的整数。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn instance_list_limit(limit: u32) -> i64 {
     clamp_limit(limit, MAX_INSTANCE_PAGE)
 }

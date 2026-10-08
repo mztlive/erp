@@ -27,6 +27,9 @@ pub trait SupplierApiGateway: Send + Sync {
     ///
     /// # 返回
     /// 检查成功返回 `Ok(())`；失败返回分类错误（可自动重试或转人工）。
+    ///
+    /// # 错误
+    /// 检查失败时返回 `ClassifiedError`，由 `class` 区分可自动重试或转人工。
     fn health_check<'a>(
         &'a self,
         connection: &'a SupplierApiConnection,
@@ -35,6 +38,16 @@ pub trait SupplierApiGateway: Send + Sync {
     >;
 
     /// 执行一次目录同步；实现必须保持来源幂等，并且只能写入 W21 正式供给链路。
+    ///
+    /// # 参数
+    /// * `connection` - 目标供应商 API 连接。
+    ///
+    /// # 返回
+    /// 覆盖实现同步成功时返回 `Ok(())`。默认实现不成功。
+    ///
+    /// # 错误
+    /// 默认实现返回 `ClassifiedError`，`class` 为 `SupplierFailureClass::TransientFailure`，
+    /// `code` 为 `CATALOG_SYNC_ADAPTER_UNAVAILABLE`。覆盖实现失败时同样返回 `ClassifiedError`。
     fn catalog_sync<'a>(
         &'a self,
         connection: &'a SupplierApiConnection,

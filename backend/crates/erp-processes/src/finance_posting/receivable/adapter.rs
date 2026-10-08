@@ -57,6 +57,9 @@ pub struct CustomerReceiptAdapter {
 
 /// 返回客户回款单的完整适配器登记。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回已校验完整性的规格与显式字段声明。
 ///
@@ -106,6 +109,9 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<CustomerReceiptAdapter
 /// # 参数
 /// * `business_object_id` - 回款单主键
 ///
+/// # 返回
+/// 返回客户回款单的 `SubjectRef`。
+///
 /// # 错误
 /// 主键为空或超长时返回校验错误。
 pub fn customer_receipt_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
@@ -134,10 +140,13 @@ pub fn start_customer_receipt_approval(
     Ok(receipt.start_approval(allocations)?)
 }
 
-/// 撤回审批：回到草稿，且 `subject_version` 不回退。
+/// 撤回审批：回到草稿，且 `approval_subject_version` 不回退。
 ///
 /// # 参数
 /// * `receipt` - 审批中的回款单
+///
+/// # 返回
+/// 撤回成功时无返回值；回款单回到草稿，且 `approval_subject_version` 不回退。
 ///
 /// # 错误
 /// 非审批中时返回冲突。
@@ -146,6 +155,12 @@ pub fn cancel_customer_receipt_to_draft(receipt: &mut CustomerReceipt) -> Result
 }
 
 /// 最终通过过账前置：仅 `IN_APPROVAL` 可进入过账。
+///
+/// # 参数
+/// * `receipt` - 待过账的客户回款单。
+///
+/// # 返回
+/// 状态为审批中时无返回值。
 ///
 /// # 错误
 /// 状态不是审批中时返回冲突。
@@ -157,6 +172,12 @@ pub fn ensure_final_approve_posting(receipt: &CustomerReceipt) -> Result<()> {
 }
 
 /// 无已绑定定义的必须审批单据不得提交。
+///
+/// # 参数
+/// * `binding` - 已查到的审批定义绑定；缺失时为 `None`。
+///
+/// # 返回
+/// 绑定存在时返回该绑定的引用。
 ///
 /// # 错误
 /// 绑定缺失时返回冲突。
@@ -194,6 +215,9 @@ pub struct CustomerReceiptStartCommand {
 ///
 /// # 返回
 /// 返回不含定义 ID 或审批人的目标启动命令。
+///
+/// # 错误
+/// 不返回错误。
 pub fn customer_receipt_start_command(
     receipt_id: &str,
     subject_version: u32,
@@ -216,6 +240,9 @@ pub fn customer_receipt_start_command(
 ///
 /// # 返回
 /// 返回 `START_APPROVAL`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn start_approval_command_kind(
     _command: &CustomerReceiptStartCommand,
 ) -> bpm::model::types::ApprovalCommandKind {
@@ -227,6 +254,9 @@ pub fn start_approval_command_kind(
 /// # 参数
 /// * `receipt` - 业务实体
 /// * `action` - 合同强类型动作
+///
+/// # 返回
+/// 动作允许时无返回值。过账只做状态前置检查；撤回会把回款单改回草稿。
 ///
 /// # 错误
 /// 动作不属于本类型或状态不允许时返回错误。
@@ -284,6 +314,9 @@ pub fn customer_receipt_responsible_org_id(receipt: &CustomerReceipt) -> Result<
 /// * `receipt` - 已冻结提交版本的回款单
 /// * `submitted_by` - 提交人
 /// * `submitted_at` - 提交时间
+///
+/// # 返回
+/// 返回注入提交人与提交时间后的审批主体快照。
 ///
 /// # 错误
 /// 组织为空、分配行为空或行数溢出时返回校验错误。

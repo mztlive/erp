@@ -14,11 +14,14 @@ use super::{source_scope_document, source_stages};
 /// 从分配引用读取必要的子账字段；缺失引用保持空事实。
 ///
 /// # 参数
-/// 财务子账集合和当前分配账户引用表达式。
+/// * `collection` - 财务子账集合名。
+/// * `reference` - 当前分配上的账户字段表达式。
+///
 /// # 返回
 /// 只装载真实来源引用的子账关联管道。
+///
 /// # 错误
-/// 无。
+/// 不返回错误。
 pub(super) fn account_stages(collection: &str, reference: &str) -> Vec<Document> {
     vec![
         doc! { "$lookup": { "from": collection, "let": { "account_id": reference },
@@ -35,11 +38,14 @@ pub(super) fn account_stages(collection: &str, reference: &str) -> Vec<Document>
 /// 销项分配沿应收子账读取当前销售责任，业务条件仅收窄已授权份额。
 ///
 /// # 参数
-/// 已解析销售授权和业务筛选条件。
+/// * `authorization` - 已解析销售授权。
+/// * `condition` - 负责人与组织筛选。
+///
 /// # 返回
 /// 销售来源存在性与授权份额匹配管道。
+///
 /// # 错误
-/// 无。
+/// 不返回错误。
 pub(super) fn sales_stages(
     authorization: &FundsAuthorization,
     condition: &FundsLinkedCondition,
@@ -64,11 +70,15 @@ pub(super) fn sales_stages(
 /// 进项分配严格区分采购和结算来源，同主键不得跨来源串权。
 ///
 /// # 参数
-/// 已解析采购、结算授权以及负责人、组织筛选条件。
+/// * `authorization` - 已解析采购与结算授权。
+/// * `owners` - 负责人精确条件；`None` 表示不筛选。
+/// * `organizations` - 组织精确条件；`None` 表示不筛选。
+///
 /// # 返回
 /// 区分实际来源类型的存在性与授权份额匹配管道。
+///
 /// # 错误
-/// 无。
+/// 不返回错误。
 pub(super) fn purchase_stages(
     authorization: &FundsAuthorization,
     owners: Option<&[String]>,
@@ -148,11 +158,15 @@ fn matched_expression(owners: Option<&[String]>, organizations: Option<&[String]
 /// 每个发票只读取自己的分配；关联装配不产生额外查询或第二份事实。
 ///
 /// # 参数
-/// 本域分配集合、来源关联管道与结果字段。
+/// * `collection` - 分配集合名。
+/// * `stages` - 来源关联管道，接在发票匹配之后。
+/// * `output` - 关联结果字段名。
+///
 /// # 返回
-/// 读取当前发票实际分配的数据库关联阶段。
+/// 读取当前发票实际分配的 `$lookup` 阶段。
+///
 /// # 错误
-/// 无。
+/// 不返回错误。
 pub(super) fn allocation_lookup(collection: &str, stages: Vec<Document>, output: &str) -> Document {
     let mut pipeline = vec![doc! { "$match": { "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
     "$expr": { "$eq": ["$invoice_id", "$$invoice_id"] } } }];

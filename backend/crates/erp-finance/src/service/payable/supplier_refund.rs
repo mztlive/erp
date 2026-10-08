@@ -30,6 +30,17 @@ pub struct SupplierRefundPostingFact {
 }
 
 /// 在原退款累计限额校验之前读取并确认财务付款已过账。
+///
+/// # 参数
+/// * `db` - 财务领域数据库。
+/// * `payment_id` - 原付款单主键。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 返回状态为 `Posted` 的付款单。
+///
+/// # 错误
+/// 付款不存在时返回 `NotFound`；状态不是已过账时返回 `BusinessLogicError`；仓储读取失败时返回对应错误。
 pub async fn load_posted_payment_for_refund(
     db: &Database,
     payment_id: &SupplierPaymentId,
@@ -48,8 +59,18 @@ pub async fn load_posted_payment_for_refund(
 
 /// 写入反向核销分配、冲减进度与减少分录。
 ///
+/// # 参数
+/// * `db` - 财务领域数据库。
+/// * `refund` - 退款稳定身份、金额与原发生时点。
+/// * `payment` - 已过账的原付款。
+/// * `actor_id` - 执行人。
+/// * `session` - 调用方事务执行器。
+///
+/// # 返回
+/// 反向分配、冲减进度与减少分录写入完成时无返回值。
+///
 /// # 错误
-/// 跨供应商、超额冲减或仓储失败时返回错误。
+/// 分录或账户缺失、跨供应商、超额冲减、实体构造失败或仓储失败时返回对应错误。
 pub async fn persist_refund_offsets_and_reversals(
     db: &Database,
     refund: &SupplierRefundPostingFact,

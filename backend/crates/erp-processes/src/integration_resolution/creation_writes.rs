@@ -59,7 +59,18 @@ impl CreationWrites for MongoWrites<'_> {
     }
 }
 /// 按本域事实、正式任务、审计的顺序执行原事务内写入。
-/// # Errors
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `fact` - 待写入的错误任务、差异，或失败消息及其错误任务。
+/// * `work_item` - 同步创建的正式任务。
+/// * `audit` - 同一事务中的审计日志。
+/// * `executor` - 外层事务执行器。
+///
+/// # 返回
+/// 无返回值。三步都写入成功即完成。
+///
+/// # 错误
 /// 任一步失败保留原错误且停止后续写入。
 pub(super) async fn persist_created(
     db: &Database,

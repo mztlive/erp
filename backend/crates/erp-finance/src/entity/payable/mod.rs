@@ -1,7 +1,7 @@
 //! 域 D19 `payable`：payable_account、payable_entry、payable_entry_offset、
 //! supplier_payment、payment_allocation、purchase_invoice_allocation（页面：W12）。
 //!
-//! 实体层无跨域依赖：只引用 `entities::ids` 的 ID newtype 与 common 基元。
+//! 实体层无跨域依赖：只引用 `erp_core::ids` 的 ID newtype 与 common 基元。
 //! 公共字段归属按 §4.3 判定：
 //! - `payable_account` 是账户主表类 → 组合 [`erp_core::common::stable::StableBase`]；
 //! - 其余表是正式事实（§4.5 不设业务软删除，冲正用反向事实），按 §6.9 字段字典

@@ -66,7 +66,8 @@ impl SupplierSettlementProcess {
     /// # 返回
     /// 返回按姓名及账号排序的合格候选；提交仍独立重新验证资格。
     /// # 错误
-    /// 单据不可编辑、岗位分离或事实读取失败时返回原领域错误。
+    /// 非当前经办人或单据不可编辑时返回 `Forbidden`。账号、权限或财务角色范围读取失败时返回对应错误。
+    /// 岗位分离或资格不足的人员被排除，不因此失败。
     pub async fn reviewer_options(
         &self,
         id: &str,
@@ -109,6 +110,18 @@ impl SupplierSettlementProcess {
     }
 
     /// 在提交时重新验证人员资格并返回一致的授权版本；过期策略由提交事务拒绝。
+    ///
+    /// # 参数
+    /// * `auth` - 工作流授权端口。
+    /// * `reviewer_id` - 拟指定的复核人。
+    /// * `preparer_id` - 当前经办人，须与复核人岗位分离。
+    /// * `org` - 结算单业务组织。
+    ///
+    /// # 返回
+    /// 返回验证前后未变化的政策版本。
+    ///
+    /// # 错误
+    /// 资格校验失败时返回对应错误。连续三次读到的政策版本不一致时返回 `ConflictError`。
     pub(super) async fn authorize_reviewer(
         &self,
         auth: &impl WorkflowAuthorizationPort,
@@ -128,6 +141,20 @@ impl SupplierSettlementProcess {
 }
 
 /// 在调用方事务内重验岗位分离、账号及同一启用财务角色的完整动作。
+///
+/// # 参数
+/// * `auth` - 工作流授权端口。
+/// * `reviewer_id` - 复核人账号。
+/// * `preparer_id` - 经办人账号。
+/// * `org` - 结算单业务组织。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 资格成立时无返回值。
+///
+/// # 错误
+/// 复核人不存在时返回 `ValidationError`。资格、权限或财务角色不满足时返回 `Forbidden`。
+/// 账号或范围读取失败时返回对应错误。
 pub(super) async fn ensure_reviewer(
     auth: &impl WorkflowAuthorizationPort,
     reviewer_id: &str,

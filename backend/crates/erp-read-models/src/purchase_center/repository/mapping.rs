@@ -16,6 +16,15 @@ use erp_supply::entity::supplier_offering::{
 };
 
 /// 投影采购依据身份；销售状态资格和 guard CAS 仍由对应调用位置执行。
+///
+/// # 参数
+/// * `order` - 销售单。
+///
+/// # 返回
+/// 返回采购依据身份事实。
+///
+/// # 错误
+/// 不返回错误。
 pub fn sales_order_basis_fact(order: &SalesOrder) -> SalesOrderBasisFact {
     SalesOrderBasisFact {
         base: FactIdentity { id: order.base.id.clone() },
@@ -25,6 +34,15 @@ pub fn sales_order_basis_fact(order: &SalesOrder) -> SalesOrderBasisFact {
     }
 }
 /// 保留选定销售修订的客户和可选合同快照。
+///
+/// # 参数
+/// * `value` - 销售修订。
+///
+/// # 返回
+/// 返回客户名称和可选合同号快照。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn sales_revision_fact(value: SalesOrderRevision) -> SalesRevisionFact {
     SalesRevisionFact {
         base: FactIdentity { id: value.base.id.clone() },
@@ -38,6 +56,15 @@ pub(crate) fn sales_revision_fact(value: SalesOrderRevision) -> SalesRevisionFac
     }
 }
 /// 保留公共销售行身份、类型与显示快照，缺子行仍由采购规则判定。
+///
+/// # 参数
+/// * `value` - 销售版本公共行。
+///
+/// # 返回
+/// 返回公共行身份、类型与显示快照。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn sales_line_fact(value: SalesOrderRevisionLine) -> SalesRevisionLineFact {
     SalesRevisionLineFact {
         base: FactIdentity { id: value.base.id.clone() },
@@ -53,6 +80,15 @@ pub(crate) fn sales_line_fact(value: SalesOrderRevisionLine) -> SalesRevisionLin
     }
 }
 /// 投影当前商品子行；数量和期限保留原值类型。
+///
+/// # 参数
+/// * `value` - 实物服务子行修订。
+///
+/// # 返回
+/// 返回 SKU、数量、单位和履约期限。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn sales_goods_fact(value: SalesOrderGoodsServiceLineRevision) -> SalesGoodsLineFact {
     SalesGoodsLineFact {
         revision_line_id: value.revision_line_id.clone(),
@@ -64,6 +100,15 @@ pub(crate) fn sales_goods_fact(value: SalesOrderGoodsServiceLineRevision) -> Sal
     }
 }
 /// SKU缺失由稀疏映射保留，现存值只保留商品引用。
+///
+/// # 参数
+/// * `value` - 现存 SKU。
+///
+/// # 返回
+/// 返回 SKU 身份及其商品引用。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn sku_fact(value: erp_catalog::Sku) -> SkuFact {
     SkuFact { base: FactIdentity { id: value.base.id.clone() }, product_id: value.product_id.clone() }
 }
@@ -77,6 +122,15 @@ fn product_kind(value: erp_catalog::ProductKind) -> ProductKind {
     }
 }
 /// 保留商品当前修订缺失与稳定类型。
+///
+/// # 参数
+/// * `value` - 商品。
+///
+/// # 返回
+/// 返回商品身份、当前修订指针和商品种类。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn product_fact(value: erp_catalog::Product) -> ProductFact {
     ProductFact {
         base: FactIdentity { id: value.base.id.clone() },
@@ -85,14 +139,41 @@ pub(crate) fn product_fact(value: erp_catalog::Product) -> ProductFact {
     }
 }
 /// 投影商品当前修订的分类身份。
+///
+/// # 参数
+/// * `value` - 商品修订。
+///
+/// # 返回
+/// 返回分类身份。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn product_revision_fact(value: erp_catalog::ProductRevision) -> ProductRevisionFact {
     ProductRevisionFact { category_id: value.category_id.clone() }
 }
 /// 保留分类父级 None 与具体身份，环和完整性由采购规则判断。
+///
+/// # 参数
+/// * `value` - 商品分类。
+///
+/// # 返回
+/// 返回分类事实；`parent_category_id` 无父级时为 `None`。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn category_fact(value: erp_catalog::ProductCategory) -> ProductCategoryFact {
     ProductCategoryFact { parent_category_id: value.parent_category_id.clone() }
 }
 /// 提供方已筛选的现有库存预占事实不计 released 数量。
+///
+/// # 参数
+/// * `value` - 现有库存预占。
+///
+/// # 返回
+/// 返回销售行、预占数量和已消耗数量。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn reservation_fact(value: erp_inventory::StockReservation) -> ExistingStockReservationFact {
     ExistingStockReservationFact {
         sales_order_line_id: value.sales_order_line_id.clone(),
@@ -101,6 +182,15 @@ pub(crate) fn reservation_fact(value: erp_inventory::StockReservation) -> Existi
     }
 }
 /// 保留余额版本与数量供原创建依据指纹和上限规则消费。
+///
+/// # 参数
+/// * `value` - 库存余额。
+///
+/// # 返回
+/// 返回余额版本、仓库、SKU 和可用数量。
+///
+/// # 错误
+/// 不返回错误。
 pub fn stock_balance_fact(value: erp_inventory::StockBalance) -> StockBalanceFact {
     StockBalanceFact {
         base: VersionedFactIdentity { id: value.base.id.clone(), version: value.base.version },
@@ -169,12 +259,30 @@ pub fn availability_fact(value: SupplierOfferingAvailability) -> AvailabilityFac
     }
 }
 /// 供应商角色只保留当前商务资料指针。
+///
+/// # 参数
+/// * `value` - 供应商账号。
+///
+/// # 返回
+/// 返回当前商务资料修订指针。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn supplier_role_fact(value: erp_supplier::SupplierAccount) -> SupplierRoleFact {
     SupplierRoleFact {
         current_commercial_profile_revision_id: value.current_commercial_profile_revision_id.clone(),
     }
 }
 /// 由供应商提供方解释历史付款资料，采购仍负责原 NET-30 回退。
+///
+/// # 参数
+/// * `value` - 供应商商务资料修订。
+///
+/// # 返回
+/// 返回有效付款条件代码和业务类别。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn supplier_commercial_fact(
     value: erp_supplier::SupplierCommercialProfileRevision,
 ) -> SupplierCommercialFact {

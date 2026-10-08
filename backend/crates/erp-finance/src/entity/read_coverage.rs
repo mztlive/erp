@@ -6,10 +6,12 @@
 /// * `ledger_read` - 当前有效的显式财务整账读取职责。
 /// * `sources` - 原单每条分配的真实来源；`None` 表示关联损坏。
 /// * `visible` - 已按各自来源类型验证的来源主键集合。
+///
 /// # 返回
-/// 显式整账职责且全部实际来源可见时返回 true；真正零分配仅要求整账职责。
+/// 显式整账职责且全部实际来源可见时返回 `true`；真正零分配仅要求整账职责。
+///
 /// # 错误
-/// 无。缺失关联失败关闭，不能转换成零分配。
+/// 不返回错误。来源缺失时返回 `false`，不能当成零分配。
 pub fn whole_document_readable<'a>(
     ledger_read: bool,
     mut sources: impl Iterator<Item = Option<&'a str>>,

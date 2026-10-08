@@ -1,4 +1,4 @@
-//! MongoDB `Database` accessors for workflow collections.
+//! 工作流集合的 MongoDB `Database` 访问器。
 
 mod approval_integration;
 mod bpm;

@@ -1,4 +1,4 @@
-//! Consumer port for warehouse-scoped inventory authorization facts.
+//! 按仓库范围计算库存授权事实的消费端口。
 
 use std::collections::BTreeSet;
 
@@ -9,17 +9,20 @@ use persistence_core::Executor;
 
 use crate::error::{Error, Result};
 
-/// Port inventory uses to compute warehouse-scoped authorization from identity facts.
+/// 库存用来从身份事实计算仓库范围授权的端口。
 #[async_trait]
 pub trait AuthorizationPort: Send + Sync {
-    /// Return inventory warehouse scopes for `actor` on the caller executor snapshot.
+    /// 在调用方执行器快照上返回 `actor` 的库存仓库范围。
     ///
-    /// # Parameters
-    /// * `actor` - authenticated audit actor
-    /// * `executor` - data-access executor chosen by the caller
+    /// # 参数
+    /// * `actor` - 已认证的审计操作者。
+    /// * `executor` - 调用方选择的数据访问执行器。
     ///
-    /// # Errors
-    /// Identity, policy or data-scope lookup failures.
+    /// # 返回
+    /// 返回该操作者的库存授权快照。
+    ///
+    /// # 错误
+    /// 身份、策略或数据范围查询失败时返回对应错误。
     async fn authorize(
         &self,
         actor: &AuditActor,
@@ -83,6 +86,15 @@ pub struct InventoryScopeMeta {
 
 impl InventoryScopeMeta {
     /// 无授权快照时的空元信息。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 范围版本、时点为空字符串，策略版本与组织版本为 0。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn empty() -> Self {
         Self {
             scope_version: String::new(),
@@ -102,6 +114,9 @@ impl InventoryScopeMeta {
     ///
     /// # 返回
     /// 返回可写入列表信封的元信息。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(
         scope_version: impl Into<String>,
         policy_version: u64,
@@ -117,21 +132,57 @@ impl InventoryScopeMeta {
     }
 
     /// 当前资源动作的范围指纹。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 范围版本字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn scope_version(&self) -> &str {
         &self.scope_version
     }
 
     /// 权限策略版本。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 权限策略版本。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn policy_version(&self) -> u64 {
         self.policy_version
     }
 
     /// 组织关系版本。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 组织关系版本。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn organization_version(&self) -> u64 {
         self.organization_version
     }
 
     /// 授权时点。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 授权时点字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_of(&self) -> &str {
         &self.as_of
     }
@@ -139,11 +190,29 @@ impl InventoryScopeMeta {
 
 impl WarehouseScope {
     /// 判断目标仓库是否落在已证明范围内。
+    ///
+    /// # 参数
+    /// * `warehouse_id` - 待判断的仓库标识。
+    ///
+    /// # 返回
+    /// 范围覆盖该仓库时为 `true`；范围为空或不包含该仓库时为 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn covers(&self, warehouse_id: &str) -> bool {
         self.0.as_ref().is_some_and(|coverage| coverage.covers(warehouse_id))
     }
 
     /// 缺仓库维或空目标时不贡献对象。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 内部覆盖为空时为 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_empty(&self) -> bool {
         self.0.is_none()
     }
@@ -152,6 +221,16 @@ impl WarehouseScope {
     ///
     /// `None` 仅表示公司级且调用方未指定仓库；`Some([])` 必须由 Repository
     /// 解释为空结果，禁止退化为全量查询。
+    ///
+    /// # 参数
+    /// * `requested` - 调用方指定的仓库；未指定时为 `None`。
+    ///
+    /// # 返回
+    /// 公司级且未指定仓库时返回 `None`。有限目标且未指定仓库时返回允许的仓库。
+    /// 指定仓库落在范围内时返回该仓库。范围为空，或指定仓库不在有限目标内时，返回空列表。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn repository_warehouse_ids(&self, requested: Option<WarehouseId>) -> Option<Vec<WarehouseId>> {
         match (&self.0, requested) {
             (Some(WarehouseCoverage::All), None) => None,
@@ -164,17 +243,46 @@ impl WarehouseScope {
         }
     }
 
-    /// Empty scope that covers no warehouse.
+    /// 不覆盖任何仓库的空范围。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回内部覆盖为 `None` 的范围。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn empty() -> Self {
         Self(None)
     }
 
-    /// Company-wide scope.
+    /// 公司级范围。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回覆盖全部仓库的范围。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn company() -> Self {
         Self(Some(WarehouseCoverage::All))
     }
 
-    /// Scope from warehouse id targets; empty input is fail-closed.
+    /// 由仓库标识目标构造范围；空输入失败关闭。
+    ///
+    /// 目标含 `*` 时为公司级。空集合时不覆盖任何仓库。
+    ///
+    /// # 参数
+    /// * `targets` - 仓库标识；`*` 表示全部仓库。
+    ///
+    /// # 返回
+    /// 返回去重后的仓库范围。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn from_targets(targets: Vec<String>) -> Self {
         Self(WarehouseCoverage::from_targets(targets))
     }
@@ -221,7 +329,16 @@ pub struct InventoryScopeSet {
 }
 
 impl InventoryAuthorization {
-    /// Inactive actor with empty warehouse scopes.
+    /// 未激活身份，且各仓库范围均为空。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 `actor_active` 为假、各仓库范围为空、列表元信息为空的授权快照。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn inactive() -> Self {
         Self {
             actor_active: false,
@@ -246,6 +363,9 @@ impl InventoryAuthorization {
     ///
     /// # 返回
     /// 返回带空列表元信息的授权快照。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn from_scope_set(scopes: InventoryScopeSet) -> Self {
         Self {
             actor_active: scopes.actor_active,
@@ -263,9 +383,26 @@ impl InventoryAuthorization {
         }
     }
 
-    /// Construct scopes computed by the composition adapter.
+    /// 由组合层计算出的各动作仓库范围构造授权快照。
     ///
     /// 历史位置参数入口，委托 [`Self::from_scope_set`]；外部组合层未迁移前保留。
+    ///
+    /// # 参数
+    /// * `actor_active` - 认证身份是否仍对应可登录账号。
+    /// * `balance_list_scope` - 余额列表范围。
+    /// * `balance_detail_scope` - 余额详情范围。
+    /// * `movement_list_scope` - 流水列表范围。
+    /// * `reservation_list_scope` - 预占列表范围。
+    /// * `adjustment_list_scope` - 调整列表范围。
+    /// * `read_scope` - 对象读取范围。
+    /// * `create_scope` - 调整创建范围。
+    /// * `update_scope` - 调整更新范围。
+    ///
+    /// # 返回
+    /// 返回带空列表元信息的授权快照。
+    ///
+    /// # 错误
+    /// 不返回错误。
     #[allow(clippy::too_many_arguments)]
     pub fn from_scopes(
         actor_active: bool,
@@ -300,6 +437,9 @@ impl InventoryAuthorization {
     ///
     /// # 返回
     /// 返回带范围信封的授权快照。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_list_meta(
         mut self,
         balance_list_meta: InventoryScopeMeta,
@@ -313,61 +453,169 @@ impl InventoryAuthorization {
     }
 
     /// 判断认证身份在事务快照内是否仍对应可登录账号。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 身份仍可登录时为 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn actor_is_active(&self) -> bool {
         self.actor_active
     }
 
     /// 返回库存余额列表的仓库范围。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 余额列表仓库范围。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn balance_list_scope(&self) -> &WarehouseScope {
         &self.balance_list_scope
     }
 
     /// 判断当前账号是否可读取目标仓库的库存余额详情。
+    ///
+    /// # 参数
+    /// * `warehouse_id` - 目标仓库标识。
+    ///
+    /// # 返回
+    /// 余额详情范围覆盖该仓库时为 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn can_read_balance_detail(&self, warehouse_id: &str) -> bool {
         self.balance_detail_scope.covers(warehouse_id)
     }
 
     /// 返回库存流水列表的仓库范围。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 流水列表仓库范围。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn movement_list_scope(&self) -> &WarehouseScope {
         &self.movement_list_scope
     }
 
     /// 返回库存预占列表的仓库范围。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 预占列表仓库范围。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn reservation_list_scope(&self) -> &WarehouseScope {
         &self.reservation_list_scope
     }
 
     /// 返回库存调整列表的联合 `list + detail` 仓库范围。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 调整列表仓库范围。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn adjustment_list_scope(&self) -> &WarehouseScope {
         &self.adjustment_list_scope
     }
 
     /// 返回对象读取仓库范围。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 对象读取仓库范围。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn read_scope(&self) -> &WarehouseScope {
         &self.read_scope
     }
 
     /// 判断当前账号是否可在目标仓库创建库存调整。
+    ///
+    /// # 参数
+    /// * `warehouse_id` - 目标仓库标识。
+    ///
+    /// # 返回
+    /// 创建范围覆盖该仓库时为 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn can_create(&self, warehouse_id: &str) -> bool {
         self.create_scope.covers(warehouse_id)
     }
 
     /// 判断当前账号是否可更新目标仓库的库存调整。
+    ///
+    /// # 参数
+    /// * `warehouse_id` - 目标仓库标识。
+    ///
+    /// # 返回
+    /// 更新范围覆盖该仓库时为 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn can_update(&self, warehouse_id: &str) -> bool {
         self.update_scope.covers(warehouse_id)
     }
 
     /// 余额列表授权指纹。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 余额列表的授权元信息。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn balance_list_meta(&self) -> &InventoryScopeMeta {
         &self.balance_list_meta
     }
 
     /// 流水列表授权指纹。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 流水列表的授权元信息。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn movement_list_meta(&self) -> &InventoryScopeMeta {
         &self.movement_list_meta
     }
 
     /// 调整列表授权指纹。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 调整列表的授权元信息。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn adjustment_list_meta(&self) -> &InventoryScopeMeta {
         &self.adjustment_list_meta
     }

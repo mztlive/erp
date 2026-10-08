@@ -295,6 +295,9 @@ fn apply_due_filter_at(
 /// 返回今日下界与明日上界。
 /// # 错误
 /// 工作时区窗口无法形成时返回错误。
+///
+/// # Panics
+/// `window.from` 为 `None` 时 panic。`WorkItemDueFilter::Today` 的窗口总会带下界，此分支不应发生。
 pub(super) fn business_day_bounds_at(now_unix_secs: i64) -> Result<(Instant, Instant)> {
     let window = WorkItemDueFilter::Today
         .window_at(Instant::from_unix_secs(now_unix_secs))

@@ -29,6 +29,15 @@ pub struct CostService {
 }
 impl CostService {
     /// 创建成本登记流程，复用入口数据库。
+    ///
+    /// # 参数
+    /// * `db` - 入口数据库。
+    ///
+    /// # 返回
+    /// 返回尚未执行登记的服务实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }

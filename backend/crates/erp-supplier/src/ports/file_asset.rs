@@ -1,4 +1,4 @@
-//! Consumer port for qualification attachment existence and sensitivity.
+//! 资质附件存在性与敏感级别的消费方端口。
 
 use async_trait::async_trait;
 use erp_core::ids::FileAssetId;

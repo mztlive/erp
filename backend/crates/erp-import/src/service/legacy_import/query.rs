@@ -25,8 +25,7 @@ impl LegacyImportService {
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
     ///
     /// # 错误
-    /// * `ValidationError` - 分页参数非法或排序字段不在白名单
-    /// * `RepositoryError` - 数据库查询失败
+    /// 分页或排序参数非法时返回 `ValidationError`。仓储查询失败时返回对应的导入领域错误，不限于 `RepositoryError`。
     pub async fn batch_list(
         &self,
         params: &LegacyImportBatchListParams,
@@ -50,8 +49,7 @@ impl LegacyImportService {
     /// 返回批次的响应视图（含 `background_job_id`）。
     ///
     /// # 错误
-    /// * `NotFound` - 批次不存在
-    /// * `RepositoryError` - 数据库查询失败
+    /// 批次不存在时返回 `NotFound`。批次读取失败时返回对应的导入领域错误。后台任务身份查询失败时返回端口错误。
     pub async fn batch_detail(&self, id: &str) -> Result<LegacyImportBatchView> {
         let batch = self
             .db
@@ -72,9 +70,8 @@ impl LegacyImportService {
     /// 返回契约形状的分页视图。
     ///
     /// # 错误
-    /// * `NotFound` - 批次不存在
-    /// * `ValidationError` - 分页参数非法或排序字段不在白名单
-    /// * `RepositoryError` - 数据库查询失败
+    /// 批次不存在时返回 `NotFound`。分页或排序参数非法时返回 `ValidationError`。
+    /// 批次核对或行查询的仓储失败返回对应的导入领域错误，不限于 `RepositoryError`。
     pub async fn row_list(
         &self,
         batch_id: &str,
@@ -131,7 +128,7 @@ impl LegacyImportService {
     /// 返回含 `background_job_id` 的响应视图。
     ///
     /// # 错误
-    /// 数据库查询失败时返回错误。
+    /// 后台任务身份查询失败时返回 [`crate::ports::BulkJobFactsPort`] 的错误，不是本方法直接查库。
     pub(super) async fn batch_view_of(&self, batch: LegacyImportBatch) -> Result<LegacyImportBatchView> {
         let background_job_id =
             self.bulk_jobs.background_job_id_by_request_id(&batch.batch_no, &mut NoTransaction).await?;
@@ -145,8 +142,11 @@ impl LegacyImportService {
     /// # 参数
     /// * `batch_id` - 导入批次 ID
     ///
+    /// # 返回
+    /// 批次存在时无返回值。
+    ///
     /// # 错误
-    /// * `NotFound` - 批次不存在
+    /// 批次不存在时返回 `NotFound`。仓储读取失败时返回对应的导入领域错误。
     async fn ensure_batch_exists(&self, batch_id: &str) -> Result<()> {
         self.db
             .legacy_import_batches()

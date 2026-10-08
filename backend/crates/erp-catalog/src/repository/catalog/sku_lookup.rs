@@ -43,6 +43,13 @@ impl<'a> CatalogRepository<'a> {
 
     /// 解析库存搜索的 SKU 编码、当前名称和规格，不匹配历史修订。
     ///
+    /// # 参数
+    /// * `keyword` - 已去除首尾空白的关键字
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回去重并按主键排序的命中 SKU 主键；无命中时返回空集合。
+    ///
     /// # 错误
     /// MongoDB 查询或反序列化失败。
     pub async fn inventory_sku_ids(&self, keyword: &str, executor: &mut dyn Executor) -> Result<Vec<SkuId>> {
@@ -398,9 +405,15 @@ impl<'a> CatalogRepository<'a> {
     /// * `attribute_values` - 待写入的修订规格属性值
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
+    /// # 返回
+    /// 条码占用（空条码则跳过）、SKU、首个修订与规格属性值都写入成功时返回 `Ok(())`。
+    /// 规格属性值为空时不插入该集合。
+    ///
     /// # 错误
-    /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
-    /// 为冲突语义）或 MongoDB 写入失败时返回错误。
+    /// 先调用 `claim_sku_barcode`：无事务会话返回 [`crate::Error::Internal`]，归属冲突、
+    /// 标识校验失败或占用写入失败返回对应的领域错误。随后的插入经
+    /// `From<persistence_core::Error>` 转换后返回：唯一索引冲突成为 [`crate::Error::ConflictError`]，
+    /// 不会原样透出 [`persistence_core::Error::DuplicateKey`]；其他仓储失败按该转换返回。
     pub async fn create_sku_with_revision(
         &self,
         sku: &Sku,

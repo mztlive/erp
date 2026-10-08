@@ -24,16 +24,28 @@ pub enum FieldUpdate<T> {
 impl<T> FieldUpdate<T> {
     /// 判断请求是否未携带该字段。
     ///
-    /// # 返回值
-    /// 更新意图为 [`FieldUpdate::Unchanged`] 时返回 `true`。
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 更新意图为 [`FieldUpdate::Unchanged`] 时返回 `true`，否则返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_unchanged(&self) -> bool {
         matches!(self, Self::Unchanged)
     }
 
     /// 将更新意图转换为创建可空字段时使用的值。
     ///
-    /// # 返回值
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
     /// `Set` 返回具体值，`Unchanged` 与 `Clear` 返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn into_option(self) -> Option<T> {
         match self {
             Self::Set(value) => Some(value),
@@ -44,7 +56,13 @@ impl<T> FieldUpdate<T> {
     /// 将更新意图应用到可空字段。
     ///
     /// # 参数
-    /// * `target` - 待更新的可空字段
+    /// * `target` - 待更新的可空字段。
+    ///
+    /// # 返回
+    /// 无返回值。`Unchanged` 不修改 `target`；`Clear` 将其设为 `None`；`Set` 写入具体值。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn apply_to(self, target: &mut Option<T>) {
         match self {
             Self::Unchanged => {},
@@ -92,6 +110,15 @@ where
     ///
     /// 显式 `null` 解析为 `Clear`，具体值解析为 `Set`；字段缺失由容器字段的
     /// `#[serde(default)]` 解析为 `Unchanged`。
+    ///
+    /// # 参数
+    /// * `deserializer` - serde 反序列化器。
+    ///
+    /// # 返回
+    /// 显式 `null` 返回 `Clear`，具体值返回 `Set`。本方法看不到字段缺失。
+    ///
+    /// # 错误
+    /// 内层 `T` 反序列化失败时返回 serde 错误。
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -113,6 +140,15 @@ where
     /// `#[serde(skip_serializing_if = "FieldUpdate::is_unchanged")]` 跳过
     /// `Unchanged`，否则往返后 `Unchanged` 会变为 `Clear`（保持不对称是已知
     /// 取舍，见类型级文档）。
+    ///
+    /// # 参数
+    /// * `serializer` - serde 序列化器。
+    ///
+    /// # 返回
+    /// `Set` 写入具体值；`Unchanged` 与 `Clear` 都写入 `null`。
+    ///
+    /// # 错误
+    /// `T` 序列化失败或写入失败时返回 serde 错误。
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,

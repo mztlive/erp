@@ -105,6 +105,16 @@ pub(crate) struct WorkbenchObjectFact {
     pub(super) display: WorkbenchObjectDisplay,
 }
 impl WorkbenchObjectFact {
+    /// 用权威事实生成展示，不另查显示层。
+    ///
+    /// # 参数
+    /// * `authority` - 命令侧对象事实。
+    ///
+    /// # 返回
+    /// 展示的根单据、标题、往来方、影响和提交摘要均复制自 `authority`；简报源保持为空。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn from_authority(authority: erp_workflow::ports::ObjectFact) -> Self {
         let display =
             WorkbenchObjectDisplay::new(authority.root_document_id.clone(), authority.label.clone())
@@ -377,6 +387,17 @@ pub(super) struct OwnedFulfillmentTask<'a> {
 
 impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 共享命令端的订单来源和公共范围判定；必须先过滤再分页或统计。
+    ///
+    /// # 参数
+    /// * `actor_id` - 当前账号。
+    /// * `facts` - 已装载的对象事实；就地删掉订单范围不允许的键。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 过滤完成后 `facts` 只保留仍在授权映射中的键。
+    ///
+    /// # 错误
+    /// 订单来源缺失、错配或授权查询失败时返回错误。
     pub(super) async fn filter_order_access(
         &self,
         actor_id: &str,
@@ -449,7 +470,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 无关键词扫描只装载授权、版本与订单来源；关键词保持原富显示检索语义。
     ///
     /// # 参数
-    /// `rows` 为本批候选；`with_display` 表示搜索依赖对象富显示；沿用调用方执行器。
+    /// `rows` 为本批候选；`with_display` 表示搜索依赖对象富显示；`executor` 为调用方执行器。
     /// # 返回
     /// 返回与原显示投影共享权威构造器的本批事实。
     /// # 错误
@@ -511,6 +532,16 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     }
 
     /// 批量读取当前页任务的权威对象事实，避免按行 N+1。
+    ///
+    /// # 参数
+    /// * `rows` - 当前页工作项行。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 返回这些行已注册对象的事实；未注册类型不进入映射。
+    ///
+    /// # 错误
+    /// 对象事实读取失败时返回错误。
     pub(super) async fn object_facts_for_rows(
         &self,
         rows: &[erp_workflow::WorkItemRow],
@@ -527,6 +558,16 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     }
 
     /// 按固定对象注册表分组查询；未注册类型不会进入本映射。
+    ///
+    /// # 参数
+    /// * `keys` - 对象种类与 ID。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 返回当前业务事实，并补上审批展示。
+    ///
+    /// # 错误
+    /// 业务事实或审批展示读取失败时返回错误。
     pub(super) async fn load_object_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -538,6 +579,16 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     }
 
     /// 读取当前业务事实；审批提交捕获与普通展示复用，禁止在此叠加旧快照。
+    ///
+    /// # 参数
+    /// * `keys` - 对象种类与 ID。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 返回销售、采购、履约、变更、资金及独立对象的当前事实，不含审批历史快照。
+    ///
+    /// # 错误
+    /// 任一类事实读取失败时返回错误。
     pub(super) async fn load_live_object_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,

@@ -56,8 +56,16 @@ impl Default for WorkingCopyFilter {
 impl QueryFilter for WorkingCopyFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// 有销售单时按 `sales_order_id` 等值过滤；有编辑目的或草稿状态时写入对应稳定代码。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(sales_order_id) = &self.sales_order_id {
@@ -76,8 +84,14 @@ impl QueryFilter for WorkingCopyFilter {
 impl Pagination for WorkingCopyFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `(page, page_size)` 元组。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -284,6 +298,9 @@ impl<'a> SalesOrderDomainRepository<'a> {
     /// * `submission` - 不可变提交快照头
     /// * `lines` - 不可变提交快照明细
     /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 返回
+    /// 提交头、明细写入且工作副本锁定成功时无返回值。
     ///
     /// # 错误
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）、乐观锁冲突或

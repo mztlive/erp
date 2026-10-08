@@ -1,4 +1,4 @@
-//! Warehouse MongoDB repositories and accessors.
+//! 仓库 MongoDB 仓储与访问器。
 
 pub mod extensions;
 pub mod owned;

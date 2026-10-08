@@ -17,7 +17,15 @@ use crate::{Error, Result};
 impl SupplierImportProcess {
     /// 加密保存输入并原子登记任务及行明细，不执行供应商写入。
     ///
-    /// 返回新任务或同载荷重放；参数、存储、事务错误及异载荷冲突向调用方返回。
+    /// # 参数
+    /// * `request` - 已解析的导入请求。
+    /// * `actor` - 提交人，参与源内容指纹。
+    ///
+    /// # 返回
+    /// 返回新建任务；同一提交身份且载荷相同则返回已有任务。
+    ///
+    /// # 错误
+    /// 请求校验失败、内容超过 10 MB、编码或保存失败、事务失败，或同一提交身份对应不同载荷时返回错误。
     pub async fn submit(
         &self,
         request: SupplierImportJobRequest,
@@ -89,12 +97,32 @@ impl SupplierImportProcess {
     }
 }
 
-/// 加密对象路径仅使用服务端生成的摘要，不接受客户端路径。
+/// 用服务端生成的摘要组成加密对象路径，不接受客户端路径。
+///
+/// # 参数
+/// * `source` - 源内容摘要的十六进制文本。
+///
+/// # 返回
+/// 返回 `supplier-import/{source}.enc`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn source_key(source: &str) -> String {
     format!("supplier-import/{source}.enc")
 }
 
-/// 构造有界任务聚合；源内容摘要参与父子指纹，覆盖全部模板字段。
+/// 构造有界任务聚合；源内容摘要写入任务身份，行明细覆盖全部模板行。
+///
+/// # 参数
+/// * `request` - 已校验的导入请求。
+/// * `actor` - 提交人账号。
+/// * `source` - 源内容摘要。
+///
+/// # 返回
+/// 返回待落库的任务和行明细。
+///
+/// # 错误
+/// 任务聚合构造失败时返回错误。
 pub(super) fn build_job(
     request: &SupplierImportJobRequest,
     actor: &str,
@@ -141,7 +169,17 @@ pub(super) fn build_job(
     .into_parts())
 }
 
-/// 同一提交身份不得切换操作者、业务类型或源数据。
+/// 同一提交身份不得切换操作者、业务类型或源数据；旧记录没有指纹时也拒绝。
+///
+/// # 参数
+/// * `existing` - 已落库的任务。
+/// * `proposed` - 本次请求构造的任务。
+///
+/// # 返回
+/// 操作者、业务类型和请求指纹都一致时返回。
+///
+/// # 错误
+/// 任一字段不一致或已有任务没有指纹时返回冲突。
 pub(super) fn ensure_replay(existing: &BackgroundJob, proposed: &BackgroundJob) -> Result<()> {
     if existing.requested_by != proposed.requested_by
         || existing.domain_job_type != proposed.domain_job_type

@@ -214,6 +214,9 @@ impl PartyView {
     /// # 返回
     /// 返回主体响应视图。
     ///
+    /// # 错误
+    /// 不返回错误。
+    ///
     /// 八个入参与投影行字段一一对应；clippy 参数计数在此放宽，行为与逐字段构造一致。
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_party_parts(
@@ -276,8 +279,8 @@ impl From<PartyRevision> for PartyRevisionView {
 impl PartyRevisionView {
     /// 从投影行构造响应视图，与 `From<PartyRevision>` 同语义（erp-party-007）。
     ///
-    /// 字段映射只在此内核中出现一处；实体路径与投影行路径均转调它，
-    /// 掩码语义不变。
+    /// 字段映射只在此内核中出现一处；实体路径与投影行路径均转调它。
+    /// 本函数不掩码、不改写名称。
     ///
     /// # 参数
     /// * `id` - 实体主键
@@ -290,6 +293,9 @@ impl PartyRevisionView {
     ///
     /// # 返回
     /// 返回修订响应视图。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(crate) fn from_revision_parts(
         id: String,
         revision_no: u32,
@@ -342,6 +348,9 @@ impl PartyListParams {
     ///
     /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
     ///
@@ -383,6 +392,15 @@ pub struct PartyRevisionListParams {
 }
 
 /// 将实体持有的末四位转换为稳定掩码；历史数据没有末四位时只返回通用掩码。
+///
+/// # 参数
+/// * `last4` - 已保存的末四位；空字符串表示历史数据没有末四位。
+///
+/// # 返回
+/// `last4` 为空时返回 `****`，否则返回 `****` 接上原末四位。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn masked_last4(last4: &str) -> String {
     if last4.is_empty() {
         return "****".to_string();

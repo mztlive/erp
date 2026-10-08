@@ -13,6 +13,15 @@ pub struct MongoCatalogSupplyQuery {
 }
 impl MongoCatalogSupplyQuery {
     /// 绑定数据库；构造不读取事实。
+    ///
+    /// # 参数
+    /// * `db` - 商品与供给集合所在数据库。
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的查询提供方。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: mongodb::Database) -> Self {
         Self { db }
     }

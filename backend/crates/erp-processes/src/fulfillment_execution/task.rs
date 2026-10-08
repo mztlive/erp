@@ -278,6 +278,7 @@ fn ensure_frozen_identity_fields(
     Err(Error::BusinessLogicError("履约任务责任身份与业务对象不一致，请联系管理员修复后重试".to_string()))
 }
 
+/// 开放履约任务必须恰好一条；缺失或重复都失败关闭。
 async fn load_single_open_task(
     db: &mongodb::Database,
     business_object_type: &str,
@@ -311,6 +312,7 @@ async fn open_fulfillment_tasks(
         .collect())
 }
 
+/// 入库与仓发取仓库经办人；直发、电子交付和服务履约取采购单当前负责人。
 async fn resolve_task_owner(
     db: &mongodb::Database,
     object: &FulfillmentTaskObject<'_>,
@@ -353,6 +355,7 @@ async fn resolve_task_owner(
     }
 }
 
+/// 仓库缺失或未配置对应经办人时不能形成责任任务。
 async fn warehouse_owner(
     db: &mongodb::Database,
     warehouse_id: &erp_core::ids::WarehouseId,
@@ -377,6 +380,7 @@ async fn warehouse_owner(
     })
 }
 
+/// 负责人取采购单当前责任人，责任组织取来源销售单结算主体。
 async fn purchase_order_owner(
     db: &mongodb::Database,
     purchase_order_id: &str,

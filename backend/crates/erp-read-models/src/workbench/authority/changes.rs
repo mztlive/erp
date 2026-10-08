@@ -1,4 +1,4 @@
-//! Sales-change and purchase-change object facts for remaining-domain authorization.
+//! 销售变更与采购变更的对象事实，供其余领域授权使用。
 
 use std::collections::{HashMap, HashSet};
 
@@ -24,7 +24,18 @@ struct PurchaseChangeFactContext {
 }
 
 impl super::WorkItemFactsReader {
-    /// Load sales-change identity, counterparty and impact.
+    /// 装载销售变更的身份、往来方与影响。
+    ///
+    /// # 参数
+    /// * `keys` - 本批对象键；没有销售变更键时不读取。
+    /// * `facts` - 输出事实表。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 成功时按变更单写入事实；来源单号、基准修订或当前提交缺失时仍写入能确定的字段。
+    ///
+    /// # 错误
+    /// 变更单、来源销售单、基准修订或提交读取失败时返回错误。
     pub(in crate::workbench) async fn load_sales_change_review_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -58,7 +69,18 @@ impl super::WorkItemFactsReader {
         Ok(())
     }
 
-    /// Load purchase-change identity, counterparty and impact.
+    /// 装载采购变更的身份、往来方与影响。
+    ///
+    /// # 参数
+    /// * `keys` - 本批对象键；没有采购变更键时不读取。
+    /// * `facts` - 输出事实表。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 成功时按变更单写入事实；来源单号、基准修订或当前提交缺失时仍写入能确定的字段。
+    ///
+    /// # 错误
+    /// 变更单、来源采购单、基准修订或提交读取失败时返回错误。
     pub(in crate::workbench) async fn load_purchase_change_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -148,6 +170,18 @@ impl super::WorkItemFactsReader {
 }
 
 /// 从已读取的变更单、基准与当前提交构造唯一权威投影。
+///
+/// # 参数
+/// * `change` - 销售变更单。
+/// * `sales_no` - 来源销售单号；缺失时标题标明待补全。
+/// * `base` - 基准销售修订；提交没有客户名时回退它。
+/// * `submission` - 当前提交；优先提供客户名。
+///
+/// # 返回
+/// 返回变更单事实。订单范围来源为所属销售单，影响固定为不审批则变更不能生效。
+///
+/// # 错误
+/// 不返回错误。
 pub(in crate::workbench) fn sales_change_fact(
     change: &SalesChangeOrder,
     sales_no: Option<&str>,
@@ -170,6 +204,18 @@ pub(in crate::workbench) fn sales_change_fact(
 }
 
 /// 从已读取的变更单、基准与当前提交构造唯一权威投影。
+///
+/// # 参数
+/// * `change` - 采购变更单。
+/// * `purchase_no` - 来源采购单号；缺失时标题标明待补全。
+/// * `base` - 基准采购修订；提交没有供应商名时回退它。
+/// * `submission` - 当前提交；优先提供供应商名。
+///
+/// # 返回
+/// 返回变更单事实。订单范围来源为所属采购单，影响固定为不审批则变更不能生效。
+///
+/// # 错误
+/// 不返回错误。
 pub(in crate::workbench) fn purchase_change_fact(
     change: &PurchaseChangeOrder,
     purchase_no: Option<&str>,

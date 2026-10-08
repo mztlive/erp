@@ -85,6 +85,9 @@ where
 ///
 /// # 返回
 /// 无返回值；直接修改传入的查询文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn apply_warehouse_scope_filter(filter: &mut Document, warehouse_ids: Option<&[WarehouseId]>) {
     if let Some(warehouse_ids) = warehouse_ids {
         filter.insert(
@@ -104,6 +107,9 @@ pub(super) fn apply_warehouse_scope_filter(filter: &mut Document, warehouse_ids:
 ///
 /// # 返回
 /// 返回含未删除过滤与仓库范围的查询文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn scoped_base_filter(warehouse_ids: Option<&[WarehouseId]>) -> Document {
     let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
     apply_warehouse_scope_filter(&mut filter, warehouse_ids);
@@ -118,6 +124,9 @@ pub(super) fn scoped_base_filter(warehouse_ids: Option<&[WarehouseId]>) -> Docum
 ///
 /// # 返回
 /// 返回带 `id` 同向 tie-breaker 的排序文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn with_id_tie_breaker(mut sort: Document, sort_ascending: bool) -> Document {
     sort.insert("id", if sort_ascending { 1 } else { -1 });
     sort
@@ -162,11 +171,27 @@ where
 ///
 /// # 返回
 /// 返回字符串集合。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn ids_to_strings<T: AsRef<str>>(ids: &[T]) -> Vec<String> {
     ids.iter().map(|id| id.as_ref().to_string()).collect()
 }
 
-/// 按给定字段 `$in` 批量读取实体（空集合直接返回空列表）。
+/// 按给定字段 `$in` 批量读取未删除实体。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `collection_name` - 集合名。
+/// * `field` - 参与 `$in` 的字段名。
+/// * `values` - 字段值；空集合直接返回空列表。
+/// * `executor` - 数据访问执行器。
+///
+/// # 返回
+/// 返回命中的未删除实体。
+///
+/// # 错误
+/// MongoDB 查询或游标读取失败时返回错误。
 pub(super) async fn find_by_field_in<T>(
     db: &Database,
     collection_name: &str,
@@ -218,7 +243,10 @@ pub(super) fn to_bson(quantity: Quantity) -> Result<Bson> {
 /// * `quantity` - 定点数量
 ///
 /// # 返回
-/// Decimal128 返回符号位翻转后的值；其他 BSON 值原样克隆返回。
+/// `Decimal128` 返回符号位翻转后的值；其他 BSON 值原样克隆返回。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn negate_bson(quantity: &Bson) -> Bson {
     let Bson::Decimal128(decimal) = quantity else {
         return quantity.clone();
@@ -228,12 +256,12 @@ pub(super) fn negate_bson(quantity: &Bson) -> Bson {
     Bson::Decimal128(mongodb::bson::Decimal128::from_bytes(bytes))
 }
 
-/// 构建原子 `$inc` 更新的公共原语（含 `version` 与 `updated_at` 元数据）。
+/// 构建原子 `$inc` 更新的公共原语（含 `updated_at`，不含 `version`）。
 ///
-/// 调用方以 `(字段, 系数)` 对声明每个字段的增减方向；符号翻转由本函数统一处理。
+/// 数量按原值写入 `$inc`，不翻转符号；减少由调用方先取相反数。
 ///
 /// # 参数
-/// * `fields` - 字段与增减系数的对列表（系数 `1` 为增加，`-1` 为减少）
+/// * `fields` - 字段名与要写入 `$inc` 的数量。
 ///
 /// # 返回
 /// 返回更新条件文档。
@@ -263,6 +291,9 @@ pub(super) fn inc_update(fields: &[(&str, Quantity)]) -> Result<Document> {
 ///
 /// # 错误
 /// 数量无法表示为 Decimal128 时返回错误。
+///
+/// # Panics
+/// `inc_update` 的成功结果恒含 `$inc`；缺失时 panic。
 pub(super) fn both_inc(quantity: Quantity, field_a: &str, field_b: &str) -> Result<Document> {
     let mut update = inc_update(&[(field_a, quantity), (field_b, quantity)])?;
     update.get_document_mut("$inc").expect("inc_update 恒含 $inc").insert("version", 1);
@@ -281,6 +312,9 @@ pub(super) fn both_inc(quantity: Quantity, field_a: &str, field_b: &str) -> Resu
 ///
 /// # 错误
 /// 数量无法表示为 Decimal128 时返回错误。
+///
+/// # Panics
+/// `inc_update` 的成功结果恒含 `$inc` 与两个声明字段；缺失时 panic。
 pub(super) fn both_dec(quantity: Quantity, field_a: &str, field_b: &str) -> Result<Document> {
     let mut update = inc_update(&[(field_a, quantity), (field_b, quantity)])?;
     let inc = update.get_document_mut("$inc").expect("inc_update 恒含 $inc");
@@ -304,6 +338,9 @@ pub(super) fn both_dec(quantity: Quantity, field_a: &str, field_b: &str) -> Resu
 ///
 /// # 错误
 /// 数量无法表示为 Decimal128 时返回错误。
+///
+/// # Panics
+/// `inc_update` 的成功结果恒含 `$inc` 与 `decrease_field`；缺失时 panic。
 pub(super) fn cross_inc(quantity: Quantity, increase_field: &str, decrease_field: &str) -> Result<Document> {
     let mut update = inc_update(&[(increase_field, quantity), (decrease_field, quantity)])?;
     let inc = update.get_document_mut("$inc").expect("inc_update 恒含 $inc");
@@ -321,7 +358,10 @@ pub(super) fn cross_inc(quantity: Quantity, increase_field: &str, decrease_field
 /// * `allowed` - 允许的排序字段白名单
 ///
 /// # 返回
-/// 返回排序条件文档。
+/// 返回排序条件文档。字段不在白名单或未提供时使用 `created_at`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     let field = sort_by.filter(|field| allowed.contains(field)).unwrap_or("created_at");

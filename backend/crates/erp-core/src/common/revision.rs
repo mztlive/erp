@@ -22,6 +22,9 @@ impl RevisionBase {
     ///
     /// # 返回
     /// 返回修订公共字段实例。
+    ///
+    /// # 错误
+    /// 不返回错误。不校验序号是否从 1 开始。
     pub fn new(revision_no: u32) -> Self {
         Self { revision_no }
     }

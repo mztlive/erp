@@ -170,7 +170,7 @@ impl Warehouse {
     /// 返回新建的仓库实体。
     ///
     /// # 错误
-    /// 当 warehouse_code 为空或超长时返回错误。
+    /// 仓库代码为空或超长，或经办人账号超长时返回错误。空白经办人视为未配置，不报错。
     pub fn new(id: WarehouseId, data: WarehouseData, created_by: impl Into<String>) -> Result<Self> {
         let warehouse_code = normalize_required_text(
             data.warehouse_code,
@@ -201,6 +201,9 @@ impl Warehouse {
     ///
     /// # 返回
     /// 更新成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 经办人账号超长，或启停迁移被 `ensure_transition` 拒绝时返回错误。
     pub fn update(&mut self, update: WarehouseUpdate, updated_by: impl Into<String>) -> Result<()> {
         if let Some(status) = update.status {
             ensure_transition(self.stable.status, status)?;
@@ -241,14 +244,23 @@ impl Warehouse {
     ///
     /// # 返回
     /// 当前版本等于期望版本时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn matches_version(&self, expected: u64) -> bool {
         self.base.version == expected
     }
 
     /// 判断仓库是否处于启用状态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为 `Active` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         self.stable.status().is_active()
     }

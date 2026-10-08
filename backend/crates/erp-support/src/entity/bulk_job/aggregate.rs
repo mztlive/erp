@@ -41,6 +41,14 @@ pub struct BulkSelectionSnapshotAggregate {
 impl BulkSelectionSnapshotAggregate {
     /// 构造选择快照及全部冻结目标。
     ///
+    /// # 参数
+    /// * `id` - 选择快照主键，同时写入每个子项
+    /// * `data` - 快照创建数据
+    /// * `drafts` - 冻结目标草稿，顺序即子项顺序
+    ///
+    /// # 返回
+    /// 返回已通过父子校验的聚合。
+    ///
     /// # 错误
     /// 空目标、目标数超出 `u32`，或任一父子实体校验失败时返回错误。
     pub fn new(
@@ -81,6 +89,15 @@ impl BulkSelectionSnapshotAggregate {
     }
 
     /// 消费聚合并返回父实体与按输入顺序构造的子项。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回父快照与子项；子项顺序与构造时的草稿顺序一致。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn into_parts(self) -> (BulkSelectionSnapshot, Vec<BulkSelectionItem>) {
         (self.snapshot, self.items)
     }
@@ -124,8 +141,16 @@ pub struct BackgroundJobAggregate {
 impl BackgroundJobAggregate {
     /// 构造后台任务及全部逐项记录。
     ///
+    /// # 参数
+    /// * `id` - 后台任务主键，同时写入每个子项
+    /// * `data` - 任务创建数据；`declared_total_count` 必须等于草稿条数
+    /// * `drafts` - 逐项草稿，顺序决定 `item_no`（从 1 起）
+    ///
+    /// # 返回
+    /// 返回已附加请求指纹的聚合。
+    ///
     /// # 错误
-    /// 空目标、目标数超出 `u32`，或任一父子实体校验失败时返回错误。
+    /// 逐项为空、声明总数与逐项数量不一致、序号超出 `u32`，或任一父子实体校验失败时返回错误。
     pub fn new(
         id: BackgroundJobId,
         data: BackgroundJobAggregateData,
@@ -179,6 +204,15 @@ impl BackgroundJobAggregate {
     }
 
     /// 消费聚合并返回父实体与严格按 `1..=N` 排列的子项。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回父任务与按序号升序排列的子项。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn into_parts(self) -> (BackgroundJob, Vec<BackgroundJobItem>) {
         (self.job, self.items)
     }
@@ -212,6 +246,7 @@ fn background_job_fingerprint(job: &BackgroundJob, items: &[BackgroundJobItem]) 
     CommandFingerprint::from_parts(parts)
 }
 
+/// 把可选字段编码进指纹：`Some` 写 `some` 与值，`None` 写 `none`，避免缺省与空串混淆。
 fn push_optional(parts: &mut Vec<String>, value: Option<&str>) {
     match value {
         Some(value) => {

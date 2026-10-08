@@ -1,4 +1,4 @@
-//! 已绑定领域集合的 ID 查询和精确清理机械能力。
+//! 已绑定领域集合的关联 ID 查询。
 
 use mongodb::Collection;
 use mongodb::bson::{Bson, Document, doc};
@@ -27,10 +27,12 @@ impl<T: Serialize + DeserializeOwned + Send + Sync> Repository<'_, T> {
     ///
     /// # 参数
     /// 无。
+    ///
     /// # 返回
     /// 返回绑定同一集合的操作入口。
+    ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn ids(&self) -> IdRepository {
         IdRepository { collection: self.collection().clone_with_type() }
     }
@@ -40,15 +42,17 @@ impl IdRepository {
     /// 按指定字段精确匹配 ID 集合，保留软删除记录。
     ///
     /// # 参数
-    /// * `field` - 外键字段
-    /// * `values` - 精确匹配值；空集合不查询
-    /// * `parent` - 可选父键投影字段
-    /// * `tag` - 可选分类键投影字段
-    /// * `executor` - 调用方事务执行器
+    /// * `field` - 外键字段。
+    /// * `values` - 精确匹配值；空集合不查询。
+    /// * `parent` - 可选父键投影字段。
+    /// * `tag` - 可选分类键投影字段。
+    /// * `executor` - 数据访问执行器，不要求处于事务中。
+    ///
     /// # 返回
-    /// 返回匹配记录的 ID 及投影字段。
+    /// 返回匹配记录的 `id`，以及请求投影的父键和分类键。
+    ///
     /// # 错误
-    /// 查询失败或文档缺少合法 ID 时返回错误。
+    /// 查询失败时返回下层错误。文档缺少有效 `id`、`parent` 指定的父键缺失，或投影字段类型与内容无效时返回 `EntityMetadataOutOfRange`。
     pub async fn linked(
         &self,
         field: &str,

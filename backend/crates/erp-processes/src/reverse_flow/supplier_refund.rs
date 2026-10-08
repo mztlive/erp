@@ -96,6 +96,17 @@ impl ReturnsProcess {
     ///
     /// 单据注册、定义绑定、退款实体、审批快照、运行事实、入口任务和审计在同一
     /// MongoDB 事务内完成。
+    ///
+    /// # 参数
+    /// * `req` - 一次创建并提交的请求。
+    /// * `actor` - 已通过鉴权的审计操作人。
+    ///
+    /// # 返回
+    /// 返回新建退款单视图；同载荷命令已提交时返回已有退款单视图。
+    ///
+    /// # 错误
+    /// 请求校验、命令收据、原付款、发布定义、审批启动或仓储写入失败时返回对应错误。
+    /// 提交结果未知时按同一命令回读，未确认则保留原错误。视图读取失败时返回对应错误。
     pub async fn commit_supplier_refund(
         &self,
         req: CommitSupplierRefundRequest,
@@ -742,8 +753,18 @@ async fn persist_bound_supplier_refund_document(
 
 /// 在最终通过事务内执行过账副作用并写回退款单。
 ///
+/// # 参数
+/// * `db` - 数据库。
+/// * `refund_id` - 退款单主键。
+/// * `actor_id` - 过账操作人 ID。
+/// * `actor` - 审计操作人。
+/// * `executor` - 最终通过事务的执行器；本函数不再开启事务。
+///
+/// # 返回
+/// 成功时无返回值。退款单已过账并写回。
+///
 /// # 错误
-/// 非审批中、原付款不存在或仓储失败时返回错误。
+/// 非审批中、原付款不存在、累计超额或仓储失败时返回错误。
 pub(super) async fn apply_supplier_refund_final_post(
     db: &Database,
     refund_id: &str,

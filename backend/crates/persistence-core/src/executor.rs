@@ -12,11 +12,14 @@ use mongodb::ClientSession;
 pub trait Executor: Send {
     /// 返回本次操作应当加入的 MongoDB 会话。
     ///
-    /// # 返回值
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
     /// 事务执行器返回 `Some(&mut ClientSession)`；非事务执行器返回 `None`。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     fn session(&mut self) -> Option<&mut ClientSession>;
 }
 
@@ -29,11 +32,14 @@ pub struct NoTransaction;
 impl Executor for NoTransaction {
     /// 返回空会话，表示本次操作不加入任何事务。
     ///
-    /// # 返回值
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
     /// 恒为 `None`。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     fn session(&mut self) -> Option<&mut ClientSession> {
         None
     }
@@ -45,11 +51,14 @@ impl Executor for ClientSession {
     /// 该实现使事务会话可作为执行器传入 Repository；`with_transaction`
     /// 回调只暴露 `&mut dyn Executor`，不把会话类型传到业务层。
     ///
-    /// # 返回值
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
     /// 恒为 `Some(self)`。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     fn session(&mut self) -> Option<&mut ClientSession> {
         Some(self)
     }
@@ -61,11 +70,14 @@ where
 {
     /// 透传被借用执行器的会话。
     ///
-    /// # 返回值
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
     /// 返回内层执行器的会话。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     fn session(&mut self) -> Option<&mut ClientSession> {
         (**self).session()
     }

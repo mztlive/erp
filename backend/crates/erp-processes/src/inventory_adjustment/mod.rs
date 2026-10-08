@@ -1,4 +1,4 @@
-//! Named inventory-adjustment process: create, submit, cancel and post.
+//! 库存调整流程：创建、提交、撤回与过账。
 
 use std::sync::Arc;
 
@@ -34,31 +34,63 @@ pub struct InventoryAdjustmentService {
 }
 
 impl InventoryAdjustmentService {
-    /// Create an inventory-adjustment process bound to `db`.
+    /// 创建绑定到 `db` 的库存调整流程服务。
     ///
-    /// # Parameters
-    /// * `db` - MongoDB database handle shared by domain repositories
-    /// * `rbac` - shared RBAC used by approval binding and authorization
+    /// # 参数
+    /// * `db` - 各领域仓储共用的 MongoDB 数据库。
+    /// * `rbac` - 审批绑定与授权使用的共享 RBAC。
     ///
-    /// # Returns
-    /// Process service that reuses one Executor per command.
+    /// # 返回
+    /// 返回按命令复用执行器的流程服务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
         Self { db, rbac, object_read: Arc::new(erp_workflow::FailClosedObjectReadPort) }
     }
 
-    /// Inject composition-root object-read for approval binding.
+    /// 注入组合根的对象读取端口，供审批绑定使用。
+    ///
+    /// 消耗 `self` 并替换对象读取实现。
+    ///
+    /// # 参数
+    /// * `object_read` - 组合根提供的审批对象读取端口。
+    ///
+    /// # 返回
+    /// 返回替换对象读取端口后的流程服务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_object_read(mut self, object_read: Arc<dyn ApprovalObjectReadPort>) -> Self {
         self.object_read = object_read;
         self
     }
 
     /// 库存领域服务，供流程读取调整单表头、明细与过账流水。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回绑定当前数据库与 RBAC 的库存领域服务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn inventory(&self) -> erp_inventory::InventoryService {
         crate::adapters::inventory_service(self.db.clone(), self.rbac.clone())
     }
 }
 
-/// Process module name.
+/// 流程模块名称。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回固定名称 `inventory_adjustment`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn process_name() -> &'static str {
     "inventory_adjustment"
 }

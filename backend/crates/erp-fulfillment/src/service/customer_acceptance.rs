@@ -25,6 +25,8 @@ impl FulfillmentService {
     ///
     /// # 参数
     /// * `params` - 查询参数（`sales_order_id`/`status` 扁平筛选）
+    /// * `authorized_sales_order_ids` - 已授权销售单主键；`None` 不收窄，`Some` 时只保留这些销售单，空集合不匹配任何记录
+    /// * `executor` - 数据访问执行器
     ///
     /// # 返回
     /// 返回契约形状的分页视图。
@@ -95,12 +97,16 @@ impl FulfillmentService {
     }
 
     /// 在调用方已授权的事务内读取验收详情。
+    ///
     /// # 参数
-    /// `id` 为验收身份，`executor` 为调用方执行器。
+    /// * `id` - 验收单主键
+    /// * `executor` - 调用方执行器
+    ///
     /// # 返回
-    /// 表头、行与分配。
+    /// 返回表头、行与分配。
+    ///
     /// # 错误
-    /// 对象不存在或读取失败时拒绝。
+    /// 对象不存在或读取失败时返回错误。
     pub async fn load_customer_acceptance(
         &self,
         id: &str,
@@ -177,8 +183,16 @@ impl From<AcceptanceFulfillmentAllocation> for AcceptanceAllocationView {
 
 /// 按创建入口原顺序构造验收表头及验收行；单号由组合层在原时点取得。
 ///
+/// # 参数
+/// * `id` - 验收单主键
+/// * `acceptance_no` - 已取得的验收单号
+/// * `req` - 创建请求
+///
+/// # 返回
+/// 返回验收表头及其行。
+///
 /// # 错误
-/// 表头或行数量无效时返回原领域错误。
+/// 表头构造失败时返回对应领域错误；验收行构造失败时返回 `Logic`。
 pub fn prepare_customer_acceptance_draft(
     id: erp_core::ids::CustomerAcceptanceId,
     acceptance_no: String,

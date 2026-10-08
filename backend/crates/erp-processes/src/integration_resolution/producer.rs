@@ -2,8 +2,7 @@
 //!
 //! 责任角色、任务类型与优先级由 `erp_integration::entity::integration_ops`
 //! 的 W29 政策独占，真实任务由 `super::work_item_factory` 装配；本模块只生成
-//! 任务主键、传入当前责任人与时间并
-//! 映射错误，不维护第二份规则。
+//! 任务主键与当前时间并映射错误，不维护第二份规则。
 
 use erp_core::common::time::Instant;
 use erp_core::ids::WorkItemId;
@@ -19,8 +18,7 @@ use crate::{Error, Result};
 /// 构造指定到人的错误处理任务（主键与时间由服务注入）。
 ///
 /// # 参数
-/// * `task` - 集成错误事实
-/// * `owner_user_id` - 创建时明确解析的当前责任人
+/// * `task` - 集成错误事实。责任人由领域政策从该事实解析，不另收参数。
 ///
 /// # 返回
 /// 返回新建的开放正式责任任务。
@@ -37,8 +35,7 @@ pub(crate) fn error_work_item(task: &IntegrationErrorTask) -> Result<WorkItem> {
 /// 构造指定到人的对账差异任务（主键与时间由服务注入）。
 ///
 /// # 参数
-/// * `difference` - 对账差异事实
-/// * `owner_user_id` - 创建时明确解析的当前责任人
+/// * `difference` - 对账差异事实。责任人由领域政策从该事实解析，不另收参数。
 ///
 /// # 返回
 /// 返回新建的开放正式责任任务。

@@ -230,6 +230,9 @@ impl ContractReadScope {
 ///
 /// # 返回
 /// 返回收窄后的授权集合；`None` 表示公司范围。
+///
+/// # 错误
+/// 不返回错误。
 pub fn narrow_authorized_customers(
     customer_id: Option<&str>,
     customer_ids: Option<&[String]>,

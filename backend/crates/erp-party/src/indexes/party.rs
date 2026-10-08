@@ -40,6 +40,9 @@ pub(crate) const PARTY_BANK_ACCOUNTS: &str = <mongodb::Database as PartyExt>::PA
 /// # 参数
 /// * `db` - 目标 MongoDB 数据库
 ///
+/// # 返回
+/// 全部目标集合的命名索引创建成功时返回 `Ok(())`。
+///
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {

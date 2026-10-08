@@ -13,14 +13,44 @@ pub(super) struct Rejection {
 }
 
 impl Rejection {
+    /// 标记错误正文尚未读完。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `body_state` 为 `pending` 的拒绝记录。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn pending() -> Self {
         Self { body_state: Some("pending"), ..Self::default() }
     }
 
+    /// 记录错误正文读取失败，不保存正文。
+    ///
+    /// # 参数
+    /// * `error` - 读取失败的诊断文本。
+    ///
+    /// # 返回
+    /// `body_state` 为 `read_failed` 的拒绝记录。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn read_failed(error: String) -> Self {
         Self { body_state: Some("read_failed"), read_error: Some(error), ..Self::default() }
     }
 
+    /// 保留完整错误正文；能解析 JSON 时展开常见错误字段。
+    ///
+    /// # 参数
+    /// * `body` - 供应商返回的完整错误正文。
+    ///
+    /// # 返回
+    /// `body_state` 为 `received` 的拒绝记录。非 JSON 时只保留正文。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn parse(body: String) -> Self {
         let mut result = Self { body_state: Some("received"), body: Some(body), ..Self::default() };
         if let Some(value) = result.body.as_deref().and_then(|body| serde_json::from_str::<Value>(body).ok())

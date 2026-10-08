@@ -57,64 +57,124 @@ pub trait FulfillmentExt {
 
     /// 获取 `purchase_receipt` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `PurchaseReceiptRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn purchase_receipts(&self) -> PurchaseReceiptRepository<'_>;
 
     /// 获取 `purchase_receipt_line` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `persistence_core::Repository<'_, crate::entity::fulfillment::PurchaseReceiptLine>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn purchase_receipt_lines(&self) -> persistence_core::Repository<'_, PurchaseReceiptLine>;
 
     /// 获取 `delivery` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `DeliveryRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn deliveries(&self) -> DeliveryRepository<'_>;
 
     /// 获取 `delivery_line` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `persistence_core::Repository<'_, crate::entity::fulfillment::DeliveryLine>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn delivery_lines(&self) -> persistence_core::Repository<'_, DeliveryLine>;
 
     /// 获取 `electronic_delivery` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `ElectronicDeliveryRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn electronic_deliveries(&self) -> ElectronicDeliveryRepository<'_>;
 
     /// 获取 `service_fulfillment` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `ServiceFulfillmentRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn service_fulfillments(&self) -> ServiceFulfillmentRepository<'_>;
 
     /// 获取 `customer_acceptance` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `CustomerAcceptanceRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn customer_acceptances(&self) -> CustomerAcceptanceRepository<'_>;
 
     /// 获取 `customer_acceptance_line` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `persistence_core::Repository<'_, crate::entity::fulfillment::CustomerAcceptanceLine>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn customer_acceptance_lines(&self) -> persistence_core::Repository<'_, CustomerAcceptanceLine>;
 
     /// 获取 `acceptance_fulfillment_allocation` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `persistence_core::Repository<'_, crate::entity::fulfillment::AcceptanceFulfillmentAllocation>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn acceptance_fulfillment_allocations(
         &self,
     ) -> persistence_core::Repository<'_, AcceptanceFulfillmentAllocation>;
 
     /// 获取承载跨集合写入的域专用仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `FulfillmentRepository` 实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn fulfillment(&self) -> FulfillmentRepository<'_>;
 }
 

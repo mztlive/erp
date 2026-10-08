@@ -1,4 +1,4 @@
-//! Cross-domain invoice posting steps sharing the root transaction executor.
+//! 销项发票过账的跨域步骤，全程共用根事务执行器。
 
 use application_core::{AuditActor, CommandReceipt};
 use async_trait::async_trait;
@@ -37,7 +37,7 @@ fn dedup_sorted(mut ids: Vec<String>) -> Vec<String> {
     ids
 }
 
-/// Immutable posting intent validated by the root invoice command.
+/// 根发票命令已校验的不可变过账意图。
 pub(super) struct InvoicePostingInput<'a> {
     pub work_item_id: &'a WorkItemId,
     pub expected_task_version: u64,
@@ -47,10 +47,21 @@ pub(super) struct InvoicePostingInput<'a> {
     pub command_receipt: Option<&'a CommandReceipt>,
 }
 
-/// Post a validated invoice through finance, workflow, sales and audit in the existing transaction.
+/// 在调用方已有事务中，按既定顺序把已校验发票写入财务、任务、销售和审计。
 ///
-/// The root owns authorization, duplicate checks and commit recovery. This operation
-/// preserves the prior step order and returns the first error without further writes.
+/// 授权、重复检查和提交恢复由根命令负责。本函数保持原步骤顺序，首次失败后不再继续写入。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `invoice` - 待过账发票；执行活动成功时写回开票申请 ID。
+/// * `input` - 根命令已校验的过账意图。
+/// * `executor` - 调用方事务执行器，各步骤共用。
+///
+/// # 返回
+/// 全部步骤成功时无返回值。
+///
+/// # 错误
+/// 执行活动、财务事实、审计、任务同步、销售进度或命令回执任一步失败时返回该错误。
 pub(super) async fn post_invoice_apply(
     db: &Database,
     invoice: &mut Invoice,
@@ -68,19 +79,26 @@ pub(super) async fn post_invoice_apply(
     execute_posting(&mut steps, executor).await
 }
 
-/// Invoice posting capabilities; each operation receives the unchanged root executor.
+/// 发票过账步骤；每步都使用调用方传入的同一执行器。
 #[async_trait]
 trait InvoicePostingSteps: Send {
+    /// 根命令是否携带需要在最后写入的收据。
     fn has_command_receipt(&self) -> bool;
+    /// 记录开票执行活动；失败则不再写财务事实。
     async fn record_execution(&mut self, executor: &mut dyn Executor) -> Result<()>;
+    /// 写入销项发票的财务分配事实。
     async fn persist_finance(&mut self, executor: &mut dyn Executor) -> Result<()>;
+    /// 在财务事实写入后记录过账审计。
     async fn write_posting_audit(&mut self, executor: &mut dyn Executor) -> Result<()>;
+    /// 按受影响应收子账同步开票任务。
     async fn synchronize_tasks(&mut self, executor: &mut dyn Executor) -> Result<()>;
+    /// 刷新相关销售单的资金进度。
     async fn update_sales_progress(&mut self, executor: &mut dyn Executor) -> Result<()>;
+    /// 有根收据时保存命令回执；无收据时由编排跳过。
     async fn write_command_receipt(&mut self, executor: &mut dyn Executor) -> Result<()>;
 }
 
-/// Preserve execution activity, finance facts, audit, tasks, sales and root receipt order.
+/// 按执行活动、财务事实、审计、任务、销售进度和根回执的顺序推进，首错即停。
 async fn execute_posting(steps: &mut impl InvoicePostingSteps, executor: &mut dyn Executor) -> Result<()> {
     steps.record_execution(executor).await?;
     steps.persist_finance(executor).await?;
@@ -93,7 +111,7 @@ async fn execute_posting(steps: &mut impl InvoicePostingSteps, executor: &mut dy
     Ok(())
 }
 
-/// Repository and service adapters for the actual posting path.
+/// 正式过账路径使用的仓储与服务适配。
 struct MongoInvoicePosting<'a> {
     db: &'a Database,
     invoice: &'a mut Invoice,
@@ -217,6 +235,16 @@ impl InvoicePostingSteps for MongoInvoicePosting<'_> {
         Ok(())
     }
 
+    /// 缺少已生成的审计事件 ID 时返回内部错误，不写回执。
+    ///
+    /// # 参数
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 无命令回执时不写。有回执且已有审计事件时，回执保存成功。
+    ///
+    /// # 错误
+    /// 有回执但 `audit_event_id` 尚未生成时返回 `Internal`，且不写回执。回执保存失败时返回对应错误。
     async fn write_command_receipt(&mut self, executor: &mut dyn Executor) -> Result<()> {
         if let Some(receipt) = self.input.command_receipt {
             let event_id = self

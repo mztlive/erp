@@ -11,11 +11,31 @@ pub struct QueueContextField {
 
 impl QueueContextField {
     /// 构造单值字段。
+    ///
+    /// # 参数
+    /// * `name` - 字段名。
+    /// * `value` - 字段值。
+    ///
+    /// # 返回
+    /// 返回只含该值的字段。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn scalar(name: impl Into<String>, value: impl Into<String>) -> Self {
         Self { name: name.into(), values: vec![value.into()] }
     }
 
     /// 构造可选单值字段，显式区分缺失和值。
+    ///
+    /// # 参数
+    /// * `name` - 字段名。
+    /// * `value` - 有值时编码为 `some` 分量，缺失时编码为 `none`。
+    ///
+    /// # 返回
+    /// 返回以元组编码区分缺失与存在的单值字段。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn optional(name: impl Into<String>, value: Option<&str>) -> Self {
         Self::scalar(
             name,
@@ -27,6 +47,16 @@ impl QueueContextField {
     }
 
     /// 构造语义无序的集合字段，值将排序并去重。
+    ///
+    /// # 参数
+    /// * `name` - 字段名。
+    /// * `values` - 集合元素；排序并去重后写入。
+    ///
+    /// # 返回
+    /// 返回排序去重后的集合字段。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn set(name: impl Into<String>, values: impl IntoIterator<Item = String>) -> Self {
         let mut values = values.into_iter().collect::<Vec<_>>();
         values.sort();
@@ -35,6 +65,15 @@ impl QueueContextField {
     }
 
     /// 把多个分量编码为无拼接碰撞的单个集合值。
+    ///
+    /// # 参数
+    /// * `parts` - 按顺序编码的分量。
+    ///
+    /// # 返回
+    /// 返回长度前缀编码后的十六进制字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn tuple(parts: impl IntoIterator<Item = String>) -> String {
         let mut encoded = Vec::new();
         for part in parts {
@@ -53,6 +92,16 @@ impl QueueContextIdentity {
     ///
     /// 字段值不依赖 `Debug` 或 JSON Map 顺序。旧版无前缀令牌不会匹配，调用方
     /// 应返回刷新提示。
+    ///
+    /// # 参数
+    /// * `namespace` - 身份命名空间。
+    /// * `fields` - 参与编码的上下文字段。
+    ///
+    /// # 返回
+    /// 返回以 `qctx-v1-` 为前缀的 SHA-256 十六进制身份。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(namespace: &str, fields: impl IntoIterator<Item = QueueContextField>) -> Self {
         let mut fields = fields.into_iter().collect::<Vec<_>>();
         fields.sort_by(|left, right| left.name.cmp(&right.name));
@@ -70,11 +119,29 @@ impl QueueContextIdentity {
     }
 
     /// 返回稳定上下文 ID。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回已编码的身份字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
     /// 消费值对象并返回稳定上下文 ID。
+    ///
+    /// # 参数
+    /// 消耗 `self`。
+    ///
+    /// # 返回
+    /// 返回已编码的身份字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn into_string(self) -> String {
         self.0
     }

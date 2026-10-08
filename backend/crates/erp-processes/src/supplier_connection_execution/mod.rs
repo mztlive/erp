@@ -22,18 +22,34 @@ pub struct SupplierConnectionExecutionProcess {
 }
 
 impl SupplierConnectionExecutionProcess {
-    /// 复用应用数据库与网关；不另建外部连接器或读取凭据。
+    /// 复用应用数据库与已注入网关，不另建外部连接器或读取凭据。
+    ///
+    /// # 参数
+    /// * `db` - 应用数据库。
+    /// * `gateway` - 组合根注入的供应商网关。
+    ///
+    /// # 返回
+    /// 返回连接任务执行流程。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database, gateway: Arc<dyn SupplierApiGateway>) -> Self {
         Self { db, gateway }
     }
 
-    /// 执行已登记的连接后台任务。
+    /// 按任务类型执行已登记的连接后台任务；已经终态则直接返回。
     ///
-    /// 该入口供 Web 进程后台调度器调用，绝不能在创建任务的 HTTP 请求内等待。
-    /// 默认未注入真实 adapter 时任务形成明确失败终态并进入 W29。
+    /// 供后台调度器调用，不得在创建任务的 HTTP 请求内等待。
     ///
-    /// # Errors
-    /// 任务不存在、状态冲突或任务结果落库失败时返回错误。
+    /// # 参数
+    /// * `job_id` - 后台任务主键。
+    /// * `actor` - 结果事务使用的审计操作人。
+    ///
+    /// # 返回
+    /// 任务已终态，或健康检查、目录同步执行完成时返回。
+    ///
+    /// # 错误
+    /// 任务不存在、任务类型不属于连接治理，或对应执行的启动与结果事务失败时返回错误。
     pub async fn process_connection_job(&self, job_id: &str, actor: &AuditActor) -> Result<()> {
         let job = self
             .db

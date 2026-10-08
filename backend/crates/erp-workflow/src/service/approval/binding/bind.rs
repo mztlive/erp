@@ -64,6 +64,13 @@ pub async fn bind_published_definition_on_document_create(
 
 /// 将已计算绑定写入单据实体。
 ///
+/// # 参数
+/// * `document` - 待写入绑定的注册单据
+/// * `binding` - 已计算的审批定义绑定
+///
+/// # 返回
+/// 返回写入后的同一绑定。
+///
 /// # 错误
 /// 单据已有绑定时返回错误。
 pub fn attach_published_binding(
@@ -75,6 +82,14 @@ pub fn attach_published_binding(
 }
 
 /// 由发布定义构造初次绑定。
+///
+/// # 参数
+/// * `definition_id` - 已发布定义 ID
+/// * `definition_version` - 定义版本
+/// * `bound_at` - 绑定时间
+///
+/// # 返回
+/// 返回初次审批定义绑定。
 ///
 /// # 错误
 /// 定义版本为零时返回错误。
@@ -109,6 +124,17 @@ async fn bind_required_definition(
 }
 
 /// 加载当前唯一已发布定义图。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `document_type` - 单据类型
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 返回已通过发布图重验的定义图。
+///
+/// # 错误
+/// 仓储读取失败、缺少发布定义或图重验失败时返回错误。
 pub(super) async fn load_published_graph(
     db: &Database,
     document_type: DocumentType,
@@ -178,6 +204,17 @@ async fn write_bound_audit(
 }
 
 /// 读取注册行。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `document_id` - 业务单据 ID
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 返回已注册的业务单据。
+///
+/// # 错误
+/// 单据未注册时返回未找到；仓储读取失败时返回对应错误。
 pub(super) async fn load_registered_document(
     db: &Database,
     document_id: &str,

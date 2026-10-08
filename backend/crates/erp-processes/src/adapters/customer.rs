@@ -1,4 +1,4 @@
-//! Customer audit, party-fact and account-fact adapters.
+//! 客户审计、主体事实与账号事实 adapter。
 
 use std::collections::HashMap;
 use std::num::NonZeroU32;
@@ -21,19 +21,37 @@ use persistence_core::{Executor, NoTransaction};
 
 use crate::audit::persist_log;
 
-/// MongoDB adapter that converts customer audit facts into `erp-audit` writes.
+/// 把客户审计事实写入 `erp-audit` 的 Mongo adapter。
 #[derive(Clone)]
 pub struct MongoCustomerAudit {
     db: Database,
 }
 
 impl MongoCustomerAudit {
-    /// Bind the adapter to `db`.
+    /// 绑定审计日志所在数据库，构造时不写库。
+    ///
+    /// # 参数
+    /// * `db` - 持久化审计日志的数据库。
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的 adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// Wrap the adapter as a shared port.
+    /// 包装为客户域可注入的共享审计 Port。
+    ///
+    /// # 参数
+    /// * `db` - 持久化审计日志的数据库。
+    ///
+    /// # 返回
+    /// 返回共享的客户审计 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn CustomerAuditPort> {
         Arc::new(Self::new(db))
     }
@@ -63,19 +81,37 @@ impl CustomerAuditPort for MongoCustomerAudit {
     }
 }
 
-/// MongoDB adapter that reads Party identity facts for customer commands.
+/// 为客户命令读取主体身份事实的 Mongo adapter。
 #[derive(Clone)]
 pub struct MongoCustomerPartyFacts {
     db: Database,
 }
 
 impl MongoCustomerPartyFacts {
-    /// Bind the adapter to `db`.
+    /// 绑定主体集合所在数据库，构造时不读取。
+    ///
+    /// # 参数
+    /// * `db` - 主体集合所在数据库。
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的 adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// Wrap the adapter as a shared port.
+    /// 包装为客户域可注入的主体事实 Port。
+    ///
+    /// # 参数
+    /// * `db` - 主体集合所在数据库。
+    ///
+    /// # 返回
+    /// 返回共享的主体事实 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn PartyFactPort> {
         Arc::new(Self::new(db))
     }
@@ -129,19 +165,37 @@ impl PartyFactPort for MongoCustomerPartyFacts {
     }
 }
 
-/// MongoDB adapter that reads account login facts for customer commands.
+/// 为客户命令读取账号登录事实的 Mongo adapter。
 #[derive(Clone)]
 pub struct MongoCustomerAccountFacts {
     db: Database,
 }
 
 impl MongoCustomerAccountFacts {
-    /// Bind the adapter to `db`.
+    /// 绑定身份账号集合所在数据库，构造时不读取。
+    ///
+    /// # 参数
+    /// * `db` - 身份账号集合所在数据库。
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的 adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// Wrap the adapter as a shared port.
+    /// 包装为客户域可注入的账号事实 Port。
+    ///
+    /// # 参数
+    /// * `db` - 身份账号集合所在数据库。
+    ///
+    /// # 返回
+    /// 返回共享的账号事实 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn AccountFactPort> {
         Arc::new(Self::new(db))
     }

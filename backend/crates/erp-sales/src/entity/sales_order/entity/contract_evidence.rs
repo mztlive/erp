@@ -16,7 +16,7 @@ impl SalesOrder {
     /// # 返回
     /// PDF、JPG、PNG 或 WebP 且有效时成功。
     /// # 错误
-    /// 类型、扩展名不匹配或已销毁时拒绝。
+    /// 类型不在 PDF、JPG、PNG、WebP 内，扩展名与类型不匹配，资产不可用，或大小为 0、超过类型上限时拒绝。
     pub fn validate_creation_evidence_file(
         mime: &str,
         name: &str,
@@ -69,7 +69,7 @@ impl SalesOrder {
     /// # 返回
     /// 客户及合同关系一致时接纳草稿结算主体；首次绑定时更新稳定合同。
     /// # 错误
-    /// 客户或已有合同不一致、非可编辑草稿更改结算主体时拒绝。
+    /// 客户或已有合同不一致、已作废销售单首次补合同，或非可编辑草稿更改结算主体时拒绝。
     pub fn apply_command_contract_context(
         &mut self,
         contract_id: &Option<ContractId>,

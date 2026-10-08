@@ -94,19 +94,28 @@ pub struct WorkItem {
 impl WorkItem {
     /// 返回创建时冻结的责任维度。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 普通任务返回 `None`；采用多责任维度开放唯一性的任务返回固定键。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn responsibility_key(&self) -> Option<&str> {
         self.responsibility_key.as_deref()
     }
 
     /// 解析并校验履约任务冻结的责任键与对象、角色、原因合同。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 非履约任务返回 `None`；已注册履约任务返回强类型责任键。
     ///
     /// # 错误
-    /// 履约任务缺少责任键，或对象、角色、原因与责任键类型不一致时返回错误。
+    /// 履约任务缺少责任键、责任键无法解析，或对象、角色、原因与责任键类型不一致时返回错误。
     pub fn fulfillment_responsibility_key(&self) -> Result<Option<FulfillmentResponsibilityKey>> {
         if !self.work_item_type.is_fulfillment_operation() {
             return Ok(None);
@@ -152,8 +161,14 @@ impl WorkItem {
 
     /// 返回创建时冻结的稳定业务行范围。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回按稳定 ID 排序并去重的只读切片；普通任务返回空切片。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn responsibility_scope_ids(&self) -> &[String] {
         &self.responsibility_scope_ids
     }
@@ -165,7 +180,10 @@ impl WorkItem {
     /// * `business_object_id` - 期望业务对象 ID
     ///
     /// # 返回
-    /// 类型与稳定 ID 均匹配时返回 `true`。
+    /// 类型与稳定 ID 均匹配时返回 `true`，否则返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn matches_business_object(&self, business_object_type: &str, business_object_id: &str) -> bool {
         self.business_object_type == business_object_type && self.business_object_id == business_object_id
     }
@@ -176,15 +194,24 @@ impl WorkItem {
     /// * `subject_version` - 权威对象版本
     ///
     /// # 返回
-    /// 与任务冻结版本一致时返回 `true`。
+    /// 与任务冻结版本一致时返回 `true`，否则返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn matches_subject_version(&self, subject_version: &str) -> bool {
         self.subject_version == subject_version
     }
 
     /// 判断任务是否属于 W29 可受控关闭关系。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 非审批的集成异常或对账差异任务返回 `true`。
+    /// 委托 [`WorkItemType::is_w29_closable`]：未绑定审批节点的集成异常或对账差异任务返回 `true`，否则返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_w29_closable(&self) -> bool {
         self.work_item_type
             .is_w29_closable(&self.business_object_type, self.approval_node_execution_id.is_some())
@@ -196,7 +223,10 @@ impl WorkItem {
     /// * `current` - 待关闭的当前任务
     ///
     /// # 返回
-    /// 本任务不同于当前任务、仍开放、同任务类型且同对象类别时返回 `true`。
+    /// 本任务不同于当前任务、仍开放、同属 W29 可关闭关系、同任务类型且同对象类别时返回 `true`，否则返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_w29_replacement_for(&self, current: &Self) -> bool {
         self.base.id != current.base.id
             && self.status == WorkItemStatus::Open

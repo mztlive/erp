@@ -20,8 +20,9 @@ impl InventoryService {
     /// 返回契约形状的分页视图。
     ///
     /// # 错误
-    /// * `ValidationError` - 分页参数非法或排序字段不在白名单
-    /// * `RepositoryError` - 数据库查询失败
+    /// 分页或排序非法时返回 `ValidationError`。
+    /// 账号未激活时返回 `Forbidden`。
+    /// 授权、商品匹配或仓储查询失败时返回对应错误。
     #[tracing::instrument(
         name = "inventory.stock_reservation_list",
         skip_all,

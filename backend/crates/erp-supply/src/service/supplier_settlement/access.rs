@@ -31,6 +31,9 @@ impl SettlementAccess {
     ///
     /// # 返回
     /// 返回无授权缓存的访问服务，构造不执行 I/O。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database, scope: Arc<dyn SettlementDataScopePort>) -> Self {
         Self { db, scope }
     }
@@ -44,6 +47,9 @@ impl SettlementAccess {
     ///
     /// # 返回
     /// 返回已解析范围事实和结算授权条件。
+    ///
+    /// # 错误
+    /// 范围 Port 拒绝动作或解析失败时返回对应错误。
     ///
     /// # 关键业务约束
     /// 责任按对账负责人和业务组织解释；创建人不成为对账负责人。
@@ -97,6 +103,9 @@ impl SettlementAccess {
     ///
     /// # 返回
     /// 范围允许时为 true。
+    ///
+    /// # 错误
+    /// 范围 Port 判定失败时返回对应错误。
     pub fn allows(
         &self,
         access: &SettlementResolvedScope,
@@ -120,6 +129,9 @@ impl SettlementAccess {
     ///
     /// # 返回
     /// 创建范围覆盖拟写入责任时返回授权上下文与业务组织。
+    ///
+    /// # 错误
+    /// 对账负责人没有主属组织或组织为 `"company"` 时返回 `ValidationError`。范围不覆盖该责任时返回 `Forbidden`。范围 Port 解析失败时返回对应错误。
     ///
     /// # 关键业务约束
     /// 缺主属组织阻断；不得把创建人当作对账负责人兜底。
@@ -149,6 +161,17 @@ impl SettlementAccess {
     }
 
     /// 展开请求组织及其可选下级。
+    ///
+    /// # 参数
+    /// * `org_unit_ids` - 请求中的组织身份。
+    /// * `include_descendants` - 为真时包含下级组织。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回展开后的组织身份集合。
+    ///
+    /// # 错误
+    /// 范围 Port 展开失败时返回对应错误。
     pub async fn expand_org_units(
         &self,
         org_unit_ids: &[String],
@@ -167,6 +190,9 @@ impl SettlementAccess {
 ///
 /// # 返回
 /// 返回结算仓储条件。
+///
+/// # 错误
+/// 不返回错误。
 ///
 /// # 关键业务约束
 /// 本人负责解释对账负责人；组织解释业务组织。

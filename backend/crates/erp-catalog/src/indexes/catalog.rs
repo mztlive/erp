@@ -56,6 +56,9 @@ pub(crate) const VOUCHER_CATEGORY_PROFILE_REVISIONS: &str =
 /// # 参数
 /// * `db` - 目标 MongoDB 数据库
 ///
+/// # 返回
+/// 各集合命名索引幂等创建成功时无返回值。
+///
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {

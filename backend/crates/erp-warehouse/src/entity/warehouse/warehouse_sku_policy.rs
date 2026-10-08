@@ -50,6 +50,9 @@ impl WarehouseSkuPolicyPeriod {
     ///
     /// # 返回
     /// 业务日落在 `[effective_from, effective_to)` 时返回 `true`；结束日当天返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn contains(self, business_day: BusinessDate) -> bool {
         business_day >= self.effective_from
             && self.effective_to.is_none_or(|effective_to| business_day < effective_to)
@@ -62,6 +65,9 @@ impl WarehouseSkuPolicyPeriod {
     ///
     /// # 返回
     /// 两个区间存在至少一个共同业务日时返回 `true`；相邻区间返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn overlaps(self, other: Self) -> bool {
         // 非退化半开区间相交当且仅当一方的起点落在另一方内。
         self.contains(other.effective_from) || other.contains(self.effective_from)
@@ -69,16 +75,28 @@ impl WarehouseSkuPolicyPeriod {
 
     /// 返回生效开始日。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回半开区间的包含端点。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn effective_from(self) -> BusinessDate {
         self.effective_from
     }
 
     /// 返回生效结束日。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回不包含的结束日；`None` 表示无限期。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn effective_to(self) -> Option<BusinessDate> {
         self.effective_to
     }
@@ -169,7 +187,7 @@ impl WarehouseSkuPolicy {
     /// 更新成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 当预警阈值为负数时返回错误。
+    /// 预警阈值为负数，或启停迁移被 `ensure_transition` 拒绝时返回错误。
     pub fn update(&mut self, update: WarehouseSkuPolicyUpdate) -> Result<()> {
         if let Some(minimum_available_quantity) = update.minimum_available_quantity {
             ensure_non_negative_quantity(minimum_available_quantity)?;
@@ -184,16 +202,28 @@ impl WarehouseSkuPolicy {
 
     /// 返回当前策略的半开生效区间。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回由实体持久化起止日构造的合法区间值对象。
+    /// 返回由实体持久化起止日构造的区间值对象，不再次校验起止顺序。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn effective_period(&self) -> WarehouseSkuPolicyPeriod {
         WarehouseSkuPolicyPeriod { effective_from: self.effective_from, effective_to: self.effective_to }
     }
 
     /// 判断当前策略是否仍参与启用策略约束。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 策略状态为启用时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_operable(&self) -> bool {
         self.status.is_active()
     }
@@ -205,6 +235,9 @@ impl WarehouseSkuPolicy {
     ///
     /// # 返回
     /// 两者不同主键、同仓库、同 SKU、均启用且区间重叠时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn conflicts_with(&self, other: &Self) -> bool {
         self.base.id != other.base.id
             && self.warehouse_id == other.warehouse_id
@@ -238,6 +271,9 @@ impl WarehouseSkuPolicy {
     ///
     /// # 返回
     /// 当前版本等于期望版本时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn matches_version(&self, expected: u64) -> bool {
         self.base.version == expected
     }

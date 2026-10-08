@@ -37,8 +37,14 @@ pub enum CustomerReceiptStatus {
 impl CustomerReceiptStatus {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -50,8 +56,14 @@ impl CustomerReceiptStatus {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "draft",
@@ -66,6 +78,16 @@ impl DocumentState for CustomerReceiptStatus {
     /// 返回全部合法后继状态。
     ///
     /// 提交进入 `IN_APPROVAL`，最终通过过账，撤回回到草稿；`REVERSED` 是终态。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Draft` 只返回 `InApproval`；`InApproval` 返回 `Posted` 与 `Draft`；
+    /// `Posted` 只返回 `Reversed`；`Reversed` 返回空切片。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft => &[Self::InApproval],
@@ -91,6 +113,9 @@ impl PendingReceiptAllocation {
     /// # 参数
     /// * `receivable_entry_id` - 被核销应收分录
     /// * `allocated_amount` - 核销金额
+    ///
+    /// # 返回
+    /// 金额为正时返回待过账核销行。
     ///
     /// # 错误
     /// 金额非正时返回错误。
@@ -252,6 +277,9 @@ impl CustomerReceipt {
     ///
     /// 取往来主体，不得用空串或当前登录人组织补位。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回非空责任组织。
     ///
@@ -268,6 +296,9 @@ impl CustomerReceipt {
     /// 生成稳定的审批事实快照（FIN-E09）。
     ///
     /// 同一实体重复生成结果确定；空分配、空组织与行数溢出失败关闭。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 返回文档号、责任组织、对手方、金额与行数事实。
@@ -289,6 +320,12 @@ impl CustomerReceipt {
     }
 
     /// 校验客户回款仍是从未提交审批的初始草稿。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 状态为草稿、审批主题版本为 0 且没有冻结分配时返回 `Ok(())`。
     ///
     /// # 错误
     /// 非草稿、审批主题版本已递增或已经冻结待过账分配时返回错误。
@@ -377,6 +414,12 @@ impl CustomerReceipt {
 
     /// 撤回审批：回到草稿，且 `approval_subject_version` 不回退。
     ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无返回值。成功时状态回到 `Draft`，审批主题版本不回退。
+    ///
     /// # 错误
     /// 非审批中时返回冲突。
     pub fn cancel_approval(&mut self) -> Result<()> {
@@ -387,6 +430,12 @@ impl CustomerReceipt {
     }
 
     /// 最终通过过账：仅 `IN_APPROVAL` 可进入 `POSTED`。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无返回值。成功时状态变为 `Posted`。
     ///
     /// # 错误
     /// 状态不是审批中时返回冲突。
@@ -399,8 +448,14 @@ impl CustomerReceipt {
 
     /// 判断回款单是否已过账。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为 `Posted` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_posted(&self) -> bool {
         self.status == CustomerReceiptStatus::Posted
     }

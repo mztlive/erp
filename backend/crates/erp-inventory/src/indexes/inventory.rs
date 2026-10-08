@@ -41,7 +41,10 @@ pub(crate) const STOCK_ADJUSTMENT_LINES: &str = <mongodb::Database as InventoryE
 /// 创建本域集合的幂等命名索引。
 ///
 /// # 参数
-/// * `db` - 目标 MongoDB 数据库
+/// * `db` - 目标 MongoDB 数据库。
+///
+/// # 返回
+/// 各集合索引创建完成。
 ///
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。

@@ -88,8 +88,17 @@ impl Default for SalesReturnCaseFilter {
 impl QueryFilter for SalesReturnCaseFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// `return_no` 为 `Some` 时做不区分大小写的字面量模糊匹配；`sales_order_id`、
+    /// `status` 为 `Some` 时分别精确匹配对应字段。缺省字段不加入条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "return_no", self.return_no.as_deref());
@@ -106,8 +115,16 @@ impl QueryFilter for SalesReturnCaseFilter {
 impl Pagination for SalesReturnCaseFilter {
     /// 返回页码与单页条数。
     ///
+    /// 不修正 `page`；`page_size` 由 `u32` 转为 `u64`。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `(page, page_size)` 元组。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }

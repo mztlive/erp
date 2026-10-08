@@ -37,8 +37,14 @@ pub enum BpmEventKind {
 impl BpmEventKind {
     /// 返回稳定事件代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回大写下划线代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::InstanceStarted => "INSTANCE_STARTED",
@@ -87,6 +93,9 @@ impl BpmEvent {
     ///
     /// # 返回
     /// 返回其余字段为空的事件。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(kind: BpmEventKind, instance_id: ApprovalProcessInstanceId, round_no: u32) -> Self {
         Self {
             kind,
@@ -106,7 +115,10 @@ impl BpmEvent {
     /// * `execution_id` - 执行主键
     ///
     /// # 返回
-    /// 返回更新后的事件。
+    /// 返回写入 `execution_id` 后的事件。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_execution(mut self, execution_id: ApprovalNodeExecutionId) -> Self {
         self.execution_id = Some(execution_id);
         self
@@ -118,7 +130,10 @@ impl BpmEvent {
     /// * `node_key` - 节点键
     ///
     /// # 返回
-    /// 返回更新后的事件。
+    /// 返回写入 `node_key` 后的事件。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_node_key(mut self, node_key: impl Into<String>) -> Self {
         self.node_key = Some(node_key.into());
         self
@@ -130,7 +145,10 @@ impl BpmEvent {
     /// * `actor` - 处理人
     ///
     /// # 返回
-    /// 返回更新后的事件。
+    /// 返回写入 `actor` 后的事件。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_actor(mut self, actor: ParticipantId) -> Self {
         self.actor = Some(actor);
         self
@@ -139,10 +157,13 @@ impl BpmEvent {
     /// 绑定原因摘要。
     ///
     /// # 参数
-    /// * `reason` - 已规范化原因
+    /// * `reason` - 原因摘要，原样写入，本方法不 trim
     ///
     /// # 返回
-    /// 返回更新后的事件。
+    /// 返回写入 `reason` 后的事件。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_reason(mut self, reason: impl Into<String>) -> Self {
         self.reason = Some(reason.into());
         self
@@ -154,7 +175,10 @@ impl BpmEvent {
     /// * `code` - 阻塞码
     ///
     /// # 返回
-    /// 返回更新后的事件。
+    /// 返回写入 `blocker_code` 后的事件。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_blocker(mut self, code: ApprovalBlockerCode) -> Self {
         self.blocker_code = Some(code);
         self

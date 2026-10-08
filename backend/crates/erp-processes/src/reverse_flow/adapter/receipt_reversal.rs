@@ -54,6 +54,9 @@ pub struct ReceiptReversalAdapter {
 
 /// 返回回款冲正单的完整适配器登记。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回已校验完整性的规格与显式字段声明。
 ///
@@ -101,6 +104,9 @@ fn receipt_reversal_adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<Recei
 /// # 参数
 /// * `business_object_id` - 冲正单主键
 ///
+/// # 返回
+/// 返回该冲正单的 `SubjectRef`。
+///
 /// # 错误
 /// 主键为空或超长时返回校验错误。
 pub fn receipt_reversal_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
@@ -112,6 +118,12 @@ pub fn receipt_reversal_subject_ref(business_object_id: &str) -> Result<SubjectR
 }
 
 /// 无已绑定定义的必须审批单据不得提交。
+///
+/// # 参数
+/// * `binding` - 已保存的定义绑定；缺失表示尚未冻结。
+///
+/// # 返回
+/// 绑定存在时返回该绑定。
 ///
 /// # 错误
 /// 绑定缺失时返回冲突。
@@ -149,6 +161,9 @@ pub struct ReceiptReversalStartCommand {
 ///
 /// # 返回
 /// 返回不含定义 ID 或审批人的目标启动命令。
+///
+/// # 错误
+/// 不返回错误。
 pub fn receipt_reversal_start_command(
     reversal_id: &str,
     subject_version: u32,
@@ -171,6 +186,9 @@ pub fn receipt_reversal_start_command(
 ///
 /// # 返回
 /// 返回 `START_APPROVAL`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn receipt_reversal_start_command_kind(
     _command: &ReceiptReversalStartCommand,
 ) -> bpm::model::types::ApprovalCommandKind {
@@ -182,6 +200,9 @@ pub fn receipt_reversal_start_command_kind(
 /// # 参数
 /// * `reversal` - 业务实体
 /// * `action` - 合同强类型动作
+///
+/// # 返回
+/// 成功时无返回值。过账或撤回动作已作用到 `reversal`。
 ///
 /// # 错误
 /// 动作不属于本类型或状态不允许时返回错误。
@@ -245,6 +266,9 @@ pub fn receipt_reversal_responsible_org_id(organization_id: &str) -> Result<Stri
 /// * `customer_id` - 原回款可选经营归属客户
 /// * `submitted_by` - 提交人
 /// * `submitted_at` - 提交时间
+///
+/// # 返回
+/// 返回已冻结的审批主体快照。
 ///
 /// # 错误
 /// 组织为空时返回校验错误。

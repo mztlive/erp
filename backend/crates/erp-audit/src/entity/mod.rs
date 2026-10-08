@@ -1,4 +1,4 @@
-//! Audit log entity.
+//! 审计日志、业务事件与命令尝试实体。
 
 mod attempt;
 mod audit_log;

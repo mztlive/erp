@@ -28,8 +28,14 @@ pub enum PersonDirectoryCategory {
 impl PersonDirectoryCategory {
     /// 返回持久化与接口使用的稳定类别代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// `sales` 或 `procurement`。
+    /// 销售为 `sales`，采购为 `procurement`，后台人员为 `business`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Sales => "sales",
@@ -40,8 +46,14 @@ impl PersonDirectoryCategory {
 
     /// 返回该目录的 DataScope 资源代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 销售为 `sales_person`，采购为 `procurement_person`。
+    /// 销售为 `sales_person`，采购为 `procurement_person`，后台人员为 `business_person`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn resource(self) -> &'static str {
         match self {
             Self::Sales => "sales_person",
@@ -52,8 +64,14 @@ impl PersonDirectoryCategory {
 
     /// 返回首次授予查询资格所观察的稳定角色 ID。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 销售为 `role-sales`，采购为 `role-procurement`。
+    /// 销售为 `Some("role-sales")`，采购为 `Some("role-procurement")`，后台人员返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     ///
     /// # 关键业务约束
     /// 销售领导、建单权限和业务单据归属都不能代替该角色 ID。
@@ -71,7 +89,10 @@ impl PersonDirectoryCategory {
     /// * `role_id` - 本次分配结果中的角色 ID
     ///
     /// # 返回
-    /// 该角色是某目录的授予来源时返回类别；其余角色返回 `None`。
+    /// 该角色是某目录的授予来源时返回类别；`role-sales` 与 `role-procurement` 以外，含后台人员，返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn from_grant_role(role_id: &str) -> Option<Self> {
         match role_id {
             "role-sales" => Some(Self::Sales),
@@ -94,8 +115,14 @@ pub enum PersonQueryStatus {
 impl PersonQueryStatus {
     /// 返回与序列化一致的稳定状态代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// `active` 或 `terminated`。
+    /// 有效为 `active`，已终止为 `terminated`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Active => "active",
@@ -121,7 +148,10 @@ pub enum ExistingGrant {
 /// * `existing` - 当前账号与类别的资格记录状态
 ///
 /// # 返回
-/// 需要新建有效资格时返回 `true`。
+/// 仅 `ExistingGrant::Absent` 时返回 `true`。
+///
+/// # 错误
+/// 不返回错误。
 ///
 /// # 关键业务约束
 /// 角色撤销不是本函数的输入，不能据此删除资格；初始化重跑也不能恢复已终止记录。
@@ -164,7 +194,7 @@ impl PersonQueryQualification {
     /// 返回尚未终止的资格记录。
     ///
     /// # 错误
-    /// 账号 ID 为空时返回校验错误。
+    /// 类别为 `Business`，或账号 ID 去空白后为空时返回 `Error::ValidationError`。
     ///
     /// # 关键业务约束
     /// 授予角色固定取类别的稳定角色 ID，调用方不能改写成显示名或其他权限。
@@ -198,8 +228,11 @@ impl PersonQueryQualification {
     /// # 参数
     /// * `at` - 终止时点
     ///
+    /// # 返回
+    /// 首次终止时把状态改为 `Terminated` 并记下 `at`。不修改账号角色。
+    ///
     /// # 错误
-    /// 资格已经终止时返回冲突。
+    /// 资格已经终止时返回 `Error::ConflictError`。
     pub fn terminate(&mut self, at: Instant) -> Result<()> {
         if self.status == PersonQueryStatus::Terminated {
             return Err(Error::ConflictError("查询资格已终止".into()));
@@ -242,7 +275,7 @@ impl DirectoryListRequest {
     /// 返回可执行的查询条件。
     ///
     /// # 错误
-    /// 搜索超长、页码或页大小越界、版本超长，或未指定组织却要求包含下级时拒绝。
+    /// 搜索超过 200 字、页码为 0、页大小不在 1 到 100、版本超长、第 2 页及以后缺少范围版本，或未指定组织却要求包含下级时返回校验错误。
     pub fn parse(
         search: Option<&str>,
         page: Option<u64>,
@@ -290,6 +323,9 @@ impl DirectoryListRequest {
 /// # 返回
 /// 候选可读且满足组织筛选时返回 `true`。
 ///
+/// # 错误
+/// 不返回错误。
+///
 /// # 关键业务约束
 /// 协作参与和历史参与恒为否，不能借业务单据把人员读权限放大。
 /// 无主属组织的人员只可能命中公司或本人范围。
@@ -322,7 +358,7 @@ pub fn candidate_in_directory(
 /// # 返回
 /// 返回组织维度交集；本人身份由调用方另行判定，不由空集合推导公司范围。
 /// # 错误
-/// 无；输入范围已由公共解析器校验。
+/// 不返回错误。调用方须传入已经公共解析器校验的范围。
 pub(crate) fn directory_org_ids(
     scope: &ResolvedScope,
     filter: Option<&BTreeSet<String>>,

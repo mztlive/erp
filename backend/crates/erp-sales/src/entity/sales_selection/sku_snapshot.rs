@@ -61,7 +61,7 @@ impl SkuSnapshot {
     /// 返回身份、名称、单位与价格均有效的快照。
     ///
     /// # 错误
-    /// 必填字段为空时拒绝。
+    /// 名称、单位或商品类型为空或超长，或销售可见含税价不大于 0 时拒绝。
     pub fn normalize(self) -> Result<Self> {
         let name = normalize_required_text(self.name, "SKU 名称不能为空", 256, "SKU 名称过长")?;
         let unit = normalize_required_text(self.unit, "SKU 单位不能为空", 64, "SKU 单位过长")?;

@@ -29,7 +29,8 @@ use crate::{Error, Result};
 /// 返回可写入草稿的确认事实。
 ///
 /// # 错误
-/// 实体规范化失败时返回校验错误。
+/// 地点无法规范化时把 `ValidationError` 转为 `C::Error`；确认事实构造失败时经
+/// `Error::from` 转为 `C::Error`；加密失败时返回提供方的 `C::Error`。
 pub fn service_confirmation_from_request<C: ServiceLocationCryptoPort>(
     req: &ConfirmServiceFulfillmentRequest,
     evidence_attachment_id: FileAssetId,
@@ -56,6 +57,17 @@ pub fn service_confirmation_from_request<C: ServiceLocationCryptoPort>(
 
 impl FulfillmentService {
     /// 在调用方事务中读取并锁定服务草稿版本，保留状态与版本首错。
+    ///
+    /// # 参数
+    /// * `record_id` - 服务履约记录主键
+    /// * `expected_version` - 期望的乐观锁版本
+    /// * `executor` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 返回版本匹配的草稿服务履约记录。
+    ///
+    /// # 错误
+    /// 记录不存在时返回 `NotFound`；不是草稿或版本不一致时返回 `ConflictError`；查询失败时返回对应错误。
     pub async fn prepare_service_confirmation(
         &self,
         record_id: &ServiceFulfillmentId,
@@ -75,6 +87,17 @@ impl FulfillmentService {
     }
 
     /// 在附件资格与登记完成之后应用现场事实、确认并写入同一服务记录。
+    ///
+    /// # 参数
+    /// * `record` - 待确认的服务履约草稿
+    /// * `confirmation` - 已规范化的确认现场事实
+    /// * `executor` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 确认并写回成功时无返回值。
+    ///
+    /// # 错误
+    /// 现场事实不能写入、状态不允许确认或仓储写入失败时返回对应错误。
     pub async fn persist_service_confirmation(
         &self,
         record: &mut ServiceFulfillment,

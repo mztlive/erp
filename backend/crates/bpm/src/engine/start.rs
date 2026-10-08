@@ -57,8 +57,12 @@ pub struct StartAssigneeBinding {
 /// * `graph` - 定义图
 /// * `bindings` - 与定义节点一一对应的审批人绑定
 ///
+/// # 返回
+/// 返回第 1 轮运行实例、全部节点审批人快照，以及入口执行和启动事件。
+///
 /// # 错误
-/// 入口缺失、绑定不完整、任一人失效或模型不变式失败时返回错误。
+/// 入口缺失、绑定数量或主键或节点键不匹配、资格不属于定义审批人、任一人失效，
+/// 或模型不变式失败时返回错误。
 pub fn start(
     command: StartCommand,
     graph: &DefinitionGraph,

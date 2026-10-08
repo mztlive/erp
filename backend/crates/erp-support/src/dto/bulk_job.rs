@@ -117,6 +117,9 @@ impl BulkSelectionSnapshotListParams {
     ///
     /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
     ///
@@ -385,6 +388,9 @@ impl BackgroundJobListParams {
     ///
     /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
     ///
@@ -561,6 +567,9 @@ impl CancelBackgroundJobFailure {
     ///
     /// # 返回
     /// 返回携带稳定错误分类的失败明细。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn from_error(job_id: String, error: &crate::error::Error) -> Self {
         Self { job_id, error_class: format!("{:?}", error.class()), message: error.to_string() }
     }

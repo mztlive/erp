@@ -72,31 +72,85 @@ struct DurablePreparedInvestigation {
 }
 impl InvestigationEvidenceRecord {
     /// 返回证据所绑定的原供应商动作身份。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回原供应商动作身份。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn target_supplier_action_id(&self) -> &str {
         &self.target_supplier_action_id
     }
 
     /// 返回已经记录的调查结果，供详情只读投影。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回调查结果。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn outcome(&self) -> SupplierOrderInvestigationOutcome {
         self.outcome
     }
 
     /// 返回证据已经验证的业务终态，供详情只读投影。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回已验证的业务终态。`None` 表示证据没有已验证终态。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn verified_resolution(&self) -> Option<SupplierOrderResolution> {
         self.verified_resolution
     }
 
     /// 返回已经记录的调查摘要，供详情只读展示。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回调查摘要。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn summary(&self) -> &str {
         &self.summary
     }
     /// 返回既有命令操作身份，供上层结果投影。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回命令操作身份。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn operation_id(&self) -> &str {
         &self.operation_id
     }
 }
 
 /// 返回原供应商动作需要的连接能力；查询记录不能作为再次提交目标。
+///
+/// # 参数
+/// * `action_type` - 原供应商动作类型。
+///
+/// # 返回
+/// 下单、取消、退款分别返回 `Order`、`Cancel`、`Refund` 能力。
+///
+/// # 错误
+/// 动作为查询记录时返回 `BusinessLogicError`。
 pub fn capability_for_action(action_type: SupplierOrderActionType) -> Result<SupplierApiCapabilityCode> {
     match action_type {
         SupplierOrderActionType::Place => Ok(SupplierApiCapabilityCode::Order),
@@ -109,6 +163,18 @@ pub fn capability_for_action(action_type: SupplierOrderActionType) -> Result<Sup
 }
 
 /// 校验原下单可重放且最新调查证据明确证明尚未形成结果。
+///
+/// # 参数
+/// * `db` - 履约集合所在数据库。
+/// * `order` - 当前供应商履约订单。
+/// * `target_action` - 拟再次提交的原下单动作。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 最新指向该动作的调查结果为 `VerifiedNoResult` 时无返回值。
+///
+/// # 错误
+/// 原下单不可重放，或最新证据不是明确无结果时返回 `BusinessLogicError`。查询动作读取失败时返回对应错误。
 pub async fn ensure_replay_safe(
     db: &Database,
     order: &SupplierFulfillmentOrder,
@@ -147,6 +213,18 @@ fn investigation_intent_record(context: &InvestigationSubject) -> InvestigationI
     }
 }
 
+/// 截断已准备调查结果中的摘要，其余分支原样返回。
+///
+/// 查询与重放分支的摘要最多保留 512 个字符；已持久化终态不改写。
+///
+/// # 参数
+/// * `prepared` - 待限制摘要长度的调查准备结果。
+///
+/// # 返回
+/// 返回摘要已截断或原样保留的准备结果。
+///
+/// # 错误
+/// 不返回错误。
 pub fn bounded_prepared_investigation(prepared: PreparedInvestigation) -> PreparedInvestigation {
     match prepared {
         PreparedInvestigation::Queried(InvestigationOutcome::VerifiedNoResult { summary }) => {
@@ -177,6 +255,18 @@ pub fn bounded_prepared_investigation(prepared: PreparedInvestigation) -> Prepar
     }
 }
 
+/// 校验已有调查意图属于当前订单、查询动作和幂等键，且载荷与本次命令一致。
+///
+/// # 参数
+/// * `evidence` - 已持久化的调查意图动作。
+/// * `context` - 本次调查的订单与动作身份。
+/// * `expected_idempotency_key` - 本次命令期望的幂等键。
+///
+/// # 返回
+/// 身份与意图载荷一致时无返回值。
+///
+/// # 错误
+/// 订单、动作类型或幂等键不一致，或意图载荷不同时返回 `ConflictError`。意图摘要为空或无法解析时返回 `Internal`。
 pub fn validate_investigation_intent(
     evidence: &SupplierOrderAction,
     context: &InvestigationSubject,
@@ -198,6 +288,17 @@ pub fn validate_investigation_intent(
     Ok(())
 }
 
+/// 解析已冻结的网关调查结果，并核对结构版本与当前命令身份。
+///
+/// # 参数
+/// * `evidence` - 带响应摘要的调查动作。
+/// * `context` - 本次调查的动作、目标和操作身份。
+///
+/// # 返回
+/// 返回已冻结的 `PreparedInvestigation`。
+///
+/// # 错误
+/// 响应摘要为空时返回 `Internal`。摘要无法按冻结结构解析，或身份与当前命令不一致时返回 `ConflictError`。
 pub fn parse_prepared_investigation(
     evidence: &SupplierOrderAction,
     context: &InvestigationSubject,
@@ -219,6 +320,19 @@ pub fn parse_prepared_investigation(
     Ok(durable.prepared)
 }
 
+/// 把已冻结调查结果应用到订单和原动作，或在查询动作上直接采用当前业务终态。
+///
+/// # 参数
+/// * `context` - 本次调查动作与目标。
+/// * `prepared` - 已冻结的调查准备结果。
+/// * `order` - 就地更新的履约订单。
+/// * `target_action` - 就地更新的原供应商动作。
+///
+/// # 返回
+/// 返回调查结论、可选业务终态和摘要。查询动作若已能从当前订单核出终态，直接返回该终态。
+///
+/// # 错误
+/// 已冻结终态与当前业务结果不一致时返回 `ConflictError`。重放分支更新订单或动作失败时返回对应错误。
 pub fn apply_prepared_investigation(
     context: &InvestigationSubject,
     prepared: &PreparedInvestigation,
@@ -265,6 +379,18 @@ pub fn apply_prepared_investigation(
     }
 }
 
+/// 按再次提交的网关结果推进订单和原下单动作。
+///
+/// # 参数
+/// * `order` - 就地更新的履约订单。
+/// * `target_action` - 就地更新的原下单动作。
+/// * `outcome` - 再次提交的网关分类结果。
+///
+/// # 返回
+/// 明确接单或拒单返回 `VerifiedTerminal`；缺少订单号、结果未知或失败返回 `ResultUnknown`。
+///
+/// # 错误
+/// 订单或动作更新失败时返回对应错误。
 pub fn apply_replay_outcome(
     order: &mut SupplierFulfillmentOrder,
     target_action: &mut SupplierOrderAction,
@@ -340,6 +466,16 @@ pub fn apply_replay_outcome(
     }
 }
 
+/// 把调查结论映射为证据动作状态。
+///
+/// # 参数
+/// * `outcome` - 调查结论。
+///
+/// # 返回
+/// 已核实终态或明确无结果返回 `Succeeded`；结果未知返回 `ResultUnknown`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn evidence_action_status(outcome: SupplierOrderInvestigationOutcome) -> SupplierOrderActionStatus {
     match outcome {
         SupplierOrderInvestigationOutcome::VerifiedTerminal
@@ -349,6 +485,17 @@ pub fn evidence_action_status(outcome: SupplierOrderInvestigationOutcome) -> Sup
 }
 
 /// 校验调查证据属于当前订单并已证明所选业务终态。
+///
+/// # 参数
+/// * `evidence` - 调查证据动作。
+/// * `order` - 当前履约订单。
+/// * `expected_resolution` - 调用方选择的业务终态。
+///
+/// # 返回
+/// 返回已证明该终态的调查证据记录。
+///
+/// # 错误
+/// 证据不属于该订单、不是成功的查询、结论不是已核实终态，或终态与选择不一致时返回 `BusinessLogicError`。证据解析失败时返回对应错误。
 pub fn verified_terminal_evidence(
     evidence: &SupplierOrderAction,
     order: &SupplierFulfillmentOrder,
@@ -370,6 +517,15 @@ pub fn verified_terminal_evidence(
 }
 
 /// 解析持久化调查结果并校验已登记的证据结构版本。
+///
+/// # 参数
+/// * `action` - 带响应摘要的调查动作。
+///
+/// # 返回
+/// 返回结构版本为 `W26_INVESTIGATION_V1` 的调查证据。
+///
+/// # 错误
+/// 摘要为空、JSON 无法解析或结构版本未登记时返回 `BusinessLogicError`。
 pub fn parse_investigation_evidence(action: &SupplierOrderAction) -> Result<InvestigationEvidenceRecord> {
     let summary = action
         .response_summary
@@ -383,10 +539,31 @@ pub fn parse_investigation_evidence(action: &SupplierOrderAction) -> Result<Inve
     Ok(record)
 }
 
+/// 把摘要截断到最多 512 个字符。
+///
+/// # 参数
+/// * `value` - 原始摘要。
+///
+/// # 返回
+/// 返回不超过 512 个字符的摘要；不足则原样返回。
+///
+/// # 错误
+/// 不返回错误。
 pub fn bounded_summary(value: &str) -> String {
     value.chars().take(512).collect()
 }
 /// 构造原结构化结果；字段写权限仍只在领域证据模块。
+///
+/// # 参数
+/// * `subject` - 调查动作、操作身份。
+/// * `target_supplier_action_id` - 证据绑定的原供应商动作。
+/// * `finding` - 调查结论、终态和摘要。
+///
+/// # 返回
+/// 返回结构版本为 `W26_INVESTIGATION_V1` 的证据；摘要最多 512 个字符。
+///
+/// # 错误
+/// 不返回错误。
 pub fn investigation_evidence_record(
     subject: &InvestigationSubject,
     target_supplier_action_id: String,
@@ -403,6 +580,18 @@ pub fn investigation_evidence_record(
     }
 }
 /// 原意图序列化和实体构造；外层事务决定写入时点。
+///
+/// # 参数
+/// * `subject` - 调查动作与目标身份。
+/// * `evidence_id` - 新意图动作的身份。
+/// * `idempotency_key` - 意图动作的幂等键。
+/// * `order_id` - 履约订单身份。
+///
+/// # 返回
+/// 返回尚未持久化的查询意图动作。
+///
+/// # 错误
+/// 意图序列化失败时返回 `Internal`；动作实体构造失败时返回对应错误。
 pub fn prepare_intent(
     subject: &InvestigationSubject,
     evidence_id: String,
@@ -421,6 +610,17 @@ pub fn prepare_intent(
     )?)
 }
 /// 在原已有意图上冻结一次网关结果。
+///
+/// # 参数
+/// * `evidence` - 就地写入冻结摘要的意图动作。
+/// * `subject` - 调查动作、目标和操作身份。
+/// * `prepared` - 待冻结的网关结果。
+///
+/// # 返回
+/// 无返回值。动作状态改为 `Pending`，响应摘要保存冻结结果。
+///
+/// # 错误
+/// 结果序列化失败时返回 `Internal`；动作更新失败时返回对应错误。
 pub fn prepare_durable_evidence(
     evidence: &mut SupplierOrderAction,
     subject: &InvestigationSubject,
@@ -444,6 +644,17 @@ pub fn prepare_durable_evidence(
     Ok(())
 }
 /// 在外层唯一执行器中保存原动作变更。
+///
+/// # 参数
+/// * `db` - 履约集合所在数据库。
+/// * `action` - 待按 CAS 写回的动作。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 无返回值。动作已写回。
+///
+/// # 错误
+/// 仓储更新失败时返回对应错误。
 pub async fn persist_action(
     db: &Database,
     action: &mut SupplierOrderAction,
@@ -453,6 +664,17 @@ pub async fn persist_action(
     Ok(())
 }
 /// 在外层唯一执行器中追加原动作事实。
+///
+/// # 参数
+/// * `db` - 履约集合所在数据库。
+/// * `action` - 待创建的动作。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 无返回值。动作已创建。
+///
+/// # 错误
+/// 仓储写入失败时返回对应错误。
 pub async fn create_action(
     db: &Database,
     action: &SupplierOrderAction,
@@ -462,6 +684,17 @@ pub async fn create_action(
     Ok(())
 }
 /// 在外层唯一执行器保存原订单变化，不新增状态判断。
+///
+/// # 参数
+/// * `db` - 履约集合所在数据库。
+/// * `order` - 待按 CAS 写回的履约订单。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 无返回值。订单已写回。
+///
+/// # 错误
+/// 仓储更新失败时返回对应错误。
 pub async fn persist_order(
     db: &Database,
     order: &mut SupplierFulfillmentOrder,
@@ -471,7 +704,18 @@ pub async fn persist_order(
     Ok(())
 }
 
-/// 已核验 durable 结果一致后推进正式证据，保留原状态及摘要字段。
+/// 已核验 durable 结果一致后，按调查结论写入动作状态和正式摘要。
+///
+/// # 参数
+/// * `evidence` - 就地推进的调查动作。
+/// * `outcome` - 决定动作状态的调查结论。
+/// * `response_summary` - 写入动作的正式摘要。
+///
+/// # 返回
+/// 无返回值。动作状态按结论更新，并替换响应摘要。
+///
+/// # 错误
+/// 动作更新失败时返回对应错误。
 pub fn finish_evidence(
     evidence: &mut SupplierOrderAction,
     outcome: SupplierOrderInvestigationOutcome,

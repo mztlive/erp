@@ -50,8 +50,11 @@ pub struct DecisionExecutionInput {
 /// # 参数
 /// * `input` - 决定输入
 ///
+/// # 返回
+/// 同载荷返回 `PreparedExecution::Replay`；否则返回待应用的决定或阻塞计划。
+///
 /// # 错误
-/// 责任不一致、异载荷冲突或引擎失败时返回错误。
+/// 命令身份不合法、责任不一致、异载荷冲突、引擎失败或收据构造失败时返回错误。
 pub fn prepare_decision(input: DecisionExecutionInput) -> Result<PreparedExecution> {
     let identity = decision_identity(
         input.command.idempotency_key.clone(),
@@ -100,6 +103,7 @@ pub fn prepare_decision(input: DecisionExecutionInput) -> Result<PreparedExecuti
     Ok(PreparedExecution::Apply(Box::new(apply_plan(plan, receipt, domain_action))))
 }
 
+/// 收据构造失败时返回校验错误。
 fn receipt_from_plan(
     id: ApprovalCommandReceiptId,
     identity: &bpm::model::ApprovalCommandIdentity,
@@ -147,6 +151,9 @@ fn prepare_open_task_conflict(input: DecisionExecutionInput) -> Result<PreparedE
 ///
 /// # 返回
 /// blocked 提交返回 `true`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn decision_commits_blocked(prepared: &PreparedExecution) -> bool {
     match prepared {
         PreparedExecution::Apply(writes) => writes.commit == bpm::engine::CommitRequired::Blocked,

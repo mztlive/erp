@@ -36,6 +36,9 @@ pub(crate) const SUPPLIER_SETTLEMENT_DIFFERENCE_EVIDENCE: &str =
 /// # 参数
 /// * `db` - 目标 MongoDB 数据库
 ///
+/// # 返回
+/// 结算单、明细、差异及两类证据索引都登记成功时返回 `Ok(())`。
+///
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {

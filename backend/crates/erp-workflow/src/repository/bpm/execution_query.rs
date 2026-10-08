@@ -91,6 +91,13 @@ impl<'a> BpmWorkflowRepository<'a> {
 
     /// 查询实例当前 `ACTIVE|BLOCKED` 执行。
     ///
+    /// # 参数
+    /// * `instance_id` - 审批流程实例 ID。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 返回当前活动或受阻执行；没有时返回 `None`。
+    ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     pub async fn find_current_execution(
@@ -146,6 +153,15 @@ impl<'a> BpmWorkflowRepository<'a> {
 
     /// 按执行序号稳定游标读取实例历史，单次不超过上限。
     ///
+    /// # 参数
+    /// * `instance_id` - 审批流程实例 ID。
+    /// * `after_execution_no` - 上一页最后一条执行序号；首页为 `None`。
+    /// * `limit` - 请求条数；夹紧到 `[1, MAX_EXECUTION_HISTORY]`。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 按 `execution_no` 升序返回本页历史执行。
+    ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
     pub async fn list_execution_history(
@@ -174,6 +190,9 @@ impl<'a> BpmWorkflowRepository<'a> {
 ///
 /// # 返回
 /// 返回含软删除约束、实例主键与可选 `execution_no $gt` 的查询文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn execution_history_filter(
     instance_id: &ApprovalProcessInstanceId,
     after_execution_no: Option<u32>,
@@ -195,10 +214,23 @@ pub(super) fn execution_history_filter(
 ///
 /// # 返回
 /// 返回可交给 MongoDB `limit` 的有界整数。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn execution_history_limit(limit: u32) -> i64 {
     clamp_limit(limit, MAX_EXECUTION_HISTORY)
 }
 
+/// 构造当前 `ACTIVE|BLOCKED` 执行过滤；软删除由 `find_one` 追加。
+///
+/// # 参数
+/// * `instance_id` - 审批流程实例 ID。
+///
+/// # 返回
+/// 返回含实例主键与当前状态集合的查询文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn current_execution_filter(instance_id: &ApprovalProcessInstanceId) -> Document {
     doc! {
         "process_instance_id": instance_id.as_ref(),

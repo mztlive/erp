@@ -57,6 +57,15 @@ fn insert_request(facts: &mut ObjectFactMap, id: &str, fact: Option<ObjectFact>)
 }
 
 /// 返回供给申请的固定展示类型，不采用内部事件名。
+///
+/// # 参数
+/// * `kind` - 供给申请种类。
+///
+/// # 返回
+/// `ExistingQuote`、`TermsChange`、`StopSupply` 分别返回已有商品报价、供给条款变更、停止供给申请。
+///
+/// # 错误
+/// 不返回错误。
 pub(in crate::workbench) fn offering_kind_label(kind: ApplicationKind) -> &'static str {
     match kind {
         ApplicationKind::ExistingQuote => "已有商品报价",
@@ -66,6 +75,15 @@ pub(in crate::workbench) fn offering_kind_label(kind: ApplicationKind) -> &'stat
 }
 
 /// 供给申请仅接受真实提交编号，不把草稿持久化版本当成提交版本。
+///
+/// # 参数
+/// * `request` - 供给申请。
+///
+/// # 返回
+/// 有提交时返回事实，版本键为 `offering:` 加提交编号；没有提交时返回 `Ok(None)`。
+///
+/// # 错误
+/// 版本约束无法构造时返回错误。
 pub(in crate::workbench) fn offering_request_fact(
     request: &OfferingApplication,
 ) -> Result<Option<ObjectFact>> {
@@ -89,6 +107,15 @@ pub(in crate::workbench) fn offering_request_fact(
 }
 
 /// 新品任务所有历史提交分别冻结，重提不使既往任务失去可回看版本。
+///
+/// # 参数
+/// * `request` - 新品草稿申请。
+///
+/// # 返回
+/// 有提交时返回事实，版本键为 `new_product:` 加提交 ID；没有提交时返回 `Ok(None)`。
+///
+/// # 错误
+/// 版本约束无法构造时返回错误。
 pub(in crate::workbench) fn new_product_request_fact(
     request: &NewProductDraft,
 ) -> Result<Option<ObjectFact>> {
@@ -113,6 +140,15 @@ pub(in crate::workbench) fn new_product_request_fact(
 }
 
 /// 合作条款任务关联冻结商务申请，不能被供给调价任务版本替代。
+///
+/// # 参数
+/// * `request` - 合作条款申请。
+///
+/// # 返回
+/// 有提交时返回事实，版本键为 `cooperation:` 加提交编号；没有提交时返回 `Ok(None)`。
+///
+/// # 错误
+/// 版本约束无法构造时返回错误。
 pub(in crate::workbench) fn cooperation_request_fact(
     request: &CooperationApplication,
 ) -> Result<Option<ObjectFact>> {

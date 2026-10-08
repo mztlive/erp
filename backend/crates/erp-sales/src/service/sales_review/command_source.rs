@@ -10,6 +10,13 @@ use crate::{Error, Result};
 impl SalesReviewService {
     /// 读取提交命令的销售状态并检查版本和草稿；必须在流程回执读取之前调用。
     ///
+    /// # 参数
+    /// * `id` - 销售变更单。
+    /// * `expected_version` - 客户端持有的版本。
+    ///
+    /// # 返回
+    /// 返回仍为草稿且版本匹配的变更单。
+    ///
     /// # 错误
     /// 缺单、过期版本及非草稿状态保留原错误类别与文案。
     pub async fn load_for_submission(&self, id: &str, expected_version: u64) -> Result<SalesChangeOrder> {
@@ -28,6 +35,13 @@ impl SalesReviewService {
         Ok(change_order)
     }
     /// 读取撤回命令的销售状态并检查客户端版本，后续状态动作在工作流计划完成后执行。
+    ///
+    /// # 参数
+    /// * `id` - 销售变更单。
+    /// * `expected_version` - 客户端持有的版本。
+    ///
+    /// # 返回
+    /// 返回版本匹配的变更单；不检查是否草稿，也不修改状态。
     ///
     /// # 错误
     /// 缺单或过期版本保持原错误；本方法不修改状态。

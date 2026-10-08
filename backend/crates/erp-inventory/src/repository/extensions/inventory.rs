@@ -46,44 +46,86 @@ pub trait InventoryExt {
 
     /// 获取 `stock_movement` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `StockMovementRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn stock_movements(&self) -> StockMovementRepository<'_>;
 
     /// 获取 `stock_balance` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `StockBalanceRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn stock_balances(&self) -> StockBalanceRepository<'_>;
 
     /// 获取 `stock_reservation` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `StockReservationRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn stock_reservations(&self) -> StockReservationRepository<'_>;
 
     /// 获取 `stock_reservation_entry` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `persistence_core::Repository<'_, crate::entity::inventory::StockReservationEntry>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn stock_reservation_entries(&self) -> persistence_core::Repository<'_, StockReservationEntry>;
 
     /// 获取 `stock_adjustment` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `StockAdjustmentRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn stock_adjustments(&self) -> StockAdjustmentRepository<'_>;
 
     /// 获取 `stock_adjustment_line` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `StockAdjustmentLineRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn stock_adjustment_lines(&self) -> StockAdjustmentLineRepository<'_>;
 
     /// 获取承载跨集合写入的域专用仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `InventoryRepository` 实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn inventory(&self) -> InventoryRepository<'_>;
 }
 

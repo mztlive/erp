@@ -24,9 +24,14 @@ impl FundsAccess {
     /// 在调用方执行器内验证付款整单读取资格，供整单附件交付前后复核。
     ///
     /// # 参数
-    /// 付款身份、服务端操作人、采购访问器与调用方原执行器。
+    /// * `id` - 供应商付款主键。
+    /// * `actor` - 已认证操作人。
+    /// * `purchase_access` - 采购访问器。
+    /// * `executor` - 调用方执行器，不另开事务。
+    ///
     /// # 返回
     /// 返回付款版本及当前授权、主单和全部实际来源版本指纹。
+    ///
     /// # 错误
     /// 不存在、部分可见或损坏来源统一返回 NotFound；资格和读取失败保留错误。
     ///
@@ -46,6 +51,17 @@ impl FundsAccess {
     }
 
     /// 分页查询供应商付款范围行：采购负责人与付款经办人分别查询。
+    ///
+    /// # 参数
+    /// * `params` - 供应商付款列表请求。
+    /// * `actor` - 已认证操作人。
+    /// * `purchase_access` - 采购访问器。
+    ///
+    /// # 返回
+    /// 最终授权付款页及同口径汇总。
+    ///
+    /// # 错误
+    /// 参数校验、范围版本、授权或读取失败时返回对应错误。
     pub async fn supplier_payment_list_scoped(
         &self,
         params: &erp_finance::dto::payable::SupplierPaymentListParams,
@@ -68,6 +84,17 @@ impl FundsAccess {
     }
 
     /// 独立详情重新解析付款详情动作；不可见与不存在统一为 NotFound。
+    ///
+    /// # 参数
+    /// * `id` - 供应商付款主键。
+    /// * `actor` - 已认证操作人。
+    /// * `purchase_access` - 采购访问器。
+    ///
+    /// # 返回
+    /// 当前详情动作允许的付款行。
+    ///
+    /// # 错误
+    /// 授权或读取失败时返回对应错误；付款不存在、来源缺失或没有任何可见份额时返回 `NotFound`。
     pub async fn supplier_payment_detail_scoped(
         &self,
         id: &str,
@@ -90,6 +117,19 @@ impl FundsAccess {
     }
 
     /// 返回前重读授权及候选事实版本；变化时拒绝交付原结果。
+    ///
+    /// # 参数
+    /// * `params` - 原始列表请求。
+    /// * `query` - 已规范化的列表查询。
+    /// * `actor` - 已认证操作人。
+    /// * `purchase_access` - 采购访问器。
+    /// * `expected` - 调用方回传的范围版本；首页可为 `None`。
+    ///
+    /// # 返回
+    /// 两次版本一致时返回第一次付款页。
+    ///
+    /// # 错误
+    /// 首次版本失配或复核版本变化时返回范围变化冲突错误；授权或读取失败时返回对应错误。
     pub(super) async fn checked_supplier_payments(
         &self,
         params: &erp_finance::dto::payable::SupplierPaymentListParams,
@@ -107,6 +147,18 @@ impl FundsAccess {
     }
 
     /// 身份和业务事实均使用调用方同一事务，不缓存权限解析结果。
+    ///
+    /// # 参数
+    /// * `params` - 原始列表请求。
+    /// * `query` - 已规范化的列表查询。
+    /// * `actor` - 已认证操作人。
+    /// * `purchase_access` - 采购访问器。
+    ///
+    /// # 返回
+    /// 同一事务内形成的授权付款页。
+    ///
+    /// # 错误
+    /// 事务、授权或读取失败时返回对应错误。
     pub(super) async fn snapshot_supplier_payments(
         &self,
         params: &erp_finance::dto::payable::SupplierPaymentListParams,
@@ -131,6 +183,19 @@ impl FundsAccess {
     }
 
     /// 最终来源份额授权与业务条件在数据库形成后分页，页外只返回窄摘要和版本。
+    ///
+    /// # 参数
+    /// * `params` - 原始列表请求，用于比对范围版本。
+    /// * `query` - 已规范化的列表查询。
+    /// * `actor` - 已认证操作人。
+    /// * `purchase_access` - 采购访问器。
+    /// * `executor` - 调用方事务。
+    ///
+    /// # 返回
+    /// 无可见范围时返回空页；否则返回数据库分页、计数与同口径汇总。
+    ///
+    /// # 错误
+    /// 授权、聚合、计数超限、版本不一致或当前页裁剪不一致时返回对应错误。
     pub(super) async fn load_supplier_payments(
         &self,
         params: &erp_finance::dto::payable::SupplierPaymentListParams,
@@ -250,6 +315,16 @@ impl FundsAccess {
     }
 
     /// 付款关联筛选条件：采购负责人、付款经办人与组织分别精确匹配。
+    ///
+    /// # 参数
+    /// * `query` - 已规范化的付款列表查询。
+    /// * `executor` - 调用方事务。
+    ///
+    /// # 返回
+    /// 采购负责人、付款经办人与展开组织的精确条件。
+    ///
+    /// # 错误
+    /// 组织展开失败时返回对应错误。
     pub(super) async fn payment_condition(
         &self,
         query: &erp_finance::dto::payable::SupplierPaymentListQuery,
@@ -276,11 +351,16 @@ impl FundsAccess {
     /// 付款详情同一事务内解析、取数与裁剪；版本绑定关联采购单。
     ///
     /// # 参数
-    /// 付款身份、操作人、采购读取访问器与调用方事务执行器。
+    /// * `id` - 供应商付款主键。
+    /// * `actor` - 已认证操作人。
+    /// * `purchase_access` - 采购访问器。
+    /// * `executor` - 调用方事务。
+    ///
     /// # 返回
     /// 返回当前获授权付款份额及来源版本凭据。
+    ///
     /// # 错误
-    /// 不存在或不可见统一为 NotFound；授权和持久化失败时拒绝。
+    /// 不存在、来源缺失或没有任何可见份额时返回 `NotFound`；授权和持久化失败时返回对应错误。
     pub(super) async fn load_supplier_payment_detail(
         &self,
         id: &str,
@@ -361,6 +441,17 @@ fn decide_payment_rows(
 }
 
 /// 付款行关联元组；结算单来源与缺失订单的分配保留未分配归属，不丢份额。
+///
+/// # 参数
+/// * `row` - 供应商付款行，用于元组中的单据身份与版本。
+/// * `links` - 该付款的核销关联。
+/// * `facts` - 采购或结算来源责任。
+///
+/// # 返回
+/// 按来源去重后的责任元组；来源事实缺失时来源、负责人和组织为空。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn payment_tuples(
     row: &SupplierPaymentRow,
     links: &[PaymentLink],
@@ -388,6 +479,15 @@ pub(super) fn payment_tuples(
 }
 
 /// 付款整单口径求和；仅整单读取资格持有者可见的结果使用，不得用于部分授权。
+///
+/// # 参数
+/// * `links` - 付款核销关联，金额已带正反方向。
+///
+/// # 返回
+/// 全部关联方向金额之和。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn payment_sum_all(links: &[PaymentLink]) -> Amount {
     let mut total = zero_amount();
     for link in links {
@@ -396,7 +496,17 @@ pub(super) fn payment_sum_all(links: &[PaymentLink]) -> Amount {
     total
 }
 
-/// 付款匹配份额求和；无归属份额始终计入可见份额，不做差额推导。
+/// 付款匹配份额求和；方向已在装载时记入金额符号，不做差额推导。
+///
+/// # 参数
+/// * `links` - 付款核销关联。
+/// * `matched` - 获授权来源主键。
+///
+/// # 返回
+/// 来源命中 `matched` 的方向金额之和；没有来源的关联不计入。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn payment_sum_signed(links: &[PaymentLink], matched: &[String]) -> Amount {
     let mut total = zero_amount();
     for link in links {
@@ -408,6 +518,18 @@ pub(super) fn payment_sum_signed(links: &[PaymentLink], matched: &[String]) -> A
 }
 
 /// 付款单行裁剪；整单金额与完整分配仅整单资格返回，否则为 null。
+///
+/// # 参数
+/// * `row` - 供应商付款行。
+/// * `links` - 该付款的核销关联。
+/// * `matched` - 获授权来源主键。
+/// * `whole` - 是否返回整单金额与全部分配。
+///
+/// # 返回
+/// 部分授权只保留命中来源的分配，整单金额为 `None`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn cut_payment_row(
     row: &SupplierPaymentRow,
     links: &[PaymentLink],

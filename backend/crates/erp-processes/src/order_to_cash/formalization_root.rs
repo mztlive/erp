@@ -17,6 +17,16 @@ pub struct SalesOrderFormalizationProcess {
 }
 impl SalesOrderFormalizationProcess {
     /// 使用组合根数据库与授权源创建销售形式化流程。
+    ///
+    /// # 参数
+    /// * `db` - 组合根数据库。
+    /// * `rbac` - 授权源。
+    ///
+    /// # 返回
+    /// 返回尚未发起形式化的流程。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
         Self { db, rbac }
     }

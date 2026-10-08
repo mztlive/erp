@@ -34,6 +34,9 @@ pub use permission::{PermissionFilter, PermissionRepositoryExt, PermissionRow, U
 ///
 /// # 返回
 /// 返回排序条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     let field = match sort_by {
@@ -45,8 +48,14 @@ pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document 
 
 /// 权限定义列表投影字段。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回投影条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn permission_projection() -> Document {
     doc! {
         "id": 1,
@@ -63,8 +72,14 @@ pub(super) fn permission_projection() -> Document {
 
 /// 数据范围列表投影字段。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回投影条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn data_scope_projection() -> Document {
     doc! {
         "id": 1,
@@ -81,8 +96,14 @@ pub(super) fn data_scope_projection() -> Document {
 
 /// 审计事件列表投影字段。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回投影条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn audit_event_projection() -> Document {
     doc! {
         "id": 1,

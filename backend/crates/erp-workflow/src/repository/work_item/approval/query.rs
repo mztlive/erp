@@ -53,6 +53,21 @@ struct DocumentApprovalDuplicateInstance {
     open_execution_count: i64,
 }
 /// 分页查询指定账号当前开放的单据审批任务。
+///
+/// # 参数
+/// * `collection` - `work_items` 集合。
+/// * `owner_user_id` - 当前任务负责人账号。
+/// * `business_object_type` - 可选业务对象类型。
+/// * `query` - 可选字面量检索；空白视为不检索。
+/// * `cursor` - 上一页最后一条的 `assigned_at` 与任务 ID；首页为 `None`。
+/// * `limit` - 页大小；必须非 0。
+/// * `executor` - 数据访问执行器。
+///
+/// # 返回
+/// 返回当前页、总数、是否还有下一页、下一页游标，以及聚合发现的完整性冲突。
+///
+/// # 错误
+/// 页大小为 0 或加一后无法表示为 `i64`、计数越界、页内缺少 `assigned_at`，或 MongoDB 聚合与反序列化失败时返回错误。
 pub(super) async fn page_open_document_approval_owned_by(
     collection: &Collection<WorkItem>,
     owner_user_id: &str,

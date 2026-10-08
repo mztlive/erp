@@ -10,8 +10,14 @@ use mongodb::bson::{Document, doc};
 
 /// 未删除行条件（`deleted_at` 哨兵等值）。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回单条件查询文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn undeleted_condition() -> Document {
     doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON }
 }
@@ -19,7 +25,13 @@ pub(crate) fn undeleted_condition() -> Document {
 /// 向 `$and` 数组追加未删除条件。
 ///
 /// # 参数
-/// * `and` - 待追加的 `$and` 条件数组
+/// * `and` - 待追加的 `$and` 条件数组。
+///
+/// # 返回
+/// 无返回值。未删除条件已追加到 `and`。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn push_undeleted(and: &mut Vec<Document>) {
     and.push(undeleted_condition());
 }
@@ -32,6 +44,9 @@ pub(crate) fn push_undeleted(and: &mut Vec<Document>) {
 ///
 /// # 返回
 /// 返回排序条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     doc! { sort_by.unwrap_or("created_at"): direction, "id": direction }

@@ -297,6 +297,20 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
     }
 
     /// 在调用方事务快照中重验操作人权限、管理范围与对象参与权。
+    ///
+    /// # 参数
+    /// * `actor_kind` - 操作人账号类型
+    /// * `actor_id` - 操作人账号 ID
+    /// * `item` - 待转交任务
+    /// * `require_manager` - 是否要求管理范围覆盖该任务
+    /// * `authorization` - 事务外形成的稳定授权快照
+    /// * `executor` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 账号仍有效且对象可访问时无返回值；要求管理人时还须覆盖该任务。
+    ///
+    /// # 错误
+    /// 账号失效、缺少管理范围、任务不在管理范围或对象不可访问时返回禁止；授权或事实读取失败时返回对应错误。
     pub(super) async fn ensure_assignment_actor_access(
         &self,
         actor_kind: erp_core::AccountKind,
@@ -514,6 +528,19 @@ pub(super) fn purchase_order_fulfillment_responsibility_id(item: &WorkItem) -> R
 const SYSTEM_OBJECT_OWNER: &str = "__system__";
 
 /// 校验目标账号可执行给定全部开放履约任务。
+///
+/// # 参数
+/// * `service` - 工作项服务
+/// * `tasks` - 待校验的开放履约任务
+/// * `target_user_id` - 目标账号 ID
+/// * `permissions` - 目标账号权限
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 每个任务都通过候选人访问校验时无返回值。空任务列表也通过。
+///
+/// # 错误
+/// 任一任务的对象访问校验失败时返回对应错误。
 pub(super) async fn ensure_fulfillment_tasks_candidate<A: crate::ports::WorkflowAuthorizationPort>(
     service: &WorkItemService<A>,
     tasks: &[WorkItem],
@@ -530,6 +557,22 @@ pub(super) async fn ensure_fulfillment_tasks_candidate<A: crate::ports::Workflow
     Ok(())
 }
 
+/// 判断审批候选人是否避开启动人、提交人、既有责任人和决定人。
+///
+/// # 参数
+/// * `candidate_id` - 候选人账号 ID
+/// * `started_by` - 实例启动人
+/// * `submitted_by` - 业务提交人
+/// * `responsibility_actor_ids` - 既有责任人
+/// * `current_owner_user_id` - 当前负责人
+/// * `allow_current_owner` - 是否允许候选人保持为当前负责人
+/// * `decided_by` - 既有决定人
+///
+/// # 返回
+/// 候选人不是启动人、提交人或决定人，且既有责任人中的同名账号仅在允许当前负责人时被放过，则返回 `true`。
+///
+/// # 错误
+/// 不返回错误。
 #[cfg(test)]
 pub(super) fn approval_assignment_separated(
     candidate_id: &str,
@@ -556,6 +599,19 @@ pub(super) fn approval_assignment_separated(
 pub(super) type AssignmentSeparationPolicy = WorkItemAssignmentSeparationPolicy;
 
 /// 按资源逐一证明正式票款审计，并返回创建、过账或红冲等经办人。
+///
+/// # 参数
+/// * `resource_type` - 审计资源类型
+/// * `resource_ids` - 必须逐一证明的资源 ID
+/// * `audits` - 已读取的审计事实
+/// * `operator_actions` - 经办动作前缀
+/// * `formal_actions` - 正式登记动作前缀
+///
+/// # 返回
+/// 每个资源都有成功的正式动作时，返回匹配经办前缀的操作人。
+///
+/// # 错误
+/// 任一资源缺少成功的正式登记审计时返回禁止。
 #[cfg(test)]
 pub(super) fn audited_fact_operator_actors(
     resource_type: &str,
@@ -589,6 +645,16 @@ pub(super) fn audited_fact_operator_actors(
     Ok(actors)
 }
 
+/// 去掉空白和系统占位后，要求岗位分离仍有权威责任人。
+///
+/// # 参数
+/// * `actors` - 候选责任人 ID
+///
+/// # 返回
+/// 返回去空白、去空值并排除 `__system__` 后的非空集合。
+///
+/// # 错误
+/// 过滤后没有责任人时返回禁止。
 pub(super) fn non_empty_assignment_actors(actors: Vec<String>) -> Result<HashSet<String>> {
     let actors = actors
         .into_iter()

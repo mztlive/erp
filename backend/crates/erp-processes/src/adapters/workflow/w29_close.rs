@@ -20,6 +20,18 @@ use persistence_core::Executor;
 use super::map_service;
 use crate::errors::Error;
 
+/// 把关闭原因整理成工作流可携带的 W29 关闭事实，不写库。
+///
+/// # 参数
+/// * `reason_code` - 关闭原因码。
+/// * `comment` - 可选说明。
+/// * `replacement_work_item_id` - 可选替代任务编号。
+///
+/// # 返回
+/// 返回关闭原因文本及替代任务编号。
+///
+/// # 错误
+/// 原因码或替代任务不被 `W29CloseDecision` 接受时返回校验错误。
 pub(super) fn prepare_w29_close(
     reason_code: &str,
     comment: Option<&str>,
@@ -126,6 +138,18 @@ impl W29ClosePort for MongoW29Close<'_> {
         Ok(())
     }
 }
+/// 在原执行器中重读并写入 W29 受控关闭。
+///
+/// # 参数
+/// * `db` - 工作项、集成异常与对账差异所在数据库。
+/// * `input` - 任务、关闭事实、证据、操作人、回执与关闭时间。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 集成异常任务已关闭，或对账差异已写入关闭证据时无返回值。
+///
+/// # 错误
+/// 替代任务不存在或不匹配、对象不存在、任务类型与异常分类不一致、差异已有终态结论、证据无效、对象类型不是 W29，或读写失败时返回对应错误。
 pub(super) async fn persist_w29_close(
     db: &Database,
     input: W29CloseInput<'_>,

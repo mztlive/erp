@@ -1,4 +1,4 @@
-//! Sales invoice finance posting within the caller's existing transaction.
+//! 在调用方既有事务内过账销项发票。
 
 use std::collections::HashMap;
 
@@ -13,11 +13,24 @@ use crate::repository::ReceivableExt;
 use crate::repository::prelude::*;
 use crate::{Error, Result};
 
-/// Apply invoice allocation amounts, register the invoice and persist allocation facts.
+/// 按分配金额更新可开票进度，登记发票并写入分配事实。
 ///
-/// The caller must pass its existing transaction executor. Returns affected accounts and
-/// their original plan order for subsequent sales/workflow composition. Errors preserve
-/// the prior missing-account, counterparty and insufficient-amount semantics.
+/// 调用方必须传入既有事务执行器。返回受影响账户及其在计划中的原顺序，供后续销售与流程组合。
+/// 账户缺失、跨主体与额度不足保持原错误语义。
+///
+/// # 参数
+/// * `db` - 财务领域数据库。
+/// * `invoice` - 待登记发票；成功时就地标为已登记。
+/// * `plan_lines` - 销项分配行。
+/// * `actor_id` - 登记人。
+/// * `executor` - 调用方事务执行器；本函数不另开事务。
+///
+/// # 返回
+/// 返回已读取的应收子账，以及计划中的账户 ID 原序。
+///
+/// # 错误
+/// 子账不存在时返回 `NotFound`；跨往来主体或剩余可开票额度不足时返回 `BusinessLogicError`；
+/// 分配计划、状态迁移或仓储失败时返回对应错误。
 pub async fn persist_sales_invoice_allocations(
     db: &Database,
     invoice: &mut Invoice,

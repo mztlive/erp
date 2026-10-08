@@ -20,7 +20,10 @@ use crate::repository::SupplierListSearchInput;
 /// * `keyword_party_ids` - 关键词命中的主体 ID，由 PartyFactsPort 预先解析
 ///
 /// # 返回
-/// 返回仓储侧列表事实束搜索输入。
+/// 返回仓储侧列表事实束搜索输入。授权范围与业务组织留空，由调用方再填。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn supplier_list_search_input(
     query: &SupplierListQuery,
     as_of: String,
@@ -57,6 +60,7 @@ pub(super) fn supplier_list_search_input(
 /// # 参数
 /// * `party` - 主体只读事实端口
 /// * `profiles` - 当前页商务资料
+/// * `executor` - 调用方执行器
 ///
 /// # 返回
 /// 返回主体 ID 到法定名称的映射；无主体引用时不访问端口。

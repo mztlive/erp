@@ -35,8 +35,14 @@ impl SupplierAccountStatus {
     ///
     /// 映射表见 [`ACCOUNT_STATUS_DISPLAY`]（erp-supplier-002）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         super::display::label_of(*self, &ACCOUNT_STATUS_DISPLAY)
     }
@@ -45,16 +51,28 @@ impl SupplierAccountStatus {
     ///
     /// 映射表见 [`ACCOUNT_STATUS_DISPLAY`]（erp-supplier-002）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         super::display::code_of(*self, &ACCOUNT_STATUS_DISPLAY)
     }
 
     /// 判断是否处于启用状态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 处于 `Active` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         matches!(self, Self::Active)
     }
@@ -72,6 +90,15 @@ const ACCOUNT_STATUS_DISPLAY: [super::display::DisplayEntry<SupplierAccountStatu
 
 impl DocumentState for SupplierAccountStatus {
     /// 返回合法后继：启用 ⇄ 停用。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Active` 的静态切片只含 `Disabled`；`Disabled` 的静态切片只含 `Active`。切片不含当前状态自身。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Active => &[Self::Disabled],
@@ -172,8 +199,8 @@ impl Eq for SupplierAccount {}
 impl SupplierAccount {
     /// 创建供应商角色。
     ///
-    /// 完成 supplier_no 的必填校验与规范化（去首尾空白、非空、长度
-    /// 上限），结算条件引用规范化。
+    /// 完成供应商编号、维护人与业务组织的必填校验与规范化（去首尾空白、非空、长度
+    /// 上限），并规范化结算条件引用。
     ///
     /// # 参数
     /// * `id` - 实体主键（`erp_core::ids::SupplierAccountId`）
@@ -184,7 +211,7 @@ impl SupplierAccount {
     /// 返回新建的供应商角色实体。
     ///
     /// # 错误
-    /// 当 supplier_no 为空/超长时返回错误。
+    /// 供应商编号、维护人或业务组织为空或超长，或结算条件引用超长时返回错误。
     pub fn new(
         id: SupplierAccountId,
         data: SupplierAccountData,
@@ -246,8 +273,14 @@ impl SupplierAccount {
 
     /// 判断供应商角色是否处于启用状态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为 `Active` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         self.stable.status().is_active()
     }
@@ -258,7 +291,7 @@ impl SupplierAccount {
     /// 无。
     ///
     /// # 返回
-    /// 两字段均非空时为 true。
+    /// 去空白后两字段均非空时为 `true`。
     ///
     /// # 错误
     /// 无。
@@ -300,7 +333,7 @@ impl SupplierAccount {
     /// 责任确有变化时返回 `true`。
     ///
     /// # 错误
-    /// 目标为空、组织空白或与当前完全一致时拒绝。
+    /// 目标维护人或业务组织为空、标识过长，或与当前完全一致时拒绝。
     ///
     /// # 关键业务约束
     /// 组织不随接收人部门隐式变化；不改审批任务。
@@ -344,6 +377,9 @@ impl SupplierAccount {
     ///
     /// # 返回
     /// 版本一致且供应商启用时返回 `None`；否则返回稳定违反原因。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn profile_update_violation(&self, expected_version: u64) -> Option<SupplierProfileUpdateViolation> {
         if self.base.version != expected_version {
             return Some(SupplierProfileUpdateViolation::VersionMismatch);

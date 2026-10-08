@@ -11,6 +11,9 @@ use crate::entity::party::EffectiveRecordStatus;
 ///
 /// # 返回
 /// 返回启用状态且日期落在左闭右开有效期内的查询文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn active_fact_filter(
     party_id: &PartyId,
     as_of: erp_core::common::time::BusinessDate,
@@ -27,6 +30,9 @@ pub(super) fn active_fact_filter(
 ///
 /// # 返回
 /// 返回启用状态且日期落在左闭右开有效期内的公共查询文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn active_fact_window_filter(as_of: erp_core::common::time::BusinessDate) -> Document {
     let as_of = as_of.to_string();
     doc! {
@@ -51,6 +57,9 @@ pub(super) fn active_fact_window_filter(as_of: erp_core::common::time::BusinessD
 ///
 /// # 返回
 /// 返回排序条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     let field = sort_by.filter(|candidate| allowed.contains(candidate)).unwrap_or("created_at");
@@ -62,8 +71,14 @@ pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&
 /// 四个从属事实的 `list_current_on`/`list_by_party` 共用同一排序语义；
 /// 排序文档唯一来源，避免默认优先与创建时间顺序漂移。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回默认标记优先、同组内最新创建优先的排序文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn default_first_sort() -> Document {
     doc! { "is_default": -1, "created_at": -1 }
 }
@@ -78,6 +93,9 @@ pub(super) fn default_first_sort() -> Document {
 ///
 /// # 返回
 /// 返回限定同一主体默认行的查询文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn party_default_marks_filter(party_id: &PartyId) -> Document {
     doc! { "party_id": party_id.to_string(), "is_default": true }
 }

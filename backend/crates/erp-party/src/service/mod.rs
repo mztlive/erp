@@ -1,4 +1,4 @@
-//! Party application services.
+//! 主体应用服务。
 
 pub mod party;
 

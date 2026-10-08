@@ -16,6 +16,13 @@ const MAX_OUTBOX_BATCH: i64 = 50;
 pub trait ApprovalNotificationOutboxRepositoryExt {
     /// 追加一条通知 outbox 记录。
     ///
+    /// # 参数
+    /// * `item` - 待写入的通知记录。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 写入成功时无返回值。
+    ///
     /// # 错误
     /// 去重键冲突或 MongoDB 写入失败时返回错误。
     async fn enqueue_outbox(
@@ -26,8 +33,18 @@ pub trait ApprovalNotificationOutboxRepositoryExt {
 
     /// 以原子条件更新领取一批可投递消息；两个 worker 不得同时取得同一条。
     ///
+    /// # 参数
+    /// * `worker_id` - 取得租约的 worker。
+    /// * `now` - 本次领取时间。
+    /// * `lease_until` - 租约到期时间。
+    /// * `limit` - 请求条数；`0` 按 1 条，且不超过 50。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回本次实际领取的消息；没有可投递消息时为空向量。
+    ///
     /// # 错误
-    /// 元数据越界或 MongoDB 更新失败时返回错误。
+    /// MongoDB 更新或反序列化失败时返回错误。
     async fn lease_outbox_batch(
         &self,
         worker_id: &str,
@@ -38,6 +55,15 @@ pub trait ApprovalNotificationOutboxRepositoryExt {
     ) -> Result<Vec<ApprovalNotificationOutbox>>;
 
     /// 以当前租约持有者为条件标记投递成功。
+    ///
+    /// # 参数
+    /// * `outbox_id` - outbox 记录 ID。
+    /// * `expected_lease_owner` - 当前租约持有者。
+    /// * `delivered_at` - 投递完成时间。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 条件命中时返回更新后的记录；持有者不匹配或不存在时返回 `None`。
     ///
     /// # 错误
     /// MongoDB 更新或反序列化失败时返回错误。
@@ -51,6 +77,16 @@ pub trait ApprovalNotificationOutboxRepositoryExt {
 
     /// 以当前租约持有者为条件重排下次尝试。
     ///
+    /// # 参数
+    /// * `outbox_id` - outbox 记录 ID。
+    /// * `expected_lease_owner` - 当前租约持有者。
+    /// * `next_attempt_at` - 下次尝试时间。
+    /// * `error_kind` - 本次失败分类。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 条件命中时返回更新后的记录；持有者不匹配或不存在时返回 `None`。
+    ///
     /// # 错误
     /// MongoDB 更新或反序列化失败时返回错误。
     async fn reschedule_outbox(
@@ -63,6 +99,15 @@ pub trait ApprovalNotificationOutboxRepositoryExt {
     ) -> Result<Option<ApprovalNotificationOutbox>>;
 
     /// 以当前租约持有者为条件将消息转入死信。
+    ///
+    /// # 参数
+    /// * `outbox_id` - outbox 记录 ID。
+    /// * `expected_lease_owner` - 当前租约持有者。
+    /// * `error_kind` - 死信失败分类。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 条件命中时返回更新后的记录；持有者不匹配或不存在时返回 `None`。
     ///
     /// # 错误
     /// MongoDB 更新或反序列化失败时返回错误。
@@ -210,6 +255,7 @@ fn lease_take_sort() -> Document {
     doc! { "next_attempt_at": 1, "id": 1 }
 }
 
+/// 领取未删除且已到期待投，或 `InFlight` 租约已到期的消息。
 fn outbox_lease_filter(now: Instant) -> Document {
     let now = now.unix_secs();
     doc! {
@@ -227,6 +273,7 @@ fn outbox_lease_filter(now: Instant) -> Document {
     }
 }
 
+/// 只匹配未删除、处于 `InFlight` 且租约持有者等于预期值的记录。
 fn lease_owner_filter(outbox_id: &str, expected_lease_owner: &str) -> Document {
     doc! {
         "id": outbox_id,
@@ -299,6 +346,7 @@ fn dead_letter_outbox_pipeline(error_kind: &str) -> Vec<Document> {
     }]
 }
 
+/// `limit` 为 0 时按 1 条，否则不超过 `MAX_OUTBOX_BATCH`。
 fn clamp_outbox_limit(limit: u32) -> i64 {
     if limit == 0 {
         return 1;

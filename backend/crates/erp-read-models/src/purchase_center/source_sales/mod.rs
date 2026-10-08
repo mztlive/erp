@@ -25,6 +25,18 @@ use crate::sales_center::materials::revision_materials;
 use crate::{Error, Result};
 
 /// 沿采购行精确销售版本引用加载销售正文、价格和允许材料，不读取当前销售内容。
+///
+/// # 参数
+/// * `db` - 目标数据库。
+/// * `order` - 采购单。
+/// * `purchase_lines` - 已投影的采购行。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 返回精确销售版本上的正文、成交价和允许材料；材料目录不可读时 `materials_unavailable` 为真且材料为空。
+///
+/// # 错误
+/// 销售版本关系不一致、来源销售单或版本不存在、版本不属于来源销售单，或销售行与账号读取失败时返回对应错误。
 pub(super) async fn source_sales(
     db: &Database,
     order: &PurchaseOrder,

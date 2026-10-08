@@ -12,7 +12,7 @@ pub trait PayableAccountRepositoryExt {
     /// 分页检索应付往来子账列表（投影查询）。
     ///
     /// 只返回 [`PayableAccountRow`] 所需的列表字段，不加载整文档；
-    /// 排序字段经白名单映射，未命中回退 `created_at` 降序。
+    /// 排序字段经白名单映射，未命中回退 `created_at`，方向由 `sort_ascending` 决定（缺省降序）。
     ///
     /// # 参数
     /// * `filter` - 筛选与分页条件

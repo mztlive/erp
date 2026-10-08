@@ -78,40 +78,70 @@ impl AssignCustomerAssignment {
 
     /// 返回已规范化的销售人员 ID。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回去空白后的账号 ID。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn user_id(&self) -> &str {
         &self.user_id
     }
 
     /// 返回归属角色。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回 `OWNER` 或 `COLLABORATOR`。
+    /// 返回 `Owner` 或 `Collaborator`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn assignment_role(&self) -> AssignmentRole {
         self.assignment_role
     }
 
     /// 返回生效开始日期。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回业务日期。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn valid_from(&self) -> BusinessDate {
         self.valid_from
     }
 
     /// 返回可选生效结束日期。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 未指定结束日时返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn valid_to(&self) -> Option<BusinessDate> {
         self.valid_to
     }
 
     /// 返回已规范化的调整原因。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回去空白后的原因文本。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn change_reason(&self) -> &str {
         &self.change_reason
     }
@@ -182,32 +212,56 @@ impl EndCustomerAssignment {
 
     /// 返回已规范化的目标归属 ID。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回去空白后的归属主键。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn assignment_id(&self) -> &str {
         &self.assignment_id
     }
 
     /// 返回结束日期。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回业务日期。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn valid_to(&self) -> BusinessDate {
         self.valid_to
     }
 
     /// 返回乐观锁期望版本。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回大于 0 的版本号。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn version(&self) -> u64 {
         self.version
     }
 
     /// 返回已规范化的调整原因。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回去空白后的原因文本。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn change_reason(&self) -> &str {
         &self.change_reason
     }

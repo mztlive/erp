@@ -59,6 +59,19 @@ impl PurchaseResponsibilityPort for MongoPurchaseResponsibility<'_> {
         Ok(())
     }
 }
+/// 在原执行器上重读采购单与开放履约任务，确认责任人仍一致。
+///
+/// # 参数
+/// * `db` - 采购单与工作项所在数据库。
+/// * `selected` - 当前选中的履约任务。
+/// * `purchase_order_id` - 采购单编号。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 返回采购单当前责任人，以及同一责任键下的开放履约任务。
+///
+/// # 错误
+/// 采购单不存在、已完成或已作废、责任人不一致、开放任务已变化，或读写失败时返回对应错误。
 pub(super) async fn purchase_order_fulfillment_scope(
     db: &Database,
     selected: &WorkItem,
@@ -67,6 +80,20 @@ pub(super) async fn purchase_order_fulfillment_scope(
 ) -> WorkflowResult<(String, Vec<WorkItem>)> {
     scope(&MongoPurchaseResponsibility { db }, selected, purchase_order_id, executor).await
 }
+/// 在原执行器上按 CAS 改写采购单责任人并持久化。
+///
+/// # 参数
+/// * `db` - 采购单所在数据库。
+/// * `purchase_order_id` - 采购单编号。
+/// * `target_user_id` - 新责任人。
+/// * `actor_id` - 操作人编号。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 采购单责任人已写回时无返回值。
+///
+/// # 错误
+/// 采购单不存在、责任改派被领域拒绝或持久化失败时返回对应错误。
 pub(super) async fn reassign_purchase_order_owner(
     db: &Database,
     purchase_order_id: &str,

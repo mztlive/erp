@@ -1,4 +1,4 @@
-//! Support domain: source registry, bulk jobs and file assets.
+//! 支撑领域：来源注册、批量任务与文件资产。
 
 pub mod dto;
 pub mod entity;

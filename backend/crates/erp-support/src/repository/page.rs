@@ -52,6 +52,9 @@ where
 ///
 /// # 返回
 /// 返回 MongoDB 排序方向数值。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn sort_direction(ascending: bool) -> i32 {
     if ascending { 1 } else { -1 }
 }
@@ -66,6 +69,9 @@ pub(crate) fn sort_direction(ascending: bool) -> i32 {
 ///
 /// # 返回
 /// 返回白名单内的排序字段名。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn created_updated_field(sort_by: Option<&str>) -> &'static str {
     match sort_by {
         Some("updated_at") => "updated_at",

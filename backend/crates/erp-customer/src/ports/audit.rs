@@ -1,4 +1,4 @@
-//! Consumer port for cross-domain audit persistence from customer commands.
+//! 客户命令跨域审计持久化的消费端口。
 
 use std::num::NonZeroU32;
 
@@ -121,7 +121,7 @@ impl PreparedCustomerAudit {
         self
     }
 
-    /// Capture customer-side fields from an already-validated audit entity snapshot.
+    /// 从已校验的审计实体快照捕获客户侧字段。
     ///
     /// 参数对象 [`ValidatedAuditSnapshot`] 收敛九个调用参数（erp-customer-012），
     /// 避免调用方传参顺序易错且难以扩展；本函数为新代码的参数对象入口。
@@ -155,7 +155,7 @@ impl PreparedCustomerAudit {
         }
     }
 
-    /// Capture customer-side fields from an already-validated audit entity snapshot.
+    /// 从已校验的审计实体快照捕获客户侧字段。
     ///
     /// 组合层调用方可使用九参入口捕获完整事件字段；
     /// 新代码优先使用参数对象入口 [`PreparedCustomerAudit::from_snapshot`]。
@@ -201,7 +201,7 @@ impl PreparedCustomerAudit {
         })
     }
 
-    /// Build a success resource audit from an authenticated actor.
+    /// 由已认证操作人构造一条成功的资源审计。
     ///
     /// # 参数
     /// * `actor` - 已通过鉴权的审计操作人
@@ -247,7 +247,19 @@ impl PreparedCustomerAudit {
 /// Port customer uses to prepare and persist resource audits on a caller executor.
 #[async_trait]
 pub trait CustomerAuditPort: Send + Sync {
-    /// Validate and prepare a success resource audit before the transaction.
+    /// 在事务开始前校验并准备一条成功的资源审计。
+    ///
+    /// # 参数
+    /// * `actor` - 已通过鉴权的审计操作人
+    /// * `action` - 业务动作名
+    /// * `resource_type` - 资源类型
+    /// * `resource_id` - 资源业务 ID
+    ///
+    /// # 返回
+    /// 返回可在调用方执行器上持久化的审计事实。
+    ///
+    /// # 错误
+    /// 资源 ID 为空或审计事实无法准备时返回对应错误。
     fn resource_log(
         &self,
         actor: AuditActor,
@@ -256,7 +268,17 @@ pub trait CustomerAuditPort: Send + Sync {
         resource_id: String,
     ) -> Result<PreparedCustomerAudit>;
 
-    /// Persist a previously prepared audit on the caller-chosen executor.
+    /// 在调用方选择的执行器上持久化已准备的审计。
+    ///
+    /// # 参数
+    /// * `audit` - 已准备的审计事实
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 审计写入完成。
+    ///
+    /// # 错误
+    /// 审计持久化失败时返回对应错误。
     async fn persist(&self, audit: &PreparedCustomerAudit, executor: &mut dyn Executor) -> Result<()>;
 }
 

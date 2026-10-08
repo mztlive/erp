@@ -2,6 +2,15 @@
 use super::dto::{ProfitLossExport, ProfitLossView};
 
 /// 直接序列化服务端全量结果，不使用客户端金额或当前页数据。
+///
+/// # 参数
+/// * `view` - 服务端全量盈亏视图。
+///
+/// # 返回
+/// 返回 CSV 内容、文件名、行数和生成时点。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn export(view: ProfitLossView) -> ProfitLossExport {
     let mut lines = metadata(&view);
     lines.push(header());

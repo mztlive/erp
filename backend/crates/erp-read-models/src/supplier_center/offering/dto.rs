@@ -240,6 +240,15 @@ impl SupplierOfferingView {
     }
 
     /// 清除采购成本、税率和费用字段。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无返回值。原地清空含税价、不含税价、进项税率、运费和服务费。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn redact_costs(&mut self) {
         self.dropship_supply_price_gross = None;
         self.dropship_supply_price_net = None;

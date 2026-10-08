@@ -57,8 +57,14 @@ pub enum SubmissionStatus {
 impl SubmissionStatus {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::InReview => "审核中",
@@ -70,8 +76,14 @@ impl SubmissionStatus {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::InReview => "IN_REVIEW",
@@ -84,6 +96,15 @@ impl SubmissionStatus {
 
 impl DocumentState for SubmissionStatus {
     /// 审核中可被通过、驳回或因新提交失效；其余为终态（旧提交不复用，§6.5）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `InReview` 的后继为 `Approved`、`Rejected`、`Superseded`；`Approved`、`Rejected`、`Superseded` 返回空切片。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::InReview => &[Self::Approved, Self::Rejected, Self::Superseded],
@@ -275,7 +296,7 @@ impl SalesOrderSubmission {
     /// 返回新建的提交实体（`InReview`）。
     ///
     /// # 错误
-    /// 必填为空、超长、关联不一致、金额三元组不成立或行清单非法时返回错误。
+    /// 提交序号或草稿版本为零、必填为空、超长、卡券投影不完整或与业务性质冲突、金额三元组不成立或行清单非法时返回错误。
     pub fn new(id: SalesOrderSubmissionId, data: SalesOrderSubmissionData) -> Result<Self> {
         if data.submission_no == 0 {
             return Err(Error::from("提交序号必须为正整数"));
@@ -376,6 +397,9 @@ impl SalesOrderSubmission {
     ///
     /// # 返回
     /// 销售单与提交人均一致时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn matches_receipt_identity(&self, sales_order_id: &str, submitted_by: &str) -> bool {
         self.sales_order_id.as_ref() == sales_order_id && self.submitted_by == submitted_by
     }
@@ -389,7 +413,7 @@ impl SalesOrderSubmission {
     /// 迁移成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 非审核中状态时返回 [`Error::InvalidStateTransition`]。
+    /// 当前状态不能迁到 `Approved` 时返回 [`Error::InvalidStateTransition`]。已是 `Approved` 时幂等成功。
     pub fn approve(&mut self, updated_by: impl Into<String>) -> Result<()> {
         self.transition(SubmissionStatus::Approved, updated_by)
     }
@@ -403,7 +427,7 @@ impl SalesOrderSubmission {
     /// 迁移成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 非审核中状态时返回 [`Error::InvalidStateTransition`]。
+    /// 当前状态不能迁到 `Rejected` 时返回 [`Error::InvalidStateTransition`]。已是 `Rejected` 时幂等成功。
     pub fn reject(&mut self, updated_by: impl Into<String>) -> Result<()> {
         self.transition(SubmissionStatus::Rejected, updated_by)
     }
@@ -417,7 +441,7 @@ impl SalesOrderSubmission {
     /// 迁移成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 非审核中状态时返回 [`Error::InvalidStateTransition`]。
+    /// 当前状态不能迁到 `Superseded` 时返回 [`Error::InvalidStateTransition`]。已是 `Superseded` 时幂等成功。
     pub fn mark_superseded(&mut self, updated_by: impl Into<String>) -> Result<()> {
         self.transition(SubmissionStatus::Superseded, updated_by)
     }
@@ -492,11 +516,14 @@ impl SalesOrderSubmission {
 
     /// 将提交表头快照转为正式版本所需的快照入参。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回与当前提交快照字段一一对应的表头入参。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     ///
     /// # 关键业务约束
     /// 只复制已规范化快照，不再次 trim 或改写空合同/结算主体。
@@ -674,6 +701,9 @@ impl SalesOrderSubmissionLine {
 
     /// 还原实物及服务字段组。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于正式版本行构造的完整实物及服务字段组。
     ///
@@ -710,6 +740,9 @@ impl SalesOrderSubmissionLine {
     }
 
     /// 还原卡券字段组。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 返回用于正式版本行构造的完整卡券字段组。

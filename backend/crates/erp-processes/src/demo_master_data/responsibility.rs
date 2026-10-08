@@ -28,6 +28,20 @@ use crate::{Error, Result};
 const RULE_PAGE_SIZE: u32 = 100;
 
 impl DemoMasterDataService {
+    /// 补齐默认采购调度人和财务付款、开票负责人。
+    ///
+    /// 已有启用的同层默认规则时保留现有负责人。
+    ///
+    /// # 参数
+    /// * `actor` - 当前操作人。
+    /// * `accounts` - 已准备的岗位账号。
+    /// * `report` - 累计责任规则提示。
+    ///
+    /// # 返回
+    /// 规格中的默认规则已存在或已创建时无返回值。
+    ///
+    /// # 错误
+    /// 规格负责人不在已准备账号中，或规则查询与创建失败时返回对应错误。
     pub(super) async fn ensure_responsibilities(
         &self,
         actor: &AuditActor,

@@ -18,6 +18,9 @@ impl SupplierImportTaskAdapter {
     ///
     /// # 返回
     /// 返回可注册到统一执行器的适配器。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(process: SupplierImportProcess) -> Self {
         Self { process }
     }
@@ -32,6 +35,9 @@ impl BackgroundTaskAdapter for SupplierImportTaskAdapter {
     ///
     /// # 返回
     /// 返回稳定的任务名 `supplier_import`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn name(&self) -> &'static str {
         "supplier_import"
     }

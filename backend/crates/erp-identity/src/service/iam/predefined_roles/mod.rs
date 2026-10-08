@@ -174,7 +174,7 @@ pub(crate) const PREDEFINED_ROLES: &[PredefinedRoleDef] = &[
 /// # 参数
 /// * `rbac` - 共享 RBAC 服务
 ///
-/// # 返回值
+/// # 返回
 /// 全部角色检查、创建或补齐完成后返回 `Ok(())`。
 ///
 /// # 错误

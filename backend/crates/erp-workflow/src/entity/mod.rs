@@ -1,4 +1,4 @@
-//! Workflow entities and value objects.
+//! 工作流实体与值对象。
 
 pub mod approval_cancellation;
 pub mod approval_integration;

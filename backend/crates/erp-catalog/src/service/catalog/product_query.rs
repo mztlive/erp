@@ -112,6 +112,15 @@ impl CatalogService {
 }
 
 /// 校验并规范化商品列表请求；保持原首错顺序。
+///
+/// # 参数
+/// * `params` - 商品列表筛选、分页与排序参数
+///
+/// # 返回
+/// 返回尚未套用授权范围的仓储筛选；`ids` 与 `scope` 保持为空。
+///
+/// # 错误
+/// 请求体校验失败、销售价为负或下限高于上限、排序字段不在白名单或排序方向非法时返回 `ValidationError`。
 pub fn prepare_product_list(params: &ProductListParams) -> Result<ProductFilter> {
     params.validate()?;
     let query = params.normalized()?;
@@ -139,6 +148,16 @@ pub fn prepare_product_list(params: &ProductListParams) -> Result<ProductFilter>
 }
 
 /// 将已读取的商品行投影为原列表响应，不读取额外事实。
+///
+/// # 参数
+/// * `page` - 已读取的商品分页行
+/// * `filter` - 提供页码与单页条数的筛选
+///
+/// # 返回
+/// 返回与 `filter` 分页一致的商品列表视图。
+///
+/// # 错误
+/// 不产生失败，始终返回 `Ok`。
 pub fn product_page_view(
     page: persistence_core::PageResult<crate::repository::ProductRow>,
     filter: &ProductFilter,

@@ -43,8 +43,14 @@ impl CapabilityCode {
     ///
     /// 映射表见 [`CAPABILITY_CODE_DISPLAY`]（erp-supplier-002）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         super::display::label_of(*self, &CAPABILITY_CODE_DISPLAY)
     }
@@ -53,8 +59,14 @@ impl CapabilityCode {
     ///
     /// 映射表见 [`CAPABILITY_CODE_DISPLAY`]（erp-supplier-002）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         super::display::code_of(*self, &CAPABILITY_CODE_DISPLAY)
     }
@@ -69,6 +81,9 @@ impl CapabilityCode {
     ///
     /// # 返回
     /// 命中时返回对应能力代码，未知代码返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn from_code(code: &str) -> Option<Self> {
         super::display::from_code(code, &CAPABILITY_CODE_DISPLAY)
     }
@@ -105,8 +120,14 @@ impl CapabilityStatus {
     ///
     /// 映射表见 [`CAPABILITY_STATUS_DISPLAY`]（erp-supplier-002）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         super::display::label_of(*self, &CAPABILITY_STATUS_DISPLAY)
     }
@@ -115,16 +136,28 @@ impl CapabilityStatus {
     ///
     /// 映射表见 [`CAPABILITY_STATUS_DISPLAY`]（erp-supplier-002）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         super::display::code_of(*self, &CAPABILITY_STATUS_DISPLAY)
     }
 
     /// 判断是否处于启用状态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 处于 `Active` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         matches!(self, Self::Active)
     }
@@ -138,6 +171,15 @@ const CAPABILITY_STATUS_DISPLAY: [super::display::DisplayEntry<CapabilityStatus>
 
 impl DocumentState for CapabilityStatus {
     /// 返回合法后继：启用 ⇄ 停用。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Active` 的静态切片只含 `Disabled`；`Disabled` 的静态切片只含 `Active`。切片不含当前状态自身。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Active => &[Self::Disabled],
@@ -308,8 +350,14 @@ impl SupplierCapability {
 
     /// 判断能力是否处于启用状态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为 `Active` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         self.stable.status().is_active()
     }
@@ -321,10 +369,10 @@ impl SupplierCapability {
     /// * `updated_by` - 本次交接执行人
     ///
     /// # 返回
-    /// 负责人确有变化时返回 `true`。
+    /// 交接成功时返回 `Ok(())`，并改写能力负责人。
     ///
     /// # 错误
-    /// 目标为空或与当前一致时拒绝。
+    /// 目标负责人为空、过长或与当前负责人一致时返回错误。
     ///
     /// # 关键业务约束
     /// 独立于整体维护人；不得把操作人写成能力负责人。

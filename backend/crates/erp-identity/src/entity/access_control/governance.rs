@@ -8,9 +8,9 @@ use crate::entity::role::{ROOT_ROLE_ID, Role};
 /// # 参数
 /// * `qualified_roles` - 调用方在当前事务中验证的角色，不得传入未经权限证明的角色。
 /// # 返回
-/// 有效内建 root 返回不附加人员上限的公司范围，适用于全部已登记范围消费者。
+/// 有效内建 root 返回不附加人员上限的公司范围，适用于全部已登记范围消费者。没有符合条件的角色时返回 `None`，由调用方继续解析人员范围。
 /// # 错误
-/// 无；不符合超管条件时返回 None，由调用方继续解析人员范围。
+/// 不返回错误。
 pub(crate) fn root_scope(qualified_roles: &[Role]) -> Option<ResolvedScope> {
     let root = qualified_roles
         .iter()

@@ -414,6 +414,17 @@ impl WorkItemRepositoryApprovalExt for Repository<'_, WorkItem> {
     }
 
     /// 按 trait 合同批量读取全部开放审批任务，保留同执行的每条命中记录。
+    ///
+    /// # 参数
+    /// * `execution_ids` - 审批节点执行 ID；空切片不查询数据库。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// `execution_ids` 为空时返回空向量。否则按 `created_at` 升序、`id` 升序返回
+    /// `open_approval_executions_filter` 命中的全部未删除开放单据审批任务，不去重。
+    ///
+    /// # 错误
+    /// `find_many_sorted` 的 MongoDB 查询或游标读取失败时返回错误。空输入不返回错误。
     async fn open_approval_tasks_for_executions(
         &self,
         execution_ids: &[ApprovalNodeExecutionId],

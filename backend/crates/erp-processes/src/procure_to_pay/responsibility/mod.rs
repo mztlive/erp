@@ -17,6 +17,16 @@ pub struct ProcurementResponsibilityProcess {
 
 impl ProcurementResponsibilityProcess {
     /// 注入当前数据库和共享授权服务，不创建独立策略快照。
+    ///
+    /// # 参数
+    /// * `db` - 当前数据库。
+    /// * `rbac` - 共享授权服务。
+    ///
+    /// # 返回
+    /// 返回采购责任流程。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
         Self { db, rbac }
     }

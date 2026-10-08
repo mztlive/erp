@@ -47,6 +47,9 @@ impl ElectronicRecipientFingerprint {
     ///
     /// # 返回
     /// 返回内部十六进制串的借用。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &str {
         &self.0
     }

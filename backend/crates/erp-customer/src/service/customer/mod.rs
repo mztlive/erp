@@ -116,8 +116,10 @@ impl CustomerService {
     ///
     /// # 错误
     /// * `NotFound` - 主体或创建人账号不存在
+    /// * `BusinessLogicError` - 创建人账号不能登录
     /// * `ConflictError` - 客户编号重复或该主体已有客户角色（唯一索引透出）
     /// * `ValidationError` - 请求体校验失败
+    /// 编号、窗口或归属字段非法时返回领域错误；范围校验、审计或事务写入失败时返回对应错误。
     pub async fn create_customer(
         &self,
         req: CreateCustomerRequest,
@@ -161,8 +163,11 @@ impl CustomerService {
     /// * `assignment` - 已构造的首条 OWNER 归属
     /// * `executor` - 调用方执行器
     ///
+    /// # 返回
+    /// 客户角色与首条 OWNER 归属都写入完成。
+    ///
     /// # 错误
-    /// 唯一索引冲突或底层写入失败。
+    /// 唯一索引冲突或底层写入失败时返回对应错误。
     pub async fn persist_new_account(
         &self,
         account: &CustomerAccount,
@@ -175,9 +180,12 @@ impl CustomerService {
     /// 按服务端数据范围解析允许返回的客户 ID。
     ///
     /// # 参数
-    /// `scope` 必须由入口授权，`actor_user_id` 为当前登录用户。
+    /// * `scope` - 目录范围；必须由入口授权。`AllAuthorized` 不按归属收窄，其余范围只保留负责销售
+    /// * `actor_user_id` - 当前登录用户
+    ///
     /// # 返回
-    /// 全量权限返回 None；受限范围返回当前负责销售的客户（可为空）。协作销售不计入。
+    /// 全量权限返回 `None`；受限范围返回当前负责销售的客户（可为空）。协作销售不计入。
+    ///
     /// # 错误
     /// 查询失败时返回仓储错误。
     pub async fn customer_ids_for_scope(
@@ -218,6 +226,7 @@ impl CustomerService {
     /// # 错误
     /// * `NotFound` - 客户角色不存在
     /// * `ConflictError` - 期望版本与当前版本不一致
+    /// 请求校验或状态迁移非法时返回校验或领域错误；范围校验、仓储更新或审计失败时返回对应错误。
     pub async fn update_customer(
         &self,
         id: &str,
@@ -268,6 +277,7 @@ impl CustomerService {
     ///
     /// # 错误
     /// * `NotFound` - 客户角色不存在
+    /// 查询失败时返回仓储错误。
     pub async fn load_customer(&self, id: &str) -> Result<CustomerAccount> {
         self.db
             .customer_accounts()
@@ -339,6 +349,22 @@ async fn persist_new_account(
 }
 
 /// 将批量读取结果按稳定 ID 装配为客户列表视图。
+///
+/// 主体身份、负责人与目录标签按 ID 对齐；缺失的主体或归属不补造记录。
+///
+/// # 参数
+/// * `rows` - 客户角色投影行，决定结果顺序
+/// * `identities` - 主体身份事实；同一 `party_id` 后者覆盖前者
+/// * `assignments` - 归属行，按客户分组
+/// * `actor_user_id` - 当前账号，用于目录标签
+/// * `requested_scope` - 页面请求的目录范围
+/// * `account_names` - 账号显示名
+///
+/// # 返回
+/// 按 `rows` 顺序返回已填充主体、负责人和范围标签的客户视图。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn assemble_customer_views(
     rows: Vec<CustomerAccountRow>,
     identities: Vec<PartyIdentityFact>,

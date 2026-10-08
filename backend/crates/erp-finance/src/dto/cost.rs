@@ -272,6 +272,9 @@ pub struct CostEntryListQuery {
 impl CostEntryListParams {
     /// 归一化成本事实列表查询参数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
     ///
@@ -331,6 +334,9 @@ pub struct CostAllocationListQuery {
 
 impl CostAllocationListParams {
     /// 归一化成本分配列表查询参数。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。

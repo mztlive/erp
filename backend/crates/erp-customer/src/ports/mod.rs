@@ -1,4 +1,4 @@
-//! Consumer ports for audit persistence and foreign Party/account/scope facts.
+//! 审计持久化，以及外部主体、账号与范围事实的消费端口。
 
 mod account;
 mod audit;

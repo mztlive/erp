@@ -1,4 +1,4 @@
-//! Customer entities and value objects.
+//! 客户实体与值对象。
 
 pub mod customer;
 

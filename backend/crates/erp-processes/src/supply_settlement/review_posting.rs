@@ -57,6 +57,7 @@ const ORDER: [Step; 11] = [
 trait PostingSteps: Send {
     async fn apply(&mut self, step: Step, executor: &mut dyn Executor) -> Result<()>;
 }
+/// 按 `ORDER` 逐步过账；任一步失败则不执行后续步骤。
 async fn execute(steps: &mut impl PostingSteps, executor: &mut dyn Executor) -> Result<()> {
     for step in ORDER {
         steps.apply(step, executor).await?;
@@ -175,6 +176,17 @@ fn review_audit(input: &Posting<'_>) -> Result<erp_audit::AuditLog> {
         .with_command_id(Some(input.audit_id.clone()))?
         .with_resource_number(Some(input.statement.statement_no.clone()))?)
 }
+/// 在同一执行器上按授权、岗位分离、明细、差异、主题、结算单、任务、应付、成本、回执和审计的顺序过账。
+///
+/// # 参数
+/// * `input` - 已准备的复核决定及财务构造结果。
+/// * `ex` - 调用方事务执行器。
+///
+/// # 返回
+/// 返回已持久化的复核决定回执。
+///
+/// # 错误
+/// 任一步失败时返回对应错误且不执行后续步骤。回执未生成时返回 `Internal`。
 pub(super) async fn post(input: Posting<'_>, ex: &mut dyn Executor) -> Result<ReviewDecisionReceipt> {
     let mut posting = MongoPosting { input, items: Vec::new(), differences: Vec::new(), receipt: None };
     execute(&mut posting, ex).await?;

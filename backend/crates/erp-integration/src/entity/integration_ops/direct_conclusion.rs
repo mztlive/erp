@@ -19,9 +19,15 @@ pub enum DirectConclusion {
 impl DirectConclusion {
     /// 从终态结论派生追加式决定的固定动作。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 确认无误派生 `ConfirmNoError` 动作，确认有效差异派生
     /// `ConfirmValidDifference` 动作；一一对应，无默认分支。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn resolution_action(self) -> ResolutionAction {
         match self {
             Self::ConfirmNoError => ResolutionAction::ConfirmNoError,
@@ -31,8 +37,14 @@ impl DirectConclusion {
 
     /// 从终态结论派生追加式决定后的固定状态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回派生动作唯一允许的终态，由 [`ResolutionAction::derived_status`] 独占。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn resulting_status(self) -> ResultingStatus {
         self.resolution_action().derived_status()
     }

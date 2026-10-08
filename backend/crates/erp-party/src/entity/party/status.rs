@@ -20,22 +20,40 @@ where
 {
     /// 是否处于启用状态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 处于启用变体时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn is_enabled(&self) -> bool;
 
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签（启用/停用）。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn status_label(&self) -> &'static str {
         if self.is_enabled() { "启用" } else { "停用" }
     }
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串（active/disabled）。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn status_code(&self) -> &'static str {
         if self.is_enabled() { "active" } else { "disabled" }
     }
@@ -63,8 +81,14 @@ where
 impl SymmetricActiveStatus for EffectiveRecordStatus {
     /// 是否处于启用状态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 处于 `Active` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn is_enabled(&self) -> bool {
         matches!(self, Self::Active)
     }
@@ -84,24 +108,42 @@ pub enum EffectiveRecordStatus {
 impl EffectiveRecordStatus {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         self.status_label()
     }
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         self.status_code()
     }
 
     /// 判断是否处于启用状态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 处于 `Active` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         self.is_enabled()
     }
@@ -126,6 +168,17 @@ impl EffectiveRecordStatus {
 
 impl DocumentState for EffectiveRecordStatus {
     /// 返回合法后继：启用 ⇄ 停用。
+    ///
+    /// 从属事实行只有这一对可逆后继，没有终态；与自身相同的幂等迁移不在切片中。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Active` 返回只含 `Disabled` 的静态切片，`Disabled` 返回只含 `Active` 的静态切片。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Active => &[Self::Disabled],
@@ -147,6 +200,9 @@ impl DocumentState for EffectiveRecordStatus {
 ///
 /// # 返回
 /// 返回选中的行引用；无启用行时返回 `None`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn select_current_default<T>(
     items: &[T],
     is_default: impl Fn(&T) -> bool,

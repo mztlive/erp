@@ -34,8 +34,14 @@ pub enum SupplierPaymentStatus {
 impl SupplierPaymentStatus {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -46,8 +52,14 @@ impl SupplierPaymentStatus {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "draft",
@@ -61,6 +73,15 @@ impl DocumentState for SupplierPaymentStatus {
     /// 返回全部合法后继状态。
     ///
     /// 正常付款从草稿直接过账；`REVERSED` 是终态。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Draft` 只返回 `Posted`；`Posted` 只返回 `Reversed`；`Reversed` 返回空切片。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft => &[Self::Posted],
@@ -85,6 +106,9 @@ impl PendingPaymentAllocation {
     /// # 参数
     /// * `payable_entry_id` - 被核销应付分录
     /// * `allocated_amount` - 核销金额
+    ///
+    /// # 返回
+    /// 金额为正时返回待过账核销行。
     ///
     /// # 错误
     /// 金额非正时返回错误。
@@ -202,8 +226,14 @@ impl SupplierPayment {
 
     /// 返回付款执行所需的银行回单图片资产。
     ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回已保存的银行回单图片资产标识。
+    ///
     /// # 错误
-    /// 数据缺少银行回单时返回错误。
+    /// `bank_receipt_asset_id` 为空时返回错误。
     pub fn require_bank_receipt(&self) -> Result<&FileAssetId> {
         self.bank_receipt_asset_id.as_ref().ok_or_else(|| Error::from("请先上传银行回单图片"))
     }
@@ -270,8 +300,14 @@ impl SupplierPayment {
 
     /// 判断付款单是否已过账。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为 `Posted` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_posted(&self) -> bool {
         self.status == SupplierPaymentStatus::Posted
     }

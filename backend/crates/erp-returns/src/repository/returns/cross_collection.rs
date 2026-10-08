@@ -27,6 +27,9 @@ impl<'a> ReturnsRepository<'a> {
     ///
     /// # 返回
     /// 返回仓储实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
@@ -43,6 +46,9 @@ impl<'a> ReturnsRepository<'a> {
     /// * `case_entity` - 待写入的处理单
     /// * `line` - 待写入的明细
     /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 返回
+    /// 两笔写入都成功时无返回值。
     ///
     /// # 错误
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
@@ -76,6 +82,9 @@ impl<'a> ReturnsRepository<'a> {
     /// * `order` - 待写入的采购退货单
     /// * `line` - 待写入的明细
     /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 返回
+    /// 两笔写入都成功时无返回值。
     ///
     /// # 错误
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射

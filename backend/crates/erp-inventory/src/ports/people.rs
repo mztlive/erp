@@ -108,7 +108,10 @@ impl AdjustmentPeopleFactsPort for FailClosedAdjustmentPeopleFactsPort {
 /// * `rows` - `(调整单 ID, 快照版本, submitted_by)`
 ///
 /// # 返回
-/// 返回每个调整单的最新 `submitted_by`。
+/// 返回每个调整单的最新 `submitted_by`。空白申请人被跳过；同一单版本相同或更低时被后出现的行替换。
+///
+/// # 错误
+/// 不返回错误。
 pub fn latest_snapshot_submitters(
     rows: impl IntoIterator<Item = (String, u32, String)>,
 ) -> HashMap<String, String> {
@@ -134,7 +137,10 @@ pub fn latest_snapshot_submitters(
 /// * `wanted` - 申请人筛选
 ///
 /// # 返回
-/// 返回命中的调整单 ID。
+/// 返回命中的调整单 ID，并按标识排序。
+///
+/// # 错误
+/// 不返回错误。
 pub fn applicant_object_ids(latest: &HashMap<String, String>, wanted: &[String]) -> Vec<String> {
     let wanted = wanted.iter().collect::<BTreeSet<_>>();
     let mut ids = latest
@@ -154,6 +160,9 @@ pub fn applicant_object_ids(latest: &HashMap<String, String>, wanted: &[String])
 ///
 /// # 返回
 /// 返回按调整单合并后的人员事实。
+///
+/// # 错误
+/// 不返回错误。
 pub fn merge_adjustment_people(
     submitted: impl IntoIterator<Item = (String, String)>,
     assignees: impl IntoIterator<Item = (String, String)>,
@@ -176,6 +185,9 @@ pub fn merge_adjustment_people(
 ///
 /// # 返回
 /// 两边都未筛选时返回 `None`；否则返回交集，空集合表示无命中。
+///
+/// # 错误
+/// 不返回错误。
 pub fn intersect_object_ids(left: Option<Vec<String>>, right: Option<Vec<String>>) -> Option<Vec<String>> {
     match (left, right) {
         (None, None) => None,

@@ -80,8 +80,15 @@ pub(crate) struct CancelAuthorization {
 
 impl CancelAuthority {
     /// 返回撤回授权身份的展示名称。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回原提交人或审批管理员的中文名称。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(crate) fn label(self) -> &'static str {
         match self {
             Self::Submitter => "原提交人",
@@ -91,6 +98,16 @@ impl CancelAuthority {
 }
 
 /// 按请求中的稳定实例 ID 精确加载审批实例。
+///
+/// # 参数
+/// * `db` - 审批实例所在数据库。
+/// * `instance_id` - 命令中的审批实例 ID。
+///
+/// # 返回
+/// 返回该 ID 对应的审批实例。
+///
+/// # 错误
+/// 实例不存在时返回 `NotFound`；仓储读取失败时返回对应错误。
 pub(crate) async fn load_cancel_instance(
     db: &Database,
     instance_id: &str,
@@ -104,6 +121,17 @@ pub(crate) async fn load_cancel_instance(
 /// 从候选实例加载 RUNNING/BLOCKED 当前执行与全部开放任务。
 ///
 /// `RUNNING` 必须恰有一个开放任务，`BLOCKED` 必须没有开放任务。
+///
+/// # 参数
+/// * `db` - 执行、任务与定义所在数据库。
+/// * `binding` - 单据创建时冻结的定义绑定。
+/// * `instance` - 已加载的候选实例。
+///
+/// # 返回
+/// 返回定义图、实例、当前执行、任务关闭策略和全部开放任务。
+///
+/// # 错误
+/// 取消策略、当前执行、开放任务数量或绑定定义不满足时返回 `ConflictError`。仓储读取失败时返回对应错误。
 pub(crate) async fn load_cancel_runtime(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
@@ -261,6 +289,17 @@ async fn ensure_replay_terminal(
 }
 
 /// 按 V3、已知历史精确 scope 顺序读取普通撤回收据。
+///
+/// # 参数
+/// * `db` - 命令收据所在数据库。
+/// * `identity` - 已规范化的普通撤回命令身份。
+/// * `executor` - 调用方数据库快照。
+///
+/// # 返回
+/// 命中第一个作用域时返回该收据；全部未命中时返回 `None`。
+///
+/// # 错误
+/// 仓储读取失败时返回对应错误。
 pub(crate) async fn find_cancel_receipt(
     db: &Database,
     identity: &PreparedCommandIdentity,
@@ -284,6 +323,15 @@ pub(crate) async fn find_cancel_receipt(
 }
 
 /// 非原命令操作人不得因收据是否存在获得不同错误投影。
+///
+/// # 参数
+/// * `instance` - 已取消的审批实例。
+///
+/// # 返回
+/// 返回稳定的 `ConflictError`。取消策略本身无法解析时，错误正文取该策略错误。
+///
+/// # 错误
+/// 不返回错误。调用方把返回值当作错误使用。
 pub(crate) fn cancel_replay_actor_mismatch(instance: &ApprovalProcessInstance) -> Error {
     match instance.cancellation_task_policy() {
         Err(error) => Error::ConflictError(error.to_string()),
@@ -294,6 +342,20 @@ pub(crate) fn cancel_replay_actor_mismatch(instance: &ApprovalProcessInstance) -
 const CANCEL_REPLAY_RECOVERY_ATTEMPTS: usize = 32;
 
 /// 事务失败或结果未知后，以有限次新会话等待并发 winner 的收据可见。
+///
+/// # 参数
+/// * `service` - 库存调整流程服务。
+/// * `id` - 库存调整单主键。
+/// * `req` - 原撤回请求中的实例与期望版本。
+/// * `reason` - 已规范化撤回原因。
+/// * `idempotency_key` - 已规范化幂等键。
+/// * `actor` - 当前认证操作人。
+///
+/// # 返回
+/// 限定次数内读到已提交结果时返回调整单视图；仍未出现时返回 `None`。
+///
+/// # 错误
+/// 某次回放校验或仓储读取失败时返回对应错误，不再继续等待。
 pub(crate) async fn recover_cancel_replay(
     service: &InventoryAdjustmentService,
     id: &str,
@@ -312,6 +374,17 @@ pub(crate) async fn recover_cancel_replay(
 }
 
 /// 校验实例确实属于路径中的库存调整单和命令冻结版本。
+///
+/// # 参数
+/// * `instance` - 已加载的审批实例。
+/// * `adjustment_id` - 路径中的库存调整单主键。
+/// * `expected_subject_version` - 命令冻结的主题版本。
+///
+/// # 返回
+/// 流程种类、主体和主题版本一致时无返回值。
+///
+/// # 错误
+/// 任一身份不一致时返回 `ConflictError`。
 pub(crate) fn ensure_cancel_instance_subject(
     instance: &ApprovalProcessInstance,
     adjustment_id: &str,
@@ -328,6 +401,16 @@ pub(crate) fn ensure_cancel_instance_subject(
 }
 
 /// 校验实例流程种类与单据创建时冻结的定义绑定。
+///
+/// # 参数
+/// * `instance` - 已加载的审批实例。
+/// * `binding` - 单据创建时冻结的定义绑定。
+///
+/// # 返回
+/// 流程种类、定义标识和定义版本一致时无返回值。
+///
+/// # 错误
+/// 任一绑定不一致时返回 `ConflictError`。
 pub(crate) fn ensure_cancel_instance_binding(
     instance: &ApprovalProcessInstance,
     binding: &ApprovalDefinitionBinding,
@@ -344,6 +427,15 @@ pub(crate) fn ensure_cancel_instance_binding(
 /// 把普通业务撤回的唯一引擎通知意图规范为普通取消事件。
 ///
 /// 人员失效实例仍走普通业务撤回，不得沿用受阻管理员取消的通知种类。
+///
+/// # 参数
+/// * `writes` - 取消编排写出的计划；成功时改写其中唯一通知意图。
+///
+/// # 返回
+/// 唯一通知已改为普通取消事件时无返回值。
+///
+/// # 错误
+/// 通知意图不是恰好一条时返回 `Internal`。
 pub(crate) fn normalize_document_cancel_notification(writes: &mut PlannedWrites) -> Result<()> {
     let [intent] = writes.notifications.as_mut_slice() else {
         return Err(Error::Internal("库存调整普通撤回必须产生唯一取消通知意图".to_string()));
@@ -354,6 +446,20 @@ pub(crate) fn normalize_document_cancel_notification(writes: &mut PlannedWrites)
 }
 
 /// 校验调用方持有的运行实例、执行与任务版本。
+///
+/// # 参数
+/// * `runtime` - 已加载的撤回运行事实。
+/// * `req` - 含实例、执行和任务期望版本的撤回请求。
+/// * `authorization` - 已证明的撤回授权，用于核对开放任务责任组织。
+///
+/// # 返回
+/// 身份与版本全部匹配时无返回值。
+///
+/// # 错误
+/// 执行身份不一致、期望版本变化，或任务策略与请求中的任务版本不匹配时返回 `ConflictError`。
+///
+/// # Panics
+/// `CloseOpenTask` 分支直接取 `open_tasks[0]`。调用方必须已证明恰有一个开放任务，否则越界。
 pub(crate) fn ensure_cancel_runtime_versions(
     runtime: &LoadedCancelRuntime,
     req: &CancelStockAdjustmentApprovalRequest,
@@ -381,6 +487,17 @@ pub(crate) fn ensure_cancel_runtime_versions(
 }
 
 /// 校验普通撤回实例与当前执行的身份、轮次、状态和 blocker 上下文。
+///
+/// # 参数
+/// * `instance` - 审批实例。
+/// * `current` - 当前节点执行。
+/// * `policy` - 当前实例决定的任务关闭策略。
+///
+/// # 返回
+/// 运行中有开放任务，或人员可恢复的阻塞且两边 blocker 相同、没有开放任务时无返回值。
+///
+/// # 错误
+/// 身份、轮次、状态或 blocker 不匹配时返回 `ConflictError`。
 pub(crate) fn ensure_cancel_execution_identity(
     instance: &ApprovalProcessInstance,
     current: &ApprovalNodeExecution,
@@ -412,6 +529,17 @@ pub(crate) fn ensure_cancel_execution_identity(
 }
 
 /// 校验开放任务与当前实例、执行、对象和责任人完全一致。
+///
+/// # 参数
+/// * `task` - 待关闭的开放审批任务。
+/// * `runtime` - 已加载的撤回运行事实。
+/// * `authorization` - 已证明的撤回授权，提供责任组织。
+///
+/// # 返回
+/// 任务与当前运行事实构成同一责任链时无返回值。
+///
+/// # 错误
+/// 适配器登记不完整，或任务与实例、执行、责任组织不一致时返回对应错误。
 pub(crate) fn ensure_open_task_matches_runtime(
     task: &WorkItem,
     runtime: &LoadedCancelRuntime,
@@ -426,6 +554,18 @@ pub(crate) fn ensure_open_task_matches_runtime(
 }
 
 /// 校验开放审批任务、当前执行、实例和冻结责任快照构成同一责任链。
+///
+/// # 参数
+/// * `task` - 开放审批任务。
+/// * `instance` - 运行中的审批实例。
+/// * `current` - 当前节点执行。
+/// * `responsible_org_id` - 冻结快照中的责任组织。
+///
+/// # 返回
+/// 任务类型、状态、执行、对象、责任人和组织全部一致时无返回值。
+///
+/// # 错误
+/// 适配器登记不完整时返回对应错误；任一身份不一致时返回 `ConflictError`。
 pub(crate) fn ensure_stock_adjustment_open_task_identity(
     task: &WorkItem,
     instance: &ApprovalProcessInstance,
@@ -454,6 +594,18 @@ pub(crate) fn ensure_stock_adjustment_open_task_identity(
     Ok(())
 }
 
+/// 校验调用方持有的乐观锁版本仍等于已加载事实。
+///
+/// # 参数
+/// * `label` - 写入冲突文案的事实名称。
+/// * `expected` - 调用方持有的版本。
+/// * `actual` - 当前加载到的版本。
+///
+/// # 返回
+/// 两边版本相等时无返回值。
+///
+/// # 错误
+/// 版本不同时返回 `ConflictError`。
 pub(crate) fn ensure_expected_version(label: &str, expected: u64, actual: u64) -> Result<()> {
     if expected == actual {
         return Ok(());
@@ -461,6 +613,16 @@ pub(crate) fn ensure_expected_version(label: &str, expected: u64, actual: u64) -
     Err(Error::ConflictError(format!("{label}版本已变化，请刷新后重试")))
 }
 
+/// 去掉撤回原因首尾空白，并拒绝空原因。
+///
+/// # 参数
+/// * `reason` - 调用方提交的撤回原因。
+///
+/// # 返回
+/// 返回去掉首尾空白后的原因。
+///
+/// # 错误
+/// 去掉空白后为空时返回 `ValidationError`。
 pub(crate) fn normalize_cancel_reason(reason: &str) -> Result<String> {
     let reason = reason.trim();
     if reason.is_empty() {
@@ -473,6 +635,21 @@ pub(crate) fn normalize_cancel_reason(reason: &str) -> Result<String> {
 ///
 /// 普通撤回固定 `blocked_port=false`。人员失效允许走本端口；非人员一致性
 /// blocker 由统一取消编排失败关闭，只能经运行管理员受阻取消入口处理。
+///
+/// # 参数
+/// * `runtime` - 已加载的撤回运行事实。
+/// * `req` - 含期望主题、实例、执行和任务版本的撤回请求。
+/// * `actor_id` - 撤回人账号 ID。
+/// * `reason` - 已规范化撤回原因。
+/// * `idempotency_key` - 已规范化幂等键。
+/// * `receipt` - 已存在的撤回收据；新命令为空。
+/// * `now` - 调用方时间。
+///
+/// # 返回
+/// 返回 `blocked_port` 固定为 `false` 的取消执行输入。
+///
+/// # 错误
+/// 撤回人引用无效，或当前执行人的资格无法收敛时返回 `ValidationError`。
 pub(crate) fn build_stock_adjustment_cancel_input(
     runtime: &LoadedCancelRuntime,
     req: &CancelStockAdjustmentApprovalRequest,
@@ -513,6 +690,17 @@ pub(crate) fn build_stock_adjustment_cancel_input(
 }
 
 /// 校验普通撤回的账号、动作权限、对象读取范围和提交人/运行管理员身份。
+///
+/// # 参数
+/// * `service` - 库存调整流程服务。
+/// * `instance` - 待撤回的审批实例。
+/// * `actor` - 当前认证操作人。
+///
+/// # 返回
+/// 返回原提交人或运行管理员的授权事实。
+///
+/// # 错误
+/// 与 `ensure_cancel_authorized_with_executor` 相同；本函数使用非事务快照。
 pub(crate) async fn ensure_cancel_authorized(
     service: &InventoryAdjustmentService,
     instance: &ApprovalProcessInstance,
@@ -526,6 +714,17 @@ pub(crate) async fn ensure_cancel_authorized(
 ///
 /// 明确的授权拒绝映射为 `false`；仓储、政策登记或一致性错误继续上抛，禁止
 /// 通过吞错把损坏事实伪装为“无动作”。
+///
+/// # 参数
+/// * `service` - 库存调整流程服务。
+/// * `instance` - 待投影撤回动作的审批实例。
+/// * `actor` - 当前认证操作人。
+///
+/// # 返回
+/// 授权通过时返回 `true`；明确拒绝时返回 `false`。
+///
+/// # 错误
+/// 授权读取失败且不是 `Forbidden` 时返回对应错误。
 pub(crate) async fn actor_can_cancel(
     service: &InventoryAdjustmentService,
     instance: &ApprovalProcessInstance,
@@ -539,6 +738,19 @@ pub(crate) async fn actor_can_cancel(
 }
 
 /// 在调用方事务快照内重新校验普通撤回授权。
+///
+/// # 参数
+/// * `db` - 快照与授权所在数据库。
+/// * `rbac` - 动作权限与对象读取使用的 RBAC。
+/// * `instance` - 待撤回的审批实例。
+/// * `actor` - 当前认证操作人。
+/// * `executor` - 调用方数据库快照。
+///
+/// # 返回
+/// 原提交人返回 `Submitter`；具备运行管理员可见性且对象可读时返回 `RuntimeAdmin`。
+///
+/// # 错误
+/// 账号未激活、缺少撤回或读取权限、不是原提交人且不是运行管理员或对象不可读时返回 `Forbidden`。缺少或对不上冻结快照时返回 `ConflictError`。授权或快照读取失败时返回对应错误。
 pub(crate) async fn ensure_cancel_authorized_with_executor(
     db: &Database,
     rbac: &SharedRbacService,

@@ -39,6 +39,15 @@ pub enum SalesInvoiceTaskReason {
 
 impl SalesInvoiceTaskReason {
     /// 返回稳定的原因代码。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回批准申请、初次可开票、红票重开或销售变更重开的稳定原因码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ApprovedInvoiceRequest => "SALES_INVOICE_REQUEST_APPROVED",
@@ -204,8 +213,19 @@ pub fn new_sales_invoice_task(
 }
 
 /// 为批准申请生成独立责任身份，保留应收作业面与申请额度摘要。
+///
+/// # 参数
+/// * `id` - 任务主键。
+/// * `spec` - 已解析的销项开票任务规格；原因会被改为批准申请。
+/// * `responsibility_key` - 服务端财务责任键。
+/// * `request_id` - 开票申请 ID，拼入责任键。
+/// * `request_no` - 开票申请编号，写入影响摘要。
+///
+/// # 返回
+/// 返回原因码为批准申请、摘要含申请编号和待开票金额的开放任务。
+///
 /// # 错误
-/// 请求身份为空、责任键或摘要过长时返回错误。
+/// 申请 ID 或编号为空白、责任键为空或过长、任务字段非法，或影响摘要超长时返回错误。
 pub fn new_approved_sales_invoice_task(
     id: WorkItemId,
     mut spec: SalesInvoiceTaskSpec,
@@ -271,6 +291,9 @@ pub fn new_supplier_payment_task(
 ///
 /// # 返回
 /// 身份一致返回 `true`，任一维度不符返回 `false`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn matches_sales_invoice_identity(task: &WorkItem, account_id: &str) -> bool {
     task.work_item_type == WorkItemType::SalesInvoiceExecution
         && task.business_object_type == RECEIVABLE_OBJECT_TYPE
@@ -294,11 +317,13 @@ pub fn matches_sales_invoice_identity(task: &WorkItem, account_id: &str) -> bool
 /// 调用方（Service）负责把 `false` 映射为稳定业务错误并解析责任人/组织。
 ///
 /// # 参数
-/// * `account` - 已在当前事务形成的采购应付子账
-/// * `entry` - 与子账一同形成的原始应付分录
+/// * `fact` - 已在当前事务形成的采购应付子账与原始分录事实。
 ///
 /// # 返回
 /// 同一正式采购应付事实返回 `true`，任一维度不符返回 `false`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn is_purchase_payable(fact: &PayablePurchaseAdmissionFact<'_>) -> bool {
     fact.source_type_is_purchase_order
         && fact.entry_payable_account_id == fact.account_id
@@ -335,16 +360,46 @@ pub fn matches_supplier_payment_identity(task: &WorkItem, account_id: &str) -> b
 }
 
 /// 返回随可开票额度变化的开票影响摘要（稳定编码，同一金额同一文本）。
+///
+/// # 参数
+/// * `open_invoiceable_total` - 当前可开票金额。
+///
+/// # 返回
+/// 返回包含该金额的固定开票提示。
+///
+/// # 错误
+/// 不返回错误。
 pub fn sales_invoice_impact_summary(open_invoiceable_total: Amount) -> String {
     format!("待开票金额 ¥{open_invoiceable_total}，请登记销项发票并完成分配")
 }
 
 /// 返回随开放余额变化的付款影响摘要（稳定编码，应付域复用）。
+///
+/// # 参数
+/// * `open_total` - 当前未付金额。
+///
+/// # 返回
+/// 返回包含该金额的固定付款提示。
+///
+/// # 错误
+/// 不返回错误。
 pub fn supplier_payment_impact_summary(open_total: Amount) -> String {
     format!("未付金额 ¥{open_total}，请按付款条件登记付款")
 }
 
 /// 判断金额是否为零（open balance 归零即终态的唯一口径）。
+///
+/// # 参数
+/// * `amount` - 待判断金额。
+///
+/// # 返回
+/// 等于 `0.00` 时返回 `true`，否则返回 `false`。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # Panics
+/// 静态字面量 `0.00` 无法解析为金额时 panic；该字面量按金额格式必须合法。
 pub fn is_zero_amount(amount: Amount) -> bool {
     amount == Amount::from_str("0.00").expect("静态零金额必须合法")
 }

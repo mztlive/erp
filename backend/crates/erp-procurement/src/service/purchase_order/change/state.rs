@@ -18,7 +18,7 @@ use crate::{Error, Result};
 /// 返回冻结后的提交版本。
 ///
 /// # 错误
-/// 非草稿、指纹非法或版本溢出时返回冲突。
+/// 非草稿、指纹非法或版本溢出时，实体错误经 `?` 变为 `Logic`。
 pub fn start_purchase_change_approval(
     order: &mut PurchaseChangeOrder,
     submission_id: erp_core::ids::PurchaseChangeSubmissionId,
@@ -34,16 +34,25 @@ pub fn start_purchase_change_approval(
 /// * `order` - 审批中的变更单
 /// * `updated_by` - 操作人
 ///
+/// # 返回
+/// 撤回到草稿后无返回值。`approval_subject_version` 不回退。
+///
 /// # 错误
-/// 非审批中时返回冲突。
+/// 非审批中时，实体错误经 `?` 变为 `Logic`。
 pub fn cancel_purchase_change_to_draft(order: &mut PurchaseChangeOrder, updated_by: &str) -> Result<()> {
     Ok(order.cancel_approval(updated_by)?)
 }
 
 /// 最终通过前置：仅 `IN_APPROVAL` 可进入生效。
 ///
+/// # 参数
+/// * `order` - 待最终通过的变更单
+///
+/// # 返回
+/// 状态为审批中时返回 `Ok(())`。
+///
 /// # 错误
-/// 状态不是审批中时返回冲突。
+/// 状态不是审批中时返回 `ConflictError`。
 pub fn ensure_final_approve_effective(order: &PurchaseChangeOrder) -> Result<()> {
     if order.stable.status != PurchaseChangeOrderStatus::InApproval {
         return Err(Error::ConflictError("只有审批中的采购变更单可以由最终通过动作生效".to_string()));

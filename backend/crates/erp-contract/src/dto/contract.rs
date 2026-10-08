@@ -296,11 +296,15 @@ impl ContractListParams {
     /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验；
     /// 未传 `scope` 时视为 [`ContractListScope::All`]。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
     ///
     /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    /// 排序字段不在白名单、排序方向非法，或 `include_descendants` 为真但未提供
+    /// `org_unit_ids` 时，返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<ContractListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, CONTRACT_SORT_FIELDS)?;
         if self.include_descendants == Some(true) && self.org_unit_ids.is_none() {

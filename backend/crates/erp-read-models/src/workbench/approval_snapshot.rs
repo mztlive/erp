@@ -49,6 +49,17 @@ pub async fn capture_approval_display(
 
 impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 批量加载不可变展示；只覆盖已存在业务事实的同类型、同版本摘要，不改变授权事实。
+    ///
+    /// # 参数
+    /// * `keys` - 本批任务引用的对象键
+    /// * `facts` - 已有对象事实表
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 无返回值。已把查到的审批展示快照套到对应事实的展示上。
+    ///
+    /// # 错误
+    /// 审批主体快照批量查询失败时返回对应错误。
     pub(super) async fn load_approval_displays(
         &self,
         keys: &HashSet<(ObjectKind, String)>,

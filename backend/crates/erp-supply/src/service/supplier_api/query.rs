@@ -95,6 +95,7 @@ impl SupplierApiService {
     ///
     /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
+    /// * `RepositoryError` - 数据库查询失败
     pub async fn capability_list(
         &self,
         params: &SupplierApiCapabilityListParams,

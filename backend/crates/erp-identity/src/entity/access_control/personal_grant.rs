@@ -123,7 +123,7 @@ impl PersonalBusinessGrant {
     /// # 返回
     /// 匹配且未撤销时为真。
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn applies(&self, user: &str, roles: &[String], resource: &str, action: &str) -> bool {
         !self.base.is_deleted()
             && self.user_id == user
@@ -139,7 +139,7 @@ impl PersonalBusinessGrant {
 /// # 返回
 /// 是否可按部门扩大范围并设置本人默认范围。
 /// # 错误
-/// 无。
+/// 不返回错误。
 pub fn department_grant_resource(resource: &str) -> bool {
     matches!(
         resource,

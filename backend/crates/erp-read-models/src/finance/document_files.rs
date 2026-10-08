@@ -274,6 +274,17 @@ fn effective_payment_ids(allocations: &[PaymentAllocation]) -> Vec<SupplierPayme
 }
 
 /// 对下载请求按所属财务单和文件双键精确匹配，禁止跨单或替换资产。
+///
+/// # 参数
+/// * `files` - 当前财务单可见文件。
+/// * `document_id` - 所属财务单身份。
+/// * `asset_id` - 指定文件时必须同时命中；为空则只按财务单匹配。
+///
+/// # 返回
+/// 返回第一笔同时命中的文件视图。
+///
+/// # 错误
+/// 没有同时命中财务单和文件时返回 `NotFound`。
 pub fn matching_file<'a>(
     files: &'a [FinancialFileView],
     document_id: &str,

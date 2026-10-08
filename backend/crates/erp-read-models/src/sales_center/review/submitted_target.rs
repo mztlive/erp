@@ -17,7 +17,7 @@ use crate::{Error, Result};
 /// 未提交返回空；已有提交时返回被冻结工作副本的内容身份。
 ///
 /// # 错误
-/// 提交、工作副本、原单或冻结版本不匹配时拒绝。
+/// 提交、工作副本、原单或冻结版本不匹配时返回 `ConflictError`。仓储读取失败会返回对应错误。
 pub(super) async fn submitted_content_hash(
     db: &mongodb::Database,
     change: &SalesChangeOrder,

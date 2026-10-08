@@ -1,4 +1,4 @@
-//! Named customer processes that own audited outer transactions.
+//! 拥有带审计外层事务的客户流程。
 
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
@@ -10,7 +10,16 @@ use crate::Result;
 use crate::adapters::{customer_access, customer_service};
 use crate::audit::run_audited;
 
-/// Process module name.
+/// 返回客户流程模块名。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回稳定模块名 `customer`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn process_name() -> &'static str {
     "customer"
 }

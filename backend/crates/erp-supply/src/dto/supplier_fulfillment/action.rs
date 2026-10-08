@@ -24,6 +24,16 @@ pub enum SupplierOrderAllowedAction {
 
 impl SupplierOrderAllowedAction {
     /// 返回稳定动作代码。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `QueryResult`、`Replay`、`ConfirmVerifiedTerminalResult` 分别对应
+    /// `QUERY_RESULT`、`REPLAY`、`CONFIRM_VERIFIED_TERMINAL_RESULT`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::QueryResult => "QUERY_RESULT",
@@ -174,6 +184,16 @@ pub enum SupplierOrderResolution {
 
 impl SupplierOrderResolution {
     /// 返回稳定终态代码。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `OrderAccepted` 为 `ORDER_ACCEPTED`，`OrderRejected` 为 `ORDER_REJECTED`，
+    /// `OrderCompleted` 为 `ORDER_COMPLETED`，`Canceled` 为 `CANCELED`，`Refunded` 为 `REFUNDED`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::OrderAccepted => "ORDER_ACCEPTED",
@@ -185,6 +205,15 @@ impl SupplierOrderResolution {
     }
 
     /// 返回面向处理人的业务结果名称。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 各终态对应的中文名称：已接单、已拒单、履约已完成、取消已完成或退款已完成。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(self) -> &'static str {
         match self {
             Self::OrderAccepted => "供应商已接单",

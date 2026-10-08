@@ -26,8 +26,14 @@ pub enum AuthorizationFailure {
 impl AuthorizationFailure {
     /// 映射为合同稳定 blocker。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回允许原审批人恢复的 blocker。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn blocker_code(self) -> ApprovalBlockerCode {
         match self {
             Self::AccountInactive => ApprovalBlockerCode::ApproverAccountInactive,
@@ -51,7 +57,7 @@ impl AuthorizationFailure {
 /// 无失败时返回 `Eligible`。
 ///
 /// # 错误
-/// 处理人引用非法时返回错误。
+/// 处理人引用非法或显示名为空白时返回 `ValidationError`。
 pub fn converge_eligibility(
     participant: &str,
     name_snapshot: &str,
@@ -80,14 +86,23 @@ pub fn converge_eligibility(
 ///
 /// # 返回
 /// 结构、任务、版本或内部不变量返回 `true`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn requires_blocked_cancel(code: ApprovalBlockerCode) -> bool {
     !code.allows_assignee_recovery()
 }
 
 /// 幂等回读失权时不得泄露资源存在性。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回不包含资源细节的禁止错误。
+///
+/// # 错误
+/// 不返回错误。
 pub fn hidden_forbidden() -> Error {
     Error::Forbidden("无权执行该审批动作".to_string())
 }
@@ -100,8 +115,11 @@ pub fn hidden_forbidden() -> Error {
 /// * `execution_assignee` - 执行审批人
 /// * `instance_assignee` - 实例节点当前审批人
 ///
+/// # 返回
+/// 三方标识一致时无返回值。
+///
 /// # 错误
-/// 任一不一致返回冲突。
+/// 任一不一致返回 `ConflictError`，码为 `APPROVAL_RESPONSIBILITY_CONFLICT`。
 pub fn ensure_triple_responsibility(
     actor_id: &str,
     task_owner_id: &str,

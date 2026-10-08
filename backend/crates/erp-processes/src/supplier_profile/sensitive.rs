@@ -17,8 +17,15 @@ use crate::{Error, Result};
 impl SupplierProfileService {
     /// 验证短时令牌、归属与权限入口后解密单个敏感字段并记录审计。
     ///
-    /// # Errors
-    /// 令牌非法/过期、记录不属于令牌供应商、旧数据无密文或审计写入失败时返回错误。
+    /// # 参数
+    /// * `req` - 含短时揭示令牌的请求。
+    /// * `actor` - 当前操作人，写入揭示审计。
+    ///
+    /// # 返回
+    /// 解密后的单个敏感字段值。
+    ///
+    /// # 错误
+    /// 请求非法、系统时间无法转换、令牌非法或过期、供应商或事实行不存在、记录不属于令牌供应商、旧数据无密文或审计写入失败时返回错误。
     pub async fn reveal_sensitive(
         &self,
         req: RevealSupplierSensitiveRequest,

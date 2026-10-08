@@ -97,6 +97,12 @@ struct ApprovalSubmissionStart<'a> {
 
 /// 禁止回退 `CARD_SALES_APPROVAL` 或卡券专用工作项。
 ///
+/// # 参数
+/// * `start` - 目标启动命令。
+///
+/// # 返回
+/// 主体种类不是旧卡券定义时返回。
+///
 /// # 错误
 /// 主体种类为旧卡券定义时返回冲突。
 pub(super) fn ensure_unified_start_command(start: &SalesOrderStartCommand) -> Result<()> {
@@ -109,8 +115,15 @@ pub(super) fn ensure_unified_start_command(start: &SalesOrderStartCommand) -> Re
 
 /// 读取销售单最新提交号，作为撤回查找实例的 `subject_version`。
 ///
+/// # 参数
+/// * `db` - 业务数据库。
+/// * `sales_order_id` - 销售单主键。
+///
+/// # 返回
+/// 返回最新提交的 `submission_no`。
+///
 /// # 错误
-/// 没有提交时返回冲突。
+/// 没有提交时返回冲突；仓储读取失败时返回对应错误。
 pub(super) async fn latest_submission_no(db: &mongodb::Database, sales_order_id: &str) -> Result<u32> {
     db.sales_order_submissions()
         .find_latest_by_order(&SalesOrderId::new(sales_order_id), &mut NoTransaction)

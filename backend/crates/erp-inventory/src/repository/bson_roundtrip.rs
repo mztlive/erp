@@ -1,4 +1,4 @@
-//! Entity BSON round-trip contracts moved out of inventory entity modules.
+//! 从库存实体模块移出的实体 BSON 往返契约。
 
 use std::str::FromStr;
 

@@ -29,6 +29,9 @@ impl SupplierSettlementService {
     ///
     /// # 返回
     /// 返回契约形状的分页视图。
+    ///
+    /// # 错误
+    /// 参数校验或规范化失败，以及仓储查询失败时返回对应错误。
     pub async fn supplier_settlement_statement_list(
         &self,
         params: &SupplierSettlementStatementListParams,
@@ -52,6 +55,9 @@ impl SupplierSettlementService {
     ///
     /// # 返回
     /// 返回带范围版本的列表；空范围返回空集。
+    ///
+    /// # 错误
+    /// 参数非法、后续页缺少范围版本或范围版本已变化时返回对应错误。范围解析、组织展开或仓储查询失败时返回对应错误。
     pub async fn statement_list_scoped(
         &self,
         params: &SupplierSettlementStatementListParams,
@@ -256,6 +262,9 @@ fn statement_filter(query: &StatementListQuery) -> StatementFilter {
 ///
 /// # 返回
 /// 返回响应视图。
+///
+/// # 错误
+/// 不返回错误。
 pub fn settlement_item_view(item: SupplierSettlementItem) -> SupplierSettlementItemView {
     SupplierSettlementItemView {
         id: item.base.id,
@@ -278,6 +287,17 @@ pub fn settlement_item_view(item: SupplierSettlementItem) -> SupplierSettlementI
 }
 
 /// 由服务端状态、责任人与差异事实投影当前对象动作和处理态。
+///
+/// # 参数
+/// * `statement` - 当前结算单。
+/// * `differences` - 结算明细上的正式差异。
+/// * `actor_id` - 当前操作人。
+///
+/// # 返回
+/// 返回允许的动作名、阻塞原因，以及处理态文本。
+///
+/// # 错误
+/// 不返回错误。
 pub fn settlement_object_actions(
     statement: &SupplierSettlementStatement,
     differences: &[SupplierSettlementDifference],

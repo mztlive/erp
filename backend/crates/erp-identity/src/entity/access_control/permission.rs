@@ -41,7 +41,7 @@ impl PermissionData {
     /// 返回描述为空、非系统权限的创建数据。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn new(resource: impl Into<String>, action: impl Into<String>, name: impl Into<String>) -> Self {
         Self {
             resource: resource.into(),
@@ -61,7 +61,7 @@ impl PermissionData {
     /// 返回更新后的创建数据。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
@@ -76,7 +76,7 @@ impl PermissionData {
     /// 返回更新后的创建数据。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn with_system(mut self, system: bool) -> Self {
         self.system = system;
         self
@@ -177,11 +177,14 @@ impl Permission {
 
     /// 校验权限定义是否允许删除。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 无返回值。
+    /// 非系统权限时无返回值。
     ///
     /// # 错误
-    /// 系统内建权限禁止删除时返回业务错误。
+    /// `system` 为真时返回业务错误，文案为「系统权限不能删除」。
     pub fn ensure_deletable(&self) -> Result<()> {
         if self.system {
             return Err(erp_core::Error::from("系统权限不能删除"));

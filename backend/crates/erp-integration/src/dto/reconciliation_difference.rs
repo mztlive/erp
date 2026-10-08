@@ -125,10 +125,14 @@ impl DifferenceListParams {
     ///
     /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
     ///
     /// # 错误
+    /// 范围版本为空或超长、包含下级却无组织筛选、处理人 ID 为 `me`、
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<DifferenceListQuery> {
         check_scoped_version(&self.scope_version, &self.org_unit_ids, self.include_descendants)?;

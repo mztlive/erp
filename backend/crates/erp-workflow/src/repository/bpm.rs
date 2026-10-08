@@ -235,6 +235,9 @@ impl<'a> BpmWorkflowRepository<'a> {
     ///
     /// # 返回
     /// 返回不自行开事务的聚合仓储。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
@@ -291,6 +294,7 @@ fn merge_documents(target: &mut Document, extra: Document) {
     }
 }
 
+/// `limit` 为 0 时返回 1，否则不超过 `max`。
 fn clamp_limit(limit: u32, max: i64) -> i64 {
     if limit == 0 {
         return 1;
@@ -298,6 +302,7 @@ fn clamp_limit(limit: u32, max: i64) -> i64 {
     i64::from(limit).min(max)
 }
 
+/// 版本无法落入 BSON `i64` 时返回元数据越界。
 fn i64_version(version: u64) -> Result<i64> {
     i64::try_from(version).map_err(|_| Error::EntityMetadataOutOfRange("version"))
 }

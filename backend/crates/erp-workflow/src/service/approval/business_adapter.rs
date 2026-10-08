@@ -148,6 +148,16 @@ impl BindingRevalidationContext {
         self
     }
 
+    /// 按单据类型从绑定上下文投影工作项范围对象。
+    ///
+    /// # 参数
+    /// * `document_type` - 固定单据类型
+    ///
+    /// # 返回
+    /// 订单类型带上来源、客户与业务部门；库存调整使用仓库；其余类型使用结算主体。负责人缺省时回落到创建人。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn scope_object(&self, document_type: DocumentType) -> WorkflowScopeObject {
         let order = OrderTaskSource::approval_kind(document_type).is_some();
         WorkflowScopeObject {
@@ -180,8 +190,14 @@ pub fn adapter_spec_of(document_type: DocumentType) -> Result<ApprovalAdapterSpe
 
 /// 由已校验政策填充适配器规格。
 ///
+/// # 参数
+/// * `policy` - 必须审批政策
+///
+/// # 返回
+/// 返回完整的 `ApprovalAdapterSpec`。
+///
 /// # 错误
-/// 三类动作未注册或相同、快照/角色缺失时返回部署不变量错误。
+/// 三类动作未注册或相同、快照或角色缺失时返回内部错误或 `ApprovalPolicyNotRegistered`。
 pub fn spec_from_policy(policy: &ProcessRequiredApprovalPolicy) -> Result<ApprovalAdapterSpec> {
     super::policy::ensure_actions_registered(policy)?;
     if policy.subject_snapshot_fields.is_empty() || policy.work_item_owner_role.as_str().is_empty() {
@@ -203,8 +219,14 @@ pub fn spec_from_policy(policy: &ProcessRequiredApprovalPolicy) -> Result<Approv
 
 /// 证明规格声明了合同要求的全部适配器字段。
 ///
+/// # 参数
+/// * `spec` - 待证明的适配器规格
+///
+/// # 返回
+/// 字段完整且三类动作互异时无返回值。
+///
 /// # 错误
-/// 任一字段缺失或三类动作不互异时返回错误。
+/// 快照字段或责任角色为空、三类动作不互异，或流程种类与单据类型不一致时返回内部错误。
 pub fn ensure_adapter_spec_complete(spec: &ApprovalAdapterSpec) -> Result<()> {
     if spec.subject_snapshot_fields.is_empty()
         || spec.owner_role.as_str().is_empty()
@@ -226,10 +248,16 @@ pub fn ensure_adapter_spec_complete(spec: &ApprovalAdapterSpec) -> Result<()> {
     Ok(())
 }
 
-/// 全部固定单据类型均已切入目标运行时。
+/// 确认该单据类型已注册审批政策。
+///
+/// # 参数
+/// * `document_type` - 固定单据类型
+///
+/// # 返回
+/// `NO_APPROVAL` 与 `PROCESS_REQUIRED` 均通过时无返回值。
 ///
 /// # 错误
-/// 政策缺失时返回部署不变量错误。
+/// `policy_of` 构造失败时传播其错误。
 pub fn ensure_runtime_cut_over(document_type: DocumentType) -> Result<()> {
     match policy_of(document_type)? {
         DocumentApprovalPolicy::NoApproval(_) | DocumentApprovalPolicy::ProcessRequired(_) => Ok(()),
@@ -242,8 +270,11 @@ pub fn ensure_runtime_cut_over(document_type: DocumentType) -> Result<()> {
 /// * `document_type` - 固定单据类型
 /// * `action` - 合同签署的强类型领域动作
 ///
+/// # 返回
+/// 不返回成功。动作属于该类型时仍因领域端口未绑定而失败。
+///
 /// # 错误
-/// 动作不属于该类型或领域端口尚未绑定时失败关闭。
+/// 政策或规格构造失败、动作不属于该类型，或领域端口尚未绑定时返回错误。
 pub fn execute_policy_domain_action(document_type: DocumentType, action: ApprovalDomainAction) -> Result<()> {
     ensure_runtime_cut_over(document_type)?;
     let spec = adapter_spec_of(document_type)?;
@@ -258,6 +289,14 @@ pub fn execute_policy_domain_action(document_type: DocumentType, action: Approva
 }
 
 /// 岗位分离：禁止创建人/提交人担任指定审批人。
+///
+/// # 参数
+/// * `policy` - 岗位分离策略
+/// * `creator_id` - 创建人或提交人
+/// * `assignee_ids` - 指定审批人
+///
+/// # 返回
+/// 创建人不在审批人集合中时无返回值。
 ///
 /// # 错误
 /// 创建人出现在审批人集合时返回校验错误。
@@ -277,10 +316,18 @@ pub fn ensure_separation_of_duties(
 
 /// 领域 Adapter 按单据组织/创建人上下文给出对象读取权。
 ///
-/// 本阶段只登记规格，不伪造读取成功；未接线返回 `None`。
+/// 使用失败关闭的对象读取端口；未接线时返回 `None`。
+///
+/// # 参数
+/// * `spec` - 适配器规格
+/// * `context` - 单据组织与创建人
+/// * `assignee_user_id` - 待重验的审批人
+///
+/// # 返回
+/// 端口给出读取结论；未接线时为 `None`。
 ///
 /// # 错误
-/// 组织或审批人为空时返回校验错误。
+/// 组织或审批人为空时返回校验错误；端口失败时返回对应错误。
 pub fn adapter_object_read_decision(
     spec: &ApprovalAdapterSpec,
     context: &BindingRevalidationContext,
@@ -294,7 +341,19 @@ pub fn adapter_object_read_decision(
     )
 }
 
-/// Domain-wired object-read decision used by approval binding.
+/// 用注入的对象读取端口判断审批人能否读取被审对象。
+///
+/// # 参数
+/// * `spec` - 适配器规格
+/// * `context` - 单据组织与创建人
+/// * `assignee_user_id` - 待重验的审批人
+/// * `port` - 对象读取端口
+///
+/// # 返回
+/// 返回端口的读取结论；端口未接线时为 `None`。
+///
+/// # 错误
+/// 组织或审批人为空时返回校验错误；端口失败时返回对应错误。
 pub fn adapter_object_read_decision_with(
     spec: &ApprovalAdapterSpec,
     context: &BindingRevalidationContext,
@@ -318,6 +377,12 @@ pub fn adapter_object_read_decision_with(
 
 /// 未接线的对象读取权必须失败关闭。
 ///
+/// # 参数
+/// * `decision` - 对象读取结论；`None` 表示未接线
+///
+/// # 返回
+/// 已接线时返回该布尔结论。
+///
 /// # 错误
 /// `None` 表示 Adapter 未接线，禁止默认放行。
 pub fn require_wired_object_read(decision: Option<bool>) -> Result<bool> {
@@ -325,6 +390,12 @@ pub fn require_wired_object_read(decision: Option<bool>) -> Result<bool> {
 }
 
 /// 校验指定用户具备对象读取权。
+///
+/// # 参数
+/// * `can_read` - 是否能读取被审对象
+///
+/// # 返回
+/// 可以读取时无返回值。
 ///
 /// # 错误
 /// 不能读取被审对象时返回校验错误。

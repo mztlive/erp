@@ -34,11 +34,25 @@ impl<A: WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
     ///
     /// # 返回
     /// 返回尚未接线 HTTP 的应用端口。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database, auth: A) -> Self {
         Self { db, auth, audit: Arc::new(FailClosedAuditPort) }
     }
 
-    /// Create a definition service with an injected audit port.
+    /// 创建注入审计端口的定义管理服务。
+    ///
+    /// # 参数
+    /// * `db` - MongoDB 数据库
+    /// * `auth` - 授权 Port
+    /// * `audit` - 审计写入端口
+    ///
+    /// # 返回
+    /// 返回使用给定审计端口的服务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_audit(db: Database, auth: A, audit: Arc<dyn WorkflowAuditPort>) -> Self {
         Self { db, auth, audit }
     }

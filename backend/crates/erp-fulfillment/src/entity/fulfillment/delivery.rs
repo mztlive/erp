@@ -52,8 +52,14 @@ pub enum DeliveryState {
 impl DeliveryState {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -65,8 +71,14 @@ impl DeliveryState {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "DRAFT",
@@ -78,24 +90,42 @@ impl DeliveryState {
 
     /// 判断是否可编辑（仅草稿）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 草稿状态返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_editable(&self) -> bool {
         matches!(self, Self::Draft)
     }
 
     /// 返回可作为客户验收依据的发货状态集合。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 固定返回已发货与已签收状态。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn acceptance_eligible_states() -> &'static [Self] {
         &[Self::Shipped, Self::Signed]
     }
 
     /// 判断当前状态能否作为客户验收履约事实。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 已发货或已签收时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_acceptance_eligible(self) -> bool {
         Self::acceptance_eligible_states().contains(&self)
     }
@@ -103,6 +133,16 @@ impl DeliveryState {
 
 impl DocumentState for DeliveryState {
     /// 固定邻接矩阵（§7.5 定向链，`REVERSED` 为不可逆终态）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Draft` 只允许进入 `Shipped`；`Shipped` 允许进入 `Signed` 或 `Reversed`；
+    /// `Signed` 只允许进入 `Reversed`；`Reversed` 没有后继。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft => &[Self::Shipped],
@@ -126,8 +166,14 @@ pub enum DeliveryType {
 impl DeliveryType {
     /// 返回类型的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::WarehouseShip => "仓发",
@@ -137,8 +183,14 @@ impl DeliveryType {
 
     /// 返回类型的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::WarehouseShip => "WAREHOUSE_SHIP",
@@ -259,6 +311,9 @@ impl Delivery {
     ///
     /// # 返回
     /// 返回 64 位小写十六进制指纹。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn address_snapshot_fingerprint(plain: &str, key: &[u8]) -> String {
         hmac_sha256_hex(key, plain.as_bytes())
     }
@@ -277,8 +332,8 @@ impl Delivery {
     /// 返回新建的发货单实体。
     ///
     /// # 错误
-    /// 单号为空/超长、物流字段超长、仓发/直发归属与字典不一致，或指纹格式
-    /// 非法时返回错误。
+    /// 单号为空或超长、包裹关联超过 100 条、明细身份或物流单号为空或超长、
+    /// 地址加密值超长、仓发或直发归属与字典不一致，或指纹格式非法时返回错误。
     pub fn new(id: DeliveryId, data: DeliveryData) -> Result<Self> {
         let delivery_no = normalize_required_text(
             data.delivery_no,
@@ -318,6 +373,9 @@ impl Delivery {
     }
 
     /// 返回单据注册与无审批绑定重验使用的组织上下文。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 返回所属销售单稳定主键。
@@ -373,7 +431,7 @@ impl Delivery {
     /// 更新成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 状态不可编辑，或物流字段超长时返回错误。
+    /// 状态不可编辑，或包裹关联超过 100 条、明细身份或物流单号为空、字段超长时返回错误。
     pub fn update(&mut self, update: DeliveryUpdate) -> Result<()> {
         self.ensure_editable()?;
         if let Some(entries) = update.tracking_entries {
@@ -403,10 +461,10 @@ impl Delivery {
     /// * `shipped_at` - 发货时间
     ///
     /// # 返回
-    /// 迁移成功返回 `Ok(())`。
+    /// 迁移成功返回 `Ok(())`。已发货再次登记按幂等成功，并覆盖 `shipped_at`。
     ///
     /// # 错误
-    /// 当前状态不允许迁移（非草稿）时返回错误。
+    /// 已签收或已冲正不能改为已发货时返回错误。
     pub fn mark_shipped(&mut self, shipped_at: Instant) -> Result<()> {
         ensure_transition(self.status, DeliveryState::Shipped)?;
         self.shipped_at = Some(shipped_at);
@@ -416,11 +474,14 @@ impl Delivery {
 
     /// 登记签收（已发货 → 已签收）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 迁移成功返回 `Ok(())`。
+    /// 迁移成功返回 `Ok(())`。已签收再次签收按幂等成功。
     ///
     /// # 错误
-    /// 当前状态不允许迁移（非已发货）时返回错误。
+    /// 草稿或已冲正不能签收时返回错误。
     pub fn mark_signed(&mut self) -> Result<()> {
         ensure_transition(self.status, DeliveryState::Signed)?;
         self.status = DeliveryState::Signed;
@@ -432,11 +493,14 @@ impl Delivery {
     /// `REVERSED` 表示存在正式反向事实（冲正出库流水/退货），不删除原事实
     /// （§4.5.1、§7.5）；反向事实由 P3 形成。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 迁移成功返回 `Ok(())`。
+    /// 迁移成功返回 `Ok(())`。已冲正再次冲正按幂等成功。
     ///
     /// # 错误
-    /// 当前状态不允许迁移（草稿或已冲正）时返回错误。
+    /// 草稿不能冲正时返回错误。
     pub fn reverse(&mut self) -> Result<()> {
         ensure_transition(self.status, DeliveryState::Reversed)?;
         self.status = DeliveryState::Reversed;
@@ -444,6 +508,9 @@ impl Delivery {
     }
 
     /// 返回供应商直发的采购来源引用。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 直发且携带采购来源时返回引用。
@@ -456,8 +523,14 @@ impl Delivery {
 
     /// 判断当前状态是否可编辑。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 草稿状态返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_editable(&self) -> bool {
         self.status.is_editable()
     }

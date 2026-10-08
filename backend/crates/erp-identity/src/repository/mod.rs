@@ -1,4 +1,4 @@
-//! Identity MongoDB repositories, Casbin adapter and accessors.
+//! 身份领域的 MongoDB 仓储、Casbin 适配器与集合访问器。
 
 pub mod access_control;
 mod account_core;

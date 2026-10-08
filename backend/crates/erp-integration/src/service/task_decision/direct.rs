@@ -18,6 +18,21 @@ use crate::service::evidence::{ensure_direct_reason, verified_reference, verify_
 use crate::{Error, Result};
 
 /// 正式任务关联已由流程检查后，按原顺序读取版本、验证证据并追加决定。
+///
+/// # 参数
+/// * `db` - 目标数据库
+/// * `authority` - 权威证据端口
+/// * `prepared` - 已解析的差异身份与版本
+/// * `command` - 直接对账命令
+/// * `receipt_id` - 决定记录主键
+/// * `actor_id` - 当前操作人
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 返回已验证的决定事实；决定记录已追加。
+///
+/// # 错误
+/// 差异不存在、版本变化、已有终态结论、原因或证据校验失败、权威端口失败或决定写入失败时返回对应错误。
 pub async fn execute_direct_decision(
     db: &Database,
     authority: &dyn IntegrationEvidenceAuthority,

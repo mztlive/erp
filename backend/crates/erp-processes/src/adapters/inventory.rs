@@ -1,4 +1,4 @@
-//! Inventory authorization, audit and foreign-fact adapters.
+//! 库存授权、审计与外部事实 adapter。
 
 use std::collections::{BTreeSet, HashMap};
 use std::num::NonZeroU32;
@@ -53,7 +53,7 @@ const INVENTORY_OPERATIONS: [(&str, bool); 8] = [
     (UPDATE_PERMISSION, true),
 ];
 
-/// MongoDB adapter that computes inventory warehouse scopes from identity facts.
+/// 从身份事实计算库存仓库范围的 Mongo adapter。
 #[derive(Clone)]
 pub struct MongoInventoryAuthorization {
     db: Database,
@@ -61,12 +61,32 @@ pub struct MongoInventoryAuthorization {
 }
 
 impl MongoInventoryAuthorization {
-    /// Bind the adapter to `db` and shared RBAC.
+    /// 绑定身份数据库与共享 RBAC，构造时不解析范围。
+    ///
+    /// # 参数
+    /// * `db` - 身份与库存集合所在数据库。
+    /// * `rbac` - 现有 RBAC 快照服务。
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的 adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
         Self { db, rbac }
     }
 
-    /// Wrap the adapter as a shared port.
+    /// 包装为库存域可注入的授权 Port。
+    ///
+    /// # 参数
+    /// * `db` - 身份与库存集合所在数据库。
+    /// * `rbac` - 现有 RBAC 快照服务。
+    ///
+    /// # 返回
+    /// 返回共享的库存授权 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(db: Database, rbac: SharedRbacService) -> Arc<dyn AuthorizationPort> {
         Arc::new(Self::new(db, rbac))
     }
@@ -83,16 +103,24 @@ impl AuthorizationPort for MongoInventoryAuthorization {
     }
 }
 
-/// Compute inventory warehouse scopes on the caller executor snapshot.
+/// 在调用方执行器快照上计算八项库存仓库范围。
 ///
-/// # Parameters
-/// * `db` - MongoDB handle
-/// * `rbac` - shared RBAC
-/// * `actor` - authenticated actor
-/// * `executor` - caller-chosen executor
+/// 账号不能登录时返回未激活授权，不继续解析范围。
 ///
-/// # Errors
-/// Identity, policy or data-scope lookup failures.
+/// # 参数
+/// * `db` - 身份与库存集合所在数据库。
+/// * `rbac` - 现有 RBAC 快照服务。
+/// * `actor` - 已认证操作人。
+/// * `executor` - 调用方选择的执行器。
+///
+/// # 返回
+/// 返回八项操作的仓库范围及结存、流水、调整列表元数据。无单项权限时该项为空范围。
+///
+/// # 错误
+/// 登录资格、策略或数据范围查询失败时返回映射后的库存错误。仓库目标超过 20000 时返回校验错误。
+///
+/// # Panics
+/// 固定库存权限码无法解析，或八项范围没有按顺序取完时 panic。
 pub async fn authorize_inventory(
     db: &Database,
     rbac: &SharedRbacService,
@@ -146,7 +174,11 @@ pub async fn authorize_inventory(
 }
 
 /// 库存查询共用仓库政策，保留各资源动作的授权槽，避免合并存量范围扩大权限。
+///
 /// 库存调整创建、更新及列表沿用同角色完整详情权限要求；仓库目录范围不参与。
+///
+/// # Panics
+/// 固定权限码不含冒号或无法解析时 panic。
 async fn inventory_scope(
     batch: &mut DataScopeBatch<'_>,
     code: &str,
@@ -209,19 +241,37 @@ fn warehouse_scope(access: &AuthorizedDataScope) -> erp_inventory::Result<Wareho
     Ok(WarehouseScope::from_targets(ids.iter().filter(|id| allows(Some(id.as_str()))).cloned().collect()))
 }
 
-/// MongoDB adapter that converts inventory audit facts into `erp-audit` writes.
+/// 把库存审计事实写入 `erp-audit` 的 Mongo adapter。
 #[derive(Clone)]
 pub struct MongoInventoryAudit {
     db: Database,
 }
 
 impl MongoInventoryAudit {
-    /// Bind the adapter to `db`.
+    /// 绑定审计日志所在数据库，构造时不写库。
+    ///
+    /// # 参数
+    /// * `db` - 持久化审计日志的数据库。
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的 adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// Wrap the adapter as a shared port.
+    /// 包装为库存域可注入的共享审计 Port。
+    ///
+    /// # 参数
+    /// * `db` - 持久化审计日志的数据库。
+    ///
+    /// # 返回
+    /// 返回共享的库存审计 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn InventoryAuditPort> {
         Arc::new(Self::new(db))
     }
@@ -299,19 +349,37 @@ fn audit_log_from_inventory(audit: &PreparedInventoryAudit) -> erp_audit::Result
         .with_event_sequence(audit.event_sequence.get())
 }
 
-/// Warehouse identity adapter used by inventory list/detail hydration.
+/// 供库存列表与详情补齐仓库身份的 adapter。
 #[derive(Clone)]
 pub struct MongoInventoryWarehouseFacts {
     db: Database,
 }
 
 impl MongoInventoryWarehouseFacts {
-    /// Bind the adapter to `db`.
+    /// 绑定仓库集合所在数据库，构造时不读取。
+    ///
+    /// # 参数
+    /// * `db` - 仓库集合所在数据库。
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的 adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// Wrap the adapter as a shared port.
+    /// 包装为库存域可注入的仓库事实 Port。
+    ///
+    /// # 参数
+    /// * `db` - 仓库集合所在数据库。
+    ///
+    /// # 返回
+    /// 返回共享的仓库事实 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn WarehouseFactsPort> {
         Arc::new(Self::new(db))
     }
@@ -378,19 +446,37 @@ impl WarehouseFactsPort for MongoInventoryWarehouseFacts {
     }
 }
 
-/// SKU identity adapter used by inventory list/detail hydration.
+/// 供库存列表与详情补齐 SKU 身份的 adapter。
 #[derive(Clone)]
 pub struct MongoInventoryCatalogFacts {
     db: Database,
 }
 
 impl MongoInventoryCatalogFacts {
-    /// Bind the adapter to `db`.
+    /// 绑定商品 SKU 集合所在数据库，构造时不读取。
+    ///
+    /// # 参数
+    /// * `db` - 商品 SKU 集合所在数据库。
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的 adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// Wrap the adapter as a shared port.
+    /// 包装为库存域可注入的商品事实 Port。
+    ///
+    /// # 参数
+    /// * `db` - 商品 SKU 集合所在数据库。
+    ///
+    /// # 返回
+    /// 返回共享的商品事实 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn CatalogFactsPort> {
         Arc::new(Self::new(db))
     }
@@ -459,19 +545,37 @@ impl CatalogFactsPort for MongoInventoryCatalogFacts {
     }
 }
 
-/// Purchase-receipt number adapter used by inventory movement views.
+/// 供库存流水视图读取采购收货单号的 adapter。
 #[derive(Clone)]
 pub struct MongoInventoryFulfillmentFacts {
     db: Database,
 }
 
 impl MongoInventoryFulfillmentFacts {
-    /// Bind the adapter to `db`.
+    /// 绑定采购收货集合所在数据库，构造时不读取。
+    ///
+    /// # 参数
+    /// * `db` - 采购收货集合所在数据库。
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的 adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// Wrap the adapter as a shared port.
+    /// 包装为库存域可注入的履约事实 Port。
+    ///
+    /// # 参数
+    /// * `db` - 采购收货集合所在数据库。
+    ///
+    /// # 返回
+    /// 返回共享的履约事实 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn FulfillmentFactsPort> {
         Arc::new(Self::new(db))
     }
@@ -514,12 +618,30 @@ pub struct MongoInventoryPeopleFacts {
 }
 
 impl MongoInventoryPeopleFacts {
-    /// Bind the adapter to `db`.
+    /// 绑定库存调整与审批集合所在数据库，构造时不读取。
+    ///
+    /// # 参数
+    /// * `db` - 库存调整与工作项所在数据库。
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的 adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// Wrap the adapter as a shared port.
+    /// 包装为库存域可注入的调整人员事实 Port。
+    ///
+    /// # 参数
+    /// * `db` - 库存调整与工作项所在数据库。
+    ///
+    /// # 返回
+    /// 返回共享的调整人员事实 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn AdjustmentPeopleFactsPort> {
         Arc::new(Self::new(db))
     }
@@ -694,7 +816,17 @@ fn open_assignees(tasks: &[WorkItem]) -> Vec<(String, String)> {
         .collect()
 }
 
-/// Construct an inventory query service with composition adapters.
+/// 装配带授权、仓库、商品、收货、审计与人员 adapter 的库存查询服务。
+///
+/// # 参数
+/// * `db` - 库存及相关集合所在数据库。
+/// * `rbac` - 现有 RBAC 快照服务。
+///
+/// # 返回
+/// 返回库存查询服务。
+///
+/// # 错误
+/// 不返回错误。
 pub fn inventory_service(db: Database, rbac: SharedRbacService) -> InventoryService {
     InventoryService::new(
         db.clone(),
@@ -707,7 +839,17 @@ pub fn inventory_service(db: Database, rbac: SharedRbacService) -> InventoryServ
     )
 }
 
-/// Construct the inventory-adjustment process that owns cross-domain transactions.
+/// 装配拥有跨域事务的库存调整流程。
+///
+/// # 参数
+/// * `db` - 库存调整使用的数据库。
+/// * `rbac` - 现有 RBAC 快照服务。
+///
+/// # 返回
+/// 返回库存调整流程。
+///
+/// # 错误
+/// 不返回错误。
 pub fn inventory_adjustment_service(
     db: Database,
     rbac: SharedRbacService,

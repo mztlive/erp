@@ -112,7 +112,22 @@ pub struct ResolvedListScope {
 
 /// 解析列表授权、展开组织筛选并校验范围版本（错误任务与差异列表共用）。
 ///
-/// 顺序与原两处内联实现一致：授权解析 → 组织展开 → 元数据 → 版本校验 → 空集。
+/// 顺序为授权解析、组织展开、元数据、版本校验。空范围只写入 `meta.empty_reason`，不在此返回空页。
+///
+/// # 参数
+/// * `access` - 当前列表访问器
+/// * `actor` - 已认证操作人
+/// * `resource` - `integration_error_task` 或 `reconciliation_difference`
+/// * `org_unit_ids` - 请求组织筛选；空表示不按组织收窄
+/// * `include_descendants` - 是否包含有效下级
+/// * `scope_version` - 客户端回传的范围版本；第一页可空
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 返回已解析事实、仓储条件、展开后的组织 ID 与列表元数据。
+///
+/// # 错误
+/// 授权解析或组织展开失败，或回传版本与当前快照不一致时返回对应错误。
 pub async fn resolve_list_scope(
     access: &super::IntegrationAccess,
     actor: &application_core::AuditActor,

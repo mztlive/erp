@@ -275,6 +275,16 @@ impl SupplierPortalProcess {
     }
 }
 
+/// 用最近一次提交编号构造合作申请任务主题。
+///
+/// # 参数
+/// * `app` - 合作申请。
+///
+/// # 返回
+/// 返回 `cooperation:` 加最近提交编号。
+///
+/// # 错误
+/// 没有任何提交时返回 `ConflictError`。
 pub(super) fn cooperation_subject(app: &CooperationApplication) -> Result<String> {
     app.submissions
         .last()

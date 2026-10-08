@@ -14,14 +14,23 @@ use persistence_core::Executor;
 use super::{map_service, purchase_responsibility, w29_close};
 use crate::errors::Error;
 
-/// Domain-object facts consumed by work-item commands.
+/// 工作项命令消费的领域对象事实。
 #[derive(Clone)]
 pub struct WorkflowObjectFacts {
     db: Database,
     reader: WorkItemFactsReader,
 }
 impl WorkflowObjectFacts {
-    /// Bind domain repositories used by work-item authorization without reading them.
+    /// 绑定工作项授权要用的领域仓库，构造时不读取。
+    ///
+    /// # 参数
+    /// * `db` - 业务事实集合所在数据库。
+    ///
+    /// # 返回
+    /// 返回同时持有读模型与数据库句柄的 adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { reader: WorkItemFactsReader::new(db.clone()), db }
     }

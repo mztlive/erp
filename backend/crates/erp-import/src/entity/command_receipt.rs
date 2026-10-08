@@ -95,10 +95,15 @@ impl ImportCommandReceipt {
     }
 
     /// 校验持久化回执，损坏的新事实不得退回展示审计。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 完整身份及合法动作结果返回空值。
+    ///
     /// # 错误
-    /// schema、命令或结果不一致时返回冲突。
+    /// 共享身份非法时返回 [`Error::Logic`]。`schema_version` 不是 1、已软删除、主键与 `command_id` 不一致、`audit_event_id` 为空白，或动作结果不匹配时返回 [`Error::ConflictError`]。
     pub fn validate(&self) -> Result<()> {
         self.identity.validate()?;
         if self.schema_version != 1

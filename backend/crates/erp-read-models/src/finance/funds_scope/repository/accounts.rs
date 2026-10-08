@@ -83,10 +83,12 @@ impl<T> AccountListSnapshot<T> {
     ///
     /// # 参数
     /// 无。
+    ///
     /// # 返回
     /// 与最终条件一致的总数。
+    ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub(in crate::finance::funds_scope) fn total(&self) -> u64 {
         self.total.first().map_or(0, |row| row.count)
     }
@@ -94,11 +96,13 @@ impl<T> AccountListSnapshot<T> {
     /// 保留原授权版本、每条匹配行与真实来源版本的哈希输入顺序。
     ///
     /// # 参数
-    /// 原事务中解析的授权上下文。
+    /// * `authorization` - 原事务中解析的授权。资源名决定超限文案，`scope_version` 进入指纹。
+    ///
     /// # 返回
     /// 完整匹配集合的跨页指纹。
+    ///
     /// # 错误
-    /// 匹配数量达到原一万条保护时整体拒绝。
+    /// `versions` 达到 10000 条时返回校验错误。资源为 `receivable_account` 时文案以「应收」开头，否则以「应付」开头。
     pub(in crate::finance::funds_scope) fn version(
         &self,
         authorization: &FundsAuthorization,
@@ -125,11 +129,17 @@ impl FundsAccess {
     /// 应收查询的授权和来源筛选先进入关联管道，页外仅返回版本与金额摘要。
     ///
     /// # 参数
-    /// 规范化业务条件、已解析授权、已展开关联条件、是否生成页面及原执行器。
+    /// * `query` - 已规范化的应收账户列表条件。
+    /// * `authorization` - 已解析销售授权。
+    /// * `condition` - 已展开的负责人、经办人与组织条件。
+    /// * `include_page` - 为 true 时生成当前页、计数和金额摘要；为 false 时这些分支恒为空，只保留版本。
+    /// * `executor` - 调用方执行器。
+    ///
     /// # 返回
-    /// 同一快照的最终页面、计数、完整轻量版本和窄金额输入。
+    /// 同一最终条件的页面、计数、完整轻量版本和窄金额输入。
+    ///
     /// # 错误
-    /// 关键词查询、MongoDB 聚合、分页或解码失败时拒绝。
+    /// 关键词查询、聚合或解码失败时返回对应错误。聚合没有快照文档时返回校验错误，文案为资金查询快照缺失。
     pub(in crate::finance::funds_scope) async fn receivable_database_snapshot(
         &self,
         query: &ReceivableAccountListQuery,
@@ -186,11 +196,17 @@ impl FundsAccess {
     /// 应付按真实来源类型关联；采购与结算同名主键不能串权。
     ///
     /// # 参数
-    /// 规范化业务条件、已解析真实来源范围、关联条件、页面开关及原执行器。
+    /// * `query` - 已规范化的应付账户列表条件。
+    /// * `authorization` - 已解析采购与结算授权。
+    /// * `condition` - 已展开的负责人、经办人与组织条件。
+    /// * `include_page` - 为 true 时生成当前页、计数和金额摘要；为 false 时这些分支恒为空，只保留版本。
+    /// * `executor` - 调用方执行器。
+    ///
     /// # 返回
     /// 同一最终来源条件的页面、计数、版本和金额摘要。
+    ///
     /// # 错误
-    /// 查询、分页或类型化解码失败时返回错误。
+    /// 关键词查询、聚合或解码失败时返回对应错误。聚合没有快照文档时返回校验错误，文案为资金查询快照缺失。
     pub(in crate::finance::funds_scope) async fn payable_database_snapshot(
         &self,
         query: &PayableAccountListQuery,

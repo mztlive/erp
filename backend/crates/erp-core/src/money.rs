@@ -45,8 +45,14 @@ macro_rules! decimal_newtype {
         impl $name {
             /// 返回底层 `Decimal`（小数位已受类型约束）。
             ///
+            /// # 参数
+            /// 无。
+            ///
             /// # 返回
             /// 返回封装值的 `Decimal` 副本。
+            ///
+            /// # 错误
+            /// 不返回错误。
             pub fn to_decimal(self) -> Decimal {
                 self.0
             }
@@ -103,6 +109,15 @@ macro_rules! decimal_newtype {
         impl Serialize for $name {
             /// 序列化：human-readable 输出字符串；非 human-readable（mongodb
             /// 驱动 raw 序列化）委托 `bson::Decimal128` 的 serde 形态。
+            ///
+            /// # 参数
+            /// * `serializer` - serde 序列化器。
+            ///
+            /// # 返回
+            /// human-readable 时写入十进制字符串；否则写入 `Decimal128` 的 serde 形态。
+            ///
+            /// # 错误
+            /// 当前值无法转成 `bson::Decimal128`，或序列化器写入失败时返回 serde 错误。
             fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
                 if serializer.is_human_readable() {
                     serializer.serialize_str(&self.0.to_string())
@@ -117,6 +132,15 @@ macro_rules! decimal_newtype {
         impl<'de> Deserialize<'de> for $name {
             /// 反序列化：接受字符串（JSON）与 Decimal128 变体（BSON，经
             /// `$numberDecimal` / `$numberDecimalBytes` 扩展形态）。
+            ///
+            /// # 参数
+            /// * `deserializer` - serde 反序列化器。
+            ///
+            /// # 返回
+            /// 解析成功且有效小数位不超过该类型上限时返回本类型。
+            ///
+            /// # 错误
+            /// 形态不被接受、字符串或 Decimal128 无法解析，或有效小数位超过该类型上限时返回 serde 错误。JSON 数字会被拒绝。
             fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
                 let decimal = deserializer.deserialize_any(MoneyVisitor)?;
                 Self::try_from(decimal).map_err(de::Error::custom)
@@ -168,6 +192,9 @@ impl Amount {
     ///
     /// # 错误
     /// 不返回错误。
+    ///
+    /// # Panics
+    /// 和超出 `Decimal` 可表示范围时，`+` 会 panic（`Addition overflowed`），不回绕。
     pub fn checked_add(self, other: Amount) -> Amount {
         Amount(self.0 + other.0)
     }
@@ -184,6 +211,9 @@ impl Amount {
     ///
     /// # 错误
     /// 不返回错误。
+    ///
+    /// # Panics
+    /// 差超出 `Decimal` 可表示范围时，`-` 会 panic（`Subtraction overflowed`），不回绕。
     pub fn checked_sub(self, other: Amount) -> Amount {
         Amount(self.0 - other.0)
     }
@@ -198,6 +228,9 @@ impl Amount {
 /// # 返回
 /// 舍入到 2 位小数后的 `Decimal`（`.005` 边界按银行家规则取偶数位，
 /// 负数按绝对值对称处理）。
+///
+/// # 错误
+/// 不返回错误。
 pub fn round_to_cent(value: Decimal) -> Decimal {
     value.round_dp(AMOUNT_SCALE)
 }
@@ -218,6 +251,13 @@ pub fn round_to_cent(value: Decimal) -> Decimal {
 ///
 /// # 返回
 /// 返回 `(gross, net, tax)` 三元组，均为 `Amount`。
+///
+/// # 错误
+/// 不返回错误。舍入结果直接构造 `Amount`，不再校验小数位。
+///
+/// # Panics
+/// 单价乘数量、含税金额乘税率或相减超出 `Decimal` 范围时，运算符会 panic。
+/// debug 构建下，若舍入后任一金额的有效小数位超过 2 位，`debug_assert` 也会 panic；release 不检查该断言。
 pub fn line_amounts(unit_price: UnitPrice, quantity: Quantity, tax_rate: Rate) -> (Amount, Amount, Amount) {
     let gross = round_to_cent(unit_price.to_decimal() * quantity.to_decimal());
     let tax = round_to_cent(gross * tax_rate.to_decimal());
@@ -243,6 +283,16 @@ impl<'de> Visitor<'de> for MoneyVisitor {
         formatter.write_str("定点小数字符串，或 $numberDecimal/$numberDecimalBytes 扩展形态")
     }
 
+    /// 按十进制字符串解析；非法数字返回 serde 错误。
+    ///
+    /// # 参数
+    /// * `value` - 十进制数字字符串。
+    ///
+    /// # 返回
+    /// 解析成功时返回对应的 `Decimal`。
+    ///
+    /// # 错误
+    /// `Decimal::from_str` 无法解析 `value` 时，经 `E::custom` 返回 serde 错误。
     fn visit_str<E: de::Error>(self, value: &str) -> std::result::Result<Decimal, E> {
         Decimal::from_str(value).map_err(E::custom)
     }
@@ -251,18 +301,58 @@ impl<'de> Visitor<'de> for MoneyVisitor {
         self.visit_str(&value)
     }
 
+    /// JSON 整数不能当作金额，统一拒绝。
+    ///
+    /// # 参数
+    /// * `value` - JSON 有符号整数。
+    ///
+    /// # 返回
+    /// 没有成功值。
+    ///
+    /// # 错误
+    /// 不论 `value` 是多少，都经 `json_integer_rejected` 返回 serde 错误，要求金额以字符串传输。
     fn visit_i64<E: de::Error>(self, value: i64) -> std::result::Result<Decimal, E> {
         Err(json_integer_rejected(value))
     }
 
+    /// JSON 无符号整数不能当作金额，统一拒绝。
+    ///
+    /// # 参数
+    /// * `value` - JSON 无符号整数。
+    ///
+    /// # 返回
+    /// 没有成功值。
+    ///
+    /// # 错误
+    /// 不论 `value` 是多少，都经 `json_integer_rejected` 返回 serde 错误，要求金额以字符串传输。
     fn visit_u64<E: de::Error>(self, value: u64) -> std::result::Result<Decimal, E> {
         Err(json_integer_rejected(value))
     }
 
+    /// JSON 浮点不能当作金额，统一拒绝。
+    ///
+    /// # 参数
+    /// * `value` - JSON 浮点数。
+    ///
+    /// # 返回
+    /// 没有成功值。
+    ///
+    /// # 错误
+    /// 不论 `value` 是多少，都返回 serde 错误，说明金额必须用字符串传输、不接受 JSON 浮点数。
     fn visit_f64<E: de::Error>(self, value: f64) -> std::result::Result<Decimal, E> {
         Err(E::custom(format!("金额必须用字符串传输，不接受 JSON 浮点数 {value}，见 P0-4.1")))
     }
 
+    /// 只接受 `$numberDecimal` 字符串或 `$numberDecimalBytes` 原始字节；缺值或未知键返回 serde 错误。
+    ///
+    /// # 参数
+    /// * `map` - 扩展文档的映射访问器。
+    ///
+    /// # 返回
+    /// 存在 `$numberDecimal` 时解析其十进制字符串并返回 `Decimal`；否则把 `$numberDecimalBytes` 还原为 `Decimal`。两者都在时只用 `$numberDecimal`。
+    ///
+    /// # 错误
+    /// 读取键或值失败时传播访问器错误。未知键、两个键都不存在、十进制字符串无法解析，或原始字节无法还原为 `Decimal` 时，经 `de::Error::custom` 返回 serde 错误。
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> std::result::Result<Decimal, A::Error> {
         let mut value: Option<String> = None;
         let mut bytes: Option<Vec<u8>> = None;
@@ -299,6 +389,16 @@ struct D128BytesSeed;
 impl<'de> de::DeserializeSeed<'de> for D128BytesSeed {
     type Value = Vec<u8>;
 
+    /// 按字节访问读取 Decimal128 原始字节，不走 `Vec<u8>` 的序列反序列化。
+    ///
+    /// # 参数
+    /// * `deserializer` - serde 反序列化器。
+    ///
+    /// # 返回
+    /// `visit_bytes` 复制为 `Vec<u8>`；`visit_byte_buf` 原样返回缓冲区。
+    ///
+    /// # 错误
+    /// 反序列化失败，或值不是原始字节时，返回 serde 错误。
     fn deserialize<D: Deserializer<'de>>(self, deserializer: D) -> std::result::Result<Vec<u8>, D::Error> {
         struct BytesVisitor;
 
@@ -328,7 +428,10 @@ impl<'de> de::DeserializeSeed<'de> for D128BytesSeed {
 /// * `bytes` - Decimal128 原始 16 字节（bson `Decimal128Access` 以字节暴露）
 ///
 /// # 返回
-/// 解析成功返回 `Ok(Decimal)`，字节长度非法或解析失败返回 `Err(String)`。
+/// 解析成功返回 `Ok(Decimal)`。
+///
+/// # 错误
+/// 字节长度不是 16，或 Decimal128 文本无法解析为 `Decimal` 时返回 `Err(String)`。
 fn decimal_from_d128_bytes(bytes: Vec<u8>) -> std::result::Result<Decimal, String> {
     let bytes: [u8; 16] = bytes.try_into().map_err(|_| "Decimal128 必须为 16 字节".to_string())?;
     let decimal128 = bson::Decimal128::from_bytes(bytes);

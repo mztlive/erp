@@ -85,6 +85,20 @@ impl EvidenceStore for MongoEvidenceStore<'_> {
 }
 
 /// 接通真实数据库 provider；准备好的补证与所有身份按原参数传入。
+///
+/// # 参数
+/// * `db` - 结算集合所在数据库。
+/// * `difference_id` - 结算差异主键。
+/// * `statement_id` - 命令指定的结算单。
+/// * `expected_version` - 期望的差异版本。
+/// * `evidence` - 已构造的补证。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 无返回值。先按 CAS 推进结算单，再追加补证。
+///
+/// # 错误
+/// 差异、明细或结算单不存在时返回 `NotFound`。差异版本变化时返回 `ConflictError`。差异不属于结算单或当前状态禁止补证时返回 `BusinessLogicError`。仓储写入失败时返回对应错误。
 pub(super) async fn persist(
     db: &Database,
     difference_id: &str,

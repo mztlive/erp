@@ -418,6 +418,15 @@ struct ProductImportRows<'a> {
 #[async_trait]
 impl ImportRowExecution for ProductImportRows<'_> {
     /// 使用本轮行来源与字典缓存执行单行导入。
+    ///
+    /// # 参数
+    /// * `row_number` - 源表行号。
+    ///
+    /// # 返回
+    /// 返回该行的状态、原因码、摘要和可选商品身份。导入失败记在结果里，不中断返回。
+    ///
+    /// # 错误
+    /// 不返回错误。
     async fn import(&mut self, row_number: u32) -> RecordedOutcome {
         self.process
             .import_single_row(
@@ -432,6 +441,16 @@ impl ImportRowExecution for ProductImportRows<'_> {
     }
 
     /// 将当前行结果与累计任务进度交给原事务边界保存。
+    ///
+    /// # 参数
+    /// * `job` - 当前导入任务；保存成功后反映已推进的版本。
+    /// * `item` - 当前行结果明细。
+    ///
+    /// # 返回
+    /// 明细与任务进度已保存。
+    ///
+    /// # 错误
+    /// 版本冲突、明细或任务写入、事务提交失败时返回对应错误。
     async fn persist(&mut self, job: &mut BackgroundJob, item: BackgroundJobItem) -> Result<()> {
         self.process.persist_progress(job, item).await
     }

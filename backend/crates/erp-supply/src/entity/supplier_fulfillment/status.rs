@@ -50,8 +50,14 @@ pub enum FulfillmentStatus {
 impl FulfillmentStatus {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Received => "接收",
@@ -68,8 +74,14 @@ impl FulfillmentStatus {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Received => "RECEIVED",
@@ -86,8 +98,14 @@ impl FulfillmentStatus {
 
     /// 判断是否处于终态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// `COMPLETED`、`REJECTED` 或 `EXCEPTION` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_terminal(self) -> bool {
         matches!(self, Self::Completed | Self::Rejected | Self::Exception)
     }
@@ -96,8 +114,14 @@ impl FulfillmentStatus {
 impl DocumentState for FulfillmentStatus {
     /// 返回全部合法后继状态（数据模型 §7.6，禁止运行时扩展）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 后继状态切片（不含自身；终态返回空）。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Received => &[Self::Submitting, Self::Exception],
@@ -130,8 +154,14 @@ pub enum CancelStatus {
 impl CancelStatus {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::None => "无",
@@ -144,8 +174,14 @@ impl CancelStatus {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::None => "NONE",
@@ -160,8 +196,14 @@ impl CancelStatus {
 impl DocumentState for CancelStatus {
     /// 返回全部合法后继状态（数据模型 §7.6：NONE→CANCEL_PENDING→CANCELED|FAILED|MANUAL）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 后继状态切片（不含自身；终态返回空）。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::None => &[Self::CancelPending],
@@ -197,8 +239,14 @@ pub enum RefundStatus {
 impl RefundStatus {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::None => "无",
@@ -212,8 +260,14 @@ impl RefundStatus {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::None => "NONE",
@@ -229,8 +283,14 @@ impl RefundStatus {
 impl DocumentState for RefundStatus {
     /// 返回全部合法后继状态（数据模型 §7.6，禁止运行时扩展）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 后继状态切片（不含自身；终态返回空）。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::None => &[Self::RefundPending],

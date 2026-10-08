@@ -83,6 +83,15 @@ pub(super) struct BuiltRowManifest {
 }
 
 /// 由请求身份推导行级清单对象键。
+///
+/// # 参数
+/// * `request_id` - 幂等请求身份。
+///
+/// # 返回
+/// 返回 `product-import-rows/{request_id}.json`。
+///
+/// # 错误
+/// `request_id` 为空、超过 64 字符或含非字母数字、`-`、`_` 以外的字符时返回 `ValidationError`。
 pub(super) fn manifest_object_key(request_id: &str) -> Result<String> {
     validate_manifest_request_id(request_id)?;
     Ok(format!("{ROW_MANIFEST_KEY_PREFIX}/{request_id}.json"))
@@ -206,7 +215,9 @@ pub(super) async fn read_row_manifest(storage: &S3Storage, request_id: &str) -> 
 /// 私有输入和旧对象清单采用相同解析及绑定校验，错误由执行器回退到下一来源。
 ///
 /// # 参数
-/// 已读取清单字节与任务当前的请求身份。
+/// * `bytes` - 已读取的清单字节。
+/// * `request_id` - 任务当前的请求身份。
+///
 /// # 返回
 /// 返回绑定同一请求及清单版本的全部原始行。
 /// # 错误
@@ -223,8 +234,14 @@ pub(super) fn decode_row_manifest(bytes: &[u8], request_id: &str) -> Result<RowM
 /// 尽力删除已上传的清单相关对象（失败补偿，忽略单个删除错误）。
 ///
 /// # 参数
-/// * `storage` - 对象存储
-/// * `keys` - 待删除对象键
+/// * `storage` - 对象存储。
+/// * `keys` - 待删除对象键。
+///
+/// # 返回
+/// 无返回值。单个删除失败被忽略。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) async fn delete_manifest_objects(storage: &S3Storage, keys: &[String]) {
     for key in keys {
         let _ = storage.delete(key).await;
@@ -237,7 +254,10 @@ pub(super) async fn delete_manifest_objects(storage: &S3Storage, keys: &[String]
 /// * `manifest` - 行级清单
 ///
 /// # 返回
-/// 返回行号到清单行的映射。
+/// 返回行号到清单行的映射。重复行号时后出现的行覆盖先前映射。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn row_entries_by_number(manifest: &RowManifest) -> HashMap<u32, &RowManifestRow> {
     manifest.rows.iter().map(|row| (row.row_number, row)).collect()
 }
@@ -249,6 +269,9 @@ pub(super) fn row_entries_by_number(manifest: &RowManifest) -> HashMap<u32, &Row
 ///
 /// # 返回
 /// 返回可直接用于产品命令的行媒体。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn row_media_from_entry(entry: &RowManifestRow) -> RowMedia {
     let mut media = RowMedia::default();
     let mut pending = Vec::new();
@@ -303,6 +326,20 @@ struct StoredManifestImages<'a> {
 #[async_trait]
 impl ManifestImageWriter for StoredManifestImages<'_> {
     /// 上传独立对象；主图和轮播首图保留各自对象键和登记命令。
+    ///
+    /// # 参数
+    /// * `row_number` - 工作表行号，写入对象键。
+    /// * `slot` - 图片槽位，写入对象键与待登记引用。
+    /// * `image` - 已准备的图片字节、扩展名、内容类型和摘要。
+    ///
+    /// # 返回
+    /// 返回待登记引用、文件登记命令和对象键。
+    ///
+    /// # 错误
+    /// 对象存储保存失败时返回 `Internal`。
+    ///
+    /// # Panics
+    /// 图片字节数无法表示为 `u64` 时 panic；正常图片长度不会触发。
     async fn put(
         &self,
         row_number: u32,
@@ -555,6 +592,20 @@ mod tests {
     #[async_trait]
     impl ManifestImageWriter for RecordingImages {
         /// 记录槽位并按指定对象注入上传失败。
+        ///
+        /// # 参数
+        /// * `row_number` - 工作表行号。
+        /// * `slot` - 图片槽位。
+        /// * `_image` - 未使用的已准备图片。
+        ///
+        /// # 返回
+        /// 未注入失败时返回引用、登记命令和槽位键。
+        ///
+        /// # 错误
+        /// 槽位键与预设失败键相同时返回 `Internal`。
+        ///
+        /// # Panics
+        /// 调用记录锁中毒时 panic。
         async fn put(
             &self,
             row_number: u32,

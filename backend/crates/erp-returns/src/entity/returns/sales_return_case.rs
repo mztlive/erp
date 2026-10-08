@@ -36,8 +36,14 @@ pub enum CaseType {
 impl CaseType {
     /// 返回类型的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Return => "退货",
@@ -49,8 +55,14 @@ impl CaseType {
 
     /// 返回类型的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Return => "return",
@@ -76,8 +88,14 @@ pub enum ReturnRoute {
 impl ReturnRoute {
     /// 返回路线的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::CompanyWarehouse => "退公司仓",
@@ -88,8 +106,14 @@ impl ReturnRoute {
 
     /// 返回路线的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::CompanyWarehouse => "company_warehouse",
@@ -124,8 +148,14 @@ pub enum SalesReturnCaseStatus {
 impl SalesReturnCaseStatus {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -140,8 +170,14 @@ impl SalesReturnCaseStatus {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "draft",
@@ -156,8 +192,14 @@ impl SalesReturnCaseStatus {
 
     /// 判断是否处于终态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为 `Completed` 或 `Voided` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_terminal(self) -> bool {
         matches!(self, Self::Completed | Self::Voided)
     }
@@ -320,8 +362,14 @@ impl SalesReturnCase {
 
     /// 判断处理单是否已完成。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为 `Completed` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_completed(&self) -> bool {
         self.stable.status() == SalesReturnCaseStatus::Completed
     }

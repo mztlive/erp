@@ -51,7 +51,7 @@ struct SettlementBriefContext {
 /// 返回与工作台使用同一构造器生成的不可变展示，不授予业务读取权限。
 ///
 /// # 错误
-/// 标签查询失败或冻结展示字段越界时中止提交。
+/// 标签查询失败、简报源缺失或冻结展示校验失败时中止提交。
 pub async fn capture_stock_adjustment_display(
     db: &Database,
     adjustment: &StockAdjustment,

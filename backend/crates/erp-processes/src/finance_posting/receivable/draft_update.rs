@@ -58,6 +58,19 @@ impl ReceivableProcess {
 }
 
 /// 先重验账号与提交操作资格，再读取完整回款来源；全程使用同一执行器。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `rbac` - 授权源。
+/// * `actor` - 当前已认证操作人。
+/// * `id` - 回款单 ID。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 账号、提交权限和完整资金来源资格都通过时无返回值。
+///
+/// # 错误
+/// 账号不可用、缺少提交权限、无权读取完整资金来源，或授权读取失败时返回错误。
 pub(super) async fn ensure_receipt_edit_authorized(
     db: &Database,
     rbac: &SharedRbacService,

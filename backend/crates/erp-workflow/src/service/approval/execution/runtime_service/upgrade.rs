@@ -36,8 +36,15 @@ pub struct UpgradeBindingCommand {
 impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// 升级未提交单据绑定到当前发布定义。
     ///
+    /// # 参数
+    /// * `actor` - 当前认证操作人。
+    /// * `command` - 绑定升级命令。
+    ///
+    /// # 返回
+    /// 返回提交或回放得到的升级结果。
+    ///
     /// # 错误
-    /// 已提交或版本冲突时返回错误。
+    /// 原因为空白、幂等键或命令身份不合法、已提交、版本冲突或升级端口失败时返回错误。
     pub async fn upgrade_binding(
         &self,
         actor: &AuditActor,

@@ -45,14 +45,44 @@ impl AgentHook for Diagnostics {
 }
 
 impl Diagnostics {
+    /// 记录传输失败。锁中毒时仍写回内部记录。
+    ///
+    /// # 参数
+    /// * `failure` - 传输层失败分类。
+    ///
+    /// # 返回
+    /// 无返回值。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn transport_failure(&self, failure: Failure) {
         self.0.lock().unwrap_or_else(|error| error.into_inner()).transport_failure = Some(failure);
     }
 
+    /// 读取已记录的传输失败。锁中毒时仍返回内部记录。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 已记录的 `Failure`；尚未记录时为 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn failure(&self) -> Option<Failure> {
         self.0.lock().unwrap_or_else(|error| error.into_inner()).transport_failure
     }
 
+    /// 记录提取失败。完成错误转入 `error`；已有校验原因时不覆盖。
+    ///
+    /// # 参数
+    /// * `error` - Rig 结构化输出错误。
+    ///
+    /// # 返回
+    /// 无返回值。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn extraction_error(&self, error: &StructuredOutputError) {
         if let StructuredOutputError::PromptError(PromptError::CompletionError(error)) = error {
             self.error(error);
@@ -82,21 +112,62 @@ impl Diagnostics {
         }
     }
 
+    /// 按损失编码保存原始响应正文。锁中毒时仍写回内部记录。
+    ///
+    /// # 参数
+    /// * `body` - 已读完的响应字节。
+    ///
+    /// # 返回
+    /// 无返回值。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn body(&self, body: &[u8]) {
         self.0.lock().unwrap_or_else(|error| error.into_inner()).response_body =
             Some(String::from_utf8_lossy(body).into_owned());
     }
 
+    /// 保存解码后的原始响应和结束原因。
+    ///
+    /// # 参数
+    /// * `response` - Rig 完成响应。
+    ///
+    /// # 返回
+    /// 无返回值。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn output(&self, response: &CompletionResponse) {
         let mut metadata = self.0.lock().unwrap_or_else(|error| error.into_inner());
         metadata.decoded_response = Some(response.raw.clone());
         metadata.finish_reason = response.finish_reason().map(|reason| format!("{reason:?}"));
     }
 
+    /// 把输出校验失败记入 `validation_error`。
+    ///
+    /// # 参数
+    /// * `error` - 本地输出解码错误。
+    ///
+    /// # 返回
+    /// 无返回值。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn output_error(&self, error: &DecodeError) {
         self.0.lock().unwrap_or_else(|error| error.into_inner()).validation_error = Some(error.to_string());
     }
 
+    /// 记录 HTTP 状态、请求标识和响应头。非成功状态把拒绝正文标为待读取。
+    ///
+    /// # 参数
+    /// * `status` - HTTP 状态码。
+    /// * `headers` - 原始响应头。
+    ///
+    /// # 返回
+    /// 无返回值。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn response(&self, status: u16, headers: &HeaderMap) {
         let mut metadata = self.0.lock().unwrap_or_else(|error| error.into_inner());
         metadata.status = Some(status);
@@ -107,14 +178,44 @@ impl Diagnostics {
         }
     }
 
+    /// 读取已记录的 HTTP 状态。锁中毒时仍返回内部记录。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 已记录的状态码；尚未记录时为 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn status(&self) -> Option<u16> {
         self.0.lock().unwrap_or_else(|error| error.into_inner()).status
     }
 
+    /// 用已解析的供应商拒绝替换当前拒绝记录。
+    ///
+    /// # 参数
+    /// * `rejection` - 错误正文的解析结果。
+    ///
+    /// # 返回
+    /// 无返回值。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn rejection(&self, rejection: Rejection) {
         self.0.lock().unwrap_or_else(|error| error.into_inner()).rejection = rejection;
     }
 
+    /// 记录供应商错误的调试文本、状态、响应头和正文。已有拒绝正文时不覆盖。
+    ///
+    /// # 参数
+    /// * `error` - Rig 供应商错误。
+    ///
+    /// # 返回
+    /// 无返回值。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn error(&self, error: &ProviderError) {
         let mut metadata = self.0.lock().unwrap_or_else(|error| error.into_inner());
         metadata.sdk_error = Some(format!("{error:?}"));
@@ -136,6 +237,18 @@ impl Diagnostics {
         }
     }
 
+    /// 按成功或失败写一条合同提取结束日志，不改变调用结果。
+    ///
+    /// # 参数
+    /// * `start` - 提取开始时刻，用于计算耗时。
+    /// * `result` - 调用方的提取结果；只读成功与失败码。
+    /// * `timeout_source` - 超时所在阶段；没有超时时为 `None`。
+    ///
+    /// # 返回
+    /// 无返回值。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn finish<T>(&self, start: Instant, result: &Result<T>, timeout_source: Option<&str>) {
         let metadata = self.0.lock().unwrap_or_else(|error| error.into_inner());
         let elapsed_ms = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);

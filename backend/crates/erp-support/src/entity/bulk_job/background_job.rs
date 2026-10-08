@@ -260,8 +260,14 @@ impl BackgroundJob {
 
     /// 在聚合创建阶段附加规范请求指纹。
     ///
+    /// # 参数
+    /// * `fingerprint` - 由规范化父子字段生成的请求指纹
+    ///
+    /// # 返回
+    /// 写入 `request_fingerprint` 后无额外返回值。
+    ///
     /// # 错误
-    /// 指纹已附加或任务已离开初始待执行状态时返回错误。
+    /// 指纹已附加、任务不是 `Pending`，或 `processed_count` 已非 0 时返回错误。
     pub fn attach_request_fingerprint(&mut self, fingerprint: CommandFingerprint) -> Result<()> {
         if self.request_fingerprint.is_some()
             || self.status != JobStatus::Pending
@@ -327,6 +333,9 @@ impl BackgroundJob {
     /// 标记部分成功。
     ///
     /// 有成功有失败（且未取消）时使用；之后仍可继续记录进度。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 无返回值。
@@ -451,14 +460,17 @@ impl BackgroundJob {
 
     /// 更新结果文件与下载到期时间。
     ///
-    /// 更新复用创建校验；关键字段（编号、类型、发起人、请求身份、目标总数）
-    /// 不允许在通用更新中修改。
+    /// 只覆盖调用方给出的结果文件与下载到期时间，未给出的字段保持不变。
+    /// 编号、类型、发起人、请求身份和目标总数不在本方法中修改，也不再执行创建校验。
     ///
     /// # 参数
     /// * `update` - 更新数据
     ///
     /// # 返回
     /// 无返回值。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn update(&mut self, update: JobUpdate) {
         if let Some(result_file_asset_id) = update.result_file_asset_id {
             self.result_file_asset_id = Some(result_file_asset_id);
@@ -473,9 +485,15 @@ impl BackgroundJob {
     /// `record_progress` 与导入批次判定共用同一谓词；调用方保留各自的
     /// 错误文案，本方法只承担纯状态判定。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 未写入 `finished_at` 且状态为 `RUNNING` / `PARTIALLY_SUCCEEDED`
     /// 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn can_record_progress(&self) -> bool {
         self.finished_at.is_none()
             && matches!(self.status, JobStatus::Running | JobStatus::PartiallySucceeded)
@@ -483,9 +501,15 @@ impl BackgroundJob {
 
     /// 判断任务是否已处于终态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// `SUCCEEDED` / `FAILED` / `CANCELLED`，或已全部结束的混合
     /// `PARTIALLY_SUCCEEDED`（已写入 `finished_at`）时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_terminal(&self) -> bool {
         matches!(self.status, JobStatus::Succeeded | JobStatus::Failed | JobStatus::Cancelled)
             || (self.status == JobStatus::PartiallySucceeded && self.finished_at.is_some())

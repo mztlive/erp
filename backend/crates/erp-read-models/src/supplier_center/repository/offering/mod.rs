@@ -18,6 +18,15 @@ pub struct SupplierOfferingReadRepository<'a> {
 }
 impl<'a> SupplierOfferingReadRepository<'a> {
     /// 绑定数据库；构造不查询事实。
+    ///
+    /// # 参数
+    /// * `db` - 数据库。
+    ///
+    /// # 返回
+    /// 返回未持有事务的只读仓储。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }

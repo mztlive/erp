@@ -1,4 +1,4 @@
-//! Inventory domain: stock balances, movements, reservations and adjustments.
+//! 库存领域：库存余额、流水、预占与调整。
 
 pub mod dto;
 pub mod entity;

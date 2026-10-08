@@ -18,6 +18,17 @@ pub(super) struct PdfFile {
     program: PathBuf,
 }
 impl PdfFile {
+    /// 把 PDF 写入进程私有临时目录，不启动转图。
+    ///
+    /// # 参数
+    /// * `pdf` - 原文件字节；空文件或超过 20 MB 会被拒绝。
+    /// * `program` - `pdftoppm` 可执行文件路径。
+    ///
+    /// # 返回
+    /// 持有临时目录和 PDF 路径的渲染上下文。
+    ///
+    /// # 错误
+    /// 文件为空、超过 20 MB、临时目录或写盘失败时返回 `OCR_RENDER_FAILED`。
     pub(super) async fn create(pdf: &[u8], program: &Path) -> Result<Self> {
         if pdf.is_empty() || pdf.len() > 20 * 1024 * 1024 {
             return Err(render_error());
@@ -28,6 +39,16 @@ impl PdfFile {
         Ok(Self { _directory: directory, path, program: program.into() })
     }
 
+    /// 在 20 秒内把指定页渲染为单张 PNG。
+    ///
+    /// # 参数
+    /// * `number` - 传给 `pdftoppm` 的起止页码。
+    ///
+    /// # 返回
+    /// 以 PNG 魔数开头、且不超过图片大小上限的字节。
+    ///
+    /// # 错误
+    /// 超时返回 `OCR_RENDER_TIMEOUT`；程序不可用返回 `OCR_RENDER_UNAVAILABLE`；空图、超限、非 PNG 或进程失败返回渲染失败或 `OCR_IMAGE_SIZE`。
     pub(super) async fn page(&self, number: u32) -> Result<Vec<u8>> {
         timeout(Duration::from_secs(20), self.render(number))
             .await

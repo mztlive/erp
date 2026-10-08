@@ -2,7 +2,7 @@
 //! supplier_capability(+_revision)、supplier_qualification(+_revision)、
 //! supplier_qualification_capability、supplier_rating_revision（页面：W14）。
 //!
-//! 实体层无跨域依赖：只引用 `entities::ids` 的 ID newtype 与 `common` 基元。
+//! 实体层无跨域依赖：只引用 `erp_core::ids` 的 ID newtype 与 `erp_core` 公共基元。
 //! 字段字典与唯一约束见数据模型 §6.2；公共字段归属按 §4.3 判定：
 //! - `supplier_account` / `supplier_capability` / `supplier_qualification`
 //!   是「稳定基础资料」→ 组合 [`erp_core::common::StableBase`]；

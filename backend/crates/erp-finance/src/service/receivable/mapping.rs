@@ -1,12 +1,18 @@
-//! Finance fact projections and stable money, version, and ledger error contracts.
+//! 财务事实投影，以及稳定的金额、版本与账本错误合同。
 
 use erp_core::money::Amount;
 
 use crate::dto::receivable::{ReceivableInvoiceFactView, ReceivableReceiptFactView};
 /// 固定零金额与账本共用同一实体层实现（`0.00` 确定性拼写）。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回 `0.00`。
+///
+/// # 错误
+/// 不返回错误。
 ///
 /// 公开包装：`erp-read-models` 的资金作用域投影（`funds_scope` 等）跨 crate 复用本入口，保持与基线一致的
 /// 公开路径 `service::receivable::mapping::zero_amount`；实体层实现保持 crate 内可见。
@@ -18,6 +24,15 @@ use crate::ports::receivable::ReceivableSnapshot;
 use crate::{Error, Result};
 
 /// 装配当前账户关联的正式回款事实投影。
+///
+/// # 参数
+/// * `snapshot` - 当前账户的回款与分配事实。
+///
+/// # 返回
+/// 返回按到账时间再按回款 ID 排序的投影；无分配时已分配额为零。`Reversed` 状态标为已冲正。
+///
+/// # 错误
+/// 不返回错误。
 pub fn receipt_fact_views(snapshot: &ReceivableSnapshot) -> Vec<ReceivableReceiptFactView> {
     let allocations_by_receipt = allocations_by_receipt_id(snapshot);
     let mut receipts = snapshot.receipts.iter().collect::<Vec<_>>();
@@ -49,6 +64,16 @@ pub fn receipt_fact_views(snapshot: &ReceivableSnapshot) -> Vec<ReceivableReceip
 }
 
 /// 装配当前账户关联的正式销项发票事实投影。
+///
+/// # 参数
+/// * `snapshot` - 当前账户的发票与分配事实。
+///
+/// # 返回
+/// 返回按开票日再按发票 ID 排序的投影；无分配时已分配额为零。
+/// `RedInvoiced` 状态标为已冲红，蓝票与红票方向分别为 `BLUE` 与 `RED`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn invoice_fact_views(snapshot: &ReceivableSnapshot) -> Vec<ReceivableInvoiceFactView> {
     let allocations_by_invoice = allocations_by_invoice_id(snapshot);
     let mut invoices = snapshot.invoices.iter().collect::<Vec<_>>();
@@ -140,8 +165,15 @@ pub fn map_ledger_error(error: erp_core::Error) -> Error {
 
 /// 校验乐观锁版本。
 ///
+/// # 参数
+/// * `actual` - 当前持久化版本。
+/// * `expected` - 调用方期望版本。
+///
+/// # 返回
+/// 版本一致时无返回值。
+///
 /// # 错误
-/// 不一致时返回冲突。
+/// 不一致时返回 `ConflictError`。
 pub fn ensure_expected_version(actual: u64, expected: u64) -> Result<()> {
     if actual == expected {
         return Ok(());

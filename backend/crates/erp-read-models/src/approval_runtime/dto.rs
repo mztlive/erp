@@ -77,24 +77,60 @@ impl DocumentApprovalInstanceView {
     }
 
     /// 复制实际当前轮次，不推断审批路线。
+    ///
+    /// # 参数
+    /// * `round_no` - 实际当前轮次
+    ///
+    /// # 返回
+    /// 返回写入 `current_round_no` 后的摘要。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_current_round_no(mut self, round_no: u32) -> Self {
         self.current_round_no = round_no;
         self
     }
 
     /// 复制实际当前节点。
+    ///
+    /// # 参数
+    /// * `node` - 实际当前节点键；没有则为 `None`
+    ///
+    /// # 返回
+    /// 返回写入 `current_node` 后的摘要，不改节点名称。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_current_node(mut self, node: Option<String>) -> Self {
         self.current_node = node;
         self
     }
 
     /// 复制实际当前审批人。
+    ///
+    /// # 参数
+    /// * `assignee` - 实际当前审批人；没有则为 `None`
+    ///
+    /// # 返回
+    /// 返回写入 `current_assignee` 后的摘要，不改显示名。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_current_assignee(mut self, assignee: Option<String>) -> Self {
         self.current_assignee = assignee;
         self
     }
 
     /// 复制最近驳回原因。
+    ///
+    /// # 参数
+    /// * `reason` - 最近驳回原因；没有则为 `None`
+    ///
+    /// # 返回
+    /// 返回写入 `latest_rejection` 后的摘要，不改驳回人。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_latest_rejection(mut self, reason: Option<String>) -> Self {
         self.latest_rejection = reason;
         self
@@ -128,6 +164,17 @@ pub struct DocumentApprovalHistoryItemView {
 
 impl DocumentApprovalHistoryItemView {
     /// 沿既有详情构造入口保留历史必填身份，未读取的决定保持为空。
+    ///
+    /// # 参数
+    /// * `execution_id` - 节点执行主键
+    /// * `node_key` - 节点键
+    /// * `result` - 实际执行结果
+    ///
+    /// # 返回
+    /// 返回轮次与执行序号为 1、节点名为空、决定字段为 `None` 的历史项。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(execution_id: String, node_key: String, result: String) -> Self {
         Self {
             execution_id,
@@ -144,6 +191,15 @@ impl DocumentApprovalHistoryItemView {
     }
 
     /// 复制真实执行轮次。
+    ///
+    /// # 参数
+    /// * `round_no` - 实际执行轮次
+    ///
+    /// # 返回
+    /// 返回写入 `round_no` 后的历史项。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_round_no(mut self, round_no: u32) -> Self {
         self.round_no = round_no;
         self

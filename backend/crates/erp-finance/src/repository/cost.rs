@@ -122,8 +122,15 @@ impl Default for CostEntryFilter {
 impl QueryFilter for CostEntryFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回查询条件文档。
+    /// 返回查询条件文档。有值时等值匹配 `cost_type`、`cost_stage`、
+    /// `cost_scope`、`supplier_id`；`source_document_id` 按字面量模糊匹配。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(cost_type) = self.cost_type {
@@ -146,8 +153,14 @@ impl QueryFilter for CostEntryFilter {
 impl Pagination for CostEntryFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组。`page` 原样返回，`page_size` 由 `u32` 转为 `u64`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -219,8 +232,14 @@ impl Default for CostAllocationFilter {
 impl QueryFilter for CostAllocationFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回查询条件文档。
+    /// 返回查询条件文档。有值时等值匹配 `cost_entry_id`、`sales_order_id`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(cost_entry_id) = &self.cost_entry_id {
@@ -236,8 +255,14 @@ impl QueryFilter for CostAllocationFilter {
 impl Pagination for CostAllocationFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组。`page` 原样返回，`page_size` 由 `u32` 转为 `u64`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -383,6 +408,9 @@ impl<'a> CostRepository<'a> {
     ///
     /// # 返回
     /// 返回仓储实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
@@ -399,6 +427,9 @@ impl<'a> CostRepository<'a> {
     /// * `entry` - 待写入的成本事实
     /// * `allocations` - 待写入的分配行集合（可为空）
     /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 返回
+    /// 成本事实与分配行都写入成功时返回 `Ok(())`。
     ///
     /// # 错误
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
@@ -425,7 +456,7 @@ impl<'a> CostRepository<'a> {
     }
 }
 
-/// 构建排序文档：字段名经白名单映射，未命中回退 `created_at` 降序。
+/// 构建排序文档：字段名经白名单映射，未命中回退 `created_at`，方向由 `sort_ascending` 决定。
 ///
 /// # 参数
 /// * `sort_by` - 排序字段（白名单内有效）

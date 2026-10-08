@@ -13,6 +13,18 @@ use super::{
 
 impl<'a> BpmWorkflowRepository<'a> {
     /// 按定义版本和允许状态写入，并使用当前状态分类 CAS 未命中。
+    ///
+    /// # 参数
+    /// * `definition` - 待写回的流程定义。
+    /// * `expected_lock_version` - 调用方持有的定义锁版本。
+    /// * `required_status` - 允许命中的定义状态。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 命中时返回 [`CasWriteOutcome::Applied`]；未命中时按当前文档返回缺失、版本冲突或状态变化。
+    ///
+    /// # 错误
+    /// 版本无法表示为 BSON 整数、实体无法序列化，或 MongoDB 更新与回读失败时返回错误。
     pub(super) async fn cas_write_definition(
         &self,
         definition: &ApprovalProcessDefinition,
@@ -35,6 +47,19 @@ impl<'a> BpmWorkflowRepository<'a> {
         .await
     }
 
+    /// 按执行版本和单一要求状态结束节点执行，未命中时分类当前执行。
+    ///
+    /// # 参数
+    /// * `execution` - 待写回的节点执行。
+    /// * `expected_execution_version` - 调用方持有的执行版本。
+    /// * `required_status` - 允许结束的当前状态。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 命中时返回 [`CasWriteOutcome::Applied`]；未命中时返回缺失、版本冲突或状态变化。
+    ///
+    /// # 错误
+    /// 版本无法表示为 BSON 整数、实体无法序列化，或 MongoDB 更新与回读失败时返回错误。
     pub(super) async fn cas_end_execution(
         &self,
         execution: &ApprovalNodeExecution,
@@ -57,6 +82,18 @@ impl<'a> BpmWorkflowRepository<'a> {
         .await
     }
 
+    /// 按预期版本条件替换文档；未命中时回读并用 `status_matches` 分类。
+    ///
+    /// # 参数
+    /// * `spec` - 集合、过滤条件、实体与预期版本。
+    /// * `status_matches` - 判断回读文档的状态是否仍符合写入前提。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 匹配数大于 0 时返回版本已加一的 [`CasWriteOutcome::Applied`]；否则返回 [`classify_cas_miss`] 的分类。
+    ///
+    /// # 错误
+    /// 下一版本越界、实体无法序列化，或 MongoDB 更新与回读失败时返回错误。
     pub(super) async fn cas_replace<T, F>(
         &self,
         spec: CasReplaceSpec<'_, T>,
@@ -97,6 +134,18 @@ impl<'a> BpmWorkflowRepository<'a> {
     }
 }
 
+/// 构造定义 CAS 过滤：主键、版本、软删除，以及单个或一组允许状态。
+///
+/// # 参数
+/// * `id` - 定义主键。
+/// * `expected_version` - 预期锁版本。
+/// * `required_status` - 允许的定义状态；多于一个时写成 `$in`。
+///
+/// # 返回
+/// 返回可交给更新条件的查询文档。
+///
+/// # 错误
+/// 版本无法表示为 BSON 整数时返回错误。
 pub(super) fn draft_or_status_filter(
     id: &str,
     expected_version: u64,
@@ -122,6 +171,18 @@ pub(super) fn draft_or_status_filter(
     Ok(filter)
 }
 
+/// 构造结束执行的 CAS 过滤：主键、版本、要求状态和软删除。
+///
+/// # 参数
+/// * `id` - 节点执行主键。
+/// * `expected_version` - 预期执行版本。
+/// * `required_status` - 允许结束的当前状态。
+///
+/// # 返回
+/// 返回可交给更新条件的查询文档。
+///
+/// # 错误
+/// 版本无法表示为 BSON 整数时返回错误。
 pub(super) fn execution_end_filter(
     id: &str,
     expected_version: u64,
@@ -136,6 +197,21 @@ pub(super) fn execution_end_filter(
 }
 
 /// 按当前文档分类 CAS 未命中：不存在、版本冲突或状态变化。
+///
+/// 版本仍等于预期且 `status_matches` 仍成立时也返回 [`CasWriteOutcome::VersionConflict`]，
+/// 因为条件更新未命中却回读到同一前提。
+///
+/// # 参数
+/// * `current` - 按主键回读到的当前文档；没有时为 `None`。
+/// * `expected_version` - 写入时期望的版本。
+/// * `status_matches` - 判断当前状态是否仍允许该写入。
+///
+/// # 返回
+/// 无文档时返回 [`CasWriteOutcome::NotFound`]；版本不同，或版本相同且状态谓词仍成立时返回
+/// [`CasWriteOutcome::VersionConflict`]；版本相同但状态谓词不成立时返回 [`CasWriteOutcome::StatusChanged`]。
+///
+/// # 错误
+/// 不返回错误。
 pub fn classify_cas_miss<T: HasBaseModel>(
     current: Option<T>,
     expected_version: u64,
@@ -153,12 +229,21 @@ pub fn classify_cas_miss<T: HasBaseModel>(
     CasWriteOutcome::StatusChanged(current)
 }
 
+/// 期望版本加一后必须能表示为 BSON `i64`。
 fn next_version_i64(expected_version: u64) -> Result<i64> {
     let next = expected_version.checked_add(1).ok_or(Error::EntityMetadataOutOfRange("version"))?;
     i64_version(next)
 }
 
 /// 审批任务完成/关闭 CAS 过滤条件。
+///
+/// # 参数
+/// * `id` - 工作项主键。
+/// * `expected_task_version` - 加载时的任务版本。
+/// * `approval_node_execution_id` - 必须仍绑定的节点执行。
+///
+/// # 返回
+/// 返回同时约束开放状态、版本、执行身份和软删除的查询文档。
 ///
 /// # 错误
 /// 版本无法表示为 BSON 整数时返回错误。
@@ -178,6 +263,13 @@ pub fn approval_task_cas_filter(
 
 /// 一次性编号赋值 CAS 过滤条件。空字符串与 `null` 均视为未分配。
 ///
+/// # 参数
+/// * `id` - 单据注册行主键。
+/// * `expected_version` - 预期乐观锁版本。
+///
+/// # 返回
+/// 返回只命中未分配编号行的查询文档。
+///
 /// # 错误
 /// 版本无法表示为 BSON 整数时返回错误。
 pub fn assign_document_no_filter(id: &str, expected_version: u64) -> Result<Document> {
@@ -193,6 +285,22 @@ pub fn assign_document_no_filter(id: &str, expected_version: u64) -> Result<Docu
 }
 
 /// 按当前事实分类一次性编号赋值未命中。
+///
+/// # 参数
+/// * `current` - 按主键回读到的当前行；没有时为 `None`。
+/// * `expected_version` - 赋值时期望的版本。
+/// * `requested_document_no` - 本次要写入的正式编号。
+/// * `version_of` - 从当前行读取版本。
+/// * `document_no_of` - 从当前行读取已有编号。
+///
+/// # 返回
+/// 无行时返回 [`AssignDocumentNoOutcome::NotFound`]；已有相同非空编号时返回
+/// [`AssignDocumentNoOutcome::SamePayload`]；已有不同非空编号时返回
+/// [`AssignDocumentNoOutcome::NumberConflict`]；编号仍为空时返回
+/// [`AssignDocumentNoOutcome::VersionConflict`]。
+///
+/// # 错误
+/// 不返回错误。
 pub fn classify_assign_document_no_miss<T>(
     current: Option<T>,
     expected_version: u64,

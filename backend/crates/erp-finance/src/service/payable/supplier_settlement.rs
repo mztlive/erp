@@ -24,6 +24,18 @@ fn zero_amount() -> Amount {
     Amount::zero()
 }
 /// 按原 Account ID/new、Entry ID/new 时点构造结算应付；posted_at 复用调用者冻结时间。
+///
+/// # 参数
+/// * `source` - 结算单号、供应商、期间截止日与主体哈希。
+/// * `amount` - 结算应付含税金额，同时作为可收票额度。
+/// * `actor_id` - 创建人。
+/// * `at` - 调用方冻结的过账时间。
+///
+/// # 返回
+/// 返回来源类型为供应商结算的子账，以及序号为 1 的原始增加分录。
+///
+/// # 错误
+/// 子账或分录实体构造失败时返回对应错误。
 pub fn build_settlement_payable(
     source: &SettlementPayableSource,
     amount: Amount,
@@ -62,6 +74,18 @@ pub fn build_settlement_payable(
 }
 
 /// 使用调用者原事务执行器，复用财务仓储账户后分录的真实写序。
+///
+/// # 参数
+/// * `db` - 财务领域数据库。
+/// * `account` - 已构造的结算应付子账。
+/// * `entry` - 已构造的原始分录。
+/// * `executor` - 调用方事务执行器；本函数不另开事务。
+///
+/// # 返回
+/// 写入成功时无返回值。
+///
+/// # 错误
+/// 仓储写入失败时返回对应错误。
 pub async fn persist_settlement_payable(
     db: &Database,
     account: &PayableAccount,

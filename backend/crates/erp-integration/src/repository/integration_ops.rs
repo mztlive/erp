@@ -458,6 +458,9 @@ impl<'a> IntegrationOpsRepository<'a> {
     ///
     /// # 返回
     /// 返回仓储实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
@@ -476,6 +479,9 @@ impl<'a> IntegrationOpsRepository<'a> {
     /// * `message` - 待置为失败的消息实体（调用方须先经 `InboxMessage::update`
     ///   把状态改为 `InboxMessageStatus::Failed`）
     /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 返回
+    /// 成功时错误任务已插入，且消息已按调用方给定状态写回。
     ///
     /// # 错误
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）、消息版本冲突

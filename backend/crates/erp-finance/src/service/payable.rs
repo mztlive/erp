@@ -17,6 +17,15 @@ pub struct PayableService {
 }
 impl PayableService {
     /// 创建应付财务服务。
+    ///
+    /// # 参数
+    /// * `db` - 财务领域数据库。
+    ///
+    /// # 返回
+    /// 返回未开始任何读写的服务实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }

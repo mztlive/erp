@@ -10,8 +10,15 @@ use crate::{Error, Result};
 impl SupplierApiReadService {
     /// 查询连接下健康检查或目录同步后台任务的当前终态/进度。
     ///
-    /// # Errors
-    /// 任务不存在或不属于指定连接时返回 `NotFound`。
+    /// # 参数
+    /// * `connection_id` - 连接主键。
+    /// * `job_id` - 后台任务主键。
+    ///
+    /// # 返回
+    /// 返回任务终态与进度视图。
+    ///
+    /// # 错误
+    /// 任务不存在或不属于指定连接时返回 `NotFound`。仓储读取失败时返回对应错误。
     pub async fn connection_job(
         &self,
         connection_id: &str,

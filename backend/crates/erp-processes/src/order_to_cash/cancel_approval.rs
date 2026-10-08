@@ -189,8 +189,10 @@ pub(super) struct SalesOrderCancelPersistInput {
 /// 撤回审批后原子写回运行事实与销售单。
 ///
 /// # 参数
-/// * `db` - 数据库
-/// * `input` - 销售单、取消计划与开放任务
+/// * `db` - 数据库。
+/// * `access` - 原命令授权检查器，事务内重验责任与版本。
+/// * `expected_order_version` - 预读时的销售单版本。
+/// * `input` - 销售单、取消计划与开放任务。
 ///
 /// # 返回
 /// 成功时无返回值。

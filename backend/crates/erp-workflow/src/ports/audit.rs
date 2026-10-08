@@ -1,4 +1,4 @@
-//! Audit persistence consumed by workflow; adapters live at the composition root.
+//! 工作流消费的审计持久化；适配器位于组合根。
 
 use std::num::NonZeroU32;
 
@@ -28,7 +28,19 @@ pub struct WorkflowAuditFact {
 
 #[cfg(test)]
 impl WorkflowAuditFact {
-    /// Construct a successful resource audit fact for tests and adapters.
+    /// 构造一条成功的资源审计事实。
+    ///
+    /// # 参数
+    /// * `actor_id` - 操作人账号 ID。
+    /// * `action` - 业务动作。
+    /// * `resource_type` - 资源类型。
+    /// * `resource_id` - 资源 ID。
+    ///
+    /// # 返回
+    /// 返回成功、无说明，且带资源 ID 的审计事实。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn successful(
         actor_id: impl Into<String>,
         action: impl Into<String>,
@@ -130,10 +142,19 @@ impl PreparedWorkflowAudit {
         Ok(self)
     }
 
-    /// Build a success resource audit from an authenticated actor.
+    /// 由已认证操作人构造成功的资源审计。
     ///
-    /// # Errors
-    /// Empty resource id.
+    /// # 参数
+    /// * `actor` - 已认证操作人。
+    /// * `action` - 业务动作。
+    /// * `resource_type` - 资源类型。
+    /// * `resource_id` - 资源 ID。
+    ///
+    /// # 返回
+    /// 返回无说明的成功审计；序号为 1，尚未绑定命令。
+    ///
+    /// # 错误
+    /// 资源 ID 为空白时返回 `ValidationError`。
     pub fn resource(
         actor: AuditActor,
         action: &str,
@@ -143,10 +164,20 @@ impl PreparedWorkflowAudit {
         Self::resource_with_message(actor, action, resource_type, resource_id, None)
     }
 
-    /// Build a success resource audit with an optional message.
+    /// 构造带可选说明的成功资源审计。
     ///
-    /// # Errors
-    /// Empty resource id.
+    /// # 参数
+    /// * `actor` - 已认证操作人。
+    /// * `action` - 业务动作。
+    /// * `resource_type` - 资源类型。
+    /// * `resource_id` - 资源 ID。
+    /// * `message` - 可选可读说明。
+    ///
+    /// # 返回
+    /// 返回带说明的成功审计；标识由 ID 生成器分配。
+    ///
+    /// # 错误
+    /// 资源 ID 为空白时返回 `ValidationError`。
     pub fn resource_with_message(
         actor: AuditActor,
         action: &str,
@@ -157,10 +188,21 @@ impl PreparedWorkflowAudit {
         Self::resource_with_id(id_generator::next_id(), actor, action, resource_type, resource_id, message)
     }
 
-    /// Build a success resource audit with an explicit id and optional message.
+    /// 用显式标识和可选说明构造成功的资源审计。
     ///
-    /// # Errors
-    /// Empty resource id.
+    /// # 参数
+    /// * `id` - 审计标识。
+    /// * `actor` - 已认证操作人。
+    /// * `action` - 业务动作。
+    /// * `resource_type` - 资源类型。
+    /// * `resource_id` - 资源 ID。
+    /// * `message` - 可选可读说明。
+    ///
+    /// # 返回
+    /// 返回序号为 1、尚未绑定命令的成功审计。
+    ///
+    /// # 错误
+    /// 资源 ID 为空白时返回 `ValidationError`。
     pub fn resource_with_id(
         id: String,
         actor: AuditActor,
@@ -197,11 +239,30 @@ impl PreparedWorkflowAudit {
 #[async_trait]
 pub trait WorkflowAuditPort: Send + Sync {
     /// 在事务开始前校验静态动作和操作人。
+    ///
+    /// # 参数
+    /// * `audit` - 待校验的成功审计。
+    ///
+    /// # 返回
+    /// 默认实现不附加校验并成功。
+    ///
+    /// # 错误
+    /// 实现拒绝该审计时返回错误。
     fn validate(&self, _audit: &PreparedWorkflowAudit) -> Result<()> {
         Ok(())
     }
 
     /// 在原事务已结束后保存独立尝试，禁止用于业务回放。
+    ///
+    /// # 参数
+    /// * `audit` - 已准备的审计。
+    /// * `result` - 事务外尝试的结果，不含错误正文。
+    ///
+    /// # 返回
+    /// 无返回值；尝试记录已保存。
+    ///
+    /// # 错误
+    /// 默认实现返回未接线的内部错误；实现无法保存时返回错误。
     async fn persist_attempt(
         &self,
         _audit: &PreparedWorkflowAudit,
@@ -210,7 +271,17 @@ pub trait WorkflowAuditPort: Send + Sync {
         Err(Error::Internal("工作流尝试审计端口未接线".into()))
     }
 
-    /// Persist a prepared success audit using the caller executor.
+    /// 用调用方执行器保存已准备的成功审计。
+    ///
+    /// # 参数
+    /// * `audit` - 已准备的成功审计。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 无返回值；审计已保存。
+    ///
+    /// # 错误
+    /// 实现无法保存时返回错误。
     async fn persist(&self, audit: &PreparedWorkflowAudit, executor: &mut dyn Executor) -> Result<()>;
 }
 

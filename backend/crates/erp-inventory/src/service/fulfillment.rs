@@ -23,37 +23,187 @@ use crate::{
 /// 收货与仓发共用的库存写入仓储边界；事实构造与数量规则由库存服务唯一持有。
 #[async_trait]
 pub(crate) trait InventoryWriteStore: Send {
+    /// 按仓库与 SKU 查找未删除余额主键。
+    ///
+    /// # 参数
+    /// * `warehouse` - 仓库。
+    /// * `sku` - SKU。
+    /// * `ex` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 命中时返回余额主键；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 查询失败时返回对应错误。
     async fn balance(
         &mut self,
         warehouse: &WarehouseId,
         sku: &SkuId,
         ex: &mut dyn Executor,
     ) -> Result<Option<String>>;
+
+    /// 原子增加账面现存与可用量。
+    ///
+    /// # 参数
+    /// * `id` - 余额主键。
+    /// * `quantity` - 增加数量。
+    /// * `ex` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 命中并增加时返回 `true`；余额行不存在时返回 `false`。
+    ///
+    /// # 错误
+    /// 写入失败时返回对应错误。
     async fn increase(&mut self, id: &str, quantity: Quantity, ex: &mut dyn Executor) -> Result<bool>;
+
+    /// 插入新的库存余额。
+    ///
+    /// # 参数
+    /// * `balance` - 已构造的余额。
+    /// * `ex` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 插入完成。
+    ///
+    /// # 错误
+    /// 写入失败时返回对应错误。
     async fn create_balance(&mut self, balance: &StockBalance, ex: &mut dyn Executor) -> Result<()>;
+
+    /// 插入库存流水。
+    ///
+    /// # 参数
+    /// * `movement` - 已构造的流水。
+    /// * `ex` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 插入完成。
+    ///
+    /// # 错误
+    /// 写入失败时返回对应错误。
     async fn movement(&mut self, movement: &StockMovement, ex: &mut dyn Executor) -> Result<()>;
+
+    /// 把余额的最后流水登记为指定流水。
+    ///
+    /// # 参数
+    /// * `balance_id` - 余额主键。
+    /// * `movement_id` - 流水主键。
+    /// * `ex` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 命中并更新时返回 `true`；余额行不存在时返回 `false`。
+    ///
+    /// # 错误
+    /// 写入失败时返回对应错误。
     async fn last_movement(
         &mut self,
         balance_id: &str,
         movement_id: &str,
         ex: &mut dyn Executor,
     ) -> Result<bool>;
+
+    /// 插入库存预占。
+    ///
+    /// # 参数
+    /// * `reservation` - 已构造的预占。
+    /// * `ex` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 插入完成。
+    ///
+    /// # 错误
+    /// 写入失败时返回对应错误。
     async fn create_reservation(
         &mut self,
         reservation: &StockReservation,
         ex: &mut dyn Executor,
     ) -> Result<()>;
+
+    /// 原子预占可用量。
+    ///
+    /// # 参数
+    /// * `id` - 余额主键。
+    /// * `quantity` - 预占数量。
+    /// * `ex` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 可用量充足且命中时返回 `true`；不足或余额不存在时返回 `false`。
+    ///
+    /// # 错误
+    /// 写入失败时返回对应错误。
     async fn reserve(&mut self, id: &str, quantity: Quantity, ex: &mut dyn Executor) -> Result<bool>;
+
+    /// 插入预占流水。
+    ///
+    /// # 参数
+    /// * `entry` - 已构造的预占流水。
+    /// * `ex` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 插入完成。
+    ///
+    /// # 错误
+    /// 写入失败时返回对应错误。
     async fn create_entry(&mut self, entry: &StockReservationEntry, ex: &mut dyn Executor) -> Result<()>;
+
+    /// 按主键读取预占消费事实。
+    ///
+    /// # 参数
+    /// * `id` - 预占主键。
+    /// * `ex` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 命中时返回预占事实；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 查询失败时返回对应错误。
     async fn find_reservation(&mut self, id: &str, ex: &mut dyn Executor) -> Result<Option<ReservationFact>>;
+
+    /// 原子消耗预占。
+    ///
+    /// # 参数
+    /// * `id` - 预占主键。
+    /// * `quantity` - 消耗数量。
+    /// * `ex` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 预占充足且状态可操作时返回 `true`；否则返回 `false` 且不改文档。
+    ///
+    /// # 错误
+    /// 写入失败时返回对应错误。
     async fn consume_reservation(
         &mut self,
         id: &str,
         quantity: Quantity,
         ex: &mut dyn Executor,
     ) -> Result<bool>;
+
+    /// 原子释放余额上的预占。
+    ///
+    /// # 参数
+    /// * `id` - 余额主键。
+    /// * `quantity` - 释放数量。
+    /// * `ex` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 预占充足且命中时返回 `true`；不足或余额不存在时返回 `false`。
+    ///
+    /// # 错误
+    /// 写入失败时返回对应错误。
     async fn release_reserved(&mut self, id: &str, quantity: Quantity, ex: &mut dyn Executor)
     -> Result<bool>;
+
+    /// 原子扣减账面现存与可用量。
+    ///
+    /// # 参数
+    /// * `id` - 余额主键。
+    /// * `quantity` - 扣减数量。
+    /// * `ex` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 可用量充足且命中时返回 `true`；不足或余额不存在时返回 `false`。
+    ///
+    /// # 错误
+    /// 写入失败时返回对应错误。
     async fn deduct_available(&mut self, id: &str, quantity: Quantity, ex: &mut dyn Executor)
     -> Result<bool>;
 }
@@ -173,6 +323,21 @@ pub struct ReceiptStockFact<'a> {
 }
 
 /// 在调用方事务内按余额、库存流水、最后流水顺序入账；失败立即返回根事务。
+///
+/// # 参数
+/// * `db` - 库存数据库。
+/// * `executor` - 调用方事务执行器，不得另开事务。
+/// * `fact` - 本行合格入库事实。
+/// * `occurred_at` - 业务发生时间，同时作为记录时间。
+/// * `actor_id` - 记录人身份。
+///
+/// # 返回
+/// 返回入账后的余额主键。
+///
+/// # 错误
+/// 余额不存在却无法增加、最后流水未命中时返回 `Error::BusinessLogicError`。
+/// 数量、来源或流水构造不合法时返回 `Error::Logic`。
+/// 仓储写入失败时返回对应错误。
 pub async fn post_receipt_stock(
     db: &Database,
     executor: &mut dyn Executor,
@@ -282,6 +447,19 @@ pub struct ReceiptReservationFact<'a> {
     pub quantity: Quantity,
 }
 /// 逐条建立库存预占、冻结可用量、写预占分录；不预检下一条分配。
+///
+/// # 参数
+/// * `db` - 库存数据库。
+/// * `executor` - 调用方事务执行器，不得另开事务。
+/// * `fact` - 一条采购分配对应的预占事实。
+///
+/// # 返回
+/// 预占、余额冻结和建立分录都写入完成。
+///
+/// # 错误
+/// 可用量不足或余额不存在时返回 `Error::BusinessLogicError`。
+/// 预占或分录构造不合法时返回 `Error::Logic`。
+/// 仓储写入失败时返回对应错误。
 pub async fn establish_receipt_reservation(
     db: &Database,
     executor: &mut dyn Executor,

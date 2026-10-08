@@ -238,6 +238,9 @@ impl PurchaseOrder {
 
     /// 校验采购单仍可冻结新的审批提交。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 草稿状态返回 `Ok(())`。
     ///
@@ -248,6 +251,9 @@ impl PurchaseOrder {
     }
 
     /// 取得可提交审批的当前草稿提交。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 采购单处于草稿且已挂接草稿提交时，返回类型化提交 ID。
@@ -284,6 +290,9 @@ impl PurchaseOrder {
 
     /// 取得可正式化的冻结提交。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 采购单处于审批中且已冻结提交时，返回类型化提交 ID。
     ///
@@ -300,6 +309,9 @@ impl PurchaseOrder {
     }
 
     /// 取得发起采购变更所需的当前生效版本。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 采购单已生效或部分执行且存在当前版本时，返回类型化版本 ID。
@@ -388,6 +400,9 @@ impl PurchaseOrder {
     /// # 参数
     /// * `purchase_no` - 正式采购单号
     ///
+    /// # 返回
+    /// 正式采购单号写入成功时返回 `Ok(())`。
+    ///
     /// # 错误
     /// 已有正式号、编号为空或超长时返回错误。
     pub fn assign_purchase_no(&mut self, purchase_no: impl Into<String>) -> Result<()> {
@@ -459,6 +474,13 @@ impl PurchaseOrder {
 
     /// 旧财务审核提交入口。审批改造后不可达。
     ///
+    /// # 参数
+    /// * `_current_submission_id` - 旧入口传入的提交身份，不读取。
+    /// * `_updated_by` - 旧入口传入的操作人，不读取。
+    ///
+    /// # 返回
+    /// 无成功返回值；调用必然失败。
+    ///
     /// # 错误
     /// 恒返回冲突，不得进入 `PENDING_FINANCE_REVIEW`。
     pub fn submit_for_review(
@@ -502,6 +524,9 @@ impl PurchaseOrder {
     /// # 参数
     /// * `updated_by` - 撤回人
     ///
+    /// # 返回
+    /// 审批中采购单回到草稿时返回 `Ok(())`。
+    ///
     /// # 错误
     /// 非审批中时返回冲突。
     pub fn cancel_approval(&mut self, updated_by: impl Into<String>) -> Result<()> {
@@ -537,6 +562,13 @@ impl PurchaseOrder {
 
     /// 旧财务审核结论入口。审批改造后不可达。
     ///
+    /// # 参数
+    /// * `_approved` - 旧财务审核结论，不读取。
+    /// * `_updated_by` - 旧入口传入的操作人，不读取。
+    ///
+    /// # 返回
+    /// 无成功返回值；调用必然失败。
+    ///
     /// # 错误
     /// 恒返回冲突，不得经 `PurchaseReviewStatus` 分支。
     pub fn apply_finance_review(&mut self, _approved: bool, _updated_by: impl Into<String>) -> Result<()> {
@@ -553,7 +585,7 @@ impl PurchaseOrder {
     /// 迁移成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 目标状态不在邻接矩阵中（含终态）时返回 [`Error::InvalidStateTransition`]。
+    /// 目标不是当前状态，且不在邻接矩阵中（含终态）时返回 [`Error::InvalidStateTransition`]。
     pub fn transition(&mut self, to: PurchaseOrderStatus, updated_by: impl Into<String>) -> Result<()> {
         ensure_transition(self.stable.status, to)?;
         self.stable.status = to;
@@ -569,6 +601,9 @@ impl PurchaseOrder {
     ///
     /// # 返回
     /// 无返回值；进度是下游付款事实的投影，由 P3 维护。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn set_payment_progress(&mut self, progress: ProgressStatus, updated_by: impl Into<String>) {
         self.payment_progress = progress;
         self.stable.touch(updated_by);
@@ -582,6 +617,9 @@ impl PurchaseOrder {
     ///
     /// # 返回
     /// 无返回值；进度是下游发票事实的投影，由 P3 维护。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn set_invoice_progress(&mut self, progress: ProgressStatus, updated_by: impl Into<String>) {
         self.invoice_progress = progress;
         self.stable.touch(updated_by);
@@ -595,12 +633,18 @@ impl PurchaseOrder {
     ///
     /// # 返回
     /// 无返回值；进度是入库/直发/电子交付/服务履约的投影，由 P3 维护。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn set_fulfillment_progress(&mut self, progress: ProgressStatus, updated_by: impl Into<String>) {
         self.fulfillment_progress = progress;
         self.stable.touch(updated_by);
     }
 
     /// 返回采购单当前责任人。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 显式责任人存在时返回账号 ID。
@@ -615,6 +659,9 @@ impl PurchaseOrder {
     }
 
     /// 取得入库任务必须使用的目标仓库。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 入仓采购且已指定目标仓库时返回仓库 ID。
@@ -675,10 +722,11 @@ impl PurchaseOrder {
     /// 应用付款条件更新。
     ///
     /// # 参数
-    /// * `payment_term_code` - 可选付款条件
+    /// * `payment_term_code` - 可选付款条件；`None` 表示不修改。
+    /// * `resolve_term` - 代码规范化后解析付款条件；其失败会原样返回。
     ///
     /// # 错误
-    /// 付款条件为空、超长或不具备计划付款日规则时返回错误。
+    /// 付款条件为空、超长，或 `resolve_term` 返回错误时失败。
     fn apply_payment_term(
         &mut self,
         payment_term_code: Option<String>,
@@ -697,7 +745,7 @@ impl PurchaseOrder {
     }
 }
 
-/// 校验履约责任与目标仓库是一一对应的事实。
+/// 入仓履约必须带目标仓，其他履约责任不得带目标仓。
 fn ensure_target_warehouse(
     responsibility: FulfillmentResponsibility,
     target_warehouse_id: Option<&WarehouseId>,

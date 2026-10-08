@@ -1,4 +1,4 @@
-//! Remaining-domain object facts for work-item authorization.
+//! 其余领域的工作项授权对象事实。
 
 use std::collections::{HashMap, HashSet};
 
@@ -13,7 +13,6 @@ use persistence_core::Executor;
 use super::{ObjectFact, ObjectFactMap, ObjectKind};
 use crate::errors::Result;
 
-/// Return the integration-error impact shown on work items.
 /// 返回集成错误对业务处理的安全影响说明。
 ///
 /// # 参数
@@ -34,13 +33,33 @@ fn integration_error_impact(task: &IntegrationErrorTask) -> &'static str {
 
 pub(in crate::workbench) const SYSTEM_OBJECT_OWNER: &str = "__system__";
 
-/// Collect object ids of one kind from a fact-key set.
+/// 从事实键集合中收集指定对象种类的 ID。
+///
+/// # 参数
+/// * `keys` - 对象种类与 ID。
+/// * `kind` - 要收集的对象种类。
+///
+/// # 返回
+/// 返回该种类的全部 ID。
+///
+/// # 错误
+/// 不返回错误。
 pub fn object_ids(keys: &HashSet<(ObjectKind, String)>, kind: ObjectKind) -> Vec<String> {
     keys.iter().filter(|(candidate, _)| *candidate == kind).map(|(_, id)| id.clone()).collect()
 }
 
 impl super::WorkItemFactsReader {
-    /// Load remaining-domain object facts grouped by the registered object kinds.
+    /// 按注册对象种类装载其余领域的权威事实。
+    ///
+    /// # 参数
+    /// * `keys` - 本批对象键。
+    /// * `executor` - 调用方执行器；各步复用同一个。
+    ///
+    /// # 返回
+    /// 返回各命令步骤累积的事实表。
+    ///
+    /// # 错误
+    /// 任一步读取失败时立即返回该错误。
     pub async fn load(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -49,6 +68,18 @@ impl super::WorkItemFactsReader {
         super::recipe::load(self, keys, executor).await
     }
 
+    /// 装载仍有效的旧数据导入批次事实；创建人固定为系统对象。
+    ///
+    /// # 参数
+    /// * `keys` - 本批对象键；没有导入批次键时不读取。
+    /// * `facts` - 输出事实表。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 成功时写入读到的批次，标题使用批次号。
+    ///
+    /// # 错误
+    /// 仓储读取失败时返回错误。
     pub(in crate::workbench) async fn load_legacy_import_batch_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -106,7 +137,18 @@ impl super::WorkItemFactsReader {
         Ok(())
     }
 
-    /// Load W26 supplier fulfillment order facts and freeze the optimistic-lock version.
+    /// 装载供应商履约订单事实，并冻结乐观锁版本。
+    ///
+    /// # 参数
+    /// * `keys` - 本批对象键；没有履约订单键时不读取。
+    /// * `facts` - 输出事实表。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 成功时写入订单号标题、系统创建人，以及当前 `base.version` 约束。
+    ///
+    /// # 错误
+    /// 仓储读取失败，或版本约束无法构造时返回错误。
     pub(in crate::workbench) async fn load_supplier_fulfillment_order_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -137,7 +179,18 @@ impl super::WorkItemFactsReader {
         Ok(())
     }
 
-    /// Load W21 supplier offering facts; unmodeled external goods stay fail-closed.
+    /// 装载已停止的供应商供给事实；供给与可供状态都未停止时不写入。
+    ///
+    /// # 参数
+    /// * `keys` - 本批对象键；没有供给键时不读取。
+    /// * `facts` - 输出事实表。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 供给状态为 `Stopped` 时写入 `offering:` 版本；可供状态为 `Stopped` 时写入 `availability:` 版本。两者都未停止则跳过该供给。
+    ///
+    /// # 错误
+    /// 仓储读取失败，或版本约束无法构造时返回错误。
     pub(in crate::workbench) async fn load_supplier_offering_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -194,6 +247,15 @@ impl super::WorkItemFactsReader {
 }
 
 /// 从已读对象构造唯一权威事实，不加载结构化显示证据。
+///
+/// # 参数
+/// * `task` - 集成异常任务。
+///
+/// # 返回
+/// 返回以任务 ID 为根的事实。创建人取 `owner_user_id`，缺失时用系统对象，并写入安全影响说明。
+///
+/// # 错误
+/// 不返回错误。
 pub(in crate::workbench) fn integration_error_fact(
     task: &erp_integration::entity::integration_ops::IntegrationErrorTask,
 ) -> ObjectFact {
@@ -205,6 +267,15 @@ pub(in crate::workbench) fn integration_error_fact(
 }
 
 /// 从已读对象构造唯一权威事实，不加载结构化显示证据。
+///
+/// # 参数
+/// * `difference` - 对账差异。
+///
+/// # 返回
+/// 返回以差异 ID 为根、系统对象为创建人的事实，并写入不得直接改写正式事实的影响说明。
+///
+/// # 错误
+/// 不返回错误。
 pub(in crate::workbench) fn reconciliation_difference_fact(
     difference: &erp_integration::entity::integration_ops::ReconciliationDifference,
 ) -> ObjectFact {

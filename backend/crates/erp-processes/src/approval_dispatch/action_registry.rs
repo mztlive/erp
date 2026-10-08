@@ -21,6 +21,16 @@ pub struct ApprovalActionRegistry {
 
 impl ApprovalActionRegistry {
     /// 构造完整领域动作注册表。
+    ///
+    /// # 参数
+    /// * `db` - 各领域动作使用的数据库。
+    /// * `rbac` - 领域动作重验使用的 RBAC 快照。
+    ///
+    /// # 返回
+    /// 返回可注入审批运行时的注册表。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
         Self { db, rbac }
     }
@@ -222,6 +232,7 @@ async fn dispatch_action(
     }
 }
 
+/// 审批领域动作必须复用调用方事务；没有会话时拒绝，避免在事务外生效。
 fn require_transaction(executor: &mut dyn Executor) -> ServiceResult<()> {
     if executor.session().is_none() {
         return Err(ServiceError::Internal("审批领域动作缺少事务执行器".to_string()));
@@ -229,6 +240,7 @@ fn require_transaction(executor: &mut dyn Executor) -> ServiceResult<()> {
     Ok(())
 }
 
+/// 冻结单据类型必须与动作一致，操作人必须与认证身份一致。
 fn validate_context(
     action: ApprovalDomainAction,
     context: &ApprovalActionContext,
@@ -244,6 +256,7 @@ fn validate_context(
     Ok(())
 }
 
+/// 同名错误原样交给工作流；没有对应变体的流程错误收成内部错误。
 fn map_service_error(error: ServiceError) -> erp_workflow::Error {
     match error {
         ServiceError::ValidationError(message) => erp_workflow::Error::ValidationError(message),

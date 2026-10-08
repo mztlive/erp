@@ -191,6 +191,9 @@ impl SupplierApiConnectionListParams {
     ///
     /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
     ///
@@ -253,6 +256,9 @@ impl SupplierApiCapabilityListParams {
     /// 归一化能力列表查询参数。
     ///
     /// 分页取默认值、排序字段过白名单校验。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
@@ -629,6 +635,9 @@ impl RateLimitPolicyRequest {
     ///
     /// # 返回
     /// 返回实体值对象。
+    ///
+    /// # 错误
+    /// `max_requests` 或 `window_secs` 为零时，`RateLimitPolicy::new` 失败并经 `Into` 转为 `Error::Logic`。
     pub(crate) fn into_policy(request: RateLimitPolicyRequest) -> Result<RateLimitPolicy> {
         RateLimitPolicy::new(request.max_requests, request.window_secs).map_err(Into::into)
     }

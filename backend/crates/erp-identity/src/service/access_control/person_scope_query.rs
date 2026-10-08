@@ -37,9 +37,29 @@ impl AccessControlService {
             .await
     }
 
+    /// 克隆当前服务，供事务闭包持有独立实例。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回复制了数据库、RBAC 与目标端口的服务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn scope_service(&self) -> Self {
         Self { db: self.db.clone(), rbac: self.rbac.clone(), targets: self.targets.clone() }
     }
+    /// 取出已装配的人员范围 RBAC。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回共享 RBAC 服务。
+    ///
+    /// # 错误
+    /// 未装配 RBAC 时返回 `Forbidden`。
     pub(super) fn scope_rbac(&self) -> Result<SharedRbacService> {
         self.rbac.clone().ok_or_else(|| Error::Forbidden("未装配人员范围服务".into()))
     }
@@ -87,6 +107,16 @@ impl AccessControlService {
     }
 
     /// 各操作独立证明，可来自人员不同的有效角色。
+    ///
+    /// # 参数
+    /// * `user` - 人员账号 ID。
+    /// * `executor` - 调用方事务执行器。
+    ///
+    /// # 返回
+    /// 返回该人员全部已接线业务的有效操作候选；非在职后台账号得到空列表。
+    ///
+    /// # 错误
+    /// 人员不存在、策略漂移或持久化失败时拒绝。
     pub(super) async fn person_business_options(
         &self,
         user: &str,

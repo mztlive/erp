@@ -1,6 +1,6 @@
 //! 共享乐观锁版本校验（冲突返回 409）。
 //!
-//! 仅限本域内部调用（`pub`），不对外暴露。
+//! 函数为 `pub`，crate 根不重导出。
 
 use crate::{Result, optimistic_lock_conflict};
 

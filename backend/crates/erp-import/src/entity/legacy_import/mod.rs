@@ -57,6 +57,9 @@ impl LegacyImportCommandIdentity {
     ///
     /// # 返回
     /// 返回不暴露原始幂等键的命令 ID 与命令指纹。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(
         prefix: &str,
         actor_id: &str,
@@ -86,16 +89,28 @@ impl LegacyImportCommandIdentity {
 
     /// 返回稳定命令 ID。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回不含原始幂等键的 SHA-256 派生 ID。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn command_id(&self) -> &str {
         &self.command_id
     }
 
     /// 返回完整命令指纹。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于拒绝同键异参的长度前缀 SHA-256 指纹。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn fingerprint(&self) -> &str {
         &self.fingerprint
     }
@@ -149,6 +164,9 @@ fn sha256_hex(value: &[u8]) -> String {
 ///
 /// # 返回
 /// 返回首次出现顺序的元素引用。
+///
+/// # 错误
+/// 不返回错误。
 pub fn dedupe_by_key<T, K>(items: &[T], mut key: impl FnMut(&T) -> K) -> Vec<&T>
 where
     K: Eq + std::hash::Hash,
@@ -167,6 +185,9 @@ where
 ///
 /// # 返回
 /// 返回首个重复键；无重复时返回 `None`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn first_duplicate_key<'a, T: 'a, K>(items: &'a [T], mut key: impl FnMut(&'a T) -> K) -> Option<K>
 where
     K: Eq + std::hash::Hash,

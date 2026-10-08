@@ -101,8 +101,18 @@ impl Default for FileAssetFilter {
 impl QueryFilter for FileAssetFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// `file_name` 为 `Some` 时按转义后的字面量、忽略大小写匹配；`None` 不写入。
+    /// `security_scan_status`、`retention_class`、`sensitivity_class` 为 `Some` 时
+    /// 分别写入对应字段的 `as_str()`。分页与排序字段不进入条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "file_name", self.file_name.as_deref());
@@ -120,10 +130,16 @@ impl QueryFilter for FileAssetFilter {
 }
 
 impl Pagination for FileAssetFilter {
-    /// 返回页码与单页条数。
+    /// 返回文件资产筛选保存的页码与单页条数，不把小于 1 的页码归一成第一页。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组；`page_size` 由 `u32` 转为 `u64`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -140,6 +156,9 @@ pub trait FileAssetRepositoryExt {
     /// # 参数
     /// * `assets` - 按业务命令顺序排列的文件资产
     /// * `executor` - 调用方事务或非事务执行器
+    ///
+    /// # 返回
+    /// 全部插入成功时无返回值；空集合不访问数据库。
     ///
     /// # 错误
     /// 插入失败时返回包含 MongoDB 批量写错误索引的仓储错误。

@@ -23,14 +23,29 @@ pub struct SalesOrderReadService {
 impl SalesOrderReadService {
     /// 使用数据库句柄构造只读查询服务。
     ///
-    /// 返回未注入 RBAC 的服务；采购动作投影需要重验权限时返回缺少授权源错误。
-    /// 构造本身不执行查询，也不产生错误。
+    /// # 参数
+    /// * `db` - 数据库。
+    ///
+    /// # 返回
+    /// 返回未注入 RBAC 的服务。采购动作投影需要重验权限时，后续读取返回缺少授权源错误。
+    /// 构造本身不执行查询。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db, rbac: None }
     }
     /// 使用数据库句柄和当前 RBAC 服务构造只读查询服务。
     ///
-    /// 返回可投影采购动作访问资格的服务；构造不执行查询，也不产生错误。
+    /// # 参数
+    /// * `db` - 数据库。
+    /// * `rbac` - 当前 RBAC 服务。
+    ///
+    /// # 返回
+    /// 返回可投影采购动作访问资格的服务。构造不执行查询。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_rbac(db: Database, rbac: SharedRbacService) -> Self {
         Self { db, rbac: Some(rbac) }
     }

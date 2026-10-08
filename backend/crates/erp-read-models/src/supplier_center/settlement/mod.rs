@@ -8,6 +8,15 @@ pub struct SupplierSettlementReadService {
 }
 impl SupplierSettlementReadService {
     /// 使用原数据库构造结算读模型。
+    ///
+    /// # 参数
+    /// * `db` - 数据库。
+    ///
+    /// # 返回
+    /// 返回结算读模型。构造不执行查询。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }

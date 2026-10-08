@@ -227,7 +227,7 @@ impl OfferingApplication {
     /// # 返回
     /// 进入已撤回。
     /// # 错误
-    /// 已处理申请拒绝撤回。
+    /// 当前状态不是 `Submitted` 时返回 `ConflictError`；操作人不是供应商门户身份时返回 `Forbidden`；供应商绑定为空或超长时返回 `ValidationError`。
     pub fn withdraw(&mut self, actor: &AuditActor) -> Result<()> {
         ensure_supplier(actor, &self.supplier_id)?;
         if self.status != ApplicationStatus::Submitted {
@@ -242,7 +242,7 @@ impl OfferingApplication {
     /// # 返回
     /// 对应的冻结提交。
     /// # 错误
-    /// 状态、任务、版本或处理人不符时拒绝。
+    /// 操作人不是 `AccountKind::Admin` 时返回 `Forbidden`；状态不是 `Submitted`、版本不一致、任务标识不符或任务版本为 0 时返回 `ConflictError`；没有冻结提交时返回 `Internal`。
     pub fn decision_submission(
         &self,
         actor: &AuditActor,
@@ -355,7 +355,7 @@ impl QuoteAccessGrant {
     /// # 参数
     /// 新状态、真实内部操作人及处理时间。
     /// # 返回
-    /// 更新当前状态与不可变变更历史。
+    /// 状态有变化时更新当前状态并追加不可变历史；状态未变时不改记录并成功。
     /// # 错误
     /// 外部门户身份不允许变更资格。
     pub fn set_active(&mut self, active: bool, actor: &AuditActor, at: Instant) -> Result<()> {
@@ -374,12 +374,34 @@ impl QuoteAccessGrant {
         Ok(())
     }
 }
+/// 确认操作人是该供应商的门户身份。
+///
+/// # 参数
+/// * `actor` - 当前操作人。
+/// * `supplier_id` - 服务器注入的供应商绑定。
+///
+/// # 返回
+/// 身份种类与绑定均有效时成功。
+///
+/// # 错误
+/// `actor` 不是 `AccountKind::Supplier` 时返回 `Forbidden`；`supplier_id` 为空白或超过 1024 字节时返回 `ValidationError`。
 pub(super) fn ensure_supplier(actor: &AuditActor, supplier_id: &str) -> Result<()> {
     if actor.kind() != AccountKind::Supplier {
         return Err(Error::Forbidden("供应商门户身份无效".into()));
     }
     ensure_text(supplier_id, "供应商绑定")
 }
+/// 拒绝空白或超过 1024 字节的文本。
+///
+/// # 参数
+/// * `value` - 待检查文本，长度按原始字节计算。
+/// * `name` - 写入校验错误的字段名。
+///
+/// # 返回
+/// 含非空白字符且字节长度不超过 1024 时成功。
+///
+/// # 错误
+/// 空白或超长时返回 `ValidationError`，文案为 `{name}为空或超出长度`。
 pub(super) fn ensure_text(value: &str, name: &str) -> Result<()> {
     if value.trim().is_empty() || value.len() > 1024 {
         return Err(Error::ValidationError(format!("{name}为空或超出长度")));

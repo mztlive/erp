@@ -29,10 +29,17 @@ pub struct PurchaseCoverageSources {
 impl PurchaseOrderDomainRepository<'_> {
     /// 批量读取销售单对应的当前采购覆盖来源。
     ///
-    /// # Errors
-    /// MongoDB 查询或反序列化失败时返回错误。指针缺失由采购领域规则校验。
+    /// 所有读取复用调用方 `executor`，顺序为采购单、当前提交行、当前版本行、商品行分配。
     ///
-    /// 所有读取复用调用方 Executor，按原采购单、提交行、版本行、分配顺序执行。
+    /// # 参数
+    /// * `sales_order_id` - 来源销售单
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回当前指针下的采购单、提交行、版本行和分配。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。指针缺失由采购领域规则校验。
     pub async fn coverage_sources(
         &self,
         sales_order_id: &SalesOrderId,

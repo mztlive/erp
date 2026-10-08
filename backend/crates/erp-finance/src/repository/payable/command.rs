@@ -20,6 +20,9 @@ impl<'a> PayableRepository<'a> {
     /// * `entry` - 待写入的原始应付分录
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
+    /// # 返回
+    /// 子账与原始分录都写入成功时返回 `Ok(())`。
+    ///
     /// # 错误
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
     /// 为冲突语义）或 MongoDB 写入失败时返回错误。

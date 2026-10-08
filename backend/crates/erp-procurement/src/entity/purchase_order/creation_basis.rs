@@ -197,6 +197,17 @@ pub fn basis_id_for(
 /// 以规范化依据片段和可选目标仓形成固定长度创建依据 ID。
 ///
 /// 目标仓只在已经完成仓库选择的采购计划中加入；可选择依据保持原有无仓库身份。
+///
+/// # 参数
+/// * `sales_order_id` - 销售单稳定身份，作为 ID 前缀。
+/// * `parts` - 已规范化的依据片段；有目标仓时在参与摘要前追加仓库片段。
+/// * `target_warehouse_id` - 已选定的目标收货仓；`None` 保持无仓库身份。
+///
+/// # 返回
+/// 返回 `{sales_order_id}:{sha256}`。摘要按 `parts` 的传入顺序计算。
+///
+/// # 错误
+/// 不返回错误。
 pub fn compose_basis_id(
     sales_order_id: &str,
     mut parts: Vec<String>,
@@ -387,6 +398,9 @@ pub fn fulfillment_options(kind: ProductKind) -> Result<&'static [FulfillmentRes
 ///
 /// # 关键业务约束
 /// 只用于边界比较，不代表缺失业务数量。
+///
+/// # Panics
+/// 数量文本 `"0"` 无法解析时 panic；零数量是合法数量，panic 只表示数量类型不变量被破坏。
 fn zero_quantity() -> Quantity {
     Quantity::from_str("0").expect("零数量合法")
 }

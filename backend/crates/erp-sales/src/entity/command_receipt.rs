@@ -77,12 +77,19 @@ impl SalesCommandReceipt {
     /// 构造必须与销售事实、审计同事务写入的回执。
     ///
     /// # 参数
-    /// `id` 为稳定命令 ID；`actor_id` 为认证账号；`key` 仅用于摘要；
-    /// `fingerprint` 沿用领域规范化请求算法；`result` 为已提交结果；`audit_event_id` 为事件关联。
+    /// * `id` - 稳定命令 ID
+    /// * `actor_id` - 认证账号
+    /// * `key` - 只用于计算幂等摘要，不明文落库
+    /// * `fingerprint` - 领域规范化请求的十六进制指纹
+    /// * `result` - 已提交结果
+    /// * `audit_event_id` - 关联审计事件
+    ///
     /// # 返回
-    /// 返回已验证的独立回执。
+    /// 返回已通过 `validate` 的独立回执。
+    ///
     /// # 错误
-    /// 身份、摘要或结果缺失时拒绝构造。
+    /// 操作号为空时返回 `Error::ValidationError`。命令身份、结果引用或审计事件为空，
+    /// 或请求指纹不是 64 位十六进制时，`validate` 返回 `Error::Internal`。
     pub fn new(
         id: String,
         actor_id: &str,
@@ -115,10 +122,14 @@ impl SalesCommandReceipt {
     ///
     /// # 参数
     /// 无。
+    ///
     /// # 返回
-    /// 合法时成功。
+    /// 合法时返回 `Ok(())`。
+    ///
     /// # 错误
-    /// 损坏、未知 schema 或缺失结果返回内部错误。
+    /// 未知 `schema_version`、已删除、身份或结果引用缺失、动作与结果不一致，
+    /// 或请求指纹不是 64 位十六进制时返回 `Error::Internal`。
+    /// 幂等摘要无法按 v1 解析时返回 `Error::Logic`。
     pub fn validate(&self) -> Result<()> {
         if self.schema_version != 1
             || self.base.is_deleted()
@@ -140,15 +151,25 @@ impl SalesCommandReceipt {
         Ok(())
     }
 
-    /// 验证载荷后返回原结果，调用方继续执行当前授权及业务交叉验证。
+    /// 核对回执与本次命令身份、作用域、指纹和幂等摘要一致。
+    ///
+    /// 成功后调用方仍须用回执上的结果做当前授权和业务交叉验证；本方法不返回该结果。
     ///
     /// # 参数
-    /// 稳定命令 ID、操作人、动作、作用域、规范化请求指纹及本次规范化幂等键摘要；创建命令没有原对象作用域，
-    /// 提交及交接必须携带原销售单作用域。
+    /// * `command_id` - 稳定命令 ID
+    /// * `actor_id` - 认证账号
+    /// * `action` - 命令动作
+    /// * `scope_id` - 原销售单作用域；创建命令必须为 `None`，提交和交接必须携带原销售单
+    /// * `fingerprint` - 本次规范化请求指纹
+    /// * `expected_key_hash` - 本次规范化幂等键摘要
+    ///
     /// # 返回
-    /// 返回已提交的结果引用。
+    /// 一致时返回 `Ok(())`。
+    ///
     /// # 错误
-    /// 身份或载荷不一致时返回冲突；损坏时返回内部错误。
+    /// 回执损坏时 `validate` 返回 `Error::Internal` 或 `Error::Logic`。
+    /// 命令身份、动作、作用域或幂等摘要不一致时返回 `Error::Internal`。
+    /// 同一操作号的请求指纹不同时返回 `Error::ConflictError`。
     pub fn matches(
         &self,
         command_id: &str,

@@ -416,6 +416,19 @@ struct ConfirmationCompletionTransactionResult {
 }
 
 /// 校验完成命令锁定的任务、事实、批次和当前责任。
+///
+/// # 参数
+/// * `command` - 已规范化的完成命令。
+/// * `work_item` - 当前确认任务。
+/// * `confirmation` - 当前确认事实。
+/// * `batch` - 确认所属批次。
+/// * `actor_id` - 当前操作人。
+///
+/// # 返回
+/// 任务、事实、批次版本与当前责任一致时无返回值。
+///
+/// # 错误
+/// 任务、批次版本或试算快照变化时返回 `ConflictError`。任务、责任范围或批次不匹配，或范围已不在必要矩阵时返回 `BusinessLogicError`。当前账号不是责任人时返回 `Forbidden`。确认范围未注册时返回 `Logic`；必要范围无法解析时返回对应错误。
 pub(super) fn validate_confirmation_completion(
     command: &PreparedConfirmationCompletion,
     work_item: &WorkItem,
@@ -483,6 +496,15 @@ fn completion_result(
 }
 
 /// 返回决策对应的稳定结果状态。
+///
+/// # 参数
+/// * `decision` - 确认决策。
+///
+/// # 返回
+/// `ConfirmScope` 返回 `Confirmed`，`ReturnForFix` 返回 `Rejected`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn confirmation_result_status(
     decision: ConfirmationDecision,
 ) -> ImportBusinessConfirmationResultStatus {
@@ -501,6 +523,9 @@ pub(super) fn confirmation_result_status(
 ///
 /// # 返回
 /// 返回不暴露原始幂等键的命令 ID 与完整命令指纹。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn confirmation_command_identity(
     actor_id: &str,
     action: &str,

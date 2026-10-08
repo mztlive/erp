@@ -60,6 +60,15 @@ impl SalesOrderCommandProcess {
 
 impl SalesCommandAccess {
     /// 创建并提交必须由同一角色同时提供两个动作。
+    ///
+    /// # 参数
+    /// * `submit` - 为真时追加 `sales_order:submit` 权限要求。
+    ///
+    /// # 返回
+    /// 返回可能追加了提交权限的检查器。
+    ///
+    /// # 错误
+    /// 提交权限码无法解析时返回错误。
     pub(super) fn require_submit(mut self, submit: bool) -> Result<Self> {
         if submit {
             self.permissions.push(Permission::parse("sales_order:submit")?);
@@ -68,6 +77,16 @@ impl SalesCommandAccess {
     }
 
     /// 在调用方事务内读取当前可操作单据，并复用公共单对象判定。
+    ///
+    /// # 参数
+    /// * `id` - 销售单主键。
+    /// * `executor` - 调用方事务执行器。
+    ///
+    /// # 返回
+    /// 返回当前可操作的销售单。
+    ///
+    /// # 错误
+    /// 单据不可见或缺失时返回错误；已要求提交时，缺少创建权限同样拒绝。
     pub(super) async fn current(&self, id: &str, executor: &mut dyn Executor) -> Result<SalesOrder> {
         let order =
             self.access.require_object(&self.actor, self.action, id, &self.permissions, executor).await?;
@@ -86,6 +105,17 @@ impl SalesCommandAccess {
     }
 
     /// 写入前重新读取当前责任与版本，防止预读取后交接或状态变化。
+    ///
+    /// # 参数
+    /// * `id` - 销售单主键。
+    /// * `expected` - 预读时的单据版本。
+    /// * `executor` - 调用方事务执行器。
+    ///
+    /// # 返回
+    /// 当前版本仍为 `expected` 时返回。
+    ///
+    /// # 错误
+    /// 单据不可操作时返回对应错误；版本已变化时返回冲突。
     pub(super) async fn revalidate(
         &self,
         id: &str,
@@ -100,6 +130,16 @@ impl SalesCommandAccess {
     }
 
     /// 新单使用即将持久化的显式责任解释创建范围，不能由创建人审计字段兜底。
+    ///
+    /// # 参数
+    /// * `order` - 即将持久化、带显式责任的销售单。
+    /// * `executor` - 调用方事务执行器。
+    ///
+    /// # 返回
+    /// 创建范围允许该责任时返回；已要求提交时，提交范围也必须允许。
+    ///
+    /// # 错误
+    /// 责任不在动作范围内，或权限码无法解析时返回错误。
     pub(super) async fn creation(&self, order: &SalesOrder, executor: &mut dyn Executor) -> Result<()> {
         self.require_creation_action(order, self.action, &self.permissions, executor).await?;
         if !self.permissions.is_empty() {

@@ -46,16 +46,28 @@ pub struct PageParams {
 impl PageParams {
     /// 返回仓储筛选可直接使用的排序字段名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回白名单来源的排序字段 owned 副本。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(crate) fn sort_name(&self) -> String {
         self.sort_by.to_string()
     }
 
     /// 返回仓储筛选可直接使用的排序方向。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 方向为升序时返回 `true`，降序时返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(crate) fn ascending(&self) -> bool {
         matches!(self.sort_dir, SortDir::Asc)
     }
@@ -298,6 +310,9 @@ impl WarehouseListParams {
     ///
     /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
     ///
@@ -378,6 +393,9 @@ impl WarehouseRevisionListParams {
     /// 归一化仓库修订列表查询参数。
     ///
     /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
@@ -513,6 +531,9 @@ impl WarehouseSkuPolicyListParams {
     /// 归一化仓库-SKU 预警策略列表查询参数。
     ///
     /// 分页取默认值、排序字段过白名单校验。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。

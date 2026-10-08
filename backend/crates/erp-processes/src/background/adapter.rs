@@ -14,6 +14,9 @@ pub trait BackgroundTaskAdapter: Send + Sync {
     ///
     /// # 返回
     /// 返回用于日志与指标的稳定任务名。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn name(&self) -> &'static str;
 
     /// 领取并执行一轮到期任务。

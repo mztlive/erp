@@ -75,8 +75,16 @@ impl Default for SupplierSettlementDifferenceFilter {
 impl QueryFilter for SupplierSettlementDifferenceFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// `statement_item_id` 与 `status` 为 `None` 时不写入对应字段；给出时分别按字符串主键和状态码等值匹配。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(statement_item_id) = &self.statement_item_id {
@@ -92,8 +100,14 @@ impl QueryFilter for SupplierSettlementDifferenceFilter {
 impl Pagination for SupplierSettlementDifferenceFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组。`page_size` 由 `u32` 转为 `u64`，页码不在此方法内归一。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -103,6 +117,16 @@ impl Pagination for SupplierSettlementDifferenceFilter {
 #[allow(async_fn_in_trait)]
 pub trait SupplierSettlementDifferenceEvidenceRepositoryExt {
     /// 按稳定请求 ID 查找不可变差异补证。
+    ///
+    /// # 参数
+    /// * `request_id` - 稳定请求 ID
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回匹配补证；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 查询失败时返回对应错误。
     async fn find_by_request_id(
         &self,
         request_id: &str,
@@ -110,6 +134,19 @@ pub trait SupplierSettlementDifferenceEvidenceRepositoryExt {
     ) -> Result<Option<SupplierSettlementDifferenceEvidence>>;
 
     /// 批量读取差异对应的全部补证，避免详情 N+1。
+    ///
+    /// 空输入直接返回空集合，不发查询。否则按 `difference_id` 一次 `$in`，
+    /// 再按 `provided_at`、`id` 升序。
+    ///
+    /// # 参数
+    /// * `difference_ids` - 差异主键集合
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回匹配补证；空输入返回空集合。
+    ///
+    /// # 错误
+    /// 查询失败时返回对应错误。
     async fn find_by_difference_ids(
         &self,
         difference_ids: &[String],

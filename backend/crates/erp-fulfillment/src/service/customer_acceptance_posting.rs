@@ -24,6 +24,16 @@ use crate::repository::FulfillmentExt;
 use crate::{Error, Result};
 impl super::FulfillmentService {
     /// 校验工作台任务身份必须与期望版本成对提供，保持正式命令入口首错。
+    ///
+    /// # 参数
+    /// * `work_item_id` - 工作台任务主键；须与 `expected_task_version` 同有或同无
+    /// * `expected_task_version` - 任务期望版本
+    ///
+    /// # 返回
+    /// 两项同时提供或同时缺省时无返回值。
+    ///
+    /// # 错误
+    /// 只提供其中一项时返回 `ValidationError`。
     pub fn validate_customer_acceptance_task_context(
         work_item_id: Option<&str>,
         expected_task_version: Option<u64>,
@@ -32,6 +42,16 @@ impl super::FulfillmentService {
     }
 
     /// 在根事务前按原顺序构建验收行与行 ID；正式命令和原草稿共用领域规则。
+    ///
+    /// # 参数
+    /// * `id` - 验收单主键
+    /// * `lines` - 验收行输入
+    ///
+    /// # 返回
+    /// 返回按输入顺序构造的验收行。
+    ///
+    /// # 错误
+    /// 行批量构造失败时返回 `Logic`。
     pub fn build_customer_acceptance_lines(
         id: CustomerAcceptanceId,
         lines: &[crate::dto::AcceptanceLineInput],
@@ -40,7 +60,19 @@ impl super::FulfillmentService {
             .map_err(Error::Logic)
     }
 
-    /// 加载可继续登记的草稿；新登记返回 None，不提前读取销售或任务。
+    /// 加载可继续登记的草稿；新登记返回 `None`，不提前读取销售或任务。
+    ///
+    /// # 参数
+    /// * `db` - 数据库实例
+    /// * `req` - 客户验收登记请求；未带 `acceptance_id` 时表示新建
+    /// * `session` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 已有草稿返回 `Some`；请求未带验收单主键时返回 `None`。
+    ///
+    /// # 错误
+    /// 指定草稿不存在时返回 `NotFound`；草稿不属于当前销售单、不是草稿或版本不一致时返回
+    /// `ConflictError`；已有草稿缺少期望版本时返回 `ValidationError`；查询失败时返回对应错误。
     pub async fn load_customer_acceptance_commit_draft(
         db: &Database,
         req: &CommitCustomerAcceptanceRequest,
@@ -63,6 +95,18 @@ impl super::FulfillmentService {
     }
 
     /// 任务身份准备成功后构造或更新验收表头；返回是否需先注册新的业务单据。
+    ///
+    /// # 参数
+    /// * `existing` - 已加载的草稿；`None` 表示新建
+    /// * `acceptance_id` - 新建时使用的验收单主键
+    /// * `req` - 登记请求
+    /// * `generated_acceptance_no` - 新建时的服务端单号；更新已有草稿时不使用
+    ///
+    /// # 返回
+    /// 返回验收表头，以及是否为新建（`true` 表示调用方须先注册业务单据）。
+    ///
+    /// # 错误
+    /// 更新已有表头失败时返回对应错误；新建缺少单号时返回 `Internal`；新建表头构造失败时返回对应错误。
     pub fn prepare_customer_acceptance_commit(
         existing: Option<CustomerAcceptance>,
         acceptance_id: &CustomerAcceptanceId,
@@ -97,7 +141,22 @@ impl super::FulfillmentService {
     }
 
     /// 写入登记表头/行、逐条履约分配与过账状态；新表头已由根流程完成无绑定注册。
+    ///
     /// 验证和 ID 生成仍穿插在原逐行写入位置，不提前生成全部分配。
+    ///
+    /// # 参数
+    /// * `db` - 数据库实例
+    /// * `acceptance` - 待写入并过账的验收表头
+    /// * `is_new` - 为 `true` 时创建表头与行，否则更新表头并替换行
+    /// * `final_lines` - 最终验收行
+    /// * `req` - 登记请求，提供逐行分配
+    /// * `session` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 写入并标记过账成功时无返回值。
+    ///
+    /// # 错误
+    /// 缺少签收凭证、分配校验或写入失败、不能过账，或仓储写入失败时返回对应错误。
     pub async fn persist_customer_acceptance_commit(
         db: &Database,
         acceptance: &mut CustomerAcceptance,
@@ -121,6 +180,17 @@ impl super::FulfillmentService {
     }
 
     /// 过账前读取并拒绝非草稿验收；任务读取必须位于本守卫之后。
+    ///
+    /// # 参数
+    /// * `db` - 数据库实例
+    /// * `acceptance_id` - 验收单主键
+    /// * `session` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 返回仍为草稿的验收单。
+    ///
+    /// # 错误
+    /// 验收单不存在时返回 `NotFound`；不是草稿时返回 `ConflictError`；查询失败时返回对应错误。
     pub async fn load_customer_acceptance_for_post(
         db: &Database,
         acceptance_id: &CustomerAcceptanceId,
@@ -136,6 +206,18 @@ impl super::FulfillmentService {
     }
 
     /// 当前责任任务准备成功后，校验并持久化草稿的履约分配及过账状态。
+    ///
+    /// # 参数
+    /// * `db` - 数据库实例
+    /// * `acceptance` - 待过账的草稿验收单
+    /// * `req` - 过账请求，提供逐行分配
+    /// * `session` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 分配写入并标记过账成功时无返回值。
+    ///
+    /// # 错误
+    /// 缺少签收凭证、验收行不完整或与请求不一致、分配校验或写入失败、不能过账，或仓储写入失败时返回对应错误。
     pub async fn persist_customer_acceptance_post(
         db: &Database,
         acceptance: &mut CustomerAcceptance,
@@ -157,7 +239,20 @@ impl super::FulfillmentService {
     }
 
     /// 校验原验收并按原顺序写反向验收、反向分配和原单冲正状态。
+    ///
     /// 返回原单和新反向单，供根流程继续刷新销售与任务；本接口不写审计或销售。
+    ///
+    /// # 参数
+    /// * `db` - 数据库实例
+    /// * `original_id` - 原验收单主键
+    /// * `req` - 冲正请求，含期望版本与原因
+    /// * `session` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 返回已冲正的原单和已过账的反向单。
+    ///
+    /// # 错误
+    /// 原单不存在时返回 `NotFound`；原单或来源分配不可冲正时返回 `ConflictError`；反向单、反向行构造失败或写入失败时返回对应错误。
     pub async fn persist_customer_acceptance_reverse(
         db: &Database,
         original_id: &CustomerAcceptanceId,
@@ -323,6 +418,7 @@ async fn persist_reverse_acceptance(
 /// * `session` - 事务会话执行器
 /// * `lines` - 验收行集合
 /// * `inputs` - 每行请求分配（销售明细归属一致）
+/// * `sales_order_id` - 销售单（校验事实归属）
 ///
 /// # 返回
 /// 全部行校验并写入完成后返回 `Ok(())`。

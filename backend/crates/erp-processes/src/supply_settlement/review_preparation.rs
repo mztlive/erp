@@ -117,6 +117,21 @@ fn execute(
     work_item.complete_by_domain_command(input.actor_id, input.at)?;
     Ok(PreparedReview { payable, payable_entry, cost_entries, cost_delta, result_status })
 }
+/// 在变更结算状态与完成任务之前构造应付和成本。
+///
+/// # 参数
+/// * `statement` - 待复核结算单；确认或驳回成功后就地记录决定。
+/// * `work_item` - 正式复核任务；准备成功后记活动并完成。
+/// * `items` - 结算明细。
+/// * `differences` - 结算差异。
+/// * `input` - 复核命令、驳回原因、操作人与时间。
+///
+/// # 返回
+/// 返回应付、成本分录、成本差额和决定状态。驳回时财务字段为空。
+///
+/// # 错误
+/// 应付或成本构造失败时不改结算状态与任务。驳回缺少原因时返回 `ValidationError`。
+/// 确认前提、决定记录或任务完成失败时返回对应错误。
 pub(super) fn prepare(
     statement: &mut SupplierSettlementStatement,
     work_item: &mut WorkItem,

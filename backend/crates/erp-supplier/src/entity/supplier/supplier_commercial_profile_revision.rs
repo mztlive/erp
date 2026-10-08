@@ -46,8 +46,14 @@ impl ReconciliationCycle {
     ///
     /// 映射表见 [`RECONCILIATION_CYCLE_DISPLAY`]（erp-supplier-002）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         super::display::label_of(*self, &RECONCILIATION_CYCLE_DISPLAY)
     }
@@ -56,8 +62,14 @@ impl ReconciliationCycle {
     ///
     /// 映射表见 [`RECONCILIATION_CYCLE_DISPLAY`]（erp-supplier-002）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         super::display::code_of(*self, &RECONCILIATION_CYCLE_DISPLAY)
     }
@@ -97,8 +109,14 @@ impl InvoiceType {
     ///
     /// 映射表见 [`INVOICE_TYPE_DISPLAY`]（erp-supplier-002）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         super::display::label_of(*self, &INVOICE_TYPE_DISPLAY)
     }
@@ -107,8 +125,14 @@ impl InvoiceType {
     ///
     /// 映射表见 [`INVOICE_TYPE_DISPLAY`]（erp-supplier-002）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         super::display::code_of(*self, &INVOICE_TYPE_DISPLAY)
     }
@@ -244,7 +268,16 @@ impl SupplierCommercialProfileRevision {
         })
     }
 
-    /// 返回新集合或旧单值，保留明确未登记的空集合。
+    /// 返回已登记的发票税率，保留明确未登记的空集合。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `invoice_tax_rates` 为 `Some` 时原样返回，包括空集合；为 `None` 时返回旧单值 `invoice_tax_rate` 组成的零或一个元素。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn tax_rates(&self) -> Vec<Rate> {
         self.invoice_tax_rates.clone().unwrap_or_else(|| self.invoice_tax_rate.into_iter().collect())
     }
@@ -385,10 +418,17 @@ fn ensure_tax_rate_valid(rate: Rate) -> Result<()> {
     Ok(())
 }
 
-/// 校验并去重常用税率，明确空集合不回退旧值。
+/// 校验并去重常用税率；`rates` 为 `Some` 时不回退 `legacy`。
 ///
-/// # Errors
-/// 超过 32 项、税率非法或单双字段矛盾时返回错误。
+/// # 参数
+/// * `rates` - 常用进项税率；`None` 沿用旧单值，`Some` 空切片表示明确未登记
+/// * `legacy` - 旧的单一税率
+///
+/// # 返回
+/// 返回按数值排序并去重后的税率。`rates` 与 `legacy` 都缺省时返回空向量。
+///
+/// # 错误
+/// 超过 32 项、任一税率不在 `[0, 1)`，或同时给出 `rates` 与 `legacy` 但去重结果不是只含该 `legacy` 的单元素列表时返回错误。
 pub fn normalize_invoice_tax_rates(rates: Option<&[Rate]>, legacy: Option<Rate>) -> Result<Vec<Rate>> {
     let mut values = rates.map(<[Rate]>::to_vec).unwrap_or_else(|| legacy.into_iter().collect());
     if values.len() > 32 {

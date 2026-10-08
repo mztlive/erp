@@ -34,8 +34,14 @@ pub enum SupplierRating {
 impl SupplierRating {
     /// 返回评级的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::A => "A 级",
@@ -47,8 +53,14 @@ impl SupplierRating {
 
     /// 返回评级的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::A => "A",
@@ -145,8 +157,14 @@ impl SupplierRatingRevision {
 
     /// 在追加下一评估版本前结束当前开放区间。
     ///
-    /// # Errors
-    /// 新版本日期不晚于当前版本开始日时返回错误。
+    /// # 参数
+    /// * `next_valid_from` - 下一版本的生效开始日
+    ///
+    /// # 返回
+    /// 成功时把当前 `valid_to` 设为 `next_valid_from` 的前一业务日。该前一日无法转成 `BusinessDate` 时写成 `None`。
+    ///
+    /// # 错误
+    /// `next_valid_from` 不晚于当前 `valid_from`，或无法取得其前一日时返回业务错误。
     pub fn close_before(&mut self, next_valid_from: BusinessDate) -> Result<()> {
         if next_valid_from <= self.valid_from {
             return Err(Error::from("新评估版本生效日期必须晚于当前版本生效日期"));

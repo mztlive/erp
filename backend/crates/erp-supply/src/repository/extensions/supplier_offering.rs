@@ -24,32 +24,62 @@ pub trait SupplierOfferingExt: Sized {
 
     /// 获取供给稳定身份集合。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回通用供给仓储。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_offerings(&self) -> SupplierOfferingRepository<'_>;
 
     /// 获取供给商业条款修订集合。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回通用修订仓储。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_offering_revisions(&self) -> SupplierOfferingRevisionRepository<'_>;
 
     /// 获取实时可供投影集合。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回通用可供投影仓储。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_offering_availabilities(&self) -> SupplierOfferingAvailabilityRepository<'_>;
 
     /// 获取供给写命令去重集合。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回通用命令仓储。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_offering_commands(&self) -> SupplierOfferingCommandRepository<'_>;
 
     /// 获取供给跨集合事务仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回供给聚合仓储。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_offering_repository(&self) -> SupplierOfferingDomainRepository<'_>;
 }
 

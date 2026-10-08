@@ -16,8 +16,14 @@ use crate::errors::{Error, Result};
 pub trait DocumentState: Sized + Copy + Eq + Debug {
     /// 返回当前状态的全部合法后继状态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 后继状态切片（不含自身）。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allowed_next(self) -> &'static [Self];
 }
 
@@ -59,6 +65,12 @@ pub fn ensure_transition<S: DocumentState + 'static>(from: S, to: S) -> Result<(
 ///
 /// 说明：含不可逆终态（如 `CLOSED`、`VOIDED`、`REVERSED`）的状态机不满足
 /// 「对称闭合」，不应调用本辅助；这类状态机应在域内对逐条边做定向断言。
+///
+/// # 返回
+/// 无返回值。三条不变量全部成立时正常返回。
+///
+/// # 错误
+/// 不返回错误。
 ///
 /// # Panics
 /// 任一不变量被违反时 panic，并给出具体状态名。

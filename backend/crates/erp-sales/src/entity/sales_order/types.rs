@@ -44,6 +44,12 @@ impl ExternalIdentityResolution {
     ///
     /// # 返回
     /// 零条返回 `Missing`，一条返回 `Resolved`，多条返回 `Ambiguous`。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    ///
+    /// # Panics
+    /// 长度已确认为 1 时 `pop` 不应为空。若仍为空，说明长度检查已被破坏，允许 panic。
     pub fn from_matches(mut matches: Vec<String>) -> Self {
         match matches.len() {
             0 => Self::Missing,
@@ -66,8 +72,14 @@ pub enum BusinessType {
 impl BusinessType {
     /// 返回类型的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Voucher => "卡券",
@@ -77,8 +89,14 @@ impl BusinessType {
 
     /// 返回类型的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Voucher => "VOUCHER",
@@ -88,16 +106,28 @@ impl BusinessType {
 
     /// 判断是否为卡券销售。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 卡券销售返回 `true`，实物及服务销售返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_voucher(self) -> bool {
         matches!(self, Self::Voucher)
     }
 
     /// 判断是否为实物及服务销售。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 实物及服务销售返回 `true`，卡券销售返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_goods_service(self) -> bool {
         matches!(self, Self::GoodsService)
     }
@@ -117,8 +147,14 @@ pub enum OriginSystem {
 impl OriginSystem {
     /// 返回入口的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Mall => "商城",
@@ -128,8 +164,14 @@ impl OriginSystem {
 
     /// 返回入口的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Mall => "MALL",
@@ -151,8 +193,14 @@ pub enum LineType {
 impl LineType {
     /// 返回行类型的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::GoodsService => "实物及服务",
@@ -162,8 +210,14 @@ impl LineType {
 
     /// 返回行类型的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::GoodsService => "GOODS_SERVICE",
@@ -178,6 +232,9 @@ impl LineType {
     ///
     /// # 返回
     /// 行类型与业务性质一致时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn belongs_to(self, business_type: BusinessType) -> bool {
         matches!(
             (self, business_type),
@@ -205,8 +262,14 @@ pub enum WelfareScenario {
 impl WelfareScenario {
     /// 返回场景的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::AnnualGiftBag => "年节礼包",
@@ -219,8 +282,14 @@ impl WelfareScenario {
 
     /// 返回场景的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::AnnualGiftBag => "ANNUAL_GIFT_BAG",
@@ -245,8 +314,14 @@ pub enum CardForm {
 impl CardForm {
     /// 返回卡形态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Electronic => "电子卡",
@@ -256,8 +331,14 @@ impl CardForm {
 
     /// 返回卡形态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Electronic => "ELECTRONIC",
@@ -381,7 +462,11 @@ pub(crate) struct BuiltLineGroups {
 /// 返回含行金额三元组的构建结果。
 ///
 /// # 错误
-/// 字段组与行类型不匹配、卡券金额不一致或成交金额为零时返回错误。
+/// 字段组与行类型不匹配、卡张数无法换成数量、卡券金额或配赠率不一致、成交金额为零，
+/// 或基础单位、服务区域为空或超长时返回错误。
+///
+/// # Panics
+/// 实物及服务分支已确认 `goods` 为 `Some`。若此时仍为空，说明匹配条件被破坏，允许 panic。
 pub(crate) fn build_line_groups(
     line_type: LineType,
     goods: Option<GoodsLineFields>,
@@ -455,7 +540,7 @@ pub(crate) fn build_line_groups(
 /// 返回推导后的配赠率。
 ///
 /// # 错误
-/// 任一金额与推导值不一致或成交金额为零时返回错误。
+/// 卡张数为零、成交金额为零、任一金额或配赠率与推导值不一致，或金额、配赠率无法落入值对象时返回错误。
 fn validate_voucher_draft(draft: &VoucherLineDraft) -> Result<Rate> {
     let amounts = derive_voucher_amounts(draft.face_value, draft.card_count, draft.unit_price_gross)?;
     if draft.face_value_total != amounts.face_value_total {
@@ -498,7 +583,7 @@ pub(crate) struct VoucherAmounts {
 /// 返回推导金额集合。
 ///
 /// # 错误
-/// 卡张数为零或成交金额为零（配赠率无定义）时返回错误。
+/// 卡张数为零、成交金额为零（配赠率无定义），或面额小计、成交金额、配赠金额、配赠率无法落入值对象时返回错误。
 pub(crate) fn derive_voucher_amounts(
     face_value: Amount,
     card_count: u32,

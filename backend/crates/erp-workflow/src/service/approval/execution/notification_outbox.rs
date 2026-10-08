@@ -19,7 +19,10 @@ pub struct NotificationIntent {
 /// * `events` - BPM 事件
 ///
 /// # 返回
-/// 返回去重键已固定的通知意图；不包含模板敏感字段。
+/// 返回去重键已固定的通知意图；不包含模板敏感字段。缺少执行引用或未知事件组合的事件被略去。
+///
+/// # 错误
+/// 不返回错误。
 pub fn map_notification_intents(events: &[BpmEvent]) -> Vec<NotificationIntent> {
     events.iter().filter_map(map_one).collect()
 }

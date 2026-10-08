@@ -1,4 +1,4 @@
-//! In-memory BSON compatibility checks for finance persistence contracts.
+//! 财务持久化合同的内存 BSON 兼容检查。
 
 use std::str::FromStr;
 

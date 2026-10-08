@@ -28,8 +28,14 @@ pub enum SettlementSourceFactType {
 impl SettlementSourceFactType {
     /// 返回摘要与审计使用的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回不会随展示文案变化的正式事实代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::FulfillmentCompleted => "FULFILLMENT_COMPLETED",
@@ -71,16 +77,28 @@ impl SettlementPeriod {
 
     /// 返回期间开始日期。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回包含边界的开始日期。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn start(self) -> BusinessDate {
         self.start
     }
 
     /// 返回期间结束日期。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回包含边界的结束日期。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn end(self) -> BusinessDate {
         self.end
     }
@@ -92,6 +110,12 @@ impl SettlementPeriod {
     ///
     /// # 返回
     /// 业务日期位于开始和结束边界之间时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    ///
+    /// # Panics
+    /// `+08:00` 是合法固定偏移；只有构造失败才 panic，正常路径不会发生。
     pub fn contains(self, value: Instant) -> bool {
         let offset = FixedOffset::east_opt(8 * 60 * 60).expect("上海时区偏移合法");
         let date = value.as_utc().with_timezone(&offset).date_naive();
@@ -111,6 +135,12 @@ impl SettlementPeriod {
     ///
     /// # 返回
     /// 返回 `(开始秒级时间戳, 结束次日零点的秒级时间戳)`。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    ///
+    /// # Panics
+    /// 上海偏移、午夜和公历次日都是固定不变量；只有构造失败才 panic，正常业务日期不会发生。
     pub fn secs_bounds(start: BusinessDate, end: BusinessDate) -> (i64, i64) {
         const SHANGHAI_OFFSET_SECS: i32 = 8 * 3600;
         let offset = FixedOffset::east_opt(SHANGHAI_OFFSET_SECS).expect("上海时区偏移合法");
@@ -166,8 +196,17 @@ impl SettlementAmountComponents {
 
     /// 返回三项均为零的金额三元组。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回合法零金额组合。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    ///
+    /// # Panics
+    /// `Decimal::ZERO` 是合法金额；只有构造失败才 panic，正常路径不会发生。
     pub fn zero() -> Self {
         let zero = Amount::try_from(Decimal::ZERO).expect("零是合法金额");
         Self { gross: zero, net: zero, tax: zero }
@@ -259,16 +298,28 @@ impl SettlementCancelEvidence {
 
     /// 返回取消发生时间。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回已确认落在结算期间内的时间点。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn occurred_at(&self) -> Instant {
         self.occurred_at
     }
 
     /// 返回规范化证据引用。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回非空正式证据引用。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn reference_id(&self) -> &str {
         &self.reference_id
     }

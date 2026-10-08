@@ -46,56 +46,110 @@ pub trait ReturnsExt {
 
     /// 获取 `sales_return_case` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SalesReturnCaseRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn sales_return_cases(&self) -> SalesReturnCaseRepository<'_>;
 
     /// 获取 `sales_return_line` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SalesReturnLineRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn sales_return_lines(&self) -> SalesReturnLineRepository<'_>;
 
     /// 获取 `purchase_return_order` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `PurchaseReturnOrderRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn purchase_return_orders(&self) -> PurchaseReturnOrderRepository<'_>;
 
     /// 获取 `purchase_return_line` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `PurchaseReturnLineRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn purchase_return_lines(&self) -> PurchaseReturnLineRepository<'_>;
 
     /// 获取 `customer_refund` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `CustomerRefundRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn customer_refunds(&self) -> CustomerRefundRepository<'_>;
 
     /// 获取 `supplier_refund` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SupplierRefundRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_refunds(&self) -> SupplierRefundRepository<'_>;
 
     /// 获取 `receipt_reversal` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `ReceiptReversalRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn receipt_reversals(&self) -> ReceiptReversalRepository<'_>;
 
     /// 获取 `payment_reversal` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `PaymentReversalRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn payment_reversals(&self) -> PaymentReversalRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `ReturnsRepository` 实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn returns(&self) -> ReturnsRepository<'_>;
 }
 

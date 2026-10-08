@@ -172,13 +172,25 @@ impl ApprovalUpgradeSubjectFacts {
 
     /// 构造定义图资格重验所需的强业务上下文。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回责任组织与不可变创建人；不读取或注入当前操作人。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn binding_context(&self) -> BindingRevalidationContext {
         BindingRevalidationContext::new(self.responsible_org_id.clone(), self.creator_id.clone())
     }
 
     /// 校验客户端期望版本仍等于强业务对象版本。
+    ///
+    /// # 参数
+    /// * `expected` - 客户端持有的强业务对象版本。
+    ///
+    /// # 返回
+    /// 版本一致时返回。
     ///
     /// # 错误
     /// 版本不一致时返回冲突，调用方不得继续升级注册投影。
@@ -192,12 +204,15 @@ impl ApprovalUpgradeSubjectFacts {
     /// 仅为无收据 Fresh 分支证明对象仍是从未提交的初始草稿。
     ///
     /// # 参数
-    /// * `db` - MongoDB 数据库
-    /// * `executor` - 与事实加载、收据查询相同的外层事务执行器
+    /// * `db` - MongoDB 数据库。
+    /// * `executor` - 与事实加载、收据查询相同的外层事务执行器。
+    ///
+    /// # 返回
+    /// 对象仍是初始未提交草稿时返回。
     ///
     /// # 错误
-    /// 对象已变化、非初始草稿或曾形成过不可变提交时返回冲突。Replay 分支不得
-    /// 调用本方法。
+    /// 对象缺失或版本变化、非初始草稿、曾形成过不可变提交，或错误传入
+    /// `NO_APPROVAL` 类型时失败关闭。Replay 分支不得调用本方法。
     pub async fn ensure_initial_unsubmitted(&self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         ensure_initial_unsubmitted_approval_upgrade_subject(db, self, executor).await
     }
@@ -205,8 +220,17 @@ impl ApprovalUpgradeSubjectFacts {
 
 /// 读取并校验一张必须审批单据的强业务事实。
 ///
+/// # 参数
+/// * `db` - MongoDB 数据库。
+/// * `document_type` - 路由给出的精确单据类型。
+/// * `document_id` - 路由给出的精确强业务对象主键。
+/// * `executor` - 调用方持有的读或事务执行器。
+///
+/// # 返回
+/// 返回强业务对象身份、版本、单号、责任组织与不可变创建人。
+///
 /// # 错误
-/// 参见 [`ApprovalUpgradeSubjectFacts::load`]。
+/// 与 [`ApprovalUpgradeSubjectFacts::load`] 相同。
 pub async fn load_approval_upgrade_subject_facts(
     db: &Database,
     document_type: DocumentType,
@@ -222,6 +246,9 @@ pub async fn load_approval_upgrade_subject_facts(
 /// * `db` - MongoDB 数据库
 /// * `facts` - 同一外层事务先前加载的强业务授权事实
 /// * `executor` - 与事实加载、收据查询相同的外层事务执行器
+///
+/// # 返回
+/// 对象仍是初始未提交草稿时返回。
 ///
 /// # 错误
 /// 对象缺失或版本变化、非初始草稿、曾形成过不可变提交，或错误传入
@@ -250,13 +277,13 @@ pub async fn ensure_initial_unsubmitted_approval_upgrade_subject(
     }
 }
 
-/// Process-owned upgrade-subject adapter over remaining domain aggregates.
+/// 用本流程读取剩余领域聚合的升级主体适配器。
 pub struct ProcessUpgradeSubject {
     db: Database,
 }
 
 impl ProcessUpgradeSubject {
-    /// Bind the adapter to a database.
+    /// 把适配器绑定到当前命令使用的数据库。
     ///
     /// # 参数
     /// * `db` - MongoDB 数据库
@@ -271,6 +298,7 @@ impl ProcessUpgradeSubject {
     }
 }
 
+/// 同名错误原样交给工作流；没有对应变体的流程错误收成内部错误。
 fn map_upgrade_error(error: Error) -> erp_workflow::Error {
     match error {
         Error::ValidationError(message) => erp_workflow::Error::ValidationError(message),

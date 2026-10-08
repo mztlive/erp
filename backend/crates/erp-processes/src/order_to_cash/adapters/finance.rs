@@ -1,4 +1,4 @@
-//! Financial facts adapted to the sales progress contract.
+//! 将财务事实适配为销售进度合同。
 
 use async_trait::async_trait;
 use erp_core::ids::SalesOrderId;
@@ -13,7 +13,16 @@ pub struct FinanceMoneyProgressAdapter {
     db: Database,
 }
 impl FinanceMoneyProgressAdapter {
-    /// Bind the provider database without performing any reads.
+    /// 绑定提供方数据库，不执行任何读取。
+    ///
+    /// # 参数
+    /// * `db` - 财务事实所在数据库。
+    ///
+    /// # 返回
+    /// 返回未发起读取的适配器。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }

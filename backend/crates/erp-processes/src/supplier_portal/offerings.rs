@@ -342,6 +342,18 @@ impl SupplierPortalProcess {
         self.offering_maintainer(owner, actor, executor).await
     }
 
+    /// 按快照种类重验报价准入、条款、既有供给归属和数量单位。
+    ///
+    /// # 参数
+    /// * `actor` - 当前门户身份。
+    /// * `snapshot` - 供给申请快照。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 快照引用的 SKU、条款和单位均合法时无返回值。
+    ///
+    /// # 错误
+    /// 报价无权、目标版本或资格不满足、供给不属于当前供应商、条款或数量单位非法时返回对应错误。
     pub(super) async fn validate_snapshot(
         &self,
         actor: &PortalActor,
@@ -392,6 +404,17 @@ impl SupplierPortalProcess {
         Ok(())
     }
 
+    /// 按快照种类校验供货数量与 SKU 基础单位。停供快照不校验数量。
+    ///
+    /// # 参数
+    /// * `snapshot` - 供给申请快照。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 数量与单位匹配，或快照为停供时无返回值。
+    ///
+    /// # 错误
+    /// 供给、SKU 或单位不存在，单位停用，或数量刻度不合法时返回对应错误。
     pub(super) async fn validate_snapshot_units(
         &self,
         snapshot: &OfferingApplicationSnapshot,
@@ -415,6 +438,19 @@ impl SupplierPortalProcess {
         Ok(())
     }
 
+    /// 用 SKU 基础单位的数量刻度校验供货条款和可选可供数量。
+    ///
+    /// # 参数
+    /// * `sku_id` - 公司 SKU ID。
+    /// * `terms` - 供货条款。
+    /// * `quantity` - 可选可供数量文本；为空时只校验条款数量。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 单位有效且数量刻度通过时无返回值。
+    ///
+    /// # 错误
+    /// SKU 不存在时返回 `NotFound`；单位不存在或已停用时返回 `BusinessLogicError`。数量刻度不合法时返回下层校验错误。读取失败时返回对应错误。
     pub(super) async fn validate_supply_quantity(
         &self,
         sku_id: &str,
@@ -441,6 +477,19 @@ impl SupplierPortalProcess {
         Ok(())
     }
 
+    /// 用供给所属 SKU 的基础单位校验可供数量。
+    ///
+    /// # 参数
+    /// * `actor` - 当前门户身份。
+    /// * `id` - 供给 ID。
+    /// * `input` - 可供状态与数量。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 供给属于当前供应商且数量刻度通过时无返回值。
+    ///
+    /// # 错误
+    /// 供给不可见、SKU 不存在、单位不存在或停用，或数量刻度不合法时返回对应错误。
     pub(super) async fn validate_availability_unit(
         &self,
         actor: &PortalActor,
@@ -470,6 +519,18 @@ impl SupplierPortalProcess {
         Ok(())
     }
 
+    /// 解析供给申请的内部维护人和业务组织。
+    ///
+    /// # 参数
+    /// * `app` - 供给申请。
+    /// * `actor` - 当前门户身份，用于核对既有供给归属。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回维护人账号 ID 和业务组织 ID。既有供给取供给上的值，否则取供应商当前维护人。
+    ///
+    /// # 错误
+    /// 既有供给不可见，或供应商不存在、已停用时返回对应错误。
     pub(super) async fn application_owner(
         &self,
         app: &OfferingApplication,
@@ -487,6 +548,16 @@ impl SupplierPortalProcess {
     }
 }
 
+/// 用最近一次提交编号构造供给申请任务主题。
+///
+/// # 参数
+/// * `app` - 供给申请。
+///
+/// # 返回
+/// 返回 `offering:` 加最近提交编号。
+///
+/// # 错误
+/// 没有任何提交时返回 `ConflictError`。
 pub(super) fn offering_subject(app: &OfferingApplication) -> Result<String> {
     app.submissions
         .last()
@@ -508,6 +579,16 @@ fn validate_quote_reported_time(snapshot: &OfferingApplicationSnapshot, confirme
     }
     Ok(())
 }
+/// 取采购决定意见。通过且未填写时使用固定文案，退回必须有意见。
+///
+/// # 参数
+/// * `input` - 采购决定与意见。
+///
+/// # 返回
+/// 返回去掉首尾空白后的意见；通过且为空时返回 `采购确认通过`。
+///
+/// # 错误
+/// 退回且意见为空时返回 `ValidationError`。
 pub(super) fn review_comment(input: &PortalReview) -> Result<&str> {
     match input.comment.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
         Some(value) => Ok(value),

@@ -9,6 +9,16 @@ use erp_finance::dto::cost::{
 use super::{Error, Result, page_offset};
 
 /// 成本列表金额排序使用可见分配份额，稳定次序以成本身份收尾。
+///
+/// # 参数
+/// * `rows` - 已授权的成本行。
+/// * `paging` - 排序与分页。
+///
+/// # 返回
+/// 返回排序后的当前页；总数是排序前的完整行数。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn costs(mut rows: Vec<ScopedCostEntryView>, paging: PageParams) -> PageView<ScopedCostEntryView> {
     rows.sort_by(|a, b| {
         let order = match paging.sort_by {
@@ -26,6 +36,17 @@ pub(super) fn costs(mut rows: Vec<ScopedCostEntryView>, paging: PageParams) -> P
 }
 
 /// 先对授权分配应用业务条件，再用分配本身的持久化时间排序和分页。
+///
+/// # 参数
+/// * `rows` - 已授权的分配行。
+/// * `created` - 分配身份到持久化创建时间。
+/// * `query` - 分配列表条件。
+///
+/// # 返回
+/// 返回按创建时间与身份排序后的当前页。
+///
+/// # 错误
+/// 分配缺少持久化创建时间时返回 `Internal`。
 pub(super) fn allocations(
     rows: Vec<CostAllocationView>,
     created: &HashMap<String, u64>,

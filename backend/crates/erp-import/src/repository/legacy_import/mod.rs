@@ -130,8 +130,19 @@ impl Default for LegacyImportBatchFilter {
 impl QueryFilter for LegacyImportBatchFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// `batch_no` 按字面量、忽略大小写匹配；`source_system_id` 与 `status` 精确匹配。
+    /// `baseline_date_from`、`baseline_date_to` 都有时把 `baseline_date` 写成含端点的
+    /// `$gte`/`$lte`，只给一端时只写对应比较；日期使用 `YYYY-MM-DD`。
+    /// 为 `None` 的筛选项不写入；分页与排序字段不进入条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "batch_no", self.batch_no.as_deref());
@@ -160,8 +171,16 @@ impl QueryFilter for LegacyImportBatchFilter {
 impl Pagination for LegacyImportBatchFilter {
     /// 返回页码与单页条数。
     ///
+    /// 原样返回 `page`，并把 `page_size` 从 `u32` 展成 `u64`；不在此处把 `0` 归一成第一页。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `(page, page_size)` 元组。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -300,8 +319,17 @@ pub struct LegacyImportRowFilter {
 impl QueryFilter for LegacyImportRowFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// `batch_id`、`parse_status`、`mapping_status` 与 `import_status` 有值时精确匹配。
+    /// `source_row_key` 按字面量、忽略大小写匹配。为 `None` 的筛选项不写入；分页与排序字段不进入条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(batch_id) = &self.batch_id {
@@ -324,8 +352,16 @@ impl QueryFilter for LegacyImportRowFilter {
 impl Pagination for LegacyImportRowFilter {
     /// 返回页码与单页条数。
     ///
+    /// 原样返回 `page`，并把 `page_size` 从 `u32` 展成 `u64`；不在此处把 `0` 归一成第一页。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `(page, page_size)` 元组。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -462,8 +498,17 @@ pub struct LegacyImportConfirmationFilter {
 impl QueryFilter for LegacyImportConfirmationFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// `batch_id`、`confirmation_scope` 与 `status` 有值时精确匹配。
+    /// 为 `None` 的筛选项不写入；分页与排序字段不进入条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(batch_id) = &self.batch_id {
@@ -482,8 +527,16 @@ impl QueryFilter for LegacyImportConfirmationFilter {
 impl Pagination for LegacyImportConfirmationFilter {
     /// 返回页码与单页条数。
     ///
+    /// 原样返回 `page`，并把 `page_size` 从 `u32` 展成 `u64`；不在此处把 `0` 归一成第一页。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `(page, page_size)` 元组。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -653,15 +706,17 @@ impl<'a> LegacyImportRepository<'a> {
     ///
     /// # 返回
     /// 返回仓储实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
 
     /// 创建导入批次并写入全部导入行（跨集合多步骤写入）。
     ///
-    /// 依次写入 `legacy_import_batch` 与 `legacy_import_rows`，保证
-    /// 「批次 + 来源行」原子可见（数据模型 §6.12：重跑使用原批次或明确
-    /// 的修复批次并保持来源行幂等）。
+    /// 依次写入 `legacy_import_batches` 与 `legacy_import_rows`。本方法自身不构成原子边界
+    /// （数据模型 §6.12：重跑使用原批次或明确的修复批次并保持来源行幂等）。
     /// **必须收到事务执行器**：本方法不构成原子边界，传入 `NoTransaction`
     /// 时两笔写入各自自动提交，行唯一索引冲突会留下只有批次没有行的
     /// 半成品；Service 必须通过 `persistence_core::Transactional::with_transaction`
@@ -669,12 +724,14 @@ impl<'a> LegacyImportRepository<'a> {
     ///
     /// # 参数
     /// * `batch` - 待写入的导入批次
-    /// * `rows` - 待写入的导入行（必须属于 `batch`）
+    /// * `rows` - 待写入的导入行（调用方须保证属于 `batch`；本方法不校验归属）
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
+    /// # 返回
+    /// 批次与全部行写入完成后无返回值。
+    ///
     /// # 错误
-    /// 当行唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service
-    /// 映射为幂等/冲突语义）或 MongoDB 写入失败时返回错误。
+    /// 批次或行写入失败时返回对应仓储错误，包括唯一索引冲突 [`persistence_core::Error::DuplicateKey`]。
     pub async fn create_batch_with_rows(
         &self,
         batch: &LegacyImportBatch,

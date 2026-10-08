@@ -61,6 +61,9 @@ const AUDIT_EVENTS: &str = <mongodb::Database as AccessControlExt>::AUDIT_EVENTS
 /// # 参数
 /// * `db` - 目标 MongoDB 数据库
 ///
+/// # 返回
+/// 账号、角色和授权相关索引全部创建成功时无额外返回值。
+///
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
@@ -69,6 +72,12 @@ pub async fn ensure(db: &Database) -> Result<()> {
 }
 
 /// 创建账号与角色索引，供启动根在审计日志索引之前调用。
+///
+/// # 参数
+/// * `db` - 目标 MongoDB 数据库
+///
+/// # 返回
+/// 账号与角色索引创建成功时无额外返回值。
 ///
 /// # 错误
 /// 第一个索引创建失败时返回原持久化错误，不继续创建后续集合索引。
@@ -79,6 +88,12 @@ pub async fn ensure_accounts_and_roles(db: &Database) -> Result<()> {
 }
 
 /// 创建身份授权与审计事件索引，供启动根在审计日志索引之后调用。
+///
+/// # 参数
+/// * `db` - 目标 MongoDB 数据库
+///
+/// # 返回
+/// 授权、审计与组织相关索引按原顺序创建成功时无额外返回值。
 ///
 /// # 错误
 /// 按原集合顺序返回第一个持久化错误。
@@ -312,11 +327,13 @@ async fn remove_obsolete_scope_index(db: &Database) -> Result<()> {
 
 /// 确保人员范围唯一键；迁移应用在事务前调用，预览不得调用。
 /// # 参数
-/// 目标数据库。
+/// * `db` - 目标数据库。
+///
 /// # 返回
 /// 新集合索引就绪。
+///
 /// # 错误
-/// 重复数据或DDL失败拒绝迁移。
+/// 重复数据或 DDL 失败时拒绝迁移。
 pub async fn ensure_person_scopes(db: &Database) -> Result<()> {
     create_indexes(
         db,

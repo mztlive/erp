@@ -78,8 +78,11 @@ impl WorkItem {
     /// * `data` - 审批任务数据
     /// * `at` - 创建时间
     ///
+    /// # 返回
+    /// 返回指定到人、来源为审批运行时并绑定节点执行的单据审批任务。
+    ///
     /// # 错误
-    /// 任一必填责任字段为空或超长时返回错误。
+    /// 责任人或其他必填字段为空或超长时返回错误。
     pub fn new_document_approval(
         id: WorkItemId,
         data: DocumentApprovalWorkItemData,
@@ -148,8 +151,15 @@ impl WorkItem {
 
     /// 由审批运行时完成当前开放的单据审批任务。
     ///
+    /// # 参数
+    /// * `completed_by` - 完成执行人，必须是当前责任人。
+    /// * `at` - 完成时间。
+    ///
+    /// # 返回
+    /// 无返回值；状态变为 `COMPLETED`。
+    ///
     /// # 错误
-    /// 不是单据审批任务、任务非开放或执行人不是当前责任人时返回错误。
+    /// 不是单据审批任务、执行人为空或超长、任务非开放，或执行人不是当前责任人时返回错误。
     pub fn complete_by_approval_runtime(
         &mut self,
         completed_by: impl Into<String>,
@@ -161,8 +171,16 @@ impl WorkItem {
 
     /// 由审批运行时关闭当前开放的单据审批任务。
     ///
+    /// # 参数
+    /// * `closed_by` - 关闭操作人。
+    /// * `data` - 关闭原因。
+    /// * `at` - 关闭时间。
+    ///
+    /// # 返回
+    /// 无返回值；状态变为 `CLOSED`。
+    ///
     /// # 错误
-    /// 不是单据审批任务、任务非开放或关闭数据非法时返回错误。
+    /// 不是单据审批任务、任务非开放，或操作人、关闭原因为空或超长时返回错误。
     pub fn close_by_approval_runtime(
         &mut self,
         closed_by: impl Into<String>,

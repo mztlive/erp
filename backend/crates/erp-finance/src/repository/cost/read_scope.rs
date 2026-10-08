@@ -38,6 +38,11 @@ pub struct CostAllocationScopeVersion {
 pub trait CostEntryReadScopeExt {
     /// 装载业务筛选下完整的有界候选成本，不在权限裁剪前分页。
     ///
+    /// # 参数
+    /// * `filter` - 已规范化的成本筛选。
+    /// * `id` - 精确成本身份；`None` 表示不按身份收窄。
+    /// * `executor` - 调用方执行器。
+    ///
     /// # 返回
     /// 最多上限加一条；精确 ID 只用于独立详情。
     ///
@@ -160,6 +165,10 @@ impl CostEntryReadScopeExt for persistence_core::Repository<'_, CostEntry> {
 #[allow(async_fn_in_trait)]
 pub trait CostAllocationReadScopeExt {
     /// 批量读取成本对应分配，调用方必须检查上限并跨批次累计。
+    ///
+    /// # 参数
+    /// * `ids` - 成本身份集合。
+    /// * `executor` - 调用方执行器。
     ///
     /// # 返回
     /// 返回最多分配上限加一条；空成本集合返回空集。

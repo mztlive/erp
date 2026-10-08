@@ -1,4 +1,4 @@
-//! Consumer ports for identity facts, audit persistence and attachment fingerprints.
+//! 身份事实、审计持久化与内容指纹的消费端口。
 
 mod audit;
 mod fingerprint;

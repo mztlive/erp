@@ -1,8 +1,8 @@
-//! Supply-domain application errors with the original unique-index mapping.
+//! 供应链领域应用错误，并保留原有唯一索引映射。
 
 use application_core::ErrorClass;
 
-/// Supply-domain result alias.
+/// 供应链领域结果别名。
 pub type Result<T> = std::result::Result<T, Error>;
 
 impl From<application_core::Error> for Error {
@@ -56,7 +56,19 @@ pub enum Error {
 }
 
 impl Error {
-    /// Stable error class used by HTTP mapping; do not parse display text.
+    /// 返回供 HTTP 映射使用的稳定错误类别；不要解析展示文案。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Internal`、`Logic`、`RepositoryError` 与 `OutcomeUnknown` 为 `ErrorClass::Internal`；
+    /// `ConflictError`、`ReceiptDuplicate` 与 `TransientTransaction` 为 `ErrorClass::Conflict`；
+    /// `BusinessLogicError`、`ValidationError` 与 `NotFound` 为 `ErrorClass::BusinessRule`；
+    /// `Forbidden` 与 `Unauthenticated` 为 `ErrorClass::Forbidden`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn class(&self) -> ErrorClass {
         match self {
             Self::Internal(_) | Self::Logic(_) | Self::RepositoryError(_) => ErrorClass::Internal,
@@ -75,8 +87,8 @@ impl Error {
 impl From<persistence_core::Error> for Error {
     /// 将仓储错误转换为供应链领域错误。
     ///
-    /// 唯一键、乐观锁和瞬态事务冲突保留为稳定的业务冲突语义，
-    /// 其余错误保持内部仓储错误。
+    /// 唯一键与乐观锁转为 `ConflictError`，瞬态事务冲突转为 `TransientTransaction`，
+    /// 提交结果未知转为 `OutcomeUnknown`，其余错误保持 `RepositoryError`。
     fn from(error: persistence_core::Error) -> Self {
         match error {
             error @ persistence_core::Error::DuplicateKey(_) => {
@@ -113,6 +125,9 @@ fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
 ///
 /// # 返回
 /// 精确命中本域索引时返回原提示；未知名称返回 `None`，由调用边界选择通用提示。
+///
+/// # 错误
+/// 不返回错误。
 ///
 /// # 约束
 /// 不匹配子串或前后缀、不规范化索引名称，不拥有其他领域或 HTTP 历史索引的提示。

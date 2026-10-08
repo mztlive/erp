@@ -38,6 +38,9 @@ impl MongoSettlementDataScope {
     ///
     /// # 返回
     /// 返回未执行 I/O 的 adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
         Self { db, rbac }
     }
@@ -50,6 +53,9 @@ impl MongoSettlementDataScope {
     ///
     /// # 返回
     /// 返回结算范围 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(db: Database, rbac: SharedRbacService) -> Arc<dyn SettlementDataScopePort> {
         Arc::new(Self::new(db, rbac))
     }
@@ -175,6 +181,9 @@ fn public_clause(clause: &SettlementResolvedClause) -> ScopeClause {
 ///
 /// # 返回
 /// 返回未缓存授权的结算访问器。
+///
+/// # 错误
+/// 不返回错误。
 pub fn settlement_access(db: Database, rbac: SharedRbacService) -> erp_supply::SettlementAccess {
     erp_supply::SettlementAccess::new(db.clone(), MongoSettlementDataScope::shared(db, rbac))
 }
@@ -187,6 +196,9 @@ pub fn settlement_access(db: Database, rbac: SharedRbacService) -> erp_supply::S
 ///
 /// # 返回
 /// 返回可解析结算范围的服务。
+///
+/// # 错误
+/// 不返回错误。
 pub fn scoped_settlement_service(db: Database, rbac: SharedRbacService) -> SupplierSettlementService {
     SupplierSettlementService::new(db.clone()).with_data_scope(MongoSettlementDataScope::shared(db, rbac))
 }
@@ -199,6 +211,9 @@ pub fn scoped_settlement_service(db: Database, rbac: SharedRbacService) -> Suppl
 ///
 /// # 返回
 /// 返回可解析结算范围的跨域流程。
+///
+/// # 错误
+/// 不返回错误。
 pub fn scoped_settlement_process(db: Database, rbac: SharedRbacService) -> SupplierSettlementProcess {
     SupplierSettlementProcess::new(db.clone())
         .with_scope(MongoSettlementDataScope::shared(db.clone(), rbac.clone()), rbac)

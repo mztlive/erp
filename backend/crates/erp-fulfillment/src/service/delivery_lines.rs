@@ -19,7 +19,7 @@ use crate::entity::fulfillment::DeliveryLineSpec;
 /// 返回带行 ID 的领域规格（行号由实体工厂分配）。
 ///
 /// # 错误
-/// 输入为空时返回校验错误。
+/// 不校验输入，始终返回 `Ok`；空切片得到空规格列表。
 pub fn delivery_line_specs(inputs: &[DeliveryLineInput]) -> Result<Vec<DeliveryLineSpec>> {
     Ok(inputs
         .iter()
@@ -40,6 +40,9 @@ pub fn delivery_line_specs(inputs: &[DeliveryLineInput]) -> Result<Vec<DeliveryL
 ///
 /// # 返回
 /// 返回带行 ID 的仓发行规格（行号由实体工厂分配）。
+///
+/// # 错误
+/// 不返回错误。
 pub fn receipt_reservation_specs(reservations: &[ReceiptReservationLineFact]) -> Vec<DeliveryLineSpec> {
     reservations
         .iter()

@@ -64,6 +64,15 @@ pub struct CustomerCenterReadService {
 
 impl CustomerCenterReadService {
     /// 创建客户对象中心读服务。
+    ///
+    /// # 参数
+    /// * `db` - 应用数据库
+    ///
+    /// # 返回
+    /// 返回绑定该数据库的只读服务，构造不访问数据库。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
@@ -73,6 +82,9 @@ impl CustomerCenterReadService {
     /// # 参数
     /// * `customer_id` - 客户 ID
     /// * `actor` - 已认证操作人；存在性以外不做任何授权推导
+    ///
+    /// # 返回
+    /// 返回该客户的最近合同、销售单摘要和跨页计数。
     ///
     /// # 错误
     /// 客户不存在或聚合读取失败时返回错误。
@@ -119,6 +131,9 @@ impl CustomerCenterReadService {
     /// # 参数
     /// * `customer_id` - 客户 ID
     /// * `actor` - 已认证操作人；存在性以外不做任何授权推导
+    ///
+    /// # 返回
+    /// 返回跨应收账户的余额、逾期金额、可开票合计和最早逾期日。
     ///
     /// # 错误
     /// 客户不存在或聚合读取失败时返回错误。

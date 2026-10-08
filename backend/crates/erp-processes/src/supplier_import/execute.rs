@@ -16,7 +16,14 @@ use crate::{Error, Result, SupplierProfileService};
 impl SupplierImportProcess {
     /// 处理至多四个未完成任务，恢复超过两分钟未推进的任务。
     ///
-    /// 返回扫描任务数；查询失败返回错误，单任务失败留待下轮恢复并记录脱敏日志。
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回本次扫描到的任务数。版本冲突的任务跳过；其他单任务失败只记脱敏日志，留待下轮恢复。
+    ///
+    /// # 错误
+    /// 查询未完成任务失败时返回仓储错误。
     pub async fn run_due_jobs(&self) -> Result<usize> {
         let jobs = self
             .db
@@ -139,7 +146,16 @@ impl SupplierImportProcess {
         Ok(())
     }
 
-    /// 仅 worker 和已校验归属的失败下载调用；解密失败不泄漏源内容。
+    /// 读取并解密任务源内容，只供执行器和已校验归属的失败下载调用。解密失败不返回源字节。
+    ///
+    /// # 参数
+    /// * `job` - 已登记的供应商导入任务。
+    ///
+    /// # 返回
+    /// 返回校验通过且指纹属于该任务的导入请求。
+    ///
+    /// # 错误
+    /// 源路径非法、读取或解密失败、内容损坏、校验失败、指纹不属于该任务，或与任务登记不一致时返回错误。
     pub(super) async fn source(&self, job: &BackgroundJob) -> Result<SupplierImportJobRequest> {
         let source = job
             .domain_job_id

@@ -44,7 +44,7 @@ impl SupplierPortalReadService {
     /// # 返回
     /// 可见的原稿、提交、决定及实际结果。
     /// # 错误
-    /// 未知与其他供应商目标统一返回不存在。
+    /// 未知与其他供应商目标统一返回 `NotFound`。供应商认证失效、查询或序列化失败时也会拒绝。
     pub async fn application(&self, actor: &PortalActor, id: &str) -> Result<PortalApplicationView> {
         self.portal_supplier(actor, &mut NoTransaction).await?;
         PortalApplicationRepository::new(&self.db)
@@ -60,7 +60,8 @@ impl SupplierPortalReadService {
     /// # 返回
     /// 仅包含可读申请的页与总数，不用供应商可见性替代供给范围。
     /// # 错误
-    /// 未装配授权、身份错误或目标越权时拒绝。
+    /// 非内部身份或未装配授权时返回 `Forbidden`。目标供应商为空或不可读时返回 `NotFound`。
+    /// 分页非法时返回 `ValidationError`。查询或序列化失败时返回对应错误。
     pub async fn admin_applications(
         &self,
         actor: &AuditActor,
@@ -101,7 +102,8 @@ impl SupplierPortalReadService {
     /// # 返回
     /// 有权审核的完整领域事实及统一协议字段。
     /// # 错误
-    /// 未知或越权统一返回不存在，未注入授权时拒绝。
+    /// 未知或越权统一返回 `NotFound`。非内部身份或未注入授权时返回 `Forbidden`。
+    /// 查询或序列化失败时返回对应错误。
     pub async fn admin_application(&self, actor: &AuditActor, id: &str) -> Result<Value> {
         if !self.internal_authorization(actor)?.request_readable(actor, id, &mut NoTransaction).await? {
             return Err(hidden_target());
@@ -110,6 +112,15 @@ impl SupplierPortalReadService {
     }
 
     /// 默认拒绝内部读取，也拒绝供应商伪装内部调用。
+    ///
+    /// # 参数
+    /// * `actor` - 调用方身份。
+    ///
+    /// # 返回
+    /// 内部账号且已注入授权端口时返回该端口。
+    ///
+    /// # 错误
+    /// 非 `AccountKind::Admin` 或未注入授权时返回 `Forbidden`。
     pub(super) fn internal_authorization(
         &self,
         actor: &AuditActor,

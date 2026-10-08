@@ -68,11 +68,26 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
     ///
     /// # 返回
     /// 返回绑定当前应用授权源的服务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database, auth: A) -> Self {
         Self::with_ports(db, auth, Arc::new(FailClosedObjectFactPort), Arc::new(FailClosedAuditPort))
     }
 
-    /// Create a command service with composition-root ports.
+    /// 创建注入对象事实与审计端口的任务服务。
+    ///
+    /// # 参数
+    /// * `db` - MongoDB 数据库
+    /// * `auth` - 注入的授权 Port
+    /// * `facts` - 对象事实端口
+    /// * `audit` - 审计写入端口
+    ///
+    /// # 返回
+    /// 返回使用给定端口的服务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_ports(
         db: Database,
         auth: A,

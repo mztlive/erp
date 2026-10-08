@@ -30,10 +30,10 @@ static EMAIL_REGEX: LazyLock<Regex> = LazyLock::new(|| {
 /// * `phone` - 手机号
 ///
 /// # 返回
-/// 返回校验结果，`Ok(())` 表示通过，`Err` 表示未通过。
+/// 匹配时返回 `Ok(())`。
 ///
 /// # 错误
-/// 当验证失败或底层操作失败时返回错误。
+/// 不匹配 `^1[3-9]\d{9}$` 时返回 `ValidationError`，代码为「无效的手机号码格式」。没有其它失败路径。
 pub fn validate_phone(phone: &str) -> ValidationResult {
     if !PHONE_REGEX.is_match(phone) {
         return Err(ValidationError::new("无效的手机号码格式"));
@@ -47,10 +47,10 @@ pub fn validate_phone(phone: &str) -> ValidationResult {
 /// * `email` - 邮箱地址
 ///
 /// # 返回
-/// 返回校验结果，`Ok(())` 表示通过，`Err` 表示未通过。
+/// 匹配时返回 `Ok(())`。
 ///
 /// # 错误
-/// 当验证失败或底层操作失败时返回错误。
+/// 不匹配 `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$` 时返回 `ValidationError`，代码为「无效的邮箱格式」。没有其它失败路径。
 pub fn validate_email(email: &str) -> ValidationResult {
     if !EMAIL_REGEX.is_match(email) {
         return Err(ValidationError::new("无效的邮箱格式"));
@@ -65,10 +65,10 @@ pub fn validate_email(email: &str) -> ValidationResult {
 /// * `message` - 提示信息
 ///
 /// # 返回
-/// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
+/// 返回去掉首尾空白后的字符串。
 ///
 /// # 错误
-/// 当验证失败或底层操作失败时返回错误。
+/// trim 后为空时返回 `Error::LogicError`，文案为 `message`。
 pub fn non_empty_trimmed(value: impl AsRef<str>, message: &str) -> Result<String> {
     let trimmed = value.as_ref().trim();
     if trimmed.is_empty() {
@@ -85,11 +85,11 @@ pub fn non_empty_trimmed(value: impl AsRef<str>, message: &str) -> Result<String
 /// * `max_len` - 最大长度
 /// * `too_long_message` - 超长时错误信息
 ///
-/// # 返回值
-/// 返回规范化后的文本
+/// # 返回
+/// 返回规范化后的文本。
 ///
 /// # 错误
-/// 当字段为空或长度超限时返回错误
+/// 当字段为空或长度超限时返回错误。
 pub fn normalize_required_text(
     value: String,
     empty_message: &str,
@@ -129,11 +129,11 @@ pub fn normalize_required_text_ref(
 /// * `value` - 可选邮箱内容
 /// * `max_len` - 最大长度
 ///
-/// # 返回值
-/// 返回规范化后的邮箱或 None
+/// # 返回
+/// 返回 trim 后的邮箱。`value` 为 `None` 或 trim 后为空时返回 `None`。
 ///
 /// # 错误
-/// 当邮箱超长或格式非法时返回错误
+/// 当邮箱超长或格式非法时返回错误。
 pub fn normalize_optional_email(value: Option<String>, max_len: usize) -> Result<Option<String>> {
     normalize_optional_contact(value, max_len, "邮箱", "邮箱长度过长", validate_email, "邮箱格式不正确")
 }
@@ -144,11 +144,11 @@ pub fn normalize_optional_email(value: Option<String>, max_len: usize) -> Result
 /// * `value` - 可选手机号内容
 /// * `max_len` - 最大长度
 ///
-/// # 返回值
-/// 返回规范化后的手机号或 None
+/// # 返回
+/// 返回 trim 后的手机号。`value` 为 `None` 或 trim 后为空时返回 `None`。
 ///
 /// # 错误
-/// 当手机号超长或格式非法时返回错误
+/// 当手机号超长或格式非法时返回错误。
 pub fn normalize_optional_phone(value: Option<String>, max_len: usize) -> Result<Option<String>> {
     normalize_optional_contact(value, max_len, "手机号", "手机号长度过长", validate_phone, "手机号格式不正确")
 }
@@ -200,8 +200,11 @@ fn normalize_optional_contact(
 /// * `label` - 字段说明
 /// * `max_len` - 最大长度
 ///
-/// # 返回值
-/// 返回规范化后的文本或 None
+/// # 返回
+/// 返回 trim 后的文本。`value` 为 `None` 或 trim 后为空时返回 `None`。
+///
+/// # 错误
+/// trim 后的字符数超过 `max_len` 时返回 `Error::LogicError`，文案为 `{label}长度不符合要求`。
 pub fn normalize_optional_text(value: Option<String>, label: &str, max_len: usize) -> Result<Option<String>> {
     let Some(value) = value else {
         return Ok(None);
@@ -223,7 +226,7 @@ pub fn normalize_optional_text(value: Option<String>, label: &str, max_len: usiz
 /// * `update` - 区分未提供、清除与设置的更新意图
 /// * `max_len` - 最大长度
 ///
-/// # 返回值
+/// # 返回
 /// 返回规范化后的更新意图。
 ///
 /// # 错误
@@ -241,7 +244,7 @@ pub fn normalize_optional_email_update(
 /// * `update` - 区分未提供、清除与设置的更新意图
 /// * `max_len` - 最大长度
 ///
-/// # 返回值
+/// # 返回
 /// 返回规范化后的更新意图。
 ///
 /// # 错误
@@ -253,7 +256,7 @@ pub fn normalize_optional_phone_update(
     normalize_field_update(update, |value| normalize_optional_phone(Some(value), max_len))
 }
 
-/// 对具体值执行规范化，并保留字段更新意图。
+/// 只规范化 `Set`：`Unchanged` 与 `Clear` 原样返回，规范化得到 `None` 时改为 `Clear`，规范化失败则返回该错误。
 fn normalize_field_update(
     update: FieldUpdate<String>,
     normalize: impl FnOnce(String) -> Result<Option<String>>,
@@ -275,8 +278,8 @@ fn normalize_field_update(
 /// * `max_len` - 最大长度
 /// * `message` - 长度超限时错误信息
 ///
-/// # 返回值
-/// 通过返回 Ok
+/// # 返回
+/// 通过返回 `Ok(())`。
 ///
 /// # 错误
 /// 当长度超限时返回错误

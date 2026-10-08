@@ -89,7 +89,7 @@ impl<'a> AcceptanceAllocationIndex<'a> {
     /// 返回按事实 ID 分组、组内保持原顺序的引用索引。
     ///
     /// # 错误
-    /// 无；数量校验延迟到事实消费时执行。
+    /// 不返回错误。数量校验延迟到事实消费时执行。
     pub(crate) fn new(allocations: &'a [AcceptanceFulfillmentAllocation]) -> Self {
         let mut grouped: HashMap<&str, Vec<&AcceptanceFulfillmentAllocation>> = HashMap::new();
         for allocation in allocations {
@@ -181,17 +181,29 @@ impl AcceptanceLineEligibility {
 
     /// 判断销售行是否已全部验收。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 净已验收数量不小于应履约数量时返回 `true`（应履约数量为零的行视为
     /// 已满足，与历史进度规则一致）。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_fully_fulfilled(&self) -> bool {
         self.net_accepted_quantity.to_decimal() >= self.required_quantity.to_decimal()
     }
 
     /// 判断销售行是否存在任一验收。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 净已验收数量不为零时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn has_acceptance(&self) -> bool {
         self.net_accepted_quantity.to_decimal() != Decimal::ZERO
     }
@@ -201,8 +213,14 @@ impl AcceptanceLineEligibility {
     /// 每条事实的剩余可验收数量由投影保证非负，因此行级汇总不为零当且仅当
     /// 存在某条事实剩余可验收数量不为零。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 行级剩余可验收数量不为零时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn has_remaining_eligible(&self) -> bool {
         self.remaining_eligible_quantity.to_decimal() != Decimal::ZERO
     }
@@ -229,6 +247,9 @@ impl AcceptanceProgress {
     /// # 返回
     /// 存在销售行时返回进度与剩余可验收标记；没有任何销售行时返回 `None`，
     /// 表示无法派生进度（调用方不得写回进度）。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn derive(lines: &[AcceptanceLineEligibility]) -> Option<Self> {
         if lines.is_empty() {
             return None;

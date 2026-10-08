@@ -57,6 +57,16 @@ pub async fn resolve_follow_up(
 }
 
 /// 在能力负责人与供应商维护人中取唯一内部跟进人。
+///
+/// # 参数
+/// * `capability_owner` - API 能力负责人；去空白后非空时优先采用。
+/// * `maintainer` - 供应商维护人；仅当前者为空时采用。
+///
+/// # 返回
+/// 返回选中的用户 ID。
+///
+/// # 错误
+/// 两者都缺失或只有空白时返回 `ValidationError`。
 pub fn pick_follow_up_user(capability_owner: Option<&str>, maintainer: Option<&str>) -> Result<String> {
     let capability = capability_owner.map(str::trim).filter(|value| !value.is_empty());
     let maintainer = maintainer.map(str::trim).filter(|value| !value.is_empty());
@@ -70,6 +80,15 @@ pub fn pick_follow_up_user(capability_owner: Option<&str>, maintainer: Option<&s
 }
 
 /// 拒绝公司根作为内部组织。
+///
+/// # 参数
+/// * `org` - 待写入的组织 ID。
+///
+/// # 返回
+/// 组织非空且不是 `company` 时无返回值。
+///
+/// # 错误
+/// 组织为空或等于 `company`（忽略大小写）时返回 `ValidationError`。
 pub fn reject_company_org(org: &str) -> Result<()> {
     if org.trim().is_empty() || org.eq_ignore_ascii_case("company") {
         return Err(Error::ValidationError("跟进人缺少有效内部组织，禁止写入公司根".into()));

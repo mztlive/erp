@@ -70,6 +70,18 @@ impl PersonScopeTerm {
     }
 
     /// 为纯表达式编译器构建临时范围项，不读取旧集合。
+    ///
+    /// # 参数
+    /// * `resource` - 业务资源标识。
+    /// * `action` - 单个动作标识。
+    /// * `subject` - 临时主体 ID。
+    /// * `limit` - 为真时主体类型是用户上限，否则是角色分支。
+    ///
+    /// # 返回
+    /// 返回启用的临时 `DataScope`。身份固定为 `expression`。
+    ///
+    /// # 错误
+    /// 目标模式为 `ManagedOrgs` 时返回校验错误。主体、绑定或目标不合法时传播 [`DataScope::new`] 的错误。
     pub(crate) fn rule(&self, resource: &str, action: &str, subject: &str, limit: bool) -> Result<DataScope> {
         if self.target_mode == Some(ScopeTargetMode::ManagedOrgs) {
             return Err(Error::ValidationError("人员范围不接受角色管理部门模式".into()));
@@ -100,9 +112,9 @@ impl PersonScopeExpression {
     /// # 参数
     /// * `resource` - 已注册业务标识。
     /// # 返回
-    /// 仅负责人语义明确且不要求其他身份维度的业务返回真。
+    /// 仅负责人语义明确且不要求其他身份维度的业务返回 `true`；其余业务返回 `false`。
     /// # 错误
-    /// 无；未知业务不提供基础范围。
+    /// 不返回错误。
     pub fn default_self(resource: &str) -> bool {
         matches!(
             resource,
@@ -183,6 +195,7 @@ impl PersonDataScope {
     /// # 参数
     /// * `state` - 当前组织及成员有效期事实。
     /// * `dimensions` - 本业务必需维度。
+    /// * `allows_history` - 该业务是否允许用历史参与补读取。
     /// * `at` - 本次统一判断时点。
     /// # 返回
     /// 分支并集与表达式条件的精确结果。
@@ -232,11 +245,13 @@ impl PersonDataScope {
 
     /// 构造尚未持久化的基础范围；必须先完成账号与动作资格检查。
     /// # 参数
-    /// 人员、已注册业务及操作。
+    /// * `user` - 人员账号 ID。
+    /// * `resource` - 已注册业务标识。
+    /// * `action` - 操作标识。
     /// # 返回
-    /// 仅含默认政策、没有附加授权的临时配置。
+    /// 仅含默认政策、没有附加授权的临时配置。无基础政策的业务留待解析时得到空范围。
     /// # 错误
-    /// 无；无基础政策的业务解析为空范围。
+    /// 不返回错误。
     pub fn default_for(user: &str, resource: &str, action: &str) -> Self {
         Self {
             base: BaseModel::new("default-person-scope".into()),
@@ -253,7 +268,7 @@ impl PersonDataScope {
     /// # 返回
     /// 空范围。
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn denied() -> ResolvedScope {
         ResolvedScope { role_clauses: vec![], user_limit: Some(ScopeClause::default()) }
     }

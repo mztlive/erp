@@ -126,6 +126,7 @@ struct AuthorizedDirectory {
     actor_id: String,
 }
 
+/// 在调用方事务内按目录类别的 `list` 动作解析数据范围。
 async fn authorize(
     db: &Database,
     rbac: &SharedRbacService,
@@ -278,6 +279,7 @@ fn org_label(state: &OrganizationState, primary_org: Option<&str>) -> Option<Str
         .map(|unit| unit.name.clone())
 }
 
+/// 调用方带回的目录版本与当前快照不一致时拒绝，未带版本则不比较。
 fn ensure_current_version(requested: &Option<String>, current: &str) -> Result<()> {
     if requested.as_ref().is_some_and(|version| version != current) {
         return Err(Error::ConflictError("DATA_SCOPE_CHANGED：数据范围已变化，请从第一页刷新".into()));

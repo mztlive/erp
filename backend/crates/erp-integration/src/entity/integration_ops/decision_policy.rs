@@ -44,8 +44,14 @@ pub enum FundsImpact {
 impl FundsImpact {
     /// 返回资金影响的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 无影响返回 `NONE`，潜在影响返回 `POTENTIAL`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::None => "NONE",
@@ -77,6 +83,9 @@ impl TerminalEvidencePolicy {
     ///
     /// # 返回
     /// 全部必需类型均已发现时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn satisfied_by(&self, present: &[RequiredEvidenceKind]) -> bool {
         self.required.iter().all(|kind| present.contains(kind))
     }
@@ -89,6 +98,9 @@ impl TerminalEvidencePolicy {
 ///
 /// # 返回
 /// 返回 typed 终态证据策略；资金影响恒为无。
+///
+/// # 错误
+/// 不返回错误。
 pub fn error_terminal_policy(task: &IntegrationErrorTask) -> TerminalEvidencePolicy {
     TerminalEvidencePolicy {
         policy_id: ERROR_POLICY_ID,
@@ -110,6 +122,9 @@ pub fn error_terminal_policy(task: &IntegrationErrorTask) -> TerminalEvidencePol
 ///
 /// # 返回
 /// 返回 typed 终态证据策略。
+///
+/// # 错误
+/// 不返回错误。
 pub fn difference_terminal_policy(difference: &ReconciliationDifference) -> TerminalEvidencePolicy {
     let financial = difference.has_financial_impact();
     TerminalEvidencePolicy {
@@ -159,6 +174,9 @@ impl ReasonRegistry {
     ///
     /// # 返回
     /// 命中时返回注册原因，否则返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn find(&self, reason_id: &str) -> Option<&RegisteredReason> {
         self.reasons.iter().find(|reason| reason.id == reason_id)
     }
@@ -166,8 +184,14 @@ impl ReasonRegistry {
 
 /// 返回无任务直接对账固定原因注册表。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回来源更正、业务确认无误、补偿闭环三项注册原因。
+///
+/// # 错误
+/// 不返回错误。
 pub fn reconciliation_reason_registry() -> ReasonRegistry {
     ReasonRegistry {
         id: REASON_REGISTRY_ID,
@@ -232,8 +256,14 @@ pub enum DecidedAction {
 impl DecidedAction {
     /// 返回动作的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回服务 view 沿用的稳定动作代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::QueryOriginalResult => "QUERY_ORIGINAL_RESULT",
@@ -282,6 +312,9 @@ pub struct ErrorActionProjection {
 ///
 /// # 返回
 /// 返回开放动作与阻断；终态返回双空，无任务时只返回缺责任阻断。
+///
+/// # 错误
+/// 不返回错误。
 pub fn project_error_actions(input: ErrorActionProjection) -> (Vec<DecidedAction>, Vec<ActionBlocker>) {
     if input.terminal {
         return (Vec::new(), Vec::new());
@@ -340,6 +373,9 @@ pub struct DifferenceActionProjection {
 ///
 /// # 返回
 /// 返回开放动作与阻断；终态返回双空，无任务时开放直接对账结论动作。
+///
+/// # 错误
+/// 不返回错误。
 pub fn project_difference_actions(
     input: DifferenceActionProjection,
 ) -> (Vec<DecidedAction>, Vec<ActionBlocker>) {
@@ -400,6 +436,9 @@ pub enum ProjectionOutcome {
 ///
 /// # 返回
 /// 返回查询与补证基础动作，及满足条件时开放的重放或完成动作。
+///
+/// # 错误
+/// 不返回错误。
 pub fn next_actions_after_outcome(
     subject: ProjectionSubject,
     outcome: ProjectionOutcome,

@@ -20,6 +20,20 @@ use crate::adapters::supplier_failure::integration_class;
 use crate::audit::persist_log;
 use crate::integration_resolution::producer::error_work_item;
 
+/// 把分类失败写入任务进度和健康检查运行记录；未知结果与明确失败分开登记。
+///
+/// # 参数
+/// * `job` - 待标失败的后台任务。
+/// * `run` - 同一次健康检查运行。
+/// * `at` - 失败登记时刻。
+/// * `latency_ms` - 网关耗时毫秒。
+/// * `error` - 已分类的网关失败。
+///
+/// # 返回
+/// 内存中的任务和运行记录更新成功时返回。
+///
+/// # 错误
+/// 进度、失败标记或运行记录状态迁移失败时返回错误。`ResultUnknown` 记为未知，其余记为失败。
 pub(super) fn settle_health_failure(
     job: &mut BackgroundJob,
     run: &mut SupplierHealthCheckRun,
@@ -37,6 +51,7 @@ pub(super) fn settle_health_failure(
     Ok(())
 }
 
+/// 处理人必须有非 `company` 的有效主属组织，否则不能登记失败任务。
 async fn handler_org(
     db: &mongodb::Database,
     user_id: &str,
@@ -51,6 +66,21 @@ async fn handler_org(
         .ok_or_else(|| crate::Error::ValidationError("处理人缺少有效内部组织".into()))
 }
 
+/// 在调用方结果事务中写入集成错误任务、工作项和对应审计。
+///
+/// # 参数
+/// * `db` - 连接与组织所在数据库。
+/// * `connection` - 失败所属连接。
+/// * `job` - 已标失败的后台任务。
+/// * `error` - 已分类失败。
+/// * `actor` - 审计操作人，同时作为处理人。
+/// * `executor` - 调用方结果事务执行器。
+///
+/// # 返回
+/// 错误任务、工作项和审计都写入后返回。
+///
+/// # 错误
+/// 处理人组织无效、任务或工作项构造失败，或任一写入失败时返回错误。
 pub(super) async fn persist_health_failure_task(
     db: &mongodb::Database,
     connection: &SupplierApiConnection,

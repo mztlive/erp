@@ -1,8 +1,8 @@
-//! Party-domain application errors with the original service mapping.
+//! 主体领域应用错误，保留原有服务层映射。
 
 use application_core::ErrorClass;
 
-/// Party-domain result alias.
+/// 主体领域的结果别名。
 pub type Result<T> = std::result::Result<T, Error>;
 
 impl From<application_core::Error> for Error {
@@ -15,7 +15,7 @@ impl From<application_core::Error> for Error {
     }
 }
 
-/// Party identity, subordinate-fact and sensitive-data errors.
+/// 主体身份、从属事实与敏感数据错误。
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("系统内部错误: {0}")]
@@ -56,7 +56,19 @@ pub enum Error {
 }
 
 impl Error {
-    /// Stable error class used by HTTP mapping; do not parse display text.
+    /// 返回 HTTP 映射使用的稳定错误类别；调用方不要解析 `Display` 文本。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Internal`、`Logic`、`RepositoryError` 与 `OutcomeUnknown` 为 `ErrorClass::Internal`；
+    /// `ConflictError`、`ReceiptDuplicate` 与 `TransientTransaction` 为 `ErrorClass::Conflict`；
+    /// `BusinessLogicError`、`ValidationError` 与 `NotFound` 为 `ErrorClass::BusinessRule`；
+    /// `Forbidden` 与 `Unauthenticated` 为 `ErrorClass::Forbidden`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn class(&self) -> ErrorClass {
         match self {
             Self::Internal(_) | Self::Logic(_) | Self::RepositoryError(_) => ErrorClass::Internal,
@@ -124,6 +136,9 @@ fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
 ///
 /// # 返回
 /// 精确命中本域注册索引时返回原提示；未知名称返回 `None`，由调用边界选择通用提示。
+///
+/// # 错误
+/// 不返回错误。
 ///
 /// # 约束
 /// 不匹配子串或前后缀、不规范化索引名称，不拥有其他领域或 HTTP 历史索引的提示。

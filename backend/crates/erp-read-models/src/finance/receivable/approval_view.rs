@@ -1,4 +1,4 @@
-//! Frozen customer receipt approval summaries for read-only display.
+//! 客户回款冻结审批摘要，仅供只读展示。
 
 use erp_finance::entity::receivable::CustomerReceiptStatus;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
@@ -19,6 +19,9 @@ use crate::finance::dto::{
 ///
 /// # 返回
 /// 返回有界只读审批结构。
+///
+/// # 错误
+/// 不返回错误。
 pub fn document_approval_view(
     binding: Option<&ApprovalDefinitionBinding>,
     instance: Option<DocumentApprovalInstanceView>,

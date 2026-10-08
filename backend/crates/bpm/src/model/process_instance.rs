@@ -144,8 +144,14 @@ impl ApprovalProcessInstance {
 
     /// 返回克隆后的强类型实例 ID，避免调用方手写字符串克隆与重包。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回与 `base.id` 同值的 [`ApprovalProcessInstanceId`]。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn typed_id(&self) -> ApprovalProcessInstanceId {
         ApprovalProcessInstanceId::new(self.base.id.clone())
     }
@@ -201,8 +207,11 @@ impl ApprovalProcessInstance {
     /// * `execution_id` - 当前执行
     /// * `at` - 调用方时间
     ///
+    /// # 返回
+    /// 无返回值。成功时写入当前执行引用并推进乐观锁版本。
+    ///
     /// # 错误
-    /// 实例已终态时返回错误。
+    /// 实例已终态、时间无法持久化或版本溢出时返回错误。
     pub fn set_current_execution(
         &mut self,
         execution_id: ApprovalNodeExecutionId,
@@ -218,8 +227,11 @@ impl ApprovalProcessInstance {
     /// # 参数
     /// * `at` - 调用方时间
     ///
+    /// # 返回
+    /// 返回加一后的当前轮次，并清空当前执行引用。
+    ///
     /// # 错误
-    /// 当前不是运行中或轮次溢出时返回错误。
+    /// 当前不是运行中、轮次溢出、时间无法持久化或版本溢出时返回错误。
     pub fn next_round(&mut self, at: Timestamp) -> ModelResult<u32> {
         if self.status != ApprovalProcessInstanceStatus::Running {
             return Err(ModelError::InvalidStatus("只有运行中的实例可以进入下一轮"));
@@ -236,8 +248,11 @@ impl ApprovalProcessInstance {
     /// * `code` - 结构化阻塞原因
     /// * `at` - 阻塞时间
     ///
+    /// # 返回
+    /// 无返回值。成功时把状态改为受阻，并写入阻塞码与阻塞时间。
+    ///
     /// # 错误
-    /// 实例已终态时返回错误。
+    /// 实例已终态、时间无法持久化或版本溢出时返回错误。
     pub fn enter_blocked(&mut self, code: ApprovalBlockerCode, at: Timestamp) -> ModelResult<()> {
         self.ensure_not_terminal()?;
         self.status = ApprovalProcessInstanceStatus::Blocked;
@@ -253,8 +268,11 @@ impl ApprovalProcessInstance {
     /// # 参数
     /// * `at` - 调用方时间
     ///
+    /// # 返回
+    /// 无返回值。成功时恢复为运行中，并清空实例上的阻塞码与阻塞时间。
+    ///
     /// # 错误
-    /// 当前不是受阻时返回错误。
+    /// 当前不是受阻、时间无法持久化或版本溢出时返回错误。
     pub fn exit_blocked(&mut self, at: Timestamp) -> ModelResult<()> {
         if self.status != ApprovalProcessInstanceStatus::Blocked {
             return Err(ModelError::InvalidStatus("只有受阻实例可以恢复运行"));
@@ -269,8 +287,11 @@ impl ApprovalProcessInstance {
     /// # 参数
     /// * `at` - 结束时间
     ///
+    /// # 返回
+    /// 无返回值。成功时把状态改为最终通过，清空当前执行与阻塞投影，并写入结束时间。
+    ///
     /// # 错误
-    /// 实例已终态时返回错误。
+    /// 实例已终态、时间无法持久化或版本溢出时返回错误。
     pub fn complete_approved(&mut self, at: Timestamp) -> ModelResult<()> {
         self.ensure_not_terminal()?;
         self.status = ApprovalProcessInstanceStatus::Approved;
@@ -285,8 +306,11 @@ impl ApprovalProcessInstance {
     /// # 参数
     /// * `at` - 结束时间
     ///
+    /// # 返回
+    /// 无返回值。成功时把状态改为已取消，清空当前执行与阻塞投影，并写入结束时间。
+    ///
     /// # 错误
-    /// 实例已终态时返回错误。
+    /// 实例已终态、时间无法持久化或版本溢出时返回错误。
     pub fn cancel(&mut self, at: Timestamp) -> ModelResult<()> {
         self.ensure_not_terminal()?;
         self.status = ApprovalProcessInstanceStatus::Cancelled;
@@ -298,8 +322,14 @@ impl ApprovalProcessInstance {
 
     /// 校验当前实例 blocker 是否允许恢复原审批人。
     ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 当前为人员失效受阻时返回 `Ok(())`。
+    ///
     /// # 错误
-    /// 终态、非受阻或结构性阻塞时返回错误。
+    /// 终态、非受阻、缺少阻塞码，或阻塞码不允许恢复原审批人时返回 [`ModelError::InvalidStatus`]。
     pub fn ensure_assignee_recovery_allowed(&self) -> ModelResult<()> {
         self.ensure_not_terminal().map_err(|_| ModelError::InvalidStatus("终态实例不得恢复原审批人"))?;
         if self.status != ApprovalProcessInstanceStatus::Blocked {
@@ -314,6 +344,7 @@ impl ApprovalProcessInstance {
         Err(ModelError::InvalidStatus("结构性或一致性阻塞不得恢复原审批人"))
     }
 
+    /// 最终通过或已取消的实例不得再改运行字段。
     fn ensure_not_terminal(&self) -> ModelResult<()> {
         if self.status.is_terminal() {
             return Err(ModelError::InvalidStatus("终态实例不得再变更运行字段"));

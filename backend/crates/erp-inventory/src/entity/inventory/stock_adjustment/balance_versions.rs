@@ -21,7 +21,7 @@ impl<'a> StockAdjustmentBalanceVersions<'a> {
     /// 返回按余额主键索引的事实。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn new(balances: &'a [StockBalance]) -> Self {
         Self { balances: balances.iter().map(|balance| (balance.base.id.as_str(), balance)).collect() }
     }
@@ -29,8 +29,9 @@ impl<'a> StockAdjustmentBalanceVersions<'a> {
     /// 逐输入行校验重复、存在、版本及维度，再确认覆盖全部调整 SKU。
     ///
     /// # 参数
-    /// * `adjustment` / `lines` - 待提交的调整单及最终明细
-    /// * `expected` - 按原命令顺序排列的余额主键与期望版本
+    /// * `adjustment` - 待提交的调整单。
+    /// * `lines` - 最终明细。
+    /// * `expected` - 按原命令顺序排列的余额主键与期望版本。
     ///
     /// # 返回
     /// 所有版本有效且完整覆盖调整维度时成功。
@@ -71,8 +72,9 @@ impl<'a> StockAdjustmentBalanceVersions<'a> {
     /// 判断历史弱收据的余额版本是否仍精确匹配且一一覆盖调整 SKU。
     ///
     /// # 参数
-    /// * `adjustment` / `lines` - 当前调整单及已保存的明细
-    /// * `expected` - 原提交命令的余额主键与期望版本
+    /// * `adjustment` - 当前调整单。
+    /// * `lines` - 已保存的明细。
+    /// * `expected` - 原提交命令的余额主键与期望版本。
     ///
     /// # 返回
     /// 版本与维度全部匹配且每个 SKU 恰有一条余额要求时为 `true`。

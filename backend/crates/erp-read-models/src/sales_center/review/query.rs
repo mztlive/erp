@@ -47,9 +47,11 @@ impl SalesChangeReadService {
     /// 返回带范围版本的分页视图。
     ///
     /// # 错误
-    /// * `ValidationError` - 分页参数非法
+    /// * `ValidationError` - 分页参数非法，或匹配版本超过上限
     /// * `ConflictError` - 跨页范围版本缺失或已变化
     /// * `Forbidden` - 没有列表动作权限
+    /// * `Internal` - 未注入授权源
+    /// 仓储或事务失败会返回对应错误。
     ///
     /// # 关键业务约束
     /// 沿来源销售单当前负责人和业务组织接入；不得另建平行管理入口。
@@ -83,6 +85,9 @@ impl SalesChangeReadService {
     ///
     /// # 错误
     /// * `NotFound` - 变更单不存在或来源销售单不可见
+    /// * `ConflictError` - 两次读取之间数据范围或变更单已变化
+    /// * `Internal` - 未注入授权源
+    /// 仓储或事务失败会返回对应错误。
     ///
     /// # 关键业务约束
     /// 列表已授权不能作为详情凭证；沿来源销售单 detail 动作重验。

@@ -52,6 +52,9 @@ pub struct CustomerRefundAdapter {
 
 /// 返回客户退款单的完整适配器登记。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回已校验完整性的规格与显式字段声明。
 ///
@@ -99,6 +102,9 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<CustomerRefundAdapter>
 /// # 参数
 /// * `business_object_id` - 退款单主键
 ///
+/// # 返回
+/// 返回该退款单的 `SubjectRef`。
+///
 /// # 错误
 /// 主键为空或超长时返回校验错误。
 pub fn customer_refund_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
@@ -110,6 +116,12 @@ pub fn customer_refund_subject_ref(business_object_id: &str) -> Result<SubjectRe
 }
 
 /// 无已绑定定义的必须审批单据不得提交。
+///
+/// # 参数
+/// * `binding` - 已保存的定义绑定；缺失表示尚未冻结。
+///
+/// # 返回
+/// 绑定存在时返回该绑定。
 ///
 /// # 错误
 /// 绑定缺失时返回冲突。
@@ -147,6 +159,9 @@ pub struct CustomerRefundStartCommand {
 ///
 /// # 返回
 /// 返回不含定义 ID 或审批人的目标启动命令。
+///
+/// # 错误
+/// 不返回错误。
 pub fn customer_refund_start_command(
     refund_id: &str,
     subject_version: u32,
@@ -169,6 +184,9 @@ pub fn customer_refund_start_command(
 ///
 /// # 返回
 /// 返回 `START_APPROVAL`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn start_approval_command_kind(
     _command: &CustomerRefundStartCommand,
 ) -> bpm::model::types::ApprovalCommandKind {
@@ -180,6 +198,9 @@ pub fn start_approval_command_kind(
 /// # 参数
 /// * `refund` - 业务实体
 /// * `action` - 合同强类型动作
+///
+/// # 返回
+/// 成功时无返回值。过账或撤回动作已作用到 `refund`。
 ///
 /// # 错误
 /// 动作不属于本类型或状态不允许时返回错误。
@@ -240,6 +261,9 @@ pub fn customer_refund_responsible_org_id(organization_id: &str) -> Result<Strin
 /// * `responsible_org_id` - 客户往来主体
 /// * `submitted_by` - 提交人
 /// * `submitted_at` - 提交时间
+///
+/// # 返回
+/// 返回已冻结的审批主体快照。
 ///
 /// # 错误
 /// 组织为空时返回校验错误。

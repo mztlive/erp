@@ -1,4 +1,4 @@
-//! Consumer port for warehouse identity and revision display facts.
+//! 仓库身份与版本展示事实的消费端口。
 
 use std::collections::HashMap;
 
@@ -27,41 +27,50 @@ pub struct WarehouseRevisionFact {
     pub name: String,
 }
 
-/// Port inventory uses to read warehouse identity without depending on `erp-warehouse`.
+/// 库存用来读取仓库身份、且不依赖 `erp-warehouse` 的端口。
 #[async_trait]
 pub trait WarehouseFactsPort: Send + Sync {
-    /// Return whether a warehouse id exists.
+    /// 判断仓库标识是否存在。
     ///
-    /// # Parameters
-    /// * `id` - warehouse id
-    /// * `executor` - data-access executor chosen by the caller
+    /// # 参数
+    /// * `id` - 仓库标识。
+    /// * `executor` - 调用方选择的数据访问执行器。
     ///
-    /// # Errors
-    /// Adapter query failures.
+    /// # 返回
+    /// 存在时为 `true`，不存在时为 `false`。
+    ///
+    /// # 错误
+    /// 适配器查询失败时返回对应错误。
     async fn warehouse_exists(&self, id: &str, executor: &mut dyn Executor) -> Result<bool>;
 
-    /// Return warehouse facts keyed by id.
+    /// 按标识返回仓库事实。
     ///
-    /// # Parameters
-    /// * `ids` - warehouse ids
-    /// * `executor` - data-access executor chosen by the caller
+    /// # 参数
+    /// * `ids` - 仓库标识。
+    /// * `executor` - 调用方选择的数据访问执行器。
     ///
-    /// # Errors
-    /// Adapter query failures.
+    /// # 返回
+    /// 返回以仓库标识为键的事实映射。
+    ///
+    /// # 错误
+    /// 适配器查询失败时返回对应错误。
     async fn warehouses_by_ids(
         &self,
         ids: &[String],
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, WarehouseFact>>;
 
-    /// Return warehouse revision facts keyed by id.
+    /// 按标识返回仓库版本展示事实。
     ///
-    /// # Parameters
-    /// * `ids` - warehouse revision ids
-    /// * `executor` - data-access executor chosen by the caller
+    /// # 参数
+    /// * `ids` - 仓库版本标识。
+    /// * `executor` - 调用方选择的数据访问执行器。
     ///
-    /// # Errors
-    /// Adapter query failures.
+    /// # 返回
+    /// 返回以版本标识为键的展示事实映射。
+    ///
+    /// # 错误
+    /// 适配器查询失败时返回对应错误。
     async fn warehouse_revisions_by_ids(
         &self,
         ids: &[String],

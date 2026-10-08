@@ -68,7 +68,7 @@ pub enum CapabilityChangeSetRejection {
     UnexpectedExpectedVersion(String),
     /// 新能力的期望版本不为 `0`。
     NewCapabilityVersionMustBeZero(&'static str),
-    /// 新能力要求以启用状态登记。
+    /// 新能力不得以启用状态登记，必须先停用。
     NewCapabilityMustStartDisabled(&'static str),
 }
 
@@ -80,6 +80,9 @@ impl std::fmt::Display for CapabilityChangeSetRejection {
     ///
     /// # 返回
     /// 写入用户可读的拒绝说明。
+    ///
+    /// # 错误
+    /// 写入格式化目标失败时返回 `fmt::Error`。
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::EmptyOrTooMany => write!(f, "能力变更必须为1到10条"),
@@ -106,6 +109,9 @@ impl From<CapabilityChangeSetRejection> for erp_core::Error {
     ///
     /// # 返回
     /// 携带同文本的实体层错误。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn from(rejection: CapabilityChangeSetRejection) -> Self {
         Self::from(rejection.to_string())
     }
@@ -231,24 +237,42 @@ impl CapabilityChangeSet {
 
     /// 返回形态已校验变更（与输入顺序一致）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回逐条形态已校验变更的只读视图。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn changes(&self) -> &[PendingCapabilityChange] {
         &self.changes
     }
 
     /// 返回变更条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回已校验变更的数量。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn len(&self) -> usize {
         self.changes.len()
     }
 
     /// 判断变更集是否为空（构造器保证恒为 `false`）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 变更集为空时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_empty(&self) -> bool {
         self.changes.is_empty()
     }
@@ -257,24 +281,42 @@ impl CapabilityChangeSet {
 impl ClassifiedCapabilityChangeSet {
     /// 返回已分类变更（与输入顺序一致）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回逐条已分类变更的只读视图。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn changes(&self) -> &[ValidatedCapabilityChange] {
         &self.changes
     }
 
     /// 返回变更条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回已分类变更的数量。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn len(&self) -> usize {
         self.changes.len()
     }
 
     /// 判断变更集是否为空（分类器保证恒为 `false`）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 变更集为空时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_empty(&self) -> bool {
         self.changes.is_empty()
     }

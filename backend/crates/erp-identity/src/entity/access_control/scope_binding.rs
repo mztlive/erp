@@ -39,8 +39,17 @@ pub struct ScopeBinding {
 impl ScopeBinding {
     /// 校验资源动作及目标形态；适用资源和动作由服务端注册目录进一步校验。
     ///
+    /// # 参数
+    /// * `scope_type` - 同行范围类型。
+    /// * `targets` - 已保存的范围目标。
+    ///
+    /// # 返回
+    /// 版本、标识和目标形态一致时无返回值。
+    ///
     /// # 错误
-    /// 缺失资源动作、未知版本、通配符、动态非组织范围或不一致的目标设置均拒绝。
+    /// `schema_version` 不是 2、资源或动作不是注册标识、动作集合为空或超过 32 个时拒绝。
+    /// 不需要目标的类型若携带模式、下级标记或目标则拒绝。
+    /// 组织范围缺少模式、动态模式用在非内部组织、显式与动态的目标携带相反，或下级标记与模式不匹配时拒绝。
     pub fn validate(&self, scope_type: DataScopeType, targets: &[String]) -> Result<()> {
         if self.schema_version != 2
             || !identifier(&self.resource)
@@ -63,8 +72,15 @@ impl ScopeBinding {
 
     /// 判断规则是否适用于当前资源与动作。
     ///
+    /// # 参数
+    /// * `resource` - 当前业务资源。
+    /// * `action` - 当前动作。
+    ///
     /// # 返回
-    /// 停用规则和其他资源动作不贡献任何范围。
+    /// 版本为 2、规则启用、资源相同且动作在列表中时返回 `true`。停用规则和其他资源动作返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn applies(&self, resource: &str, action: &str) -> bool {
         self.schema_version == 2
             && self.enabled

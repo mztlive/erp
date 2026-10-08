@@ -1,6 +1,6 @@
 //! 域 D17 `inventory`：库存流水、余额、预占与库存调整（页面：W10 库存台账）。
 //!
-//! 实体层无跨域依赖：只引用 `entities::ids` 的 ID newtype 与 `common` 基元。
+//! 实体层无跨域依赖：标识、数量与校验来自 `erp_core`，持久化基座来自 `entity_core`。
 //! 字段字典与约束见数据模型 §6.7；公共字段归属按 §4.3 判定：
 //! - `stock_movement` 的字典含 `occurred_at`/`recorded_at` 等正式事实字段 →
 //!   组合 `FactBase`，且**不可更新或删除**（§6.7）；`stock_reservation_entry`
@@ -40,8 +40,17 @@ pub use stock_reservation::{
 
 /// 返回库存域数量零值（定点 `0`，不做字符串解析）。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回精确零数量。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # Panics
+/// `Quantity::try_from(Decimal::ZERO)` 失败时 panic。零值恒满足数量精度，正常路径不会发生。
 pub fn zero_quantity() -> Quantity {
     Quantity::try_from(rust_decimal::Decimal::ZERO).expect("Decimal::ZERO 恒满足数量精度")
 }

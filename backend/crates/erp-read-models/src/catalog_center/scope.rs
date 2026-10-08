@@ -79,6 +79,7 @@ impl CatalogCenterReadService {
         view.items.into_iter().next().ok_or_else(|| Error::NotFound("商品不存在或无权查看".into()))
     }
 
+    /// 未装配数据库时返回 `Internal`；否则在同一事务装载列表快照。
     async fn list_snapshot(&self, params: &ProductListParams, actor: &AuditActor) -> Result<ProductSnapshot> {
         let db = self.db.clone().ok_or_else(|| Error::Internal("商品中心未装配数据库".into()))?;
         let query = self.query.clone();
@@ -144,12 +145,23 @@ async fn build_snapshot(
 }
 
 /// 按维护人身份匹配展示名；缺失姓名保持空值，不将内部 ID 当作姓名。
+///
+/// # 参数
+/// * `rows` - 待补维护人姓名的商品行
+/// * `names` - 账号身份到展示名
+///
+/// # 返回
+/// 无返回值。按 `maintainer_user_id` 写入 `maintainer_user_name`；映射没有该身份时为 `None`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn apply_maintainer_names(rows: &mut [ProductView], names: &HashMap<String, String>) {
     for row in rows {
         row.maintainer_user_name = names.get(&row.maintainer_user_id).cloned();
     }
 }
 
+/// 包含下级却没有组织时返回 `ValidationError`，不得展开成全部组织。
 async fn apply_org_filter(
     filter: &mut ProductFilter,
     data_scope: &dyn CatalogDataScopePort,
@@ -173,6 +185,19 @@ async fn apply_org_filter(
 }
 
 /// 先按完整查询读取候选身份，再在候选内解析采购责任，最终列表仍按全部条件分页。
+///
+/// # 参数
+/// * `query` - 商品候选查询
+/// * `filter` - 已含范围与组织条件的商品过滤；命中后写入 `ids`
+/// * `procurement` - 采购负责人规则解析
+/// * `params` - 列表参数；`procurement_owner_user_ids` 为 `None` 时不改过滤
+/// * `executor` - 与授权相同的执行器
+///
+/// # 返回
+/// `procurement_owner_user_ids` 为 `None` 时不改 `filter`。否则把命中商品写入 `filter.ids`。
+///
+/// # 错误
+/// 候选超过 10000 时返回 `ValidationError`；候选读取或责任解析失败时返回对应错误。
 pub(super) async fn apply_procurement_filter(
     query: &dyn CatalogSupplyQueryPort,
     filter: &mut ProductFilter,

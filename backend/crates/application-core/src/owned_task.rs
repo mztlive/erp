@@ -23,7 +23,7 @@ fn map_owned_join_error(name: &'static str, error: tokio::task::JoinError) -> Er
 /// * `name` - 用于 JoinError 诊断的任务名称
 /// * `operation` - 需要独立持有的异步操作
 ///
-/// # 返回值
+/// # 返回
 /// 返回异步操作的原始结果。
 ///
 /// # 错误

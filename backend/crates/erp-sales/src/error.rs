@@ -1,8 +1,8 @@
-//! Sales-domain application errors with the original unique-index mapping.
+//! 销售领域应用错误，保留原有唯一索引冲突映射。
 
 use application_core::ErrorClass;
 
-/// Sales-domain result alias.
+/// 销售领域结果别名。
 pub type Result<T> = std::result::Result<T, Error>;
 
 impl From<application_core::Error> for Error {
@@ -71,7 +71,23 @@ pub enum Error {
 }
 
 impl Error {
-    /// Stable error class used by HTTP mapping; do not parse display text.
+    /// 返回 HTTP 映射使用的稳定错误分类；不得解析 Display 文本。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `ConflictError` 与 `SelectionConflict` 为 `Conflict`。
+    /// `BusinessLogicError`、`ValidationError`、`NotFound`、`SelectionEnded`、
+    /// `SelectionLimitExceeded` 与 `SelectionPrepareFailed` 为 `BusinessRule`。
+    /// `Forbidden` 与 `Unauthenticated` 为 `Forbidden`。
+    /// `Internal`、`Logic` 与 `SelectionPendingCheck` 为 `Internal`。
+    /// `RepositoryError`、`ReceiptDuplicate`、`TransientTransaction` 与
+    /// `OutcomeUnknown` 按其持久化源错误分类：唯一键、乐观锁和瞬态事务冲突为
+    /// `Conflict`，其余为 `Internal`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn class(&self) -> ErrorClass {
         match self {
             Self::Internal(_) | Self::Logic(_) => ErrorClass::Internal,
@@ -99,6 +115,9 @@ impl Error {
     ///
     /// # 返回
     /// 返回选品冲突错误。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn selection_conflict(message: impl Into<String>) -> Self {
         Self::SelectionConflict(message.into())
     }
@@ -110,6 +129,9 @@ impl Error {
     ///
     /// # 返回
     /// 返回选品结束错误。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn selection_ended(message: impl Into<String>) -> Self {
         Self::SelectionEnded(message.into())
     }
@@ -121,6 +143,9 @@ impl Error {
     ///
     /// # 返回
     /// 返回选品超限错误。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn selection_limit(message: impl Into<String>) -> Self {
         Self::SelectionLimitExceeded(message.into())
     }
@@ -132,6 +157,9 @@ impl Error {
     ///
     /// # 返回
     /// 返回准备失败错误。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn selection_prepare_failed(message: impl Into<String>) -> Self {
         Self::SelectionPrepareFailed(message.into())
     }
@@ -143,6 +171,9 @@ impl Error {
     ///
     /// # 返回
     /// 返回待核对错误。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn selection_pending(message: impl Into<String>) -> Self {
         Self::SelectionPendingCheck(message.into())
     }

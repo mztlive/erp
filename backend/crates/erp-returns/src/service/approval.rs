@@ -11,6 +11,15 @@ use crate::{Error, Result};
 /// 仅“非审批中即拒绝”的最终守卫收敛到 [`ensure_in_approval`]。
 pub(crate) trait FinalPostingGuard {
     /// 是否处于可进入最终通过过账的审批中状态。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 审批中返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn is_in_approval(&self) -> bool;
 }
 
@@ -65,7 +74,7 @@ pub(crate) fn ensure_in_approval(document: &impl FinalPostingGuard, document_lab
 /// 返回冻结后的提交版本。
 ///
 /// # 错误
-/// 非草稿或版本溢出时返回冲突。
+/// 非草稿或审批版本溢出时返回 `Logic`。
 pub fn start_customer_refund_approval(refund: &mut CustomerRefund) -> Result<u32> {
     Ok(refund.start_approval()?)
 }
@@ -73,18 +82,27 @@ pub fn start_customer_refund_approval(refund: &mut CustomerRefund) -> Result<u32
 /// 撤回审批：回到草稿，且 `subject_version` 不回退。
 ///
 /// # 参数
-/// * `refund` - 审批中的退款单
+/// * `refund` - 审批中的退款单。
+///
+/// # 返回
+/// 成功时单据回到草稿，审批版本不回退。
 ///
 /// # 错误
-/// 非审批中时返回冲突。
+/// 非审批中时返回 `Logic`。
 pub fn cancel_customer_refund_to_draft(refund: &mut CustomerRefund) -> Result<()> {
     Ok(refund.cancel_approval()?)
 }
 
 /// 最终通过过账前置：仅 `IN_APPROVAL` 可进入过账。
 ///
+/// # 参数
+/// * `refund` - 待过账单据。
+///
+/// # 返回
+/// 单据处于审批中时返回成功。
+///
 /// # 错误
-/// 状态不是审批中时返回冲突。
+/// 非审批中时返回 `ConflictError`。
 pub fn ensure_final_approve_posting(refund: &CustomerRefund) -> Result<()> {
     ensure_in_approval(refund, "客户退款单")
 }
@@ -98,7 +116,7 @@ pub fn ensure_final_approve_posting(refund: &CustomerRefund) -> Result<()> {
 /// 返回冻结后的提交版本。
 ///
 /// # 错误
-/// 非草稿或版本溢出时返回冲突。
+/// 非草稿或审批版本溢出时返回 `Logic`。
 pub fn start_supplier_refund_approval(refund: &mut SupplierRefund) -> Result<u32> {
     Ok(refund.start_approval()?)
 }
@@ -106,18 +124,27 @@ pub fn start_supplier_refund_approval(refund: &mut SupplierRefund) -> Result<u32
 /// 撤回审批：回到草稿，且 `subject_version` 不回退。
 ///
 /// # 参数
-/// * `refund` - 审批中的退款单
+/// * `refund` - 审批中的退款单。
+///
+/// # 返回
+/// 成功时单据回到草稿，审批版本不回退。
 ///
 /// # 错误
-/// 非审批中时返回冲突。
+/// 非审批中时返回 `Logic`。
 pub fn cancel_supplier_refund_to_draft(refund: &mut SupplierRefund) -> Result<()> {
     Ok(refund.cancel_approval()?)
 }
 
 /// 最终通过过账前置：仅 `IN_APPROVAL` 可进入过账。
 ///
+/// # 参数
+/// * `refund` - 待过账单据。
+///
+/// # 返回
+/// 单据处于审批中时返回成功。
+///
 /// # 错误
-/// 状态不是审批中时返回冲突。
+/// 非审批中时返回 `ConflictError`。
 pub fn ensure_supplier_refund_final_approve_posting(refund: &SupplierRefund) -> Result<()> {
     ensure_in_approval(refund, "供应商退款单")
 }
@@ -131,7 +158,7 @@ pub fn ensure_supplier_refund_final_approve_posting(refund: &SupplierRefund) -> 
 /// 返回冻结后的提交版本。
 ///
 /// # 错误
-/// 非草稿或版本溢出时返回冲突。
+/// 非草稿或审批版本溢出时返回 `Logic`。
 pub fn start_receipt_reversal_approval(reversal: &mut ReceiptReversal) -> Result<u32> {
     Ok(reversal.start_approval()?)
 }
@@ -139,18 +166,27 @@ pub fn start_receipt_reversal_approval(reversal: &mut ReceiptReversal) -> Result
 /// 撤回审批：回到草稿，且 `subject_version` 不回退。
 ///
 /// # 参数
-/// * `reversal` - 审批中的冲正单
+/// * `reversal` - 审批中的冲正单。
+///
+/// # 返回
+/// 成功时单据回到草稿，审批版本不回退。
 ///
 /// # 错误
-/// 非审批中时返回冲突。
+/// 非审批中时返回 `Logic`。
 pub fn cancel_receipt_reversal_to_draft(reversal: &mut ReceiptReversal) -> Result<()> {
     Ok(reversal.cancel_approval()?)
 }
 
 /// 最终通过过账前置：仅 `IN_APPROVAL` 可进入过账。
 ///
+/// # 参数
+/// * `reversal` - 待过账单据。
+///
+/// # 返回
+/// 单据处于审批中时返回成功。
+///
 /// # 错误
-/// 状态不是审批中时返回冲突。
+/// 非审批中时返回 `ConflictError`。
 pub fn ensure_receipt_reversal_final_approve_posting(reversal: &ReceiptReversal) -> Result<()> {
     ensure_in_approval(reversal, "回款冲正单")
 }
@@ -164,7 +200,7 @@ pub fn ensure_receipt_reversal_final_approve_posting(reversal: &ReceiptReversal)
 /// 返回冻结后的提交版本。
 ///
 /// # 错误
-/// 非草稿或版本溢出时返回冲突。
+/// 非草稿或审批版本溢出时返回 `Logic`。
 pub fn start_payment_reversal_approval(reversal: &mut PaymentReversal) -> Result<u32> {
     Ok(reversal.start_approval()?)
 }
@@ -172,18 +208,27 @@ pub fn start_payment_reversal_approval(reversal: &mut PaymentReversal) -> Result
 /// 撤回审批：回到草稿，且 `subject_version` 不回退。
 ///
 /// # 参数
-/// * `reversal` - 审批中的冲正单
+/// * `reversal` - 审批中的冲正单。
+///
+/// # 返回
+/// 成功时单据回到草稿，审批版本不回退。
 ///
 /// # 错误
-/// 非审批中时返回冲突。
+/// 非审批中时返回 `Logic`。
 pub fn cancel_payment_reversal_to_draft(reversal: &mut PaymentReversal) -> Result<()> {
     Ok(reversal.cancel_approval()?)
 }
 
 /// 最终通过过账前置：仅 `IN_APPROVAL` 可进入过账。
 ///
+/// # 参数
+/// * `reversal` - 待过账单据。
+///
+/// # 返回
+/// 单据处于审批中时返回成功。
+///
 /// # 错误
-/// 状态不是审批中时返回冲突。
+/// 非审批中时返回 `ConflictError`。
 pub fn ensure_payment_reversal_final_approve_posting(reversal: &PaymentReversal) -> Result<()> {
     ensure_in_approval(reversal, "付款冲正单")
 }

@@ -251,6 +251,18 @@ impl FailClosedPurchaseDataScopePort {
 
 #[async_trait]
 impl PurchaseDataScopePort for FailClosedPurchaseDataScopePort {
+    /// 未接线时拒绝解析采购范围。
+    ///
+    /// # 参数
+    /// * `_actor` - 已认证身份；本实现不读取。
+    /// * `_action` - 采购动作；本实现不读取。
+    /// * `_executor` - 调用方执行器；本实现不读取。
+    ///
+    /// # 返回
+    /// 不返回范围事实。
+    ///
+    /// # 错误
+    /// 始终返回 `Error::Internal`，文案为采购范围端口未接线。
     async fn resolve(
         &self,
         _actor: &AuditActor,
@@ -260,6 +272,19 @@ impl PurchaseDataScopePort for FailClosedPurchaseDataScopePort {
         Err(unwired())
     }
 
+    /// 未接线时拒绝按额外权限解析采购范围。
+    ///
+    /// # 参数
+    /// * `_actor` - 已认证身份；本实现不读取。
+    /// * `_action` - 采购动作；本实现不读取。
+    /// * `_permissions` - 额外权限码；本实现不读取。
+    /// * `_executor` - 调用方执行器；本实现不读取。
+    ///
+    /// # 返回
+    /// 不返回范围事实。
+    ///
+    /// # 错误
+    /// 始终返回 `Error::Internal`，文案为采购范围端口未接线。
     async fn resolve_permissions(
         &self,
         _actor: &AuditActor,
@@ -270,6 +295,18 @@ impl PurchaseDataScopePort for FailClosedPurchaseDataScopePort {
         Err(unwired())
     }
 
+    /// 未接线时拒绝展开组织。
+    ///
+    /// # 参数
+    /// * `_org_unit_ids` - 请求中的组织 ID；本实现不读取。
+    /// * `_include_descendants` - 是否包含下级；本实现不读取。
+    /// * `_executor` - 调用方执行器；本实现不读取。
+    ///
+    /// # 返回
+    /// 不返回组织 ID。
+    ///
+    /// # 错误
+    /// 始终返回 `Error::Internal`，文案为采购范围端口未接线。
     async fn expand_org_units(
         &self,
         _org_unit_ids: &[String],
@@ -279,6 +316,18 @@ impl PurchaseDataScopePort for FailClosedPurchaseDataScopePort {
         Err(unwired())
     }
 
+    /// 未接线时拒绝读取组织成员。
+    ///
+    /// # 参数
+    /// * `_org_unit_ids` - 已展开的内部组织；本实现不读取。
+    /// * `_at` - 解析时点；本实现不读取。
+    /// * `_executor` - 调用方执行器；本实现不读取。
+    ///
+    /// # 返回
+    /// 不返回人员 ID。
+    ///
+    /// # 错误
+    /// 始终返回 `Error::Internal`，文案为采购范围端口未接线。
     async fn org_member_ids(
         &self,
         _org_unit_ids: &BTreeSet<String>,
@@ -288,6 +337,18 @@ impl PurchaseDataScopePort for FailClosedPurchaseDataScopePort {
         Err(unwired())
     }
 
+    /// 未接线时拒绝查询主属组织。
+    ///
+    /// # 参数
+    /// * `_user_id` - 当前账号；本实现不读取。
+    /// * `_at` - 解析时点；本实现不读取。
+    /// * `_executor` - 调用方执行器；本实现不读取。
+    ///
+    /// # 返回
+    /// 不返回组织 ID。
+    ///
+    /// # 错误
+    /// 始终返回 `Error::Internal`，文案为采购范围端口未接线。
     async fn own_org(
         &self,
         _user_id: &str,

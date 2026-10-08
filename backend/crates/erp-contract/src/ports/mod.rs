@@ -1,4 +1,4 @@
-//! Consumer ports for customer, identity, attachment and audit facts.
+//! 客户、身份、附件与审计事实的消费方端口。
 
 mod audit;
 mod company;

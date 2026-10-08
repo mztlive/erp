@@ -18,7 +18,7 @@ pub trait SupplyCommandReceiptExt {
     /// # 返回
     /// 返回绑定当前数据库的仓储。
     /// # 错误
-    /// 无；数据库读取、写入时传播错误。
+    /// 不返回错误。
     fn supply_command_receipts(&self) -> Repository<'_, SupplyCommandReceipt>;
 }
 

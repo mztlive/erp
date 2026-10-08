@@ -20,14 +20,21 @@ pub enum CalendarPeriod {
 impl CalendarPeriod {
     /// 计算日期所属自然周期的最后一天。
     ///
-    /// # Errors
-    /// 日期计算超出支持范围时返回错误。
+    /// # 参数
+    /// * `date` - 周期内的业务日期。
+    ///
+    /// # 返回
+    /// 返回该自然周期的最后一天。周从周一开始；月、季度、半年和年按自然历，季度与半年从 1 月起算。
+    ///
+    /// # 错误
+    /// 日期运算超出 `NaiveDate` 可表示范围时返回 `Error::LogicError`，文案为「自然周期日期超出支持范围」。
     pub fn end(self, date: BusinessDate) -> Result<BusinessDate> {
         let date = date.as_naive_date();
         let end = self.end_date(date).ok_or("自然周期日期超出支持范围")?;
         Ok(BusinessDate::from_naive_date(end))
     }
 
+    /// 所属自然周期的最后一天；日历运算溢出时返回 `None`。
     fn end_date(self, date: NaiveDate) -> Option<NaiveDate> {
         match self {
             Self::Week => {

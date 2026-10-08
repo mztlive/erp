@@ -12,13 +12,16 @@ impl FundsAccess {
     ///
     /// # 参数
     /// * `actor` - 已认证调用人。
-    /// * `resource` / `id` - 实际财务来源类型与主键。
-    /// * `purchase_access` - 采购方向访问器。
+    /// * `resource` - 财务来源类型。
+    /// * `id` - 来源主键。
+    /// * `purchase_access` - 采购方向访问器；采购类来源缺少它时直接失败。
     /// * `executor` - 调用方事务，不另开事务。
+    ///
     /// # 返回
-    /// 完整来源可读返回 true；不可见与不存在返回 false。
+    /// 完整来源可读返回 true；详情结果为 `NotFound` 或 `Forbidden` 时返回 false。
+    ///
     /// # 错误
-    /// 持久化失败、授权漂移或不支持的来源类型返回错误。
+    /// 不支持的来源类型返回校验错误；采购方向缺少访问器返回 `Forbidden`；其余读取或授权解析失败原样返回。本函数不检查范围版本。
     pub async fn source_document_readable(
         &self,
         actor: &AuditActor,

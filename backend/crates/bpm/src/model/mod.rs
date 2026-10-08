@@ -125,6 +125,19 @@ impl ProcessKind {
         (Self::PurchaseReturnOrder, "purchase_return_order"),
     ];
 
+    /// 返回已冻结的稳定代码。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回种类表中对应的非空稳定代码，长度不超过 [`Self::MAX_LEN`]。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    ///
+    /// # Panics
+    /// 种类表漏登记当前变体时 panic。表与枚举变体一一对应，漏登记属于编程错误。
     pub fn as_str(self) -> &'static str {
         Self::TABLE.iter().find(|(kind, _)| *kind == self).map(|(_, code)| *code).expect("种类表覆盖全部变体")
     }
@@ -178,16 +191,28 @@ impl SubjectRef {
 
     /// 返回对象种类。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回构造时写入的稳定种类。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn subject_kind(&self) -> &str {
         &self.subject_kind
     }
 
     /// 返回对象主键。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回构造时写入的稳定标识。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn subject_id(&self) -> &str {
         &self.subject_id
     }
@@ -195,6 +220,15 @@ impl SubjectRef {
 
 impl<'de> Deserialize<'de> for SubjectRef {
     /// 反序列化后走 [`SubjectRef::new`]，空值与超长字段不得绕过构造校验。
+    ///
+    /// # 参数
+    /// * `deserializer` - 含 `subject_kind` 与 `subject_id` 的反序列化器
+    ///
+    /// # 返回
+    /// 两个字段经构造校验通过后返回引用。
+    ///
+    /// # 错误
+    /// 缺字段、类型不符，或构造拒绝空值与超长时返回反序列化错误。
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
         #[derive(Deserialize)]
         struct RawSubjectRef {
@@ -235,8 +269,14 @@ impl ParticipantId {
 
     /// 返回不透明处理人标识。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回构造时写入的字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -244,6 +284,15 @@ impl ParticipantId {
 
 impl<'de> Deserialize<'de> for ParticipantId {
     /// 反序列化后走 [`ParticipantId::new`]，空值与超长标识不得绕过构造校验。
+    ///
+    /// # 参数
+    /// * `deserializer` - 处理人标识字符串的反序列化器
+    ///
+    /// # 返回
+    /// 标识经构造校验通过后返回引用。
+    ///
+    /// # 错误
+    /// 类型不符，或构造拒绝空值与超长时返回反序列化错误。
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
         let value = String::deserialize(deserializer)?;
         Self::new(value).map_err(serde::de::Error::custom)
@@ -262,6 +311,9 @@ impl Timestamp {
     ///
     /// # 返回
     /// 返回 BPM 时间值对象。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn from_utc(value: DateTime<Utc>) -> Self {
         Self(value)
     }
@@ -284,20 +336,46 @@ impl Timestamp {
 
     /// 返回 UTC 秒级时间戳。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回秒级整数。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn unix_secs(self) -> i64 {
         self.0.timestamp()
     }
 }
 
 impl Serialize for Timestamp {
+    /// 把时间戳写成 UTC 秒。
+    ///
+    /// # 参数
+    /// * `serializer` - 调用方提供的序列化器
+    ///
+    /// # 返回
+    /// 成功时返回序列化器的完成值。
+    ///
+    /// # 错误
+    /// 序列化器拒绝 `i64` 时返回其错误。本方法不再校验时间范围。
     fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
         serializer.serialize_i64(self.unix_secs())
     }
 }
 
 impl<'de> Deserialize<'de> for Timestamp {
+    /// 从 UTC 秒还原时间戳，超出可表示范围时失败。
+    ///
+    /// # 参数
+    /// * `deserializer` - UTC 秒的反序列化器
+    ///
+    /// # 返回
+    /// 秒数可表示时返回 [`Timestamp`]。
+    ///
+    /// # 错误
+    /// 类型不符或超出 `chrono` 可表示范围时返回反序列化错误。
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
         let unix_secs = i64::deserialize(deserializer)?;
         Self::from_unix_secs(unix_secs).map_err(serde::de::Error::custom)

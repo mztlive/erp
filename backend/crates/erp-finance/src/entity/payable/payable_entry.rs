@@ -35,8 +35,14 @@ pub enum PayableEntryType {
 impl PayableEntryType {
     /// 返回类型的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Original => "原始应付",
@@ -49,8 +55,14 @@ impl PayableEntryType {
 
     /// 返回类型的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Original => "original",
@@ -75,8 +87,14 @@ pub enum EntryDirection {
 impl EntryDirection {
     /// 返回方向的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Increase => "增加",
@@ -86,8 +104,14 @@ impl EntryDirection {
 
     /// 返回方向的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Increase => "increase",
@@ -221,6 +245,9 @@ impl PayableEntry {
     ///
     /// # 返回
     /// 恒返回错误。
+    ///
+    /// # 错误
+    /// 任何调用都返回错误：正式事实过账后不可更新，纠错须追加反向分录。
     pub fn update(&mut self, update: PayableEntryData, updated_by: impl Into<String>) -> Result<()> {
         let _ = (update, updated_by);
         Err(Error::from("正式事实过账后不可更新，纠错请追加反向分录"))

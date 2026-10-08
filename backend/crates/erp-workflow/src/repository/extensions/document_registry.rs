@@ -32,26 +32,50 @@ pub trait DocumentRegistryExt {
 
     /// 获取 `business_document` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `BusinessDocumentRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn business_documents(&self) -> BusinessDocumentRepository<'_>;
 
     /// 获取 `document_relation` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `DocumentRelationRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn document_relations(&self) -> DocumentRelationRepository<'_>;
 
     /// 获取 `document_participant` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `DocumentParticipantRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn document_participants(&self) -> DocumentParticipantRepository<'_>;
 
     /// 获取 `workflow_action` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `WorkflowActionRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn workflow_actions(&self) -> WorkflowActionRepository<'_>;
 }
 

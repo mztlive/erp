@@ -15,6 +15,18 @@ pub trait QualificationPort: Send + Sync {
         + From<validator::ValidationErrors>
         + Send;
     /// 在调用方执行器上校验SKU及供应商当前能力；不创建事务。
+    ///
+    /// # 参数
+    /// * `supplier_id` - 供应商账号。
+    /// * `sku_id` - 公司 SKU。
+    /// * `on_date` - 校验所用业务日。
+    /// * `executor` - 调用方执行器，本方法不创建事务。
+    ///
+    /// # 返回
+    /// 当前能力满足时成功。
+    ///
+    /// # 错误
+    /// 校验未通过或沿 `executor` 读取失败时返回 `Self::Error`。
     async fn ensure_qualified(
         &self,
         supplier_id: &SupplierAccountId,

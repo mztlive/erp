@@ -1,4 +1,4 @@
-//! Minimal sales snapshot fields combined with finance facts for receivable decisions.
+//! 应收决策所需的最小销售快照字段与财务事实。
 
 use crate::entity::receivable::{
     CustomerReceipt, Invoice, ReceiptAllocation, ReceivableEntry, SalesInvoiceAllocation,

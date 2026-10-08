@@ -83,8 +83,11 @@ impl PurchaseOrderService {
     }
     /// 客户端直接生效失败关闭。最终动作只能由审批运行时调用。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 恒返回冲突。
+    /// 无成功返回值。
     ///
     /// # 错误
     /// 恒返回 `ConflictError`。
@@ -108,10 +111,29 @@ pub struct EffectiveChangeWrite {
 }
 impl EffectiveChangeWrite {
     /// 标记变更已生效；调用方保持原审计构造之后、来源销售 guard 之前的时点。
+    ///
+    /// # 参数
+    /// * `actor_id` - 最终通过执行人
+    ///
+    /// # 返回
+    /// 变更单进入生效并记下新版本后无返回值。
+    ///
+    /// # 错误
+    /// 变更单不是审批中时，实体错误经 `?` 变为 `Logic`。
     pub fn mark_effective(&mut self, actor_id: &str) -> Result<()> {
         Ok(self.change.apply_effective(self.revision.base.id.clone().into(), actor_id)?)
     }
     /// 写本次正式版本和版本行，不改变其他域或开启事务。
+    ///
+    /// # 参数
+    /// * `db` - 采购数据库
+    /// * `executor` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 版本和版本行写入成功时无返回值。
+    ///
+    /// # 错误
+    /// 仓储插入失败时返回对应错误。
     pub async fn persist_revision(&self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         Ok(db
             .purchase_order()
@@ -119,6 +141,17 @@ impl EffectiveChangeWrite {
             .await?)
     }
     /// 原分配持久化成功后切当前版本并 CAS 更新采购单。
+    ///
+    /// # 参数
+    /// * `db` - 采购数据库
+    /// * `actor_id` - 最终通过执行人
+    /// * `executor` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 当前版本指针更新并 CAS 成功时无返回值。
+    ///
+    /// # 错误
+    /// 采购单状态不允许应用变更时返回 `Logic`；版本冲突或其他仓储失败时返回对应错误。
     pub async fn persist_current_order(
         &mut self,
         db: &Database,
@@ -130,6 +163,16 @@ impl EffectiveChangeWrite {
         Ok(())
     }
     /// 原财务差额写入成功后通过冻结提交并 CAS 更新。
+    ///
+    /// # 参数
+    /// * `db` - 采购数据库
+    /// * `executor` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 提交改为已通过并 CAS 成功时无返回值。
+    ///
+    /// # 错误
+    /// 提交不是待审核时返回 `Logic`；仓储更新失败时返回对应错误。
     pub async fn persist_approved_submission(
         &mut self,
         db: &Database,
@@ -140,6 +183,16 @@ impl EffectiveChangeWrite {
         Ok(())
     }
     /// 写已生效变更状态，不生成审计或产生财务副作用。
+    ///
+    /// # 参数
+    /// * `db` - 采购数据库
+    /// * `executor` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 变更单 CAS 成功时无返回值。
+    ///
+    /// # 错误
+    /// 仓储更新失败时返回对应错误。
     pub async fn persist_change(&mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         Ok(db.purchase_change_orders().update(&mut self.change, executor).await?)
     }

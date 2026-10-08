@@ -23,6 +23,15 @@ pub(super) struct OrderResult {
 }
 impl OrderResult {
     /// 把实际金额与完整性证据同时投影，完整性由全行实际供货成本和履约完成决定。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 无返回值；写入覆盖状态与汇总金额。完整时写入利润，否则利润为空。
+    ///
+    /// # 错误
+    /// 成本已完整且盈亏金额超出范围时返回错误。
     pub fn finish(&mut self) -> Result<()> {
         let complete = self.row.coverage_blockers.is_empty();
         self.row.coverage_state = if complete {
@@ -43,15 +52,44 @@ impl OrderResult {
     }
 }
 /// 金额严格累计；异常大金额整体失败。
+///
+/// # 参数
+/// * `target` - 被累加的金额。
+/// * `amount` - 本次增加额。
+///
+/// # 返回
+/// 无返回值；成功时 `target` 已加上 `amount`。
+///
+/// # 错误
+/// 累加超出范围时返回 `ValidationError`。
 pub(super) fn add(target: &mut Decimal, amount: Decimal) -> Result<()> {
     *target = target.checked_add(amount).ok_or_else(|| Error::ValidationError("统计金额超出范围".into()))?;
     Ok(())
 }
 /// 金额保留分，财务值已由正式行完成舍入。
+///
+/// # 参数
+/// * `value` - 已按分舍入的金额。
+///
+/// # 返回
+/// 返回保留两位小数的字符串。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn money(value: Decimal) -> String {
     format!("{value:.2}")
 }
 /// 比率按百分数展示，零分母不伪造比率。
+///
+/// # 参数
+/// * `numerator` - 分子。
+/// * `denominator` - 分母。
+///
+/// # 返回
+/// 返回百分数字符串；分母不大于零或乘除超出范围时返回 `None`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn percent(numerator: Decimal, denominator: Decimal) -> Option<String> {
     if denominator <= Decimal::ZERO {
         return None;
@@ -62,6 +100,18 @@ pub(super) fn percent(numerator: Decimal, denominator: Decimal) -> Option<String
         .map(|n| format!("{n:.2}%"))
 }
 /// 汇总字段只承载服务端计算结果，零收入利润仍可存在但利润率不可用。
+///
+/// # 参数
+/// * `revenue` - 不含税收入。
+/// * `costs` - 已归集成本。
+/// * `profit` - 完整覆盖时的利润；不完整时为 `None`。
+/// * `profit_revenue` - 计算利润率的收入分母。
+///
+/// # 返回
+/// 返回汇总字段；利润缺失或收入不大于零时不给出利润率。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn totals(
     revenue: Decimal,
     costs: &ProfitLossAmounts,
@@ -167,6 +217,17 @@ fn order_row(
         .with_drilldown(None, if drill { vec!["cost_entry".into()] } else { vec![] }, vec![])
 }
 /// 按订单和版本索引归集，数据库读取次数及内存遍历不随单据数平方增长。
+///
+/// # 参数
+/// * `source` - 同一快照中的销售与成本事实。
+/// * `as_of` - 查询时点的 UTC 秒；更晚发生的成本不计入。
+/// * `drill` - 为真时行上保留成本下钻动作。
+///
+/// # 返回
+/// 返回每张授权销售单的经营结果。
+///
+/// # 错误
+/// 正式版本缺失或不属于该单、表头与明细收入不一致、缺少生效日期、金额超出范围，或覆盖与利润计算失败时返回对应错误。
 pub(super) fn calculate(source: &Sources, as_of: i64, drill: bool) -> Result<Vec<OrderResult>> {
     let sales = SalesIndex::new(source);
     let entries: HashMap<_, _> = source.entries.iter().map(|e| (e.base.id.as_str(), e)).collect();

@@ -45,14 +45,32 @@ status_display!(PurchaseOrderStatus, {
 impl PurchaseOrderStatus {
     /// 判断当前状态是否允许发起采购变更。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 已生效或部分执行时返回 `true`，其余状态返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn allows_change(self) -> bool {
         matches!(self, Self::Effective | Self::PartiallyExecuted)
     }
 }
 
 impl DocumentState for PurchaseOrderStatus {
+    /// 草稿可进入审批或作废；审批中可生效或撤回到草稿；已生效只能部分执行，部分执行只能完成。旧财务审核与终态没有后继。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Draft` 返回 `InApproval` 与 `Voided`；`InApproval` 返回 `Effective` 与 `Draft`；
+    /// `Effective` 返回 `PartiallyExecuted`；`PartiallyExecuted` 返回 `Completed`；
+    /// `PendingFinanceReview`、`Completed` 与 `Voided` 返回空切片。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft => &[Self::InApproval, Self::Voided],

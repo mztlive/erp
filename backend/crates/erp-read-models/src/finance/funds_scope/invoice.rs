@@ -27,11 +27,13 @@ use crate::{Error, Result};
 /// 销项发票分配实体转响应视图；与发票查询服务保持同一字段口径。
 ///
 /// # 参数
-/// 原销项分配实体。
+/// * `item` - 销项分配实体。
+///
 /// # 返回
 /// 原分配动作、引用和金额字段的响应视图。
+///
 /// # 错误
-/// 无。
+/// 不返回错误。
 pub(super) fn sales_invoice_allocation_view(item: &SalesInvoiceAllocation) -> SalesInvoiceAllocationView {
     SalesInvoiceAllocationView {
         id: item.base.id.clone(),
@@ -49,9 +51,13 @@ impl FundsAccess {
     /// 分页查询发票范围行：销项按负责销售，登记经办人与组织分别查询。
     ///
     /// # 参数
-    /// 请求参数、当前调用人和采购范围服务。
+    /// * `params` - 发票列表请求。
+    /// * `actor` - 已认证操作人。
+    /// * `purchase_access` - 采购访问器。
+    ///
     /// # 返回
     /// 最终授权份额的分页响应与汇总。
+    ///
     /// # 错误
     /// 参数、范围版本、授权、持久化或查询上限检查失败时拒绝。
     pub async fn invoice_list_scoped(
@@ -72,11 +78,15 @@ impl FundsAccess {
     /// 独立详情重新解析发票详情动作；不可见与不存在统一为 NotFound。
     ///
     /// # 参数
-    /// 发票主键、当前调用人和采购范围服务。
+    /// * `id` - 发票主键。
+    /// * `actor` - 已认证操作人。
+    /// * `purchase_access` - 采购访问器。
+    ///
     /// # 返回
     /// 当前授权资格裁剪的发票详情。
+    ///
     /// # 错误
-    /// 不可见或不存在返回 NotFound；其他读取错误原样传播。
+    /// 不可见或不存在返回 `NotFound`；其他读取错误原样传播。
     pub async fn invoice_detail_scoped(
         &self,
         id: &str,
@@ -101,11 +111,17 @@ impl FundsAccess {
     /// 返回前重读授权及候选事实版本；变化时拒绝交付原结果。
     ///
     /// # 参数
-    /// 请求与规范化查询、调用人、采购范围服务和预期版本。
+    /// * `params` - 原始列表请求。
+    /// * `query` - 已规范化的列表查询。
+    /// * `actor` - 已认证操作人。
+    /// * `purchase_access` - 采购访问器。
+    /// * `expected` - 调用方回传的范围版本；首页可为 `None`。
+    ///
     /// # 返回
     /// 独立轻量完整复核通过后的首拍页面。
+    ///
     /// # 错误
-    /// 首拍预期版本或二拍完整范围版本不一致时拒绝。
+    /// 首拍预期版本或二拍完整范围版本不一致时拒绝；授权或读取失败时返回对应错误。
     pub(super) async fn checked_invoices(
         &self,
         params: &InvoiceListParams,
@@ -125,9 +141,14 @@ impl FundsAccess {
     /// 身份和业务事实均使用调用方同一事务，不缓存权限解析结果。
     ///
     /// # 参数
-    /// 请求与规范化查询、调用人和采购范围服务。
+    /// * `params` - 原始列表请求。
+    /// * `query` - 已规范化的列表查询。
+    /// * `actor` - 已认证操作人。
+    /// * `purchase_access` - 采购访问器。
+    ///
     /// # 返回
     /// 同事务内形成的最终授权发票页面。
+    ///
     /// # 错误
     /// 授权解析、持久化或汇总读取失败时拒绝。
     pub(super) async fn snapshot_invoices(
@@ -158,9 +179,15 @@ impl FundsAccess {
     /// 数据库先形成最终授权份额，再查询页面、总数、完整版本与金额流。
     ///
     /// # 参数
-    /// 请求与规范化查询、调用人、采购范围服务和原快照执行器。
+    /// * `params` - 原始列表请求，用于比对范围版本。
+    /// * `query` - 已规范化的列表查询。
+    /// * `actor` - 已认证操作人。
+    /// * `purchase_access` - 采购访问器。
+    /// * `executor` - 调用方事务。
+    ///
     /// # 返回
-    /// 数据库分页、同口径计数及授权份额汇总。
+    /// 数据库分页、同口径计数及授权份额汇总；无可见范围时返回空页。
+    ///
     /// # 错误
     /// 读取、解码、范围版本或查询上限检查失败时拒绝。
     pub(super) async fn load_invoices(
@@ -275,9 +302,13 @@ impl FundsAccess {
     /// 发票双方向关联事实一次取回；缺失订单保留未分配归属。
     ///
     /// # 参数
-    /// 两方向分配关联集合和原执行器。
+    /// * `sales_links` - 销项分配关联。
+    /// * `purchase_links` - 进项分配关联。
+    /// * `executor` - 调用方事务。
+    ///
     /// # 返回
     /// 当前销售与采购或结算来源责任事实。
+    ///
     /// # 错误
     /// 持久化读取失败时返回错误。
     pub(super) async fn invoice_fact_maps(
@@ -298,9 +329,12 @@ impl FundsAccess {
     /// 发票关联筛选条件：销售负责人、采购负责人、登记经办人与组织分别精确匹配。
     ///
     /// # 参数
-    /// 规范化查询和原执行器。
+    /// * `query` - 已规范化的发票列表查询。
+    /// * `executor` - 调用方事务。
+    ///
     /// # 返回
     /// 负责人、登记人及展开组织的精确筛选条件。
+    ///
     /// # 错误
     /// 组织展开读取失败时返回错误。
     pub(super) async fn invoice_condition(
@@ -332,11 +366,18 @@ impl FundsAccess {
     /// 单行金额裁剪；整单金额与完整分配仅整单资格返回，否则为 null。
     ///
     /// # 参数
-    /// 票面、实际分配、匹配来源集合及整票资格。
+    /// * `row` - 发票行。
+    /// * `sales` - 销项分配关联。
+    /// * `purchase` - 进项分配关联。
+    /// * `sales_matched` - 获授权销售来源。
+    /// * `purchase_matched` - 获授权采购或结算来源。
+    /// * `whole` - 是否返回整票金额与全部分配。
+    ///
     /// # 返回
-    /// 按授权份额裁剪的原发票行视图。
+    /// 按授权份额裁剪的发票行；部分授权时整票金额为 `None`。
+    ///
     /// # 错误
-    /// 无；金额越界保留原金额类型行为。
+    /// 不返回错误。
     pub(super) fn cut_invoice_row(
         &self,
         row: &InvoiceRow,
@@ -392,11 +433,16 @@ impl FundsAccess {
     /// 发票详情同一事务内解析、取数与裁剪；版本绑定关联单据。
     ///
     /// # 参数
-    /// 发票主键、调用人、采购范围服务和原执行器。
+    /// * `id` - 发票主键。
+    /// * `actor` - 已认证操作人。
+    /// * `purchase_access` - 采购访问器。
+    /// * `executor` - 调用方事务。
+    ///
     /// # 返回
     /// 已重新解析详情动作的授权份额视图。
+    ///
     /// # 错误
-    /// 不存在、不可见或必要来源缺失时拒绝。
+    /// 授权或读取失败时返回对应错误；发票不存在、必要来源缺失或没有任何可见份额时返回 `NotFound`。
     pub(super) async fn load_invoice_detail(
         &self,
         id: &str,
@@ -474,11 +520,15 @@ fn invoice_detail_result(
 /// 发票销项分配关联元组；缺失订单的分配保留未分配归属，不丢份额。
 ///
 /// # 参数
-/// 销项关联、当前销售事实和匹配来源集合。
+/// * `row` - 发票行，用于元组中的单据身份与版本。
+/// * `links` - 销项分配关联。
+/// * `facts` - 销售来源责任。
+///
 /// # 返回
-/// 既有格式的销售来源责任元组。
+/// 按来源去重后的销售责任元组；来源事实缺失时来源、负责人和组织为空。
+///
 /// # 错误
-/// 无。
+/// 不返回错误。
 pub(super) fn invoice_sales_tuples(
     row: &InvoiceRow,
     links: &[SalesInvoiceLink],
@@ -508,11 +558,15 @@ pub(super) fn invoice_sales_tuples(
 /// 发票进项分配关联元组；结算单来源与缺失订单计入未分配。
 ///
 /// # 参数
-/// 进项关联、当前采购或结算事实和匹配来源集合。
+/// * `row` - 发票行，用于元组中的单据身份与版本。
+/// * `links` - 进项分配关联。
+/// * `facts` - 采购或结算来源责任。
+///
 /// # 返回
-/// 既有格式的采购与结算责任元组。
+/// 按来源去重后的采购与结算责任元组；来源事实缺失时来源、负责人和组织为空。
+///
 /// # 错误
-/// 无。
+/// 不返回错误。
 pub(super) fn invoice_purchase_tuples(
     row: &InvoiceRow,
     links: &[PurchaseInvoiceLink],
@@ -542,11 +596,14 @@ pub(super) fn invoice_purchase_tuples(
 /// 发票整单口径求和；仅整单读取资格持有者可见的结果使用，不得用于部分授权。
 ///
 /// # 参数
-/// 两方向实际分配关联。
+/// * `sales` - 销项分配关联。
+/// * `purchase` - 进项分配关联。
+///
 /// # 返回
 /// 按原销项再进项顺序归并的方向金额。
+///
 /// # 错误
-/// 金额越界保留原金额类型行为。
+/// 不返回错误。
 pub(super) fn sum_invoice_signed(sales: &[SalesInvoiceLink], purchase: &[PurchaseInvoiceLink]) -> Amount {
     let mut total = zero_amount();
     for link in sales {
@@ -561,11 +618,16 @@ pub(super) fn sum_invoice_signed(sales: &[SalesInvoiceLink], purchase: &[Purchas
 /// 发票匹配份额求和；方向已在装载时按正反动作记入金额符号，不做差额推导。
 ///
 /// # 参数
-/// 两方向实际分配与匹配来源集合。
+/// * `sales` - 销项分配关联。
+/// * `purchase` - 进项分配关联。
+/// * `sales_matched` - 获授权销售来源。
+/// * `purchase_matched` - 获授权采购或结算来源。
+///
 /// # 返回
-/// 按原顺序归并的可见份额金额。
+/// 来源命中对应匹配集合的方向金额之和。
+///
 /// # 错误
-/// 金额越界保留原金额类型行为。
+/// 不返回错误。
 pub(super) fn sum_invoice_matched(
     sales: &[SalesInvoiceLink],
     purchase: &[PurchaseInvoiceLink],
@@ -618,11 +680,14 @@ pub(super) fn invoice_summary_inputs(
 /// 发票未分配余额沿用发票查询口径：蓝票含税减已分配，红票含税加已分配。
 ///
 /// # 参数
-/// 原票面和完整分配方向金额。
+/// * `row` - 发票行，用其蓝红类型与含税金额。
+/// * `allocated` - 完整分配方向金额。
+///
 /// # 返回
-/// 按蓝票或红票规则计算的未分配金额。
+/// 蓝票为含税减已分配，红票为含税加已分配。
+///
 /// # 错误
-/// 金额越界保留原金额类型行为。
+/// 不返回错误。
 pub(super) fn invoice_unallocated(row: &InvoiceRow, allocated: Amount) -> Amount {
     match row.invoice_kind {
         InvoiceKind::Blue => row.gross_amount.checked_sub(allocated),
@@ -633,11 +698,17 @@ pub(super) fn invoice_unallocated(row: &InvoiceRow, allocated: Amount) -> Amount
 /// 整张发票必须覆盖销项与进项实际分配，部分来源不授予完整票面。
 ///
 /// # 参数
-/// 整账资格、两方向实际分配及匹配来源集合。
+/// * `ledger_read` - 是否具备财务整账读取职责。
+/// * `sales` - 销项分配关联。
+/// * `purchase` - 进项分配关联。
+/// * `sales_matched` - 获授权销售来源。
+/// * `purchase_matched` - 获授权采购或结算来源。
+///
 /// # 返回
-/// 全部实际来源可读时返回 true。
+/// 两个方向的实际来源都可读时返回 true。
+///
 /// # 错误
-/// 无。
+/// 不返回错误。
 pub(super) fn whole_invoice_readable(
     ledger_read: bool,
     sales: &[SalesInvoiceLink],

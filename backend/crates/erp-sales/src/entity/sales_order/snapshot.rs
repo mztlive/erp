@@ -245,7 +245,7 @@ impl HeaderSnapshots {
     /// 返回规范化后的快照集合。
     ///
     /// # 错误
-    /// 任一必填快照为空或超长时返回错误。
+    /// 必填快照为空或超长，或已提供的合同编号、结算主体名称超长时返回错误。
     pub fn build(data: &HeaderSnapshotData) -> Result<Self> {
         let contract_snapshot =
             normalize_optional_text(data.contract_no.clone(), "合同编号", CONTRACT_NO_MAX_LEN)?

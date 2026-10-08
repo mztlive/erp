@@ -97,6 +97,9 @@ impl ApprovalSubjectSnapshot {
     /// * `subject_version` - 冻结提交版本
     /// * `payload` - 有界快照字段
     ///
+    /// # 返回
+    /// 返回尚未附带展示快照和材料文件的业务对象快照。
+    ///
     /// # 错误
     /// 必填字段缺失、超长或类型要求的金额/数量缺失时返回错误。
     pub fn new(

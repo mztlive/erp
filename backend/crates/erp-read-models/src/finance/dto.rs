@@ -1,4 +1,4 @@
-//! Receivable detail projections combining finance facts with workflow and sales context.
+//! 应收详情投影：组合财务事实与审批、销售上下文。
 
 use erp_core::common::time::Instant;
 use erp_core::money::Amount;

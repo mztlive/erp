@@ -81,8 +81,15 @@ impl super::execution::TaskCommandPort for CompletionCommand<'_> {
 impl IntegrationResolutionProcess {
     /// 执行 W29 任务完成强命令。
     ///
+    /// # 参数
+    /// * `command` - 任务完成强命令。
+    /// * `actor` - 已通过鉴权的审计操作人。
+    ///
+    /// # 返回
+    /// 本次完成或同载荷重放的结果。
+    ///
     /// # 错误
-    /// 无法由当前权威事实验证终态，或责任/版本/幂等校验失败时返回错误。
+    /// 请求非法、命令无法形成幂等指纹、无法由当前权威事实验证终态，或责任/版本/幂等校验失败时返回错误。
     pub async fn complete_task(
         &self,
         command: IntegrationTaskCompletionCommand,

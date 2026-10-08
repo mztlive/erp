@@ -26,12 +26,32 @@ pub struct MongoFundsDataScope {
 }
 
 impl MongoFundsDataScope {
-    /// 绑定身份数据库及现有 RBAC 实例。
+    /// 只保存身份数据库；`rbac` 在构造时丢弃，本 adapter 不调用公共解析器。
+    ///
+    /// # 参数
+    /// * `db` - 组织集合所在数据库。
+    /// * `_rbac` - 为装配签名保留，不保存、不使用。
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的 adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database, _rbac: SharedRbacService) -> Self {
         Self { db }
     }
 
     /// 包装为资金域可注入的共享 Port。
+    ///
+    /// # 参数
+    /// * `db` - 组织集合所在数据库。
+    /// * `rbac` - 为装配签名保留；adapter 不保存它。
+    ///
+    /// # 返回
+    /// 返回资金范围 Port。`resolve` 恒拒绝，组织展开只使用数据库。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(db: Database, rbac: SharedRbacService) -> Arc<dyn FundsDataScopePort> {
         Arc::new(Self::new(db, rbac))
     }
@@ -150,6 +170,16 @@ fn public_clause(clause: &FundsResolvedClause) -> ScopeClause {
 }
 
 /// 构造绑定同一 RBAC 的资金访问器；HTTP 与命名 Process 必须经此入口。
+///
+/// # 参数
+/// * `db` - 资金与身份集合所在数据库。
+/// * `rbac` - 交给资金访问器的 RBAC 快照；范围 Port 本身不保存它。
+///
+/// # 返回
+/// 返回已注入本 adapter 的资金访问器。
+///
+/// # 错误
+/// 不返回错误。
 pub fn funds_access_with_rbac(
     db: Database,
     rbac: SharedRbacService,

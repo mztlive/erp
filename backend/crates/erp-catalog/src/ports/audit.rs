@@ -1,4 +1,4 @@
-//! Consumer port for cross-domain audit persistence from catalog commands.
+//! 商品命令跨域持久化审计的消费端口。
 
 use std::num::NonZeroU32;
 
@@ -194,7 +194,19 @@ impl PreparedCatalogAudit {
 /// Port catalog uses to prepare and persist resource audits on a caller executor.
 #[async_trait]
 pub trait CatalogAuditPort: Send + Sync {
-    /// Validate and prepare a success resource audit before the transaction.
+    /// 在事务前校验并准备一条成功的资源审计。
+    ///
+    /// # 参数
+    /// * `actor` - 已鉴权操作人
+    /// * `action` - 业务动作
+    /// * `resource_type` - 资源类型
+    /// * `resource_id` - 资源 ID
+    ///
+    /// # 返回
+    /// 返回可在调用方执行器上持久化的审计事实。
+    ///
+    /// # 错误
+    /// 资源 ID 为空等校验失败时返回对应错误。
     fn resource_log(
         &self,
         actor: AuditActor,
@@ -203,7 +215,20 @@ pub trait CatalogAuditPort: Send + Sync {
         resource_id: String,
     ) -> Result<PreparedCatalogAudit>;
 
-    /// Validate and prepare a success resource audit that carries a business message.
+    /// 在事务前校验并准备一条带业务说明的成功资源审计。
+    ///
+    /// # 参数
+    /// * `actor` - 已鉴权操作人
+    /// * `action` - 业务动作
+    /// * `resource_type` - 资源类型
+    /// * `resource_id` - 资源 ID
+    /// * `message` - 可选业务说明
+    ///
+    /// # 返回
+    /// 返回带业务说明的预制审计事实。
+    ///
+    /// # 错误
+    /// 资源 ID 为空等校验失败时返回对应错误。
     fn resource_log_with_message(
         &self,
         actor: AuditActor,
@@ -213,7 +238,17 @@ pub trait CatalogAuditPort: Send + Sync {
         message: Option<String>,
     ) -> Result<PreparedCatalogAudit>;
 
-    /// Persist a previously prepared audit on the caller-chosen executor.
+    /// 在调用方选定的执行器上持久化已准备的审计。
+    ///
+    /// # 参数
+    /// * `audit` - 事先准备好的审计事实
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 写入完成时无返回值。
+    ///
+    /// # 错误
+    /// 端口未接线或写入失败时返回对应错误。
     async fn persist(&self, audit: &PreparedCatalogAudit, executor: &mut dyn Executor) -> Result<()>;
 }
 

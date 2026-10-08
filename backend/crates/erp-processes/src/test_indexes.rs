@@ -5,8 +5,11 @@
 /// # 参数
 /// * `db` - 目标 MongoDB 数据库
 ///
+/// # 返回
+/// 全部领域索引登记成功后返回。
+///
 /// # 错误
-/// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
+/// 任一领域索引创建失败时返回持久化错误。已有数据违反唯一约束或 MongoDB 无法创建索引时包含在该错误中。
 pub(crate) async fn ensure_indexes(db: &mongodb::Database) -> persistence_core::Result<()> {
     erp_identity::indexes::ensure_accounts_and_roles(db).await?;
     erp_audit::indexes::ensure(db).await?;

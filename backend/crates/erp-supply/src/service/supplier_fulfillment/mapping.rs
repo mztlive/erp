@@ -22,7 +22,10 @@ impl From<VerifiedSupplierOrderResolution> for SupplierOrderResolution {
 /// * `line` - 动作行实体
 ///
 /// # 返回
-/// 返回响应视图。
+/// 返回动作行响应视图。
+///
+/// # 错误
+/// 不返回错误。
 pub fn action_line_view(
     line: SupplierOrderActionLine,
 ) -> crate::dto::supplier_fulfillment::SupplierOrderActionLineView {
@@ -42,7 +45,10 @@ pub fn action_line_view(
 /// * `allocations` - 分配行集合
 ///
 /// # 返回
-/// 返回响应视图。
+/// 返回含分配行的退款事实响应视图。
+///
+/// # 错误
+/// 不返回错误。
 pub fn refund_fact_view(
     fact: &SupplierRefundFact,
     allocations: &[SupplierRefundAllocation],

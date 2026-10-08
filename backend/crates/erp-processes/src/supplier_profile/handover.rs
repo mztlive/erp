@@ -320,6 +320,15 @@ impl AuditedCommand for SupplierHandoverCommand {
     type Output = HandoverOutput;
 
     /// 同执行器查证和交接，成功回执与正式事实共同提交。
+    ///
+    /// # 参数
+    /// * `executor` - 供应商或能力交接与回执共用的执行器。
+    ///
+    /// # 返回
+    /// 分支回放时返回 `AuditedWrite::Replayed`，不写新回执。首次成功先保存回执，再返回带交接事件的 `AuditedWrite::Fresh`。
+    ///
+    /// # 错误
+    /// 供应商或能力分支失败、回执构造或回执保存失败时返回对应错误。
     async fn execute(&self, executor: &mut dyn Executor) -> Result<AuditedWrite<Self::Output>> {
         let outcome = match &self.request {
             HandoverRequest::Supplier { id, req } => self.execute_supplier(id, req, executor).await?,

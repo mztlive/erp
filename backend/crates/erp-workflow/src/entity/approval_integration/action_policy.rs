@@ -85,6 +85,15 @@ impl ApprovalDomainAction {
     ];
 
     /// 返回动作所属的唯一 ERP 单据类型。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回该动作唯一对应的 `DocumentType`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn document_type(self) -> DocumentType {
         match self {
             Self::SalesOrderStartApprovalSubmission
@@ -143,6 +152,15 @@ impl ApprovalDomainAction {
     }
 
     /// 返回稳定动作代码。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回形如 `Service::method` 的稳定动作代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::SalesOrderStartApprovalSubmission => "SalesOrderService::start_approval_submission",

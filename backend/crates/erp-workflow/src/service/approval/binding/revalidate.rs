@@ -37,8 +37,9 @@ pub(super) fn revalidate_published_graph(graph: &DefinitionGraph) -> Result<()> 
 /// Adapter 重验指定用户、权限、对象范围、读取权与岗位分离。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库
+/// * `_db` - 数据库参数；本函数不读取
 /// * `rbac` - 共享 RBAC 服务
+/// * `_object_read` - 对象读取端口；本函数不读取
 /// * `policy` - 当前单据类型必须审批政策
 /// * `context` - 当前单据组织与创建人事实
 /// * `graph` - 已由 BPM 校验的定义图
@@ -85,7 +86,7 @@ pub(super) async fn revalidate_binding_graph(
 /// 一次批量读取定义内全部审批人账号事实。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库
+/// * `rbac` - 共享 RBAC 服务
 /// * `assignee_ids` - BPM 按确定顺序提取的审批人 ID
 /// * `executor` - 调用方事务执行器
 ///
@@ -93,7 +94,7 @@ pub(super) async fn revalidate_binding_graph(
 /// 返回按账号 ID 索引的未软删除账号事实；缺失 ID 不会补齐。
 ///
 /// # 错误
-/// Repository 批量查询失败时返回错误。
+/// 授权端口批量读取账号失败时返回错误。
 ///
 /// # 关键业务约束
 /// Repository 不保证 `$in` 结果顺序；Service 必须继续按 `assignee_ids`

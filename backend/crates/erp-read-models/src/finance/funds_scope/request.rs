@@ -19,6 +19,16 @@ use crate::{Error, Result};
 
 impl FundsAccess {
     /// 分页查询开票申请范围行：负责销售/申请人/当前开票处理人分别查询。
+    ///
+    /// # 参数
+    /// * `query` - 开票申请列表查询。
+    /// * `actor` - 已认证操作人。
+    ///
+    /// # 返回
+    /// 最终授权申请页及同口径汇总。
+    ///
+    /// # 错误
+    /// 筛选校验、范围版本、授权或读取失败时返回对应错误。
     pub async fn request_list_scoped(
         &self,
         query: &erp_finance::dto::receivable::InvoiceRequestQuery,
@@ -32,6 +42,16 @@ impl FundsAccess {
     }
 
     /// 独立详情重新解析开票申请详情动作；不可见与不存在统一为 NotFound。
+    ///
+    /// # 参数
+    /// * `id` - 开票申请主键。
+    /// * `actor` - 已认证操作人。
+    ///
+    /// # 返回
+    /// 当前详情动作允许的申请行。
+    ///
+    /// # 错误
+    /// 授权或读取失败时返回对应错误；申请不存在、来源销售单缺失或不在授权内时返回 `NotFound`。
     pub async fn request_detail_scoped(
         &self,
         id: &str,
@@ -50,6 +70,17 @@ impl FundsAccess {
     }
 
     /// 返回前重读授权及候选事实版本；变化时拒绝交付原结果。
+    ///
+    /// # 参数
+    /// * `query` - 开票申请列表查询。
+    /// * `actor` - 已认证操作人。
+    /// * `expected` - 调用方回传的范围版本；首页可为 `None`。
+    ///
+    /// # 返回
+    /// 两次快照版本一致时返回第一次申请页。
+    ///
+    /// # 错误
+    /// 任一拍版本失配时返回范围变化冲突错误；授权或读取失败时返回对应错误。
     pub(super) async fn checked_requests(
         &self,
         query: &erp_finance::dto::receivable::InvoiceRequestQuery,
@@ -60,6 +91,16 @@ impl FundsAccess {
     }
 
     /// 身份和业务事实均使用调用方同一事务，不缓存权限解析结果。
+    ///
+    /// # 参数
+    /// * `query` - 开票申请列表查询。
+    /// * `actor` - 已认证操作人。
+    ///
+    /// # 返回
+    /// 同一事务内形成的授权申请页。
+    ///
+    /// # 错误
+    /// 事务、授权或读取失败时返回对应错误。
     pub(super) async fn snapshot_requests(
         &self,
         query: &erp_finance::dto::receivable::InvoiceRequestQuery,
@@ -78,6 +119,17 @@ impl FundsAccess {
     }
 
     /// 分页查询开票申请范围行：申请人取创建人，处理人取工作项当前负责人。
+    ///
+    /// # 参数
+    /// * `query` - 开票申请列表查询。
+    /// * `actor` - 已认证操作人。
+    /// * `executor` - 调用方事务。
+    ///
+    /// # 返回
+    /// 无可见范围时返回空页；否则返回裁剪后的申请页与汇总。
+    ///
+    /// # 错误
+    /// 授权、候选读取、来源事实或版本不一致时返回对应错误。
     pub(super) async fn load_requests(
         &self,
         query: &erp_finance::dto::receivable::InvoiceRequestQuery,
@@ -104,6 +156,16 @@ impl FundsAccess {
     }
 
     /// 有界完整装载候选；超过既有上限整体拒绝，不改变最终授权裁剪与分页。
+    ///
+    /// # 参数
+    /// * `query` - 开票申请列表查询。
+    /// * `executor` - 调用方事务。
+    ///
+    /// # 返回
+    /// 不超过 10000 条的申请候选。
+    ///
+    /// # 错误
+    /// 仓储读取失败时返回对应错误；候选超过 10000 条时返回校验错误。
     pub(super) async fn page_all_requests(
         &self,
         query: &erp_finance::dto::receivable::InvoiceRequestQuery,
@@ -113,6 +175,19 @@ impl FundsAccess {
     }
 
     /// 开票申请候选逐行判定可见性与筛选；缺失销售单的行跳过，不计未分配。
+    ///
+    /// # 参数
+    /// * `query` - 开票申请列表查询。
+    /// * `rows` - 已装载的申请候选。
+    /// * `access` - 本次列表动作的已解析范围。
+    /// * `authorization` - 资金授权，用于销售单 ID 限制。
+    /// * `executor` - 调用方事务。
+    ///
+    /// # 返回
+    /// 已决定的申请行、销售责任事实与销售单号。
+    ///
+    /// # 错误
+    /// 销售单、授权 ID、工作项或组织条件读取失败时返回对应错误。
     pub(super) async fn assemble_requests(
         &self,
         query: &erp_finance::dto::receivable::InvoiceRequestQuery,
@@ -133,6 +208,16 @@ impl FundsAccess {
     }
 
     /// 开票申请关联筛选条件：负责人、申请人、处理人与组织分别精确匹配。
+    ///
+    /// # 参数
+    /// * `query` - 开票申请列表查询。
+    /// * `executor` - 调用方事务。
+    ///
+    /// # 返回
+    /// 销售负责人、申请人、处理人与展开组织的精确条件。
+    ///
+    /// # 错误
+    /// 组织展开失败时返回对应错误。
     pub(super) async fn request_condition(
         &self,
         query: &erp_finance::dto::receivable::InvoiceRequestQuery,
@@ -183,6 +268,21 @@ impl FundsAccess {
     }
 
     /// 开票申请候选分页裁剪与汇总装配；申请金额为行级事实，始终返回。
+    ///
+    /// # 参数
+    /// * `query` - 开票申请列表查询，提供页码、页大小与范围版本。
+    /// * `decided` - 已通过授权与筛选的申请及处理人。
+    /// * `facts` - 关联销售责任事实。
+    /// * `order_nos` - 销售单号。
+    /// * `authorization` - 已解析授权，用于范围元信息。
+    /// * `fingerprint` - 已写入授权与单据版本的哈希器。
+    /// * `_executor` - 调用方事务；本方法不再读取。
+    ///
+    /// # 返回
+    /// 当前页申请行、候选总数与按销售负责人归组的汇总。
+    ///
+    /// # 错误
+    /// 回传范围版本与本次指纹不一致时返回范围变化冲突错误。
     // 查询+分页+执行器参数为既有签名，保持调用方一致不拆。
     #[allow(clippy::too_many_arguments)]
     pub(super) async fn finish_requests(
@@ -235,6 +335,17 @@ impl FundsAccess {
     }
 
     /// 开票申请详情同一事务内解析、取数与裁剪；版本绑定关联销售单。
+    ///
+    /// # 参数
+    /// * `id` - 开票申请主键。
+    /// * `actor` - 已认证操作人。
+    /// * `executor` - 调用方事务。
+    ///
+    /// # 返回
+    /// 详情动作允许的申请行及范围版本。
+    ///
+    /// # 错误
+    /// 授权、读取或未接线的资源动作失败时返回对应错误；申请不存在、来源销售单缺失、不在销售单集合内或单对象判定不允许时返回 `NotFound`。
     pub(super) async fn load_request_detail(
         &self,
         id: &str,

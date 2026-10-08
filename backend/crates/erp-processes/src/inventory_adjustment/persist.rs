@@ -401,22 +401,7 @@ async fn validate_balance_versions(
     StockAdjustmentBalanceVersions::new(&balances).validate(adjustment, lines, &expected).map_err(Error::from)
 }
 
-/// 将启动计划写入 BPM 集合、不可变快照和入口 WorkItem。
-///
-/// # 参数
-/// * `db` - 数据库
-/// * `writes` - 启动写入集合
-/// * `snapshot_payload` - 快照载荷
-/// * `owner_role` - 责任角色
-/// * `organization_id` - 责任组织
-/// * `now` - 调用方时间
-/// * `executor` - 数据访问执行器
-///
-/// # 返回
-/// 成功时无返回值。
-///
-/// # 错误
-/// 计划缺少入口执行或写入失败时返回错误。
+/// 启动运行事实写入时已冻结的单据、责任与时间。
 struct StartRuntimeContext<'a> {
     owner_role: &'a str,
     organization_id: &'a str,
@@ -523,6 +508,17 @@ async fn persist_start_notifications(
 }
 
 /// 校验启动通知恰为一条 Started 与一条 Entered，且去重键绑定运行身份。
+///
+/// # 参数
+/// * `notifications` - 计划中的通知种类与去重键。
+/// * `instance_id` - 新审批实例 ID。
+/// * `execution_id` - 入口执行 ID。
+///
+/// # 返回
+/// 恰好一条匹配的 `Started` 和一条匹配的 `Entered` 时无返回值。
+///
+/// # 错误
+/// 条数或去重键不匹配时返回 `Internal`。
 pub(super) fn validate_start_notification_identities(
     notifications: &[(ApprovalNotificationEventKind, String)],
     instance_id: &str,

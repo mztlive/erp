@@ -28,8 +28,17 @@ pub(crate) enum SalesInvoiceTaskChange {
 
 /// 在开票、红冲或应收金额变更事务内同步销项开票执行任务。
 ///
+/// # 参数
+/// * `db` - 数据库。
+/// * `account_id` - 应收子账 ID。
+/// * `change` - 调用方传入的额度变化来源；本函数不按该值分支。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 占用额度未超限且已批准任务同步完成时无返回值。
+///
 /// # 错误
-/// 子账缺失、开放任务重复、规则或负责人失效、任务身份损坏时返回错误。
+/// 子账不存在、占用额度读取失败、已占用额度超过可开票金额，或已批准任务同步失败时返回错误。
 pub(crate) async fn sync_sales_invoice_task(
     db: &mongodb::Database,
     account_id: &ReceivableAccountId,
@@ -57,8 +66,17 @@ pub(crate) struct InvoiceExecutionInput<'a> {
 
 /// 在销项发票正式提交事务内校验并记录当前开票执行任务活动。
 ///
+/// # 参数
+/// * `db` - 数据库。
+/// * `input` - 本次开票的任务身份、来源和金额。
+/// * `actor` - 当前操作人，必须是任务责任人。
+/// * `executor` - 正式提交事务执行器。
+///
+/// # 返回
+/// 返回本次消耗的开票申请 ID。
+///
 /// # 错误
-/// 任务版本、当前责任人、应收子账、往来主体或任一分配目标不属于同一任务时失败关闭。
+/// 任务或子账不存在、版本已变化、责任身份不符、非当前责任人、往来主体或分配目标不一致、授权消耗或任务活动写入失败时返回错误。
 pub(crate) async fn record_invoice_execution(
     db: &mongodb::Database,
     input: InvoiceExecutionInput<'_>,
@@ -107,6 +125,7 @@ pub(crate) async fn record_invoice_execution(
     Ok(request_id)
 }
 
+/// 任务责任身份与应收子账不一致时失败关闭。
 fn ensure_task_identity(task: &WorkItem, account: &ReceivableAccount) -> Result<()> {
     if matches_sales_invoice_identity(task, &account.base.id) {
         return Ok(());

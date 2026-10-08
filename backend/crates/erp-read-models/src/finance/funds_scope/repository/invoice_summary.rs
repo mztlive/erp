@@ -63,11 +63,13 @@ impl InvoiceShare {
     /// 将已登记分配的正反动作转换为原定点方向金额。
     ///
     /// # 参数
-    /// 当前原始正反动作与含税金额。
+    /// 无。
+    ///
     /// # 返回
-    /// 沿原动作方向转换的定点金额。
+    /// 正向分配返回含税金额；冲正分配返回其相反数。
+    ///
     /// # 错误
-    /// 金额越界保留原金额类型行为。
+    /// 不返回错误。
     pub(super) fn signed(&self) -> Amount {
         match self.allocation_action {
             AllocationAction::Apply => self.allocated_gross_amount,
@@ -79,11 +81,15 @@ impl InvoiceShare {
 /// 使用同快照内原最终父 ID 集合的两方向 find，保留旧分配流和来源事实。
 ///
 /// # 参数
-/// 数据库、最终完整版本与首拍汇总资格、原执行器。
+/// * `db` - 发票汇总仓储所在数据库。
+/// * `versions` - 最终匹配发票版本；首拍须带汇总资格。
+/// * `executor` - 调用方执行器。
+///
 /// # 返回
 /// 保持原父票及两方向分配流的汇总行。
+///
 /// # 错误
-/// 查询、解码或首拍汇总资格缺失时拒绝。
+/// 查询、解码失败，或某条版本缺少首拍汇总资格时拒绝。
 pub(super) async fn summary_rows(
     db: &Database,
     versions: &[InvoiceVersion],
@@ -186,11 +192,14 @@ fn append_summary_links(
 /// 只归并数据库最终匹配的金额流，整单合计仅在全部行完整可读时返回。
 ///
 /// # 参数
-/// 最终匹配票的必要金额事实与完整范围版本。
+/// * `rows` - 最终匹配票的金额与份额。
+/// * `version` - 本次范围版本。
+///
 /// # 返回
-/// 按原顺序归并的份额分区和整票金额资格。
+/// 按原顺序归并的份额分区；只有全部行完整可读时才带整票金额合计。
+///
 /// # 错误
-/// 汇总资格错误时拒绝；金额越界保留原金额类型行为。
+/// 不返回错误。本函数没有失败分支。
 pub(super) fn invoice_summary(rows: &[InvoiceSummaryRow], version: &str) -> Result<FundsSummaryView> {
     let mut triples = Vec::new();
     let mut owners = HashMap::new();

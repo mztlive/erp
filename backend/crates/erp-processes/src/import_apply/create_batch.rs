@@ -17,7 +17,16 @@ use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl ImportApplyService {
-    /// 构造导入批次详情视图（补充后台任务关联）。
+    /// 构造导入批次详情视图，并补上同请求号的后台任务关联。
+    ///
+    /// # 参数
+    /// * `batch` - 已存在的导入批次。
+    ///
+    /// # 返回
+    /// 返回批次视图；找不到后台任务时 `background_job_id` 为空。
+    ///
+    /// # 错误
+    /// 按批次号查询后台任务失败时返回仓储错误。
     pub(super) async fn batch_view_of(&self, batch: LegacyImportBatch) -> Result<LegacyImportBatchView> {
         let background_job =
             self.db.background_jobs().find_by_request_id(&batch.batch_no, &mut NoTransaction).await?;
@@ -138,17 +147,6 @@ impl ImportApplyService {
         Err(Error::NotFound(format!("{label}资产不存在")))
     }
 
-    /// 构造导入行实体列表。
-    ///
-    /// # 参数
-    /// * `req` - 创建请求
-    /// * `batch_id` - 所属导入批次
-    ///
-    /// # 返回
-    /// 返回新建的导入行实体列表。
-    ///
-    /// # 错误
-    /// 行字段校验失败时返回错误。
     /// 经领域行工厂装配导入行实体（INT-E24）。
     ///
     /// Service 只预分配行 ID 并注入批次，字符串规范化与批内唯一判定由

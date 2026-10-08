@@ -184,7 +184,7 @@ impl SupplierService {
     /// 返回未经装配的详情事实束。
     ///
     /// # 错误
-    /// 供应商或关联主体缺失时返回 `NotFound`。
+    /// 供应商或关联主体缺失时返回 `NotFound`；事实束或主体查询失败时返回对应错误。
     async fn load_detail_facts(&self, id: &str) -> Result<LoadedSupplierDetail> {
         let supplier_id = SupplierAccountId::new(id);
         let bundle = self
@@ -444,7 +444,7 @@ impl SupplierService {
     /// 返回供应商角色实体。
     ///
     /// # 错误
-    /// * `NotFound` - 供应商角色不存在
+    /// 供应商角色不存在时返回 `NotFound`；仓储读取失败时返回对应错误。
     pub async fn load_supplier(&self, id: &str) -> Result<SupplierAccount> {
         self.db
             .supplier()

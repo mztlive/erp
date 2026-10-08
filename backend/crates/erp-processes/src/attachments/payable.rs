@@ -1,4 +1,4 @@
-//! Payable commands that register bank-receipt files in the same posting transaction.
+//! 应付命令：在同一过账事务中登记银行回单文件。
 
 use std::sync::Arc;
 

@@ -24,14 +24,41 @@ pub struct CreatedChangeWrite {
 }
 impl CreatedChangeWrite {
     /// 新变更单标识，供注册审批单据与审计使用。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回新变更单稳定身份。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn change_id(&self) -> &str {
         &self.change_order.base.id
     }
     /// 绑定定义时冻结的变更单版本。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回变更单当前版本号。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn version(&self) -> u64 {
         self.change_order.base.version
     }
     /// 从原销售单冻结的结算主体，供流程映射责任组织。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回工作副本上的结算主体。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn settlement_party_id(&self) -> &erp_core::ids::PartyId {
         &self.working_copy.settlement_party_id
     }
@@ -54,6 +81,13 @@ impl CreatedChangeWrite {
     }
     /// 在绑定登记成功后，按原序写入变更单、工作副本和行，不启动事务。
     ///
+    /// # 参数
+    /// * `db` - 销售集合所在数据库。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 变更单、工作副本和全部行都插入成功时返回 `Ok(())`。
+    ///
     /// # 错误
     /// 保留仓储唯一键与 CAS 冲突；错误交由调用方回滚。
     pub async fn persist(&self, db: &mongodb::Database, executor: &mut dyn Executor) -> Result<()> {
@@ -72,8 +106,18 @@ impl SalesReviewService {
     /// 客户端只提交变更意图；表头、合同和行事实均从冻结版本派生。
     /// 创建幂等键仅按原 DTO 校验，本方法不新增命令回执。
     ///
+    /// # 参数
+    /// * `req` - 变更意图；表头、合同和行事实不从该请求派生。
+    /// * `actor` - 当前认证建单人。
+    ///
+    /// # 返回
+    /// 返回尚未持久化的变更单、变更工作副本和行。
+    ///
     /// # 错误
-    /// 原销售单不可变更、基准版本漂移或已有进行中变更时保持原错误。
+    /// 原销售单不可变更、基准版本漂移或已有进行中变更时保持原错误；销售单或当前版本不存在、请求校验失败、工作副本构造失败以及仓储读取失败时返回对应错误。
+    ///
+    /// # Panics
+    /// `sales_change_start_blocker` 已通过后仍缺少当前版本时 panic；调用点依赖实体规则保证版本存在。
     pub async fn prepare_creation(
         &self,
         req: CreateSalesChangeOrderRequest,

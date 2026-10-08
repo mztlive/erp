@@ -25,6 +25,19 @@ struct Data {
     prism_version: String,
 }
 
+/// 解码识别响应；非 2xx 不解析正文。空 `content` 仍是成功结果。
+///
+/// # 参数
+/// * `status` - HTTP 状态码。
+/// * `bytes` - 响应正文；仅在不超过上限且状态为 2xx 时按 JSON 解析。
+///
+/// # 返回
+/// `Page`：`text` 为内层 `content`，`version` 为 `{API_VERSION};algo=…;prism=…`。
+///
+/// # 错误
+/// `bytes` 超过 `MAX_RESPONSE_BYTES`，或 `content` 超过 100000 字节、`algo_version` 或 `prism_version` 超过 80 字节时，返回 `Error::ResponseSize`。
+/// 信封或内层 `Data` 不是合法 JSON，或成功响应缺少 `Data` 时，返回 `Error::InvalidResponse`。
+/// 状态非 2xx，或业务 `Code` 存在且不是 `200` 时，返回 `Error::Authorization`、`Error::Throttled`、`Error::Unavailable` 或 `Error::Rejected`。
 pub(crate) fn decode(status: u16, bytes: &[u8]) -> Result<Page> {
     if bytes.len() > MAX_RESPONSE_BYTES {
         return Err(Error::ResponseSize);
@@ -45,6 +58,7 @@ pub(crate) fn decode(status: u16, bytes: &[u8]) -> Result<Page> {
     Ok(Page { text: data.content, version })
 }
 
+/// 只按状态码和错误码前缀归类，不把供应商正文写入 `Error`。
 fn classify(status: u16, code: &str) -> Error {
     if matches!(status, 401 | 403)
         || code == "noPermission"

@@ -32,13 +32,16 @@ impl From<DirectorySelectedQuery> for DirectoryQuery {
 }
 
 impl DirectoryQuery {
-    /// 校验搜索、分页与版本约束。
+    /// 校验搜索、分页与版本约束，并去掉搜索词与范围版本的首尾空白。
+    ///
     /// # 参数
-    /// `self` 为 HTTP 解码后的请求。
+    /// * `self` - 被消费的目录请求。
+    ///
     /// # 返回
-    /// 成功返回规范化请求。
+    /// 成功时返回规范化后的请求。
+    ///
     /// # 错误
-    /// 非法页、空版本后续页或超长关键词时拒绝。
+    /// 返回 `Error::ValidationError`：搜索词超过 200 个字符、`page` 为 0、显式 `page_size` 不在 1 到 100、范围版本超过 256 字节、第 2 页及以后没有范围版本，或 `ids` 与搜索词或非首页同时出现。
     pub fn normalized(mut self) -> Result<Self> {
         self.q = self.q.map(|v| v.trim().to_owned()).filter(|v| !v.is_empty());
         self.scope_version = self.scope_version.map(|v| v.trim().to_owned()).filter(|v| !v.is_empty());
@@ -92,13 +95,18 @@ pub struct DirectoryPage {
 }
 
 impl DirectoryPage {
-    /// 对有界授权结果稳定分页，版本覆盖授权版本、规范化搜索条件和排序后的目录项。
+    /// 对有界授权结果稳定分页。版本覆盖授权版本、规范化搜索条件和排序后的目录项。
+    ///
     /// # 参数
-    /// `items` 为已完成资格、范围、搜索的完整有界结果，`query` 为规范化请求。
+    /// * `items` - 已完成资格、范围和搜索过滤的完整结果；本方法再按名称与 ID 排序。
+    /// * `query` - 规范化后的目录请求。
+    /// * `scope` - 授权范围与版本；`no_scope` 为真时响应的 `empty_reason` 为 `"no_scope"`。
+    ///
     /// # 返回
-    /// 目录页；调用者必须比较请求与响应版本后才返回。空白搜索与缺省搜索相同，同一搜索的各页版本相同。
+    /// 返回目录页。空白搜索与未提供搜索的版本相同，同一搜索各页版本相同。已选 `ids` 时页大小固定为 100。超出末页时 `items` 为空，不另报错。调用者必须比较请求版本与响应版本后再交出该页。
+    ///
     /// # 错误
-    /// 超出规模边界、版本材料过长或序列化失败时拒绝。
+    /// `items` 长度超过 `DIRECTORY_LIMIT` 时返回 `Error::ValidationError`。目录项序列化失败，或某一版本字段的长度无法表示为 `u64` 时返回 `Error::Internal`。
     pub fn from_snapshot(
         mut items: Vec<DirectoryItem>,
         query: &DirectoryQuery,

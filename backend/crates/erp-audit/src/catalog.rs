@@ -2,10 +2,12 @@
 
 use crate::{AuditAction, AuditCode, AuditField, AuditFieldKind, Error, Result};
 
+/// 普通动作不开放字段投影，版本固定为 1。
 const fn action(code: &'static str, resource_type: &'static str, label: &'static str) -> AuditAction {
     AuditAction { code, resource_type, label, version: 1, allowed_fields: &[] }
 }
 
+/// 门户动作共用同一资源类型，白名单之外的字段不能进入投影。
 const fn portal_action(code: &'static str, label: &'static str) -> AuditAction {
     AuditAction {
         code,
@@ -391,7 +393,7 @@ pub fn registered_action(action: &str, resource_type: &str) -> Result<AuditActio
 /// 返回静态业务动作目录；身份治理目录继续由身份领域维护。
 ///
 /// # 错误
-/// 无。
+/// 不返回错误。
 pub fn registered_actions() -> &'static [AuditAction] {
     REGISTERED_ACTIONS
 }

@@ -26,6 +26,18 @@ pub struct CustomerAcceptanceProcess {
 }
 impl CustomerAcceptanceProcess {
     /// 使用入口已有配置构造流程；领域查询与跨域工作台分别持有实际读取接口。
+    ///
+    /// # 参数
+    /// * `db` - 业务数据库。读模型由此新建。
+    /// * `read` - 已构造的履约领域服务，存为领域写入端。
+    /// * `rbac` - 授权源。
+    /// * `object_read` - 审批对象读取端口。
+    ///
+    /// # 返回
+    /// 返回持有读模型、领域服务和授权源的验收流程。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(
         db: Database,
         read: FulfillmentService,

@@ -37,6 +37,9 @@ impl PayableReadService {
     ///
     /// # 返回
     /// 返回契约形状的分页视图。
+    ///
+    /// # 错误
+    /// 参数校验失败，或关键词、付款单、视图装配与冲正读取失败时返回对应错误。
     pub async fn supplier_payment_list(
         &self,
         params: &SupplierPaymentListParams,
@@ -78,7 +81,7 @@ impl PayableReadService {
     /// 返回付款单视图。
     ///
     /// # 错误
-    /// * `NotFound` - 付款单不存在
+    /// 付款单不存在时返回 `NotFound`；冲正读取失败或详情装配失败时返回对应错误。
     pub async fn supplier_payment_detail(&self, id: &str) -> Result<SupplierPaymentView> {
         let mut views = vec![self.supplier_payment_view(id.to_string(), true).await?];
         self.attach_supplier_payment_reversals(&mut views).await?;

@@ -1,4 +1,4 @@
-//! Party domain: stable party identity, subordinate facts and sensitive-data codec.
+//! 主体领域：稳定主体身份、从属事实与敏感数据编解码。
 
 pub mod dto;
 pub mod entity;

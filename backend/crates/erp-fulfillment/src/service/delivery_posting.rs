@@ -11,6 +11,15 @@ use crate::{Error, Result};
 impl FulfillmentService {
     /// 按原序加载发货单、校验草稿和版本、应用物流信息并读取非空发货行。
     ///
+    /// # 参数
+    /// * `delivery_id` - 发货单主键
+    /// * `expected_version` - 期望的乐观锁版本
+    /// * `update` - 过账前写入的物流更新
+    /// * `executor` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 返回已应用物流更新的草稿发货单及其非空发货行。
+    ///
     /// # 错误
     /// 不存在、非草稿、版本冲突、物流更新非法或没有行时保留原首错。
     ///
@@ -50,6 +59,14 @@ impl FulfillmentService {
 
     /// 在库存或采购门槛成功之后，以同一执行器迁移发货状态并写入原版本 CAS。
     ///
+    /// # 参数
+    /// * `delivery` - 待标记已发货的发货单
+    /// * `occurred_at` - 发货发生时间
+    /// * `executor` - 与前置门槛相同的执行器
+    ///
+    /// # 返回
+    /// 状态迁移并写回成功时无返回值。
+    ///
     /// # 错误
     /// 状态迁移或仓储写入失败时保留原错误，调用方不得推进任务或审计。
     pub async fn persist_posted_delivery(
@@ -66,8 +83,14 @@ impl FulfillmentService {
 
 /// 在直发分支原位置读取采购来源引用，不提前触发采购或付款校验。
 ///
+/// # 参数
+/// * `delivery` - 待读取采购来源的发货单
+///
+/// # 返回
+/// 返回供应商直发引用的采购单主键。
+///
 /// # 错误
-/// 供应商直发缺少采购来源时返回原业务错误。
+/// 仓发或缺少采购来源时返回 `BusinessLogicError`。
 pub fn supplier_purchase_source(delivery: &Delivery) -> Result<PurchaseOrderId> {
     delivery.supplier_purchase_source().map_err(|error| Error::BusinessLogicError(error.to_string()))
 }

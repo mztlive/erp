@@ -1,4 +1,4 @@
-//! Warehouse domain: stable warehouse identity, revisions and SKU policies.
+//! 仓库领域：稳定仓库身份、修订与 SKU 策略。
 
 pub mod dto;
 pub mod entity;

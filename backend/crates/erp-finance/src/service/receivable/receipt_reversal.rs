@@ -64,6 +64,17 @@ pub async fn load_receivable_offset_facts(
 }
 
 /// 读取可冲正的正式回款；保留先存在性再状态的错误顺序。
+///
+/// # 参数
+/// * `db` - 财务领域数据库。
+/// * `receipt_id` - 原回款主键。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 返回状态为 `Posted` 的客户回款。
+///
+/// # 错误
+/// 回款不存在时返回 `NotFound`；状态不是已过账时返回 `BusinessLogicError`；仓储读取失败时返回对应错误。
 pub async fn load_posted_receipt(
     db: &Database,
     receipt_id: &CustomerReceiptId,
@@ -82,10 +93,22 @@ pub async fn load_posted_receipt(
 
 /// 写入反向核销分配、冲减进度并把原回款置为已冲正。
 ///
-/// # 错误
-/// 超额冲减或仓储失败时返回错误。
 /// 在退货域累计额度检查成功后逆向核销并更新原回款；始终复用调用方 Executor。
 /// 分配计划、额度写入、逐行 ID 与状态迁移沿原顺序执行。
+///
+/// # 参数
+/// * `db` - 财务领域数据库。
+/// * `receipt` - 已过账的原回款。
+/// * `amount` - 本次冲正金额。
+/// * `occurred_at` - 冲正发生时间。
+/// * `actor_id` - 执行人。
+/// * `session` - 调用方事务执行器。
+///
+/// # 返回
+/// 反向分配写入且原回款迁到 `Reversed` 后无返回值。
+///
+/// # 错误
+/// 分配计划失败、分录缺失、超额冲减、状态迁移或仓储失败时返回对应错误。
 pub async fn reverse_receipt_allocations(
     db: &Database,
     receipt: CustomerReceipt,
@@ -109,6 +132,17 @@ pub async fn reverse_receipt_allocations(
 }
 
 /// 必须在冲正状态和成功审计写入后调用，重新读取全部分配后返回排序去重销售标识。
+///
+/// # 参数
+/// * `db` - 财务领域数据库。
+/// * `receipt_id` - 原回款主键。
+/// * `session` - 调用方事务执行器。
+///
+/// # 返回
+/// 返回排序去重后的销售单 ID。
+///
+/// # 错误
+/// 分配、分录或账户读取失败，或缺任一分录、账户时返回对应错误。
 pub async fn receipt_allocation_sales_order_ids(
     db: &Database,
     receipt_id: &CustomerReceiptId,

@@ -14,12 +14,18 @@ pub struct ResetRetention(HashMap<String, Vec<Bson>>);
 
 impl ResetRetention {
     /// 精确读取必须保留的文档，并登记其物理主键。
+    ///
     /// # 参数
-    /// `db` 为数据库，`collection` 与 `filter` 由拥有领域提供，`executor` 为当前事务。
+    /// * `db` - 目标数据库。
+    /// * `collection` - 拥有领域指定的集合名。
+    /// * `filter` - 拥有领域指定的精确匹配条件。
+    /// * `executor` - 数据访问执行器。本方法不检查是否处于事务中。
+    ///
     /// # 返回
-    /// 文档存在时登记原始 `_id`，不修改其内容。
+    /// 无返回值。文档存在时登记其原始 `_id`，不修改库中内容。
+    ///
     /// # 错误
-    /// 必需文档缺失、没有物理主键或读取失败时拒绝重置。
+    /// 必需文档缺失或没有物理主键时返回 `EntityMetadataOutOfRange`；读取失败时返回下层错误。
     pub async fn require(
         &mut self,
         db: &Database,
@@ -46,10 +52,13 @@ pub struct DatabaseReset {
 
 impl DatabaseReset {
     /// 在事务外读取集合元数据；不得由客户端提交集合白名单。
+    ///
     /// # 参数
-    /// `db` 为应用配置指定的目标数据库。
+    /// * `db` - 应用配置指定的目标数据库。调用后由重置计划持有。
+    ///
     /// # 返回
     /// 返回当前数据库的重置计划，包含未登记的历史业务集合。
+    ///
     /// # 错误
     /// MongoDB 元数据读取失败时返回错误。
     pub async fn prepare(db: Database) -> Result<Self> {
@@ -60,12 +69,16 @@ impl DatabaseReset {
     }
 
     /// 在调用方事务中清除保留清单之外的全部文档。
+    ///
     /// # 参数
-    /// `retention` 为领域核准的物理身份，`executor` 必须承载事务。
+    /// * `retention` - 领域核准、需要原样保留的物理主键。
+    /// * `executor` - 必须已绑定事务会话的数据访问执行器。
+    ///
     /// # 返回
     /// 实际删除的文档总数；集合与索引保持不变。
+    ///
     /// # 错误
-    /// 无事务、删除失败、保留集合缺失或检测到残留时返回错误，由调用方回滚。
+    /// `executor` 没有会话时返回 `UnsupportedDeployment`。保留集合不在当前库、删除计数溢出或删除后仍有残留时返回 `EntityMetadataOutOfRange`。删除或残留检查失败时返回下层错误。出错后由调用方回滚。
     pub async fn execute(self, retention: ResetRetention, executor: &mut dyn Executor) -> Result<u64> {
         if executor.session().is_none() {
             return Err(Error::UnsupportedDeployment("database reset requires a transaction"));
@@ -81,7 +94,9 @@ impl DatabaseReset {
 /// 重置编排使用的持久化操作，测试替身只替换 I/O。
 #[async_trait]
 trait ResetStore: Send {
+    /// 删除 `kept` 以外的文档并返回删除条数；下层失败原样返回。
     async fn erase(&mut self, collection: &str, kept: &[Bson]) -> Result<u64>;
+    /// 检查 `kept` 以外是否仍有文档。
     async fn has_residue(&mut self, collection: &str, kept: &[Bson]) -> Result<bool>;
 }
 

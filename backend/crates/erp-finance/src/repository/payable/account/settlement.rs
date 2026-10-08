@@ -172,6 +172,9 @@ impl PayableAccountSettlementExt for persistence_core::Repository<'_, PayableAcc
 ///
 /// # 返回
 /// 返回未删除账户的核销额度守卫文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn settlement_guard(id: &str, amount: &Bson) -> Document {
     doc! {
         "id": id,

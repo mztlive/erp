@@ -56,6 +56,13 @@ impl RbacService {
     ///
     /// 系统角色不允许通过普通管理接口分配；目标角色权限必须是操作人当前隐式权限的子集。
     ///
+    /// # 参数
+    /// * `actor` - 已认证操作人。
+    /// * `role_ids` - 待授予的角色 ID。
+    ///
+    /// # 返回
+    /// 返回已校验的角色集合和当时的 policy 版本。
+    ///
     /// # 错误
     /// 当角色不存在、不可分配、权限越界或 policy 加载失败时返回错误。
     pub async fn authorize_role_assignment(
@@ -80,6 +87,15 @@ impl RbacService {
     ///
     /// 目标账号当前权限与待分配角色权限都必须是操作人权限的子集；绑定任一系统
     /// 角色的账号禁止通过普通管理接口修改。整个判断共享同一 Enforcer 快照。
+    ///
+    /// # 参数
+    /// * `actor` - 已认证操作人。
+    /// * `target_kind` - 目标账号类型。
+    /// * `target_id` - 目标账号 ID。
+    /// * `requested_role_ids` - 可选的新角色集合；为空表示不改角色。
+    ///
+    /// # 返回
+    /// 返回 policy 版本；请求了新角色时同时带上已校验的授予上下文。
     ///
     /// # 错误
     /// 当目标含系统角色、权限越界、待分配角色无效或 policy 加载失败时返回错误。
@@ -113,6 +129,16 @@ impl RbacService {
     }
 
     /// 校验待写入角色权限不超过操作人当前权限。
+    ///
+    /// # 参数
+    /// * `actor` - 已认证操作人。
+    /// * `permissions` - 待写入的权限。
+    ///
+    /// # 返回
+    /// 返回规范化后的权限集和当时的 policy 版本。
+    ///
+    /// # 错误
+    /// 权限超出操作人范围或 policy 加载失败时返回错误。
     pub(super) async fn authorize_permissions(
         &self,
         actor: &AuditActor,
@@ -147,6 +173,17 @@ impl RbacService {
     }
 
     /// 校验操作人可管理角色的当前权限范围，并按需校验更新后的权限。
+    ///
+    /// # 参数
+    /// * `actor` - 已认证操作人。
+    /// * `role_id` - 目标角色 ID。
+    /// * `updated_permissions` - 更新后的权限；为空表示不改权限。
+    ///
+    /// # 返回
+    /// 返回可选的新权限集和当时的 policy 版本。
+    ///
+    /// # 错误
+    /// 当前或更新后的权限超出操作人范围，或 policy 加载失败时返回错误。
     pub(super) async fn authorize_role_update(
         &self,
         actor: &AuditActor,
@@ -175,7 +212,7 @@ impl RbacService {
     /// * `grant` - 已按操作人权限和 policy 版本校验的授予上下文
     /// * `executor` - 数据访问执行器，必须为事务执行器
     ///
-    /// # 返回值
+    /// # 返回
     /// 事务内角色校验和绑定替换成功时返回 `Ok(())`。
     ///
     /// # 错误
@@ -201,7 +238,7 @@ impl RbacService {
     /// * `role_ids` - 完整角色 ID 集合
     /// * `executor` - 数据访问执行器，必须为事务执行器
     ///
-    /// # 返回值
+    /// # 返回
     /// 角色校验和绑定替换成功时返回 `Ok(())`。
     ///
     /// # 错误
@@ -228,7 +265,7 @@ impl RbacService {
     /// * `role_ids` - 已规范化的完整角色 ID 集合
     /// * `executor` - 数据访问执行器，必须为事务执行器
     ///
-    /// # 返回值
+    /// # 返回
     /// 事务内角色校验和绑定替换成功时返回 `Ok(())`。
     ///
     /// # 错误
@@ -260,7 +297,7 @@ impl RbacService {
     /// * `account_id` - 账号 ID
     /// * `executor` - 数据访问执行器，必须为事务执行器
     ///
-    /// # 返回值
+    /// # 返回
     /// 事务内角色绑定清除成功时返回 `Ok(())`。
     ///
     /// # 错误
@@ -300,6 +337,16 @@ impl RbacService {
 }
 
 /// 校验事务内解析出的可分配角色数量与请求一致。
+///
+/// # 参数
+/// * `requested_count` - 请求中的角色数量。
+/// * `existing_count` - 实际读到的启用角色数量。
+///
+/// # 返回
+/// 两边数量一致时无返回值。
+///
+/// # 错误
+/// 数量不一致时返回业务错误，表示角色不存在或已停用。
 pub(super) fn ensure_all_roles_assignable(requested_count: usize, existing_count: usize) -> Result<()> {
     if existing_count != requested_count {
         return Err(Error::BusinessLogicError("角色不存在或已停用".to_string()));
@@ -308,6 +355,15 @@ pub(super) fn ensure_all_roles_assignable(requested_count: usize, existing_count
 }
 
 /// 确保每个请求角色均允许通过普通管理入口分配。
+///
+/// # 参数
+/// * `roles` - 待分配角色。
+///
+/// # 返回
+/// 每个角色都可分配时无返回值。
+///
+/// # 错误
+/// 任一角色是系统角色或已停用时返回 `Forbidden`。
 pub(super) fn ensure_roles_delegable(roles: &[Role]) -> Result<()> {
     roles.iter().try_for_each(ensure_role_delegable)
 }
@@ -320,10 +376,30 @@ fn ensure_role_delegable(role: &Role) -> Result<()> {
     Ok(())
 }
 
+/// 判断角色能否经普通管理入口分配。
+///
+/// # 参数
+/// * `role` - 待判断角色。
+///
+/// # 返回
+/// 不是 root，且领域规则允许分配时返回 `true`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn role_is_assignable(role: &Role) -> bool {
     role.base.id != ROOT_ROLE_ID && role.ensure_assignable().is_ok()
 }
 
+/// 拒绝修改 root 或其他不可变角色。
+///
+/// # 参数
+/// * `role` - 待修改角色。
+///
+/// # 返回
+/// 角色允许修改时无返回值。
+///
+/// # 错误
+/// root 或领域规则禁止修改时返回 `Forbidden`。
 pub(super) fn ensure_role_mutable(role: &Role) -> Result<()> {
     if role.base.id == ROOT_ROLE_ID || role.ensure_mutable().is_err() {
         return Err(Error::Forbidden("系统角色不能修改".to_string()));
@@ -331,6 +407,16 @@ pub(super) fn ensure_role_mutable(role: &Role) -> Result<()> {
     Ok(())
 }
 
+/// 拒绝删除 root 或其他不可删除角色。
+///
+/// # 参数
+/// * `role` - 待删除角色。
+///
+/// # 返回
+/// 角色允许删除时无返回值。
+///
+/// # 错误
+/// root 或领域规则禁止删除时返回 `Forbidden`。
 pub(super) fn ensure_role_deletable(role: &Role) -> Result<()> {
     if role.base.id == ROOT_ROLE_ID || role.ensure_deletable().is_err() {
         return Err(Error::Forbidden("系统角色不能删除".to_string()));
@@ -338,6 +424,7 @@ pub(super) fn ensure_role_deletable(role: &Role) -> Result<()> {
     Ok(())
 }
 
+/// 在同一 Enforcer 快照内要求目标账号现有权限和待分配角色权限都不超过操作人。
 fn authorize_account_permissions(
     enforcer: &Enforcer,
     actor_permissions: &PermissionSet,
@@ -354,6 +441,17 @@ fn authorize_account_permissions(
     Ok(())
 }
 
+/// 拒绝通过普通管理接口修改绑定了 root 或其他系统角色的账号。
+///
+/// # 参数
+/// * `target_role_ids` - 目标账号当前直接角色。
+/// * `roles` - 已加载的角色实体。
+///
+/// # 返回
+/// 没有受保护角色时无返回值。
+///
+/// # 错误
+/// 绑定 root 或系统角色，或角色实体缺失时返回 `Forbidden`。
 pub(super) fn ensure_target_roles_manageable(
     target_role_ids: &[String],
     roles: &HashMap<String, Role>,
@@ -379,10 +477,32 @@ fn authorized_role_grant(
     Ok(AuthorizedRoleGrant { role_ids, policy_revision })
 }
 
+/// 要求待授予权限是操作人权限的子集。
+///
+/// # 参数
+/// * `actor` - 操作人权限集。
+/// * `required` - 待授予权限集。
+///
+/// # 返回
+/// 操作人覆盖目标时无返回值。
+///
+/// # 错误
+/// 目标超出操作人范围时返回 `Forbidden`。
 pub(super) fn ensure_permission_subset(actor: &PermissionSet, required: &PermissionSet) -> Result<()> {
     ensure_covers(actor, required, "不能授予超出自身权限范围的角色或权限")
 }
 
+/// 要求被管理对象的权限不超过操作人。
+///
+/// # 参数
+/// * `actor` - 操作人权限集。
+/// * `target` - 目标账号或角色的权限集。
+///
+/// # 返回
+/// 操作人覆盖目标时无返回值。
+///
+/// # 错误
+/// 目标权限高于操作人时返回 `Forbidden`。
 pub(super) fn ensure_management_subset(actor: &PermissionSet, target: &PermissionSet) -> Result<()> {
     ensure_covers(actor, target, "不能管理权限范围高于自身的账号或角色")
 }

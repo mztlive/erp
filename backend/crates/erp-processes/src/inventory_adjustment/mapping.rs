@@ -18,6 +18,16 @@ const STOCK_ADJUSTMENT_START_DIGEST_VERSION: &str = "STOCK_ADJUSTMENT_START_V1";
 const STOCK_ADJUSTMENT_START_VARIANT: &str = "STOCK_ADJUSTMENT_SUBMISSION";
 
 /// 返回库存调整启动命令的当前 V3 与历史无前缀作用域。
+///
+/// # 参数
+/// * `adjustment_id` - 库存调整单主键。
+/// * `target_subject_version` - 本次启动冻结的主题版本。
+///
+/// # 返回
+/// 返回作用域候选，当前作用域在前。
+///
+/// # 错误
+/// 作用域构造失败时返回下层对应错误。
 pub(super) fn stock_adjustment_start_scopes(
     adjustment_id: &str,
     target_subject_version: u32,
@@ -33,6 +43,16 @@ pub(super) fn stock_adjustment_start_scopes(
 }
 
 /// 对完整规范化库存调整提交载荷计算版本化摘要。
+///
+/// # 参数
+/// * `req` - 库存调整提交载荷。
+/// * `actor_id` - 提交人标识。
+///
+/// # 返回
+/// 返回带 `v1:` 前缀的载荷摘要。
+///
+/// # 错误
+/// 明细行主键或数量非法时返回 `ValidationError`；摘要序列化失败时返回 `Internal`。
 pub(super) fn stock_adjustment_start_digest(
     req: &SubmitStockAdjustmentRequest,
     actor_id: &str,
@@ -72,6 +92,19 @@ pub(super) fn stock_adjustment_start_digest(
 }
 
 /// 构造库存调整完整提交载荷的当前 V3 身份，并登记两代精确历史候选。
+///
+/// # 参数
+/// * `adjustment_id` - 库存调整单主键。
+/// * `req` - 库存调整提交载荷。
+/// * `actor_id` - 提交人标识。
+/// * `binding_id` - 冻结的审批定义标识。
+/// * `definition_version` - 冻结的定义版本。
+///
+/// # 返回
+/// 返回当前身份，并附带两代历史身份候选。
+///
+/// # 错误
+/// 幂等键非法、明细无法规范化，或身份构造失败时返回对应错误。
 pub(super) fn stock_adjustment_start_identity(
     adjustment_id: &str,
     req: &SubmitStockAdjustmentRequest,
@@ -157,7 +190,18 @@ pub(super) fn stock_adjustment_start_identity(
     Ok(identity)
 }
 
-/// Unknown-result 查询仅接受作用域与摘要版本的精确历史配对。
+/// 未知结果查询仅接受作用域与摘要版本的精确历史配对。
+///
+/// # 参数
+/// * `scope_id` - 收据上的作用域。
+/// * `payload_digest` - 收据上的载荷摘要。
+/// * `scopes` - 当前与历史作用域；长度不是 2 时一律拒绝。
+///
+/// # 返回
+/// 当前作用域配 `v3:` 摘要，或历史作用域配 `v1:` 或裸 SHA-256 摘要时返回 `true`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn is_supported_start_receipt_identity(
     scope_id: &str,
     payload_digest: &str,

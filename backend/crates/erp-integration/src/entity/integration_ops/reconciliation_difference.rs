@@ -61,7 +61,7 @@ impl ReconciliationDifferenceData {
     /// 返回无证据引用的创建数据。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn new(business_object_type: String, business_object_id: String, difference_type: String) -> Self {
         Self {
             business_object_type,
@@ -115,7 +115,8 @@ impl ReconciliationDifference {
     /// 返回新建的对账差异实体。
     ///
     /// # 错误
-    /// 当对象类型/对象 ID/差异分类为空或超长、证据引用超长、两侧证据都为空时返回错误。
+    /// 对象类型、对象 ID 或差异分类为空或超长，证据引用超长，两侧证据都为空，
+    /// 或处理人/组织为空、为 `me`/`company` 占位或超长时返回领域校验错误。
     pub fn new(id: ReconciliationDifferenceId, data: ReconciliationDifferenceData) -> Result<Self> {
         let business_object_type = normalize_required_text(
             data.business_object_type,
@@ -179,8 +180,14 @@ impl ReconciliationDifference {
     /// 固定关键词覆盖金额、资金、支付、退款、余额、应收和应付差异；匹配
     /// 不区分大小写，供终态证据策略选择财务补偿要求。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 差异分类包含任一固定资金关键词时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn has_financial_impact(&self) -> bool {
         let value = self.difference_type.to_ascii_lowercase();
         ["amount", "fund", "payment", "refund", "balance", "receivable", "payable"]

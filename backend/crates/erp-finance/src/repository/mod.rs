@@ -53,6 +53,9 @@ pub mod keyword;
 ///
 /// # 返回
 /// 返回排序条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn sort_doc_with_id(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     let field = sort_by.filter(|name| allowed.contains(name)).unwrap_or("created_at");

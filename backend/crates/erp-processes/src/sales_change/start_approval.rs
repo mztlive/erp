@@ -112,6 +112,21 @@ pub(super) async fn load_start_receipt(
 }
 
 /// 在 fresh 事务快照内按完整 V3/legacy 身份回读已提交的销售变更启动结果。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `subject` - 业务对象引用。
+/// * `subject_version` - 冻结提交版本。
+/// * `idempotency_key` - 调用方幂等键。
+/// * `binding` - 创建时冻结的定义绑定。
+/// * `actor_id` - 启动人。
+/// * `executor` - 当前事务执行器。
+///
+/// # 返回
+/// 已提交且与冻结事实一致的审批实例 ID。没有同载荷收据时为 `None`。
+///
+/// # 错误
+/// 幂等键非法、收据载荷冲突、收据指向的实例不存在、实例与冻结事实不一致，或仓储读取失败时返回错误。
 pub(super) async fn replay_sales_change_start_with_executor(
     db: &Database,
     subject: &SubjectRef,

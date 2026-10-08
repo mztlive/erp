@@ -192,7 +192,7 @@ async fn replay_sourcing_command(
 struct CreateFromSourcingApplyInput<'a> {
     /// 审批绑定授权源。
     rbac: &'a SharedRbacService,
-    /// Composition-root object-read port.
+    /// 组合根审批对象读取端口。
     object_read: &'a dyn erp_workflow::ApprovalObjectReadPort,
     /// 原始选源请求。
     req: &'a CreatePurchaseOrdersFromSourcingRequest,
@@ -208,7 +208,6 @@ struct CreateFromSourcingApplyInput<'a> {
     actor: &'a AuditActor,
 }
 
-/// 已规范化的选源行。
 /// 查找 guard 后仍有效的库存余额依据。
 ///
 /// # 参数

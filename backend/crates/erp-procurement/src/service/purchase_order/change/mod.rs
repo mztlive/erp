@@ -14,8 +14,17 @@ use crate::entity::purchase_order::{
 };
 /// 在原创建时点分配变更 ID；不读取外域或预写审计。
 ///
+/// # 参数
+/// * `order` - 来源采购单，只取其稳定 ID
+/// * `base_revision` - 冻结的基准采购版本，只取其稳定 ID
+/// * `reason` - 变更原因原文
+/// * `actor_id` - 创建人
+///
+/// # 返回
+/// 返回新建的草稿变更单。
+///
 /// # 错误
-/// 原变更实体校验失败时返回原领域错误。
+/// 实体校验失败时，`erp_core::Error` 经 `?` 变为 `Logic`。
 pub fn new_change(
     order: &PurchaseOrder,
     base_revision: &PurchaseOrderRevision,

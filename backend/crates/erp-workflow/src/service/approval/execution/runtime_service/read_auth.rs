@@ -138,6 +138,15 @@ pub(super) async fn revalidate_decision_approver(
 }
 
 /// 读取必须审批政策唯一签署的岗位分离规则。
+///
+/// # 参数
+/// * `document_type` - 正式单据类型。
+///
+/// # 返回
+/// 返回该类型必须审批政策中的岗位分离规则。
+///
+/// # 错误
+/// 政策未登记，或该类型不需要审批时返回 `ApprovalPolicyNotRegistered`。
 pub(super) fn process_required_separation_policy(
     document_type: DocumentType,
 ) -> Result<SeparationOfDutiesPolicy> {
@@ -150,6 +159,16 @@ pub(super) fn process_required_separation_policy(
 }
 
 /// 校验当前执行与实例持有的运行令牌完全一致。
+///
+/// # 参数
+/// * `instance` - 审批实例。
+/// * `current` - 当前执行；实例没有当前执行时为空。
+///
+/// # 返回
+/// 两边都没有当前执行，或执行 ID、实例 ID 都一致时返回 `true`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn current_execution_matches_instance(
     instance: &ApprovalProcessInstance,
     current: Option<&ApprovalNodeExecution>,
@@ -169,8 +188,14 @@ impl RuntimeReadAuthorizationFacts {
     ///
     /// 纯判定（无 I/O），Service 只做仓储结果驱动的编排。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 允许读取时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn ordinary_allowed(self) -> bool {
         self.actor_active
             && (self.initiator
@@ -182,8 +207,14 @@ impl RuntimeReadAuthorizationFacts {
     ///
     /// 纯判定（无 I/O），Service 只做仓储结果驱动的编排。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 允许读取时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn management_allowed(self) -> bool {
         self.actor_active && self.runtime_admin && self.object_readable && self.scope_covers
     }
@@ -192,14 +223,33 @@ impl RuntimeReadAuthorizationFacts {
     ///
     /// 纯判定（无 I/O），Service 只做仓储结果驱动的编排。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 允许读取时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn started_allowed(self) -> bool {
         self.actor_active && self.initiator
     }
 }
 
 /// 当前开放审批任务是否精确证明 actor 对运行实例的当前责任。
+///
+/// # 参数
+/// * `task` - 开放审批任务。
+/// * `execution` - 当前节点执行。
+/// * `subject` - 已对齐的运行主体。
+/// * `actor_id` - 被证明的责任人。
+/// * `expected_owner_role` - 该单据类型要求的责任岗位。
+///
+/// # 返回
+/// 任务、执行、实例、快照、岗位和组织全部一致时返回 `true`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn task_proves_current_responsibility(
     task: &WorkItem,
     execution: &ApprovalNodeExecution,
@@ -240,6 +290,19 @@ pub(super) fn task_proves_current_responsibility(
 }
 
 /// Mine 页的 WorkItem、当前 execution 与实例摘要是否构成同一当前责任链。
+///
+/// # 参数
+/// * `task` - 当前页任务。
+/// * `execution` - 任务所属执行。
+/// * `summary` - 实例摘要。
+/// * `snapshot` - 冻结快照；缺失时责任链不成立。
+/// * `actor_id` - 当前读者。
+///
+/// # 返回
+/// 运行链与快照责任组织都一致时返回 `Ok(true)`；任一事实不一致时返回 `Ok(false)`。
+///
+/// # 错误
+/// 主体种类无法解析，或单据适配规格不存在时隐藏为不存在或返回适配错误。
 pub(super) fn mine_runtime_chain_matches(
     task: &WorkItem,
     execution: &ApprovalNodeExecution,
@@ -296,6 +359,15 @@ pub(super) fn mine_runtime_chain_matches(
 ///
 /// 不得依赖唯一索引或静默去重；重复 WorkItem 会同时污染当前页行与
 /// Repository 返回的 total，因此必须按隐藏实例存在性的稳定语义整页失败。
+///
+/// # 参数
+/// * `tasks` - 当前页任务，顺序保留。
+///
+/// # 返回
+/// 返回与任务顺序一致且互不重复的执行 ID。
+///
+/// # 错误
+/// 任务没有执行引用或执行 ID 重复时隐藏为不存在。
 pub(super) fn mine_execution_ids(tasks: &[WorkItem]) -> Result<Vec<ApprovalNodeExecutionId>> {
     let mut seen = HashSet::with_capacity(tasks.len());
     let mut execution_ids = Vec::with_capacity(tasks.len());
@@ -310,6 +382,15 @@ pub(super) fn mine_execution_ids(tasks: &[WorkItem]) -> Result<Vec<ApprovalNodeE
 }
 
 /// 把 Repository 在完整过滤集合中发现的责任链冲突映射为隐藏式拒绝。
+///
+/// # 参数
+/// * `conflict_count` - 仓储报告的责任链冲突数。
+///
+/// # 返回
+/// 没有冲突时无返回值。
+///
+/// # 错误
+/// 冲突数大于 0 时隐藏为不存在。
 pub(super) fn ensure_mine_page_integrity(conflict_count: usize) -> Result<()> {
     if conflict_count == 0 {
         return Ok(());
@@ -320,6 +401,16 @@ pub(super) fn ensure_mine_page_integrity(conflict_count: usize) -> Result<()> {
 /// 由 Mine 当前页 execution 解析实例 ID，并拒绝两个执行指向同一实例。
 ///
 /// 执行结果缺失或实例重复均表示当前责任链不能形成唯一列表行，整页失败关闭。
+///
+/// # 参数
+/// * `execution_ids` - 当前页执行 ID。
+/// * `execution_by_id` - 已按执行 ID 建表的执行。
+///
+/// # 返回
+/// 返回与执行顺序一致且互不重复的实例 ID。
+///
+/// # 错误
+/// 执行缺失或两个执行指向同一实例时隐藏为不存在。
 pub(super) fn mine_instance_ids(
     execution_ids: &[ApprovalNodeExecutionId],
     execution_by_id: &HashMap<String, ApprovalNodeExecution>,
@@ -340,6 +431,16 @@ pub(super) fn mine_instance_ids(
 }
 
 /// 将批量读取结果按稳定 ID 建表；重复 ID 按持久化身份损坏失败关闭。
+///
+/// # 参数
+/// * `items` - 批量读取结果。
+/// * `key_of` - 从单项取出稳定 ID。
+///
+/// # 返回
+/// 返回以稳定 ID 为键的表。
+///
+/// # 错误
+/// 同一 ID 出现多次时隐藏为不存在。
 pub(super) fn unique_by_id<T, F>(items: Vec<T>, key_of: F) -> Result<HashMap<String, T>>
 where
     F: Fn(&T) -> String,

@@ -77,10 +77,13 @@ impl CommandFingerprint {
     /// 无。
     ///
     /// # 返回
-    /// 返回 64 位小写十六进制摘要。
+    /// 返回 64 位小写十六进制摘要；release 下前缀缺失时返回空字符串。
     ///
     /// # 错误
-    /// 无；非法形态在 debug 断言，release 兜底为空。
+    /// 不返回错误。
+    ///
+    /// # Panics
+    /// debug 构建下前缀缺失会触发断言。构造器与 `parse` 保证已验证指纹带 v1 前缀。
     pub fn digest_hex(&self) -> &str {
         debug_assert!(self.0.starts_with(V1_PREFIX), "已验证指纹必须有 v1 前缀");
         self.0.strip_prefix(V1_PREFIX).unwrap_or("")
@@ -97,6 +100,18 @@ fn feed_length_prefixed(hasher: &mut Sha256, parts: impl IntoIterator<Item = imp
 }
 
 impl<'de> Deserialize<'de> for CommandFingerprint {
+    /// 将持久化字符串反序列化为 v1 指纹。
+    ///
+    /// 摘要按 `parse` 转成小写。
+    ///
+    /// # 参数
+    /// * `deserializer` - 提供指纹字符串的反序列化器。
+    ///
+    /// # 返回
+    /// 成功时返回归一化后的指纹。
+    ///
+    /// # 错误
+    /// 输入不是字符串，或缺少 v1 前缀、摘要不是 64 位十六进制时，返回反序列化错误。
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
         let value = String::deserialize(deserializer)?;
         Self::parse(value).map_err(serde::de::Error::custom)
@@ -120,7 +135,7 @@ impl CommandIdentity {
     /// 返回当前命令身份。
     ///
     /// # 错误
-    /// 前缀为空时返回错误。
+    /// `prefix` 去空白后为空时返回错误。
     pub fn new(prefix: &str, parts: impl IntoIterator<Item = String>) -> Result<Self> {
         if prefix.trim().is_empty() {
             return Err(Error::from("命令身份前缀不能为空"));
@@ -214,7 +229,7 @@ impl CommandReceipt {
     /// 返回版本化收据。
     ///
     /// # 错误
-    /// 幂等键为空或载荷序列化失败时返回错误。
+    /// `prefix` 或幂等键去空白后为空，或载荷序列化失败时返回错误。
     pub fn from_payload<T: Serialize>(
         prefix: &str,
         actor_id: &str,
@@ -255,7 +270,7 @@ impl CommandReceipt {
     /// 返回版本化收据。
     ///
     /// # 错误
-    /// 幂等键或资源 ID 为空时返回错误。
+    /// `prefix`、幂等键或资源 ID 去空白后为空时返回错误。
     pub fn from_resource_parts(
         prefix: &str,
         actor_id: &str,
@@ -283,33 +298,71 @@ impl CommandReceipt {
     }
 
     /// 返回新写入使用的收据 ID。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回当前收据 ID。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn id(&self) -> &str {
         self.identity.current_id()
     }
 
     /// 返回收据所属操作人。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回操作人 ID。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn actor_id(&self) -> &str {
         &self.actor_id
     }
 
     /// 返回收据动作。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回动作名称。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn action(&self) -> &str {
         &self.action
     }
 
     /// 返回收据结果资源类型。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回资源类型。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn resource_type(&self) -> &str {
         &self.resource_type
     }
 
-    /// 返回资源定位命令的目标作用域；创建命令以动作和资源类型划定作用域。
+    /// 返回资源定位命令的目标资源 ID。
     ///
     /// # 参数
     /// 无。
+    ///
     /// # 返回
-    /// 返回可选目标资源 ID。
+    /// 返回 `Some` 目标资源 ID。`from_payload` 形成的收据没有资源定位，返回 `None`。
+    ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn scope_id(&self) -> Option<&str> {
         self.scope_id.as_deref()
     }
@@ -341,6 +394,7 @@ impl CommandReceipt {
     }
 }
 
+/// 把载荷收成键有序的规范 JSON，避免对象字段顺序影响指纹。
 fn canonical_json<T: Serialize>(payload: &T) -> Result<String> {
     let value = serde_json::to_value(payload).map_err(payload_serialize_error)?;
     let mut output = String::new();
@@ -355,6 +409,7 @@ fn write_scalar_json(value: &impl Serialize, output: &mut String) -> Result<()> 
     Ok(())
 }
 
+/// 对象键排序后写入规范 JSON，数组保持原顺序；标量序列化失败即失败。
 fn write_canonical_json(value: &serde_json::Value, output: &mut String) -> Result<()> {
     match value {
         serde_json::Value::Object(map) => {

@@ -30,6 +30,16 @@ use crate::workbench::authority::funds::mapping::voucher_revision_ids;
 
 impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 批量读取应付供应商展示名。
+    ///
+    /// # 参数
+    /// * `accounts` - 本批应付子账
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回下层读出的供应商展示名映射。
+    ///
+    /// # 错误
+    /// 资金读取失败时返回对应错误。
     pub(super) async fn payable_supplier_names(
         &self,
         accounts: &[PayableAccount],
@@ -39,6 +49,16 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     }
 
     /// 批量读取应付来源采购单号。
+    ///
+    /// # 参数
+    /// * `accounts` - 本批应付子账
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回下层读出的来源采购单号映射。
+    ///
+    /// # 错误
+    /// 资金读取失败时返回对应错误。
     pub(super) async fn payable_purchase_numbers(
         &self,
         accounts: &[PayableAccount],
@@ -48,6 +68,16 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     }
 
     /// 批量汇总每个应付子账最早分录到期日。
+    ///
+    /// # 参数
+    /// * `accounts` - 本批应付子账
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回应付子账 ID 到该子账最早分录到期日。
+    ///
+    /// # 错误
+    /// 应付分录到期日查询失败时返回仓储错误。
     pub(super) async fn payable_due_dates(
         &self,
         accounts: &[PayableAccount],

@@ -73,6 +73,7 @@ impl Client {
     }
 }
 
+/// 声明长度或累计块长度超过 `MAX_RESPONSE_BYTES` 时停止并返回 `Error::ResponseSize`。
 async fn read_response(mut response: Response) -> Result<Vec<u8>> {
     if response.content_length().is_some_and(|length| length > MAX_RESPONSE_BYTES as u64) {
         return Err(Error::ResponseSize);

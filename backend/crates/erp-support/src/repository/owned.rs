@@ -1,6 +1,6 @@
-//! Collection-scoped aliases for [`persistence_core::Repository`].
+//! 按集合别名指向 [`persistence_core::Repository`]。
 //!
-//! Domain-specific methods are extension traits on the generic repository.
+//! 领域方法是通用仓储上的扩展 trait。
 
 pub type BackgroundJobRepository<'a> =
     persistence_core::Repository<'a, crate::entity::bulk_job::BackgroundJob>;

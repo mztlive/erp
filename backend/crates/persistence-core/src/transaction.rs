@@ -1,7 +1,6 @@
-//! Transaction support for MongoDB operations
+//! MongoDB 操作的事务支持。
 //!
-//! This module provides transaction management for MongoDB operations,
-//! allowing multiple operations to be executed atomically.
+//! 提供事务管理，使多次操作得以原子执行。
 
 use std::future::Future;
 use std::pin::Pin;
@@ -89,7 +88,7 @@ async fn abort_quietly(session: &mut ClientSession) {
     }
 }
 
-/// Trait for executing operations within a transaction context
+/// 在事务上下文中执行操作。
 #[async_trait]
 pub trait Transactional {
     /// 在同一事务内执行回调，并将持久化错误转换为调用方错误类型。
@@ -116,7 +115,7 @@ pub trait Transactional {
         E: From<Error> + Send;
 }
 
-/// Implements transaction support for MongoDB client
+/// 为 MongoDB 客户端实现事务支持。
 #[async_trait]
 impl Transactional for Client {
     /// 在事务中执行函数，并允许调用方指定错误类型。

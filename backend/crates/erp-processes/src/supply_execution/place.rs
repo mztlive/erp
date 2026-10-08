@@ -108,8 +108,12 @@ impl SupplierFulfillmentProcess {
     /// * `connection` - 供应商连接
     /// * `actor` - 审计操作人
     ///
+    /// # 返回
+    /// 派发结果已应用到订单与动作，并在同一事务写回消息；需要人工处理时创建或复用 W26 任务。
+    ///
     /// # 错误
-    /// 结果写回失败时返回 `ConflictError`/`RepositoryError`/`OutcomeUnknown`。
+    /// 结果无法应用到订单、处理人缺少有效内部组织，或错误任务构造失败时返回对应错误。
+    /// 结果写回失败时返回 `ConflictError`、`RepositoryError` 或 `OutcomeUnknown`。
     pub(super) async fn settle_dispatch(
         &self,
         order: &mut SupplierFulfillmentOrder,
@@ -170,15 +174,17 @@ impl SupplierFulfillmentProcess {
     /// 构建失败路径错误任务并把消息置为失败（§6.21 错误分类）。
     ///
     /// # 参数
-    /// * `message` - `inbox_message` 信封（置为失败）
-    /// * `order` - 供应商子订单（业务对象引用）
-    /// * `error_class` - 错误分类
+    /// * `message` - `inbox_message` 信封（置为失败）。
+    /// * `order` - 供应商子订单（业务对象引用）。
+    /// * `error_class` - 错误分类。
+    /// * `actor` - 当前处理人，写入任务归属用户。
+    /// * `owner_org_unit_id` - 处理人的有效内部组织。
     ///
     /// # 返回
     /// 返回待落库的错误任务。
     ///
     /// # 错误
-    /// 实体构造校验失败时返回 `LogicError`。
+    /// 消息更新或错误任务构造失败时返回 `Logic`。
     fn build_error_task(
         &self,
         message: &mut InboxMessage,
@@ -273,7 +279,7 @@ impl SupplierFulfillmentProcess {
 /// 返回消息实体。
 ///
 /// # 错误
-/// 实体构造校验失败时返回 `LogicError`。
+/// 实体构造校验失败时返回 `Logic`。
 pub(super) fn build_action_message(
     action: &SupplierOrderAction,
     connection: &SupplierApiConnection,

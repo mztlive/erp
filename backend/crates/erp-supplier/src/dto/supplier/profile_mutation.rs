@@ -190,6 +190,9 @@ pub struct SaveSupplierProfileRequest {
 impl SaveSupplierProfileRequest {
     /// 校验根级供应商资料请求的完整输入合同。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 根字段、清空/替换意图及全部嵌套输入均合法时返回 `Ok(())`。
     ///

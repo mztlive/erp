@@ -41,8 +41,11 @@ impl ApprovalTransitionDefinition {
     /// * `to_node_key` - 目标节点
     /// * `at` - 调用方时间
     ///
+    /// # 返回
+    /// 返回指向节点、终态为空的连线。
+    ///
     /// # 错误
-    /// 节点键非法时返回错误。
+    /// 来源或目标节点键为空或超长，或调用方时间无法持久化时返回错误。
     pub fn to_node(
         id: ApprovalTransitionDefinitionId,
         process_definition_id: ApprovalProcessDefinitionId,
@@ -82,8 +85,11 @@ impl ApprovalTransitionDefinition {
     /// * `event` - 必须是通过
     /// * `at` - 调用方时间
     ///
+    /// # 返回
+    /// 返回终态为通过、目标节点为空的连线。
+    ///
     /// # 错误
-    /// 事件不是通过或来源键非法时返回错误。
+    /// 事件不是通过、来源键为空或超长，或调用方时间无法持久化时返回错误。
     pub fn to_approved(
         id: ApprovalTransitionDefinitionId,
         process_definition_id: ApprovalProcessDefinitionId,
@@ -112,6 +118,12 @@ impl ApprovalTransitionDefinition {
     /// 校验单条连线形状：节点目标与终态恰有一个。
     ///
     /// 本方法不判断该节点是否入口或末节点。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 形状合法时返回 `Ok(())`。
     ///
     /// # 错误
     /// 目标组合不合法时返回 [`ModelError::InvalidTransition`]。

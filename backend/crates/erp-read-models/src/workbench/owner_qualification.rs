@@ -36,6 +36,15 @@ struct OwnerPermissions {
 
 impl QualificationCache {
     /// 只在调用方事务执行器内启用；每个完整扫描创建独立缓存。
+    ///
+    /// # 参数
+    /// * `executor` - 调用方执行器；只用来判断是否处于事务会话
+    ///
+    /// # 返回
+    /// `executor.session()` 有值时返回启用缓存的实例，否则缓存关闭。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn new(executor: &mut dyn Executor) -> Self {
         Self { enabled: executor.session().is_some(), owners: HashMap::new() }
     }
@@ -101,7 +110,10 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 统计复用页面资格重验，直接消费本批已读的权威来源。
     ///
     /// # 参数
-    /// `items` 为最小动作投影，`facts` 为同一执行器中的对象权威事实。
+    /// * `items` - 最小动作投影
+    /// * `facts` - 同一执行器中的对象权威事实
+    /// * `qualification` - 本扫描阶段的负责人资格缓存
+    /// * `executor` - 资格读取沿用的执行器
     /// # 返回
     /// 原地阻断失去账号、执行权限或订单读取资格的负责人。
     /// # 错误

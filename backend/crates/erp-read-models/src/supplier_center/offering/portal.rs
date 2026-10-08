@@ -110,7 +110,7 @@ impl PortalOfferingReadService {
     /// # 返回
     /// 返回该供应商必要的供给资料。
     /// # 错误
-    /// 不存在或属于其他供应商时返回相同 NotFound。
+    /// 不存在或属于其他供应商时返回相同 `NotFound`。仓储或下层读取失败会返回对应错误。
     pub async fn offering(&self, actor: &PortalActor, id: &str) -> Result<PortalOfferingView> {
         self.require_owned(actor, id, &mut NoTransaction).await?;
         let query = SupplierOfferingListQuery {

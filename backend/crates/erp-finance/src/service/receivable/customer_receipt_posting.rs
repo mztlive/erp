@@ -1,4 +1,4 @@
-//! Customer receipt ledger posting owned by finance.
+//! 由财务持有的客户回款账本过账。
 
 use std::collections::{HashMap, HashSet};
 
@@ -14,11 +14,23 @@ use crate::repository::prelude::*;
 use crate::service::receivable::mapping::map_ledger_error;
 use crate::{Error, Result};
 
-/// Settle an approval-validated receipt in the caller's current transaction.
+/// 在调用方当前事务中核销已通过审批校验的回款。
 ///
-/// Applies account deltas before receipt status and allocation writes, returning the
-/// affected sales-order identities for the caller's later progress update.
-/// Missing facts, cross-party allocation, ledger and balance failures propagate unchanged.
+/// 先写账户差额，再更新回款状态与分配。返回受影响的销售单身份，供调用方随后推进进度。
+/// 事实缺失、跨主体核销、账本与余额失败均按原错误传播。
+///
+/// # 参数
+/// * `db` - 财务领域数据库。
+/// * `receipt` - 待过账回款；成功时就地标为已过账。
+/// * `actor_id` - 执行人。
+/// * `executor` - 调用方事务执行器；本函数不另开事务。
+///
+/// # 返回
+/// 返回本次核销涉及的销售单 ID，顺序为账户首次出现顺序。
+///
+/// # 错误
+/// 分录或子账不存在时返回 `NotFound`；跨往来主体时返回 `BusinessLogicError`；
+/// 开放余额不足时返回 `BusinessLogicError`；账本或仓储失败时返回对应错误。
 pub async fn settle_customer_receipt(
     db: &Database,
     receipt: &mut CustomerReceipt,

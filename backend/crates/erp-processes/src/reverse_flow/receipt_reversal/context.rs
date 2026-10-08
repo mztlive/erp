@@ -15,6 +15,13 @@ use crate::{Error, Result};
 
 /// 查询原回款往来主体作为责任组织，并带回可选客户。
 ///
+/// # 参数
+/// * `db` - 数据库。
+/// * `original_receipt_id` - 原客户回款主键。
+///
+/// # 返回
+/// 返回责任组织 ID，以及原回款上的可选客户。
+///
 /// # 错误
 /// 原回款不存在或往来主体为空时返回错误。
 pub(super) async fn load_receipt_reversal_context(
@@ -32,8 +39,20 @@ pub(super) async fn load_receipt_reversal_context(
 
 /// 查询发布定义、写入绑定并持久化注册行。
 ///
+/// # 参数
+/// * `db` - 数据库。
+/// * `rbac` - 绑定重验使用的共享 RBAC。
+/// * `object_read` - 对象读取授权端口。
+/// * `document` - 待登记单据；成功时写入绑定后持久化。消耗该值。
+/// * `bind_command` - 发布定义绑定命令。
+/// * `actor` - 审计操作人。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 返回已附加到注册行的发布定义绑定。
+///
 /// # 错误
-/// 无发布定义或绑定失败时返回错误。
+/// 对象读取校验失败、无发布定义、绑定失败或注册写入失败时返回错误。
 pub(super) async fn persist_bound_receipt_reversal_document(
     db: &Database,
     rbac: &SharedRbacService,

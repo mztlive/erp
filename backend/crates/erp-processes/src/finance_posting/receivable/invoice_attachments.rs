@@ -14,6 +14,16 @@ use persistence_core::Executor;
 use crate::{Error, Result};
 
 /// 解析临时引用并拒绝重复或未消费的上传对象。
+///
+/// # 参数
+/// * `ids` - 待解析的附件 ID；成功时就地替换为正式资产 ID。
+/// * `pending` - 本批次已上传、尚未登记的附件。
+///
+/// # 返回
+/// 全部引用解析且没有未消费上传时无返回值。
+///
+/// # 错误
+/// 附件超过 32 个、临时引用无法解析、附件重复或仍有未消费上传时返回错误。
 pub(super) fn resolve(ids: &mut [FileAssetId], pending: &dyn PendingAttachmentBatch) -> Result<()> {
     if ids.len() > 32 {
         return Err(Error::ValidationError("发票附件最多 32 个".into()));
@@ -31,6 +41,20 @@ pub(super) fn resolve(ids: &mut [FileAssetId], pending: &dyn PendingAttachmentBa
 }
 
 /// 在当前发票事务中登记文件并建立准确的发票附件关系。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `invoice_id` - 发票 ID，同时作为附件所属单据 ID。
+/// * `ids` - 已解析的正式文件资产 ID。
+/// * `pending` - 本批次待登记附件。
+/// * `actor` - 当前登记人，必须是文件创建人。
+/// * `executor` - 当前发票事务执行器。
+///
+/// # 返回
+/// 文件与附件关系写入当前事务后无返回值。
+///
+/// # 错误
+/// 文件登记失败、附件不存在、不是发票证据、不是本人上传或附件关系写入失败时返回错误。
 pub(super) async fn persist(
     db: &Database,
     invoice_id: &str,
@@ -65,6 +89,17 @@ pub(super) async fn persist(
 }
 
 /// 文件内容清单与业务请求共同构成精确幂等指纹。
+///
+/// # 参数
+/// * `req` - 发票提交请求。
+/// * `actor_id` - 提交人 ID。
+/// * `pending` - 本批次上传；无内容清单且批次为空时载荷只有请求。
+///
+/// # 返回
+/// 返回命令回执。内容清单非空时载荷为请求与清单，否则只有请求。
+///
+/// # 错误
+/// 已有上传但内容清单为空、幂等键为空或载荷序列化失败时返回错误。
 pub(super) fn receipt(
     req: &CommitInvoiceRequest,
     actor_id: &str,

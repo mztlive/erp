@@ -1,15 +1,28 @@
-//! Domain object-read branches for approval binding.
+//! 审批绑定使用的领域对象读取分支。
 
 use erp_workflow::entity::document_registry::DocumentType as WorkflowDocumentType;
 use erp_workflow::ports::ApprovalObjectReadPort;
 use erp_workflow::service::approval::business_adapter::{ApprovalAdapterSpec, BindingRevalidationContext};
 use erp_workflow::{Error, Result};
 
-/// Process-owned object-read adapter that calls remaining domain services.
+/// 调用仍留在领域侧的对象读取判定。
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ProcessObjectRead;
 
 impl ApprovalObjectReadPort for ProcessObjectRead {
+    /// 创建人不参与读取权；只按单据类型、组织和审批人判定。
+    ///
+    /// # 参数
+    /// * `document_type` - 审批绑定的单据类型。
+    /// * `organization_id` - 单据组织。
+    /// * `creator_id` - 创建人。本实现不使用。
+    /// * `assignee_user_id` - 候选审批人。
+    ///
+    /// # 返回
+    /// 已接线时返回 `Some`，布尔值是读取权；未接线的单据类型返回 `None`。开票申请和库存调整在组织与审批人非空时返回 `Some(true)`。
+    ///
+    /// # 错误
+    /// 组织或审批人为空时返回校验错误；领域读取失败时返回映射后的工作流错误。
     fn object_read_decision(
         &self,
         document_type: WorkflowDocumentType,
@@ -22,18 +35,20 @@ impl ApprovalObjectReadPort for ProcessObjectRead {
     }
 }
 
-/// Domain-wired object-read decision used by approval binding.
+/// 按适配器单据类型给出审批绑定使用的对象读取权。
 ///
-/// # Parameters
-/// * `spec` - complete adapter spec
-/// * `context` - document organization and creator
-/// * `assignee_user_id` - candidate approver
+/// 创建人不参与判定。开票申请和库存调整在组织与审批人非空时直接允许读取。
 ///
-/// # Returns
-/// `Some` when the domain adapter is wired.
+/// # 参数
+/// * `spec` - 含单据类型的适配器规格。
+/// * `context` - 单据组织与创建人；本函数只使用组织。
+/// * `assignee_user_id` - 候选审批人。
 ///
-/// # Errors
-/// Empty organization/assignee or domain adapter failures.
+/// # 返回
+/// 已接线时返回 `Some`，布尔值是读取权；未接线的单据类型返回 `None`。
+///
+/// # 错误
+/// 组织或审批人为空时返回校验错误；领域读取失败时返回映射后的工作流错误。
 pub fn adapter_object_read_decision(
     spec: &ApprovalAdapterSpec,
     context: &BindingRevalidationContext,
@@ -42,6 +57,7 @@ pub fn adapter_object_read_decision(
     adapter_object_read_for_type(spec.document_type, &context.organization_id, assignee_user_id)
 }
 
+/// 空组织或审批人拒绝；未接线的单据类型返回 `None`，不得默认放行。
 fn adapter_object_read_for_type(
     document_type: WorkflowDocumentType,
     organization_id: &str,
@@ -95,7 +111,7 @@ fn adapter_object_read_for_type(
     }
 }
 
-/// Unwired object-read must fail closed.
+/// 未接线的对象读取必须失败关闭，禁止把 `None` 当成允许。
 ///
 /// # 参数
 /// * `decision` - 领域 Adapter 返回的显式判定
@@ -109,16 +125,16 @@ pub fn require_wired_object_read(decision: Option<bool>) -> Result<bool> {
     decision.ok_or_else(|| Error::ValidationError("对象读取权未接线，已按安全策略拒绝".to_string()))
 }
 
-/// Map remaining domain service errors onto workflow error classes.
+/// 把流程边界错误映射为工作流错误类别。
 ///
 /// # 参数
-/// * `error` - 旧 services 错误
+/// * `error` - 流程边界错误
 ///
 /// # 返回
-/// 返回 workflow 错误。
+/// 校验和业务逻辑错误保留原文，其余收成内部错误。
 ///
 /// # 错误
-/// 无；调用方继续传播映射后的错误。
+/// 不返回错误。
 fn map_workflow_error(error: crate::Error) -> Error {
     match error {
         crate::Error::ValidationError(message) => Error::ValidationError(message),

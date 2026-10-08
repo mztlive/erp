@@ -14,6 +14,17 @@ use crate::entity::document_registry::DocumentType;
 use crate::repository::bpm::DefinitionCatalogStatusFact;
 
 /// 配置状态。
+///
+/// # 参数
+/// * `requirement` - 审批要求
+/// * `published` - 已发布版本；没有时为空
+/// * `draft` - 活动草稿版本；没有时为空
+///
+/// # 返回
+/// 无需审批返回不适用；有发布版本返回已发布；仅有草稿返回草稿；否则返回缺失配置。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn configuration_status(
     requirement: ApprovalRequirement,
     published: Option<u32>,
@@ -115,6 +126,18 @@ pub(super) fn catalog_facts_by_kind(
 }
 
 /// 类型级定义允许动作（与工作项 `access::allowed_actions` 按语义区分命名）。
+///
+/// # 参数
+/// * `requirement` - 审批要求
+/// * `can_define` - 是否具备该类型定义管理权
+/// * `published` - 已发布版本
+/// * `draft` - 活动草稿版本
+///
+/// # 返回
+/// 无权或无需审批时返回空；无草稿时允许创建；有草稿时允许替换与发布；有发布版本时另允许退役。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn definition_allowed_actions(
     requirement: ApprovalRequirement,
     can_define: bool,
@@ -146,6 +169,15 @@ fn requirement_view(requirement: ApprovalRequirement) -> ApprovalRequirementView
 }
 
 /// 构造详情视图。
+///
+/// # 参数
+/// * `graph` - 定义图
+///
+/// # 返回
+/// 返回按展示顺序排列节点的详情。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn detail_view(graph: &DefinitionGraph) -> DefinitionDetailView {
     let document_type = document_type_of(graph.definition.process_kind);
     let mut nodes = graph.nodes.iter().collect::<Vec<_>>();
@@ -169,6 +201,15 @@ pub(super) fn detail_view(graph: &DefinitionGraph) -> DefinitionDetailView {
 }
 
 /// 构造节点视图。
+///
+/// # 参数
+/// * `node` - 定义节点
+///
+/// # 返回
+/// 返回节点标识、名称、用途、顺序与审批人快照。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn node_view(node: &ApprovalNodeDefinition) -> DefinitionNodeView {
     DefinitionNodeView {
         node_id: node.base.id.clone(),
@@ -183,6 +224,15 @@ pub(super) fn node_view(node: &ApprovalNodeDefinition) -> DefinitionNodeView {
 }
 
 /// 构造版本摘要。
+///
+/// # 参数
+/// * `definition` - 流程定义
+///
+/// # 返回
+/// 返回定义 ID、版本、状态、名称与锁版本。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn version_item(definition: &ApprovalProcessDefinition) -> DefinitionVersionItem {
     DefinitionVersionItem {
         definition_id: definition.base.id.clone(),

@@ -61,7 +61,8 @@ impl SupplierSettlementService {
     ///
     /// # 参数
     /// * `req` - 来源证据命令
-    /// * `actor` - 已鉴权记录人
+    /// * `actor_id` - 已鉴权记录人
+    /// * `executor` - 调用方执行器
     /// * `request_hash` - 当前命令的稳定幂等指纹
     ///
     /// # 返回
@@ -473,6 +474,9 @@ fn ensure_complete_source_scope(scope: CompleteSourceScope<'_>) -> Result<()> {
 ///
 /// # 返回
 /// 返回对行和证据输入顺序稳定的 SHA-256 指纹。
+///
+/// # 错误
+/// 不返回错误。
 pub fn source_request_hash(req: &RecordSettlementSourceEvidenceRequest) -> String {
     let mut parts = vec![
         "supplier-settlement-source-evidence-command-v1".to_string(),
@@ -518,6 +522,17 @@ pub fn source_request_hash(req: &RecordSettlementSourceEvidenceRequest) -> Strin
 
 impl SupplierSettlementService {
     /// 按请求 ID 重放已冻结来源，并保持不同载荷的原冲突。
+    ///
+    /// # 参数
+    /// * `request_id` - 来源证据请求身份。
+    /// * `request_hash` - 本次命令指纹。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 没有该请求时返回 `None`。指纹一致时返回已冻结来源的概要视图。
+    ///
+    /// # 错误
+    /// 同一请求已用于不同命令时返回 `ConflictError`。仓储读取失败时返回对应错误。
     pub async fn replay_source(
         &self,
         request_id: &str,
@@ -535,6 +550,16 @@ impl SupplierSettlementService {
         Ok(Some(existing.into()))
     }
     /// 持久化已经完成逐行核验的来源证据；审计由根流程在其后写入。
+    ///
+    /// # 参数
+    /// * `evidence` - 已逐行核验的来源证据。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 无返回值。来源证据已写入。
+    ///
+    /// # 错误
+    /// 仓储写入失败时返回对应错误。
     pub async fn persist_source_evidence(
         &self,
         evidence: &SupplierSettlementSourceEvidence,

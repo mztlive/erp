@@ -23,6 +23,9 @@ const RECENT_HISTORY_LIMIT: usize = 8;
 ///
 /// # 返回
 /// 返回有界只读审批结构。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn document_approval_view(
     binding: Option<&ApprovalDefinitionBinding>,
     instance: Option<DocumentApprovalInstanceView>,

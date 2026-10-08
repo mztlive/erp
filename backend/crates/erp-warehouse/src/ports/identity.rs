@@ -1,4 +1,4 @@
-//! Consumer port for identity facts required by warehouse handler eligibility.
+//! 仓库经办人资格所需的身份事实消费端口。
 
 use async_trait::async_trait;
 
@@ -14,7 +14,16 @@ pub enum HandlerDuty {
 }
 
 impl HandlerDuty {
-    /// Return the original Chinese operation label used in eligibility errors.
+    /// 返回资格错误里使用的中文操作标签。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 入库返回「入库」，仓发返回「仓发」。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(self) -> &'static str {
         match self {
             Self::Inbound => "入库",
@@ -22,7 +31,16 @@ impl HandlerDuty {
         }
     }
 
-    /// Return whether `fact` is eligible for this duty.
+    /// 判断身份事实是否具备该履约责任的资格。
+    ///
+    /// # 参数
+    /// * `fact` - 经办人身份事实。
+    ///
+    /// # 返回
+    /// 入库看 `inbound_eligible`，仓发看 `outbound_eligible`；具备时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_eligible(self, fact: &HandlerIdentityFact) -> bool {
         match self {
             Self::Inbound => fact.inbound_eligible,
@@ -56,22 +74,30 @@ pub struct HandlerIdentityFact {
 /// Port warehouse uses to read handler identity and permission facts.
 #[async_trait]
 pub trait IdentityFactPort: Send + Sync {
-    /// Return identity facts for one handler candidate.
+    /// 返回一名经办人候选的身份事实。
     ///
-    /// Missing or disabled accounts return `None`. The service maps that to the
-    /// original "账号不存在或已停用" business error.
+    /// 账号不存在或已停用时返回 `None`。服务层把这种情况映射为含「账号不存在或已停用」的业务错误。
     ///
-    /// # Parameters
-    /// * `account_id` - candidate account id
+    /// # 参数
+    /// * `account_id` - 候选账号 ID。
     ///
-    /// # Errors
-    /// Identity lookup failures other than a missing account.
+    /// # 返回
+    /// 找到可用账号时返回身份事实；缺失或停用时返回 `None`。
+    ///
+    /// # 错误
+    /// 除账号缺失以外的身份查询失败时返回错误。
     async fn handler_identity(&self, account_id: &str) -> Result<Option<HandlerIdentityFact>>;
 
-    /// Return company-wide admin handler candidates (no organization filter).
+    /// 返回全公司管理端经办人候选，不按组织过滤。
     ///
-    /// # Errors
-    /// Identity listing or permission evaluation failures.
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回身份事实列表。
+    ///
+    /// # 错误
+    /// 身份列举或权限判断失败时返回错误。
     async fn admin_handler_identities(&self) -> Result<Vec<HandlerIdentityFact>>;
 }
 

@@ -57,8 +57,14 @@ pub struct ScopedObject<'a> {
 impl ScopeClause {
     /// 判断对象是否满足该角色的各适用维度。
     ///
+    /// # 参数
+    /// * `object` - 业务域给出的对象责任事实。
+    ///
     /// # 返回
-    /// Company 覆盖维度；普通范围逐维求交，空正向范围不贡献对象。
+    /// `company` 为真时直接返回 `true`。否则已出现的归属、结算主体和仓库维度都要命中；没有任何正向范围时返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn covers(&self, object: &ScopedObject<'_>) -> bool {
         if self.company {
             return true;
@@ -92,8 +98,15 @@ impl ScopeClause {
 impl ResolvedScope {
     /// 判断读取或写入范围；调用方必须先证明有效账号和完整动作权限。
     ///
+    /// # 参数
+    /// * `object` - 业务域给出的对象责任事实。
+    /// * `allow_history` - 为真时，历史参与可以补读取。
+    ///
     /// # 返回
-    /// 合法历史参与仅补读取，仍与用户上限求交；角色缺范围不影响合法参与。
+    /// 任一角色条款覆盖，或允许历史且对象是历史参与者时为真；若存在用户上限，还要再被上限覆盖。没有角色条款时，历史参与仍可单独放行读取。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn allows(&self, object: &ScopedObject<'_>, allow_history: bool) -> bool {
         let granted = self.role_clauses.iter().any(|scope| scope.covers(object))
             || (allow_history && object.historical_read_participant);
@@ -109,7 +122,7 @@ impl ResolvedScope {
     /// 至少一条角色条款时为 `true`。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     ///
     /// # 关键业务约束
     /// 个人上限只收窄已有角色结果，不构成授权，也不得补 Company。
@@ -121,13 +134,28 @@ impl ResolvedScope {
 impl ScopeResolution<'_> {
     /// 解析角色并集及用户上限；输入角色必须由现有 RBAC 同角色完整权限检查产生。
     ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回角色条款并集和可选的用户上限，不保留逐角色映射。
+    ///
     /// # 错误
-    /// 无效目标或组织关系拒绝；缺范围、缺组织和缺必需维度保持空集。
+    /// 没有合格角色时返回 `Error::Forbidden`。绑定、目标或组织关系非法时返回对应错误。缺范围、缺组织或缺必需维度的角色不进入结果，而不是报错。
     pub fn resolve(&self) -> Result<ResolvedScope> {
         self.resolve_with_roles().map(|(scope, _)| scope)
     }
 
     /// 保留每个完整授权角色的条款，供需要角色责任证明的消费者使用。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回合并后的范围，以及角色 ID 到其完整条款的映射。不完整的角色两者都不收录。
+    ///
+    /// # 错误
+    /// `eligible_role_ids` 为空时返回 `Error::Forbidden`。规则绑定、组织展开或成员关系非法时返回对应错误。
     pub fn resolve_with_roles(&self) -> Result<(ResolvedScope, BTreeMap<String, ScopeClause>)> {
         if self.eligible_role_ids.is_empty() {
             return Err(crate::Error::Forbidden("没有提供完整动作权限的有效角色".into()));

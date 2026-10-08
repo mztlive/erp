@@ -18,7 +18,7 @@ impl RbacService {
     /// # 参数
     /// * `transaction` - 在事务执行器中执行的写入函数
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回事务函数的结果。
     ///
     /// # 错误
@@ -48,6 +48,13 @@ impl RbacService {
 
     /// 使用授权快照对应的 policy 版本运行写事务。
     ///
+    /// # 参数
+    /// * `policy_revision` - 授权时冻结的 policy 版本。
+    /// * `transaction` - 在事务执行器中执行的写入函数。
+    ///
+    /// # 返回
+    /// 返回事务函数的结果。
+    ///
     /// # 错误
     /// 授权后 policy 已变化、事务失败或本地刷新失败时返回错误。
     pub async fn run_authorized_policy_transaction<T, E, F>(
@@ -75,6 +82,16 @@ impl RbacService {
     }
 
     /// 运行 policy 写事务，并按需绑定事务前授权使用的版本。
+    ///
+    /// # 参数
+    /// * `expected_revision` - 要求匹配的 policy 版本；为空时只推进版本、不比较旧值。
+    /// * `transaction` - 在事务执行器中执行的写入函数。
+    ///
+    /// # 返回
+    /// 返回事务函数的结果。
+    ///
+    /// # 错误
+    /// 策略一致性未知、版本冲突、事务失败或本地刷新失败时返回错误。
     pub(super) async fn run_policy_transaction_at_revision<T, E, F>(
         self: &Arc<Self>,
         expected_revision: Option<u64>,
@@ -161,6 +178,14 @@ impl RbacService {
 
     /// 使用授权快照对应版本运行 policy 与审计原子事务。
     ///
+    /// # 参数
+    /// * `policy_revision` - 授权时冻结的 policy 版本。
+    /// * `audit` - 已在事务前准备的资源审计。
+    /// * `transaction` - 在事务执行器中执行的业务写入。
+    ///
+    /// # 返回
+    /// 返回业务写入的结果。
+    ///
     /// # 错误
     /// 业务写入、审计、policy 版本比较、提交或刷新失败时返回错误。
     pub async fn run_authorized_audited_policy_transaction<T, E, F>(
@@ -202,7 +227,7 @@ impl RbacService {
     ///
     /// # 参数
     /// * `transaction` - 已完成的 MongoDB policy 事务结果
-    /// # 返回值
+    /// # 返回
     /// 成功时返回事务值；失败时返回原始事务错误。
     ///
     /// # 错误
@@ -241,6 +266,15 @@ impl RbacService {
     }
 
     /// 在提交结果未知后阻止授权读取和后续 policy 写入，避免旧快照被误判为最新状态。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 提交结果仍然已知时无返回值。
+    ///
+    /// # 错误
+    /// 本进程已进入提交结果未知状态时返回 `Rbac`。
     pub(super) fn ensure_policy_consistency_known(&self) -> Result<()> {
         if self.policy_consistency_unknown.load(Ordering::Acquire) {
             return Err(Error::Rbac("授权策略提交结果未知，当前进程已停止授权，请重启服务".to_string()));

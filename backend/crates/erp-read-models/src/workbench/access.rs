@@ -108,6 +108,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     /// # 参数
     /// * `account_kind` - 账号类型
     /// * `actor_id` - 账号稳定 ID
+    /// * `executor` - 当前读取执行器
     ///
     /// # 返回
     /// 返回权限代码、参与单据、管理组织与责任范围。
@@ -128,6 +129,19 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     }
 
     /// 首拍身份版本与访问事实可共用只读阶段，末拍重验必须另行调用原版本端口。
+    ///
+    /// # 参数
+    /// * `actor` - 当前审计账号。
+    /// * `executor` - 当前读取执行器。
+    ///
+    /// # 返回
+    /// 返回授权快照与首拍身份版本。
+    ///
+    /// # 错误
+    /// 批量身份端口失败、首拍版本缺失，或回退路径的角色、权限与范围读取失败时返回错误。
+    ///
+    /// # Panics
+    /// 优化端口在要求版本时仍给出空版本属于程序错误；该情况已先返回 `Error::Internal`，随后的 `expect` 不应触发。
     pub(super) async fn queue_access_with_version(
         &self,
         actor: &AuditActor,
@@ -182,6 +196,17 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     }
 
     /// 定位实际授予指定权限的角色，使管理数据范围与权限来源关联。
+    ///
+    /// # 参数
+    /// * `role_ids` - 账号已有角色。
+    /// * `permission` - 待定位的权限。
+    /// * `account_has_permission` - 账号是否已具备该权限；为假时不查角色。
+    ///
+    /// # 返回
+    /// 返回实际授予该权限的角色 ID；账号不具备该权限时为空。
+    ///
+    /// # 错误
+    /// 角色权限判定失败时返回对应错误。
     pub(super) async fn roles_granting_permission(
         &self,
         role_ids: &[String],
@@ -200,6 +225,18 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         Ok(granting_roles)
     }
 
+    /// 把列表查询和授权快照收成仓储过滤条件。
+    ///
+    /// # 参数
+    /// * `query` - 工作项列表查询。
+    /// * `actor` - 当前账号。
+    /// * `access` - 已装载的授权快照。
+    ///
+    /// # 返回
+    /// `Mine` 限定本人；`Managed` 限定管理范围内的负责人；`History` 带上历史操作人，能管理且管理负责人不是空列表时再附带可管理负责人。
+    ///
+    /// # 错误
+    /// `Managed` 且账号没有管理范围时返回 `Error::Forbidden`。
     pub(super) fn scope_filter(
         &self,
         query: &dto::WorkItemListQuery,
@@ -234,6 +271,19 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         Ok(filter)
     }
 
+    /// 计算当前视图下的处理状态与允许动作。
+    ///
+    /// # 参数
+    /// * `item` - 已授权的工作项投影。
+    /// * `scope` - 当前队列范围。
+    /// * `actor` - 当前账号。
+    /// * `access` - 授权快照。
+    ///
+    /// # 返回
+    /// 历史范围或非开放任务返回无动作的就绪结果；开放任务附带允许动作。当前处理阻塞恒为空。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn view_access(
         &self,
         item: &dto::WorkItemFields,
@@ -295,7 +345,10 @@ fn access_from_facts(actor_id: &str, facts: WorkflowQueueAccessFact) -> ActorAcc
 /// 返回当前账号具备读取权限的工作项类型和业务对象类型组合。
 ///
 /// # 错误
-/// 无；注册关系中的固定权限必须可解析。
+/// 不返回错误。
+///
+/// # Panics
+/// 注册关系中的固定权限代码无法解析时，`has_permission` 会 `expect`。
 pub(super) fn object_access_shapes(access: &ActorAccess) -> Vec<(WorkItemType, String)> {
     WorkItemType::registered_brief_relations()
         .iter()
@@ -323,7 +376,10 @@ pub(super) fn object_access_shapes(access: &ActorAccess) -> Vec<(WorkItemType, S
 /// 任一已授予权限覆盖要求时返回 `true`。
 ///
 /// # 错误
-/// 无；固定权限代码无效属于程序错误并触发断言。
+/// 不返回错误。
+///
+/// # Panics
+/// `permission` 无法解析时 `expect`，属于程序错误。
 pub(super) fn has_permission(access: &ActorAccess, permission: &str) -> bool {
     let required = Permission::parse(permission).expect("对象注册表权限必须合法");
     PermissionSet::new(access.permissions.clone()).covers_one(&required)
@@ -408,6 +464,19 @@ pub(super) fn authorized_item_fields(
 }
 
 /// 返回执行任务的完整权限；普通任务返回空集，未注册执行对象失败关闭。
+///
+/// # 参数
+/// * `work_item_type` - 工作项类型。
+/// * `business_object_type` - 业务对象类型。
+///
+/// # 返回
+/// 供应商供给的 `BusinessException` 返回 `supplier_offering:resolve_supply_exception`。其余对象委托 `required_execution_permissions`：有注册结果时返回对应权限集，未注册返回 `None`。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # Panics
+/// 固定或注册的执行权限代码无法解析时 `expect`。
 pub(super) fn required_execution_permissions(
     work_item_type: WorkItemType,
     business_object_type: &str,
@@ -427,6 +496,20 @@ pub(super) fn required_execution_permissions(
 }
 
 /// 判断账号是否覆盖执行任务在目标工作面所需的全部权限。
+///
+/// # 参数
+/// * `work_item_type` - 工作项类型。
+/// * `business_object_type` - 业务对象类型。
+/// * `access` - 当前账号授权快照。
+///
+/// # 返回
+/// 所需权限集存在且账号权限覆盖它时返回 `true`；未注册执行对象返回 `false`。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # Panics
+/// 执行权限代码无法解析时，经 `required_execution_permissions` 触发 `expect`。
 pub(super) fn has_execution_permissions(
     work_item_type: WorkItemType,
     business_object_type: &str,
@@ -466,6 +549,19 @@ pub(super) fn has_item_participation(
         || has_object_participation(access, owner_role, owner_organization_id, fact)
 }
 
+/// 判断账号是否因创建或参与根单据而具备对象参与关系。
+///
+/// # 参数
+/// * `access` - 当前账号授权快照。
+/// * `_owner_role` - 责任角色；本函数不使用。
+/// * `_owner_organization_id` - 责任组织；本函数不使用。
+/// * `fact` - 业务对象事实。
+///
+/// # 返回
+/// 创建人是当前账号，或参与单据包含事实根单据时返回 `true`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn has_object_participation(
     access: &ActorAccess,
     _owner_role: &str,
@@ -484,6 +580,16 @@ pub(super) struct ViewAccess {
 }
 
 impl ViewAccess {
+    /// 构造可处理且无阻塞的视图访问结果。
+    ///
+    /// # 参数
+    /// * `allowed_actions` - 当前允许的动作。
+    ///
+    /// # 返回
+    /// 处理状态为 `ProcessingState::Ready`，阻塞为空。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn ready(allowed_actions: Vec<WorkItemAllowedAction>) -> Self {
         Self {
             processing_state: ProcessingState::Ready,
@@ -493,6 +599,16 @@ impl ViewAccess {
         }
     }
 
+    /// 构造被审批阻塞、不允许动作的视图访问结果。
+    ///
+    /// # 参数
+    /// * `blocker` - 处理阻塞说明；同时写入主动作阻塞列表。
+    ///
+    /// # 返回
+    /// 处理状态为 `ProcessingState::ApprovalBlocked`，允许动作为空。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn blocked(blocker: ProcessingBlockerView) -> Self {
         Self {
             processing_state: ProcessingState::ApprovalBlocked,
@@ -558,6 +674,16 @@ pub(super) fn allowed_actions(
     actions
 }
 
+/// 确认账号具备非空的任务责任管理范围。
+///
+/// # 参数
+/// * `access` - 当前账号授权快照。
+///
+/// # 返回
+/// 具备管理资格，且管理负责人不是空列表时无返回值。`managed_owner_ids` 为 `None` 表示不限定名单，仍算具备范围。
+///
+/// # 错误
+/// 不能管理，或管理负责人列表为空时返回 `Error::Forbidden`。
 pub(super) fn ensure_managed_access(access: &ActorAccess) -> Result<()> {
     if !access.can_manage || access.managed_owner_ids.as_ref().is_some_and(Vec::is_empty) {
         return Err(Error::Forbidden("当前账号没有任务责任管理范围".to_string()));
@@ -565,6 +691,18 @@ pub(super) fn ensure_managed_access(access: &ActorAccess) -> Result<()> {
     Ok(())
 }
 
+/// 判断当前账号查看该任务时应使用的队列范围。
+///
+/// # 参数
+/// * `item` - 工作项。
+/// * `actor_id` - 当前账号 ID。
+/// * `access` - 授权快照。
+///
+/// # 返回
+/// 终态且本人有历史参与或管理覆盖负责人时返回 `History`；本人负责返回 `Mine`；开放且管理覆盖负责人返回 `Managed`。
+///
+/// # 错误
+/// 以上都不满足时返回 `Error::Forbidden`。
 pub(super) fn detail_scope(item: &WorkItem, actor_id: &str, access: &ActorAccess) -> Result<WorkItemScope> {
     if item.is_terminal()
         && (has_personal_history_access(item, actor_id)
@@ -584,12 +722,34 @@ pub(super) fn detail_scope(item: &WorkItem, actor_id: &str, access: &ActorAccess
     Err(Error::Forbidden("当前账号无权查看该任务".to_string()))
 }
 
+/// 判断账号是否出现在该任务的历史责任或完结记录中。
+///
+/// # 参数
+/// * `item` - 工作项。
+/// * `actor_id` - 当前账号 ID。
+///
+/// # 返回
+/// 责任人、完成人或关闭人包含该账号时返回 `true`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn has_personal_history_access(item: &WorkItem, actor_id: &str) -> bool {
     item.responsibility_actor_ids.iter().any(|id| id == actor_id)
         || item.completed_by.as_deref() == Some(actor_id)
         || item.closed_by.as_deref() == Some(actor_id)
 }
 
+/// 判断管理范围是否覆盖指定负责人。
+///
+/// # 参数
+/// * `access` - 授权快照。
+/// * `owner` - 任务负责人；无负责人时不能被名单覆盖。
+///
+/// # 返回
+/// `managed_owner_ids` 为 `None` 时不限定名单，返回 `true`；否则负责人在名单中返回 `true`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn covers_owner(access: &ActorAccess, owner: Option<&str>) -> bool {
     access
         .managed_owner_ids

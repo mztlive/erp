@@ -1,4 +1,4 @@
-//! Consumer port for contract PDF attachment existence.
+//! 合同 PDF 附件是否存在的消费方端口。
 
 use async_trait::async_trait;
 use erp_core::ids::FileAssetId;
@@ -18,17 +18,17 @@ pub struct FileAssetFact {
 /// File-asset writes stay in `erp-processes`; this port is a read-only existence fact.
 #[async_trait]
 pub trait FileAssetFactsPort: Send + Sync {
-    /// Load one undeleted file-asset fact.
+    /// 读取一条未删除的文件资产事实。
     ///
-    /// # Parameters
-    /// * `attachment_id` - file asset id
-    /// * `executor` - caller-chosen executor
+    /// # 参数
+    /// * `attachment_id` - 文件资产 ID。
+    /// * `executor` - 调用方选定的执行器。
     ///
-    /// # Returns
-    /// `None` when the asset does not exist or is deleted.
+    /// # 返回
+    /// 资产不存在或已删除时返回 `None`。
     ///
-    /// # Errors
-    /// Adapter query failures.
+    /// # 错误
+    /// 适配器查询失败时返回对应错误。
     async fn find_by_id(
         &self,
         attachment_id: &FileAssetId,

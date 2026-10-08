@@ -87,8 +87,19 @@ impl Default for CustomerAccountFilter {
 impl QueryFilter for CustomerAccountFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// `keyword` 为 `Some` 时对 `customer_no` 做忽略大小写的字面量正则；若同时给出
+    /// `keyword_party_ids`，再与 `party_id` 的 `$in` 组成 `$or`。`keyword` 为 `None`
+    /// 时忽略 `keyword_party_ids`。`party_id`、`party_ids`、`customer_ids`、`status`
+    /// 为 `Some` 时分别写入对应条件；`party_id` 与 `party_ids` 都存在时后者覆盖前者。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(keyword) = self.keyword.as_deref() {
@@ -119,8 +130,16 @@ impl QueryFilter for CustomerAccountFilter {
 impl Pagination for CustomerAccountFilter {
     /// 返回页码与单页条数。
     ///
+    /// 原样返回本筛选条件的 `page`，并把 `page_size` 从 `u32` 转为 `u64`，不把小于 1 的页码归一。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `(page, page_size)` 元组。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -146,7 +165,19 @@ pub trait CustomerAccountRepositoryExt {
         executor: &mut dyn Executor,
     ) -> Result<HashMap<String, String>>;
 
-    /// 按客户角色 ID 集合批量读取活跃客户。
+    /// 按客户角色 ID 集合批量读取未删除客户。
+    ///
+    /// 不按启停状态过滤。空集合不访问数据库。
+    ///
+    /// # 参数
+    /// * `customer_ids` - 客户角色 ID
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回未删除且 ID 命中的客户；缺失或已软删除的 ID 不补行。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
     async fn find_accounts_by_ids(
         &self,
         customer_ids: &[CustomerAccountId],
@@ -208,7 +239,8 @@ pub trait CustomerAccountRepositoryExt {
     /// 查找企业已有客户身份，包含软删除记录以防重复建档。
     ///
     /// # 参数
-    /// * `party_id` / `executor` - 稳定主体及调用方事务。
+    /// * `party_id` - 稳定主体 ID
+    /// * `executor` - 调用方执行器，可位于事务中
     ///
     /// # 返回
     /// 已存在的客户身份；不存在时返回 `None`。
@@ -221,9 +253,17 @@ pub trait CustomerAccountRepositoryExt {
         executor: &mut dyn Executor,
     ) -> Result<Option<CustomerAccount>>;
 
-    /// 返回匹配条件的未删除对象 ID，供跨域列表在分页前组合筛选。
+    /// 返回匹配主体的未删除客户 ID，供跨域列表在分页前组合筛选。
     ///
-    /// 数据库查询失败时返回错误；空命中返回空集合，不扩大范围。
+    /// # 参数
+    /// * `party_ids` - 主体 ID 集合
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回未删除客户的 ID；无命中时为空集合，不扩大范围。
+    ///
+    /// # 错误
+    /// 数据库查询失败时返回错误。
     async fn matching_ids_by_parties(
         &self,
         party_ids: &[String],
@@ -370,8 +410,17 @@ pub struct CustomerAssignmentFilter {
 impl QueryFilter for CustomerAssignmentFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// `customer_id`、`user_id`、`assignment_role` 为 `Some` 时分别按客户、销售人员与归属角色精确匹配；
+    /// `None` 不写入对应字段。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(customer_id) = &self.customer_id {
@@ -390,8 +439,16 @@ impl QueryFilter for CustomerAssignmentFilter {
 impl Pagination for CustomerAssignmentFilter {
     /// 返回页码与单页条数。
     ///
+    /// 原样返回本筛选条件的 `page`，并把 `page_size` 从 `u32` 转为 `u64`，不把小于 1 的页码归一。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `(page, page_size)` 元组。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -408,7 +465,7 @@ pub trait CustomerAssignmentRepositoryExt {
     /// * `as_of` - 归属有效期判定业务日期
     /// * `executor` - 事务或无事务执行器
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回未删除客户的生效主责关系。
     ///
     /// # 错误

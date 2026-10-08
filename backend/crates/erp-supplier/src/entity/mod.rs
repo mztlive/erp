@@ -1,4 +1,4 @@
-//! Supplier entities and value objects.
+//! 供应商实体与值对象。
 
 pub mod supplier;
 

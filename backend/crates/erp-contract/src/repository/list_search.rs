@@ -33,6 +33,9 @@ impl ContractCustomer {
     /// # 返回
     /// 返回展示标签。
     ///
+    /// # 错误
+    /// 不返回错误。
+    ///
     /// # 关键业务约束
     /// 不得用签约经办姓名填充未分配主责。
     pub(crate) fn resolve_owner_label(owner: Option<&String>, names: &HashMap<String, String>) -> String {
@@ -61,6 +64,9 @@ impl ContractRow {
     ///
     /// # 返回
     /// 返回列表视图。
+    ///
+    /// # 错误
+    /// 不返回错误。
     ///
     /// # 关键业务约束
     /// `owner_user_id` 只来自客户当前主负责人。
@@ -157,6 +163,15 @@ pub struct ContractSearchResult {
 }
 impl ContractSearchResult {
     /// 空命中聚合计数视为零。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `totals` 首条的 `total`。没有计数文档时返回 `0`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn total(&self) -> i64 {
         self.totals.first().map(|c| c.total).unwrap_or(0)
     }
@@ -164,6 +179,13 @@ impl ContractSearchResult {
 
 impl ContractDomainRepository<'_> {
     /// 只读取可见合同引用的去重客户 ID，用于批量解析当前负责人。
+    ///
+    /// # 参数
+    /// * `filter` - 可见合同筛选条件。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 去重后的客户 ID。非字符串值略过。
     ///
     /// # 错误
     /// MongoDB 查询失败。
@@ -184,6 +206,14 @@ impl ContractDomainRepository<'_> {
     ///
     /// 会话/非会话两分支的游标推进与反序列化经 `advance_search_cursor` 收敛；
     /// 两分支只保留执行器接入差异，空命中返回默认值的行为不变。
+    ///
+    /// # 参数
+    /// * `filter` - 可见范围筛选。
+    /// * `search` - 列表关键词与指标条件。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 同一可见范围内的分页结果、筛选总数与范围指标。空命中为默认值。
     ///
     /// # 错误
     /// MongoDB 聚合或反序列化失败。

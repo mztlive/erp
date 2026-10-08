@@ -43,6 +43,9 @@ pub(crate) const RECONCILIATION_DIFFERENCE_RESOLUTIONS: &str =
 /// # 参数
 /// * `db` - 目标 MongoDB 数据库
 ///
+/// # 返回
+/// 成功时四个事实集合的命名索引与命令回执 `id` 唯一索引已创建。
+///
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {

@@ -15,18 +15,55 @@ struct Fake {
 #[async_trait]
 impl BatchOperation for Fake {
     /// 返回测试业务身份。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 `identity` 的副本。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn identity(&self) -> String {
         self.identity.clone()
     }
     /// 返回测试供应商。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 `supplier`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier(&self) -> Option<&str> {
         Some(&self.supplier)
     }
     /// 返回测试命令键。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回可改写的 `key`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn key(&mut self) -> &mut String {
         &mut self.key
     }
     /// 模拟规则失败和持久化回执。
+    ///
+    /// # 参数
+    /// * `_` - 未使用的供给流程。
+    /// * `_` - 未使用的操作人。
+    ///
+    /// # 返回
+    /// `replay` 为真时返回 `Some(true)`，否则返回 `None`。
+    ///
+    /// # 错误
+    /// `invalid` 为真时返回 `ValidationError`。
     async fn prepare(&self, _: &SupplierOfferingProcess, _: &AuditActor) -> Result<Option<Value>> {
         if self.invalid {
             return Err(Error::ValidationError("订货编码重复".into()));
@@ -34,6 +71,16 @@ impl BatchOperation for Fake {
         Ok(self.replay.then_some(Value::Bool(true)))
     }
     /// 记录实际执行次数。
+    ///
+    /// # 参数
+    /// * `_` - 未使用的供给流程。
+    /// * `_` - 未使用的操作人。
+    ///
+    /// # 返回
+    /// 写入计数加一后返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     async fn execute(self, _: &SupplierOfferingProcess, _: &AuditActor) -> Result<Value> {
         self.writes.fetch_add(1, Ordering::SeqCst);
         Ok(Value::Bool(true))
@@ -93,6 +140,15 @@ struct FakeRunner;
 #[async_trait]
 impl BatchRunner<Fake> for FakeRunner {
     /// 模拟准备，不读取数据库。
+    ///
+    /// # 参数
+    /// * `input` - 测试行。
+    ///
+    /// # 返回
+    /// `replay` 为真时返回 `Some(true)`，否则返回 `None`。
+    ///
+    /// # 错误
+    /// `invalid` 为真时返回 `ValidationError`。
     async fn prepare(&self, input: &Fake) -> Result<Option<Value>> {
         if input.invalid {
             return Err(Error::ValidationError("订货编码重复".into()));
@@ -100,6 +156,15 @@ impl BatchRunner<Fake> for FakeRunner {
         Ok(input.replay.then_some(Value::Bool(true)))
     }
     /// 模拟写入，不连接外部服务。
+    ///
+    /// # 参数
+    /// * `input` - 测试行；按其 `identity` 决定结果。
+    ///
+    /// # 返回
+    /// 先把写入计数加一。身份不是 `reject` 或 `unknown` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 身份为 `reject` 时返回 `ConflictError`；为 `unknown` 时返回 `Internal`。计数仍已增加。
     async fn execute(&self, input: Fake) -> Result<Value> {
         input.writes.fetch_add(1, Ordering::SeqCst);
         match input.identity.as_str() {

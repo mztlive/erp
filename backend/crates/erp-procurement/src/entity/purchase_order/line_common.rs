@@ -80,31 +80,142 @@ pub(crate) fn validate_purchase_line(fields: &PurchaseLineFields) -> Result<()> 
 /// 有销售分配字段的行类型覆写 [`ensure_allocation`](Self::ensure_allocation)。
 pub(crate) trait PurchaseLineDataRef {
     /// 返回行类型。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回该行的 [`PurchaseLineType`]。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn line_type(&self) -> PurchaseLineType;
     /// 返回采购二次确认分行引用。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回字段中的采购二次确认分行引用。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn procurement_confirmation_line_id(&self) -> &Option<ProcurementConfirmationLineId>;
     /// 返回 SKU 引用。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回字段中的 SKU 引用。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn sku_id(&self) -> &Option<SkuId>;
     /// 返回商品名称快照。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回字段中的商品名称快照。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn product_name_snapshot(&self) -> &Option<String>;
     /// 返回规格快照。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回字段中的规格快照。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn specification_snapshot(&self) -> &Option<String>;
     /// 返回基础单位数量。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回字段中的基础单位数量。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn quantity(&self) -> Option<Quantity>;
     /// 返回单位代码。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回字段中的单位代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn base_unit_code(&self) -> &Option<String>;
     /// 返回含税采购单价。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回字段中的含税采购单价。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn unit_cost_gross(&self) -> Option<UnitPrice>;
     /// 返回含税行金额。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回字段中的含税行金额。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn gross_amount(&self) -> Amount;
     /// 返回不含税行金额。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回字段中的不含税行金额。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn net_amount(&self) -> Amount;
     /// 返回税额。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回字段中的税额。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn tax_amount(&self) -> Amount;
     /// 返回进项税率。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回字段中的进项税率。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn input_tax_rate(&self) -> Option<Rate>;
 
     /// 校验销售分配归属；无销售分配字段的行类型保持默认空实现。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 校验通过返回 `Ok(())`。
@@ -163,7 +274,7 @@ pub(crate) fn normalize_and_validate_line<D: PurchaseLineDataRef>(
 /// * `fields` - 一行采购明细的共享字段组
 ///
 /// # 错误
-/// 必填字段缺失、数量非正或金额三元组不守恒时返回错误。
+/// 必填字段缺失、数量非正、含税单价或进项税率为负，或金额三元组不守恒时返回错误。
 fn validate_item_service_line(fields: &PurchaseLineFields) -> Result<()> {
     if fields.procurement_confirmation_line_id.is_none() {
         return Err(Error::from("商品/服务行必须引用采购二次确认分行"));
@@ -195,7 +306,7 @@ fn validate_item_service_line(fields: &PurchaseLineFields) -> Result<()> {
 /// * `fields` - 一行采购明细的共享字段组
 ///
 /// # 错误
-/// 携带商品行字段、缺少税率或金额三元组不守恒时返回错误。
+/// 携带商品行字段、缺少进项税率、税率或金额为负，或金额三元组不守恒时返回错误。
 fn validate_logistics_fee_line(fields: &PurchaseLineFields) -> Result<()> {
     if fields.procurement_confirmation_line_id.is_some() {
         return Err(Error::from("物流费用行不得引用采购二次确认分行"));
@@ -241,6 +352,9 @@ fn validate_logistics_fee_line(fields: &PurchaseLineFields) -> Result<()> {
 ///
 /// # 错误
 /// 快照缺失或为空时返回错误。
+///
+/// # Panics
+/// `value` 为 `Some` 时才 `unwrap`；`None` 已在同一条件中返回错误，正常输入不会 panic。
 fn ensure_snapshot_present(value: Option<&str>, label: &str) -> Result<()> {
     if value.is_none() || value.unwrap().is_empty() {
         return Err(Error::from(format!("商品/服务行必须保存{label}快照")));

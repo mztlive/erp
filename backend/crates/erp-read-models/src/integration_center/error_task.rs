@@ -57,6 +57,7 @@ impl IntegrationCenterReadService {
         })
     }
 
+    /// 多个正式责任关联时返回 `ConflictError`，避免任选一条任务。
     async fn find_task_work_item(
         &self,
         task_id: &str,

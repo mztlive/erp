@@ -64,6 +64,15 @@ impl SensitiveDataCodec {
     ///
     /// 调用方必须在启动期创建一次并注入所有 Service；进程运行期间不得切换，
     /// 否则既有密文与查询指纹会变得不可用。
+    ///
+    /// # 参数
+    /// * `secret` - 应用启动密钥。
+    ///
+    /// # 返回
+    /// 返回分别用于加密、查询指纹和揭示令牌的编解码器。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn from_secret(secret: &[u8]) -> Self {
         Self {
             encryption_key: derive_key(secret, b"erp-sensitive-encryption-v1"),
@@ -75,6 +84,15 @@ impl SensitiveDataCodec {
     /// 返回只读查询指纹密钥。
     ///
     /// 该密钥仅传给实体构造函数计算 HMAC，不得持久化或输出。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 32 字节查询指纹密钥的借用。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn fingerprint_key(&self) -> &[u8] {
         &self.fingerprint_key
     }
@@ -90,7 +108,7 @@ impl SensitiveDataCodec {
     /// 返回预计算的查询指纹。
     ///
     /// # 错误
-    /// 无。规范化失败由实体指纹算法按空输入处理。
+    /// 不返回错误。手机号只去首尾空白，本方法不因明文内容失败。
     ///
     /// # 关键业务约束
     /// 不得把密钥或明文交给比较 VO；仅传递本方法的 typed 结果。
@@ -152,8 +170,14 @@ impl SensitiveDataCodec {
 
     /// 使用 AES-256-GCM 加密明文并返回带版本的 URL-safe 编码。
     ///
-    /// # Errors
-    /// 随机数源或 AEAD 加密失败时返回内部错误。
+    /// # 参数
+    /// * `plaintext` - 待加密明文。
+    ///
+    /// # 返回
+    /// 返回 `版本.nonce.ciphertext` 形式的 URL-safe 密文。每次调用使用新的随机 nonce。
+    ///
+    /// # 错误
+    /// 加密器初始化、随机数生成或 AEAD 加密失败时返回 `Internal`。
     pub fn encrypt(&self, plaintext: &str) -> Result<String> {
         let cipher = Aes256Gcm::new_from_slice(&self.encryption_key)
             .map_err(|_| Error::Internal("敏感数据加密初始化失败".to_string()))?;
@@ -171,8 +195,15 @@ impl SensitiveDataCodec {
 
     /// 解密由当前版本编码器生成的密文。
     ///
-    /// # Errors
-    /// 密文为空、格式非法、版本未知、认证失败或密钥不匹配时返回校验错误。
+    /// # 参数
+    /// * `encoded` - `encrypt` 生成的版本化密文。
+    ///
+    /// # 返回
+    /// 返回 UTF-8 明文。
+    ///
+    /// # 错误
+    /// 版本不受支持、分段缺失、多余分段或 nonce 长度不符时返回 `ValidationError`。
+    /// 解密器初始化失败时返回 `Internal`。认证失败、密钥不匹配或明文不是 UTF-8 时返回 `ValidationError`。
     pub fn decrypt(&self, encoded: &str) -> Result<String> {
         let (nonce, ciphertext) = parse_ciphertext(encoded)?;
         let cipher = Aes256Gcm::new_from_slice(&self.encryption_key)
@@ -189,6 +220,18 @@ impl SensitiveDataCodec {
     ///
     /// `expires_at` 由调用方统一控制；令牌只表达访问范围，最终仍必须经过 HTTP
     /// RBAC 权限校验并记录揭示审计。
+    ///
+    /// # 参数
+    /// * `kind` - 可揭示的敏感字段类型。
+    /// * `record_id` - 事实行 ID。
+    /// * `supplier_id` - 供应商 ID。
+    /// * `expires_at` - 过期秒级时间戳。
+    ///
+    /// # 返回
+    /// 返回 URL-safe 的 `payload.signature` 令牌。
+    ///
+    /// # 错误
+    /// 声明序列化失败或签名密钥初始化失败时返回 `Internal`。
     pub fn issue_reveal_token(
         &self,
         kind: SensitiveFieldKind,
@@ -206,8 +249,16 @@ impl SensitiveDataCodec {
 
     /// 验证短时揭示令牌并返回受限访问范围。
     ///
-    /// # Errors
-    /// 令牌格式、签名或过期时间非法时返回校验错误。
+    /// # 参数
+    /// * `token` - `issue_reveal_token` 签发的令牌。
+    /// * `now` - 当前秒级时间戳。
+    ///
+    /// # 返回
+    /// 签名有效且 `expires_at >= now` 时返回揭示范围。
+    ///
+    /// # 错误
+    /// 令牌缺少分隔、编码非法、签名不匹配或声明无法反序列化时返回 `ValidationError`。
+    /// 验签密钥初始化失败时返回 `Internal`。`expires_at < now` 时返回 `ValidationError`。
     pub fn verify_reveal_token(&self, token: &str, now: u64) -> Result<SensitiveRevealScope> {
         let (payload, signature) = token
             .split_once('.')

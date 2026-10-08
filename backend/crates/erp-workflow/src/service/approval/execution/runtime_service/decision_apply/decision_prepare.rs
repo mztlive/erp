@@ -84,6 +84,19 @@ pub(super) struct PreparedOpenDecision {
     pub(super) runtime_admin_ids: Vec<String>,
 }
 
+/// 加载仍开放的决定运行时：任务、执行、实例、快照与节点审批人。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `actor` - 当前决定人。
+/// * `command` - 决定命令。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 返回已通过当前任务责任链的开放运行时。
+///
+/// # 错误
+/// 任务或执行缺失、任务前置失败、主体不一致、责任冲突、开放任务不含当前任务或缺少节点审批人时返回错误；仓储失败时返回对应错误。
 pub(super) async fn load_open_decision_runtime(
     db: &Database,
     actor: &AuditActor,
@@ -94,6 +107,7 @@ pub(super) async fn load_open_decision_runtime(
     load_open_decision_subject(db, actor, command, execution, executor).await
 }
 
+/// 按任务前置取出执行；任务不存在、不是当前决定人或执行缺失时失败。
 async fn load_open_decision_execution(
     db: &Database,
     actor: &AuditActor,
@@ -118,6 +132,7 @@ async fn load_open_decision_execution(
     Ok(OpenDecisionExecution { item, execution_id, execution, expected_execution_version })
 }
 
+/// 把已授权执行补齐为实例、快照、开放任务和节点审批人齐全的运行时。
 async fn load_open_decision_subject(
     db: &Database,
     actor: &AuditActor,
@@ -144,6 +159,7 @@ async fn load_open_decision_subject(
     })
 }
 
+/// 加载实例与冻结快照；种类或主体不一致时失败关闭。
 async fn load_open_decision_instance(
     db: &Database,
     execution: &ApprovalNodeExecution,
@@ -181,6 +197,7 @@ async fn load_open_decision_instance(
     })
 }
 
+/// 责任链不成立、开放任务不含当前任务或缺少节点审批人时失败。
 async fn load_open_decision_tasks(
     db: &Database,
     actor: &AuditActor,
@@ -217,6 +234,22 @@ async fn load_open_decision_tasks(
     Ok((open_tasks, instance_assignee))
 }
 
+/// 重验当前与下一节点资格，并形成尚未写库的决定计划。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `rbac` - 授权端口。
+/// * `object_read` - 被审对象读取端口。
+/// * `actor` - 当前决定人。
+/// * `command` - 决定命令。
+/// * `loaded` - 已加载的开放运行时。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 返回待写入的计划、动作上下文、任务身份和审计。
+///
+/// # 错误
+/// 定义或目标节点缺失、资格重验失败、执行序号溢出、规划失败，或新命令落入回放分支时返回错误。
 pub(super) async fn prepare_open_decision(
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
@@ -236,6 +269,7 @@ pub(super) async fn prepare_open_decision(
     finish_prepared_open_decision(actor, command, loaded, writes, now, runtime_admin_ids)
 }
 
+/// 重验当前与下一节点资格；定义或目标节点缺失时失败。
 async fn revalidate_decision_eligibilities(
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
@@ -295,6 +329,7 @@ async fn revalidate_decision_eligibilities(
     Ok((graph, current_eligibility, next_eligibility))
 }
 
+/// 调用决定规划器；新命令落入回放分支时按内部错误失败。
 fn plan_open_decision(
     actor: &AuditActor,
     command: &RuntimeDecisionCommand,
@@ -338,6 +373,7 @@ fn plan_open_decision(
     Ok(*writes)
 }
 
+/// 计划成功后冻结动作上下文、任务身份、列表投影与审计。
 fn finish_prepared_open_decision(
     actor: &AuditActor,
     command: &RuntimeDecisionCommand,
@@ -377,6 +413,7 @@ fn finish_prepared_open_decision(
     })
 }
 
+/// 仅当计划含受阻通知时解析运行管理员收件人。
 async fn blocked_runtime_admin_ids(
     db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
@@ -402,6 +439,7 @@ async fn blocked_runtime_admin_ids(
     }
 }
 
+/// 由已加载运行事实构造领域决定动作上下文。
 fn decision_action_context(
     command: &RuntimeDecisionCommand,
     loaded: &OpenDecisionRuntime,
@@ -422,6 +460,7 @@ fn decision_action_context(
     })
 }
 
+/// 构造决定审计；资源标识取自实例。
 fn decision_audit(
     actor: &AuditActor,
     command: &RuntimeDecisionCommand,

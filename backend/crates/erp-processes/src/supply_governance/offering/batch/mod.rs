@@ -84,16 +84,63 @@ pub enum RowStatus {
 #[async_trait]
 pub trait BatchOperation: Send + Sync + 'static {
     /// 返回批内唯一业务身份。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 本行用于整批去重的业务身份。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn identity(&self) -> String;
     /// 返回批量创建的供应商；更新命令返回空。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 创建行的供应商标识。默认实现返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier(&self) -> Option<&str> {
         None
     }
     /// 取原命令键，用于批内去重与主体隔离。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 可改写的命令键。调用方会把它限定到当前主体。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn key(&mut self) -> &mut String;
     /// 校验权限、资格、版本和字段；已执行时返回持久化结果。
+    ///
+    /// # 参数
+    /// * `process` - 供给流程。
+    /// * `actor` - 当前操作人。
+    ///
+    /// # 返回
+    /// 已有持久化结果时为 `Some`；尚未执行时为 `None`。
+    ///
+    /// # 错误
+    /// 权限、资格、版本或字段校验失败时返回实现方错误。
     async fn prepare(&self, process: &SupplierOfferingProcess, actor: &AuditActor) -> Result<Option<Value>>;
-    /// 调用拥有原子事务的单条用例。
+    /// 消耗本行并调用拥有原子事务的单条用例。
+    ///
+    /// # 参数
+    /// * `process` - 供给流程。
+    /// * `actor` - 当前操作人。
+    ///
+    /// # 返回
+    /// 单条执行结果的 JSON 值。
+    ///
+    /// # 错误
+    /// 单条用例失败时返回实现方错误。
     async fn execute(self, process: &SupplierOfferingProcess, actor: &AuditActor) -> Result<Value>;
 }
 
@@ -165,10 +212,28 @@ struct ProcessRunner<'a> {
 #[async_trait]
 impl<T: BatchOperation> BatchRunner<T> for ProcessRunner<'_> {
     /// 接入单条供给预检。
+    ///
+    /// # 参数
+    /// * `input` - 一条批量命令。
+    ///
+    /// # 返回
+    /// 转发 `BatchOperation::prepare`：已有持久化结果为 `Some`，尚未执行为 `None`。
+    ///
+    /// # 错误
+    /// 预检失败时返回原错误。
     async fn prepare(&self, input: &T) -> Result<Option<Value>> {
         input.prepare(self.process, self.actor).await
     }
     /// 接入单条供给事务。
+    ///
+    /// # 参数
+    /// * `input` - 一条批量命令，交给单条 `execute` 消耗。
+    ///
+    /// # 返回
+    /// 转发单条执行结果的 JSON。
+    ///
+    /// # 错误
+    /// 单条执行失败时返回原错误。
     async fn execute(&self, input: T) -> Result<Value> {
         input.execute(self.process, self.actor).await
     }

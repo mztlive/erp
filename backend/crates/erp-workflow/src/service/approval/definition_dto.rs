@@ -19,8 +19,14 @@ pub enum DraftSource {
 impl DraftSource {
     /// 返回稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `EMPTY` 或 `CURRENT_PUBLISHED`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Empty => "EMPTY",

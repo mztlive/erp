@@ -40,8 +40,14 @@ pub struct CreateSourceSystemRequest {
 impl CreateSourceSystemRequest {
     /// 转换为实体创建数据（`status` 缺省按启用处理）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回实体层创建数据。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn into_data(self) -> SourceSystemData {
         SourceSystemData {
             code: self.code,
@@ -158,6 +164,9 @@ impl SourceSystemListParams {
     /// 归一化来源系统列表查询参数。
     ///
     /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
@@ -297,6 +306,9 @@ impl ExternalIdentityMapListParams {
     /// 归一化外部身份映射列表查询参数。
     ///
     /// 分页取默认值、排序字段过白名单校验。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。

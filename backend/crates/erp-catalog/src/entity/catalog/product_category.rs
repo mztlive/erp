@@ -173,16 +173,28 @@ impl ProductCategory {
 
     /// 判断是否为根分类。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 没有父分类时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_root(&self) -> bool {
         self.parent_category_id.is_none()
     }
 
     /// 判断分类是否处于启用状态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为 `Active` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         self.stable.status().is_active()
     }

@@ -1,4 +1,4 @@
-//! Inventory HTTP/application DTOs reused by handlers and processes.
+//! 供处理器与流程复用的库存 HTTP/应用 DTO。
 
 pub mod inventory;
 pub mod list;

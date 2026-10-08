@@ -81,6 +81,9 @@ pub(crate) struct SalesChangeOrderListQuery {
 impl SalesChangeOrderListParams {
     /// 归一化销售变更单列表查询参数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
     ///

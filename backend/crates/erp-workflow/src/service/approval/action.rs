@@ -426,6 +426,15 @@ pub type ApprovalActionFuture<'a> = Pin<Box<dyn Future<Output = Result<()>> + Se
 pub trait ApprovalDomainActionPort: Send + Sync {
     /// 在审批运行时的唯一外层事务内执行已注册动作。
     ///
+    /// # 参数
+    /// * `action` - 已注册的强类型领域动作
+    /// * `context` - 已冻结的动作上下文
+    /// * `actor` - 已认证操作人
+    /// * `executor` - 运行时传入的同一事务执行器
+    ///
+    /// # 返回
+    /// 领域事实写入完成时返回成功。
+    ///
     /// # 错误
     /// 业务版本、状态、权限或领域不变量不满足时返回稳定服务错误，外层事务整体回滚。
     fn execute<'a>(
@@ -442,6 +451,19 @@ pub trait ApprovalDomainActionPort: Send + Sync {
 pub struct FailClosedApprovalActionPort;
 
 impl ApprovalDomainActionPort for FailClosedApprovalActionPort {
+    /// 拒绝尚未绑定的领域动作，不写正式事实。
+    ///
+    /// # 参数
+    /// * `action` - 尚未绑定的领域动作
+    /// * `_context` - 动作上下文；本实现不读取
+    /// * `_actor` - 操作人；本实现不读取
+    /// * `_executor` - 外层事务执行器；本实现不写入
+    ///
+    /// # 返回
+    /// 不返回成功。
+    ///
+    /// # 错误
+    /// 始终返回业务错误，说明该动作尚未绑定。
     fn execute<'a>(
         &'a self,
         action: ApprovalDomainAction,

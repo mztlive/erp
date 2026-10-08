@@ -25,8 +25,14 @@ pub enum AllocationAction {
 impl AllocationAction {
     /// 返回动作的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Apply => "核销",
@@ -36,8 +42,14 @@ impl AllocationAction {
 
     /// 返回动作的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Apply => "apply",
@@ -57,6 +69,9 @@ impl AllocationAction {
     ///
     /// # 返回
     /// 返回更新后的净额。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn apply_to_net(self, total: Amount, amount: Amount) -> Amount {
         crate::entity::receivable::AllocationAction::from(self).apply_to_net(total, amount)
     }
@@ -178,6 +193,9 @@ impl PaymentAllocation {
     ///
     /// # 返回
     /// 恒返回错误。
+    ///
+    /// # 错误
+    /// 任何调用都返回错误：正式事实过账后不可更新或删除。
     pub fn update(&mut self, update: PaymentAllocationData, updated_by: impl Into<String>) -> Result<()> {
         let _ = (update, updated_by);
         Err(Error::from("正式事实过账后不可更新或删除"))

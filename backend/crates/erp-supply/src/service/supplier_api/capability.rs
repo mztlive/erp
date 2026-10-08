@@ -9,6 +9,19 @@ use crate::repository::SupplierApiExt;
 use crate::{Error, Result};
 impl SupplierApiService {
     /// 执行原能力变更全部本域读取/校验/批量写入，不开启事务。
+    ///
+    /// # 参数
+    /// * `id` - 供应商连接主键。
+    /// * `expected_version` - 调用方持有的连接版本。
+    /// * `change_set` - 待分类并应用的能力变更集。
+    /// * `actor_id` - 记录能力配置的操作人。
+    /// * `executor` - 调用方事务的执行器。
+    ///
+    /// # 返回
+    /// 返回已推进版本的连接。
+    ///
+    /// # 错误
+    /// 连接不存在时返回 `NotFound`；版本不一致时返回 `ConflictError`；连接处于启用状态时返回 `BusinessLogicError`。变更集分类、实时版本、采购确认覆盖、实体构造或仓储写入失败时返回对应错误。
     pub async fn apply_capability_changes(
         &self,
         id: &str,

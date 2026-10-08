@@ -1,4 +1,4 @@
-//! Identity use cases: IAM, auth, access control and account helpers.
+//! 身份用例：IAM、认证、访问控制与账号辅助。
 
 pub mod access_control;
 pub mod account_support;

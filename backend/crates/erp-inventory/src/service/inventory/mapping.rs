@@ -1,4 +1,4 @@
-//! Inventory line-update mapping used by local commands and processes.
+//! 本地命令与流程共用的库存明细更新映射。
 
 use crate::dto::StockAdjustmentLineUpdateInput;
 use crate::entity::inventory::StockAdjustmentLineUpdate;

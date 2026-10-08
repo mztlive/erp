@@ -23,8 +23,14 @@ pub enum SourceType {
 impl SourceType {
     /// 返回用于展示的中文标签。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回中文标签字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(self) -> &'static str {
         match self {
             Self::Erp => "ERP 系统",

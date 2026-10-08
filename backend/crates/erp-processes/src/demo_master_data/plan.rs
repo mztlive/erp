@@ -31,6 +31,15 @@ pub(super) enum DemoKind {
 
 impl DemoKind {
     /// 返回清单里保存的种类代码。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 `unit`、`brand`、`category`、`warehouse`、`customer`、`supplier` 或 `product`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn as_str(self) -> &'static str {
         match self {
             Self::Unit => "unit",
@@ -44,6 +53,15 @@ impl DemoKind {
     }
 
     /// 从清单种类代码还原种类。
+    ///
+    /// # 参数
+    /// * `value` - 清单里的种类代码。
+    ///
+    /// # 返回
+    /// 代码属于固定清单时返回对应种类；否则返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn parse(value: &str) -> Option<Self> {
         Some(match value {
             "unit" => Self::Unit,
@@ -147,6 +165,9 @@ pub(super) fn planned_counts(steps: &[DemoStep]) -> DemoCounts {
 ///
 /// # 返回
 /// 返回 `(仍在列表中, 已删除)`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn count_records(rows: &[(DemoKind, bool)]) -> (DemoCounts, DemoCounts) {
     let mut active = DemoCounts::default();
     let mut removed = DemoCounts::default();
@@ -167,7 +188,10 @@ pub(super) fn count_records(rows: &[(DemoKind, bool)]) -> (DemoCounts, DemoCount
 /// * `len` - 清单总条数
 ///
 /// # 返回
-/// 返回本轮下标，区间不超过 [`CHUNK_LEN`]。
+/// 返回本轮下标，区间不超过 [`CHUNK_LEN`]。`cursor` 超过 `len` 时区间为空。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn apply_window(cursor: usize, len: usize) -> std::ops::Range<usize> {
     let start = cursor.min(len);
     let end = start.saturating_add(CHUNK_LEN).min(len);

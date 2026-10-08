@@ -25,8 +25,14 @@ pub enum CommandOptionalField {
 impl CommandOptionalField {
     /// 返回字段的中文说明。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的字段标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(self) -> &'static str {
         match self {
             Self::PayloadReference => "不透明引用",
@@ -66,6 +72,9 @@ impl std::fmt::Display for SupplierCommandShapeRejection {
     ///
     /// # 返回
     /// 写入用户可读的拒绝说明。
+    ///
+    /// # 错误
+    /// 写入格式化目标失败时返回 `fmt::Error`。
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::TechnicalReferenceOnCreate => {
@@ -102,6 +111,9 @@ impl From<SupplierCommandShapeRejection> for erp_core::Error {
     ///
     /// # 返回
     /// 携带同文本的实体层错误。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn from(rejection: SupplierCommandShapeRejection) -> Self {
         Self::from(rejection.to_string())
     }
@@ -152,8 +164,14 @@ impl PreparedSupplierConnectionCreate {
 
     /// 返回新连接起始状态（恒为停用）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回停用状态。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn status(self) -> SupplierApiConnectionStatus {
         self.status
     }
@@ -299,8 +317,14 @@ impl PreparedSupplierConnectionCommand {
 
     /// 返回命令的固定治理动作。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回本变体对应的治理动作。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn action(&self) -> SupplierConnectionAction {
         match self {
             Self::UpdateBusinessProfile { .. } => SupplierConnectionAction::UpdateBusinessProfile,
@@ -315,8 +339,14 @@ impl PreparedSupplierConnectionCommand {
 
     /// 返回命令携带的期望连接版本。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回大于 `0` 的期望版本。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn expected_version(&self) -> u64 {
         match self {
             Self::UpdateBusinessProfile { expected_version, .. }

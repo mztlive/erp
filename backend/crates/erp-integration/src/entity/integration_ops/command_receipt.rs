@@ -40,7 +40,7 @@ pub trait IntegrationReceiptPayload: Clone + Send + Sync {
     /// # 返回
     /// 返回领域登记的结果种类。
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     fn into_result(self) -> IntegrationCommandResult;
     /// 从领域枚举恢复相应种类的完整结果。
     /// # 参数
@@ -142,6 +142,7 @@ impl IntegrationCommandReceipt {
         }
         Ok(value)
     }
+    /// 回执版本、动作与结果种类、指纹和必填字段必须同时成立，否则失败关闭。
     fn validate(&self) -> Result<()> {
         let expected_action = match &self.result {
             IntegrationCommandResult::TaskAction(_) => "integration.task_action",

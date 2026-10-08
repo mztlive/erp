@@ -30,10 +30,13 @@ impl TestApi {
     /// 绑定待测试路由。
     ///
     /// # 参数
-    /// * `router` - 已组装完成的路由（状态已通过 `with_state` 注入）
+    /// * `router` - 已组装完成的路由（状态已通过 `with_state` 注入）。
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回测试客户端实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(router: Router) -> Self {
         Self { router }
     }
@@ -41,11 +44,17 @@ impl TestApi {
     /// 发送 GET 请求。
     ///
     /// # 参数
-    /// * `path` - 请求路径（如 `/admin/roles`）
-    /// * `token` - 可选 JWT，携带时写入 `Authorization: Bearer <token>`
+    /// * `path` - 请求路径（如 `/admin/roles`）。
+    /// * `token` - 可选 JWT，携带时写入 `Authorization: Bearer <token>`。
     ///
-    /// # 返回值
-    /// 返回 `(HTTP 状态码, JSON 响应体)`。
+    /// # 返回
+    /// 返回 `(HTTP 状态码, JSON 响应体)`；响应体非 JSON 时 JSON 为 `Value::Null`。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    ///
+    /// # Panics
+    /// 转调 [`Self::request`]，token 非法、请求构造失败、路由调用失败，或响应体读取失败、超过 [`MAX_RESPONSE_BYTES`] 时 panic。
     pub async fn get(&self, path: &str, token: Option<&str>) -> (u16, Value) {
         self.request(Method::GET, path, token, None).await
     }
@@ -53,12 +62,18 @@ impl TestApi {
     /// 发送 POST 请求。
     ///
     /// # 参数
-    /// * `path` - 请求路径
-    /// * `token` - 可选 JWT，携带时写入 `Authorization: Bearer <token>`
-    /// * `json` - 可选的 JSON 请求体，携带时写入 `Content-Type: application/json`
+    /// * `path` - 请求路径。
+    /// * `token` - 可选 JWT，携带时写入 `Authorization: Bearer <token>`。
+    /// * `json` - 可选的 JSON 请求体，携带时写入 `Content-Type: application/json`。
     ///
-    /// # 返回值
-    /// 返回 `(HTTP 状态码, JSON 响应体)`。
+    /// # 返回
+    /// 返回 `(HTTP 状态码, JSON 响应体)`；响应体非 JSON 时 JSON 为 `Value::Null`。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    ///
+    /// # Panics
+    /// 转调 [`Self::request`]，token 非法、请求构造失败、路由调用失败，或响应体读取失败、超过 [`MAX_RESPONSE_BYTES`] 时 panic。
     pub async fn post(&self, path: &str, token: Option<&str>, json: Option<Value>) -> (u16, Value) {
         self.request(Method::POST, path, token, json).await
     }
@@ -68,13 +83,19 @@ impl TestApi {
     /// 新增 `PUT`/`PATCH`/`DELETE` 等方法时直接调用本方法。
     ///
     /// # 参数
-    /// * `method` - HTTP 方法
-    /// * `path` - 请求路径（如 `/admin/roles`）
-    /// * `token` - 可选 JWT，携带时写入 `Authorization: Bearer <token>`
-    /// * `json` - 可选的 JSON 请求体，携带时写入 `Content-Type: application/json`
+    /// * `method` - HTTP 方法。
+    /// * `path` - 请求路径（如 `/admin/roles`）。
+    /// * `token` - 可选 JWT，携带时写入 `Authorization: Bearer <token>`。
+    /// * `json` - 可选的 JSON 请求体，携带时写入 `Content-Type: application/json`。
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回 `(HTTP 状态码, JSON 响应体)`；响应体非 JSON 时返回 `Value::Null`。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    ///
+    /// # Panics
+    /// `Bearer` token 无法写入头、请求构造失败、路由 `oneshot` 失败，或响应体读取失败、超过 [`MAX_RESPONSE_BYTES`] 时 panic。
     pub async fn request(
         &self,
         method: Method,

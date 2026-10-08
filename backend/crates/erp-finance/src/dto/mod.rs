@@ -1,4 +1,4 @@
-//! Finance dto contracts.
+//! 财务数据传输对象合同。
 
 pub mod cost;
 pub mod payable;

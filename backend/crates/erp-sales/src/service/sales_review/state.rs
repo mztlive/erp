@@ -13,6 +13,9 @@ use crate::{Error, Result};
 /// * `target_content_hash` - 目标内容指纹
 /// * `updated_by` - 提交人
 ///
+/// # 返回
+/// 状态迁移成功时返回 `Ok(())`，提交编号保持不变。
+///
 /// # 错误
 /// 状态不允许或指纹非法时返回冲突。
 pub fn start_sales_change_approval(
@@ -30,6 +33,9 @@ pub fn start_sales_change_approval(
 /// * `order` - 审批中的变更单
 /// * `updated_by` - 操作人
 ///
+/// # 返回
+/// 状态迁移成功时返回 `Ok(())`，提交编号保持不变。
+///
 /// # 错误
 /// 非审批中时返回冲突。
 pub fn cancel_sales_change_to_draft(order: &mut SalesChangeOrder, updated_by: &str) -> Result<()> {
@@ -37,6 +43,12 @@ pub fn cancel_sales_change_to_draft(order: &mut SalesChangeOrder, updated_by: &s
 }
 
 /// 最终通过前置：仅 `IN_APPROVAL` 可进入生效。
+///
+/// # 参数
+/// * `order` - 待执行最终通过动作的销售变更单。
+///
+/// # 返回
+/// 状态为审批中时返回 `Ok(())`。
 ///
 /// # 错误
 /// 状态不是审批中时返回冲突。
@@ -48,6 +60,14 @@ pub fn ensure_final_approve_effective(order: &SalesChangeOrder) -> Result<()> {
 }
 
 /// 将已按审批动作迁移的销售变更状态写入原 CAS；本接口不启动事务。
+///
+/// # 参数
+/// * `db` - 销售变更集合所在数据库。
+/// * `change` - 已完成撤回迁移的变更单。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 乐观锁更新成功时返回 `Ok(())`。
 ///
 /// # 错误
 /// 销售集合更新失败原样返回，跨域工作流与审计由调用方原子回滚。

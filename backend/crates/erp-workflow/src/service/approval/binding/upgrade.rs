@@ -107,6 +107,14 @@ pub async fn upgrade_unsubmitted_document_definition(
 
 /// 在 unknown/duplicate 恢复的新事务中只执行授权回读。
 ///
+/// # 参数
+/// * `db` - 数据库
+/// * `rbac` - 共享 RBAC
+/// * `upgrade` - 升级主体端口
+/// * `command` - 未提交定义升级命令
+/// * `actor` - 已认证操作人
+/// * `executor` - 本次恢复使用的新事务执行器
+///
 /// # 返回
 /// 同载荷 V3 收据及其不可变动作完整时返回 `Some(Replay)`；收据尚不存在
 /// 返回 `None`。
@@ -393,6 +401,16 @@ async fn apply_fresh_upgrade(
 }
 
 /// 注册投影必须与同一事务已读取的强业务事实精确一致。
+///
+/// # 参数
+/// * `document` - 已注册的业务单据
+/// * `facts` - 同一事务读到的强业务事实
+///
+/// # 返回
+/// 主键、类型一致，且两端都有单号时单号也一致，则无返回值。
+///
+/// # 错误
+/// 主键、类型不一致，或两端单号都非空且不相等时返回冲突。
 pub(super) fn ensure_registered_upgrade_subject(
     document: &BusinessDocument,
     facts: &ApprovalUpgradeSubjectFacts,
@@ -481,6 +499,20 @@ fn upgraded_binding_audit(
 }
 
 /// 从收据指向的动作严格证明并重建绑定升级结果。
+///
+/// # 参数
+/// * `command` - 未提交定义升级命令
+/// * `actor` - 已认证操作人
+/// * `reason` - 已规范化的升级原因
+/// * `receipt` - 命令收据
+/// * `action` - 收据指向的工作流动作
+/// * `outcome` - 本次结果类别
+///
+/// # 返回
+/// 收据、动作与上下文全部吻合时返回升级结果视图。
+///
+/// # 错误
+/// 载荷、版本、动作身份或时间无法证明时返回幂等载荷冲突。
 pub(super) fn upgrade_result_from_action(
     command: &UpgradeUnsubmittedDefinitionCommand,
     actor: &AuditActor,
@@ -571,6 +603,15 @@ fn map_binding_upgrade_error(error: ApprovalBindingUpgradeError) -> Error {
 }
 
 /// 映射 BPM 模型错误。
+///
+/// # 参数
+/// * `error` - BPM 模型错误
+///
+/// # 返回
+/// 字段或迁移非法时保留原文；其余变体也转为校验错误。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn map_model_error(error: ModelError) -> Error {
     match error {
         ModelError::InvalidField(message) | ModelError::InvalidTransition(message) => {

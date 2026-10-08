@@ -31,8 +31,14 @@ pub enum DataScopeSubjectType {
 impl DataScopeSubjectType {
     /// 返回主体类型的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回面向用户的中文标签。
+    /// 角色为「角色」，用户为「用户」。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Role => "角色",
@@ -42,8 +48,14 @@ impl DataScopeSubjectType {
 
     /// 返回主体类型的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
+    /// 角色为 `role`，用户为 `user`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Role => "role",
@@ -72,8 +84,14 @@ pub enum DataScopeType {
 impl DataScopeType {
     /// 返回范围类型的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回面向用户的中文标签。
+    /// 依次为「公司级」「组织」「团队」「本人负责」「协作参与」。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Company => "公司级",
@@ -86,8 +104,14 @@ impl DataScopeType {
 
     /// 返回范围类型的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
+    /// 依次为 `company`、`organization`、`team`、`self_owned`、`collaborative`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Company => "company",
@@ -100,8 +124,14 @@ impl DataScopeType {
 
     /// 判断范围类型是否需要显式范围目标。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 组织/团队（需要目标对象）返回 `true`。
+    /// `Organization` 与 `Team` 返回 `true`。公司、本人负责和协作参与返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn requires_targets(self) -> bool {
         matches!(self, Self::Organization | Self::Team)
     }
@@ -160,8 +190,7 @@ impl DataScope {
     /// 返回新建的数据范围。
     ///
     /// # 错误
-    /// 当主体 ID 为空/超长、目标数量越界、目标为空/超长，或范围类型与目标
-    /// 携带不一致时返回错误。
+    /// 主体 ID 为空或超长、绑定校验失败、目标数量越界、目标为空或超长，或范围类型与目标携带不一致时返回错误。
     pub fn new(id: DataScopeId, data: DataScopeData) -> Result<Self> {
         let subject_id = normalize_required_text(
             data.subject_id,

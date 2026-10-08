@@ -24,6 +24,18 @@ struct ReceiptId {
 }
 
 /// 精确采购责任键及真正关联入库单定位当前开放任务，最多一千个。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `order` - 已授权的采购单。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 返回责任键、对象和当前草稿同时匹配的开放履约任务。
+///
+/// # 错误
+/// 草稿入库单或开放任务超过一千个时返回 `ValidationError`。
+/// 采购单缺责任人、履约责任键不合法或仓储读取失败时返回对应错误。
 pub(in crate::supplier_portal) async fn actual_open_tasks(
     db: &Database,
     order: &PurchaseOrder,

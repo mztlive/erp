@@ -141,6 +141,9 @@ impl BusinessDocumentListParams {
     ///
     /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
     ///
@@ -189,7 +192,10 @@ impl AppendWorkflowActionRequest {
     /// * `actor_id` - 实际操作者
     ///
     /// # 返回
-    /// 返回实体层创建数据。
+    /// 返回实体层创建数据。消耗 `self`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(crate) fn into_data(self, actor_role: &str, actor_id: &str) -> WorkflowActionData {
         WorkflowActionData {
             document_id: self.document_id,
@@ -282,6 +288,9 @@ impl WorkflowActionListParams {
     ///
     /// 文本筛选去首尾空白、分页取默认值、排序字段过白名单校验。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
     ///
@@ -317,8 +326,14 @@ pub struct CreateDocumentRelationRequest {
 impl CreateDocumentRelationRequest {
     /// 转换为实体创建数据。
     ///
+    /// # 参数
+    /// 无。消耗 `self`。
+    ///
     /// # 返回
     /// 返回实体层创建数据。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(crate) fn into_data(self) -> DocumentRelationData {
         DocumentRelationData {
             from_document_id: self.from_document_id,
@@ -379,7 +394,10 @@ impl CreateDocumentParticipantRequest {
     /// * `recorded_by` - 记录人（账号或系统身份）
     ///
     /// # 返回
-    /// 返回实体层创建数据。
+    /// 返回实体层创建数据。消耗 `self`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(crate) fn into_data(self, recorded_by: &str) -> DocumentParticipantData {
         DocumentParticipantData {
             document_id: self.document_id,

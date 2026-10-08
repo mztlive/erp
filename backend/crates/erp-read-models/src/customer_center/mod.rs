@@ -1,4 +1,4 @@
-//! Customer-center read model.
+//! 客户对象中心读模型。
 
 mod repository;
 mod service;

@@ -131,6 +131,9 @@ impl SupplierOfferingAvailability {
 
     /// 返回下一次成功持久化后的投影版本。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回当前乐观锁版本加一。
     ///
@@ -142,8 +145,14 @@ impl SupplierOfferingAvailability {
 
     /// 返回当前可供事实对应的销售安全中断原因。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 明确停止、不可供、过期或零库存时返回领域原因；正常可供时返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn interruption_reason(&self) -> Option<AvailabilityInterruptionReason> {
         match (self.availability_status, self.available_quantity) {
             (AvailabilityStatus::Stopped, _) => Some(AvailabilityInterruptionReason::SupplierStopped),
@@ -158,8 +167,14 @@ impl SupplierOfferingAvailability {
 
     /// 判断当前投影是否可参与采购且数量未耗尽。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为可供且数量为空或大于零时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_available(&self) -> bool {
         self.availability_status == AvailabilityStatus::Available
             && self

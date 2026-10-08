@@ -167,7 +167,9 @@ impl SupplierPortalReadService {
     /// # 返回
     /// 返回当前待确认原稿每行的精确同供应商、同订货码候选；其他状态为空。
     /// # 错误
-    /// 请求越权、供给当前版本或对应SKU资料缺失时拒绝。
+    /// 非内部身份或未装配授权时返回 `Forbidden`。申请不存在或越权时返回 `NotFound`。
+    /// 供给当前版本缺失、归属异常或 SKU 资料缺失时返回 `ConflictError`。
+    /// 待确认原稿关联损坏或仓储读取失败时返回对应错误。
     pub async fn existing_offering_review_candidates(
         &self,
         request_id: &str,

@@ -44,6 +44,9 @@ pub(super) fn amount_bson(amount: &Amount) -> Result<Bson> {
 ///
 /// # 返回
 /// 返回聚合管道更新文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn progress_pipeline(
     progress_field: &str,
     balance_field: &str,

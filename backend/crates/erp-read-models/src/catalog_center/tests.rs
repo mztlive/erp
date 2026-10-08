@@ -64,6 +64,19 @@ struct RecordingQuery {
 #[async_trait]
 impl CatalogSupplyQueryPort for RecordingQuery {
     /// 记录生产责任筛选传入的完整条件，返回预设的候选身份。
+    ///
+    /// # 参数
+    /// * `filter` - 完整商品筛选；本替身克隆后记入 `candidate_filter`，不按页码收窄。
+    /// * `_` - 调用方执行器；本替身不读取。
+    ///
+    /// # 返回
+    /// `fail` 为假时返回预设 `candidates` 的克隆。
+    ///
+    /// # 错误
+    /// `fail` 为真时，仍先记下调用与 `filter`，再返回 `persistence_core::Error::OptimisticLockingError`。
+    ///
+    /// # Panics
+    /// `candidates` 为 `None` 时 `expect` 失败，表示普通商品查询不得读取采购候选。观测 `Mutex` 中毒时 `unwrap` 也会 panic。
     async fn product_candidate_ids(
         &self,
         filter: &ProductFilter,

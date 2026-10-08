@@ -34,6 +34,9 @@ pub(crate) const SUPPLIER_API_COMMAND_RECEIPTS: &str =
 /// # 参数
 /// * `db` - 目标 MongoDB 数据库
 ///
+/// # 返回
+/// 连接、能力、业务确认、健康检查和命令回执索引都登记成功时返回 `Ok(())`。
+///
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {

@@ -1,5 +1,5 @@
-//! Receivable finance operations and deterministic command preparation.
-//! Cross-domain transactions and workflow commands are owned by finance posting processes.
+//! 应收财务操作与确定性的命令准备。
+//! 跨域事务和工作流命令由财务过账流程持有。
 
 pub mod customer_receipt_commit;
 pub mod invoice_commit;
@@ -11,15 +11,24 @@ pub mod red_invoice_plan;
 
 mod invoice_query;
 
-/// Finance-only receivable queries and transaction-independent application operations.
+/// 仅财务域的应收查询，以及不依赖事务的应用操作。
 pub struct ReceivableService {
     db: mongodb::Database,
 }
 
 impl ReceivableService {
-    /// Construct a finance service over the supplied database handle.
+    /// 用给定数据库句柄构造应收财务服务。
     ///
-    /// No reads, writes or transaction boundaries are introduced by construction.
+    /// 构造本身不读取、不写入，也不划定事务边界。
+    ///
+    /// # 参数
+    /// * `db` - 财务领域数据库。
+    ///
+    /// # 返回
+    /// 返回未开始任何读写的服务实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: mongodb::Database) -> Self {
         Self { db }
     }

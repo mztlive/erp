@@ -24,6 +24,19 @@ use super::upgrade_shared::{
 use super::upgrade_subject::ApprovalUpgradeSubjectFacts;
 use crate::{Error, Result};
 
+/// 读取销售单，并核验请求单据类型与业务性质一致。
+///
+/// # 参数
+/// * `db` - 销售单所在数据库。
+/// * `requested_type` - 路由给出的销售单或卡券销售单类型。
+/// * `document_id` - 销售单主键。
+/// * `executor` - 调用方读或事务执行器。
+///
+/// # 返回
+/// 返回销售单主键、版本、单号、结算主体与创建人。
+///
+/// # 错误
+/// 销售单不存在、业务性质与请求类型不一致、主键或责任字段非法，或仓储失败时返回错误。
 pub(crate) async fn load_sales_order(
     db: &Database,
     requested_type: DocumentType,
@@ -47,6 +60,18 @@ pub(crate) async fn load_sales_order(
     )
 }
 
+/// 读取销售变更单，用来源销售单的结算主体作为责任组织。
+///
+/// # 参数
+/// * `db` - 销售变更单与来源销售单所在数据库。
+/// * `document_id` - 销售变更单主键。
+/// * `executor` - 调用方读或事务执行器。
+///
+/// # 返回
+/// 返回变更单事实；正式单号为空。
+///
+/// # 错误
+/// 变更单或来源销售单不存在、来源业务性质无法映射、责任字段非法或仓储失败时返回错误。
 pub(crate) async fn load_sales_change(
     db: &Database,
     document_id: &str,
@@ -74,6 +99,18 @@ pub(crate) async fn load_sales_change(
     )
 }
 
+/// 读取采购单，并要求来源销售单是实物及服务销售。
+///
+/// # 参数
+/// * `db` - 采购单与来源销售单所在数据库。
+/// * `document_id` - 采购单主键。
+/// * `executor` - 调用方读或事务执行器。
+///
+/// # 返回
+/// 返回采购单主键、版本、采购单号、来源结算主体与创建人。
+///
+/// # 错误
+/// 采购单或来源销售单不存在、来源不是实物及服务、责任字段非法或仓储失败时返回错误。
 pub(crate) async fn load_purchase_order(
     db: &Database,
     document_id: &str,
@@ -101,6 +138,18 @@ pub(crate) async fn load_purchase_order(
     )
 }
 
+/// 读取采购变更单，经采购单找到来源销售单的结算主体。
+///
+/// # 参数
+/// * `db` - 采购变更、采购单与来源销售单所在数据库。
+/// * `document_id` - 采购变更单主键。
+/// * `executor` - 调用方读或事务执行器。
+///
+/// # 返回
+/// 返回变更单事实；正式单号为空。
+///
+/// # 错误
+/// 变更单、来源采购单或来源销售单不存在、来源不是实物及服务、责任字段非法或仓储失败时返回错误。
 pub(crate) async fn load_purchase_change(
     db: &Database,
     document_id: &str,
@@ -133,6 +182,18 @@ pub(crate) async fn load_purchase_change(
     )
 }
 
+/// 读取库存调整单，用仓库作为责任组织。
+///
+/// # 参数
+/// * `db` - 库存调整单所在数据库。
+/// * `document_id` - 库存调整单主键。
+/// * `executor` - 调用方读或事务执行器。
+///
+/// # 返回
+/// 返回调整单主键、版本、单号、仓库与创建人。
+///
+/// # 错误
+/// 调整单不存在、责任字段非法或仓储失败时返回错误。
 pub(crate) async fn load_stock_adjustment(
     db: &Database,
     document_id: &str,
@@ -154,6 +215,18 @@ pub(crate) async fn load_stock_adjustment(
     )
 }
 
+/// 读取客户回款单，用对方主体作为责任组织。
+///
+/// # 参数
+/// * `db` - 客户回款单所在数据库。
+/// * `document_id` - 客户回款单主键。
+/// * `executor` - 调用方读或事务执行器。
+///
+/// # 返回
+/// 返回回款单主键、版本、单号、对方主体与创建人。
+///
+/// # 错误
+/// 回款单不存在、责任字段非法或仓储失败时返回错误。
 pub(crate) async fn load_customer_receipt(
     db: &Database,
     document_id: &str,
@@ -175,6 +248,18 @@ pub(crate) async fn load_customer_receipt(
     )
 }
 
+/// 读取客户退款单，用所属客户的主体作为责任组织。
+///
+/// # 参数
+/// * `db` - 客户退款单与客户所在数据库。
+/// * `document_id` - 客户退款单主键。
+/// * `executor` - 调用方读或事务执行器。
+///
+/// # 返回
+/// 返回退款单主键、版本、单号、客户主体与创建人。
+///
+/// # 错误
+/// 退款单或所属客户不存在、责任字段非法或仓储失败时返回错误。
 pub(crate) async fn load_customer_refund(
     db: &Database,
     document_id: &str,
@@ -201,6 +286,18 @@ pub(crate) async fn load_customer_refund(
     )
 }
 
+/// 读取供应商退款单，用所属供应商的主体作为责任组织。
+///
+/// # 参数
+/// * `db` - 供应商退款单与供应商所在数据库。
+/// * `document_id` - 供应商退款单主键。
+/// * `executor` - 调用方读或事务执行器。
+///
+/// # 返回
+/// 返回退款单主键、版本、单号、供应商主体与创建人。
+///
+/// # 错误
+/// 退款单或所属供应商不存在、责任字段非法或仓储失败时返回错误。
 pub(crate) async fn load_supplier_refund(
     db: &Database,
     document_id: &str,
@@ -227,6 +324,18 @@ pub(crate) async fn load_supplier_refund(
     )
 }
 
+/// 读取回款冲正单，用原回款的对方主体作为责任组织。
+///
+/// # 参数
+/// * `db` - 回款冲正单与原回款所在数据库。
+/// * `document_id` - 回款冲正单主键。
+/// * `executor` - 调用方读或事务执行器。
+///
+/// # 返回
+/// 返回冲正单主键、版本、单号、原回款对方主体与创建人。
+///
+/// # 错误
+/// 冲正单或原回款不存在、责任字段非法或仓储失败时返回错误。
 pub(crate) async fn load_receipt_reversal(
     db: &Database,
     document_id: &str,
@@ -253,6 +362,18 @@ pub(crate) async fn load_receipt_reversal(
     )
 }
 
+/// 读取付款冲正单，经原付款找到供应商主体作为责任组织。
+///
+/// # 参数
+/// * `db` - 付款冲正、原付款与供应商所在数据库。
+/// * `document_id` - 付款冲正单主键。
+/// * `executor` - 调用方读或事务执行器。
+///
+/// # 返回
+/// 返回冲正单主键、版本、单号、供应商主体与创建人。
+///
+/// # 错误
+/// 冲正单、原付款或原付款供应商不存在、责任字段非法或仓储失败时返回错误。
 pub(crate) async fn load_payment_reversal(
     db: &Database,
     document_id: &str,
@@ -284,6 +405,18 @@ pub(crate) async fn load_payment_reversal(
     )
 }
 
+/// 证明销售单仍是从未提交的初始草稿，且身份与已加载事实一致。
+///
+/// # 参数
+/// * `db` - 销售单与提交记录所在数据库。
+/// * `facts` - 同一外层事务先前加载的强业务事实。
+/// * `executor` - 与事实加载相同的外层事务执行器。
+///
+/// # 返回
+/// 仍为初始未提交草稿时返回。
+///
+/// # 错误
+/// 单据不存在、类型不匹配、主键或版本不一致、非初始草稿或已有提交时返回错误。仓储失败时返回对应错误。
 pub(crate) async fn ensure_fresh_sales_order(
     db: &Database,
     facts: &ApprovalUpgradeSubjectFacts,
@@ -307,6 +440,18 @@ pub(crate) async fn ensure_fresh_sales_order(
     Ok(())
 }
 
+/// 证明销售变更单仍是从未提交的初始草稿，且身份与已加载事实一致。
+///
+/// # 参数
+/// * `db` - 销售变更单与提交记录所在数据库。
+/// * `facts` - 同一外层事务先前加载的强业务事实。
+/// * `executor` - 与事实加载相同的外层事务执行器。
+///
+/// # 返回
+/// 仍为初始未提交草稿且最新提交序号为 0 时返回。
+///
+/// # 错误
+/// 变更单不存在、主键或版本不一致、非初始草稿或已有提交时返回错误。仓储失败时返回对应错误。
 pub(crate) async fn ensure_fresh_sales_change(
     db: &Database,
     facts: &ApprovalUpgradeSubjectFacts,
@@ -329,6 +474,18 @@ pub(crate) async fn ensure_fresh_sales_change(
     Ok(())
 }
 
+/// 证明采购单仍是初始草稿，且身份与已加载事实一致。
+///
+/// # 参数
+/// * `db` - 采购单所在数据库。
+/// * `facts` - 同一外层事务先前加载的强业务事实。
+/// * `executor` - 与事实加载相同的外层事务执行器。
+///
+/// # 返回
+/// 仍为初始草稿时返回。
+///
+/// # 错误
+/// 采购单不存在、主键或版本不一致，或初始状态门禁失败时返回错误。仓储失败时返回对应错误。
 pub(crate) async fn ensure_fresh_purchase_order(
     db: &Database,
     facts: &ApprovalUpgradeSubjectFacts,
@@ -343,6 +500,18 @@ pub(crate) async fn ensure_fresh_purchase_order(
     ensure_initial_purchase_state(&order)
 }
 
+/// 证明采购变更单仍是初始草稿，且身份与已加载事实一致。
+///
+/// # 参数
+/// * `db` - 采购变更单所在数据库。
+/// * `facts` - 同一外层事务先前加载的强业务事实。
+/// * `executor` - 与事实加载相同的外层事务执行器。
+///
+/// # 返回
+/// 仍为初始草稿时返回。
+///
+/// # 错误
+/// 变更单不存在、主键或版本不一致，或初始状态门禁失败时返回错误。仓储失败时返回对应错误。
 pub(crate) async fn ensure_fresh_purchase_change(
     db: &Database,
     facts: &ApprovalUpgradeSubjectFacts,
@@ -357,6 +526,18 @@ pub(crate) async fn ensure_fresh_purchase_change(
     ensure_initial_purchase_change_state(&change)
 }
 
+/// 证明库存调整单仍是初始未提交状态，且身份与已加载事实一致。
+///
+/// # 参数
+/// * `db` - 库存调整单所在数据库。
+/// * `facts` - 同一外层事务先前加载的强业务事实。
+/// * `executor` - 与事实加载相同的外层事务执行器。
+///
+/// # 返回
+/// 仍为初始审批状态时返回。
+///
+/// # 错误
+/// 调整单不存在、主键或版本不一致，或已离开初始审批状态时返回错误。仓储失败时返回对应错误。
 pub(crate) async fn ensure_fresh_stock_adjustment(
     db: &Database,
     facts: &ApprovalUpgradeSubjectFacts,
@@ -371,6 +552,18 @@ pub(crate) async fn ensure_fresh_stock_adjustment(
     adjustment.ensure_initial_approval_state().map_err(|_| already_submitted(DocumentType::StockAdjustment))
 }
 
+/// 证明客户回款单仍是初始未提交状态，且身份与已加载事实一致。
+///
+/// # 参数
+/// * `db` - 客户回款单所在数据库。
+/// * `facts` - 同一外层事务先前加载的强业务事实。
+/// * `executor` - 与事实加载相同的外层事务执行器。
+///
+/// # 返回
+/// 仍为初始审批状态时返回。
+///
+/// # 错误
+/// 回款单不存在、主键或版本不一致，或已离开初始审批状态时返回错误。仓储失败时返回对应错误。
 pub(crate) async fn ensure_fresh_customer_receipt(
     db: &Database,
     facts: &ApprovalUpgradeSubjectFacts,
@@ -385,6 +578,18 @@ pub(crate) async fn ensure_fresh_customer_receipt(
     receipt.ensure_initial_approval_state().map_err(|_| already_submitted(DocumentType::CustomerReceipt))
 }
 
+/// 证明客户退款单仍是初始未提交状态，且身份与已加载事实一致。
+///
+/// # 参数
+/// * `db` - 客户退款单所在数据库。
+/// * `facts` - 同一外层事务先前加载的强业务事实。
+/// * `executor` - 与事实加载相同的外层事务执行器。
+///
+/// # 返回
+/// 仍为初始审批状态时返回。
+///
+/// # 错误
+/// 退款单不存在、主键或版本不一致，或已离开初始审批状态时返回错误。仓储失败时返回对应错误。
 pub(crate) async fn ensure_fresh_customer_refund(
     db: &Database,
     facts: &ApprovalUpgradeSubjectFacts,
@@ -399,6 +604,18 @@ pub(crate) async fn ensure_fresh_customer_refund(
     refund.ensure_initial_approval_state().map_err(|_| already_submitted(DocumentType::CustomerRefund))
 }
 
+/// 证明供应商退款单仍是初始未提交状态，且身份与已加载事实一致。
+///
+/// # 参数
+/// * `db` - 供应商退款单所在数据库。
+/// * `facts` - 同一外层事务先前加载的强业务事实。
+/// * `executor` - 与事实加载相同的外层事务执行器。
+///
+/// # 返回
+/// 仍为初始审批状态时返回。
+///
+/// # 错误
+/// 退款单不存在、主键或版本不一致，或已离开初始审批状态时返回错误。仓储失败时返回对应错误。
 pub(crate) async fn ensure_fresh_supplier_refund(
     db: &Database,
     facts: &ApprovalUpgradeSubjectFacts,
@@ -413,6 +630,18 @@ pub(crate) async fn ensure_fresh_supplier_refund(
     refund.ensure_initial_approval_state().map_err(|_| already_submitted(DocumentType::SupplierRefund))
 }
 
+/// 证明回款冲正单仍是初始未提交状态，且身份与已加载事实一致。
+///
+/// # 参数
+/// * `db` - 回款冲正单所在数据库。
+/// * `facts` - 同一外层事务先前加载的强业务事实。
+/// * `executor` - 与事实加载相同的外层事务执行器。
+///
+/// # 返回
+/// 仍为初始审批状态时返回。
+///
+/// # 错误
+/// 冲正单不存在、主键或版本不一致，或已离开初始审批状态时返回错误。仓储失败时返回对应错误。
 pub(crate) async fn ensure_fresh_receipt_reversal(
     db: &Database,
     facts: &ApprovalUpgradeSubjectFacts,
@@ -427,6 +656,18 @@ pub(crate) async fn ensure_fresh_receipt_reversal(
     reversal.ensure_initial_approval_state().map_err(|_| already_submitted(DocumentType::ReceiptReversal))
 }
 
+/// 证明付款冲正单仍是初始未提交状态，且身份与已加载事实一致。
+///
+/// # 参数
+/// * `db` - 付款冲正单所在数据库。
+/// * `facts` - 同一外层事务先前加载的强业务事实。
+/// * `executor` - 与事实加载相同的外层事务执行器。
+///
+/// # 返回
+/// 仍为初始审批状态时返回。
+///
+/// # 错误
+/// 冲正单不存在、主键或版本不一致，或已离开初始审批状态时返回错误。仓储失败时返回对应错误。
 pub(crate) async fn ensure_fresh_payment_reversal(
     db: &Database,
     facts: &ApprovalUpgradeSubjectFacts,

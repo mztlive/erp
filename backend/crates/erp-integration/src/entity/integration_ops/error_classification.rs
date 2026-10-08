@@ -8,11 +8,31 @@
 use super::integration_error_task::ErrorClass;
 
 /// 判断外部调用是否没有可确认的最终结果。
+///
+/// # 参数
+/// * `class` - 已归类的错误分类。
+/// * `code` - 稳定错误码；匹配区分大小写。
+///
+/// # 返回
+/// 分类为 `ResultUnknown`，或 `code` 含 `TIMEOUT`、`OUTCOME_UNKNOWN` 时返回 `true`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn is_result_unknown(class: ErrorClass, code: &str) -> bool {
     class == ErrorClass::ResultUnknown || code.contains("TIMEOUT") || code.contains("OUTCOME_UNKNOWN")
 }
 
 /// 把符合结果未知信号的分类归一化为正式结果未知分类。
+///
+/// # 参数
+/// * `class` - 原始错误分类。
+/// * `code` - 稳定错误码，判定规则与 [`is_result_unknown`] 相同。
+///
+/// # 返回
+/// 命中结果未知信号时返回 `ErrorClass::ResultUnknown`，否则原样返回 `class`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn normalized_result_unknown_class(class: ErrorClass, code: &str) -> ErrorClass {
     if is_result_unknown(class, code) { ErrorClass::ResultUnknown } else { class }
 }

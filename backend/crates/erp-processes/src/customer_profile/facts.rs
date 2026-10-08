@@ -24,7 +24,18 @@ use super::numbering::business_no;
 use crate::{Error, Result};
 
 impl CustomerProfileService {
-    /// 构造创建场景的全部从属事实并完成敏感值加密。
+    /// 构造创建场景的全部从属事实并完成敏感值加密。未提交的集合按空处理。
+    ///
+    /// # 参数
+    /// * `req` - 创建请求中的联系人、地址和银行账户。
+    /// * `party_id` - 这些事实所属的主体。
+    /// * `actor` - 写入事实的操作人。
+    ///
+    /// # 返回
+    /// 返回尚未持久化的联系人、地址和银行账户。
+    ///
+    /// # 错误
+    /// 必填明文缺失、事实构造失败或敏感值加密失败时返回错误。
     pub(super) fn create_facts(
         &self,
         req: &SaveCustomerProfileRequest,
@@ -55,7 +66,18 @@ impl CustomerProfileService {
         Ok(PartyFacts { contacts, addresses, bank_accounts })
     }
 
-    /// 为显式提交的事实集合计算保留、结束和新增差异。
+    /// 为显式提交的事实集合计算保留、结束和新增差异。请求里缺省的集合不参与差异。
+    ///
+    /// # 参数
+    /// * `party_id` - 待比较的主体。
+    /// * `req` - 修订请求；只有出现的事实集合才会加载当前行。
+    /// * `actor` - 写入结束或更新的操作人。
+    ///
+    /// # 返回
+    /// 返回三类事实各自的更新与新增差异。
+    ///
+    /// # 错误
+    /// 当前事实查询失败，或差异中的校验、冲突、构造与加密失败时返回错误。
     pub(super) async fn prepare_fact_changes(
         &self,
         party_id: &PartyId,
@@ -416,7 +438,17 @@ pub(super) struct PartyFacts {
 }
 
 impl PartyFacts {
-    /// 写入全部新事实。
+    /// 消耗本批新事实，按联系人、地址、银行账户的顺序写入。
+    ///
+    /// # 参数
+    /// * `db` - 主体事实所在数据库。
+    /// * `executor` - 调用方事务执行器。
+    ///
+    /// # 返回
+    /// 全部创建成功后返回。
+    ///
+    /// # 错误
+    /// 任一事实创建失败时返回仓储错误。
     pub(super) async fn persist(self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         for item in &self.contacts {
             db.party_contacts().create(item, executor).await?;
@@ -452,7 +484,17 @@ pub(super) struct PartyFactChanges {
 }
 
 impl PartyFactChanges {
-    /// 按先结束旧事实、后写新事实的顺序持久化差异。
+    /// 消耗差异，按联系人、地址、银行账户的顺序先更新旧事实，再创建新事实。
+    ///
+    /// # 参数
+    /// * `db` - 主体事实所在数据库。
+    /// * `executor` - 调用方事务执行器。
+    ///
+    /// # 返回
+    /// 全部更新和创建成功后返回。
+    ///
+    /// # 错误
+    /// 任一更新或创建失败时返回仓储错误。
     pub(super) async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         for item in &mut self.contacts.updated {
             db.party_contacts().update(item, executor).await?;
@@ -573,6 +615,7 @@ fn close_remaining_banks(
     Ok(())
 }
 
+/// 去掉首尾空白后仍为空则拒绝，避免把空白明文加密入库。
 fn required_text(value: Option<&str>, label: &str) -> Result<String> {
     value
         .map(str::trim)

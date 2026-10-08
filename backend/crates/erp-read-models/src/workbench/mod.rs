@@ -1,4 +1,4 @@
-//! Workbench read model: authorized work-item list, detail, stats and briefs.
+//! 工作台读模型：已授权的任务列表、详情、统计和简报。
 
 mod access;
 mod action_projection;

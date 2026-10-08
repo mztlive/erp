@@ -18,6 +18,9 @@ impl SalesSelectionTaskAdapter {
     ///
     /// # 返回
     /// 返回可注册到统一执行器的适配器。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(process: SalesSelectionProcess) -> Self {
         Self { process }
     }
@@ -32,6 +35,9 @@ impl BackgroundTaskAdapter for SalesSelectionTaskAdapter {
     ///
     /// # 返回
     /// 返回稳定的任务名 `sales_selection_prepare`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn name(&self) -> &'static str {
         "sales_selection_prepare"
     }

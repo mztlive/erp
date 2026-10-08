@@ -89,8 +89,18 @@ impl Default for SupplierPaymentFilter {
 impl QueryFilter for SupplierPaymentFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回查询条件文档。
+    /// 返回查询条件文档。`payment_no` 按字面量模糊匹配；去空白后非空的
+    /// `keyword` 再对 `payment_no` 做字面量匹配，并在 `keyword_supplier_ids`
+    /// 非空时加入 `supplier_id` 的 `$in`，这些条件取 `$or`。有值时等值匹配
+    /// `supplier_id`、`status`。`keyword_ids` 为 `Some` 时与上述条件用 `$and`
+    /// 再按 `id` 取交集，空集合匹配零行。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "payment_no", self.payment_no.as_deref());
@@ -120,8 +130,14 @@ impl QueryFilter for SupplierPaymentFilter {
 impl Pagination for SupplierPaymentFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组。`page` 原样返回，`page_size` 由 `u32` 转为 `u64`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }

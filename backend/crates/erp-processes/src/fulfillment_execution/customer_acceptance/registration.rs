@@ -159,8 +159,19 @@ async fn persist_unbound_customer_acceptance_document(
 
 /// 为已构造客户验收登记 `BusinessDocument` 并调用统一绑定端口。
 ///
+/// # 参数
+/// * `db` - 业务数据库。
+/// * `rbac` - 授权源。
+/// * `object_read` - 审批对象读取端口。
+/// * `acceptance` - 已构造的客户验收。
+/// * `actor` - 创建人。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 单据注册与空绑定证明写入成功时返回。
+///
 /// # 错误
-/// 绑定端口或注册写入失败时返回错误。
+/// 销售单不可见、绑定命令非法、端口返回绑定或注册写入失败时返回错误。
 pub async fn register_created_customer_acceptance_document(
     db: &Database,
     rbac: &SharedRbacService,

@@ -29,52 +29,100 @@ pub trait BpmExt {
 
     /// 返回流程定义集合仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `persistence_core::Repository<'_, ApprovalProcessDefinition>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn approval_process_definitions(&self) -> persistence_core::Repository<'_, ApprovalProcessDefinition>;
 
     /// 返回节点定义集合仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `persistence_core::Repository<'_, ApprovalNodeDefinition>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn approval_node_definitions(&self) -> persistence_core::Repository<'_, ApprovalNodeDefinition>;
 
     /// 返回连线定义集合仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `persistence_core::Repository<'_, ApprovalTransitionDefinition>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn approval_transition_definitions(
         &self,
     ) -> persistence_core::Repository<'_, ApprovalTransitionDefinition>;
 
     /// 返回运行实例集合仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `persistence_core::Repository<'_, ApprovalProcessInstance>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn approval_process_instances(&self) -> persistence_core::Repository<'_, ApprovalProcessInstance>;
 
     /// 返回节点执行集合仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `persistence_core::Repository<'_, ApprovalNodeExecution>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn approval_node_executions(&self) -> persistence_core::Repository<'_, ApprovalNodeExecution>;
 
     /// 返回实例审批人集合仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `persistence_core::Repository<'_, ApprovalInstanceAssignee>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn approval_instance_assignees(&self) -> persistence_core::Repository<'_, ApprovalInstanceAssignee>;
 
     /// 返回命令收据集合仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `persistence_core::Repository<'_, ApprovalCommandReceipt>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn approval_command_receipts(&self) -> persistence_core::Repository<'_, ApprovalCommandReceipt>;
 
     /// 返回跨 BPM 目标集合的聚合仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回只映射 BPM 模型的 [`BpmWorkflowRepository`]。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn bpm_workflow(&self) -> BpmWorkflowRepository<'_>;
 }
 

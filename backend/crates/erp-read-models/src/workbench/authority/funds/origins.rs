@@ -7,7 +7,17 @@ use persistence_core::Executor;
 
 use crate::errors::Result;
 impl super::super::WorkItemFactsReader {
-    /// Load original receipt counterparties for refunds and reversals.
+    /// 读取退款与冲正所引用的原回款往来名称。
+    ///
+    /// # 参数
+    /// * `receipt_ids` - 原客户回款 ID。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 返回回款 ID 到主体法定名称。没有名称的回款不入映射。
+    ///
+    /// # 错误
+    /// 回款或主体名称读取失败时返回错误。
     pub(in crate::workbench) async fn customer_receipt_origins(
         &self,
         receipt_ids: &[String],
@@ -19,7 +29,17 @@ impl super::super::WorkItemFactsReader {
         let party_names = self.party_legal_names(&party_ids, executor).await?;
         Ok(receipt_counterparties(&receipts, &party_names))
     }
-    /// Load original receivable-entry counterparties.
+    /// 读取原应收分录经所属账户解析出的往来名称。
+    ///
+    /// # 参数
+    /// * `entry_ids` - 应收分录 ID。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 返回分录 ID 到主体法定名称。账户或名称缺失的分录不入映射。
+    ///
+    /// # 错误
+    /// 分录、账户或主体名称读取失败时返回错误。
     pub(in crate::workbench) async fn receivable_entry_origins(
         &self,
         entry_ids: &[String],
@@ -39,7 +59,17 @@ impl super::super::WorkItemFactsReader {
             accounts.into_iter().map(|account| (account.base.id.clone(), account)).collect::<HashMap<_, _>>();
         Ok(receivable_entry_counterparties(&entries, &accounts, &party_names))
     }
-    /// Load original payment counterparties for refunds and reversals.
+    /// 读取退款与冲正所引用的原付款往来名称。
+    ///
+    /// # 参数
+    /// * `payment_ids` - 原供应商付款 ID。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 返回付款 ID 到供应商显示名。没有名称的付款不入映射。
+    ///
+    /// # 错误
+    /// 付款或供应商名称读取失败时返回错误。
     pub(in crate::workbench) async fn supplier_payment_origins(
         &self,
         payment_ids: &[String],
@@ -54,7 +84,17 @@ impl super::super::WorkItemFactsReader {
             .await?;
         Ok(payment_counterparties(&payments, &supplier_names))
     }
-    /// Load original payable-entry counterparties.
+    /// 读取原应付分录经所属账户解析出的往来名称。
+    ///
+    /// # 参数
+    /// * `entry_ids` - 应付分录 ID。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 返回分录 ID 到供应商显示名。账户或名称缺失的分录不入映射。
+    ///
+    /// # 错误
+    /// 分录、账户或供应商名称读取失败时返回错误。
     pub(in crate::workbench) async fn payable_entry_origins(
         &self,
         entry_ids: &[String],
@@ -71,6 +111,16 @@ impl super::super::WorkItemFactsReader {
     }
 }
 /// 将已读来源投影成命令名称；缺名称或账户的来源不入 map。
+///
+/// # 参数
+/// * `receipts` - 已读客户回款。
+/// * `party_names` - 主体 ID 到法定名称。
+///
+/// # 返回
+/// 返回回款 ID 到名称。主体没有名称的回款被丢弃。
+///
+/// # 错误
+/// 不返回错误。
 pub(in crate::workbench) fn receipt_counterparties(
     receipts: &[CustomerReceipt],
     party_names: &HashMap<String, String>,
@@ -87,6 +137,17 @@ pub(in crate::workbench) fn receipt_counterparties(
 }
 
 /// 将已读来源投影成命令名称；缺名称或账户的来源不入 map。
+///
+/// # 参数
+/// * `entries` - 已读应收分录。
+/// * `accounts` - 应收账户 ID 到账户。
+/// * `party_names` - 主体 ID 到法定名称。
+///
+/// # 返回
+/// 返回分录 ID 到名称。账户或主体名称缺失的分录被丢弃。
+///
+/// # 错误
+/// 不返回错误。
 pub(in crate::workbench) fn receivable_entry_counterparties(
     entries: &[ReceivableEntry],
     accounts: &HashMap<String, ReceivableAccount>,
@@ -105,6 +166,16 @@ pub(in crate::workbench) fn receivable_entry_counterparties(
 }
 
 /// 将已读来源投影成命令名称；缺名称或账户的来源不入 map。
+///
+/// # 参数
+/// * `payments` - 已读供应商付款。
+/// * `supplier_names` - 供应商 ID 到显示名。
+///
+/// # 返回
+/// 返回付款 ID 到名称。没有显示名的付款被丢弃。
+///
+/// # 错误
+/// 不返回错误。
 pub(in crate::workbench) fn payment_counterparties(
     payments: &[SupplierPayment],
     supplier_names: &HashMap<String, String>,
@@ -121,6 +192,17 @@ pub(in crate::workbench) fn payment_counterparties(
 }
 
 /// 将已读来源投影成命令名称；缺名称或账户的来源不入 map。
+///
+/// # 参数
+/// * `entries` - 已读应付分录。
+/// * `accounts` - 应付账户 ID 到账户。
+/// * `supplier_names` - 供应商 ID 到显示名。
+///
+/// # 返回
+/// 返回分录 ID 到名称。账户或供应商名称缺失的分录被丢弃。
+///
+/// # 错误
+/// 不返回错误。
 pub(in crate::workbench) fn payable_entry_counterparties(
     entries: &[PayableEntry],
     accounts: &HashMap<String, PayableAccount>,

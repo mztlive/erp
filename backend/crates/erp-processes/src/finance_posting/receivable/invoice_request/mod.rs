@@ -42,9 +42,18 @@ async fn reserved(db: &Database, account_id: &str, executor: &mut dyn Executor) 
         .iter()
         .fold(Amount::zero(), |sum, request| sum.checked_add(request.reserved())))
 }
-/// 销售变更不得使既有申请授权超出当前可开票额度。
+/// 已占用的申请额度不得超过当前可开票金额。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `account` - 当前应收子账，以其 `open_invoiceable_total` 为上限。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 占用不超过可开票额度时无返回值。
+///
 /// # 错误
-/// 必须先撤回占用申请或解决已批准授权后才能减少销售金额。
+/// 占用额度读取失败时返回该错误；已占用额度大于 `open_invoiceable_total` 时返回冲突。
 pub(crate) async fn ensure_reserved_capacity(
     db: &Database,
     account: &ReceivableAccount,

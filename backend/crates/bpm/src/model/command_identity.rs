@@ -48,6 +48,15 @@ impl IdempotencyKey {
     }
 
     /// 返回可直接持久化和精确查询的规范键。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 trim 后保存的幂等键。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -85,6 +94,15 @@ impl fmt::Display for IdempotencyKey {
 
 impl<'de> Deserialize<'de> for IdempotencyKey {
     /// 持久化值必须已经规范化；反序列化不得静默改写索引身份。
+    ///
+    /// # 参数
+    /// * `deserializer` - 幂等键字符串的反序列化器
+    ///
+    /// # 返回
+    /// 持久化字符串已是规范形态时返回 [`IdempotencyKey`]。
+    ///
+    /// # 错误
+    /// 空值、超长，或含首尾空白因而不是规范形态时，返回反序列化错误。
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -127,6 +145,15 @@ pub struct CanonicalCommandPayload {
 
 impl CanonicalCommandPayload {
     /// 创建空载荷 builder。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回尚未写入字段的载荷。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new() -> Self {
         Self::default()
     }
@@ -135,6 +162,19 @@ impl CanonicalCommandPayload {
     ///
     /// 文本按原字节编码，绝不 trim；每个字段均包含独立类型标签和 u64 大端
     /// 长度前缀，因此分隔符、字段边界、可选值和整数类型均不能互相碰撞。
+    ///
+    /// # 参数
+    /// * `field` - 按调用顺序追加的带类型字段
+    ///
+    /// # 返回
+    /// 返回已追加该字段的载荷。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    ///
+    /// # Panics
+    /// 字段值字节长度无法用 `u64` 回填时 panic。`usize` 到 `u64` 在目标平台上不会失败，
+    /// 该分支只守住长度前缀写不进去的编程错误。
     pub fn field(mut self, field: CommandPayloadField<'_>) -> Self {
         encode_field(&field, &mut self.encoded);
         self
@@ -153,8 +193,16 @@ pub struct CommandScope(String);
 impl CommandScope {
     /// 按命令种类、命令域与规范载荷形成 v3 作用域。
     ///
+    /// # 参数
+    /// * `command_kind` - 命令种类
+    /// * `domain` - 命令域
+    /// * `payload` - 作用域载荷
+    ///
+    /// # 返回
+    /// 返回 `v3:` 加小写 SHA-256 的作用域。
+    ///
     /// # 错误
-    /// 命令域为空、含首尾空白或超过 128 个 UTF-8 字节时返回错误。
+    /// 命令域为空、含首尾空白或超过 128 个 UTF-8 字节时返回 [`ModelError::InvalidField`]。
     pub fn v3(
         command_kind: ApprovalCommandKind,
         domain: &str,
@@ -164,6 +212,15 @@ impl CommandScope {
     }
 
     /// 返回稳定持久化字符串。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 `v3:` 加小写 SHA-256 的作用域字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -192,8 +249,16 @@ impl CommandDigest {
     /// 使用与 [`CommandScope`] 不同的 namespace，即便输入相同也不得产生相同
     /// 字符串。
     ///
+    /// # 参数
+    /// * `command_kind` - 命令种类
+    /// * `domain` - 命令域
+    /// * `payload` - 摘要载荷
+    ///
+    /// # 返回
+    /// 返回 `v3:` 加小写 SHA-256 的摘要。
+    ///
     /// # 错误
-    /// 命令域为空、含首尾空白或超过 128 个 UTF-8 字节时返回错误。
+    /// 命令域为空、含首尾空白或超过 128 个 UTF-8 字节时返回 [`ModelError::InvalidField`]。
     pub fn v3(
         command_kind: ApprovalCommandKind,
         domain: &str,
@@ -203,6 +268,15 @@ impl CommandDigest {
     }
 
     /// 返回稳定持久化字符串。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 `v3:` 加小写 SHA-256 的摘要字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -235,6 +309,16 @@ impl ApprovalCommandIdentity {
     /// 同一命令域必须在所有调用点使用完全相同的字段顺序；scope 只承载唯一
     /// 资源范围，digest 必须承载全部会影响执行结果的请求字段。
     ///
+    /// # 参数
+    /// * `command_kind` - 命令种类
+    /// * `domain` - 命令域，同一命令的所有调用点必须相同
+    /// * `idempotency_key` - 已规范化的幂等键
+    /// * `scope_payload` - 只承载唯一资源范围的载荷
+    /// * `digest_payload` - 承载全部影响执行结果的请求字段
+    ///
+    /// # 返回
+    /// 返回 v3 作用域与摘要都已算好的身份。
+    ///
     /// # 错误
     /// 命令域非法时返回 [`ModelError::InvalidField`]。
     pub fn new(
@@ -253,26 +337,63 @@ impl ApprovalCommandIdentity {
     }
 
     /// 返回权威命令种类。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回构造时写入的 [`ApprovalCommandKind`]。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn command_kind(&self) -> ApprovalCommandKind {
         self.command_kind
     }
 
     /// 返回新写与当前格式查询使用的 v3 作用域。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回构造时写入的 [`CommandScope`]。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn scope(&self) -> &CommandScope {
         &self.scope
     }
 
     /// 返回唯一键查询使用的规范幂等键。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回构造时写入的 [`IdempotencyKey`]。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn idempotency_key(&self) -> &IdempotencyKey {
         &self.idempotency_key
     }
 
     /// 返回新写与当前格式回放比较使用的 v3 摘要。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回构造时写入的 [`CommandDigest`]。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn digest(&self) -> &CommandDigest {
         &self.digest
     }
 }
 
+/// 命令域必须非空、无首尾空白，且不超过 [`SCOPE_MAX_LEN`] 字节。
 fn validate_domain(domain: &str) -> ModelResult<()> {
     if domain.is_empty() || domain.trim() != domain {
         return Err(ModelError::InvalidField("命令摘要域无效"));
@@ -294,6 +415,7 @@ fn hashed_identity_value(
     Ok(versioned_hash(namespace, command_kind, domain, payload))
 }
 
+/// 用长度前缀拼接命名空间、命令种类、命令域与载荷，得到 `v3:` 加小写 SHA-256。
 fn versioned_hash(
     namespace: &[u8],
     command_kind: ApprovalCommandKind,
@@ -308,12 +430,17 @@ fn versioned_hash(
     format!("{V3_PREFIX}{}", hex::encode(hasher.finalize()))
 }
 
+/// 先写入字节长度的大端 `u64`，再写入内容，避免不同分段拼接后碰撞。
 fn update_length_prefixed(hasher: &mut Sha256, value: &[u8]) {
     hasher.update((value.len() as u64).to_be_bytes());
     hasher.update(value);
 }
 
 /// 直接追加字段编码并回填长度，保持类型标记、字段边界与序列顺序。
+///
+/// # Panics
+/// 字段值字节长度无法用 `u64` 表示时 panic。`usize` 到 `u64` 在目标平台上不会失败，
+/// 该分支只守住长度前缀写不进去的编程错误。
 fn encode_field(field: &CommandPayloadField<'_>, target: &mut Vec<u8>) {
     target.push(match field {
         CommandPayloadField::Text(_) => 1,

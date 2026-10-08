@@ -153,8 +153,24 @@ impl Default for SupplierAccountFilter {
 impl QueryFilter for SupplierAccountFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回查询条件文档。
+    /// 返回查询条件文档。始终写入未删除的 `deleted_at`。
+    /// `party_id` 与 `status` 为 `Some` 时精确匹配。
+    /// `keyword` 与非空 `party_ids` 同时存在时，以 `supplier_no` 的字面量、忽略大小写正则
+    /// 和 `party_id` 的 `$in` 组成 `$or`；仅有 `keyword` 时只匹配 `supplier_no`。
+    /// 没有 `keyword` 时不使用 `party_ids`。
+    /// `supplier_ids` 为 `Some` 时写入 `id` 的 `$in`（空集合即无命中），
+    /// `excluded_supplier_ids` 为 `Some` 时再写入 `$nin`；只排除时只写 `$nin`。
+    /// `maintainer_user_ids`、`business_org_unit_ids` 为 `Some` 时按 `$in` 过滤。
+    /// `authorized_scope` 为空时在已有条件上写入 `$expr: false` 并返回；
+    /// 范围文档为空时不再追加条件，否则与前述条件做 `$and`。
+    /// 分页与排序字段不进入条件。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(party_id) = &self.party_id {
@@ -232,14 +248,17 @@ fn insert_supplier_id_constraints(
 
 /// 转换供应商角色 ID，供 MongoDB 集合条件使用。
 ///
-/// 批量 `$in` 条件的唯一构造入口（erp-supplier-013）：`$in` ID 列表、
-/// 空集合短路与去重语义集中一处，调用方不再各自拼 `map(ToString)`。
+/// 批量 `$in` 的字符串列表只在这里由 `ToString` 生成（erp-supplier-013）。
+/// 空集合与去重由调用方处理，本函数不短路、不去重。
 ///
 /// # 参数
 /// * `ids` - 强类型供应商角色 ID 集合
 ///
 /// # 返回
-/// 返回保持输入顺序的字符串 ID 集合。
+/// 返回与输入等长、保持输入顺序的字符串 ID 集合。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn supplier_id_strings(ids: &[SupplierAccountId]) -> Vec<String> {
     ids.iter().map(ToString::to_string).collect()
 }
@@ -258,8 +277,14 @@ fn party_id_strings(ids: &[PartyId]) -> Vec<String> {
 impl Pagination for SupplierAccountFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组。`page_size` 由 `u32` 展成 `u64`，不把 `0` 归一成第一页。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }

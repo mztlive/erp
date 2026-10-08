@@ -60,6 +60,14 @@ impl PurchaseOrderProcess {
 
     /// 在审批运行时持有的事务内生效采购变更。
     ///
+    /// # 参数
+    /// * `change_id` - 采购变更单主键。
+    /// * `actor` - 最终通过的审计操作人。
+    /// * `executor` - 审批运行时持有的事务执行器。
+    ///
+    /// # 返回
+    /// 生效写入在调用方事务内完成。
+    ///
     /// # 错误
     /// 状态、基准版本、应付/成本差额或持久化不变量失败时返回错误。
     pub async fn apply_effective_change_apply(

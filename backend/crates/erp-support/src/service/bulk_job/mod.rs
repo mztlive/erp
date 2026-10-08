@@ -67,6 +67,9 @@ impl BulkJobService {
     ///
     /// # 返回
     /// 返回服务实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(
         db: Database,
         audit: Arc<dyn SupportAuditPort>,
@@ -648,10 +651,19 @@ fn ensure_job_visible(job: &BackgroundJob, actor: &AuditActor, is_admin: bool) -
     Err(Error::Forbidden("只能查看自己创建的后台任务".to_string()))
 }
 
-/// Map a support-domain error back to a persistence error for idempotent job create.
+/// 把支撑领域错误还原为持久化错误，供幂等创建任务识别唯一键冲突。
 ///
-/// `create_background_job` still inspects `DuplicateKey` after the transaction;
-/// audit persist failures are not request-id conflicts and must not look like them.
+/// `create_background_job` 在事务结束后仍检查 `DuplicateKey`。审计写入失败
+/// 不是请求身份冲突，不能伪装成该冲突。
+///
+/// # 参数
+/// * `error` - 事务内返回的支撑领域错误
+///
+/// # 返回
+/// 仓储来源的错误原样交还原内部错误；其余错误包成 `DatabaseError`。
+///
+/// # 错误
+/// 不返回错误。
 fn support_error_as_persistence(error: Error) -> persistence_core::Error {
     match error {
         Error::RepositoryError(inner)

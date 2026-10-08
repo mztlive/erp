@@ -105,7 +105,7 @@ pub struct ConsumerRegistration {
 /// * `action` - 已注册动作
 ///
 /// # 返回
-/// 返回该资源动作的必需维度。
+/// 返回该资源动作的消费者登记，含默认本人范围、支持维度、必需维度和历史参与。
 ///
 /// # 错误
 /// 未接线资源或动作返回校验错误。
@@ -130,22 +130,18 @@ pub fn registration(resource: &str, action: &str) -> Result<ConsumerRegistration
     })
 }
 
-/// 对配置、初始化及已存储规则执行相同的消费者准入。
-///
-/// # 参数
-/// * `binding` - 已通过模型形态校验的资源动作绑定。
-/// # 返回
-/// 全部动作及目标维度已接线时成功。
-/// # 错误
-/// 任一动作未接线或维度不支持时拒绝，停用规则也不能绕过准入。
-/// 拒绝人员目录未登记的范围类型。
+/// 拒绝对象目录和人员目录不接受的范围类型。
 ///
 /// # 参数
 /// * `resource` - 业务资源
 /// * `scope_type` - 待写入或已存储的范围类型
 ///
+/// # 返回
+/// 范围类型被该资源接受时无返回值。
+///
 /// # 错误
-/// 人员目录配置协作参与时拒绝。其他资源保持原有范围类型。
+/// `settlement_party` 与 `warehouse` 在类型不是 `Company` 或 `Organization` 时返回校验错误。
+/// `sales_person`、`procurement_person`、`business_person` 与 `person_query_qualification` 配置 `Collaborative` 时返回校验错误。
 ///
 /// # 关键业务约束
 /// 协作参与不能从业务单据扩张出人员读取权。配置入口和解析都必须拒绝。
@@ -165,6 +161,16 @@ pub fn validate_scope_type(resource: &str, scope_type: DataScopeType) -> Result<
     Ok(())
 }
 
+/// 对配置、初始化及已存储规则执行相同的消费者准入。
+///
+/// # 参数
+/// * `binding` - 已通过模型形态校验的资源动作绑定。
+///
+/// # 返回
+/// 全部动作及目标维度已接线时无返回值。
+///
+/// # 错误
+/// 任一动作未接线或维度不支持时返回校验错误，停用规则也不能绕过准入。
 pub fn validate_binding(binding: &ScopeBinding) -> Result<()> {
     for action in &binding.actions {
         let consumer = registration(&binding.resource, action)?;

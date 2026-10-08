@@ -15,6 +15,9 @@ use crate::entity::fulfillment::CustomerAcceptanceLineSpec;
 ///
 /// # 返回
 /// 返回带行 ID 的领域规格（行号与凭证默认由实体工厂分配）。
+///
+/// # 错误
+/// 不返回错误。
 pub fn acceptance_line_specs(inputs: &[AcceptanceLineInput]) -> Vec<CustomerAcceptanceLineSpec> {
     inputs
         .iter()

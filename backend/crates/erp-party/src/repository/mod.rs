@@ -1,4 +1,4 @@
-//! Party MongoDB repositories and accessors.
+//! 主体 MongoDB 仓储与访问器。
 
 pub mod extensions;
 pub mod owned;

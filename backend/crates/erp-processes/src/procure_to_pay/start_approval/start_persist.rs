@@ -149,10 +149,30 @@ pub(super) enum StartStep {
 #[async_trait]
 pub(super) trait StartSteps: Send {
     /// 复用调用方执行器应用一个原步骤，失败时保留原错误。
+    ///
+    /// # 参数
+    /// * `step` - 采购启动生产写序中的一步。
+    /// * `executor` - 调用方持有的同一执行器。
+    ///
+    /// # 返回
+    /// 该步已完成。
+    ///
+    /// # 错误
+    /// 该步失败时返回原错误。
     async fn apply(&mut self, step: StartStep, executor: &mut dyn Executor) -> Result<()>;
 }
 
 /// 生产写序由此唯一入口执行；任一步失败后不再推进后续步骤。
+///
+/// # 参数
+/// * `steps` - 按固定顺序执行各步的端口。
+/// * `executor` - 全程复用的执行器。
+///
+/// # 返回
+/// 收据、守卫、资格、提交、运行事实、命令收据与审计均已写入。
+///
+/// # 错误
+/// 任一步失败时返回原错误，后续步骤不再执行。
 pub(super) async fn execute_start_steps(
     steps: &mut impl StartSteps,
     executor: &mut dyn Executor,

@@ -1,7 +1,6 @@
-//! Supplier-domain helpers for profile command views.
+//! 供应商资料命令视图的领域辅助函数。
 //!
-//! Root create/update orchestration that opens a transaction across Party,
-//! attachments and audit lives in `erp-processes::supplier_profile`.
+//! 跨主体、附件与审计开启事务的创建与更新编排在 `erp-processes::supplier_profile`。
 
 use crate::dto::supplier::SupplierProfileMutationView;
 use crate::entity::supplier::SupplierProfileCommand;
@@ -13,6 +12,9 @@ use crate::entity::supplier::SupplierProfileCommand;
 ///
 /// # 返回
 /// 返回与原 HTTP 契约一致的稳定业务视图。
+///
+/// # 错误
+/// 不返回错误。
 pub fn command_view(command: SupplierProfileCommand) -> SupplierProfileMutationView {
     SupplierProfileMutationView {
         supplier_id: command.supplier_id,

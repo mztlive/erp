@@ -34,6 +34,17 @@ pub struct FulfillmentProcess {
 
 impl FulfillmentProcess {
     /// 使用原入口配置构造流程；指纹密钥和敏感信息编解码器保持启动期共享。
+    ///
+    /// # 参数
+    /// * `db` - 业务数据库。
+    /// * `fingerprint_key` - 启动期共享的指纹密钥。
+    /// * `sensitive_data` - 启动期共享的敏感信息编解码器。
+    ///
+    /// # 返回
+    /// 返回对象读取默认失败关闭的履约流程。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database, fingerprint_key: Vec<u8>, sensitive_data: Arc<SensitiveDataCodec>) -> Self {
         let rbac = crate::adapters::identity::shared_rbac_service(db.clone());
         Self {
@@ -46,11 +57,30 @@ impl FulfillmentProcess {
     }
 
     /// 注入组合根已经配置的审批对象读取能力。
+    ///
+    /// # 参数
+    /// * `object_read` - 组合根配置的审批对象读取端口。
+    ///
+    /// # 返回
+    /// 返回替换对象读取端口后的履约流程。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_object_read(mut self, object_read: Arc<dyn erp_workflow::ApprovalObjectReadPort>) -> Self {
         self.object_read = object_read;
         self
     }
 
+    /// 用本流程的数据库构造履约领域服务，不另开事务。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回绑定同一数据库的 `FulfillmentService`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn domain(&self) -> FulfillmentService {
         FulfillmentService::new(self.db.clone())
     }

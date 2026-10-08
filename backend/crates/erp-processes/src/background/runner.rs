@@ -25,6 +25,9 @@ impl BackgroundRunner {
     ///
     /// # 返回
     /// 返回空适配器的执行器，需继续调用 `register` 装配任务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(interval: Duration) -> Self {
         Self { adapters: Vec::new(), interval }
     }
@@ -36,6 +39,9 @@ impl BackgroundRunner {
     ///
     /// # 返回
     /// 返回装配后的执行器，支持链式调用。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn register<A>(mut self, adapter: A) -> Self
     where
         A: BackgroundTaskAdapter + 'static,
@@ -90,6 +96,9 @@ impl BackgroundRunner {
     ///
     /// # 返回
     /// 返回后台任务句柄；调用方负责在进程退出时等待或终止。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn spawn(self: Arc<Self>) -> JoinHandle<()> {
         tokio::spawn(async move {
             loop {

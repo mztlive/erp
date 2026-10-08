@@ -242,6 +242,7 @@ async fn start(
     .await
 }
 
+/// 启动快照固定一行，金额取申请金额，责任组织与客户取往来主体。
 fn request_start_snapshot(
     request: &SalesInvoiceRequest,
     actor: &AuditActor,

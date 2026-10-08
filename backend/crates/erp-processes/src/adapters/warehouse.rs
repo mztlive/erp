@@ -1,4 +1,4 @@
-//! Warehouse identity, audit and fingerprint adapters.
+//! 仓库身份、审计与指纹 adapter。
 
 use std::num::NonZeroU32;
 use std::sync::Arc;
@@ -25,19 +25,37 @@ use crate::audit::persist_log;
 
 map_identity_error!(erp_warehouse);
 
-/// MongoDB adapter that converts warehouse audit facts into `erp-audit` writes.
+/// 把仓库审计事实写入 `erp-audit` 的 Mongo adapter。
 #[derive(Clone)]
 pub struct MongoWarehouseAudit {
     db: Database,
 }
 
 impl MongoWarehouseAudit {
-    /// Bind the adapter to `db`.
+    /// 绑定审计日志所在数据库，构造时不写库。
+    ///
+    /// # 参数
+    /// * `db` - 持久化审计日志的数据库。
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的 adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// Wrap the adapter as a shared port.
+    /// 包装为仓库域可注入的共享审计 Port。
+    ///
+    /// # 参数
+    /// * `db` - 持久化审计日志的数据库。
+    ///
+    /// # 返回
+    /// 返回共享的仓库审计 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn WarehouseAuditPort> {
         Arc::new(Self::new(db))
     }
@@ -81,10 +99,10 @@ impl WarehouseAuditPort for MongoWarehouseAudit {
     }
 }
 
-/// Identity adapter that evaluates inbound/outbound warehouse handler eligibility.
+/// 判断入库与出库处理人资格的身份 adapter。
 ///
-/// Inbound covers `purchase_receipt:list/detail/update/post`; outbound covers
-/// `delivery:list/detail/update/post`.
+/// 入库覆盖 `purchase_receipt:list/detail/update/post`；出库覆盖
+/// `delivery:list/detail/update/post`。
 #[derive(Clone)]
 pub struct MongoWarehouseIdentity {
     db: Database,
@@ -92,12 +110,32 @@ pub struct MongoWarehouseIdentity {
 }
 
 impl MongoWarehouseIdentity {
-    /// Bind the adapter to `db` and the shared RBAC service.
+    /// 绑定身份账号数据库与共享 RBAC，构造时不查询权限。
+    ///
+    /// # 参数
+    /// * `db` - 身份账号集合所在数据库。
+    /// * `rbac` - 现有 RBAC 快照服务。
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的 adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
         Self { db, rbac }
     }
 
-    /// Wrap the adapter as a shared port.
+    /// 包装为仓库域可注入的身份事实 Port。
+    ///
+    /// # 参数
+    /// * `db` - 身份账号集合所在数据库。
+    /// * `rbac` - 现有 RBAC 快照服务。
+    ///
+    /// # 返回
+    /// 返回共享的身份事实 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(db: Database, rbac: SharedRbacService) -> Arc<dyn IdentityFactPort> {
         Arc::new(Self::new(db, rbac))
     }
@@ -160,7 +198,7 @@ impl IdentityFactPort for MongoWarehouseIdentity {
     }
 }
 
-/// Fingerprint adapter that delegates to the unique support HMAC implementation.
+/// 委托支持域唯一 HMAC 实现的附件指纹 adapter。
 #[derive(Debug, Default, Clone, Copy)]
 pub struct SupportFingerprint;
 
@@ -170,7 +208,17 @@ impl AttachmentFingerprintPort for SupportFingerprint {
     }
 }
 
-/// Construct a warehouse service with identity, audit and fingerprint adapters.
+/// 装配带身份、审计与指纹 adapter 的仓库服务。
+///
+/// # 参数
+/// * `db` - 仓库与身份集合所在数据库。
+/// * `rbac` - 现有 RBAC 快照服务。
+///
+/// # 返回
+/// 返回仓库服务。
+///
+/// # 错误
+/// 不返回错误。
 pub fn warehouse_service(db: Database, rbac: SharedRbacService) -> WarehouseService {
     WarehouseService::new(
         db.clone(),
@@ -186,12 +234,20 @@ fn account_fact(account: &erp_identity::AccountCore) -> WorkflowAccountFact {
         .with_login_account(account.secret.account().to_string())
 }
 
+/// 取已登记履约对象的完整执行权限。
+///
+/// # Panics
+/// 对象类型未登记履约完整执行权限时 panic，避免静默放行。
 fn required_fulfillment_permissions(business_object_type: &str) -> &'static [&'static str] {
     WorkItemType::FulfillmentOperation
         .fulfillment_execution_permissions(business_object_type)
         .expect("仓库责任对象必须登记履约完整执行权限")
 }
 
+/// 把固定仓储操作权限码解析为权限值。
+///
+/// # Panics
+/// 固定权限码无法解析时 panic。
 fn handler_permissions(codes: &[&str]) -> Vec<Permission> {
     codes.iter().map(|code| Permission::parse(code).expect("固定仓储操作权限必须合法")).collect()
 }

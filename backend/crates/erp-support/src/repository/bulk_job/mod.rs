@@ -54,6 +54,18 @@ impl<'a> BulkJobRepository<'a> {
     ///
     /// 无指纹历史行采取失败关闭兼容策略：不猜测旧载荷，返回异载荷冲突，调用方
     /// 必须使用新的 request_id 重新提交。
+    ///
+    /// # 参数
+    /// * `requested` - 本次尝试登记的任务，用于比对 `request_id` 与请求指纹
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 没有相同 `request_id` 的未删除任务时返回 `None`。指纹一致时返回
+    /// [`BackgroundJobRegistration::ReplaySame`]；指纹缺失或不同时返回
+    /// [`BackgroundJobRegistration::ConflictDifferentPayload`]。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
     pub async fn registration_by_request_id(
         &self,
         requested: &BackgroundJob,
@@ -86,6 +98,9 @@ impl<'a> BulkJobRepository<'a> {
     ///
     /// # 返回
     /// 返回仓储实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
@@ -102,6 +117,9 @@ impl<'a> BulkJobRepository<'a> {
     /// * `snapshot` - 待写入的选择快照
     /// * `items` - 待写入的冻结目标集合
     /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 返回
+    /// 快照与逐项全部写入成功时无返回值。
     ///
     /// # 错误
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]，由 Service 映射
@@ -180,6 +198,9 @@ impl<'a> BulkJobRepository<'a> {
 ///
 /// # 返回
 /// 返回排序条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     let direction = sort_direction(sort_ascending);
     let field = created_updated_field(sort_by);

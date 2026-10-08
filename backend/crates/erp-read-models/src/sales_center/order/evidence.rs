@@ -18,7 +18,8 @@ impl SalesOrderReadService {
     /// # 返回
     /// 返回当前销售单版本，供读取文件后的来源一致性复验。
     /// # 错误
-    /// 账号、范围或精确关系无效时拒绝。
+    /// 账号、范围或精确关系无效时拒绝。凭证不在销售单或附件中时返回 `NotFound`。
+    /// 未注入授权源时返回 `Internal`。仓储或事务失败会返回对应错误。
     pub async fn require_sales_evidence(
         &self,
         actor: &AuditActor,

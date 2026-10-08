@@ -1,5 +1,5 @@
-//! Consumer-side customer profile DTO validation and request fingerprints.
+//! 客户资料 DTO 的消费侧校验与请求指纹。
 //!
-//! Root create/update orchestration lives in `erp-processes::customer_profile`.
+//! 根级创建与修订编排在 `erp-processes::customer_profile`。
 
 mod validation;

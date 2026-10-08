@@ -29,8 +29,14 @@ pub enum ContractStatus {
 impl ContractStatus {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Effective => "生效",
@@ -41,8 +47,14 @@ impl ContractStatus {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Effective => "EFFECTIVE",
@@ -54,6 +66,15 @@ impl ContractStatus {
 
 impl DocumentState for ContractStatus {
     /// 生效后可终止或到期；终止/到期为终态（W04 无重新激活入口）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Effective` 返回 `Terminated` 与 `Expired`；`Terminated` 与 `Expired` 返回空切片。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Effective => &[Self::Terminated, Self::Expired],
@@ -205,6 +226,9 @@ impl Contract {
     ///
     /// # 返回
     /// 无返回值；更新当前版本指针并记录更新人。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn attach_revision(&mut self, revision_id: impl Into<String>, updated_by: impl Into<String>) {
         self.stable.current_revision_id = Some(revision_id.into());
         self.stable.touch(updated_by);

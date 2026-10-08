@@ -11,6 +11,7 @@ trait Store: Send {
     async fn account(&mut self, account: &PayableAccount, ex: &mut dyn Executor) -> Result<()>;
     async fn entry(&mut self, entry: &PayableEntry, ex: &mut dyn Executor) -> Result<()>;
 }
+/// 先写入应付子账，成功后再写原始分录；前一步失败则不写分录。
 async fn execute(
     store: &mut impl Store,
     account: &PayableAccount,
@@ -38,6 +39,21 @@ impl Store for MongoStore<'_> {
         Ok(())
     }
 }
+/// 按先子账、后原始分录的顺序写入应付事实。
+///
+/// 本函数不开启事务；任一步失败即返回，不继续写后续集合。
+///
+/// # 参数
+/// * `db` - 目标数据库。
+/// * `account` - 待写入的应付往来子账。
+/// * `entry` - 待写入的原始应付分录。
+/// * `ex` - 调用方执行器；原子性由调用方事务保证。
+///
+/// # 返回
+/// 两笔写入都成功时返回 `Ok(())`。
+///
+/// # 错误
+/// 子账或分录插入失败时返回仓储错误。
 pub(super) async fn create(
     db: &Database,
     account: &PayableAccount,

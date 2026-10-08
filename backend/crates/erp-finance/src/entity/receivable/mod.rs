@@ -2,7 +2,7 @@
 //! receivable_entry_offset、customer_receipt、receipt_allocation、invoice、
 //! sales_invoice_allocation（页面：W11）。
 //!
-//! 实体层无跨域依赖：只引用 `entities::ids` 的 ID newtype 与 common 基元。
+//! 实体层无跨域依赖：只引用 `erp_core::ids` 的 ID newtype 与 common 基元。
 //! 公共字段归属按 §4.3 判定：
 //! - `receivable_account` / `invoice` 是账户与主表类 → 组合 [`erp_core::common::stable::StableBase`]；
 //! - 其余表是正式事实（§4.5 不设业务软删除，冲正用反向事实），按 §6.8 字段字典建模；

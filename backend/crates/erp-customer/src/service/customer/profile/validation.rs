@@ -77,6 +77,9 @@ impl SaveCustomerProfileRequest {
     /// 只保留 `validator` 注解表达的协议校验；默认项、既有 ID、版本与
     /// 创建/修订结构组合由 entities 值对象校验。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// DTO 协议合法时返回 `Ok(())`。
     ///

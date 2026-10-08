@@ -112,6 +112,9 @@ impl PurchaseInvoiceAllocation {
     ///
     /// # 返回
     /// 恒返回错误。
+    ///
+    /// # 错误
+    /// 任何调用都返回错误：正式事实过账后不可更新或删除。
     pub fn update(
         &mut self,
         update: PurchaseInvoiceAllocationData,

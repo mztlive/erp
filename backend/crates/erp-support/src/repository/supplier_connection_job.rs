@@ -9,6 +9,18 @@ use crate::BackgroundJob;
 #[allow(async_fn_in_trait)]
 pub trait BackgroundJobRepositorySupplierConnectionExt {
     /// 返回属于指定连接及任务类型的后台任务；空白名单直接无结果。
+    ///
+    /// # 参数
+    /// * `connection_id` - 供应商连接 ID，对应 `domain_job_id`
+    /// * `job_id` - 后台任务 ID
+    /// * `job_types` - 允许的领域任务类型；空切片不访问数据库
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 命中时返回任务；`job_types` 为空或无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
     async fn find_supplier_connection_job(
         &self,
         connection_id: &str,
@@ -18,6 +30,17 @@ pub trait BackgroundJobRepositorySupplierConnectionExt {
     ) -> Result<Option<BackgroundJob>>;
 
     /// 统计阻止连接停用的目录同步任务，使用原三个未结束状态。
+    ///
+    /// # 参数
+    /// * `connection_id` - 供应商连接 ID，对应 `domain_job_id`
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回 `SUPPLIER_CATALOG_SYNC` 且状态为 `pending`、`running` 或
+    /// `partially_succeeded` 的未删除任务数量。
+    ///
+    /// # 错误
+    /// MongoDB 计数失败时返回错误。
     async fn count_active_supplier_catalog_jobs(
         &self,
         connection_id: &str,

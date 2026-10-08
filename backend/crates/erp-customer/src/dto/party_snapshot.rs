@@ -1,8 +1,7 @@
-//! Consumer-side Party snapshots used by customer DTOs.
+//! 客户 DTO 使用的主体快照。
 //!
-//! These types preserve the original HTTP/JSON field names and serde rename
-//! rules. They are not Party aggregates and must not be persisted as live
-//! Party documents.
+//! 这些类型保留原有 HTTP/JSON 字段名与 serde 重命名规则。它们不是主体聚合，
+//! 不得当作现行主体文档持久化。
 
 use serde::{Deserialize, Serialize};
 

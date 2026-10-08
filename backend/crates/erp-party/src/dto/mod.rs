@@ -1,4 +1,4 @@
-//! Party HTTP/application DTOs reused by handlers.
+//! 供 Handler 复用的主体 HTTP 与应用 DTO。
 
 pub mod party;
 

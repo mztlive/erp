@@ -1,7 +1,18 @@
 //! 往来编号与来源映射存在性；保留原逐个读取和未知种类语义。
 use super::WorkItemFactsReader;
 impl WorkItemFactsReader {
-    /// Whether a customer or supplier counterparty is currently active.
+    /// 判断客户或供应商往来是否当前有效。
+    ///
+    /// # 参数
+    /// * `kind` - `"supplier"` 或 `"customer"`；其他值不读取。
+    /// * `id` - 往来账户 ID。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 账户存在且 `is_active` 时返回 `true`；未知种类或未找到返回 `false`。
+    ///
+    /// # 错误
+    /// 仓储读取失败时返回对应错误。
     pub async fn counterparty_is_active(
         &self,
         kind: &str,
@@ -28,7 +39,18 @@ impl WorkItemFactsReader {
         })
     }
 
-    /// Display numbers for counterparties of one kind.
+    /// 读取同一往来种类的展示编号。
+    ///
+    /// # 参数
+    /// * `kind` - `"supplier"` 或 `"customer"`；其他值不读取。
+    /// * `ids` - 往来账户 ID；按输入顺序逐个读取，重复 ID 会重复读。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回已找到账户的 ID 到编号；未找到的 ID 不出现。未知种类返回空映射。
+    ///
+    /// # 错误
+    /// 任一次编号读取失败时返回该错误，不再读取后续 ID。
     pub async fn counterparty_numbers(
         &self,
         kind: &str,
@@ -39,7 +61,16 @@ impl WorkItemFactsReader {
     }
 
     /// 检查外部身份映射是否存在，保留调用方的读取边界。
-    /// 返回原持久化错误，由原 workflow 边界决定错误分类和文案。
+    ///
+    /// # 参数
+    /// * `id` - 外部身份映射 ID。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 映射存在时返回 `true`。
+    ///
+    /// # 错误
+    /// 返回原持久化错误，由调用方的 workflow 边界决定错误分类和文案。
     pub async fn external_identity_map_exists(
         &self,
         id: &str,

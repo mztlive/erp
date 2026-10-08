@@ -26,6 +26,20 @@ pub(super) struct CurrentSnapshotOutput {
 
 impl super::CustomerQualityReadModel {
     /// 在调用方事务内完成现任授权、业务筛选与事实装载。
+    ///
+    /// # 参数
+    /// * `query` - 现任口径筛选；其中的范围版本用于和本次快照比对
+    /// * `actor` - 已认证操作人
+    /// * `bounds` - 已校验的期间边界
+    /// * `export` - 为真时不按页截断行
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 返回当前视图、原查询，以及本次客户与销售范围合成的版本指纹。
+    ///
+    /// # 错误
+    /// 授权解析失败、授权客户数超过 `QUALITY_ORDER_LIMIT`、包含下级却没有组织、
+    /// 组织展开或订单与客户事实读取失败时返回错误。查询已带的范围版本与本次快照不一致时返回范围变化错误。
     pub(super) async fn snapshot_current(
         &self,
         query: &CurrentQualityQuery,
@@ -96,6 +110,17 @@ impl super::CustomerQualityReadModel {
     }
 
     /// 在新的读取事务内重验账号、组织、协作及业务责任集合，防止返回旧宽范围文件。
+    ///
+    /// # 参数
+    /// * `query` - 与快照相同的现任筛选
+    /// * `actor` - 已认证操作人
+    /// * `expected` - 快照事务返回的版本指纹
+    ///
+    /// # 返回
+    /// 重算版本与 `expected` 一致时无返回值。
+    ///
+    /// # 错误
+    /// 重验事务内的授权、筛选、组织展开或事实读取失败时返回错误。重算版本与 `expected` 不一致时返回范围变化错误。
     pub(super) async fn recheck_current(
         &self,
         query: &CurrentQualityQuery,

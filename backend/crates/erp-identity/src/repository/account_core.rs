@@ -19,21 +19,21 @@ pub trait AccountCoreRepositoryExt {
     /// * `id` - 账号 ID
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回匹配的未删除账号；不存在时返回 `None`。
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
     async fn find_account(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<AccountCore>>;
 
-    /// 根据账号查找统一账号。
+    /// 根据账号查找未删除的统一账号。
     ///
     /// # 参数
     /// * `account` - 账号
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回值
-    /// 返回匹配的统一账号
+    /// # 返回
+    /// 返回匹配的未删除统一账号；不存在或已软删除时返回 `None`。
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
@@ -51,8 +51,8 @@ pub trait AccountCoreRepositoryExt {
     /// * `account` - 账号
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回值
-    /// 返回匹配的统一账号
+    /// # 返回
+    /// 返回匹配的统一账号，包含已软删除记录；不存在时返回 `None`。
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
@@ -68,8 +68,8 @@ pub trait AccountCoreRepositoryExt {
     /// * `id` - 账号 ID
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回值
-    /// 返回匹配的账号记录。
+    /// # 返回
+    /// 返回匹配的账号记录，包含已软删除记录；不存在时返回 `None`。
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
@@ -85,7 +85,7 @@ pub trait AccountCoreRepositoryExt {
     /// * `ids` - 账号 ID 集合；为空时直接返回空集合
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回全部匹配且未软删除的账号记录。
     ///
     /// # 错误
@@ -98,7 +98,7 @@ pub trait AccountCoreRepositoryExt {
     /// * `ids` - 账号 ID 集合；为空时直接返回空映射
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回以账号 ID 为键、展示名称为值的映射。
     ///
     /// # 错误
@@ -118,7 +118,7 @@ pub trait AccountCoreRepositoryExt {
     /// * `owner_ids` - 负责人账号 ID 集合；为空时直接返回空集合
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回全部匹配且未软删除的统一账号；输入为空时返回空集合。
     ///
     /// # 错误
@@ -138,7 +138,7 @@ pub trait AccountCoreRepositoryExt {
     /// * `owner_id` - 负责人账号 ID
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回未删除账号；不存在时返回 `None`。
     ///
     /// # 错误
@@ -157,7 +157,7 @@ pub trait AccountCoreRepositoryExt {
     /// * `kind` - 账号类型
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回匹配的账号集合
     ///
     /// # 错误
@@ -170,7 +170,7 @@ pub trait AccountCoreRepositoryExt {
     /// * `id` - 审批责任人账号 ID
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回匹配且未软删除的账号；不存在时返回 `None`。
     ///
     /// # 错误
@@ -191,7 +191,7 @@ pub trait AccountCoreRepositoryExt {
     /// * `limit` - 最大返回条数；为零时直接返回空集合
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回有效后台账号，最多 `limit` 条。
     ///
     /// # 错误
@@ -215,7 +215,7 @@ pub trait AccountCoreRepositoryExt {
     /// * `id` - 统一账号 ID
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回未删除账号；不存在时返回 `None`。
     ///
     /// # 错误
@@ -238,7 +238,7 @@ pub trait AccountCoreRepositoryExt {
     /// * `ids` - 账号 ID 集合；为空时直接返回空集合
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回全部匹配且未删除的账号记录。
     ///
     /// # 错误

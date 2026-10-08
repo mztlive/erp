@@ -47,8 +47,14 @@ pub struct SimulatedSupplierGateway;
 impl SimulatedSupplierGateway {
     /// 构造模拟网关。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回无状态模拟网关实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new() -> Self {
         Self
     }

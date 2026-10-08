@@ -36,7 +36,16 @@ impl From<mongodb::error::Error> for Error {
     ///
     /// 服务端错误码 `11000` 归类为唯一键冲突；带
     /// `TransientTransactionError` 标签的错误归类为可重试并发事务冲突；
-    /// 其他写入或连接错误保持数据库错误。
+    /// 其余驱动错误归类为 `DatabaseError`。
+    ///
+    /// # 参数
+    /// * `error` - MongoDB 驱动错误。
+    ///
+    /// # 返回
+    /// 分类后的仓储 `Error`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn from(error: mongodb::error::Error) -> Self {
         if duplicate_key_message(&error).is_some() {
             return Self::DuplicateKey(error);
@@ -54,8 +63,14 @@ impl Error {
     /// 解析服务端 `E11000` 错误信息中的 `index: <name>` 片段，供上层将
     /// 已知唯一索引映射为面向用户的业务冲突提示；无法解析时返回 `None`。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 唯一索引名；非 `DuplicateKey` 或无法解析时返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn duplicate_index_name(&self) -> Option<&str> {
         match self {
             Self::DuplicateKey(error) => duplicate_key_message(error).and_then(parse_index_name_from_message),

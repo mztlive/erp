@@ -1,4 +1,4 @@
-//! Import MongoDB repositories and accessors.
+//! 导入 MongoDB 仓储与访问器。
 
 mod command_receipt;
 pub mod extensions;

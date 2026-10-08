@@ -18,6 +18,9 @@ use crate::{AccessControlExt, Error, Result};
 /// * `role_ids` - 分配后的完整角色集合
 /// * `executor` - 调用方事务执行器
 ///
+/// # 返回
+/// 需要补记的资格写入完成后无返回值。
+///
 /// # 错误
 /// 资格写入失败时返回错误，以便与角色分配一起回滚。
 ///
@@ -46,6 +49,9 @@ pub async fn grant_assigned_roles(
 /// * `account_id` - 账号 ID
 /// * `category` - 查询类别
 /// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 已有记录或本次插入完成后无返回值。
 ///
 /// # 错误
 /// 非唯一冲突的写入失败时返回错误。

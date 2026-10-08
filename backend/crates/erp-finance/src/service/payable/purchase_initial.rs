@@ -24,6 +24,16 @@ pub struct InitialPurchasePayable<'a> {
     pub due_date: BusinessDate,
 }
 /// 按账户、分录原次序分配身份并构造原始应付，保留原实体错误和发生时间。
+///
+/// # 参数
+/// * `input` - 采购冻结的来源身份、供应商、含税金额与到期日。
+/// * `actor_id` - 创建人。
+///
+/// # 返回
+/// 返回来源为采购单的子账与序号为 1 的原始增加分录。已核销与已收票为零，可收票额等于含税合计。
+///
+/// # 错误
+/// 子账或分录实体构造失败时返回对应错误。
 pub fn prepare(input: InitialPurchasePayable<'_>, actor_id: &str) -> Result<(PayableAccount, PayableEntry)> {
     let account = crate::entity::payable::PayableAccount::new(
         erp_core::ids::PayableAccountId::new(next_id()),
@@ -59,6 +69,18 @@ fn zero_amount() -> Amount {
     Amount::from_str("0").expect("零金额合法")
 }
 /// 将原始账户和分录按财务原子仓储合同写入调用方事务。
+///
+/// # 参数
+/// * `db` - 财务领域数据库。
+/// * `account` - 已构造的应付子账。
+/// * `entry` - 已构造的原始分录。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 写入成功时无返回值。
+///
+/// # 错误
+/// 仓储写入失败时返回对应错误。
 pub async fn persist(
     db: &mongodb::Database,
     account: &PayableAccount,

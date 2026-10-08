@@ -39,8 +39,14 @@ pub enum MovementDirection {
 impl MovementDirection {
     /// 返回方向的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Increase => "增加",
@@ -50,8 +56,14 @@ impl MovementDirection {
 
     /// 返回方向的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Increase => "INCREASE",
@@ -88,8 +100,14 @@ pub enum MovementType {
 impl MovementType {
     /// 返回类型的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Initial => "期初",
@@ -106,8 +124,14 @@ impl MovementType {
 
     /// 返回类型的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Initial => "INITIAL",
@@ -126,8 +150,14 @@ impl MovementType {
     ///
     /// 冲正的方向由原流水决定（跨聚合，返回 `None` 由 P3 判定）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 增加类返回 `Increase`，减少类返回 `Decrease`，冲正返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn inherent_direction(self) -> Option<MovementDirection> {
         match self {
             Self::Initial | Self::PurchaseReceiptIn | Self::SalesReturnIn | Self::StockGain => {
@@ -249,8 +279,8 @@ impl StockMovement {
     /// 返回新建的库存流水实体。
     ///
     /// # 错误
-    /// 数量非正、方向与类型不一致、来源单据标识为空、记录时间早于发生时间
-    /// 或冲正引用自身时返回错误。
+    /// 数量非正、方向与类型不一致、来源单据标识或记录人为空或超长、来源行标识规范化失败、
+    /// 记录时间早于发生时间，或冲正引用自身时返回错误。
     pub fn new(id: StockMovementId, data: StockMovementData) -> Result<Self> {
         ensure_positive_quantity(data.quantity, "库存流水数量必须为正数")?;
         if let Some(expected) = data.movement_type.inherent_direction()

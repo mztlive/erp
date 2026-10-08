@@ -434,6 +434,7 @@ impl SalesOrderService {
         }
     }
 
+    /// 先按客户端版本拒绝过期副本，再读取旧行；行查询不进入调用方事务。
     async fn prepare_existing_submission_copy(
         &self,
         order: &SalesOrder,
@@ -464,6 +465,7 @@ impl SalesOrderService {
         Ok((working_copy, copy_lines, plan))
     }
 
+    /// 内容指纹与再次保存草稿都使用递增后的 `draft_version`，避免与当前已保存版本重复。
     fn update_submission_copy(
         order: &SalesOrder,
         working_copy: &mut SalesOrderWorkingCopy,

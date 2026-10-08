@@ -208,6 +208,16 @@ struct ReceiptSuccessCommand<'a, P> {
 impl<P: ReceiptCommandWritePort> AuditedCommand for ReceiptSuccessCommand<'_, P> {
     type Output = ();
 
+    /// 在原执行器保存成功回执，并只为首次成功生成一条回款事件。
+    ///
+    /// # 参数
+    /// * `executor` - 正式业务写入使用的原执行器。
+    ///
+    /// # 返回
+    /// 回执保存成功后返回 `AuditedWrite::Fresh`，结果为 `()`，事件内容含到账金额与状态。本实现不走回放分支。
+    ///
+    /// # 错误
+    /// 回执保存失败时返回对应错误。
     async fn execute(&self, executor: &mut dyn Executor) -> Result<AuditedWrite<()>> {
         self.port
             .save_receipt(self.command, self.receipt.base.id.clone(), self.audit_event_id.into(), executor)

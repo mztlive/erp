@@ -123,10 +123,14 @@ impl ApprovalBriefSection {
 impl ApprovalDisplaySnapshot {
     /// 校验快照边界，防止把无限明细或任意大文本写进审批事实。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 合法展示返回成功。
+    ///
     /// # 错误
-    /// 缺失来源身份、超过 128 个字段/100 行或单项超过 8192 字符时返回错误。
+    /// 根单据 ID 为空、关联销售超过 100 个或其身份无效、附加字段超过 128 个、明细超过 100 行，或单项文本超过 8192 字符时返回错误。
     pub fn validate(&self) -> Result<()> {
         if self.source_sales.len() > 100 {
             return Err(Error::from("审批关联销售资料超过100个版本"));

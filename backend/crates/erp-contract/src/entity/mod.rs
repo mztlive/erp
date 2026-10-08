@@ -1,4 +1,4 @@
-//! Contract entities and value objects.
+//! 合同实体与值对象。
 
 pub mod contract;
 pub mod template;

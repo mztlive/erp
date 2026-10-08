@@ -1,4 +1,4 @@
-//! Consumer ports for authorization, warehouse/SKU/receipt facts and audit persistence.
+//! 授权、仓库、SKU、入库单事实与审计持久化的消费端口。
 
 mod audit;
 mod authorization;

@@ -1,4 +1,4 @@
-//! Consumer port for cross-domain audit persistence from support commands.
+//! 支撑领域命令写入跨域审计的消费方端口。
 
 use std::num::NonZeroU32;
 
@@ -10,62 +10,65 @@ use persistence_core::Executor;
 
 use crate::error::{Error, Result};
 
-/// Prepared successful resource audit that support can persist through a port.
+/// 支撑领域可经端口持久化的成功资源审计事实。
 ///
-/// Support never depends on `erp-audit` types. Composition-root adapters convert
-/// this fact into an `AuditLog` and write it on the same [`Executor`].
+/// 支撑领域不依赖 `erp-audit` 类型。组合根适配器把该事实转成 `AuditLog`，
+/// 并写到同一个 [`Executor`]。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreparedSupportAudit {
-    /// Stable audit document id.
+    /// 稳定的审计文档 ID。
     pub id: String,
-    /// Optimistic-lock version captured at construction.
+    /// 构造时捕获的乐观锁版本。
     pub version: u64,
-    /// Creation timestamp captured at construction.
+    /// 构造时捕获的创建时间。
     pub created_at: u64,
-    /// Update timestamp captured at construction.
+    /// 构造时捕获的更新时间。
     pub updated_at: u64,
-    /// Soft-delete marker captured at construction.
+    /// 构造时捕获的软删除标记。
     pub deleted_at: u64,
-    /// Actor account id.
+    /// 操作人账号 ID。
     pub actor_id: String,
-    /// Actor login account.
+    /// 操作人登录账号。
     pub actor_account: String,
-    /// Actor kind.
+    /// 操作人种类。
     pub actor_type: AccountKind,
-    /// Safe actor display-name snapshot captured when the command was authenticated.
+    /// 命令认证时捕获的安全操作人显示名快照。
     pub actor_name_snapshot: Option<String>,
-    /// Request correlation captured at invocation; absent outside a request.
+    /// 调用时捕获的请求关联；请求之外为 `None`。
     pub request_id: Option<String>,
-    /// Positive event order within one business command.
+    /// 同一业务命令内从 1 开始的事件序号。
     pub event_sequence: NonZeroU32,
-    /// Business action name.
+    /// 业务动作名。
     pub action: String,
-    /// Resource type.
+    /// 资源类型。
     pub resource_type: String,
-    /// Resource id.
+    /// 资源 ID。
     pub resource_id: Option<String>,
-    /// Success flag; support only prepares successful resource audits.
+    /// 是否成功；支撑领域只准备成功的资源审计。
     pub success: bool,
-    /// Optional business message.
+    /// 可选业务说明。
     pub message: Option<String>,
 }
 
 impl PreparedSupportAudit {
-    /// Capture support-side fields from an already-validated audit entity snapshot.
+    /// 从已校验的审计实体快照采集支撑侧字段。
     ///
-    /// # Parameters
-    /// * `base` - persistence metadata of the constructed audit
-    /// * `actor_id` - actor id
-    /// * `actor_account` - actor login
-    /// * `actor_type` - actor kind
-    /// * `action` - action name
-    /// * `resource_type` - resource type
-    /// * `resource_id` - resource id
-    /// * `success` - success flag
-    /// * `message` - optional message
+    /// # 参数
+    /// * `base` - 已构造审计的持久化元数据
+    /// * `actor_id` - 操作人账号 ID
+    /// * `actor_account` - 操作人登录账号
+    /// * `actor_type` - 操作人种类
+    /// * `action` - 业务动作名
+    /// * `resource_type` - 资源类型
+    /// * `resource_id` - 资源 ID；缺失时为 `None`
+    /// * `success` - 是否成功
+    /// * `message` - 可选业务说明
     ///
-    /// # Returns
-    /// Opaque prepared audit facts for later persistence.
+    /// # 返回
+    /// 返回供稍后持久化的审计事实；名称快照与请求编号初始为 `None`，事件序号为 `1`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     #[allow(clippy::too_many_arguments)]
     pub fn from_validated(
         base: &BaseModel,
@@ -98,7 +101,7 @@ impl PreparedSupportAudit {
         }
     }
 
-    /// Carry an already validated safe actor name without reading current account data.
+    /// 携带已校验的安全操作人名称，不读取当前账号数据。
     ///
     /// # 参数
     /// * `name` - 认证时已经校验的安全名称快照；缺失时保持 `None`。
@@ -113,7 +116,7 @@ impl PreparedSupportAudit {
         self
     }
 
-    /// Carry an already validated request correlation without generating one.
+    /// 携带已校验的请求关联编号，不另行生成。
     ///
     /// # 参数
     /// * `request_id` - 调用时的安全请求编号；缺失时保持 `None`。
@@ -128,7 +131,7 @@ impl PreparedSupportAudit {
         self
     }
 
-    /// Preserve the positive order of an already prepared event.
+    /// 保留已准备事件的正序序号。
     ///
     /// # 参数
     /// * `event_sequence` - 命令内从一开始的非零事件序号。
@@ -143,10 +146,19 @@ impl PreparedSupportAudit {
         self
     }
 
-    /// Build a success resource audit from an authenticated actor.
+    /// 由已认证操作人构造成功的资源审计。
     ///
-    /// # Errors
-    /// Empty resource id.
+    /// # 参数
+    /// * `actor` - 已认证操作人
+    /// * `action` - 业务动作名
+    /// * `resource_type` - 资源类型
+    /// * `resource_id` - 资源 ID
+    ///
+    /// # 返回
+    /// 返回成功标记为 `true`、并带上操作人名称快照与请求编号的审计事实。
+    ///
+    /// # 错误
+    /// `resource_id` 去空白后为空时返回 `ValidationError`。
     pub fn resource(
         actor: AuditActor,
         action: &str,
@@ -177,10 +189,22 @@ impl PreparedSupportAudit {
     }
 }
 
-/// Port support uses to prepare and persist resource audits on a caller executor.
+/// 支撑领域在调用方执行器上准备并持久化资源审计的端口。
 #[async_trait]
 pub trait SupportAuditPort: Send + Sync {
-    /// Validate and prepare a success resource audit before the transaction.
+    /// 在事务开始前校验并准备一条成功的资源审计。
+    ///
+    /// # 参数
+    /// * `actor` - 已认证操作人
+    /// * `action` - 业务动作名
+    /// * `resource_type` - 资源类型
+    /// * `resource_id` - 资源 ID
+    ///
+    /// # 返回
+    /// 返回可交给 [`Self::persist`] 写入的审计事实。
+    ///
+    /// # 错误
+    /// 资源 ID 为空或实现无法准备审计时返回错误。本方法不写库。
     fn resource_log(
         &self,
         actor: AuditActor,
@@ -189,11 +213,21 @@ pub trait SupportAuditPort: Send + Sync {
         resource_id: String,
     ) -> Result<PreparedSupportAudit>;
 
-    /// Persist a previously prepared audit on the caller-chosen executor.
+    /// 把先前准备好的审计写到调用方选定的执行器。
+    ///
+    /// # 参数
+    /// * `audit` - 已准备的审计事实
+    /// * `executor` - 调用方选定的执行器
+    ///
+    /// # 返回
+    /// 写入成功时无返回值。
+    ///
+    /// # 错误
+    /// 持久化失败时返回错误。
     async fn persist(&self, audit: &PreparedSupportAudit, executor: &mut dyn Executor) -> Result<()>;
 }
 
-/// Fail-closed audit port used when composition has not injected an adapter.
+/// 组合根尚未注入适配器时使用的失败关闭审计端口。
 #[derive(Debug, Default, Clone, Copy)]
 pub struct FailClosedAuditPort;
 
@@ -209,6 +243,17 @@ impl SupportAuditPort for FailClosedAuditPort {
         PreparedSupportAudit::resource(actor, action, resource_type, resource_id)
     }
 
+    /// 拒绝写入未接线的审计端口。
+    ///
+    /// # 参数
+    /// * `_audit` - 已准备的审计事实；本实现不读取
+    /// * `_executor` - 调用方执行器；本实现不写入
+    ///
+    /// # 返回
+    /// 不返回成功。
+    ///
+    /// # 错误
+    /// 始终返回 `Internal`（审计端口未接线）。
     async fn persist(&self, _audit: &PreparedSupportAudit, _executor: &mut dyn Executor) -> Result<()> {
         Err(Error::Internal("审计端口未接线".to_string()))
     }

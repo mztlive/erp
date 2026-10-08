@@ -199,7 +199,8 @@ pub fn ensure_request_scope(req: &CreatePurchaseOrderFromBasisRequest, scope: &B
 /// 返回按请求稳定行排序的已选择采购行。
 ///
 /// # 错误
-/// 请求行不属于依据，或数量超过最新剩余量/供应商可供上限时返回冲突。
+/// 行不属于依据，或数量超过剩余量/可供上限时返回 `ConflictError`。数量精度不合法，
+/// 或预计交付日晚于销售期限时返回 `ValidationError`。履约期限无法转成上海业务日时返回 `Internal`。
 ///
 /// # 关键业务约束
 /// 同时校验 `quantity <= remaining` 与 `quantity <= min(remaining, available)`。

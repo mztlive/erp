@@ -68,6 +68,9 @@ pub struct ApprovalCommandView {
 ///
 /// # 返回
 /// 返回不得用命令输入拼装的最新视图。
+///
+/// # 错误
+/// 不返回错误。
 pub fn map_command_view(
     instance: &ApprovalProcessInstance,
     current_execution: Option<&ApprovalNodeExecution>,

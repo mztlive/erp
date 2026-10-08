@@ -17,8 +17,16 @@ type DifferenceFilter = <Database as IntegrationOpsExt>::ReconciliationDifferenc
 impl IntegrationOpsService {
     /// 分页查询对账差异，并按最新决定派生状态与版本。
     ///
+    /// # 参数
+    /// * `params` - 列表查询参数
+    /// * `actor` - 已认证操作人
+    ///
+    /// # 返回
+    /// 返回带范围元数据的分页视图；无决定的差异状态为 `None`、版本为 0。
+    /// 角色无有效范围时条目为空且 `empty_reason` 为 `no_scope`。
+    ///
     /// # 错误
-    /// 查询参数非法、范围变化或仓储查询失败时返回错误。
+    /// 查询参数非法、范围版本变化、授权或组织展开失败、仓储查询或事务失败时返回对应错误。
     pub async fn difference_list(
         &self,
         params: &DifferenceListParams,
@@ -38,6 +46,7 @@ impl IntegrationOpsService {
             .await
     }
 
+    /// 无有效范围时不查库，直接返回空页。
     async fn difference_page(
         &self,
         query: dto::DifferenceListQuery,
@@ -95,9 +104,17 @@ impl IntegrationOpsService {
         ))
     }
 }
-/// 构造差异并保留原字段不变量的 ValidationError 映射。
-/// # Errors
-/// 至少一侧证据与身份字段不满足原实体规则时返回原校验错误。
+/// 构造差异并把实体不变量失败映射为 `ValidationError`。
+///
+/// # 参数
+/// * `req` - 差异登记请求
+/// * `owner_org_unit_id` - 处理人当前内部组织
+///
+/// # 返回
+/// 返回新建的对账差异。
+///
+/// # 错误
+/// 对象身份、证据引用或处理人不满足实体规则时返回 `ValidationError`，文案来自领域错误。
 pub fn prepare_difference(
     req: &CreateDifferenceRequest,
     owner_org_unit_id: String,
@@ -163,6 +180,7 @@ fn difference_list_view(
     }
 }
 
+/// 无最新决定的差异状态为 `None`、版本为 0。
 async fn project_difference_rows(
     service: &IntegrationOpsService,
     rows: Vec<crate::repository::integration_ops::ReconciliationDifferenceRow>,
@@ -209,8 +227,17 @@ fn empty_difference_page(filter: &DifferenceFilter, meta: ScopedIntegrationList)
 }
 
 /// 在调用方事务内保存不可变差异事实。
-/// # Errors
-/// 返回原仓储错误。
+///
+/// # 参数
+/// * `db` - 目标数据库
+/// * `difference` - 待写入的对账差异
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 成功时差异已写入。
+///
+/// # 错误
+/// 仓储写入失败时返回对应错误。
 pub async fn persist_difference(
     db: &Database,
     difference: &ReconciliationDifference,

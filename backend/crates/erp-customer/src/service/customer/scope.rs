@@ -328,6 +328,9 @@ impl ScopeFingerprint {
 ///
 /// # 返回
 /// 返回 `{base}:{hex指纹}` 格式的范围版本。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn fingerprint_scope_version(
     base: &str,
     owned: &[String],

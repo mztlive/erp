@@ -23,6 +23,16 @@ use crate::errors::{Error, Result};
 
 pub(super) const AUTHORIZED_SCAN_BATCH_SIZE: NonZeroU32 = NonZeroU32::new(100).expect("批次大小必须非零");
 
+/// 从工作项行借用履约授权所需的对象与负责人身份。
+///
+/// # 参数
+/// * `row` - 仓储工作项行
+///
+/// # 返回
+/// 返回借用该行标识的 `OwnedFulfillmentTask`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn owned_fulfillment_task(row: &erp_workflow::WorkItemRow) -> OwnedFulfillmentTask<'_> {
     OwnedFulfillmentTask {
         work_item_type: row.work_item_type,
@@ -56,11 +66,21 @@ pub struct WorkbenchReadService<A> {
 }
 
 impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
+    /// 用当前数据库构造工作项事实读取器，不执行查询。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回绑定 `self.db` 克隆的 `WorkItemFactsReader`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn facts_reader(&self) -> super::authority::WorkItemFactsReader {
         super::authority::WorkItemFactsReader::new(self.db.clone())
     }
 
-    /// Create a workbench read service.
+    /// 构造工作台读模型。
     ///
     /// # 参数
     /// * `db` - MongoDB 数据库
@@ -84,9 +104,9 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     /// * `id` - 已读取的精确履约任务身份。
     /// * `executor` - 影响读取沿用的执行器。
     /// # 返回
-    /// 返回任务详情授权是否成立，不返回任务或业务显示内容。
+    /// 任务详情授权成立时返回 `true`。任务不存在或禁止访问时返回 `false`，不返回任务或业务显示内容。
     /// # 错误
-    /// 不存在或禁止访问返回false；授权配置及读取故障继续传播。
+    /// 除不存在和禁止访问外，授权配置及对象读取故障继续传播。
     pub(crate) async fn work_item_readable_with_executor(
         &self,
         actor: &AuditActor,
@@ -292,6 +312,17 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     }
 
     /// 为完整任务列表重新读取对象并执行参与权过滤。
+    ///
+    /// # 参数
+    /// * `items` - 待授权的工作项
+    /// * `access` - 当前操作人的队列访问事实
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 返回通过对象授权的任务字段；未授权的任务被略去。
+    ///
+    /// # 错误
+    /// 对象事实读取或审批授权失败时返回对应错误。
     pub(super) async fn authorized_fields_for_items(
         &self,
         items: Vec<WorkItem>,
@@ -340,6 +371,20 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     }
 
     /// 为已授权任务逐条计算审批阻断与允许动作。
+    ///
+    /// # 参数
+    /// * `fields` - 已授权任务字段
+    /// * `scope` - 责任范围
+    /// * `actor` - 已认证操作人
+    /// * `actor_access` - 操作人访问事实
+    /// * `queue_context_id` - 当前队列上下文
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 返回补齐姓名、审批上下文和负责人资格后的任务投影。
+    ///
+    /// # 错误
+    /// 供给预警、视图访问、路由投影、姓名、审批上下文或负责人资格读取失败时返回对应错误。
     pub(super) async fn project_fields(
         &self,
         mut fields: Vec<dto::WorkItemFields>,
@@ -370,6 +415,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     ///
     /// # 参数
     /// * `items` - 已通过工作项和业务对象授权的安全投影
+    /// * `executor` - 审批节点与实例读取沿用的执行器
     ///
     /// # 返回
     /// 无审批节点的任务保持不变；审批任务获得与节点执行严格绑定的运行上下文。
@@ -422,8 +468,15 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
 
     /// 查询当前用户有权查看的单条任务。
     ///
+    /// # 参数
+    /// * `id` - 工作项稳定 ID
+    /// * `actor` - 已认证操作人
+    ///
+    /// # 返回
+    /// 返回同一事务内重验授权后的单条任务投影。
+    ///
     /// # 错误
-    /// 任务不存在或当前用户不在任一安全责任范围时返回错误。
+    /// 任务不存在、不在安全责任范围、业务对象不可见，或授权与展示读取失败时返回错误。
     pub async fn work_item_detail(self, id: String, actor: AuditActor) -> Result<WorkItemView> {
         let this = self.clone();
         self.db
@@ -511,6 +564,15 @@ fn fail_closed_missing_approval_context(item: &mut WorkItemView) {
 }
 
 /// 从动作集合中移除审批决定并返回是否发生移除。
+///
+/// # 参数
+/// * `actions` - 待就地过滤的允许动作
+///
+/// # 返回
+/// 移除了 `Approve` 或 `Reject` 时返回 `true`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn remove_approval_decision_actions(actions: &mut Vec<WorkItemAllowedAction>) -> bool {
     let before = actions.len();
     actions
@@ -555,6 +617,17 @@ fn queue_context_id(actor_id: &str, query: &dto::WorkItemListQuery, access: &Act
 }
 
 /// 完整结果使用有界滚动指纹；页码不进入版本，跨页共享同一授权锚点。
+///
+/// # 参数
+/// * `identity` - 写入指纹的 `identity` 标量
+/// * `query` - 写入指纹的 `query` 标量
+/// * `result` - 写入指纹的 `result` 标量
+///
+/// # 返回
+/// 返回前缀为 `work-item-scope` 的上下文标识。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn queue_scope_version(identity: &str, query: &str, result: &str) -> String {
     QueueContextIdentity::new(
         "work-item-scope",
@@ -568,6 +641,17 @@ pub(super) fn queue_scope_version(identity: &str, query: &str, result: &str) -> 
 }
 
 /// 后续页无版本或版本漂移必须失败关闭，禁止拼接不同范围结果。
+///
+/// # 参数
+/// * `page` - 请求页码
+/// * `provided` - 客户端回传的范围版本
+/// * `expected` - 服务端重算的范围版本
+///
+/// # 返回
+/// 页码不大于 1 且未回传版本，或回传值与重算值一致时无返回值。
+///
+/// # 错误
+/// `page` 大于 1 且未回传版本，或回传值与 `expected` 不同时，返回 `Error::ConflictError`，详情前缀为 `DATA_SCOPE_CHANGED：`。
 pub(super) fn ensure_scope_version(page: u64, provided: Option<&str>, expected: &str) -> Result<()> {
     if (page > 1 && provided.is_none()) || provided.is_some_and(|value| value != expected) {
         return Err(crate::support::data_scope_changed("数据范围已变化，请从第一页刷新"));
@@ -575,6 +659,17 @@ pub(super) fn ensure_scope_version(page: u64, provided: Option<&str>, expected: 
     Ok(())
 }
 
+/// 为单条任务详情生成队列上下文标识。
+///
+/// # 参数
+/// * `actor_id` - 操作人 ID
+/// * `work_item_id` - 工作项稳定 ID
+///
+/// # 返回
+/// 返回前缀为 `work-item-single` 的上下文标识。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn single_item_context_id(actor_id: &str, work_item_id: &str) -> String {
     QueueContextIdentity::new(
         "work-item-single",
@@ -583,6 +678,17 @@ pub(super) fn single_item_context_id(actor_id: &str, work_item_id: &str) -> Stri
     .into_string()
 }
 
+/// 校验客户端回传的队列上下文；缺省视为当前查询。
+///
+/// # 参数
+/// * `provided` - 客户端回传的队列上下文
+/// * `expected` - 服务端按当前查询重算的上下文
+///
+/// # 返回
+/// 未回传或与重算值相同时无返回值。
+///
+/// # 错误
+/// 回传值与 `expected` 不同时返回 `Error::ConflictError`，详情为 `DATA_SCOPE_CHANGED：队列范围已变化，请从第一页刷新`。
 pub(super) fn ensure_queue_context(provided: &Option<String>, expected: &str) -> Result<()> {
     if provided.as_deref().is_none_or(|provided| provided == expected) {
         return Ok(());
@@ -605,6 +711,17 @@ pub(super) struct AuthorizedPageCollector<T> {
 }
 
 impl<T> AuthorizedPageCollector<T> {
+    /// 按页码和页大小计算本页半开区间。
+    ///
+    /// # 参数
+    /// * `page` - 页码；小于 1 时按 1 处理
+    /// * `page_size` - 单页条数
+    ///
+    /// # 返回
+    /// 返回起点为 `(page - 1) * page_size`、终点为起点加页大小的收集器。
+    ///
+    /// # 错误
+    /// 起点或终点溢出时返回 `Error::ValidationError`。
     pub(super) fn new(page: u64, page_size: u32) -> Result<Self> {
         let start = page
             .max(1)
@@ -617,6 +734,16 @@ impl<T> AuthorizedPageCollector<T> {
         Ok(Self { start, end, total: 0, items: Vec::with_capacity(page_size as usize) })
     }
 
+    /// 按出现顺序计入授权行，只保留落在本页区间内的行。
+    ///
+    /// # 参数
+    /// * `authorized` - 本批新授权的行
+    ///
+    /// # 返回
+    /// 无返回值。总数饱和累加，区间外的行不进入 `items`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn extend(&mut self, authorized: impl IntoIterator<Item = T>) {
         for item in authorized {
             let position = self.total;
@@ -627,12 +754,32 @@ impl<T> AuthorizedPageCollector<T> {
         }
     }
 
+    /// 结束收集并交出本页行与授权总数。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回本页 `items`。总数能放入 `i64` 时原样返回，否则为 `i64::MAX`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn finish(self) -> AuthorizedPage<T> {
         AuthorizedPage { items: self.items, total: i64::try_from(self.total).unwrap_or(i64::MAX) }
     }
 }
 
 /// 对已授权并装配业务显示事实的任务执行字面量 OR 搜索；必须先于总数和分页。
+///
+/// # 参数
+/// * `fields` - 已授权任务字段
+/// * `q` - 检索词
+///
+/// # 返回
+/// 检索词规范化后为空时返回 `true`。否则对象标签、往来名称、对象 ID、对象类型、原因码或影响摘要任一字段包含该词时返回 `true`。比较忽略大小写。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn matches_keyword(fields: &dto::WorkItemFields, q: Option<&str>) -> bool {
     let Some(q) = application_core::normalized_text(q) else {
         return true;
@@ -652,6 +799,16 @@ pub(super) fn matches_keyword(fields: &dto::WorkItemFields, q: Option<&str>) -> 
 }
 
 /// 当前处理人筛选只收窄授权结果；空集表示不过滤。
+///
+/// # 参数
+/// * `fields` - 已授权任务字段
+/// * `handler_ids` - 处理人稳定 ID；空切片表示不筛选
+///
+/// # 返回
+/// 不筛选，或 `owner_user_id` 落在 `handler_ids` 中时返回 `true`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn matches_handler(fields: &dto::WorkItemFields, handler_ids: &[String]) -> bool {
     if handler_ids.is_empty() {
         return true;
@@ -660,6 +817,18 @@ pub(super) fn matches_handler(fields: &dto::WorkItemFields, handler_ids: &[Strin
 }
 
 /// 来源销售/采购筛选只收窄授权结果；不同字段按 AND 求交。
+///
+/// # 参数
+/// * `fields` - 已授权任务字段
+/// * `facts` - 已装载的对象事实
+/// * `sales_ids` - 来源销售单 ID
+/// * `purchase_ids` - 来源采购单 ID
+///
+/// # 返回
+/// 两侧 ID 都为空时返回 `true`。没有对象策略或事实时返回 `false`。否则按拥有域的来源匹配函数判定。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn matches_order_sources(
     fields: &dto::WorkItemFields,
     facts: &super::WorkbenchObjectFactMap,

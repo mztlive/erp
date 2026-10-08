@@ -8,7 +8,21 @@ use erp_workflow::entity::work_item::{
 
 use crate::Result;
 const W26_OWNER_ROLE: &str = "role-procurement";
-/// 在原创建分支与时点执行 WorkItem 构造校验；调用方预先生成身份。
+/// 在原创建分支与时点执行 `WorkItem` 构造校验；调用方预先生成身份。
+///
+/// # 参数
+/// * `work_item_id` - 调用方预先生成的任务 ID。
+/// * `order` - 已有跟进人和非公司根组织的供应商订单。
+/// * `work_item_type` - `IntegrationResultUnknown` 或 `BusinessException`。
+///
+/// # 返回
+/// 返回绑定该订单当前主体版本和个人责任的正式任务。
+///
+/// # 错误
+/// 订单缺少跟进人时返回对应错误。组织为空或为公司根时返回 `ValidationError`。任务字段校验失败时返回 `Logic`。
+///
+/// # Panics
+/// `work_item_type` 不是上述两种已注册异常任务时 panic。调用方不得传入其他类型。
 pub(super) fn create(
     work_item_id: WorkItemId,
     order: &SupplierFulfillmentOrder,

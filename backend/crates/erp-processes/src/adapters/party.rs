@@ -1,4 +1,4 @@
-//! Party audit and supplier-role adapters.
+//! 主体审计与供应商角色 adapter。
 
 use std::num::NonZeroU32;
 use std::sync::Arc;
@@ -16,19 +16,37 @@ use persistence_core::{Executor, NoTransaction};
 
 use crate::audit::persist_log;
 
-/// MongoDB adapter that converts party audit facts into `erp-audit` writes.
+/// 把主体审计事实写入 `erp-audit` 的 Mongo adapter。
 #[derive(Clone)]
 pub struct MongoPartyAudit {
     db: Database,
 }
 
 impl MongoPartyAudit {
-    /// Bind the adapter to `db`.
+    /// 绑定审计日志所在数据库，构造时不写库。
+    ///
+    /// # 参数
+    /// * `db` - 持久化审计日志的数据库。
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的 adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// Wrap the adapter as a shared port.
+    /// 包装为主体域可注入的共享审计 Port。
+    ///
+    /// # 参数
+    /// * `db` - 持久化审计日志的数据库。
+    ///
+    /// # 返回
+    /// 返回共享的主体审计 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn PartyAuditPort> {
         Arc::new(Self::new(db))
     }
@@ -58,19 +76,37 @@ impl PartyAuditPort for MongoPartyAudit {
     }
 }
 
-/// MongoDB adapter that reads whether a party currently has a supplier role.
+/// 读取主体当前是否具有供应商角色的 Mongo adapter。
 #[derive(Clone)]
 pub struct MongoSupplierRole {
     db: Database,
 }
 
 impl MongoSupplierRole {
-    /// Bind the adapter to `db`.
+    /// 绑定供应商账号集合所在数据库，构造时不读取。
+    ///
+    /// # 参数
+    /// * `db` - 供应商账号所在数据库。
+    ///
+    /// # 返回
+    /// 返回未执行 I/O 的 adapter。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// Wrap the adapter as a shared port.
+    /// 包装为主体域可注入的供应商角色 Port。
+    ///
+    /// # 参数
+    /// * `db` - 供应商账号所在数据库。
+    ///
+    /// # 返回
+    /// 返回共享的供应商角色 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn SupplierRolePort> {
         Arc::new(Self::new(db))
     }

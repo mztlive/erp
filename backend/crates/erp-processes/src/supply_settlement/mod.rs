@@ -46,11 +46,30 @@ pub struct SupplierSettlementProcess {
 }
 impl SupplierSettlementProcess {
     /// 使用原数据库依赖构造结算流程；范围 Port 缺省失败关闭。
+    ///
+    /// # 参数
+    /// * `db` - MongoDB 数据库。
+    ///
+    /// # 返回
+    /// 返回未注入 RBAC 的流程；范围查询使用 `FailClosedSettlementDataScopePort`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db, data_scope: FailClosedSettlementDataScopePort::shared(), rbac: None }
     }
 
-    /// 注入结算范围 Port 与 RBAC。
+    /// 注入结算范围 Port 与 RBAC。消耗 `self` 并返回同一流程。
+    ///
+    /// # 参数
+    /// * `data_scope` - 结算数据范围。
+    /// * `rbac` - 权限服务。
+    ///
+    /// # 返回
+    /// 返回已注入依赖的流程。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_scope(
         mut self,
         data_scope: Arc<dyn SettlementDataScopePort>,

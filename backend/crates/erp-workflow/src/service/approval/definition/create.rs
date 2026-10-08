@@ -28,6 +28,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
     /// * `request` - 写请求
     /// * `actor` - 已认证操作人
     ///
+    /// # 返回
+    /// 返回新建草稿或同载荷回放的详情。
+    ///
     /// # 错误
     /// 政策、权限、幂等冲突或已有活动草稿时返回错误。
     pub async fn create_definition_draft(
@@ -132,7 +135,7 @@ struct CreateDraftTxInput<'a> {
     actor: &'a AuditActor,
     /// 已规范化的当前命令身份及精确旧格式候选。
     identity: &'a PreparedDefinitionIdentity,
-    /// Injected audit port.
+    /// 注入的审计端口。
     audit: &'a dyn crate::ports::WorkflowAuditPort,
 }
 

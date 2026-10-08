@@ -19,8 +19,14 @@ pub enum CustomerProfileOperation {
 impl CustomerProfileOperation {
     /// 返回客户资料命令持久化使用的稳定操作代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 创建返回 `create`，修订返回 `update`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Create => "create",
@@ -70,8 +76,14 @@ impl CustomerProfileRequestShape {
 
     /// 返回根命令操作类型。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回创建或修订操作。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn operation(&self) -> CustomerProfileOperation {
         self.operation
     }
@@ -142,12 +154,39 @@ impl CustomerProfileFactKind {
 /// 客户资料事实输入的最小结构契约。
 pub trait CustomerProfileFactInput {
     /// 返回既有事实 ID；`None` 表示新增事实。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 既有事实返回其 ID；新增事实返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn existing_id(&self) -> Option<&str>;
 
     /// 返回当前输入是否被标记为默认项。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 被标记为默认项时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn is_default(&self) -> bool;
 
     /// 返回新增事实所需的敏感明文；既有事实允许省略。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回敏感明文；未提供时为 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn required_value(&self) -> Option<&str>;
 }
 
@@ -170,6 +209,9 @@ where
     ///
     /// # 返回
     /// 返回待校验的事实集合值对象。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(kind: CustomerProfileFactKind, items: Option<&'a [T]>) -> Self {
         Self { kind, items }
     }

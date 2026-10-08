@@ -29,7 +29,7 @@ use crate::repository::prelude::*;
 /// 已关联合同必须通过有效期校验；无资质记录时保留当前阶段临时放行政策。
 ///
 /// # 参数
-/// * `db` - 数据库实例（调用方执行器，本函数不开启事务）
+/// * `db` - 目标数据库；读取使用 `NoTransaction`，不加入调用方事务
 /// * `supplier_id` - 供应商角色 ID
 /// * `capability_revision_id` - 待校验的能力修订 ID
 /// * `on_date` - 业务自然日（由调用方显式注入，不读取全局时钟）
@@ -39,8 +39,10 @@ use crate::repository::prelude::*;
 ///
 /// # 错误
 /// * `NotFound` - 供应商不存在
-/// * `BusinessLogicError` - 供应商已停用、能力不存在、版本不存在或
-///   领域判定认为不合格（停用、归属不符、非当前版本、未生效、已过期）
+/// * `BusinessLogicError` - 供应商已停用、能力不存在、版本不存在、
+///   领域判定认为不合格（停用、归属不符、非当前版本、未生效、已过期），
+///   或已关联合约在业务日不合格
+/// * 仓储读取失败时返回对应错误
 ///
 /// # 约束
 /// * 仅执行事实加载与领域委派，不在 Service 重复实现校验规则
@@ -61,7 +63,23 @@ pub async fn ensure_capability_qualified(
     .await
 }
 /// 读取供给所需当前能力指针，再委派同一权威资格规则。
-/// 保留首个能力读取与后续按修订代码的第二次读取，不缓存资格事实。
+///
+/// 先按商品类型对应的能力代码读取能力；缺失或没有当前修订时立即失败。
+/// 通过后再按修订重读能力，不缓存资格事实。读取使用调用方执行器。
+///
+/// # 参数
+/// * `db` - 目标数据库
+/// * `supplier_id` - 供应商角色 ID
+/// * `kind` - 供给商品类型
+/// * `on_date` - 业务自然日
+/// * `executor` - 调用方执行器；本函数不开启事务
+///
+/// # 返回
+/// 当前能力与已关联合约都合格时返回 `Ok(())`。
+///
+/// # 错误
+/// 所需能力未启用或缺少当前版本时返回 `BusinessLogicError`。
+/// 其后的失败与 [`ensure_capability_qualified`] 相同，但读取沿用 `executor`。
 pub async fn ensure_offering_capability_qualified(
     db: &Database,
     supplier_id: &SupplierAccountId,
@@ -191,12 +209,13 @@ async fn ensure_qualified_with_port<P: QualificationFactsPort>(
 /// # 参数
 /// * `db` - 数据库实例
 /// * `revision_id` - 修订 ID
+/// * `executor` - 调用方执行器
 ///
 /// # 返回
-/// 返回修订实体；不存在时返回业务错误。
+/// 返回能力修订实体。
 ///
 /// # 错误
-/// 修订不存在时返回 `BusinessLogicError("供应商能力版本不存在")`。
+/// 修订不存在时返回 `BusinessLogicError`；仓储读取失败时返回对应错误。
 async fn load_capability_revision(
     db: &Database,
     revision_id: &SupplierCapabilityRevisionId,

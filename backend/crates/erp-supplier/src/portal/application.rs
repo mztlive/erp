@@ -279,6 +279,7 @@ impl CooperationApplication {
         Ok(())
     }
 
+    /// 供应商身份必须匹配且版本未变；范围外按不存在拒绝。
     fn ensure_supplier(&self, supplier_id: &str, version: u64, actor: &AuditActor) -> Result<()> {
         ensure_actor(actor, AccountKind::Supplier)?;
         if self.supplier_id != supplier_id {
@@ -287,6 +288,7 @@ impl CooperationApplication {
         self.ensure_version(version)
     }
 
+    /// 已删除或版本不一致时拒绝，避免覆盖并发修改。
     fn ensure_version(&self, version: u64) -> Result<()> {
         if self.base.is_deleted() || self.base.version != version {
             return Err(Error::ConflictError("申请已改变，请重新核对后提交".into()));
@@ -294,6 +296,7 @@ impl CooperationApplication {
         Ok(())
     }
 
+    /// 仅草稿、退回、撤回可改内容或再次提交。
     fn ensure_editable(&self) -> Result<()> {
         if !matches!(
             self.status,
@@ -304,6 +307,7 @@ impl CooperationApplication {
         Ok(())
     }
 
+    /// 只允许原地保存，或按当前状态追加一次提交或决定。
     fn ensure_history_transition(&self, before: &Self) -> Result<()> {
         let submissions = self.submissions.len().checked_sub(before.submissions.len());
         let decisions = self.decisions.len().checked_sub(before.decisions.len());
@@ -336,6 +340,7 @@ impl CooperationApplication {
         Ok(())
     }
 
+    /// 最后一条决定必须对应当前冻结提交，且操作人种类与状态一致。
     fn ensure_last_decision(&self, before: &Self) -> Result<()> {
         let submission = before.pending_submission()?;
         let decision =
@@ -355,6 +360,7 @@ impl CooperationApplication {
         Ok(())
     }
 
+    /// 以当前冻结提交号追加决定并切换状态。
     fn finish(
         &mut self,
         status: CooperationStatus,
@@ -376,6 +382,17 @@ impl CooperationApplication {
     }
 }
 
+/// 要求操作人种类与账号标识符合本次动作。
+///
+/// # 参数
+/// * `actor` - 已鉴权操作人
+/// * `expected` - 允许的账号种类
+///
+/// # 返回
+/// 种类匹配且账号标识去空白后非空时返回 `Ok(())`。
+///
+/// # 错误
+/// 种类不符或账号标识为空时返回 `Forbidden`。
 pub(super) fn ensure_actor(actor: &AuditActor, expected: AccountKind) -> Result<()> {
     if actor.kind() != expected || actor.id().trim().is_empty() {
         return Err(Error::Forbidden("操作人身份不允许执行合作条款动作".into()));

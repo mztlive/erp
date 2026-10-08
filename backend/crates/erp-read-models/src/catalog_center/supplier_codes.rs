@@ -40,6 +40,9 @@ impl CatalogCenterReadService {
 ///
 /// # 返回
 /// 原地补齐可读取的编号；缺失或已删除的供应商不补编号。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn apply_supplier_codes(
     rows: &mut [SellableSkuView],
     row_ids: &[Vec<String>],

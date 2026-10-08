@@ -1,4 +1,4 @@
-//! Consumer port for cross-domain audit persistence from inventory commands.
+//! 库存命令跨域持久化审计的消费端口。
 
 use std::num::NonZeroU32;
 
@@ -51,7 +51,26 @@ pub struct PreparedInventoryAudit {
 }
 
 impl PreparedInventoryAudit {
-    /// Capture inventory-side fields from an already-validated audit entity snapshot.
+    /// 从已校验的审计实体快照抄录库存侧字段。
+    ///
+    /// 不读取账号，名称快照与请求关联留空，事件序号取 `NonZeroU32::MIN`。
+    ///
+    /// # 参数
+    /// * `base` - 已生成的持久化元数据。
+    /// * `actor_id` - 操作者账号标识。
+    /// * `actor_account` - 操作者登录账号。
+    /// * `actor_type` - 操作者账号类型。
+    /// * `action` - 业务动作名称。
+    /// * `resource_type` - 资源类型。
+    /// * `resource_id` - 资源标识；可空。
+    /// * `success` - 是否成功。
+    /// * `message` - 可选业务说明。
+    ///
+    /// # 返回
+    /// 返回尚未携带名称快照和请求关联的审计事实。
+    ///
+    /// # 错误
+    /// 不返回错误。
     #[allow(clippy::too_many_arguments)]
     pub fn from_validated(
         base: &BaseModel,
@@ -84,7 +103,7 @@ impl PreparedInventoryAudit {
         }
     }
 
-    /// Carry an already validated safe actor name without reading current account data.
+    /// 带上已校验的安全操作者名称，不读取当前账号。
     ///
     /// # 参数
     /// * `name` - 认证时已经校验的安全名称快照；缺失时保持 `None`。
@@ -99,7 +118,7 @@ impl PreparedInventoryAudit {
         self
     }
 
-    /// Carry an already validated request correlation without generating one.
+    /// 带上已校验的请求关联，不另行生成。
     ///
     /// # 参数
     /// * `request_id` - 调用时的安全请求编号；缺失时保持 `None`。
@@ -114,7 +133,7 @@ impl PreparedInventoryAudit {
         self
     }
 
-    /// Preserve the positive order of an already prepared event.
+    /// 保留已准备事件的正序序号。
     ///
     /// # 参数
     /// * `event_sequence` - 命令内从一开始的非零事件序号。
@@ -129,10 +148,20 @@ impl PreparedInventoryAudit {
         self
     }
 
-    /// Build a success resource audit from an authenticated actor.
+    /// 由已认证操作者构造一条成功的资源审计。
     ///
-    /// # Errors
-    /// Empty resource id.
+    /// # 参数
+    /// * `actor` - 已认证的审计操作者；消耗后拆出账号字段。
+    /// * `action` - 业务动作名称。
+    /// * `resource_type` - 资源类型。
+    /// * `resource_id` - 资源标识，去空白后不得为空。
+    /// * `message` - 可选业务说明。
+    ///
+    /// # 返回
+    /// 返回 `success` 为真、并带上操作者名称快照与请求关联的审计事实。
+    ///
+    /// # 错误
+    /// `resource_id` 去空白后为空时返回 `Error::ValidationError`。
     pub fn resource(
         actor: AuditActor,
         action: &str,
@@ -164,10 +193,22 @@ impl PreparedInventoryAudit {
     }
 }
 
-/// Port inventory uses to prepare and persist resource audits on a caller executor.
+/// 库存用来在调用方执行器上准备并持久化资源审计的端口。
 #[async_trait]
 pub trait InventoryAuditPort: Send + Sync {
-    /// Validate and prepare a success resource audit before the transaction.
+    /// 在事务开始前校验并准备一条成功的资源审计。
+    ///
+    /// # 参数
+    /// * `actor` - 已认证的审计操作者。
+    /// * `action` - 业务动作名称。
+    /// * `resource_type` - 资源类型。
+    /// * `resource_id` - 资源标识。
+    ///
+    /// # 返回
+    /// 返回可在同一执行器上持久化的审计事实。
+    ///
+    /// # 错误
+    /// 准备失败时返回对应错误。
     fn resource_log(
         &self,
         actor: AuditActor,
@@ -176,7 +217,17 @@ pub trait InventoryAuditPort: Send + Sync {
         resource_id: String,
     ) -> Result<PreparedInventoryAudit>;
 
-    /// Persist a previously prepared audit on the caller-chosen executor.
+    /// 把先前准备好的审计写到调用方选择的执行器上。
+    ///
+    /// # 参数
+    /// * `audit` - 已准备的审计事实。
+    /// * `executor` - 调用方选择的数据访问执行器。
+    ///
+    /// # 返回
+    /// 持久化完成。
+    ///
+    /// # 错误
+    /// 写入失败时返回对应错误。
     async fn persist(&self, audit: &PreparedInventoryAudit, executor: &mut dyn Executor) -> Result<()>;
 }
 

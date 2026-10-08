@@ -20,6 +20,7 @@ impl ReturnsReadService {
     ///
     /// # 错误
     /// * `NotFound` - 退款单不存在
+    /// 仓储或审批绑定读取失败时返回对应错误。
     pub async fn supplier_refund_detail(&self, id: &str) -> Result<SupplierRefundView> {
         self.supplier_refund_view(id.to_string()).await
     }
@@ -40,6 +41,7 @@ impl ReturnsReadService {
     ///
     /// # 错误
     /// * `NotFound` - 退款单不存在
+    /// 仓储或审批绑定读取失败时返回对应错误。
     async fn supplier_refund_view(&self, id: String) -> Result<SupplierRefundView> {
         let refund = self
             .db

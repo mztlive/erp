@@ -226,6 +226,15 @@ impl PortalApplicationView {
 }
 
 /// 只将已声明允许的值送入输出；不序列化整个领域根对象。
+///
+/// # 参数
+/// * `value` - 已声明允许进入输出的值。
+///
+/// # 返回
+/// 返回对应的 JSON 值。
+///
+/// # 错误
+/// 序列化失败时返回 `Internal`。
 pub(super) fn value<T: Serialize>(value: T) -> Result<Value> {
     serde_json::to_value(value).map_err(|error| Error::Internal(error.to_string()))
 }

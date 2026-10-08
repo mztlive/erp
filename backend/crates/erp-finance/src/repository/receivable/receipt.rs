@@ -97,8 +97,19 @@ impl Default for CustomerReceiptFilter {
 impl QueryFilter for CustomerReceiptFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回查询条件文档。
+    /// 返回查询条件文档。有值时等值匹配 `counterparty_party_id`、`status`；
+    /// `receipt_no` 按字面量模糊匹配。`receipt_ids` 为 `Some` 且
+    /// `pending_entry_ids` 为空时按 `id` 的 `$in` 匹配；`pending_entry_ids`
+    /// 非空时改为与 `pending_allocations.receivable_entry_id` 的 `$in` 取
+    /// `$or`。`receipt_ids` 为 `None` 时不使用 `pending_entry_ids`。
+    /// `keyword_ids` 为 `Some` 时与上述条件用 `$and` 再按 `id` 取交集，空集合匹配零行。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(receipt_ids) = &self.receipt_ids {
@@ -129,8 +140,14 @@ impl QueryFilter for CustomerReceiptFilter {
 impl Pagination for CustomerReceiptFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组。`page` 原样返回，`page_size` 由 `u32` 转为 `u64`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }

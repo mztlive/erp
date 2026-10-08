@@ -14,7 +14,16 @@ pub struct MongoOfferingQualification {
     pub(super) db: Database,
 }
 impl MongoOfferingQualification {
-    /// 绑定数据库；资格读取由ensure_qualified在原命令位置触发。
+    /// 绑定数据库；资格读取由 `ensure_qualified` 在原命令位置触发。
+    ///
+    /// # 参数
+    /// * `db` - 数据库。
+    ///
+    /// # 返回
+    /// 尚未读取资格事实的适配器。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }

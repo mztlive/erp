@@ -40,6 +40,15 @@ pub struct QueryIds(Vec<String>);
 
 impl QueryIds {
     /// 返回规范化身份集合；调用方必须与服务端授权条件求交。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回已保存的身份切片。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_slice(&self) -> &[String] {
         &self.0
     }
@@ -60,7 +69,18 @@ impl QueryIds {
 }
 
 impl<'de> Deserialize<'de> for QueryIds {
-    /// 从单个查询参数解析 ID；姓名只允许用于独立关键词搜索。
+    /// 从单个查询参数解析逗号分隔的稳定 ID。
+    ///
+    /// 姓名不能写入本字段，只允许用于独立关键词搜索。解析时去首尾空白、去重并按字典序排列。
+    ///
+    /// # 参数
+    /// * `deserializer` - 提供原始查询字符串的反序列化器。
+    ///
+    /// # 返回
+    /// 成功时返回 `QueryIds`。
+    ///
+    /// # 错误
+    /// 值不是字符串时返回反序列化错误。按逗号拆分后超过 100 段，或任一段去空白后为空、超过 128 字节、含 ASCII 字母数字与 `-_` 以外的字符时，返回对应校验文案。
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let raw = String::deserialize(deserializer)?;
         parse_query_ids(&raw).map(|ids| Self(ids.into_iter().collect())).map_err(serde::de::Error::custom)

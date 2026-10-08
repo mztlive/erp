@@ -130,8 +130,14 @@ impl QueryFilter for ContractFilter {
     /// `customer_id` 与 `customer_ids` 同时存在时按交集收窄：请求客户不在集合内
     /// 时写入空 `$in`，保证分页总数为 0 而不是退回全量合同。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "contract_no", self.contract_no.as_deref());
@@ -151,8 +157,16 @@ impl QueryFilter for ContractFilter {
 impl Pagination for ContractFilter {
     /// 返回页码与单页条数。
     ///
+    /// 读取筛选条件上的 `page`，并把 `page_size` 从 `u32` 拓宽为 `u64`。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `(page, page_size)` 元组。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -205,7 +219,15 @@ pub trait ContractRepositoryExt {
 
     /// 返回匹配条件的未删除对象 ID，供跨域列表在分页前组合筛选。
     ///
-    /// 数据库查询失败时返回错误；空命中返回空集合，不扩大范围。
+    /// # 参数
+    /// * `keyword` - 合同编号的字面量关键词。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 未删除且编号匹配的合同 ID。空命中为空集合，不扩大范围。非字符串 ID 略过。
+    ///
+    /// # 错误
+    /// 数据库查询失败时返回错误。
     async fn matching_ids_by_number(&self, keyword: &str, executor: &mut dyn Executor)
     -> Result<Vec<String>>;
 }
@@ -269,6 +291,16 @@ impl ContractRepositoryExt for persistence_core::Repository<'_, Contract> {
 #[allow(async_fn_in_trait)]
 pub trait ContractRevisionRepositoryExt {
     /// 按修订 ID 集合批量读取不可变合同版本。
+    ///
+    /// # 参数
+    /// * `revision_ids` - 修订主键。空集合不查询。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 命中的版本。空 ID 集合返回空向量，未命中的 ID 不出现。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
     async fn find_by_ids(
         &self,
         revision_ids: &[String],
@@ -369,6 +401,9 @@ impl<'a> ContractDomainRepository<'a> {
     ///
     /// # 返回
     /// 返回仓储实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
@@ -385,6 +420,9 @@ impl<'a> ContractDomainRepository<'a> {
     /// * `contract` - 待写入的合同（成功后内存中绑定首个版本指针并递增版本）
     /// * `revision` - 首个不可变合同版本
     /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 返回
+    /// 无返回值。合同与首个不可变版本写入完成。
     ///
     /// # 错误
     /// 当唯一索引冲突（透出 [`persistence_core::Error::DuplicateKey`]）、乐观锁冲突或
@@ -410,6 +448,9 @@ impl<'a> ContractDomainRepository<'a> {
     /// * `contract` - 待绑定新版本的合同（成功后内存中切换版本指针并递增版本）
     /// * `revision` - 新不可变合同版本
     /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 返回
+    /// 无返回值。新版本写入完成并已绑定当前版本指针。
     ///
     /// # 错误
     /// 当唯一索引冲突、乐观锁冲突或 MongoDB 写入失败时返回错误。

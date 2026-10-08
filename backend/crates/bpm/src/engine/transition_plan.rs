@@ -59,8 +59,14 @@ pub enum TaskCloseReason {
 impl TaskCloseReason {
     /// 返回稳定关闭原因代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回合同固定关闭原因。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ApprovalRuntimeBlocked => "APPROVAL_RUNTIME_BLOCKED",
@@ -98,6 +104,9 @@ impl TransitionPlan {
     ///
     /// # 返回
     /// 返回不含执行或任务意图的计划骨架。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn for_instance(instance: ApprovalProcessInstance, commit: CommitRequired) -> Self {
         Self {
             instance,
@@ -120,7 +129,10 @@ impl TransitionPlan {
     /// * `keep_commit` - 为真时保留当前提交类别
     ///
     /// # 返回
-    /// 返回合并后的计划。
+    /// 无返回值。就地并入进入计划的实例、执行、任务与事件；`keep_commit` 为假时改用进入计划的提交类别。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn merge_enter(&mut self, enter: TransitionPlan, keep_commit: bool) {
         self.instance = enter.instance;
         self.created_executions.extend(enter.created_executions);
@@ -141,7 +153,10 @@ impl TransitionPlan {
     /// * `enter` - `plan_enter_node` 的结果
     ///
     /// # 返回
-    /// 返回合并后的计划。
+    /// 无返回值。就地并入进入计划，并保留当前提交类别。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn merge_enter_keep_commit(&mut self, enter: TransitionPlan) {
         self.merge_enter(enter, true);
     }
@@ -152,7 +167,10 @@ impl TransitionPlan {
     /// * `enter` - `plan_enter_node` 的结果
     ///
     /// # 返回
-    /// 返回合并后的计划。
+    /// 无返回值。就地并入进入计划，并改用其提交类别。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn merge_enter_adopt_commit(&mut self, enter: TransitionPlan) {
         self.merge_enter(enter, false);
     }

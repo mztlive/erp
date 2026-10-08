@@ -84,8 +84,20 @@ impl Default for PurchaseReturnOrderFilter {
 impl QueryFilter for PurchaseReturnOrderFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// `purchase_return_no` 为 `Some` 时做不区分大小写的字面量模糊匹配；`status` 为
+    /// `Some` 时精确匹配。`purchase_order_id` 与 `authorized_purchase_order_ids` 都缺省时
+    /// 不限制采购单；只有前者时精确匹配；只有后者且非空时按 `$in` 匹配，空则写入
+    /// `$expr: false`。两者都有时，授权列表包含该采购单才精确匹配，否则同样写入
+    /// `$expr: false`。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "purchase_return_no", self.purchase_return_no.as_deref());
@@ -122,8 +134,16 @@ impl QueryFilter for PurchaseReturnOrderFilter {
 impl Pagination for PurchaseReturnOrderFilter {
     /// 返回页码与单页条数。
     ///
+    /// 不修正 `page`；`page_size` 由 `u32` 转为 `u64`。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `(page, page_size)` 元组。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }

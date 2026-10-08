@@ -18,6 +18,21 @@ const CANCEL_BLOCKED_DOMAIN: &str = "APPROVAL_EXECUTION_CANCEL_BLOCKED";
 const UPGRADE_BINDING_DOMAIN: &str = "APPROVAL_EXECUTION_UPGRADE_BINDING";
 
 /// 形成审批决定的 V3 身份，并精确登记 V2 与无前缀历史摘要。
+///
+/// # 参数
+/// * `idempotency_key` - 已规范化幂等键。
+/// * `execution_id` - 当前执行 ID，同时作为 scope。
+/// * `work_item_id` - 任务 ID。
+/// * `decision` - 决定稳定码。
+/// * `reason` - 决定原因；可空。
+/// * `expected_task_version` - 期望任务版本。
+/// * `actor_id` - 决定人。
+///
+/// # 返回
+/// 返回当前 V3 身份，以及同一执行 scope 上的 V2 与无前缀历史候选。
+///
+/// # 错误
+/// 幂等键或载荷字段非法时返回校验错误。
 pub fn decision_identity(
     idempotency_key: IdempotencyKey,
     execution_id: &str,
@@ -249,6 +264,21 @@ pub fn document_cancel_identity(params: DocumentCancelIdentityParams<'_>) -> Res
 }
 
 /// 形成原审批人恢复的 V3 身份与无前缀历史身份。
+///
+/// # 参数
+/// * `idempotency_key` - 已规范化幂等键。
+/// * `instance_id` - 实例 ID，同时作为 scope。
+/// * `expected_instance_version` - 期望实例版本。
+/// * `expected_execution_version` - 期望执行版本。
+/// * `expected_assignment_version` - 期望绑定版本。
+/// * `expected_closed_task_version` - 期望已关闭任务版本；无任务时为 `None`。
+/// * `actor_id` - 恢复人。
+///
+/// # 返回
+/// 返回当前 V3 身份，以及同一实例 scope 上的无前缀历史候选。
+///
+/// # 错误
+/// 幂等键或载荷字段非法时返回校验错误。
 pub fn resume_identity(
     idempotency_key: IdempotencyKey,
     instance_id: &str,
@@ -397,6 +427,21 @@ pub fn cancel_blocked_identity(params: CancelBlockedIdentityParams<'_>) -> Resul
 /// 升级命令在本开发期没有已发布历史 writer，不登记任何 legacy 候选。scope
 /// 精确绑定单据类型与 ID；digest 同时绑定 scope 字段、业务对象版本、绑定版本、
 /// 规范化原因和实际操作人。
+///
+/// # 参数
+/// * `document_type` - 单据类型稳定码。
+/// * `document_id` - 单据 ID。
+/// * `expected_business_object_version` - 期望业务对象版本。
+/// * `expected_binding_version` - 期望绑定版本。
+/// * `normalized_reason` - 已规范化升级原因。
+/// * `actor_id` - 实际操作人。
+/// * `idempotency_key` - 已规范化幂等键。
+///
+/// # 返回
+/// 返回不含历史候选的当前 V3 身份。
+///
+/// # 错误
+/// 幂等键或载荷字段非法时返回校验错误。
 pub fn upgrade_binding_identity(
     document_type: &str,
     document_id: &str,

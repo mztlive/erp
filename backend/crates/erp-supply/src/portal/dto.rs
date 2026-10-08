@@ -14,6 +14,16 @@ pub enum PortalAvailabilityStatus {
     OutOfStock,
 }
 impl From<PortalAvailabilityStatus> for AvailabilityStatus {
+    /// 将门户可供状态映射为正式可供状态。
+    ///
+    /// # 参数
+    /// * `value` - 门户报告的可供状态。
+    ///
+    /// # 返回
+    /// `Available` 映射为 `AvailabilityStatus::Available`；`OutOfStock` 映射为 `AvailabilityStatus::Unavailable`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn from(value: PortalAvailabilityStatus) -> Self {
         match value {
             PortalAvailabilityStatus::Available => Self::Available,

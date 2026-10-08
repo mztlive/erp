@@ -95,6 +95,16 @@ pub(super) enum DecodeError {
 type DecodeResult<T> = std::result::Result<T, DecodeError>;
 
 // Rig 负责读取 submit 参数；hook 仅拒绝截断、额外输出及多个提交，不重写结果。
+/// 拒绝截断、额外输出和多次 `submit`，不改写完成结果。
+///
+/// # 参数
+/// * `response` - Rig 完成响应。
+///
+/// # 返回
+/// 形状合格时无额外值。
+///
+/// # 错误
+/// 结束原因不是 `ToolCalls`、响应未完成或带错误、输出不是数组、出现非法输出项、缺少 `submit`、参数不是字符串或超过 256000 字节时返回对应 `DecodeError`。
 pub(super) fn validate_response(response: &CompletionResponse) -> DecodeResult<()> {
     if response.finish_reason() != Some(FinishReason::ToolCalls) {
         return Err(DecodeError::FinishReason(response.finish_reason()));
@@ -138,6 +148,19 @@ pub(super) fn validate_response(response: &CompletionResponse) -> DecodeResult<(
     Ok(())
 }
 
+/// 把模型输出收成合同提取结果，并限制字段数量与长度。
+///
+/// # 参数
+/// * `output` - 已反序列化的提交参数。
+/// * `requested` - 请求使用的模型名。
+/// * `reported` - 响应报告的模型名。
+/// * `provider_id` - 写入提取证据的供应商标识。
+///
+/// # 返回
+/// 带协议版本、字段和冲突说明的 `ContractExtraction`。
+///
+/// # 错误
+/// 报告模型名为空、超过 96 字节或含非 ASCII 可见字符、字段或冲突超限、值为空、页码不在 1 到 200、字段重复，或结果 JSON 超过 256000 字节时返回对应 `DecodeError`。
 pub(super) fn convert(
     output: Output,
     requested: &str,

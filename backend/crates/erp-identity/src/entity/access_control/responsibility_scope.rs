@@ -15,6 +15,15 @@ pub enum OrganizationCoverage {
 
 impl OrganizationCoverage {
     /// 从显式组织 ID 形成规范化覆盖；`*` 表示全部组织。
+    ///
+    /// # 参数
+    /// * `targets` - 组织 ID；重复项会被去掉。
+    ///
+    /// # 返回
+    /// 含 `*` 时返回 `All`，即使同时还有其他 ID。只有明确 ID 时返回按字典序排列的 `Targets`。输入为空时返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn from_targets(targets: impl IntoIterator<Item = String>) -> Option<Self> {
         let targets = targets.into_iter().collect::<BTreeSet<_>>();
         if targets.contains("*") {
@@ -25,8 +34,14 @@ impl OrganizationCoverage {
 
     /// 从 DataScope 事实形成明确覆盖；空范围不隐式解释为 All。
     ///
+    /// # 参数
+    /// * `scopes` - 同一责任主体上的范围事实。
+    ///
     /// # 返回
-    /// 公司级范围返回 `All`；组织/团队目标返回去重排序的 `Targets`；无组织事实返回 `None`。
+    /// 任一公司级范围返回 `All`。否则把组织与团队目标去重并排序后返回 `Targets`。没有这些目标时返回 `None`。本人负责和协作参与不贡献组织覆盖。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn from_scopes(scopes: &[DataScope]) -> Option<Self> {
         if scopes.iter().any(|scope| scope.scope_type == DataScopeType::Company) {
             return Some(Self::All);
@@ -43,8 +58,14 @@ impl OrganizationCoverage {
 
     /// 形成明确目标集合。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// `All` 返回单个 `None`；明确目标返回 `Some(id)` 的稳定集合。
+    /// `All` 返回单个 `None`；明确目标按现有顺序返回 `Some(id)`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn targets(&self) -> Vec<Option<String>> {
         match self {
             Self::All => vec![None],
@@ -54,8 +75,14 @@ impl OrganizationCoverage {
 
     /// 计算两个组织覆盖的交集。
     ///
+    /// # 参数
+    /// * `other` - 另一份组织覆盖。
+    ///
     /// # 返回
-    /// 返回规范化后的覆盖交集；无交集返回 `None`。
+    /// 任一侧为 `All` 时返回另一侧的克隆。两侧都是明确目标时返回交集；交集为空则返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn intersect(&self, other: &Self) -> Option<Self> {
         match (self, other) {
             (Self::All, coverage) | (coverage, Self::All) => Some(coverage.clone()),
@@ -69,6 +96,15 @@ impl OrganizationCoverage {
     }
 
     /// 判断当前覆盖是否包含指定组织。
+    ///
+    /// # 参数
+    /// * `organization_id` - 待判断的组织 ID。
+    ///
+    /// # 返回
+    /// `All` 对任意 ID 返回 `true`。明确目标按已排序列表二分查找，命中时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn covers(&self, organization_id: &str) -> bool {
         match self {
             Self::All => true,
@@ -87,6 +123,15 @@ impl ResponsibilityScopeSet {
     /// 构造去重并稳定排序的责任范围集合。
     ///
     /// 同一角色存在 `None` 时表示覆盖全部组织，必须吸收该角色的明确组织项。
+    ///
+    /// # 参数
+    /// * `values` - 角色 ID 与组织 ID。组织为 `None` 表示该角色覆盖全部组织。
+    ///
+    /// # 返回
+    /// 返回按角色 ID、组织 ID 稳定排序的集合。同一角色一旦出现 `None`，只保留这一项。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(values: impl IntoIterator<Item = (String, Option<String>)>) -> Self {
         let mut normalized = BTreeMap::<String, Option<BTreeSet<String>>>::new();
         for (role_id, organization_id) in values {
@@ -123,6 +168,15 @@ impl ResponsibilityScopeSet {
     }
 
     /// 合并责任范围集合。
+    ///
+    /// # 参数
+    /// * `other` - 需要并入的责任范围。
+    ///
+    /// # 返回
+    /// 返回两侧合并后再规范化的集合。同一角色的全部组织覆盖会吸收明确组织。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn union(&self, other: &Self) -> Self {
         Self::new(self.0.iter().cloned().chain(other.0.iter().cloned()))
     }
@@ -130,6 +184,15 @@ impl ResponsibilityScopeSet {
     /// 计算两个责任范围集合的交集。
     ///
     /// `None` 表示对应角色覆盖全部组织；与明确组织集合相交时保留明确集合。
+    ///
+    /// # 参数
+    /// * `other` - 另一份责任范围。
+    ///
+    /// # 返回
+    /// 只保留两侧都出现的角色。两侧都覆盖全部组织时保留 `None`；一侧为全部组织时保留另一侧的明确组织；两侧都是明确组织时保留交集。没有共同角色时返回空集合。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn intersect(&self, other: &Self) -> Self {
         let roles = self
             .0
@@ -156,6 +219,16 @@ impl ResponsibilityScopeSet {
     }
 
     /// 判断集合是否覆盖指定角色与组织。
+    ///
+    /// # 参数
+    /// * `role_id` - 角色 ID。
+    /// * `organization_id` - 组织 ID。
+    ///
+    /// # 返回
+    /// 存在该角色，且其组织为 `None` 或等于 `organization_id` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn covers(&self, role_id: &str, organization_id: &str) -> bool {
         self.0.iter().any(|(role, organization)| {
             role == role_id && organization.as_deref().is_none_or(|allowed| allowed == organization_id)
@@ -163,6 +236,15 @@ impl ResponsibilityScopeSet {
     }
 
     /// 返回规范化范围切片。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 `(角色 ID, 组织 ID)` 的只读切片。组织为 `None` 表示该角色覆盖全部组织。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_slice(&self) -> &[(String, Option<String>)] {
         &self.0
     }

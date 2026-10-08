@@ -27,18 +27,52 @@ pub struct SalesChangeSubmissionWrite {
 }
 impl SalesChangeSubmissionWrite {
     /// 已进入审批中、尚未写入的变更事实。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回内存中的变更单。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn change(&self) -> &SalesChangeOrder {
         &self.change_order
     }
     /// 不可变提交头，供审批主体版本和快照映射。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回尚未写入的提交头。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn submission(&self) -> &SalesChangeSubmission {
         &self.submission
     }
     /// 不可变提交行，供审批金额/数量快照映射。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回尚未写入的提交行。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn lines(&self) -> &[SalesChangeSubmissionLine] {
         &self.submission_lines
     }
     /// receipt 与业务单据守卫成功后，写入提交头、行、变更状态，再更新工作副本。
+    ///
+    /// # 参数
+    /// * `db` - 销售集合所在数据库。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 提交与工作副本都写入成功时返回 `Ok(())`。
     ///
     /// # 错误
     /// 销售集合或 CAS 失败时原样返回；本方法不启动事务。
@@ -52,6 +86,13 @@ impl SalesChangeSubmissionWrite {
 }
 impl SalesReviewService {
     /// 在冻结审批绑定读取之后，按原读取时点准备下一不可变提交。
+    ///
+    /// # 参数
+    /// * `change_order` - 冻结审批绑定读取之后的变更单。
+    /// * `actor` - 当前提交人。
+    ///
+    /// # 返回
+    /// 返回尚未写入的提交计划；变更单已在内存中进入审批中。
     ///
     /// # 错误
     /// 副本、版本、状态或快照不符合销售规则时失败。

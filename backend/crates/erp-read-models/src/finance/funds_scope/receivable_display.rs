@@ -16,8 +16,11 @@ impl FundsAccess {
     /// 给已授权应收行补上往来名称和分录。
     ///
     /// # 参数
-    /// * `rows` - 当前页或详情行；空切片不访问数据库
-    /// * `executor` - 调用方事务
+    /// * `rows` - 当前页或详情行；空切片不访问数据库。
+    /// * `executor` - 调用方事务。
+    ///
+    /// # 返回
+    /// 名称与分录写入 `rows` 后成功。
     ///
     /// # 错误
     /// 主体或分录读取失败时返回错误。
@@ -95,6 +98,15 @@ impl FundsAccess {
 }
 
 /// 把分录实体收成范围响应。冲减合计不在这条读取里重算，核销池使用分录金额。
+///
+/// # 参数
+/// * `entry` - 应收分录实体。
+///
+/// # 返回
+/// 复制标识、方向、金额与来源字段的视图；`offset_total` 为零金额。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn entry_view(entry: erp_finance::entity::receivable::ReceivableEntry) -> ReceivableEntryView {
     ReceivableEntryView {
         id: entry.base.id,

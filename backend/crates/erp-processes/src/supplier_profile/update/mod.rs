@@ -35,7 +35,15 @@ use persist::*;
 impl SupplierProfileService {
     /// 修订完整供应商资料；全部写入与幂等结果原子提交。
     ///
-    /// # Errors
+    /// # 参数
+    /// * `supplier_id` - 待修订的供应商。
+    /// * `req` - 根资料修订请求。
+    /// * `actor` - 当前操作人。
+    ///
+    /// # 返回
+    /// 修订或同键重放的资料变更视图。
+    ///
+    /// # 错误
     /// 输入无效、乐观锁冲突、引用失效、附件不存在或敏感级别不匹配时返回错误。
     pub async fn update(
         &self,
@@ -48,8 +56,17 @@ impl SupplierProfileService {
 
     /// 修订完整供应商资料，并把同一次 multipart 命令携带的资质文件原子登记。
     ///
-    /// # Errors
-    /// 输入无效、文件引用或敏感级别不匹配、乐观锁冲突或事务失败时返回错误。
+    /// # 参数
+    /// * `supplier_id` - 待修订的供应商。
+    /// * `req` - 根资料修订请求。
+    /// * `pending_assets` - 同一次命令待登记的资质文件。
+    /// * `actor` - 当前操作人。
+    ///
+    /// # 返回
+    /// 业务视图，以及本次上传对象是否已随事务登记。同键重放时 `assets_committed` 为 `false`。
+    ///
+    /// # 错误
+    /// 输入无效、同键异参、文件引用或敏感级别不匹配、乐观锁冲突或事务失败时返回错误。
     pub async fn update_with_assets(
         &self,
         supplier_id: &str,

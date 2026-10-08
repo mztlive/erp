@@ -1,4 +1,4 @@
-//! Adapt current catalog qualification without importing catalog into sales.
+//! 在不把目录 crate 引入销售的前提下适配当前可售资格。
 use async_trait::async_trait;
 use erp_catalog::entity::catalog::SkuSalesPrices;
 use erp_catalog::ports::supply::CatalogSupplyQueryPort;
@@ -16,7 +16,16 @@ pub struct CatalogQualificationAdapter {
     query: std::sync::Arc<dyn CatalogSupplyQueryPort>,
 }
 impl CatalogQualificationAdapter {
-    /// Bind the repository without loading any current catalog facts.
+    /// 绑定目录查询，不加载当前目录事实。
+    ///
+    /// # 参数
+    /// * `db` - 目录所在数据库。
+    ///
+    /// # 返回
+    /// 返回未发起查询的适配器。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: mongodb::Database) -> Self {
         Self { query: std::sync::Arc::new(MongoCatalogSupplyQuery::new(db)) }
     }

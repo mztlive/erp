@@ -32,8 +32,14 @@ pub enum ArchiveSource {
 impl ArchiveSource {
     /// 返回来源的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::ContractCenter => "合同中心",
@@ -43,8 +49,14 @@ impl ArchiveSource {
 
     /// 返回来源的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::ContractCenter => "CONTRACT_CENTER",

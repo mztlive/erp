@@ -56,6 +56,13 @@ impl SupplierFulfillmentProcess {
     /// `VERIFIED_NO_RESULT` 查询证据，并始终沿原供应商动作幂等键派发。调查证据
     /// 与审计收据在同一事务提交，重复命令返回原结果。
     ///
+    /// # 参数
+    /// * `command` - 普通订单调查命令。
+    /// * `actor` - 当前操作人。
+    ///
+    /// # 返回
+    /// 返回原调查结果；同一命令重放返回已提交结果。
+    ///
     /// # 错误
     /// 订单/动作不存在、版本变化、查询能力不足、重放证据不足或幂等键复用不同
     /// 命令时失败关闭。
@@ -104,6 +111,13 @@ impl SupplierFulfillmentProcess {
     /// 外部调用前和证据提交事务内均重验任务版本、主体版本、订单版本、当前个人
     /// 责任与角色/组织资格。证据、任务处理记录和审计收据同事务提交，任务始终
     /// 保持 `OPEN`。
+    ///
+    /// # 参数
+    /// * `command` - W26 任务调查命令。
+    /// * `actor` - 当前任务责任人。
+    ///
+    /// # 返回
+    /// 返回原调查结果且任务保持 `OPEN`；同一命令重放返回已提交结果。
     ///
     /// # 错误
     /// 正式任务未注册到当前订单、处理权变化、任一版本变化、调查证据不足或幂等
@@ -599,6 +613,20 @@ fn ensure_version(actual: u64, expected: u64, object: &str) -> Result<()> {
     Err(Error::ConflictError(format!("{object}版本已变化，请刷新后重试")))
 }
 
+/// 校验 W26 任务仍开放、绑定当前订单，且版本与责任人符合命令。
+///
+/// # 参数
+/// * `item` - 正式任务。
+/// * `order_id` - 当前供应商订单 ID。
+/// * `expected_task_version` - 命令锁定的任务版本。
+/// * `expected_subject_version` - 命令锁定的主体版本。
+/// * `actor_id` - 当前操作人。
+///
+/// # 返回
+/// 任务类型、对象、版本和责任一致时无返回值。
+///
+/// # 错误
+/// 任务版本、开放状态或主体版本不符时返回 `ConflictError`。任务类型或业务对象未注册到该订单时返回 `BusinessLogicError`。当前账号不是责任人时返回 `Forbidden`。
 pub(super) fn validate_w26_task(
     item: &WorkItem,
     order_id: &str,
@@ -628,6 +656,18 @@ pub(super) fn validate_w26_task(
     Ok(())
 }
 
+/// 校验任务主体版本同时等于命令期望值和当前订单版本。
+///
+/// # 参数
+/// * `item` - 正式任务。
+/// * `expected_subject_version` - 命令锁定的主体版本。
+/// * `order_version` - 当前订单版本。
+///
+/// # 返回
+/// 三者一致时无返回值。
+///
+/// # 错误
+/// 任一版本不一致时返回 `ConflictError`。
 pub(super) fn ensure_task_subject_matches_order(
     item: &WorkItem,
     expected_subject_version: &str,

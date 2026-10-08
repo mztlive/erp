@@ -138,8 +138,14 @@ impl SupplierSettlementSourceEvidenceLine {
 
     /// 校验逐行身份、证据与金额恒等式。
     ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 数量、事实、证据和金额恒等成立时返回 `Ok(())`；同时就地排序去重事实类别并规范化证据引用。
+    ///
     /// # 错误
-    /// 缺少事实/证据、金额为负或任一 `gross = net + tax` 与 ERP 构成恒等不成立时返回错误。
+    /// 数量不大于零、缺少事实或证据、引用为空、超长或超限、金额为负，或 `gross = net + tax` 与 ERP 构成恒等不成立时返回错误。
     pub fn validate(&mut self) -> Result<()> {
         if self.quantity.to_decimal() <= Decimal::ZERO {
             return Err(Error::from("来源证据行数量必须大于零"));

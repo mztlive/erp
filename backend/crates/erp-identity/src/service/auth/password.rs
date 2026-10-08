@@ -17,16 +17,28 @@ pub(crate) enum PasswordCheck {
 impl PasswordCheck {
     /// 判断密码是否匹配当前或已迁移凭证。
     ///
-    /// # 返回值
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
     /// 当前密码有效时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_match(&self) -> bool {
         !matches!(self, Self::Mismatch)
     }
 
     /// 消费结果并取出由 legacy MD5 迁移得到的新凭证。
     ///
-    /// # 返回值
+    /// # 参数
+    /// 消耗 `self`。
+    ///
+    /// # 返回
     /// legacy 凭证匹配时返回升级后的凭证，否则返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn into_upgraded_secret(self) -> Option<Secret> {
         match self {
             Self::Upgraded(secret) => Some(secret),
@@ -45,7 +57,7 @@ impl PasswordCheck {
 /// * `secret` - 已加载凭证；不可认证或不存在时传入 `None`
 /// * `password` - 待校验的明文密码
 ///
-/// # 返回值
+/// # 返回
 /// 返回密码匹配状态及可选升级凭证。
 ///
 /// # 错误
@@ -64,7 +76,7 @@ pub async fn verify_password(secret: Option<Secret>, password: String) -> Result
 /// * `account` - 已规范化登录账号
 /// * `password` - 明文密码
 ///
-/// # 返回值
+/// # 返回
 /// 返回已生成 Argon2 哈希的凭证。
 ///
 /// # 错误
@@ -81,7 +93,7 @@ pub async fn hash_secret(account: LoginAccount, password: String) -> Result<Secr
 /// # 参数
 /// * `work` - 拥有全部输入且可能执行密码哈希的同步领域工作
 ///
-/// # 返回值
+/// # 返回
 /// 返回同步领域工作生成的值。
 ///
 /// # 错误

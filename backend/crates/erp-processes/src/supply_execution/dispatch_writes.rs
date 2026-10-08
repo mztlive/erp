@@ -21,6 +21,7 @@ trait DispatchWrites: Send {
     async fn message(&mut self, executor: &mut dyn Executor) -> Result<()>;
     async fn responsibility(&mut self, executor: &mut dyn Executor) -> Result<()>;
 }
+/// 按本域、集成信封、正式责任的顺序写入；任一步失败则停止后续步骤。
 async fn execute(writes: &mut impl DispatchWrites, executor: &mut dyn Executor) -> Result<()> {
     writes.domain(executor).await?;
     writes.message(executor).await?;
@@ -36,6 +37,16 @@ pub(super) struct MongoWrites<'a> {
     pub(super) actor: &'a AuditActor,
 }
 impl MongoWrites<'_> {
+    /// 在同一执行器上按本域、集成信封、正式责任的顺序写回派发结果。消耗 `self`。
+    ///
+    /// # 参数
+    /// * `executor` - 调用方事务执行器。
+    ///
+    /// # 返回
+    /// 三步均成功时无返回值。
+    ///
+    /// # 错误
+    /// 任一步失败时返回对应错误，且不执行后续步骤。
     pub(super) async fn persist(mut self, executor: &mut dyn Executor) -> Result<()> {
         execute(&mut self, executor).await
     }

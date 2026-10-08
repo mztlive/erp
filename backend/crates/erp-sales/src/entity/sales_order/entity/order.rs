@@ -166,7 +166,7 @@ impl SalesOrder {
     /// 返回新建的销售单实体（`Draft`、`NotSubmitted`）。
     ///
     /// # 错误
-    /// 当 order_no 为空/超长或可选字段超长时返回错误。
+    /// 销售单号、负责销售或业务组织为空或超长，或来源身份、来源状态代码超长时返回错误。
     pub fn new(id: SalesOrderId, data: SalesOrderData, created_by: impl Into<String>) -> Result<Self> {
         let order_no =
             normalize_required_text(data.order_no, "销售单号不能为空", ORDER_NO_MAX_LEN, "销售单号过长")?;
@@ -217,14 +217,23 @@ impl SalesOrder {
     ///
     /// # 返回
     /// 当前版本与期望版本一致时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn matches_version(&self, expected_version: u64) -> bool {
         self.base.version == expected_version
     }
 
     /// 判断销售单是否已经完整形式化。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 商务状态为已生效且审核轨为已通过时返回 `true`。
+    /// 商业主状态为已生效且审核轨为已通过时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_fully_formalized(&self) -> bool {
         self.commercial_status == CommercialStatus::Effective && self.review_status == ReviewStatus::Approved
     }
@@ -238,6 +247,9 @@ impl SalesOrder {
     ///
     /// # 返回
     /// 三项关系与销售单稳定关系完全一致时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn matches_contract_context(
         &self,
         contract_id: &Option<ContractId>,
@@ -251,8 +263,14 @@ impl SalesOrder {
 
     /// 返回发起销售变更前的实体内阻塞原因。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 非生效、缺当前版本或卡券销售时返回稳定阻塞说明；实体状态允许时返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn sales_change_start_blocker(&self) -> Option<&'static str> {
         if self.commercial_status != CommercialStatus::Effective {
             return Some("只有已生效的销售单才能发起变更");
@@ -267,8 +285,14 @@ impl SalesOrder {
 
     /// 返回当前生效版本身份。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 已形成正式版本时返回版本 ID 字符串；草稿尚无版本时返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn current_revision_id(&self) -> Option<&str> {
         self.stable.current_revision_id.as_deref()
     }
@@ -280,6 +304,9 @@ impl SalesOrder {
     ///
     /// # 返回
     /// 当前版本与基准版本一致时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn current_revision_matches(&self, base_revision_id: &SalesOrderRevisionId) -> bool {
         self.stable.current_revision_id.as_deref() == Some(base_revision_id.as_ref())
     }
@@ -292,6 +319,9 @@ impl SalesOrder {
     /// # 返回
     /// 非实物服务、未生效或无剩余数量时返回稳定阻塞说明；实体状态允许时返回
     /// `None`。权限与责任任务仍由 Service 校验。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn procurement_creation_blocker(&self, remaining_quantity: Quantity) -> Option<&'static str> {
         if !self.business_type.is_goods_service() {
             return Some("非实物及服务销售单无需供给分配");
@@ -314,6 +344,9 @@ impl SalesOrder {
     ///
     /// # 返回
     /// 任一进度发生变化并已更新实体时返回 `true`；无变化返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn refresh_progress(
         &mut self,
         fulfillment: Option<FulfillmentProgress>,
@@ -410,7 +443,8 @@ impl SalesOrder {
     /// 迁移成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 非草稿态或审核轨非未提交态时返回 [`Error::InvalidStateTransition`]。
+    /// 商业主状态不能迁到 `PendingReview`，或审核轨不能迁到 `NotSubmitted` 时返回
+    /// [`Error::InvalidStateTransition`]。已处于目标状态时该次检查幂等成功。
     pub fn submit_for_review(&mut self, updated_by: impl Into<String>) -> Result<()> {
         ensure_transition(self.commercial_status, CommercialStatus::PendingReview)?;
         ensure_transition(self.review_status, ReviewStatus::NotSubmitted)?;
@@ -432,7 +466,8 @@ impl SalesOrder {
     /// 迁移成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 非草稿或审核轨非未提交时返回冲突或非法迁移。
+    /// 与 [`Self::submit_for_review`] 相同：商业主状态不能迁到 `PendingReview`，或审核轨不能迁到
+    /// `NotSubmitted` 时返回 [`Error::InvalidStateTransition`]。
     pub fn start_approval_submission(&mut self, updated_by: impl Into<String>) -> Result<()> {
         self.submit_for_review(updated_by)
     }
@@ -449,7 +484,8 @@ impl SalesOrder {
     /// 迁移成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 审核轨不是审批中时返回冲突。
+    /// 审核轨不是 `InApproval` 时返回领域错误。商业主状态不能回到 `Draft` 时返回
+    /// [`Error::InvalidStateTransition`]。
     pub fn cancel_approval_submission(&mut self, updated_by: impl Into<String>) -> Result<()> {
         if self.review_status != ReviewStatus::InApproval {
             return Err(Error::from("只有审批中的销售单可以撤回审批提交"));
@@ -466,7 +502,7 @@ impl SalesOrder {
     /// 迁移成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 非审核中态时返回 [`Error::InvalidStateTransition`]。
+    /// 商业主状态不能迁到 `Draft` 时返回 [`Error::InvalidStateTransition`]。已是草稿时幂等成功。
     pub fn return_to_draft(&mut self, updated_by: impl Into<String>) -> Result<()> {
         self.transition_commercial_status(CommercialStatus::Draft)?;
         self.review_status = ReviewStatus::NotSubmitted;
@@ -498,8 +534,8 @@ impl SalesOrder {
 
     /// 审批通过并生效（主状态 `PENDING_REVIEW → EFFECTIVE`）。
     ///
-    /// 审核轨同时推进到 `Approved`。目标路径只接受 `IN_APPROVAL`。
-    /// 生效时间由调用方以服务端时间给出。
+    /// 审核轨按固定邻接迁到 `Approved`，不限于 `InApproval`。
+    /// 生效时间由调用方以服务端时间给出。归属快照必须已冻结，且 `attributed_at` 等于 `effective_at`。
     ///
     /// # 参数
     /// * `effective_at` - 生效时间
@@ -509,7 +545,8 @@ impl SalesOrder {
     /// 迁移成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 非审核中态或审核轨不允许直接通过时返回
+    /// 归属快照缺失、归属时点与 `effective_at` 不一致，或快照校验失败时返回领域错误。
+    /// 商业主状态不能迁到 `Effective`，或审核轨不能迁到 `Approved` 时返回
     /// [`Error::InvalidStateTransition`]。
     pub fn approve(&mut self, effective_at: Instant, updated_by: impl Into<String>) -> Result<()> {
         if self.attribution.as_ref().is_some_and(|snapshot| snapshot.attributed_at != effective_at) {
@@ -530,8 +567,14 @@ impl SalesOrder {
 
     /// 冻结首次生效归属；已有快照不可覆盖。
     ///
+    /// # 参数
+    /// * `snapshot` - 待冻结的首次生效归属
+    ///
+    /// # 返回
+    /// 校验通过并写入快照时返回 `Ok(())`。
+    ///
     /// # 错误
-    /// 责任不一致、快照不完整或已经冻结时拒绝。
+    /// 商业主状态不是 `PendingReview`、已经有归属快照或生效时间，或 `snapshot` 校验失败时返回领域错误。
     pub fn freeze_attribution(&mut self, snapshot: super::super::SalesAttribution) -> Result<()> {
         if self.commercial_status != CommercialStatus::PendingReview {
             return Err(Error::from("仅审核中的销售单可准备首次生效归属"));
@@ -553,7 +596,7 @@ impl SalesOrder {
     /// 迁移成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 非草稿态时返回 [`Error::InvalidStateTransition`]。
+    /// 商业主状态不能迁到 `Voided` 时返回 [`Error::InvalidStateTransition`]。已作废时幂等成功。
     pub fn void(&mut self, updated_by: impl Into<String>) -> Result<()> {
         self.transition_commercial_status(CommercialStatus::Voided)?;
         self.stable.touch(updated_by);
@@ -604,6 +647,9 @@ impl SalesOrder {
     ///
     /// # 返回
     /// 无返回值；更新当前版本指针并记录更新人。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn attach_revision(&mut self, revision_id: impl Into<String>, updated_by: impl Into<String>) {
         self.stable.current_revision_id = Some(revision_id.into());
         self.stable.touch(updated_by);
@@ -639,7 +685,7 @@ impl SalesOrder {
     /// 责任确有变化并已更新时返回 `true`。
     ///
     /// # 错误
-    /// 已作废、目标为空或与当前完全一致时拒绝；归属快照与状态字段保持不变。
+    /// 已作废、目标负责销售为空或超长、显式目标业务组织为空或超长，或目标与当前完全一致时拒绝；归属快照与状态字段保持不变。
     ///
     /// # 关键业务约束
     /// 只改负责人与业务组织，不改归属快照、状态或审批任务。

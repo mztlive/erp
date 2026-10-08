@@ -53,8 +53,14 @@ pub enum AuditEventResult {
 impl AuditEventResult {
     /// 返回结果的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回面向用户的中文标签。
+    /// 成功、拒绝、失败分别为「成功」「拒绝」「失败」，未知为「结果未知」。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Success => "成功",
@@ -66,8 +72,14 @@ impl AuditEventResult {
 
     /// 返回结果的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回用于持久化与查询的稳定字符串。
+    /// 依次为 `SUCCESS`、`DENIED`、`FAILED`、`UNKNOWN`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Success => "SUCCESS",

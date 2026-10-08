@@ -42,8 +42,14 @@ pub enum AllocationAction {
 impl AllocationAction {
     /// 返回动作的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Apply => "应用",
@@ -53,8 +59,14 @@ impl AllocationAction {
 
     /// 返回动作的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Apply => "APPLY",
@@ -176,6 +188,9 @@ impl SupplierRefundFact {
     ///
     /// # 错误
     /// 分配归属其他退款头或 APPLY 合计不等于退款头金额时返回错误。
+    ///
+    /// # Panics
+    /// `0.00` 是合法金额；只有构造失败才 panic，正常路径不会发生。
     pub fn validate_allocations(&self, allocations: &[SupplierRefundAllocation]) -> Result<()> {
         let mut total = Amount::from_str("0.00").expect("零是合法金额");
         for allocation in allocations {

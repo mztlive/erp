@@ -1,4 +1,4 @@
-//! Approval domain-action dispatch.
+//! 审批领域动作分发。
 
 mod action_registry;
 mod object_read;

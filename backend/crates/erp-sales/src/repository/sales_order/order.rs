@@ -206,6 +206,9 @@ impl SalesOrderFilter {
     }
 
     /// 追加一项交集条件，避免覆盖先前的关键词或合同存在性条件。
+    ///
+    /// # Panics
+    /// `$and` 只能由本方法写成数组；若该字段已是其他 BSON 类型则 panic。
     fn intersect(filter: &mut Document, condition: Document) {
         filter
             .entry("$and".to_string())
@@ -219,8 +222,16 @@ impl SalesOrderFilter {
 impl QueryFilter for SalesOrderFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// 单号走字面量正则；客户、合同、来源、商业状态、审核轨、业务性质、履约/回款/开票进度、关闭状态、创建人有值时按等值追加，负责人按 `$in` 追加。合同是否存在与关键词再与上述条件求交。创建时间上下界写入 `created_at`，无法装入 `i64` 的时间戳记为 `i64::MAX`。`business_org_unit_ids` 为空集合时条件恒假。`MyTodo` 追加草稿或驳回/低毛利待审的 `$or`；`ExceptionOnly` 把审核轨限定为 `Rejected`。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = undeleted_condition();
         insert_literal_regex_filter(&mut filter, "order_no", self.order_no.as_deref());
@@ -308,8 +319,14 @@ impl QueryFilter for SalesOrderFilter {
 impl Pagination for SalesOrderFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `(page, page_size)` 元组。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -384,6 +401,7 @@ pub trait SalesOrderRepositoryExt {
     ///
     /// # 参数
     /// * `filter` - 筛选与分页条件
+    /// * `scope` - 已证明的销售读取范围，与筛选求交
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
@@ -399,6 +417,11 @@ pub trait SalesOrderRepositoryExt {
     ) -> Result<PageResult<SalesOrderRow>>;
 
     /// 装载查询的有界身份与版本集合，用于跨页及导出的一致性校验。
+    ///
+    /// # 参数
+    /// * `filter` - 与列表相同的筛选条件
+    /// * `scope` - 已证明的销售读取范围，与筛选求交
+    /// * `executor` - 调用方执行器
     ///
     /// # 返回
     /// 最多 10001 行；调用方必须整体拒绝超限，不得截断版本集合。
@@ -427,7 +450,14 @@ pub trait SalesOrderRepositoryExt {
         executor: &mut dyn Executor,
     ) -> Result<Vec<SalesOrderId>>;
 
-    /// 判断组织是否仍有需要交接的未结单据。
+    /// 判断组织是否仍有未作废且未关闭的销售单。
+    ///
+    /// # 参数
+    /// * `org` - 业务组织 ID。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// `commercial_status` 不是 `VOIDED` 且 `close_status` 不是 `CLOSED` 时返回 `true`。
     ///
     /// # 错误
     /// 查询失败返回仓储错误；失败不得解释为没有业务。

@@ -51,8 +51,16 @@ struct CloseDomainEvidenceInput<'a> {
 impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkItemService<A> {
     /// 关闭重复、误派或已有有效替代任务。
     ///
+    /// # 参数
+    /// * `id` - 待关闭任务 ID
+    /// * `req` - 关闭原因、预期版本与幂等键
+    /// * `actor` - 当前操作人
+    ///
+    /// # 返回
+    /// 关闭成功或同载荷回放时返回已应用结果。预期版本与当前版本不一致，或写入遇到版本冲突时，返回版本冲突结果。
+    ///
     /// # 错误
-    /// 缺少管理权限、任务类型禁止通用关闭、原因非法或版本陈旧时返回错误。
+    /// 缺少管理权限、任务类型禁止通用关闭、原因或替代任务非法、对象不可访问或仓储失败时返回错误。版本陈旧本身不是错误。
     pub async fn close(
         self,
         id: String,

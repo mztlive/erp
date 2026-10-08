@@ -14,6 +14,17 @@ use crate::{Error, Result};
 
 impl IntegrationResolutionProcess {
     /// 重放仍校验当前账号、责任、完整执行权限和对象绑定，不再套原写版本。
+    ///
+    /// # 参数
+    /// * `work_item_id` - 回执绑定的正式任务。
+    /// * `action` - 非终态动作，用于核对对象关联。
+    /// * `actor` - 当前认证账号。
+    ///
+    /// # 返回
+    /// 无返回值。校验通过后可以继续重放。
+    ///
+    /// # 错误
+    /// 任务缺失时返回内部错误；当前账号不是责任人时返回 `Forbidden`；对象关联或执行权限不通过，或仓储读取失败时返回对应错误。
     pub(super) async fn ensure_replay_task_access(
         &self,
         work_item_id: &str,
@@ -38,6 +49,17 @@ impl IntegrationResolutionProcess {
         Ok(())
     }
 
+    /// 按命令身份读取已提交回执，并按当前操作人恢复载荷。
+    ///
+    /// # 参数
+    /// * `receipt` - 领域命令身份。
+    /// * `actor` - 当前认证账号。
+    ///
+    /// # 返回
+    /// 已提交回执的载荷；没有回执时为 `None`。
+    ///
+    /// # 错误
+    /// 仓储读取失败，或回执无法按该命令身份和操作人恢复时返回对应错误。
     pub(super) async fn replay_receipt<T: IntegrationReceiptPayload>(
         &self,
         receipt: &IntegrationCommandIdentity,
@@ -94,6 +116,19 @@ pub(super) fn command_identity<T: Serialize>(
 ///
 /// 任务版本与业务主题版本取自 Prepared 目标（DTO 层单次解析），此处只做
 /// typed 比较，不再解析版本字符串。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `target` - 已解析的任务与主题版本。
+/// * `action` - 非终态动作，用于核对对象关联。
+/// * `actor_id` - 当前操作人。
+/// * `executor` - 读取所用执行器。
+///
+/// # 返回
+/// 仍开放且归属当前人的正式任务。
+///
+/// # 错误
+/// 任务不存在返回 `NotFound`；版本变化或任务不再开放返回 `ConflictError`；不是当前责任人返回 `Forbidden`；关联或仓储读取失败返回对应错误。
 pub(super) async fn load_bound_work_item(
     db: &Database,
     target: &PreparedWorkItemTarget,

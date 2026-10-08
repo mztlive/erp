@@ -1,4 +1,4 @@
-//! Shared projected list queries for legacy import collections.
+//! 旧数据导入集合共用的列表投影查询。
 
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
@@ -56,6 +56,13 @@ where
 ///
 /// # 返回
 /// 返回排序条件文档。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # Panics
+/// 调试构建下，`sort_by` 有值且不在三类列表排序白名单并集中时 `debug_assert` 会 panic。
+/// 发布构建不 panic，并回退 `created_at`。
 pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     debug_assert!(sort_by.is_none_or(is_allowed_sort_field), "非法排序字段已回退 created_at：{sort_by:?}");
     let direction = if sort_ascending { 1 } else { -1 };
@@ -72,8 +79,14 @@ fn is_allowed_sort_field(field: &str) -> bool {
 
 /// 导入批次列表投影字段。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回投影条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn legacy_import_batch_projection() -> Document {
     doc! {
         "id": 1,
@@ -95,8 +108,14 @@ pub(super) fn legacy_import_batch_projection() -> Document {
 
 /// 导入行列表投影字段。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回投影条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn legacy_import_row_projection() -> Document {
     doc! {
         "id": 1,
@@ -116,8 +135,14 @@ pub(super) fn legacy_import_row_projection() -> Document {
 
 /// 导入确认列表投影字段。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回投影条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn legacy_import_confirmation_projection() -> Document {
     doc! {
         "id": 1,

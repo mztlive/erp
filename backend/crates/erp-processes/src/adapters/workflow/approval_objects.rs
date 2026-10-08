@@ -19,6 +19,18 @@ use crate::{Error, Result};
 
 type Keys = HashSet<(DocumentType, String)>;
 
+/// 按单据类型去重后批量读取审批范围事实。
+///
+/// # 参数
+/// * `db` - 各业务单据集合所在数据库。
+/// * `keys` - 单据类型与编号。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 返回已找到的范围对象；缺失键不出现在结果中。
+///
+/// # 错误
+/// 键超过 500 条时返回校验错误；单据或读模型查询失败时返回对应仓储或流程错误。
 pub(super) async fn load(
     db: &Database,
     keys: &Keys,

@@ -109,8 +109,19 @@ impl Default for SupplierFulfillmentOrderFilter {
 impl QueryFilter for SupplierFulfillmentOrderFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// 供应商与履约、取消、退款状态按等值写入，`external_order_no` 按字面量正则匹配。
+    /// 跟进人、业务组织与处理人订单经 `insert_id_in` 写入；空列表写成 `$expr: false`。
+    /// `q` 在履约单号与外部订单号上取 `$or`。`view` 与 `aftersale_pending` 用 `$and` 追加，
+    /// `scope` 为 `Some` 时再与已有条件取 `$and`。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(supplier_id) = &self.supplier_id {
@@ -154,8 +165,14 @@ impl QueryFilter for SupplierFulfillmentOrderFilter {
 impl Pagination for SupplierFulfillmentOrderFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组。`page_size` 由 `u32` 转为 `u64`，页码不在此方法内归一。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -265,11 +282,24 @@ impl SupplierFulfillmentOrderRepositoryExt for SupplierFulfillmentOrderRepositor
 ///
 /// # 返回
 /// 返回排序条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn order_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     let field = sort_by.filter(|field| ORDER_SORT_FIELDS.contains(field)).unwrap_or("created_at");
     doc! { field: direction, "id": direction }
 }
+/// 履约订单列表投影字段。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回只含列表列的投影文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn supplier_fulfillment_order_projection() -> Document {
     doc! {
         "id": 1,
@@ -291,6 +321,20 @@ pub(crate) fn supplier_fulfillment_order_projection() -> Document {
     }
 }
 
+/// 把可选 ID 列表写入 `$in` 条件。
+///
+/// `None` 不改过滤条件。`Some` 且为空时写入恒假 `$expr`，避免空 `$in`。
+///
+/// # 参数
+/// * `filter` - 待收窄的查询文档
+/// * `field` - 接收 `$in` 的字段名
+/// * `ids` - 可选 ID 列表；`None` 表示不按该字段筛选
+///
+/// # 返回
+/// 无返回值。条件直接写入 `filter`。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn insert_id_in(filter: &mut Document, field: &str, ids: Option<&[String]>) {
     let Some(ids) = ids.filter(|values| !values.is_empty()) else {
         if ids.is_some() {
@@ -301,6 +345,19 @@ pub(crate) fn insert_id_in(filter: &mut Document, field: &str, ids: Option<&[Str
     filter.insert(field, doc! { "$in": ids });
 }
 
+/// 用 `$and` 合并一条可选条件。
+///
+/// `extra` 为 `None` 时不改 `filter`。否则用原条件与 `extra` 组成 `$and` 并替换 `filter`。
+///
+/// # 参数
+/// * `filter` - 当前查询文档，命中时被替换
+/// * `extra` - 要追加的条件；`None` 表示不追加
+///
+/// # 返回
+/// 无返回值。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn and_optional(filter: &mut Document, extra: Option<Document>) {
     let Some(extra) = extra else {
         return;
@@ -309,6 +366,16 @@ pub(crate) fn and_optional(filter: &mut Document, extra: Option<Document>) {
     *filter = doc! { "$and": [current, extra] };
 }
 
+/// 把列表视图名编译为状态条件。
+///
+/// # 参数
+/// * `view` - 视图名；`actionable` 为待处理状态并集，`recent_completed` 为已完成，其余（含 `None`）不附加条件
+///
+/// # 返回
+/// 已知视图返回条件文档；未知或 `None` 返回 `None`。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn view_clause(view: Option<&str>) -> Option<Document> {
     match view {
         Some("actionable") => Some(doc! {
@@ -323,6 +390,17 @@ pub(crate) fn view_clause(view: Option<&str>) -> Option<Document> {
     }
 }
 
+/// 编译仍待处理的取消或退款状态条件。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回取消状态为 `FAILED`、`MANUAL` 或 `CANCEL_PENDING`，或退款状态为
+/// `REFUND_FAILED`、`MANUAL` 或 `REFUND_PENDING` 的 `$or` 文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn aftersale_pending_clause() -> Document {
     doc! {
         "$or": [

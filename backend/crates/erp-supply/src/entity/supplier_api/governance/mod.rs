@@ -52,6 +52,15 @@ pub enum SupplierConnectionAction {
 
 impl SupplierConnectionAction {
     /// 返回稳定动作代码。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回大写稳定动作代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::UpdateBusinessProfile => "UPDATE_BUSINESS_PROFILE",
@@ -65,6 +74,15 @@ impl SupplierConnectionAction {
     }
 
     /// 返回固定注册表全部动作。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回固定注册表中的七个治理动作，顺序与注册表一致。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub const fn all() -> [Self; 7] {
         [
             Self::UpdateBusinessProfile,
@@ -92,8 +110,14 @@ pub struct SupplierConnectionBusinessImpact {
 impl SupplierConnectionBusinessImpact {
     /// 判断是否存在任何必须先处理的活动业务对象。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 任一计数大于零时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn has_blockers(self) -> bool {
         self.active_offerings > 0 || self.open_supplier_orders > 0 || self.active_sync_jobs > 0
     }
@@ -134,6 +158,9 @@ impl SupplierConnectionGovernance<'_> {
     ///
     /// # 返回
     /// 返回稳定阻塞原因；空集合表示领域前置条件满足。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn blockers(
         &self,
         action: SupplierConnectionAction,
@@ -155,8 +182,14 @@ impl SupplierConnectionGovernance<'_> {
 
     /// 返回最近一次成功健康检查。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回最新优先历史中的首个成功运行；没有时返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn latest_successful_health_run(&self) -> Option<&SupplierHealthCheckRun> {
         self.health_runs.iter().find(|run| run.status == SupplierHealthCheckStatus::Succeeded)
     }
@@ -168,6 +201,9 @@ impl SupplierConnectionGovernance<'_> {
     ///
     /// # 返回
     /// 返回最新优先历史中的首个匹配确认；没有时返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn latest_confirmation(
         &self,
         capability_code: SupplierApiCapabilityCode,

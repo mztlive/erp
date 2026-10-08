@@ -15,11 +15,14 @@ use super::working_copy_line::SalesOrderWorkingCopyLine;
 impl SalesOrderWorkingCopy {
     /// 将已规范化的表头快照还原为提交构造入参。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回与当前工作副本快照字段一一对应的表头入参。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     ///
     /// # 关键业务约束
     /// 只复制已规范化快照，不再次 trim。

@@ -28,7 +28,14 @@ pub struct AuthorizedTaskFact {
 pub trait WorkItemAuthorizationReadPort: Send + Sync {
     /// 授权后返回该详情需要的最小正式任务事实。
     ///
-    /// # Errors
-    /// 保留工作流原 NotFound、Forbidden、Conflict 与底层读取错误。
+    /// # 参数
+    /// * `id` - 正式任务身份
+    /// * `actor` - 已认证操作人
+    ///
+    /// # 返回
+    /// 返回任务类型、业务对象、冻结版本和允许动作。
+    ///
+    /// # 错误
+    /// 保留工作流原 `NotFound`、`Forbidden`、`Conflict` 与底层读取错误。
     async fn authorize(&self, id: &str, actor: &AuditActor) -> erp_workflow::Result<AuthorizedTaskFact>;
 }

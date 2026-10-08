@@ -1,3 +1,3 @@
-//! Party entities and value objects.
+//! 主体实体与值对象。
 
 pub mod party;

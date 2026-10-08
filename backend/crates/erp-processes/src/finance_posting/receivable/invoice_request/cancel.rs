@@ -157,6 +157,7 @@ pub(crate) async fn cancel(
     cancel_and_record(db, id, actor, None, executor).await.map(|_| ())
 }
 
+/// 锁应收、撤回申请并写审计；返回本次审计事件 ID。
 async fn cancel_and_record(
     db: &Database,
     id: &str,

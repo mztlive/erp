@@ -15,7 +15,7 @@ pub trait ProcurementResponsibilityRuleRepositoryExt {
     /// * `executor` - 数据访问执行器
     ///
     /// # 返回
-    /// 返回按优先级与创建时间稳定排序的当前页规则及总数。
+    /// 返回按 `rule_type`、`created_at`、`id` 升序排列的当前页规则及总数。
     ///
     /// # 错误
     /// MongoDB 查询、计数或反序列化失败时返回错误。

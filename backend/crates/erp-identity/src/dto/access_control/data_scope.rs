@@ -216,8 +216,14 @@ pub struct CreateDataScopeRequest {
 impl CreateDataScopeRequest {
     /// 转换为实体创建数据。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回实体层创建数据。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn into_data(self) -> DataScopeData {
         DataScopeData {
             subject_type: self.subject_type,

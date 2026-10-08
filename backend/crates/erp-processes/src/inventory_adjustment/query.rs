@@ -34,6 +34,17 @@ impl InventoryAdjustmentService {
     }
 
     /// 构造库存调整详情；签署命令结果必须按收据引用的实例精确投影。
+    ///
+    /// # 参数
+    /// * `id` - 调整单主键。
+    /// * `actor` - 当前认证操作人，用于投影审批动作。
+    /// * `approval_instance` - 为 `Some` 时按该实例与期望主题版本投影；`None` 时加载主题上的当前审批。
+    ///
+    /// # 返回
+    /// 返回含审批、表头、明细与过账流水的详情。
+    ///
+    /// # 错误
+    /// 调整单不可读、绑定缺失、审批投影失败，或明细、流水、人员读取失败时返回对应错误。
     pub(super) async fn stock_adjustment_detail_with_instance(
         &self,
         id: &str,

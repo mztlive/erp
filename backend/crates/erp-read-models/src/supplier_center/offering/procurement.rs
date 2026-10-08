@@ -60,6 +60,9 @@ impl MongoOfferingProcurementOwners {
     ///
     /// # 返回
     /// 返回未执行 I/O 的解析器。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
@@ -71,6 +74,9 @@ impl MongoOfferingProcurementOwners {
     ///
     /// # 返回
     /// 返回供给列表可注入的采购负责人解析器。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn OfferingProcurementOwners> {
         Arc::new(Self::new(db))
     }

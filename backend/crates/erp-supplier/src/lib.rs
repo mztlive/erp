@@ -1,4 +1,4 @@
-//! Supplier domain: accounts, capabilities, qualifications and commercial profiles.
+//! 供应商领域：账户、能力、资质与商务资料。
 
 pub mod dto;
 pub mod entity;

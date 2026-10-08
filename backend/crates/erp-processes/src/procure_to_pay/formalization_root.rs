@@ -18,6 +18,16 @@ pub struct PurchaseOrderFormalizationProcess {
 }
 impl PurchaseOrderFormalizationProcess {
     /// 使用组合根数据库与授权源构造采购形式化流程。
+    ///
+    /// # 参数
+    /// * `db` - 组合根数据库。
+    /// * `rbac` - 形式化时绑定采购单服务的授权源。
+    ///
+    /// # 返回
+    /// 返回形式化流程。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database, rbac: SharedRbacService) -> Self {
         Self { db, rbac }
     }
@@ -54,6 +64,14 @@ impl PurchaseOrderFormalizationProcess {
     }
 
     /// 在审批运行时持有的事务内形式化最终通过的采购单。
+    ///
+    /// # 参数
+    /// * `id` - 采购单主键。
+    /// * `actor` - 已通过鉴权的审计操作人。
+    /// * `executor` - 审批运行时持有的事务执行器。
+    ///
+    /// # 返回
+    /// 形式化写入在调用方事务内完成。
     ///
     /// # 错误
     /// 提交、来源复验、应付/成本或履约草稿写入失败时返回错误。

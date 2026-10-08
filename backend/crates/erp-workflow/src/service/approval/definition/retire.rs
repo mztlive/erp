@@ -25,6 +25,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
     /// * `request` - 退役请求
     /// * `actor` - 已认证操作人
     ///
+    /// # 返回
+    /// 返回退役后的定义详情；同载荷回放返回已退役结果。
+    ///
     /// # 错误
     /// 目标不是当前发布版本或锁冲突时返回错误。
     pub async fn retire_definition(
@@ -124,7 +127,7 @@ struct RetireTxInput<'a> {
     actor: &'a AuditActor,
     /// 已规范化的当前命令身份及精确旧格式候选。
     identity: &'a PreparedDefinitionIdentity,
-    /// Injected audit port.
+    /// 注入的审计端口。
     audit: &'a dyn crate::ports::WorkflowAuditPort,
 }
 

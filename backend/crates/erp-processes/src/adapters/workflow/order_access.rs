@@ -22,6 +22,20 @@ use crate::adapters::purchase_access;
 use crate::{Error, Result};
 
 /// 审批沿强实体外键取得当前订单，展示根节点不提供读取权。
+///
+/// # 参数
+/// * `db` - 订单事实所在数据库。
+/// * `rbac` - 现有 RBAC 快照服务。
+/// * `actor` - 当前操作人。
+/// * `document_type` - 审批单据类型。
+/// * `document_id` - 单据编号。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 当前订单来源在详情范围内时返回 `true`；没有事实时返回 `false`。
+///
+/// # 错误
+/// 单据类型未接入订单审批、来源事实与类型不符，或读模型查询失败时返回错误。
 pub(super) async fn approval_readable(
     db: &Database,
     rbac: &SharedRbacService,
@@ -50,6 +64,19 @@ pub(super) async fn approval_readable(
 }
 
 /// 每种订单解析一次权限并批量加载对象；任务重复引用不引起逐任务查询。
+///
+/// # 参数
+/// * `db` - 销售与采购订单所在数据库。
+/// * `rbac` - 现有 RBAC 快照服务。
+/// * `actor` - 当前操作人。
+/// * `sources` - 待判定的订单来源。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 返回详情范围允许的来源子集。
+///
+/// # 错误
+/// 来源超过 500 条时返回校验错误。无详情权限或未找到只过滤该资源；配置、版本与基础设施错误原样返回。
 pub(super) async fn readable_sources(
     db: &Database,
     rbac: &SharedRbacService,
@@ -132,7 +159,21 @@ async fn purchase_sources(
 }
 
 /// 绑定本地事实与运行时保持同一详情动作；销售协作与历史沿公共读模型解析。
+///
 /// 缺失来源、客户或内部部门时拒绝，不使用结算主体代替内部组织。
+///
+/// # 参数
+/// * `db` - 订单集合所在数据库。
+/// * `rbac` - 现有 RBAC 快照服务。
+/// * `actor` - 当前操作人。
+/// * `object` - 已装载的工作流范围对象。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 详情动作允许该对象时返回 `true`；缺来源、负责人为空或缺内部组织时返回 `false`。
+///
+/// # 错误
+/// 订单查询或范围解析中的非拒绝类错误原样返回；采购详情被拒绝时返回 `false`。
 pub(super) async fn binding_readable(
     db: &Database,
     rbac: &SharedRbacService,

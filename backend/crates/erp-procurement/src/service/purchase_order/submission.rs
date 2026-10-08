@@ -15,7 +15,21 @@ use crate::entity::purchase_order::{
 };
 use crate::repository::PurchaseOrderExt;
 impl PurchaseOrderService {
-    /// 冻结草稿为正式提交（复制明细并重指向正式提交、推进主表指针）。
+    /// 按草稿复制出待审核正式提交，并把 `draft_lines` 换成挂到新提交的行。
+    ///
+    /// 不写库，也不修改采购单指针。序号用 `NoTransaction` 读取既有提交后计算。
+    ///
+    /// # 参数
+    /// * `order` - 当前采购单，只用于计算提交序号
+    /// * `draft` - 当前草稿提交；本方法不修改它
+    /// * `draft_lines` - 原地替换为新正式提交行
+    /// * `actor` - 提交人
+    ///
+    /// # 返回
+    /// 返回新的待审核正式提交。
+    ///
+    /// # 错误
+    /// 序号读取失败时返回仓储错误；序号溢出、草稿状态或行不变式不满足时返回 `Logic`。
     pub async fn freeze_submission(
         &self,
         order: &mut PurchaseOrder,
@@ -87,6 +101,17 @@ impl PurchaseOrderService {
         Ok((formal, lines))
     }
     /// 计算下一个提交序号（`SUB-{n}`，聚合内唯一）。
+    ///
+    /// 用 `NoTransaction` 读取该采购单已有提交，不加入调用方事务。
+    ///
+    /// # 参数
+    /// * `order` - 当前采购单
+    ///
+    /// # 返回
+    /// 返回下一个 `SUB-` 加六位序号。
+    ///
+    /// # 错误
+    /// 提交列表读取失败时返回仓储错误；序号达到 `u32::MAX` 时返回 `Logic`。
     pub async fn next_submission_no(&self, order: &PurchaseOrder) -> Result<String> {
         let existing = self
             .db
@@ -98,8 +123,14 @@ impl PurchaseOrderService {
 }
 /// 首次提交分配不可复用正式号。已有正式号时保持不变。
 ///
+/// # 参数
+/// * `order` - 待分配单号的采购单；空号时写成 `PO-` 加单据 ID
+///
+/// # 返回
+/// 已有正式号或新号写入成功时无返回值。
+///
 /// # 错误
-/// 编号非法时返回校验错误。
+/// 生成的单号为空或超长时，实体错误经 `?` 变为 `Logic`。已有正式号不会进入该校验。
 pub fn assign_formal_purchase_no(order: &mut PurchaseOrder) -> Result<()> {
     if !order.purchase_no.is_empty() {
         return Ok(());

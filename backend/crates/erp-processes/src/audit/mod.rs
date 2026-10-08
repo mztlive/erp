@@ -1,4 +1,4 @@
-//! Shared audited-transaction process.
+//! 共享的带审计事务流程。
 
 mod attempt;
 mod execution;

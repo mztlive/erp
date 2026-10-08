@@ -1,4 +1,4 @@
-//! Supplier MongoDB repositories and accessors.
+//! 供应商 MongoDB 仓储与访问器。
 
 pub mod extensions;
 pub mod owned;

@@ -86,8 +86,14 @@ impl Default for InboxMessageFilter {
 impl QueryFilter for InboxMessageFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = undeleted_base();
         if let Some(source_system_id) = &self.source_system_id {
@@ -111,8 +117,14 @@ macro_rules! filter_pagination {
         impl Pagination for $filter {
             /// 返回页码与单页条数。
             ///
+            /// # 参数
+            /// 无。
+            ///
             /// # 返回
             /// 返回 `(page, page_size)` 元组。
+            ///
+            /// # 错误
+            /// 不返回错误。
             fn page_and_size(&self) -> (u64, u64) {
                 (self.page, u64::from(self.page_size))
             }
@@ -219,8 +231,14 @@ impl Default for IntegrationErrorTaskFilter {
 impl QueryFilter for IntegrationErrorTaskFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = undeleted_base();
         if let Some(message_id) = &self.message_id {
@@ -333,8 +351,14 @@ impl Default for ReconciliationDifferenceFilter {
 impl QueryFilter for ReconciliationDifferenceFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = undeleted_base();
         if let Some(business_object_type) = &self.business_object_type {
@@ -392,8 +416,14 @@ pub struct ResolutionHistoryRow {
 
 /// 未删除基底文档（三类列表过滤与批量查询共用；修订表外全部列表查询自动追加）。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回仅含 `deleted_at` 未删除标记的查询文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn undeleted_base() -> Document {
     doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON }
 }
@@ -409,6 +439,9 @@ pub(crate) fn undeleted_base() -> Document {
 ///
 /// # 返回
 /// 无返回值；直接修改传入的查询文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn insert_time_range(filter: &mut Document, field: &str, from: Option<i64>, to: Option<i64>) {
     let mut range = Document::new();
     if let Some(from) = from {
@@ -430,6 +463,9 @@ pub(crate) fn insert_time_range(filter: &mut Document, field: &str, from: Option
 ///
 /// # 返回
 /// 无返回值；直接修改传入的查询文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn insert_id_in(filter: &mut Document, field: &str, ids: &[String]) {
     if !ids.is_empty() {
         filter.insert(field, doc! { "$in": ids });
@@ -444,6 +480,9 @@ pub(crate) fn insert_id_in(filter: &mut Document, field: &str, ids: &[String]) {
 ///
 /// # 返回
 /// 返回求交后的查询文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn and_scope(filter: Document, scope: Option<&Document>) -> Document {
     match scope {
         Some(scope) if !scope.is_empty() => doc! { "$and": [filter, scope.clone()] },
@@ -460,6 +499,9 @@ pub(crate) fn and_scope(filter: Document, scope: Option<&Document>) -> Document 
 ///
 /// # 返回
 /// 无返回值；直接修改传入的查询文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn keyword_filter(filter: &mut Document, q: Option<&str>, fields: &[&str]) {
     let Some(q) = q else {
         return;

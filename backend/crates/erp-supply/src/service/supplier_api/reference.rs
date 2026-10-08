@@ -9,6 +9,17 @@ use crate::repository::SupplierApiExt;
 use crate::{Error, Result};
 impl SupplierApiService {
     /// 事务外引用解析之前执行原版本与启用保护。
+    ///
+    /// # 参数
+    /// * `id` - 供应商连接主键。
+    /// * `expected_version` - 调用方持有的连接版本。
+    /// * `executor` - 调用方事务的执行器。
+    ///
+    /// # 返回
+    /// 返回通过版本与停用保护的连接。
+    ///
+    /// # 错误
+    /// 连接不存在或版本不一致时返回对应错误；连接处于启用状态时返回 `BusinessLogicError`。
     pub async fn load_reference_target(
         &self,
         id: &str,
@@ -23,6 +34,20 @@ impl SupplierApiService {
         Ok(connection)
     }
     /// 结果事务重新读取并校验后应用内部引用；不会使用预检快照直接写入。
+    ///
+    /// # 参数
+    /// * `id` - 供应商连接主键。
+    /// * `action` - 业务资料、端点或凭证引用绑定动作。
+    /// * `expected_version` - 调用方持有的连接版本。
+    /// * `resolved` - 已解析的内部引用。
+    /// * `actor_id` - 操作人。
+    /// * `executor` - 调用方事务的执行器。
+    ///
+    /// # 返回
+    /// 返回已写回的连接。
+    ///
+    /// # 错误
+    /// 连接不存在或版本不一致时返回对应错误；连接处于启用状态时返回 `BusinessLogicError`。动作不是三种引用绑定之一时返回 `Internal`。实体更新或仓储写回失败时返回对应错误。
     pub async fn apply_reference(
         &self,
         id: &str,

@@ -1,4 +1,4 @@
-//! Composition-root authorization facts. Does not expose RbacService, AccountCore, or Role.
+//! 组合根使用的授权事实。不暴露 `RbacService`、`AccountCore` 或 `Role`。
 
 use async_trait::async_trait;
 
@@ -13,18 +13,30 @@ pub struct OrganizationScopeFact {
 }
 
 impl OrganizationScopeFact {
-    /// Wrap an organization coverage fact.
+    /// 包装已算出的组织覆盖事实，不暴露角色或账号聚合。
     ///
-    /// # Parameters
-    /// * `coverage` - computed coverage
+    /// # 参数
+    /// * `coverage` - 已计算的组织覆盖
     ///
-    /// # Returns
-    /// Fact wrapper that does not expose Role or AccountCore.
+    /// # 返回
+    /// 返回不暴露 `Role` 或 `AccountCore` 的事实包装。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(coverage: OrganizationCoverage) -> Self {
         Self { coverage }
     }
 
-    /// Borrow the coverage fact.
+    /// 借用组织覆盖事实。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回内部 `OrganizationCoverage` 的借用。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn coverage(&self) -> &OrganizationCoverage {
         &self.coverage
     }
@@ -33,28 +45,28 @@ impl OrganizationScopeFact {
 /// Authorization facts for composition-root adapters.
 #[async_trait]
 pub trait AuthorizationPort: Send + Sync {
-    /// Return whether `subject` is allowed `permission`.
+    /// 判断 `subject` 是否允许 `permission`。
     ///
-    /// # Parameters
-    /// * `subject` - Casbin subject key
-    /// * `permission` - required permission
+    /// # 参数
+    /// * `subject` - Casbin 主体键
+    /// * `permission` - 所需权限
     ///
-    /// # Returns
-    /// `true` when the subject is allowed.
+    /// # 返回
+    /// 主体被允许时返回 `true`，否则返回 `false`。
     ///
-    /// # Errors
-    /// Policy load or enforcement failures.
+    /// # 错误
+    /// 策略加载或鉴权执行失败时返回错误。
     async fn allows(&self, subject: &str, permission: &Permission) -> Result<bool>;
 
-    /// Return the subject's organization coverage fact, not a Role aggregate.
+    /// 返回主体的组织覆盖事实，而不是角色聚合。
     ///
-    /// # Parameters
-    /// * `subject` - Casbin subject key
+    /// # 参数
+    /// * `subject` - Casbin 主体键
     ///
-    /// # Returns
-    /// Organization coverage when configured.
+    /// # 返回
+    /// 已配置组织覆盖时返回该事实；未配置时返回 `None`。
     ///
-    /// # Errors
-    /// Policy or data-scope query failures.
+    /// # 错误
+    /// 策略或数据范围查询失败时返回错误。
     async fn organization_scope(&self, subject: &str) -> Result<Option<OrganizationScopeFact>>;
 }

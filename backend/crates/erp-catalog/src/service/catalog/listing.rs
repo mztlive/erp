@@ -218,6 +218,15 @@ impl CatalogService {
     }
 
     /// 为一组 SPU 批量计算继承上架状态，避免列表 N+1。
+    ///
+    /// # 参数
+    /// * `product_ids` - 要汇总的商品稳定 ID
+    ///
+    /// # 返回
+    /// 返回按商品 ID 索引的继承上架视图。
+    ///
+    /// # 错误
+    /// 上架汇总读取失败时返回仓储错误。
     pub(super) async fn product_listing_views(
         &self,
         product_ids: &[ProductId],
@@ -227,6 +236,17 @@ impl CatalogService {
     }
 
     /// 将商品实体映射为包含实时 SKU 上架汇总的响应。
+    ///
+    /// 名称、分类、品牌、维护人姓名与供给计数不在此填充。
+    ///
+    /// # 参数
+    /// * `product` - 已加载的商品实体
+    ///
+    /// # 返回
+    /// 返回带继承上架状态和启用 SKU 计数的 `ProductView`；没有汇总时计数为零。
+    ///
+    /// # 错误
+    /// 上架汇总读取失败时返回仓储错误。
     pub(super) async fn product_view(&self, product: Product) -> Result<ProductView> {
         let product_id = ProductId::new(product.base.id.clone());
         let mut summaries = self.product_listing_views(std::slice::from_ref(&product_id)).await?;

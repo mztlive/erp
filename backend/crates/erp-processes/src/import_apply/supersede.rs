@@ -1,4 +1,4 @@
-//! Supersede orchestration: invalidate import confirmations and close WorkItems via workflow.
+//! 取代编排：作废导入确认，并经工作流关闭对应工作项。
 
 use std::collections::HashMap;
 
@@ -14,14 +14,17 @@ use persistence_core::Executor;
 
 use crate::{Error, Result};
 
-/// Collect work-item ids referenced by confirmations replaced by a newer trial.
+/// 收集被更新试算取代的确认所引用的任务 ID。
 ///
-/// # Parameters
-/// * `confirmations` - current confirmation matrix
-/// * `replacement_trial_version` - new trial version
+/// # 参数
+/// * `confirmations` - 当前确认矩阵。
+/// * `replacement_trial_version` - 新试算版本。
 ///
-/// # Returns
-/// Work-item ids in matrix order, excluding empty replacements.
+/// # 返回
+/// 按矩阵顺序返回被该试算取代的确认的 `work_item_id`，同一 ID 只保留首次出现。
+///
+/// # 错误
+/// 不返回错误。
 pub fn replaced_confirmation_work_item_ids(
     confirmations: &[LegacyImportConfirmation],
     replacement_trial_version: u32,
@@ -37,16 +40,19 @@ pub fn replaced_confirmation_work_item_ids(
     ids
 }
 
-/// Map loaded work-item snapshots to the open items that must close for this replacement.
+/// 把已加载的任务快照映射为本次取代必须关闭的开放任务。
 ///
-/// # Parameters
-/// * `confirmations` - matrix after in-memory `invalidate`
-/// * `replacement_trial_version` - new trial version
-/// * `work_items_by_id` - snapshots keyed by work-item id (hits are removed)
-/// * `replacement_id` - replacement confirmation id
+/// # 参数
+/// * `confirmations` - 内存中已作废之后的确认矩阵。
+/// * `replacement_trial_version` - 新试算版本。
+/// * `work_items_by_id` - 以任务 ID 为键的快照；命中项会被移出。
+/// * `replacement_id` - 取代确认的 ID。
 ///
-/// # Errors
-/// Missing work-item association for an invalidated confirmation.
+/// # 返回
+/// 返回仍为 `Open`、且已被该取代确认作废的任务。已关闭任务不进入关闭集合。
+///
+/// # 错误
+/// 已作废确认缺少对应任务快照时返回 `Internal`。
 pub fn collect_superseded_closable_work_items(
     confirmations: &[LegacyImportConfirmation],
     replacement_trial_version: u32,
@@ -69,20 +75,22 @@ pub fn collect_superseded_closable_work_items(
     Ok(to_close)
 }
 
-/// Invalidate replaced confirmation facts and close associated work items on one executor.
+/// 在同一执行器上作废被取代的确认事实，并关闭关联的开放任务。
 ///
-/// WorkItem writes go through workflow; confirmation invalidation stays on the import
-/// confirmation repository. The caller transaction rolls back on any failure.
+/// 任务写入走工作流仓储，确认作废留在导入确认仓储。任一失败由调用方事务回滚。
 ///
-/// # Parameters
-/// * `db` - database handle
-/// * `confirmations` - current trial matrix (replaced rows are invalidated in place)
-/// * `replacement` - new trial confirmation
-/// * `actor_id` - current actor
-/// * `executor` - caller transaction executor
+/// # 参数
+/// * `db` - 数据库。
+/// * `confirmations` - 当前试算矩阵；被取代的行就地作废。
+/// * `replacement` - 新试算确认。
+/// * `actor_id` - 当前操作人。
+/// * `executor` - 调用方事务执行器。
 ///
-/// # Errors
-/// Confirmation invalidate, missing work item, close, or CAS write failures.
+/// # 返回
+/// 无被取代确认时直接返回；否则作废事实并关闭仍开放的关联任务。
+///
+/// # 错误
+/// 确认作废、任务缺失、关闭或后续 CAS 写入失败时返回对应错误。
 pub async fn invalidate_replaced_confirmation(
     db: &Database,
     confirmations: &mut [LegacyImportConfirmation],

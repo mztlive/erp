@@ -35,6 +35,7 @@ impl Credentials {
     }
 }
 
+/// 空串、空格、控制字符、非 ASCII 或超过 16384 字节都不能作为签名材料。
 fn valid_secret(value: &str) -> bool {
     !value.is_empty() && value.len() <= 16384 && value.bytes().all(|b| (33..=126).contains(&b))
 }

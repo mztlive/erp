@@ -25,16 +25,28 @@ pub struct OrganizationRepository<'a> {
 impl<'a> OrganizationRepository<'a> {
     /// 绑定数据库。
     ///
+    /// # 参数
+    /// * `db` - 组织集合所在数据库
+    ///
     /// # 返回
     /// 返回仅拥有组织集合的仓储实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
 
     /// 在调用方同一事务中读取版本与完整组织事实。
     ///
+    /// # 参数
+    /// * `executor` - 调用方事务或非事务执行器
+    ///
+    /// # 返回
+    /// 返回组织单元、成员、管理范围和版本；尚无版本文档时版本为 `0`。
+    ///
     /// # 错误
-    /// 任一集合读取失败时不返回残缺状态。
+    /// 任一集合读取失败时返回仓储错误，不返回残缺状态。
     pub async fn state(&self, executor: &mut dyn Executor) -> Result<OrganizationState> {
         Ok(OrganizationState {
             version: self.revision(executor).await?.map(|value| value.revision).unwrap_or(0),
@@ -50,6 +62,12 @@ impl<'a> OrganizationRepository<'a> {
 
     /// 读取当前组织版本，用于跨页重验与缓存失效。
     ///
+    /// # 参数
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 返回标识为 `organization` 的版本文档；尚无文档时返回 `None`。
+    ///
     /// # 错误
     /// 底层读取失败时返回仓储错误。
     pub async fn revision(&self, executor: &mut dyn Executor) -> Result<Option<OrganizationRevision>> {
@@ -57,6 +75,13 @@ impl<'a> OrganizationRepository<'a> {
     }
 
     /// 查询幂等命令回执；仅组织管理用例可返回审计详情。
+    ///
+    /// # 参数
+    /// * `id` - 变更回执 ID
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 返回匹配回执；不存在时返回 `None`。
     ///
     /// # 错误
     /// 底层读取失败时返回仓储错误。
@@ -68,10 +93,19 @@ impl<'a> OrganizationRepository<'a> {
         Repository::new(self.db, ORG_CHANGES).find_by_id(id, executor).await
     }
 
-    /// 保存变更行、全局版本和前后审计；必须传入同一业务事务执行器。
+    /// 推进全局版本，写入有变化的组织单元和成员，并创建含前后状态的变更回执。
+    ///
+    /// 不写入管理范围集合。必须传入同一业务事务执行器。
+    ///
+    /// # 参数
+    /// * `receipt` - 含预期版本和前后组织状态的变更回执
+    /// * `executor` - 调用方的同一事务执行器
+    ///
+    /// # 返回
+    /// 版本、变化的组织单元与成员以及回执都写入成功时无额外返回值。
     ///
     /// # 错误
-    /// 并发版本冲突、重复幂等键或写入失败时由调用方回滚全部操作。
+    /// 版本与预期不符、回执键重复或任一写入失败时返回仓储错误，由调用方回滚。
     pub async fn save(
         &self,
         receipt: &mut OrganizationChangeReceipt,

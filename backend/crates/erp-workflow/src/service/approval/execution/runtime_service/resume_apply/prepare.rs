@@ -221,6 +221,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         .await
     }
 
+    /// 原任务必须唯一且已关闭；声明了版本却没有任务，或多任务时失败。
     async fn load_resume_task_guard(
         &self,
         execution_id: &ApprovalNodeExecutionId,

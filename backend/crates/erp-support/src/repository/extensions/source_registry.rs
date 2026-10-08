@@ -31,26 +31,50 @@ pub trait SourceRegistryExt {
 
     /// 获取 `source_system` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SourceSystemRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn source_systems(&self) -> SourceSystemRepository<'_>;
 
     /// 获取 `external_identity_map` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `ExternalIdentityMapRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn external_identity_maps(&self) -> ExternalIdentityMapRepository<'_>;
 
     /// 获取 `external_identity_target` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `ExternalIdentityTargetRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn external_identity_targets(&self) -> ExternalIdentityTargetRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SourceRegistryRepository` 实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn source_registry(&self) -> SourceRegistryRepository<'_>;
 }
 

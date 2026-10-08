@@ -103,7 +103,7 @@ impl FulfillmentOrderAccess {
     /// # 参数
     /// * `access` - 当前动作已解析事实
     /// * `order` - 已加载订单
-    /// * `handler_user_id` - 任务处理人；仅任务专用入口验证任务，不扩张普通范围
+    /// * `_handler_user_id` - 任务处理人；仅任务专用入口验证任务，不扩张普通范围。本方法不读取该参数。
     ///
     /// # 返回
     /// 范围允许时为 true。
@@ -126,6 +126,17 @@ impl FulfillmentOrderAccess {
     }
 
     /// 展开请求组织及其可选下级，与授权用同一执行器。
+    ///
+    /// # 参数
+    /// * `org_unit_ids` - 请求中的组织身份。
+    /// * `include_descendants` - 为真时包含下级组织。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回展开后的组织身份集合。
+    ///
+    /// # 错误
+    /// 范围 Port 展开失败时返回对应错误。
     pub async fn expand_org_units(
         &self,
         org_unit_ids: &[String],
@@ -136,6 +147,17 @@ impl FulfillmentOrderAccess {
     }
 
     /// 查询账号在解析时点的唯一主属组织。
+    ///
+    /// # 参数
+    /// * `user_id` - 账号身份。
+    /// * `at` - 解析时点。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回范围 Port 给出的主属组织。`None` 表示该时点没有返回主属组织。
+    ///
+    /// # 错误
+    /// 范围 Port 查询失败时返回对应错误。
     pub async fn own_org(
         &self,
         user_id: &str,
@@ -146,6 +168,19 @@ impl FulfillmentOrderAccess {
     }
 
     /// 校验拟创建或拟写入对象落在当前动作范围内。
+    ///
+    /// # 参数
+    /// * `actor` - 已认证操作人。
+    /// * `action` - 已注册动作。
+    /// * `owner` - 拟写入对象的跟进人。
+    /// * `org` - 拟写入对象的业务组织。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 对象落在范围内时无返回值。
+    ///
+    /// # 错误
+    /// 动作解析失败时返回对应错误。范围为空或对象不被允许时返回 `Forbidden`。
     pub async fn ensure_writable(
         &self,
         actor: &AuditActor,

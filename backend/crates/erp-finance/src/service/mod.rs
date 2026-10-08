@@ -1,4 +1,4 @@
-//! Finance service contracts.
+//! 财务服务合同。
 
 pub mod command_receipt;
 pub mod cost;

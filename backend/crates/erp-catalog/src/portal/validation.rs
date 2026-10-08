@@ -108,6 +108,15 @@ impl NewProductInput {
     }
 
     /// 草稿存储校验只检查边界，允许尚未填写的必填资料。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 文本、附件和 SKU 行都未越界且行标识不重复时返回空结果。
+    ///
+    /// # 错误
+    /// 文本或标识超长、附件重复或过多、SKU 超过 100 个、行标识重复或 SKU 存储字段非法时返回 `ValidationError`。
     pub(super) fn validate_storage(&self) -> Result<()> {
         bounded(&self.name, "商品名称", NAME_MAX_LEN)?;
         self.brand.validate_storage("品牌")?;
@@ -132,6 +141,15 @@ impl NewProductInput {
 
 impl DictionaryInput {
     /// 所选 ID 与版本必须同时存在，原稿不做 trim 写回。
+    ///
+    /// # 参数
+    /// * `field` - 拼进错误文案的字段名
+    ///
+    /// # 返回
+    /// 未选择，或标识与正版本成对且标识合法时返回空结果。
+    ///
+    /// # 错误
+    /// 原文超长、标识与版本缺一、版本不为正或标识含首尾空白时返回 `ValidationError`。
     pub(super) fn validate_storage(&self, field: &str) -> Result<()> {
         bounded(&self.raw_name, field, DESCRIPTION_MAX_LEN)?;
         match (&self.selected_id, self.expected_version) {
@@ -165,6 +183,15 @@ impl DictionaryInput {
 
 impl DraftSku {
     /// 保存时只验证输入尺寸及显式引用的结构。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 行标识、文本、规格、包装、数量和填报时间都在允许范围内时返回空结果。
+    ///
+    /// # 错误
+    /// 标识非法、文本超长、规格过多、可供数量为负、填报时间无效或包装存储校验失败时返回 `ValidationError`。
     pub(super) fn validate_storage(&self) -> Result<()> {
         validate_id(&self.row_id, "SKU 行标识")?;
         bounded(&self.name, "SKU 名称", NAME_MAX_LEN)?;
@@ -285,6 +312,16 @@ fn ensure_category_node(node: &CategoryHierarchyNode, kind: ProductKind) -> Resu
 }
 
 /// 核对最终结果与全部映射行及复用目标一致。
+///
+/// # 参数
+/// * `normalized` - 内部确认的 SKU 映射
+/// * `result` - 本次建档结果
+///
+/// # 返回
+/// 每个映射行都有不重复的 SKU、修订和供给，且与复用决定一致时返回空结果。
+///
+/// # 错误
+/// 结果标识非法、行数不一致、SKU 重复、缺少供给，或新建与复用目标和映射不符时返回 `ValidationError`。
 pub(super) fn ensure_result(normalized: &NormalizedProduct, result: &CatalogDraftResult) -> Result<()> {
     validate_id(&result.product_id, "结果商品")?;
     if result.skus.len() != normalized.sku_mappings.len() {
@@ -334,6 +371,18 @@ fn ensure_sku_result(
 }
 
 /// 构造决定时验证实际操作人，禁止失败后才发现缺失事实。
+///
+/// # 参数
+/// * `status` - 本次决定后的提报状态
+/// * `reason` - 可选决定原因；本函数不检查是否为空
+/// * `actor_id` - 实际操作人标识
+/// * `at` - 决定时间
+///
+/// # 返回
+/// 返回尚未填入映射和建档结果的 `DraftDecision`。
+///
+/// # 错误
+/// 操作人标识为空、超长或含首尾空白时返回 `ValidationError`。
 pub(super) fn decision(
     status: DraftStatus,
     reason: Option<String>,
@@ -371,6 +420,17 @@ fn ensure_name(raw: &str, normalized: &str) -> Result<()> {
 }
 
 /// 必填文本只返回规范值供判断，不改写供应商原稿。
+///
+/// # 参数
+/// * `value` - 原始文本
+/// * `field` - 拼进错误文案的字段名
+/// * `max_len` - 按字符计的最大长度
+///
+/// # 返回
+/// 返回去掉首尾空白后的非空文本。
+///
+/// # 错误
+/// 去掉空白后为空或超过 `max_len` 时返回 `ValidationError`。
 pub(super) fn required(value: &str, field: &str, max_len: usize) -> Result<String> {
     let normalized = non_empty_trimmed(value, &format!("{field}不能为空"))
         .map_err(|error| validation(&error.to_string()))?;
@@ -379,6 +439,17 @@ pub(super) fn required(value: &str, field: &str, max_len: usize) -> Result<Strin
 }
 
 /// 统一文本长度检查。
+///
+/// # 参数
+/// * `value` - 待检查文本，不裁剪
+/// * `field` - 拼进错误文案的字段名
+/// * `max_len` - 按字符计的最大长度
+///
+/// # 返回
+/// 未超过长度时返回空结果。
+///
+/// # 错误
+/// 字符数超过 `max_len` 时返回 `ValidationError`。
 pub(super) fn bounded(value: &str, field: &str, max_len: usize) -> Result<()> {
     if value.chars().count() > max_len {
         return Err(validation(&format!("{field}过长")));
@@ -395,6 +466,16 @@ fn optional_text(value: Option<&str>, field: &str, max_len: usize) -> Result<()>
 }
 
 /// 稳定标识非空、长度有限且不包含首尾空白。
+///
+/// # 参数
+/// * `value` - 待检查标识
+/// * `field` - 拼进错误文案的字段名
+///
+/// # 返回
+/// 标识本身已是规范值时返回空结果。
+///
+/// # 错误
+/// 为空、超过长度上限或去掉首尾空白后与原文不同时返回 `ValidationError`。
 pub(super) fn validate_id(value: &str, field: &str) -> Result<()> {
     let normalized = required(value, field, ID_MAX_LEN)?;
     if normalized != value {
@@ -427,6 +508,15 @@ fn validate_assets(ids: &[String]) -> Result<()> {
 }
 
 /// 门户纯规则错误使用验证分类，不按内部错误返回。
+///
+/// # 参数
+/// * `message` - 验证失败说明
+///
+/// # 返回
+/// 返回 `Error::ValidationError`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn validation(message: &str) -> Error {
     Error::ValidationError(message.to_string())
 }

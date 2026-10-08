@@ -34,32 +34,62 @@ pub trait BulkJobExt {
 
     /// 获取 `bulk_selection_snapshot` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `BulkSelectionSnapshotRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn bulk_selection_snapshots(&self) -> BulkSelectionSnapshotRepository<'_>;
 
     /// 获取 `bulk_selection_item` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `BulkSelectionItemRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn bulk_selection_items(&self) -> BulkSelectionItemRepository<'_>;
 
     /// 获取 `background_job` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `BackgroundJobRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn background_jobs(&self) -> BackgroundJobRepository<'_>;
 
     /// 获取 `background_job_item` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `BackgroundJobItemRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn background_job_items(&self) -> BackgroundJobItemRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `BulkJobRepository` 实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn bulk_job(&self) -> BulkJobRepository<'_>;
 }
 

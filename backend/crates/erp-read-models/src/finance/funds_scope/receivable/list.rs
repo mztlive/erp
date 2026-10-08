@@ -14,6 +14,16 @@ use crate::Result;
 
 impl FundsAccess {
     /// 组织条件在本次事务展开；负责人和登记经办人仍分别匹配。
+    ///
+    /// # 参数
+    /// * `query` - 已规范化的应收列表查询。
+    /// * `executor` - 调用方事务。
+    ///
+    /// # 返回
+    /// 销售负责人、登记经办人与展开组织的精确条件；未提供的维度为 `None`。
+    ///
+    /// # 错误
+    /// 组织展开失败时返回对应错误。
     pub(super) async fn receivable_condition(
         &self,
         query: &ReceivableAccountListQuery,
@@ -38,6 +48,16 @@ impl FundsAccess {
 }
 
 /// 当前页复用净核销与分录；真实来源只包含页面必要责任字段。
+///
+/// # 参数
+/// * `rows` - 当前页数据库行及来源责任。
+/// * `facts` - 同拍核销净额与分录；本函数会取走对应分录。
+///
+/// # 返回
+/// 整单金额直接取自页面行的范围行；客户名称留空。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn receivable_page_rows(
     rows: &[AccountPageRow<ReceivableAccountRow>],
     facts: &mut ReceivableFacts,
@@ -73,6 +93,17 @@ pub(super) fn receivable_page_rows(
 }
 
 /// 全范围使用数据库窄摘要和同拍净核销，保留原逐行加总顺序。
+///
+/// # 参数
+/// * `rows` - 全部匹配行的窄金额摘要。
+/// * `facts` - 同拍各子账净核销额。
+/// * `version` - 本次范围版本。
+///
+/// # 返回
+/// 按来源负责人归组的可见份额，以及整单含税合计。
+///
+/// # 错误
+/// 不返回错误。汇总构造始终成功。
 pub(super) fn receivable_summary(
     rows: &[AccountSummaryRow],
     facts: &ReceivableFacts,

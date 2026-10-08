@@ -132,6 +132,7 @@ fn parse_optional<T: FromStr>(value: Option<&str>, field: &str) -> Result<Option
         .transpose()
 }
 
+/// 解析业务日期；失败文案保留未经 trim 的原始输入。
 fn parse_business_date(value: &str) -> Result<BusinessDate> {
     BusinessDate::from_str(value.trim()).map_err(|_| Error::ValidationError(format!("非法业务日期: {value}")))
 }

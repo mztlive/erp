@@ -25,7 +25,7 @@ impl WorkItem {
     /// 自动完成成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 单据审批任务或非开放任务不能使用本入口。
+    /// 单据审批或带审批节点执行引用、不是供给分配任务，或任务不是开放状态时返回错误。
     pub fn complete_when_requirement_satisfied(&mut self, at: Instant) -> Result<()> {
         self.ensure_generic_mutation()?;
         if self.work_item_type != WorkItemType::ProcurementOrderCreation {
@@ -48,7 +48,7 @@ impl WorkItem {
     /// 自动完成成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 非付款执行任务或任务已不是开放状态时返回错误。
+    /// 单据审批或带审批节点执行引用、不是付款执行任务，或任务不是开放状态时返回错误。
     pub fn complete_when_payable_settled(&mut self, at: Instant) -> Result<()> {
         self.ensure_generic_mutation()?;
         if self.work_item_type != WorkItemType::SupplierPaymentExecution {
@@ -71,7 +71,7 @@ impl WorkItem {
     /// 自动完成成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 非销项开票执行任务或任务已不是开放状态时返回错误。
+    /// 单据审批或带审批节点执行引用、不是销项开票执行任务，或任务不是开放状态时返回错误。
     pub fn complete_when_fully_invoiced(&mut self, at: Instant) -> Result<()> {
         self.ensure_generic_mutation()?;
         if self.work_item_type != WorkItemType::SalesInvoiceExecution {
@@ -89,6 +89,13 @@ impl WorkItem {
     ///
     /// `started_at` 只在第一次调用时写入；后续调用仅推进 `last_activity_at`。
     ///
+    /// # 参数
+    /// * `actor_id` - 当前操作人。
+    /// * `at` - 活动时间。
+    ///
+    /// # 返回
+    /// 无返回值；首次写入 `started_at`，并更新 `last_activity_at`。
+    ///
     /// # 错误
     /// 任务非开放、没有个人责任或操作人不是当前责任人时返回错误。
     pub fn record_activity(&mut self, actor_id: &str, at: Instant) -> Result<()> {
@@ -103,8 +110,15 @@ impl WorkItem {
     /// 首次分派时间只在此前从未形成个人责任时写入；首次处理时间保持不变。
     /// 调用方必须在应用层重新校验目标任职、角色、数据范围与岗位分离。
     ///
+    /// # 参数
+    /// * `target_user_id` - 新的个人责任人。
+    /// * `at` - 转交时间。
+    ///
+    /// # 返回
+    /// 无返回值；更新当前责任人、来源和活动时间。首次形成个人责任时写入 `assigned_at`。
+    ///
     /// # 错误
-    /// 任务非开放或目标用户为空、超长时返回错误。
+    /// 单据审批或带审批节点执行引用、任务非开放，或目标用户为空、超长时返回错误。
     pub fn reassign(&mut self, target_user_id: impl Into<String>, at: Instant) -> Result<()> {
         self.ensure_generic_mutation()?;
         self.assign_to(target_user_id, AssignmentSource::AdminReassign, at)
@@ -115,8 +129,15 @@ impl WorkItem {
     /// 本方法只形成任务事实；调用方必须把正式领域事实、审批推进和本实体写入
     /// 放在同一事务。完成动作同时按 `if_null` 语义形成首次处理时间。
     ///
+    /// # 参数
+    /// * `completed_by` - 完成执行人，必须是当前责任人。
+    /// * `at` - 完成时间。
+    ///
+    /// # 返回
+    /// 无返回值；状态变为 `COMPLETED`，并在此前没有处理时间时写入 `started_at`。
+    ///
     /// # 错误
-    /// 任务非开放、没有个人责任或执行人不是当前责任人时返回错误。
+    /// 单据审批或带审批节点执行引用、供应商申请确认任务、执行人为空或超长、任务非开放，或执行人不是当前责任人时返回错误。
     pub fn complete_by_domain_command(&mut self, completed_by: impl Into<String>, at: Instant) -> Result<()> {
         self.ensure_generic_mutation()?;
         if self.work_item_type == WorkItemType::SupplierPortalReview {
@@ -129,8 +150,16 @@ impl WorkItem {
     ///
     /// 调用方必须先执行任务类型关闭策略与专门权限校验；关闭不会完成业务动作。
     ///
+    /// # 参数
+    /// * `closed_by` - 关闭操作人。
+    /// * `data` - 关闭原因。
+    /// * `at` - 关闭时间。
+    ///
+    /// # 返回
+    /// 无返回值；状态变为 `CLOSED` 并写入关闭人、原因和时间。
+    ///
     /// # 错误
-    /// 任务非开放、操作人或关闭原因为空、超长时返回错误。
+    /// 单据审批或带审批节点执行引用、供应商申请确认任务、任务非开放，或操作人、关闭原因为空或超长时返回错误。
     pub fn close(
         &mut self,
         closed_by: impl Into<String>,
@@ -184,24 +213,39 @@ impl WorkItem {
 
     /// 返回任务是否已进入不可逆终态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// `COMPLETED` 或 `CLOSED` 时返回 `true`。
+    /// `COMPLETED` 或 `CLOSED` 时返回 `true`，开放时返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_terminal(&self) -> bool {
         matches!(self.status, WorkItemStatus::Completed | WorkItemStatus::Closed)
     }
 
     /// 判断给定用户是否是开放任务的当前个人责任人。
     ///
+    /// # 参数
+    /// * `user_id` - 待比较的用户 ID。
+    ///
     /// # 返回
-    /// 任务开放且责任人与给定用户相同时返回 `true`。
+    /// 任务开放且责任人与给定用户相同时返回 `true`，否则返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_owned_by(&self, user_id: &str) -> bool {
         self.status == WorkItemStatus::Open && self.owner_user_id.as_deref() == Some(user_id)
     }
 
     /// 校验任务可以进入通用责任变更或关闭入口。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 非单据审批任务返回 `Ok(())`。
+    /// 非单据审批且没有审批节点执行引用时返回 `Ok(())`。
     ///
     /// # 错误
     /// 单据审批任务或带审批节点执行引用时返回固定禁止错误。
@@ -212,6 +256,17 @@ impl WorkItem {
         Ok(())
     }
 
+    /// 把开放任务标为完成，并要求执行人就是当前责任人。
+    ///
+    /// # 参数
+    /// * `completed_by` - 完成执行人。
+    /// * `at` - 完成时间。
+    ///
+    /// # 返回
+    /// 无返回值；状态变为 `COMPLETED`。此前没有处理时间时写入 `started_at`。
+    ///
+    /// # 错误
+    /// 执行人为空或超长、任务非开放，或执行人不是当前责任人时返回错误。
     pub(super) fn complete_open(&mut self, completed_by: impl Into<String>, at: Instant) -> Result<()> {
         let completed_by = normalize_required_text(
             completed_by.into(),
@@ -231,6 +286,16 @@ impl WorkItem {
         self.ensure_generic_responsibility_mutation()
     }
 
+    /// 拒绝非开放任务上的责任动作。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 任务为 `OPEN` 时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 任务不是开放状态时返回错误。
     pub(super) fn ensure_open(&self) -> Result<()> {
         if self.status == WorkItemStatus::Open {
             return Ok(());

@@ -1,4 +1,4 @@
-//! Consumer port for purchase-receipt document numbers used by movement views.
+//! 流水视图使用的采购入库单号消费端口。
 
 use std::collections::HashMap;
 
@@ -16,17 +16,20 @@ pub struct ReceiptNoFact {
     pub receipt_no: String,
 }
 
-/// Port inventory uses to read receipt numbers without depending on fulfillment.
+/// 库存用来读取入库单号、且不依赖履约领域的端口。
 #[async_trait]
 pub trait FulfillmentFactsPort: Send + Sync {
-    /// Return receipt numbers keyed by purchase-receipt id.
+    /// 按采购入库单标识返回单号。
     ///
-    /// # Parameters
-    /// * `ids` - purchase receipt ids
-    /// * `executor` - data-access executor chosen by the caller
+    /// # 参数
+    /// * `ids` - 采购入库单标识。
+    /// * `executor` - 调用方选择的数据访问执行器。
     ///
-    /// # Errors
-    /// Adapter query failures.
+    /// # 返回
+    /// 返回以入库单标识为键的单号事实映射。
+    ///
+    /// # 错误
+    /// 适配器查询失败时返回对应错误。
     async fn receipt_nos_by_ids(
         &self,
         ids: &[String],

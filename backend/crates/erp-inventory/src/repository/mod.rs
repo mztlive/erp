@@ -1,4 +1,4 @@
-//! Inventory MongoDB repositories and accessors.
+//! 库存 MongoDB 仓储与访问器。
 
 mod cancellation;
 pub mod extensions;

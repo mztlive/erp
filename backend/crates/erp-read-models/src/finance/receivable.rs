@@ -1,4 +1,4 @@
-//! Receivable account and customer receipt read models.
+//! 应收子账与客户回款读模型。
 
 mod account;
 mod approval_query;
@@ -7,17 +7,26 @@ mod customer_receipt;
 pub mod invoice_request;
 pub mod snapshot;
 
-/// Read-only receivable projections spanning finance, sales and workflow facts.
+/// 只读应收投影，跨越财务、销售与审批事实。
 ///
-/// All commands and transaction ownership stay with financial posting processes.
+/// 命令与事务所有权仍留在财务过账流程。
 pub struct ReceivableReadService {
     db: mongodb::Database,
 }
 
 impl ReceivableReadService {
-    /// Construct the read model for the supplied database.
+    /// 为给定数据库构造应收读模型。
     ///
-    /// Construction performs no reads or writes and cannot fail.
+    /// 构造不读不写。
+    ///
+    /// # 参数
+    /// * `db` - 目标数据库。
+    ///
+    /// # 返回
+    /// 返回应收读模型。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: mongodb::Database) -> Self {
         Self { db }
     }
@@ -27,6 +36,15 @@ impl ReceivableReadService {
     /// 发票列表关键词同时支持主体和实际关联的来源、收付款单据。
     ///
     /// 分页与金额视图继续复用财务服务，外域或财务读取失败整次返回错误。
+    ///
+    /// # 参数
+    /// * `params` - 发票列表查询参数。
+    ///
+    /// # 返回
+    /// 返回财务服务装配的发票分页视图。
+    ///
+    /// # 错误
+    /// 参数校验失败，或关键词、外域与财务发票读取失败时整次返回错误。
     pub async fn invoice_list(
         &self,
         params: &erp_finance::dto::receivable::InvoiceListParams,

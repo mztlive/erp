@@ -35,6 +35,15 @@ pub struct SalesReviewService {
 }
 impl SalesReviewService {
     /// 使用销售集合所在数据库创建单域服务。
+    ///
+    /// # 参数
+    /// * `db` - 销售集合所在数据库。
+    ///
+    /// # 返回
+    /// 返回只持有该数据库的服务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }

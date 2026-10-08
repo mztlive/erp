@@ -54,8 +54,14 @@ pub enum ServiceFulfillmentState {
 impl ServiceFulfillmentState {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -66,8 +72,14 @@ impl ServiceFulfillmentState {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "DRAFT",
@@ -78,24 +90,42 @@ impl ServiceFulfillmentState {
 
     /// 判断是否可编辑（仅草稿）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 草稿状态返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_editable(&self) -> bool {
         matches!(self, Self::Draft)
     }
 
     /// 判断当前状态能否执行首次确认。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 仅草稿状态返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_confirmable(self) -> bool {
         self.is_editable()
     }
 
     /// 判断当前状态能否作为客户验收履约事实。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 已确认状态返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_acceptance_eligible(self) -> bool {
         matches!(self, Self::Confirmed)
     }
@@ -103,6 +133,16 @@ impl ServiceFulfillmentState {
 
 impl DocumentState for ServiceFulfillmentState {
     /// 固定邻接矩阵（§7.5 定向链，`REVERSED` 为不可逆终态）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Draft` 只允许进入 `Confirmed`；`Confirmed` 只允许进入 `Reversed`；
+    /// `Reversed` 没有后继。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft => &[Self::Confirmed],
@@ -385,6 +425,9 @@ impl ServiceFulfillment {
     ///
     /// # 返回
     /// 返回 64 位小写十六进制指纹。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn recipient_snapshot_fingerprint(plain: &str, key: &[u8]) -> String {
         ElectronicDelivery::recipient_snapshot_fingerprint(plain, key)
     }
@@ -400,6 +443,9 @@ impl ServiceFulfillment {
     ///
     /// # 返回
     /// 返回 64 位小写十六进制指纹。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn service_location_fingerprint(plain: &str, key: &[u8]) -> String {
         hmac_sha256_hex(key, plain.as_bytes())
     }
@@ -500,6 +546,9 @@ impl ServiceFulfillment {
 
     /// 返回单据注册与无审批绑定重验使用的组织上下文。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回所属销售稳定明细主键。
     ///
@@ -514,6 +563,9 @@ impl ServiceFulfillment {
     }
 
     /// 校验记录可执行首次确认。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 草稿状态返回 `Ok(())`。
@@ -547,11 +599,14 @@ impl ServiceFulfillment {
 
     /// 校验确认前已登记图片凭证。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 凭证主键非空时返回 `Ok(())`。
     ///
     /// # 错误
-    /// 未上传图片凭证时返回错误。
+    /// 缺少图片凭证或凭证主键为空白时返回错误。
     pub fn ensure_evidence_present(&self) -> Result<()> {
         let Some(evidence_attachment_id) = self.evidence_attachment_id.as_ref() else {
             return Err(Error::from("线下服务履约必须上传图片凭证"));
@@ -569,7 +624,7 @@ impl ServiceFulfillment {
     /// 履约成功、已确认且销售明细一致时返回服务数量。
     ///
     /// # 错误
-    /// 履约失败、状态无效或销售明细关联不一致时返回错误。
+    /// 未成功确认（状态不是已确认，或结果不是 `Success`，含部分成功与失败）或销售明细不一致时返回错误。
     pub fn acceptance_quantity(&self, sales_order_line_id: &SalesOrderLineId) -> Result<Quantity> {
         if !self.is_acceptance_eligible() {
             return Err(Error::from("服务履约事实未成功确认"));
@@ -582,8 +637,14 @@ impl ServiceFulfillment {
 
     /// 判断服务履约事实是否可进入客户验收。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 仅已确认且履约结果成功时返回 `true`；失败记录只保留尝试事实。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_acceptance_eligible(&self) -> bool {
         self.status.is_acceptance_eligible() && self.result == FulfillmentResult::Success
     }
@@ -645,6 +706,9 @@ impl ServiceFulfillment {
     /// 确认前必须已写入图片凭证；现场地点和时间由 [`Self::apply_confirmation`]
     /// 在同一确认命令内写入。已确认记录再次确认保持幂等。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 迁移成功或已确认幂等时返回 `Ok(())`。
     ///
@@ -666,11 +730,14 @@ impl ServiceFulfillment {
     /// `REVERSED` 表示存在正式反向事实，不删除原记录（§4.5.1、§7.5）；
     /// 反向事实由 P3 形成。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 迁移成功返回 `Ok(())`。
+    /// 迁移成功返回 `Ok(())`。已冲正再次冲正按幂等成功。
     ///
     /// # 错误
-    /// 当前状态不允许迁移（草稿或已冲正）时返回错误。
+    /// 草稿不能冲正时返回错误。
     pub fn reverse(&mut self) -> Result<()> {
         ensure_transition(self.status, ServiceFulfillmentState::Reversed)?;
         self.status = ServiceFulfillmentState::Reversed;
@@ -679,8 +746,14 @@ impl ServiceFulfillment {
 
     /// 判断当前状态是否可编辑。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 草稿状态返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_editable(&self) -> bool {
         self.status.is_editable()
     }

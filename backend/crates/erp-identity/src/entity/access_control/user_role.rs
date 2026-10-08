@@ -51,7 +51,7 @@ impl UserRoleRevokeData {
     /// 返回说明为空的撤权数据。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn new(revoke_reason_code: impl Into<String>) -> Self {
         Self { revoke_reason_code: revoke_reason_code.into(), revoke_reason_text: None }
     }
@@ -65,7 +65,7 @@ impl UserRoleRevokeData {
     /// 返回更新后的撤权数据。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn with_revoke_reason_text(mut self, revoke_reason_text: impl Into<String>) -> Self {
         self.revoke_reason_text = Some(revoke_reason_text.into());
         self
@@ -191,7 +191,10 @@ impl UserRole {
     /// * `at` - 判断时刻
     ///
     /// # 返回
-    /// 未撤权、已到生效时间且未到期时返回 `true`。
+    /// 未撤权、不早于 `effective_from`，且没有终点或不超过 `effective_to` 时返回 `true`。终点时刻仍算有效。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_effective_at(&self, at: Instant) -> bool {
         if self.revoked_at.is_some() {
             return false;

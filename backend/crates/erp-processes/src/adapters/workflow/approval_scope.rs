@@ -37,6 +37,20 @@ impl WorkflowScopePredicate for Predicate {
     }
 }
 
+/// 按 `资源:动作` 解析工作流管理读取范围，不授予审批任务访问权。
+///
+/// # 参数
+/// * `db` - 身份与角色集合所在数据库。
+/// * `rbac` - 现有 RBAC 快照服务。
+/// * `actor` - 当前操作人。
+/// * `permission` - `资源:动作` 形式的权限码。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 无该动作权限时返回 `None`；否则返回带角色与谓词的范围。
+///
+/// # 错误
+/// 权限码缺少冒号、权限无法解析、策略快照或角色查询失败时返回对应错误。
 pub(super) async fn resolve(
     db: &Database,
     rbac: &SharedRbacService,

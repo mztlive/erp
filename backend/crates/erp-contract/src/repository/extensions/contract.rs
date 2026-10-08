@@ -22,20 +22,38 @@ pub trait ContractExt {
 
     /// 获取 `contract` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `ContractRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn contracts(&self) -> ContractRepository<'_>;
 
     /// 获取 `contract_revision` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `ContractRevisionRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn contract_revisions(&self) -> ContractRevisionRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `ContractDomainRepository` 实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn contract(&self) -> ContractDomainRepository<'_>;
 }
 

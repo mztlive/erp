@@ -113,8 +113,14 @@ impl Default for AuditEventFilter {
 impl QueryFilter for AuditEventFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "actor_id", self.actor_id.as_deref());
@@ -201,8 +207,14 @@ fn insert_keyword_clauses(filter: &mut Document, q: Option<&str>, keyword_action
 impl Pagination for AuditEventFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `(page, page_size)` 元组。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -214,7 +226,7 @@ pub trait AuditEventRepositoryExt {
     /// 分页检索审计事件（投影查询）。
     ///
     /// 只返回 [`AuditEventRow`] 所需的审计字段，不加载整文档；`actor_id` /
-    /// `action_type` 按字面量忽略大小写模糊匹配（复用 `repository::regex_filter`），
+    /// `action_type` 按字面量忽略大小写模糊匹配（复用 `insert_literal_regex_filter`），
     /// 对象/结果精确匹配覆盖 `idx_audit_events_object_created`。审计事件是
     /// 追加式留痕，本集合**不提供**软删除/恢复方法。
     ///

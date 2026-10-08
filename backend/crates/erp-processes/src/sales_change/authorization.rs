@@ -20,7 +20,7 @@ pub(super) struct SalesChangeCommandAccess {
 }
 
 impl SalesChangeProcess {
-    /// 构造写命令范围检查器；缺少身份装配时拒绝，不退回路由级授权。
+    /// 构造写命令范围检查器。授权源使用构造时注入的 RBAC，不退回路由级授权。
     ///
     /// # 参数
     /// * `actor` - 已认证操作人

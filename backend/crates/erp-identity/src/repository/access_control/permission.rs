@@ -80,8 +80,14 @@ impl Default for PermissionFilter {
 impl QueryFilter for PermissionFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "resource", self.resource.as_deref());
@@ -98,8 +104,14 @@ impl QueryFilter for PermissionFilter {
 impl Pagination for PermissionFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `(page, page_size)` 元组。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -111,7 +123,7 @@ pub trait PermissionRepositoryExt {
     /// 分页检索权限定义列表（投影查询，权限目录）。
     ///
     /// 只返回 [`PermissionRow`] 所需的目录字段，不加载整文档；`resource` 按
-    /// 字面量忽略大小写模糊匹配（复用 `repository::regex_filter`），停用/系统
+    /// 字面量忽略大小写模糊匹配（复用 `insert_literal_regex_filter`），停用/系统
     /// 标记精确匹配覆盖 `idx_permissions_disabled`。
     ///
     /// # 参数

@@ -129,8 +129,11 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// * `actor` - 已认证操作人
     /// * `query` - 已规范化查询
     ///
+    /// # 返回
+    /// 返回当前视图的一页实例摘要。
+    ///
     /// # 错误
-    /// view/status 非法或仓储失败时返回错误。
+    /// 查询合同不成立、读者无效或列表读取失败时返回错误。
     pub async fn instance_list(
         &self,
         actor: &AuditActor,
@@ -154,7 +157,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// 返回实例状态与当前执行投影。
     ///
     /// # 错误
-    /// 不存在或无权时不泄露存在性。
+    /// 不存在或无权时不泄露存在性；仓储失败时返回对应错误。
     pub async fn instance_detail(
         &self,
         actor: &AuditActor,
@@ -196,7 +199,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     /// 返回按 `execution_no` 升序的历史页，字段对齐审批 Tab。
     ///
     /// # 错误
-    /// 仓储失败时返回错误。
+    /// 读者无效或不存在、无权时不泄露存在性；仓储失败时返回对应错误。
     pub async fn instance_history(
         &self,
         actor: &AuditActor,
@@ -359,6 +362,15 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     }
 
     /// 加载实例、当前执行与唯一冻结快照，并校验运行主体三元组。
+    ///
+    /// # 参数
+    /// * `instance_id` - 审批实例 ID。
+    ///
+    /// # 返回
+    /// 返回实例、当前执行、冻结快照和单据类型都已对齐的读取主体。
+    ///
+    /// # 错误
+    /// 实例或快照缺失、类型与流程不一致、主体三元组不匹配或当前执行令牌不一致时隐藏为不存在；仓储失败时返回对应错误。
     pub(super) async fn load_runtime_read_subject(&self, instance_id: &str) -> Result<RuntimeReadSubject> {
         let instance_id = ApprovalProcessInstanceId::new(instance_id);
         let instance = self
@@ -398,6 +410,16 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
     }
 
     /// 发起人和精确当前责任人读取冻结审批资料；其他人必须具备类型管理及来源读权。
+    ///
+    /// # 参数
+    /// * `actor` - 当前读者。
+    /// * `subject` - 已加载的运行主体。
+    ///
+    /// # 返回
+    /// 发起人、当前或历史责任人，或管理读取成立时无返回值。
+    ///
+    /// # 错误
+    /// 管理资格不足时隐藏为不存在；责任链或权限读取失败时返回对应错误。
     pub(super) async fn ensure_ordinary_runtime_read(
         &self,
         actor: &AuditActor,
@@ -547,6 +569,16 @@ pub(super) fn instance_list_filter(
 }
 
 /// 从当前视图最后一行生成下一页游标。
+///
+/// # 参数
+/// * `view` - 仓储列表视图。
+/// * `row` - 当前页最后一行摘要。
+///
+/// # 返回
+/// `Started` 用启动时间，`Blocked` 用受阻时间或回退到更新时间，其余用更新时间；ID 取实例 ID。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn cursor_from_summary(
     view: ApprovalInstanceListView,
     row: &ApprovalInstanceSummary,
@@ -573,6 +605,16 @@ fn map_status_filter(
 }
 
 /// 由仓储摘要与启动快照映射列表行。
+///
+/// # 参数
+/// * `row` - 仓储实例摘要。
+/// * `snapshot` - 同实例的冻结快照；缺失或不匹配时只清空展示字段。
+///
+/// # 返回
+/// 返回带运行投影的列表行；快照不匹配时单据号和金额为空。
+///
+/// # 错误
+/// 主体种类与流程种类不能解析为正式单据类型时隐藏为不存在。
 pub(super) fn item_from_summary(
     row: ApprovalInstanceSummary,
     snapshot: Option<&ApprovalSubjectSnapshot>,
@@ -610,6 +652,18 @@ pub(super) fn item_from_summary(
 }
 
 /// 对聚合页行重新执行对象读取与授权矩阵，然后映射公开列表行。
+///
+/// # 参数
+/// * `row` - 已聚合的实例与可选快照。
+/// * `actor` - 当前读者。
+/// * `view` - 对外列表视图。
+/// * `type_scopes` - 本视图允许进入仓储的流程种类。
+///
+/// # 返回
+/// 授权通过后返回公开列表行。
+///
+/// # 错误
+/// `Mine`、类型不在范围内、流程种类不一致或主体无法解析时隐藏为不存在。
 pub(super) fn item_from_runtime_read_row(
     row: ApprovalRuntimeReadRow,
     actor: &AuditActor,
@@ -672,6 +726,18 @@ fn item_from_instance_id(
 }
 
 /// 由决定后的写入构造实例列表投影。
+///
+/// # 参数
+/// * `writes` - 决定计划。
+/// * `ended_execution_id` - 刚结束的执行 ID。
+/// * `reject_reason` - 驳回原因；通过时为空。
+/// * `now` - 状态变更时间。
+///
+/// # 返回
+/// 当前节点取最后一条新建执行；有驳回原因时记录刚结束的执行。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn list_projection_from_writes(
     writes: &PlannedWrites,
     ended_execution_id: &str,
@@ -692,6 +758,16 @@ pub(super) fn list_projection_from_writes(
 }
 
 /// 视图中的首个新建开放任务摘要。
+///
+/// # 参数
+/// * `writes` - 决定或恢复计划。
+/// * `new_task_ids` - 与新建任务意图对齐的任务 ID。
+///
+/// # 返回
+/// 首个意图是人工任务且已分配 ID 时返回摘要；否则返回 `None`。版本固定为 `"1"`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn first_open_task(writes: &PlannedWrites, new_task_ids: &[String]) -> Option<OpenTaskSummary> {
     let intent = writes.create_tasks.first()?;
     let task_id = new_task_ids.first()?;

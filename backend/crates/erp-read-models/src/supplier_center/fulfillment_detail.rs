@@ -32,6 +32,16 @@ impl SupplierFulfillmentDetailReadService {
     /// 使用同一数据库和组合根已配置的履约服务创建详情读取器。
     ///
     /// 履约服务负责现有单域订单读取规则；详情读取不调用供应商网关。
+    ///
+    /// # 参数
+    /// * `db` - 数据库。
+    /// * `fulfillment` - 组合根已配置的履约读取服务。
+    ///
+    /// # 返回
+    /// 返回详情读取器。构造不执行查询。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: mongodb::Database, fulfillment: SupplierFulfillmentService) -> Self {
         Self { db, fulfillment }
     }
@@ -39,14 +49,22 @@ impl SupplierFulfillmentDetailReadService {
     /// 查询供应商履约订单详情（订单 + 明细 + 状态历史 + 动作 + 退款事实）。
     ///
     /// # 参数
-    /// * `id` - 供应商子订单 ID
+    /// * `id` - 供应商子订单 ID。
+    /// * `params` - 详情参数；非空 `work_item_id` 才进入正式任务授权。
+    /// * `actor` - 已认证操作人，用于任务授权。
+    /// * `task_auth` - 正式任务读取授权端口。
     ///
     /// # 返回
     /// 返回详情视图。
     ///
     /// # 错误
-    /// * `NotFound` - 订单不存在
+    /// * `NotFound` - 订单不存在，或已授权的正式任务不存在
+    /// * `BusinessLogicError` - 正式任务与当前订单不匹配
     /// * `RepositoryError` - 数据库查询失败
+    /// 任务授权失败时返回对应错误。
+    ///
+    /// # Panics
+    /// `formal` 分支只在 `work_item_id` 已解析为非空时进入。`expect` 只守这个已建立的不变式。
     pub async fn supplier_fulfillment_order_detail(
         &self,
         id: &str,

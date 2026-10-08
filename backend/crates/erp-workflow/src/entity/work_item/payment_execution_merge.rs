@@ -74,44 +74,59 @@ impl PaymentExecutionMergeSet {
 
     /// 返回冻结的成员切片。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 构造时的成员顺序。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn members(&self) -> &[PaymentExecutionMergeMember] {
         &self.members
     }
 
     /// 返回集合内唯一供应商。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 首个成员的供应商 ID；构造时已保证全部相同。
+    /// 首个成员的供应商 ID；构造时已保证全部相同且集合非空。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
+    ///
+    /// # Panics
+    /// 成员为空时读取首项会越界；[`Self::try_new`] 拒绝空集。
     pub fn supplier_id(&self) -> &str {
         self.members[0].supplier_id.as_str()
     }
 
     /// 返回是否覆盖多条付款任务。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 成员多于 1 时为合并打款。
+    /// 成员多于 1 时返回 `true`，否则返回 `false`。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn is_merged(&self) -> bool {
         self.members.len() > 1
     }
 
     /// 返回全部应付子账 ID，顺序与成员一致。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 应付子账 ID 列表。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn payable_account_ids(&self) -> Vec<&str> {
         self.members.iter().map(|member| member.payable_account_id.as_str()).collect()
     }

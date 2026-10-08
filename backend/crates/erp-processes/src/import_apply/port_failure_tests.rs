@@ -1,4 +1,4 @@
-//! Characterizing tests: a write-port failure must not produce a completed confirmation/WorkItem.
+//! 特征测试：写入端口失败时不得产生已完成的确认或工作项。
 
 use async_trait::async_trait;
 use erp_core::common::time::Instant;
@@ -10,7 +10,7 @@ use persistence_core::{Executor, NoTransaction};
 
 use crate::{Error, Result};
 
-/// Minimal write port used to prove confirmation/WorkItem do not advance on failure.
+/// 用于证明确认与工作项在写入失败时不会前进的最小写入端口。
 #[async_trait]
 trait ConfirmationWritePort: Send + Sync {
     async fn persist_confirmation_and_work_item(
@@ -35,9 +35,9 @@ impl ConfirmationWritePort for FailingConfirmationWrite {
     }
 }
 
-/// Apply a domain decision locally, then persist through the port.
+/// 先在本地应用领域决定，再经端口持久化。
 ///
-/// On port failure the function returns Err and does not yield a completed result.
+/// 端口失败时返回错误，且不产生已完成结果。
 async fn complete_through_port(
     mut confirmation: LegacyImportConfirmation,
     port: &dyn ConfirmationWritePort,

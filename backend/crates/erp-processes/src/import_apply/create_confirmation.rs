@@ -296,6 +296,16 @@ fn validate_confirmation_creation_replay(
 }
 
 /// 将本次决策后的事实替换进内存矩阵。
+///
+/// # 参数
+/// * `confirmations` - 当前确认矩阵。
+/// * `decided` - 已决策的确认事实。
+///
+/// # 返回
+/// 找到相同 `id` 时就地替换；矩阵中不存在该事实时保持原样。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn replace_confirmation_in_matrix(
     confirmations: &mut [LegacyImportConfirmation],
     decided: &LegacyImportConfirmation,
@@ -312,6 +322,9 @@ pub(super) fn replace_confirmation_in_matrix(
 ///
 /// # 返回
 /// 返回 HTTP 契约使用的下一步枚举。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn confirmation_next_step(
     decision: ConfirmationMatrixDecision,
 ) -> ImportBusinessConfirmationNextStep {

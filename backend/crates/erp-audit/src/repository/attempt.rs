@@ -14,7 +14,7 @@ pub trait AuditAttemptExt {
     /// # 返回
     /// 返回当前数据库中的尝试记录仓储。
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     fn audit_attempts(&self) -> Repository<'_, AuditAttempt>;
 }
 impl AuditAttemptExt for Database {

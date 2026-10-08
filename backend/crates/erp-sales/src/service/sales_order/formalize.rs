@@ -1,4 +1,4 @@
-//! Sales-owned immutable formal revision construction and transaction-local writes.
+//! 销售本域不可变正式版本构造，以及调用方事务内的写入。
 use erp_core::common::time::Instant;
 use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId};
 use id_generator::next_id;
@@ -14,6 +14,14 @@ use crate::repository::SalesOrderExt;
 use crate::repository::prelude::*;
 use crate::{Error, Result};
 /// 读取该销售单最新提交及其明细。
+///
+/// # 参数
+/// * `db` - 销售集合所在数据库。
+/// * `sales_order_id` - 销售单身份。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 返回最新提交及其明细。
 ///
 /// # 错误
 /// 无提交或仓储失败时返回错误。
@@ -34,7 +42,7 @@ pub async fn load_latest_submission(
     Ok((submission, lines))
 }
 
-/// Allocate revision and subtype identities in frozen submission-line order before building the aggregate.
+/// 在构造聚合之前，按冻结提交行顺序分配正式版本头、公共行和子类型身份。
 fn allocate_formal_revision_identities(lines: &[SalesOrderSubmissionLine]) -> FormalRevisionIdentities {
     FormalRevisionIdentities::new(
         SalesOrderRevisionId::new(next_id()),
@@ -60,6 +68,17 @@ fn allocate_formal_revision_identities(lines: &[SalesOrderSubmissionLine]) -> Fo
 
 /// 按业务性质构造正式版本。
 ///
+/// 版本号固定为 1，来源固定为 ERP 审批。
+///
+/// # 参数
+/// * `order` - 待形式化的销售单。
+/// * `submission` - 用于构造版本的提交。
+/// * `submission_lines` - 冻结提交行，身份按该顺序分配。
+/// * `effective_at` - 生效时间。
+///
+/// # 返回
+/// 返回尚未持久化的正式版本聚合。
+///
 /// # 错误
 /// 行类型与业务性质不一致或字段缺失时返回错误。
 pub fn build_revision_for_order(
@@ -83,9 +102,20 @@ pub fn build_revision_for_order(
     .map_err(Error::Logic)
 }
 
-/// Apply approval to the stable order and immutable submission after the caller prepared other-domain tasks.
+/// 调用方完成外域准备后，按原顺序审批销售单、挂上修订，再审批不可变提交。
 ///
-/// The original order approval, revision attachment and submission approval order is retained.
+/// # 参数
+/// * `order` - 待审批的稳定销售单。
+/// * `submission` - 待审批的不可变提交。
+/// * `aggregate` - 已构造的正式版本，只读取其修订身份。
+/// * `now` - 审批时间。
+/// * `actor_id` - 审批人。
+///
+/// # 返回
+/// 内存中的销售单和提交都完成审批时返回 `Ok(())`，不写库。
+///
+/// # 错误
+/// 销售单或提交的审批动作被拒绝时返回对应错误。
 pub fn approve_submission(
     order: &mut SalesOrder,
     submission: &mut SalesOrderSubmission,
@@ -99,7 +129,19 @@ pub fn approve_submission(
     Ok(())
 }
 
-/// Persist the stable order and formal revision before the caller synchronizes procurement tasks.
+/// 在调用方同步采购任务之前，写入稳定销售单和正式版本。
+///
+/// # 参数
+/// * `db` - 销售集合所在数据库。
+/// * `order` - 已挂上修订的销售单。
+/// * `aggregate` - 正式版本聚合。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 形式化写入成功时返回 `Ok(())`。
+///
+/// # 错误
+/// 仓储或形式化写入失败时返回对应错误。
 pub async fn persist_revision(
     db: &Database,
     order: &mut SalesOrder,
@@ -119,7 +161,18 @@ pub async fn persist_revision(
         .await?)
 }
 
-/// Persist the approved submission after the caller's procurement task synchronization step.
+/// 在调用方同步采购任务之后，写回已审批的提交。
+///
+/// # 参数
+/// * `db` - 销售集合所在数据库。
+/// * `submission` - 已审批的提交。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 更新成功时返回 `Ok(())`。
+///
+/// # 错误
+/// 仓储更新失败时返回对应错误。
 pub async fn persist_submission(
     db: &Database,
     submission: &mut SalesOrderSubmission,

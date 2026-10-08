@@ -234,7 +234,8 @@ impl SalesOrderWorkingCopy {
     /// 返回新建的工作副本实体（`Editing`）。
     ///
     /// # 错误
-    /// 必填为空、超长、关联不一致、金额三元组不成立或行清单非法时返回错误。
+    /// 草稿版本为零、必填为空、超长、编辑目的与变更单不匹配、卡券类目与履约期限只提供其一、
+    /// 合同与合同版本只提供其一、金额三元组不成立或行清单非法时返回错误。
     pub fn new(
         id: SalesOrderWorkingCopyId,
         data: SalesOrderWorkingCopyData,
@@ -308,7 +309,7 @@ impl SalesOrderWorkingCopy {
         })
     }
 
-    /// 更新草稿表头（仅 `Editing` 状态允许）。
+    /// 更新草稿表头。
     ///
     /// 复用 `new` 的规范化与关联一致性校验；`sales_order_id`/`working_purpose`/
     /// `sales_change_order_id`/`base_revision_id`/`business_type` 是身份与基准字段，
@@ -322,7 +323,9 @@ impl SalesOrderWorkingCopy {
     /// 更新成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 状态非 `Editing`、必填为空、超长或金额三元组不成立时返回错误。
+    /// 当前状态不能迁到 `Editing`（已提交或已放弃）时返回 [`Error::InvalidStateTransition`]；
+    /// `Editing` 与 `Conflict` 可通过该检查。必填为空、超长、合同与合同版本只提供其一、
+    /// 卡券类目与履约期限只提供其一，或金额三元组不成立时返回错误。
     pub fn update(
         &mut self,
         update: SalesOrderWorkingCopyUpdate,
@@ -405,6 +408,9 @@ impl SalesOrderWorkingCopy {
     ///
     /// # 返回
     /// 当前版本与期望版本一致时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn matches_version(&self, expected_version: u64) -> bool {
         self.base.version == expected_version
     }
@@ -418,6 +424,9 @@ impl SalesOrderWorkingCopy {
     ///
     /// # 返回
     /// 三项关系与工作副本冻结关系完全一致时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn matches_contract_context(
         &self,
         contract_id: &ContractId,
@@ -457,13 +466,22 @@ impl SalesOrderWorkingCopy {
 
     /// 判断工作副本是否已经提交锁定。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为 `Submitted` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_submitted(&self) -> bool {
         self.stable.status == WorkingCopyStatus::Submitted
     }
 
     /// 为提交锁定工作副本，已提交副本保持不变。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 本次从编辑态迁移到已提交时返回 `true`；原本已提交时返回 `false`。
@@ -488,7 +506,8 @@ impl SalesOrderWorkingCopy {
     /// 保存成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 状态非 `Editing`，或指纹/编辑人为空、超长时返回错误。
+    /// 当前状态不能迁到 `Editing`（已提交或已放弃）时返回 [`Error::InvalidStateTransition`]；
+    /// `Editing` 与 `Conflict` 可通过该检查。指纹或编辑人为空、超长时返回错误。
     pub fn save_draft(
         &mut self,
         content_hash: impl Into<String>,
@@ -511,11 +530,14 @@ impl SalesOrderWorkingCopy {
 
     /// 提交草稿（`Editing → Submitted`，提交事务锁定草稿后标记）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 迁移成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 非编辑中状态时返回 [`Error::InvalidStateTransition`]。
+    /// 当前状态不能迁到 `Submitted` 时返回 [`Error::InvalidStateTransition`]。已是 `Submitted` 时幂等成功。
     pub fn submit(&mut self) -> Result<()> {
         ensure_transition(self.stable.status, WorkingCopyStatus::Submitted)?;
         self.stable.status = WorkingCopyStatus::Submitted;
@@ -524,11 +546,14 @@ impl SalesOrderWorkingCopy {
 
     /// 放弃草稿（`Editing → Abandoned`）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 迁移成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 非编辑中状态时返回 [`Error::InvalidStateTransition`]。
+    /// 当前状态不能迁到 `Abandoned` 时返回 [`Error::InvalidStateTransition`]。已是 `Abandoned` 时幂等成功。
     pub fn abandon(&mut self) -> Result<()> {
         ensure_transition(self.stable.status, WorkingCopyStatus::Abandoned)?;
         self.stable.status = WorkingCopyStatus::Abandoned;
@@ -537,11 +562,14 @@ impl SalesOrderWorkingCopy {
 
     /// 标记冲突（`Editing → Conflict`；基础资料变化不静默改写已保存草稿，§6.5）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 迁移成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 非编辑中状态时返回 [`Error::InvalidStateTransition`]。
+    /// 当前状态不能迁到 `Conflict` 时返回 [`Error::InvalidStateTransition`]。已是 `Conflict` 时幂等成功。
     pub fn mark_conflict(&mut self) -> Result<()> {
         ensure_transition(self.stable.status, WorkingCopyStatus::Conflict)?;
         self.stable.status = WorkingCopyStatus::Conflict;
@@ -550,11 +578,14 @@ impl SalesOrderWorkingCopy {
 
     /// 解决冲突回到编辑中（`Conflict → Editing`）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 迁移成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 非冲突状态时返回 [`Error::InvalidStateTransition`]。
+    /// 当前状态不能迁到 `Editing` 时返回 [`Error::InvalidStateTransition`]。已是 `Editing` 时幂等成功。
     pub fn resolve_conflict(&mut self) -> Result<()> {
         ensure_transition(self.stable.status, WorkingCopyStatus::Editing)?;
         self.stable.status = WorkingCopyStatus::Editing;

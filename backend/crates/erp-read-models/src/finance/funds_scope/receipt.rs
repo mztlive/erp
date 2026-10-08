@@ -21,6 +21,15 @@ use crate::finance::search::keyword_ids;
 use crate::{Error, Result};
 
 /// 回款分配实体转响应视图；与现有回款投影保持同一字段口径。
+///
+/// # 参数
+/// * `item` - 回款分配实体。
+///
+/// # 返回
+/// 复制序号、动作、分录、金额与冲正引用的响应视图。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn receipt_allocation_view(
     item: &erp_finance::entity::receivable::ReceiptAllocation,
 ) -> erp_finance::dto::receivable::ReceiptAllocationView {
@@ -35,6 +44,17 @@ pub(super) fn receipt_allocation_view(
     }
 }
 /// 回款行关联元组；缺失订单的分配保留未分配归属，不丢份额。
+///
+/// # 参数
+/// * `row` - 客户回款行，用于元组中的单据身份与版本。
+/// * `links` - 该回款的核销关联。
+/// * `facts` - 销售来源责任。
+///
+/// # 返回
+/// 按来源去重后的责任元组；来源事实缺失时来源、负责人和组织为空。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn receipt_tuples(
     row: &CustomerReceiptRow,
     links: &[ReceiptLink],
@@ -62,6 +82,16 @@ pub(super) fn receipt_tuples(
 }
 
 /// 授权集合内的归属订单；`None` 表示公司范围不限制关联单。
+///
+/// # 参数
+/// * `tuples` - 关联责任元组。
+/// * `allowed` - 允许的来源主键；`None` 表示不限制。
+///
+/// # 返回
+/// 去重后的来源主键。`allowed` 为 `Some` 时只保留其中的来源。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn matched_orders(tuples: &[OrderTuple], allowed: &Option<BTreeSet<String>>) -> Vec<String> {
     tuples
         .iter()
@@ -75,6 +105,18 @@ pub(super) fn matched_orders(tuples: &[OrderTuple], allowed: &Option<BTreeSet<St
 }
 
 /// 归属筛选逐份额收窄，不能仅以单据内另一条关联命中作为份额依据。
+///
+/// # 参数
+/// * `tuples` - 关联责任元组。
+/// * `matched` - 已通过授权集合的来源主键。
+/// * `owners` - 负责人精确条件；`None` 表示不筛选。
+/// * `orgs` - 组织精确条件；`None` 表示不筛选。
+///
+/// # 返回
+/// 同时满足已提供负责人与组织条件的来源主键。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn filter_matched_orders(
     tuples: &[OrderTuple],
     matched: Vec<String>,
@@ -94,6 +136,15 @@ pub(super) fn filter_matched_orders(
 }
 
 /// 整单口径求和；仅整单读取资格持有者可见的结果使用，不得用于部分授权。
+///
+/// # 参数
+/// * `links` - 回款核销关联，金额已带正反方向。
+///
+/// # 返回
+/// 全部关联方向金额之和。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn sum_all(links: &[ReceiptLink]) -> Amount {
     let mut total = zero_amount();
     for link in links {
@@ -116,6 +167,16 @@ pub(super) fn summary_inputs(
 }
 
 /// 匹配份额求和；方向已在装载时按正反动作记入金额符号，不做差额推导。
+///
+/// # 参数
+/// * `links` - 回款核销关联。
+/// * `matched` - 获授权来源主键。
+///
+/// # 返回
+/// 来源命中 `matched` 的方向金额之和。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn sum_signed(links: &[ReceiptLink], matched: &[String]) -> Amount {
     let mut total = zero_amount();
     for link in links {
@@ -129,6 +190,16 @@ pub(super) fn sum_signed(links: &[ReceiptLink], matched: &[String]) -> Amount {
 
 impl FundsAccess {
     /// 分页查询客户回款范围行：负责销售与登记/核销经办人分别查询。
+    ///
+    /// # 参数
+    /// * `params` - 客户回款列表请求。
+    /// * `actor` - 已认证操作人。
+    ///
+    /// # 返回
+    /// 最终授权回款页及同口径汇总。
+    ///
+    /// # 错误
+    /// 参数校验、范围版本、授权或读取失败时返回对应错误。
     pub async fn customer_receipt_list_scoped(
         &self,
         params: &erp_finance::dto::receivable::CustomerReceiptListParams,
@@ -143,6 +214,16 @@ impl FundsAccess {
     }
 
     /// 独立详情重新解析回款详情动作；不可见与不存在统一为 NotFound。
+    ///
+    /// # 参数
+    /// * `id` - 客户回款主键。
+    /// * `actor` - 已认证操作人。
+    ///
+    /// # 返回
+    /// 当前详情动作允许的回款行。
+    ///
+    /// # 错误
+    /// 授权或读取失败时返回对应错误；回款不存在、来源缺失或没有任何可见份额时返回 `NotFound`。
     pub async fn customer_receipt_detail_scoped(
         &self,
         id: &str,
@@ -161,6 +242,18 @@ impl FundsAccess {
     }
 
     /// 返回前重读授权及候选事实版本；变化时拒绝交付原结果。
+    ///
+    /// # 参数
+    /// * `params` - 原始列表请求。
+    /// * `query` - 已规范化的列表查询。
+    /// * `actor` - 已认证操作人。
+    /// * `expected` - 调用方回传的范围版本；首页可为 `None`。
+    ///
+    /// # 返回
+    /// 两次版本一致时返回第一次回款页。
+    ///
+    /// # 错误
+    /// 首次版本失配或复核版本变化时返回范围变化冲突错误；授权或读取失败时返回对应错误。
     pub(super) async fn checked_customer_receipts(
         &self,
         params: &erp_finance::dto::receivable::CustomerReceiptListParams,
@@ -177,6 +270,17 @@ impl FundsAccess {
     }
 
     /// 身份和业务事实均使用调用方同一事务，不缓存权限解析结果。
+    ///
+    /// # 参数
+    /// * `params` - 原始列表请求。
+    /// * `query` - 已规范化的列表查询。
+    /// * `actor` - 已认证操作人。
+    ///
+    /// # 返回
+    /// 同一事务内形成的授权回款页。
+    ///
+    /// # 错误
+    /// 事务、授权或读取失败时返回对应错误。
     pub(super) async fn snapshot_customer_receipts(
         &self,
         params: &erp_finance::dto::receivable::CustomerReceiptListParams,
@@ -208,6 +312,18 @@ impl FundsAccess {
     }
 
     /// 最终授权份额和业务条件在数据库形成后分页，页外只装载窄汇总及版本。
+    ///
+    /// # 参数
+    /// * `params` - 原始列表请求，用于比对范围版本。
+    /// * `query` - 已规范化的列表查询。
+    /// * `actor` - 已认证操作人。
+    /// * `executor` - 调用方事务。
+    ///
+    /// # 返回
+    /// 无可见范围时返回空页；否则返回数据库分页、计数与同口径汇总。
+    ///
+    /// # 错误
+    /// 授权、聚合、计数超限、版本不一致或当前页裁剪不一致时返回对应错误。
     pub(super) async fn load_customer_receipts(
         &self,
         params: &erp_finance::dto::receivable::CustomerReceiptListParams,
@@ -342,6 +458,16 @@ impl FundsAccess {
     }
 
     /// 回款关联筛选条件：负责人、经办人与组织分别精确匹配，同字段 OR、异字段 AND。
+    ///
+    /// # 参数
+    /// * `query` - 已规范化的回款列表查询。
+    /// * `executor` - 调用方事务。
+    ///
+    /// # 返回
+    /// 销售负责人、经办人与展开组织的精确条件。
+    ///
+    /// # 错误
+    /// 组织展开失败时返回对应错误。
     pub(super) async fn receipt_condition(
         &self,
         query: &erp_finance::dto::receivable::CustomerReceiptListQuery,
@@ -434,14 +560,16 @@ impl FundsAccess {
     /// 单行裁剪；整单金额、登记信息与编辑版本仅整单资格返回。
     ///
     /// # 参数
-    /// `row` 为回款事实，`links` 为核销来源，`matched` 为获授权来源；
-    /// `whole` 必须由现有整单读取资格判定取得。
+    /// * `row` - 客户回款行。
+    /// * `links` - 该回款的核销关联。
+    /// * `matched` - 获授权来源主键。
+    /// * `whole` - 是否具备整单读取资格。
     ///
     /// # 返回
-    /// 部分授权只保留获授权份额，金额为 null 且不返回整单登记信息。
+    /// 部分授权只保留获授权份额，整单金额为 `None`，且不返回结算主体、客户、银行引用和版本。
     ///
     /// # 错误
-    /// 本方法不产生业务错误。
+    /// 不返回错误。
     pub(super) fn cut_receipt_row(
         row: &CustomerReceiptRow,
         links: &[ReceiptLink],
@@ -479,6 +607,17 @@ impl FundsAccess {
     }
 
     /// 回款详情同一事务内解析、取数与裁剪；版本绑定关联单据。
+    ///
+    /// # 参数
+    /// * `id` - 客户回款主键。
+    /// * `actor` - 已认证操作人。
+    /// * `executor` - 调用方事务。
+    ///
+    /// # 返回
+    /// 当前详情动作允许的回款行及范围版本。
+    ///
+    /// # 错误
+    /// 授权或读取失败时返回对应错误；回款不存在、来源缺失或没有任何可见份额时返回 `NotFound`。
     pub(super) async fn load_customer_receipt_detail(
         &self,
         id: &str,

@@ -45,7 +45,12 @@ pub async fn require_supplier_portal_task_read(
 /// 重验当前内部账号对精确供应商申请的商品与供给业务确认资格。
 ///
 /// # 参数
-/// 当前授权 Port、具体账号、注册对象种类、精确申请及调用方执行器。
+/// * `auth` - 已装配的工作流授权 Port
+/// * `actor_id` - 当前内部确认人账号 ID
+/// * `kind` - 固定任务关系中的对象种类
+/// * `object_id` - 权威申请主键
+/// * `executor` - 调用方执行器
+///
 /// # 返回
 /// 供应商申请业务动作和责任范围全部满足时成功；其他对象沿原授权规则执行。
 /// # 错误
@@ -74,8 +79,14 @@ pub(super) async fn require_supplier_portal_task_review(
 
 /// 隐藏不可见对象的存在性，保留配置、版本及基础设施错误供调用方处理。
 ///
+/// # 参数
+/// * `error` - 对象读取或参与校验返回的错误
+///
 /// # 返回
 /// 读取拒绝统一为 Forbidden，其他错误原样返回，不得伪装成候选不合格。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn task_read_error(error: Error) -> Error {
     match error {
         Error::Forbidden(_) | Error::NotFound(_) => {

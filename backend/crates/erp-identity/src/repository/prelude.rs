@@ -1,4 +1,4 @@
-//! Extension traits for collection repositories.
+//! 集合仓储的扩展 trait。
 
 pub use super::access_control::{
     AuditEventRepositoryExt, DataScopeRepositoryExt, PermissionRepositoryExt, UserRoleRepositoryExt,

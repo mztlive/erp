@@ -22,6 +22,18 @@ pub(in crate::supplier_portal) struct PurchaseSources {
 }
 
 /// 批量从当前指针读取选源，禁止按供应商与 SKU 构造关系。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `ids` - 采购单身份。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 返回命中采购单的当前负责人和选源。未命中的身份不出现。已完成或已作废的单据不填选源。
+///
+/// # 错误
+/// 采购单超过一千个或选源行超过一万行时返回 `ValidationError`。
+/// 未完成单据缺少责任人或仓储读取失败时返回对应错误。
 pub(in crate::supplier_portal) async fn current_purchase_sources(
     db: &Database,
     ids: &[PurchaseOrderId],

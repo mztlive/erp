@@ -317,8 +317,14 @@ const WORK_ITEM_BRIEF_RELATIONS: &[WorkItemBriefRelation] = &[
 impl WorkItemType {
     /// 返回面向用户的任务类型标签。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回稳定中文展示名。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::ProcurementOrderCreation => "供给分配",
@@ -346,8 +352,14 @@ impl WorkItemType {
 
     /// 返回任务类型的持久化代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SCREAMING_SNAKE_CASE` 稳定代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ProcurementOrderCreation => "PROCUREMENT_ORDER_CREATION",
@@ -380,6 +392,9 @@ impl WorkItemType {
     ///
     /// # 返回
     /// 已注册组合返回对象种类与读取权限；未注册组合返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn brief_relation(self, business_object_type: &str) -> Option<&'static WorkItemBriefRelation> {
         WORK_ITEM_BRIEF_RELATIONS.iter().find(|relation| {
             relation.work_item_type == self && relation.business_object_type == business_object_type
@@ -388,16 +403,28 @@ impl WorkItemType {
 
     /// 返回全部固定工作项简报关系。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回只读静态关系表，供授权查询形成安全对象形状。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn registered_brief_relations() -> &'static [WorkItemBriefRelation] {
         WORK_ITEM_BRIEF_RELATIONS
     }
 
     /// 返回当前任务类型的岗位分离策略。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回审批历史、领域参与人、角色参与或失败关闭策略。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn assignment_separation_policy(self) -> WorkItemAssignmentSeparationPolicy {
         match self {
             Self::DocumentApproval => WorkItemAssignmentSeparationPolicy::ApprovalHistory,
@@ -429,40 +456,70 @@ impl WorkItemType {
 
     /// 判断任务是否为具体履约操作。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 入库、发货、电子交付或服务履约任务返回 `true`。
+    /// `FulfillmentOperation` 返回 `true`，其余类型返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_fulfillment_operation(self) -> bool {
         self == Self::FulfillmentOperation
     }
 
     /// 判断任务是否为销售客户验收登记。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// W06 客户验收登记任务返回 `true`。
+    /// `CustomerAcceptanceRegistration` 返回 `true`，其余类型返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_customer_acceptance_registration(self) -> bool {
         self == Self::CustomerAcceptanceRegistration
     }
 
     /// 判断任务是否为供应商付款执行。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 已确认应付的付款执行任务返回 `true`。
+    /// `SupplierPaymentExecution` 返回 `true`，其余类型返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_supplier_payment_execution(self) -> bool {
         self == Self::SupplierPaymentExecution
     }
 
     /// 判断任务是否为销项开票执行。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 应收子账开票执行任务返回 `true`。
+    /// `SalesInvoiceExecution` 返回 `true`，其余类型返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_sales_invoice_execution(self) -> bool {
         self == Self::SalesInvoiceExecution
     }
 
     /// 判断任务是否为通用单据审批。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 单据审批任务返回 `true`。
+    /// `DocumentApproval` 返回 `true`，其余类型返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_document_approval(self) -> bool {
         self == Self::DocumentApproval
     }
@@ -474,7 +531,10 @@ impl WorkItemType {
     /// * `has_approval_step` - 是否绑定审批节点执行
     ///
     /// # 返回
-    /// 仅非审批的集成异常或对账差异任务返回 `true`。
+    /// 未绑定审批节点，且类型为集成结果未知或业务异常、对象为 `integration_error_task` 或 `reconciliation_difference` 时返回 `true`；否则返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_w29_closable(self, business_object_type: &str, has_approval_step: bool) -> bool {
         !has_approval_step
             && matches!(
@@ -503,8 +563,14 @@ pub enum WorkItemStatus {
 impl WorkItemStatus {
     /// 返回面向用户的状态标签。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回稳定中文展示名。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Open => "待处理",
@@ -515,8 +581,14 @@ impl WorkItemStatus {
 
     /// 返回状态的持久化代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `OPEN`、`COMPLETED` 或 `CLOSED`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Open => "OPEN",
@@ -550,8 +622,14 @@ pub enum AssignmentSource {
 impl AssignmentSource {
     /// 返回责任来源的持久化代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回已注册的稳定来源代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::SystemRule => "SYSTEM_RULE",
@@ -578,8 +656,14 @@ pub enum WorkItemPriority {
 impl WorkItemPriority {
     /// 返回面向用户的优先级标签。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回稳定中文展示名。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Urgent => "紧急",
@@ -591,8 +675,14 @@ impl WorkItemPriority {
 
     /// 返回优先级的持久化代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回小写稳定代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Urgent => "urgent",

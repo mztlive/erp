@@ -23,10 +23,18 @@ pub(super) struct SalesCommandEvent {
 
 impl SalesCommandEvent {
     /// 校验静态动作与身份，提前固定安全历史快照。
+    ///
     /// # 参数
-    /// 稳定命令 ID、操作人、原键、请求摘要、强类型结果和业务编号。
+    /// * `id` - 稳定命令 ID。
+    /// * `actor` - 操作人。
+    /// * `key` - 原幂等键。
+    /// * `fingerprint` - 请求摘要。
+    /// * `result` - 强类型命令结果。
+    /// * `number` - 业务编号。
+    ///
     /// # 返回
     /// 返回同事务执行包装的输入。
+    ///
     /// # 错误
     /// 动作身份或结果无效时拒绝构造。
     pub(super) fn new(
@@ -120,10 +128,17 @@ impl AuditedCommand for RecordCommand<'_> {
 /// 在调用方执行器内读取并验证完整命令身份，不将删除的回执当作未执行。
 ///
 /// # 参数
-/// 稳定命令 ID、认证账号、固定动作、原销售单作用域；`fingerprint` 同时携带
-/// 规范化请求指纹和从本次请求形成的幂等键摘要。
+/// * `db` - 业务数据库。
+/// * `command_id` - 稳定命令 ID。
+/// * `actor_id` - 认证账号。
+/// * `action` - 固定动作。
+/// * `scope_id` - 原销售单作用域；无作用域时为 `None`。
+/// * `fingerprint` - 规范化请求指纹，以及从本次请求形成的幂等键摘要。
+/// * `executor` - 调用方执行器。
+///
 /// # 返回
-/// 命中返回已验证的强类型回执，没有回执返回 None。
+/// 命中返回已验证的强类型回执，没有回执返回 `None`。
+///
 /// # 错误
 /// 异载荷、身份损坏或读取失败时停止回放。
 pub(super) async fn load_command_receipt(
@@ -151,6 +166,21 @@ pub(super) async fn load_command_receipt(
 }
 
 /// 同执行器恢复精确提交快照和原行，查证后重验当前提交资格。
+///
+/// # 参数
+/// * `db` - 业务数据库。
+/// * `command_id` - 稳定命令 ID。
+/// * `fingerprint` - 规范化请求指纹与幂等键摘要。
+/// * `sales_order_id` - 原销售单。
+/// * `actor_id` - 原提交人。
+/// * `access` - 当前提交资格检查器。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 回执命中且快照一致时返回原提交视图；没有回执时返回 `None`。
+///
+/// # 错误
+/// 回执种类无效、快照缺失或不一致、身份不匹配，或当前提交资格不足时返回错误。
 pub(super) async fn replay_submission_with_executor(
     db: &Database,
     command_id: &str,
@@ -239,6 +269,16 @@ fn validate_command_replay(
 }
 
 /// 只读查证命中才返回原结果；查证失败不得覆盖首次提交未知分类。
+///
+/// # 参数
+/// * `original` - 首次失败或未知提交错误。
+/// * `recovered` - 只读查证结果；`Ok(None)` 表示未命中。
+///
+/// # 返回
+/// 查证命中时返回原结果。
+///
+/// # 错误
+/// 未命中时保留 `original`；`original` 为未知提交且查证失败时仍保留 `original`；其他查证错误原样返回。
 pub(super) fn finish_receipt_recovery<T>(original: Error, recovered: Result<Option<T>>) -> Result<T> {
     crate::audit::recover_command(original, recovered)
 }

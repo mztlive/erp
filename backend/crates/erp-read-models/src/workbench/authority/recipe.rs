@@ -55,6 +55,19 @@ const ORDER: [Step; 21] = [
 ];
 #[async_trait]
 pub(super) trait CommandFactReads: Send + Sync {
+    /// 按固定步骤读取一类对象事实并写入 `facts`。
+    ///
+    /// # 参数
+    /// * `step` - 当前调度步骤。
+    /// * `keys` - 本批对象键；空键仍执行该步。
+    /// * `facts` - 累积写入的权威事实。
+    /// * `executor` - 调用方执行器，各步复用同一个。
+    ///
+    /// # 返回
+    /// 该步读取完成。
+    ///
+    /// # 错误
+    /// 该步仓储或映射失败时返回对应错误；调用方应停止后续步骤。
     async fn read(
         &self,
         step: Step,
@@ -63,6 +76,18 @@ pub(super) trait CommandFactReads: Send + Sync {
         executor: &mut dyn Executor,
     ) -> Result<()>;
 }
+/// 按固定顺序执行全部命令读取步骤。
+///
+/// # 参数
+/// * `port` - 各步的读取实现。
+/// * `keys` - 本批对象键；空键仍执行每一步。
+/// * `executor` - 全程复用的执行器。
+///
+/// # 返回
+/// 返回各步累积的权威事实表。
+///
+/// # 错误
+/// 任一步失败立即返回该错误，不再执行后续步骤。
 pub(super) async fn load(
     port: &impl CommandFactReads,
     keys: &HashSet<ObjectFactKey>,

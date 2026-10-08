@@ -11,6 +11,17 @@ pub const PROFIT_LOSS_ALLOCATION_LIMIT: usize = 100_000;
 #[allow(async_fn_in_trait)]
 pub trait CostAllocationProfitLossExt {
     /// 返回目标订单的分配，使用已有销售单索引；空范围不访问数据库。
+    ///
+    /// # 参数
+    /// * `ids` - 销售单身份集合。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回未删除且 `sales_order_id` 命中的分配，最多 [`PROFIT_LOSS_ALLOCATION_LIMIT`] 加一条；
+    /// `ids` 为空时不访问数据库并返回空列表。
+    ///
+    /// # 错误
+    /// 数据库读取失败时返回仓储错误。
     async fn profit_loss_allocations(
         &self,
         ids: &[String],
@@ -41,6 +52,16 @@ impl CostAllocationProfitLossExt for persistence_core::Repository<'_, CostAlloca
 #[allow(async_fn_in_trait)]
 pub trait CostEntryProfitLossExt {
     /// 按分配引用读取完整成本事实；调用方校验缺失事实，禁止视为零成本。
+    ///
+    /// # 参数
+    /// * `ids` - 成本事实身份集合。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回未删除且 `id` 命中的成本事实；`ids` 为空时不访问数据库并返回空列表。
+    ///
+    /// # 错误
+    /// 数据库读取失败时返回仓储错误。
     async fn profit_loss_entries(
         &self,
         ids: &[String],

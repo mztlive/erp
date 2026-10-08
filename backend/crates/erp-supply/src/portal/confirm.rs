@@ -155,6 +155,7 @@ impl PortalOfferingService {
         }
         self.create_confirmed(CreateInput::from_context(&input)?, qualification, executor).await
     }
+    /// 校验条款与资格后写入供给、首版修订和可供投影；订货身份已存在则冲突。
     async fn create_confirmed<P: QualificationPort + ?Sized>(
         &self,
         input: CreateInput<'_>,
@@ -191,6 +192,7 @@ impl PortalOfferingService {
             .await?;
         Ok(ConfirmedOfferingResult { result: formal_result(&offering, &revision, "CREATED"), created: true })
     }
+    /// 有新条款时追加修订，无差异则复用当前修订；无条款时把供给标为停止。
     async fn revise_confirmed<P: QualificationPort + ?Sized>(
         &self,
         revision: RevisionInput<'_>,
@@ -236,6 +238,7 @@ impl PortalOfferingService {
             })
         }
     }
+    /// 读取本供应商可写供给，并拒绝版本漂移、条款号变化或已停止供给。
     async fn confirmation_target(
         &self,
         input: &ConfirmedOfferingInput<'_>,
@@ -292,6 +295,7 @@ impl PortalOfferingService {
         Ok(revision)
     }
 }
+/// 确认人须为内部账号，申请仍为已提交，且当前快照等于最后一次冻结提交。
 fn ensure_confirmation(input: &ConfirmedOfferingInput<'_>) -> Result<()> {
     if input.actor.kind() != AccountKind::Admin {
         return Err(Error::Forbidden("仅内部人员可确认供给".into()));
@@ -311,6 +315,7 @@ fn ensure_confirmation(input: &ConfirmedOfferingInput<'_>) -> Result<()> {
     ensure_text(input.maintainer_user_id, "供给内部维护人")?;
     ensure_text(input.business_org_unit_id, "供给业务组织")
 }
+/// 没有调用方事务会话时拒绝正式供给写入。
 fn ensure_transaction(executor: &mut dyn Executor) -> Result<()> {
     if executor.session().is_none() {
         return Err(Error::Internal("门户正式供给写入必须使用调用方事务".into()));
@@ -332,6 +337,7 @@ fn formal_result(
 }
 
 impl<'a> CreateInput<'a> {
+    /// 只从首次报价快照组装创建输入，其它申请类型返回校验错误。
     fn from_context(context: &'a ConfirmedOfferingInput<'a>) -> Result<Self> {
         let OfferingApplicationSnapshot::ExistingQuote {
             sku_id,
@@ -374,6 +380,7 @@ impl<'a> CreateInput<'a> {
             self.context.actor.id(),
         )?)
     }
+    /// 校验填报时间与数量后构造可供投影，更新人取最后一次提交人。
     fn availability(&self, id: SupplierOfferingId) -> Result<SupplierOfferingAvailability> {
         let received_at = Instant::now();
         validate_portal_reported_at(self.availability_reported_at, received_at)?;

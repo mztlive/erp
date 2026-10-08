@@ -1,4 +1,4 @@
-//! Extension traits for collection repositories.
+//! 集合仓储的扩展 trait。
 
 pub use super::background_job_cancel::BackgroundJobRepositoryCancelExt;
 pub use super::bulk_job::{

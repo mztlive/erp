@@ -18,6 +18,23 @@ use crate::{Error, Result};
 // 草稿占位值不含个人信息；正式确认替换为加密快照及配置密钥计算的指纹。
 const DRAFT_FINGERPRINT_KEY: &[u8] = b"erp-electronic-delivery-draft-key-v1";
 
+/// 为商品服务行按已冻结销售分配创建电子交付草稿和履约任务。
+///
+/// 非商品服务行，或没有采购确认行的明细会被跳过。
+///
+/// # 参数
+/// * `db` - 履约集合所在数据库。
+/// * `order` - 已生效采购单。
+/// * `revision_lines` - 生效版本行。
+/// * `allocations` - 采购行 ID 到销售分配 ID。
+/// * `actor_id` - 草稿登记人。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 草稿与履约任务写入完成。
+///
+/// # 错误
+/// 商品服务行缺少销售分配、草稿构造失败，或交付与履约任务写入失败时返回错误。
 pub(super) async fn create_electronic_drafts(
     db: &mongodb::Database,
     order: &PurchaseOrder,
@@ -54,6 +71,7 @@ pub(super) async fn create_electronic_drafts(
     Ok(())
 }
 
+/// 用占位收件快照和固定草稿指纹密钥构造电子交付草稿；数量缺失时按 0。
 fn draft(
     order: &PurchaseOrder,
     line: &PurchaseOrderRevisionLine,

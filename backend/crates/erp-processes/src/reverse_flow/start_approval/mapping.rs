@@ -10,6 +10,9 @@ use erp_workflow::repository::bpm::ApprovalInstanceListProjection;
 ///
 /// # 返回
 /// 返回启动时的列表投影。
+///
+/// # 错误
+/// 不返回错误。
 pub fn list_projection_from_execution(
     execution: &ApprovalNodeExecution,
     now: Instant,

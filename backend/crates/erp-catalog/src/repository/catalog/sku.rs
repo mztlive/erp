@@ -91,8 +91,17 @@ impl Default for SkuFilter {
 impl QueryFilter for SkuFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回查询条件文档。
+    /// 返回查询条件文档。始终写入未删除的 `deleted_at`。`sku_no` 有值时按字面量正则匹配；
+    /// `ids` 为 `Some` 时写入 `id` 的 `$in`（空数组也写入）；`product_id` 有值时精确匹配；
+    /// `status` 有值时按稳定代码精确匹配。`listing_status` 为 `Listed` 时匹配 `listed` 或 `null`，
+    /// 为 `Unlisted` 时只精确匹配 `unlisted`。分页与排序字段不进入条件。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "sku_no", self.sku_no.as_deref());
@@ -117,10 +126,16 @@ impl QueryFilter for SkuFilter {
 }
 
 impl Pagination for SkuFilter {
-    /// 返回页码与单页条数。
+    /// 返回 SKU 列表的页码与单页条数，不做页码归一或条数钳制。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组：第一项为 `page`，第二项为 `page_size` 转成的 `u64`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -271,11 +286,30 @@ impl SkuRepositoryExt for persistence_core::Repository<'_, Sku> {
 }
 
 /// 构建 SKU 排序文档（白名单：`created_at`/`sku_no`）。
+///
+/// # 参数
+/// * `sort_by` - 请求的排序字段；不在白名单时回退 `created_at`
+/// * `sort_ascending` - 升序为 `true`，降序为 `false`
+///
+/// # 返回
+/// 返回排序文档；同一方向同时作用于排序字段与 `id`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn sku_sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     sort_doc(whitelisted_sort(sort_by, SKU_SORT_FIELDS), sort_ascending)
 }
 
 /// SKU 列表投影字段。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回包含身份、状态、当前修订指针、版本与创建时间的投影文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn sku_projection() -> Document {
     doc! {
         "id": 1,

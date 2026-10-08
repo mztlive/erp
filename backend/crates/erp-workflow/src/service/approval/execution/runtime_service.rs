@@ -90,7 +90,22 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         )
     }
 
-    /// Create a runtime service with every composition-root port injected.
+    /// 用组合根注入的全部端口创建运行服务。
+    ///
+    /// # 参数
+    /// * `db` - MongoDB。
+    /// * `auth` - 授权端口。
+    /// * `action_port` - 领域动作端口。
+    /// * `object_read` - 被审对象读取端口。
+    /// * `upgrade` - 未提交绑定升级端口。
+    /// * `audit` - 审计端口。
+    /// * `facts` - 对象事实端口。
+    ///
+    /// # 返回
+    /// 返回已装配端口的运行服务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_ports(
         db: Database,
         auth: A,
@@ -298,7 +313,7 @@ fn require_cas_applied<T>(outcome: crate::repository::bpm::CasWriteOutcome<T>, l
 /// * `recover` - 提交疑似成功时的恢复函数
 ///
 /// # 返回
-/// 返回提交或恢复得到的命令结果视图。
+/// 返回提交成功或恢复成功的结果。
 ///
 /// # 错误
 /// 提交失败且不属于可恢复形态，或恢复仍失败时返回原错误。
@@ -329,7 +344,7 @@ where
 /// * `replay` - 每次以新会话回读胜者收据的回放函数
 ///
 /// # 返回
-/// 回放命中胜者收据时返回其命令视图。
+/// 回放返回 `Some` 时返回该值。
 ///
 /// # 错误
 /// 回放明确失败时返回该错误；首次未知提交的查证失败始终保留原错误和来源；

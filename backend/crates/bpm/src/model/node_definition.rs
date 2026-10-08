@@ -59,8 +59,14 @@ pub struct ApprovalNodeDefinition {
 impl ApprovalNodeDefinition {
     /// 规范化节点显示名称，供命令摘要与实体构造共享同一规则源。
     ///
+    /// # 参数
+    /// * `name` - 调用方提供的节点名称
+    ///
+    /// # 返回
+    /// 返回去除首尾空白后的名称。
+    ///
     /// # 错误
-    /// trim 后为空或超过 [`NAME_MAX_LEN`] 个 UTF-8 字节时返回错误。
+    /// trim 后为空或超过 [`NAME_MAX_LEN`] 个 UTF-8 字节时返回 [`ModelError::InvalidField`]。
     pub fn normalize_name(name: impl Into<String>) -> ModelResult<String> {
         normalize_required(name, "节点名称不能为空", NAME_MAX_LEN, "节点名称过长")
     }

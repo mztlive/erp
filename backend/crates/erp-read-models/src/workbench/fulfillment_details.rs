@@ -21,6 +21,17 @@ type Names = HashMap<String, (String, Option<String>)>;
 
 impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 批量追加四种履约单据的公共业务字段；缺失字段明确显示待登记，不展示内部身份。
+    ///
+    /// # 参数
+    /// * `keys` - 本批任务引用的对象键
+    /// * `facts` - 输出的对象事实表
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 无返回值。已就地写入入库、发货、电子交付和服务履约的公共字段。
+    ///
+    /// # 错误
+    /// 任一种履约单据或名称解析的仓储读取失败时返回对应错误。
     pub(super) async fn load_fulfillment_details(
         &self,
         keys: &HashSet<(ObjectKind, String)>,

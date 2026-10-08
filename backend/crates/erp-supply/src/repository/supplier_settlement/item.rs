@@ -67,8 +67,16 @@ pub struct SupplierSettlementItemFilter {
 impl QueryFilter for SupplierSettlementItemFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// 仅在 `statement_id` 为 `Some` 时追加所属结算单等值条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(statement_id) = &self.statement_id {
@@ -81,8 +89,14 @@ impl QueryFilter for SupplierSettlementItemFilter {
 impl Pagination for SupplierSettlementItemFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组。`page_size` 由 `u32` 转为 `u64`，页码不在此方法内归一。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }

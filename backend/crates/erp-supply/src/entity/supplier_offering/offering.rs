@@ -155,6 +155,9 @@ impl SupplierOffering {
     ///
     /// # 返回
     /// 状态更新成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 没有失败路径，总是返回 `Ok(())`。
     pub fn update_status(&mut self, status: OfferingStatus, updated_by: impl Into<String>) -> Result<()> {
         self.stable.status = status;
         self.stable.touch(updated_by);
@@ -172,6 +175,9 @@ impl SupplierOffering {
     ///
     /// # 返回
     /// 关系一致时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn belongs_to_ordering_source(
         &self,
         supplier_id: &SupplierAccountId,
@@ -203,6 +209,9 @@ impl SupplierOffering {
     }
 
     /// 返回下一次成功持久化后的实体版本。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 返回当前乐观锁版本加一。
@@ -489,6 +498,9 @@ impl SupplierOfferingRevision {
     ///
     /// # 返回
     /// 返回无影响、成本变化或关键供给变化。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn impact_from(&self, prior: &Self) -> OfferingRevisionImpact {
         let critical_changed = prior.bulk_minimum_order_quantity != self.bulk_minimum_order_quantity
             || prior.supply_region != self.supply_region
@@ -511,6 +523,9 @@ impl SupplierOfferingRevision {
 }
 
 /// 按合同规则由含税价派生不含税价。
+///
+/// # Panics
+/// 合法含税价与税率必须得到合法不含税价；构造失败说明金额标度不变量已破坏。
 fn net_price(gross: UnitPrice, rate: Rate) -> UnitPrice {
     UnitPrice::try_from(gross.to_decimal() - round_to_cent(gross.to_decimal() * rate.to_decimal()))
         .expect("合法含税价与税率必须生成合法不含税价")

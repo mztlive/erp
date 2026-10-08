@@ -33,6 +33,9 @@ pub(crate) const WAREHOUSE_SKU_POLICIES: &str = <mongodb::Database as WarehouseE
 /// # 参数
 /// * `db` - 目标 MongoDB 数据库
 ///
+/// # 返回
+/// 无返回值。三个集合的命名索引已创建或已存在。
+///
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {

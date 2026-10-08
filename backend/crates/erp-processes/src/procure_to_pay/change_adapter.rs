@@ -66,11 +66,14 @@ pub struct PurchaseChangeOrderAdapter {
 
 /// 返回采购变更单的完整适配器登记。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回已校验完整性的规格与显式字段声明。
 ///
 /// # 错误
-/// 政策缺失或三类动作不互异时返回部署不变量错误。
+/// 政策缺失或三类动作不互异时返回部署不变量错误；签署字段与合同不一致时返回内部错误。
 pub fn purchase_change_order_adapter() -> Result<PurchaseChangeOrderAdapter> {
     let spec = adapter_spec_of(DocumentType::PurchaseChangeOrder)?;
     ensure_adapter_spec_complete(&spec)?;
@@ -116,6 +119,9 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<PurchaseChangeOrderAda
 /// # 参数
 /// * `business_object_id` - 变更单主键
 ///
+/// # 返回
+/// 返回采购变更单的 `SubjectRef`。
+///
 /// # 错误
 /// 主键为空或超长时返回校验错误。
 pub fn purchase_change_order_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
@@ -127,6 +133,12 @@ pub fn purchase_change_order_subject_ref(business_object_id: &str) -> Result<Sub
 }
 
 /// 无已绑定定义的必须审批单据不得提交。
+///
+/// # 参数
+/// * `binding` - 单据上已冻结的审批定义绑定。
+///
+/// # 返回
+/// 返回已存在的绑定。
 ///
 /// # 错误
 /// 绑定缺失时返回冲突。
@@ -164,6 +176,9 @@ pub struct PurchaseChangeOrderStartCommand {
 ///
 /// # 返回
 /// 返回不含定义 ID 或审批人的目标启动命令。
+///
+/// # 错误
+/// 不返回错误。
 pub fn purchase_change_start_command(
     change_order_id: &str,
     subject_version: u32,
@@ -186,6 +201,9 @@ pub fn purchase_change_start_command(
 ///
 /// # 返回
 /// 返回 `START_APPROVAL`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn start_approval_command_kind(
     _command: &PurchaseChangeOrderStartCommand,
 ) -> bpm::model::types::ApprovalCommandKind {
@@ -198,6 +216,9 @@ pub fn start_approval_command_kind(
 /// * `order` - 业务实体
 /// * `action` - 合同强类型动作
 /// * `updated_by` - 操作人
+///
+/// # 返回
+/// 领域动作已写入 `order`。
 ///
 /// # 错误
 /// 动作不属于本类型或状态不允许时返回错误。
@@ -275,8 +296,11 @@ pub fn purchase_change_responsible_org_id(sales_order: &SalesOrder) -> Result<St
 /// * `submitted_by` - 提交人
 /// * `submitted_at` - 提交时间
 ///
+/// # 返回
+/// 返回冻结的审批主体快照。
+///
 /// # 错误
-/// 明细为空、金额/数量非法或组织为空时返回校验错误。
+/// 明细为空、金额或数量非法、明细行数溢出或组织为空时返回校验错误。
 pub fn build_purchase_change_snapshot(
     change_order: &PurchaseChangeOrder,
     sales_order: &SalesOrder,

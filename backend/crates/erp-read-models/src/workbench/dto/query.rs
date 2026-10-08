@@ -82,11 +82,14 @@ pub(crate) struct WorkItemListQuery {
 impl WorkItemListParams {
     /// 校验并规范化责任队列查询。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回不包含客户端责任过滤条件的服务端查询事实。
     ///
     /// # 错误
-    /// scope/status 不兼容、时区或暂不支持的查询参数非法时返回验证错误。
+    /// 开放范围与历史状态不兼容、任务类型已退役或不属于所选任务族、优先级不是 1 至 4、时区不是 `Asia/Shanghai`，或处理人与来源订单 ID 为空、过长或超过 100 项时，返回 `Error::ValidationError`。
     pub(crate) fn normalized(&self) -> Result<WorkItemListQuery> {
         let statuses = normalize_statuses(self.scope, self.status)?;
         let work_item_types = normalize_work_item_types(self.family, self.work_item_type)?;
@@ -159,8 +162,14 @@ pub struct WorkItemStatsParams {
 impl WorkItemStatsParams {
     /// 复用正式队列规范化逻辑形成服务端统计查询。
     ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回固定第 1 页、每页 100 条、按创建时间倒序，且不含检索词和焦点任务的队列查询。
+    ///
     /// # 错误
-    /// 任务族与类型冲突或时区不受支持时返回验证错误。
+    /// 任务类型已退役或不属于所选任务族、时区不是 `Asia/Shanghai`，或处理人与来源订单 ID 为空、过长或超过 100 项时，返回 `Error::ValidationError`。
     pub(crate) fn normalized(&self) -> Result<WorkItemListQuery> {
         WorkItemListParams {
             scope: self.scope,
@@ -252,6 +261,16 @@ fn normalize_statuses(scope: WorkItemScope, status: Option<WorkItemStatus>) -> R
     }
 }
 
+/// 解析逗号分隔的优先级序号。
+///
+/// # 参数
+/// * `value` - 逗号分隔的原始查询值；空或缺省表示不筛选
+///
+/// # 返回
+/// 返回按输入顺序对应的 `WorkItemPriority`；空输入返回空向量。`1` 至 `4` 依次为紧急、高、普通、低。
+///
+/// # 错误
+/// 任一项不是 `1` 至 `4` 时返回 `Error::ValidationError`。
 pub(super) fn parse_priorities(value: Option<&str>) -> Result<Vec<WorkItemPriority>> {
     let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(Vec::new());

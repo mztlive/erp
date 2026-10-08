@@ -119,7 +119,7 @@ impl SupplierFulfillmentProcess {
 /// 返回消息实体。
 ///
 /// # 错误
-/// 实体构造校验失败时返回 `LogicError`。
+/// 实体构造校验失败时返回 `Logic`。
 fn build_refund_message(
     order: &SupplierFulfillmentOrder,
     req: &RecordRefundResultRequest,

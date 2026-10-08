@@ -1,4 +1,4 @@
-//! Supplier-domain application errors with the original service mapping.
+//! 供应商领域应用错误，沿用原有服务映射。
 
 use application_core::ErrorClass;
 
@@ -56,7 +56,7 @@ pub enum Error {
 }
 
 impl Error {
-    /// Stable error class used by HTTP mapping; do not parse display text.
+    /// 返回 HTTP 映射使用的稳定错误类别；调用方不得解析展示文案。
     ///
     /// 归类理由（erp-supplier-010）：
     /// * `Logic` → Internal：实体不变式被绕过属程序缺陷，非用户可纠正输入；
@@ -64,6 +64,15 @@ impl Error {
     ///   不得按冲突语义自动重试写入；
     /// * `TransientTransaction` → Conflict：瞬态事务冲突可由调用方重试；
     /// * `NotFound` → BusinessRule：读取不可见对象不泄露存在性差异。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回与变体对应的 `ErrorClass`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn class(&self) -> ErrorClass {
         match self {
             Self::Internal(_) | Self::Logic(_) | Self::RepositoryError(_) => ErrorClass::Internal,
@@ -122,6 +131,9 @@ fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
 ///
 /// # 返回
 /// 精确命中本域注册索引时返回原提示；未知名称返回 `None`，由调用边界选择通用提示。
+///
+/// # 错误
+/// 不返回错误。
 ///
 /// # 约束
 /// 不匹配子串或前后缀、不规范化索引名称，不拥有其他领域或 HTTP 历史索引的提示。

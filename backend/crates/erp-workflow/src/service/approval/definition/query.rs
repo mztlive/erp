@@ -14,11 +14,14 @@ use crate::error::Result;
 use crate::repository::BpmExt;
 
 impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
-    /// 返回固定 20 行非敏感目录。
+    /// 返回固定 21 行非敏感目录。
     ///
     /// # 参数
     /// * `actor` - 已认证操作人
     /// * `visibility` - 类型级可见范围
+    ///
+    /// # 返回
+    /// 返回 `ALL_DOCUMENT_TYPES` 每一类型一行目录。
     ///
     /// # 错误
     /// 政策或仓储读取失败时返回错误。
@@ -53,8 +56,11 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
     /// * `actor` - 已认证操作人
     /// * `visibility` - 类型级可见范围
     ///
+    /// # 返回
+    /// 返回该类型的版本摘要。
+    ///
     /// # 错误
-    /// 无读取权或类型无需审批时返回错误。
+    /// 无读取权或类型无需审批时返回错误；授权重验或仓储读取失败时返回对应错误。
     pub async fn definition_versions(
         &self,
         document_type: DocumentType,
@@ -79,8 +85,11 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
     /// * `actor` - 已认证操作人
     /// * `visibility` - 类型级可见范围
     ///
+    /// # 返回
+    /// 返回定义详情。
+    ///
     /// # 错误
-    /// 不存在或无权读取时返回不泄露存在性的错误。
+    /// 不存在或无权读取时返回不泄露存在性的错误；仓储读取失败时返回对应错误。
     pub async fn definition_detail(
         &self,
         definition_id: &str,

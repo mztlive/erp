@@ -33,8 +33,14 @@ pub enum InvoiceDirection {
 impl InvoiceDirection {
     /// 返回方向的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Sales => "销项",
@@ -44,8 +50,14 @@ impl InvoiceDirection {
 
     /// 返回方向的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Sales => "sales",
@@ -67,8 +79,14 @@ pub enum InvoiceKind {
 impl InvoiceKind {
     /// 返回类型的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Blue => "蓝票",
@@ -78,8 +96,14 @@ impl InvoiceKind {
 
     /// 返回类型的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Blue => "blue",
@@ -103,8 +127,14 @@ pub enum AccountingDirection {
 impl AccountingDirection {
     /// 返回方向的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Increase => "增加",
@@ -114,8 +144,14 @@ impl AccountingDirection {
 
     /// 返回方向的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Increase => "increase",
@@ -140,8 +176,14 @@ pub enum InvoiceStatus {
 impl InvoiceStatus {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -152,8 +194,14 @@ impl InvoiceStatus {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "draft",
@@ -450,8 +498,14 @@ impl Invoice {
 
     /// 判断发票是否已登记。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为 `Registered` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_registered(&self) -> bool {
         self.stable.status() == InvoiceStatus::Registered
     }
@@ -470,7 +524,7 @@ impl Invoice {
 /// 恒等成立返回 `Ok(())`。
 ///
 /// # 错误
-/// 分量非负或恒等不成立时返回错误。
+/// 分量为负或恒等不成立时返回错误。
 fn validate_amounts(gross: Amount, net: Amount, tax: Amount) -> Result<()> {
     if gross.to_decimal().is_sign_negative()
         || net.to_decimal().is_sign_negative()

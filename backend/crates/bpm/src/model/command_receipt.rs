@@ -31,11 +31,21 @@ pub struct ApprovalCommandReceipt {
 }
 
 impl<'de> Deserialize<'de> for ApprovalCommandReceipt {
-    /// 兼容历史 writer 可能写出的两个同名 `created_at`。
+    /// 兼容历史写入可能留下的两个同名 `created_at`。
     ///
     /// 历史模型同时展开 `BaseModel.created_at` 并显式序列化 `created_at`；MongoDB
     /// 驱动直接序列化实体时会保留两个 BSON 键。两个值相同时按一个创建时间读取；
     /// 值不一致时失败关闭，禁止任意选择一个时间掩盖损坏事实。
+    ///
+    /// # 参数
+    /// * `deserializer` - 命令收据映射的反序列化器
+    ///
+    /// # 返回
+    /// 必填字段齐全且重复 `created_at` 同值时返回收据。
+    ///
+    /// # 错误
+    /// 缺必填字段、同名字段除 `created_at` 外重复、`created_at` 超过两个或两个值不一致时，
+    /// 返回反序列化错误。
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -175,6 +185,9 @@ impl ApprovalCommandReceipt {
     /// * `result_ref` - 结果引用
     /// * `at` - 创建时间
     ///
+    /// # 返回
+    /// 返回写入身份字段与规范化结果引用的收据。
+    ///
     /// # 错误
     /// 结果引用非法或调用方时间无法持久化时返回错误。
     pub fn new(
@@ -194,6 +207,12 @@ impl ApprovalCommandReceipt {
     }
 
     /// 按完整 v3 身份回读：唯一键身份与载荷均相同才返回自身。
+    ///
+    /// # 参数
+    /// * `identity` - 本次请求的 v3 命令身份
+    ///
+    /// # 返回
+    /// 种类、作用域、幂等键与摘要都一致时返回本收据。
     ///
     /// # 错误
     /// 命令种类、作用域、规范幂等键或摘要任一不一致时返回

@@ -47,11 +47,14 @@ struct SalesApprovalSource {
 /// 读取销售正式修订锁定的合同 PDF 与原销售审批冻结的附件。
 ///
 /// # 参数
-/// `db`、`revision` 和 `executor` 必须来自已授权的采购来源读取阶段。
+/// * `db` - 销售与文件事实所在数据库。
+/// * `revision` - 已授权采购来源读取阶段锁定的销售修订。
+/// * `executor` - 同一读取阶段的执行器。
 /// # 返回
 /// 返回精确合同修订和已验证的冻结材料，旧审批未保存的附件保持缺失。
 /// # 错误
 /// 来源提交不一致、文件变化、删除或安全隔离时拒绝，不补读当前销售附件。
+/// 仓储读取失败会返回对应错误。
 pub async fn revision_materials(
     db: &Database,
     revision: &SalesOrderRevision,
@@ -88,11 +91,13 @@ pub async fn revision_materials(
 /// 重新核对冻结文件版本、内容标识及当前治理状态。
 ///
 /// # 参数
-/// `files` 是已经由销售或采购来源链证明的精确允许清单。
+/// * `db` - 文件事实所在数据库。
+/// * `files` - 已经由销售或采购来源链证明的精确允许清单。
+/// * `executor` - 调用方执行器。
 /// # 返回
 /// 全部文件仍匹配冻结内容且可供读取时成功。
 /// # 错误
-/// 缺失、软删除、文件变化、销毁或隔离时拒绝整个材料包。
+/// 缺失、软删除、文件变化、销毁或隔离时拒绝整个材料包。仓储读取失败会返回对应错误。
 pub async fn validate_materials(
     db: &Database,
     files: &[ApprovalMaterialFile],
@@ -190,11 +195,14 @@ async fn revision_contract(
 /// 按本次销售提交锁定的合同版本证明客户与合同关系。
 ///
 /// # 参数
-/// `submission` 必须是本次审批精确版本的不可变销售提交。
+/// * `db` - 合同与销售事实所在数据库。
+/// * `submission` - 本次审批精确版本的不可变销售提交。
+/// * `executor` - 调用方执行器。
 /// # 返回
-/// 返回锁定的合同版本；无合同开单返回空。
+/// 返回锁定的合同版本；无合同开单返回 `None`。
 /// # 错误
 /// 版本缺失或客户、合同身份、合同编号不匹配时拒绝；销售结算主体允许单独选择。
+/// 仓储读取失败会返回对应错误。
 pub async fn submission_contract(
     db: &Database,
     submission: &SalesOrderSubmission,
@@ -215,11 +223,13 @@ pub async fn submission_contract(
 
 /// 读取本次销售变更提交锁定的合同正文关系。
 /// # 参数
-/// `submission` 为精确变更提交，`executor` 为原审批启动事务。
+/// * `db` - 合同与销售事实所在数据库。
+/// * `submission` - 精确变更提交。
+/// * `executor` - 原审批启动事务。
 /// # 返回
-/// 经过真实销售单和客户关系证明的合同修订。
+/// 返回经过真实销售单和客户关系证明的合同修订。没有锁定合同修订时返回 `None`。
 /// # 错误
-/// 关系缺失或不匹配时失败关闭，不补录当前合同。
+/// 关系缺失或不匹配时失败关闭，不补录当前合同。仓储读取失败会返回对应错误。
 pub async fn change_submission_contract(
     db: &Database,
     submission: &SalesChangeSubmission,
@@ -240,11 +250,13 @@ pub async fn change_submission_contract(
 
 /// 变更审批沿准确基准修订继承原销售冻结凭证，不继承旧合同正文。
 /// # 参数
-/// `submission` 和 `executor` 为本次变更审批精确提交及原事务。
+/// * `db` - 销售修订与文件事实所在数据库。
+/// * `submission` - 本次变更审批的精确提交。
+/// * `executor` - 原事务执行器。
 /// # 返回
 /// 仍可读取的原成交冻结材料；旧清单为空时保持为空。
 /// # 错误
-/// 跨销售单、版本链错误或历史文件变化时拒绝材料。
+/// 跨销售单、版本链错误或历史文件变化时拒绝材料。仓储读取失败会返回对应错误。
 pub async fn change_evidence(
     db: &Database,
     submission: &SalesChangeSubmission,

@@ -89,11 +89,29 @@ pub struct RolePermissionSnapshot {
 
 impl RolePermissionSnapshot {
     /// 返回账号在该 policy revision 下直接绑定的角色。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回冻结时的角色 ID 切片。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn role_ids(&self) -> &[String] {
         &self.role_ids
     }
 
     /// 返回实际授予指定权限的角色，保持冻结角色顺序。
+    ///
+    /// # 参数
+    /// * `permission` - 待核对的权限。
+    ///
+    /// # 返回
+    /// 返回冻结角色中包含该权限的角色 ID。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn granting_role_ids(&self, permission: &Permission) -> Vec<String> {
         self.role_ids
             .iter()
@@ -107,6 +125,15 @@ impl RolePermissionSnapshot {
     /// 返回同时授予全部指定权限的角色，保持冻结角色顺序。
     ///
     /// 权限交集必须在同一角色内完成；调用方不得分别汇总不同角色的授权结果。
+    ///
+    /// # 参数
+    /// * `permissions` - 必须由同一角色同时授予的权限。
+    ///
+    /// # 返回
+    /// 返回同时具备全部权限的角色 ID；`permissions` 为空时返回空列表。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn granting_role_ids_for_all(&self, permissions: &[Permission]) -> Vec<String> {
         if permissions.is_empty() {
             return Vec::new();
@@ -123,6 +150,15 @@ impl RolePermissionSnapshot {
     }
 
     /// 返回冻结 Enforcer 对应的 policy revision。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回快照中的 policy 版本。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn policy_revision(&self) -> u64 {
         self.policy_revision
     }
@@ -136,6 +172,15 @@ pub struct AuthorizedRoleGrant {
 
 impl AuthorizedRoleGrant {
     /// 返回授权检查使用的 policy 版本。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回授予上下文中的 policy 版本。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn policy_revision(&self) -> u64 {
         self.policy_revision
     }
@@ -149,11 +194,29 @@ pub struct AuthorizedAccountManagement {
 
 impl AuthorizedAccountManagement {
     /// 返回授权检查使用的 policy 版本。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回账号管理上下文中的 policy 版本。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn policy_revision(&self) -> u64 {
         self.policy_revision
     }
 
     /// 取出同一授权快照校验的可选角色授予上下文。
+    ///
+    /// # 参数
+    /// 消耗 `self`。
+    ///
+    /// # 返回
+    /// 本次校验包含新角色集合时返回授予上下文，否则返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn into_role_grant(self) -> Option<AuthorizedRoleGrant> {
         self.role_grant
     }
@@ -175,6 +238,16 @@ impl RbacService {
     /// 创建 RBAC 服务。
     ///
     /// Casbin Enforcer 在首次使用时异步加载 MongoDB policy。
+    ///
+    /// # 参数
+    /// * `db` - 身份数据库。
+    /// * `audit` - 资源审计端口。
+    ///
+    /// # 返回
+    /// 返回尚未加载 Enforcer 的服务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database, audit: Arc<dyn IdentityAuditPort>) -> Self {
         let policy_store = MongoCasbinAdapter::new(db.clone());
         Self {
@@ -204,6 +277,18 @@ impl RbacService {
     }
 
     /// 通过审计端口在事务前构造成功资源审计。
+    ///
+    /// # 参数
+    /// * `actor` - 已认证操作人。
+    /// * `action` - 审计动作。
+    /// * `resource_type` - 资源类型。
+    /// * `resource_id` - 资源 ID。
+    ///
+    /// # 返回
+    /// 返回可在事务内持久化的资源审计。
+    ///
+    /// # 错误
+    /// 审计端口构造失败时返回对应错误。
     pub fn prepare_resource_log(
         &self,
         actor: application_core::AuditActor,
@@ -217,16 +302,30 @@ impl RbacService {
 
 /// 创建共享 RBAC 服务。
 ///
-/// # 返回值
+/// # 参数
+/// * `db` - 身份数据库。
+/// * `audit` - 资源审计端口。
+///
+/// # 返回
 /// 返回延迟初始化 Casbin Enforcer 的共享服务。
+///
+/// # 错误
+/// 不返回错误。
 pub fn shared_rbac_service(db: Database, audit: Arc<dyn IdentityAuditPort>) -> SharedRbacService {
     Arc::new(RbacService::new(db, audit))
 }
 
 /// 构建 Casbin 主体标识。
 ///
-/// # 返回值
+/// # 参数
+/// * `account_kind` - 账号类型。
+/// * `account_id` - 账号 ID。
+///
+/// # 返回
 /// 返回包含账号类型和账号 ID 的稳定主体标识。
+///
+/// # 错误
+/// 不返回错误。
 pub fn subject(account_kind: AccountKind, account_id: &str) -> String {
     format!("user:{}:{account_id}", account_kind.as_str())
 }

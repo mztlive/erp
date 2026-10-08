@@ -83,6 +83,19 @@ fn merge_costs(target: &mut ProfitLossAmounts, source: &ProfitLossAmounts) -> Re
     Ok(())
 }
 /// 覆盖率保留期间订单的完整分母；历史候选由独立目录提供。
+///
+/// # 参数
+/// * `orders` - 已归集的订单结果。
+/// * `query` - 盈亏筛选。
+/// * `as_of` - 投影时点展示文本。
+/// * `export` - 为真时行集合不按当前页截断。
+/// * `scope_label` - 授权范围说明。
+///
+/// # 返回
+/// 返回含全量覆盖率、汇总、趋势和行页的视图；无匹配时 `empty_reason` 为 `filtered_empty` 或 `no_data`。
+///
+/// # 错误
+/// 金额累计、分组或趋势计算超出范围时返回对应错误。
 pub(super) fn project(
     orders: Vec<OrderResult>,
     query: &ProfitLossQuery,

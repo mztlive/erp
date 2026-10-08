@@ -267,6 +267,16 @@ impl<T: PurchaseReceiptResult> PurchaseCommandReceipt<T> {
     }
 }
 impl PurchaseReceiptResult for CreationReceipt {
+    /// 校验创建回执的动作与采购单身份。
+    ///
+    /// # 参数
+    /// * `id` - 当前命令身份。
+    ///
+    /// # 返回
+    /// 动作为 `CREATE_ACTION` 或 `CREATE_SOURCING_ACTION`，采购单 ID 与单号非空白，且 `lock_version` 大于 0 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误；任一条件不满足时返回 `false`。
     fn valid_result(&self, id: &PurchaseCommandReceiptIdentity) -> bool {
         [CREATE_ACTION, CREATE_SOURCING_ACTION].contains(&id.action.as_str())
             && !self.purchase_order_id.trim().is_empty()
@@ -275,6 +285,16 @@ impl PurchaseReceiptResult for CreationReceipt {
     }
 }
 impl PurchaseReceiptResult for SaveDraftReceipt {
+    /// 校验保存草稿回执的动作、范围、版本与金额守恒。
+    ///
+    /// # 参数
+    /// * `id` - 当前命令身份。
+    ///
+    /// # 返回
+    /// `lock_version` 大于 0，动作为 `SAVE_ACTION`，`scope_id` 等于采购单 ID，采购单 ID、含税、不含税、税额和业务引用都非空白，且三项金额可解析、非负并满足含税等于不含税加税额时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误；任一条件不满足时返回 `false`。
     fn valid_result(&self, id: &PurchaseCommandReceiptIdentity) -> bool {
         self.lock_version > 0
             && valid_saved_totals(self)
@@ -286,6 +306,16 @@ impl PurchaseReceiptResult for SaveDraftReceipt {
     }
 }
 impl PurchaseReceiptResult for VoidDraftReceipt {
+    /// 校验作废草稿回执的动作、范围与作废状态。
+    ///
+    /// # 参数
+    /// * `id` - 当前命令身份。
+    ///
+    /// # 返回
+    /// `lock_version` 大于 0，原因与业务引用非空白，动作为 `VOID_ACTION`，`scope_id` 等于采购单 ID，且 `status` 为 `VOIDED` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误；任一条件不满足时返回 `false`。
     fn valid_result(&self, id: &PurchaseCommandReceiptIdentity) -> bool {
         self.lock_version > 0
             && !self.reason.trim().is_empty()
@@ -296,6 +326,16 @@ impl PurchaseReceiptResult for VoidDraftReceipt {
     }
 }
 impl PurchaseReceiptResult for SourcingReceipt {
+    /// 校验选源回执的动作、采购单行和库存预占数量。
+    ///
+    /// # 参数
+    /// * `id` - 当前命令身份。
+    ///
+    /// # 返回
+    /// 动作为 `CREATE_SOURCING_ACTION` 且 `scope_id` 有值，每张采购单 ID 与单号非空白且 `lock_version` 大于 0，每条预占数量可解析且大于 0、相关身份非空白时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误；任一条件不满足时返回 `false`。
     fn valid_result(&self, id: &PurchaseCommandReceiptIdentity) -> bool {
         id.action == CREATE_SOURCING_ACTION
             && id.scope_id.is_some()
@@ -319,6 +359,16 @@ impl PurchaseReceiptResult for SourcingReceipt {
     }
 }
 impl PurchaseReceiptResult for PurchaseSubmitReceipt {
+    /// 校验采购提交回执的动作、提交版本与任务占位。
+    ///
+    /// # 参数
+    /// * `id` - 当前命令身份。
+    ///
+    /// # 返回
+    /// `lock_version` 大于 0，`subject_version` 可解析为大于 0 的 `u32`，动作为 `PURCHASE_SUBMIT_ACTION` 且 `scope_id` 有值，单号、提交 ID、提交序号和提交版本非空白，待办 ID 为空且 `task_version` 为 0，或待办 ID 去掉空白后仍非空且 `task_version` 不为 0 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误；任一条件不满足时返回 `false`。
     fn valid_result(&self, id: &PurchaseCommandReceiptIdentity) -> bool {
         self.lock_version > 0
             && self.subject_version.parse::<u32>().is_ok_and(|v| v > 0)

@@ -1,4 +1,4 @@
-//! Catalog domain: dictionaries, products, SKUs, sellable query and specification signature.
+//! 商品域：字典、商品、SKU、可售查询与规格签名。
 
 pub mod dto;
 pub mod entity;

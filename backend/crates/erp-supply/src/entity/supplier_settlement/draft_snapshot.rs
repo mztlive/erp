@@ -108,6 +108,9 @@ impl SupplierSettlementDraftSnapshot {
 ///
 /// # 返回
 /// 返回精确到分的零金额。
+///
+/// # Panics
+/// `Decimal::ZERO` 是合法金额；只有构造失败才 panic，正常路径不会发生。
 fn zero() -> Amount {
     Amount::try_from(Decimal::ZERO).expect("零是合法金额")
 }

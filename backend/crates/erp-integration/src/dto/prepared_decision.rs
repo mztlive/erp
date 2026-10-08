@@ -134,9 +134,15 @@ impl TryFrom<&DirectReconciliationCommand> for PreparedDirectDecisionTarget {
 impl IntegrationTaskCompletionCommand {
     /// 将任务完成决定适配为非终结任务动作（用于任务绑定与责任校验）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回携带完成决定业务身份的 `AddEvidence` 动作；原因码取完成原因，
     /// 备注与证据引用原样透传。
+    ///
+    /// # 错误
+    /// 不返回错误。
     ///
     /// # 约束
     /// 适配形状由 Prepared DTO 拥有，Service 不再维护镜像转换。

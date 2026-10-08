@@ -301,10 +301,13 @@ async fn ensure_purchase_create_permission(
     Err(Error::ValidationError(format!("采购负责人 {} 缺少 purchase_order:create 权限", owner.user_id())))
 }
 
-/// 构造采购建单权限值对象.
+/// 构造采购建单权限值对象。
+///
+/// # 参数
+/// 无。
 ///
 /// # 返回
-/// 返回固定 `purchase_order:create` 权限.
+/// 返回固定 `purchase_order:create` 权限。
 ///
 /// # 错误
 /// 固定权限代码无法解析时返回实体错误。

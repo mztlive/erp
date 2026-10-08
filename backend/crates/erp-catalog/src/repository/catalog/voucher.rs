@@ -74,7 +74,7 @@ impl VoucherCategoryProfileRevisionRow {
     }
 }
 
-/// 卡券类目扩展修订列表筛选条件（修订表追加写入，无软删除过滤）。
+/// 卡券类目扩展修订列表筛选条件（修订表追加写入；查询仍排除已软删除修订）。
 #[derive(Debug, Clone)]
 pub struct VoucherCategoryProfileRevisionFilter {
     /// 卡券类目 SKU；`None` 表示不筛选。
@@ -92,10 +92,17 @@ pub struct VoucherCategoryProfileRevisionFilter {
 }
 
 impl QueryFilter for VoucherCategoryProfileRevisionFilter {
-    /// 转换为 MongoDB 查询条件（修订表不参与软删除）。
+    /// 转换为 MongoDB 查询条件，并追加未删除的 `deleted_at` 条件。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
-    /// 返回查询条件文档。
+    /// 返回查询条件文档。`sku_id` 有值时精确匹配；`status` 有值时按稳定代码精确匹配。
+    /// 分页与排序字段不进入条件。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(sku_id) = &self.sku_id {
@@ -109,10 +116,16 @@ impl QueryFilter for VoucherCategoryProfileRevisionFilter {
 }
 
 impl Pagination for VoucherCategoryProfileRevisionFilter {
-    /// 返回页码与单页条数。
+    /// 返回卡券类目扩展修订列表的页码与单页条数，不做页码归一或条数钳制。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组：第一项为 `page`，第二项为 `page_size` 转成的 `u64`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }

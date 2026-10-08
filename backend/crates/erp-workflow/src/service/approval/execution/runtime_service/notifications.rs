@@ -115,11 +115,35 @@ pub(super) async fn persist_cancel_notifications(
 }
 
 /// 受阻取消固定通知提交人和实际执行取消的运行管理员；同人时只保留一次。
+///
+/// # 参数
+/// * `submitted_by` - 单据提交人。
+/// * `actor_id` - 执行取消的运行管理员。
+///
+/// # 返回
+/// 返回去重后的收件人，提交人在前。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn blocked_cancel_notification_recipients(submitted_by: &str, actor_id: &str) -> Vec<String> {
     notification_recipients(submitted_by, [actor_id])
 }
 
 /// 读取当前有效且真正具备该单据类型运行管理权限的通知收件人。
+///
+/// # 参数
+/// * `_db` - 保留给调用形参，本函数不直接查库。
+/// * `rbac` - 账号与权限端口。
+/// * `_object_read` - 保留给调用形参，本函数不读取对象正文。
+/// * `document_type` - 需要运行管理权限的单据类型。
+/// * `snapshot` - 冻结主体，用于来源可读性。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 返回已排序去重的管理员账号 ID；没有合格管理员时为空。
+///
+/// # 错误
+/// 账号、权限或来源可读性读取失败时返回对应错误。
 pub(super) async fn runtime_admin_notification_recipients(
     _db: &Database,
     rbac: &impl crate::ports::WorkflowAuthorizationPort,
@@ -154,6 +178,22 @@ pub(super) async fn runtime_admin_notification_recipients(
 }
 
 /// 按 §16.5 消费决定计划中的每个通知意图并写入同一事务 outbox。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `writes` - 决定计划。
+/// * `facts` - 模板与收件人事实。
+/// * `now` - 入队时间。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 每条意图都入队后无返回值。
+///
+/// # 错误
+/// 意图缺失、重复、类型或去重键不匹配、执行引用不存在、入队校验失败或仓储写入失败时返回错误。
+///
+/// # Panics
+/// 非决定通知事件已在前面返回错误；后续 `unreachable!` 只覆盖该分支被错误改写的情况。
 pub(super) async fn persist_decision_notifications(
     db: &Database,
     writes: &PlannedWrites,
@@ -238,6 +278,16 @@ pub(super) async fn persist_decision_notifications(
 }
 
 /// 以主收件人开头追加其它收件人并稳定去重。
+///
+/// # 参数
+/// * `primary` - 主收件人。
+/// * `additional` - 追加收件人。
+///
+/// # 返回
+/// 返回主收件人在前、其余按出现顺序去重的列表。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn notification_recipients<'a>(
     primary: &str,
     additional: impl IntoIterator<Item = &'a str>,
@@ -294,6 +344,9 @@ pub(super) struct ResumeNotificationFacts<'a> {
 ///
 /// # 关键业务约束
 /// 恢复必须且只能产生 Entered 与 Resumed 两条通知。
+///
+/// # Panics
+/// 非进入节点或恢复事件已在前面返回错误；后续 `unreachable!` 只覆盖该分支被错误改写的情况。
 pub(super) async fn persist_resume_notifications(
     db: &Database,
     writes: &PlannedWrites,

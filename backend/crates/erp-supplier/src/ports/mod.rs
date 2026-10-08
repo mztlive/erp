@@ -1,4 +1,4 @@
-//! Consumer ports for party facts, sensitive tokens and qualification attachments.
+//! 主体事实、敏感令牌与资质附件的消费方端口。
 
 mod account;
 mod data_scope;

@@ -195,6 +195,15 @@ impl SupplyCommandReceipt {
 }
 
 /// 指纹只接受固定长度的十六进制摘要。
+///
+/// # 参数
+/// * `value` - 待检查的指纹文本。
+///
+/// # 返回
+/// 长度为 64 且全部为 ASCII 十六进制字符时返回 `true`，否则返回 `false`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn digest_is_valid(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }

@@ -39,7 +39,7 @@ impl PurchaseOfferingSource {
     /// # 返回
     /// 返回不可由客户端改写的完整选源值。
     /// # 错误
-    /// 身份或版本缺失时拒绝创建。
+    /// 条款或可供投影不属于当前供给，或身份、版本缺失时拒绝创建。
     pub fn from_supply(supply: &LineSupply) -> Result<Self> {
         if supply.revision.supplier_offering_id.as_ref() != supply.offering.base.id.as_str()
             || supply.availability.supplier_offering_id.as_ref() != supply.offering.base.id.as_str()
@@ -111,6 +111,16 @@ impl PurchaseOfferingSource {
 }
 
 /// 行归属只允许商品行持有完整选源，未知历史行保留空值。
+///
+/// # 参数
+/// * `kind` - 采购行类型。
+/// * `source` - 已冻结的供给选源；`None` 表示历史行尚未记录选源。
+///
+/// # 返回
+/// 未记录选源，或商品行选源的身份与三种版本都可追溯时返回 `Ok(())`。
+///
+/// # 错误
+/// 物流费用行携带选源，或选源身份为空白、任一版本为 0 时返回领域错误。
 pub(super) fn ensure_offering_source(
     kind: PurchaseLineType,
     source: Option<&PurchaseOfferingSource>,

@@ -40,8 +40,14 @@ pub enum SupplierOrderActionType {
 impl SupplierOrderActionType {
     /// 返回动作类型的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Place => "下单",
@@ -53,8 +59,14 @@ impl SupplierOrderActionType {
 
     /// 返回动作类型的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Place => "PLACE",
@@ -88,8 +100,14 @@ pub enum SupplierOrderActionStatus {
 impl SupplierOrderActionStatus {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Pending => "待发送",
@@ -103,8 +121,14 @@ impl SupplierOrderActionStatus {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Pending => "PENDING",
@@ -151,6 +175,9 @@ impl SupplierOrderActionData {
     ///
     /// # 返回
     /// 返回待发送的 `PLACE` 动作数据。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn place(
         order_id: SupplierFulfillmentOrderId,
         idempotency_key: impl Into<String>,
@@ -180,6 +207,9 @@ impl SupplierOrderActionData {
     ///
     /// # 返回
     /// 返回待发送的手工调整动作数据。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn manual_adjustment(
         order_id: SupplierFulfillmentOrderId,
         action_type: SupplierOrderActionType,
@@ -213,6 +243,9 @@ impl SupplierOrderActionData {
     ///
     /// # 返回
     /// 返回 `QUERY/SENDING` 且首次尝试计数为一的动作数据。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn query_intent(
         order_id: SupplierFulfillmentOrderId,
         idempotency_key: impl Into<String>,
@@ -241,6 +274,9 @@ impl SupplierOrderActionData {
     ///
     /// # 返回
     /// 返回 `QUERY/SUCCEEDED` 且首次尝试计数为一的动作数据。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn query_result(
         order_id: SupplierFulfillmentOrderId,
         idempotency_key: impl Into<String>,
@@ -381,6 +417,12 @@ impl SupplierOrderAction {
     ///
     /// # 参数
     /// * `next_attempt_at` - 下次重试时间；`None` 表示不再自动重试
+    ///
+    /// # 返回
+    /// 无返回值。重试次数饱和加一，并写入下次重试时间。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn record_attempt(&mut self, next_attempt_at: Option<Instant>) {
         self.attempt_count = self.attempt_count.saturating_add(1);
         self.next_attempt_at = next_attempt_at;
@@ -474,7 +516,10 @@ impl SupplierOrderActionLineData {
     /// * `amount` - 提交金额
     ///
     /// # 返回
-    /// 返回行号从 1 起的动作行数据。
+    /// 返回行号从 1 起的动作行数据。序号无法以 `u32` 表示时，行号饱和为 `u32::MAX`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn from_request_index(
         action_id: SupplierOrderActionId,
         index: usize,

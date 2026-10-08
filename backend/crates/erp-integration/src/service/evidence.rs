@@ -21,6 +21,9 @@ use crate::{Error, Result};
 ///
 /// # 返回
 /// 返回响应视图；策略身份、资金影响与类型要求来自领域策略。
+///
+/// # 错误
+/// 不返回错误。
 pub fn error_evidence_policy(task: &IntegrationErrorTask) -> ResolutionEvidencePolicyView {
     policy_view(error_terminal_policy(task))
 }
@@ -32,14 +35,23 @@ pub fn error_evidence_policy(task: &IntegrationErrorTask) -> ResolutionEvidenceP
 ///
 /// # 返回
 /// 返回响应视图；策略身份、资金影响与类型要求来自领域策略。
+///
+/// # 错误
+/// 不返回错误。
 pub fn difference_evidence_policy(difference: &ReconciliationDifference) -> ResolutionEvidencePolicyView {
     policy_view(difference_terminal_policy(difference))
 }
 
 /// 返回无任务直接对账固定原因注册表视图（注册表归领域，此处只做 view 映射）。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回响应视图；原因、结论与类型要求来自领域注册表。
+///
+/// # 错误
+/// 不返回错误。
 pub fn reconciliation_reason_registry() -> ReconciliationReasonRegistryView {
     let registry = domain_reason_registry();
     ReconciliationReasonRegistryView {
@@ -97,6 +109,9 @@ fn policy_view(policy: TerminalEvidencePolicy) -> ResolutionEvidencePolicyView {
 ///
 /// # 返回
 /// 返回领域证据类型集合（顺序保留提交顺序，不去重）。
+///
+/// # 错误
+/// 不返回错误。
 pub fn domain_kinds(refs: &[ControlledEvidenceRef]) -> Vec<RequiredEvidenceKind> {
     refs.iter().map(|evidence| RequiredEvidenceKind::from(evidence.kind)).collect()
 }
@@ -108,6 +123,9 @@ pub fn domain_kinds(refs: &[ControlledEvidenceRef]) -> Vec<RequiredEvidenceKind>
 ///
 /// # 返回
 /// 返回阻断响应视图；稳定代码与说明来自领域。
+///
+/// # 错误
+/// 不返回错误。
 pub fn blocker_view(blocker: &crate::entity::integration_ops::ActionBlocker) -> ActionBlockerView {
     ActionBlockerView {
         action: blocker.action.as_str().to_string(),
@@ -177,6 +195,20 @@ evidence_kind_table!(
 );
 
 /// 校验任务完成命令引用的策略身份、键与证据类型集合。
+///
+/// # 参数
+/// * `submitted_id` - 命令中的证据策略 ID
+/// * `submitted_version` - 命令中的策略版本
+/// * `submitted_key` - 命令中的策略键
+/// * `submitted_refs` - 命令中的证据引用
+/// * `expected` - 当前业务项的固定策略视图
+///
+/// # 返回
+/// 身份、版本、键一致且提交类型覆盖全部必需类型时成功。
+///
+/// # 错误
+/// 策略身份、版本或键不一致时返回 `ConflictError`；
+/// 必需证据类型未覆盖时返回 `BusinessLogicError`。
 pub fn ensure_completion_policy(
     submitted_id: &str,
     submitted_version: u64,
@@ -203,6 +235,22 @@ pub fn ensure_completion_policy(
 /// 校验直接对账原因注册表身份、原因、结论与所需证据类型。
 ///
 /// 注册原因与结论映射归领域，此处只做请求校验与错误映射。
+///
+/// # 参数
+/// * `registry_id` - 命令中的原因注册表 ID
+/// * `registry_version` - 命令中的注册表版本
+/// * `registered_reason_id` - 命令中的注册原因 ID
+/// * `reason_code` - 固定原因代码
+/// * `conclusion` - 终态结论
+/// * `evidence_refs` - 待核对的证据引用
+///
+/// # 返回
+/// 注册表、原因、结论与证据类型一致时成功。
+///
+/// # 错误
+/// 注册表身份或版本变化时返回 `ConflictError`；
+/// 原因未注册、原因 ID 与代码不一致或结论不一致时返回 `ValidationError`；
+/// 必需证据类型未覆盖时返回 `BusinessLogicError`。
 pub fn ensure_direct_reason(
     registry_id: &str,
     registry_version: u64,
@@ -246,6 +294,20 @@ fn kinds_subset(submitted: &[RequiredEvidenceKind], required: &[RequiredEvidence
 }
 
 /// 逐条调用权威端口重验证据，并返回可持久化的稳定引用。
+///
+/// # 参数
+/// * `authority` - 权威证据端口
+/// * `subject` - 当前业务项证据上下文
+/// * `refs` - 客户端证据引用，按原顺序验证
+/// * `actor_id` - 当前操作人
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 返回与请求顺序一致的已验证证据。
+///
+/// # 错误
+/// 引用为空时返回 `ValidationError`，且不调用端口；
+/// 任一条验证失败时立即返回该错误，不再验证后续引用。
 pub async fn verify_evidence_refs(
     authority: &dyn IntegrationEvidenceAuthority,
     subject: &EvidenceSubject,
@@ -264,6 +326,15 @@ pub async fn verify_evidence_refs(
 }
 
 /// 从验证结果派生单一稳定证据引用；多条以分号连接。
+///
+/// # 参数
+/// * `verified` - 已验证证据
+///
+/// # 返回
+/// 返回领域证据集合的 wire 编码。
+///
+/// # 错误
+/// 领域证据集合构造失败时经 [`evidence_reference_grammar`] 返回 `ValidationError`。
 pub fn verified_reference(verified: &[VerifiedEvidence]) -> Result<String> {
     evidence_reference_grammar(EvidenceReferenceSet::try_from_canonical(
         verified.iter().map(|evidence| evidence.canonical_reference.clone()),

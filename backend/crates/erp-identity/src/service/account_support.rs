@@ -18,7 +18,7 @@ use crate::service::auth::password;
 /// * `expected_kind` - 调用场景要求的账号类型
 /// * `not_found_message` - 统一的不存在提示
 ///
-/// # 返回值
+/// # 返回
 /// 返回类型匹配的账号。
 ///
 /// # 错误
@@ -41,7 +41,7 @@ pub fn account_of_kind(
 /// * `exclude_account_id` - 可选排除账号ID（更新场景）
 /// * `executor` - 数据访问执行器，由调用方决定是否位于事务中
 ///
-/// # 返回值
+/// # 返回
 /// 校验通过返回 Ok
 ///
 /// # 错误
@@ -72,7 +72,7 @@ pub async fn ensure_account_available(
 /// * `account` - 当前账号实体
 /// * `update` - 待应用的账号更新
 ///
-/// # 返回值
+/// # 返回
 /// 返回已应用领域更新、可安全持久化的账号。
 ///
 /// # 错误

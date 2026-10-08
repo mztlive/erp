@@ -8,6 +8,13 @@ use persistence_core::Executor;
 pub trait OrganizationBusinessPort: Send + Sync {
     /// 判断组织是否仍存在需要交接的未结业务。
     ///
+    /// # 参数
+    /// * `org_unit_id` - 待停用的组织单元 ID
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 仍有需要交接的未结业务时返回 `true`，否则返回 `false`。
+    ///
     /// # 错误
     /// 外域查询失败必须拒绝停用，禁止将失败解释为空业务。
     async fn has_unsettled_business(

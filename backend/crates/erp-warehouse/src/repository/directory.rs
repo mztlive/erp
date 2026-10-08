@@ -7,10 +7,16 @@ use persistence_core::{Executor, Result, insert_literal_regex_filter};
 use crate::repository::WarehouseExt;
 
 /// 查询授权目录快照。
+///
 /// # 参数
-/// `scope` 为本域授权，`query` 为规范化条件，`executor` 为调用方事务。
+/// * `db` - 本域数据库。
+/// * `scope` - 本域授权范围。
+/// * `query` - 已规范化的目录条件。
+/// * `executor` - 调用方事务执行器。
+///
 /// # 返回
 /// 最多10001项轻量结果；服务层对超限整体拒绝。
+///
 /// # 错误
 /// 数据库读取或反序列化失败时传播原始错误。
 pub(crate) async fn snapshot(

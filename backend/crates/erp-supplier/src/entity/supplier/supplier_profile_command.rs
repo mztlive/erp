@@ -69,7 +69,14 @@ pub struct SupplierProfileCommand {
 impl SupplierProfileCommand {
     /// 创建已成功根级命令的去重记录。
     ///
-    /// # Errors
+    /// # 参数
+    /// * `id` - 命令记录主键
+    /// * `data` - 幂等键、操作、指纹与结果身份
+    ///
+    /// # 返回
+    /// 返回已校验的去重记录；请求指纹按传入原样保存。
+    ///
+    /// # 错误
     /// 幂等键、结果身份、请求指纹或变更原因为空，或幂等键过长、指纹格式非法时返回校验错误。
     ///
     /// # 约束
@@ -204,7 +211,7 @@ impl SupplierProfileCommand {
 /// * `value` - 完整指纹字符串
 ///
 /// # 返回
-/// 返回小写摘要切片；非法格式由外层校验失败。
+/// 返回去掉 `sha256-v1:` 前缀后的摘要切片；未带该前缀时原样返回，不改变大小写。非法格式由外层校验失败。
 fn fingerprint_digest(value: &str) -> &str {
     value.strip_prefix(FINGERPRINT_V1_PREFIX).unwrap_or(value)
 }

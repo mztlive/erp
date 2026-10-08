@@ -21,6 +21,18 @@ use crate::workbench::authority::funds::origins::{
 };
 
 /// 组装付款执行任务的应付对象事实。
+///
+/// # 参数
+/// * `account` - 应付子账
+/// * `supplier` - 供应商展示名
+/// * `purchase_no` - 来源采购单号
+/// * `due_date` - 计划付款日文案
+///
+/// # 返回
+/// 返回带权威事实和结构化简报的对象事实。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn payable_account_fact(
     account: PayableAccount,
     supplier: Option<String>,
@@ -36,6 +48,18 @@ pub(super) fn payable_account_fact(
 }
 
 /// 组装付款执行任务的结构化应付简报。
+///
+/// # 参数
+/// * `account` - 应付子账，提供未付与已付金额
+/// * `supplier` - 供应商展示名
+/// * `purchase_no` - 来源采购单号
+/// * `due_date` - 计划付款日文案
+///
+/// # 返回
+/// 返回供应商、采购单、金额和计划付款日键值，以及由这些字段拼成的列表摘要。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn payable_brief_source(
     account: &PayableAccount,
     supplier: Option<String>,
@@ -321,6 +345,17 @@ pub(super) fn amount_reason_brief(
 }
 
 /// 同一来源行分别投影命令名称与富简报；富简报保留名称缺失的原始单据。
+///
+/// # 参数
+/// * `receipts` - 回款单
+/// * `party_names` - 主体 ID 到往来名称
+/// * `lines` - 回款单 ID 到简报行
+///
+/// # 返回
+/// 返回命令用往来名称，以及按回款单 ID 索引的富简报。名称缺失时简报仍保留原单。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn receipt_origins_from_rows(
     receipts: Vec<CustomerReceipt>,
     party_names: HashMap<String, String>,
@@ -353,6 +388,17 @@ pub(super) fn receipt_origins_from_rows(
 }
 
 /// 同一来源行分别投影命令名称与富简报；富简报保留名称缺失的原始单据。
+///
+/// # 参数
+/// * `payments` - 付款单
+/// * `supplier_names` - 供应商 ID 到展示名
+/// * `lines` - 付款单 ID 到核销简报行
+///
+/// # 返回
+/// 返回命令用往来名称，以及按付款单 ID 索引的富简报。名称缺失时简报仍保留原单。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn payment_origins_from_rows(
     payments: Vec<SupplierPayment>,
     supplier_names: HashMap<String, String>,
@@ -386,6 +432,18 @@ pub(super) fn payment_origins_from_rows(
 }
 
 /// 同一来源行分别投影命令名称与富简报；富简报保留名称缺失的原始单据。
+///
+/// # 参数
+/// * `entries` - 应收分录
+/// * `accounts` - 子账 ID 到应收子账
+/// * `party_names` - 主体 ID 到往来名称
+/// * `sales_nos` - 销售单 ID 到单号
+///
+/// # 返回
+/// 返回分录往来名称，以及按分录 ID 索引的富简报。销售单号缺失时原单文案为「销售单号待补全」。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn receivable_origins_from_rows(
     entries: Vec<ReceivableEntry>,
     accounts: HashMap<String, ReceivableAccount>,
@@ -424,6 +482,18 @@ pub(super) fn receivable_origins_from_rows(
 }
 
 /// 同一来源行分别投影命令名称与富简报；富简报保留名称缺失的原始单据。
+///
+/// # 参数
+/// * `entries` - 应付分录
+/// * `accounts` - 子账 ID 到应付子账
+/// * `supplier_names` - 供应商 ID 到展示名
+/// * `purchase_nos` - 来源单据 ID 到采购单号
+///
+/// # 返回
+/// 返回分录往来名称，以及按分录 ID 索引的富简报。采购单号缺失时原单文案为「采购单号待补全」。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn payable_origins_from_rows(
     entries: Vec<PayableEntry>,
     accounts: HashMap<String, PayableAccount>,
@@ -460,7 +530,17 @@ pub(super) fn payable_origins_from_rows(
         .collect();
     FundsOrigins { counterparties, briefs }
 }
-/// 富显示明确覆盖往来字段；None 是原结果，不回退 authority 名称。
+/// 富显示明确覆盖往来字段；`None` 是原结果，不回退 authority 名称。
+///
+/// # 参数
+/// * `authority` - 命令权威对象事实
+/// * `counterparty` - 要写入的往来展示名；`None` 会把展示名置空
+///
+/// # 返回
+/// 返回把 `counterparty_label` 设为 `counterparty` 的工作台事实。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn funds_fact_display(
     authority: erp_workflow::ports::ObjectFact,
     counterparty: Option<String>,
@@ -470,6 +550,16 @@ pub(super) fn funds_fact_display(
     fact
 }
 /// 卡券富显示可由券行扩充，其 predicate 不得覆盖命令 authority。
+///
+/// # 参数
+/// * `authority` - 命令权威对象事实
+/// * `display_voucher` - 是否按卡券应收影响文案展示
+///
+/// # 返回
+/// 返回权威事实，并把 `impact_summary` 设为 `receivable_account_impact` 的结果。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn receivable_fact_display(
     authority: erp_workflow::ports::ObjectFact,
     display_voucher: bool,
@@ -480,6 +570,18 @@ pub(super) fn receivable_fact_display(
     fact
 }
 /// 富来源优先存在的原单条目，即使该条目名称为空也不落到分录。
+///
+/// # 参数
+/// * `primary_id` - 原回款或付款单 ID
+/// * `primary` - 原单富简报
+/// * `entry_id` - 分录 ID
+/// * `entries` - 分录富简报
+///
+/// # 返回
+/// 原单 ID 在 `primary` 中有条目时返回该条目；否则返回分录条目。两者都没有时返回 `None`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn select_funds_origin<'a, P: ToString, E: ToString>(
     primary_id: Option<&P>,
     primary: &'a FundsOrigins,

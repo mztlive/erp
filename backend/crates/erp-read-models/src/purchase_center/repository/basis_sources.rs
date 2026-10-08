@@ -181,6 +181,18 @@ async fn creation_basis_facts_for_order(
 }
 
 /// 由销售当前版本、统一覆盖与公司可用库存形成现有库存供给依据。
+///
+/// # 参数
+/// * `db` - 目标数据库。
+/// * `order` - 销售单。
+/// * `responsibility_scope_ids` - 任务冻结的销售行身份。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 销售单未生效时返回空集合；否则返回现有库存供给依据分组。
+///
+/// # 错误
+/// 采购覆盖、可用库存或仓库读取失败时返回对应错误。
 pub async fn stock_basis_groups_for_order(
     db: &mongodb::Database,
     order: &SalesOrder,

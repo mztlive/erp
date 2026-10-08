@@ -1,4 +1,4 @@
-//! Customer HTTP/application DTOs reused by handlers and processes.
+//! 供 Handler 与 Process 复用的客户 HTTP/应用 DTO。
 
 pub mod customer;
 pub mod party_snapshot;

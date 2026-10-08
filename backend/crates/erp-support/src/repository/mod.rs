@@ -1,4 +1,4 @@
-//! Support MongoDB repositories and accessors.
+//! 支撑领域的 MongoDB 仓储与访问器。
 
 mod background_job_cancel;
 pub mod bulk_job;

@@ -21,8 +21,14 @@ pub struct SaveCompanyRequest {
 impl SaveCompanyRequest {
     /// 生成经过校验的公司角色内容。
     ///
-    /// # Errors
-    /// 非法名称或别名返回校验失败。
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回校验并规范化后的 [`CompanyProfile`]。
+    ///
+    /// # 错误
+    /// [`CompanyProfile::new`] 拒绝全称、简称或别名时，返回 `ValidationError`。
     pub fn profile(&self) -> Result<CompanyProfile> {
         CompanyProfile::new(self.legal_name.clone(), self.short_name.clone(), self.aliases.clone())
             .map_err(|e| crate::Error::ValidationError(e.to_string()))
@@ -53,6 +59,17 @@ pub struct CompanyView {
 
 impl TryFrom<Party> for CompanyView {
     type Error = crate::Error;
+
+    /// 从带公司角色的主体投影维护视图。
+    ///
+    /// # 参数
+    /// * `party` - 被消耗的主体；必须带有 `company_profile`。
+    ///
+    /// # 返回
+    /// 返回不含敏感账户字段的公司视图。
+    ///
+    /// # 错误
+    /// `company_profile` 为 `None` 时返回 `NotFound`。
     fn try_from(party: Party) -> Result<Self> {
         let company = party.company_profile.ok_or_else(|| crate::Error::NotFound("公司主体不存在".into()))?;
         Ok(Self {

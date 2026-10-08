@@ -1,4 +1,4 @@
-//! Customer-center owned read repositories.
+//! 客户对象中心自有的读仓储。
 
 mod related;
 

@@ -129,9 +129,9 @@ impl ReceivableProcess {
     }
 }
 
-/// Extract the stable sales business-kind fact consumed by finance.
+/// 把已持久化的销售业务类型显式映射为财务消费的稳定事实。
 ///
-/// All persisted source variants map explicitly; no fallback changes the review policy.
+/// 每个来源变体都有对应项，不用缺省分支改变复核政策。
 fn sales_business_type_fact(
     value: erp_sales::entity::sales_order::BusinessType,
 ) -> erp_finance::entity::receivable::SalesBusinessTypeFact {

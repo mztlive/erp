@@ -32,15 +32,16 @@ impl ProductImportProcess {
     /// 创建导入流程。
     ///
     /// # 参数
-    /// * `db` - MongoDB 数据库
-    /// * `storage` - 对象存储
-    /// * `secret` - 文件内容指纹密钥
+    /// * `db` - MongoDB 数据库。
+    /// * `rbac` - 权限服务。
+    /// * `storage` - 对象存储。
+    /// * `secret` - 文件内容指纹密钥。
     ///
     /// # 返回
     /// 返回流程实例。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn new(
         db: Database,
         rbac: SharedRbacService,

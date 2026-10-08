@@ -1,6 +1,6 @@
-//! Collection-scoped aliases for [`persistence_core::Repository`].
+//! 按集合收窄的 [`persistence_core::Repository`] 别名。
 //!
-//! Domain-specific methods are extension traits on the generic repository.
+//! 领域专用方法是泛型仓储上的扩展 trait。
 
 pub type ApprovalNotificationOutboxRepository<'a> =
     persistence_core::Repository<'a, crate::entity::approval_integration::ApprovalNotificationOutbox>;

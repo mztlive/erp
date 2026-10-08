@@ -51,8 +51,16 @@ pub struct FormalizedSubmissionWrite {
 impl SalesOrderCommandProcess {
     /// 准备最终通过的销售事实；重复形式化返回 `None`，由外层流程复用原回执。
     ///
+    /// # 参数
+    /// * `id` - 销售单主键。
+    /// * `actor` - 已认证操作人。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 尚未形式化时返回待写入上下文；已经完全形式化时返回 `None`。
+    ///
     /// # 错误
-    /// 状态、提交或采购责任授权不满足原合同则失败。
+    /// 销售单不存在、状态或提交不满足、采购责任授权失败或仓储失败时返回错误。
     pub async fn prepare_approved_submission(
         &self,
         id: &str,
@@ -255,11 +263,29 @@ pub(super) async fn persist_procurement_work_items(
 
 impl FormalizedSubmissionWrite {
     /// 待形式化销售单标识，供组合层在入事务前创建原审计记录。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回待形式化销售单标识。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn order_id(&self) -> &str {
         &self.order_id
     }
 
     /// 本次冻结采购责任的授权版本，供流程保持原 CAS 事务栅栏。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 有采购责任计划时返回其授权版本；没有采购计划时返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn policy_revision(&self) -> Option<u64> {
         self.procurement.as_ref().map(|plan| plan.resolution.policy_revision)
     }

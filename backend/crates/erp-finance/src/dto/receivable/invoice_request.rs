@@ -52,11 +52,14 @@ pub struct InvoiceRequestQuery {
 impl InvoiceRequestQuery {
     /// 校验人员组织筛选组合；未知字段由反序列化直接拒绝。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 组合合法时成功。
+    /// 组合合法时无返回值。
     ///
     /// # 错误
-    /// 版本超长、包含下级但未提供组织时返回 `ValidationError`。
+    /// 范围版本为空或超过 256 个字符，或包含下级但未提供组织时返回 `ValidationError`。
     pub fn validate_scope_filters(&self) -> crate::Result<()> {
         if self.scope_version.as_ref().is_some_and(|version| version.is_empty() || version.len() > 256) {
             return Err(crate::Error::ValidationError("范围版本非法".into()));

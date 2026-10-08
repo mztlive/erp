@@ -1,4 +1,4 @@
-//! Contract MongoDB repositories and accessors.
+//! 合同 MongoDB 仓储与访问器。
 
 pub mod contract;
 pub mod extensions;

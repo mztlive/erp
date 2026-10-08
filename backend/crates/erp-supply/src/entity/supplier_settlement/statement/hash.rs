@@ -13,6 +13,9 @@ impl SupplierSettlementStatement {
     ///
     /// # 返回
     /// 返回 64 位小写 SHA-256 十六进制摘要。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn review_subject_hash(&self, differences: &[SupplierSettlementDifference]) -> String {
         let mut parts = vec![
             "supplier-settlement-review-subject-v1".to_string(),
@@ -56,6 +59,12 @@ impl SupplierSettlementStatement {
     /// 来源快照保持冻结；只有覆盖当前结算明细与差异正式结论的主题摘要允许推进。
     /// 待复核、已确认和已作废状态均拒绝修改。
     ///
+    /// # 参数
+    /// * `subject_hash` - 覆盖当前明细与差异结论的主题摘要
+    ///
+    /// # 返回
+    /// 摘要规范化并写回后返回 `Ok(())`。
+    ///
     /// # 错误
     /// 当前状态不可编辑或摘要不是规范 SHA-256 十六进制值时返回错误。
     pub fn update_subject_hash(&mut self, subject_hash: impl Into<String>) -> Result<()> {
@@ -71,6 +80,15 @@ impl SupplierSettlementStatement {
 }
 
 /// 对字段逐项加入长度前缀后计算稳定摘要，消除字符串拼接歧义。
+///
+/// # 参数
+/// * `parts` - 已按业务语义排好序的字段文本
+///
+/// # 返回
+/// 返回 64 位小写 SHA-256 十六进制摘要。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn digest_parts(parts: &[String]) -> String {
     let mut digest = Sha256::new();
     for part in parts {
@@ -81,6 +99,16 @@ pub(crate) fn digest_parts(parts: &[String]) -> String {
 }
 
 /// 规范化服务端生成的 SHA-256 十六进制摘要。
+///
+/// # 参数
+/// * `value` - 待规范化的摘要文本
+/// * `field` - 错误消息使用的业务字段名称
+///
+/// # 返回
+/// 返回去掉首尾空白后的小写 64 位十六进制摘要。
+///
+/// # 错误
+/// 非 64 位十六进制时返回领域错误。
 pub(crate) fn normalize_sha256(value: String, field: &str) -> Result<String> {
     let value = value.trim().to_ascii_lowercase();
     if value.len() != HASH_LEN || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {

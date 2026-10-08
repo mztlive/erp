@@ -28,7 +28,16 @@ pub(super) enum IncludedQualificationHealth {
 
 /// 将列表筛选转为命中集合健康状态。
 ///
-/// `NotRegistered` 由排除集路径处理，不属于命中集合，返回 `None`。
+/// `NotRegistered` 由排除集路径处理，不属于命中集合。
+///
+/// # 参数
+/// * `health` - 资质健康筛选；`None` 表示只按类型命中
+///
+/// # 返回
+/// `NotRegistered` 返回 `None`；未筛选时返回 `ByType`；其余状态返回同名命中状态。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn included_qualification_health(
     health: Option<SupplierQualificationHealthFilter>,
 ) -> Option<IncludedQualificationHealth> {

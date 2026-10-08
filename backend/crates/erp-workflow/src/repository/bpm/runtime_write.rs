@@ -19,8 +19,18 @@ impl<'a> BpmWorkflowRepository<'a> {
     /// 本方法不写收据、不创建事务。要求并发启动以收据作为第一写的调用方，
     /// 必须先在同一事务调用 [`Self::insert_command_receipt`]，再调用本方法。
     ///
+    /// # 参数
+    /// * `instance` - 待插入的启动实例。
+    /// * `assignees` - 启动时冻结的全部节点审批人。
+    /// * `first_execution` - 首个节点执行。
+    /// * `list_projection` - 与实例一并写入的列表投影。
+    /// * `executor` - 调用方执行器；本方法不创建事务。
+    ///
+    /// # 返回
+    /// 实例、审批人与首个执行都写入成功时无返回值。
+    ///
     /// # 错误
-    /// 任一运行集合插入失败时返回错误，调用方事务必须整体回滚。
+    /// 实例或列表投影无法序列化，或任一运行集合插入失败时返回错误；调用方事务必须整体回滚。
     pub async fn create_bpm_runtime_after_receipt(
         &self,
         instance: &ApprovalProcessInstance,
@@ -50,6 +60,15 @@ impl<'a> BpmWorkflowRepository<'a> {
     /// scope；幂等键必须先形成 [`IdempotencyKey`]，仓储不接受或二次规范 raw
     /// 输入。未命中返回 `Ok(None)`，唯一索引竞争后的恢复读取必须由 Service 在
     /// 可用的新会话中编排。
+    ///
+    /// # 参数
+    /// * `command_kind` - 命令种类。
+    /// * `scope_id` - 调用方传入的当前或已登记历史 scope。
+    /// * `idempotency_key` - 已形成的幂等键。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 返回匹配收据；未命中时返回 `None`。
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
@@ -98,6 +117,14 @@ impl<'a> BpmWorkflowRepository<'a> {
     /// 最后写业务单据、任务、通知和审计。旧调用方继续使用
     /// [`Self::persist_cancelled_runtime`]，其行为保持不变。
     ///
+    /// # 参数
+    /// * `instance` - 已进入 `CANCELLED` 的实例快照。
+    /// * `updated_executions` - 已随实例取消结束的当前执行；至少一条。
+    /// * `executor` - 调用方执行器；本方法不写收据、不创建事务。
+    ///
+    /// # 返回
+    /// 实例与全部当前执行的 CAS 都已应用时无返回值。
+    ///
     /// # 错误
     /// 取消计划缺少执行、版本元数据非法、CAS 未命中或 MongoDB 写入失败时返回错误。
     pub async fn persist_cancelled_runtime_after_receipt(
@@ -131,8 +158,18 @@ impl<'a> BpmWorkflowRepository<'a> {
 
     /// 以 `id + expected_instance_version + current_execution_id + RUNNING|BLOCKED` 推进实例。
     ///
+    /// # 参数
+    /// * `instance` - 待写回的实例。
+    /// * `expected_instance_version` - 加载时的实例版本。
+    /// * `expected_current_execution_id` - 必须仍是当前节点执行。
+    /// * `list_projection` - 与实例一并写入的列表投影。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 返回应用、缺失、版本冲突或状态变化的 CAS 分类。
+    ///
     /// # 错误
-    /// 元数据越界或 MongoDB 写入失败时返回错误。
+    /// 版本元数据越界、实例或投影无法序列化，或 MongoDB 写入与回读失败时返回错误。
     pub async fn advance_instance(
         &self,
         instance: &ApprovalProcessInstance,
@@ -167,8 +204,16 @@ impl<'a> BpmWorkflowRepository<'a> {
 
     /// 以 `id + expected_execution_version + ACTIVE` 结束活动执行。
     ///
+    /// # 参数
+    /// * `execution` - 待写回的节点执行。
+    /// * `expected_execution_version` - 加载时的执行版本。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 返回应用、缺失、版本冲突或状态变化的 CAS 分类。
+    ///
     /// # 错误
-    /// 元数据越界或 MongoDB 写入失败时返回错误。
+    /// 版本元数据越界、实体无法序列化，或 MongoDB 写入与回读失败时返回错误。
     pub async fn end_active_execution(
         &self,
         execution: &ApprovalNodeExecution,
@@ -249,6 +294,13 @@ impl<'a> BpmWorkflowRepository<'a> {
 
     /// 插入新的节点执行。原审批人恢复不得更新旧 `CLOSED` 任务对应的旧执行。
     ///
+    /// # 参数
+    /// * `execution` - 新的节点执行。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 插入成功时无返回值。
+    ///
     /// # 错误
     /// 唯一索引冲突或 MongoDB 写入失败时返回错误。
     pub async fn insert_execution(
@@ -260,6 +312,13 @@ impl<'a> BpmWorkflowRepository<'a> {
     }
 
     /// 启动实例时一次性冻结全部节点审批人绑定；运行时不得更新或追加。
+    ///
+    /// # 参数
+    /// * `assignees` - 启动时冻结的审批人绑定。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 插入成功时无返回值。
     ///
     /// # 错误
     /// 唯一索引冲突或 MongoDB 写入失败时返回错误。
@@ -278,6 +337,13 @@ impl<'a> BpmWorkflowRepository<'a> {
 
     /// 插入命令收据。唯一键冲突由调用方按同/异载荷回读分类。
     ///
+    /// # 参数
+    /// * `receipt` - 命令收据。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 插入成功时无返回值。
+    ///
     /// # 错误
     /// 唯一索引冲突或 MongoDB 写入失败时返回错误。
     pub async fn insert_command_receipt(
@@ -289,6 +355,18 @@ impl<'a> BpmWorkflowRepository<'a> {
     }
 }
 
+/// 按命令种类、scope 与幂等键构造收据查询，不含软删除条件。
+///
+/// # 参数
+/// * `command_kind` - 命令种类。
+/// * `scope_id` - 命令 scope。
+/// * `idempotency_key` - 幂等键。
+///
+/// # 返回
+/// 返回可交给 `find_one` 的等值过滤文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn receipt_key_filter(
     command_kind: ApprovalCommandKind,
     scope_id: &str,
@@ -301,6 +379,18 @@ pub(super) fn receipt_key_filter(
     }
 }
 
+/// 构造推进实例的 CAS 过滤：版本、当前执行、`RUNNING|BLOCKED` 与软删除。
+///
+/// # 参数
+/// * `id` - 实例主键。
+/// * `expected_version` - 加载时版本。
+/// * `expected_current_execution_id` - 必须仍是当前节点执行。
+///
+/// # 返回
+/// 返回可交给条件更新的查询文档。
+///
+/// # 错误
+/// 版本无法表示为 BSON 整数时返回错误。
 pub(super) fn instance_advance_filter(
     id: &str,
     expected_version: u64,
@@ -369,6 +459,17 @@ pub(super) fn cancelled_instance_projection(
     }
 }
 
+/// 把实例与列表投影序列化成同一条插入文档。
+///
+/// # 参数
+/// * `instance` - 启动实例。
+/// * `list_projection` - 覆盖或补上的列表字段。
+///
+/// # 返回
+/// 返回合并后的 BSON 文档。
+///
+/// # 错误
+/// 实例或列表投影无法序列化时返回错误。
 pub(super) fn instance_insert_document(
     instance: &ApprovalProcessInstance,
     list_projection: &ApprovalInstanceListProjection,

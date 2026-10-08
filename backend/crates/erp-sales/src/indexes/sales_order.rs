@@ -69,6 +69,9 @@ pub(crate) const SALES_ORDER_VOUCHER_LINE_REVISIONS: &str =
 /// # 参数
 /// * `db` - 目标 MongoDB 数据库
 ///
+/// # 返回
+/// 本域各集合索引创建或已存在时返回空结果。
+///
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {

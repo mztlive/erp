@@ -68,6 +68,9 @@ impl PurchaseOrderProcess {
     ///
     /// # 返回
     /// 返回服务实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db, rbac: None, object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort) }
     }
@@ -79,6 +82,9 @@ impl PurchaseOrderProcess {
     ///
     /// # 返回
     /// 返回同时绑定数据库和授权源的服务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_rbac(db: Database, rbac: SharedRbacService) -> Self {
         Self {
             db,
@@ -86,7 +92,16 @@ impl PurchaseOrderProcess {
             object_read: std::sync::Arc::new(erp_workflow::FailClosedObjectReadPort),
         }
     }
-    /// Inject composition-root object-read for approval binding.
+    /// 消耗 `self`，换入组合根提供的审批对象读取端口。
+    ///
+    /// # 参数
+    /// * `object_read` - 审批绑定使用的对象读取端口。
+    ///
+    /// # 返回
+    /// 返回替换端口后的服务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_object_read(
         mut self,
         object_read: std::sync::Arc<dyn erp_workflow::ApprovalObjectReadPort>,
@@ -99,6 +114,12 @@ impl PurchaseOrderProcess {
         PurchaseOrderService::new(self.db.clone())
     }
     /// 读取采购单写命令所需的共享授权源。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回已注入的共享授权源。
     ///
     /// # 错误
     /// 未注入 RBAC 时返回内部错误，不得跳过绑定。
@@ -114,8 +135,18 @@ use erp_workflow::service::approval::policy::ApprovalDomainAction;
 use persistence_core::Executor;
 /// 在审批运行时持有的事务内撤回采购单审批。
 ///
+/// # 参数
+/// * `db` - 采购单与审计所在数据库。
+/// * `id` - 采购单主键。
+/// * `action` - 审批运行时给出的领域动作。
+/// * `actor` - 撤回操作人。
+/// * `executor` - 审批运行时持有的事务执行器。
+///
+/// # 返回
+/// 采购单撤回与审计已写入调用方事务。
+///
 /// # 错误
-/// 采购单不存在、提交快照缺失、状态迁移或 CAS 写入失败时返回错误。
+/// 采购单不存在、提交快照缺失、状态迁移、审计构造或 CAS 写入失败时返回错误。
 pub async fn cancel_order_approval(
     db: &Database,
     id: &str,
@@ -145,8 +176,18 @@ pub async fn cancel_order_approval(
 
 /// 在审批运行时持有的事务内撤回采购变更审批。
 ///
+/// # 参数
+/// * `db` - 采购变更单与审计所在数据库。
+/// * `id` - 采购变更单主键。
+/// * `action` - 审批运行时给出的领域动作。
+/// * `actor` - 撤回操作人。
+/// * `executor` - 审批运行时持有的事务执行器。
+///
+/// # 返回
+/// 采购变更撤回与审计已写入调用方事务。
+///
 /// # 错误
-/// 采购变更单不存在、状态迁移或 CAS 写入失败时返回错误。
+/// 采购变更单不存在、状态迁移、审计构造或 CAS 写入失败时返回错误。
 pub async fn cancel_change_approval_apply(
     db: &Database,
     id: &str,

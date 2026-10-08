@@ -14,6 +14,21 @@ use super::SupplierApiGovernanceProcess;
 use super::receipt::{CommandReceiptWrite, persist_command_receipt};
 use crate::{Error, Result};
 impl SupplierApiGovernanceProcess {
+    /// 事务外预检并解析外部引用，再在新事务内重验连接并提交。
+    ///
+    /// # 参数
+    /// * `id` - 供应连接 ID。
+    /// * `action` - 资料、端点或凭证引用动作。
+    /// * `payload_reference` - 待解析的外部引用。
+    /// * `expected_version` - 调用方冻结的连接版本。
+    /// * `identity` - 已计算的命令身份。
+    /// * `actor` - 当前操作人。
+    ///
+    /// # 返回
+    /// 引用绑定成功后的命令回执。
+    ///
+    /// # 错误
+    /// 连接或版本不可用、动作不是引用命令、外部引用解析失败，或提交时重验与回执写入失败时返回对应错误。解析失败映射为 `BusinessLogicError`。
     pub(super) async fn execute_reference_command(
         &self,
         id: &str,

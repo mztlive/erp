@@ -34,26 +34,50 @@ pub trait LegacyImportExt {
 
     /// 获取 `legacy_import_batch` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `LegacyImportBatchRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn legacy_import_batches(&self) -> LegacyImportBatchRepository<'_>;
 
     /// 获取 `legacy_import_row` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `LegacyImportRowRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn legacy_import_rows(&self) -> LegacyImportRowRepository<'_>;
 
     /// 获取 `legacy_import_confirmation` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `LegacyImportConfirmationRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn legacy_import_confirmations(&self) -> LegacyImportConfirmationRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `LegacyImportRepository` 实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn legacy_import(&self) -> LegacyImportRepository<'_>;
 }
 

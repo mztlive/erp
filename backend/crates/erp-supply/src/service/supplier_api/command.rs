@@ -19,6 +19,17 @@ pub struct CommandIdentity {
 }
 impl CommandIdentity {
     /// 按操作人、连接、动作和原始命令生成原幂等摘要。
+    ///
+    /// # 参数
+    /// * `id` - 供应商连接主键。
+    /// * `actor_id` - 操作人身份。
+    /// * `command` - 原始连接命令，含幂等键与动作。
+    ///
+    /// # 返回
+    /// 返回含幂等摘要、请求指纹和稳定回执、审计身份的 `CommandIdentity`。
+    ///
+    /// # 错误
+    /// 幂等键经 trim 后为空时返回 `ValidationError`。
     pub fn new(id: &str, actor_id: &str, command: &SupplierConnectionCommand) -> Result<Self> {
         required(Some(command.idempotency_key.as_str()), "幂等键不能为空")?;
         let idempotency_hash =
@@ -111,6 +122,9 @@ pub(super) fn apply_validated_changes(
 /// # 返回
 /// 形态问题映射为 `ValidationError`，新能力版本映射为 `ConflictError`，
 /// 新能力启用映射为 `BusinessLogicError`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn map_capability_change_rejection(rejection: CapabilityChangeSetRejection) -> Error {
     match rejection {
         CapabilityChangeSetRejection::EmptyOrTooMany
@@ -203,6 +217,19 @@ pub fn confirmation_fingerprint(id: &str, command: &ConfirmBusinessCapabilityReq
     ])
 }
 
+/// 计算能力更新命令的稳定指纹。
+///
+/// 命令序列化失败时按空载荷参与摘要，不因此中断。
+///
+/// # 参数
+/// * `id` - 供应商连接主键。
+/// * `command` - 能力更新命令。
+///
+/// # 返回
+/// 返回连接主键与命令载荷的摘要。
+///
+/// # 错误
+/// 不返回错误。
 pub fn capability_update_fingerprint(id: &str, command: &UpdateSupplierCapabilitiesCommand) -> String {
     let payload = serde_json::to_string(command).unwrap_or_default();
     digest(&[id, &payload])

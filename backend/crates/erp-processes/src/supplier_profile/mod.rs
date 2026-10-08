@@ -41,7 +41,17 @@ pub struct SupplierProfileWithAssetsResult {
 }
 
 impl SupplierProfileService {
-    /// 创建根级供应商资料服务。
+    /// 创建根级供应商资料服务。不在构造时注入 RBAC。
+    ///
+    /// # 参数
+    /// * `db` - 数据库。
+    /// * `sensitive_data` - 敏感字段编解码器。
+    ///
+    /// # 返回
+    /// 未注入授权源的资料服务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database, sensitive_data: Arc<SensitiveDataCodec>) -> Self {
         Self { db, sensitive_data, rbac: None }
     }
@@ -61,14 +71,29 @@ impl SupplierProfileService {
         self
     }
 
-    /// 取得资料写入所需的授权源。
+    /// 取得资料写入所需的授权源。未注入时失败关闭。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 构造后注入的 RBAC。
+    ///
+    /// # 错误
+    /// 未注入授权源时返回内部错误。
     pub(super) fn require_rbac(&self) -> Result<&SharedRbacService> {
         self.rbac.as_ref().ok_or_else(|| Error::Internal("供应商资料写入需要授权源".into()))
     }
 
     /// 按幂等键查询已成功的根级命令结果。
     ///
-    /// # Errors
+    /// # 参数
+    /// * `idempotency_key` - 客户端根资料命令幂等键。
+    ///
+    /// # 返回
+    /// 已成功命令的视图；没有记录时为 `None`。
+    ///
+    /// # 错误
     /// 查询失败时返回仓储错误。
     pub async fn command_result(&self, idempotency_key: &str) -> Result<Option<SupplierProfileMutationView>> {
         Ok(self.command_record(idempotency_key).await?.map(command_view))

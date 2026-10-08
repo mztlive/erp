@@ -68,6 +68,10 @@ impl ProductImportProcess {
     ///
     /// # 返回
     /// 返回新建或幂等回放的导入任务。
+    ///
+    /// # 错误
+    /// 任务装配、清单构建、清单写入或任务登记失败时返回对应错误。
+    /// 清单或登记失败会删除本次已上传对象；`OutcomeUnknown` 不执行对象补偿。
     pub(super) async fn create_job_from_parsed(
         &self,
         file_asset: FileAsset,
@@ -102,7 +106,12 @@ impl ProductImportProcess {
     /// 原子登记源文件资产、任务、逐行结果表和可选私有清单。
     ///
     /// # 参数
-    /// 文件资产、任务及明细、原文件名和已通过容量校验的可选私有清单。
+    /// * `file_asset` - 已落对象存储的文件资产。
+    /// * `job` - 待登记的导入任务。
+    /// * `items` - 逐行明细。
+    /// * `file_name` - 原始文件名。
+    /// * `input` - 已通过容量校验的可选私有清单。
+    ///
     /// # 返回
     /// 返回新任务或既有幂等回放任务。
     /// # 错误
@@ -144,6 +153,16 @@ impl ProductImportProcess {
         }
     }
 
+    /// 按请求身份回放已存在的导入任务。
+    ///
+    /// # 参数
+    /// * `request_id` - 幂等请求身份。
+    ///
+    /// # 返回
+    /// 返回已存在任务的视图；文件名不随回放恢复。
+    ///
+    /// # 错误
+    /// 查询失败时返回仓储错误。找不到任务时返回 `ConflictError`。
     pub(super) async fn replay_existing_job(&self, request_id: &str) -> Result<ProductImportJobView> {
         let existing = self
             .db

@@ -28,6 +28,9 @@ impl LegacyImportService {
     ///
     /// # 返回
     /// 返回服务实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database, bulk_jobs: Arc<dyn BulkJobFactsPort>) -> Self {
         Self { db, bulk_jobs }
     }

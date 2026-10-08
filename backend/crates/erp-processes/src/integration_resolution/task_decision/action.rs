@@ -84,8 +84,15 @@ impl super::execution::TaskCommandPort for ActionCommand<'_> {
 impl IntegrationResolutionProcess {
     /// 执行 W29 非终结任务动作，并保证任务仍为 `OPEN`。
     ///
+    /// # 参数
+    /// * `command` - 非终结任务动作强命令。
+    /// * `actor` - 已通过鉴权的审计操作人。
+    ///
+    /// # 返回
+    /// 本次动作或同载荷重放的结果。
+    ///
     /// # 错误
-    /// 责任、任务/主题/领域版本、动作前置条件或幂等指纹不成立时返回错误。
+    /// 请求非法、命令无法形成幂等指纹，或责任、任务/主题/领域版本、动作前置条件或幂等指纹不成立时返回错误。
     pub async fn apply_task_action(
         &self,
         command: IntegrationTaskActionCommand,

@@ -328,11 +328,15 @@ pub struct SupplierPaymentListQuery {
 impl SupplierPaymentListParams {
     /// 归一化供应商付款单列表查询参数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回不依赖仓储类型的规范化查询参数。
     ///
     /// # 错误
-    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
+    /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`；
+    /// 包含下级但未提供组织时同样返回 `ValidationError`。
     pub fn normalized(&self) -> Result<SupplierPaymentListQuery> {
         let (sort_by, sort_dir) =
             normalize_sort(&self.sort_by, &self.sort_dir, SUPPLIER_PAYMENT_SORT_FIELDS)?;

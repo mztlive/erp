@@ -28,8 +28,14 @@ pub use upgrade::{replay_unsubmitted_document_definition_upgrade, upgrade_unsubm
 
 /// 按政策决定是否查询发布定义。
 ///
+/// # 参数
+/// * `requirement` - 单据类型的审批要求
+///
 /// # 返回
 /// `NO_APPROVAL` 跳过；`PROCESS_REQUIRED` 必须绑定。
+///
+/// # 错误
+/// 不返回错误。
 pub fn binding_decision(requirement: ApprovalRequirement) -> BindingDecision {
     match requirement {
         ApprovalRequirement::NoApproval => BindingDecision::SkipNoApproval,
@@ -39,16 +45,28 @@ pub fn binding_decision(requirement: ApprovalRequirement) -> BindingDecision {
 
 /// 必须审批且缺失发布定义时失败关闭。
 ///
+/// # 参数
+/// * `published` - 已查到的发布定义；缺失为 `None`
+///
+/// # 返回
+/// 存在发布定义时返回其值。
+///
 /// # 错误
-/// 返回 `APPROVAL_PROCESS_NOT_CONFIGURED`。
+/// `published` 为 `None` 时返回 `APPROVAL_PROCESS_NOT_CONFIGURED`。
 pub fn published_definition_or_not_configured<T>(published: Option<T>) -> Result<T> {
     published.ok_or_else(process_not_configured)
 }
 
 /// 构造未配置流程的稳定冲突。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回 `APPROVAL_PROCESS_NOT_CONFIGURED`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn process_not_configured() -> Error {
     Error::from_approval_code(ErrorCode::ApprovalProcessNotConfigured)
 }

@@ -218,28 +218,46 @@ impl From<validator::ValidationErrors> for Error {
 }
 
 impl Error {
-    /// Whether a failed transaction may already have committed on the server.
+    /// 判断失败后服务端是否仍可能已经提交。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `OutcomeUnknown`、`ReceiptDuplicate` 或 `TransientTransaction` 时返回 `true`，其余返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn command_may_have_committed(&self) -> bool {
         matches!(self, Self::OutcomeUnknown(_) | Self::ReceiptDuplicate(_) | Self::TransientTransaction(_))
     }
-    /// 由合同冻结的审批稳定码构造应用错误。
+    /// 把合同冻结的审批稳定码原样包成 `Error::Coded`，不在此处改写类别。
     ///
-    /// `APPROVAL_POLICY_NOT_REGISTERED` 只允许作为内部错误；资格与图校验走 422 语义，
-    /// 责任不匹配走 403，其余稳定码走冲突。未接入类型不得回退旧运行时。
+    /// 类别仍由稳定码自身决定：`APPROVAL_POLICY_NOT_REGISTERED` 为内部错误，
+    /// 未指派给操作人为拒绝，定义非法与驳回原因必填为业务规则，其余为冲突。
     ///
     /// # 参数
-    /// * `code` - 合同冻结的结构化错误码
+    /// * `code` - 合同冻结的结构化错误码。
     ///
     /// # 返回
-    /// 返回已带稳定码的应用错误。
+    /// 返回已带该稳定码的应用错误。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub const fn from_approval_code(code: WorkflowErrorCode) -> Self {
         Self::Coded(code)
     }
 
     /// 返回结构化应用错误码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 仅结构化错误返回稳定码；普通业务文案不得被反向解析。
+    /// 仅 `Coded` 返回稳定码；普通业务文案返回 `None`，不得被反向解析。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub const fn code(&self) -> Option<WorkflowErrorCode> {
         match self {
             Self::Coded(code) => Some(*code),

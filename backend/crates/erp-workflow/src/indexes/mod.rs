@@ -1,4 +1,4 @@
-//! Workflow collection indexes.
+//! 工作流集合索引。
 
 mod approval_integration;
 mod bpm;
@@ -8,13 +8,16 @@ mod work_item;
 use mongodb::Database;
 use persistence_core::Result;
 
-/// Create workflow collection indexes.
+/// 创建工作流各集合索引。
 ///
-/// # Parameters
-/// * `db` - target MongoDB database
+/// # 参数
+/// * `db` - 目标 MongoDB 数据库。
 ///
-/// # Errors
-/// Unique-constraint violations or MongoDB index creation failures.
+/// # 返回
+/// 无返回值。
+///
+/// # 错误
+/// 任一子模块因唯一约束冲突或 MongoDB 无法创建索引而失败时返回对应错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     approval_integration::ensure(db).await?;
     bpm::ensure(db).await?;

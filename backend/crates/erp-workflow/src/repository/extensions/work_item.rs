@@ -22,14 +22,26 @@ pub trait WorkItemExt {
 
     /// 获取 `work_item` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `WorkItemRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn work_items(&self) -> WorkItemRepository<'_>;
 
     /// 获取财务执行负责人规则 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `FinanceResponsibilityRuleRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn finance_responsibility_rules(&self) -> FinanceResponsibilityRuleRepository<'_>;
 }
 

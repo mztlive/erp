@@ -10,21 +10,31 @@ use crate::entity::{AuditLog, BusinessEventResult};
 /// 展示查询与同事务写入，不暴露命令或业务身份事实。
 #[allow(async_fn_in_trait)]
 pub trait AuditLogRepositoryExt {
-    /// 有序写入多个操作事件。
+    /// 按给定顺序写入多条操作事件。
+    ///
+    /// 空切片不访问数据库。调用方持有 `executor`，本函数不提交事务。
+    ///
     /// # 参数
-    /// logs 保持业务事件序号顺序，executor 由原用例传入。
+    /// * `logs` - 保持业务事件序号顺序的审计日志。
+    /// * `executor` - 调用方传入的执行器。
+    ///
     /// # 返回
-    /// 全部写入成功时返回空结果。
+    /// 写入成功或 `logs` 为空时返回 `Ok(())`。
+    ///
     /// # 错误
-    /// 任一写入失败停止，事务由调用方处理。
+    /// `logs` 非空且仓储写入失败时返回对应错误。
     async fn create_many_ordered(&self, logs: &[AuditLog], executor: &mut dyn Executor) -> Result<()>;
     /// 按结构化条件查询展示日志。
+    ///
     /// # 参数
-    /// filter 为已授权筛选，executor 为调用方执行器。
+    /// * `filter` - 已授权的展示筛选。
+    /// * `executor` - 调用方执行器。
+    ///
     /// # 返回
-    /// 返回分页日志。
+    /// 返回分页日志。排序由仓储检索按创建时间倒序给出。
+    ///
     /// # 错误
-    /// 查询或计数失败时返回错误。
+    /// 仓储查询或计数失败时返回对应错误。
     async fn search_logs(
         &self,
         filter: &AuditLogFilter,
@@ -70,7 +80,7 @@ impl Default for AuditLogFilter {
     /// 返回第 1 页、每页 20 条的空筛选条件。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     fn default() -> Self {
         Self {
             actor_account: None,
@@ -86,10 +96,18 @@ impl Default for AuditLogFilter {
 }
 
 impl QueryFilter for AuditLogFilter {
-    /// 转换为 MongoDB 查询条件。
+    /// 转换成未删除审计日志的 MongoDB 查询条件。
     ///
-    /// # 返回值
-    /// 返回查询条件文档
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 始终包含未删除条件。`actor_account`、`action` 与业务编号按字面量正则匹配；
+    /// `event_result` 写入 `structured_event.result` 的 `succeeded`、`rejected` 或 `unknown`；
+    /// `resource_type` 与 `success` 为精确匹配。分页字段不进入条件。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
 
@@ -123,10 +141,16 @@ impl QueryFilter for AuditLogFilter {
 }
 
 impl Pagination for AuditLogFilter {
-    /// 返回页码和分页大小。
+    /// 返回调用方保存的页码和分页大小，不把 `0` 归一成第一页。
     ///
-    /// # 返回值
-    /// 返回原始页码与单页条目数。
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 `(page, page_size)`，其中 `page_size` 展成 `u64`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }

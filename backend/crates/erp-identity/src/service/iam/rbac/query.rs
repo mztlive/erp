@@ -42,6 +42,12 @@ fn role_items_from_map(
 impl RbacService {
     /// 查询全部角色及其直接权限。
     ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回带直接权限的角色列表；没有角色时为空列表。
+    ///
     /// # 错误
     /// 当 MongoDB 或 Casbin policy 查询失败时返回错误。
     pub async fn role_list(&self) -> Result<Vec<RoleItem>> {
@@ -50,6 +56,12 @@ impl RbacService {
     }
 
     /// 查询全部可分配角色及其直接权限。
+    ///
+    /// # 参数
+    /// * `actor` - 已认证操作人，用于按自身权限过滤。
+    ///
+    /// # 返回
+    /// 返回操作人权限能够覆盖、且允许普通分配的角色。
     ///
     /// # 错误
     /// 当 MongoDB 或 Casbin policy 查询失败时返回错误。
@@ -100,6 +112,13 @@ impl RbacService {
 
     /// 查询账号直接绑定的角色 ID。
     ///
+    /// # 参数
+    /// * `account_kind` - 账号类型。
+    /// * `account_id` - 账号 ID。
+    ///
+    /// # 返回
+    /// 返回去掉 `role:` 前缀的直接角色 ID；未绑定时为空列表。
+    ///
     /// # 错误
     /// 当 Casbin policy 加载失败时返回错误。
     pub async fn role_ids(&self, account_kind: AccountKind, account_id: &str) -> Result<Vec<String>> {
@@ -140,7 +159,7 @@ impl RbacService {
     /// * `account_kind` - 账号类型。
     /// * `account_ids` - 待查询的账号 ID 集合。
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回账号 ID 到角色 ID 集合的映射；未绑定角色的账号对应空集合。
     ///
     /// # 错误
@@ -160,8 +179,15 @@ impl RbacService {
 
     /// 查询账号通过角色继承获得的权限。
     ///
+    /// # 参数
+    /// * `account_kind` - 账号类型。
+    /// * `account_id` - 账号 ID。
+    ///
+    /// # 返回
+    /// 返回去重后的隐式权限。
+    ///
     /// # 错误
-    /// 当 Casbin policy 包含非法权限时返回错误。
+    /// Casbin policy 无法加载，或策略行无法解析为权限时返回错误。
     pub async fn permissions(&self, account_kind: AccountKind, account_id: &str) -> Result<Vec<Permission>> {
         let policies = self
             .fresh_enforcer()

@@ -11,11 +11,14 @@ use super::super::FundsLinkedCondition;
 /// 将已解析范围的当前责任事实映射到来源仓储字段。
 ///
 /// # 参数
-/// 已通过资源动作资格校验的范围与来源负责人字段。
+/// * `scope` - 已通过资源动作资格校验的范围。
+/// * `owner_field` - 来源负责人字段名。
+///
 /// # 返回
-/// 角色并集与个人上限的独立交集条件；缺范围保持恒假。
+/// 角色并集与个人上限的独立交集条件；缺范围保持恒假。负责人字段会改成 `owner_field`。
+///
 /// # 错误
-/// 无。
+/// 不返回错误。
 pub(crate) fn source_scope_document(scope: &AuthorizedDataScope, owner_field: &str) -> Document {
     let clause = |item: &ScopeClause| PurchaseScopeClause {
         company: item.company,
@@ -58,11 +61,18 @@ fn rename_owner(document: Document, owner_field: &str) -> Document {
 /// 关联一个真实来源并分别保留最小责任事实与授权布尔值。
 ///
 /// # 参数
-/// 集合、原单引用表达式、输出字段、已解析范围、负责人及单号字段。
+/// * `collection` - 来源集合名。
+/// * `local_expression` - 原单引用表达式。
+/// * `as_field` - 来源事实输出字段。
+/// * `scope` - 已解析来源范围条件。
+/// * `owner_field` - 来源负责人字段。
+/// * `number_field` - 来源单号字段。
+///
 /// # 返回
-/// 输出 `as_field` 为存在来源的事实，`as_field_allowed` 为实际范围资格。
+/// 关联阶段。`as_field` 为存在来源的事实，`{as_field}_allowed` 为实际范围资格；缺失来源时事实留空且资格为 false。
+///
 /// # 错误
-/// 无；缺失来源事实留空且资格为 false。
+/// 不返回错误。
 pub(crate) fn source_stages(
     collection: &str,
     local_expression: Bson,
@@ -107,11 +117,14 @@ fn owner_expression(field: &str) -> Bson {
 /// 业务筛选与来源授权求交，不替换授权分支。
 ///
 /// # 参数
-/// 已展开组织和精确身份条件、来源负责人字段。
+/// * `condition` - 已展开组织和精确身份条件。
+/// * `owner_field` - 来源负责人字段名。
+///
 /// # 返回
-/// 返回负责人和组织交集；经办维度由主对象查询处理。
+/// 负责人和组织的 `$in` 条件；未提供的维度不写入。经办维度不在此文档中。
+///
 /// # 错误
-/// 无。
+/// 不返回错误。
 pub(crate) fn linked_condition_document(condition: &FundsLinkedCondition, owner_field: &str) -> Document {
     let mut document = Document::new();
     if let Some(ids) = &condition.owner_user_ids {

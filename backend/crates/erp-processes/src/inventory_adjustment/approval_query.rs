@@ -35,6 +35,18 @@ use super::cancel_approval::{
 use crate::{Error, Result};
 
 /// 加载库存调整详情的审批实例、历史与当前调用人撤回令牌。
+///
+/// # 参数
+/// * `service` - 库存调整流程服务。
+/// * `adjustment` - 已加载的调整单。
+/// * `binding` - 冻结的定义绑定；可为空。
+/// * `actor` - 当前认证操作人。
+///
+/// # 返回
+/// 返回只读审批视图。主题上没有实例时实例与历史为空，仍可能带提交令牌。
+///
+/// # 错误
+/// 主体引用非法、提交令牌授权读取失败、主题版本溢出，或运行事实读取失败时返回对应错误。
 pub(super) async fn load_document_approval(
     service: &InventoryAdjustmentService,
     adjustment: &StockAdjustment,
@@ -63,6 +75,20 @@ pub(super) async fn load_document_approval(
 ///
 /// 本入口不生成新的提交令牌。旧实例已取消、单据已回到草稿或重新提交时，
 /// 响应仍只能展示原命令实例，不能回落到主题上的最新实例或泄露新命令动作。
+///
+/// # 参数
+/// * `service` - 库存调整流程服务。
+/// * `adjustment` - 已加载的调整单。
+/// * `binding` - 冻结的定义绑定。
+/// * `instance_id` - 收据引用的审批实例 ID。
+/// * `expected_subject_version` - 原命令冻结的主题版本。
+/// * `actor` - 当前认证操作人。
+///
+/// # 返回
+/// 返回该实例的只读审批视图，且不带提交令牌。
+///
+/// # 错误
+/// 实例不存在、实例身份与单据或版本不一致、绑定缺失或不匹配，或运行事实读取失败时返回冲突或下层错误。
 pub(super) async fn load_document_approval_for_instance(
     service: &InventoryAdjustmentService,
     adjustment: &StockAdjustment,

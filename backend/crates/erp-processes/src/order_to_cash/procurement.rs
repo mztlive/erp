@@ -44,7 +44,16 @@ fn resolution_input(
 ) -> ResolutionInput {
     ResolutionInput { line_key: fact.line_key, sku_id: fact.sku_id, service_region: fact.service_region }
 }
-/// Map frozen sales-line facts onto the unchanged procurement resolver input.
+/// 把已冻结的销售明细事实映射为采购责任解析输入。
+///
+/// # 参数
+/// * `lines` - 已冻结的销售提交行。
+///
+/// # 返回
+/// 返回与原行对应的解析输入。
+///
+/// # 错误
+/// 销售明细无法形成采购事实时返回下层错误。
 pub(super) fn submission_procurement_inputs(
     lines: &[SalesOrderSubmissionLine],
 ) -> Result<Vec<ResolutionInput>> {

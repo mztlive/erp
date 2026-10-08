@@ -184,6 +184,15 @@ impl AuditedCommand for OfferingHandoverCommand {
     type Output = HandoverSupplierOfferingView;
 
     /// 同 Executor 查证、资格校验、交接和回执；重放不追加成功事件。
+    ///
+    /// # 参数
+    /// * `executor` - 查证、交接与回执共用的调用方执行器。
+    ///
+    /// # 返回
+    /// 已有匹配回执时返回 `AuditedWrite::Replayed`，不追加成功事件。首次成功返回 `AuditedWrite::Fresh`，含交接事件和当前供给视图。
+    ///
+    /// # 错误
+    /// 回执不匹配、目标账号或组织校验失败、供给不可更新、交接写入、回执构造或保存失败时返回对应错误。
     async fn execute(&self, executor: &mut dyn Executor) -> Result<AuditedWrite<Self::Output>> {
         if let Some(view) =
             replay(&self.db, &self.rbac, &self.command, &self.id, &self.actor, executor).await?

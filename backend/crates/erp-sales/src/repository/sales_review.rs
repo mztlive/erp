@@ -81,8 +81,16 @@ impl Default for SalesChangeOrderFilter {
 impl QueryFilter for SalesChangeOrderFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// 按原销售单、变更状态与已授权销售单求交。指定销售单不在授权集合内，或授权集合为空时，条件恒假。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         change_order_filter(
             self.sales_order_id.as_ref().map(ToString::to_string).as_deref(),
@@ -95,8 +103,14 @@ impl QueryFilter for SalesChangeOrderFilter {
 impl Pagination for SalesChangeOrderFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `(page, page_size)` 元组。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -502,6 +516,9 @@ impl<'a> SalesReviewRepository<'a> {
     ///
     /// # 返回
     /// 返回仓储实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: &'a Database) -> Self {
         Self { db }
     }
@@ -513,6 +530,9 @@ impl<'a> SalesReviewRepository<'a> {
     /// * `submission` - 不可变变更提交头
     /// * `lines` - 不可变变更提交明细
     /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 返回
+    /// 变更提交、明细写入且变更单更新成功时无返回值。
     ///
     /// # 错误
     /// 当唯一索引冲突、乐观锁冲突或 MongoDB 写入失败时返回错误。

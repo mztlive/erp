@@ -1,4 +1,4 @@
-//! Consumer-owned ports for authorization, object read, upgrade facts and work-item facts.
+//! 消费方拥有的端口：授权、对象读取、升级事实与工作项事实。
 
 mod audit;
 mod authorization;

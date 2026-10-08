@@ -7,6 +7,19 @@ use erp_identity::service::access_control::resolve::AuthorizedDataScope;
 use erp_identity::{Error, Result};
 
 /// 将已校验的单身份维度范围映射为领域目录输入。
+///
+/// 公司范围且个人上限未收窄公司时，`ids` 为 `None`；否则为求交后的目标 ID。
+/// 空目标集保持空集，不会改写成公司范围。
+///
+/// # 参数
+/// * `access` - 身份域已解析授权。
+/// * `dimension` - 目录使用的单一身份维度。
+///
+/// # 返回
+/// 返回目录范围。`ids` 为 `None` 表示公司范围；`no_scope` 为真表示目标集为空。
+///
+/// # 错误
+/// 该维度目标超过 `DIRECTORY_LIMIT` 时返回 `Error::ValidationError`。
 pub(super) fn directory_scope(
     access: AuthorizedDataScope,
     dimension: ScopeDimension,

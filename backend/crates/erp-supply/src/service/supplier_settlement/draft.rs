@@ -39,6 +39,18 @@ pub struct PreparedRefresh {
 }
 impl SupplierSettlementService {
     /// 核验创建动作、期间和幂等记录，再从最新来源依原顺序构造结算单与快照。
+    ///
+    /// # 参数
+    /// * `req` - 创建结算草稿请求。
+    /// * `actor_id` - 对账负责人。
+    /// * `business_org_unit_id` - 结算单业务组织。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 同一结算单号且供应商、期间一致时返回 `StatementPreparation::Replay`。否则返回待写入的草稿。
+    ///
+    /// # 错误
+    /// 参数、动作或期间非法时返回 `ValidationError`。同一结算单号已用于不同供应商或期间时返回 `ConflictError`。当前范围没有来源证据时返回 `BusinessLogicError`。仓储读取或快照组装失败时返回对应错误。
     pub async fn prepare_statement(
         &self,
         req: &CreateSettlementStatementRequest,
@@ -80,6 +92,7 @@ impl SupplierSettlementService {
 
         Ok(StatementPreparation::Ready(prepared))
     }
+    /// 重读当前明细和差异行数，组装草稿命令结果。
     async fn draft_result(
         &self,
         statement: SupplierSettlementStatement,
@@ -100,6 +113,18 @@ impl SupplierSettlementService {
         })
     }
     /// 按责任、版本、来源和旧明细的原顺序准备刷新；相同来源不创建新快照。
+    ///
+    /// # 参数
+    /// * `id` - 结算单主键。
+    /// * `req` - 刷新请求，含期望版本和来源摘要。
+    /// * `actor_id` - 操作人，必须是当前经办人。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 来源摘要未变时返回原结算单和当前行数，快照为 `None`。来源已变时返回已套用新快照的结算单、新快照和待替换的旧明细、差异身份。
+    ///
+    /// # 错误
+    /// 结算单不存在时返回 `NotFound`。操作人不是经办人时返回 `Forbidden`。版本或来源摘要不一致时返回 `ConflictError`。冻结策略没有来源证据时返回 `BusinessLogicError`。仓储读取或快照构造失败时返回对应错误。
     pub async fn prepare_refresh(
         &self,
         id: &str,
@@ -176,6 +201,19 @@ impl SupplierSettlementService {
         })
     }
     /// 按原结算单号查重并只核对供应商和期间，随后重读当前行数。
+    ///
+    /// # 参数
+    /// * `req` - 创建请求，用于核对供应商。
+    /// * `statement_no` - 确定性结算单号。
+    /// * `period_start` - 已解析的期间开始。
+    /// * `period_end` - 已解析的期间结束。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 没有该结算单号时返回 `None`。供应商和期间一致时返回带当前行数的重放结果。
+    ///
+    /// # 错误
+    /// 已有结算单的供应商或期间不同时返回 `ConflictError`。仓储读取失败时返回对应错误。
     pub async fn replay_statement_create(
         &self,
         req: &CreateSettlementStatementRequest,
@@ -202,6 +240,18 @@ impl SupplierSettlementService {
         ))
     }
     /// 按原仓储的单头、明细、差异顺序创建冻结结算快照。
+    ///
+    /// # 参数
+    /// * `statement` - 待创建的结算单。
+    /// * `items` - 待创建的冻结明细。
+    /// * `differences` - 待创建的正式差异。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 无返回值。结算单、明细和差异已创建。
+    ///
+    /// # 错误
+    /// 仓储写入失败时返回对应错误。
     pub async fn persist_statement_with_items(
         &self,
         statement: &SupplierSettlementStatement,
@@ -216,6 +266,19 @@ impl SupplierSettlementService {
         Ok(())
     }
     /// 在调用者事务内重验旧版本和来源摘要，再按原物理顺序替换草稿。
+    ///
+    /// # 参数
+    /// * `statement` - 待写回的结算单。
+    /// * `snapshot` - 新的明细和差异快照。
+    /// * `old_ids` - 待替换的旧明细身份和旧差异身份。
+    /// * `req` - 刷新请求，用于重验版本和来源摘要。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 无返回值。旧草稿已被新快照替换。
+    ///
+    /// # 错误
+    /// 重读时结算单不存在返回 `NotFound`。版本或来源摘要已变化时返回 `ConflictError`。仓储替换失败时返回对应错误。
     pub async fn persist_refreshed_statement(
         &self,
         statement: &mut SupplierSettlementStatement,
@@ -376,6 +439,7 @@ fn draft_statement_data(
     }
 }
 
+/// 结算单号取期间结束文本的前 6 位数字，再接请求身份摘要的前 16 位。
 fn deterministic_statement_no(req: &CreateSettlementStatementRequest) -> String {
     let digest = digest_parts(&[
         "supplier-settlement-create-v1".to_string(),
@@ -386,6 +450,7 @@ fn deterministic_statement_no(req: &CreateSettlementStatementRequest) -> String 
     format!("ST-{month}-{}", &digest[..16])
 }
 
+/// 同一结算单号只接受相同供应商和期间，其余载荷不在此比较。
 fn validate_create_replay(
     statement: &SupplierSettlementStatement,
     req: &CreateSettlementStatementRequest,

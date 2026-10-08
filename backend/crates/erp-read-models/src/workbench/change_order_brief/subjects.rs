@@ -6,8 +6,17 @@ use crate::workbench::WorkbenchSubjectDisplay;
 
 /// 保存每次销售变更的冻结字段和行差异。
 ///
-/// `fact` 为待补充展示，`change` 为变更实体，`number` 为来源单号，`context` 为批量提交事实。
-/// 无返回值；仅写入展示，不修改权限。
+/// # 参数
+/// * `fact` - 待补充展示的对象事实。
+/// * `change` - 销售变更单。
+/// * `number` - 来源销售单号。
+/// * `context` - 批量读取的基准修订、提交与行状态。
+///
+/// # 返回
+/// 无返回值。按提交编号和提交 ID 写入展示，不修改权限。非当前提交不保留原因和变更类型。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn sales(
     fact: &mut WorkbenchObjectFact,
     change: &SalesChangeOrder,
@@ -58,8 +67,17 @@ fn sales_source(
 
 /// 保存采购变更的冻结字段；仅完整且与审批计数一致的 CS 序列可作为历史版本。
 ///
-/// `fact` 为待补充展示，`change` 为变更实体，`number` 为来源单号，`context` 为批量提交事实。
-/// 无返回值；仅写入展示，不修改权限。
+/// # 参数
+/// * `fact` - 待补充展示的对象事实。
+/// * `change` - 采购变更单。
+/// * `number` - 来源采购单号。
+/// * `context` - 批量读取的基准修订、提交与行状态。
+///
+/// # 返回
+/// 无返回值。当前提交写入审批版本；序列对齐时历史提交写入 CS 序号；始终再按提交 ID 写一份。不修改权限。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn purchase(
     fact: &mut WorkbenchObjectFact,
     change: &PurchaseChangeOrder,

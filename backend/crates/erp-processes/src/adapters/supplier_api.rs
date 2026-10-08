@@ -42,10 +42,13 @@ impl SupplierApiGateway for UnavailableSupplierApiGateway {
     /// 执行一次连接健康检查（默认实现恒失败关闭）。
     ///
     /// # 参数
-    /// * `connection` - 目标连接
+    /// * `connection` - 目标连接。
     ///
     /// # 返回
-    /// 恒返回 `TransientFailure` 分类错误（端点引用为配置引用，未注册可调用地址）。
+    /// 不返回成功值。
+    ///
+    /// # 错误
+    /// 恒返回 `TransientFailure`、代码 `ENDPOINT_UNRESOLVED`：端点引用是配置引用，未注册可调用地址。
     fn health_check<'a>(
         &'a self,
         connection: &'a SupplierApiConnection,

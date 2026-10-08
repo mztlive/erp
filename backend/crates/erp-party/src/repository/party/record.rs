@@ -80,8 +80,18 @@ impl Default for PartyFilter {
 impl QueryFilter for PartyFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// `matching_name_ids` 为空时，把 `keyword` 作为 `party_no` 的字面量正则并入；`None` 则不写。
+    /// 非空时改为 `$or`：一条是这些主体 `id` 的 `$in`，`keyword` 为 `Some` 时再并入 `party_no` 条件。
+    /// `party_kind` 与 `status` 为 `None` 时不写入，有值时按稳定代码精确匹配，并与上述条件同时生效。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         let mut number = Document::new();
@@ -110,8 +120,14 @@ impl QueryFilter for PartyFilter {
 impl Pagination for PartyFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组。`page` 原样取出，`page_size` 由 `u32` 转为 `u64`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }

@@ -520,7 +520,7 @@ fn build_coverage(
 /// 返回采购覆盖值对象。
 ///
 /// # 错误
-/// 数量不一致时返回领域错误。
+/// 目标或覆盖数量为负、覆盖超过目标，或剩余数量与进度无法构造时返回领域错误。
 ///
 /// # 关键业务约束
 /// 所有查询入口共享同一错误语义。
@@ -559,6 +559,9 @@ fn quantity_of(value: Decimal) -> Result<Quantity> {
 ///
 /// # 关键业务约束
 /// 零值只用于缺省覆盖，不代表缺失采购指针。
+///
+/// # Panics
+/// 数量类型拒绝零值时 panic；零数量是合法数量，panic 只表示数量类型不变量被破坏。
 fn zero_quantity() -> Quantity {
     Quantity::try_from(Decimal::ZERO).expect("零数量合法")
 }

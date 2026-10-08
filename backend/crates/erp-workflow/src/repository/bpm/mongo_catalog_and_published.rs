@@ -1,4 +1,4 @@
-//! Mongo catalog/published graph tests stay ignored; this crate does not depend on test-support.
+//! Mongo 目录与已发布图测试保持忽略；本 crate 不依赖 test-support。
 
 /// 批量目录覆盖 published-only、draft-only、并存、缺失、退役、软删、空输入、去重与重复状态失败关闭。
 ///

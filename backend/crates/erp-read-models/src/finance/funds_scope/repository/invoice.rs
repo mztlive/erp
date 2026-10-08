@@ -85,11 +85,13 @@ impl InvoiceVersion {
     /// 保留旧协议逐票哈希主键、版本及按来源键排序的责任版本。
     ///
     /// # 参数
-    /// 原指纹 hasher。
+    /// * `fingerprint` - 调用方持有的指纹 hasher。
+    ///
     /// # 返回
-    /// 按既有协议追加当前记录与来源版本。
+    /// 按既有协议把发票主键、版本以及销项、进项来源版本写入 `fingerprint`。
+    ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn hash_into(&self, fingerprint: &mut impl Hasher) {
         self.id.hash(fingerprint);
         self.version.hash(fingerprint);
@@ -103,11 +105,13 @@ impl InvoiceSnapshot {
     /// 用最终授权集合执行原查询保护，超限整体拒绝而不截断结果。
     ///
     /// # 参数
-    /// 最终授权快照。
+    /// 无。
+    ///
     /// # 返回
-    /// 未达到原查询上限时返回成功。
+    /// 版本条数少于 10000 时成功。
+    ///
     /// # 错误
-    /// 最终匹配达到 10000 条时返回原查询保护错误。
+    /// `versions` 达到 10000 条时返回校验错误，文案为发票查询超过上限。
     pub fn ensure_bounded(&self) -> Result<()> {
         if self.versions.len() >= 10_000 {
             return Err(Error::ValidationError("发票查询超过上限，请收窄组织或负责人条件".into()));
@@ -118,11 +122,13 @@ impl InvoiceSnapshot {
     /// 返回与页面同一最终条件的数据库计数，空匹配为零。
     ///
     /// # 参数
-    /// 当前快照。
-    /// # 返回
-    /// 数据库最终授权条件的计数。
-    /// # 错误
     /// 无。
+    ///
+    /// # 返回
+    /// 数据库最终授权条件的计数；计数分支为空时为零。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn total(&self) -> u64 {
         self.total.first().map_or(0, |row| row.count)
     }
@@ -130,11 +136,13 @@ impl InvoiceSnapshot {
     /// 完整轻量金额流继续使用原 Rust 定点算法归并，部分整单合计为 null。
     ///
     /// # 参数
-    /// 首拍金额事实及完整范围版本。
+    /// * `version` - 本次范围版本，传给汇总归并。
+    ///
     /// # 返回
-    /// 原定点算法归并的授权份额与整单金额资格。
+    /// 由已装载金额流行归并的授权份额与整票金额资格。
+    ///
     /// # 错误
-    /// 必要事实损坏时拒绝；金额越界保留原金额类型的溢出行为。
+    /// 不返回错误。归并不产生失败分支。
     pub fn summary(&self, version: &str) -> Result<FundsSummaryView> {
         invoice_summary(&self.summary, version)
     }
@@ -144,11 +152,13 @@ impl InvoicePageRow {
     /// 当前页分配恢复原裁剪单元，金额正反不由票面差额推导。
     ///
     /// # 参数
-    /// 当前页已登记分配。
+    /// 无。
+    ///
     /// # 返回
     /// 保持原顺序和金额方向的销项、进项裁剪单元。
+    ///
     /// # 错误
-    /// 无；金额越界保留原金额类型行为。
+    /// 不返回错误。
     pub fn links(&self) -> (Vec<SalesInvoiceLink>, Vec<PurchaseInvoiceLink>) {
         let sales = self
             .sales
@@ -206,11 +216,19 @@ fn signed_purchase(item: &PurchaseInvoiceAllocation) -> Amount {
 /// 在同一执行器查询最终授权页；复核拍只执行轻量版本分支。
 ///
 /// # 参数
-/// 数据库、规范化查询、已解析授权、业务条件、首拍标记和原执行器。
+/// * `db` - 发票集合所在数据库。
+/// * `filter` - 发票主表筛选。
+/// * `query` - 已规范化的发票列表查询。
+/// * `authorization` - 已解析授权。
+/// * `condition` - 负责人、经办人与组织条件。
+/// * `materialize` - 为 true 时同时读取当前页和汇总事实。
+/// * `executor` - 调用方执行器。
+///
 /// # 返回
 /// 最终授权页面、计数和完整轻量版本；首拍另包含原流汇总事实。
+///
 /// # 错误
-/// 持久化、解码或最终匹配超限时拒绝。
+/// 聚合或解码失败时返回对应错误。`versions` 达到 10000 条时返回校验错误，文案为发票查询超过上限。`materialize` 为 true 时，分页投影缺失或版本缺少首拍汇总资格会返回 `Internal`。
 pub(in crate::finance::funds_scope) async fn invoice_snapshot(
     db: &Database,
     filter: &InvoiceFilter,

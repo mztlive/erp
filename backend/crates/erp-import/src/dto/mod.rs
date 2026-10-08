@@ -1,4 +1,4 @@
-//! Import HTTP/application DTOs reused by handlers and processes.
+//! 供 Handler 与 Process 复用的导入 HTTP 与应用 DTO。
 
 pub mod legacy_import;
 pub mod receipt;

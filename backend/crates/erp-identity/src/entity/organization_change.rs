@@ -94,10 +94,19 @@ pub struct OrganizationChangeReceipt {
 }
 
 impl OrganizationChangeRequest {
-    /// 校验版本请求的原因和幂等键。
+    /// 校验版本请求的原因、幂等键，并拒绝已停用的管理关系命令。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 命令、幂等键和原因都可用时无返回值。
     ///
     /// # 错误
-    /// 空白、过长或包含非安全字符的幂等键拒绝。
+    /// `GrantManagement` 与 `RevokeManagement` 返回校验错误。
+    /// `UpdatePersonProfile` 在展开子操作失败时传播其错误。
+    /// 幂等键为空、长于 128 字节，或含有字母、数字、下划线、短横线以外的字节时返回校验错误。
+    /// 原因去空白后为空或超过 1000 字时返回校验错误。
     pub fn validate(&self) -> Result<()> {
         match &self.change {
             OrganizationOperation::GrantManagement { .. }
@@ -125,8 +134,17 @@ impl OrganizationChangeRequest {
 impl OrganizationState {
     /// 按当前版本准备变更结果，失败不修改调用方状态。
     ///
+    /// # 参数
+    /// * `request` - 带期望版本、幂等键和命令的变更请求。
+    /// * `id` - 本次新建组织或成员关系使用的身份。
+    /// * `actor` - 操作人身份。
+    /// * `at` - 本次变更时点。
+    ///
+    /// # 返回
+    /// 返回版本加一后的新状态；调用方持有的 `self` 保持不变。
+    ///
     /// # 错误
-    /// 版本冲突、无效节点、环、重叠有效期或非法停用均拒绝。
+    /// 请求校验失败、期望版本不一致、命令应用失败、组织树无效、成员有效期非法或重叠，以及版本号溢出时返回对应错误。
     pub fn changed(
         &self,
         request: &OrganizationChangeRequest,
@@ -148,8 +166,15 @@ impl OrganizationState {
 
     /// 查询当前唯一主属组织；重复关系失败关闭，不默认放入根组织。
     ///
+    /// # 参数
+    /// * `user_id` - 用户账号 ID。
+    /// * `at` - 判断时点。
+    ///
+    /// # 返回
+    /// 该时点唯一有效主属组织的 ID；没有有效关系时返回 `None`。
+    ///
     /// # 错误
-    /// 同一时点存在多条主属关系时返回冲突错误。
+    /// 同一时点存在多条主属关系时返回 `Error::ConflictError`。
     pub fn own_org(&self, user_id: &str, at: Instant) -> Result<Option<&str>> {
         OrgMembership::primary_org(&self.memberships, user_id, at)
     }

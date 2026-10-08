@@ -37,6 +37,16 @@ impl QualityOrderFilter {
 #[allow(async_fn_in_trait)]
 pub trait SalesOrderRepositoryQualityExt {
     /// 有界读取期间正式销售单；调用方必须对超限结果整体拒绝。
+    ///
+    /// # 参数
+    /// * `filter` - 生效区间、客户集合与授权范围。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 最多返回 `QUALITY_ORDER_LIMIT + 1` 条，按 `effective_at`、`id` 升序；多出的一条表示超限。
+    ///
+    /// # 错误
+    /// 数据库读取或反序列化失败时返回仓储错误。
     async fn quality_orders(
         &self,
         filter: &QualityOrderFilter,

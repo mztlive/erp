@@ -27,6 +27,9 @@ pub(crate) const CONTRACT_REVISIONS: &str = <mongodb::Database as ContractExt>::
 /// # 参数
 /// * `db` - 目标 MongoDB 数据库
 ///
+/// # 返回
+/// 无返回值。`contract` 与 `contract_revision` 的命名索引已登记。
+///
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {

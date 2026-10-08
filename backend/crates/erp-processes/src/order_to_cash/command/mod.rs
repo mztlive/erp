@@ -1,4 +1,4 @@
-//! Sales lifecycle commands and cross-domain approval transactions.
+//! 销售生命周期命令与跨域审批事务。
 mod cancel;
 mod contract;
 mod create;

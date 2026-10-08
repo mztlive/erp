@@ -1,4 +1,4 @@
-//! Named catalog processes that own audited outer transactions.
+//! 拥有带审计外层事务的目录流程。
 
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
@@ -22,12 +22,32 @@ use crate::Result;
 use crate::adapters::catalog_service;
 use crate::audit::run_audited;
 
-/// Process module name.
+/// 返回目录流程模块名。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回稳定模块名 `catalog`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn process_name() -> &'static str {
     "catalog"
 }
 
-/// Create a unit of measure and persist the success audit in one transaction.
+/// 创建计量单位，并在同一事务中写入成功审计。
+///
+/// # 参数
+/// * `db` - 计量单位所在数据库。
+/// * `req` - 计量单位创建请求。
+/// * `actor` - 已认证的审计操作人。
+///
+/// # 返回
+/// 返回创建后的计量单位视图。
+///
+/// # 错误
+/// 请求校验失败、单位构造失败、审计构造失败，或写入与审计事务失败时返回错误。
 pub async fn create_unit_of_measure(
     db: Database,
     req: CreateUnitOfMeasureRequest,
@@ -59,7 +79,18 @@ pub async fn create_unit_of_measure(
     Ok(unit.into())
 }
 
-/// Create a product category and persist the success audit in one transaction.
+/// 创建商品分类，并在同一事务中写入成功审计。
+///
+/// # 参数
+/// * `db` - 商品分类所在数据库。
+/// * `req` - 商品分类创建请求。
+/// * `actor` - 已认证的审计操作人。
+///
+/// # 返回
+/// 返回创建后的商品分类视图。
+///
+/// # 错误
+/// 请求校验失败、上级分类链校验失败、分类构造失败，或写入与审计事务失败时返回错误。
 pub async fn create_product_category(
     db: Database,
     req: CreateProductCategoryRequest,
@@ -92,7 +123,18 @@ pub async fn create_product_category(
     Ok(category.into())
 }
 
-/// Create a SKU attribute and persist the success audit in one transaction.
+/// 创建 SKU 属性，并在同一事务中写入成功审计。
+///
+/// # 参数
+/// * `db` - SKU 属性所在数据库。
+/// * `req` - SKU 属性创建请求。
+/// * `actor` - 已认证的审计操作人。
+///
+/// # 返回
+/// 返回创建后的 SKU 属性视图。
+///
+/// # 错误
+/// 请求校验失败、属性构造失败，或写入与审计事务失败时返回错误。
 pub async fn create_sku_attribute(
     db: Database,
     req: CreateSkuAttributeRequest,
@@ -122,7 +164,18 @@ pub async fn create_sku_attribute(
     Ok(attribute.into())
 }
 
-/// Create a SKU attribute value and persist the success audit in one transaction.
+/// 创建 SKU 属性值，并在同一事务中写入成功审计。
+///
+/// # 参数
+/// * `db` - SKU 属性值所在数据库。
+/// * `req` - SKU 属性值创建请求。
+/// * `actor` - 已认证的审计操作人。
+///
+/// # 返回
+/// 返回创建后的 SKU 属性值视图。
+///
+/// # 错误
+/// 请求校验失败、所属属性加载失败、属性值构造失败，或写入与审计事务失败时返回错误。
 pub async fn create_sku_attribute_value(
     db: Database,
     req: CreateSkuAttributeValueRequest,

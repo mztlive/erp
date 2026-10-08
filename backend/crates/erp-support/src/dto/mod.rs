@@ -1,4 +1,4 @@
-//! Support HTTP/application DTOs reused by handlers.
+//! 供 Handler 复用的支撑领域 HTTP 与应用 DTO。
 //!
 //! `PageParams`（归一化分页）与分页 helpers（`SortDir`/`PageView`/
 //! `non_blank`/`normalize_sort`）是三 DTO 共享的唯一来源；各列表 DTO 只保留
@@ -49,6 +49,9 @@ impl PageParams {
     ///
     /// # 返回
     /// 返回归一化后的分页参数。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn normalized(
         page: Option<u64>,
         page_size: Option<u32>,
@@ -91,8 +94,14 @@ impl PageParams {
     /// 各列表 Service 用本方法填充 `page`/`page_size`/`sort_by`/
     /// `sort_ascending`，只保留各自的筛选字段组装。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `(page, page_size, sort_by, sort_ascending)`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn into_filter_parts(self) -> (u64, u32, Option<String>, bool) {
         let ascending = matches!(self.sort_dir, SortDir::Asc);
         (self.page, self.page_size, Some(self.sort_by.to_string()), ascending)

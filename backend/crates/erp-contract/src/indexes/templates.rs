@@ -7,6 +7,16 @@ use persistence_core::Result;
 
 use crate::repository::templates::{APPLICATIONS, COMPANY_NUMBERING, COUNTERS, TEMPLATES};
 
+/// 为模板、主体编号、年度流水和领号申请集合登记幂等命名索引。
+///
+/// # 参数
+/// * `db` - 目标 MongoDB 数据库。
+///
+/// # 返回
+/// 无返回值。各集合的身份唯一索引，以及模板目录、申请去重与本人分页索引已登记。
+///
+/// # 错误
+/// 已有数据违反唯一约束，或 MongoDB 无法创建索引时返回错误。
 pub(super) async fn ensure(db: &Database) -> Result<()> {
     for collection in [TEMPLATES, COMPANY_NUMBERING, COUNTERS, APPLICATIONS] {
         db.collection::<Document>(collection)

@@ -53,6 +53,9 @@ pub(crate) const SUPPLIER_PROFILE_COMMANDS: &str =
 /// # 参数
 /// * `db` - 目标 MongoDB 数据库
 ///
+/// # 返回
+/// 九个集合的命名索引都创建成功时返回 `Ok(())`。
+///
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {

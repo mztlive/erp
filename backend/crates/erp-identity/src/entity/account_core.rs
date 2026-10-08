@@ -47,8 +47,11 @@ impl ExistingSuperAdminState {
     /// * `is_deleted` - 账号是否已软删除
     /// * `is_active` - 账号状态是否允许登录
     ///
-    /// # 返回值
-    /// 返回对应的已存在账号状态。
+    /// # 返回
+    /// 已软删除时返回 `Deleted`；否则可登录返回 `Active`，不可登录返回 `Inactive`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(crate) fn from_state(is_deleted: bool, is_active: bool) -> Self {
         if is_deleted {
             return Self::Deleted;
@@ -58,8 +61,14 @@ impl ExistingSuperAdminState {
 
     /// 返回初始化是否恢复了不可登录或已删除账号。
     ///
-    /// # 返回值
-    /// 非启用状态恢复为启用时返回 `true`。
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 非 `Active` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(crate) fn reactivates(self) -> bool {
         !matches!(self, Self::Active)
     }
@@ -68,8 +77,14 @@ impl ExistingSuperAdminState {
 impl AccountStatus {
     /// 判断状态是否可登录。
     ///
-    /// # 返回值
-    /// 处于 `Active` 时返回 true。
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 处于 `Active` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         matches!(self, Self::Active)
     }
@@ -121,17 +136,17 @@ pub struct AccountCore {
 }
 
 impl AccountCore {
-    /// 创建统一账号。
+    /// 创建统一账号，并把登录账号再按后台长度上限校验。
     ///
     /// # 参数
     /// * `id` - 账号ID
     /// * `data` - 账号创建数据
     ///
-    /// # 返回值
-    /// 返回新建的账号实体。
+    /// # 返回
+    /// 返回名称、联系方式和头像已规范化的新账号。
     ///
     /// # 错误
-    /// 当账号数据校验失败时返回错误。
+    /// 名称、邮箱、手机号或头像不合法，或登录账号超出后台长度时返回错误。
     pub fn new(id: String, data: AccountCoreData) -> Result<Self> {
         let mut secret = data.secret;
         let name = normalize_required_text(data.name, "账号名称不能为空", NAME_MAX_LEN, "账号名称过长")?;
@@ -158,11 +173,11 @@ impl AccountCore {
     /// # 参数
     /// * `update` - 更新数据
     ///
-    /// # 返回值
-    /// 更新成功返回 Ok。
+    /// # 返回
+    /// 校验通过后就地更新；未提供的字段保持不变。
     ///
     /// # 错误
-    /// 当更新数据校验失败时返回错误。
+    /// 名称、登录账号、密码、邮箱、手机号或头像不合法时返回错误。状态本身不产生错误。
     pub fn update(&mut self, update: AccountCoreUpdate) -> Result<()> {
         self.apply_name(update.name)?;
         self.apply_account(update.account)?;
@@ -177,8 +192,14 @@ impl AccountCore {
 
     /// 判断账号是否可登录。
     ///
-    /// # 返回值
-    /// 返回账号状态是否允许登录。
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 仅当 `status` 为 `Active` 时返回 `true`，不检查软删除。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn can_login(&self) -> bool {
         self.status.is_active()
     }
@@ -188,8 +209,11 @@ impl AccountCore {
     /// # 参数
     /// * `expected_kind` - 本次认证入口要求的账号类型
     ///
-    /// # 返回值
+    /// # 返回
     /// 账号类型匹配且状态允许登录时返回凭证借用，否则返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     ///
     /// # 安全约束
     /// 本方法不验证密码、不选择哈希算法，也不改变错误文案；认证 Service 必须
@@ -205,8 +229,11 @@ impl AccountCore {
     /// * `kind` - 会话中的账号类型
     /// * `version` - 会话签发时的账号版本
     ///
-    /// # 返回值
+    /// # 返回
     /// 账号仍可登录，且账号、类型与版本全部一致时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn matches_session_identity(&self, account: &str, kind: AccountKind, version: u64) -> bool {
         self.authentication_secret_for(kind)
             .is_some_and(|secret| secret.account() == account && self.base.version == version)
@@ -214,8 +241,11 @@ impl AccountCore {
 
     /// 校验账号当前允许登录并参与业务操作。
     ///
-    /// # 返回值
-    /// 账号处于启用状态时返回 `Ok(())`。
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 账号处于 `Active` 时返回 `Ok(())`。
     ///
     /// # 错误
     /// 账号被冻结或归档时返回错误。
@@ -231,8 +261,11 @@ impl AccountCore {
     /// # 参数
     /// * `expected` - 期望账号类型
     ///
-    /// # 返回值
+    /// # 返回
     /// 类型匹配时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_kind(&self, expected: AccountKind) -> bool {
         self.kind == expected
     }
@@ -242,11 +275,11 @@ impl AccountCore {
     /// # 参数
     /// 无。
     ///
-    /// # 返回值
+    /// # 返回
     /// 账号类型为后台管理员且状态允许登录时返回 `true`。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     ///
     /// # 关键业务约束
     /// 审批责任人等后台职责必须同时满足身份类型与账号状态，不得只判断其中一项。
@@ -290,7 +323,7 @@ impl AccountCore {
     /// * `password` - 可选密码
     ///
     /// # 错误
-    /// 当密码不符合策略时返回错误。
+    /// 当密码为空或密码哈希失败时返回错误。
     fn apply_password(&mut self, password: Option<String>) -> Result<()> {
         if let Some(password) = password {
             self.secret.change_password(password)?;
@@ -312,7 +345,7 @@ impl AccountCore {
     /// 应用邮箱更新。
     ///
     /// # 参数
-    /// * `email` - 可选邮箱
+    /// * `email` - 邮箱字段更新，可为保持不变、清空或设置新值
     ///
     /// # 错误
     /// 当邮箱不合法时返回错误。
@@ -325,7 +358,7 @@ impl AccountCore {
     /// 应用手机号更新。
     ///
     /// # 参数
-    /// * `phone` - 可选手机号
+    /// * `phone` - 手机号字段更新，可为保持不变、清空或设置新值
     ///
     /// # 错误
     /// 当手机号不合法时返回错误。

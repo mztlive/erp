@@ -99,6 +99,15 @@ impl FulfillmentService {
         })
     }
     /// 校验并构造采购入库草稿；身份和行顺序保持请求处理时点。
+    ///
+    /// # 参数
+    /// * `req` - 采购入库创建请求
+    ///
+    /// # 返回
+    /// 返回入库表头及其行。
+    ///
+    /// # 错误
+    /// 请求校验失败时返回 `ValidationError`；表头构造失败时返回对应错误；行批量构造失败时返回 `Logic`。
     pub fn prepare_purchase_receipt(
         req: CreatePurchaseReceiptRequest,
     ) -> Result<(PurchaseReceipt, Vec<PurchaseReceiptLine>)> {
@@ -117,6 +126,17 @@ impl FulfillmentService {
         Ok((receipt, lines))
     }
     /// 读取并校验草稿更新；版本守卫先于冻结仓库守卫。
+    ///
+    /// # 参数
+    /// * `id` - 入库单主键
+    /// * `req` - 带期望版本的更新请求
+    ///
+    /// # 返回
+    /// 返回已应用更新、尚未写回的草稿。
+    ///
+    /// # 错误
+    /// 请求校验失败时返回 `ValidationError`；入库单不存在时返回 `NotFound`；版本不一致时返回
+    /// `ConflictError`；请求变更已冻结仓库时返回 `ValidationError`；领域更新失败时返回对应错误。
     pub async fn prepare_purchase_receipt_update(
         &self,
         id: &str,
@@ -143,6 +163,17 @@ impl FulfillmentService {
         Ok(receipt)
     }
     /// 在调用方事务内创建采购入库表头及其行。
+    ///
+    /// # 参数
+    /// * `receipt` - 入库表头
+    /// * `lines` - 入库行
+    /// * `executor` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 创建成功时无返回值。
+    ///
+    /// # 错误
+    /// 仓储写入失败时返回对应错误。
     pub async fn persist_created_purchase_receipt(
         &self,
         receipt: &PurchaseReceipt,
@@ -153,6 +184,16 @@ impl FulfillmentService {
         Ok(())
     }
     /// 在调用方事务内按原乐观锁条件写回采购入库单。
+    ///
+    /// # 参数
+    /// * `receipt` - 已完成领域修改的入库单
+    /// * `executor` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 写回成功时无返回值。
+    ///
+    /// # 错误
+    /// 版本冲突或仓储写入失败时返回对应错误。
     pub async fn persist_purchase_receipt(
         &self,
         receipt: &mut PurchaseReceipt,

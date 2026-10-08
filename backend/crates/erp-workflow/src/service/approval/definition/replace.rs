@@ -35,6 +35,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
     /// * `request` - 节点替换请求
     /// * `actor` - 已认证操作人
     ///
+    /// # 返回
+    /// 返回替换后的草稿详情；同载荷回放返回已有结果。
+    ///
     /// # 错误
     /// 锁版本冲突、节点不合法或账号校验失败时返回错误。
     pub async fn replace_definition_nodes(
@@ -138,7 +141,7 @@ struct ReplaceNodesTxInput<'a> {
     actor: &'a AuditActor,
     /// 已规范化的当前命令身份及精确旧格式候选。
     identity: &'a PreparedDefinitionIdentity,
-    /// Injected audit port.
+    /// 注入的审计端口。
     audit: &'a dyn crate::ports::WorkflowAuditPort,
 }
 
@@ -201,6 +204,18 @@ async fn replace_nodes_tx(
 }
 
 /// 重新加载草稿并核对锁版本。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `original` - 事务外读到的定义
+/// * `expected` - 期望的定义锁版本
+/// * `session` - 调用方执行器
+///
+/// # 返回
+/// 定义仍可修改且锁版本一致时返回当前图。
+///
+/// # 错误
+/// 定义缺失、不是草稿或锁版本陈旧时返回错误；仓储读取失败时返回对应错误。
 pub(super) async fn reload_draft_for_cas(
     db: &Database,
     original: &ApprovalProcessDefinition,
@@ -284,6 +299,18 @@ async fn apply_draft_graph(
 }
 
 /// 调用仓储整组替换草稿图。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `graph` - 待写回的草稿图
+/// * `expected` - 期望的定义锁版本
+/// * `session` - 调用方执行器
+///
+/// # 返回
+/// 返回 CAS 成功后的定义图；节点与连线沿用入参。
+///
+/// # 错误
+/// 仓储写入失败，或 CAS 结果不是成功应用时返回错误。
 pub(super) async fn replace_graph(
     db: &Database,
     graph: DefinitionGraph,
@@ -335,7 +362,7 @@ fn node_replacement_drafts(requests: &[DefinitionNodeRequest]) -> Result<Vec<Nod
 /// 批量读取审批人并校验账号、静态权限与可静态判断的岗位分离。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库
+/// * `_db` - 数据库参数；本函数不读取
 /// * `rbac` - 共享 RBAC 服务
 /// * `policy` - 当前单据类型必须审批政策
 /// * `user_ids` - BPM 确定性提取的审批人 ID
@@ -367,7 +394,7 @@ pub(super) async fn validate_assignees(
 /// 批量读取账号快照。
 ///
 /// # 参数
-/// * `db` - MongoDB 数据库
+/// * `rbac` - 共享 RBAC 服务
 /// * `user_ids` - 去重后的审批人账号 ID
 /// * `session` - 调用方事务执行器
 ///
@@ -375,7 +402,7 @@ pub(super) async fn validate_assignees(
 /// 返回按账号 ID 索引的账号快照；空输入直接返回空映射。
 ///
 /// # 错误
-/// Repository 批量查询失败时返回错误。
+/// 授权端口批量读取账号失败时返回错误。
 ///
 /// # 关键业务约束
 /// 查询条件由账号 Repository 的 `list_by_ids` 封装，禁止 Service 拼装 MongoDB 条件。
@@ -422,6 +449,16 @@ async fn ensure_static_eligibility(
 }
 
 /// 定义期只能判断节点间岗位分离；提交人隔离留到运行时。
+///
+/// # 参数
+/// * `policy` - 岗位分离策略
+/// * `_user_ids` - 审批人 ID；当前策略不使用
+///
+/// # 返回
+/// `ForbidSubmitterAsApprover` 下无返回值。
+///
+/// # 错误
+/// 当前策略不会失败。
 pub(super) fn validate_static_separation(
     policy: SeparationOfDutiesPolicy,
     _user_ids: &[String],
@@ -523,6 +560,15 @@ fn ensure_draft_lock(definition: &ApprovalProcessDefinition, expected: u64) -> R
 }
 
 /// 使用 DTO 清洗规则准备完整有序节点载荷。
+///
+/// # 参数
+/// * `nodes` - 客户端节点请求
+///
+/// # 返回
+/// 返回按 `display_order` 排序的已清洗节点。
+///
+/// # 错误
+/// 单个节点 `prepare` 失败时映射为模型错误。
 pub(super) fn prepare_definition_nodes(
     nodes: Vec<DefinitionNodeRequest>,
 ) -> Result<Vec<DefinitionNodeRequest>> {
@@ -610,6 +656,12 @@ fn require_active_backoffice_assignee(
 }
 
 /// 定义期静态 `approval_instance:decide` 闸门。
+///
+/// # 参数
+/// * `has_decide` - 审批人是否具备静态决定权限
+///
+/// # 返回
+/// 具备权限时无返回值。
 ///
 /// # 错误
 /// 缺少静态审批权限时返回业务错误。

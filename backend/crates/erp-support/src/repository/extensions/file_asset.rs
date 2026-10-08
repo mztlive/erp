@@ -22,14 +22,26 @@ pub trait FileAssetExt {
 
     /// 获取 `file_asset` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `FileAssetRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn file_assets(&self) -> FileAssetRepository<'_>;
 
     /// 获取 `document_attachment` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `DocumentAttachmentRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn document_attachments(&self) -> DocumentAttachmentRepository<'_>;
 }
 

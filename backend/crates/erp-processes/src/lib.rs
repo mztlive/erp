@@ -1,4 +1,4 @@
-//! Cross-domain processes: approval dispatch, audited transactions and named use cases.
+//! 跨域流程：审批分发、带审计的事务和命名用例。
 
 mod errors;
 

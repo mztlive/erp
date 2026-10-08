@@ -11,11 +11,15 @@ use crate::Result;
 /// 使用原执行器执行类型化只读聚合，不另开事务。
 ///
 /// # 参数
-/// 集合句柄、已形成最终条件的管道和原执行器。
+/// * `collection` - 要聚合的集合。
+/// * `pipeline` - 已形成最终条件的管道。
+/// * `executor` - 调用方执行器；有会话时沿用该会话。
+///
 /// # 返回
 /// 返回聚合投影结果。
+///
 /// # 错误
-/// MongoDB 或类型化解码失败时拒绝。
+/// 聚合执行或类型化解码失败时返回对应错误。
 pub(crate) async fn aggregate<T: DeserializeOwned + Send + Sync>(
     collection: Collection<Document>,
     pipeline: Vec<Document>,
@@ -47,11 +51,18 @@ pub(crate) async fn aggregate<T: DeserializeOwned + Send + Sync>(
 /// 分页只作用于实体页；版本和汇总仍覆盖全部最终匹配记录。
 ///
 /// # 参数
-/// 页码、条数、稳定排序、页面/版本投影及汇总管道。
+/// * `page` - 页码，从 1 起。
+/// * `size` - 页大小。
+/// * `sort` - 稳定排序。
+/// * `item_projection` - 当前页投影。
+/// * `version_projection` - 完整版本投影。
+/// * `summary_pipeline` - 汇总分支管道。
+///
 /// # 返回
-/// 返回共享最终条件的 `$facet`。
+/// 共享最终条件的 `$facet`。页偏移无法用 `i64` 表示时，页面分支是恒假匹配，版本与汇总分支仍完整。
+///
 /// # 错误
-/// 无；超过数据库整数范围的合法深页返回空页，其余分支仍完整。
+/// 不返回错误。
 pub(crate) fn page_facet(
     page: u64,
     size: u32,
@@ -70,6 +81,18 @@ pub(crate) fn page_facet(
 }
 
 /// 只将当前页和总数压入单文档，完整版本及金额使用独立游标。
+///
+/// # 参数
+/// * `page` - 页码，从 1 起。
+/// * `size` - 页大小。
+/// * `sort` - 稳定排序。
+/// * `projection` - 当前页投影。
+///
+/// # 返回
+/// 只含 `items` 与 `total` 的 `$facet`。页偏移无法用 `i64` 表示时，页面分支是恒假匹配。
+///
+/// # 错误
+/// 不返回错误。
 pub(crate) fn page_only_facet(page: u64, size: u32, sort: Document, projection: Document) -> Document {
     doc! { "$facet": { "items": item_stages(page, size, sort, projection), "total": [{ "$count": "count" }] } }
 }
@@ -92,11 +115,15 @@ fn item_stages(page: u64, size: u32, sort: Document, projection: Document) -> Ve
 /// 与领域列表保持相同白名单和唯一 ID 尾键排序。
 ///
 /// # 参数
-/// 已规范化字段、方向和领域允许字段。
+/// * `field` - 请求的排序字段。
+/// * `ascending` - 为 true 时升序。
+/// * `allowed` - 允许的排序字段。
+///
 /// # 返回
-/// 返回稳定排序条件。
+/// `field` 在白名单内时按其排序，否则按 `created_at`；同一方向追加 `id` 尾键。
+///
 /// # 错误
-/// 无。
+/// 不返回错误。
 pub(crate) fn sort_document(field: &str, ascending: bool, allowed: &[&str]) -> Document {
     let field = if allowed.contains(&field) { field } else { "created_at" };
     let direction = if ascending { 1 } else { -1 };

@@ -43,8 +43,14 @@ pub struct PageParams {
 impl PageParams {
     /// 返回 Repository 筛选共用的排序字段与方向。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回 `(排序字段, 是否升序)`；调用方四类列表查询共用，避免重复映射。
+    /// 返回 `(排序字段, 是否升序)`；字段总是 `Some`，升序仅当方向为 `SortDir::Asc`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(crate) fn sort_selection(&self) -> (Option<String>, bool) {
         (Some(self.sort_by.to_string()), matches!(self.sort_dir, SortDir::Asc))
     }

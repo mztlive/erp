@@ -12,7 +12,7 @@ use crate::{Error, Result};
 /// 返回冻结后的提交版本。
 ///
 /// # 错误
-/// 非草稿或版本溢出时返回冲突。
+/// 非草稿或版本溢出时，实体错误经 `?` 变为 `Logic`。
 pub fn start_purchase_order_approval(
     order: &mut PurchaseOrder,
     submission_id: impl Into<String>,
@@ -26,8 +26,11 @@ pub fn start_purchase_order_approval(
 /// * `order` - 审批中的采购单
 /// * `updated_by` - 操作人
 ///
+/// # 返回
+/// 撤回到草稿后无返回值。`approval_subject_version` 不回退。
+///
 /// # 错误
-/// 非审批中时返回冲突。
+/// 非审批中时，实体错误经 `?` 变为 `Logic`。
 pub fn cancel_purchase_order_to_draft(order: &mut PurchaseOrder, updated_by: &str) -> Result<()> {
     Ok(order.cancel_approval(updated_by)?)
 }

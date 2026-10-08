@@ -9,11 +9,43 @@ use crate::Result;
 /// 仅暴露审计后的新读取和单张销售单刷新；生产与替身共用相同 runner。
 #[async_trait]
 pub(super) trait AffectedSales: Send {
+    /// 读取审计写入之后受影响的销售单。
+    ///
+    /// # 参数
+    /// * `executor` - 调用方事务执行器。
+    ///
+    /// # 返回
+    /// 返回需要刷新回款进度的销售单 ID。
+    ///
+    /// # 错误
+    /// 读取失败时返回对应错误。
     async fn load_sales(&mut self, executor: &mut dyn Executor) -> Result<Vec<SalesOrderId>>;
+
+    /// 刷新一张销售单的回款进度。
+    ///
+    /// # 参数
+    /// * `id` - 销售单 ID。
+    /// * `executor` - 调用方事务执行器。
+    ///
+    /// # 返回
+    /// 成功时无返回值。
+    ///
+    /// # 错误
+    /// 刷新失败时返回对应错误。
     async fn refresh_sale(&mut self, id: &SalesOrderId, executor: &mut dyn Executor) -> Result<()>;
 }
 
 /// 任何读取或单销售刷新失败立即停止，不预先访问后续销售单。
+///
+/// # 参数
+/// * `port` - 审计后的销售单读取与单张刷新。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 成功时无返回值。已按读取顺序刷新每张销售单。
+///
+/// # 错误
+/// `load_sales` 或任一 `refresh_sale` 失败时立即返回该错误，不再访问后续销售单。
 pub(super) async fn refresh_affected_sales(
     port: &mut impl AffectedSales,
     executor: &mut dyn Executor,

@@ -207,6 +207,15 @@ pub(super) async fn ensure_allocation_valid(
 }
 
 /// 显式投影当前采购版本行的履约消费事实；不得提前检查后续收货行。
+///
+/// # 参数
+/// * `line` - 当前采购版本行。
+///
+/// # 返回
+/// 返回该行标识和数量。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn revision_line_fact(
     line: &erp_procurement::entity::purchase_order::PurchaseOrderRevisionLine,
 ) -> PurchaseRevisionLineFact {

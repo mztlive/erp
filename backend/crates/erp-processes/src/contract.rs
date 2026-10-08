@@ -1,4 +1,4 @@
-//! Named contract processes that own file-asset registration and contract writes.
+//! 登记合同文件并写入合同的命名流程。
 
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditLog};
@@ -15,26 +15,37 @@ use crate::Result;
 use crate::adapters::scoped_contract_service;
 use crate::audit::persist_log;
 
-/// Process module name.
+/// 返回合同流程模块名。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回稳定模块名 `contract`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn process_name() -> &'static str {
     "contract"
 }
 
-/// Register a contract PDF and persist the contract identity plus first revision atomically.
+/// 登记合同 PDF，并在同一事务中写入合同身份、首个修订和成功审计。
 ///
-/// Object storage is already written by the HTTP adapter. This process holds the
-/// root MongoDB transaction: file-asset metadata, contract + revision, and both
-/// success audits share one [`persistence_core::Executor`].
+/// 对象存储已由 HTTP 适配器写完。本流程持有根事务：文件资产元数据、合同与修订、
+/// 两笔成功审计共用同一个执行器。
 ///
-/// # Parameters
-/// * `db` - database handle
-/// * `rbac` - current RBAC snapshot used by the contract DataScope adapter
-/// * `req` - contract business fields
-/// * `asset_req` - already stored object bytes with registration metadata
-/// * `actor` - authenticated audit actor
+/// # 参数
+/// * `db` - 合同与文件资产所在数据库。
+/// * `rbac` - 合同数据范围适配器使用的当前 RBAC 快照。
+/// * `req` - 合同业务字段。
+/// * `asset_req` - 已存储对象的登记元数据。
+/// * `actor` - 已认证的审计操作人。
 ///
-/// # Errors
-/// Customer missing/disabled, field validation, unique-index conflicts, or transaction failures.
+/// # 返回
+/// 返回合同、首个修订和文件资产的上传视图。
+///
+/// # 错误
+/// 字段校验失败、上传计划失败、创建范围重验失败、唯一冲突或事务失败时返回错误。
 pub async fn upload_contract(
     db: Database,
     rbac: SharedRbacService,

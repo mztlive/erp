@@ -1,4 +1,4 @@
-//! Composition adapter: processes and entrypoints persist identity audits via erp-audit.
+//! 流程与入口经 `erp-audit` 持久化身份审计。
 
 use std::num::NonZeroU32;
 use std::sync::Arc;
@@ -13,25 +13,37 @@ use persistence_core::Executor;
 
 use crate::audit::persist_log;
 
-/// MongoDB adapter that converts identity audit facts into `erp-audit` writes.
+/// 把身份审计事实写入 `erp-audit` 的 Mongo adapter。
 #[derive(Clone)]
 pub struct MongoIdentityAudit {
     db: Database,
 }
 
 impl MongoIdentityAudit {
-    /// Bind the adapter to `db`.
+    /// 绑定审计日志所在数据库，构造时不写库。
     ///
-    /// # Parameters
-    /// * `db` - MongoDB database used to persist audit logs
+    /// # 参数
+    /// * `db` - 持久化审计日志的数据库。
     ///
-    /// # Returns
-    /// Adapter implementing [`IdentityAuditPort`].
+    /// # 返回
+    /// 返回未执行 I/O 的 adapter，而不是共享 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 
-    /// Wrap the adapter as a shared port.
+    /// 包装为身份域可注入的共享审计 Port。
+    ///
+    /// # 参数
+    /// * `db` - 持久化审计日志的数据库。
+    ///
+    /// # 返回
+    /// 返回实现 `IdentityAuditPort` 的共享 Port。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn shared(db: Database) -> Arc<dyn IdentityAuditPort> {
         Arc::new(Self::new(db))
     }
@@ -61,7 +73,7 @@ impl IdentityAuditPort for MongoIdentityAudit {
     }
 }
 
-/// Copy constructed audit fields so persist does not regenerate timestamps.
+/// 拷贝已构造的审计字段，避免持久化时重新生成时间戳。
 fn prepared_from_log(log: &AuditLog) -> PreparedResourceAudit {
     PreparedResourceAudit::from_validated(
         &log.base,
@@ -83,7 +95,7 @@ fn prepared_from_log(log: &AuditLog) -> PreparedResourceAudit {
     )
 }
 
-/// Rebuild the audit entity with the original BaseModel snapshot.
+/// 用原来的 `BaseModel` 快照重建审计实体。
 fn audit_log_from_prepared(audit: &PreparedResourceAudit) -> erp_audit::Result<AuditLog> {
     let mut log = AuditLog::new(
         audit.id.clone(),

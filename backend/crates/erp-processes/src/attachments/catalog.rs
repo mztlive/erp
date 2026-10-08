@@ -1,4 +1,4 @@
-//! Catalog commands that register uploaded files in the same business transaction.
+//! 在同一业务事务中登记上传文件的目录命令。
 
 use application_core::AuditActor;
 use erp_catalog::{
@@ -13,7 +13,19 @@ use super::pending::PendingFileAssets;
 use crate::Result;
 use crate::adapters::{CatalogPendingAttachments, catalog_service, scoped_catalog_service};
 
-/// Create a product brand and persist any uploaded logo in one transaction.
+/// 创建商品品牌，并在同一事务中持久化已上传的标志。
+///
+/// # 参数
+/// * `db` - 品牌与文件资产所在数据库。
+/// * `req` - 品牌创建请求。
+/// * `asset_requests` - 已写入对象存储的标志登记请求；可以为空。
+/// * `actor` - 已认证的审计操作人。
+///
+/// # 返回
+/// 返回创建后的品牌视图。
+///
+/// # 错误
+/// 临时文件校验失败，或品牌创建与附件事务失败时返回错误。
 pub async fn product_brand_create_with_assets(
     db: Database,
     req: CreateProductBrandRequest,
@@ -25,7 +37,20 @@ pub async fn product_brand_create_with_assets(
     catalog_service(db).product_brand_create_with_assets(req, pending, &actor).await.map_err(Into::into)
 }
 
-/// Update a product brand and persist any uploaded logo in one transaction.
+/// 更新商品品牌，并在同一事务中持久化已上传的标志。
+///
+/// # 参数
+/// * `db` - 品牌与文件资产所在数据库。
+/// * `id` - 品牌主键。
+/// * `req` - 品牌更新请求。
+/// * `asset_requests` - 已写入对象存储的标志登记请求；可以为空。
+/// * `actor` - 已认证的审计操作人。
+///
+/// # 返回
+/// 返回更新后的品牌视图。
+///
+/// # 错误
+/// 临时文件校验失败，或品牌更新与附件事务失败时返回错误。
 pub async fn product_brand_update_with_assets(
     db: Database,
     id: String,
@@ -38,7 +63,20 @@ pub async fn product_brand_update_with_assets(
     catalog_service(db).product_brand_update_with_assets(&id, req, pending, &actor).await.map_err(Into::into)
 }
 
-/// Create a product and persist uploaded media in one transaction.
+/// 创建商品，并在同一事务中持久化已上传的媒体。
+///
+/// # 参数
+/// * `db` - 商品与文件资产所在数据库。
+/// * `rbac` - 商品范围重验使用的 RBAC 快照。
+/// * `req` - 商品创建请求。
+/// * `asset_requests` - 已写入对象存储的媒体登记请求。
+/// * `actor` - 已认证的审计操作人。
+///
+/// # 返回
+/// 返回创建后的商品视图。
+///
+/// # 错误
+/// 临时文件校验失败，或商品创建与附件事务失败时返回错误。
 pub async fn product_create_with_assets(
     db: Database,
     rbac: SharedRbacService,
@@ -54,7 +92,21 @@ pub async fn product_create_with_assets(
         .map_err(Into::into)
 }
 
-/// Update a product and persist uploaded media in one transaction.
+/// 更新商品，并在同一事务中持久化已上传的媒体。
+///
+/// # 参数
+/// * `db` - 商品与文件资产所在数据库。
+/// * `rbac` - 商品范围重验使用的 RBAC 快照。
+/// * `id` - 商品主键。
+/// * `req` - 商品更新请求。
+/// * `asset_requests` - 已写入对象存储的媒体登记请求。
+/// * `actor` - 已认证的审计操作人。
+///
+/// # 返回
+/// 返回更新后的商品视图。
+///
+/// # 错误
+/// 临时文件校验失败，或商品更新与附件事务失败时返回错误。
 pub async fn product_update_with_assets(
     db: Database,
     rbac: SharedRbacService,

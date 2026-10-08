@@ -1,4 +1,4 @@
-//! Customer domain: customer accounts, assignments and profile-command facts.
+//! 客户领域：客户角色、归属与资料命令事实。
 
 pub mod dto;
 pub mod entity;

@@ -122,6 +122,9 @@ pub(super) fn assemble_purchase_review_displays(
 ///
 /// # 错误
 /// 无。
+///
+/// # Panics
+/// `authority` 缺少对应采购单时 panic；调用方须已为每张已读取采购单放入权威映射。
 pub(super) fn insert_purchase_order_facts(
     facts: &mut WorkbenchObjectFactMap,
     orders: &[PurchaseOrder],

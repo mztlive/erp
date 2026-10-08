@@ -29,6 +29,19 @@ struct ManagementCount {
 }
 
 /// 固定绑定供应商并只投影安全账号字段。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `supplier_id` - 已证明详情资格的供应商。
+/// * `query` - 已规范化的分页与搜索。
+/// * `active` - 启停筛选；`None` 表示不过滤。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 返回安全账号字段的分页。空结果总数为 `0`。
+///
+/// # 错误
+/// 聚合或反序列化失败时返回对应错误。
 pub(in crate::supplier_portal) async fn accounts_page(
     db: &Database,
     supplier_id: &str,
@@ -45,6 +58,19 @@ pub(in crate::supplier_portal) async fn accounts_page(
 }
 
 /// 固定开放供应商并保留可撤销的失效SKU关系。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `supplier_id` - 已证明详情资格的供应商。
+/// * `query` - 已规范化的分页与搜索。
+/// * `active` - 启停筛选；`None` 表示不过滤。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 返回定向开放关系的分页。缺失或停用的 SKU 仍保留关系身份。
+///
+/// # 错误
+/// 聚合或反序列化失败时返回对应错误。
 pub(in crate::supplier_portal) async fn grants_page(
     db: &Database,
     supplier_id: &str,

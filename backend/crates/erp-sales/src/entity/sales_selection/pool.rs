@@ -89,7 +89,8 @@ impl PoolSource {
     /// 返回与类型匹配的来源。
     ///
     /// # 错误
-    /// 类型与载荷不一致、勾选为空或超限时拒绝。
+    /// 筛选条件的售价下限大于上限，或勾选身份为空、超过 500、含空白时拒绝。
+    /// 与来源类型不匹配的另一侧载荷直接丢弃，不因此失败。
     pub fn new(
         kind: PoolSourceKind,
         filter: Option<PoolFilterSnapshot>,

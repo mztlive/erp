@@ -28,6 +28,9 @@ pub struct PersonDirectoryQuery {
 impl PersonDirectoryQuery {
     /// 转成目录服务使用的规范化条件。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回校验后的查询条件。
     ///
@@ -105,6 +108,9 @@ impl PersonDirectoryPage {
     ///
     /// # 返回
     /// 返回目录页。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn from_page(
         page: PageView<PersonDirectoryItem>,
         scope_version: String,

@@ -18,7 +18,7 @@ impl SupplierFulfillmentService {
     /// * `order` - 供应商子订单
     /// * `req` - 退款成功结果请求
     /// * `connection_id` - 供应商连接
-    /// * `message` - 同事务创建的 `inbox_message` 信封
+    /// * `inbox_message_id` - 同事务创建的收件箱消息身份
     ///
     /// # 返回
     /// 返回 `(事实头, 分配行)`。
@@ -78,6 +78,17 @@ impl SupplierFulfillmentService {
         Ok((fact, allocations))
     }
     /// 读取原两项财务快照并在原位置推进退款状态。
+    ///
+    /// # 参数
+    /// * `id` - 供应商履约订单主键。
+    /// * `order` - 就地推进退款状态的子订单。
+    /// * `refund_amount` - 本次退款金额。
+    ///
+    /// # 返回
+    /// 无返回值。累计金额等于订单成本时进入 `Refunded`，否则进入 `Partial`。
+    ///
+    /// # 错误
+    /// 财务快照读取失败时返回对应错误。累加后超过订单成本余额时返回 `BusinessLogicError`。状态迁移失败时返回对应错误。
     pub async fn advance_refund_result(
         &self,
         id: &str,
@@ -104,6 +115,19 @@ impl SupplierFulfillmentService {
     }
 }
 /// 先订单CAS，后退款事实与分配的原复合写。
+///
+/// # 参数
+/// * `db` - 履约集合所在数据库。
+/// * `order` - 待按 CAS 写回的子订单。
+/// * `fact` - 退款事实头。
+/// * `allocations` - 退款分配行。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 无返回值。订单先于退款事实和分配写入。
+///
+/// # 错误
+/// 任一步仓储写入失败时返回对应错误。
 pub async fn persist_refund_result(
     db: &Database,
     order: &mut SupplierFulfillmentOrder,

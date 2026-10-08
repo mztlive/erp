@@ -41,8 +41,14 @@ pub struct OrgValidity {
 impl OrgValidity {
     /// 校验有效期起止顺序。
     ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 终点晚于起点，或没有终点时无返回值。
+    ///
     /// # 错误
-    /// 空区间和倒置区间均返回校验错误。
+    /// 终点存在且不晚于起点时返回 `Error::ValidationError`。空区间和倒置区间都拒绝。
     pub fn validate(&self) -> Result<()> {
         if self.valid_to.is_some_and(|end| end <= self.valid_from) {
             return Err(Error::ValidationError("有效期结束必须晚于开始".into()));
@@ -52,16 +58,28 @@ impl OrgValidity {
 
     /// 判断指定服务端时点是否处于有效期。
     ///
+    /// # 参数
+    /// * `at` - 服务端时点。
+    ///
     /// # 返回
-    /// 起点包含，终点排除。
+    /// 起点包含、终点排除时返回 `true`。没有终点表示持续有效。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn contains(&self, at: Instant) -> bool {
         self.valid_from <= at && self.valid_to.is_none_or(|end| at < end)
     }
 
     /// 判断两个半开区间是否重叠。
     ///
+    /// # 参数
+    /// * `other` - 另一个半开有效期。
+    ///
     /// # 返回
-    /// 相邻区间返回 false，无终点表示持续有效。
+    /// 两端都严格早于对方起点时返回 `false`。相邻区间不重叠；没有终点表示持续有效。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn overlaps(&self, other: &Self) -> bool {
         self.valid_to.is_none_or(|end| other.valid_from < end)
             && other.valid_to.is_none_or(|end| self.valid_from < end)
@@ -153,8 +171,14 @@ impl<'a> OrgTree<'a> {
 
     /// 返回根节点至当前节点的路径，包含当前节点。
     ///
+    /// # 参数
+    /// * `id` - 目标组织 ID。
+    ///
+    /// # 返回
+    /// 成功时返回自根到该节点的路径。
+    ///
     /// # 错误
-    /// 路径存在环或缺失节点时拒绝，不生成残缺归属快照。
+    /// 路径存在环或节点缺失时返回 `Error::ValidationError`，不生成残缺归属快照。
     pub fn path(&self, id: &str) -> Result<Vec<&'a OrgUnit>> {
         let mut path = Vec::new();
         let mut seen = BTreeSet::new();
@@ -207,8 +231,19 @@ impl<'a> OrgTree<'a> {
 impl OrgUnit {
     /// 构造启用组织；父子关系由完整树在事务中校验。
     ///
+    /// # 参数
+    /// * `id` - 组织 ID。
+    /// * `name` - 组织名称。
+    /// * `parent_id` - 父组织 ID；根节点为 `None`。
+    /// * `kind` - 部门或团队。
+    /// * `actor` - 操作人身份。
+    /// * `reason` - 变更原因。
+    ///
+    /// # 返回
+    /// 返回 `enabled` 为真的新节点。
+    ///
     /// # 错误
-    /// 名称、操作人或原因缺失及过长时拒绝。
+    /// 名称、操作人或原因缺失及过长时返回校验错误。
     pub fn new(
         id: String,
         name: String,

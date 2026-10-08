@@ -16,8 +16,18 @@ use super::*;
 use crate::audit::persist_log;
 
 /// 最终审批通过时原子授予额度并生成申请专属财务执行任务。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `id` - 开票申请 ID。
+/// * `actor` - 已认证审批人。
+/// * `executor` - 审批事务执行器。
+///
+/// # 返回
+/// 申请已批准、执行任务与审计写入成功时无返回值。
+///
 /// # 错误
-/// 应收额度不足、财务负责人缺失、状态或并发冲突时审批事务回滚。
+/// 申请或应收不存在、占用额度超过可开票金额、批准状态不允许、财务负责人缺失、任务构造或写入失败时返回错误。
 pub(crate) async fn approve(
     db: &Database,
     id: &str,
@@ -65,8 +75,20 @@ pub(crate) async fn approve(
     Ok(())
 }
 /// 消耗与任务一一关联的已批准申请；旧任务及错配任务一律拒绝。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `task_id` - 开票执行任务 ID。
+/// * `account_id` - 当前应收子账 ID。
+/// * `party_id` - 发票往来主体。
+/// * `amount` - 本次登记的开票金额。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 返回被消耗的开票申请 ID。
+///
 /// # 错误
-/// 申请缺失、主体或应收不符、金额超额时不允许登记发票。
+/// 没有已批准申请、主体或应收不符、金额无法入账、应收锁或申请更新失败时返回错误。
 pub(crate) async fn consume_authorization(
     db: &Database,
     task_id: &str,
@@ -88,6 +110,17 @@ pub(crate) async fn consume_authorization(
     Ok(request.base.id)
 }
 /// 开票登记后按每张申请剩余授权更新任务，不按销售单全部余额关闭任务。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `account` - 当前应收子账。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 开放任务已按剩余授权完成或更新摘要时无返回值。没有对应申请的开放任务跳过。
+///
+/// # 错误
+/// 任务查询、完成、摘要更新或任务写回失败时返回错误。
 pub(crate) async fn sync_authorized_tasks(
     db: &Database,
     account: &ReceivableAccount,

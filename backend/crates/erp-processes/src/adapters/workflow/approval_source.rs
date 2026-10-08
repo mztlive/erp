@@ -16,6 +16,20 @@ use crate::adapters::{funds_access_with_rbac, purchase_access};
 use crate::{Error, Result};
 
 /// 管理访问必须覆盖完整来源对象；缺失来源和未接入类型一律拒绝。
+///
+/// # 参数
+/// * `db` - 业务单据集合所在数据库。
+/// * `rbac` - 现有 RBAC 快照服务。
+/// * `actor` - 当前操作人。
+/// * `kind` - 审批单据类型。
+/// * `id` - 单据编号。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 来源详情可读时返回 `true`；类型未接入、来源缺失或无权限时返回 `false`。
+///
+/// # 错误
+/// 订单来源、库存或资金来源查询中的非拒绝类错误原样返回。
 pub(super) async fn readable(
     db: &Database,
     rbac: &SharedRbacService,

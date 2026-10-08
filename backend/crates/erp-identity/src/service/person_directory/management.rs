@@ -28,6 +28,15 @@ pub struct QualificationChange {
 impl PersonDirectoryService {
     /// 读取或维护单个账号的查询资格；授权在事务内按目标账号及有效主属组织判定。
     ///
+    /// # 参数
+    /// * `actor` - 已认证操作人。
+    /// * `category` - 查询类别。
+    /// * `account_id` - 目标后台账号 ID。
+    /// * `change` - 为空时只读取；有值时按版本终止或再授予。
+    ///
+    /// # 返回
+    /// 返回该账号当前资格；尚无记录时返回 `None`。
+    ///
     /// # 错误
     /// 非岗位类别、无范围、目标非后台账号、版本冲突或持久化失败时拒绝。
     pub async fn qualification(

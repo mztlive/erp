@@ -45,7 +45,7 @@ impl LoginAccount {
     /// # 参数
     /// * `value` - 原始登录账号
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回已去除首尾空白的登录账号。
     ///
     /// # 错误
@@ -63,16 +63,28 @@ impl LoginAccount {
 
     /// 返回规范化后的账号字符串。
     ///
-    /// # 返回值
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
     /// 返回账号的借用视图。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
 
     /// 消费值对象并返回账号字符串。
     ///
-    /// # 返回值
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
     /// 返回规范化后的账号所有权。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn into_string(self) -> String {
         self.0
     }
@@ -87,6 +99,16 @@ impl AsRef<str> for LoginAccount {
 impl TryFrom<String> for LoginAccount {
     type Error = Error;
 
+    /// 按 [`LoginAccount::new`] 校验并收编已拥有的字符串。
+    ///
+    /// # 参数
+    /// * `value` - 原始登录账号。
+    ///
+    /// # 返回
+    /// 成功时返回已去除首尾空白的登录账号。
+    ///
+    /// # 错误
+    /// 账号为空或字符数不在允许区间时返回 `Error::LogicError`。
     fn try_from(value: String) -> std::result::Result<Self, Self::Error> {
         Self::new(value)
     }
@@ -95,6 +117,16 @@ impl TryFrom<String> for LoginAccount {
 impl TryFrom<&str> for LoginAccount {
     type Error = Error;
 
+    /// 按 [`LoginAccount::new`] 校验并复制字符串切片。
+    ///
+    /// # 参数
+    /// * `value` - 原始登录账号。
+    ///
+    /// # 返回
+    /// 成功时返回已去除首尾空白的登录账号。
+    ///
+    /// # 错误
+    /// 账号为空或字符数不在允许区间时返回 `Error::LogicError`。
     fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
         Self::new(value)
     }
@@ -112,6 +144,16 @@ pub struct Secret {
 }
 
 impl fmt::Debug for Secret {
+    /// 调试输出登录账号，密码哈希固定写成 `[REDACTED]`。
+    ///
+    /// # 参数
+    /// * `formatter` - 调试格式化器。
+    ///
+    /// # 返回
+    /// 写入成功时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 格式化写入失败时返回 `fmt::Error`。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("Secret")
@@ -128,7 +170,7 @@ impl Secret {
     /// * `account` - 已规范化的登录账号
     /// * `password` - 明文密码
     ///
-    /// # 返回值
+    /// # 返回
     /// 返回采用 Argon2id 哈希的新凭证。
     ///
     /// # 错误
@@ -139,16 +181,28 @@ impl Secret {
 
     /// 返回规范化后的登录账号。
     ///
-    /// # 返回值
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
     /// 返回账号字符串的借用视图。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn account(&self) -> &str {
         self.account.as_str()
     }
 
     /// 消费凭证并返回登录账号。
     ///
-    /// # 返回值
-    /// 返回账号字符串所有权；密码哈希会随其余凭证一起被丢弃。
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回账号字符串所有权；密码哈希随凭证一起丢弃。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn into_account(self) -> String {
         self.account
     }
@@ -157,6 +211,12 @@ impl Secret {
     ///
     /// # 参数
     /// * `account` - 已规范化的新登录账号
+    ///
+    /// # 返回
+    /// 无返回值。就地替换登录账号，不改密码哈希。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn change_account(&mut self, account: LoginAccount) {
         self.account = account.into_string();
     }
@@ -165,6 +225,9 @@ impl Secret {
     ///
     /// # 参数
     /// * `password` - 新的明文密码
+    ///
+    /// # 返回
+    /// 成功时用新的 Argon2id 哈希替换当前密码哈希。
     ///
     /// # 错误
     /// 当密码为空或密码哈希失败时返回错误。
@@ -185,8 +248,11 @@ impl Secret {
     /// * `secret` - 已加载凭证；账号不存在或不可认证时传入 `None`
     /// * `password` - 待验证的明文密码
     ///
-    /// # 返回值
-    /// 返回匹配状态及是否需要迁移。
+    /// # 返回
+    /// 匹配当前 Argon2 时返回 `Current`，匹配旧 MD5 时返回 `Legacy`，其余情况返回 `Mismatch`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn verify_password_or_dummy(secret: Option<&Self>, password: &str) -> PasswordVerification {
         let Some(secret) = secret else {
             perform_dummy_argon2(password);
@@ -216,8 +282,14 @@ impl Secret {
 
     /// 判断当前凭证是否仍使用可迁移的旧 MD5 摘要。
     ///
-    /// # 返回值
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
     /// 哈希是合法的 32 位十六进制 MD5 摘要时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_legacy_password_hash(&self) -> bool {
         self.password_hash.len() == LEGACY_MD5_LEN
             && self.password_hash.bytes().all(|byte| byte.is_ascii_hexdigit())
@@ -252,6 +324,9 @@ fn verify_argon2(password: &str, encoded_hash: &str) -> Option<bool> {
 }
 
 /// 使用与新密码哈希相同的默认参数执行一次 Argon2 工作。
+///
+/// # Panics
+/// 固定盐常量无法按 Base64 编码时 panic；该常量在源码中写死，正常构建不应发生。
 fn perform_dummy_argon2(password: &str) {
     let salt = SaltString::encode_b64(DUMMY_ARGON2_SALT).expect("dummy Argon2 salt constant must be valid");
     let _ = Argon2::default().hash_password(password.as_bytes(), &salt);

@@ -27,8 +27,14 @@ impl SettlementMode {
     ///
     /// 映射表见 [`SETTLEMENT_MODE_DISPLAY`]（erp-supplier-002）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回结算方式中文名称。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         super::display::label_of(*self, &SETTLEMENT_MODE_DISPLAY)
     }
@@ -37,8 +43,14 @@ impl SettlementMode {
     ///
     /// 映射表见 [`SETTLEMENT_MODE_DISPLAY`]（erp-supplier-002）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 snake_case 结算方式代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         super::display::code_of(*self, &SETTLEMENT_MODE_DISPLAY)
     }
@@ -121,8 +133,17 @@ impl SupplierPaymentTerm {
 
     /// 返回规范化后的稳定付款条件代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回采购单、提交和供应商商务版本统一使用的代码。
+    /// 返回采购单、提交和供应商商务版本统一使用的代码。周期条件形如 `PERIOD_<周期>_<天数>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    ///
+    /// # Panics
+    /// `Periodic` 已在前面返回；若仍进入后续分支则 panic。
     pub fn code(self) -> String {
         if let Self::Periodic { period, days } = self {
             return format!("PERIOD_{}_{}", period_code(period), days);
@@ -141,8 +162,17 @@ impl SupplierPaymentTerm {
 
     /// 返回面向采购与财务用户的付款条件名称。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回与计划付款日规则一致的中文标签。
+    /// 返回与计划付款日规则一致的中文标签。周期条件带结算方式名称和期末后天数。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    ///
+    /// # Panics
+    /// `Periodic` 已在前面返回；若仍进入后续分支则 panic。
     pub fn label(self) -> String {
         if let Self::Periodic { days, .. } = self {
             return format!("{}，期末后 {} 天付款", self.settlement_mode().label(), days);
@@ -161,8 +191,14 @@ impl SupplierPaymentTerm {
 
     /// 返回付款条件归属的结算方式。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回必须与供应商商务版本一致的结算方式。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn settlement_mode(self) -> SettlementMode {
         match self {
             Self::Prepay100 | Self::Prepay50 | Self::Prepay30 => SettlementMode::Prepayment,
@@ -178,7 +214,16 @@ impl SupplierPaymentTerm {
         }
     }
 
-    /// 返回自然周期与期末后付款天数；旧规则保持为空。
+    /// 返回自然周期与期末后付款天数。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Periodic` 返回 `(周期, 天数)`；先款、现结和货到后付返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn calendar_due(self) -> Option<(CalendarPeriod, u16)> {
         if let Self::Periodic { period, days } = self {
             return Some((period, days));
@@ -207,13 +252,31 @@ impl SupplierPaymentTerm {
 
     /// 判断付款条件是否启用先款后货门禁。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 预付比例条件返回 `true`，现结和后付条件返回 `false`。
+    /// `Prepay100`、`Prepay50`、`Prepay30` 返回 `true`，其余条件返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn prepay_gate(self) -> bool {
         matches!(self, Self::Prepay100 | Self::Prepay50 | Self::Prepay30)
     }
 
     /// 返回受控先款条件的最低付款比例，供采购冻结履约门槛。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Prepay100`、`Prepay50`、`Prepay30` 分别返回 100%、50%、30%；其余条件返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    ///
+    /// # Panics
+    /// 先款百分比无法换成 `Rate` 时 panic。100、50、30 均在 `Rate` 精度内，正常路径不会发生。
     pub fn prepay_minimum_ratio(self) -> Option<erp_core::money::Rate> {
         let percent = match self {
             Self::Prepay100 => 100,
@@ -229,8 +292,14 @@ impl SupplierPaymentTerm {
 
     /// 返回以最晚预计交付日为基准的账期天数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 后付条件返回 15 或 30；审批日付款条件返回 `None`。
+    /// `PostpayNet15` 返回 `Some(15)`，`PostpayNet30` 返回 `Some(30)`；先款、现结和周期条件返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn days_after_delivery(self) -> Option<u64> {
         match self {
             Self::PostpayNet15 => Some(15),

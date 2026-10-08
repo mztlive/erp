@@ -35,8 +35,14 @@ pub enum AssignmentRole {
 impl AssignmentRole {
     /// 返回角色的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Owner => "负责销售",
@@ -46,8 +52,14 @@ impl AssignmentRole {
 
     /// 返回角色的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Owner => "OWNER",
@@ -206,6 +218,9 @@ impl CustomerAssignment {
     ///
     /// # 返回
     /// 同一客户下角色/用户组合需要唯一且有效期重叠时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn conflicts_with(&self, other: &Self) -> bool {
         if self.customer_id != other.customer_id || self.assignment_role != other.assignment_role {
             return false;
@@ -245,13 +260,16 @@ impl CustomerAssignment {
         super::ensure_entity_version(self.base.version, expected)
     }
 
-    /// 判断归属当前是否有效（按业务日期判定有效期）。
+    /// 判断归属当前是否有效（按业务日期判定有效期，结束日为开区间）。
     ///
     /// # 参数
     /// * `as_of` - 业务日期
     ///
     /// # 返回
-    /// 业务日期落在生效区间内时返回 `true`。
+    /// `as_of` 不早于 `valid_from`，且早于 `valid_to` 时返回 `true`；`valid_to` 为 `None` 时开始日及之后有效。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_active_on(&self, as_of: BusinessDate) -> bool {
         as_of >= self.valid_from && self.valid_to.is_none_or(|valid_to| as_of < valid_to)
     }
@@ -281,7 +299,10 @@ impl CustomerAssignment {
     /// * `account_names` - 账号显示名
     ///
     /// # 返回
-    /// 返回负责人 ID、显示名与协作人数。
+    /// 返回切片中首个 `Owner` 的账号 ID 与显示名，以及 `Collaborator` 行数。没有 `Owner` 时 ID 为 `None`；ID 不在 `account_names` 中时显示名为 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn owner_summary(
         assignments: &[Self],
         account_names: &HashMap<String, String>,

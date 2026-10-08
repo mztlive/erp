@@ -30,6 +30,15 @@ pub(in crate::demo_master_data) struct DemoMasterRecord {
 
 impl DemoMasterRecord {
     /// 按种类代码读取种类。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 种类代码能还原时返回 `DemoKind`；无法识别时返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(in crate::demo_master_data) fn kind(&self) -> Option<DemoKind> {
         DemoKind::parse(&self.kind)
     }
@@ -70,6 +79,9 @@ pub(in crate::demo_master_data) async fn load(
 /// * `db` - 目标数据库
 /// * `record` - 要保存的清单行
 ///
+/// # 返回
+/// 按 `key` 与 `entity_id` 写入或覆盖成功时无返回值。
+///
 /// # 错误
 /// 序列化或写入失败时返回错误。
 pub(in crate::demo_master_data) async fn save(db: &Database, record: &DemoMasterRecord) -> Result<()> {
@@ -88,8 +100,11 @@ pub(in crate::demo_master_data) async fn save(db: &Database, record: &DemoMaster
 /// # 参数
 /// * `db` - 目标数据库
 ///
+/// # 返回
+/// `key` 唯一索引已创建时无返回值。
+///
 /// # 错误
-/// 索引创建失败时返回错误。
+/// 索引创建失败时返回持久化错误。
 pub async fn ensure_indexes(db: &Database) -> persistence_core::Result<()> {
     let index = IndexModel::builder()
         .keys(doc! { "key": 1 })

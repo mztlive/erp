@@ -4,6 +4,17 @@ use async_trait::async_trait;
 use super::*;
 #[async_trait]
 pub(super) trait CommandResultPort: Sync {
+    /// 按幂等键读取已落盘的供给命令。
+    ///
+    /// # 参数
+    /// * `key` - 命令幂等键。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 找到时返回命令。`None` 表示该键没有命令。
+    ///
+    /// # 错误
+    /// 仓储读取失败时返回对应错误。
     async fn command(
         &self,
         key: &str,
@@ -21,6 +32,20 @@ impl CommandResultPort for SupplierOfferingService {
     }
 }
 /// 任意事务错误触发一次重读；重读错、指纹错、结果解码错优先于原错。
+///
+/// # 参数
+/// * `port` - 命令读取端口。
+/// * `transaction_result` - 事务提交结果。
+/// * `idempotency_key` - 原命令幂等键。
+/// * `operation` - 期望的命令操作名。
+/// * `fingerprint` - 本次请求指纹。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 事务成功时返回其成功值。失败且存在可重放命令时返回解码后的原结果。
+///
+/// # 错误
+/// 没有原命令时返回原事务错误。重读失败原样传播；指纹不一致返回 `ConflictError`；结果无法解码返回 `Internal`。
 pub(super) async fn resolve<T: DeserializeOwned, E: From<Error>, P: CommandResultPort>(
     port: &P,
     transaction_result: std::result::Result<T, E>,

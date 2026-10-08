@@ -54,8 +54,17 @@ impl QueryFilter for PartyRevisionFilter {
     /// 转换为 MongoDB 查询条件（修订集合无软删除，过滤条件为空时仍显式
     /// 追加未删除过滤，与基类语义保持一致）。
     ///
+    /// `party_id` 为 `None` 时不写入，有值时按字符串精确匹配。`legal_name` 与
+    /// `short_name` 为 `None` 时不写入，有值时按字面量正则、忽略大小写匹配。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(party_id) = &self.party_id {
@@ -70,8 +79,14 @@ impl QueryFilter for PartyRevisionFilter {
 impl Pagination for PartyRevisionFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组。`page` 原样取出，`page_size` 由 `u32` 转为 `u64`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }

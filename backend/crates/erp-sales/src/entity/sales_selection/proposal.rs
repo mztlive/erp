@@ -137,7 +137,7 @@ impl SalesSelectionProposal {
     /// 返回不可改的方案表头。
     ///
     /// # 错误
-    /// 编号为空或合计与提交方式不一致时拒绝。
+    /// 编号、销售负责人或业务组织为空，或合计与提交方式不一致时拒绝。
     pub fn new(id: SalesSelectionProposalId, data: SalesSelectionProposalData) -> Result<Self> {
         let proposal_no = data.proposal_no.trim();
         if proposal_no.is_empty() {

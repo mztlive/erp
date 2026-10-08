@@ -79,7 +79,7 @@ impl AuthorizationPolicy {
     /// # 返回
     /// 来源资源动作，或无需映射时保持原值。
     /// # 错误
-    /// 无；消费者登记由解析入口验证。
+    /// 不返回错误。消费者登记由解析入口验证。
     pub fn scope_source<'a>(resource: &'a str, action: &'a str) -> (&'a str, &'a str) {
         match resource {
             "contract" => ("customer", "list"),
@@ -94,7 +94,7 @@ impl AuthorizationPolicy {
     /// # 返回
     /// 业务责任、治理委派和目录可见范围为 true。
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn configurable(self) -> bool {
         matches!(self, Self::Business | Self::Governance | Self::Directory)
     }
@@ -105,7 +105,7 @@ impl AuthorizationPolicy {
     /// # 返回
     /// 静态说明；不表示具体对象已授权。
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn description(self) -> &'static str {
         match self {
             Self::Business => "按业务责任和附加范围授权；仍需具备对应操作权限。",
@@ -125,7 +125,7 @@ impl AuthorizationPolicy {
     /// # 返回
     /// 资源专用说明，其他资源返回策略通用说明。
     /// # 错误
-    /// 无；不产生具体对象的授权结论。
+    /// 不返回错误。不产生具体对象的授权结论。
     pub fn description_for(self, resource: &str) -> &'static str {
         match resource {
             "stock_balance" | "stock_movement" | "stock_reservation" => {

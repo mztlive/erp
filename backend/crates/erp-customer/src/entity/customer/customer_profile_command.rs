@@ -33,6 +33,9 @@ impl CustomerProfileRequestFingerprint {
     /// # 返回
     /// 返回 `sha256-json-v1:<64hex>` 形态的请求指纹。
     ///
+    /// # 错误
+    /// 不返回错误。
+    ///
     /// # 关键业务约束
     /// VO 只对显式字节计算摘要，不依赖或反向引用 Service DTO；调用方必须用
     /// golden 测试冻结 v1 JSON 字段顺序。
@@ -64,13 +67,22 @@ impl CustomerProfileRequestFingerprint {
 
     /// 返回内存比较与诊断使用的带版本指纹。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `sha256-json-v1:<64hex>` 字符串切片。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
     /// 返回 SHA-256 摘要部分。
+    ///
+    /// # Panics
+    /// 指纹不含已验证的 v1 前缀时 panic；构造路径保证前缀存在。
     fn digest_hex(&self) -> &str {
         self.0.strip_prefix(REQUEST_FINGERPRINT_V1_PREFIX).expect("已验证客户资料指纹必须包含 v1 前缀")
     }
@@ -134,40 +146,70 @@ impl CustomerProfileReplayContext {
 
     /// 返回规范化后的幂等键。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回仓储查询和新命令持久化共用的幂等键。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn idempotency_key(&self) -> &str {
         &self.idempotency_key
     }
 
     /// 返回命令操作。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回创建或修订操作。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn operation(&self) -> CustomerProfileOperation {
         self.operation
     }
 
     /// 返回修订目标客户 ID。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 修订命令返回客户 ID，创建命令返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn customer_id(&self) -> Option<&str> {
         self.customer_id.as_deref()
     }
 
     /// 返回命令发起人。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回已完成精确形态校验的账号 ID。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn initiated_by(&self) -> &str {
         &self.initiated_by
     }
 
     /// 返回当前请求指纹。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回版本化请求指纹值对象。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn request_fingerprint(&self) -> &CustomerProfileRequestFingerprint {
         &self.request_fingerprint
     }
@@ -263,8 +305,17 @@ pub struct CustomerProfileCommand {
 impl CustomerProfileCommand {
     /// 创建客户资料命令的稳定成功结果。
     ///
-    /// # Errors
-    /// 幂等键、操作、请求指纹、结果身份或变更原因为空时返回校验错误。
+    /// 持久化的请求指纹是历史裸 SHA-256 摘要，不保留版本前缀。
+    ///
+    /// # 参数
+    /// * `id` - 命令记录 ID
+    /// * `data` - 成功结果字段
+    ///
+    /// # 返回
+    /// 返回字段已规范化的命令实体。
+    ///
+    /// # 错误
+    /// 幂等键为空或超长、操作不是 `create` 或 `update`、请求指纹格式非法，或发起人、客户、主体、修订 ID 与变更原因为空白时返回领域错误。
     pub fn new(id: impl Into<String>, data: CustomerProfileCommandData) -> Result<Self> {
         let idempotency_key = normalize_required_text(
             data.idempotency_key,

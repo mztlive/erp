@@ -1,8 +1,8 @@
-//! Integration-domain application errors with the original unique-index mapping.
+//! 集成领域应用错误，保留原唯一索引冲突文案映射。
 
 use application_core::ErrorClass;
 
-/// Integration-domain result alias.
+/// 集成领域结果别名。
 pub type Result<T> = std::result::Result<T, Error>;
 
 impl From<application_core::Error> for Error {
@@ -56,7 +56,19 @@ pub enum Error {
 }
 
 impl Error {
-    /// Stable error class used by HTTP mapping; do not parse display text.
+    /// 返回 HTTP 映射使用的稳定错误分类；调用方不得解析展示文案。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Internal`、`Logic`、`RepositoryError` 与 `OutcomeUnknown` 为 `ErrorClass::Internal`；
+    /// `ConflictError`、`ReceiptDuplicate` 与 `TransientTransaction` 为 `ErrorClass::Conflict`；
+    /// `BusinessLogicError`、`ValidationError` 与 `NotFound` 为 `ErrorClass::BusinessRule`；
+    /// `Forbidden` 与 `Unauthenticated` 为 `ErrorClass::Forbidden`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn class(&self) -> ErrorClass {
         match self {
             Self::Internal(_) | Self::Logic(_) | Self::RepositoryError(_) => ErrorClass::Internal,
@@ -98,10 +110,13 @@ pub const OPTIMISTIC_LOCK_CONFLICT_MESSAGE: &str = "数据已被其他请求修�
 /// 由乐观锁冲突构造版本冲突错误（版本校验与仓储映射的统一入口）。
 ///
 /// # 参数
-/// * 无。
+/// 无。
 ///
 /// # 返回
 /// 返回 `ConflictError`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn optimistic_lock_conflict() -> Error {
     Error::ConflictError(OPTIMISTIC_LOCK_CONFLICT_MESSAGE.to_string())
 }

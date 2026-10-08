@@ -50,7 +50,10 @@ pub struct ProcurementCatalogBundle {
 /// 返回去重后按字典序稳定排序的当前商品修订 ID 集合。
 ///
 /// # 错误
-/// 任一商品尚未形成当前修订时返回校验错误。
+/// 任一商品缺少 `current_revision_id` 时返回 `LogicError`。
+///
+/// # Panics
+/// 排序键在同一 `HashMap` 中丢失时 panic；键来自 `products.keys()`，正常不可达。
 ///
 /// # 约束
 /// 去重后按 ID 字符串字典序稳定排序，满足确定性顺序；不依赖 HashMap 迭代随机性。
@@ -85,7 +88,7 @@ pub fn current_revision_ids(products: &HashMap<String, Product>) -> Result<Vec<P
 /// 返回行键到分类链和商品类型事实的映射。
 ///
 /// # 错误
-/// 分类链缺失或存在环时返回错误；调用方已保证前置映射完整性后仍需再次校验环。
+/// SKU、商品、当前修订或修订映射缺失时返回 `LogicError`；分类缺失或成环时返回 `category_chain` 的错误。
 ///
 /// # 约束
 /// 结果以输入行键为键保持确定性；分类链顺序从当前分类到根，不依赖输入乱序。
@@ -131,7 +134,7 @@ pub fn build_catalog_facts(
 /// 返回从当前分类到根分类的有序强类型 ID 链，顺序固定为自底向上。
 ///
 /// # 错误
-/// 分类缺失时返回校验错误；父级关系成环（自环或多节点环）时返回冲突错误。
+/// 分类不在 `categories` 中，或父级自环、多节点环时，均返回 `LogicError`。
 ///
 /// # 约束
 /// 环检测使用访问集合，去重键为分类 ID 字符串；链内不得出现重复。

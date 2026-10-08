@@ -213,6 +213,9 @@ pub fn build_working_copy_lines(
 ///
 /// # 返回
 /// 返回表头快照入参。
+///
+/// # 错误
+/// 字段复制不失败，始终返回 `Ok`。
 pub fn header_snapshot(
     draft: &SalesOrderDraftRequest,
 ) -> Result<crate::entity::sales_order::HeaderSnapshotData> {
@@ -294,6 +297,9 @@ pub fn build_submission_lines(
 ///
 /// # 返回
 /// 返回视图。
+///
+/// # 错误
+/// 不返回错误。
 pub fn submission_view(
     submission: SalesOrderSubmission,
     lines: Vec<SalesOrderSubmissionLine>,
@@ -332,7 +338,10 @@ pub fn submission_view(
 /// * `line` - 工作副本行实体
 ///
 /// # 返回
-/// 返回视图。
+/// 返回视图。参考价固定为 `None`，本函数不回查价格。
+///
+/// # 错误
+/// 不返回错误。
 pub fn working_copy_line_view(line: SalesOrderWorkingCopyLine) -> SalesOrderWorkingCopyLineView {
     SalesOrderWorkingCopyLineView {
         pricing_mode: line.pricing_mode,

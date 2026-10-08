@@ -27,8 +27,16 @@ pub struct SalesAttribution {
 impl SalesAttribution {
     /// 核对快照与单据责任身份一致，并要求完整、无重复的组织路径。
     ///
+    /// # 参数
+    /// * `owner` - 单据负责销售身份
+    /// * `org` - 单据业务组织身份
+    ///
+    /// # 返回
+    /// 快照完整且与责任身份一致时返回 `Ok(())`。
+    ///
     /// # 错误
-    /// 缺名称、版本、路径，路径末节点不一致或身份不匹配时拒绝生效。
+    /// 人员或组织名称、路径节点名称或身份为空，路径为空、重复或末节点与业务组织不一致，
+    /// `attribution_version` 不是 1，`organization_version` 为 0，或身份与 `owner`、`org` 不一致时返回领域错误。
     pub fn validate(&self, owner: &str, org: &str) -> Result<()> {
         let identities_match = self.attribution_user_id == owner && self.attribution_org_unit_id == org;
         let path_matches = self

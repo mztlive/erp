@@ -81,8 +81,14 @@ pub enum ApprovalNodePurpose {
 impl ApprovalNodePurpose {
     /// 返回稳定用途键。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回合同签署的用途代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::SalesOrderProcurementConfirmation => SALES_ORDER_PROCUREMENT_CONFIRMATION,
@@ -131,8 +137,14 @@ pub struct WorkItemOwnerRole {
 impl WorkItemOwnerRole {
     /// 返回稳定责任角色标签。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `<prefix>_approver`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         self.value
     }
@@ -213,8 +225,14 @@ pub enum DocumentApprovalPolicy {
 impl DocumentApprovalPolicy {
     /// 返回审批要求。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `NO_APPROVAL` 或 `PROCESS_REQUIRED`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn requirement(&self) -> ApprovalRequirement {
         match self {
             Self::NoApproval(_) => ApprovalRequirement::NoApproval,
@@ -224,8 +242,14 @@ impl DocumentApprovalPolicy {
 
     /// 返回对应流程种类。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回已冻结映射的 `ProcessKind`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn process_kind(&self) -> ProcessKind {
         match self {
             Self::NoApproval(policy) => policy.process_kind,
@@ -235,8 +259,14 @@ impl DocumentApprovalPolicy {
 
     /// 返回单据类型。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回政策绑定的 `DocumentType`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn document_type(&self) -> DocumentType {
         match self {
             Self::NoApproval(policy) => policy.document_type,
@@ -362,8 +392,14 @@ pub fn policy_of(document_type: DocumentType) -> Result<DocumentApprovalPolicy> 
 
 /// 要求该类型政策为必须审批并返回完整政策。
 ///
+/// # 参数
+/// * `document_type` - 固定单据类型
+///
+/// # 返回
+/// 返回该类型的 `ProcessRequiredApprovalPolicy`。
+///
 /// # 错误
-/// 类型为 `NO_APPROVAL` 或政策读取失败时返回错误。
+/// 类型为 `NO_APPROVAL` 时返回业务错误；政策构造失败时传播 `policy_of` 的错误。
 pub fn require_process_required(document_type: DocumentType) -> Result<ProcessRequiredApprovalPolicy> {
     match policy_of(document_type)? {
         DocumentApprovalPolicy::ProcessRequired(policy) => Ok(policy),
@@ -375,8 +411,14 @@ pub fn require_process_required(document_type: DocumentType) -> Result<ProcessRe
 
 /// 校验三类强类型动作均已注册且互不相同。
 ///
+/// # 参数
+/// * `policy` - 必须审批政策
+///
+/// # 返回
+/// 三类动作互异时无返回值。
+///
 /// # 错误
-/// 动作相同或无法穷尽识别时返回部署不变量错误。
+/// 三类动作不互异时返回 `ApprovalPolicyNotRegistered`。
 pub fn ensure_actions_registered(policy: &ProcessRequiredApprovalPolicy) -> Result<()> {
     ensure_real_action(policy.start_action)?;
     ensure_real_action(policy.final_approve_action)?;
@@ -445,7 +487,7 @@ fn finance_required(
 /// 构造必须审批政策。
 ///
 /// # 错误
-/// 类型级权限无法解析或该类型不应注册运行政策时返回错误。
+/// 单据类型没有稳定责任角色时返回内部错误。
 fn process_required(
     document_type: DocumentType,
     required_node_purposes: &'static [ApprovalNodePurpose],
@@ -484,7 +526,7 @@ fn no_approval(document_type: DocumentType) -> DocumentApprovalPolicy {
 /// 解析类型级管理权限。
 ///
 /// # 错误
-/// 权限字符串不符合 `resource:action` 时返回部署不变量错误。
+/// 当前实现只拼接单据类型与动作，不会失败。
 fn type_permission(document_type: DocumentType, action: &str) -> Result<String> {
     Ok(format!("{}:{action}", document_type.as_str()))
 }

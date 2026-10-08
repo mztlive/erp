@@ -1,4 +1,4 @@
-//! Financial read models combining public finance facts with external display and workflow context.
+//! 财务读模型：组合公开财务事实与外部展示、审批上下文。
 
 pub mod document_files;
 pub mod dto;

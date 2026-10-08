@@ -24,10 +24,13 @@ pub(super) type RevisionAggregate = SalesOrderRevisionAggregate;
 /// * `revision` - 版本聚合
 ///
 /// # 返回
-/// 返回含税合计。
+/// 返回公共行含税合计；没有公共行时返回零。
 ///
 /// # 错误
-/// 无行时返回 `ValidationError`。
+/// 函数体不产生 `Err`。
+///
+/// # Panics
+/// `Amount::from_str("0.00")` 失败时 panic；该字面量应为合法静态零值。
 pub(super) fn revision_gross(revision: &RevisionAggregate) -> Result<Amount> {
     let zero = Amount::from_str("0.00").expect("静态零值必须合法");
     Ok(revision.lines.iter().fold(zero, |acc, line| acc.checked_add(line.gross_amount)))

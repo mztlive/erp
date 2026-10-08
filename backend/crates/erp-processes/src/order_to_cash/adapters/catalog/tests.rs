@@ -26,6 +26,19 @@ struct RecordingQuery {
 #[async_trait]
 impl CatalogSupplyQueryPort for RecordingQuery {
     /// 销售资格复验必须继续使用精确引用查询。
+    ///
+    /// # 参数
+    /// * `_` - 未使用的商品筛选。
+    /// * `_` - 未使用的执行器。
+    ///
+    /// # 返回
+    /// 不会正常返回。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    ///
+    /// # Panics
+    /// 总是 panic，防止销售资格复验改走候选商品查询。
     async fn product_candidate_ids(
         &self,
         _: &ProductFilter,

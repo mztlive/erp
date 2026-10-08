@@ -65,6 +65,13 @@ pub(super) async fn complete_or_close_tasks(
 
 /// 解析当前结束执行唯一的任务终结方式。
 ///
+/// # 参数
+/// * `input` - 完成与关闭意图。
+/// * `execution_id` - 当前结束的执行。
+///
+/// # 返回
+/// 没有针对该执行的意图时返回 `None`；只有完成时返回完成，只有同一种关闭原因时返回关闭。
+///
 /// # 错误
 /// 同一执行同时被计划为完成和关闭，或出现不同关闭原因时返回冲突。
 pub(super) fn approval_task_ending(
@@ -102,6 +109,14 @@ pub(super) struct CreateOpenTasksInput<'a> {
 }
 
 /// 为 `HumanTaskRequested` 意图创建新开放任务。
+///
+/// # 参数
+/// * `db` - MongoDB。
+/// * `input` - 计划、任务 ID 与单据责任上下文。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 人工任务意图都创建后无返回值；其它意图被跳过。
 ///
 /// # 错误
 /// 任务实体构造失败或 Repository 写入失败时返回错误。

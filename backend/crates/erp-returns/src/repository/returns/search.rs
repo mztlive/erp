@@ -8,7 +8,27 @@ use serde::de::DeserializeOwned;
 
 /// 列表筛选的排序字段（三份 Filter 的 `sort_by` / `sort_ascending` 同构读取）。
 pub(super) trait ListSort {
+    /// 读取筛选上的排序字段名。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 未指定排序字段时返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn sort_by(&self) -> Option<&str>;
+    /// 读取筛选是否按升序排序。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 升序为 `true`，降序为 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn sort_ascending(&self) -> bool;
 }
 
@@ -60,6 +80,9 @@ where
 ///
 /// # 返回
 /// 返回排序条件文档；`id` 作为次键保证同值稳定排序。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     let field = sort_by.filter(|name| allowed.contains(name)).unwrap_or("created_at");
@@ -67,6 +90,18 @@ pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&
 }
 
 /// 两类原事实引用的共用 `$in` 筛选（字段名由调用方保持原语义）。
+///
+/// # 参数
+/// * `ids_a` - 第一类原事实 ID。
+/// * `field_a` - 第一类字段名。
+/// * `ids_b` - 第二类原事实 ID。
+/// * `field_b` - 第二类字段名。
+///
+/// # 返回
+/// 返回只包含非空 ID 集合的 `$in` 条件；两边都空时返回空文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn originals_filter<A: ToString, B: ToString>(
     ids_a: &[A],
     field_a: &str,

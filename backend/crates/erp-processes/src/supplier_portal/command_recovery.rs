@@ -49,6 +49,18 @@ impl CommandRejection {
         Ok(Self { kind, message })
     }
 
+    /// 把封存的拒绝还原为原来的校验、业务或冲突错误。
+    ///
+    /// 消耗 `self`。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 按封存种类返回 `ValidationError`、`BusinessLogicError` 或 `ConflictError`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub(super) fn into_error(self) -> Error {
         match self.kind {
             RejectionKind::Validation => Error::ValidationError(self.message),
@@ -63,6 +75,15 @@ impl CommandRejection {
 }
 
 /// 已封存的拒绝在所有原命令入口恢复为同一确定错误。
+///
+/// # 参数
+/// * `value` - 回执中的结果 JSON。
+///
+/// # 返回
+/// 普通成功结果返回 `None`；封存拒绝时返回可还原的 `CommandRejection`。
+///
+/// # 错误
+/// 终态标记、拒绝体或原因损坏时返回 `Internal`。
 pub(super) fn rejection(value: &Value) -> Result<Option<CommandRejection>> {
     let Some(outcome) = value.get("portal_command_outcome") else {
         return Ok(None);
@@ -100,6 +121,20 @@ async fn recovery_decision(
 }
 
 impl SupplierPortalProcess {
+    /// 原命令已有回执时原样返回；预检确定失败时封存拒绝；预检通过时返回 `None` 以便重新执行。
+    ///
+    /// # 参数
+    /// * `actor` - 当前门户身份。
+    /// * `action` - 原命令动作。
+    /// * `key` - 原命令幂等键。
+    /// * `payload` - 原命令载荷。
+    /// * `validate` - 只读预检，不执行正式写入。
+    ///
+    /// # 返回
+    /// 已有回执或新封存的拒绝 JSON 为 `Some`；预检通过且尚无回执时返回 `None`。
+    ///
+    /// # 错误
+    /// 命令构造、会话、不可封存的预检错误，或拒绝回执写入失败时返回对应错误。
     pub(super) async fn recover_unexecutable<P, F>(
         &self,
         actor: &PortalActor,

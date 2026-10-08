@@ -45,14 +45,33 @@ fn map_service(error: Error) -> WorkflowError {
     }
 }
 
-/// Convert an identity account into the workflow account fact.
+/// 把身份账号转换成工作流账号事实。
+///
+/// # 参数
+/// * `account` - 身份域账号核心。
+///
+/// # 返回
+/// 返回带显示名和登录名的 `WorkflowAccountFact`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn account_fact(account: &erp_identity::AccountCore) -> WorkflowAccountFact {
     WorkflowAccountFact::new(account.base.id.clone(), account.kind, account.can_login())
         .with_display_name(account.name.clone())
         .with_login_account(account.secret.account().to_string())
 }
 
-/// Construct a fully wired work-item command service.
+/// 装配授权、对象事实与审计端口齐全的工作项命令服务。
+///
+/// # 参数
+/// * `db` - 工作项与身份集合所在数据库。
+/// * `rbac` - 现有 RBAC 快照服务。
+///
+/// # 返回
+/// 返回已注入三个组合端口的工作项服务。
+///
+/// # 错误
+/// 不返回错误。
 pub fn work_item_service(db: Database, rbac: SharedRbacService) -> WorkItemService<WorkflowAuth> {
     let auth = WorkflowAuth::new(db.clone(), rbac);
     let facts = Arc::new(WorkflowObjectFacts::new(db.clone()));
@@ -60,25 +79,66 @@ pub fn work_item_service(db: Database, rbac: SharedRbacService) -> WorkItemServi
     WorkItemService::with_ports(db, auth, facts, audit)
 }
 
-/// Construct workflow authorization for composition roots.
+/// 为组合根构造工作流授权 adapter。
+///
+/// # 参数
+/// * `db` - 身份与业务集合所在数据库。
+/// * `rbac` - 现有 RBAC 快照服务。
+///
+/// # 返回
+/// 返回未执行 I/O 的 `WorkflowAuth`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn workflow_auth(db: Database, rbac: SharedRbacService) -> WorkflowAuth {
     WorkflowAuth::new(db, rbac)
 }
 
-/// Construct the workflow audit adapter.
+/// 构造工作流审计 adapter。
+///
+/// # 参数
+/// * `db` - 审计与业务集合所在数据库。
+///
+/// # 返回
+/// 返回共享的 `WorkflowAudit`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn workflow_audit(db: Database) -> Arc<WorkflowAudit> {
     Arc::new(WorkflowAudit::new(db))
 }
 
-/// Construct the work-item object-fact adapter.
+/// 构造工作项对象事实 adapter。
+///
+/// # 参数
+/// * `db` - 业务事实集合所在数据库。
+///
+/// # 返回
+/// 返回共享的 `WorkflowObjectFacts`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn workflow_object_facts(db: Database) -> Arc<WorkflowObjectFacts> {
     Arc::new(WorkflowObjectFacts::new(db))
 }
 
-/// Bind a published approval definition through composition-root ports.
+/// 经组合根端口绑定已发布审批定义。
 ///
-/// Domain processes must receive `object_read` from the composition
-/// root. This helper does not open a nested transaction.
+/// 领域流程必须从组合根取得 `object_read`。本函数不另开嵌套事务。
+///
+/// # 参数
+/// * `db` - 单据与审批集合所在数据库。
+/// * `rbac` - 现有 RBAC 快照服务。
+/// * `object_read` - 组合根提供的审批对象读取端口。
+/// * `command` - 绑定已发布定义的命令。
+/// * `actor` - 当前操作人。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 成功时返回工作流绑定函数的结果；内层为 `None` 时原样返回 `None`。
+///
+/// # 错误
+/// 工作流绑定失败时映射为流程 `Error`。
 pub async fn bind_published_definition_on_document_create(
     db: &mongodb::Database,
     rbac: &SharedRbacService,
@@ -106,7 +166,17 @@ fn map_service_err(error: erp_workflow::Error) -> Error {
     Error::from(error)
 }
 
-/// Attach a computed binding onto a registered business document.
+/// 把已算出的绑定挂到已注册业务单据上。
+///
+/// # 参数
+/// * `document` - 待写入绑定的业务单据。
+/// * `binding` - 已发布定义绑定。
+///
+/// # 返回
+/// 成功时返回工作流函数交回的绑定。
+///
+/// # 错误
+/// 工作流拒绝挂载时经 `Error::from` 返回对应流程错误。
 pub fn attach_published_binding(
     document: &mut erp_workflow::entity::document_registry::BusinessDocument,
     binding: erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding,

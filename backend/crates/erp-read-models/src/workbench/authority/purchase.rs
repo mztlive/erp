@@ -1,4 +1,4 @@
-//! Purchase-order object facts for remaining-domain work-item authorization.
+//! 采购单对象事实，供其余领域的工作项授权使用。
 
 use std::collections::{HashMap, HashSet};
 
@@ -22,7 +22,18 @@ struct PurchaseReviewDisplay {
 }
 
 impl super::WorkItemFactsReader {
-    /// Load purchase-order identity and per-submission counterparty/impact overlays.
+    /// 装载采购单身份，以及按提交覆盖的往来方与影响。
+    ///
+    /// # 参数
+    /// * `keys` - 本批对象键。
+    /// * `facts` - 输出事实表。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 没有采购单时不写入。成功时按单写入事实，当前提交的往来方与影响同时落到对象级字段。
+    ///
+    /// # 错误
+    /// 采购单、提交或提交行读取失败时返回错误。
     pub(in crate::workbench) async fn load_purchase_order_facts(
         &self,
         keys: &HashSet<(ObjectKind, String)>,
@@ -106,6 +117,16 @@ impl super::WorkItemFactsReader {
         Ok(purchase_line_counts(&self.purchase_submission_lines(submissions, executor).await?))
     }
     /// 只读取原提交行来源；命令计数与显示行状态消费同一返回值。
+    ///
+    /// # 参数
+    /// * `submissions` - 本批采购提交；为空时不读取。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 返回这些提交的全部行。
+    ///
+    /// # 错误
+    /// 仓储读取失败时返回错误。
     pub(in crate::workbench) async fn purchase_submission_lines(
         &self,
         submissions: &[PurchaseOrderSubmission],
@@ -182,6 +203,15 @@ fn assemble_purchase_review_displays(
 }
 
 /// 为每次正式重提定位同一采购单的上一次正式提交。
+///
+/// # 参数
+/// * `submissions` - 本批采购提交。
+///
+/// # 返回
+/// 返回正式提交 ID 到同单上一正式提交 ID。没有 `formal_sequence` 的提交不参与；每单按序号排序后只连接相邻两次。
+///
+/// # 错误
+/// 不返回错误。
 pub(in crate::workbench) fn previous_formal_submission_ids(
     submissions: &[PurchaseOrderSubmission],
 ) -> HashMap<String, String> {
@@ -230,6 +260,15 @@ fn purchase_review_display(
 }
 
 /// 按原全部行统计提交数量，不使用富简报截取后的行数。
+///
+/// # 参数
+/// * `lines` - 采购提交行。
+///
+/// # 返回
+/// 返回提交 ID 到行数。
+///
+/// # 错误
+/// 不返回错误。
 pub(in crate::workbench) fn purchase_line_counts(
     lines: &[PurchaseOrderSubmissionLine],
 ) -> HashMap<String, usize> {
@@ -240,6 +279,17 @@ pub(in crate::workbench) fn purchase_line_counts(
     counts
 }
 /// 从已经读取的来源构造采购权威事实；不增加显示查询。
+///
+/// # 参数
+/// * `orders` - 已读采购单。
+/// * `submissions` - 已读采购提交。
+/// * `counts` - 提交 ID 到行数。
+///
+/// # 返回
+/// 返回采购单 ID 到权威事实；当前提交的往来方与影响写到对象级字段。
+///
+/// # 错误
+/// 不返回错误。
 pub(in crate::workbench) fn purchase_facts(
     orders: &[PurchaseOrder],
     submissions: &[PurchaseOrderSubmission],

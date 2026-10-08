@@ -19,8 +19,15 @@ impl CustomerProfileService {
     ///
     /// HTTP 层必须先依据令牌字段类型执行对应 RBAC 校验。
     ///
-    /// # Errors
-    /// 令牌非法/过期、事实不属于令牌客户、密文不可用或审计失败时返回错误。
+    /// # 参数
+    /// * `req` - 揭示请求，只携带短时令牌。
+    /// * `actor` - 已认证操作人，用于成功审计。
+    ///
+    /// # 返回
+    /// 返回解密后的单个敏感字段明文。
+    ///
+    /// # 错误
+    /// 请求校验失败、令牌非法或过期、客户或事实不存在、事实不属于令牌客户、密文不可用或审计写入失败时返回错误。
     pub async fn reveal_sensitive(
         &self,
         req: RevealCustomerSensitiveRequest,
@@ -39,6 +46,18 @@ impl CustomerProfileService {
     }
 
     /// 为每条当前敏感事实签发一分钟有效的字段级令牌。
+    ///
+    /// # 参数
+    /// * `customer_id` - 令牌绑定的客户主键。
+    /// * `contacts` - 当前联系人事实。
+    /// * `addresses` - 当前地址事实。
+    /// * `bank_accounts` - 当前银行账户事实。
+    ///
+    /// # 返回
+    /// 按联系人、地址、银行账户的顺序返回令牌视图；手机号和账号使用末四位掩码，地址固定掩码。
+    ///
+    /// # 错误
+    /// 系统时间无法转换为秒，或令牌签发失败时返回错误。
     pub(super) fn sensitive_fields(
         &self,
         customer_id: &str,
@@ -140,6 +159,7 @@ impl CustomerProfileService {
     }
 }
 
+/// 读取当前时刻的 Unix 秒；负值或溢出不能签发令牌。
 fn unix_now() -> Result<u64> {
     u64::try_from(Instant::now().unix_secs()).map_err(|_| Error::Internal("系统时间非法".to_string()))
 }

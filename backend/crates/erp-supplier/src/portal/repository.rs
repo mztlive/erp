@@ -37,7 +37,7 @@ impl<'a> CooperationRepository<'a> {
     /// * `id` - 内部任务指向的精确申请标识。
     /// * `executor` - 调用方执行器。
     /// # 返回
-    /// 返回未删除申请或空结果。
+    /// 返回未删除申请；没有未删除申请时返回 `None`。
     /// # 错误
     /// 数据库读取失败时拒绝。
     pub async fn find_any(
@@ -97,7 +97,7 @@ impl<'a> CooperationRepository<'a> {
     /// * `supplier_id` - 服务器授权供应商。
     /// * `executor` - 调用方执行器。
     /// # 返回
-    /// 返回可见申请或空结果。
+    /// 返回当前供应商可见的未删除申请；范围外、已删除或不存在时返回 `None`。
     /// # 错误
     /// 数据库错误时拒绝。
     pub async fn get(
@@ -197,9 +197,9 @@ impl<'a> CooperationRepository<'a> {
     /// * `supplier_id` - 当前授权范围。
     /// * `executor` - 调用方事务执行器。
     /// # 返回
-    /// 返回可重放回执或空结果。
+    /// 返回通过身份与载荷校验的回执；没有匹配回执时返回 `None`。
     /// # 错误
-    /// 同幂等键异载荷或数据库读取失败时拒绝。
+    /// 回执与当前命令的范围、身份或载荷不一致，或数据库读取失败时拒绝。
     pub async fn receipt(
         &self,
         command: &CommandReceipt,
@@ -244,7 +244,9 @@ impl<'a> CooperationRepository<'a> {
     /// # 返回
     /// 成功后 plan supplier 更新为实际写入版本。
     /// # 错误
-    /// 当前 supplier 版本、状态或 profile 指针变更时返回冲突。
+    /// 未传入事务执行器时返回 `Internal`；计划身份不一致或确认时间超限时返回
+    /// `ValidationError`；供应商版本超限，或当前版本、状态、指针已变时返回
+    /// `ConflictError`；更新或写入商务修订失败时返回对应错误。
     pub async fn apply_confirmed(
         &self,
         before: &SupplierAccount,
@@ -283,6 +285,7 @@ impl<'a> CooperationRepository<'a> {
     }
 }
 
+/// 正式计划的供应商、商务修订与版本增量必须和已读取账户一致。
 fn ensure_confirmed_plan(before: &SupplierAccount, plan: &ConfirmedCooperation) -> Result<()> {
     if plan.supplier.base.id != before.base.id
         || plan.profile.supplier_id.to_string() != before.base.id
@@ -301,6 +304,7 @@ fn scoped_filter(supplier_id: &str) -> Document {
     doc! { "supplier_id": supplier_id, "deleted_at": NOT_DELETED_TIMESTAMP_BSON }
 }
 
+/// 空供应商绑定拒绝；有状态时写入序列化后的状态条件。
 fn list_filter(supplier_id: &str, status: Option<CooperationStatus>) -> Result<Document> {
     if supplier_id.trim().is_empty() {
         return Err(Error::Forbidden("供应商绑定无效".into()));

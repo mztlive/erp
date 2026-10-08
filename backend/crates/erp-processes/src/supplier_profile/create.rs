@@ -36,7 +36,14 @@ use crate::{Error, Result};
 impl SupplierProfileService {
     /// 创建 Party、Supplier 及其当前资料；全部写入与幂等结果原子提交。
     ///
-    /// # Errors
+    /// # 参数
+    /// * `req` - 根资料创建请求。
+    /// * `actor` - 当前操作人。
+    ///
+    /// # 返回
+    /// 创建或同键重放的资料变更视图。
+    ///
+    /// # 错误
     /// 输入无效、引用主体停用、附件不存在或敏感级别不匹配、身份重复或事务失败时返回错误。
     pub async fn create(
         &self,
@@ -48,8 +55,16 @@ impl SupplierProfileService {
 
     /// 创建完整供应商资料，并把同一次 multipart 命令携带的资质文件原子登记。
     ///
-    /// # Errors
-    /// 输入无效、文件引用或敏感级别不匹配、身份重复或事务失败时返回错误。
+    /// # 参数
+    /// * `req` - 根资料创建请求。
+    /// * `pending_assets` - 同一次命令待登记的资质文件；没有上传时为空批次。
+    /// * `actor` - 当前操作人。
+    ///
+    /// # 返回
+    /// 业务视图，以及本次上传对象是否已随事务登记。同键重放时 `assets_committed` 为 `false`。
+    ///
+    /// # 错误
+    /// 输入无效、创建时提交清空意图、同键异参、文件引用或敏感级别不匹配、身份重复或事务失败时返回错误。
     pub async fn create_with_assets(
         &self,
         mut req: SaveSupplierProfileRequest,
@@ -197,7 +212,18 @@ impl SupplierProfileService {
         })
     }
 
-    /// 构造并加密默认联系人。
+    /// 构造并加密默认联系人。请求没有联系人时不创建。
+    ///
+    /// # 参数
+    /// * `req` - 根资料请求。
+    /// * `party_id` - 新建主体 ID。
+    /// * `actor_id` - 操作人 ID。
+    ///
+    /// # 返回
+    /// 默认联系人；`req.contact` 为空时为 `None`。
+    ///
+    /// # 错误
+    /// 联系人构造或手机号加密失败时返回对应错误。
     pub(super) fn create_contact(
         &self,
         req: &SaveSupplierProfileRequest,
@@ -228,7 +254,18 @@ impl SupplierProfileService {
         Ok(Some(contact))
     }
 
-    /// 构造并加密默认经营地址。
+    /// 构造并加密默认经营地址。请求没有地址时不创建。
+    ///
+    /// # 参数
+    /// * `req` - 根资料请求。
+    /// * `party_id` - 新建主体 ID。
+    /// * `actor_id` - 操作人 ID。
+    ///
+    /// # 返回
+    /// 默认经营地址；`req.address` 为空时为 `None`。
+    ///
+    /// # 错误
+    /// 地址构造或地址加密失败时返回对应错误。
     pub(super) fn create_address(
         &self,
         req: &SaveSupplierProfileRequest,
@@ -257,7 +294,18 @@ impl SupplierProfileService {
         Ok(Some(address))
     }
 
-    /// 构造并加密默认银行账户。
+    /// 构造并加密默认银行账户。请求没有账户时不创建。
+    ///
+    /// # 参数
+    /// * `req` - 根资料请求。户名取法定名称。
+    /// * `party_id` - 新建主体 ID。
+    /// * `actor_id` - 操作人 ID。
+    ///
+    /// # 返回
+    /// 默认银行账户；`req.bank_account` 为空时为 `None`。
+    ///
+    /// # 错误
+    /// 账户构造或账号加密失败时返回对应错误。
     pub(super) fn create_bank_account(
         &self,
         req: &SaveSupplierProfileRequest,
@@ -496,6 +544,15 @@ fn allocate_creation_plan(
 }
 
 /// 创建必须显式指定整体维护人。
+///
+/// # 参数
+/// * `req` - 根资料请求。
+///
+/// # 返回
+/// 去掉首尾空白后的维护人 ID。
+///
+/// # 错误
+/// 维护人缺失或只有空白时返回校验错误。
 pub(super) fn required_maintainer(req: &SaveSupplierProfileRequest) -> Result<String> {
     req.maintainer_user_id
         .as_deref()
@@ -505,7 +562,16 @@ pub(super) fn required_maintainer(req: &SaveSupplierProfileRequest) -> Result<St
         .ok_or_else(|| Error::ValidationError("供应商维护人不能为空".into()))
 }
 
-/// 读取新建能力的显式负责人。
+/// 读取新建能力的显式负责人。每个能力代码都必须有非空负责人。
+///
+/// # 参数
+/// * `req` - 根资料请求。
+///
+/// # 返回
+/// 与 `capability_codes` 顺序一致的能力代码和负责人。
+///
+/// # 错误
+/// 任一能力没有非空负责人时返回校验错误。
 pub(super) fn capability_owners_of(
     req: &SaveSupplierProfileRequest,
 ) -> Result<Vec<(erp_supplier::CapabilityCode, String)>> {
@@ -545,7 +611,18 @@ async fn resolve_create_org(
         .await
 }
 
-/// 创建可选税务事实。
+/// 创建可选税务事实。税号为空时不创建。
+///
+/// # 参数
+/// * `req` - 根资料请求。生效日取 `effective_from`。
+/// * `party_id` - 新建主体 ID。
+/// * `actor_id` - 操作人 ID。
+///
+/// # 返回
+/// 默认有效税务事实；税号缺失或只有空白时为 `None`。
+///
+/// # 错误
+/// 税务事实构造失败时返回对应错误。
 pub(super) fn create_tax_profile(
     req: &SaveSupplierProfileRequest,
     party_id: &PartyId,

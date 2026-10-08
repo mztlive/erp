@@ -79,8 +79,17 @@ impl Default for BulkSelectionSnapshotFilter {
 impl QueryFilter for BulkSelectionSnapshotFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// `selection_type` 与 `status` 为 `Some` 时分别写入 `as_str()`。`created_by`
+    /// 为 `Some` 时精确匹配。分页与排序字段不进入条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(selection_type) = self.selection_type {
@@ -97,10 +106,16 @@ impl QueryFilter for BulkSelectionSnapshotFilter {
 }
 
 impl Pagination for BulkSelectionSnapshotFilter {
-    /// 返回页码与单页条数。
+    /// 返回选择快照筛选保存的页码与单页条数，不把小于 1 的页码归一成第一页。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组；`page_size` 由 `u32` 转为 `u64`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }

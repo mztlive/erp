@@ -57,13 +57,18 @@ pub(crate) const PURCHASE_CHANGE_SUBMISSION_LINES: &str =
 
 /// 创建本域集合的幂等命名索引。
 ///
-/// 逐条落地数据模型 §6.6「必需约束与索引」；唯一约束一律用唯一索引表达。
+/// 先把同名采购号索引对齐为仅约束非空正式号的部分唯一索引，再逐条落地数据模型
+/// §6.6「必需约束与索引」；唯一约束一律用唯一索引表达。
 ///
 /// # 参数
 /// * `db` - 目标 MongoDB 数据库
 ///
+/// # 返回
+/// 旧采购号索引已对齐且全部命名索引创建成功时无返回值。
+///
 /// # 错误
-/// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
+/// 列出集合或索引失败、删除不匹配的旧采购号索引失败、已有数据违反唯一约束，
+/// 或 MongoDB 无法创建索引时返回错误。
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
     reconcile_purchase_order_no_index(db).await?;
     create_indexes(db, PURCHASE_ORDERS, purchase_order_indexes()).await?;

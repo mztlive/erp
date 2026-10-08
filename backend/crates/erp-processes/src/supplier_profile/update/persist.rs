@@ -127,6 +127,7 @@ impl PreparedUpdate {
     /// * `effective_from` - 生效起始日
     /// * `change_reason` - 变更原因
     /// * `actor` - 审计操作人
+    /// * `pending_assets` - 同一次命令待登记的资质文件
     ///
     /// # 返回
     /// 返回可落库的修订事务载荷。
@@ -192,7 +193,17 @@ impl PreparedUpdate {
         })
     }
 
-    /// 将完整资料修订与幂等结果写入同一事务。
+    /// 消耗本载荷，把完整资料修订与幂等结果写入同一事务。
+    ///
+    /// # 参数
+    /// * `db` - 数据库。
+    /// * `executor` - 修订事务执行器。
+    ///
+    /// # 返回
+    /// 无返回值。待登记文件、主体、从属事实、能力、资质、评级、幂等命令和审计都写入后完成。
+    ///
+    /// # 错误
+    /// 任一步写入失败时返回该错误并停止后续写入。
     pub(super) async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         self.pending_assets.persist(db, executor).await?;
         self.persist_roots(db, executor).await?;

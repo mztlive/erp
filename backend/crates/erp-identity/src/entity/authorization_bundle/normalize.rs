@@ -93,7 +93,7 @@ impl PolicyDocument {
     /// # 返回
     /// 排序去重后的人员 ID。
     /// # 错误
-    /// 无；文件规范化阶段已校验 ID。
+    /// 不返回错误。人员 ID 已在文件规范化阶段校验。
     pub fn user_ids(&self) -> Vec<String> {
         self.bindings
             .iter()
@@ -174,6 +174,15 @@ impl PolicyScope {
 }
 
 /// 统一限制外部人员标识，拒绝空白及控制字符。
+///
+/// # 参数
+/// * `value` - 外部人员标识；先去掉首尾空白。
+///
+/// # 返回
+/// 返回去掉首尾空白后的标识。
+///
+/// # 错误
+/// 去空白后为空、字节长度超过 128，或含控制字符时返回 `Error::ValidationError`。
 pub(super) fn normalize_id(value: &str) -> Result<String> {
     let value = value.trim();
     if value.is_empty() || value.len() > 128 || value.chars().any(char::is_control) {

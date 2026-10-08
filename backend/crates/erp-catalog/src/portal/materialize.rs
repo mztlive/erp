@@ -1,4 +1,4 @@
-//! Catalog materialization joins one process transaction and never updates reused data.
+//! 商品物化加入同一流程事务，且不更新被复用的资料。
 
 use application_core::AuditActor;
 use erp_core::common::time::BusinessDate;
@@ -46,7 +46,7 @@ pub struct CatalogMaterializeCommand {
 }
 
 impl CatalogPortalService {
-    /// Create missing catalog identities or reuse explicitly versioned identities.
+    /// 缺少商品身份时新建，已给出版本的身份则原样复用。
     /// # 参数
     /// `command` 为内部核对结果，`executor` 为商品、供给、任务共同使用的事务。
     /// # 返回

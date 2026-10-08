@@ -1,4 +1,4 @@
-//! Extension traits for collection repositories.
+//! 集合仓储扩展 trait。
 
 pub use super::cost::{
     CostAllocationProfitLossExt, CostAllocationReadScopeExt, CostAllocationRepositoryExt,

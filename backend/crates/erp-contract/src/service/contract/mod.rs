@@ -221,6 +221,9 @@ impl ContractService {
     /// * `revision` - 不可变修订
     /// * `executor` - 调用方执行器
     ///
+    /// # 返回
+    /// 无返回值。合同身份与不可变修订已写入调用方执行器。
+    ///
     /// # 错误
     /// 唯一索引冲突、乐观锁冲突或底层写入失败。
     pub async fn apply_create(

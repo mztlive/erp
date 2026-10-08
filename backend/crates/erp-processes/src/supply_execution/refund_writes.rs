@@ -19,6 +19,7 @@ trait RefundWrites: Send {
     async fn domain(&mut self, executor: &mut dyn Executor) -> Result<()>;
     async fn audit(&mut self, executor: &mut dyn Executor) -> Result<()>;
 }
+/// 按 inbox、领域事实、审计的顺序写入；任一步失败则停止后续步骤。
 async fn execute(writes: &mut impl RefundWrites, executor: &mut dyn Executor) -> Result<()> {
     writes.inbox(executor).await?;
     writes.domain(executor).await?;
@@ -47,7 +48,22 @@ impl RefundWrites for MongoWrites<'_> {
         Ok(())
     }
 }
-/// inbox、订单/退款事实、审计均消费同一个外层执行器。
+/// 在同一外层执行器上按 inbox、订单/退款事实、审计的顺序写入。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `message` - 退款回调入站消息。
+/// * `order` - 供应商履约订单，成功后就地更新。
+/// * `fact` - 退款事实。
+/// * `allocations` - 退款分配。
+/// * `audit` - 审计日志。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 三步均成功时无返回值。
+///
+/// # 错误
+/// 任一步失败时返回对应错误，且不执行后续步骤。
 pub(super) async fn persist(
     db: &Database,
     message: &InboxMessage,

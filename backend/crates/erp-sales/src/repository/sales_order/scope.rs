@@ -73,8 +73,14 @@ impl SalesReadScope {
     }
     /// 判断完整销售集合是否已获授权，个人上限仍须允许公司范围。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 仅在角色公司授权且未被个人上限收窄时返回 true。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_company(&self) -> bool {
         self.required_scopes.iter().all(Self::is_company)
             && self.roles.iter().any(|c| c.company)
@@ -82,8 +88,14 @@ impl SalesReadScope {
     }
     /// 判断授权规则是否确定不产生可见对象。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 仅证明空授权；非空规则仍可能因期间或业务筛选而没有记录。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_empty(&self) -> bool {
         self.required_scopes.iter().any(Self::is_empty)
             || (self.roles.iter().all(SalesScopeClause::is_empty) && self.historical_order_ids.is_empty())
@@ -91,8 +103,14 @@ impl SalesReadScope {
     }
     /// 生成角色并集与个人上限交集，历史业绩字段不参与授权。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回仓储读取条件，空角色集不产生全量授权。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn document(&self) -> Document {
         let mut grants = self.roles.iter().map(SalesScopeClause::document).collect::<Vec<_>>();
         if !self.historical_order_ids.is_empty() {
@@ -115,6 +133,12 @@ impl SalesReadScope {
 #[allow(async_fn_in_trait)]
 pub trait SalesOrderRepositoryScopeExt {
     /// 按两组独立授权交集批量读取关联销售责任事实。
+    ///
+    /// # 参数
+    /// * `ids` - 待核对的销售单 ID；空集合直接返回空结果。
+    /// * `sales` - 已证明的销售范围。
+    /// * `resource` - 已证明的消费资源范围。
+    /// * `executor` - 调用方执行器。
     ///
     /// # 返回
     /// 仅返回指定 ID 内同时满足两组范围的订单；调用方负责分批和总上限。

@@ -27,8 +27,14 @@ pub enum PayableSourceType {
 impl PayableSourceType {
     /// 返回类型的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::PurchaseOrder => "采购单",
@@ -38,8 +44,14 @@ impl PayableSourceType {
 
     /// 返回类型的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::PurchaseOrder => "purchase_order",
@@ -66,8 +78,14 @@ pub enum PayableAccountStatus {
 impl PayableAccountStatus {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Open => "未结",
@@ -78,8 +96,14 @@ impl PayableAccountStatus {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Open => "open",
@@ -319,8 +343,14 @@ impl PayableAccount {
 
     /// 判断子账是否已结清。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 开放余额为零时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_settled(&self) -> bool {
         self.stable.status() == PayableAccountStatus::Settled
     }

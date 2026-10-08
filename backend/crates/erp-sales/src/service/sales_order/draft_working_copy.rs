@@ -1,4 +1,4 @@
-//! Sales-owned first-submission working-copy identities and reconstruction.
+//! 销售本域首次提交工作副本的稳定行身份与重建。
 use std::collections::HashSet;
 
 use application_core::AuditActor;

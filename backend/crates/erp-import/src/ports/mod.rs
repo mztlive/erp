@@ -1,4 +1,4 @@
-//! Consumer ports for bulk-job facts used by import queries.
+//! 导入查询使用的后台任务事实消费端口。
 
 mod bulk_job;
 

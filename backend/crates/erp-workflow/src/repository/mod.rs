@@ -1,4 +1,4 @@
-//! Workflow MongoDB repositories and accessors.
+//! 工作流 MongoDB 仓储与访问器。
 
 mod approval_cancellation;
 pub mod approval_integration;

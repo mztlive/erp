@@ -166,6 +166,16 @@ impl PurchaseLineDataRef for PurchaseChangeSubmissionLineData {
         self.input_tax_rate
     }
 
+    /// 按行类型校验销售分配字段。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 商品行已引用销售稳定行与当前版本行且分配数量为正，或物流费用行不携带销售分配时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 商品行缺少销售行引用、分配数量缺失或非正，或物流费用行携带销售行、历史提交行或分配数量时返回领域错误。
     fn ensure_allocation(&self) -> Result<()> {
         match self.line_type {
             PurchaseLineType::ItemService => {

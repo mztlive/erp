@@ -1,4 +1,4 @@
-//! Workflow-domain application errors and frozen approval ErrorCode.
+//! 工作流域应用错误与冻结的审批 `ErrorCode`。
 
 use application_core::ErrorClass;
 
@@ -62,7 +62,16 @@ pub enum Error {
 }
 
 impl Error {
-    /// Stable error class used by HTTP mapping; do not parse display text.
+    /// 返回 HTTP 映射使用的稳定错误分类；不得解析展示文案。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 按错误变体返回 `ErrorClass`；`Coded` 委托给 [`ErrorCode::class`]。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn class(&self) -> ErrorClass {
         match self {
             Self::Internal(_) | Self::Logic(_) | Self::Rbac(_) | Self::RepositoryError(_) => {
@@ -87,6 +96,9 @@ impl Error {
     ///
     /// # 返回
     /// 返回已带稳定码的工作流错误。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub const fn from_approval_code(code: ErrorCode) -> Self {
         Self::Coded(code)
     }
@@ -98,22 +110,37 @@ impl Error {
     ///
     /// # 返回
     /// 返回携带统一措辞的 `ConflictError`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn version_conflict(target: impl Into<String>) -> Self {
         Self::ConflictError(format!("{}版本已变化，请刷新后重试", target.into()))
     }
 
     /// 通用并发修改冲突提示（未命中具体对象时的兜底）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回统一措辞的 `ConflictError`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn concurrent_modification() -> Self {
         Self::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
     }
 
     /// 返回结构化服务错误码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 仅结构化错误返回稳定码；普通业务文案不得被反向解析。
+    /// 仅 `Coded` 返回稳定码；其余变体返回 `None`，普通业务文案不得被反向解析。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub const fn code(&self) -> Option<ErrorCode> {
         match self {
             Self::Coded(code) => Some(*code),
@@ -154,6 +181,9 @@ fn duplicate_key_conflict_message(error: &persistence_core::Error) -> String {
 ///
 /// # 返回
 /// 精确命中本域注册索引时返回原提示；未知名称返回 `None`，由调用边界选择通用提示。
+///
+/// # 错误
+/// 不返回错误。
 ///
 /// # 约束
 /// 不匹配子串或前后缀、不规范化索引名称，不拥有其他领域或 HTTP 历史索引的提示。
@@ -227,6 +257,15 @@ impl ErrorCode {
     ];
 
     /// 返回机器可读的稳定码。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回合同冻结的大写稳定码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::ApprovalPolicyNotRegistered => "APPROVAL_POLICY_NOT_REGISTERED",
@@ -254,6 +293,15 @@ impl ErrorCode {
     }
 
     /// 返回不依赖 HTTP 的服务错误分类。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 未登记策略为内部错误，审批人未指派为禁止，定义无效或缺少驳回原因为业务规则，其余为冲突。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub const fn class(self) -> ErrorClass {
         match self {
             Self::ApprovalPolicyNotRegistered => ErrorClass::Internal,
@@ -264,6 +312,15 @@ impl ErrorCode {
     }
 
     /// 返回冲突后刷新并重试是否安全。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 定义、任务、实例、执行或主体版本冲突时返回 `true`，其余稳定码返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub const fn retryable(self) -> bool {
         matches!(
             self,

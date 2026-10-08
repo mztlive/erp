@@ -31,7 +31,7 @@ pub struct RuntimeHistoryItem {
     pub decided_at: Option<i64>,
 }
 
-/// 执行历史分页。
+/// 构造执行历史项。
 impl RuntimeHistoryItem {
     /// 以必填执行身份构造历史项；决定维度默认为空。
     ///
@@ -63,7 +63,6 @@ impl RuntimeHistoryItem {
 }
 
 /// 执行历史分页。
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeHistoryPage {
     /// 当前页，按 `execution_no` 升序。
@@ -128,7 +127,7 @@ pub fn history_page_from(mut items: Vec<RuntimeHistoryItem>, limit: u32) -> Runt
 /// * `items` - 按 `execution_no` 升序的历史项
 ///
 /// # 返回
-/// 最后一条 `REJECTED` 的决定原因；没有驳回时返回 `None`。
+/// 最后一条 `REJECTED` 的决定原因；没有驳回，或该条没有决定原因时返回 `None`。
 ///
 /// # 错误
 /// 无。

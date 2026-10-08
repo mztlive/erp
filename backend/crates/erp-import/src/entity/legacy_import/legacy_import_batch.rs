@@ -51,8 +51,14 @@ pub enum LegacyImportBatchStatus {
 impl LegacyImportBatchStatus {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::PendingValidation => "待校验",
@@ -68,8 +74,14 @@ impl LegacyImportBatchStatus {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::PendingValidation => "pending_validation",
@@ -228,19 +240,28 @@ impl LegacyImportBatch {
 
     /// 返回批次对象集要求的固定确认范围。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回去重、稳定排序的必要确认范围。
     ///
     /// # 错误
-    /// 批次对象集包含未注册类型时返回错误。
+    /// 对象类型未注册，或对象集为空、无法解析出确认范围时，返回 [`ConfirmationScope::required_for_object_set`] 的错误。
     pub fn required_confirmation_scopes(&self) -> Result<std::collections::BTreeSet<ConfirmationScope>> {
         ConfirmationScope::required_for_object_set(&self.source_object_set)
     }
 
     /// 判断批次是否已进入不可继续应用的结果终态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 完成、部分失败或失败时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_terminal(&self) -> bool {
         matches!(
             self.status,
@@ -257,6 +278,9 @@ impl LegacyImportBatch {
     ///
     /// # 返回
     /// 版本一致时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn has_version(&self, expected: u64) -> bool {
         self.base.version == expected
     }
@@ -268,6 +292,9 @@ impl LegacyImportBatch {
     ///
     /// # 返回
     /// 规范化后与当前批次规则版本一致时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn has_rule_version(&self, expected: &str) -> bool {
         self.import_rule_version == expected.trim()
     }
@@ -277,11 +304,14 @@ impl LegacyImportBatch {
     /// 待校验批次依次经过校验中后进入待确认；校验中直接进入待确认；
     /// 已在待确认时幂等返回。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 推进成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 批次已离开可确认阶段时返回错误。
+    /// 批次已离开可确认阶段时返回 `erp_core::Error::LogicError`。中间的固定迁移失败时返回 `InvalidStateTransition`。
     pub fn prepare_confirmation(&mut self) -> Result<()> {
         match self.status {
             LegacyImportBatchStatus::PendingValidation => {
@@ -296,40 +326,70 @@ impl LegacyImportBatch {
 
     /// 判断批次是否处于逐行应用阶段。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为导入中时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_importing(&self) -> bool {
         self.status == LegacyImportBatchStatus::Importing
     }
 
     /// 判断批次是否接受责任范围确认决策。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为待确认时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn accepts_confirmation_decision(&self) -> bool {
         self.status == LegacyImportBatchStatus::PendingConfirmation
     }
 
     /// 判断批次是否已完成确认并等待启动应用。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为待应用时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_ready_to_apply(&self) -> bool {
         self.status == LegacyImportBatchStatus::ReadyToApply
     }
 
     /// 判断批次是否允许取消尚未应用的项目。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 待应用或导入中状态返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn accepts_pending_cancellation(&self) -> bool {
         matches!(self.status, LegacyImportBatchStatus::ReadyToApply | LegacyImportBatchStatus::Importing)
     }
 
     /// 判断批次是否允许重新准备失败项目。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 部分失败或失败状态返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn accepts_failed_retry(&self) -> bool {
         matches!(self.status, LegacyImportBatchStatus::PartialFailed | LegacyImportBatchStatus::Failed)
     }
@@ -341,7 +401,10 @@ impl LegacyImportBatch {
     /// * `failed_rows` - 已失败行数
     ///
     /// # 返回
-    /// 全部完成且无失败返回完成；全部完成但有失败返回部分失败；否则保持导入中。
+    /// 全部完成且无失败返回完成；全部完成但有失败返回部分失败；否则保持导入中。不会返回 `Failed`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn application_outcome(pending_rows: u64, failed_rows: u64) -> LegacyImportBatchStatus {
         if pending_rows > 0 {
             LegacyImportBatchStatus::Importing
@@ -354,16 +417,16 @@ impl LegacyImportBatch {
 
     /// 推进批次状态。
     ///
-    /// 只允许数据模型 §6.12 固定管线内的迁移（含幂等），失败为终态。
+    /// 只允许数据模型 §6.12 固定邻接中的迁移。`Completed` 无后继；`Failed` 与 `PartialFailed` 只可回到 `ReadyToApply`，不是终态。
     ///
     /// # 参数
     /// * `to` - 目标状态
     ///
     /// # 返回
-    /// 迁移合法返回 `Ok(())`。
+    /// 迁移合法返回 `Ok(())`。目标与当前状态相同也返回 `Ok(())`。
     ///
     /// # 错误
-    /// 目标状态不在固定邻接矩阵中时返回 `InvalidStateTransition`。
+    /// 目标既不是当前状态，也不在 `allowed_next` 中时返回 `InvalidStateTransition`。
     pub fn advance(&mut self, to: LegacyImportBatchStatus) -> Result<()> {
         ensure_transition(self.status, to)?;
         self.status = to;
@@ -401,6 +464,9 @@ impl LegacyImportBatch {
     ///
     /// # 返回
     /// 登记成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 函数体没有失败路径，总是返回 `Ok(())`。
     pub fn attach_success_assets(
         &mut self,
         sanitized_file_asset_id: FileAssetId,
@@ -418,6 +484,9 @@ impl LegacyImportBatch {
     ///
     /// # 返回
     /// 登记成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 函数体没有失败路径，总是返回 `Ok(())`。
     pub fn attach_failure_diagnostic_asset(&mut self, file_asset_id: FileAssetId) -> Result<()> {
         self.failure_diagnostic_file_asset_id = Some(file_asset_id);
         Ok(())

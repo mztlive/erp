@@ -1,4 +1,4 @@
-//! Work-item command DTOs. HTTP query/view types live in erp-read-models.
+//! 工作项命令 DTO。HTTP 查询与视图类型在 erp-read-models。
 
 mod command;
 mod status;

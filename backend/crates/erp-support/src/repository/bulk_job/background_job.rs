@@ -114,8 +114,18 @@ impl Default for BackgroundJobFilter {
 impl QueryFilter for BackgroundJobFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// `job_no` 为 `Some` 时按转义后的字面量、忽略大小写匹配。`job_type` 与
+    /// `status` 为 `Some` 时写入 `as_str()`；`domain_job_type` 与 `requested_by`
+    /// 为 `Some` 时精确匹配。分页与排序字段不进入条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         insert_literal_regex_filter(&mut filter, "job_no", self.job_no.as_deref());
@@ -136,10 +146,16 @@ impl QueryFilter for BackgroundJobFilter {
 }
 
 impl Pagination for BackgroundJobFilter {
-    /// 返回页码与单页条数。
+    /// 返回后台任务筛选保存的页码与单页条数，不把小于 1 的页码归一成第一页。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组；`page_size` 由 `u32` 转为 `u64`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -227,7 +243,20 @@ pub trait BackgroundJobRepositoryExt {
 }
 
 impl BackgroundJobRepositoryExt for persistence_core::Repository<'_, BackgroundJob> {
-    /// 使用任务 ID 索引批量读取，沿用通用仓储的未删除过滤。
+    /// 按业务 `id` 做 `$in` 批量读取，未删除过滤沿用通用仓储 `find_many`。
+    ///
+    /// 空 `ids` 直接返回空向量，不访问数据库。非空时用各 `BackgroundJobId` 的
+    /// `as_ref()` 组成 `$in`，本实现不附加排序。
+    ///
+    /// # 参数
+    /// * `ids` - 后台任务 ID；空切片不访问数据库
+    /// * `executor` - 传给 `find_many` 的数据访问执行器
+    ///
+    /// # 返回
+    /// 返回匹配且未删除的后台任务；顺序不保证与输入一致。空输入返回空向量。
+    ///
+    /// # 错误
+    /// 空输入不失败。否则返回 `find_many` 的错误，即 MongoDB 查询或游标读取失败。
     async fn find_by_ids(
         &self,
         ids: &[BackgroundJobId],

@@ -1,4 +1,4 @@
-//! Per-account monetary facts published for consumer progress calculations.
+//! 按账户发布、供消费方计算进度的款项事实。
 
 use erp_core::money::Amount;
 

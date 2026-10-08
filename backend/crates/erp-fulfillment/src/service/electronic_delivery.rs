@@ -115,6 +115,16 @@ impl From<ElectronicDelivery> for ElectronicDeliveryView {
 
 impl FulfillmentService {
     /// 在调用方事务中写入已准备的电子交付草稿；不创建第二事务。
+    ///
+    /// # 参数
+    /// * `record` - 已准备的电子交付草稿
+    /// * `executor` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 写入成功时无返回值。
+    ///
+    /// # 错误
+    /// 仓储写入失败时返回对应错误。
     pub async fn persist_created_electronic_delivery(
         &self,
         record: &ElectronicDelivery,
@@ -127,6 +137,16 @@ impl FulfillmentService {
 
 impl FulfillmentService {
     /// 同一事务中读取待确认电子交付并执行原草稿状态守卫。
+    ///
+    /// # 参数
+    /// * `record_id` - 电子交付记录主键
+    /// * `executor` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 返回仍可确认的电子交付记录。
+    ///
+    /// # 错误
+    /// 记录不存在时返回 `NotFound`；不是可确认草稿时返回 `ConflictError`；查询失败时返回对应错误。
     pub async fn prepare_electronic_confirmation(
         &self,
         record_id: &erp_core::ids::ElectronicDeliveryId,
@@ -143,6 +163,16 @@ impl FulfillmentService {
     }
 
     /// 采购资格与分配检查成功后确认本域电子交付事实；不发送外部消息。
+    ///
+    /// # 参数
+    /// * `record` - 待确认的电子交付记录
+    /// * `executor` - 调用方事务执行器
+    ///
+    /// # 返回
+    /// 确认并写回成功时无返回值。
+    ///
+    /// # 错误
+    /// 已冲正不能确认，或仓储写入失败时返回对应错误。
     pub async fn persist_electronic_confirmation(
         &self,
         record: &mut ElectronicDelivery,

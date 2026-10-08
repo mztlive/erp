@@ -41,12 +41,24 @@ struct MongoPosting<'a> {
     effects: Option<FormalizedPurchaseEffects>,
 }
 impl MongoPosting<'_> {
+    /// 读取采购步骤留下的应付与履约事实；计划尚未产生或已被消费时返回内部错误。
     fn effects(&self) -> Result<&FormalizedPurchaseEffects> {
         self.effects.as_ref().ok_or_else(|| Error::Internal("采购正式化写入计划缺少采购结果".to_string()))
     }
 }
 #[async_trait]
 impl PostingSteps for MongoPosting<'_> {
+    /// 按固定步骤消费写入计划；计划缺失或该步失败时保留原错误。
+    ///
+    /// # 参数
+    /// * `step` - 采购、应付、付款任务、成本、履约或审计。
+    /// * `executor` - 调用方唯一执行器。
+    ///
+    /// # 返回
+    /// 该步写入完成。采购步消费写入计划，并把采购结果留给后续步骤。
+    ///
+    /// # 错误
+    /// 采购写入计划已消费，或后续步骤缺少采购结果时返回 `Internal`。领域写入或审计失败时返回原错误。
     async fn apply(&mut self, step: Step, executor: &mut dyn Executor) -> Result<()> {
         match step {
             Step::Purchase => {
@@ -93,6 +105,19 @@ impl PostingSteps for MongoPosting<'_> {
     }
 }
 /// 在根事务原位置执行采购、应付、付款任务、成本、履约与审计；不新建事务或重排步骤。
+///
+/// # 参数
+/// * `db` - 各步写入使用的数据库。
+/// * `persist` - 事务外算好的采购形式化写入计划。
+/// * `actor` - 生效操作人。
+/// * `audit` - 成功路径上的审计日志。
+/// * `executor` - 调用方唯一执行器。
+///
+/// # 返回
+/// 六步按既定顺序写完。
+///
+/// # 错误
+/// 任一步失败时返回原错误，不再执行后续步骤。
 pub(super) async fn post(
     db: &Database,
     persist: FormalizedOrderPersist,

@@ -187,11 +187,17 @@ impl SalesOrderWorkingCopyLine {
     ///
     /// # 返回
     /// 明细所属工作副本一致时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn belongs_to_working_copy(&self, working_copy_id: &SalesOrderWorkingCopyId) -> bool {
         &self.working_copy_id == working_copy_id
     }
 
     /// 返回公司商品池可售校验所需的精确 SKU 引用。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 卡券行返回 `None`；实物及服务行返回 `(SKU, SKU 修订)`。
@@ -212,6 +218,9 @@ impl SalesOrderWorkingCopyLine {
     }
 
     /// 还原实物及服务字段组。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 实物及服务行返回完整字段组；卡券行返回 `None`。
@@ -249,6 +258,9 @@ impl SalesOrderWorkingCopyLine {
     }
 
     /// 还原卡券字段组。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 卡券行返回完整字段组；实物及服务行返回 `None`。

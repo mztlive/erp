@@ -26,7 +26,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// * `items` - 待补齐姓名的任务投影
     ///
     /// # 返回
-    /// 成功时就地更新展示名；没有处理人时不查询。
+    /// 成功时就地更新展示名；没有处理人、也没有待解析的提交人账号时不查询。
     ///
     /// # 错误
     /// 账号查询失败时返回仓储错误。
@@ -52,7 +52,8 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 审批跟踪复用责任队列的提交人姓名解析；无法解析的账号不展示。
     ///
     /// # 参数
-    /// `items` 为已完成阅读授权的审批列表。
+    /// * `items` - 已完成阅读授权的审批列表
+    /// * `executor` - 账号姓名读取沿用的执行器
     /// # 返回
     /// 原地将提交人身份替换为姓名。
     /// # 错误

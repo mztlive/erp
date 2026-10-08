@@ -32,8 +32,16 @@ impl SupplierApiGovernanceProcess {
     /// HTTP 请求只登记健康检查或目录同步任务；外部调用由
     /// 流程层 `SupplierConnectionExecutionProcess::process_connection_job` 在后台执行。
     ///
-    /// # Errors
-    /// 权限不足、版本冲突、引用无法解析或业务前置不满足时返回稳定错误。
+    /// # 参数
+    /// * `id` - 供应连接 ID。
+    /// * `command` - 固定连接治理命令。
+    /// * `actor` - 已通过鉴权的操作人。
+    ///
+    /// # 返回
+    /// 新执行或同命令重放的正式回执。
+    ///
+    /// # 错误
+    /// 请求非法、权限不足、命令形状不合法、版本冲突、引用无法解析或业务前置不满足时返回稳定错误。
     pub async fn execute_connection_command(
         &self,
         id: &str,
@@ -128,8 +136,16 @@ impl SupplierApiGovernanceProcess {
 
     /// 追加采购业务能力确认；不修改能力启停且不创建工作项。
     ///
-    /// # Errors
-    /// 权限、连接/能力版本、同键异参或数据一致性校验失败时返回错误。
+    /// # 参数
+    /// * `id` - 供应连接 ID。
+    /// * `command` - 采购业务能力确认命令。
+    /// * `actor` - 已通过鉴权的操作人。
+    ///
+    /// # 返回
+    /// 新确认结果；同键同参重放返回已有确认。
+    ///
+    /// # 错误
+    /// 请求非法、权限不足、同键异参、连接或能力版本不一致、审计构造失败，或确认与审计写入失败时返回错误。
     pub async fn confirm_business_capability_requirement(
         &self,
         id: &str,
@@ -204,8 +220,16 @@ impl SupplierApiGovernanceProcess {
 
     /// 使用连接版本与逐能力版本原子更新固定能力配置。
     ///
-    /// # Errors
-    /// 权限不足、版本冲突、重复能力代码或启用能力缺少采购确认时返回错误。
+    /// # 参数
+    /// * `id` - 供应连接 ID。
+    /// * `command` - 能力变更命令。
+    /// * `actor` - 已通过鉴权的操作人。
+    ///
+    /// # 返回
+    /// 新的能力更新结果；同键同参重放返回已有结果。
+    ///
+    /// # 错误
+    /// 请求非法、权限不足、版本冲突、重复能力代码或启用能力缺少采购确认时返回错误。
     pub async fn update_capabilities(
         &self,
         id: &str,

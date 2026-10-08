@@ -70,6 +70,9 @@ pub fn new_registered_document(
 /// * `document` - 已构造的注册行
 /// * `executor` - 调用方执行器
 ///
+/// # 返回
+/// 注册行写入完成时无返回值。
+///
 /// # 错误
 /// 唯一键冲突或仓储失败时返回错误。
 pub async fn persist_registered_document(
@@ -83,6 +86,14 @@ pub async fn persist_registered_document(
 
 /// 按执行器查询注册行。
 ///
+/// # 参数
+/// * `db` - 数据库
+/// * `document_id` - 业务单据 ID
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 找到时返回注册行；不存在时返回 `None`。
+///
 /// # 错误
 /// 仓储读取失败时返回错误。
 pub async fn find_registered_document(
@@ -94,6 +105,14 @@ pub async fn find_registered_document(
 }
 
 /// 按执行器查询单据审批绑定。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `document_id` - 业务单据 ID
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 已绑定返回绑定；单据已注册但未绑定时返回 `None`。
 ///
 /// # 错误
 /// 单据不存在或仓储失败时返回错误。
@@ -131,11 +150,25 @@ impl DocumentRegistryService {
     ///
     /// # 返回
     /// 返回服务实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self::with_ports(db, Arc::new(FailClosedAuditPort), Arc::new(FailClosedObjectFactPort))
     }
 
-    /// Create a document-registry service with composition-root ports.
+    /// 创建注入审计与对象事实端口的单据注册服务。
+    ///
+    /// # 参数
+    /// * `db` - 数据库
+    /// * `audit` - 审计写入端口
+    /// * `facts` - 对象事实端口
+    ///
+    /// # 返回
+    /// 返回使用给定端口的服务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_ports(
         db: Database,
         audit: Arc<dyn WorkflowAuditPort>,
@@ -213,10 +246,9 @@ impl DocumentRegistryService {
     ///
     /// # 参数
     /// * `params` - 查询参数
-    /// * `executor` - 数据访问执行器（单读传 `NoTransaction`，事务复用传同一执行器）
     ///
     /// # 返回
-    /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+    /// 使用 `NoTransaction` 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
     ///
     /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
@@ -278,10 +310,9 @@ impl DocumentRegistryService {
     ///
     /// # 参数
     /// * `id` - 单据注册 ID
-    /// * `executor` - 数据访问执行器
     ///
     /// # 返回
-    /// 返回注册行视图。
+    /// 使用 `NoTransaction` 返回注册行视图。
     ///
     /// # 错误
     /// * `NotFound` - 单据注册不存在
@@ -318,10 +349,9 @@ impl DocumentRegistryService {
     ///
     /// # 参数
     /// * `id` - 单据注册 ID
-    /// * `executor` - 数据访问执行器
     ///
     /// # 返回
-    /// 无绑定返回 `None`。
+    /// 使用 `NoTransaction` 查询；无绑定返回 `None`。
     ///
     /// # 错误
     /// 单据未注册时返回 `NotFound`。
@@ -467,10 +497,9 @@ impl DocumentRegistryService {
     ///
     /// # 参数
     /// * `document_id` - 业务单据 ID
-    /// * `executor` - 数据访问执行器
     ///
     /// # 返回
-    /// 返回出向与入向关系的合并视图。
+    /// 使用 `NoTransaction` 返回出向与入向关系的合并视图。
     ///
     /// # 错误
     /// * `RepositoryError` - 数据库查询失败
@@ -551,10 +580,9 @@ impl DocumentRegistryService {
     ///
     /// # 参数
     /// * `user_id` - 参与人用户 ID
-    /// * `executor` - 数据访问执行器
     ///
     /// # 返回
-    /// 返回按参与时间倒序排列的参与记录视图。
+    /// 使用 `NoTransaction` 返回按参与时间倒序排列的参与记录视图。
     ///
     /// # 错误
     /// * `ValidationError` - 用户 ID 为空白

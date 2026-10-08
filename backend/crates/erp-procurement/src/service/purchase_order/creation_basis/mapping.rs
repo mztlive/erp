@@ -291,7 +291,10 @@ pub fn business_date_of(instant: Instant) -> Result<BusinessDate> {
 /// 返回六位精度数量零值。
 ///
 /// # 错误
-/// 无。
+/// 不返回错误。
+///
+/// # Panics
+/// 常量 `"0"` 无法解析为数量时 panic。
 ///
 /// # 关键业务约束
 /// 只用于边界比较，不代表缺失业务数量。

@@ -34,26 +34,50 @@ pub trait WarehouseExt {
 
     /// 获取 `warehouse` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `WarehouseRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn warehouses(&self) -> WarehouseRepository<'_>;
 
     /// 获取 `warehouse_revision` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `WarehouseRevisionRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn warehouse_revisions(&self) -> WarehouseRevisionRepository<'_>;
 
     /// 获取 `warehouse_sku_policy` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `WarehouseSkuPolicyRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn warehouse_sku_policies(&self) -> WarehouseSkuPolicyRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `WarehouseDomainRepository` 实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn warehouse(&self) -> WarehouseDomainRepository<'_>;
 }
 
@@ -64,32 +88,56 @@ impl WarehouseExt for Database {
 
     /// 获取 `warehouse` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `WarehouseRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn warehouses(&self) -> WarehouseRepository<'_> {
         WarehouseRepository::new(self, Self::WAREHOUSES)
     }
 
     /// 获取 `warehouse_revision` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `WarehouseRevisionRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn warehouse_revisions(&self) -> WarehouseRevisionRepository<'_> {
         WarehouseRevisionRepository::new(self, Self::WAREHOUSE_REVISIONS)
     }
 
     /// 获取 `warehouse_sku_policy` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `WarehouseSkuPolicyRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn warehouse_sku_policies(&self) -> WarehouseSkuPolicyRepository<'_> {
         WarehouseSkuPolicyRepository::new(self, Self::WAREHOUSE_SKU_POLICIES)
     }
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `WarehouseDomainRepository` 实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn warehouse(&self) -> WarehouseDomainRepository<'_> {
         WarehouseDomainRepository::new(self)
     }

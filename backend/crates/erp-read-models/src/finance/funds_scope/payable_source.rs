@@ -17,11 +17,14 @@ const SETTLEMENT_PREFIX: &str = "supplier_settlement_statement:";
 /// 内部关联键包含真实来源类型，避免相同主键在采购与结算域间串权。
 ///
 /// # 参数
-/// 真实应付来源类型与原始主键。
+/// * `source` - 应付来源类型。
+/// * `id` - 来源主键。
+///
 /// # 返回
-/// 返回仅在财务内部使用的带类型关联键。
+/// 采购单返回原主键；供应商结算返回带 `supplier_settlement_statement:` 前缀的关联键。
+///
 /// # 错误
-/// 无。
+/// 不返回错误。
 pub(super) fn source_key(source: PayableSourceType, id: &str) -> String {
     match source {
         PayableSourceType::PurchaseOrder => id.to_owned(),
@@ -33,11 +36,14 @@ impl FundsAccess {
     /// 有界批量装载结算当前责任，加入与采购共用的关联事实集合。
     ///
     /// # 参数
-    /// 来源关联键集合及原事务执行器。
+    /// * `ids` - 带结算前缀的来源关联键；其他键被忽略。
+    /// * `executor` - 调用方事务。
+    ///
     /// # 返回
     /// 返回存在的结算来源事实；缺失来源不补空事实。
+    ///
     /// # 错误
-    /// 持久化失败返回错误。
+    /// 结算单读取失败时返回对应错误。
     pub(super) async fn settlement_fact_map(
         &self,
         ids: &[String],
@@ -73,11 +79,13 @@ impl FundsAuthorization {
     /// 每条应付关联仅采用其实际来源范围，未知或缺失来源不获得资格。
     ///
     /// # 参数
-    /// 已装载的来源事实。
+    /// * `facts` - 已装载的采购或结算来源事实。
+    ///
     /// # 返回
-    /// 返回被真实来源范围覆盖的关联键集合。
+    /// 始终返回 `Some`，内容是被对应来源范围覆盖的关联键；没有命中时为空集合。
+    ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub(super) fn payable_ids(
         &self,
         facts: &HashMap<String, LinkedPurchaseFact>,
@@ -94,11 +102,14 @@ impl FundsAuthorization {
     /// 使用真实来源责任校验单一应付关联，不采用另一来源的组织授权。
     ///
     /// # 参数
-    /// 来源关联键及当前责任事实。
+    /// * `id` - 带类型的来源关联键。
+    /// * `fact` - 该来源的当前责任事实。
+    ///
     /// # 返回
-    /// 对应来源的责任范围覆盖时为 true。
+    /// 结算键使用结算范围，其他键使用采购上下文；范围未装配或不覆盖该责任时返回 false。
+    ///
     /// # 错误
-    /// 无；来源范围未装配时返回 false。
+    /// 不返回错误。
     pub(super) fn payable_fact_allowed(&self, id: &str, fact: &LinkedPurchaseFact) -> bool {
         let scope = if id.starts_with(SETTLEMENT_PREFIX) {
             let Some(scope) = self.settlement.as_ref() else {

@@ -13,9 +13,13 @@ pub trait WorkItemRepositoryExt {
     /// 在调用方执行上下文中打开一次稳定排序的候选扫描。
     ///
     /// # 参数
-    /// `filter` 为原队列候选条件；`batch_size` 控制每次取数；不另开会话。
+    /// * `filter` - 原队列候选条件。
+    /// * `batch_size` - 每次取数的非零批次大小。
+    /// * `executor` - 调用方执行器；不另开会话。
+    ///
     /// # 返回
     /// 返回可逐批消费的游标；调用方仍负责完整授权、总数与版本计算。
+    ///
     /// # 错误
     /// 数据库查询失败时返回仓储错误。
     async fn open_work_item_scan(
@@ -51,6 +55,11 @@ pub trait WorkItemRepositoryExt {
 
     /// 在与队列完全相同的授权筛选内查找焦点任务。
     ///
+    /// # 参数
+    /// * `id` - 工作项 ID。
+    /// * `filter` - 与队列相同的授权筛选。
+    /// * `executor` - 数据访问执行器。
+    ///
     /// # 返回
     /// 任务同时满足 ID 与全部 scope/角色/组织/业务筛选时返回完整实体；否则
     /// 返回 `None`，调用方不得退回无过滤的 ID 查询。
@@ -68,6 +77,14 @@ pub trait WorkItemRepositoryExt {
     ///
     /// 该查询供强类型服务核对当前责任事实；同一对象与任务类型的开放唯一性由
     /// `uk_work_items_open_object_type` 部分唯一索引保证。
+    ///
+    /// # 参数
+    /// * `business_object_type` - 业务对象类型。
+    /// * `business_object_id` - 业务对象稳定 ID。
+    /// * `executor` - 数据访问执行器。
+    ///
+    /// # 返回
+    /// 按创建时间升序返回该对象当前全部开放任务；没有时为空向量。
     ///
     /// # 错误
     /// MongoDB 查询或反序列化失败时返回错误。
@@ -115,14 +132,17 @@ pub trait WorkItemRepositoryExt {
     /// MongoDB 查询或反序列化失败时返回错误。
     async fn find_work_item(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<WorkItem>>;
 
-    /// Persist already-closed confirmation work items in the caller transaction.
+    /// 在调用方事务中写回已经关闭的确认任务。
     ///
-    /// # Parameters
-    /// * `work_items` - closed work items to write back with CAS
-    /// * `executor` - caller transaction executor
+    /// # 参数
+    /// * `work_items` - 已关闭、待按 CAS 写回的任务；空切片不访问数据库。
+    /// * `executor` - 调用方事务执行器。
     ///
-    /// # Errors
-    /// Version conflict or MongoDB write failures.
+    /// # 返回
+    /// 全部写回成功时无返回值。
+    ///
+    /// # 错误
+    /// 任一条 `update` 发生版本冲突或 MongoDB 写入失败时返回错误。
     async fn persist_closed_confirmation_work_items(
         &self,
         work_items: &mut [WorkItem],
@@ -171,6 +191,17 @@ pub trait WorkItemRepositoryExt {
 
 impl WorkItemRepositoryExt for Repository<'_, WorkItem> {
     /// 打开原筛选和排序的单个查询游标，沿用调用方执行器。
+    ///
+    /// # 参数
+    /// * `filter` - 原队列候选筛选，含排序字段。
+    /// * `batch_size` - 每次取数的非零批次大小。
+    /// * `executor` - 调用方执行器；游标沿用该执行器，不另开会话。
+    ///
+    /// # 返回
+    /// 成功时返回 `WorkItemScan`。
+    ///
+    /// # 错误
+    /// 数据库查询失败时返回 `WorkItemScan::open` 的仓储错误。
     async fn open_work_item_scan(
         &self,
         filter: &WorkItemFilter,
@@ -299,6 +330,16 @@ impl WorkItemRepositoryExt for Repository<'_, WorkItem> {
 }
 
 /// 将白名单排序编译为包含稳定 ID 次序的数据库条件。
+///
+/// # 参数
+/// * `sort_by` - 排序字段；`None` 或白名单外字段时使用 `created_at`。
+/// * `sort_ascending` - 为 `true` 时升序。
+///
+/// # 返回
+/// 返回主字段方向与 `id` 升序并列键。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
     let direction = if sort_ascending { 1 } else { -1 };
     let field = match sort_by {
@@ -315,6 +356,15 @@ pub(super) fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document 
 }
 
 /// 工作台扫描与原分页读取复用同一组任务事实字段。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回任务身份、责任、时间与摘要字段的投影文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn work_item_projection() -> Document {
     doc! {
         "id": 1,

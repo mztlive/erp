@@ -1,8 +1,8 @@
-//! Finance-domain application errors with the original unique-index mapping.
+//! 财务领域应用错误，并保留唯一索引冲突的既有映射。
 
 use application_core::ErrorClass;
 
-/// Finance-domain result alias.
+/// 财务领域结果别名。
 pub type Result<T> = std::result::Result<T, Error>;
 
 impl From<application_core::Error> for Error {
@@ -15,7 +15,7 @@ impl From<application_core::Error> for Error {
     }
 }
 
-/// Finance account, invoice, payment and cost errors.
+/// 财务账户、发票、付款与成本错误。
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("系统内部错误: {0}")]
@@ -56,7 +56,18 @@ pub enum Error {
 }
 
 impl Error {
-    /// Stable error class used by HTTP mapping; do not parse display text.
+    /// 返回供 HTTP 映射使用的稳定错误类别；不要解析展示文案。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Internal`、`Logic`、`RepositoryError` 与 `OutcomeUnknown` 为 `ErrorClass::Internal`；
+    /// 冲突类为 `ErrorClass::Conflict`；业务、校验与不存在为 `ErrorClass::BusinessRule`；
+    /// 权限与认证失败为 `ErrorClass::Forbidden`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn class(&self) -> ErrorClass {
         match self {
             Self::Internal(_) | Self::Logic(_) | Self::RepositoryError(_) => ErrorClass::Internal,

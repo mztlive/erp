@@ -105,7 +105,7 @@ impl DeliveryTrackingEntries {
     /// # 返回
     /// 返回全部规范化关联；空集合表示清空包裹。
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn into_entries(self) -> Vec<DeliveryTrackingEntry> {
         self.0
     }

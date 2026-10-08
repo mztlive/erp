@@ -269,6 +269,17 @@ fn purchase_payment_label(snapshot: &PaymentTermSnapshot) -> String {
 }
 
 /// 把销售基准版本行转成按稳定销售行分组的比较状态。
+///
+/// # 参数
+/// * `lines` - 销售修订行。
+/// * `goods_lines` - 实物或服务行修订，按修订行 ID 对齐。
+/// * `voucher_lines` - 卡券行修订，按修订行 ID 对齐。
+///
+/// # 返回
+/// 返回修订 ID 到稳定销售行比较状态。数量优先实物行，否则用卡券张数。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn sales_base_line_states(
     lines: &[SalesOrderRevisionLine],
     goods_lines: &[SalesOrderGoodsServiceLineRevision],
@@ -308,6 +319,15 @@ pub(super) fn sales_base_line_states(
 }
 
 /// 把销售变更目标提交行转成按稳定销售行分组的比较状态。
+///
+/// # 参数
+/// * `lines` - 销售变更提交行。
+///
+/// # 返回
+/// 返回提交 ID 到稳定销售行比较状态。数量优先数量字段，否则用卡券张数。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn sales_target_line_states(lines: &[SalesChangeSubmissionLine]) -> HashMap<String, LineStateMap> {
     let mut grouped: HashMap<String, LineStateMap> = HashMap::new();
     for line in lines {
@@ -333,6 +353,15 @@ pub(super) fn sales_target_line_states(lines: &[SalesChangeSubmissionLine]) -> H
 }
 
 /// 把采购基准版本行转成按稳定来源行分组的比较状态。
+///
+/// # 参数
+/// * `lines` - 采购修订行。
+///
+/// # 返回
+/// 返回修订 ID 到稳定来源行比较状态。行键优先采购确认行，其次销售行，再次 SKU 与行号，最后行号。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn purchase_base_line_states(
     lines: &[PurchaseOrderRevisionLine],
 ) -> HashMap<String, LineStateMap> {
@@ -352,6 +381,15 @@ pub(super) fn purchase_base_line_states(
 }
 
 /// 把采购变更目标提交行转成按稳定来源行分组的比较状态。
+///
+/// # 参数
+/// * `lines` - 采购变更提交行。
+///
+/// # 返回
+/// 返回提交 ID 到稳定来源行比较状态。行键规则与基准修订行相同。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn purchase_target_line_states(
     lines: &[PurchaseChangeSubmissionLine],
 ) -> HashMap<String, LineStateMap> {

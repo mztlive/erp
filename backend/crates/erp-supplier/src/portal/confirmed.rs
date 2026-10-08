@@ -77,6 +77,7 @@ pub fn plan_confirmed_cooperation(
     Ok(ConfirmedCooperation { supplier, profile, result })
 }
 
+/// 供应商须启用且与申请绑定，商务指针和期望版本必须仍是当前值。
 fn ensure_current(
     application: &CooperationApplication,
     supplier: &SupplierAccount,

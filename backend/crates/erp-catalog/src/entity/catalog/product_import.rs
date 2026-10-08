@@ -105,11 +105,14 @@ pub fn dispimg_id(value: &str) -> Option<&str> {
 
 /// 未填写品牌时使用的稳定名称。
 ///
+/// # 参数
+/// 无。
+///
 /// # 返回
 /// 返回占位品牌名称。
 ///
 /// # 错误
-/// 无。
+/// 不返回错误。
 pub fn unspecified_brand_name() -> &'static str {
     "未填写品牌"
 }

@@ -12,6 +12,19 @@ use crate::repository::prelude::*;
 use crate::{Error, Result};
 impl SupplierSettlementService {
     /// 结算本域prepare_difference_evidence，保持原校验、构造和执行器顺序。
+    ///
+    /// # 参数
+    /// * `difference_id` - 结算差异主键。
+    /// * `req` - 补证请求。
+    /// * `actor_id` - 补证提供人。
+    /// * `command_hash` - 已计算的命令指纹。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回尚未写入的补证实体。
+    ///
+    /// # 错误
+    /// 结算单、差异或明细不存在时返回 `NotFound`。差异版本不一致时返回 `ConflictError`。结算状态不允许补证，或差异不属于命令指定的结算单时返回 `BusinessLogicError`。实体构造或仓储读取失败时返回对应错误。
     pub async fn prepare_difference_evidence(
         &self,
         difference_id: &str,
@@ -63,6 +76,19 @@ impl SupplierSettlementService {
         Ok(evidence)
     }
     /// 结算本域persist_difference_evidence，保持原校验、构造和执行器顺序。
+    ///
+    /// # 参数
+    /// * `difference_id` - 结算差异主键。
+    /// * `statement_id` - 命令指定的结算单。
+    /// * `expected_version` - 期望的差异版本。
+    /// * `evidence` - 已构造的补证。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 无返回值。结算主题已按 CAS 推进，补证已追加。
+    ///
+    /// # 错误
+    /// 差异、明细或结算单不存在时返回 `NotFound`。差异版本变化时返回 `ConflictError`。差异不属于结算单或当前状态禁止补证时返回 `BusinessLogicError`。仓储写入失败时返回对应错误。
     pub async fn persist_difference_evidence(
         &self,
         difference_id: &str,
@@ -82,6 +108,18 @@ impl SupplierSettlementService {
         .await
     }
     /// 按请求 ID 查找原补证并保留完整关联和载荷复验。
+    ///
+    /// # 参数
+    /// * `request_id` - 补证请求身份。
+    /// * `req` - 本次补证请求，用于核对结算单和差异。
+    /// * `hash` - 本次命令指纹。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 没有该请求时返回 `None`。指纹和关联一致时返回重放结果。
+    ///
+    /// # 错误
+    /// 同一请求已用于不同命令时返回 `ConflictError`。仓储读取失败时返回对应错误。
     pub async fn replay_difference_evidence(
         &self,
         request_id: &str,
@@ -106,6 +144,9 @@ impl SupplierSettlementService {
 /// # 参数
 /// * `actual` - 当前差异版本
 /// * `expected` - 命令声明的期望版本
+///
+/// # 返回
+/// 版本一致时无返回值。
 ///
 /// # 错误
 /// 版本不一致时返回冲突错误。
@@ -143,6 +184,18 @@ pub fn evidence_command_hash(req: &SettlementDifferenceEvidenceRequest) -> Strin
     ])
 }
 
+/// 复验已存补证的指纹、结算单和差异是否与本次命令相同。
+///
+/// # 参数
+/// * `existing` - 已持久化的补证。
+/// * `req` - 本次补证请求。
+/// * `command_hash` - 本次命令指纹。
+///
+/// # 返回
+/// 一致时返回状态为 `REPLAYED` 的补证结果。
+///
+/// # 错误
+/// 指纹、结算单或差异不同时返回 `ConflictError`。
 pub fn replay_evidence(
     existing: SupplierSettlementDifferenceEvidence,
     req: &SettlementDifferenceEvidenceRequest,
@@ -157,6 +210,18 @@ pub fn replay_evidence(
     Ok(evidence_result(existing, "REPLAYED", "差异补证结果已恢复"))
 }
 
+/// 由补证实体组装命令结果。
+///
+/// # 参数
+/// * `evidence` - 补证实体。
+/// * `result_status` - 结果状态文本。
+/// * `message` - 结果说明。
+///
+/// # 返回
+/// 返回含详情投影的补证命令结果。
+///
+/// # 错误
+/// 不返回错误。
 pub fn evidence_result(
     evidence: SupplierSettlementDifferenceEvidence,
     result_status: &str,
@@ -173,6 +238,15 @@ pub fn evidence_result(
 }
 
 /// 将不可变补证实体转换为详情投影。
+///
+/// # 参数
+/// * `evidence` - 补证实体。
+///
+/// # 返回
+/// 返回证据引用、意见、说明、提供人和提供时间。
+///
+/// # 错误
+/// 不返回错误。
 pub fn evidence_view(evidence: SupplierSettlementDifferenceEvidence) -> SettlementDifferenceEvidenceView {
     SettlementDifferenceEvidenceView {
         evidence_id: evidence.base.id,

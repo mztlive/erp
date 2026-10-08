@@ -118,8 +118,14 @@ impl QueryFilter for DataScopeFilter {
 impl Pagination for DataScopeFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `(page, page_size)` 元组。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }
@@ -129,10 +135,16 @@ impl Pagination for DataScopeFilter {
 #[allow(async_fn_in_trait)]
 pub trait DataScopeRepositoryExt {
     /// 是否保存过该角色动作范围，包括撤销历史。
+    ///
     /// # 参数
-    /// 角色、资源、动作及调用方执行器。
+    /// * `role_id` - 角色主体 ID
+    /// * `resource` - 资源标识
+    /// * `action` - 动作标识
+    /// * `executor` - 调用方执行器
+    ///
     /// # 返回
-    /// 是否存在配置历史。
+    /// 存在匹配文档时返回 `true`，不按删除或启用状态过滤。
+    ///
     /// # 错误
     /// 查询失败时返回错误。
     async fn has_role_action_history(
@@ -144,6 +156,14 @@ pub trait DataScopeRepositoryExt {
     ) -> Result<bool>;
 
     /// 查询主体资源的全部配置留痕，包含撤销记录，防止初始化恢复授权。
+    ///
+    /// # 参数
+    /// * `role_id` - 角色主体 ID
+    /// * `resource` - 资源标识
+    /// * `executor` - 调用方执行器
+    ///
+    /// # 返回
+    /// 存在匹配文档时返回 `true`，不按删除或启用状态过滤。
     ///
     /// # 错误
     /// 底层读取失败时返回仓储错误。
@@ -213,7 +233,7 @@ pub trait DataScopeRepositoryExt {
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
-    /// 返回该主体的全部数据范围。
+    /// 返回该主体全部未软删除且 `schema_version` 为 2 的数据范围。
     ///
     /// # 错误
     /// 当 MongoDB 查询或游标读取失败时返回错误。
@@ -226,9 +246,8 @@ pub trait DataScopeRepositoryExt {
 
     /// 按同类主体 ID 集合批量取回数据范围。
     ///
-    /// 查询复用 `uk_data_scopes_subject_scope` 的
-    /// `(subject_type, subject_id)` 前缀；Repository 只返回未软删除的
-    /// 持久化事实，不计算用户与角色范围的授权交集。
+    /// 按 `subject_type` 与 `subject_id` 批量读取。Repository 只返回
+    /// `schema_version` 为 2 且未软删除的持久化事实，不计算用户与角色范围的授权交集。
     ///
     /// # 参数
     /// * `subject_type` - 范围主体类型

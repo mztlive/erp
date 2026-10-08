@@ -41,32 +41,74 @@ pub trait SupplierSettlementExt {
 
     /// 获取 `supplier_settlement_statement` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SupplierSettlementStatementRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_settlement_statements(&self) -> SupplierSettlementStatementRepository<'_>;
 
     /// 获取 `supplier_settlement_item` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SupplierSettlementItemRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_settlement_items(&self) -> SupplierSettlementItemRepository<'_>;
 
     /// 获取 `supplier_settlement_difference` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SupplierSettlementDifferenceRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_settlement_differences(&self) -> SupplierSettlementDifferenceRepository<'_>;
 
     /// 获取不可变结算来源证据批次 Repository。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回当前数据库的来源证据仓储。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_settlement_source_evidence(&self) -> SupplierSettlementSourceEvidenceRepository<'_>;
 
     /// 获取不可变结算差异补证 Repository。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回当前数据库的差异补证仓储。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_settlement_difference_evidence(&self) -> SupplierSettlementDifferenceEvidenceRepository<'_>;
 
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `SupplierSettlementRepository` 实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn supplier_settlement(&self) -> SupplierSettlementRepository<'_>;
 }
 

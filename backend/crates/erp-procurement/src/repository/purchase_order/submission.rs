@@ -59,8 +59,17 @@ impl Default for PurchaseOrderSubmissionFilter {
 impl QueryFilter for PurchaseOrderSubmissionFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// `purchase_order_id` 与 `supplier_id` 为 `Some` 时按字符串精确匹配，`status` 为 `Some`
+    /// 时写入其稳定代码；三者为 `None` 时不写入。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(purchase_order_id) = &self.purchase_order_id {
@@ -79,8 +88,16 @@ impl QueryFilter for PurchaseOrderSubmissionFilter {
 impl Pagination for PurchaseOrderSubmissionFilter {
     /// 返回页码与单页条数。
     ///
+    /// `page` 原样返回，`page_size` 由 `u32` 拓宽为 `u64`。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `(page, page_size)` 元组。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }

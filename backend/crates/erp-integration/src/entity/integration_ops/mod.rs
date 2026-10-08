@@ -84,6 +84,9 @@ impl IntegrationCommandIdentity {
     ///
     /// # 返回
     /// 返回不暴露原始幂等键的稳定命令身份。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(
         actor_id: &str,
         action: &str,
@@ -111,51 +114,84 @@ impl IntegrationCommandIdentity {
 
     /// 返回稳定收据 ID。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回不含原始幂等键的 SHA-256 派生收据 ID。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn receipt_id(&self) -> &str {
         &self.receipt_id
     }
 
-    /// 返回规范化原始幂等键摘要，不记录原始键。
+    /// 返回原始幂等键的 SHA-256 摘要，不保存原始键。
+    ///
     /// # 参数
     /// 无。
+    ///
     /// # 返回
-    /// 返回SHA256摘要。
+    /// 返回原始幂等键字节的 64 位小写十六进制摘要；构造时不对键做去空白或其他规范化。
+    ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn idempotency_key_hash(&self) -> &str {
         &self.idempotency_key_hash
     }
 
     /// 返回完整命令载荷指纹。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于拒绝同键异参的 SHA-256 指纹。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn fingerprint(&self) -> &str {
         &self.fingerprint
     }
 
     /// 返回命令动作名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回构造身份时冻结的稳定动作名。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn action(&self) -> &str {
         &self.action
     }
 
     /// 返回命令资源类型。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回构造身份时冻结的资源类型。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn resource_type(&self) -> &str {
         &self.resource_type
     }
 
     /// 返回命令资源 ID。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回构造身份时冻结的资源 ID。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn resource_id(&self) -> &str {
         &self.resource_id
     }
@@ -169,7 +205,10 @@ impl IntegrationCommandIdentity {
     /// * `resource_id` - 审计资源 ID
     ///
     /// # 返回
-    /// 全部身份字段与命令冻结值一致时返回 `true`。
+    /// 操作人、动作、资源类型都与冻结值一致，且 `resource_id` 为 `Some` 并等于冻结资源 ID 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn matches_receipt(
         &self,
         actor_id: &str,

@@ -78,6 +78,9 @@ impl PayableService {
     ///
     /// # 返回
     /// 返回服务实例。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         let rbac = shared_rbac_service(db.clone());
         Self {
@@ -103,13 +106,16 @@ impl PayableService {
         self
     }
 
-    /// Inject composition-root object-read for approval binding.
+    /// 注入组合根的审批对象读取端口，供单据绑定使用。
     ///
-    /// # Parameters
-    /// * `object_read` - composition-root read port
+    /// # 参数
+    /// * `object_read` - 组合根装配的对象读取端口。
     ///
-    /// # Returns
-    /// Returns the service with its object-read binding configured.
+    /// # 返回
+    /// 返回已绑定该端口的服务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn with_object_read(mut self, object_read: Arc<dyn ApprovalObjectReadPort>) -> Self {
         self.object_read = object_read;
         self

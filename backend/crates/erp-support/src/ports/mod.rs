@@ -1,4 +1,4 @@
-//! Consumer ports for audit persistence, business-document facts and pending attachments.
+//! 支撑领域消费的审计持久化、业务单据事实与待处理附件端口。
 
 mod audit;
 mod business_document;

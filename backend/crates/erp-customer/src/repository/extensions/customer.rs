@@ -28,20 +28,38 @@ pub trait CustomerExt {
 
     /// 获取 `customer_account` 集合的 Repository。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `CustomerAccountRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn customer_accounts(&self) -> CustomerAccountRepository<'_>;
 
     /// 获取 `customer_assignment` 集合的 Repository（按有效期的归属事实行）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `CustomerAssignmentRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn customer_assignments(&self) -> CustomerAssignmentRepository<'_>;
 
     /// 获取客户资料根级命令去重仓储。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `CustomerProfileCommandRepository<'_>`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn customer_profile_commands(&self) -> CustomerProfileCommandRepository<'_>;
 }
 

@@ -155,6 +155,9 @@ impl PurchaseChangeSubmission {
 
     /// 校验变更提交仍处于待处理状态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 待审核状态返回 `Ok(())`。
     ///
@@ -168,6 +171,9 @@ impl PurchaseChangeSubmission {
     }
 
     /// 记录采购变更最终通过结论。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 待审核提交成功改为已通过时返回 `Ok(())`。
@@ -192,7 +198,7 @@ impl PurchaseChangeSubmission {
     /// 提交成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 状态不是草稿时返回错误。
+    /// 状态不是草稿，或提交人为空、超长时返回错误。
     pub fn submit(&mut self, submitted_at: Instant, submitted_by: impl Into<String>) -> Result<()> {
         if self.status != SubmissionStatus::Draft {
             return Err(Error::from("只有草稿状态的提交可以提交复核"));

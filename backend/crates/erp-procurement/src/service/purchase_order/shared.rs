@@ -52,6 +52,15 @@ impl PurchaseOrderService {
 /// 版本化访问（乐观锁校验统一入口）。
 pub trait Versioned {
     /// 返回实体乐观锁版本。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 `base.version`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn version(&self) -> u64;
 }
 

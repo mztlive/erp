@@ -12,7 +12,7 @@ use syn::{Data, DeriveInput, Error, Fields, FieldsNamed, Ident, Result, parse_ma
 /// 返回 `TokenStream` 实例。
 ///
 /// # 错误
-/// 输入非具名结构体或缺 `base` 字段时编译失败。
+/// 输入无法解析、不是结构体、不是具名结构体，或缺 `base` 字段时编译失败。
 #[proc_macro_derive(Entity)]
 pub fn derive_entity(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -31,7 +31,7 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
 /// 返回生成代码。
 ///
 /// # 错误
-/// 输入非具名结构体或缺 `base` 字段时返回错误。
+/// 输入不是结构体、不是具名结构体，或缺 `base` 字段时返回 `syn::Error`。
 fn expand_derive_entity(input: &DeriveInput) -> Result<TokenStream2> {
     let Data::Struct(data) = &input.data else {
         return Err(entity_error(&input.ident, "Entity 派生仅支持结构体"));
@@ -48,16 +48,28 @@ fn expand_derive_entity(input: &DeriveInput) -> Result<TokenStream2> {
         impl #impl_generics ::entity_core::HasBaseModel for #name #ty_generics #where_clause {
             /// 返回实体持久化元数据。
             ///
+            /// # 参数
+            /// 无。
+            ///
             /// # 返回
             /// 返回引用，生命周期与持有者一致。
+            ///
+            /// # 错误
+            /// 不返回错误。
             fn base(&self) -> &::entity_core::BaseModel {
                 &self.base
             }
 
             /// 返回实体持久化元数据的可变引用。
             ///
+            /// # 参数
+            /// 无。
+            ///
             /// # 返回
             /// 返回可变引用，生命周期与持有者一致。
+            ///
+            /// # 错误
+            /// 不返回错误。
             fn base_mut(&mut self) -> &mut ::entity_core::BaseModel {
                 &mut self.base
             }
@@ -82,7 +94,7 @@ fn has_base_field(fields: &FieldsNamed) -> bool {
 /// ID 值由调用方生成并传入；本宏不生成主键，也不校验格式。
 ///
 /// # 参数
-/// * 输入 token - 要生成的 ID 类型名
+/// * `input` - 要生成的 ID 类型名，必须是单个标识符。
 ///
 /// # 返回
 /// 返回类型定义与 impl 的 `TokenStream`。
@@ -119,6 +131,9 @@ fn expand_id_type(name: &Ident) -> TokenStream2 {
             ///
             /// # 返回
             /// 返回新的 ID。ID 是透明值对象，不校验格式。
+            ///
+            /// # 错误
+            /// 不返回错误。
             pub fn new(value: impl ::std::convert::Into<::std::string::String>) -> Self {
                 Self(value.into())
             }
@@ -151,6 +166,16 @@ fn expand_id_type(name: &Ident) -> TokenStream2 {
         }
 
         impl ::serde::Serialize for #name {
+            /// 将 ID 序列化为透明字符串。
+            ///
+            /// # 参数
+            /// * `serializer` - 调用方提供的序列化器。
+            ///
+            /// # 返回
+            /// 成功时返回序列化器的完成值。
+            ///
+            /// # 错误
+            /// 序列化器拒绝写入字符串时返回 `S::Error`。
             fn serialize<S: ::serde::ser::Serializer>(
                 &self,
                 serializer: S,
@@ -160,6 +185,16 @@ fn expand_id_type(name: &Ident) -> TokenStream2 {
         }
 
         impl<'de> ::serde::Deserialize<'de> for #name {
+            /// 从透明字符串反序列化 ID，不校验格式。
+            ///
+            /// # 参数
+            /// * `deserializer` - 调用方提供的反序列化器。
+            ///
+            /// # 返回
+            /// 成功时返回包装该字符串的 ID。
+            ///
+            /// # 错误
+            /// 输入不能按字符串读取时，经 `?` 返回 `D::Error`。
             fn deserialize<D: ::serde::de::Deserializer<'de>>(
                 deserializer: D,
             ) -> ::std::result::Result<Self, D::Error> {

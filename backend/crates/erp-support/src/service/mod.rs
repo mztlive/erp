@@ -1,4 +1,4 @@
-//! Support application services.
+//! 支撑领域应用服务。
 
 pub mod bulk_job;
 pub mod file_asset;

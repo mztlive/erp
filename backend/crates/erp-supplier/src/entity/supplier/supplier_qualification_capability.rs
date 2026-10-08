@@ -43,6 +43,9 @@ impl SupplierQualificationCapability {
     ///
     /// # 返回
     /// 返回新建的关联实体。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(
         id: SupplierQualificationCapabilityId,
         data: SupplierQualificationCapabilityData,

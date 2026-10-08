@@ -38,8 +38,14 @@ pub enum SettlementDifferenceType {
 impl SettlementDifferenceType {
     /// 返回差异类型的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Missing => "漏单",
@@ -52,8 +58,14 @@ impl SettlementDifferenceType {
 
     /// 返回差异类型的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Missing => "MISSING",
@@ -84,8 +96,14 @@ pub enum SettlementDifferenceStatus {
 impl SettlementDifferenceStatus {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Pending => "待处理",
@@ -98,8 +116,14 @@ impl SettlementDifferenceStatus {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Pending => "PENDING",
@@ -127,8 +151,14 @@ pub enum SettlementDifferenceConclusionKind {
 impl SettlementDifferenceConclusionKind {
     /// 返回结论对应的持久化差异状态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回供应商认可、ERP 认可、已补偿或已关闭状态。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn status(self) -> SettlementDifferenceStatus {
         match self {
             Self::SupplierAccepted => SettlementDifferenceStatus::SupplierAcknowledged,
@@ -140,8 +170,14 @@ impl SettlementDifferenceConclusionKind {
 
     /// 返回审计与命令摘要使用的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回大写稳定代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::SupplierAccepted => "SUPPLIER_ACCEPTED",
@@ -214,40 +250,70 @@ impl SettlementDifferenceConclusion {
 
     /// 返回结论对应的差异状态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回正式持久化状态。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn status(&self) -> SettlementDifferenceStatus {
         self.kind.status()
     }
 
     /// 返回正式结论类别。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回构造时的强类型结论类别。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn kind(&self) -> SettlementDifferenceConclusionKind {
         self.kind
     }
 
     /// 返回规范化原因代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回大写受控原因代码。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn reason_code(&self) -> &str {
         &self.reason_code
     }
 
     /// 返回排序去重后的证据引用。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回只读证据引用切片。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn evidence_reference_ids(&self) -> &[String] {
         &self.evidence_reference_ids
     }
 
     /// 返回稳定持久化文本。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `reason=<code>;evidence=<refs>` 格式文本。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn encoded(&self) -> &str {
         &self.encoded
     }
@@ -361,8 +427,14 @@ impl SupplierSettlementDifference {
 
     /// 判断差异是否仍等待正式结论。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为 `PENDING` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_pending(&self) -> bool {
         self.status == SettlementDifferenceStatus::Pending
     }

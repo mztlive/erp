@@ -90,8 +90,14 @@ pub enum ApplyResultItem {
 impl ApplyResultItem {
     /// 返回该结果对应的导入行 ID。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回行 ID 借用。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn row_id(&self) -> &LegacyImportRowId {
         match self {
             Self::Imported { row_id, .. } | Self::Failed { row_id, .. } | Self::Skipped { row_id, .. } => {
@@ -102,8 +108,14 @@ impl ApplyResultItem {
 
     /// 返回来源稳定身份。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 待映射行可能携带身份；已映射行可为空。
+    /// 三种结果都可能携带身份；未提供时返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn external_identity_map_id(&self) -> Option<&ExternalIdentityMapId> {
         match self {
             Self::Imported { external_identity_map_id, .. }
@@ -129,10 +141,10 @@ impl ApplyResultSet {
     /// * `drafts` - 请求中的行级结果（顺序保留）
     ///
     /// # 返回
-    /// 返回已去重且字段形状合法的结果集。
+    /// 返回行 ID 互异且字段形状合法的结果集。重复 ID 不会被删掉，而是失败。
     ///
     /// # 错误
-    /// 数量越界、行 ID 重复、必填字段缺失或禁止字段出现时返回 [`Error::LogicError`]。
+    /// 数量越界、行 ID 重复、必填字段缺失、禁止字段出现或文本超长时返回 [`Error::LogicError`]。
     ///
     /// # 约束
     /// 纯内存确定性校验；不查询批次归属，不访问数据库。
@@ -150,16 +162,28 @@ impl ApplyResultSet {
 
     /// 返回已校验的行结果切片。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回按请求顺序排列的结果项。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn items(&self) -> &[ApplyResultItem] {
         &self.items
     }
 
     /// 返回按请求顺序排列的行 ID。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回与结果项一一对应的行 ID 列表，供仓储按 ID 且受批次约束读取。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn row_ids(&self) -> Vec<LegacyImportRowId> {
         self.items.iter().map(|item| item.row_id().clone()).collect()
     }

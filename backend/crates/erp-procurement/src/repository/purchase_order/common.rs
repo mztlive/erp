@@ -7,8 +7,8 @@ pub(super) const PURCHASE_ORDER_SORT_FIELDS: &[&str] = &["created_at", "purchase
 
 /// 构建白名单校验后的排序文档。
 ///
-/// 排序字段必须落在白名单内，未知字段一律回退 `created_at`（§2.3 禁止透传
-/// 任意字段名）；`None` 默认 `created_at` 降序。
+/// 排序字段必须落在白名单内，未知字段或 `None` 回退 `created_at`（§2.3 禁止透传
+/// 任意字段名）。方向只由 `sort_ascending` 决定，并带上同向的 `id`。
 ///
 /// # 参数
 /// * `sort_by` - 排序字段
@@ -17,6 +17,9 @@ pub(super) const PURCHASE_ORDER_SORT_FIELDS: &[&str] = &["created_at", "purchase
 ///
 /// # 返回
 /// 返回排序条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn sort_doc(sort_by: Option<&str>, whitelist: &[&str], sort_ascending: bool) -> Document {
     let field = sort_by.filter(|field| whitelist.contains(field)).unwrap_or("created_at");
     let direction = if sort_ascending { 1 } else { -1 };
@@ -31,6 +34,9 @@ pub(super) fn sort_doc(sort_by: Option<&str>, whitelist: &[&str], sort_ascending
 ///
 /// # 返回
 /// 返回批量查询条件文档。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn in_filter<T: Into<String>>(field: &str, values: impl IntoIterator<Item = T>) -> Document {
     let values: Vec<Bson> = values.into_iter().map(|value| Bson::String(value.into())).collect();
     doc! { field: { "$in": values } }

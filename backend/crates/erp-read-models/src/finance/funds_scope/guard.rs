@@ -10,6 +10,17 @@ use crate::{Error, Result};
 
 impl FundsAccess {
     /// 应收子账命令守卫：详情动作重验关联销售当前负责人与登记经办。
+    ///
+    /// # 参数
+    /// * `actor` - 已认证操作人。
+    /// * `id` - 应收往来子账主键。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 详情动作允许该子账时成功，无返回值。
+    ///
+    /// # 错误
+    /// 授权解析失败时返回对应错误；子账或来源销售单不存在，或当前责任不允许时返回 `NotFound`。
     pub(super) async fn guard_receivable_account(
         &self,
         actor: &AuditActor,

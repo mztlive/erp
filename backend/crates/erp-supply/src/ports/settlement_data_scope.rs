@@ -26,8 +26,14 @@ pub struct SettlementResolvedClause {
 impl SettlementResolvedClause {
     /// 判断条款是否构成有效结算范围规则。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 含公司、本人负责或组织目标时为 true。
+    ///
+    /// # 错误
+    /// 不返回错误。
     ///
     /// # 关键业务约束
     /// 协作单独存在不构成结算对象规则；空条款保持空集且不得补公司。
@@ -62,8 +68,14 @@ pub struct SettlementResolvedScope {
 impl SettlementResolvedScope {
     /// 判断角色正向范围是否含有效规则。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 任一角色条款构成有效规则时为 true。
+    ///
+    /// # 错误
+    /// 不返回错误。
     ///
     /// # 关键业务约束
     /// 只看角色条款；个人上限不单独构成“有范围规则”。
@@ -149,6 +161,9 @@ pub trait SettlementDataScopePort: Send + Sync {
     ///
     /// # 返回
     /// 返回排序去重后的人员 ID。
+    ///
+    /// # 错误
+    /// 组织关系非法或读取失败时拒绝。
     async fn org_member_ids(
         &self,
         org_unit_ids: &BTreeSet<String>,
@@ -165,6 +180,9 @@ pub trait SettlementDataScopePort: Send + Sync {
     ///
     /// # 返回
     /// 存在唯一主属组织时返回其 ID；没有主属组织时返回 `None`。
+    ///
+    /// # 错误
+    /// 同一时点存在多条主属关系时拒绝。
     ///
     /// # 关键业务约束
     /// 不得默认放入根组织或公司范围。
@@ -183,8 +201,14 @@ pub struct FailClosedSettlementDataScopePort;
 impl FailClosedSettlementDataScopePort {
     /// 返回未接线的共享端口。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回可注入结算服务的失败关闭端口。
+    ///
+    /// # 错误
+    /// 不返回错误。
     ///
     /// # 关键业务约束
     /// 仅用于不解析范围的装载路径；解析入口必须注入真实 adapter。

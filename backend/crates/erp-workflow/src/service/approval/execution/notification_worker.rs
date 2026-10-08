@@ -34,7 +34,10 @@ pub const LEASE_SECS: i64 = 30;
 /// * `attempt_count` - 已失败次数，从 1 开始
 ///
 /// # 返回
-/// 仍可重试时返回退避秒数。
+/// 下标仍落在退避表内时返回秒数；超出表长时返回 `None`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn retry_backoff_secs(attempt_count: u32) -> Option<i64> {
     let index = usize::try_from(attempt_count.saturating_sub(1)).ok()?;
     RETRY_BACKOFF_SECS.get(index).copied()
@@ -47,6 +50,9 @@ pub fn retry_backoff_secs(attempt_count: u32) -> Option<i64> {
 ///
 /// # 返回
 /// 达到最大次数时返回 `true`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn should_dead_letter(attempt_count: u32) -> bool {
     attempt_count >= MAX_DELIVERY_ATTEMPTS
 }
@@ -57,6 +63,9 @@ pub fn should_dead_letter(attempt_count: u32) -> bool {
 /// * `item` - 租约中的 outbox
 /// * `attempt` - 发送结果
 /// * `failed_at` - 失败时间
+///
+/// # 返回
+/// 成功、退避或死信状态写回实体后无返回值。
 ///
 /// # 错误
 /// 消息不处于投递中时返回错误。
@@ -89,6 +98,9 @@ fn error_class(attempt: DeliveryAttempt) -> &'static str {
 ///
 /// # 返回
 /// 返回租约截止。
+///
+/// # 错误
+/// 不返回错误。
 pub fn lease_until(now: Instant) -> Instant {
     Instant::from_unix_secs(now.unix_secs().saturating_add(LEASE_SECS))
 }
@@ -102,6 +114,9 @@ pub trait NotificationSender {
     ///
     /// # 返回
     /// 返回投递结果。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn send_idempotent(&self, dedup_key: &str) -> DeliveryAttempt;
 }
 
@@ -117,6 +132,9 @@ pub trait OutboxLeaseStore {
     ///
     /// # 返回
     /// 返回已写入 worker ID 的消息。
+    ///
+    /// # 错误
+    /// 领取租约失败时返回实现方错误。
     fn lease_batch(
         &mut self,
         worker_id: &str,
@@ -131,6 +149,9 @@ pub trait OutboxLeaseStore {
     /// * `id` - outbox 主键
     /// * `worker_id` - 租约持有者
     ///
+    /// # 返回
+    /// 标记成功时无返回值。
+    ///
     /// # 错误
     /// owner 不匹配时返回冲突。
     fn mark_delivered(&mut self, id: &str, worker_id: &str) -> Result<()>;
@@ -140,6 +161,9 @@ pub trait OutboxLeaseStore {
     /// # 参数
     /// * `item` - 已更新的 outbox
     /// * `worker_id` - 租约持有者
+    ///
+    /// # 返回
+    /// 写回成功时无返回值。
     ///
     /// # 错误
     /// owner 不匹配时返回冲突。
@@ -166,8 +190,11 @@ pub struct WorkerBatchOutcome {
 /// * `now` - 当前时间
 /// * `limit` - 批次上限
 ///
+/// # 返回
+/// 返回本批成功、重试与死信计数。
+///
 /// # 错误
-/// 租约或 CAS 失败时返回错误。
+/// 租约、发送结果落库或 CAS 失败时返回错误。
 pub fn process_outbox_batch<S, N>(
     store: &mut S,
     sender: &N,
@@ -217,6 +244,9 @@ impl NotificationSender for FailClosedNotificationSender {
     ///
     /// # 返回
     /// 始终返回 `Fatal`，由 worker 按退避或死信落库。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn send_idempotent(&self, dedup_key: &str) -> DeliveryAttempt {
         tracing::error!(dedup_key = %dedup_key, "审批通知提供方未接入，投递失败关闭");
         DeliveryAttempt::Fatal
@@ -237,6 +267,9 @@ impl ApprovalNotificationOutboxPort {
     ///
     /// # 返回
     /// 返回真实仓储端口，发送口未接入时失败关闭。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db, sender: FailClosedNotificationSender }
     }
@@ -245,6 +278,9 @@ impl ApprovalNotificationOutboxPort {
     ///
     /// # 参数
     /// * `worker_id` - 本进程租约持有者
+    ///
+    /// # 返回
+    /// 本批已领取消息都处理完后无返回值。
     ///
     /// # 错误
     /// 租约或 CAS 落库失败时返回服务错误。

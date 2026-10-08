@@ -37,6 +37,13 @@ impl VoidChangeWrite {
 
     /// 在同一执行器内先写作废变更，再写放弃的工作副本。
     ///
+    /// # 参数
+    /// * `db` - 销售集合所在数据库。
+    /// * `executor` - 调用方根事务执行器。
+    ///
+    /// # 返回
+    /// 先更新变更单，再更新存在的工作副本；都成功时返回 `Ok(())`。
+    ///
     /// # 错误
     /// 任一步 CAS 失败时交由根事务回滚。
     pub async fn persist(&mut self, db: &mongodb::Database, executor: &mut dyn Executor) -> Result<()> {
@@ -56,11 +63,13 @@ impl SalesReviewService {
     /// * `actor` - 已通过鉴权的审计操作人
     ///
     /// # 返回
-    /// 返回变更单详情视图。
+    /// 返回已作废、尚未落库的变更单；存在工作副本时一并返回已放弃的副本。
     ///
     /// # 错误
     /// * `NotFound` - 变更单不存在
     /// * `ConflictError` - 期望版本与当前版本不一致
+    ///
+    /// 请求校验、作废或放弃工作副本被拒绝，以及仓储读取失败时返回对应错误。
     pub async fn prepare_void(
         &self,
         id: &str,

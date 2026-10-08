@@ -55,10 +55,10 @@ impl S3StorageConfig {
     /// * `public_base_url` - 对外返回的公开访问基础 URL
     ///
     /// # 返回
-    /// 返回端点、前缀与 path-style 均为空/关闭的启动配置。
+    /// 返回 `endpoint`、`session_token` 与 `key_prefix` 均为空，且 `force_path_style` 为 `false` 的启动配置。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn new(
         bucket: impl Into<String>,
         region: impl Into<String>,
@@ -88,7 +88,7 @@ impl S3StorageConfig {
     /// 返回更新后的启动配置。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn with_endpoint(mut self, endpoint: impl Into<String>) -> Self {
         self.endpoint = Some(endpoint.into());
         self
@@ -103,7 +103,7 @@ impl S3StorageConfig {
     /// 返回更新后的启动配置。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn with_key_prefix(mut self, key_prefix: impl Into<String>) -> Self {
         self.key_prefix = Some(key_prefix.into());
         self
@@ -118,7 +118,7 @@ impl S3StorageConfig {
     /// 返回更新后的启动配置。
     ///
     /// # 错误
-    /// 无。
+    /// 不返回错误。
     pub fn with_force_path_style(mut self, force_path_style: bool) -> Self {
         self.force_path_style = force_path_style;
         self
@@ -150,7 +150,7 @@ impl UploadedPart {
         self.etag.trim_matches('"')
     }
 
-    // 分片序号与 ETag 的纯规则校验，与预签名同口径。
+    // 分片序号须在 1–10000，且 ETag 去引号后不能为空白。
     fn validate(&self) -> Result<()> {
         validate_part_number(self.part_number)?;
         if self.normalized_etag().trim().is_empty() {
@@ -170,7 +170,10 @@ impl S3Storage {
     /// 返回可复用的 S3 存储客户端。
     ///
     /// # 错误
-    /// bucket、region、凭证为空，endpoint 格式无效，或对象键前缀不安全时返回错误。
+    /// 返回 `Error::InvalidConfig`：`bucket`、`region`、`access_key_id` 或 `secret_access_key` 为空或含首尾空白；
+    /// `session_token` 为 `Some` 但为空或含首尾空白；提供的 `endpoint` 不是带非空主机的 `http`/`https` 绝对地址；
+    /// `public_base_url` 无法解析、缺少主机、不是 HTTP(S)，或含 query/fragment；
+    /// `key_prefix` 为空白、含首尾空白、以 `/` 开头或结尾、含 `\`、空段、`.` 或 `..`。
     pub fn new(config: S3StorageConfig) -> Result<Self> {
         let public_base_url = validate_config(&config)?;
         let key_prefix = normalize_prefix(config.key_prefix)?;
@@ -210,10 +213,10 @@ impl S3Storage {
     /// * `content_type` - 可选的 HTTP Content-Type。
     ///
     /// # 返回
-    /// 成功时返回空。
+    /// 无返回值。对象已写入，并清除该键内容缓存；缓存锁中毒时清除会被跳过。
     ///
     /// # 错误
-    /// 路径无效或 S3 `PutObject` 失败时返回错误。
+    /// 路径无效时返回 `Error::PathError`，缓存不变。`PutObject` 失败时返回 `Error::S3`，且已尝试清除该键缓存。
     pub async fn save_with_content_type<P: AsRef<Path>>(
         &self,
         path: P,
@@ -229,10 +232,13 @@ impl S3Storage {
     /// * `path` - 安全相对对象路径。
     /// * `content` - 已完成类型、大小与内容指纹校验的文件字节。
     /// * `content_type` - 可选 MIME。
+    ///
     /// # 返回
-    /// 成功时返回空。
+    /// 无返回值。对象已写入，并清除该键内容缓存；缓存锁中毒时清除会被跳过。
+    ///
     /// # 错误
-    /// 路径非法或 PutObject 失败时返回错误；调用取消时遵循 SDK 上传语义。
+    /// 路径非法时返回 `Error::PathError`，缓存不变。`PutObject` 失败时返回 `Error::S3`，且已尝试清除该键缓存。
+    /// 调用取消时遵循 SDK 上传语义。
     pub async fn save_owned_with_content_type<P: AsRef<Path>>(
         &self,
         path: P,
@@ -258,10 +264,13 @@ impl S3Storage {
     ///
     /// # 参数
     /// 无。
+    ///
     /// # 返回
-    /// HeadBucket 成功时返回空；即使权限拒绝也可能已完成 TLS 连接复用。
+    /// 无返回值。`HeadBucket` 成功即完成预热。
+    ///
     /// # 错误
-    /// 返回 SDK 错误；调用方可限时并忽略预热失败，不改变服务启动资格。
+    /// `HeadBucket` 失败时返回 `Error::S3`。即使权限拒绝也可能已完成 TLS 连接复用；
+    /// 调用方可限时并忽略预热失败，不改变服务启动资格。
     pub async fn warm_connection(&self) -> Result<()> {
         let started = Instant::now();
         let result = self.client.head_bucket().bucket(&self.bucket).send().await.map_err(s3_error);
@@ -279,7 +288,7 @@ impl S3Storage {
     /// 返回 `public_base_url` 与完整对象键拼接后的 URL。
     ///
     /// # 错误
-    /// 对象路径无效时返回错误。
+    /// 对象路径无效时返回 `Error::PathError`；`public_base_url` 不能作为分层 URL 时返回 `Error::InvalidConfig`。
     pub fn public_url<P: AsRef<Path>>(&self, path: P) -> Result<String> {
         let key = self.object_key(path.as_ref())?;
         let mut url = self.public_base_url.clone();
@@ -305,7 +314,8 @@ impl S3Storage {
     /// 返回对象的完整字节内容。
     ///
     /// # 错误
-    /// 对象不存在时返回 `Error::NotFound`；路径无效、S3 请求或响应体读取失败时返回错误。
+    /// 对象不存在时返回 `Error::NotFound`。路径无效时返回 `Error::PathError`；
+    /// `GetObject` 或响应体读取失败时返回 `Error::S3`。
     pub async fn read<P: AsRef<Path>>(&self, path: P) -> Result<Vec<u8>> {
         let stream = self.read_stream(path).await?;
         let started = Instant::now();
@@ -325,10 +335,12 @@ impl S3Storage {
     /// # 参数
     /// * `path` - 安全相对对象路径。
     /// * `fingerprint` - 当前元数据确认的不可变内容身份。
+    ///
     /// # 返回
     /// 返回完整内容；调用方仍须执行响应前的当前文件状态及版本重验。
+    ///
     /// # 错误
-    /// 路径、对象读取与响应体错误沿用 read；缓存故障只退回原读取路径。
+    /// 路径、对象读取与响应体错误沿用 `read`；缓存锁中毒时不返回错误，只退回直接读取。
     pub async fn read_immutable<P: AsRef<Path>>(&self, path: P, fingerprint: &str) -> Result<Vec<u8>> {
         let key = self.object_key(path.as_ref())?;
         let generation = self.content_cache.lock().ok().and_then(|cache| cache.generation());
@@ -360,7 +372,7 @@ impl S3Storage {
     /// 返回可消费的字节流。
     ///
     /// # 错误
-    /// 对象不存在时返回 `Error::NotFound`；路径无效或 S3 请求失败时返回错误。
+    /// 对象不存在时返回 `Error::NotFound`。路径无效时返回 `Error::PathError`；`GetObject` 失败时返回 `Error::S3`。
     pub async fn read_stream<P: AsRef<Path>>(&self, path: P) -> Result<ByteStream> {
         let key = self.object_key(path.as_ref())?;
         let started = Instant::now();
@@ -383,7 +395,7 @@ impl S3Storage {
     /// 返回 S3 分片上传标识。
     ///
     /// # 错误
-    /// 路径无效或 S3 `CreateMultipartUpload` 失败时返回错误。
+    /// 路径无效时返回 `Error::PathError`；`CreateMultipartUpload` 失败，或响应没有上传标识时，返回 `Error::S3`。
     pub async fn create_multipart_upload<P: AsRef<Path>>(
         &self,
         path: P,
@@ -416,7 +428,7 @@ impl S3Storage {
     /// 返回预签名 PUT 地址。
     ///
     /// # 错误
-    /// 路径无效、分片序号非法或签名失败时返回错误。
+    /// 路径无效时返回 `Error::PathError`。分片序号不在 1–10000、有效期不被预签名配置接受，或签名失败时返回 `Error::S3`。
     pub async fn presign_upload_part<P: AsRef<Path>>(
         &self,
         path: P,
@@ -453,10 +465,12 @@ impl S3Storage {
     /// * `parts` - 分片序号与 ETag 列表。
     ///
     /// # 返回
-    /// 成功时返回空。
+    /// 无返回值。分片已合并为对象，并清除该键内容缓存；缓存锁中毒时清除会被跳过。
     ///
     /// # 错误
-    /// 路径无效、分片列表为空、分片序号或 ETag 非法，或 S3 `CompleteMultipartUpload` 失败时返回错误。
+    /// 路径无效时返回 `Error::PathError`，缓存不变。`upload_id` 经 `trim` 后为空、分片列表为空、
+    /// 分片序号不在 1–10000，或 ETag 去引号后为空白时返回 `Error::S3`，缓存不变。
+    /// `CompleteMultipartUpload` 失败时返回 `Error::S3`，且已尝试清除该键缓存。
     pub async fn complete_multipart_upload<P: AsRef<Path>>(
         &self,
         path: P,
@@ -496,8 +510,11 @@ impl S3Storage {
     /// * `path` - 相对存储路径。
     /// * `upload_id` - 分片上传标识。
     ///
+    /// # 返回
+    /// 无返回值。对应分片上传已取消。
+    ///
     /// # 错误
-    /// 路径无效或 S3 `AbortMultipartUpload` 失败时返回错误。
+    /// 路径无效时返回 `Error::PathError`；`AbortMultipartUpload` 失败时返回 `Error::S3`。
     pub async fn abort_multipart_upload<P: AsRef<Path>>(&self, path: P, upload_id: &str) -> Result<()> {
         let key = self.object_key(path.as_ref())?;
         self.client
@@ -516,8 +533,12 @@ impl S3Storage {
     /// # 参数
     /// * `path` - 相对存储路径。
     ///
+    /// # 返回
+    /// 无返回值。对象已删除，并清除该键内容缓存；缓存锁中毒时清除会被跳过。
+    ///
     /// # 错误
-    /// 对象不存在时返回 `Error::NotFound`；路径无效或 S3 请求失败时返回错误。
+    /// 路径无效时返回 `Error::PathError`，缓存不变。
+    /// 键解析成功后会尝试清除缓存；对象不存在时返回 `Error::NotFound`，存在性检查或删除请求失败时返回 `Error::S3`。
     pub async fn delete<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let key = self.object_key(path.as_ref())?;
         self.invalidate_content(&key);
@@ -532,7 +553,7 @@ impl S3Storage {
         Ok(())
     }
 
-    /// 所有本服务对象变更先使字节缓存失效，不跨 await 持有同步锁。
+    /// 对象变更时使该键字节缓存失效，且不跨 `await` 持有同步锁。锁中毒时跳过失效。
     fn invalidate_content(&self, key: &str) {
         if let Ok(mut cache) = self.content_cache.lock() {
             cache.invalidate(key);
@@ -614,7 +635,7 @@ fn validate_config(config: &S3StorageConfig) -> Result<Url> {
     public_base_url(&config.public_base_url)
 }
 
-/// 校验合并分片的前置条件，与预签名同口径。
+/// 校验合并前的上传标识、非空分片列表，以及各分片序号与 ETag。
 fn validate_complete_parts(upload_id: &str, parts: &[UploadedPart]) -> Result<()> {
     if upload_id.trim().is_empty() {
         return Err(Error::S3("分片上传标识不能为空".to_string()));

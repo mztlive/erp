@@ -49,7 +49,16 @@ impl NumberGroup {
     }
 }
 
-/// 只允许本世纪年度，避免两位年号在世纪间重复。
+/// 只允许 2000 至 2099 年，避免两位年号在世纪间重复。
+///
+/// # 参数
+/// * `year` - 完整公历年度。
+///
+/// # 返回
+/// 年度在范围内时无返回值。
+///
+/// # 错误
+/// 超出该范围时返回 `ValidationError`。
 pub(crate) fn validate_year(year: i32) -> Result<()> {
     if !(2000..=2099).contains(&year) {
         return Err(Error::ValidationError("合同编号年度须在 2000 至 2099 年之间".into()));
@@ -57,7 +66,18 @@ pub(crate) fn validate_year(year: i32) -> Result<()> {
     Ok(())
 }
 
-/// 创建边界统一规范化短文本。
+/// 创建边界统一规范化短文本：去首尾空白，最长 256 个字符。
+///
+/// # 参数
+/// * `raw` - 原始文本。
+/// * `label` - 写入校验错误的字段名。
+/// * `required` - 为真时，空白视为缺失。
+///
+/// # 返回
+/// 去空白后的文本。非必填且原文为空白时返回空字符串。
+///
+/// # 错误
+/// 必填为空，或字符数超过 256 时返回 `ValidationError`。
 pub(crate) fn text(raw: &str, label: &str, required: bool) -> Result<String> {
     let value = raw.trim();
     if (required && value.is_empty()) || value.chars().count() > 256 {

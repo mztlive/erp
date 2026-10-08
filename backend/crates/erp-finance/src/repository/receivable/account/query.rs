@@ -12,7 +12,7 @@ pub trait ReceivableAccountRepositoryExt {
     /// 分页检索应收往来子账列表（投影查询）。
     ///
     /// 只返回 [`ReceivableAccountRow`] 所需的列表字段，不加载整文档；
-    /// 排序字段经白名单映射，未命中回退 `created_at` 降序。
+    /// 排序字段经白名单映射，未命中回退 `created_at`，方向由 `sort_ascending` 决定（缺省降序）。
     ///
     /// # 参数
     /// * `filter` - 筛选与分页条件
@@ -30,6 +30,16 @@ pub trait ReceivableAccountRepositoryExt {
     ) -> Result<PageResult<ReceivableAccountRow>>;
 
     /// 按销售单读取全部活跃应收子账，供服务端关联列表投影使用。
+    ///
+    /// # 参数
+    /// * `sales_order_id` - 来源销售单身份。
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中。
+    ///
+    /// # 返回
+    /// 返回 `sales_order_id` 匹配且未删除的应收子账；没有匹配时返回空列表。顺序不承诺。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
     async fn find_accounts_by_sales_order_id(
         &self,
         sales_order_id: &str,

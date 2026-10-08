@@ -31,6 +31,20 @@ pub struct TerminalFact {
 }
 
 /// 验证证据并终结本域对象，沿原执行器写入后返回主题版本。
+///
+/// # 参数
+/// * `db` - 目标数据库
+/// * `authority` - 权威证据端口
+/// * `command` - 任务完成命令
+/// * `resolution_id` - 差异决定记录主键；错误任务分支不使用
+/// * `actor_id` - 当前操作人
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 返回已验证终态证据引用和写入后的主题版本。
+///
+/// # 错误
+/// 对象不存在、已终结或版本变化、策略不匹配、证据校验失败、实体状态迁移失败或仓储写入失败时返回对应错误。
 pub async fn complete_domain_item(
     db: &Database,
     authority: &dyn IntegrationEvidenceAuthority,

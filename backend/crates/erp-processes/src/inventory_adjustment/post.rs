@@ -49,16 +49,16 @@ impl InventoryAdjustmentService {
 /// 在审批运行时持有的事务内过账库存调整单。
 ///
 /// # 参数
-/// * `db` - 数据库实例
-/// * `adjustment_id` - 库存调整单 ID
-/// * `actor` - 已认证操作人
-/// * `executor` - 审批运行时持有的事务执行器
+/// * `db` - 数据库实例。
+/// * `context` - 审批运行时冻结的最终通过上下文。
+/// * `actor` - 已认证操作人。
+/// * `executor` - 审批运行时持有的事务执行器。
 ///
 /// # 返回
 /// 返回事务内已推进到过账状态的调整单。
 ///
 /// # 错误
-/// 调整单/明细不存在、方向或库存不变量失败、任一写入失败时返回错误。
+/// 运行上下文不匹配、调整单或明细不存在、方向或库存不变量失败、任一写入失败时返回错误。
 async fn post_stock_adjustment_write(
     db: &Database,
     context: &ApprovalActionContext,

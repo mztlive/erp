@@ -45,8 +45,16 @@ impl Default for SubmissionFilter {
 impl QueryFilter for SubmissionFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// 有销售单时按 `sales_order_id` 等值过滤，有状态时写入 `status` 的稳定代码。
+    ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回查询条件文档。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(sales_order_id) = &self.sales_order_id {
@@ -62,8 +70,14 @@ impl QueryFilter for SubmissionFilter {
 impl Pagination for SubmissionFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回 `(page, page_size)` 元组。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }

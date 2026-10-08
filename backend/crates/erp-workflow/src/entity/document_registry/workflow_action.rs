@@ -61,8 +61,14 @@ pub enum WorkflowActionType {
 impl WorkflowActionType {
     /// 返回动作类型的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Submit => "提交",
@@ -87,8 +93,14 @@ impl WorkflowActionType {
 
     /// 返回动作类型的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Submit => "submit",
@@ -113,8 +125,14 @@ impl WorkflowActionType {
 
     /// 判断是否属于审批审计动作。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 11 个审批动作返回 `true`。
+    /// 11 个审批动作返回 `true`，提交、通过、驳回、确认、作废和完成返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_approval_action(self) -> bool {
         matches!(
             self,
@@ -133,6 +151,15 @@ impl WorkflowActionType {
     }
 
     /// 判断动作是否必须引用已经存在的审批运行实例与节点执行。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 启动、节点决定、轮次重启、受阻、恢复、取消和完成返回 `true`；定义绑定变更及其他动作返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn requires_approval_runtime_context(self) -> bool {
         matches!(
             self,
@@ -149,6 +176,15 @@ impl WorkflowActionType {
     }
 
     /// 判断动作是否必须携带审批定义绑定变更事实。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 绑定或升级审批定义时返回 `true`，其余动作返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn requires_approval_binding_context(self) -> bool {
         matches!(self, Self::ApprovalDefinitionBound | Self::ApprovalDefinitionUpgraded)
     }
@@ -261,8 +297,11 @@ impl WorkflowAction {
     /// * `data` - 创建数据
     /// * `approval_context` - 实例、轮次与节点执行
     ///
+    /// # 返回
+    /// 返回带运行时审批上下文、且不含绑定上下文的动作。
+    ///
     /// # 错误
-    /// 基础字段非法或动作不是审批动作时返回错误。
+    /// 状态、操作者、角色或意见非法，动作不要求运行时上下文，轮次为 0，或同时携带绑定上下文时返回错误。
     pub fn new_with_approval_context(
         id: WorkflowActionId,
         data: WorkflowActionData,
@@ -273,8 +312,16 @@ impl WorkflowAction {
 
     /// 创建带审批定义绑定前后值的不可变动作。
     ///
+    /// # 参数
+    /// * `id` - 动作主键。
+    /// * `data` - 创建数据。
+    /// * `approval_binding_context` - 定义与绑定版本的前后值。
+    ///
+    /// # 返回
+    /// 返回带绑定上下文、且不含运行时上下文的动作。
+    ///
     /// # 错误
-    /// 基础字段非法、动作不是绑定动作或绑定版本没有严格递增时返回错误。
+    /// 状态、操作者、角色或意见非法，动作不要求绑定上下文，携带了运行时上下文，或绑定版本未严格加一时返回错误。
     pub fn new_with_approval_binding_context(
         id: WorkflowActionId,
         data: WorkflowActionData,
@@ -316,7 +363,7 @@ impl WorkflowAction {
 /// 审批动作必须携带结构化上下文，不得把身份拼入意见。
 ///
 /// # 错误
-/// 审批动作缺少上下文，或非审批动作携带上下文时返回错误。
+/// 运行时动作缺少上下文、轮次为 0 或带了绑定上下文，绑定动作缺少上下文、带了运行时上下文或版本未严格加一，以及其他动作携带任一上下文时返回错误。
 fn validate_approval_contexts(
     action_type: WorkflowActionType,
     approval_context: Option<ApprovalActionContext>,

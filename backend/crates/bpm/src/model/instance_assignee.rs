@@ -44,8 +44,11 @@ impl ApprovalInstanceAssignee {
     /// * `definition_assignee` - 定义审批人
     /// * `at` - 调用方时间
     ///
+    /// # 返回
+    /// 返回来源为定义、当前责任人等于定义审批人、变更审计为空的绑定。
+    ///
     /// # 错误
-    /// 节点键非法时返回错误。
+    /// 节点键为空或超长，或调用方时间无法持久化时返回错误。
     pub fn from_definition(
         id: ApprovalInstanceAssigneeId,
         process_instance_id: ApprovalProcessInstanceId,
@@ -68,8 +71,14 @@ impl ApprovalInstanceAssignee {
 
     /// 校验实例绑定仍是启动时从定义冻结的原始事实。
     ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 绑定仍是定义快照时返回 `Ok(())`。
+    ///
     /// # 错误
-    /// 来源、当前责任人或保留审计字段发生变化时返回错误。
+    /// 来源、当前责任人或保留审计字段发生变化时返回 [`ModelError::InvalidStatus`]。
     pub fn ensure_unchanged_from_definition(&self) -> ModelResult<()> {
         if self.assignment_source != ApprovalAssigneeBindingSource::Definition
             || self.current_assignee_participant_id != self.definition_assignee_participant_id

@@ -5,6 +5,16 @@ use erp_procurement::repository::PurchaseOrderExt;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 
+/// 按采购单当前版本查找未删除修订，只投影付款条件快照和含税金额。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回写入 `_gate_revisions` 的 `$lookup` 阶段。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn revision_lookup() -> Document {
     doc! { "$lookup": {
         "from": <Database as PurchaseOrderExt>::PURCHASE_ORDER_REVISIONS,
@@ -19,6 +29,15 @@ pub(super) fn revision_lookup() -> Document {
 
 /// 按来源采购单分录汇总 APPLY − REVERSE，与正式履约校验使用同一事实链。
 /// 返回聚合阶段；没有付款事实时由外层补 Decimal 零。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回写入 `_gate_payments` 的 `$lookup` 阶段。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn payments_lookup() -> Document {
     doc! { "$lookup": {
         "from": <Database as PayableExt>::PAYABLE_ENTRIES,
@@ -48,6 +67,16 @@ fn allocation_lookup() -> Document {
     } }
 }
 
+/// 取第一条修订，并把付款净额缺省为 Decimal 零。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回设置 `_gate_revision` 与 `_gate_paid` 的 `$set` 阶段。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn facts() -> Document {
     doc! { "$set": {
         "_gate_revision": { "$arrayElemAt": ["$_gate_revisions", 0] },
@@ -57,6 +86,16 @@ pub(super) fn facts() -> Document {
 
 /// 缺失生效版本时失败关闭；自有库存仓发不受供应商付款条件约束。
 /// 门槛金额及比例均来自冻结快照，不能按付款条件名称猜测。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回先款门槛 `$switch`：仓发为 `SATISFIED`，缺修订或缺金额与比例门槛为 `BLOCKED`，
+/// 非先款门槛为 `NOT_APPLICABLE`，已付低于门槛为 `BLOCKED`，否则 `SATISFIED`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn state() -> Document {
     doc! { "$switch": {
         "branches": [
@@ -75,6 +114,15 @@ pub(super) fn state() -> Document {
 
 /// 金额、比例须同时满足，取较高门槛。
 /// Decimal `$round` 与正式命令 `round_to_cent` 同为银行家舍入。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回最低金额与按比例舍入金额二者中的较大值表达式。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn required_amount() -> Document {
     doc! { "$max": [
         { "$ifNull": ["$_gate_revision.payment_term_snapshot.prepay_minimum_amount", { "$toDecimal": "0" }] },

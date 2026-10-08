@@ -57,6 +57,19 @@ fn resolve_sort_dir(sort_dir: Option<&str>) -> Result<SortDir> {
 }
 
 /// 按领域白名单归一化列表排序字段与方向。
+///
+/// 未提供或空白的排序字段直接使用 `DEFAULT_SORT_FIELD`，不再查白名单。
+///
+/// # 参数
+/// * `sort_by` - 请求中的排序字段。
+/// * `sort_dir` - 请求中的排序方向；去掉首尾空白后，空白、未提供或 `desc` 视为 `DEFAULT_SORT_DIR`。
+/// * `allowed_fields` - 领域允许的排序字段，与去空白后的 `sort_by` 精确匹配。
+///
+/// # 返回
+/// 返回静态字段名和 `SortDir`。显式 `asc` 为 `SortDir::Asc`。
+///
+/// # 错误
+/// `sort_by` 不在白名单时返回 `Error::ValidationError`。`sort_dir` 不是 `asc` 或 `desc` 时同样返回 `Error::ValidationError`。
 pub fn normalize_sort(
     sort_by: &Option<String>,
     sort_dir: &Option<String>,
@@ -100,6 +113,15 @@ impl<T> Default for PageView<T> {
 }
 
 /// 校验文本去除首尾空白后非空。
+///
+/// # 参数
+/// * `value` - 待校验文本。
+///
+/// # 返回
+/// 非空白时无返回值。
+///
+/// # 错误
+/// 去首尾空白后为空时返回 `validator::ValidationError`，代码为「不能为空白」。
 pub fn non_blank(value: &str) -> std::result::Result<(), validator::ValidationError> {
     if is_blank(value) {
         return Err(validator::ValidationError::new("不能为空白"));
@@ -108,16 +130,43 @@ pub fn non_blank(value: &str) -> std::result::Result<(), validator::ValidationEr
 }
 
 /// 归一化可选的文本查询条件。
+///
+/// # 参数
+/// * `value` - 原始查询文本。
+///
+/// # 返回
+/// 去掉首尾空白后仍非空时返回该文本；未提供或空白时返回 `None`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn normalized_text(value: Option<&str>) -> Option<String> {
     trimmed_query(value).map(str::to_string)
 }
 
-/// 返回有效页码；未提供时使用第一页。
+/// 返回页码；未提供时使用第一页。
+///
+/// # 参数
+/// * `page` - 请求页码。
+///
+/// # 返回
+/// 已提供时原样返回，包括 `0`；未提供时返回 `DEFAULT_PAGE`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn page_or_default(page: Option<u64>) -> u64 {
     page.unwrap_or(DEFAULT_PAGE)
 }
 
-/// 返回分页大小；未提供时使用默认大小。
+/// 返回分页大小；未提供时使用默认大小，并夹紧到允许区间。
+///
+/// # 参数
+/// * `page_size` - 请求的分页大小。
+///
+/// # 返回
+/// 未提供时返回 `DEFAULT_PAGE_SIZE`。已提供时夹紧到 `1..=MAX_PAGE_SIZE`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn page_size_or_default(page_size: Option<u32>) -> u32 {
     page_size.unwrap_or(DEFAULT_PAGE_SIZE).clamp(1, MAX_PAGE_SIZE)
 }

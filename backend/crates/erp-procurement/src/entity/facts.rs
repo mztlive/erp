@@ -134,6 +134,15 @@ pub enum ProductKind {
 
 impl ProductKind {
     /// 返回稳定代码，用于既有采购责任选择器。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 `PHYSICAL`、`VIRTUAL`、`OFFLINE_SERVICE` 或 `VOUCHER`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Physical => "PHYSICAL",
@@ -143,6 +152,15 @@ impl ProductKind {
         }
     }
     /// 返回原业务展示标签。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回「实物」「虚拟」「线下服务」或「卡券」。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(self) -> &'static str {
         match self {
             Self::Physical => "实物",
@@ -294,10 +312,29 @@ impl SupplierCommercialFact {
     }
 
     /// 返回提供方已经解释的付款条件原值。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 `payment_term_code` 的克隆，空字符串保持缺失语义。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn effective_payment_term_code(&self) -> String {
         self.payment_term_code.clone()
     }
+
     /// 返回提供方已经解释的经营类目。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回经营类目克隆；未登记时返回 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn effective_business_category(&self) -> Option<String> {
         self.business_category.clone()
     }

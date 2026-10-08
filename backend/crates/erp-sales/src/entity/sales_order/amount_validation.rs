@@ -17,7 +17,10 @@ use erp_core::{Error, Result};
 /// 返回 `(含税合计, 不含税合计, 税额合计)`；空集合返回保留两位小数的 `0.00`。
 ///
 /// # 错误
-/// 无；金额值对象负责保持精度和范围。
+/// 不返回错误。金额值对象负责保持精度和范围。
+///
+/// # Panics
+/// 静态字面量 `0.00` 无法解析为金额时 panic。该字面量由代码固定，用于构造零金额。
 pub(crate) fn sum_line_amounts(
     amounts: impl IntoIterator<Item = (Amount, Amount, Amount)>,
 ) -> (Amount, Amount, Amount) {

@@ -8,8 +8,18 @@ use super::{BpmWorkflowRepository, CasWriteOutcome, NODE_DEFINITIONS, TRANSITION
 impl<'a> BpmWorkflowRepository<'a> {
     /// 以 `id + DRAFT + expected_definition_lock_version` 整组替换草稿图。
     ///
+    /// # 参数
+    /// * `definition` - 待写回的草稿定义。
+    /// * `nodes` - 替换后的节点定义。
+    /// * `transitions` - 替换后的连线定义。
+    /// * `expected_definition_lock_version` - 草稿定义的预期锁版本。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 定义 CAS 未应用时原样返回该分类且不改子图；应用成功后返回同一 [`CasWriteOutcome::Applied`]。
+    ///
     /// # 错误
-    /// 元数据越界或 MongoDB 写入失败时返回错误。
+    /// 元数据越界、序列化失败或 MongoDB 写入失败时返回错误。
     pub async fn replace_draft_graph(
         &self,
         definition: &ApprovalProcessDefinition,
@@ -35,8 +45,18 @@ impl<'a> BpmWorkflowRepository<'a> {
 
     /// 先退役旧发布版本，再把草稿发布为当前唯一 `PUBLISHED`。
     ///
+    /// # 参数
+    /// * `definition` - 待发布的草稿定义。
+    /// * `previous` - 需要退役的当前发布版本；没有时跳过退役。
+    /// * `expected_definition_lock_version` - 草稿的预期锁版本。
+    /// * `expected_previous_lock_version` - 旧发布的预期锁版本；`None` 时用 `previous` 自身的锁版本。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 旧发布 CAS 未应用时返回该分类且不发布草稿；否则返回草稿发布的 CAS 分类。
+    ///
     /// # 错误
-    /// 元数据越界或 MongoDB 写入失败时返回错误。
+    /// 元数据越界、序列化失败或 MongoDB 写入失败时返回错误。
     pub async fn publish_and_retire_previous(
         &self,
         definition: &ApprovalProcessDefinition,

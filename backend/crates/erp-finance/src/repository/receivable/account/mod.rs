@@ -138,8 +138,19 @@ impl Default for ReceivableAccountFilter {
 impl QueryFilter for ReceivableAccountFilter {
     /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回查询条件文档。
+    /// 返回查询条件文档。`keyword` 为 `Some` 时，对 `id`、`sales_order_id`、
+    /// `customer_id`、`counterparty_party_id` 做字面量模糊匹配，并在
+    /// `keyword_sales_order_ids`、`keyword_party_ids` 非空时分别按对应字段
+    /// `$in`，这些条件取 `$or`。有值时等值匹配 `account_id`（写入 `id`）、
+    /// `customer_id`、`counterparty_party_id`、`status`、`sales_order_id`。
+    /// `keyword_ids` 为 `Some` 时与上述条件用 `$and` 再按 `id` 取交集，空集合匹配零行。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
         if let Some(keyword) = self.keyword.as_deref() {
@@ -185,8 +196,14 @@ impl QueryFilter for ReceivableAccountFilter {
 impl Pagination for ReceivableAccountFilter {
     /// 返回页码与单页条数。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 返回 `(page, page_size)` 元组。
+    /// 返回 `(page, page_size)` 元组。`page` 原样返回，`page_size` 由 `u32` 转为 `u64`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
     }

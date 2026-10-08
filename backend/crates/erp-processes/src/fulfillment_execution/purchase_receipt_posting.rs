@@ -227,6 +227,16 @@ struct MongoReceiptPosting<'a> {
 #[async_trait::async_trait]
 impl ReceiptPostingSteps for MongoReceiptPosting<'_> {
     /// 执行指定过账步骤；所有数据库操作继续复用调用方事务。
+    ///
+    /// # 参数
+    /// * `step` - 入库行下标，或入库标记、任务、采购进度、仓发草稿、审计之一。
+    /// * `session` - 调用方事务执行器；本步不另开事务。
+    ///
+    /// # 返回
+    /// 该步写入完成。
+    ///
+    /// # 错误
+    /// 行过账、入库标记、履约任务、采购进度、仓发草稿或审计失败时返回原错误。
     async fn apply(&mut self, step: ReceiptPostingStep, session: &mut dyn Executor) -> Result<()> {
         let db = self.db;
         let receipt = &mut *self.receipt;

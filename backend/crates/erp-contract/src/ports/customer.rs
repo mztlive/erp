@@ -1,4 +1,4 @@
-//! Consumer ports for customer existence, numbers and assignment visibility.
+//! 客户存在性、编号与归属可见性的消费方端口。
 
 use std::collections::HashMap;
 
@@ -36,26 +36,29 @@ pub struct CustomerAccountFact {
 /// Port contract uses to read customer identity without depending on `erp-customer`.
 #[async_trait]
 pub trait CustomerFactsPort: Send + Sync {
-    /// Load one undeleted customer role.
+    /// 读取一条未删除的客户角色。
     ///
-    /// # Parameters
-    /// * `customer_id` - customer role id
+    /// # 参数
+    /// * `customer_id` - 客户角色 ID。
     ///
-    /// # Returns
-    /// `None` when the customer does not exist or is deleted.
+    /// # 返回
+    /// 客户不存在或已删除时返回 `None`。
     ///
-    /// # Errors
-    /// Adapter query failures.
+    /// # 错误
+    /// 适配器查询失败时返回对应错误。
     async fn find_by_id(&self, customer_id: &CustomerAccountId) -> Result<Option<CustomerAccountFact>>;
 
-    /// Load undeleted customer roles by id. Missing ids are omitted.
+    /// 按 ID 读取未删除的客户角色。缺失的 ID 省略。
     ///
-    /// # Parameters
-    /// * `customer_ids` - customer role ids
-    /// * `executor` - caller executor used to validate source existence
+    /// # 参数
+    /// * `customer_ids` - 客户角色 ID。
+    /// * `executor` - 调用方执行器，用于核对来源是否存在。
     ///
-    /// # Errors
-    /// Adapter query failures.
+    /// # 返回
+    /// 仍存在的客户事实。缺失的 ID 不出现。
+    ///
+    /// # 错误
+    /// 适配器查询失败时返回对应错误。
     async fn find_by_ids(
         &self,
         customer_ids: &[CustomerAccountId],

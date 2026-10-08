@@ -16,6 +16,15 @@ pub struct SupplierApiService {
 }
 impl SupplierApiService {
     /// 绑定供应链本域持久化。
+    ///
+    /// # 参数
+    /// * `db` - 供应链数据库。
+    ///
+    /// # 返回
+    /// 返回只持有数据库的服务。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }

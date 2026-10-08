@@ -69,7 +69,7 @@ impl PurchaseFulfillmentEligibility {
     /// 未启用门槛或已达到全部门槛时返回 `Ok(())`。
     ///
     /// # 错误
-    /// 有效付款低于冻结金额或比例门槛时返回业务规则错误。
+    /// 已启用先款门槛但金额与比例门槛都未冻结，或有效付款低于冻结金额或比例门槛时返回业务规则错误。
     pub fn ensure_prepayment_satisfied(
         snapshot: &PaymentTermSnapshot,
         gross_amount: Amount,
@@ -145,8 +145,14 @@ pub enum PurchaseReceiptState {
 impl PurchaseReceiptState {
     /// 返回状态的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Draft => "草稿",
@@ -157,8 +163,14 @@ impl PurchaseReceiptState {
 
     /// 返回状态的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Draft => "DRAFT",
@@ -169,8 +181,14 @@ impl PurchaseReceiptState {
 
     /// 判断是否可编辑（仅草稿）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 草稿状态返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_editable(&self) -> bool {
         matches!(self, Self::Draft)
     }
@@ -178,6 +196,16 @@ impl PurchaseReceiptState {
 
 impl DocumentState for PurchaseReceiptState {
     /// 固定邻接矩阵（§7.5 定向链，`REVERSED` 为不可逆终态）。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// `Draft` 只允许进入 `Posted`；`Posted` 只允许进入 `Reversed`；
+    /// `Reversed` 没有后继。
+    ///
+    /// # 错误
+    /// 不返回错误。
     fn allowed_next(self) -> &'static [Self] {
         match self {
             Self::Draft => &[Self::Posted],
@@ -211,7 +239,7 @@ impl QualityResult {
     /// 正数时返回部分合格。
     ///
     /// # 错误
-    /// 无；数量非负与到货数量守恒由入库行构造器统一校验。
+    /// 不返回错误。数量非负与到货数量守恒由入库行构造器统一校验。
     pub fn from_quantities(qualified_quantity: Quantity, rejected_quantity: Quantity) -> Self {
         if rejected_quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
             Self::Passed
@@ -224,8 +252,14 @@ impl QualityResult {
 
     /// 返回结果的中文展示名。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回面向用户的中文标签。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
             Self::Passed => "合格",
@@ -236,8 +270,14 @@ impl QualityResult {
 
     /// 返回结果的稳定代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回用于持久化与查询的稳定字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Passed => "PASSED",
@@ -387,7 +427,10 @@ impl PurchaseReceipt {
     /// * `received` - 按采购版本行（强类型主键）汇总的累计合格收货
     ///
     /// # 返回
-    /// 全部有数量行均收满时返回 `Completed`，否则返回 `Partial`。
+    /// 有数量的版本行数量相加为应到货合计；`revision_lines` 里能在 `received` 命中的数量相加为累计收货（没有数量的行若在映射中也计入）。应到货合计大于零且累计收货不低于应到货合计时返回 `Completed`，否则返回 `Partial`。比较的是合计，不是逐行收满。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn fulfillment_progress(
         revision_lines: &[PurchaseOrderRevisionLine],
         received: &HashMap<PurchaseOrderRevisionLineId, Quantity>,
@@ -417,10 +460,10 @@ impl PurchaseReceipt {
     /// * `posted_by` - 仓储经办人（账号或系统身份）
     ///
     /// # 返回
-    /// 迁移成功返回 `Ok(())`。
+    /// 迁移成功返回 `Ok(())`。已过账再次过账按幂等成功，并覆盖过账时间与经办人。
     ///
     /// # 错误
-    /// 当前状态不允许迁移（非草稿），或经办人为空/超长时返回错误。
+    /// 已冲正不能过账，或经办人为空或超长时返回错误。
     pub fn mark_posted(&mut self, posted_at: Instant, posted_by: impl Into<String>) -> Result<()> {
         ensure_transition(self.status, PurchaseReceiptState::Posted)?;
         let posted_by =
@@ -436,11 +479,14 @@ impl PurchaseReceipt {
     /// `REVERSED` 表示存在正式反向事实（冲正流水/采购退货），不删除原事实
     /// （§4.5.1、§7.5）；反向事实由 P3 形成。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
-    /// 迁移成功返回 `Ok(())`。
+    /// 迁移成功返回 `Ok(())`。已冲正再次冲正按幂等成功。
     ///
     /// # 错误
-    /// 当前状态不允许迁移（非已过账）时返回错误。
+    /// 草稿不能冲正时返回错误。
     pub fn reverse(&mut self) -> Result<()> {
         ensure_transition(self.status, PurchaseReceiptState::Reversed)?;
         self.status = PurchaseReceiptState::Reversed;
@@ -449,8 +495,14 @@ impl PurchaseReceipt {
 
     /// 判断当前状态是否可编辑。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 草稿状态返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_editable(&self) -> bool {
         self.status.is_editable()
     }
@@ -547,6 +599,9 @@ impl PurchaseReceiptLine {
 
     /// 返回本行计入累计有效收货上限的数量。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 返回合格数量与不合格数量之和。
     ///
@@ -567,7 +622,7 @@ impl PurchaseReceiptLine {
     /// 关联一致、非物流费用行且累计不超收时返回 `Ok(())`。
     ///
     /// # 错误
-    /// 采购版本行关联不一致、没有可收货数量或累计超收时返回错误。
+    /// 采购版本行关联不一致、没有可收货数量、累计超收，或合格与不合格数量之和超出统一精度时返回错误。
     pub fn ensure_within_revision(
         &self,
         revision_line: &PurchaseOrderRevisionLine,
@@ -592,7 +647,7 @@ impl PurchaseReceiptLine {
     /// * `purchase_line_total` - 当前采购版本行总数量
     ///
     /// # 返回
-    /// 返回与分配集合一一对应、合计等于本行合格数量的预占份额。
+    /// 返回与分配集合一一对应的预占份额；非空时最后一笔吸收尾差，合计等于本行合格数量。分配集合为空时返回空向量，不另报错。
     ///
     /// # 错误
     /// 采购行数量非正或份额超出统一数量精度时返回错误。

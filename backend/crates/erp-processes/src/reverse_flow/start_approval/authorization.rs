@@ -150,6 +150,20 @@ async fn ensure_financial_initiator(
     }
     Ok(())
 }
+
+/// 在读取具体退款或冲正来源前确认账号仍可提交。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `rbac` - 共享 RBAC。
+/// * `actor` - 待重验的操作人。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 账号仍有效时无返回值。
+///
+/// # 错误
+/// 账号失效时返回 `Forbidden`。授权查询失败时返回对应错误。
 pub(super) async fn ensure_actor_active(
     db: &Database,
     rbac: &SharedRbacService,
@@ -158,6 +172,23 @@ pub(super) async fn ensure_actor_active(
 ) -> Result<()> {
     ensure_active(&MongoReplayAuthorization { db, rbac }, actor, executor).await
 }
+
+/// 在同一事务内重验账号、提交权限、资金来源可读性和原经办职责。
+///
+/// # 参数
+/// * `db` - 数据库。
+/// * `rbac` - 共享 RBAC。
+/// * `actor` - 待重验的操作人。
+/// * `kind` - 退款或冲正单据类型。
+/// * `permission` - 提交动作权限码。
+/// * `id` - 单据主键。
+/// * `executor` - 调用方事务执行器。
+///
+/// # 返回
+/// 授权通过时无返回值。
+///
+/// # 错误
+/// 账号失效、缺少提交权限、无权读取资金来源、经办人不符或仓储失败时返回对应错误。
 pub(super) async fn ensure_replay_authorized(
     db: &Database,
     rbac: &SharedRbacService,
@@ -172,6 +203,18 @@ pub(super) async fn ensure_replay_authorized(
 
 impl ReturnsProcess {
     /// 已提交命令回放仍在新事务内重验当前职责和资金来源，保持零写入。
+    ///
+    /// # 参数
+    /// * `kind` - 退款或冲正单据类型。
+    /// * `permission` - 提交动作权限码。
+    /// * `id` - 已提交单据主键。
+    /// * `actor` - 回放操作人。
+    ///
+    /// # 返回
+    /// 重验通过时无返回值。不写入业务数据。
+    ///
+    /// # 错误
+    /// 事务内授权失败或事务本身失败时返回对应错误。
     pub(in crate::reverse_flow) async fn authorize_refund_replay(
         &self,
         kind: DocumentType,

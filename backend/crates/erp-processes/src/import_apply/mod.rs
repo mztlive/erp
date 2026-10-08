@@ -1,4 +1,4 @@
-//! Named import-apply process: batch apply, execution, confirmation and supersede.
+//! 跨域导入应用流程：批次应用、执行、确认与取代。
 
 use mongodb::Database;
 
@@ -25,27 +25,39 @@ const IMPORT_CONFIRMATION_ORGANIZATION: &str = "company";
 const IMPORT_CONFIRMATION_COMMAND_PREFIX: &str = "import-confirmation-command-";
 const IMPORT_EXECUTION_COMMAND_PREFIX: &str = "import-execution-command-";
 
-/// Cross-domain import apply process service.
+/// 跨域导入应用流程服务。
 ///
-/// Holds the root transaction for apply, execution and confirmation commands.
+/// 持有应用、执行与确认命令的根事务。
 pub struct ImportApplyService {
     db: Database,
 }
 
 impl ImportApplyService {
-    /// Create an import-apply process bound to `db`.
+    /// 创建绑定到 `db` 的导入应用流程。
     ///
-    /// # Parameters
-    /// * `db` - MongoDB database handle shared by domain repositories
+    /// # 参数
+    /// * `db` - 各领域仓储共用的 MongoDB 数据库。
     ///
-    /// # Returns
-    /// Process service that reuses one Executor per command.
+    /// # 返回
+    /// 返回流程服务。单条命令复用同一个执行器。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(db: Database) -> Self {
         Self { db }
     }
 }
 
-/// Process module name.
+/// 返回流程模块名。
+///
+/// # 参数
+/// 无。
+///
+/// # 返回
+/// 返回稳定模块名 `import_apply`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn process_name() -> &'static str {
     "import_apply"
 }

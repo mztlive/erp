@@ -1,4 +1,4 @@
-//! Facts required by sales order rules without depending on provider domains.
+//! 销售单规则所需事实，不依赖供方领域。
 
 use async_trait::async_trait;
 use erp_core::common::time::BusinessDate;
@@ -22,9 +22,17 @@ pub struct ReceivableBalanceFact {
 /// Supply balances within the caller's transaction after sales existence has been checked.
 #[async_trait]
 pub trait SalesMoneyProgressPort: Send + Sync {
-    /// Read every undeleted account for the sales order, without aggregating away zero accounts.
+    /// 读取该销售单全部未删除应收账户，零余额账户不得被汇总掉。
     ///
-    /// Provider failures propagate before any sales progress write.
+    /// # 参数
+    /// * `sales_order_id` - 销售单身份。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回逐账户余额。空列表表示没有账户，与余额为零的账户不同。
+    ///
+    /// # 错误
+    /// 供方读取失败时原样传播，且发生在任何销售进度写入之前。
     async fn receivable_balances(
         &self,
         sales_order_id: &SalesOrderId,
@@ -35,9 +43,18 @@ pub trait SalesMoneyProgressPort: Send + Sync {
 /// Exact SKU and revision identities accepted by the current catalog.
 #[async_trait]
 pub trait SellableSkuPort: Send + Sync {
-    /// Return qualified pairs for the requested business date using the caller's executor.
+    /// 按请求的业务日返回当前目录接受的 SKU 与修订配对。
     ///
-    /// Missing pairs remain absent; repository failures must propagate unchanged in class.
+    /// # 参数
+    /// * `refs` - 待核对的 SKU 与修订配对。
+    /// * `date` - 资格业务日。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回合格配对；未合格的配对保持不出现。
+    ///
+    /// # 错误
+    /// 仓储失败按原错误类别传播。
     async fn qualified_refs(
         &self,
         refs: &[(String, String)],

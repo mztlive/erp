@@ -34,6 +34,9 @@ impl QualityAccess {
     ///
     /// # 返回
     /// 返回无授权缓存的解析器，构造不执行 I/O。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn new(
         db: Database,
         rbac: erp_identity::SharedRbacService,
@@ -89,6 +92,16 @@ impl QualityAccess {
 }
 
 /// 现任口径无范围：客户侧既无角色规则，历史参与也不补充现任客户集合。
+///
+/// # 参数
+/// * `customer` - 已解析的客户范围事实
+/// * `scope` - 客户读取条件
+///
+/// # 返回
+/// 两者都为空时返回 `true`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn no_current_scope(customer: &CustomerResolvedScope, scope: &CustomerReadScope) -> bool {
     !customer.has_scope_rules() && scope.is_empty()
 }

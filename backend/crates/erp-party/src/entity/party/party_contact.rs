@@ -115,7 +115,7 @@ pub struct PartyContact {
 }
 
 impl fmt::Debug for PartyContact {
-    /// Redacted Debug：不输出手机号密文与指纹（明文字段永不进入 Debug 输出）。
+    /// 脱敏 `Debug`：不输出手机号密文与指纹（明文字段永不进入 `Debug` 输出）。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("PartyContact")
@@ -137,7 +137,7 @@ impl fmt::Debug for PartyContact {
 }
 
 impl fmt::Debug for PartyContactData {
-    /// Redacted Debug：手机号明文不进入任何输出。
+    /// 脱敏 `Debug`：手机号明文不进入任何输出。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("PartyContactData")
@@ -167,6 +167,9 @@ impl PartyContact {
     ///
     /// # 返回
     /// 返回指纹字符串。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn mobile_fingerprint(plain: &str, key: &[u8]) -> String {
         hmac_sha256_hex(key, normalize_mobile(plain).as_bytes())
     }
@@ -276,8 +279,14 @@ impl PartyContact {
 
     /// 判断联系人是否处于启用状态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 状态为 `Active` 时返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn is_active(&self) -> bool {
         self.status.is_active()
     }

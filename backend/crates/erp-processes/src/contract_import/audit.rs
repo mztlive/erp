@@ -10,6 +10,18 @@ use super::ContractImportProcess;
 use crate::audit::{AuditedCommand, AuditedWrite};
 use crate::{Error, Result};
 
+/// 按已登记动作构造业务事件上下文。
+///
+/// # 参数
+/// * `actor` - 已认证操作人。
+/// * `action` - 稳定动作代码。
+/// * `resource` - 资源类型代码。
+///
+/// # 返回
+/// 可供审计回执关联的事件上下文。
+///
+/// # 错误
+/// 动作未登记、资源类型不匹配，或操作人身份、动作元数据无效时返回校验错误。
 pub(super) fn context(actor: &AuditActor, action: &str, resource: &str) -> Result<BusinessEventContext> {
     Ok(BusinessEventContext::new(actor.clone(), registered_action(action, resource)?)?)
 }

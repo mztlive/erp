@@ -349,6 +349,15 @@ fn open_fulfillment_kind(fields: &WorkItemFields) -> Option<ObjectKind> {
 }
 
 /// 收集已授权开放履约任务的精确对象键，不采用请求参数或来源单号。
+///
+/// # 参数
+/// * `fields` - 已授权的工作项投影。
+///
+/// # 返回
+/// 返回开放履约任务的对象种类与业务对象 ID。完成、历史或非履约任务不进入集合。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn current_fulfillment_keys(fields: &[WorkItemFields]) -> HashSet<(ObjectKind, String)> {
     fields
         .iter()
@@ -370,6 +379,16 @@ fn applicable_purchase_id<'a>(
 }
 
 /// 当前页同一采购单只读取一次；版本过期、历史和无实际关联的对象不参加。
+///
+/// # 参数
+/// * `fields` - 已授权的工作项投影。
+/// * `sources` - 已复验的当前履约草稿关联。
+///
+/// # 返回
+/// 返回仍指向当前草稿版本且任务已通过复验的采购单 ID，按字符串去重。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn current_purchase_ids(
     fields: &[WorkItemFields],
     sources: &FulfillmentSupplySources,
@@ -385,6 +404,15 @@ pub(super) fn current_purchase_ids(
 }
 
 /// 只保留供给合同提供的业务文案；内部供给 ID、代码和版本不进入界面文字。
+///
+/// # 参数
+/// * `warnings` - 一张采购单的当前供给提示。
+///
+/// # 返回
+/// 把非空且去重后的提示，以及未知关联时的关联说明，用中文分号拼成一段。没有可展示文字时返回 `None`。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn supply_warning_summary(warnings: &PurchaseSupplyWarnings) -> Option<String> {
     let mut seen = HashSet::new();
     let messages = warnings
@@ -399,6 +427,18 @@ pub(super) fn supply_warning_summary(warnings: &PurchaseSupplyWarnings) -> Optio
 }
 
 /// 仅追加非数值提示段，保持任务影响、金额、状态和付款历史的正式事实。
+///
+/// # 参数
+/// * `fields` - 已授权的当前页字段；就地追加简报段。
+/// * `sources` - 已复验的履约草稿关联。
+/// * `warnings` - 采购单 ID 到当前供给提示。
+/// * `owner_names` - 采购责任人 ID 到显示姓名。
+///
+/// # 返回
+/// 无返回值。仅对版本与任务复验都通过、且提示有文案的行追加「当前采购负责人」和「供给影响提示」。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn apply_supply_warning_briefs(
     fields: &mut [WorkItemFields],
     sources: &FulfillmentSupplySources,
@@ -425,6 +465,16 @@ pub(super) fn apply_supply_warning_briefs(
 }
 
 /// 提示必须指向真实当前采购责任；缺失姓名时明确待核验，不展示内部身份。
+///
+/// # 参数
+/// * `warnings` - 一张采购单的当前供给提示。
+/// * `owner_names` - 采购责任人 ID 到显示姓名。
+///
+/// # 返回
+/// 返回去空白后的姓名；责任人或姓名缺失、或姓名为空白时返回「采购负责人信息待核验」。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn purchase_owner_label<'a>(
     warnings: &PurchaseSupplyWarnings,
     owner_names: &'a HashMap<String, String>,

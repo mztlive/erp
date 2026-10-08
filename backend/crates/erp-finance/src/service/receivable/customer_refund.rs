@@ -108,6 +108,17 @@ pub struct CustomerRefundPosting {
     pub occurred_at: Instant,
 }
 /// 在调用方指定执行器中读取退款来源；预读不增加Posted守卫。
+///
+/// # 参数
+/// * `db` - 财务领域数据库。
+/// * `id` - 原客户回款主键。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 返回已存在的客户回款，不检查是否已过账。
+///
+/// # 错误
+/// 回款不存在时返回 `NotFound`；仓储读取失败时返回对应错误。
 pub async fn load_customer_refund_source(
     db: &Database,
     id: &str,
@@ -119,6 +130,17 @@ pub async fn load_customer_refund_source(
         .ok_or_else(|| Error::NotFound("原客户回款不存在".to_string()))
 }
 /// 最终退款在原存在性、Posted顺序读取来源；不复用冲正的不同错误文案。
+///
+/// # 参数
+/// * `db` - 财务领域数据库。
+/// * `id` - 原回款主键。
+/// * `executor` - 调用方执行器。
+///
+/// # 返回
+/// 返回状态为 `Posted` 的客户回款。
+///
+/// # 错误
+/// 回款不存在时返回 `NotFound`；状态不是已过账时返回 `BusinessLogicError`；仓储读取失败时返回对应错误。
 pub async fn load_posted_refund_receipt(
     db: &Database,
     id: &CustomerReceiptId,
@@ -136,8 +158,18 @@ pub async fn load_posted_refund_receipt(
 }
 /// 写入反向核销分配、冲减进度与减少分录。
 ///
+/// # 参数
+/// * `db` - 财务领域数据库。
+/// * `refund` - 客户退款过账事实。
+/// * `receipt` - 已过账的原回款；本函数不改其状态。
+/// * `actor_id` - 执行人。
+/// * `session` - 调用方事务执行器。
+///
+/// # 返回
+/// 反向分配、冲减进度与减少分录写入完成时无返回值。
+///
 /// # 错误
-/// 跨主体、超额冲减或仓储失败时返回错误。
+/// 分录或账户缺失、跨主体、超额冲减、实体构造失败或仓储失败时返回对应错误。
 pub async fn persist_refund_offsets_and_reversals(
     db: &Database,
     refund: &CustomerRefundPosting,

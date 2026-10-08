@@ -1,6 +1,6 @@
-//! Collection-scoped aliases for [`persistence_core::Repository`].
+//! [`persistence_core::Repository`] 的集合作用域别名。
 //!
-//! Domain-specific methods are extension traits on the generic repository.
+//! 领域专用方法是通用仓储上的扩展 trait。
 
 pub type LegacyImportBatchRepository<'a> =
     persistence_core::Repository<'a, crate::entity::legacy_import::LegacyImportBatch>;

@@ -17,6 +17,9 @@ use super::super::dto::{
 ///
 /// # 返回
 /// 返回有界只读审批结构。
+///
+/// # 错误
+/// 不返回错误。
 pub fn document_approval_view(
     binding: Option<&ApprovalDefinitionBinding>,
     instance: Option<DocumentApprovalInstanceView>,

@@ -13,7 +13,14 @@ use crate::{Error, Result};
 impl SupplierProfileService {
     /// 执行有界导入并返回每一行结果；不持久化上传中的明文敏感资料。
     ///
-    /// # Errors
+    /// # 参数
+    /// * `request` - 导入批次。
+    /// * `actor` - 当前操作人。
+    ///
+    /// # 返回
+    /// 与输入行对应的导入结果。单行失败写入该行结果，不中断后续行。
+    ///
+    /// # 错误
     /// 批次为空或超过 500 行时拒绝整个请求；业务行错误在结果中返回。
     pub async fn import(
         &self,

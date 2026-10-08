@@ -222,8 +222,14 @@ impl PurchaseOrderSubmission {
     /// 仅识别 `SUB-{n}`；`DRAFT-*` 草稿和其它旧格式不属于正式提交，返回
     /// `None`。该序号用于区分首次提交与撤回后的再次提交，不表达审批轮次。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 正式提交号中的 `u32` 序号，或 `None`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn formal_sequence(&self) -> Option<u32> {
         parse_sequence(&self.submission_no, "SUB-")
     }
@@ -309,7 +315,7 @@ impl PurchaseOrderSubmission {
     /// 提交成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 状态不是草稿时返回错误。
+    /// 状态不是草稿，或提交人为空、超长时返回错误。
     pub fn submit(&mut self, submitted_at: Instant, submitted_by: impl Into<String>) -> Result<()> {
         self.ensure_draft()?;
         self.status = SubmissionStatus::Pending;
@@ -336,7 +342,7 @@ impl PurchaseOrderSubmission {
     /// 记录成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 状态不是待审核时返回错误。
+    /// 状态不是待审核，审核人或驳回原因代码为空或超长，或审核说明超长时返回错误。
     pub fn record_review(
         &mut self,
         decision: PurchaseOrderReviewDecision,
@@ -375,6 +381,9 @@ impl PurchaseOrderSubmission {
 
     /// 校验提交仍处于待审核状态。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 待审核状态返回 `Ok(())`。
     ///
@@ -394,14 +403,23 @@ impl PurchaseOrderSubmission {
     ///
     /// # 返回
     /// 审核人与已记录提交人不同时返回 `true`；未记录提交人也返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn reviewer_is_separated(&self, reviewer_id: &str) -> bool {
         self.submitted_by.as_deref() != Some(reviewer_id)
     }
 
     /// 返回当前提交在对象中心使用的内容来源代码。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 草稿返回 `DRAFT`，其他不可变提交状态返回 `SUBMISSION`。
+    ///
+    /// # 错误
+    /// 不返回错误。
     pub fn content_source(&self) -> &'static str {
         if self.status == SubmissionStatus::Draft { "DRAFT" } else { "SUBMISSION" }
     }
@@ -416,6 +434,9 @@ impl PurchaseOrderSubmission {
     ///
     /// # 错误
     /// 任一行不属于本提交，或含税、不含税、税额任一汇总不一致时返回领域错误。
+    ///
+    /// # Panics
+    /// 金额零值无法构造时 panic；零金额是合法金额，panic 只表示金额类型不变量被破坏。
     pub fn ensure_line_totals(&self, lines: &[PurchaseOrderSubmissionLine]) -> Result<()> {
         let mut gross = Amount::try_from(rust_decimal::Decimal::ZERO).expect("零金额合法");
         let mut net = gross;
@@ -436,11 +457,14 @@ impl PurchaseOrderSubmission {
 
     /// 标记因重新提交失效（§6.6：修改内容必须新建提交并使旧复核失效）。
     ///
+    /// # 参数
+    /// 无。
+    ///
     /// # 返回
     /// 标记成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 提交已通过并已形成正式事实时不允许失效，返回错误（由 P3 校验下游事实）。
+    /// 状态已是 `Approved` 时返回领域错误。本方法不检查是否已经形成下游正式事实。
     pub fn mark_superseded(&mut self) -> Result<()> {
         if self.status == SubmissionStatus::Approved {
             return Err(Error::from("已通过的提交不得标记失效"));
@@ -450,6 +474,9 @@ impl PurchaseOrderSubmission {
     }
 
     /// 校验当前状态为草稿。
+    ///
+    /// # 参数
+    /// 无。
     ///
     /// # 返回
     /// 草稿状态返回 `Ok(())`。

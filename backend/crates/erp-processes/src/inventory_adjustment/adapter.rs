@@ -28,13 +28,16 @@ use crate::{Error, Result};
 /// 详情最近审批历史条数上限。完整历史走分页端点。
 pub const RECENT_HISTORY_LIMIT: usize = 8;
 
-/// Map a local inventory snapshot fact to the workflow payload wire shape.
+/// 把库存拥有的冻结快照事实映射为工作流载荷形状。
 ///
-/// # Parameters
-/// * `fact` - inventory-owned frozen snapshot
+/// # 参数
+/// * `fact` - 库存领域持有的冻结快照。
 ///
-/// # Returns
-/// Workflow `ApprovalSubjectSnapshotPayload` with original field/serde values.
+/// # 返回
+/// 返回保留原字段与序列化取值的 `ApprovalSubjectSnapshotPayload`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn workflow_snapshot_from_inventory(fact: StockAdjustmentSnapshotFact) -> ApprovalSubjectSnapshotPayload {
     ApprovalSubjectSnapshotPayload {
         document_no: fact.document_no,
@@ -76,6 +79,9 @@ pub struct StockAdjustmentAdapter {
 }
 
 /// 返回试点类型的完整适配器登记。
+///
+/// # 参数
+/// 无。
 ///
 /// # 返回
 /// 返回已校验完整性的规格与显式字段声明。
@@ -124,10 +130,13 @@ fn adapter_from_spec(spec: ApprovalAdapterSpec) -> Result<StockAdjustmentAdapter
 /// 为库存调整单构造唯一 `bpm::SubjectRef`。
 ///
 /// # 参数
-/// * `business_object_id` - 调整单主键
+/// * `business_object_id` - 调整单主键。
+///
+/// # 返回
+/// 返回库存调整单据类型下的主体引用。
 ///
 /// # 错误
-/// 主键为空或超长时返回校验错误。
+/// 主键为空或超长时返回 `ValidationError`。
 pub fn stock_adjustment_subject_ref(business_object_id: &str) -> Result<SubjectRef> {
     erp_workflow::entity::approval_integration::subject_ref_for(
         DocumentType::StockAdjustment,
@@ -138,8 +147,14 @@ pub fn stock_adjustment_subject_ref(business_object_id: &str) -> Result<SubjectR
 
 /// 无已绑定定义的必须审批单据不得提交。
 ///
+/// # 参数
+/// * `binding` - 已加载的定义绑定；缺失时拒绝。
+///
+/// # 返回
+/// 绑定存在时返回其引用。
+///
 /// # 错误
-/// 绑定缺失时返回冲突。
+/// 绑定缺失时返回 `ConflictError`。
 pub fn require_frozen_binding(
     binding: Option<&ApprovalDefinitionBinding>,
 ) -> Result<&ApprovalDefinitionBinding> {
@@ -174,6 +189,9 @@ pub struct StockAdjustmentStartCommand {
 ///
 /// # 返回
 /// 返回不含定义 ID 或审批人的目标启动命令。
+///
+/// # 错误
+/// 不返回错误。
 pub fn stock_adjustment_start_command(
     adjustment_id: &str,
     subject_version: u32,
@@ -196,6 +214,9 @@ pub fn stock_adjustment_start_command(
 ///
 /// # 返回
 /// 返回 `START_APPROVAL`。
+///
+/// # 错误
+/// 不返回错误。
 pub fn start_approval_command_kind(
     _command: &StockAdjustmentStartCommand,
 ) -> bpm::model::types::ApprovalCommandKind {
@@ -205,11 +226,14 @@ pub fn start_approval_command_kind(
 /// 执行签署的库存调整领域动作。
 ///
 /// # 参数
-/// * `adjustment` - 业务实体
-/// * `action` - 合同强类型动作
+/// * `adjustment` - 待迁移状态的库存调整单。
+/// * `action` - 合同强类型动作。
+///
+/// # 返回
+/// 动作已作用到 `adjustment` 时无返回值。
 ///
 /// # 错误
-/// 动作不属于本类型或状态不允许时返回错误。
+/// 动作不属于本类型时返回 `ValidationError`；状态不允许时返回 `ConflictError`。
 pub fn execute_stock_adjustment_domain_action(
     adjustment: &mut StockAdjustment,
     action: ApprovalDomainAction,
@@ -228,7 +252,22 @@ pub fn execute_stock_adjustment_domain_action(
     }
 }
 
-/// 由绑定、运行摘要、历史和 actor-aware 提交/撤回令牌构造只读审批结构。
+/// 由绑定、运行摘要、历史和调用人提交/撤回令牌构造只读审批结构。
+///
+/// # 参数
+/// * `binding` - 冻结定义绑定；为空时定义摘要为空。
+/// * `instance` - 审批实例摘要；没有实例时为空。
+/// * `recent_history` - 最近历史条目。
+/// * `history_page` - 历史分页游标。
+/// * `status` - 调整单状态，用于投影允许动作。
+/// * `submit_command` - 当前调用人的提交令牌；为空表示不可提交。
+/// * `cancel_command` - 当前调用人的撤回令牌；为空表示不可撤回。
+///
+/// # 返回
+/// 返回只读 `DocumentApprovalView`。允许动作只在对应令牌存在时包含提交或撤回。
+///
+/// # 错误
+/// 不返回错误。
 pub(super) fn document_approval_view_with_history(
     binding: Option<&ApprovalDefinitionBinding>,
     instance: Option<DocumentApprovalInstanceView>,
