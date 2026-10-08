@@ -26,6 +26,8 @@ export type SettlementPartySearchComboboxProps = Omit<
     purpose?: PartySelectorPurpose
     noScopeLabel?: string
     selectedItem?: SettlementPartyComboboxItem
+    /** 已授权单据中的结算主体快照；只回显同一已选身份，目录错误仍保留。 */
+    selectedSnapshot?: SettlementPartyComboboxItem
     onItemChange?: (item?: SettlementPartyComboboxItem) => void
     /** 已选客户对应主体；空搜索时只列出该主体，输入关键词后仍可搜全部。 */
     restrictToPartyId?: string
@@ -35,6 +37,7 @@ export type SettlementPartySearchComboboxProps = Omit<
 export function SettlementPartySearchCombobox({
     purpose = "form",
     selectedItem: _selectedItem,
+    selectedSnapshot,
     onItemChange,
     emptyLabel,
     noScopeLabel,
@@ -61,10 +64,12 @@ export function SettlementPartySearchCombobox({
         enabled: Boolean(value),
         staleTime: STALE_TIME,
     })
+    const snapshot =
+        selectedSnapshot?.partyId === value ? selectedSnapshot : undefined
     const selectedRow =
         selected.isError || selected.isFetching
-            ? undefined
-            : (selected.data ?? undefined)
+            ? snapshot
+            : (selected.data ?? snapshot)
     const rows = [
         ...(list.isError || list.isFetching
             ? []

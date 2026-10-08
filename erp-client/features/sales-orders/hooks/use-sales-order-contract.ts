@@ -29,7 +29,7 @@ export function useSupplementSalesOrderContract(onSupplemented: () => void) {
                 title: "合同未补录",
                 description: getErrorMessage(
                     error,
-                    "请核对合同客户、结算主体和商业条款后重试",
+                    "请核对合同客户、付款、开票要求和税率后重试",
                 ),
                 type: "error",
             })

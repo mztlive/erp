@@ -100,6 +100,7 @@ export const previewContractImport = (id: string) =>
 export type ConfirmContractImport = {
     version: number
     fields: Record<string, string | null>
+    create_customer?: boolean
 }
 export const confirmContractImport = (input: {
     id: string

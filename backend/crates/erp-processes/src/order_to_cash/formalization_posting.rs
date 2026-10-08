@@ -2,17 +2,19 @@
 
 use async_trait::async_trait;
 use erp_audit::AuditLog;
-use erp_core::ids::SalesOrderId;
+use erp_core::common::time::Instant;
+use erp_core::ids::{PartyId, SalesOrderId, SalesOrderRevisionId};
+use erp_core::money::Amount;
+use erp_customer::CustomerExt;
 use erp_finance::entity::receivable::SalesBusinessTypeFact;
 use erp_finance::service::receivable::initial_account::{InitialReceivableInput, create_initial_receivable};
+use erp_sales::entity::sales_order::{BusinessType, SalesOrder};
 use erp_workflow::DocumentRegistryExt;
 use persistence_core::Executor;
 
 use super::formalize::{FormalizedSubmissionWrite, persist_procurement_work_items};
-#[cfg(test)]
-use crate::Error;
-use crate::Result;
 use crate::audit::persist_log;
+use crate::{Error, Result};
 
 /// Each variant is one existing side-effect boundary, in the original order below.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -114,34 +116,59 @@ impl PostingSteps for MongoPosting<'_> {
                 .await?;
             },
             Receivable => {
-                let order = &write.order;
-                create_initial_receivable(
-                    &write.db,
-                    InitialReceivableInput {
-                        business_type: match order.business_type {
-                            erp_sales::entity::sales_order::BusinessType::GoodsService => {
-                                SalesBusinessTypeFact::GoodsService
-                            },
-                            erp_sales::entity::sales_order::BusinessType::Voucher => {
-                                SalesBusinessTypeFact::Voucher
-                            },
-                        },
-                        sales_order_id: order.base.id.clone().into(),
-                        customer_id: order.customer_id.clone(),
-                        counterparty_party_id: order.settlement_party_id.clone(),
-                        source_sales_order_revision_id: write.aggregate.revision.base.id.clone().into(),
-                        gross_total: write.aggregate.revision.gross_amount,
-                        posted_at: write.now,
-                    },
-                    executor,
-                )
-                .await?;
+                post_receivable(write, executor).await?;
             },
             Audit => {
                 persist_log(&write.db, self.audit, executor).await?;
             },
         }
         Ok(())
+    }
+}
+
+/// 在销售生效的原事务中读取客户企业身份，形成对客户的应收。
+async fn post_receivable(write: &FormalizedSubmissionWrite, executor: &mut dyn Executor) -> Result<()> {
+    let order = &write.order;
+    let customer = write
+        .db
+        .customer_accounts()
+        .find_by_id(order.customer_id.as_ref(), executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("销售单客户不存在，无法形成应收".into()))?;
+    create_initial_receivable(
+        &write.db,
+        receivable_input(
+            order,
+            customer.party_id,
+            write.aggregate.revision.base.id.clone().into(),
+            write.aggregate.revision.gross_amount,
+            write.now,
+        ),
+        executor,
+    )
+    .await?;
+    Ok(())
+}
+
+/// 将销售事实与独立读取的客户主体映射为财务输入。
+fn receivable_input(
+    order: &SalesOrder,
+    customer_party: PartyId,
+    revision_id: SalesOrderRevisionId,
+    gross_total: Amount,
+    posted_at: Instant,
+) -> InitialReceivableInput {
+    InitialReceivableInput {
+        business_type: match order.business_type {
+            BusinessType::GoodsService => SalesBusinessTypeFact::GoodsService,
+            BusinessType::Voucher => SalesBusinessTypeFact::Voucher,
+        },
+        sales_order_id: order.base.id.clone().into(),
+        customer_id: order.customer_id.clone(),
+        counterparty_party_id: customer_party,
+        source_sales_order_revision_id: revision_id,
+        gross_total,
+        posted_at,
     }
 }
 
@@ -167,6 +194,11 @@ pub(super) async fn post(
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use erp_core::ids::CustomerAccountId;
+    use erp_sales::entity::sales_order::{OriginSystem, SalesOrderData};
+
     use super::*;
     struct TestExecutor {
         _identity: u8,
@@ -205,6 +237,41 @@ mod tests {
             Receivable,
             Audit,
         ]
+    }
+
+    #[test]
+    fn receivable_debtor_uses_customer_company_independently_of_our_settlement_company() {
+        for business_type in [BusinessType::GoodsService, BusinessType::Voucher] {
+            let order = SalesOrder::new(
+                SalesOrderId::new("sale-1"),
+                SalesOrderData {
+                    business_org_unit_id: "org-1".into(),
+                    sales_owner_user_id: "sales-1".into(),
+                    order_no: "SO-1".into(),
+                    business_type,
+                    origin_system: OriginSystem::Erp,
+                    source_identity_id: None,
+                    customer_id: CustomerAccountId::new("customer-1"),
+                    contract_id: None,
+                    settlement_party_id: PartyId::new("our-other-company"),
+                    source_status_code: None,
+                },
+                "sales-1",
+            )
+            .unwrap();
+            let input = receivable_input(
+                &order,
+                PartyId::new("customer-company"),
+                SalesOrderRevisionId::new("revision-1"),
+                Amount::from_str("123.45").unwrap(),
+                Instant::from_unix_secs(1_800_000_000),
+            );
+            assert_eq!(input.customer_id, order.customer_id);
+            assert_eq!(input.counterparty_party_id.as_ref(), "customer-company");
+            assert_ne!(input.counterparty_party_id, order.settlement_party_id);
+            assert_eq!(input.source_sales_order_revision_id.as_ref(), "revision-1");
+            assert_eq!(input.gross_total, Amount::from_str("123.45").unwrap());
+        }
     }
 
     #[tokio::test]

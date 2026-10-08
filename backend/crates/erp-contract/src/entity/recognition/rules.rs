@@ -59,7 +59,7 @@ pub struct ValidatedFields {
 
 impl ContractValues {
     pub(super) fn validate_values(&self) -> Result<ValidatedFields> {
-        for field in [ContractNo, CustomerName, CompanyName, SettlementName, BusinessScope] {
+        for field in [ContractNo, CustomerName, CompanyName, BusinessScope] {
             self.required(field)?;
         }
         let (payment_code, payment_name) = self.payment()?;
@@ -152,9 +152,20 @@ pub fn match_identity(
     credit: Option<&str>,
     candidates: Vec<MatchedIdentity>,
 ) -> Result<MatchedIdentity> {
-    let mut matches = candidates.into_iter().filter(|item| item.legal_name.trim() == name.trim());
+    let credit = credit.map(str::trim).filter(|value| !value.is_empty()).map(str::to_ascii_uppercase);
+    let has_candidates = !candidates.is_empty();
+    let mut matches = candidates.into_iter().filter(|item| {
+        credit.as_ref().map_or_else(
+            || item.legal_name.trim() == name.trim(),
+            |code| item.credit_code.as_ref().is_some_and(|value| value.trim().eq_ignore_ascii_case(code)),
+        )
+    });
     let matched = matches.next().ok_or_else(|| {
-        ImportFailure::new("MASTER_NOT_FOUND", "未找到名称完全一致且启用的主数据，请先维护主数据后重试")
+        if credit.is_some() && has_candidates {
+            ImportFailure::new("IDENTITY_CONFLICT", "合同名称与信用代码不一致，请核对合同和主数据")
+        } else {
+            ImportFailure::new("MASTER_NOT_FOUND", "未找到对应主体，请核对名称或确认创建客户")
+        }
     })?;
     if matches.next().is_some() {
         return Err(ImportFailure::new(
@@ -162,7 +173,7 @@ pub fn match_identity(
             "名称对应多个主数据，无法自动选择，请先整理主数据",
         ));
     }
-    if credit.is_some_and(|code| matched.credit_code.as_deref() != Some(code.trim())) {
+    if matched.legal_name.trim() != name.trim() {
         return Err(ImportFailure::new("IDENTITY_CONFLICT", "合同名称与信用代码不一致，请核对合同和主数据"));
     }
     Ok(matched)

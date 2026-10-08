@@ -141,6 +141,8 @@ export function SalesOrderCreateHeaderFields({
                         label="税率（%）"
                         required
                         type="number"
+                        disabled={hasContract}
+                        description={hasContract ? "沿用合同约定" : undefined}
                         className="max-w-36"
                         inputClassName="num text-right"
                     />

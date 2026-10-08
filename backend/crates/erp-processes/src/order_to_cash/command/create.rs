@@ -1,11 +1,12 @@
 use application_core::{AuditActor, CommandFingerprint};
-use erp_contract::{ContractExt, ContractStatus};
-use erp_core::ids::{ContractId, CustomerAccountId, PartyId};
+use erp_contract::{Contract, ContractExt, ContractRevision, ContractStatus};
+use erp_core::ids::{ContractId, ContractRevisionId, CustomerAccountId, PartyId};
 use erp_read_models::sales_center::order::dto::SalesOrderDetailView;
 use erp_sales::dto::sales_order::{
     CreateSalesOrderRequest, SalesOrderCreateIntent, SalesOrderDraftRequest, SalesOrderEditableDraftRequest,
 };
 use erp_sales::entity::command_receipt::SalesCommandResult;
+use erp_sales::entity::sales_order::contract_terms::ensure_contract_customer;
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::service::sales_order::command::identity::{
     sales_order_create_audit_id, sales_order_create_fingerprint,
@@ -62,6 +63,7 @@ impl SalesOrderCommandProcess {
         let access = self.command_access(actor, "detail")?;
         if let Some(contract_id) = contract_id {
             let contract = access.load_contract(contract_id.as_ref(), &mut NoTransaction).await?;
+            ensure_contract_customer(&contract.customer_id, customer_id.as_ref())?;
             return Ok(contract.customer_id);
         }
         let customer_id =
@@ -75,6 +77,7 @@ impl SalesOrderCommandProcess {
     /// # 参数
     /// * `access` - 已构造的命令检查器，用于合同／客户 detail 重验
     /// * `contract_id` - 合同稳定身份
+    /// * `customer_id` - 客户端已选择的客户；提供时必须与合同一致
     /// * `editable` - 客户端可编辑字段与行
     /// * `executor` - 调用方执行器；预装载可用 `NoTransaction`，不得代替写入事务重验
     ///
@@ -90,6 +93,7 @@ impl SalesOrderCommandProcess {
         &self,
         access: &SalesCommandAccess,
         contract_id: &ContractId,
+        customer_id: &Option<CustomerAccountId>,
         editable: SalesOrderEditableDraftRequest,
         executor: &mut dyn Executor,
     ) -> Result<(CustomerAccountId, PartyId, SalesOrderDraftRequest)> {
@@ -99,34 +103,22 @@ impl SalesOrderCommandProcess {
             .as_ref()
             .ok_or_else(|| Error::ValidationError("有关同时必须选择合同版本".into()))?;
         let contract = access.load_contract(contract_id.as_ref(), executor).await?;
-        if contract.stable.status != ContractStatus::Effective {
-            return Err(Error::BusinessLogicError("合同当前不可用于新销售提交".to_string()));
-        }
-        if contract.stable.current_revision_id.as_deref() != Some(revision_id.as_ref()) {
-            return Err(Error::ConflictError("所选合同版本已不是当前可用版本，请刷新后重新选择".to_string()));
-        }
-        let revision = self
-            .db
-            .contract_revisions()
-            .find_by_id(revision_id.as_ref(), executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("合同版本不存在".to_string()))?;
-        if !revision.belongs_to_contract(contract_id) {
-            return Err(Error::ValidationError("合同版本不属于所选合同".to_string()));
-        }
-        if !revision.matches_settlement_party(&contract.settlement_party_id) {
-            return Err(Error::ConflictError("合同当前结算主体与所选版本不一致，请刷新后重试".to_string()));
-        }
+        ensure_contract_customer(&contract.customer_id, customer_id.as_ref())?;
+        let revision = self.contract_sales_revision(&contract, revision_id, executor).await?;
         let customer = access.load_customer(contract.customer_id.as_ref(), executor).await?;
         if !customer.is_active() {
             return Err(Error::BusinessLogicError("客户已停用，禁止创建新销售单".to_string()));
         }
+        let settlement_id =
+            editable.settlement_party_id.clone().unwrap_or_else(|| contract.settlement_party_id.clone());
+        let settlement_name =
+            access.settlement_name(&contract.settlement_party_id, &settlement_id, executor).await?;
         let mut draft = SalesOrderDraftRequest {
             editor_user_id: editable.editor_user_id,
             customer_name: revision.customer_snapshot.customer_name,
             contract_no: Some(revision.contract_no),
             requested_contract_revision_id: editable.requested_contract_revision_id,
-            settlement_party_name: Some(revision.settlement_party_snapshot.settlement_party_name),
+            settlement_party_name: Some(settlement_name),
             payment_term_code: revision.payment_term_snapshot.payment_term_code,
             payment_term_name: revision.payment_term_snapshot.payment_term_name,
             invoice_type: revision.invoice_requirement_snapshot.invoice_type,
@@ -140,7 +132,35 @@ impl SalesOrderCommandProcess {
         };
         draft.validate()?;
         self.sales().resolve_draft_reference_prices(&mut draft.lines, &self.catalog(), executor).await?;
-        Ok((contract.customer_id, contract.settlement_party_id, draft))
+        Ok((contract.customer_id, settlement_id, draft))
+    }
+
+    /// 在同一执行器内验证并读取合同当前有效修订。
+    async fn contract_sales_revision(
+        &self,
+        contract: &Contract,
+        revision_id: &ContractRevisionId,
+        executor: &mut dyn Executor,
+    ) -> Result<ContractRevision> {
+        if contract.stable.status != ContractStatus::Effective {
+            return Err(Error::BusinessLogicError("合同当前不可用于新销售提交".to_string()));
+        }
+        if contract.stable.current_revision_id.as_deref() != Some(revision_id.as_ref()) {
+            return Err(Error::ConflictError("所选合同版本已不是当前可用版本，请刷新后重新选择".to_string()));
+        }
+        let revision = self
+            .db
+            .contract_revisions()
+            .find_by_id(revision_id.as_ref(), executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("合同版本不存在".to_string()))?;
+        if !revision.belongs_to_contract(&ContractId::new(contract.base.id.clone())) {
+            return Err(Error::ValidationError("合同版本不属于所选合同".to_string()));
+        }
+        if !revision.matches_settlement_party(&contract.settlement_party_id) {
+            return Err(Error::ConflictError("合同当前结算主体与所选版本不一致，请刷新后重试".to_string()));
+        }
+        Ok(revision)
     }
 
     /// 原子创建销售单、稳定明细及首次工作副本；`intent=SUBMIT` 时在同一写入事务

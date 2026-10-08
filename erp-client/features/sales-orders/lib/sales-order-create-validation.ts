@@ -127,7 +127,7 @@ const createSalesOrderSchema = z
             context.addIssue({
                 code: "custom",
                 path: ["contractId"],
-                message: "请选择有效合同，或切换为凭证开单",
+                message: "请选择有效合同，或切换为先开单后补合同",
             })
         } else if (value.orderBasis === "evidence") {
             if (!value.customerId.trim() || !value.customerName.trim()) {
@@ -154,7 +154,7 @@ const createSalesOrderSchema = z
                 message: "正在同步合同信息，请稍后再提交",
             })
         } else {
-            if (!value.customerName.trim()) {
+            if (!value.customerId.trim() || !value.customerName.trim()) {
                 context.addIssue({
                     code: "custom",
                     path: ["customerName"],
@@ -297,7 +297,16 @@ const draftSalesOrderSchema = z
             context.addIssue({
                 code: "custom",
                 path: ["contractId"],
-                message: "请选择有效合同，或切换为凭证开单",
+                message: "请选择有效合同，或切换为先开单后补合同",
+            })
+        } else if (
+            value.orderBasis === "contract" &&
+            (!value.requestedContractRevisionId || !value.customerId.trim())
+        ) {
+            context.addIssue({
+                code: "custom",
+                path: ["contractId"],
+                message: "正在同步合同与客户信息，请稍后保存",
             })
         } else if (value.orderBasis === "evidence") {
             if (!value.customerId.trim() || !value.customerName.trim()) {

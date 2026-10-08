@@ -140,6 +140,7 @@ impl SalesOrderService {
             customer_name: copy.customer_snapshot.customer_name.clone(),
             contract_no: copy.contract_snapshot.as_ref().map(|s| s.contract_no.clone()),
             contract_revision_id: copy.contract_revision_id.as_ref().map(ToString::to_string),
+            settlement_party_id: copy.settlement_party_id.to_string(),
             settlement_party_name: copy
                 .settlement_party_snapshot
                 .as_ref()

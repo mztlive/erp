@@ -37,7 +37,10 @@ fn sample() -> (OcrDocument, ContractExtraction) {
 fn validates_original_facts_without_defaults() {
     let (doc, extraction) = sample();
     doc.validate(1).unwrap();
-    let fields = ConfirmImport { version: 1, fields: extraction.draft(&doc).fields }.validate().unwrap().0;
+    let fields = ConfirmImport { create_customer: false, version: 1, fields: extraction.draft(&doc).fields }
+        .validate()
+        .unwrap()
+        .0;
     assert_eq!(fields.payment_code, "POSTPAY_NET30");
     assert_eq!(fields.tax_point, "13");
     assert_eq!(fields.signed_at.to_string(), "2026-10-01");
@@ -96,7 +99,8 @@ fn draft_allows_semantic_values_but_drops_unverifiable_evidence() {
 #[test]
 fn confirmation_accepts_edits_but_requires_valid_business_values() {
     let (doc, extraction) = sample();
-    let mut command = ConfirmImport { version: 1, fields: extraction.draft(&doc).fields };
+    let mut command =
+        ConfirmImport { create_customer: false, version: 1, fields: extraction.draft(&doc).fields };
     command.fields.insert(ContractNo, Some("人工补充编号".into()));
     command.fields.insert(PaymentTerms, Some("先款 50%".into()));
     let (values, _) = command.validate().unwrap();
@@ -113,6 +117,31 @@ fn confirmation_accepts_edits_but_requires_valid_business_values() {
         invalid.fields.insert(field, value);
         assert!(invalid.validate().is_err());
     }
+}
+
+#[test]
+fn settlement_fields_are_optional_and_legacy_values_remain_readable() {
+    let (doc, extraction) = sample();
+    let mut command =
+        ConfirmImport { version: 1, fields: extraction.draft(&doc).fields, create_customer: false };
+    command.fields.remove(&SettlementName);
+    command.fields.remove(&SettlementCreditCode);
+    assert!(command.validate().is_ok());
+    command.fields.insert(SettlementName, Some("历史结算主体".into()));
+    assert!(command.validate().is_ok());
+    assert_eq!(command.fields[&SettlementName].as_deref(), Some("历史结算主体"));
+}
+
+#[test]
+fn customer_creation_requires_explicit_confirmation_and_preserves_legacy_wire_shape() {
+    let legacy = serde_json::json!({"version": 1, "fields": {}});
+    let mut command: ConfirmImport = serde_json::from_value(legacy.clone()).unwrap();
+    assert!(!command.create_customer);
+    assert_eq!(serde_json::to_value(&command).unwrap(), legacy);
+    command.create_customer = true;
+    let new = serde_json::to_value(&command).unwrap();
+    assert_eq!(new["create_customer"], true);
+    assert_eq!(serde_json::from_value::<ConfirmImport>(new).unwrap(), command);
 }
 #[test]
 fn identity_requires_unique_name_and_consistent_code() {
@@ -207,7 +236,8 @@ fn import_view_preserves_revision_target_and_server_recovery_deadline() {
 #[test]
 fn confirmation_rejects_stale_pending_and_changed_replays() {
     let mut task = task();
-    let command = ConfirmImport { version: task.base.version, fields: BTreeMap::new() };
+    let command =
+        ConfirmImport { create_customer: false, version: task.base.version, fields: BTreeMap::new() };
     assert!(task.check_confirmation(&command).is_err());
     task.status = ImportStatus::Review;
     assert!(task.check_confirmation(&command).unwrap());
@@ -218,6 +248,9 @@ fn confirmation_rejects_stale_pending_and_changed_replays() {
     task.status = ImportStatus::Succeeded;
     task.confirmation = Some(command.clone());
     assert!(!task.check_confirmation(&command).unwrap());
+    let mut changed = command.clone();
+    changed.create_customer = true;
+    assert!(task.check_confirmation(&changed).is_err());
     let mut changed = command;
     changed.fields.insert(ContractNo, Some("other".into()));
     assert!(task.check_confirmation(&changed).is_err());

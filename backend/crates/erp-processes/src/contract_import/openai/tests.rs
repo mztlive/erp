@@ -76,7 +76,9 @@ async fn rig_sends_all_pages_as_data_and_decodes_typed_evidence() {
     let http = RecordingHttpClient::new(response(&output.to_string(), "completed"));
     let extraction = extractor().extract_with(&document, http.clone(), Diagnostics::default()).await.unwrap();
     let (validated, _) =
-        ConfirmImport { version: 1, fields: extraction.draft(&document).fields }.validate().unwrap();
+        ConfirmImport { create_customer: false, version: 1, fields: extraction.draft(&document).fields }
+            .validate()
+            .unwrap();
     assert_eq!(validated.payment_code, "POSTPAY_NET30");
     assert_eq!(extraction.provider, "gateway-a");
     assert!(extraction.version.starts_with("protocol=responses;"));
@@ -170,7 +172,9 @@ async fn preserves_configured_provider_in_serialized_evidence_across_service_swi
         let stored = serde_json::to_vec(&extraction).unwrap();
         let restored: ContractExtraction = serde_json::from_slice(&stored).unwrap();
         assert_eq!(restored.provider, extraction.provider);
-        ConfirmImport { version: 1, fields: restored.draft(&document).fields }.validate().unwrap();
+        ConfirmImport { create_customer: false, version: 1, fields: restored.draft(&document).fields }
+            .validate()
+            .unwrap();
         assert!(!String::from_utf8(stored).unwrap().contains("test-key"));
     }
     assert!(!String::from_utf8(http.requests()[0].body.to_vec()).unwrap().contains("gateway-b"));
@@ -187,7 +191,9 @@ async fn maximum_model_lengths_fit_persisted_version_limit() {
         .extract_with(&document, RecordingHttpClient::new(raw.to_string()), Diagnostics::default())
         .await
         .unwrap();
-    ConfirmImport { version: 1, fields: extraction.draft(&document).fields }.validate().unwrap();
+    ConfirmImport { create_customer: false, version: 1, fields: extraction.draft(&document).fields }
+        .validate()
+        .unwrap();
     assert!(extraction.version.len() <= 256);
 }
 
@@ -385,7 +391,7 @@ async fn accepts_openai_reasoning_without_using_it_as_contract_evidence() {
         let extraction =
             extractor.extract_with(&document, http.clone(), Diagnostics::default()).await.unwrap();
         assert_eq!(
-            ConfirmImport { version: 1, fields: extraction.draft(&document).fields }
+            ConfirmImport { create_customer: false, version: 1, fields: extraction.draft(&document).fields }
                 .validate()
                 .unwrap()
                 .0

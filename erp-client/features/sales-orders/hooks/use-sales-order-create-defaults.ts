@@ -35,9 +35,11 @@ export function useSalesOrderCreateDefaults({
         const nature = initialDraft?.nature ?? initialNature
         const contractId = initialDraft?.contractId || initialContractId
         return {
-            orderBasis: contractId ? "contract" : "evidence",
+            orderBasis: initialDraft && !contractId ? "evidence" : "contract",
             contractId,
-            requestedContractRevisionId: initialContractRevisionId,
+            requestedContractRevisionId:
+                initialDraft?.requestedContractRevisionId ||
+                initialContractRevisionId,
             contractRevisionLabel: "",
             customerId: initialDraft?.customerId || initialCustomerId,
             evidenceUploadPending: false,

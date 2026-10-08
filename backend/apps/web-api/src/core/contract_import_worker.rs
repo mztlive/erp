@@ -146,6 +146,7 @@ mod tests {
     #[test]
     fn persisted_business_failure_is_warn_and_never_logs_the_failure_message() {
         let view = ImportView {
+            source_file_asset_id: "private-file-asset".into(),
             draft: None,
             expected_customer_id: None,
             revision_target: None,

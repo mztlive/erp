@@ -22,6 +22,7 @@ export type UseContractUploadFormOptions = {
     initialCustomerId?: string
     revisionTarget?: { contractId: string; version: number }
     onSuccess?: (result: UploadContractPdfResult) => void
+    autoAccept?: boolean
 }
 
 export function useContractUploadForm(options: UseContractUploadFormOptions) {
@@ -37,14 +38,24 @@ export function useContractUploadForm(options: UseContractUploadFormOptions) {
         key: string
     } | null>(null)
     const uploadMutation = useUploadContractPdfMutation()
+    const invalidateArchived = () =>
+        Promise.all([
+            client.invalidateQueries({ queryKey: ["contracts"] }),
+            client.invalidateQueries({ queryKey: ["entity-selectors"] }),
+            client.invalidateQueries({ queryKey: ["customers"] }),
+            client.invalidateQueries({ queryKey: ["party-selector"] }),
+            client.invalidateQueries({ queryKey: ["master-data"] }),
+            client.invalidateQueries({
+                queryKey: ["contract-import-identities"],
+            }),
+        ])
     const refresh = async (task: ContractImportTask) => {
         client.setQueryData(["contract-imports", "detail", task.id], task)
         await client.invalidateQueries({
             queryKey: ["contract-imports", "list"],
         })
         if (task.status === "succeeded") {
-            await client.invalidateQueries({ queryKey: ["contracts"] })
-            await client.invalidateQueries({ queryKey: ["entity-selectors"] })
+            await invalidateArchived()
         }
     }
     const runMutation = useMutation({
@@ -55,7 +66,10 @@ export function useContractUploadForm(options: UseContractUploadFormOptions) {
     })
     const confirmMutation = useMutation({
         mutationFn: confirmContractImport,
-        onSuccess: refresh,
+        onSuccess: async (task) => {
+            await refresh(task)
+            if (options.autoAccept) acceptTask(task)
+        },
     })
     const list = useQuery({
         queryKey: [
@@ -93,6 +107,12 @@ export function useContractUploadForm(options: UseContractUploadFormOptions) {
         observedSuccess.current = task.id
         void client.invalidateQueries({ queryKey: ["contracts"] })
         void client.invalidateQueries({ queryKey: ["entity-selectors"] })
+        void client.invalidateQueries({ queryKey: ["customers"] })
+        void client.invalidateQueries({ queryKey: ["party-selector"] })
+        void client.invalidateQueries({ queryKey: ["master-data"] })
+        void client.invalidateQueries({
+            queryKey: ["contract-import-identities"],
+        })
         void client.invalidateQueries({
             queryKey: ["contract-imports", "list"],
         })
@@ -176,11 +196,20 @@ export function useContractUploadForm(options: UseContractUploadFormOptions) {
         form.reset()
         request.current = null
     }
-    const accept = () => {
-        const result = detail.data?.result
-        if (detail.data?.status !== "succeeded" || !result || contextError)
+    function acceptTask(task: ContractImportTask) {
+        const result = task.result
+        if (
+            task.status !== "succeeded" ||
+            !result ||
+            contractImportContextError(
+                task,
+                options.initialCustomerId,
+                options.revisionTarget,
+            )
+        )
             return
         options.onSuccess?.({
+            customerId: task.customer_id,
             contractId: result.id,
             contractNo: result.contract_no,
             revisionId: result.revision_id,
@@ -190,6 +219,9 @@ export function useContractUploadForm(options: UseContractUploadFormOptions) {
             reference: `CT-UP-${result.contract_no}`,
         })
         options.onOpenChange(false)
+    }
+    const accept = () => {
+        if (detail.data) acceptTask(detail.data)
     }
     return {
         form,

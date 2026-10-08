@@ -6169,6 +6169,38 @@
       "reason": "原门户命令拒绝终态工厂以真实供应商操作人、原命令身份和固定拒绝事件构造审计元数据，不构造成功业务事实；持久化由拒绝终态事务的同一 Executor 执行。"
     },
     {
+      "path": "crates/erp-processes/src/contract_import/customer.rs",
+      "function": "new_customer",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "确认合同归档后创建缺失企业及当前修订，并以真实操作人构造 party.create 事件；主体、修订和事件通过 persist_log 共用上层 confirm 的 run_audited_event 事务 Executor。建档资格先重验，不另开事务；任务成功重放在进入该步骤前返回，不重复建档或留痕。"
+    },
+    {
+      "path": "crates/erp-processes/src/contract_import/customer.rs",
+      "function": "create_customer",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "确认合同归档后补建缺失客户角色和操作人 OWNER，并以真实操作人构造 customer_profile.create 事件；客户、归属和事件通过 persist_log 共用上层 confirm 的 run_audited_event 事务 Executor。已有客户不调用该步骤，任务成功重放不追加事件，失败由原归档事务收尾。"
+    },
+    {
       "path": "crates/erp-processes/src/contract_import/archive.rs",
       "function": "confirm",
       "policy": "Audited",

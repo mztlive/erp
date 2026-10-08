@@ -29,7 +29,7 @@ import { useSalesOrderContractCheck } from "@/features/sales-orders/hooks/querie
 import { ContractSupplementCheck } from "./contract-supplement-check"
 import { hasPermission } from "@/lib/permissions"
 
-/** 概览内补录合同；客户与结算主体由原销售单固定。 */
+/** 概览内补录合同；客户必须一致，结算主体保留销售单选择。 */
 export function SalesOrderContractSupplement({
     order,
 }: {
@@ -127,7 +127,7 @@ export function SalesOrderContractSupplement({
                     <DialogHeader>
                         <DialogTitle>补录销售合同</DialogTitle>
                         <DialogDescription>
-                            客户、结算主体及商业条款必须与原销售单一致。补录不会修改原单内容，绑定后不能在此更换。
+                            合同客户及付款、开票、税率必须与原销售单一致。结算主体保留原单选择，补录不会修改原单内容。
                         </DialogDescription>
                     </DialogHeader>
                     <form
@@ -237,6 +237,7 @@ export function SalesOrderContractSupplement({
                 open={uploadOpen}
                 onOpenChange={setUploadOpen}
                 initialCustomerId={order.customerId}
+                autoAccept
                 onSuccess={(result) => {
                     void client.invalidateQueries({
                         queryKey: entitySelectorKeys.all,

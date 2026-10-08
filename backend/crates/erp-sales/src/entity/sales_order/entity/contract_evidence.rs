@@ -6,6 +6,7 @@ use erp_core::ids::{ContractId, CustomerAccountId, FileAssetId, PartyId};
 use erp_core::{Error, Result};
 
 use super::{CommercialStatus, SalesOrder};
+use crate::entity::sales_order::contract_terms::ensure_contract_customer;
 
 impl SalesOrder {
     /// 检验建单凭证的内容类型、对应扩展名与有效状态。
@@ -66,9 +67,9 @@ impl SalesOrder {
     /// * `contract_id` / `customer_id` / `settlement_party_id` - 服务端解析的命令关系
     /// * `actor_id` - 当前编辑人
     /// # 返回
-    /// 关系一致时成功；首次绑定时更新稳定合同。
+    /// 客户及合同关系一致时接纳草稿结算主体；首次绑定时更新稳定合同。
     /// # 错误
-    /// 客户、结算主体或已有合同不一致时拒绝。
+    /// 客户或已有合同不一致、非可编辑草稿更改结算主体时拒绝。
     pub fn apply_command_contract_context(
         &mut self,
         contract_id: &Option<ContractId>,
@@ -76,20 +77,30 @@ impl SalesOrder {
         settlement_party_id: &PartyId,
         actor_id: &str,
     ) -> Result<()> {
-        if self.matches_contract_context(contract_id, customer_id, settlement_party_id) {
-            return Ok(());
+        ensure_contract_customer(customer_id, Some(&self.customer_id))?;
+        let first_contract = contract_id.as_ref().filter(|_| self.contract_id.is_none());
+        if &self.contract_id != contract_id && first_contract.is_none() {
+            return Err(Error::from("销售单合同归属已变化，请刷新后重试"));
         }
-        if let Some(contract_id) = contract_id.as_ref().filter(|_| self.contract_id.is_none()) {
-            return self.bind_contract(contract_id.clone(), customer_id, settlement_party_id, actor_id);
+        let changed_settlement = &self.settlement_party_id != settlement_party_id;
+        if changed_settlement {
+            self.ensure_first_submission_working_copy_editable()?;
         }
-        Err(Error::from("销售单合同归属已变化，请刷新后重试"))
+        if let Some(contract_id) = first_contract {
+            self.bind_contract(contract_id.clone(), customer_id, actor_id)?;
+        }
+        if changed_settlement {
+            self.settlement_party_id = settlement_party_id.clone();
+            self.stable.touch(actor_id);
+        }
+        Ok(())
     }
 
     /// 首次绑定合同，保留客户、结算主体及全部商业内容。
     ///
     /// # 参数
     /// * `contract_id` - 已验证当前有效修订的合同
-    /// * `customer_id` / `settlement_party_id` - 合同权威关系
+    /// * `customer_id` - 合同权威客户；销售单已选择的结算主体保持不变
     /// * `actor_id` - 已认证修改人
     /// # 返回
     /// 更新稳定合同关系和修改人。
@@ -99,7 +110,6 @@ impl SalesOrder {
         &mut self,
         contract_id: ContractId,
         customer_id: &CustomerAccountId,
-        settlement_party_id: &PartyId,
         actor_id: &str,
     ) -> Result<()> {
         if self.commercial_status == CommercialStatus::Voided {
@@ -108,9 +118,7 @@ impl SalesOrder {
         if self.contract_id.is_some() {
             return Err(Error::from("销售单已有关联合同，不允许替换"));
         }
-        if &self.customer_id != customer_id || &self.settlement_party_id != settlement_party_id {
-            return Err(Error::from("合同客户及结算主体必须与原销售单一致"));
-        }
+        ensure_contract_customer(customer_id, Some(&self.customer_id))?;
         self.contract_id = Some(contract_id);
         self.stable.touch(actor_id);
         Ok(())
@@ -184,35 +192,18 @@ mod tests {
         let mut order = order();
         let original = order.clone();
         assert!(
-            order
-                .bind_contract(
-                    ContractId::new("c"),
-                    &CustomerAccountId::new("other"),
-                    &PartyId::new("party-1"),
-                    "sales"
-                )
-                .is_err()
+            order.bind_contract(ContractId::new("c"), &CustomerAccountId::new("other"), "sales").is_err()
         );
         assert_eq!(order, original);
+        order.settlement_party_id = PartyId::new("our-selected-company");
         order.commercial_status = CommercialStatus::Effective;
-        order
-            .bind_contract(
-                ContractId::new("c"),
-                &CustomerAccountId::new("customer-1"),
-                &PartyId::new("party-1"),
-                "sales",
-            )
-            .unwrap();
+        order.bind_contract(ContractId::new("c"), &CustomerAccountId::new("customer-1"), "sales").unwrap();
         assert_eq!(order.commercial_status, CommercialStatus::Effective);
         assert_eq!(order.order_no, original.order_no);
+        assert_eq!(order.settlement_party_id.as_ref(), "our-selected-company");
         assert!(
             order
-                .bind_contract(
-                    ContractId::new("replacement"),
-                    &CustomerAccountId::new("customer-1"),
-                    &PartyId::new("party-1"),
-                    "sales"
-                )
+                .bind_contract(ContractId::new("replacement"), &CustomerAccountId::new("customer-1"), "sales")
                 .is_err()
         );
     }
@@ -247,12 +238,7 @@ mod tests {
         let before = order.clone();
         assert!(
             order
-                .bind_contract(
-                    ContractId::new("c"),
-                    &CustomerAccountId::new("customer-1"),
-                    &PartyId::new("party-1"),
-                    "sales"
-                )
+                .bind_contract(ContractId::new("c"), &CustomerAccountId::new("customer-1"), "sales")
                 .is_err()
         );
         assert_eq!(order, before);
@@ -280,6 +266,47 @@ mod tests {
                 )
                 .is_err()
         );
+    }
+
+    #[test]
+    fn draft_settlement_can_change_without_changing_contract_or_customer() {
+        let mut order = order();
+        let customer = order.customer_id.clone();
+        let contract = Some(ContractId::new("c"));
+        order
+            .apply_command_contract_context(&contract, &customer, &PartyId::new("our-company"), "sales")
+            .unwrap();
+        order
+            .apply_command_contract_context(&contract, &customer, &PartyId::new("other-company"), "sales")
+            .unwrap();
+        assert_eq!(order.contract_id, contract);
+        assert_eq!(order.customer_id, customer);
+        assert_eq!(order.settlement_party_id.as_ref(), "other-company");
+        let before = order.clone();
+        assert!(
+            order
+                .apply_command_contract_context(
+                    &contract,
+                    &CustomerAccountId::new("different"),
+                    &PartyId::new("third"),
+                    "sales"
+                )
+                .is_err()
+        );
+        assert_eq!(order, before);
+    }
+
+    #[test]
+    fn effective_sale_settlement_cannot_change_through_draft_command() {
+        let mut order = order();
+        order.commercial_status = CommercialStatus::Effective;
+        let before = order.clone();
+        assert!(
+            order
+                .apply_command_contract_context(&None, &before.customer_id, &PartyId::new("other"), "sales")
+                .is_err()
+        );
+        assert_eq!(order, before);
     }
 
     #[test]

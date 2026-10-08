@@ -2,6 +2,7 @@
 pub mod aliyun;
 mod archive;
 mod audit;
+mod customer;
 mod matching;
 pub mod openai;
 mod pipeline;

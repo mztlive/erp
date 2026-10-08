@@ -127,7 +127,7 @@ pub struct SalesOrderDraftRequest {
 
 /// 前端可编辑的销售草稿命令。
 ///
-/// 有合同的客户、结算主体和商业条款由服务端按所选合同修订冻结；
+/// 有合同的客户和商业条款由服务端按所选合同修订冻结，结算主体可单独选择；
 /// 无合同时仅接受明确约定条款，客户和结算主体仍从服务端资料读取。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
@@ -137,6 +137,9 @@ pub struct SalesOrderEditableDraftRequest {
     pub editor_user_id: String,
     /// 用户明确选择的合同不可变版本；无合同时为空。
     pub requested_contract_revision_id: Option<ContractRevisionId>,
+    /// 有合同时明确选择的结算主体；创建时省略沿用合同默认，编辑时省略保留原单。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settlement_party_id: Option<PartyId>,
     /// 无合同时由客户与销售约定的付款和开票条款。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[validate(nested)]
@@ -202,7 +205,7 @@ pub struct CreateSalesOrderRequest {
     pub business_type: BusinessType,
     /// 合同稳定身份；无合同时为空，有合同时从当前合同修订解析归属。
     pub contract_id: Option<ContractId>,
-    /// 无合同时选择的客户；有合同由服务端解析。
+    /// 所选客户；有合同时必须与合同客户一致，旧客户端省略时由服务端解析。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub customer_id: Option<CustomerAccountId>,
     /// 幂等键；同一操作人、同一键和同一完整载荷返回原销售单，异载荷返回冲突。
@@ -227,7 +230,7 @@ pub struct SaveWorkingCopyRequest {
     pub version: u64,
     /// 所选合同稳定身份；无合同时为空。
     pub contract_id: Option<ContractId>,
-    /// 无合同时选择的客户；有合同由服务端解析。
+    /// 所选客户；有合同时必须与合同客户一致，旧客户端省略时由服务端解析。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub customer_id: Option<CustomerAccountId>,
     /// 客户端可编辑草稿；合同权威快照由服务端补齐。
@@ -249,7 +252,7 @@ pub struct SubmitSalesOrderRequest {
     pub idempotency_key: String,
     /// 所选合同稳定身份；无合同时为空。
     pub contract_id: Option<ContractId>,
-    /// 无合同时选择的客户；有合同由服务端解析。
+    /// 所选客户；有合同时必须与合同客户一致，旧客户端省略时由服务端解析。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub customer_id: Option<CustomerAccountId>,
     /// 本次提交的完整可编辑草稿。
@@ -531,6 +534,8 @@ pub struct WorkingCopyView {
     pub contract_no: Option<String>,
     /// 草稿冻结的合同不可变版本；有合同时必须回显该值。
     pub contract_revision_id: Option<String>,
+    /// 本次草稿明确选择的结算主体稳定身份。
+    pub settlement_party_id: String,
     /// 结算主体名称快照。
     pub settlement_party_name: Option<String>,
     /// 付款条件代码。

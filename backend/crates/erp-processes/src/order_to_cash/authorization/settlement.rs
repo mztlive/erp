@@ -1,4 +1,4 @@
-//! 无归档合同开单的结算主体资格；目录授权与写入重验使用同一范围判定。
+//! 销售结算主体资格；目录授权与写入重验使用同一范围判定。
 use erp_core::ids::PartyId;
 use erp_identity::access_control::ScopedObject;
 use erp_identity::service::access_control::resolve::DataScopeService;
@@ -11,18 +11,19 @@ use crate::{Error, Result};
 impl SalesCommandAccess {
     /// 校验所选结算主体并读取当前法定名称。
     /// # 参数
-    /// `customer_party` 为已授权客户主体，`selected` 为明确选择，`executor` 沿用调用方事务。
+    /// `authorized_default` 为已授权合同默认主体或旧无合同客户主体；`selected` 为所选主体。
+    /// `executor` 沿用调用方事务。
     /// # 返回
     /// 经授权且启用的企业主体名称。
     /// # 错误
     /// 独立主体越权、停用、缺失或资料版本无效时拒绝。
     pub(in crate::order_to_cash) async fn settlement_name(
         &self,
-        customer_party: &PartyId,
+        authorized_default: &PartyId,
         selected: &PartyId,
         executor: &mut dyn Executor,
     ) -> Result<String> {
-        if selected != customer_party {
+        if selected != authorized_default {
             let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
                 .resolve(&self.actor, "settlement_party", "list", executor)
                 .await?;

@@ -1,5 +1,6 @@
 "use client"
 
+import { useCallback, useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -11,19 +12,38 @@ import {
 } from "@/components/ui/dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Spinner } from "@/components/ui/spinner"
+import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from "@/components/ui/collapsible"
+import { ChevronRightIcon } from "lucide-react"
 import { getErrorMessage } from "@/lib/api/errors"
 import {
     useContractUploadForm,
     type UseContractUploadFormOptions,
 } from "@/features/contracts/hooks/use-contract-upload-form"
 import { ContractImportHistory } from "./contract-import-history"
-import { ContractImportReview } from "./contract-import-review"
+import {
+    ContractImportReview,
+    type ContractImportReviewSubmitState,
+} from "./contract-import-review"
 import { ContractImportTask } from "./contract-import-task"
 
 export type ContractUploadDialogProps = UseContractUploadFormOptions
 
 export function ContractUploadDialog(props: ContractUploadDialogProps) {
     const state = useContractUploadForm(props)
+    const [reviewSubmit, setReviewSubmit] =
+        useState<ContractImportReviewSubmitState>({
+            taskId: "",
+            canSubmit: false,
+            isSubmitting: false,
+        })
+    const updateReviewSubmit = useCallback(
+        (value: ContractImportReviewSubmitState) => setReviewSubmit(value),
+        [],
+    )
     const task = state.detail.data
     const busy =
         state.uploadMutation.isPending ||
@@ -52,7 +72,7 @@ export function ContractUploadDialog(props: ContractUploadDialogProps) {
                         {props.revisionTarget ? "导入合同新版本" : "导入合同"}
                     </DialogTitle>
                     <DialogDescription>
-                        识别并预填合同信息，核对修改后确认归档
+                        识别合同并匹配签约双方，核对后保存合同档案
                     </DialogDescription>
                 </DialogHeader>
                 <div className="min-h-0 space-y-5 overflow-y-auto">
@@ -105,6 +125,7 @@ export function ContractUploadDialog(props: ContractUploadDialogProps) {
                     ) : task ? (
                         <ContractImportTask
                             task={task}
+                            showExtraction={false}
                             busy={busy}
                             recoveryAvailable={Boolean(recoveryAvailable)}
                             contextError={state.contextError}
@@ -128,10 +149,12 @@ export function ContractUploadDialog(props: ContractUploadDialogProps) {
                     ) : null}
                     {task?.status === "review" && task.draft ? (
                         <ContractImportReview
-                            key={`${task.id}-${task.version}`}
+                            key={task.id}
                             task={task}
                             busy={busy}
                             disabled={Boolean(state.contextError)}
+                            expectedCustomerId={props.initialCustomerId}
+                            onSubmitStateChange={updateReviewSubmit}
                             onConfirm={(command) =>
                                 state.confirmMutation.mutateAsync({
                                     id: task.id,
@@ -147,21 +170,32 @@ export function ContractUploadDialog(props: ContractUploadDialogProps) {
                             className="h-96 w-full rounded-lg border border-border"
                         />
                     ) : null}
-                    <ContractImportHistory
-                        items={state.list.data?.items ?? []}
-                        total={state.list.data?.total ?? 0}
-                        loading={state.list.isPending}
-                        page={state.page}
-                        selectedId={state.selectedId}
-                        currentTask={task}
-                        disabled={busy}
-                        onSelect={state.select}
-                        onPageChange={state.setPage}
-                    />
+                    <Collapsible>
+                        <CollapsibleTrigger
+                            id="contract-import-history-toggle"
+                            className="group flex items-center gap-1 text-sm text-muted-foreground"
+                        >
+                            <ChevronRightIcon className="size-4 group-data-panel-open:rotate-90" />
+                            查看导入记录
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="mt-3">
+                            <ContractImportHistory
+                                items={state.list.data?.items ?? []}
+                                total={state.list.data?.total ?? 0}
+                                loading={state.list.isPending}
+                                page={state.page}
+                                selectedId={state.selectedId}
+                                currentTask={task}
+                                disabled={busy}
+                                onSelect={state.select}
+                                onPageChange={state.setPage}
+                            />
+                        </CollapsibleContent>
+                    </Collapsible>
                 </div>
                 <DialogFooter className="shrink-0 items-start gap-3 border-t border-border pt-4 sm:flex-wrap sm:items-center sm:justify-between">
                     <p className="text-xs leading-relaxed text-muted-foreground">
-                        识别结果可补充、修改，确认后归档
+                        确认后保存合同档案与原 PDF，供销售单引用
                     </p>
                     <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
                         {task?.status === "succeeded" ||
@@ -193,6 +227,27 @@ export function ContractUploadDialog(props: ContractUploadDialogProps) {
                                 onClick={state.accept}
                             >
                                 {props.onSuccess ? "使用此合同" : "完成"}
+                            </Button>
+                        ) : null}
+                        {task?.status === "review" && task.draft ? (
+                            <Button
+                                id="contract-import-confirm"
+                                type="submit"
+                                form="contract-import-review-form"
+                                disabled={
+                                    busy ||
+                                    Boolean(state.contextError) ||
+                                    reviewSubmit.taskId !== task.id ||
+                                    !reviewSubmit.canSubmit ||
+                                    reviewSubmit.isSubmitting
+                                }
+                            >
+                                {busy || reviewSubmit.isSubmitting ? (
+                                    <Spinner />
+                                ) : null}
+                                {busy || reviewSubmit.isSubmitting
+                                    ? "正在归档…"
+                                    : "确认并归档"}
                             </Button>
                         ) : null}
                     </div>

@@ -36,11 +36,12 @@ impl SalesOrderCommandProcess {
         access: &SalesCommandAccess,
         mut order: SalesOrder,
         source: (Option<ContractId>, Option<CustomerAccountId>),
-        editable: SalesOrderEditableDraftRequest,
+        mut editable: SalesOrderEditableDraftRequest,
         actor: &AuditActor,
         require_editable: bool,
     ) -> Result<(SalesOrder, SalesOrderDraftRequest)> {
         let (contract_id, customer_id) = source;
+        editable.retain_settlement(&order.settlement_party_id, contract_id.is_some());
         let (customer_id, settlement_party_id, draft) = self
             .resolve_sales_command_draft(access, &contract_id, &customer_id, editable, &mut NoTransaction)
             .await?;
@@ -74,9 +75,14 @@ impl SalesOrderCommandProcess {
         executor: &mut dyn Executor,
     ) -> Result<(CustomerAccountId, PartyId, SalesOrderDraftRequest)> {
         if let Some(contract_id) = contract_id {
-            return self.resolve_contract_sales_draft(access, contract_id, editable, executor).await;
+            return self
+                .resolve_contract_sales_draft(access, contract_id, customer_id, editable, executor)
+                .await;
         }
         editable.validate()?;
+        if editable.settlement_party_id.is_some() {
+            return Err(Error::ValidationError("无合同销售单的结算主体必须填写在约定条款中".into()));
+        }
         if editable.requested_contract_revision_id.is_some() {
             return Err(Error::ValidationError("无合同销售单不得指定合同版本".into()));
         }

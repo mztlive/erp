@@ -122,6 +122,7 @@ export type ContractCenterView = {
     ownerLabel: string
     ownerKind: "current_customer_owner" | "historical_participant"
     currentRevision: {
+        signingCompanyPartyId?: string
         signingCompanyName?: string
         recognizedFields?: Record<
             string,
@@ -161,6 +162,7 @@ export type UploadContractPdfInput = {
 }
 
 export type UploadContractPdfResult = {
+    customerId?: string
     contractId: string
     contractNo: string
     revisionId: string

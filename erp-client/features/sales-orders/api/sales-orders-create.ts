@@ -159,6 +159,9 @@ function buildDraftPayload(
                 input.ownerUserId.trim() || input.ownerName.trim() || "unknown",
             requested_contract_revision_id: requestedContractRevisionId || null,
             ...(requestedContractRevisionId
+                ? { settlement_party_id: input.settlementPartyId || null }
+                : {}),
+            ...(requestedContractRevisionId
                 ? {}
                 : {
                       no_contract_terms: {
@@ -215,12 +218,10 @@ export async function createSalesOrder(
         order_no: input.orderNo,
         business_type: businessType,
         contract_id: input.contract.contractId || null,
+        customer_id: input.customerId,
         ...(input.contract.contractId
             ? {}
-            : {
-                  customer_id: input.customerId,
-                  evidence_file_asset_ids: input.evidenceFileAssetIds ?? [],
-              }),
+            : { evidence_file_asset_ids: input.evidenceFileAssetIds ?? [] }),
         idempotency_key: input.idempotencyKey,
         intent: input.intent,
         draft,
@@ -274,9 +275,7 @@ export async function saveSalesOrderDraft(
         {
             version: input.version,
             contract_id: input.contract.contractId || null,
-            ...(input.contract.contractId
-                ? {}
-                : { customer_id: input.customerId }),
+            customer_id: input.customerId,
             draft,
         },
     )
@@ -303,7 +302,7 @@ export async function submitSalesOrder(
         version: input.version,
         idempotency_key: input.idempotencyKey,
         contract_id: input.contract.contractId || null,
-        ...(input.contract.contractId ? {} : { customer_id: input.customerId }),
+        customer_id: input.customerId,
         draft,
     })
     return { salesOrderId: input.salesOrderId }
@@ -314,6 +313,7 @@ export type SalesOrderDraftResumeData = {
     documentNumber: string
     version: number
     contractId: string
+    requestedContractRevisionId?: string
     customerId?: string
     customerName?: string
     settlementEntity?: string
@@ -430,10 +430,12 @@ export async function fetchSalesOrderDraftForResume(
         documentNumber: detail.order_no,
         version: wc?.version ?? detail.version,
         contractId: detail.contract_id ?? "",
+        requestedContractRevisionId: source.contract_revision_id ?? undefined,
         customerId: detail.customer_id,
         customerName: source.customer_name,
         settlementEntity: source.settlement_party_name ?? undefined,
-        settlementPartyId: detail.settlement_party_id,
+        settlementPartyId:
+            source.settlement_party_id ?? detail.settlement_party_id,
         invoiceType: source.invoice_type ?? "",
         evidenceFileAssetIds: detail.evidence_file_asset_ids ?? [],
         evidenceFiles:

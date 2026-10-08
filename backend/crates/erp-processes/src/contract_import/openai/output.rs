@@ -75,11 +75,11 @@ pub(super) enum DecodeError {
     #[error("finish_reason: expected ToolCalls, received {0:?}")]
     FinishReason(Option<FinishReason>),
     #[error("response_state: status={status}, error={error}, incomplete_details={incomplete}")]
-    ResponseState { status: Value, error: Value, incomplete: Value },
+    ResponseState { status: Box<Value>, error: Box<Value>, incomplete: Box<Value> },
     #[error("response_shape: {0}")]
     Shape(&'static str),
     #[error("output_item: index={index}, type={kind}, status={status}")]
-    OutputItem { index: usize, kind: Value, status: Value },
+    OutputItem { index: usize, kind: Box<Value>, status: Box<Value> },
     #[error("json_encode: {0}")]
     Json(#[from] serde_json::Error),
     #[error("reported_model: invalid model {0:?}")]
@@ -102,9 +102,9 @@ pub(super) fn validate_response(response: &CompletionResponse) -> DecodeResult<(
     let raw = &response.raw;
     if raw["status"] != "completed" || !raw["error"].is_null() || !raw["incomplete_details"].is_null() {
         return Err(DecodeError::ResponseState {
-            status: raw["status"].clone(),
-            error: raw["error"].clone(),
-            incomplete: raw["incomplete_details"].clone(),
+            status: Box::new(raw["status"].clone()),
+            error: Box::new(raw["error"].clone()),
+            incomplete: Box::new(raw["incomplete_details"].clone()),
         });
     }
     let output = raw["output"].as_array().ok_or(DecodeError::Shape("output must be an array"))?;
@@ -126,8 +126,8 @@ pub(super) fn validate_response(response: &CompletionResponse) -> DecodeResult<(
             _ => {
                 return Err(DecodeError::OutputItem {
                     index,
-                    kind: item["type"].clone(),
-                    status: item["status"].clone(),
+                    kind: Box::new(item["type"].clone()),
+                    status: Box::new(item["status"].clone()),
                 });
             },
         }

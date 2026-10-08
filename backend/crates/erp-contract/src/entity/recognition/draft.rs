@@ -46,6 +46,13 @@ impl From<&ContractExtraction> for ContractValues {
 pub struct ConfirmImport {
     pub version: u64,
     pub fields: BTreeMap<ContractField, Option<String>>,
+    /// 用户确认允许在归档事务内补建缺失的客户身份。
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub create_customer: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 impl ContractExtraction {

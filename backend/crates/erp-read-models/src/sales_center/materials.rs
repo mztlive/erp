@@ -3,9 +3,7 @@
 use std::collections::BTreeSet;
 
 use erp_contract::{ContractExt, ContractRevision};
-use erp_core::ids::{
-    ContractRevisionId, CustomerAccountId, FileAssetId, PartyId, SalesOrderId, SalesOrderRevisionId,
-};
+use erp_core::ids::{ContractRevisionId, CustomerAccountId, FileAssetId, SalesOrderId, SalesOrderRevisionId};
 use erp_sales::entity::sales_order::{BusinessType, SalesOrderRevision, SalesOrderSubmission};
 use erp_sales::entity::sales_review::SalesChangeSubmission;
 use erp_sales::repository::{SalesOrderExt, SalesReviewExt};
@@ -32,7 +30,6 @@ pub struct RevisionMaterials {
 struct ContractSource<'a> {
     sales_order_id: &'a SalesOrderId,
     customer_id: &'a CustomerAccountId,
-    settlement_party_id: &'a PartyId,
     revision_id: Option<&'a ContractRevisionId>,
     contract_no: Option<&'a str>,
 }
@@ -44,7 +41,6 @@ struct SalesApprovalSource {
     document_id: String,
     submission_no: u32,
     customer_id: CustomerAccountId,
-    settlement_party_id: PartyId,
     base_revision_id: Option<SalesOrderRevisionId>,
 }
 
@@ -168,37 +164,37 @@ async fn revision_contract(
         .find_by_id(contract.contract_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::ConflictError("来源销售锁定的合同不存在".into()))?;
-    let identity_matches = if let Some(source) = source {
-        source.customer_id == identity.customer_id
-            && source.settlement_party_id == contract.settlement_party_id
+    let customer_id = if let Some(source) = source {
+        source.customer_id.clone()
     } else {
         let order = db
             .sales_orders()
             .find_by_id(revision.sales_order_id.as_ref(), executor)
             .await?
             .ok_or_else(|| Error::ConflictError("来源销售单不存在".into()))?;
-        order.customer_id == identity.customer_id && order.settlement_party_id == contract.settlement_party_id
+        order.customer_id
     };
-    if revision.contract_snapshot.as_ref().map(|value| value.contract_no.as_str())
-        != Some(contract.contract_no.as_str())
-        || revision.customer_snapshot.customer_name != contract.customer_snapshot.customer_name
-        || revision.settlement_party_snapshot.as_ref().map(|value| value.settlement_party_name.as_str())
-            != Some(contract.settlement_party_snapshot.settlement_party_name.as_str())
-        || !identity_matches
-    {
+    contract
+        .ensure_customer_reference(
+            &identity,
+            &customer_id,
+            revision.contract_snapshot.as_ref().map(|value| value.contract_no.as_str()),
+        )
+        .map_err(|_| Error::ConflictError("来源销售与合同版本不匹配".into()))?;
+    if revision.customer_snapshot.customer_name != contract.customer_snapshot.customer_name {
         return Err(Error::ConflictError("来源销售与合同版本不匹配".into()));
     }
     Ok(Some(contract))
 }
 
-/// 按本次销售提交锁定的合同版本证明客户与结算关系。
+/// 按本次销售提交锁定的合同版本证明客户与合同关系。
 ///
 /// # 参数
 /// `submission` 必须是本次审批精确版本的不可变销售提交。
 /// # 返回
 /// 返回锁定的合同版本；无合同开单返回空。
 /// # 错误
-/// 版本缺失或客户、结算主体、合同编号不匹配时拒绝。
+/// 版本缺失或客户、合同身份、合同编号不匹配时拒绝；销售结算主体允许单独选择。
 pub async fn submission_contract(
     db: &Database,
     submission: &SalesOrderSubmission,
@@ -209,7 +205,6 @@ pub async fn submission_contract(
         ContractSource {
             sales_order_id: &submission.sales_order_id,
             customer_id: &submission.customer_id,
-            settlement_party_id: &submission.settlement_party_id,
             revision_id: submission.contract_revision_id.as_ref(),
             contract_no: submission.contract_snapshot.as_ref().map(|value| value.contract_no.as_str()),
         },
@@ -222,7 +217,7 @@ pub async fn submission_contract(
 /// # 参数
 /// `submission` 为精确变更提交，`executor` 为原审批启动事务。
 /// # 返回
-/// 经过真实销售单、客户和结算关系证明的合同修订。
+/// 经过真实销售单和客户关系证明的合同修订。
 /// # 错误
 /// 关系缺失或不匹配时失败关闭，不补录当前合同。
 pub async fn change_submission_contract(
@@ -235,7 +230,6 @@ pub async fn change_submission_contract(
         ContractSource {
             sales_order_id: &submission.sales_order_id,
             customer_id: &submission.customer_id,
-            settlement_party_id: &submission.settlement_party_id,
             revision_id: submission.contract_revision_id.as_ref(),
             contract_no: submission.contract_snapshot.as_ref().map(|value| value.contract_no.as_str()),
         },
@@ -269,7 +263,7 @@ pub async fn change_evidence(
     Ok(files)
 }
 
-/// 唯一不可变合同修订必须同时匹配真实销售单、客户、结算主体和合同编号。
+/// 唯一不可变合同修订必须同时匹配真实销售单、客户和合同编号。
 async fn locked_contract(
     db: &Database,
     source: ContractSource<'_>,
@@ -291,12 +285,11 @@ async fn locked_contract(
         .find_by_id(source.sales_order_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::ConflictError("销售提交对应销售单不存在".into()))?;
-    if &contract.customer_id != source.customer_id
-        || &revision.settlement_party_id != source.settlement_party_id
-        || order.contract_id.as_ref() != Some(&revision.contract_id)
-        || source.contract_no != Some(revision.contract_no.as_str())
-    {
-        return Err(Error::ConflictError("销售提交与锁定合同的客户或结算关系不匹配".into()));
+    revision
+        .ensure_customer_reference(&contract, source.customer_id, source.contract_no)
+        .map_err(|_| Error::ConflictError("销售提交与锁定合同的客户或合同关系不匹配".into()))?;
+    if order.contract_id.as_ref() != Some(&revision.contract_id) {
+        return Err(Error::ConflictError("销售提交与锁定合同的客户或合同关系不匹配".into()));
     }
     Ok(Some(revision))
 }
@@ -424,7 +417,6 @@ async fn revision_source(
             document_id: submission.sales_order_id.to_string(),
             submission_no: submission.submission_no,
             customer_id: submission.customer_id,
-            settlement_party_id: submission.settlement_party_id,
             base_revision_id: None,
         }));
     }
@@ -444,7 +436,6 @@ async fn revision_source(
         document_id: submission.sales_change_order_id.to_string(),
         submission_no: submission.submission_no,
         customer_id: submission.customer_id,
-        settlement_party_id: submission.settlement_party_id,
         base_revision_id: Some(submission.base_revision_id),
     }))
 }

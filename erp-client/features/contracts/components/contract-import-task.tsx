@@ -124,7 +124,9 @@ export function ContractImportTask({
                     <div>
                         <h3 className="font-medium">合同已归档</h3>
                         <p className="mt-1 text-sm text-muted-foreground">
-                            合同信息已确认并归档，下方保留原始识别依据。
+                            {showExtraction
+                                ? "合同信息已确认并归档，下方保留原始识别依据。"
+                                : "合同信息与原 PDF 已保存，可查看原文核对。"}
                         </p>
                     </div>
                 </div>

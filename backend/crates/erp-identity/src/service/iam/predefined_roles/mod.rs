@@ -393,15 +393,17 @@ mod tests {
     };
     use crate::entity::rbac::{Permission, PermissionSet};
 
-    /// 采购选择已有公司，系统管理员维护公司；启动补权限保留额外人工授权。
+    /// 采购和销售选择已有公司，系统管理员维护公司；启动补权限保留额外人工授权。
     #[test]
     fn company_permissions_follow_role_duties_and_append_without_replacing() {
         let procurement = PermissionSet::new(parse_permissions(PROCUREMENT_PERMISSIONS).unwrap());
         let sysadmin = PermissionSet::new(parse_permissions(super::SYSADMIN_PERMISSIONS).unwrap());
+        let sales = PermissionSet::new(parse_permissions(SALES_PERMISSIONS).unwrap());
         for action in ["list", "detail", "create", "update"] {
             let permission = Permission::parse(format!("company:{action}")).unwrap();
             assert!(sysadmin.covers_one(&permission));
             assert_eq!(procurement.covers_one(&permission), matches!(action, "list" | "detail"));
+            assert_eq!(sales.covers_one(&permission), matches!(action, "list" | "detail"));
         }
         let mut previous = super::remove_permissions(
             &parse_permissions(PROCUREMENT_PERMISSIONS).unwrap(),

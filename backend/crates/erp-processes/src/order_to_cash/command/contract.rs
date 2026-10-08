@@ -21,14 +21,14 @@ use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl SalesOrderCommandProcess {
-    /// 在原草稿保存事务内持久化首次合同绑定，历史提交和正式版本保持不变。
+    /// 在原草稿事务内持久化首次合同绑定及本次明确选择的结算主体。
     ///
     /// # 参数
     /// * `db` / `access` / `executor` - 当前授权与草稿事务
     /// * `order` - 服务端准备完成的稳定关系
     /// * `revision_id` - 本次工作副本引用的合同修订
     /// # 返回
-    /// 原单未绑定而本次准备已绑定时更新稳定对象，其余情况无写入。
+    /// 合同或结算主体发生有效变更时更新稳定对象，历史提交及版本保持不变。
     /// # 错误
     /// 版本变化、已有合同变化或更新失败时拒绝。
     pub(in crate::order_to_cash) async fn persist_first_contract_binding(
@@ -39,12 +39,17 @@ impl SalesOrderCommandProcess {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         let current = access.current(&order.base.id, executor).await?;
-        if current.contract_id == order.contract_id {
+        if current.matches_contract_context(
+            &order.contract_id,
+            &order.customer_id,
+            &order.settlement_party_id,
+        ) {
             return Ok(());
         }
-        if !current.matches_version(order.base.version) || current.contract_id.is_some() {
+        if !current.matches_version(order.base.version) {
             return Err(Error::ConflictError("销售单合同或版本已变化，请刷新后重试".into()));
         }
+        current.ensure_first_submission_working_copy_editable()?;
         Self::check_first_contract_binding(db, access, &current, order, revision_id, executor).await?;
         let mut updated = order.clone();
         db.sales_orders().update(&mut updated, executor).await?;
@@ -166,12 +171,7 @@ async fn verify_and_bind_contract(
     if let Some(mut copy) = basis.working_copy {
         db.sales_order_working_copies().update(&mut copy, executor).await?;
     }
-    order.bind_contract(
-        req.contract_id.clone(),
-        &order.customer_id.clone(),
-        &order.settlement_party_id.clone(),
-        actor.id(),
-    )?;
+    order.bind_contract(req.contract_id.clone(), &order.customer_id.clone(), actor.id())?;
     Ok(())
 }
 
@@ -205,12 +205,7 @@ async fn contract_binding_check(
         return Err(Error::ConflictError("合同版本归属或结算主体已变化，请刷新后重试".into()));
     }
     // 在副本上执行领域关系守卫；预检不修改原对象。
-    order.clone().bind_contract(
-        req.contract_id.clone(),
-        &contract.customer_id,
-        &contract.settlement_party_id,
-        "contract-check",
-    )?;
+    order.clone().bind_contract(req.contract_id.clone(), &contract.customer_id, "contract-check")?;
     let basis = SalesOrderService::new(db.clone()).contract_binding_basis(order, executor).await?;
     let terms = ContractTerms {
         payment: PaymentTermSnapshot {

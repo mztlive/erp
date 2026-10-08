@@ -8,6 +8,7 @@ use erp_customer::{CustomerAccount, CustomerExt};
 use erp_identity::{Permission, SharedRbacService};
 use erp_read_models::sales_center::access::SalesAccess;
 use erp_sales::entity::sales_order::SalesOrder;
+use erp_sales::entity::sales_order::contract_terms::ensure_contract_customer;
 use persistence_core::Executor;
 
 use super::SalesOrderCommandProcess;
@@ -212,7 +213,11 @@ impl SalesCommandAccess {
     /// 客户始终独立重验；只有已选择合同时才重验合同对象。
     pub(super) async fn related_order(&self, order: &SalesOrder, executor: &mut dyn Executor) -> Result<()> {
         if let Some(contract_id) = order.contract_id.as_ref() {
-            self.related(contract_id.as_ref(), order.customer_id.as_ref(), executor).await
+            let contract = self.load_contract(contract_id.as_ref(), executor).await?;
+            ensure_contract_customer(&contract.customer_id, Some(&order.customer_id))?;
+            self.require_customer(order.customer_id.as_ref(), executor).await?;
+            self.settlement_name(&contract.settlement_party_id, &order.settlement_party_id, executor).await?;
+            Ok(())
         } else {
             let customer = self.load_customer(order.customer_id.as_ref(), executor).await?;
             self.settlement_name(&customer.party_id, &order.settlement_party_id, executor).await?;

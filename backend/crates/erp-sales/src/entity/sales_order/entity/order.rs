@@ -234,7 +234,7 @@ impl SalesOrder {
     /// # 参数
     /// * `contract_id` - 当前命令选择的合同
     /// * `customer_id` - 合同解析出的客户
-    /// * `settlement_party_id` - 合同解析出的结算主体
+    /// * `settlement_party_id` - 销售命令明确选择的结算主体
     ///
     /// # 返回
     /// 三项关系与销售单稳定关系完全一致时返回 `true`。

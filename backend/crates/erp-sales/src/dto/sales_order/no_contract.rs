@@ -1,9 +1,26 @@
 //! 无合同销售可编辑 DTO 与服务器读取资料的确定性组装。
+use erp_core::ids::PartyId;
 use validator::Validate;
 
 use super::{SalesOrderDraftRequest, SalesOrderEditableDraftRequest};
 use crate::{Error, Result};
 impl SalesOrderEditableDraftRequest {
+    /// 编辑旧销售单时，省略结算主体表示保留原选择。
+    ///
+    /// # 参数
+    /// `existing` 为原销售单结算主体，`has_contract` 表示本次是否关联合同。
+    /// # 返回
+    /// 仅补齐对应请求字段中的缺省值，显式选择保持不变。
+    /// # 错误
+    /// 无；关联和主体资格由命令流程另行校验。
+    pub fn retain_settlement(&mut self, existing: &PartyId, has_contract: bool) {
+        if has_contract {
+            self.settlement_party_id.get_or_insert_with(|| existing.clone());
+        } else if let Some(terms) = self.no_contract_terms.as_mut() {
+            terms.settlement_party_id.get_or_insert_with(|| existing.clone());
+        }
+    }
+
     /// 规范化并组装无合同草稿；主体名称来自服务器。
     ///
     /// # 参数
@@ -93,5 +110,40 @@ mod tests {
         let mut draft = editable();
         draft.no_contract_terms.as_mut().unwrap().tax_point = " ".into();
         assert!(draft.into_no_contract_draft("客户".into(), "结算".into()).is_err());
+    }
+
+    #[test]
+    fn editing_keeps_saved_settlement_when_omitted_and_honors_explicit_choice() {
+        let original = PartyId::new("our-company");
+        let selected = PartyId::new("other-company");
+        for has_contract in [true, false] {
+            let mut input = editable();
+            input.retain_settlement(&original, has_contract);
+            if has_contract {
+                assert_eq!(input.settlement_party_id, Some(original.clone()));
+                input.settlement_party_id = Some(selected.clone());
+            } else {
+                assert_eq!(
+                    input.no_contract_terms.as_ref().unwrap().settlement_party_id,
+                    Some(original.clone())
+                );
+                input.no_contract_terms.as_mut().unwrap().settlement_party_id = Some(selected.clone());
+            }
+            input.retain_settlement(&original, has_contract);
+            let actual = if has_contract {
+                input.settlement_party_id
+            } else {
+                input.no_contract_terms.unwrap().settlement_party_id
+            };
+            assert_eq!(actual, Some(selected.clone()));
+        }
+    }
+
+    #[test]
+    fn legacy_commands_omit_new_settlement_field_when_serialized() {
+        let input = editable();
+        assert!(input.settlement_party_id.is_none());
+        let wire = serde_json::to_value(input).unwrap();
+        assert!(wire.get("settlement_party_id").is_none());
     }
 }

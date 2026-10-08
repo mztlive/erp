@@ -105,7 +105,7 @@ export function SalesOrderCreateEvidenceField({
                         <FieldDescription id="sales-orders-create-evidence-description">
                             {locked
                                 ? "创建销售单时上传的开单依据已保留。"
-                                : "保留合同 PDF 或其他开单依据，支持继续添加；已归档合同可在销售单详情中关联。"}
+                                : "上传订单确认、未完成签署的合同或其他业务凭证；签署完成后，在销售单详情补录合同。"}
                         </FieldDescription>
                         {invalid ? (
                             <FieldError

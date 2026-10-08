@@ -192,6 +192,7 @@ export type BackendWorkingCopy = {
     contract_no?: string | null
     contract_revision_id?: string | null
     settlement_party_name?: string | null
+    settlement_party_id?: string
     payment_term_code?: string
     payment_term_name?: string
     invoice_type?: string
@@ -216,6 +217,7 @@ export type BackendSubmission = {
     contract_no?: string | null
     contract_revision_id?: string | null
     settlement_party_name?: string | null
+    settlement_party_id?: string
     payment_term_code?: string
     payment_term_name?: string
     invoice_type?: string

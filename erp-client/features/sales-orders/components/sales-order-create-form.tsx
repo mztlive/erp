@@ -16,8 +16,6 @@ import { toast } from "@/components/ui/toast"
 import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
 import { getErrorMessage } from "@/lib/api/errors"
 import type { FormalCommandKeyLedger } from "@/lib/formal-command"
-import { SalesContractPrefillDialog } from "./sales-contract-prefill-dialog"
-import type { SalesContractPrefill } from "../api/contract-prefill"
 import { ContractUploadDialog } from "@/features/contracts/contract-upload-dialog"
 import { useContractCenterQuery } from "@/features/contracts/queries"
 import type { UploadContractPdfResult } from "@/features/contracts/types"
@@ -81,9 +79,12 @@ export function SalesOrderCreateForm({
         initialDraft?.contractId || initialContractId,
     )
     const [uploadOpen, setUploadOpen] = React.useState(false)
-    const preferredRevisionRef = React.useRef(initialContractRevisionId)
-    /** 继续编辑场景下，合同派生 effect 首次运行时不要覆盖已从草稿带回的付款条件。 */
-    const skipPaymentTermsResetRef = React.useRef(initialDraft != null)
+    const preferredRevisionRef = React.useRef(
+        initialDraft?.requestedContractRevisionId || initialContractRevisionId,
+    )
+    /** 已同步的合同不会因后台刷新覆盖用户修改的结算主体。 */
+    const synchronizedContractRef = React.useRef("")
+    const keepDraftTermsRef = React.useRef(initialDraft != null)
     const contractQuery = useContractCenterQuery(selectedContractId)
 
     const commandLedger = useSalesOrderCreateCommandLedger(
@@ -188,6 +189,37 @@ export function SalesOrderCreateForm({
         form.store,
         (state) => state.values.customerId,
     )
+    const selectedSettlementPartyId = useSelector(
+        form.store,
+        (state) => state.values.settlementPartyId,
+    )
+    const contractDefaultSettlementId =
+        contractQuery.data?.currentRevision.signingCompanyPartyId ||
+        contractQuery.data?.currentRevision.settlementParty.id
+    const settlementSnapshot =
+        initialDraft &&
+        initialDraft.settlementPartyId === selectedSettlementPartyId &&
+        initialDraft.settlementEntity
+            ? {
+                  partyId: selectedSettlementPartyId,
+                  displayName: initialDraft.settlementEntity,
+                  partyCode: "",
+              }
+            : contractQuery.data &&
+                contractDefaultSettlementId === selectedSettlementPartyId
+              ? {
+                    partyId: selectedSettlementPartyId,
+                    displayName: contractQuery.data.currentRevision
+                        .signingCompanyPartyId
+                        ? contractQuery.data.currentRevision
+                              .signingCompanyName ||
+                          contractQuery.data.currentRevision.settlementParty
+                              .displayName
+                        : contractQuery.data.currentRevision.settlementParty
+                              .displayName,
+                    partyCode: "",
+                }
+              : undefined
     const customerQuery = useCustomerCenterQuery(
         orderBasis === "evidence" ? selectedCustomerId : "",
     )
@@ -205,11 +237,12 @@ export function SalesOrderCreateForm({
         const contract = contractQuery.data
         if (!selectedContractId || contract?.contractId !== selectedContractId)
             return
+        if (synchronizedContractRef.current === selectedContractId) return
+        synchronizedContractRef.current = selectedContractId
         const preferredRevision = preferredRevisionRef.current
             ? contract.revisionTimeline.find(
                   (revision) =>
-                      revision.revisionId === preferredRevisionRef.current &&
-                      revision.isCurrent,
+                      revision.revisionId === preferredRevisionRef.current,
               )
             : undefined
         const revision =
@@ -231,22 +264,24 @@ export function SalesOrderCreateForm({
         form.setFieldValue("customerName", contract.customer.displayName, {
             dontUpdateMeta: true,
         })
-        form.setFieldValue(
-            "settlementPartyId",
-            contract.currentRevision.settlementParty.id,
-            { dontUpdateMeta: true },
-        )
-        form.setFieldValue(
-            "settlementEntity",
-            contract.currentRevision.settlementParty.displayName,
-            { dontUpdateMeta: true },
-        )
-        // 负责销售固定为当前登录用户，不随合同变更覆盖
-        if (skipPaymentTermsResetRef.current) {
-            // 继续编辑草稿：本次合同 effect 首次运行只是把当前合同重新同步一遍，
-            // 已从草稿带回的付款条件不应被合同默认值覆盖；仅跳过这一次。
-            skipPaymentTermsResetRef.current = false
+        // 续编沿用已保存的商业条款及结算主体；新选合同使用合同默认值。
+        if (keepDraftTermsRef.current) {
+            keepDraftTermsRef.current = false
         } else {
+            form.setFieldValue(
+                "settlementPartyId",
+                contract.currentRevision.signingCompanyPartyId ||
+                    contract.currentRevision.settlementParty.id,
+                { dontUpdateMeta: true },
+            )
+            form.setFieldValue(
+                "settlementEntity",
+                contract.currentRevision.signingCompanyPartyId
+                    ? contract.currentRevision.signingCompanyName ||
+                          contract.currentRevision.settlementParty.displayName
+                    : contract.currentRevision.settlementParty.displayName,
+                { dontUpdateMeta: true },
+            )
             form.setFieldValue(
                 "invoiceType",
                 contract.currentRevision.invoiceRequirementSnapshot.titleType,
@@ -277,16 +312,6 @@ export function SalesOrderCreateForm({
         form.setFieldValue("customerName", customer.currentRevision.legalName, {
             dontUpdateMeta: true,
         })
-        if (!form.state.values.settlementPartyId) {
-            form.setFieldValue("settlementPartyId", customer.partyId, {
-                dontUpdateMeta: true,
-            })
-            form.setFieldValue(
-                "settlementEntity",
-                customer.currentRevision.legalName,
-                { dontUpdateMeta: true },
-            )
-        }
         if (!form.state.values.paymentTerms) {
             form.setFieldValue(
                 "paymentTerms",
@@ -310,12 +335,15 @@ export function SalesOrderCreateForm({
     const handleContractChange = React.useCallback(
         (contractId: string) => {
             preferredRevisionRef.current = ""
+            synchronizedContractRef.current = ""
+            keepDraftTermsRef.current = false
             setSelectedContractId(contractId)
             form.setFieldValue("requestedContractRevisionId", "")
             form.setFieldValue("contractRevisionLabel", "")
-            form.setFieldValue("customerName", "")
-            form.setFieldValue("settlementEntity", "")
-            form.setFieldValue("settlementPartyId", "")
+            if (contractId) {
+                form.setFieldValue("settlementEntity", "")
+                form.setFieldValue("settlementPartyId", "")
+            }
         },
         [form],
     )
@@ -337,6 +365,8 @@ export function SalesOrderCreateForm({
                 queryKey: entitySelectorKeys.all,
             })
             preferredRevisionRef.current = result.revisionId
+            synchronizedContractRef.current = ""
+            keepDraftTermsRef.current = false
             setSelectedContractId(result.contractId)
             form.setFieldValue("orderBasis", "contract")
             form.setFieldValue("contractId", result.contractId)
@@ -348,31 +378,6 @@ export function SalesOrderCreateForm({
         },
         [form, queryClient],
     )
-
-    const applyContractPrefill = (value: SalesContractPrefill) => {
-        preferredRevisionRef.current = ""
-        setSelectedContractId("")
-        form.setFieldValue("orderBasis", "evidence")
-        form.setFieldValue("contractId", "")
-        form.setFieldValue("requestedContractRevisionId", "")
-        form.setFieldValue("contractRevisionLabel", "")
-        form.setFieldValue("customerId", value.customerId)
-        form.setFieldValue("customerName", value.customerName)
-        form.setFieldValue("settlementPartyId", value.settlementPartyId)
-        form.setFieldValue("settlementEntity", value.settlementEntity)
-        form.setFieldValue("paymentTerms", value.paymentTerms)
-        form.setFieldValue("invoiceType", value.invoiceType)
-        form.setFieldValue("taxRatePercent", value.taxRatePercent)
-        const files = form.state.values.evidenceAttachments ?? []
-        if (!files.some((file) => file.id === value.file.id)) {
-            form.setFieldValue("evidenceAttachments", [...files, value.file])
-        }
-        toast.add({
-            title: "已填入客户与结算条款",
-            description: "合同 PDF 已保留，请继续填写销售明细并核对后提交。",
-            type: "success",
-        })
-    }
 
     const applyNature = React.useCallback(
         (nature: SalesOrderNature) => {
@@ -480,13 +485,8 @@ export function SalesOrderCreateForm({
                         </div>
                         <SalesOrderCreateContractSection
                             form={form}
-                            initialCustomerId={
-                                initialDraft?.customerId ||
-                                (submission.draftIdentity
-                                    ? selectedCustomerId
-                                    : initialCustomerId)
-                            }
                             customerLocked={submission.draftIdentity != null}
+                            settlementSnapshot={settlementSnapshot}
                             contractFetching={contractQuery.isFetching}
                             onContractChange={handleContractChange}
                             onOrderBasisChange={handleOrderBasisChange}
@@ -537,29 +537,15 @@ export function SalesOrderCreateForm({
             </form>
 
             <div id="sales-orders-create-contract-upload-dialog">
-                {!initialDraft && !submission.draftIdentity ? (
-                    <SalesContractPrefillDialog
-                        open={uploadOpen}
-                        onOpenChange={setUploadOpen}
-                        currentCustomerId={selectedCustomerId}
-                        onApply={applyContractPrefill}
-                    />
-                ) : (
-                    <ContractUploadDialog
-                        open={uploadOpen}
-                        onOpenChange={setUploadOpen}
-                        initialCustomerId={
-                            initialDraft?.customerId ||
-                            (submission.draftIdentity
-                                ? submission.savedValues?.customerId ||
-                                  selectedCustomerId
-                                : selectedCustomerId || initialCustomerId)
-                        }
-                        onSuccess={(result) => {
-                            void handleUploadSuccess(result)
-                        }}
-                    />
-                )}
+                <ContractUploadDialog
+                    open={uploadOpen}
+                    onOpenChange={setUploadOpen}
+                    autoAccept
+                    initialCustomerId={selectedCustomerId || undefined}
+                    onSuccess={(result) => {
+                        void handleUploadSuccess(result)
+                    }}
+                />
             </div>
 
             <DiscardConfirmDialog

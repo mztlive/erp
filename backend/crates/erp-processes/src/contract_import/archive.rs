@@ -14,7 +14,6 @@ use persistence_core::{Executor, NoTransaction};
 
 use super::ContractImportProcess;
 use super::audit::{ArchiveImport, context};
-use super::matching::match_all;
 use crate::adapters::{contract_access, customer_access, scoped_contract_service};
 use crate::audit::run_audited_event;
 use crate::{Error, Result};
@@ -52,7 +51,7 @@ impl ContractImportProcess {
         task = current;
         self.require_source(&task, executor).await?;
         let (fields, values) = command.validate().map_err(|error| Error::ValidationError(error.message))?;
-        let mut proof = match_all(&self.db, &task, &values, executor).await?;
+        let mut proof = self.match_all(&task, &values, command.create_customer, actor, executor).await?;
         proof.confirmed_fields = Some(command.fields.clone());
         let access = contract_access(self.db.clone(), self.rbac.clone());
         access.require_create(actor, &proof.customer_id, executor).await?;
@@ -68,6 +67,17 @@ impl ContractImportProcess {
         )?;
         planned.revision.recognition = Some(proof);
         self.persist_plan(&task, actor, &mut planned, executor).await?;
+        let view = self.complete_archive(task, planned, command, executor).await?;
+        Ok((view, true))
+    }
+
+    async fn complete_archive(
+        &self,
+        mut task: ContractImport,
+        planned: PlannedContractArchive,
+        command: &ConfirmImport,
+        executor: &mut dyn Executor,
+    ) -> Result<ImportView> {
         task.customer_id = Some(planned.contract.customer_id.to_string());
         task.result = Some(UploadContractView {
             id: planned.contract.base.id.clone(),
@@ -81,7 +91,7 @@ impl ContractImportProcess {
         task.status = ImportStatus::Succeeded;
         task.confirmation = Some(command.clone());
         self.db.contract_imports().update(&mut task, executor).await?;
-        Ok((task.into(), true))
+        Ok(task.into())
     }
 
     async fn persist_plan(

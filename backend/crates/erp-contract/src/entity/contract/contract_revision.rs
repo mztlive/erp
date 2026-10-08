@@ -8,10 +8,11 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use erp_core::common::revision::RevisionBase;
 use erp_core::common::time::BusinessDate;
-use erp_core::ids::{ContractId, ContractRevisionId, FileAssetId, PartyId};
+use erp_core::ids::{ContractId, ContractRevisionId, CustomerAccountId, FileAssetId, PartyId};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+use super::Contract;
 use super::snapshot::{
     ContractSnapshot, CustomerSnapshot, InvoiceRequirementSnapshot, PaymentTermSnapshot,
     SettlementPartySnapshot,
@@ -218,6 +219,30 @@ impl ContractRevision {
         &self.contract_id == contract_id
     }
 
+    /// 核对客户对合同不可变版本的引用身份。
+    ///
+    /// # 参数
+    /// `contract` 为本版本所属的稳定合同，`customer_id` 和 `contract_no` 为引用方冻结的身份。
+    /// # 返回
+    /// 客户、合同身份和编号全部一致时成功；结算主体由销售单单独约定。
+    /// # 错误
+    /// 客户、所属合同或编号不一致，以及引用方缺少编号时拒绝。
+    pub fn ensure_customer_reference(
+        &self,
+        contract: &Contract,
+        customer_id: &CustomerAccountId,
+        contract_no: Option<&str>,
+    ) -> Result<()> {
+        if self.contract_id.as_ref() != contract.base.id.as_str()
+            || self.contract_no != contract.contract_no
+            || &contract.customer_id != customer_id
+            || contract_no != Some(self.contract_no.as_str())
+        {
+            return Err(Error::from("合同引用的客户、身份或编号不匹配"));
+        }
+        Ok(())
+    }
+
     /// 判断本版本结算主体是否与给定主体一致。
     ///
     /// # 参数
@@ -242,6 +267,7 @@ mod tests {
     use erp_core::ids::ContractId;
 
     use super::*;
+    use crate::ContractData;
 
     fn data() -> ContractRevisionData {
         ContractRevisionData {
@@ -316,6 +342,66 @@ mod tests {
         assert!(!revision.belongs_to_contract(&ContractId::new("c-other")));
         assert!(revision.matches_settlement_party(&PartyId::new("party-1")));
         assert!(!revision.matches_settlement_party(&PartyId::new("party-other")));
+    }
+
+    #[test]
+    fn customer_reference_keeps_historical_contract_identity_independent_of_settlement() {
+        let revision =
+            ContractRevision::new(ContractRevisionId::new("rev-1"), ContractId::new("c-1"), 1, data())
+                .unwrap();
+        let mut contract = Contract::new(
+            ContractId::new("c-1"),
+            ContractData {
+                contract_no: revision.contract_no.clone(),
+                customer_id: CustomerAccountId::new("customer-1"),
+                settlement_party_id: PartyId::new("another-settlement"),
+            },
+            "sales",
+        )
+        .unwrap();
+        contract.attach_revision("rev-2", "sales");
+        contract.terminate("sales").unwrap();
+
+        revision
+            .ensure_customer_reference(&contract, &CustomerAccountId::new("customer-1"), Some("HT-2026-0088"))
+            .unwrap();
+        assert!(
+            revision
+                .ensure_customer_reference(
+                    &contract,
+                    &CustomerAccountId::new("customer-other"),
+                    Some("HT-2026-0088"),
+                )
+                .is_err()
+        );
+        for number in [None, Some("HT-OTHER")] {
+            assert!(
+                revision
+                    .ensure_customer_reference(&contract, &CustomerAccountId::new("customer-1"), number)
+                    .is_err()
+            );
+        }
+        contract.base.id = "contract-other".into();
+        assert!(
+            revision
+                .ensure_customer_reference(
+                    &contract,
+                    &CustomerAccountId::new("customer-1"),
+                    Some("HT-2026-0088"),
+                )
+                .is_err()
+        );
+        contract.base.id = "c-1".into();
+        contract.contract_no = "HT-OTHER".into();
+        assert!(
+            revision
+                .ensure_customer_reference(
+                    &contract,
+                    &CustomerAccountId::new("customer-1"),
+                    Some("HT-2026-0088"),
+                )
+                .is_err()
+        );
     }
 
     #[test]

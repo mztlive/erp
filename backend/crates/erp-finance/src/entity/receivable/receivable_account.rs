@@ -141,11 +141,11 @@ impl AccountReviewStatus {
 pub struct ReceivableAccountData {
     /// 来源销售单。
     pub sales_order_id: SalesOrderId,
-    /// 往来子账序号（同一销售单内从 1 递增，更换结算主体时以新序号另建子账）。
+    /// 往来子账序号（同一销售单内从 1 递增，客户往来身份变化时以新序号另建子账）。
     pub account_seq: u32,
     /// 企业客户经营归属（不作为资金核销相等键）。
     pub customer_id: CustomerAccountId,
-    /// 收款和开票往来主体（生效销售版本的 `settlement_party_id`）。
+    /// 收款和开票的客户企业主体；独立于销售单的我方结算主体。
     pub counterparty_party_id: PartyId,
     /// 本子账开始适用的销售版本。
     pub source_sales_order_revision_id: SalesOrderRevisionId,

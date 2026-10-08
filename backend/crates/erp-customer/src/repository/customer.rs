@@ -205,6 +205,22 @@ pub trait CustomerAccountRepositoryExt {
         executor: &mut dyn Executor,
     ) -> Result<Option<CustomerAccount>>;
 
+    /// 查找企业已有客户身份，包含软删除记录以防重复建档。
+    ///
+    /// # 参数
+    /// * `party_id` / `executor` - 稳定主体及调用方事务。
+    ///
+    /// # 返回
+    /// 已存在的客户身份；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 数据库读取失败。
+    async fn find_by_party_including_deleted(
+        &self,
+        party_id: &PartyId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<CustomerAccount>>;
+
     /// 返回匹配条件的未删除对象 ID，供跨域列表在分页前组合筛选。
     ///
     /// 数据库查询失败时返回错误；空命中返回空集合，不扩大范围。
@@ -283,6 +299,14 @@ impl CustomerAccountRepositoryExt for Repository<'_, CustomerAccount> {
         executor: &mut dyn Executor,
     ) -> Result<Option<CustomerAccount>> {
         self.find_one(doc! { "party_id": party_id.to_string() }, executor).await
+    }
+
+    async fn find_by_party_including_deleted(
+        &self,
+        party_id: &PartyId,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<CustomerAccount>> {
+        mongo_ops::find_one(&self.collection(), doc! { "party_id": party_id.to_string() }, executor).await
     }
 
     async fn matching_ids_by_parties(

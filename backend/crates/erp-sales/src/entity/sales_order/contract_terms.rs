@@ -1,11 +1,30 @@
 //! 后补合同的条款核对；不修改任一来源快照。
 use std::str::FromStr;
 
+use erp_core::ids::CustomerAccountId;
 use erp_core::{Error, Result};
 use rust_decimal::Decimal;
 use serde::Serialize;
 
 use super::{InvoiceRequirementSnapshot, PaymentTermSnapshot};
+
+/// 核对销售客户与合同对方身份；兼容旧客户端省略客户的请求。
+///
+/// # 参数
+/// `expected` 为合同权威客户，`selected` 为销售命令或已保存销售单的客户。
+/// # 返回
+/// 未声明客户或身份相同时通过。
+/// # 错误
+/// 身份不同时拒绝，禁止按合同静默更换已选择的客户。
+pub fn ensure_contract_customer(
+    expected: &CustomerAccountId,
+    selected: Option<&CustomerAccountId>,
+) -> Result<()> {
+    if selected.is_some_and(|id| id != expected) {
+        return Err(Error::from("销售单客户必须与合同对方主体对应的客户一致"));
+    }
+    Ok(())
+}
 
 /// 待核对的结构化商业条款。
 #[derive(Debug, Clone)]
@@ -115,6 +134,15 @@ fn tax_percent(raw: &str) -> Option<Decimal> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn contract_customer_accepts_same_or_legacy_omission_and_rejects_different_identity() {
+        let customer = CustomerAccountId::new("customer-1");
+        ensure_contract_customer(&customer, None).unwrap();
+        ensure_contract_customer(&customer, Some(&customer)).unwrap();
+        let error = ensure_contract_customer(&customer, Some(&CustomerAccountId::new("other"))).unwrap_err();
+        assert!(error.to_string().contains("客户必须与合同"));
+    }
 
     fn terms() -> ContractTerms {
         ContractTerms {
