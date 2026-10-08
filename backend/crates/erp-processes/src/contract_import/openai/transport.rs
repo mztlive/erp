@@ -10,6 +10,7 @@ use rig_core::http_client::{
 };
 
 use super::diagnostics::Diagnostics;
+use super::rejection::Rejection;
 
 pub(super) const MAX_RESPONSE: usize = 1_048_576;
 
@@ -80,24 +81,7 @@ impl HttpClientExt for BoundedHttp {
             let response = request.send().await.map_err(|error| {
                 http_client::Error::instance(transport_error(error, TimeoutSource::ResponseHeaders))
             })?;
-            let status = response.status();
-            diagnostics.response(status.as_u16(), response.headers());
-            if !status.is_success() {
-                // 不读取/记录错误正文，也不向 Rig 传供应商响应头。
-                return Err(http_client::Error::non_success_with_details(
-                    status,
-                    HeaderMap::new(),
-                    String::new(),
-                ));
-            }
-            let body: LazyBody<U> = Box::pin(async move {
-                read_body(response).await.map(U::from).map_err(http_client::Error::instance)
-            });
-            Response::builder()
-                .status(status)
-                .header("content-type", "application/json")
-                .body(body)
-                .map_err(Into::into)
+            receive(response, diagnostics).await.map_err(|error| *error)
         }
     }
 
@@ -120,6 +104,35 @@ impl HttpClientExt for BoundedHttp {
     {
         ready(Err(http_client::Error::instance(Failure::Unsupported)))
     }
+}
+
+async fn receive<U: From<Bytes> + Send + 'static>(
+    response: HttpResponse,
+    diagnostics: Diagnostics,
+) -> Result<Response<LazyBody<U>>, Box<http_client::Error>> {
+    let status = response.status();
+    diagnostics.response(status.as_u16(), response.headers());
+    if !status.is_success() {
+        // 完整读取错误文本供任务日志使用，失败分类仍由已收到的 HTTP 状态决定。
+        let rejection = match response.text().await {
+            Ok(body) => Rejection::parse(body),
+            Err(error) => Rejection::read_failed(format!("{error:?}")),
+        };
+        diagnostics.rejection(rejection);
+        return Err(Box::new(http_client::Error::non_success_with_details(
+            status,
+            HeaderMap::new(),
+            String::new(),
+        )));
+    }
+    let body: LazyBody<U> =
+        Box::pin(async move { read_body(response).await.map(U::from).map_err(http_client::Error::instance) });
+    Response::builder()
+        .status(status)
+        .header("content-type", "application/json")
+        .body(body)
+        .map_err(http_client::Error::from)
+        .map_err(Box::new)
 }
 
 async fn read_body(mut response: HttpResponse) -> Result<Bytes, Failure> {
@@ -153,6 +166,13 @@ fn transport_error(error: reqwest::Error, stage: TimeoutSource) -> Failure {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Instant;
+
+    use rig_core::ProviderError;
+    use serde_json::json;
+
+    use super::super::provider_error;
+    use super::super::tests::{capture, event};
     use super::*;
     #[test]
     fn rejects_chunked_overflow_before_appending() {
@@ -161,5 +181,49 @@ mod tests {
         assert!(append(&mut bytes, &[2]).is_err());
         assert_eq!(bytes.len(), MAX_RESPONSE);
         assert_eq!(bytes[MAX_RESPONSE - 1], 1);
+    }
+
+    #[tokio::test]
+    async fn http_400_logs_complete_body_beyond_success_response_limit() {
+        let message = format!("json_schema is not supported: {}", "错误详情".repeat(MAX_RESPONSE / 6));
+        let body = json!({"error": {"type": "vendor.custom", "code": 400,
+            "param": "response_format.type", "message": message}})
+        .to_string();
+        assert!(body.len() > MAX_RESPONSE);
+        let response = Response::builder()
+            .status(400)
+            .header("x-vendor-detail", "original-detail")
+            .body(body.clone())
+            .unwrap();
+        let diagnostics = Diagnostics::default();
+        let (result, logs) = capture(async {
+            let error = receive::<Bytes>(response.into(), diagnostics.clone()).await.err().unwrap();
+            let error = ProviderError::from(*error);
+            diagnostics.error(&error);
+            let result: Result<(), _> = Err(provider_error(&error));
+            diagnostics.finish(Instant::now(), &result, None);
+            result
+        })
+        .await;
+        assert_eq!(result.unwrap_err().code, "AI_REJECTED");
+        let fields = &event(&logs, "contract_ai_finished")["fields"];
+        assert_eq!(fields["http_status"], 400);
+        assert_eq!(fields["provider_error_body_state"], "received");
+        assert_eq!(fields["provider_error_body"].as_str(), Some(body.as_str()));
+        assert_eq!(fields["provider_error_type"], "vendor.custom");
+        assert_eq!(fields["provider_error_code"], "400");
+        assert_eq!(fields["provider_error_param"], "response_format.type");
+        assert_eq!(fields["provider_error_message"].as_str(), Some(message.as_str()));
+        assert!(fields["provider_response_headers"].as_str().unwrap().contains("original-detail"));
+    }
+
+    #[tokio::test]
+    async fn success_response_still_uses_existing_body_limit() {
+        let response = Response::builder().status(200).body("ok").unwrap();
+        let response = receive::<Bytes>(response.into(), Diagnostics::default()).await.unwrap();
+        assert_eq!(response.into_body().await.unwrap(), Bytes::from_static(b"ok"));
+        let response = Response::builder().status(200).body(vec![b'x'; MAX_RESPONSE + 1]).unwrap();
+        let response = receive::<Bytes>(response.into(), Diagnostics::default()).await.unwrap();
+        assert!(response.into_body().await.is_err());
     }
 }

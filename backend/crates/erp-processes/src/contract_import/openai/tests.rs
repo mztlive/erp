@@ -7,6 +7,7 @@ use rig_core::http_client::{HeaderMap, HeaderValue, StatusCode};
 use rig_core::test_utils::RecordingHttpClient;
 use serde_json::{Value, json};
 use tracing::Instrument;
+use tracing::instrument::WithSubscriber;
 
 use super::*;
 
@@ -395,7 +396,7 @@ async fn cancels_pending_request_at_deadline_without_retry() {
     assert_eq!(finished["fields"]["timeout_source"], "application_deadline");
     assert_eq!(finished["fields"]["error_code"], "AI_TIMEOUT");
     assert!(finished["fields"].get("http_status").is_none());
-    assert!(!serde_json::to_string(&logs).unwrap().contains("sdk-private-payload"));
+    assert!(serde_json::to_string(&logs).unwrap().contains("sdk-private-payload"));
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     assert!(dropped.load(Ordering::SeqCst));
 }
@@ -414,7 +415,7 @@ impl Write for &Capture {
     }
 }
 
-async fn capture<F: Future>(future: F) -> (F::Output, Vec<Value>) {
+pub(super) async fn capture<F: Future>(future: F) -> (F::Output, Vec<Value>) {
     let buffer = Arc::new(Capture::default());
     let subscriber =
         tracing_subscriber::fmt().json().without_time().with_ansi(false).with_writer(buffer.clone()).finish();
@@ -425,12 +426,12 @@ async fn capture<F: Future>(future: F) -> (F::Output, Vec<Value>) {
     (output, logs)
 }
 
-fn event<'a>(logs: &'a [Value], name: &str) -> &'a Value {
+pub(super) fn event<'a>(logs: &'a [Value], name: &str) -> &'a Value {
     logs.iter().find(|entry| entry["fields"]["event"] == name).unwrap()
 }
 
 #[tokio::test]
-async fn successful_call_logs_safe_metadata_with_task_context() {
+async fn successful_call_logs_model_endpoint_and_task_context() {
     let (document, output) = sample();
     let diagnostics = Diagnostics::default();
     let mut headers = HeaderMap::new();
@@ -453,6 +454,10 @@ async fn successful_call_logs_safe_metadata_with_task_context() {
     assert_eq!(started["span"]["provider_id"], "gateway-a");
     assert_eq!(started["span"]["page_count"], 3);
     assert_eq!(started["span"]["timeout_seconds"], 90);
+    assert_eq!(started["span"]["model"], "contract-model");
+    assert_eq!(started["span"]["base_url"], "https://gateway.example/compatible/v1/");
+    assert_eq!(started["span"]["response_format"], "json_schema");
+    assert_eq!(started["span"]["strict"], true);
     let finished = event(&logs, "contract_ai_finished");
     assert_eq!(finished["fields"]["outcome"], "succeeded");
     assert_eq!(finished["fields"]["http_status"], 200);
@@ -460,14 +465,10 @@ async fn successful_call_logs_safe_metadata_with_task_context() {
     assert!(finished["fields"]["elapsed_ms"].is_u64());
     assert_eq!(finished["spans"][0]["task_id"], "task-1");
     assert_eq!(finished["spans"][0]["request_id"], "request-1");
-    let serialized = serde_json::to_string(&logs).unwrap();
-    for secret in ["private-cookie", "test-key", "contract-model", "gateway.example", "客户有限公司"] {
-        assert!(!serialized.contains(secret), "logs exposed {secret}");
-    }
 }
 
 #[tokio::test]
-async fn upstream_timeout_logs_status_and_request_id_without_provider_body() {
+async fn upstream_timeout_logs_original_provider_body_headers_and_request_id() {
     let (document, _) = sample();
     for status in [408, 504] {
         let diagnostics = Diagnostics::default();
@@ -486,10 +487,26 @@ async fn upstream_timeout_logs_status_and_request_id_without_provider_body() {
         assert_eq!(finished["fields"]["timeout_source"], "upstream_http");
         assert_eq!(finished["fields"]["http_status"], status);
         assert_eq!(finished["fields"]["provider_request_id"], "req-upstream-123");
-        let serialized = serde_json::to_string(&logs).unwrap();
-        assert!(!serialized.contains("secret-key"));
-        assert!(!serialized.contains("confidential-contract"));
-        assert!(!serialized.contains("private-cookie"));
+        assert_eq!(finished["fields"]["provider_error_body"], "secret-key confidential-contract");
+        assert!(finished["fields"]["provider_response_headers"].as_str().unwrap().contains("private-cookie"));
+    }
+}
+
+#[test]
+fn diagnostic_read_deadline_preserves_known_http_rejections() {
+    for (status, code, source) in [
+        (400, "AI_REJECTED", None),
+        (401, "AI_UNAUTHORIZED", None),
+        (429, "AI_THROTTLED", None),
+        (500, "AI_UNAVAILABLE", None),
+        (504, "AI_TIMEOUT", Some("upstream_http")),
+        (200, "AI_TIMEOUT", Some("application_deadline")),
+    ] {
+        let diagnostics = Diagnostics::default();
+        diagnostics.response(status, &HeaderMap::new());
+        let (result, timeout_source) = deadline_failure(&diagnostics);
+        assert_eq!(result.unwrap_err().code, code);
+        assert_eq!(timeout_source, source);
     }
 }
 
