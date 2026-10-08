@@ -3,7 +3,7 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
-use super::{ContractExtraction, ImportFailure, OcrDocument};
+use super::{ConfirmImport, ContractExtraction, ImportFailure, OcrDocument, RecognitionDraft};
 use crate::{Error, Result, UploadContractView};
 
 /// 中断任务恢复等待覆盖文件读取、识别与事务确认窗口。
@@ -41,6 +41,7 @@ pub enum ImportStatus {
     Ready,
     Processing,
     Failed,
+    Review,
     Succeeded,
 }
 
@@ -58,12 +59,15 @@ pub struct ContractImport {
     pub failure: Option<ImportFailure>,
     pub result: Option<UploadContractView>,
     #[serde(default)]
+    pub confirmation: Option<ConfirmImport>,
+    #[serde(default)]
     pub customer_id: Option<String>,
 }
 
-/// 任务公开视图不含对象存储键和全文，只提供逐字段依据。
+/// 任务公开视图提供可编辑预填、逐字段依据及结果，不含存储键和全文。
 #[derive(Clone, Serialize)]
 pub struct ImportView {
+    pub draft: Option<RecognitionDraft>,
     pub expected_customer_id: Option<String>,
     pub revision_target: Option<RevisionTarget>,
     pub recoverable_at: Option<u64>,
@@ -82,7 +86,13 @@ pub struct ImportView {
 
 impl From<ContractImport> for ImportView {
     fn from(task: ContractImport) -> Self {
+        let draft = task
+            .extraction
+            .as_ref()
+            .zip(task.ocr.as_ref())
+            .map(|(extraction, document)| extraction.draft(document));
         Self {
+            draft,
             expected_customer_id: task.command.expected_customer_id,
             revision_target: task.command.revision_target,
             recoverable_at: task.started_at.map(|start| start.saturating_add(IMPORT_RECOVERY_SECONDS)),
@@ -144,6 +154,7 @@ impl ContractImport {
             extraction: None,
             failure: None,
             result: None,
+            confirmation: None,
             customer_id: None,
         })
     }
@@ -152,11 +163,11 @@ impl ContractImport {
     /// # 参数
     /// * `now` - 当前秒级时间；恢复等待覆盖外部识别及归档确认窗口。
     /// # 返回
-    /// 已成功返回 false，其余可开始时返回 true。
+    /// 已完成识别或归档返回 false，其余可开始时返回 true。
     /// # 错误
     /// 正在处理且未过期时拒绝。
     pub fn begin(&mut self, now: u64) -> Result<bool> {
-        if self.status == ImportStatus::Succeeded {
+        if matches!(self.status, ImportStatus::Succeeded | ImportStatus::Review) {
             return Ok(false);
         }
         if self.status == ImportStatus::Processing
@@ -169,6 +180,45 @@ impl ContractImport {
         self.failure = None;
         self.ocr = None;
         self.extraction = None;
+        Ok(true)
+    }
+
+    /// 保存识别阶段结果，等待用户确认，不生成合同归档结果。
+    /// # 参数
+    /// * `ocr` / `extraction` - 本次完整 OCR 与部分提取结果。
+    /// # 返回
+    /// 任务进入待确认状态。
+    /// # 错误
+    /// 非处理中的任务不可完成识别。
+    pub fn finish_recognition(&mut self, ocr: OcrDocument, extraction: ContractExtraction) -> Result<()> {
+        if self.status != ImportStatus::Processing {
+            return Err(Error::ConflictError("任务未在识别中，请刷新查看结果".into()));
+        }
+        self.ocr = Some(ocr);
+        self.extraction = Some(extraction);
+        self.failure = None;
+        self.status = ImportStatus::Review;
+        Ok(())
+    }
+
+    /// 检查确认状态和重放内容。
+    /// # 参数
+    /// * `command` - 用户确认命令。
+    /// # 返回
+    /// 待归档为 true；同内容成功重放为 false。
+    /// # 错误
+    /// 未完成识别、版本变化或异载荷重放。
+    pub fn check_confirmation(&self, command: &ConfirmImport) -> Result<bool> {
+        if self.status == ImportStatus::Succeeded {
+            return if self.confirmation.as_ref() == Some(command) {
+                Ok(false)
+            } else {
+                Err(Error::ConflictError("此任务已归档，确认内容不一致，请刷新查看结果".into()))
+            };
+        }
+        if self.status != ImportStatus::Review || self.base.version != command.version {
+            return Err(Error::ConflictError("识别结果或版本已变化，请刷新后确认".into()));
+        }
         Ok(true)
     }
 

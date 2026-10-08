@@ -17,6 +17,7 @@ import {
     type UseContractUploadFormOptions,
 } from "@/features/contracts/hooks/use-contract-upload-form"
 import { ContractImportHistory } from "./contract-import-history"
+import { ContractImportReview } from "./contract-import-review"
 import { ContractImportTask } from "./contract-import-task"
 
 export type ContractUploadDialogProps = UseContractUploadFormOptions
@@ -24,8 +25,12 @@ export type ContractUploadDialogProps = UseContractUploadFormOptions
 export function ContractUploadDialog(props: ContractUploadDialogProps) {
     const state = useContractUploadForm(props)
     const task = state.detail.data
-    const busy = state.uploadMutation.isPending || state.runMutation.isPending
+    const busy =
+        state.uploadMutation.isPending ||
+        state.runMutation.isPending ||
+        state.confirmMutation.isPending
     const error =
+        state.confirmMutation.error ||
         state.uploadMutation.error ||
         state.runMutation.error ||
         state.list.error ||
@@ -47,7 +52,7 @@ export function ContractUploadDialog(props: ContractUploadDialogProps) {
                         {props.revisionTarget ? "导入合同新版本" : "导入合同"}
                     </DialogTitle>
                     <DialogDescription>
-                        识别合同信息，自动匹配客户与主体
+                        识别并预填合同信息，核对修改后确认归档
                     </DialogDescription>
                 </DialogHeader>
                 <div className="min-h-0 space-y-5 overflow-y-auto">
@@ -121,6 +126,20 @@ export function ContractUploadDialog(props: ContractUploadDialogProps) {
                             正在加载识别结果…
                         </p>
                     ) : null}
+                    {task?.status === "review" && task.draft ? (
+                        <ContractImportReview
+                            key={`${task.id}-${task.version}`}
+                            task={task}
+                            busy={busy}
+                            disabled={Boolean(state.contextError)}
+                            onConfirm={(command) =>
+                                state.confirmMutation.mutateAsync({
+                                    id: task.id,
+                                    command,
+                                })
+                            }
+                        />
+                    ) : null}
                     {state.previewUrl ? (
                         <iframe
                             title="导入合同原文"
@@ -142,7 +161,7 @@ export function ContractUploadDialog(props: ContractUploadDialogProps) {
                 </div>
                 <DialogFooter className="shrink-0 items-start gap-3 border-t border-border pt-4 sm:flex-wrap sm:items-center sm:justify-between">
                     <p className="text-xs leading-relaxed text-muted-foreground">
-                        识别结果仅供核对，合同信息不可手工修改
+                        识别结果可补充、修改，确认后归档
                     </p>
                     <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
                         {task?.status === "succeeded" ||

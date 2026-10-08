@@ -185,6 +185,14 @@ fn import_routes(rbac: &SharedRbacService) -> Router<AppState> {
             with_permission(post(contract::imports::run), rbac, contract::imports::run_permission_key()),
         )
         .route(
+            "/contract-imports/{id}/confirm",
+            with_permission(
+                post(contract::imports::confirm),
+                rbac,
+                contract::imports::confirm_permission_key(),
+            ),
+        )
+        .route(
             "/contract-imports/{id}/preview",
             with_permission(
                 get(contract::imports::preview),

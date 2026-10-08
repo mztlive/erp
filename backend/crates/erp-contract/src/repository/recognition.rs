@@ -131,6 +131,7 @@ mod tests {
             extraction: None,
             failure: Some(ImportFailure::new("OCR_NOT_CONFIGURED", "尚未配置")),
             result: None,
+            confirmation: None,
             customer_id: None,
         };
         let encoded = mongodb::bson::serialize_to_document(&task).unwrap();

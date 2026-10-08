@@ -2,7 +2,7 @@
 use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_audit::{BusinessEventContent, BusinessEventContext, BusinessEventResult, registered_action};
-use erp_contract::entity::recognition::{ContractImport, ImportCommand, ImportView};
+use erp_contract::entity::recognition::{ConfirmImport, ContractImport, ImportCommand, ImportView};
 use erp_support::FileAsset;
 use persistence_core::Executor;
 
@@ -42,6 +42,7 @@ pub(super) struct ArchiveImport {
     pub process: ContractImportProcess,
     pub actor: AuditActor,
     pub task: ContractImport,
+    pub command: ConfirmImport,
 }
 
 #[async_trait]
@@ -49,7 +50,11 @@ impl AuditedCommand for ArchiveImport {
     type Output = ImportView;
 
     async fn execute(&self, executor: &mut dyn Executor) -> Result<AuditedWrite<Self::Output>> {
-        let result = self.process.persist_archive(self.task.clone(), &self.actor, executor).await?;
+        let (result, created) =
+            self.process.persist_archive(self.task.clone(), &self.actor, &self.command, executor).await?;
+        if !created {
+            return Ok(AuditedWrite::Replayed(result));
+        }
         let contract = result.result.as_ref().ok_or_else(|| Error::Internal("归档结果缺失".into()))?;
         Ok(AuditedWrite::Fresh {
             content: content(contract.id.clone(), Some(contract.contract_no.clone())),

@@ -52,7 +52,7 @@ impl RecognitionProviders {
                 return Err(ImportFailure::new("EXTRACTION_TOO_LARGE", "字段提取结果异常，请联系管理员"));
             }
             attempt.extraction = Some(extraction.clone());
-            extraction.validate(&document)?;
+            // 识别只生成待确认草稿；缺失、冲突和未匹配字段不阻断任务。
             Ok::<(), ImportFailure>(())
         })
         .await;

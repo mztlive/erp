@@ -2763,6 +2763,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/contract-imports/{id}/confirm",
+                description: "确认合同识别信息并归档",
+                permission: {
+                    resource: "contract",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/contract-imports/{id}/preview",
                 description: "预览本人导入原文",

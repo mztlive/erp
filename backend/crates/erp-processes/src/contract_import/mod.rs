@@ -80,7 +80,7 @@ impl ContractImportProcess {
         })
     }
 
-    /// 领取本人任务；后台执行器必须独立持有本调用至归档完成。
+    /// 领取本人任务；后台执行器必须独立持有本调用至识别结果保存。
     /// # 参数
     /// * `id` / `actor` - 任务与认证人。
     /// # 返回
@@ -107,7 +107,7 @@ impl ContractImportProcess {
     pub async fn execute(
         &self,
         attempt: ImportAttempt,
-        actor: &AuditActor,
+        _actor: &AuditActor,
         pdf: &[u8],
     ) -> Result<ImportView> {
         let mut task = attempt.task;
@@ -122,22 +122,12 @@ impl ContractImportProcess {
         if let Some(failure) = attempt.failure {
             return self.fail(task, failure).await;
         }
-        match self.archive(&task, actor).await {
-            Ok(view) => Ok(view),
-            Err(error @ Error::OutcomeUnknown(_)) => Err(error),
-            Err(error) => {
-                let message = match &error {
-                    Error::BusinessLogicError(message)
-                    | Error::ValidationError(message)
-                    | Error::ConflictError(message) => message.as_str(),
-                    Error::Forbidden(_) | Error::NotFound(_) => {
-                        "无权使用识别匹配的客户或合同，请联系管理员核对权限"
-                    },
-                    _ => "归档暂未完成，请稍后重试或联系管理员",
-                };
-                self.fail(task, ImportFailure::new("ARCHIVE_REJECTED", message)).await
-            },
-        }
+        let ocr = task.ocr.take().ok_or_else(|| Error::Internal("识别结果缺少 OCR".into()))?;
+        let extraction =
+            task.extraction.take().ok_or_else(|| Error::Internal("识别结果缺少提取信息".into()))?;
+        task.finish_recognition(ocr, extraction)?;
+        self.db.contract_imports().update(&mut task, &mut NoTransaction).await?;
+        Ok(task.into())
     }
 
     /// 登记读取原文件失败，任务可在原记录重试。

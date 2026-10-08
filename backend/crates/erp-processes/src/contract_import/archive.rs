@@ -1,7 +1,7 @@
 //! 合同、不可变修订、导入结果和审计共用同一事务。
 use application_core::AuditActor;
 use erp_contract::entity::recognition::{
-    ContractImport, ImportStatus, ImportView, RecognitionProof, ValidatedFields,
+    ConfirmImport, ContractImport, ImportStatus, ImportView, RecognitionProof, ValidatedFields,
 };
 use erp_contract::repository::prelude::*;
 use erp_contract::repository::recognition::{self, ContractImportExt};
@@ -10,7 +10,7 @@ use erp_contract::{
     UploadContractView, plan_upload_archive,
 };
 use erp_core::ids::{CustomerAccountId, FileAssetId, PartyId};
-use persistence_core::Executor;
+use persistence_core::{Executor, NoTransaction};
 
 use super::ContractImportProcess;
 use super::audit::{ArchiveImport, context};
@@ -20,11 +20,20 @@ use crate::audit::run_audited_event;
 use crate::{Error, Result};
 
 impl ContractImportProcess {
-    pub(super) async fn archive(&self, task: &ContractImport, actor: &AuditActor) -> Result<ImportView> {
+    /// 确认用户编辑后的草稿并归档；识别本身不产生合同。
+    /// # 参数
+    /// * `id` / `command` / `actor` - 本人任务、确认值及认证人。
+    /// # 返回
+    /// 归档结果；相同确认命令重放返回原结果。
+    /// # 错误
+    /// 并发、输入、主数据、权限或事务失败。
+    pub async fn confirm(&self, id: &str, command: ConfirmImport, actor: &AuditActor) -> Result<ImportView> {
+        let task = recognition::owned(&self.db, actor.id(), id, &mut NoTransaction).await?;
+        task.check_confirmation(&command)?;
         run_audited_event(
             &self.db,
             context(actor, "contract.import.archive", "contract")?,
-            ArchiveImport { process: self.clone(), actor: actor.clone(), task: task.clone() },
+            ArchiveImport { process: self.clone(), actor: actor.clone(), task, command },
         )
         .await
     }
@@ -33,19 +42,18 @@ impl ContractImportProcess {
         &self,
         mut task: ContractImport,
         actor: &AuditActor,
+        command: &ConfirmImport,
         executor: &mut dyn Executor,
-    ) -> Result<ImportView> {
+    ) -> Result<(ImportView, bool)> {
         let current = recognition::owned(&self.db, actor.id(), &task.base.id, executor).await?;
-        if current.base.version != task.base.version || current.status != ImportStatus::Processing {
-            return Err(Error::ConflictError("导入任务状态已变化，请刷新查看结果".into()));
+        if !current.check_confirmation(command)? {
+            return Ok((current.into(), false));
         }
+        task = current;
         self.require_source(&task, executor).await?;
-        let extraction =
-            task.extraction.as_ref().ok_or_else(|| Error::ValidationError("缺少提取结果".into()))?;
-        let document = task.ocr.as_ref().ok_or_else(|| Error::ValidationError("缺少逐页识别结果".into()))?;
-        document.validate(task.source.page_count).map_err(|e| Error::ValidationError(e.message))?;
-        let fields = extraction.validate(document).map_err(|e| Error::ValidationError(e.message))?;
-        let proof = match_all(&self.db, &task, extraction, executor).await?;
+        let (fields, values) = command.validate().map_err(|error| Error::ValidationError(error.message))?;
+        let mut proof = match_all(&self.db, &task, &values, executor).await?;
+        proof.confirmed_fields = Some(command.fields.clone());
         let access = contract_access(self.db.clone(), self.rbac.clone());
         access.require_create(actor, &proof.customer_id, executor).await?;
         customer_access(self.db.clone(), self.rbac.clone())
@@ -71,8 +79,9 @@ impl ContractImportProcess {
             created_at: planned.revision.base.created_at,
         });
         task.status = ImportStatus::Succeeded;
+        task.confirmation = Some(command.clone());
         self.db.contract_imports().update(&mut task, executor).await?;
-        Ok(task.into())
+        Ok((task.into(), true))
     }
 
     async fn persist_plan(

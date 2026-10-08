@@ -127,6 +127,14 @@ export function ContractImportTask({
                     </div>
                 </div>
             ) : null}
+            {task.status === "review" ? (
+                <Alert>
+                    <AlertTitle>识别完成，请核对并补充</AlertTitle>
+                    <AlertDescription>
+                        未识别或存在冲突的字段已留空，其余信息已预填。确认后保存合同。
+                    </AlertDescription>
+                </Alert>
+            ) : null}
             {task.status === "succeeded" ? (
                 <div
                     className="flex items-start gap-3 rounded-lg bg-muted/50 p-5"
@@ -139,7 +147,7 @@ export function ContractImportTask({
                     <div>
                         <h3 className="font-medium">合同已归档</h3>
                         <p className="mt-1 text-sm text-muted-foreground">
-                            合同信息已识别并通过校验，可核对下方内容。
+                            合同信息已确认并归档，下方保留原始识别依据。
                         </p>
                     </div>
                 </div>

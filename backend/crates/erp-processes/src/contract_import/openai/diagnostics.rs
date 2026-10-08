@@ -2,11 +2,17 @@
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
+use rig_agent::agent::{AgentHook, HookContext, OutcomeAction, OutcomeEvent};
+use rig_agent::completion::{PromptError, StructuredOutputError};
 use rig_core::ProviderError;
+use rig_core::completion::CompletionResponse;
 use rig_core::http_client::HeaderMap;
+use serde_json::Value as JsonValue;
 
 use super::Result;
+use super::output::{DecodeError, validate_response};
 use super::rejection::Rejection;
+use super::transport::Failure;
 
 #[derive(Clone, Default)]
 pub(super) struct Diagnostics(Arc<Mutex<ResponseMetadata>>);
@@ -14,13 +20,83 @@ pub(super) struct Diagnostics(Arc<Mutex<ResponseMetadata>>);
 #[derive(Default)]
 struct ResponseMetadata {
     status: Option<u16>,
+    transport_failure: Option<Failure>,
     request_id: Option<String>,
     headers: Vec<(String, String)>,
     sdk_error: Option<String>,
+    response_body: Option<String>,
+    decoded_response: Option<JsonValue>,
+    finish_reason: Option<String>,
+    validation_error: Option<String>,
     rejection: Rejection,
 }
 
+impl AgentHook for Diagnostics {
+    async fn on_outcome(&self, _: &HookContext, event: OutcomeEvent<'_>) -> OutcomeAction {
+        if let Some(response) = event.completion() {
+            self.output(response);
+            if let Err(error) = validate_response(response) {
+                self.output_error(&error);
+                return OutcomeAction::stop(error.to_string());
+            }
+        }
+        OutcomeAction::proceed()
+    }
+}
+
 impl Diagnostics {
+    pub(super) fn transport_failure(&self, failure: Failure) {
+        self.0.lock().unwrap_or_else(|error| error.into_inner()).transport_failure = Some(failure);
+    }
+
+    pub(super) fn failure(&self) -> Option<Failure> {
+        self.0.lock().unwrap_or_else(|error| error.into_inner()).transport_failure
+    }
+
+    pub(super) fn extraction_error(&self, error: &StructuredOutputError) {
+        if let StructuredOutputError::PromptError(PromptError::CompletionError(error)) = error {
+            self.error(error);
+            return;
+        }
+        let mut metadata = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        metadata.sdk_error = Some(format!("{error:?}"));
+        if let Some(status) = error.provider_response_status() {
+            metadata.status = Some(status.as_u16());
+        }
+        if let Some(headers) = error.provider_response_headers() {
+            if metadata.headers.is_empty() {
+                metadata.headers = response_headers(headers);
+            }
+            if metadata.request_id.is_none() {
+                metadata.request_id = request_id(headers);
+            }
+        }
+        if metadata.rejection.body_state.is_none()
+            && let Some(body) = error.provider_response_body()
+        {
+            metadata.rejection = Rejection::parse(body.to_owned());
+        }
+        // hook 已记录完成状态等具体拒绝原因时，不用取消错误覆盖。
+        if metadata.validation_error.is_none() {
+            metadata.validation_error = Some(error.to_string());
+        }
+    }
+
+    pub(super) fn body(&self, body: &[u8]) {
+        self.0.lock().unwrap_or_else(|error| error.into_inner()).response_body =
+            Some(String::from_utf8_lossy(body).into_owned());
+    }
+
+    pub(super) fn output(&self, response: &CompletionResponse) {
+        let mut metadata = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        metadata.decoded_response = Some(response.raw.clone());
+        metadata.finish_reason = response.finish_reason().map(|reason| format!("{reason:?}"));
+    }
+
+    pub(super) fn output_error(&self, error: &DecodeError) {
+        self.0.lock().unwrap_or_else(|error| error.into_inner()).validation_error = Some(error.to_string());
+    }
+
     pub(super) fn response(&self, status: u16, headers: &HeaderMap) {
         let mut metadata = self.0.lock().unwrap_or_else(|error| error.into_inner());
         metadata.status = Some(status);
@@ -63,6 +139,7 @@ impl Diagnostics {
     pub(super) fn finish<T>(&self, start: Instant, result: &Result<T>, timeout_source: Option<&str>) {
         let metadata = self.0.lock().unwrap_or_else(|error| error.into_inner());
         let elapsed_ms = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
+        let response = metadata.decoded_response.as_ref().unwrap_or(&JsonValue::Null);
         match result {
             Ok(_) => tracing::info!(
                 event = "contract_ai_finished",
@@ -84,6 +161,13 @@ impl Diagnostics {
                 provider_error_param = metadata.rejection.param.as_deref(),
                 provider_error_message = metadata.rejection.message.as_deref(),
                 provider_response_headers = ?metadata.headers, provider_sdk_error = metadata.sdk_error.as_deref(),
+                provider_response_body = metadata.response_body.as_deref(),
+                provider_decoded_response = metadata.decoded_response.as_ref().map(JsonValue::to_string).as_deref(),
+                provider_finish_reason = metadata.finish_reason.as_deref(),
+                provider_response_status = response["status"].as_str(),
+                provider_incomplete_details = response.get("incomplete_details").map(JsonValue::to_string).as_deref(),
+                provider_usage = response.get("usage").map(JsonValue::to_string).as_deref(),
+                output_validation_error = metadata.validation_error.as_deref(),
                 "合同字段提取失败"
             ),
         }
@@ -91,9 +175,9 @@ impl Diagnostics {
 }
 
 fn request_id(headers: &HeaderMap) -> Option<String> {
-    ["x-request-id", "x-dashscope-request-id", "x-acs-request-id"].into_iter().find_map(|name| {
-        headers.get(name).map(|value| String::from_utf8_lossy(value.as_bytes()).into_owned())
-    })
+    ["x-request-id", "x-dashscope-request-id", "x-acs-request-id", "x-ds-trace-id"].into_iter().find_map(
+        |name| headers.get(name).map(|value| String::from_utf8_lossy(value.as_bytes()).into_owned()),
+    )
 }
 
 fn response_headers(headers: &HeaderMap) -> Vec<(String, String)> {
@@ -122,6 +206,10 @@ mod tests {
         headers.remove("x-request-id");
         headers.insert("x-dashscope-request-id", HeaderValue::from_static("req_123-abc.4"));
         assert_eq!(request_id(&headers).as_deref(), Some("req_123-abc.4"));
+        headers.insert("x-ds-trace-id", HeaderValue::from_static("deepseek-trace-123"));
+        assert_eq!(request_id(&headers).as_deref(), Some("req_123-abc.4"));
+        headers.remove("x-dashscope-request-id");
+        assert_eq!(request_id(&headers).as_deref(), Some("deepseek-trace-123"));
         assert!(response_headers(&headers).contains(&("x-untrusted-id".into(), "private-data".into())));
     }
 }

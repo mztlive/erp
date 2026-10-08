@@ -5,6 +5,7 @@ edition = "2024"
 autotests = false
 
 [dependencies]
+rig-agent = { workspace = true }
 aliyun-ocr = { workspace = true }
 rig-core = { workspace = true }
 reqwest = { workspace = true }

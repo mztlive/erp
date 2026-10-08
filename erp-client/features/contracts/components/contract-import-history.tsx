@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils"
 const STATUS = {
     ready: { label: "等待识别", variant: "secondary" },
     processing: { label: "正在识别", variant: "secondary" },
+    review: { label: "待确认", variant: "secondary" },
     failed: { label: "导入失败", variant: "destructive" },
     succeeded: { label: "已归档", variant: "success" },
 } as const

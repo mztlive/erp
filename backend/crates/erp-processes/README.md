@@ -77,4 +77,4 @@ env -u ERP_TEST_MONGO_URI cargo test -p erp-processes --lib --locked
 
 `contract_import::aliyun::AliyunContractOcr` 实现合同领域 `ContractOcr`。PDF 转图使用 Poppler，网络请求使用独立 [aliyun-ocr](../aliyun-ocr/README.md) crate；所有渲染及外部识别必须在数据库事务外执行。配置、资源限制、取消及验收边界按该接入合同执行。
 
-`contract_import::openai::OpenAiContractExtractor` 使用 `rig-core` 实现 `ContractExtractor`，通过 OpenAI Responses API 结构化输出提取全文字段和证据。模型不得参与主数据匹配或执行动作，配置与失败语义执行 [AI 提取接入合同](../../../docs/contract-ai-contract.md)。
+`contract_import::openai::OpenAiContractExtractor` 使用 `rig-agent` 标准 Extractor 与 `rig-core` OpenAI Responses provider 实现 `ContractExtractor`，通过内置 `submit` 输出函数提取全文字段和证据。模型不得参与主数据匹配或执行动作，配置与失败语义执行 [AI 提取接入合同](../../../docs/contract-ai-contract.md)。

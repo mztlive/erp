@@ -88,3 +88,34 @@ async fn executes_real_pipeline_and_stops_before_ai_on_missing_page() {
 async fn rejects_broken_pdf_before_provider_call() {
     assert!(inspect_pdf(b"%PDF-broken".to_vec()).await.is_err());
 }
+
+struct PartialExtractor;
+#[async_trait]
+impl ContractExtractor for PartialExtractor {
+    async fn extract(&self, _: &OcrDocument) -> std::result::Result<ContractExtraction, ImportFailure> {
+        let mut fields = fields();
+        fields.remove(&ContractField::ContractNo);
+        fields.remove(&ContractField::PaymentTerms);
+        Ok(ContractExtraction {
+            provider: "test".into(),
+            version: "1".into(),
+            fields,
+            conflicts: vec!["payment_terms：第2页存在两种付款约定".into()],
+        })
+    }
+}
+
+#[tokio::test]
+async fn partial_extraction_and_conflicts_do_not_fail_recognition() {
+    let providers = RecognitionProviders {
+        ocr: Arc::new(TestProvider { calls: Arc::new(AtomicUsize::new(0)), missing_page: false }),
+        extractor: Arc::new(PartialExtractor),
+    };
+    let attempt = providers.run(b"pdf", 1).await;
+    assert!(attempt.failure.is_none());
+    let draft = attempt.extraction.unwrap().draft(&attempt.ocr.unwrap());
+    assert!(draft.fields[&ContractField::ContractNo].is_none());
+    assert!(draft.fields[&ContractField::PaymentTerms].is_none());
+    assert_eq!(draft.fields[&ContractField::CustomerName].as_deref(), Some("客户公司"));
+    assert_eq!(draft.warnings.len(), 1);
+}

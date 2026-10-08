@@ -7,6 +7,7 @@ import { useUploadContractPdfMutation } from "@/features/contracts/hooks/queries
 import { contractPdfError } from "@/features/contracts/lib/pdf"
 import {
     fetchContractImport,
+    confirmContractImport,
     fetchContractImports,
     runContractImport,
     previewContractImport,
@@ -51,6 +52,10 @@ export function useContractUploadForm(options: UseContractUploadFormOptions) {
         onSuccess: refresh,
         onSettled: () =>
             client.invalidateQueries({ queryKey: ["contract-imports"] }),
+    })
+    const confirmMutation = useMutation({
+        mutationFn: confirmContractImport,
+        onSuccess: refresh,
     })
     const list = useQuery({
         queryKey: [
@@ -161,6 +166,7 @@ export function useContractUploadForm(options: UseContractUploadFormOptions) {
         setSelectedId(id)
         setPreview({ id: "", url: "" })
         runMutation.reset()
+        confirmMutation.reset()
         previewMutation.reset()
         uploadMutation.reset()
     }
@@ -189,6 +195,7 @@ export function useContractUploadForm(options: UseContractUploadFormOptions) {
         form,
         uploadMutation,
         runMutation,
+        confirmMutation,
         list,
         detail,
         select,

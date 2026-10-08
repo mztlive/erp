@@ -37,7 +37,7 @@ fn sample() -> (OcrDocument, ContractExtraction) {
 fn validates_original_facts_without_defaults() {
     let (doc, extraction) = sample();
     doc.validate(1).unwrap();
-    let fields = extraction.validate(&doc).unwrap();
+    let fields = ConfirmImport { version: 1, fields: extraction.draft(&doc).fields }.validate().unwrap().0;
     assert_eq!(fields.payment_code, "POSTPAY_NET30");
     assert_eq!(fields.tax_point, "13");
     assert_eq!(fields.signed_at.to_string(), "2026-10-01");
@@ -53,26 +53,66 @@ fn rejects_missing_pages_unreadable_and_false_blank() {
     assert!(doc.validate(1).is_err());
 }
 #[test]
-fn rejects_hallucination_conflicts_and_missing_fields() {
-    let (doc, mut fields) = sample();
-    fields.fields.get_mut(&CustomerName).unwrap().value = "不相关公司".into();
-    assert_eq!(fields.validate(&doc).err().unwrap().code, "SOURCE_MISMATCH");
-    let (_, mut fields) = sample();
-    fields.conflicts.push("签章页不一致".into());
-    assert_eq!(fields.validate(&doc).err().unwrap().code, "EXTRACTION_CONFLICT");
-    fields.conflicts.clear();
-    fields.fields.remove(&TaxPoint);
-    assert_eq!(fields.validate(&doc).err().unwrap().field, Some(TaxPoint));
+fn draft_preserves_partial_values_and_nulls_conflicts_and_missing_fields() {
+    let (mut doc, mut extraction) = sample();
+    extraction.conflicts.push("payment_terms：同页存在两个付款约定".into());
+    extraction.fields.remove(&TaxPoint);
+    doc.pages[0].text.push_str("专票");
+    extraction
+        .fields
+        .insert(InvoiceType, ExtractedField { value: "专票".into(), quote: "专票".into(), page: 1 });
+    let draft = extraction.draft(&doc);
+    assert_eq!(draft.fields.len(), 14);
+    assert_eq!(draft.fields[&CustomerName].as_deref(), Some("客户有限公司"));
+    assert_eq!(draft.fields[&InvoiceType].as_deref(), Some("增值税专用发票"));
+    assert_eq!(draft.fields[&SignedAt].as_deref(), Some("2026-10-01"));
+    assert!(draft.fields[&PaymentTerms].is_none());
+    assert!(draft.fields[&TaxPoint].is_none());
+    let json = serde_json::to_value(&draft).unwrap();
+    assert!(json["fields"]["payment_terms"].is_null());
+    assert_eq!(draft.warnings.len(), 1);
+    assert!(extraction.fields.contains_key(&PaymentTerms));
 }
+
 #[test]
-fn refuses_semantically_different_terms_even_with_same_days() {
-    let (mut doc, mut fields) = sample();
-    doc.pages[0].text.push_str("\n验收后30天");
-    fields.fields.insert(
+fn draft_allows_semantic_values_but_drops_unverifiable_evidence() {
+    let (mut doc, mut extraction) = sample();
+    doc.pages[0].text.push_str("支付50%定金，收货后支付尾款");
+    extraction.fields.insert(
         PaymentTerms,
-        ExtractedField { value: "验收后30天".into(), quote: "验收后30天".into(), page: 1 },
+        ExtractedField {
+            value: "先款 50%".into(), page: 1, quote: "支付50%定金，收货后支付尾款".into()
+        },
     );
-    assert_eq!(fields.validate(&doc).err().unwrap().code, "UNMATCHED_TERMS");
+    extraction.fields.get_mut(&CustomerName).unwrap().quote = "不存在的原文".into();
+    let draft = extraction.draft(&doc);
+    assert_eq!(draft.fields[&PaymentTerms].as_deref(), Some("先款 50%"));
+    assert!(draft.fields[&CustomerName].is_none());
+    assert_eq!(draft.fields[&ContractNo].as_deref(), Some("HT-1"));
+    extraction.fields.clear();
+    assert!(extraction.draft(&doc).fields.values().all(Option::is_none));
+}
+
+#[test]
+fn confirmation_accepts_edits_but_requires_valid_business_values() {
+    let (doc, extraction) = sample();
+    let mut command = ConfirmImport { version: 1, fields: extraction.draft(&doc).fields };
+    command.fields.insert(ContractNo, Some("人工补充编号".into()));
+    command.fields.insert(PaymentTerms, Some("先款 50%".into()));
+    let (values, _) = command.validate().unwrap();
+    assert_eq!(values.contract_no, "人工补充编号");
+    assert_eq!(values.payment_code, "PREPAY_50");
+    assert_eq!(extraction.fields[&ContractNo].value, "HT-1");
+    for (field, value) in [
+        (TaxPoint, None),
+        (PaymentTerms, Some("收到发票后30天".into())),
+        (SignedAt, Some("2026-02-30".into())),
+        (ValidTo, Some("2020-01-01".into())),
+    ] {
+        let mut invalid = command.clone();
+        invalid.fields.insert(field, value);
+        assert!(invalid.validate().is_err());
+    }
 }
 #[test]
 fn identity_requires_unique_name_and_consistent_code() {
@@ -125,6 +165,7 @@ fn task() -> ContractImport {
         extraction: None,
         failure: None,
         result: None,
+        confirmation: None,
         customer_id: None,
     }
 }
@@ -146,20 +187,6 @@ fn task_replay_and_recovery_do_not_override_success() {
 }
 
 #[test]
-fn dates_tax_and_unknown_metadata_fail_closed() {
-    let (mut doc, mut fields) = sample();
-    for (key, text) in [(TaxPoint, "5%"), (SignedAt, "2026-02-30"), (ValidTo, "2020-01-01")] {
-        let previous = fields.fields[&key].clone();
-        doc.pages[0].text.push_str(text);
-        fields.fields.insert(key, ExtractedField { value: text.into(), quote: text.into(), page: 1 });
-        assert!(fields.validate(&doc).is_err());
-        fields.fields.insert(key, previous);
-    }
-    doc.provider.clear();
-    assert!(doc.validate(1).is_err());
-}
-
-#[test]
 fn import_view_preserves_revision_target_and_server_recovery_deadline() {
     let mut task = task();
     task.command.expected_customer_id = Some("customer-a".into());
@@ -174,4 +201,49 @@ fn import_view_preserves_revision_target_and_server_recovery_deadline() {
     let fresh = ImportView::from(self::task());
     assert!(fresh.revision_target.is_none());
     assert!(fresh.recoverable_at.is_none());
+}
+
+#[test]
+fn confirmation_rejects_stale_pending_and_changed_replays() {
+    let mut task = task();
+    let command = ConfirmImport { version: task.base.version, fields: BTreeMap::new() };
+    assert!(task.check_confirmation(&command).is_err());
+    task.status = ImportStatus::Review;
+    assert!(task.check_confirmation(&command).unwrap());
+    assert!(!task.begin(100).unwrap());
+    let mut stale = command.clone();
+    stale.version += 1;
+    assert!(task.check_confirmation(&stale).is_err());
+    task.status = ImportStatus::Succeeded;
+    task.confirmation = Some(command.clone());
+    assert!(!task.check_confirmation(&command).unwrap());
+    let mut changed = command;
+    changed.fields.insert(ContractNo, Some("other".into()));
+    assert!(task.check_confirmation(&changed).is_err());
+}
+
+#[test]
+fn successful_recognition_waits_for_confirmation_without_archiving() {
+    let (doc, mut extraction) = sample();
+    extraction.fields.remove(&PaymentTerms);
+    extraction.conflicts.push("payment_terms：需要用户确认".into());
+    let mut task = task();
+    assert!(task.finish_recognition(doc.clone(), extraction.clone()).is_err());
+    task.begin(100).unwrap();
+    task.finish_recognition(doc, extraction).unwrap();
+    assert_eq!(task.status, ImportStatus::Review);
+    assert!(task.result.is_none());
+    assert!(task.confirmation.is_none());
+    let view = ImportView::from(task);
+    assert!(view.failure.is_none());
+    assert!(view.draft.unwrap().fields[&PaymentTerms].is_none());
+}
+
+#[test]
+fn historical_tasks_without_confirmation_remain_readable() {
+    let mut value = serde_json::to_value(task()).unwrap();
+    value.as_object_mut().unwrap().remove("confirmation");
+    let restored: ContractImport = serde_json::from_value(value).unwrap();
+    assert!(restored.confirmation.is_none());
+    assert_eq!(restored.status, ImportStatus::Ready);
 }

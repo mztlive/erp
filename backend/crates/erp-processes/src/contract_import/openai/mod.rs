@@ -12,17 +12,19 @@ use async_trait::async_trait;
 use diagnostics::Diagnostics;
 use erp_contract::entity::recognition::{ContractExtraction, ImportFailure, OcrDocument};
 use erp_contract::ports::recognition::ContractExtractor;
-use rig_core::ProviderError;
-use rig_core::completion::CompletionRequest;
+use rig_agent::completion::{PromptError, StructuredOutputError};
+use rig_agent::extractor::ExtractorBuilder;
 use rig_core::http_client::{Error as HttpError, HttpClientExt};
 use rig_core::providers::openai::OpenAIConfig;
+use rig_core::{ErrorKind, ProviderError};
 use serde_json::json;
 use tokio::time::timeout;
 use transport::{BoundedHttp, Failure};
 
 type Result<T> = std::result::Result<T, ImportFailure>;
+const PROMPT_VERSION: &str = "contract-v4";
 
-/// 每个任务冻结配置；模型无工具、无主数据访问权限，不自动重试。
+/// 每个任务冻结配置；仅允许 Rig submit 输出，无业务工具及主数据访问权限，不自动重试。
 pub struct OpenAiContractExtractor {
     provider_id: String,
     base_url: String,
@@ -63,8 +65,8 @@ impl OpenAiContractExtractor {
     #[tracing::instrument(name = "contract_ai", skip_all, fields(
         provider_id = %self.provider_id, page_count = document.pages.len(),
         model = %self.model, base_url = %self.base_url,
-        protocol = "responses", response_format = "json_schema", strict = true,
-        reasoning_effort = "none",
+        protocol = "responses", extraction_method = "rig_extractor", output_tool = "submit",
+        prompt_version = PROMPT_VERSION,
         timeout_seconds = self.timeout.as_secs(), max_output_tokens = self.max_output_tokens
     ))]
     async fn extract_with(
@@ -76,27 +78,42 @@ impl OpenAiContractExtractor {
         let count = u32::try_from(document.pages.len()).map_err(|_| invalid_output())?;
         document.validate(count)?;
         let prompt = serde_json::to_string(&document.pages).map_err(|_| invalid_output())?;
-        let request = CompletionRequest::new(prompt)
-            .preamble(include_str!("prompt.txt"))
-            .max_tokens(self.max_output_tokens)
-            .output_schema(output::schema()?)
-            // 合同字段直接按原文提取，关闭思考以避免推理耗尽正文输出额度。
-            .additional_params(json!({"store": false, "reasoning": {"effort": "none"}}))
-            .record_content_telemetry(true);
         let client = OpenAIConfig::new(self.api_key.clone())
             .with_base_url(self.base_url.trim_end_matches('/'))
             .connect(http);
-        let model = client.responses(&self.model);
+        let mut model = client.responses(&self.model);
+        model.wire = model.wire.with_strict_tools();
+        let extractor = ExtractorBuilder::<output::Output>::new(model)
+            .append_preamble(include_str!("prompt.txt"))
+            .max_tokens(self.max_output_tokens)
+            .additional_params(json!({"store": false, "parallel_tool_calls": false}))
+            .add_hook(diagnostics.clone())
+            .retries(0)
+            .build();
+
+        let extraction = extractor.extract(prompt).record_content_telemetry(true);
         let start = Instant::now();
         tracing::info!(event = "contract_ai_started", "开始提取合同字段");
         // SDK 与适配器共享任务上下文，错误正文由诊断字段完整记录。
-        let (result, timeout_source) = match timeout(self.timeout, model.call(request)).await {
+        let (result, timeout_source) = match timeout(self.timeout, extraction).await {
             Err(_) => deadline_failure(&diagnostics),
             Ok(Err(error)) => {
-                diagnostics.error(&error);
-                (Err(provider_error(&error)), timeout_source(&error))
+                diagnostics.extraction_error(&error);
+                extraction_failure(&error, &diagnostics)
             },
-            Ok(Ok(response)) => (output::decode(response, &self.model, &self.provider_id), None),
+            Ok(Ok(response)) => {
+                let reported = response
+                    .completion_calls
+                    .last()
+                    .and_then(|call| call.raw["model"].as_str())
+                    .unwrap_or("unreported");
+                let result = output::convert(response.output, &self.model, reported, &self.provider_id)
+                    .map_err(|error| {
+                        diagnostics.output_error(&error);
+                        invalid_output()
+                    });
+                (result, None)
+            },
         };
         diagnostics.finish(start, &result, timeout_source);
         result
@@ -111,6 +128,33 @@ impl ContractExtractor for OpenAiContractExtractor {
             .map_err(|_| ImportFailure::new("AI_UNAVAILABLE", "字段提取服务暂不可用，请稍后重试"))?;
         self.extract_with(document, http, diagnostics).await
     }
+}
+
+fn extraction_failure(
+    error: &StructuredOutputError,
+    diagnostics: &Diagnostics,
+) -> (Result<ContractExtraction>, Option<&'static str>) {
+    if let StructuredOutputError::PromptError(PromptError::CompletionError(error)) = error {
+        return (Err(provider_error(error)), timeout_source(error));
+    }
+    if let Some(status) = error.provider_response_status().filter(|status| !status.is_success()) {
+        let status = status.as_u16();
+        return (Err(status_error(status)), matches!(status, 408 | 504).then_some("upstream_http"));
+    }
+    // Rig runtime 的 ErrorReport 不保留自定义 Rust 错误类型，传输边界保留原始分类。
+    if let Some(failure) = diagnostics.failure() {
+        let source = match failure {
+            Failure::Timeout(source) => Some(source.as_str()),
+            _ => None,
+        };
+        return (Err(provider_error(&ProviderError::from(HttpError::instance(failure)))), source);
+    }
+    if let StructuredOutputError::PromptError(PromptError::Report(report)) = error
+        && report.kind == ErrorKind::Http
+    {
+        return (Err(ImportFailure::new("AI_UNAVAILABLE", "字段提取服务暂不可用，请稍后重试")), None);
+    }
+    (Err(invalid_output()), None)
 }
 
 fn invalid_output() -> ImportFailure {

@@ -1,5 +1,7 @@
-//! 合同识别的供应商无关事实、原文依据与严格校验。
+//! 合同识别的供应商无关事实、原文依据、预填草稿与确认校验。
+mod draft;
 mod pdf;
+pub use draft::{ConfirmImport, ContractValues, RecognitionDraft};
 mod rules;
 pub use pdf::pdf_page_count;
 mod task;
@@ -12,7 +14,7 @@ pub use rules::{ValidatedFields, match_identity};
 use serde::{Deserialize, Serialize};
 pub use task::{ContractImport, ImportCommand, ImportSource, ImportStatus, ImportView, RevisionTarget};
 
-/// 所有业务字段只能来自原文，供应商不得返回 ERP 主键。
+/// AI 预填字段须有原文依据，供应商不得返回 ERP 主键。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ContractField {
@@ -32,7 +34,7 @@ pub enum ContractField {
     BusinessScope,
 }
 
-/// 保留页码和原文片段，value 必须是 quote 的原文子串。
+/// 保留页码和逐字原文片段；value 可为有依据的语义等价值。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ExtractedField {
@@ -60,7 +62,7 @@ pub struct OcrDocument {
     pub pages: Vec<OcrPage>,
 }
 
-/// AI 的输出不代表通过，必须再经原文、规则和主数据校验。
+/// AI 输出用于预填，用户确认值另行执行归档校验。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ContractExtraction {
@@ -106,6 +108,9 @@ pub struct MatchedIdentity {
 /// 归档证据持久化在不可变合同修订中。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RecognitionProof {
+    /// 用户确认后的值独立保存；不得覆盖原始识别依据。
+    #[serde(default)]
+    pub confirmed_fields: Option<BTreeMap<ContractField, Option<String>>>,
     pub import_id: String,
     pub source_sha256: String,
     pub customer_id: String,

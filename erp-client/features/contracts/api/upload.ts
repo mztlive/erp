@@ -14,13 +14,15 @@ export type ContractImportTask = {
     version: number
     file_name: string
     page_count: number
-    status: "ready" | "processing" | "failed" | "succeeded"
+    status: "ready" | "processing" | "failed" | "review" | "succeeded"
     customer_id?: string
     expected_customer_id?: string
     started_at?: number
     recoverable_at?: number
     revision_target?: { contract_id: string; version: number }
+    draft?: { fields: Record<string, string | null>; warnings: string[] } | null
     extraction?: {
+        conflicts: string[]
         fields: Record<string, { value: string; page: number; quote: string }>
     }
     failure?: { code: string; message: string; field?: string; page?: number }
@@ -86,3 +88,16 @@ export const runContractImport = (id: string) =>
     )
 export const previewContractImport = (id: string) =>
     apiGetBlob(`/admin/contract-imports/${encodeURIComponent(id)}/preview`)
+
+export type ConfirmContractImport = {
+    version: number
+    fields: Record<string, string | null>
+}
+export const confirmContractImport = (input: {
+    id: string
+    command: ConfirmContractImport
+}) =>
+    apiPost<ContractImportTask>(
+        `/admin/contract-imports/${encodeURIComponent(input.id)}/confirm`,
+        input.command,
+    )

@@ -1,12 +1,12 @@
-//! 识别导入 HTTP 协议；业务字段不接受客户端输入。
+//! 识别导入 HTTP 协议；识别与用户确认分别接收控制命令和业务字段。
 use application_core::AuditActor;
-use axum::Extension;
 use axum::body::Body;
 use axum::extract::{Multipart, Path, Query, State};
 use axum::http::{HeaderValue, header};
 use axum::response::Response;
+use axum::{Extension, Json};
 use erp_contract::PageView;
-use erp_contract::entity::recognition::{ImportCommand, ImportView};
+use erp_contract::entity::recognition::{ConfirmImport, ImportCommand, ImportView};
 use erp_processes::contract_import::inspect_pdf;
 use erp_support::{RetentionClass, SensitivityClass};
 use serde::Deserialize;
@@ -33,7 +33,7 @@ pub struct ImportListQuery {
     resource = "contract",
     action = "create"
 )]
-/// 上传只登记导入任务，业务字段只能由后续识别得到。
+/// 上传只登记导入任务，后续识别预填并由用户确认业务字段。
 /// # 参数
 /// * `state` / `actor` / `multipart` - 应用、认证人及文件与控制命令。
 /// # 返回
@@ -132,7 +132,7 @@ pub async fn list(
 /// # 参数
 /// * `state` / `actor` / `id` - 应用、认证人与任务。
 /// # 返回
-/// 只读字段与失败原因。
+/// 可编辑草稿、原文依据与失败原因。
 /// # 错误
 /// 越权或查询失败。
 pub async fn detail(
@@ -154,7 +154,7 @@ pub async fn detail(
 /// # 参数
 /// * `state` / `actor` / `id` / `body` - 应用、认证人、任务与必须为空的正文。
 /// # 返回
-/// 已领取的任务状态；识别和归档在独立后台任务中继续执行。
+/// 已领取的任务状态；识别在独立后台任务中继续执行，归档由确认接口触发。
 /// # 错误
 /// 文件、并发、权限或数据库失败。
 pub async fn run(
@@ -167,6 +167,29 @@ pub async fn run(
         return Err(Error::BadRequest("识别请求不接受手填字段".into()));
     }
     Ok(ApiResponse::ok_with_data(contract_import_worker::start(state, actor, id).await?))
+}
+
+#[permission_macros::permission(
+    group = "合同",
+    group_desc = "合同 PDF 档案管理",
+    desc = "确认合同识别信息并归档",
+    resource = "contract",
+    action = "create"
+)]
+/// 接收用户补充或修改的字段并归档。
+/// # 参数
+/// * `state` / `actor` / `id` / `command` - 应用、认证人、任务及确认命令。
+/// # 返回
+/// 已归档任务。
+/// # 错误
+/// 业务字段、主数据、权限、并发或事务错误。
+pub async fn confirm(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(command): Json<ConfirmImport>,
+) -> Result<ImportView> {
+    Ok(ApiResponse::ok_with_data(state.contract_import_process().confirm(&id, command, &actor).await?))
 }
 
 #[permission_macros::permission(
@@ -231,6 +254,21 @@ async fn read_file(multipart: &mut Multipart) -> std::result::Result<AssetFile, 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn confirmation_accepts_nullable_editable_fields_and_rejects_unknown_control_fields() {
+        let command: ConfirmImport = serde_json::from_value(serde_json::json!({
+            "version": 1, "fields": {"contract_no": "人工补充", "payment_terms": null}
+        }))
+        .unwrap();
+        assert_eq!(command.fields.len(), 2);
+        assert!(
+            serde_json::from_value::<ConfirmImport>(serde_json::json!({
+                "version": 1, "fields": {}, "owner_id": "other"
+            }))
+            .is_err()
+        );
+    }
+
     #[test]
     fn rejects_forged_business_fields_and_accepts_only_control_data() {
         assert!(decode_command(br#"{"request_key":"abcdefgh","contract_no":"FAKE"}"#).is_err());

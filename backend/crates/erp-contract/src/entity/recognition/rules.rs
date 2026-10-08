@@ -2,7 +2,7 @@
 use ContractField::*;
 use erp_core::common::time::BusinessDate;
 
-use super::{ContractExtraction, ContractField, ImportFailure, MatchedIdentity, OcrDocument};
+use super::{ContractField, ContractValues, ImportFailure, MatchedIdentity, OcrDocument};
 
 type Result<T> = std::result::Result<T, ImportFailure>;
 
@@ -45,7 +45,7 @@ impl OcrDocument {
     }
 }
 
-/// 已通过证据校验的结构化业务值。
+/// 已通过确认校验的结构化业务值。
 pub struct ValidatedFields {
     pub contract_no: String,
     pub payment_code: String,
@@ -57,34 +57,25 @@ pub struct ValidatedFields {
     pub valid_to: Option<BusinessDate>,
 }
 
-impl ContractExtraction {
-    /// 校验每个字段有原文依据，再按确定规则生成业务值。
-    /// # 参数
-    /// * `document` - 已通过页覆盖校验的 OCR 全文。
-    /// # 返回
-    /// 可用于归档的结构化值。
-    /// # 错误
-    /// 缺失、冲突、虚构引文或无法准确表达的条款。
-    pub fn validate(&self, document: &OcrDocument) -> Result<ValidatedFields> {
-        self.validate_evidence(document)?;
+impl ContractValues {
+    pub(super) fn validate_values(&self) -> Result<ValidatedFields> {
+        for field in [ContractNo, CustomerName, CompanyName, SettlementName, BusinessScope] {
+            self.required(field)?;
+        }
         let (payment_code, payment_name) = self.payment()?;
         let invoice_type = self.required(InvoiceType)?;
         if !["增值税专用发票", "增值税普通发票", "不开发票"].contains(&invoice_type) {
-            return Err(self.failure(
-                InvoiceType,
-                "UNMATCHED_TERMS",
-                "开票要求无法匹配，请完善原文或系统规则",
-            ));
+            return Err(self.failure(InvoiceType, "UNMATCHED_TERMS", "请选择支持的开票类型"));
         }
         let tax_point = self.required(TaxPoint)?.strip_suffix('%').unwrap_or(self.required(TaxPoint)?).trim();
         if !["0", "1", "3", "6", "9", "13"].contains(&tax_point) {
-            return Err(self.failure(TaxPoint, "UNMATCHED_TAX", "税率无法精确匹配，请检查合同原文"));
+            return Err(self.failure(TaxPoint, "UNMATCHED_TAX", "请选择支持的税率"));
         }
         let signed_at = self.date(SignedAt)?;
         let valid_from = self.date(ValidFrom)?;
         let valid_to = if self.required(ValidTo)? == "长期" { None } else { Some(self.date(ValidTo)?) };
         if valid_to.is_some_and(|end| end < valid_from) {
-            return Err(self.failure(ValidTo, "INVALID_DATES", "合同有效期起止冲突，请检查原文"));
+            return Err(self.failure(ValidTo, "INVALID_DATES", "有效期止不能早于生效日期"));
         }
         Ok(ValidatedFields {
             contract_no: self.required(ContractNo)?.into(),
@@ -98,63 +89,22 @@ impl ContractExtraction {
         })
     }
 
-    fn validate_evidence(&self, document: &OcrDocument) -> Result<()> {
-        if self.provider.trim().is_empty()
-            || self.provider.len() > 256
-            || self.version.trim().is_empty()
-            || self.version.len() > 256
-            || !self.conflicts.is_empty()
-        {
-            return Err(ImportFailure::new(
-                "EXTRACTION_CONFLICT",
-                "合同存在冲突或识别结果不完整，请检查原文",
-            ));
-        }
-        for (key, field) in &self.fields {
-            let page = document.pages.iter().find(|page| page.number == field.page);
-            if field.value.trim().is_empty()
-                || field.value.len() > 4096
-                || field.quote.len() > 8192
-                || !field.quote.contains(&field.value)
-                || page.is_none_or(|page| !page.text.contains(&field.quote))
-            {
-                return Err(self.failure(*key, "SOURCE_MISMATCH", "字段没有可验证的原文依据，请重新识别"));
-            }
-        }
-        for field in [
-            ContractNo,
-            CustomerName,
-            CompanyName,
-            SettlementName,
-            PaymentTerms,
-            InvoiceType,
-            TaxPoint,
-            SignedAt,
-            ValidFrom,
-            ValidTo,
-            BusinessScope,
-        ] {
-            self.required(field)?;
-        }
-        Ok(())
-    }
-
     /// 读取必需字段，不补默认值。
     /// # 参数
     /// * `field` - 字段类型。
     /// # 返回
-    /// 原文值。
+    /// 用户确认值。
     /// # 错误
-    /// 原文缺失。
+    /// 必填信息缺失。
     pub fn required(&self, field: ContractField) -> Result<&str> {
         self.fields
             .get(&field)
-            .map(|value| value.value.trim())
+            .map(|value| value.trim())
             .filter(|s| !s.is_empty())
-            .ok_or_else(|| self.failure(field, "MISSING_FIELD", "合同缺少必需信息，请补充完整签署文件"))
+            .ok_or_else(|| self.failure(field, "MISSING_FIELD", "合同缺少必需信息，请补充后确认"))
     }
 
-    fn date(&self, field: ContractField) -> Result<BusinessDate> {
+    pub(super) fn date(&self, field: ContractField) -> Result<BusinessDate> {
         let raw = self.required(field)?;
         let normalized = raw.replace(['年', '月', '/'], "-").replace('日', "");
         let parts: Vec<_> = normalized.split('-').collect();
@@ -164,10 +114,10 @@ impl ContractExtraction {
             }
             BusinessDate::from_ymd(parts[0].parse().ok()?, parts[1].parse().ok()?, parts[2].parse().ok()?)
         })();
-        parsed.ok_or_else(|| self.failure(field, "INVALID_DATE", "日期无法明确识别，请检查原文"))
+        parsed.ok_or_else(|| self.failure(field, "INVALID_DATE", "日期格式无效，请填写有效日期"))
     }
 
-    fn payment(&self) -> Result<(String, String)> {
+    pub(super) fn payment(&self) -> Result<(String, String)> {
         let raw = self.required(PaymentTerms)?;
         let compact = raw.split_whitespace().collect::<String>();
         let terms = [
@@ -181,28 +131,17 @@ impl ContractExtraction {
             .iter()
             .find(|(label, _, _)| *label == compact)
             .map(|(_, code, name)| ((*code).into(), (*name).into()))
-            .ok_or_else(|| {
-                self.failure(
-                    PaymentTerms,
-                    "UNMATCHED_TERMS",
-                    "付款条款无法精确匹配现有规则，请联系管理员完善规则",
-                )
-            })
+            .ok_or_else(|| self.failure(PaymentTerms, "UNMATCHED_TERMS", "请选择支持的付款条件"))
     }
 
     fn failure(&self, field: ContractField, code: &str, message: &str) -> ImportFailure {
-        ImportFailure {
-            code: code.into(),
-            message: message.into(),
-            field: Some(field),
-            page: self.fields.get(&field).map(|value| value.page),
-        }
+        ImportFailure { code: code.into(), message: message.into(), field: Some(field), page: None }
     }
 }
 
 /// 对有界候选执行名称和信用代码双重一致性检查，拒绝模糊或多义匹配。
 /// # 参数
-/// * `name` / `credit` - 原文法定名称及可选信用代码。
+/// * `name` / `credit` - 用户确认的法定名称及可选信用代码。
 /// * `candidates` - 当前未删除、启用主数据候选。
 /// # 返回
 /// 唯一身份及其版本。

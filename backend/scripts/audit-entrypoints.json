@@ -6170,7 +6170,7 @@
     },
     {
       "path": "crates/erp-processes/src/contract_import/archive.rs",
-      "function": "archive",
+      "function": "confirm",
       "policy": "Audited",
       "stage": "Transaction",
       "boundaries": [

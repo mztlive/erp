@@ -14,7 +14,7 @@ use super::rejection::Rejection;
 
 pub(super) const MAX_RESPONSE: usize = 1_048_576;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, Copy, thiserror::Error)]
 pub(super) enum Failure {
     #[error("AI request timed out")]
     Timeout(TimeoutSource),
@@ -79,7 +79,9 @@ impl HttpClientExt for BoundedHttp {
         let diagnostics = self.diagnostics.clone();
         async move {
             let response = request.send().await.map_err(|error| {
-                http_client::Error::instance(transport_error(error, TimeoutSource::ResponseHeaders))
+                let failure = transport_error(error, TimeoutSource::ResponseHeaders);
+                diagnostics.transport_failure(failure);
+                http_client::Error::instance(failure)
             })?;
             receive(response, diagnostics).await.map_err(|error| *error)
         }
@@ -125,8 +127,14 @@ async fn receive<U: From<Bytes> + Send + 'static>(
             String::new(),
         )));
     }
-    let body: LazyBody<U> =
-        Box::pin(async move { read_body(response).await.map(U::from).map_err(http_client::Error::instance) });
+    let body: LazyBody<U> = Box::pin(async move {
+        let body = read_body(response).await.map_err(|failure| {
+            diagnostics.transport_failure(failure);
+            http_client::Error::instance(failure)
+        })?;
+        diagnostics.body(&body);
+        Ok(U::from(body))
+    });
     Response::builder()
         .status(status)
         .header("content-type", "application/json")
@@ -171,8 +179,8 @@ mod tests {
     use rig_core::ProviderError;
     use serde_json::json;
 
-    use super::super::provider_error;
     use super::super::tests::{capture, event};
+    use super::super::{Result as ExtractResult, invalid_output, provider_error};
     use super::*;
     #[test]
     fn rejects_chunked_overflow_before_appending() {
@@ -215,6 +223,29 @@ mod tests {
         assert_eq!(fields["provider_error_param"], "response_format.type");
         assert_eq!(fields["provider_error_message"].as_str(), Some(message.as_str()));
         assert!(fields["provider_response_headers"].as_str().unwrap().contains("original-detail"));
+    }
+
+    #[tokio::test]
+    async fn http_200_retains_original_body_when_output_is_rejected() {
+        let body =
+            json!({"status": "completed", "output": [], "vendor_extra": "完整正文".repeat(4096)}).to_string();
+        let response = Response::builder()
+            .status(200)
+            .header("x-ds-trace-id", "deepseek-trace-123")
+            .body(body.clone())
+            .unwrap();
+        let diagnostics = Diagnostics::default();
+        let (_, logs) = capture(async {
+            let response = receive::<Bytes>(response.into(), diagnostics.clone()).await.unwrap();
+            assert_eq!(response.into_body().await.unwrap().as_ref(), body.as_bytes());
+            let result: ExtractResult<()> = Err(invalid_output());
+            diagnostics.finish(Instant::now(), &result, None);
+        })
+        .await;
+        let fields = &event(&logs, "contract_ai_finished")["fields"];
+        assert_eq!(fields["provider_response_body"], body);
+        assert_eq!(fields["http_status"], 200);
+        assert_eq!(fields["provider_request_id"], "deepseek-trace-123");
     }
 
     #[tokio::test]
