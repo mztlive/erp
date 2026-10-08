@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/react-query"
 import { useStore } from "@tanstack/react-form"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
+import { Input } from "@/components/ui/input"
+import { Field, FieldLabel } from "@/components/ui/field"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { MoneyValue } from "@/components/business"
@@ -24,8 +26,6 @@ const schema = z.object({
         .string()
         .regex(/^\d+(\.\d{1,2})?$/, "金额最多两位小数")
         .refine((v) => /[1-9]/.test(v), "请输入大于零的金额"),
-    invoice_title: z.string().trim().min(1, "请输入开票抬头").max(256),
-    tax_number: z.string().trim().min(1, "请输入税号").max(64),
     invoice_content: z.string().trim().min(1, "请输入开票内容").max(1000),
     reason: z.string().trim().min(1, "请输入申请事由").max(1000),
 })
@@ -33,14 +33,12 @@ const schema = z.object({
 export function InvoiceRequestForm({
     salesOrderId,
     accountId,
-    title,
     existing,
     onDone,
     onCancel,
 }: {
     salesOrderId?: string
     accountId?: string
-    title?: string
     existing?: InvoiceRequest
     onDone: (request: InvoiceRequest) => void
     onCancel: () => void
@@ -55,22 +53,26 @@ export function InvoiceRequestForm({
                 existing?.receivable_account_id ?? accountId ?? "",
             salesOrderId: existing?.sales_order_id ?? salesOrderId ?? "",
             amount: existing?.data.amount ?? "",
-            invoice_title: existing?.data.invoice_title ?? title ?? "",
-            tax_number: existing?.data.tax_number ?? "",
             invoice_content: existing?.data.invoice_content ?? "",
             reason: existing?.data.reason ?? "",
         },
         validators: { onSubmit: schema },
         onSubmit: async ({ value }) => {
-            if (!resolvedAccountId) return
+            if (
+                !resolvedAccountId ||
+                !amounts.data?.can_submit ||
+                amounts.isError ||
+                amounts.isFetching
+            )
+                return
             const input = pending.current ?? {
                 receivable_account_id: resolvedAccountId,
                 request_id: existing?.id,
                 expected_version: existing?.version,
                 data: {
                     amount: value.amount,
-                    invoice_title: value.invoice_title,
-                    tax_number: value.tax_number,
+                    invoice_title: amounts.data.invoice_title,
+                    tax_number: amounts.data.tax_number,
                     invoice_content: value.invoice_content,
                     reason: value.reason,
                 },
@@ -190,6 +192,11 @@ export function InvoiceRequestForm({
                           : "请选择已生效的销售单。"}
                 </p>
             )}
+            {amounts.data?.unavailable_reason ? (
+                <p role="status" className="text-sm text-muted-foreground">
+                    {amounts.data.unavailable_reason}
+                </p>
+            ) : null}
             <fieldset disabled={locked} className="grid gap-4 sm:grid-cols-2">
                 <form.AppField name="amount">
                     {(field) => (
@@ -201,24 +208,36 @@ export function InvoiceRequestForm({
                         />
                     )}
                 </form.AppField>
-                <form.AppField name="invoice_title">
-                    {(field) => (
-                        <field.TextField
-                            id="invoice-request-title"
-                            label="开票抬头"
-                            required
-                        />
-                    )}
-                </form.AppField>
-                <form.AppField name="tax_number">
-                    {(field) => (
-                        <field.TextField
-                            id="invoice-request-tax-number"
-                            label="税号"
-                            required
-                        />
-                    )}
-                </form.AppField>
+                <Field>
+                    <FieldLabel htmlFor="invoice-request-title">
+                        开票抬头
+                    </FieldLabel>
+                    <Input
+                        id="invoice-request-title"
+                        readOnly
+                        value={
+                            pending.current?.data.invoice_title ??
+                            amounts.data?.invoice_title ??
+                            ""
+                        }
+                        placeholder="选择结算主体后自动带入"
+                    />
+                </Field>
+                <Field>
+                    <FieldLabel htmlFor="invoice-request-tax-number">
+                        税号（统一社会信用代码）
+                    </FieldLabel>
+                    <Input
+                        id="invoice-request-tax-number"
+                        readOnly
+                        value={
+                            pending.current?.data.tax_number ??
+                            amounts.data?.tax_number ??
+                            ""
+                        }
+                        placeholder="从结算主体档案自动带入"
+                    />
+                </Field>
                 <form.AppField name="invoice_content">
                     {(field) => (
                         <field.TextField
@@ -275,8 +294,9 @@ export function InvoiceRequestForm({
                         loading={commands.submit.isPending}
                         disabled={
                             locked ||
-                            !amounts.data ||
-                            !/[1-9]/.test(amounts.data.available_amount)
+                            amounts.isError ||
+                            amounts.isFetching ||
+                            !amounts.data?.can_submit
                         }
                     >
                         提交审批

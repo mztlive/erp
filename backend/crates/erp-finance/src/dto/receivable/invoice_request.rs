@@ -73,6 +73,10 @@ impl InvoiceRequestQuery {
 /// 销售应收的开票申请额度摘要。各字段含税，已登记不重复占用。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InvoiceRequestAmounts {
+    pub can_submit: bool,
+    pub unavailable_reason: Option<String>,
+    pub invoice_title: String,
+    pub tax_number: String,
     pub receivable_account_id: String,
     pub available_amount: Amount,
     pub pending_amount: Amount,

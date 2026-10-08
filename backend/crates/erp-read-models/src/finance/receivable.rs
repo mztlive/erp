@@ -5,6 +5,7 @@ mod approval_query;
 pub mod approval_view;
 mod customer_receipt;
 pub mod invoice_request;
+pub mod invoice_request_source;
 pub mod snapshot;
 
 /// 只读应收投影，跨越财务、销售与审批事实。

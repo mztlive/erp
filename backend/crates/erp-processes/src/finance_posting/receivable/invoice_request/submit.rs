@@ -6,7 +6,7 @@ use erp_finance::dto::receivable::SubmitInvoiceRequest;
 use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::receivable::mapping::ensure_expected_version;
 use erp_read_models::finance::receivable::invoice_request::InvoiceRequestView;
-use erp_sales::repository::SalesOrderExt;
+use erp_read_models::finance::receivable::invoice_request_source;
 use erp_workflow::entity::approval_integration::{
     ApprovalSubjectCounterparty, ApprovalSubjectSnapshotPayload, subject_ref_for,
 };
@@ -67,11 +67,13 @@ impl ReceivableProcess {
                         return Ok::<String, Error>(id);
                     }
                     let account = lock_account(&db, &req.receivable_account_id, executor).await?;
-                    ensure_effective_source(&db, &account, executor).await?;
-                    let mut request = candidate(&db, &account, &req, &actor, executor).await?;
                     let available = account
                         .open_invoiceable_total
                         .checked_sub(reserved(&db, &account.base.id, executor).await?);
+                    invoice_request_source::load(&db, &account, executor)
+                        .await?
+                        .validate(&req.data, available)?;
+                    let mut request = candidate(&db, &account, &req, &actor, executor).await?;
                     request.submit(available)?;
                     let binding = bind(&db, &rbac, object_read.as_ref(), &request, &actor, executor).await?;
                     let id = request.base.id.clone();
@@ -260,24 +262,4 @@ fn request_start_snapshot(
         total_quantity: None,
         line_count: 1,
     }
-}
-
-/// 申请只能来自已生效销售单形成的当前应收来源。
-async fn ensure_effective_source(
-    db: &Database,
-    account: &ReceivableAccount,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let order = db
-        .sales_orders()
-        .find_by_id(&account.sales_order_id, executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("来源销售单不存在".into()))?;
-    if order.commercial_status != erp_sales::entity::sales_order::CommercialStatus::Effective
-        || order.current_revision_id().is_none()
-        || order.customer_id != account.customer_id
-    {
-        return Err(Error::ConflictError("仅可为已生效销售单提交开票申请".into()));
-    }
-    Ok(())
 }

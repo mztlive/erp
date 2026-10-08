@@ -362,8 +362,13 @@ function WorkspaceDocumentTaskDetail({
             ? instanceId
             : currentPaperKind && item.businessObjectId.trim(),
     )
+    const salesApproval =
+        approvalDocument &&
+        ["sales_order", "voucher_sales_order"].includes(item.businessObjectType)
     const readActionLabel = approvalDocument
-        ? "查看提交资料"
+        ? salesApproval
+            ? "预览完整销售单"
+            : "查看提交资料"
         : item.workItemType === "FULFILLMENT_OPERATION"
           ? `查看来源${item.businessObjectType === "delivery" ? "销售" : "采购"}单`
           : workspaceReadActionLabel(item.businessObjectType)
@@ -693,10 +698,31 @@ function WorkspaceDocumentTaskDetail({
                                 </li>
                             ))}
                         </ul>
+                        {approvalDocument && instanceId ? (
+                            <Button
+                                id={`workspace-task-detail-preview-submission-${toAutomationIdSegment(item.workItemId)}`}
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="mt-3 self-start"
+                                onClick={() =>
+                                    setPaper({
+                                        kind: "approval_snapshot",
+                                        objectId: instanceId,
+                                        title: item.stableNumber,
+                                    })
+                                }
+                            >
+                                <FileTextIcon aria-hidden="true" />
+                                {readActionLabel}
+                            </Button>
+                        ) : null}
                         {briefMoreCount ? (
                             <p className="text-xs text-muted-foreground">
                                 {approvalDocument
-                                    ? `本摘要未包含另外 ${briefMoreCount} 行。请核对提交资料中的附件；资料不足时请发起人补充后重新提交。`
+                                    ? salesApproval
+                                        ? `此处展示前 ${briefLines.length} 行，共 ${lineCount} 行。预览完整销售单可查看本次提交的全部明细。`
+                                        : `本摘要未包含另外 ${briefMoreCount} 行，请查看提交资料及附件。`
                                     : canReadPaper
                                       ? `另有 ${briefMoreCount} 行，${readActionLabel}可看全部明细`
                                       : `另有 ${briefMoreCount} 行，${openActionLabel}查看`}

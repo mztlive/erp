@@ -52,6 +52,10 @@ pub async fn freeze_approval_materials(
                 .await?,
         );
     }
+    if let Some(display) = &mut snapshot.display {
+        display.source.resolve_submitter_name(&snapshot.payload.submitted_by, actor.actor_name_snapshot());
+        display.validate()?;
+    }
     if snapshot.document_type == DocumentType::PurchaseOrder {
         let (source_sales, files) = related_sales::capture(db, &snapshot, executor).await?;
         if let Some(display) = &mut snapshot.display {
@@ -109,7 +113,8 @@ async fn direct_materials(
         .await?
         .filter(|account| account.is_active_backoffice())
         .ok_or_else(|| Error::Forbidden("审批材料原提交账号不存在或已失效".into()))?;
-    let actor = AuditActor::new(account.id, account.login_account, account.kind);
+    let actor = AuditActor::new(account.id, account.login_account, account.kind)
+        .with_actor_name_snapshot(Some(account.display_name))?;
     authorize_material_transfer(auth, &actor, &files, executor).await?;
     Ok((files.iter().map(material_from_asset).collect(), actor))
 }

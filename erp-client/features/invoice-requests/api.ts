@@ -38,6 +38,10 @@ export type InvoiceRequest = {
     approval?: DocumentApprovalViewDto | null
 }
 export type RequestAmounts = {
+    can_submit: boolean
+    unavailable_reason: string | null
+    invoice_title: string
+    tax_number: string
     receivable_account_id: string
     available_amount: string
     pending_amount: string

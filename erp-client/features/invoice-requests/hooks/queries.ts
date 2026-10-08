@@ -1,5 +1,10 @@
 "use client"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import {
+    useQuery,
+    useQueries,
+    useMutation,
+    useQueryClient,
+} from "@tanstack/react-query"
 import { useAccountProfileQuery } from "@/features/auth/hooks/queries"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 import { hasPermission } from "@/lib/permissions"
@@ -56,9 +61,23 @@ export const useInvoiceRequest = (id?: string) => {
 /** 应收额度是服务端事实，禁止用列表合计替代。 */
 export const useInvoiceRequestAmounts = (id?: string, enabled = true) =>
     useQuery({
+        staleTime: 0,
         queryKey: [...requestKeys.all, "amounts", id],
         queryFn: () => getRequestAmounts(id!),
         enabled: Boolean(id) && enabled,
+    })
+/** 多结算主体逐笔核对准入；任一笔可申请才开放销售单入口。 */
+export const useInvoiceRequestAvailability = (
+    ids: string[],
+    enabled: boolean,
+) =>
+    useQueries({
+        queries: ids.map((id) => ({
+            queryKey: [...requestKeys.all, "amounts", id],
+            queryFn: () => getRequestAmounts(id),
+            staleTime: 0,
+            enabled,
+        })),
     })
 /** 审批与财务命令完成后刷新申请、票款、销售和任务。 */
 export function useInvoiceRequestCommands() {

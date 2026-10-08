@@ -20,6 +20,7 @@ import {
 import {
     useInvoiceRequests,
     useInvoiceRequestAmounts,
+    useInvoiceRequestAvailability,
     useInvoiceRequestPermissions,
 } from "../hooks/queries"
 import {
@@ -32,7 +33,7 @@ import { InvoiceRequestDetail } from "./request-detail"
 export function InvoiceRequestPanel({
     salesOrderId,
     accountId,
-    title,
+    accountIds = [],
     initialRequestId,
     initialCreate = false,
     query: filters = {},
@@ -40,7 +41,7 @@ export function InvoiceRequestPanel({
 }: {
     salesOrderId?: string
     accountId?: string
-    title?: string
+    accountIds?: string[]
     initialRequestId?: string
     initialCreate?: boolean
     query?: RequestQuery
@@ -52,7 +53,8 @@ export function InvoiceRequestPanel({
         () => initialRequestId || pendingInvoiceRequestDetailId(),
     )
     const [creating, setCreating] = useState(
-        () => initialCreate && !pendingInvoiceRequestDetailId(),
+        () =>
+            initialCreate && !salesOrderId && !pendingInvoiceRequestDetailId(),
     )
     const [editing, setEditing] = useState<InvoiceRequest>()
     useEffect(() => {
@@ -73,6 +75,19 @@ export function InvoiceRequestPanel({
         permissions.canRead,
     )
     const amounts = useInvoiceRequestAmounts(accountId, permissions.canRead)
+    const availability = useInvoiceRequestAvailability(
+        accountId ? [accountId] : accountIds,
+        permissions.canRead && Boolean(salesOrderId),
+    )
+    const canCreate =
+        permissions.canSubmit &&
+        (!salesOrderId ||
+            availability.some(
+                (query) =>
+                    query.isSuccess &&
+                    !query.isFetching &&
+                    query.data.can_submit,
+            ))
     if (!permissions.canRead)
         return (
             <p className="text-sm text-muted-foreground">
@@ -88,7 +103,6 @@ export function InvoiceRequestPanel({
                 <InvoiceRequestForm
                     salesOrderId={salesOrderId}
                     accountId={accountId}
-                    title={title}
                     existing={editing}
                     onCancel={() => {
                         setCreating(false)
@@ -124,15 +138,9 @@ export function InvoiceRequestPanel({
                         提交申请，审批通过后由财务开票。
                     </p>
                 </div>
-                {permissions.canSubmit ? (
+                {canCreate ? (
                     <Button
                         id="invoice-request-create"
-                        disabled={Boolean(
-                            salesOrderId &&
-                            accountId &&
-                            (!amounts.data ||
-                                !/[1-9]/.test(amounts.data.available_amount)),
-                        )}
                         onClick={() => {
                             dismissPendingInvoiceRequestDetail()
                             setCreating(true)

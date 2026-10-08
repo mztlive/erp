@@ -2,6 +2,8 @@ import { apiGet, apiGetBlob } from "@/lib/api"
 
 /** 仅提交时冻结的展示与文件白名单；关联对象标识不构成读取入口。 */
 export type ApprovalMaterials = {
+    document_no: string
+    sales_order?: ApprovalSalesSubmission | null
     subject_version: number
     document_type: string
     document_id: string
@@ -40,6 +42,46 @@ export type ApprovalMaterials = {
         file_name: string
         content_type: string
         byte_size: number
+    }[]
+}
+
+/** 审批实例授权返回的精确销售提交，不依赖普通销售单详情。 */
+export type ApprovalSalesSubmission = {
+    submission_no: number
+    business_type: "GOODS_SERVICE" | "VOUCHER"
+    customer_name: string
+    contract_no: string | null
+    settlement_party_name: string | null
+    payment_term_name: string
+    invoice_type: string
+    tax_point: string
+    project_name: string | null
+    business_remark: string | null
+    voucher_expiry_at: number | null
+    receivable_due_date: string | null
+    gross_amount: string
+    net_amount: string
+    tax_amount: string
+    submitted_by: string
+    submitted_at: number
+    lines: {
+        id: string
+        line_no: number
+        item_name_snapshot: string
+        sku_id: string | null
+        spec_snapshot: string | null
+        unit_snapshot: string | null
+        quantity: string | null
+        unit_price_gross: string | null
+        gross_amount: string
+        net_amount: string
+        tax_amount: string
+        sales_tax_rate: string
+        fulfillment_due_at: number | null
+        service_region: string | null
+        face_value: string | null
+        card_count: number | null
+        card_form: string | null
     }[]
 }
 

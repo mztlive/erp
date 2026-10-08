@@ -1,6 +1,7 @@
 //! 只返回审批提交时冻结的展示与材料元数据；不读取当前业务详情。
 
 use application_core::AuditActor;
+use persistence_core::NoTransaction;
 use serde::Serialize;
 
 use super::{ApprovalRuntimeService, hidden_not_found};
@@ -32,6 +33,7 @@ impl From<&ApprovalMaterialFile> for ApprovalMaterialView {
 /// 当前账号可读取的同一提交版本资料，不含当前草稿或存储定位信息。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ApprovalMaterialsView {
+    pub document_no: String,
     pub document_type: String,
     pub document_id: String,
     pub subject_version: u32,
@@ -56,8 +58,15 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         let subject = self.load_runtime_read_subject(instance_id).await?;
         self.ensure_ordinary_runtime_read(actor, &subject).await?;
         let snapshot = subject.snapshot;
-        let display =
+        let mut display =
             snapshot.display.ok_or_else(|| Error::ConflictError("该审批未保存可预览资料".into()))?;
+        if display.source.needs_submitter_name(&snapshot.payload.submitted_by) {
+            let account = self.auth.load_account(&snapshot.payload.submitted_by, &mut NoTransaction).await?;
+            display.source.resolve_submitter_name(
+                &snapshot.payload.submitted_by,
+                account.as_ref().map(|account| account.display_name.as_str()),
+            );
+        }
         display.validate()?;
         let mut attachments = Vec::new();
         for file in &snapshot.material_files {
@@ -65,6 +74,7 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             attachments.push(ApprovalMaterialView::from(file));
         }
         Ok(ApprovalMaterialsView {
+            document_no: snapshot.payload.document_no,
             document_type: snapshot.document_type.as_str().into(),
             document_id: snapshot.business_object_id,
             subject_version: snapshot.subject_version,

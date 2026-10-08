@@ -2,22 +2,20 @@
 
 import Image from "next/image"
 import { useEffect, useState } from "react"
-import { Button } from "@/components/ui/button"
 import { BusinessFailureState } from "@/components/business"
-import type { ApprovalMaterials } from "../api/materials"
 import { useApprovalMaterialPreview } from "../hooks/use-approval-materials"
 
-/** 仅渲染审批专门接口返回的图片或 PDF，关闭后释放临时文件地址。 */
+/** 独立页面读取审批授权附件；页面卸载时释放临时文件地址。 */
 export function ApprovalMaterialPreview({
     instanceId,
-    file,
-    onClose,
+    assetId,
+    fileName,
 }: {
     instanceId: string
-    file: ApprovalMaterials["attachments"][number]
-    onClose: () => void
+    assetId: string
+    fileName: string
 }) {
-    const query = useApprovalMaterialPreview(instanceId, file.file_asset_id)
+    const query = useApprovalMaterialPreview(instanceId, assetId)
     const [url, setUrl] = useState<string | null>(null)
     useEffect(() => {
         if (!query.data) return
@@ -26,50 +24,41 @@ export function ApprovalMaterialPreview({
         return () => URL.revokeObjectURL(next)
     }, [query.data])
     return (
-        <section className="space-y-3 border-t pt-5">
-            <div className="flex items-center justify-between gap-3">
-                <h3 className="min-w-0 break-all font-medium">
-                    {file.file_name}
-                </h3>
-                <Button
-                    id="approval-material-preview-close"
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={onClose}
-                >
-                    关闭预览
-                </Button>
-            </div>
-            {query.isError ? (
-                <BusinessFailureState
-                    id="approval-material-preview-retry"
-                    error={query.error}
-                    onRetry={() => void query.refetch()}
-                />
-            ) : query.isFetching || !url ? (
-                <p role="status" className="text-sm text-muted-foreground">
-                    正在读取附件…
-                </p>
-            ) : file.content_type === "application/pdf" ? (
-                <iframe
-                    id="approval-material-preview-document"
-                    src={url}
-                    title={file.file_name}
-                    className="h-[60vh] w-full rounded-md border"
-                />
-            ) : (
-                <div className="relative h-[60vh] w-full">
-                    <Image
-                        src={url}
-                        alt={file.file_name}
-                        fill
-                        unoptimized
-                        sizes="100vw"
-                        className="rounded-md object-contain"
+        <main className="flex h-svh flex-col bg-background">
+            <header className="shrink-0 border-b px-6 py-4">
+                <h1 className="break-all text-lg font-semibold">{fileName}</h1>
+            </header>
+            <div className="relative min-h-0 flex-1">
+                {query.isError ? (
+                    <BusinessFailureState
+                        id="approval-material-preview-retry"
+                        error={query.error}
+                        onRetry={() => void query.refetch()}
                     />
-                </div>
-            )}
-        </section>
+                ) : query.isFetching || !url ? (
+                    <p role="status" className="text-sm text-muted-foreground">
+                        正在读取附件…
+                    </p>
+                ) : query.data?.type === "application/pdf" ? (
+                    <iframe
+                        id="approval-material-preview-document"
+                        src={url}
+                        title={fileName}
+                        className="h-full w-full border-0"
+                    />
+                ) : (
+                    <div className="relative h-full w-full">
+                        <Image
+                            src={url}
+                            alt={fileName}
+                            fill
+                            unoptimized
+                            sizes="100vw"
+                            className="rounded-md object-contain"
+                        />
+                    </div>
+                )}
+            </div>
+        </main>
     )
 }

@@ -1,8 +1,6 @@
 "use client"
 
-import { useState } from "react"
-import { ApprovalMaterialPreview } from "./approval-material-preview"
-import type { ApprovalMaterials } from "../api/materials"
+import { ApprovalSalesOrderPaper } from "./approval-sales-order-paper"
 import { BusinessFailureState } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
@@ -29,9 +27,6 @@ export function ApprovalSubmittedMaterials({
     instanceId: string
     enabled: boolean
 }) {
-    const [preview, setPreview] = useState<
-        ApprovalMaterials["attachments"][number] | null
-    >(null)
     const query = useApprovalMaterials(instanceId, enabled)
     const download = useDownloadApprovalMaterial(instanceId)
     if (query.isPending || query.isFetching)
@@ -52,100 +47,120 @@ export function ApprovalSubmittedMaterials({
                 />
             </div>
         )
-    const { display, attachments, subject_version: version } = query.data
+    const {
+        display,
+        attachments,
+        sales_order: salesOrder,
+        subject_version: version,
+    } = query.data
     const source = display.source
     return (
         <article className="space-y-6 rounded-lg bg-card p-6 shadow-lg sm:p-10">
             <header className="space-y-2 border-b pb-5 pr-8">
-                <h2 className="text-xl font-semibold">审批提交资料</h2>
+                <h2 className="text-xl font-semibold">
+                    {salesOrder ? "销售单提交预览" : "审批提交资料"}
+                </h2>
                 <p className="text-sm text-muted-foreground">
                     提交版本 {version} ·
                     以下内容保留自此次提交，审批完成后单据的变化不在此处更新。
                 </p>
-                {(display.counterparty_label || source.customer) && (
-                    <p className="font-medium">
-                        {display.counterparty_label || source.customer}
-                    </p>
-                )}
-                {source.list_summary && (
+                {!salesOrder &&
+                    (display.counterparty_label || source.customer) && (
+                        <p className="font-medium">
+                            {display.counterparty_label || source.customer}
+                        </p>
+                    )}
+                {!salesOrder && source.list_summary && (
                     <p className="text-sm">{source.list_summary}</p>
                 )}
             </header>
-            {(source.amount_label ||
-                source.submitter_name ||
-                source.extra_sections.length > 0) && (
-                <dl className="grid gap-4 text-sm sm:grid-cols-2">
-                    {source.amount_label && (
-                        <div>
-                            <dt className="text-xs text-muted-foreground">
-                                提交金额
-                            </dt>
-                            <dd className="num mt-1 text-lg font-semibold">
-                                {source.amount_label}
-                            </dd>
-                        </div>
+            {salesOrder ? (
+                <ApprovalSalesOrderPaper
+                    submission={salesOrder}
+                    documentNo={query.data.document_no}
+                    submitterName={source.submitter_name}
+                />
+            ) : (
+                <>
+                    {(source.amount_label ||
+                        source.submitter_name ||
+                        source.extra_sections.length > 0) && (
+                        <dl className="grid gap-4 text-sm sm:grid-cols-2">
+                            {source.amount_label && (
+                                <div>
+                                    <dt className="text-xs text-muted-foreground">
+                                        提交金额
+                                    </dt>
+                                    <dd className="num mt-1 text-lg font-semibold">
+                                        {source.amount_label}
+                                    </dd>
+                                </div>
+                            )}
+                            {source.submitter_name && (
+                                <div>
+                                    <dt className="text-xs text-muted-foreground">
+                                        申请人
+                                    </dt>
+                                    <dd className="mt-1">
+                                        {source.submitter_name}
+                                    </dd>
+                                </div>
+                            )}
+                            {source.extra_sections.map((section, index) => (
+                                <div key={`${section.label}:${index}`}>
+                                    <dt className="text-xs text-muted-foreground">
+                                        {section.label}
+                                    </dt>
+                                    <dd
+                                        className={`mt-1 break-words ${section.numeric ? "num" : ""}`}
+                                    >
+                                        {section.value}
+                                    </dd>
+                                </div>
+                            ))}
+                        </dl>
                     )}
-                    {source.submitter_name && (
-                        <div>
-                            <dt className="text-xs text-muted-foreground">
-                                申请人
-                            </dt>
-                            <dd className="mt-1">{source.submitter_name}</dd>
-                        </div>
-                    )}
-                    {source.extra_sections.map((section, index) => (
-                        <div key={`${section.label}:${index}`}>
-                            <dt className="text-xs text-muted-foreground">
-                                {section.label}
-                            </dt>
-                            <dd
-                                className={`mt-1 break-words ${section.numeric ? "num" : ""}`}
+                    <section className="space-y-3">
+                        <h3 className="font-medium">提交资料摘要</h3>
+                        {source.lines.length ? (
+                            <ul className="divide-y text-sm">
+                                {source.lines.map((line, index) => (
+                                    <li
+                                        key={`${line.title}:${index}`}
+                                        className="flex flex-wrap justify-between gap-3 py-3"
+                                    >
+                                        <span>{line.title}</span>
+                                        <span className="text-muted-foreground">
+                                            {[line.quantity, line.due_label]
+                                                .filter(Boolean)
+                                                .join(" · ")}
+                                        </span>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p className="text-sm text-muted-foreground">
+                                此次提交未保留明细摘要，请核对其他提交字段及附件。
+                            </p>
+                        )}
+                        {source.more_count > 0 && (
+                            <p
+                                role="status"
+                                className="rounded-md border border-warning-border bg-warning-soft p-3 text-sm text-warning-soft-foreground"
                             >
-                                {section.value}
-                            </dd>
-                        </div>
-                    ))}
-                </dl>
+                                当前仅展示 {source.lines.length} 行摘要，另有{" "}
+                                {source.more_count}{" "}
+                                行未包含在摘要中。请核对提交附件；资料不足时请发起人补充后重新提交。
+                            </p>
+                        )}
+                        {display.impact_summary && (
+                            <p className="text-sm text-muted-foreground">
+                                {display.impact_summary}
+                            </p>
+                        )}
+                    </section>
+                </>
             )}
-            <section className="space-y-3">
-                <h3 className="font-medium">提交资料摘要</h3>
-                {source.lines.length ? (
-                    <ul className="divide-y text-sm">
-                        {source.lines.map((line, index) => (
-                            <li
-                                key={`${line.title}:${index}`}
-                                className="flex flex-wrap justify-between gap-3 py-3"
-                            >
-                                <span>{line.title}</span>
-                                <span className="text-muted-foreground">
-                                    {[line.quantity, line.due_label]
-                                        .filter(Boolean)
-                                        .join(" · ")}
-                                </span>
-                            </li>
-                        ))}
-                    </ul>
-                ) : (
-                    <p className="text-sm text-muted-foreground">
-                        此次提交未保留明细摘要，请核对其他提交字段及附件。
-                    </p>
-                )}
-                {source.more_count > 0 && (
-                    <p
-                        role="status"
-                        className="rounded-md border border-warning-border bg-warning-soft p-3 text-sm text-warning-soft-foreground"
-                    >
-                        当前仅展示 {source.lines.length} 行摘要，另有{" "}
-                        {source.more_count}{" "}
-                        行未包含在摘要中。请核对提交附件；资料不足时请发起人补充后重新提交。
-                    </p>
-                )}
-                {display.impact_summary && (
-                    <p className="text-sm text-muted-foreground">
-                        {display.impact_summary}
-                    </p>
-                )}
-            </section>
             {(display.source_sales ?? []).length > 0 && (
                 <section className="space-y-4 border-t pt-5">
                     <h3 className="font-medium">关联销售单</h3>
@@ -223,10 +238,16 @@ export function ApprovalSubmittedMaterials({
                                     ) && (
                                         <Button
                                             id={`approval-submitted-material-${toAutomationIdSegment(file.file_asset_id)}-preview`}
-                                            type="button"
                                             variant="ghost"
                                             size="sm"
-                                            onClick={() => setPreview(file)}
+                                            render={
+                                                <a
+                                                    href={`/approval-materials?${new URLSearchParams({ instance: instanceId, file: file.file_asset_id, name: file.file_name })}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    aria-label={`查看 ${file.file_name}（新标签页）`}
+                                                />
+                                            }
                                         >
                                             查看
                                         </Button>
@@ -269,14 +290,6 @@ export function ApprovalSubmittedMaterials({
                     </p>
                 )}
             </section>
-            {preview && (
-                <ApprovalMaterialPreview
-                    key={preview.file_asset_id}
-                    instanceId={instanceId}
-                    file={preview}
-                    onClose={() => setPreview(null)}
-                />
-            )}
         </article>
     )
 }

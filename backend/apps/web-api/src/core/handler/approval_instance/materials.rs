@@ -8,7 +8,7 @@ use axum::http::HeaderValue;
 use axum::http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS};
 use axum::response::Response;
 use erp_processes::approval_materials;
-use erp_workflow::service::approval::execution::runtime_service::ApprovalMaterialsView;
+use erp_read_models::sales_center::approval_materials::{ApprovalDocumentMaterials, materials};
 
 use crate::app_state::AppState;
 use crate::core::errors::{Error, Result};
@@ -33,8 +33,10 @@ pub async fn list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
-) -> Result<ApprovalMaterialsView> {
-    Ok(ApiResponse::ok_with_data(state.approval_runtime_service().materials(&actor, &id).await?))
+) -> Result<ApprovalDocumentMaterials> {
+    Ok(ApiResponse::ok_with_data(
+        materials(&state.db(), &state.approval_runtime_service(), &actor, &id).await?,
+    ))
 }
 
 #[permission_macros::permission(

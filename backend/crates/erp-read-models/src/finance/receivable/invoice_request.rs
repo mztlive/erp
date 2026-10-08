@@ -98,13 +98,17 @@ impl ReceivableReadService {
                 _ => {},
             }
         }
+        let source = super::invoice_request_source::load(&self.db, &account, &mut NoTransaction).await?;
+        let available =
+            account.open_invoiceable_total.checked_sub(pending).checked_sub(approved).max(Amount::zero());
+        let unavailable_reason = source.unavailable_reason(available).map(str::to_owned);
         Ok(InvoiceRequestAmounts {
+            can_submit: unavailable_reason.is_none(),
+            unavailable_reason,
+            invoice_title: source.invoice_title,
+            tax_number: source.tax_number,
             receivable_account_id: account_id.into(),
-            available_amount: account
-                .open_invoiceable_total
-                .checked_sub(pending)
-                .checked_sub(approved)
-                .max(Amount::zero()),
+            available_amount: available,
             pending_amount: pending,
             approved_remaining_amount: approved,
             invoiced_amount: account.invoiced_total,

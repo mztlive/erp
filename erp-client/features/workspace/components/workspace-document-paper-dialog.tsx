@@ -53,7 +53,7 @@ export function WorkspaceDocumentPaperDialog({
                 </DialogTitle>
                 <DialogDescription className="sr-only">
                     {target?.kind === "approval_snapshot"
-                        ? "此次审批提交时保留的资料摘要与附件，按当前审批访问资格读取。"
+                        ? "此次审批提交时保留的单据及附件，销售单包含全部提交明细，按当前审批访问资格读取。"
                         : "系统业务数据的打印件；金额与状态以系统记录为准。版本、附件和关联单据仍在对应工作面查看。"}
                     按 Esc 或点击遮罩关闭。
                 </DialogDescription>

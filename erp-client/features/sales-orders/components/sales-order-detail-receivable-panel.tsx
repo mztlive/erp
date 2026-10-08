@@ -197,7 +197,9 @@ export function ReceivablePanel({ order }: { order: SalesOrderDetailView }) {
                         ? readableAccounts[0]?.accountId
                         : undefined
                 }
-                title={order.customerName}
+                accountIds={readableAccounts?.map(
+                    (account) => account.accountId,
+                )}
             />
             <div className="divide-y divide-border/70">
                 <DetailRecordSection

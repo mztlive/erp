@@ -87,6 +87,36 @@ pub struct ApprovalBriefSource {
     pub extra_sections: Vec<ApprovalBriefSection>,
 }
 
+impl ApprovalBriefSource {
+    /// 判断提交人展示是否缺失或仍为该提交人的内部身份。
+    /// # 参数
+    /// * `submitter_id` - 当前快照载荷保存的提交人身份。
+    /// # 返回
+    /// 缺少姓名或错误保存为身份时返回 true。
+    /// # 错误
+    /// 不返回错误。
+    pub fn needs_submitter_name(&self, submitter_id: &str) -> bool {
+        self.submitter_name.as_deref().is_none_or(|name| name.trim().is_empty() || name == submitter_id)
+    }
+
+    /// 补齐可读姓名；已有冻结姓名保持原值，无法解析时不展示内部身份。
+    /// # 参数
+    /// * `submitter_id` - 快照保存的提交人身份。
+    /// * `name` - 授权后读取到的姓名。
+    /// # 返回
+    /// 就地补齐姓名或清除无法解析的身份值。
+    /// # 错误
+    /// 不返回错误。
+    pub fn resolve_submitter_name(&mut self, submitter_id: &str, name: Option<&str>) {
+        if self.needs_submitter_name(submitter_id) {
+            self.submitter_name = name
+                .map(str::trim)
+                .filter(|name| !name.is_empty() && *name != submitter_id)
+                .map(str::to_owned);
+        }
+    }
+}
+
 /// 冻结明细摘要；完整行数由 more_count 保留。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ApprovalBriefLine {
@@ -171,6 +201,31 @@ impl ApprovalDisplaySnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn submitter_name_resolves_legacy_identity_and_preserves_frozen_name() {
+        let mut source =
+            ApprovalBriefSource { submitter_name: Some("account-1".into()), ..Default::default() };
+        assert!(source.needs_submitter_name("account-1"));
+        source.resolve_submitter_name("account-1", Some("  周晓彤  "));
+        assert_eq!(source.submitter_name.as_deref(), Some("周晓彤"));
+        source.resolve_submitter_name("account-1", Some("变更后的姓名"));
+        assert_eq!(source.submitter_name.as_deref(), Some("周晓彤"));
+    }
+
+    #[test]
+    fn unavailable_submitter_never_falls_back_to_internal_identity() {
+        for name in [None, Some(""), Some("  "), Some("account-1")] {
+            let mut source =
+                ApprovalBriefSource { submitter_name: Some("account-1".into()), ..Default::default() };
+            source.resolve_submitter_name("account-1", name);
+            assert_eq!(source.submitter_name, None);
+        }
+        let mut source = ApprovalBriefSource::default();
+        source.resolve_submitter_name("account-1", Some("系统管理员"));
+        assert_eq!(source.submitter_name.as_deref(), Some("系统管理员"));
+    }
+
     #[test]
     fn brief_section_new_defaults_to_non_numeric() {
         let section = ApprovalBriefSection::new("k".into(), "v".into());
