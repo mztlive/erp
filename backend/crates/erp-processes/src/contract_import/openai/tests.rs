@@ -90,6 +90,7 @@ async fn rig_sends_all_pages_as_data_and_decodes_typed_evidence() {
     assert_eq!(request["text"]["format"]["strict"], true);
     assert_eq!(request["text"]["format"]["name"], "contract_extraction_v1");
     assert_eq!(request["max_output_tokens"], 8192);
+    assert_eq!(request["reasoning"]["effort"], "none");
     assert!(request.get("tools").is_none_or(|tools| tools.as_array().is_some_and(Vec::is_empty)));
     assert_eq!(request["store"], false);
     assert_ne!(request["stream"], true);
@@ -367,6 +368,28 @@ async fn accepts_deepseek_reasoning_without_using_it_as_contract_evidence() {
 }
 
 #[tokio::test]
+async fn rejects_exhausted_reasoning_budget_without_retry() {
+    let (document, _) = sample();
+    let mut raw: Value = serde_json::from_str(&response("", "incomplete")).unwrap();
+    raw["incomplete_details"] = json!({"reason": "max_output_tokens"});
+    raw["output"] = json!([{
+        "type": "reasoning", "id": "rs-1", "status": "incomplete", "summary": [],
+        "content": [{"type": "reasoning_text", "text": "尚未输出合同字段"}]
+    }]);
+    raw["usage"] = json!({
+        "input_tokens": 2150, "output_tokens": 8192, "total_tokens": 10342,
+        "output_tokens_details": {"reasoning_tokens": 8192}
+    });
+    let http = RecordingHttpClient::new(raw.to_string());
+    let result = extractor().extract_with(&document, http.clone(), Diagnostics::default()).await;
+    assert_eq!(result.unwrap_err().code, "AI_INVALID_OUTPUT");
+    let calls = http.requests();
+    assert_eq!(calls.len(), 1);
+    let request: Value = serde_json::from_slice(&calls[0].body).unwrap();
+    assert_eq!(request["reasoning"]["effort"], "none");
+}
+
+#[tokio::test]
 async fn rejects_inconsistent_completion_and_non_text_output() {
     let (document, output) = sample();
     let original: Value = serde_json::from_str(&response(&output.to_string(), "completed")).unwrap();
@@ -566,6 +589,7 @@ async fn successful_call_logs_model_endpoint_and_task_context() {
     assert_eq!(started["span"]["protocol"], "responses");
     assert_eq!(started["span"]["response_format"], "json_schema");
     assert_eq!(started["span"]["strict"], true);
+    assert_eq!(started["span"]["reasoning_effort"], "none");
     let finished = event(&logs, "contract_ai_finished");
     assert_eq!(finished["fields"]["outcome"], "succeeded");
     assert_eq!(finished["fields"]["http_status"], 200);

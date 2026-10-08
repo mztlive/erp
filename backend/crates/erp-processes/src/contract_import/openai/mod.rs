@@ -64,6 +64,7 @@ impl OpenAiContractExtractor {
         provider_id = %self.provider_id, page_count = document.pages.len(),
         model = %self.model, base_url = %self.base_url,
         protocol = "responses", response_format = "json_schema", strict = true,
+        reasoning_effort = "none",
         timeout_seconds = self.timeout.as_secs(), max_output_tokens = self.max_output_tokens
     ))]
     async fn extract_with(
@@ -79,7 +80,8 @@ impl OpenAiContractExtractor {
             .preamble(include_str!("prompt.txt"))
             .max_tokens(self.max_output_tokens)
             .output_schema(output::schema()?)
-            .additional_params(json!({"store": false}))
+            // 合同字段直接按原文提取，关闭思考以避免推理耗尽正文输出额度。
+            .additional_params(json!({"store": false, "reasoning": {"effort": "none"}}))
             .record_content_telemetry(true);
         let client = OpenAIConfig::new(self.api_key.clone())
             .with_base_url(self.base_url.trim_end_matches('/'))

@@ -6,6 +6,7 @@
 2. `contract_import::openai::OpenAiContractExtractor` 使用锁定的 `rig-core 0.43.0` OpenAI provider 编解码，发送一次非流式 `POST <base_url>/responses`，设置 `store=false`，不创建或续接服务端会话。不得回退到 Chat Completions、启用工具、自动重试或自动降低输出约束。
 3. 提取模型须支持 Responses API 的 `text.format.type=json_schema` 与 `text.format.strict=true` 结构化输出，且上下文容量足以容纳合同全文、固定提示词、Schema 与输出。仅声明 OpenAI 兼容不代表满足此要求。服务不支持时任务失败，不得退回自由文本或人工输入。
 4. 请求 Schema 仅使用对象、数组、字符串、整数、枚举、必填项及禁止额外属性的基础约束。不得发送微调模型不支持的 `minLength/maxLength/minimum/maximum/minItems/maxItems`；字段数量、字节长度、页号范围和非空校验必须在本地执行，超限仍须失败。
+5. 合同字段提取请求固定发送 `reasoning.effort=none`，显式关闭思考模式，避免推理消耗最终 JSON 的输出额度。供应商须支持该参数；参数被拒绝时按 `AI_REJECTED` 失败，不删除参数后重试或退回默认思考模式。
 
 ## 2. 配置与启用
 
@@ -38,7 +39,7 @@ max_output_tokens = 8192
 7. 日志内容不设限制，允许记录完整请求、响应、OCR、模型输出、原始错误、配置、凭据及调用上下文。本合同不要求日志脱敏、截断、字段白名单或内容过滤。适配器开启 SDK 内容追踪，SDK 日志须关联当前任务上下文。
 8. 后台任务须建立 `contract_import` 日志上下文，包含 `task_id`、`account`、`request_id`。任务开始记录 `contract_import_started`，持久化后的业务失败须以 WARN 记录 `contract_import_finished`、`error_code`、`elapsed_ms`；持久化异常或提交结果未知须以 ERROR 记录，不得仅因 HTTP 返回 200 判定识别成功。
 9. OCR 开始与完成须记录 `contract_ocr_started` / `contract_ocr_finished`、页数和耗时。识别阶段失败须记录 `contract_recognition_failed`、`stage`（`ocr` / `ai` / `validation`）、错误码、总耗时与当前阶段耗时；`RECOGNITION_TIMEOUT` 表示 180 秒总预算耗尽。
-10. AI 调用须记录 `contract_ai_started` / `contract_ai_finished`，通过 `contract_ai` 上下文关联 `provider_id`、`model`、`base_url`、`protocol=responses`、`response_format`、`strict`、页数、超时秒数和输出 token 上限。结束日志须包含结果、耗时以及已取得的 HTTP 状态和供应商请求 ID；失败须以 WARN 记录错误码。`timeout_source` 区分 `application_deadline`（应用等待截止）、`connect`（连接超时）、`response_headers`（发送请求或等待响应头超时）、`response_body`（读取响应超时）、`upstream_http`（上游 408/504）。总预算取消 AI 时，以识别阶段的 `RECOGNITION_TIMEOUT` 为准，不得伪报供应商超时。
+10. AI 调用须记录 `contract_ai_started` / `contract_ai_finished`，通过 `contract_ai` 上下文关联 `provider_id`、`model`、`base_url`、`protocol=responses`、`response_format`、`strict`、`reasoning_effort=none`、页数、超时秒数和输出 token 上限。结束日志须包含结果、耗时以及已取得的 HTTP 状态和供应商请求 ID；失败须以 WARN 记录错误码。`timeout_source` 区分 `application_deadline`（应用等待截止）、`connect`（连接超时）、`response_headers`（发送请求或等待响应头超时）、`response_body`（读取响应超时）、`upstream_http`（上游 408/504）。总预算取消 AI 时，以识别阶段的 `RECOGNITION_TIMEOUT` 为准，不得伪报供应商超时。
 11. HTTP 失败须完整读取错误文本，在 `contract_ai_finished` 记录 `provider_error_body`、全部 `provider_response_headers` 及可用的 `provider_sdk_error`，不另设日志正文大小限制、不截断。JSON 错误须同时展开 `provider_error_type`、`provider_error_code`、`provider_error_param`、`provider_error_message`；保留供应商原值，不使用固定摘要替换。非 JSON 或 JSON 解析失败仍保留原始文本。供应商请求 ID 按 `x-request-id`、`x-dashscope-request-id`、`x-acs-request-id` 顺序提取，不限制值的长度或字符；其他头仍完整记录。
 12. `provider_error_body_state` 标记正文已收到（`received`）、读取失败（`read_failed`）或调用期限到达前尚未读完（`pending`）；读取失败须记录原始 `provider_error_read_error`。诊断正文读取沿用既有请求超时与总预算，不额外发送请求或自动重试。已经取得非成功 HTTP 状态时，正文读取失败或 AI 调用期限到达均按该状态分类，不得把已知的 HTTP 400/401 等改报成等待响应超时。
 
@@ -54,7 +55,7 @@ max_output_tokens = 8192
 
 ## 4. 验证与回退
 
-1. 库单元测试须通过真实 Rig provider 与内存 HTTP 替身执行协议编解码，覆盖 `/responses` 路由、`instructions/input/text.format/max_output_tokens/store` 请求字段、完整页面、实际请求 Schema 基础子集、本地范围限制、配置供应商标识的证据序列化、结构化输出、reasoning 与正文隔离、完成状态、拒答、额外输出项、证据校验、冲突、缺失、重复、异常响应、无重试、超时取消及错误正文完整记录。不得使用真实计费接口作为单元测试。
+1. 库单元测试须通过真实 Rig provider 与内存 HTTP 替身执行协议编解码，覆盖 `/responses` 路由、`instructions/input/text.format/max_output_tokens/store/reasoning.effort` 请求字段、完整页面、实际请求 Schema 基础子集、本地范围限制、配置供应商标识的证据序列化、结构化输出、关闭思考、reasoning 与正文隔离、推理耗尽输出额度、完成状态、拒答、额外输出项、证据校验、冲突、缺失、重复、异常响应、无重试、超时取消及错误正文完整记录。不得使用真实计费接口作为单元测试。
 2. 运行 `cargo check --workspace --locked`、受影响 crate 的库测试与 Clippy，以及领域依赖边界检查。不得执行真实 MongoDB/S3 集成测试。
 3. 实际供应商上线前须验证 Responses API 路由、严格结构化输出兼容性、真实合同识别质量及跨页冲突检测。静态门禁和协议替身测试不得替代此项验收。
 4. 删除 `[contract_ai]` 配置即可停用后续任务的 AI 提取。回退不得删除历史合同修订、原文件、任务或识别证据。
