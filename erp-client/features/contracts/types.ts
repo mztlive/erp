@@ -132,6 +132,7 @@ export type ContractCenterView = {
         settlementParty: ObjectReference
         paymentTermSnapshot: PaymentTermView
         invoiceRequirementSnapshot: InvoiceRequirementView
+        taxPoint?: string
         validFrom: string
         validTo: string
         signedAt?: string

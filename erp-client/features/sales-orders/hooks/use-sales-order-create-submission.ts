@@ -93,6 +93,8 @@ export function useSalesOrderCreateSubmission({
                 : []
         const draftContent = {
             nature: value.nature,
+            settlementPartyId: value.settlementPartyId,
+            invoiceType: value.invoiceType,
             customerId: value.customerId,
             ownerUserId: value.ownerUserId,
             ownerName: value.ownerName,

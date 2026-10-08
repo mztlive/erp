@@ -35,7 +35,7 @@ export function useSalesOrderCreateDefaults({
         const nature = initialDraft?.nature ?? initialNature
         const contractId = initialDraft?.contractId || initialContractId
         return {
-            orderBasis: initialDraft && !contractId ? "evidence" : "contract",
+            orderBasis: contractId ? "contract" : "evidence",
             contractId,
             requestedContractRevisionId: initialContractRevisionId,
             contractRevisionLabel: "",
@@ -48,13 +48,14 @@ export function useSalesOrderCreateDefaults({
                       fileName: "已上传开单凭证",
                   })) ?? []),
             customerName: initialDraft?.customerName ?? "",
-            settlementPartyId: "",
+            settlementPartyId: initialDraft?.settlementPartyId ?? "",
             settlementEntity: initialDraft?.settlementEntity ?? "",
             nature,
             ownerUserId: "",
             ownerName: "",
             welfareScene: initialDraft?.welfareScene ?? "",
             paymentTerms: initialDraft?.paymentTerms ?? "",
+            invoiceType: initialDraft?.invoiceType ?? "增值税专用发票",
             fulfillmentDeadline: initialDraft?.fulfillmentDeadline ?? "",
             receivableDueDate: initialDraft?.receivableDueDate ?? "",
             taxRatePercent:

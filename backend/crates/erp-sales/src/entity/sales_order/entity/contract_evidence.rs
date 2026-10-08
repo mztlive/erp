@@ -30,7 +30,8 @@ impl SalesOrder {
             "image/webp" => extension == "webp",
             _ => false,
         };
-        if !accepted || unavailable || byte_size == 0 || byte_size > 5 * 1024 * 1024 {
+        let max_bytes = if mime == "application/pdf" { 20 * 1024 * 1024 } else { 5 * 1024 * 1024 };
+        if !accepted || unavailable || byte_size == 0 || byte_size > max_bytes {
             return Err(Error::from("销售建单凭证必须为有效 PDF、JPG、PNG 或 WebP 文件"));
         }
         Ok(())
@@ -144,6 +145,32 @@ mod tests {
     }
 
     #[test]
+    fn accepts_recognized_contract_pdf_but_keeps_image_limit() {
+        assert!(
+            SalesOrder::validate_creation_evidence_file(
+                "application/pdf",
+                "合同.pdf",
+                false,
+                20 * 1024 * 1024
+            )
+            .is_ok()
+        );
+        assert!(
+            SalesOrder::validate_creation_evidence_file(
+                "application/pdf",
+                "合同.pdf",
+                false,
+                20 * 1024 * 1024 + 1
+            )
+            .is_err()
+        );
+        assert!(
+            SalesOrder::validate_creation_evidence_file("image/png", "凭证.png", false, 5 * 1024 * 1024 + 1)
+                .is_err()
+        );
+    }
+
+    #[test]
     fn no_contract_creation_requires_unique_evidence() {
         let mut order = order();
         assert!(order.set_creation_evidence(vec![]).is_err());
@@ -211,7 +238,7 @@ mod tests {
                 "application/pdf",
                 "a.pdf",
                 false,
-                5 * 1024 * 1024 + 1
+                20 * 1024 * 1024 + 1
             )
             .is_err()
         );

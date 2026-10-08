@@ -27,6 +27,7 @@ export type SalesOrderSubmitSnapshot = {
     nature: SalesOrderNature
     welfareScene: string
     paymentTerms: string
+    invoiceType: string
     fulfillmentDeadline: string
     taxRatePercent: string
     remark: string
@@ -76,6 +77,7 @@ export function buildSalesOrderSubmitSnapshot(
         nature: values.nature,
         welfareScene: values.welfareScene,
         paymentTerms: values.paymentTerms,
+        invoiceType: values.invoiceType,
         fulfillmentDeadline: values.fulfillmentDeadline,
         taxRatePercent: values.taxRatePercent,
         remark: values.remark,

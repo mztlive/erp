@@ -3,7 +3,6 @@
 use application_core::AuditActor;
 use erp_core::ids::{BusinessDocumentId, ContractId, CustomerAccountId, DocumentAttachmentId, PartyId};
 use erp_identity::SharedRbacService;
-use erp_party::PartyExt;
 use erp_read_models::workbench::authorize_material_transfer;
 use erp_sales::dto::sales_order::{SalesOrderDraftRequest, SalesOrderEditableDraftRequest};
 use erp_sales::entity::sales_order::SalesOrder;
@@ -87,27 +86,16 @@ impl SalesOrderCommandProcess {
         if !customer.is_active() {
             return Err(Error::BusinessLogicError("客户已停用，禁止创建新销售单".into()));
         }
-        let party = self
-            .db
-            .parties()
-            .find_by_id(customer.party_id.as_ref(), executor)
-            .await?
-            .ok_or_else(|| Error::NotFound("客户主体不存在".into()))?;
-        let revision_id = party
-            .stable
-            .current_revision_id
-            .as_deref()
-            .ok_or_else(|| Error::ConflictError("客户主体缺少有效资料版本".into()))?;
-        let revision = self
-            .db
-            .party_revisions()
-            .find_by_id(revision_id, executor)
-            .await?
-            .filter(|row| row.party_id == customer.party_id)
-            .ok_or_else(|| Error::ConflictError("客户主体资料版本不存在或归属不一致".into()))?;
-        let mut draft = editable.into_no_contract_draft(revision.legal_name)?;
+        let customer_name = access.party_name(&customer.party_id, executor).await?;
+        let settlement_id = editable
+            .no_contract_terms
+            .as_ref()
+            .and_then(|terms| terms.settlement_party_id.clone())
+            .unwrap_or_else(|| customer.party_id.clone());
+        let settlement_name = access.settlement_name(&customer.party_id, &settlement_id, executor).await?;
+        let mut draft = editable.into_no_contract_draft(customer_name, settlement_name)?;
         self.sales().resolve_draft_reference_prices(&mut draft.lines, &self.catalog(), executor).await?;
-        Ok((CustomerAccountId::new(customer.base.id), customer.party_id, draft))
+        Ok((CustomerAccountId::new(customer.base.id), settlement_id, draft))
     }
 
     /// 在建单原事务中验证并关联首次凭证，供详情与审批材料授权读取。

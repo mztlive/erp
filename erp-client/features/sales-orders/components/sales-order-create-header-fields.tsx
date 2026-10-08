@@ -110,6 +110,22 @@ export function SalesOrderCreateHeaderFields({
                     />
                 )}
             </form.AppField>
+            <form.AppField name="invoiceType">
+                {(field) => (
+                    <field.SelectField
+                        id="sales-orders-create-header-invoice-type"
+                        label="开票要求"
+                        required
+                        disabled={hasContract}
+                        options={[
+                            "增值税专用发票",
+                            "增值税普通发票",
+                            "不开发票",
+                        ].map((value) => ({ value, label: value }))}
+                        description={hasContract ? "沿用合同约定" : undefined}
+                    />
+                )}
+            </form.AppField>
             <form.AppField
                 name="taxRatePercent"
                 validators={{

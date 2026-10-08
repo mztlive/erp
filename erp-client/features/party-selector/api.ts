@@ -49,12 +49,21 @@ async function partyItem(row: PartyDto): Promise<SettlementPartyComboboxItem> {
 export async function searchParties(
     input: EntitySearch,
 ): Promise<SelectorPage<SettlementPartyComboboxItem>> {
-    if (input.purpose === "filter") {
+    if (input.purpose === "filter" || input.purpose === "sales-order") {
         const page = await searchObjectDirectory(
             "settlement-parties",
             input.query,
         )
-        return { ...page, items: page.items.map(directoryItem) }
+        return {
+            ...page,
+            items: page.items
+                .filter(
+                    (row) =>
+                        input.purpose === "filter" ||
+                        row.status.toLowerCase() === "active",
+                )
+                .map(directoryItem),
+        }
     }
     const page = await fetchSelectorList<PartyDto>("/admin/parties", {
         keyword: input.query.trim() || undefined,
@@ -70,7 +79,7 @@ export async function fetchPartyOption(
     purpose: PartySelectorPurpose = "filter",
 ): Promise<SettlementPartyComboboxItem | null> {
     if (!partyId) return null
-    if (purpose === "filter") {
+    if (purpose === "filter" || purpose === "sales-order") {
         const page = await selectedObjectDirectory(
             "settlement-parties",
             partyId,

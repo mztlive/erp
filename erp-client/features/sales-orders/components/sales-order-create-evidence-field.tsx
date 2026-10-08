@@ -32,7 +32,7 @@ export function SalesOrderCreateEvidenceField({
                 return (
                     <Field data-invalid={invalid || undefined}>
                         <FieldLabel htmlFor="sales-orders-create-evidence-input">
-                            开单凭证<span className="text-destructive">*</span>
+                            开单材料<span className="text-destructive">*</span>
                         </FieldLabel>
                         {(field.state.value ?? []).length > 0 ? (
                             <ul className="space-y-2">
@@ -105,7 +105,7 @@ export function SalesOrderCreateEvidenceField({
                         <FieldDescription id="sales-orders-create-evidence-description">
                             {locked
                                 ? "创建销售单时上传的开单依据已保留。"
-                                : "至少上传一份凭证，支持继续添加；签署合同后可在销售单详情中补录。"}
+                                : "保留合同 PDF 或其他开单依据，支持继续添加；已归档合同可在销售单详情中关联。"}
                         </FieldDescription>
                         {invalid ? (
                             <FieldError

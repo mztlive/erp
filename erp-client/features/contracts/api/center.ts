@@ -132,6 +132,7 @@ export async function fetchContractCenter(
                 days: paymentTermDays(termCode),
                 description: termName,
             },
+            taxPoint: current?.tax_point,
             invoiceRequirementSnapshot: {
                 titleType: current?.invoice_type ?? "—",
                 contentSummary: current ? `税点 ${current.tax_point}` : "—",

@@ -16,6 +16,8 @@ import { toast } from "@/components/ui/toast"
 import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
 import { getErrorMessage } from "@/lib/api/errors"
 import type { FormalCommandKeyLedger } from "@/lib/formal-command"
+import { SalesContractPrefillDialog } from "./sales-contract-prefill-dialog"
+import type { SalesContractPrefill } from "../api/contract-prefill"
 import { ContractUploadDialog } from "@/features/contracts/contract-upload-dialog"
 import { useContractCenterQuery } from "@/features/contracts/queries"
 import type { UploadContractPdfResult } from "@/features/contracts/types"
@@ -245,6 +247,19 @@ export function SalesOrderCreateForm({
             // 已从草稿带回的付款条件不应被合同默认值覆盖；仅跳过这一次。
             skipPaymentTermsResetRef.current = false
         } else {
+            form.setFieldValue(
+                "invoiceType",
+                contract.currentRevision.invoiceRequirementSnapshot.titleType,
+                { dontUpdateMeta: true },
+            )
+            form.setFieldValue(
+                "taxRatePercent",
+                contract.currentRevision.taxPoint
+                    ?.trim()
+                    .replace(/[%％]$/, "")
+                    .trim() ?? "",
+                { dontUpdateMeta: true },
+            )
             const termLabel = contract.currentRevision.paymentTermSnapshot.label
             const termMatch = PAYMENT_TERM_OPTIONS.find(
                 (o) => o.label === termLabel || o.value === termLabel,
@@ -262,14 +277,16 @@ export function SalesOrderCreateForm({
         form.setFieldValue("customerName", customer.currentRevision.legalName, {
             dontUpdateMeta: true,
         })
-        form.setFieldValue("settlementPartyId", customer.partyId, {
-            dontUpdateMeta: true,
-        })
-        form.setFieldValue(
-            "settlementEntity",
-            customer.currentRevision.legalName,
-            { dontUpdateMeta: true },
-        )
+        if (!form.state.values.settlementPartyId) {
+            form.setFieldValue("settlementPartyId", customer.partyId, {
+                dontUpdateMeta: true,
+            })
+            form.setFieldValue(
+                "settlementEntity",
+                customer.currentRevision.legalName,
+                { dontUpdateMeta: true },
+            )
+        }
         if (!form.state.values.paymentTerms) {
             form.setFieldValue(
                 "paymentTerms",
@@ -332,12 +349,45 @@ export function SalesOrderCreateForm({
         [form, queryClient],
     )
 
+    const applyContractPrefill = (value: SalesContractPrefill) => {
+        preferredRevisionRef.current = ""
+        setSelectedContractId("")
+        form.setFieldValue("orderBasis", "evidence")
+        form.setFieldValue("contractId", "")
+        form.setFieldValue("requestedContractRevisionId", "")
+        form.setFieldValue("contractRevisionLabel", "")
+        form.setFieldValue("customerId", value.customerId)
+        form.setFieldValue("customerName", value.customerName)
+        form.setFieldValue("settlementPartyId", value.settlementPartyId)
+        form.setFieldValue("settlementEntity", value.settlementEntity)
+        form.setFieldValue("paymentTerms", value.paymentTerms)
+        form.setFieldValue("invoiceType", value.invoiceType)
+        form.setFieldValue("taxRatePercent", value.taxRatePercent)
+        const files = form.state.values.evidenceAttachments ?? []
+        if (!files.some((file) => file.id === value.file.id)) {
+            form.setFieldValue("evidenceAttachments", [...files, value.file])
+        }
+        toast.add({
+            title: "已填入客户与结算条款",
+            description: "合同 PDF 已保留，请继续填写销售明细并核对后提交。",
+            type: "success",
+        })
+    }
+
     const applyNature = React.useCallback(
         (nature: SalesOrderNature) => {
-            form.setFieldValue(
-                "taxRatePercent",
-                nature === "card_voucher" ? "6.00" : "13.00",
-            )
+            // 仅更新尚未核对的新单默认税率；识别、手工填写、合同与草稿条款保持不变。
+            if (
+                !form.getFieldMeta("taxRatePercent")?.isTouched &&
+                !form.state.values.contractId &&
+                !initialDraft
+            ) {
+                form.setFieldValue(
+                    "taxRatePercent",
+                    nature === "card_voucher" ? "6.00" : "13.00",
+                    { dontUpdateMeta: true },
+                )
+            }
             form.setFieldValue("receivableDueDate", "")
             form.setFieldValue("nature", nature)
             form.setFieldValue(
@@ -346,7 +396,7 @@ export function SalesOrderCreateForm({
             )
             setDraftSaved(null)
         },
-        [form, setDraftSaved],
+        [form, initialDraft, setDraftSaved],
     )
 
     const owner = (
@@ -487,20 +537,29 @@ export function SalesOrderCreateForm({
             </form>
 
             <div id="sales-orders-create-contract-upload-dialog">
-                <ContractUploadDialog
-                    open={uploadOpen}
-                    onOpenChange={setUploadOpen}
-                    initialCustomerId={
-                        initialDraft?.customerId ||
-                        (submission.draftIdentity
-                            ? submission.savedValues?.customerId ||
-                              selectedCustomerId
-                            : selectedCustomerId || initialCustomerId)
-                    }
-                    onSuccess={(result) => {
-                        void handleUploadSuccess(result)
-                    }}
-                />
+                {!initialDraft && !submission.draftIdentity ? (
+                    <SalesContractPrefillDialog
+                        open={uploadOpen}
+                        onOpenChange={setUploadOpen}
+                        currentCustomerId={selectedCustomerId}
+                        onApply={applyContractPrefill}
+                    />
+                ) : (
+                    <ContractUploadDialog
+                        open={uploadOpen}
+                        onOpenChange={setUploadOpen}
+                        initialCustomerId={
+                            initialDraft?.customerId ||
+                            (submission.draftIdentity
+                                ? submission.savedValues?.customerId ||
+                                  selectedCustomerId
+                                : selectedCustomerId || initialCustomerId)
+                        }
+                        onSuccess={(result) => {
+                            void handleUploadSuccess(result)
+                        }}
+                    />
+                )}
             </div>
 
             <DiscardConfirmDialog

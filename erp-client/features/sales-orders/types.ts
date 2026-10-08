@@ -61,6 +61,8 @@ export type CreateSalesOrderInput = {
     contract: SalesOrderContractInput
     customerId?: string
     evidenceFileAssetIds?: string[]
+    settlementPartyId?: string
+    invoiceType?: string
     nature: SalesOrderNature
     /** 负责销售用户 id（当前登录用户）。 */
     ownerUserId: string

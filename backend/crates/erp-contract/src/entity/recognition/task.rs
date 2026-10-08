@@ -79,6 +79,8 @@ pub struct ContractImport {
 /// 任务公开视图提供可编辑预填、逐字段依据及结果，不含存储键和全文。
 #[derive(Clone, Serialize)]
 pub struct ImportView {
+    /// 本人上传的源文件；用于销售开单材料，写入仍须校验资产归属与可用性。
+    pub source_file_asset_id: String,
     pub draft: Option<RecognitionDraft>,
     pub expected_customer_id: Option<String>,
     pub revision_target: Option<RevisionTarget>,
@@ -105,6 +107,7 @@ impl From<ContractImport> for ImportView {
             .zip(task.ocr.as_ref())
             .map(|(extraction, document)| extraction.draft(document));
         Self {
+            source_file_asset_id: task.source.file_asset_id,
             draft,
             expected_customer_id: task.command.expected_customer_id,
             revision_target: task.command.revision_target,

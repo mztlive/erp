@@ -1,5 +1,7 @@
 //! 销售命令在原业务事务内重验资源动作、责任和业务版本。
 
+mod settlement;
+
 use application_core::AuditActor;
 use erp_contract::{Contract, ContractExt};
 use erp_customer::{CustomerAccount, CustomerExt};
@@ -212,7 +214,9 @@ impl SalesCommandAccess {
         if let Some(contract_id) = order.contract_id.as_ref() {
             self.related(contract_id.as_ref(), order.customer_id.as_ref(), executor).await
         } else {
-            self.require_customer(order.customer_id.as_ref(), executor).await
+            let customer = self.load_customer(order.customer_id.as_ref(), executor).await?;
+            self.settlement_name(&customer.party_id, &order.settlement_party_id, executor).await?;
+            Ok(())
         }
     }
 

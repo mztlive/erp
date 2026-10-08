@@ -41,6 +41,7 @@ const FIELDS: Record<string, string> = {
 
 export function ContractImportTask({
     task,
+    showExtraction = true,
     busy,
     recoveryAvailable,
     contextError,
@@ -52,6 +53,7 @@ export function ContractImportTask({
     onNew,
 }: {
     task: ImportTask
+    showExtraction?: boolean
     busy: boolean
     recoveryAvailable: boolean
     contextError?: string
@@ -205,7 +207,7 @@ export function ContractImportTask({
                     </div>
                 </div>
             ) : null}
-            {task.extraction ? (
+            {showExtraction && task.extraction ? (
                 <div className="space-y-3">
                     <h3 className="text-sm font-medium">识别信息</h3>
                     <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">

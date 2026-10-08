@@ -9,6 +9,7 @@ import { SalesOrderCreateEvidenceField } from "@/features/sales-orders/component
 import {
     ContractSearchCombobox,
     CustomerSearchCombobox,
+    SettlementPartySearchCombobox,
 } from "@/features/entity-selectors"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -42,6 +43,26 @@ export function SalesOrderCreateContractSection({
     )
     return (
         <div className="space-y-5">
+            {!customerLocked ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-4">
+                    <div>
+                        <p className="text-sm font-medium">用合同自动填写</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            匹配客户与结算主体，预填付款、开票要求和税率
+                        </p>
+                    </div>
+                    <Button
+                        id="sales-orders-create-contract-upload"
+                        type="button"
+                        variant="outline"
+                        disabled={uploading}
+                        onClick={onUploadClick}
+                    >
+                        <UploadIcon aria-hidden="true" />
+                        上传合同并预填
+                    </Button>
+                </div>
+            ) : null}
             <form.AppField name="orderBasis">
                 {(field) => (
                     <Field className="gap-2 sm:grid sm:grid-cols-[auto_1fr] sm:gap-x-6">
@@ -71,7 +92,7 @@ export function SalesOrderCreateContractSection({
                         >
                             {[
                                 { value: "contract", label: "关联合同" },
-                                { value: "evidence", label: "凭证开单" },
+                                { value: "evidence", label: "上传材料开单" },
                             ].map((option) => (
                                 <RadioGroupItem
                                     key={option.value}
@@ -100,8 +121,8 @@ export function SalesOrderCreateContractSection({
                                 : uploading
                                   ? "凭证上传中，请完成后再切换开单依据。"
                                   : basis === "contract"
-                                    ? "选择已签合同，自动带入客户与付款条件"
-                                    : "暂未签约，上传凭证先开单，合同后补"}
+                                    ? "选择已归档合同，自动带入客户与结算条款"
+                                    : "上传合同或其他凭证作为开单材料；合同资料可另行归档后关联"}
                         </p>
                     </Field>
                 )}
@@ -127,18 +148,6 @@ export function SalesOrderCreateContractSection({
                                             *
                                         </span>
                                     </FieldLabel>
-                                    <Button
-                                        id="sales-orders-create-contract-upload"
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        aria-label="上传合同 PDF"
-                                        title="上传合同 PDF"
-                                        onClick={() => onUploadClick()}
-                                    >
-                                        <UploadIcon aria-hidden="true" />
-                                        上传合同
-                                    </Button>
                                 </div>
                                 <ContractSearchCombobox
                                     id="sales-orders-create-contract"
@@ -151,7 +160,7 @@ export function SalesOrderCreateContractSection({
                                     customerId={initialCustomerId || undefined}
                                     selectableOnly
                                     placeholder="搜索合同编号或客户"
-                                    emptyLabel="暂无可用合同，请上传合同或切换为凭证开单"
+                                    emptyLabel="暂无可用合同，可上传合同预填或使用其他开单材料"
                                 />
                                 {isInvalid ? (
                                     <FieldError errors={errors} />
@@ -179,9 +188,19 @@ export function SalesOrderCreateContractSection({
                                         disabled={customerLocked}
                                         id="sales-orders-create-customer"
                                         value={field.state.value || undefined}
-                                        onValueChange={(id) =>
+                                        onValueChange={(id) => {
+                                            if (id !== field.state.value) {
+                                                form.setFieldValue(
+                                                    "settlementPartyId",
+                                                    "",
+                                                )
+                                                form.setFieldValue(
+                                                    "settlementEntity",
+                                                    "",
+                                                )
+                                            }
                                             field.handleChange(id ?? "")
-                                        }
+                                        }}
                                         onItemChange={(customer) =>
                                             form.setFieldValue(
                                                 "customerName",
@@ -200,6 +219,37 @@ export function SalesOrderCreateContractSection({
                                 </Field>
                             )
                         }}
+                    </form.AppField>
+                    <form.AppField name="settlementPartyId">
+                        {(field) => (
+                            <Field>
+                                <FieldLabel htmlFor="sales-orders-create-settlement">
+                                    结算主体
+                                    <span className="text-destructive">*</span>
+                                </FieldLabel>
+                                <SettlementPartySearchCombobox
+                                    id="sales-orders-create-settlement"
+                                    purpose="sales-order"
+                                    disabled={customerLocked}
+                                    value={field.state.value || undefined}
+                                    onValueChange={(id) =>
+                                        field.handleChange(id ?? "")
+                                    }
+                                    onItemChange={(item) =>
+                                        form.setFieldValue(
+                                            "settlementEntity",
+                                            item?.displayName ?? "",
+                                        )
+                                    }
+                                    placeholder="搜索并选择结算主体"
+                                />
+                                <FieldError
+                                    errors={toFieldErrors(
+                                        field.state.meta.errors,
+                                    )}
+                                />
+                            </Field>
+                        )}
                     </form.AppField>
                     <SalesOrderCreateEvidenceField
                         form={form}

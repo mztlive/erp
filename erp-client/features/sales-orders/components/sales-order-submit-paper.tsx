@@ -64,7 +64,7 @@ export function SalesOrderSubmitPaper({
                     id: "buyer",
                     label: "客户",
                     name: snapshot.customerName || "—",
-                    reference: snapshot.contractLabel || "无合同",
+                    reference: snapshot.contractLabel || "未关联归档合同",
                     fields: [
                         {
                             id: "settlement",
@@ -74,7 +74,7 @@ export function SalesOrderSubmitPaper({
                         {
                             id: "contract",
                             label: "合同",
-                            value: snapshot.contractLabel || "无合同",
+                            value: snapshot.contractLabel || "未关联归档合同",
                         },
                     ],
                 },
@@ -84,6 +84,11 @@ export function SalesOrderSubmitPaper({
                     id: "payment",
                     label: "付款条件",
                     value: paymentLabel,
+                },
+                {
+                    id: "invoice",
+                    label: "开票要求",
+                    value: snapshot.invoiceType || "—",
                 },
                 {
                     id: "deadline",

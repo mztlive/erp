@@ -16,6 +16,7 @@ export type ContractImportStage =
     | "preparing_review"
 
 export type ContractImportTask = {
+    source_file_asset_id: string
     id: string
     version: number
     file_name: string

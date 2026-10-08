@@ -46,6 +46,8 @@ type DraftContentInput = {
     ownerName: string
     welfareScene: string
     paymentTerms: string
+    invoiceType?: string
+    settlementPartyId?: string
     fulfillmentDeadline: string
     receivableDueDate: string
     taxRatePercent: string
@@ -169,7 +171,8 @@ function buildDraftPayload(
                           payment_term_name:
                               paymentTermLabel(input.paymentTerms) ||
                               input.paymentTerms,
-                          invoice_type: "增值税专用发票",
+                          invoice_type: input.invoiceType ?? "增值税专用发票",
+                          settlement_party_id: input.settlementPartyId || null,
                           tax_point: input.taxRatePercent || "0",
                       },
                   }),
@@ -319,6 +322,8 @@ export type SalesOrderDraftResumeData = {
     nature: SalesOrderNature
     welfareScene: string
     paymentTerms: string
+    invoiceType?: string
+    settlementPartyId?: string
     fulfillmentDeadline: string
     receivableDueDate: string
     taxRatePercent: string
@@ -428,6 +433,8 @@ export async function fetchSalesOrderDraftForResume(
         customerId: detail.customer_id,
         customerName: source.customer_name,
         settlementEntity: source.settlement_party_name ?? undefined,
+        settlementPartyId: detail.settlement_party_id,
+        invoiceType: source.invoice_type ?? "",
         evidenceFileAssetIds: detail.evidence_file_asset_ids ?? [],
         evidenceFiles:
             detail.evidence_files?.map((file) => ({

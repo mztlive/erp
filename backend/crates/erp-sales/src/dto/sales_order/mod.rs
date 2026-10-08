@@ -13,7 +13,7 @@ mod revision_lines;
 
 use application_core::{normalized_text, page_or_default, page_size_or_default};
 use erp_core::common::time::BusinessDate;
-use erp_core::ids::{ContractId, ContractRevisionId, CustomerAccountId, FileAssetId, SkuId};
+use erp_core::ids::{ContractId, ContractRevisionId, CustomerAccountId, FileAssetId, PartyId, SkuId};
 use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -161,6 +161,9 @@ pub struct SalesOrderEditableDraftRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct SalesOrderNoContractTerms {
+    /// 明确选择的结算主体；旧客户端省略时沿用客户主体。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settlement_party_id: Option<PartyId>,
     /// 付款条件代码。
     #[validate(custom(function = "non_blank", message = "付款条件代码不能为空"))]
     pub payment_term_code: String,
