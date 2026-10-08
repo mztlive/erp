@@ -307,3 +307,50 @@ final result: passed
 2. 仓库默认 `.next` 指向未挂载的 Kingston 路径，原目录 `npm run build` 因 ENOENT 失败。临时副本使用 Webpack 完成生产构建与 standalone 打包；仅临时副本将追踪根设为 `/` 以覆盖外部 node_modules 软链接，仓库构建配置未修改。
 3. 全量 `format:check` 被 6 个既有文件阻断：`access-list-toolbar.tsx`、`access-audit-page.tsx`、`receivable-counterparty-search-combobox.tsx`、`data-scope/cache.ts`、`invoice-requests/scoped-view.ts`、`lib/selector-list.ts`。本次不得顺带格式化这些文件。
 4. 未调用真实客户提交接口，未写业务库；真实回执接口、封面权限与手机文件接收行为仍须在服务可用时验收。
+
+---
+
+# 合同导入分步核对验收
+
+final result: passed
+
+## 验收范围
+
+- 目标：用户选定的第三张设计图；横向窗口、三步核对、右侧原文、固定底部操作。
+- 页面：`http://localhost:3000/sales/contracts`，从已有待确认记录进入核对。
+- 状态：第一步；客户和我方主体未匹配，建档确认未勾选，下一步不可用。
+- 原图：`outputs/contract-import-design/reference.png`，1536 × 1024 像素。
+- 桌面截图：`outputs/contract-import-design/desktop-1536x1024.jpg`，1536 × 1024 像素。
+- 窄窗口截图：`outputs/contract-import-design/narrow-900x700.jpg`，900 × 700 像素。
+- 归一化：桌面 CSS 视口与两张图片均为 1536 × 1024，按 1:1 对照。只验收合同弹窗；背景沿用现有 ERP，原文使用真实 PDF，字号和控件沿用共享主题。
+
+## 视觉与交互门禁
+
+| 检查项 | 验收结果 |
+| --- | --- |
+| 全图对照 | 原图、最终桌面截图和窄窗口截图在同次输入中对照；无未解决的 P0/P1/P2 问题 |
+| 窗口边界 | 桌面弹窗为 1280 × 820，底部位于视口内；页面无横向溢出 |
+| 局部区域 | 全图可直接核对标题、步骤导航、客户建档区、PDF 页及底部按钮，无需另行放大裁切 |
+| 三步导航 | 第一组有效后才能进入合同条款；条款完整后可进入日期与范围 |
+| 输入保留 | 第二步填写编号、付款条件、税率后前进再返回，输入值保留 |
+| 归档限制 | 前两步不出现归档按钮；第三步缺少日期时归档不可用 |
+| PDF | 真实四页合同显示成功；翻至第二页后切换核对步骤，阅读页码仍保留 |
+| 窄窗口 | 900 × 700 下正文内部滚动，原文排列到表单之后；底部按钮在视口内且无横向溢出 |
+| DOM ID | 当前第一步可见文档未发现重复 ID；历史记录入口移除重复折叠层 |
+| 控制台 | 未发现应用错误；浏览器翻译扩展的 token 错误不计入应用验收 |
+
+## 修复复验
+
+| 等级 | 问题 | 执行要求与复验 |
+| --- | --- | --- |
+| P1 | 浏览器内嵌 PDF 显示空白 | 使用应用内分页渲染；真实原文首、次页已显示，见最终桌面截图 |
+| P2 | 窄窗口中两块内容重叠 | 小于桌面断点时改为正常文档流；900 × 700 复验通过 |
+| P2 | 原文操作独占一行，压缩阅读区 | 文件名与完整原文入口同排，预览整页适配阅读区；桌面复验通过 |
+
+## 检查及交付边界
+
+1. `npm run lint`、`npx tsc --noEmit`、`npm run build`、本次改动文件的格式检查和 `git diff --check` 通过。
+2. 全量 `format:check` 仍报告 5 个既有文件：`access-list-toolbar.tsx`、`access-audit-page.tsx`、`receivable-counterparty-search-combobox.tsx`、`scoped-view.ts`、`selector-list.ts`。本次不修改这些文件。
+3. “查看完整原文”已验证打开新的 Blob 页面；浏览器工具禁止读取 Blob 协议页面，因此新窗口内部显示未截图验收。应用内 PDF 分页已完成视觉验收。
+4. 本次不执行确认归档，不新建客户或合同；填写验收值仅存在于浏览器表单，截图前已通过刷新清除。
+5. 截图保存在已忽略的 `outputs/`，不得随代码发布真实合同截图。代码仅改合同导入前端、PDF 静态资源准备和对应合同文档；保留并行工作的后端改动。
