@@ -22,6 +22,12 @@ const STEP_FIELDS = [
     ["signed_at", "valid_from", "valid_to", "business_scope"],
 ] as const
 
+export const importNewCustomerCreditCodeSchema = z
+    .string()
+    .trim()
+    .min(1, "请填写统一社会信用代码后再确认建立客户档案")
+    .regex(/^[A-Za-z0-9]{18}$/, "统一社会信用代码须为 18 位字母数字")
+
 export function importReviewFieldStep(field: string): ImportReviewStep {
     const step = STEP_FIELDS.findIndex((fields) =>
         (fields as readonly string[]).includes(field),
@@ -61,6 +67,17 @@ export function importReviewSchema({
             createCustomer: z.boolean(),
         })
         .superRefine((value, ctx) => {
+            if (!value.customerId && value.createCustomer) {
+                const creditCode = importNewCustomerCreditCodeSchema.safeParse(
+                    value.customer_credit_code,
+                )
+                if (!creditCode.success)
+                    ctx.addIssue({
+                        code: "custom",
+                        path: ["customer_credit_code"],
+                        message: creditCode.error.issues[0].message,
+                    })
+            }
             if (
                 !value.customerId &&
                 !(value.createCustomer && canCreate && !expectedCustomerId)

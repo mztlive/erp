@@ -24,6 +24,7 @@ import { CompanySearchCombobox } from "@/features/companies/company-search-combo
 import { useCompanyQuery } from "@/features/companies/queries"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
+    importNewCustomerCreditCodeSchema,
     importReviewSchema,
     importReviewFieldStep,
     type ImportReviewStep,
@@ -465,11 +466,25 @@ function ContractImportReviewForm({
                                                     />
                                                 )}
                                             </form.AppField>
-                                            <form.AppField name="customer_credit_code">
+                                            <form.AppField
+                                                name="customer_credit_code"
+                                                validators={{
+                                                    onChange: field.state.value
+                                                        ? importNewCustomerCreditCodeSchema
+                                                        : undefined,
+                                                    onBlur: field.state.value
+                                                        ? importNewCustomerCreditCodeSchema
+                                                        : undefined,
+                                                }}
+                                            >
                                                 {(code) => (
                                                     <code.TextField
                                                         id="contract-import-new-customer-code"
                                                         label="统一社会信用代码"
+                                                        required={
+                                                            field.state.value
+                                                        }
+                                                        description="确认匹配或建档时必填，请填写 18 位字母数字；已有客户可在上方直接选择。"
                                                         disabled={locked}
                                                     />
                                                 )}
