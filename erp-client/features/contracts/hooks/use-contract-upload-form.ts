@@ -62,6 +62,13 @@ export function useContractUploadForm(options: UseContractUploadFormOptions) {
         queryFn: () =>
             fetchContractImports(page, options.revisionTarget?.contractId),
         enabled: options.open,
+        refetchInterval: (query) =>
+            query.state.data?.items.some(
+                (item) =>
+                    item.status === "processing" || item.status === "ready",
+            )
+                ? 3000
+                : false,
     })
     const detail = useQuery({
         queryKey: ["contract-imports", "detail", selectedId],
@@ -155,6 +162,13 @@ export function useContractUploadForm(options: UseContractUploadFormOptions) {
         setPreview({ id: "", url: "" })
         runMutation.reset()
         previewMutation.reset()
+        uploadMutation.reset()
+    }
+    const startNew = () => {
+        if (uploadMutation.isPending || runMutation.isPending) return
+        select("")
+        form.reset()
+        request.current = null
     }
     const accept = () => {
         const result = detail.data?.result
@@ -187,5 +201,6 @@ export function useContractUploadForm(options: UseContractUploadFormOptions) {
         canAccept,
         contextError,
         retry,
+        startNew,
     }
 }
