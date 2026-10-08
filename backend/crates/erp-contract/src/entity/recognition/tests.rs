@@ -160,6 +160,7 @@ fn task() -> ContractImport {
             page_count: 1,
         },
         status: ImportStatus::Ready,
+        stage: None,
         started_at: None,
         ocr: None,
         extraction: None,
@@ -246,4 +247,54 @@ fn historical_tasks_without_confirmation_remain_readable() {
     let restored: ContractImport = serde_json::from_value(value).unwrap();
     assert!(restored.confirmation.is_none());
     assert_eq!(restored.status, ImportStatus::Ready);
+}
+
+#[test]
+fn progress_only_advances_in_processing_and_retry_restarts_from_file() {
+    let stages =
+        [ImportStage::ReadingFile, ImportStage::Ocr, ImportStage::AiExtract, ImportStage::PreparingReview];
+    for status in [
+        ImportStatus::Ready,
+        ImportStatus::Processing,
+        ImportStatus::Failed,
+        ImportStatus::Review,
+        ImportStatus::Succeeded,
+    ] {
+        for (index, current) in stages.iter().enumerate() {
+            for (next_index, next) in stages.iter().enumerate() {
+                let mut task = task();
+                task.status = status;
+                task.stage = Some(*current);
+                let expected = status == ImportStatus::Processing && next_index == index + 1;
+                assert_eq!(task.advance(*next).is_ok(), expected);
+                assert_eq!(task.stage, Some(if expected { *next } else { *current }));
+            }
+        }
+    }
+    let mut task = task();
+    task.begin(100).unwrap();
+    task.advance(ImportStage::Ocr).unwrap();
+    task.advance(ImportStage::AiExtract).unwrap();
+    task.status = ImportStatus::Failed;
+    assert_eq!(ImportView::from(task.clone()).stage, Some(ImportStage::AiExtract));
+    task.begin(200).unwrap();
+    assert_eq!(task.stage, Some(ImportStage::ReadingFile));
+    task.advance(ImportStage::Ocr).unwrap();
+    task.begin(800).unwrap();
+    assert_eq!(task.stage, Some(ImportStage::ReadingFile));
+}
+
+#[test]
+fn legacy_tasks_have_unknown_progress_and_views_serialize_stage_names() {
+    let mut task = task();
+    let mut legacy = serde_json::to_value(&task).unwrap();
+    legacy.as_object_mut().unwrap().remove("stage");
+    let restored: ContractImport = serde_json::from_value(legacy).unwrap();
+    assert_eq!(restored.stage, None);
+    assert_eq!(ImportView::from(restored).stage, None);
+    task.begin(100).unwrap();
+    task.advance(ImportStage::Ocr).unwrap();
+    let view = serde_json::to_value(ImportView::from(task)).unwrap();
+    assert_eq!(view["stage"], "ocr");
+    assert_eq!(view["status"], "processing");
 }

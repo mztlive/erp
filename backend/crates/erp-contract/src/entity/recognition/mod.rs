@@ -12,7 +12,9 @@ use std::collections::BTreeMap;
 
 pub use rules::{ValidatedFields, match_identity};
 use serde::{Deserialize, Serialize};
-pub use task::{ContractImport, ImportCommand, ImportSource, ImportStatus, ImportView, RevisionTarget};
+pub use task::{
+    ContractImport, ImportCommand, ImportSource, ImportStage, ImportStatus, ImportView, RevisionTarget,
+};
 
 /// AI 预填字段须有原文依据，供应商不得返回 ERP 主键。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]

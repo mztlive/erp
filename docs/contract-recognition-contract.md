@@ -19,6 +19,15 @@
 7. 任务按创建人和请求键去重。同键不同文件摘要或上下文返回冲突；同键重放返回原任务。未使用上传对象须补偿删除，事务结果未知时不得删除或自动重放。
 8. 失败保留任务、文件和已完成的有界结果。原文件仅通过本人任务受控预览，销毁、隔离或拒绝状态禁止识别与归档。
 
+### 2.1 识别进度
+
+1. 任务与任务视图增加可空 `stage` 字段，取值顺序为 `reading_file`（读取文件）、`ocr`（OCR 文字识别）、`ai_extract`（AI 字段提取）、`preparing_review`（整理核对结果）。`status` 继续作为等待、处理中、待确认、失败和已归档的权威状态。
+2. 领取或恢复任务时保存 `reading_file`；每个后续阶段必须在实际执行前完成版本 CAS 写入。阶段写入失败或版本冲突须停止后续处理，不得继续调用供应商或覆盖新执行结果。正常执行不得跳过或倒退阶段。
+3. 识别失败保留最后阶段；重新识别从读取文件开始。`review` 表示全部识别步骤已完成，`succeeded` 表示用户确认归档成功，不能依据 `stage` 单独判断完成。
+4. 前端沿用本人任务详情每 3 秒轮询，按后端阶段展示已完成步骤、当前步骤和等待步骤。进度条仅表示已完成步骤数，不表示耗时占比；不得按计时器虚增进度。OCR 内部页进度及 AI 内部生成进度不在本接口范围内。
+5. 历史记录缺失 `stage` 时按 `null` 读取，前端显示等待进度更新，不猜测具体阶段。快速步骤可在相邻两次轮询之间完成，不要求前端逐项播放。
+6. 本次字段为兼容性扩展，无历史数据回填、集合迁移或新增索引。回退本次进度功能时可保留已写入的 `stage`，上一版本忽略该字段；继续遵守第 6 节的待确认状态兼容要求。
+
 ## 3. 预填与确认规则
 
 | 字段 | 识别预填 | 用户确认归档 |
@@ -45,7 +54,7 @@
 | --- | --- | --- |
 | `POST /admin/contracts/upload` | multipart 按 `file`、`command` 顺序；command 含 `request_key`、可选 `expected_customer_id`、可选 `revision_target { contract_id, version }` | 持久任务 |
 | `GET /admin/contract-imports?page=1` | 页码、可选 `revision_contract_id` | 本人任务，每页 20 条 |
-| `GET /admin/contract-imports/{id}` | 无 | 状态、可空预填字段、原始依据、提示、失败原因及归档结果 |
+| `GET /admin/contract-imports/{id}` | 无 | 状态、可空当前阶段 `stage`、可空预填字段、原始依据、提示、失败原因及归档结果 |
 | `POST /admin/contract-imports/{id}/run` | 空正文 | 已领取或已有任务；前端轮询至待确认或失败 |
 | `POST /admin/contract-imports/{id}/confirm` | `{ version, fields: { contract_no: string或null, ... } }`，键为 14 种字段英文名 | 用户确认后归档；支持同内容重放 |
 | `GET /admin/contract-imports/{id}/preview` | 无 | 本人任务原 PDF，私有且不缓存 |

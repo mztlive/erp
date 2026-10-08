@@ -9,12 +9,19 @@ import {
 import { contractPdfError } from "@/features/contracts/lib/pdf"
 import type { UploadContractPdfInput } from "@/features/contracts/types"
 
+export type ContractImportStage =
+    | "reading_file"
+    | "ocr"
+    | "ai_extract"
+    | "preparing_review"
+
 export type ContractImportTask = {
     id: string
     version: number
     file_name: string
     page_count: number
     status: "ready" | "processing" | "failed" | "review" | "succeeded"
+    stage?: ContractImportStage | null
     customer_id?: string
     expected_customer_id?: string
     started_at?: number

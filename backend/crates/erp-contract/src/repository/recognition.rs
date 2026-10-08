@@ -126,6 +126,7 @@ mod tests {
                 page_count: 1,
             },
             status: ImportStatus::Failed,
+            stage: None,
             started_at: Some(100),
             ocr: None,
             extraction: None,

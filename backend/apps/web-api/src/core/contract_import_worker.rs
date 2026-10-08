@@ -155,6 +155,7 @@ mod tests {
             file_name: "private-file.pdf".into(),
             page_count: 4,
             status: ImportStatus::Failed,
+            stage: None,
             started_at: None,
             extraction: None,
             result: None,

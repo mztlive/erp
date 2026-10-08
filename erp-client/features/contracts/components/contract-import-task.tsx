@@ -4,7 +4,6 @@ import {
     CheckCircle2Icon,
     ChevronRightIcon,
     FileTextIcon,
-    InfoIcon,
     RefreshCwIcon,
 } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -14,10 +13,14 @@ import {
     CollapsibleContent,
     CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import { Progress } from "@/components/ui/progress"
 import { Spinner } from "@/components/ui/spinner"
 import type { ContractImportTask as ImportTask } from "@/features/contracts/api/upload"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+
+import {
+    ContractImportProgress,
+    importStageLabel,
+} from "./contract-import-progress"
 
 const FIELDS: Record<string, string> = {
     contract_no: "合同编号",
@@ -61,6 +64,7 @@ export function ContractImportTask({
 }) {
     const processing = task.status === "processing"
     const failed = task.status === "failed"
+    const stageLabel = importStageLabel(task.stage)
     return (
         <section className="space-y-5" aria-label="合同识别结果">
             <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-lg border border-border p-4">
@@ -96,36 +100,7 @@ export function ContractImportTask({
                 </Alert>
             ) : null}
             {processing && !recoveryAvailable ? (
-                <div
-                    className="rounded-lg bg-muted/50 p-5 sm:p-6"
-                    role="status"
-                    aria-live="polite"
-                >
-                    <div className="flex items-center gap-3">
-                        <Spinner
-                            className="size-5 motion-reduce:animate-none"
-                            aria-hidden="true"
-                        />
-                        <h3 className="font-medium">正在识别合同</h3>
-                    </div>
-                    <div className="mt-4 space-y-5 sm:ml-8">
-                        <p className="text-sm leading-relaxed text-muted-foreground">
-                            系统正在处理，请稍候。识别结果将自动更新。
-                        </p>
-                        <Progress
-                            value={null}
-                            aria-label="正在识别合同"
-                            className="[&_[data-slot=progress-track]]:h-1.5 [&_[data-slot=progress-track]]:bg-foreground/10 [&_[data-slot=progress-indicator]]:mx-auto [&_[data-slot=progress-indicator]]:w-1/3 [&_[data-slot=progress-indicator]]:rounded-full [&_[data-slot=progress-indicator]]:bg-foreground/50 [&_[data-slot=progress-indicator]]:motion-safe:animate-pulse"
-                        />
-                        <p className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
-                            <InfoIcon
-                                className="mt-0.5 size-3.5 shrink-0"
-                                aria-hidden="true"
-                            />
-                            可以关闭窗口，任务将在后台继续处理。
-                        </p>
-                    </div>
-                </div>
+                <ContractImportProgress stage={task.stage} />
             ) : null}
             {task.status === "review" ? (
                 <Alert>
@@ -165,6 +140,9 @@ export function ContractImportTask({
                         <p className="break-words text-sm leading-relaxed text-muted-foreground">
                             {failed ? (
                                 <>
+                                    {stageLabel
+                                        ? `失败阶段：${stageLabel}。`
+                                        : ""}
                                     {task.failure?.field
                                         ? `${FIELDS[task.failure.field] ?? "合同字段"}：`
                                         : ""}
@@ -175,9 +153,9 @@ export function ContractImportTask({
                                         "识别未完成，请重试或更换文件。"}
                                 </>
                             ) : recoveryAvailable ? (
-                                "本次识别长时间未完成，可以恢复识别或刷新结果。"
+                                `本次识别长时间未完成${stageLabel ? `，停留在${stageLabel}` : ""}，可以恢复识别或刷新结果。`
                             ) : (
-                                "开始识别后，系统将提取合同信息并匹配客户与主体。"
+                                "开始识别后，系统将识别文字并提取合同信息。"
                             )}
                         </p>
                     </div>

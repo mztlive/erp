@@ -45,6 +45,16 @@ pub enum ImportStatus {
     Succeeded,
 }
 
+/// 当前执行阶段，仅由后台在开始实际工作前推进。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ImportStage {
+    ReadingFile,
+    Ocr,
+    AiExtract,
+    PreparingReview,
+}
+
 #[derive(Clone, Serialize, Deserialize, Entity)]
 pub struct ContractImport {
     #[serde(flatten)]
@@ -53,6 +63,8 @@ pub struct ContractImport {
     pub command: ImportCommand,
     pub source: ImportSource,
     pub status: ImportStatus,
+    #[serde(default)]
+    pub stage: Option<ImportStage>,
     pub started_at: Option<u64>,
     pub ocr: Option<OcrDocument>,
     pub extraction: Option<ContractExtraction>,
@@ -76,6 +88,7 @@ pub struct ImportView {
     pub file_name: String,
     pub page_count: u32,
     pub status: ImportStatus,
+    pub stage: Option<ImportStage>,
     pub started_at: Option<u64>,
     pub extraction: Option<ContractExtraction>,
     pub failure: Option<ImportFailure>,
@@ -101,6 +114,7 @@ impl From<ContractImport> for ImportView {
             file_name: task.source.file_name,
             page_count: task.source.page_count,
             status: task.status,
+            stage: task.stage,
             started_at: task.started_at,
             extraction: task.extraction,
             failure: task.failure,
@@ -149,6 +163,7 @@ impl ContractImport {
             command,
             source,
             status: ImportStatus::Ready,
+            stage: None,
             started_at: None,
             ocr: None,
             extraction: None,
@@ -176,11 +191,33 @@ impl ContractImport {
             return Err(Error::ConflictError("合同正在识别，请稍后查看结果".into()));
         }
         self.status = ImportStatus::Processing;
+        self.stage = Some(ImportStage::ReadingFile);
         self.started_at = Some(now);
         self.failure = None;
         self.ocr = None;
         self.extraction = None;
         Ok(true)
+    }
+
+    /// 推进本轮处理阶段，禁止跳过、倒退或修改已结束任务。
+    /// # 参数
+    /// * `stage` - 即将执行的阶段。
+    /// # 返回
+    /// 阶段合法时更新任务。
+    /// # 错误
+    /// 任务状态或阶段顺序不合法。
+    pub fn advance(&mut self, stage: ImportStage) -> Result<()> {
+        let next = matches!(
+            (self.stage, stage),
+            (Some(ImportStage::ReadingFile), ImportStage::Ocr)
+                | (Some(ImportStage::Ocr), ImportStage::AiExtract)
+                | (Some(ImportStage::AiExtract), ImportStage::PreparingReview)
+        );
+        if self.status != ImportStatus::Processing || !next {
+            return Err(Error::ConflictError("识别阶段已变化，请刷新查看结果".into()));
+        }
+        self.stage = Some(stage);
+        Ok(())
     }
 
     /// 保存识别阶段结果，等待用户确认，不生成合同归档结果。

@@ -5,6 +5,7 @@ mod audit;
 mod matching;
 pub mod openai;
 mod pipeline;
+mod progress;
 mod source;
 #[cfg(test)]
 mod tests;
@@ -16,6 +17,7 @@ use erp_identity::SharedRbacService;
 use mongodb::Database;
 use persistence_core::NoTransaction;
 pub use pipeline::RecognitionProviders;
+use progress::TaskProgress;
 use sha2::{Digest, Sha256};
 pub use source::inspect_pdf;
 
@@ -116,7 +118,10 @@ impl ContractImportProcess {
                 .fail(task, ImportFailure::new("SOURCE_CHANGED", "原文件内容已变化，请重新上传"))
                 .await;
         }
-        let attempt = self.providers.run(pdf, task.source.page_count).await;
+        let attempt = self
+            .providers
+            .run(pdf, task.source.page_count, &mut TaskProgress { db: &self.db, task: &mut task })
+            .await?;
         task.ocr = attempt.ocr;
         task.extraction = attempt.extraction;
         if let Some(failure) = attempt.failure {
