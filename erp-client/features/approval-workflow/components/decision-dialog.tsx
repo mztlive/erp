@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog"
 
 import { approvalConflictMessage, isApprovalConflict } from "../api"
+import { displayReadableName } from "../display"
 import {
     decisionIntentFingerprint,
     slotForIntent,
@@ -160,8 +161,9 @@ export function DecisionDialog({
                             </dd>
                             <dt className="text-muted-foreground">当前节点</dt>
                             <dd className="min-w-0 break-words">
-                                {context.currentNodeLabel?.trim() ||
-                                    "当前节点待加载"}
+                                {displayReadableName(
+                                    context.currentNodeLabel,
+                                ) || "当前节点待加载"}
                             </dd>
                             <dt className="text-muted-foreground">结果影响</dt>
                             <dd className="min-w-0 break-words">

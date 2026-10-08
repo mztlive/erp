@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils"
 import {
     displayActorName,
     displayExecutionStatus,
+    displayReadableName,
     displayRound,
     displayUnixSeconds,
     executionStatusTone,
@@ -73,8 +74,7 @@ function HistoryHeading({
 function HistoryEntry({ item }: { item: ApprovalHistoryItem }) {
     const tone = executionStatusTone(item.result)
     const Icon = TONE_ICON[tone]
-    const actor =
-        displayActorName(item.decidedBy) ?? displayActorName(item.assigneeName)
+    const actor = displayActorName(item.assigneeName, item.decidedBy)
     const decidedAt = displayUnixSeconds(item.decidedAt)
     const rejected = item.result === "REJECTED"
     const current = item.result === "ACTIVE"
@@ -86,7 +86,10 @@ function HistoryEntry({ item }: { item: ApprovalHistoryItem }) {
             </TimelineMarker>
             <TimelineHeader>
                 <TimelineTitle className="flex min-w-0 flex-wrap items-center gap-2">
-                    <span>{item.nodeName}</span>
+                    <span>
+                        {displayReadableName(item.nodeName, item.nodeKey) ??
+                            "审批节点未标注"}
+                    </span>
                     <StatusBadge
                         tone={tone}
                         label={displayExecutionStatus(item.result)}

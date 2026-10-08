@@ -291,6 +291,9 @@ pub struct ScopedPurchaseInvoiceAllocationRow {
     pub invoice_no: Option<String>,
     /// 应付子账。
     pub payable_account_id: String,
+    /// 应付子账真实来源业务单号；采购单号或结算单号，缺失时不回退内部 ID。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_document_no: Option<String>,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
     /// 获授权分配金额。

@@ -175,6 +175,8 @@ fn instance_view(
         latest_rejection_by: rejected
             .and_then(|execution| execution.decided_by.as_ref())
             .map(|actor| actor.as_str().to_owned()),
+        latest_rejection_by_name: rejected
+            .and_then(|execution| optional_text(&execution.assignee_name_snapshot)),
         subject_version: Some(instance.subject_version.to_string()),
         instance_version: Some(instance.base.version.to_string()),
         current_execution_id: current.map(|execution| execution.base.id.clone()),
@@ -278,8 +280,33 @@ mod tests {
         assert_eq!(view.current_execution_version.as_deref(), Some("9007199254740995"));
         assert_eq!(view.current_task_version.as_deref(), Some("9007199254740997"));
         assert_eq!(view.latest_rejection.as_deref(), Some("请修正合同"));
+        assert_eq!(view.latest_rejection_by.as_deref(), Some("reviewer"));
+        assert_eq!(view.latest_rejection_by_name.as_deref(), Some("审批人"));
         assert_eq!(view.current_node_name.as_deref(), Some("财务复核"));
         assert_eq!(view.started_by.as_deref(), Some("creator"));
+    }
+
+    /// 缺失姓名快照不能把决定人标识当作显示名。
+    #[test]
+    fn runtime_rejection_name_preserves_snapshot_and_omits_missing_name() {
+        let (instance, current, task) = running();
+        let mut rejected = current.clone();
+        rejected
+            .record_reject(
+                ParticipantId::new("reviewer").unwrap(),
+                "请修正合同",
+                Timestamp::from_unix_secs(12).unwrap(),
+            )
+            .unwrap();
+        rejected.assignee_name_snapshot = "  原审批人姓名  ".into();
+        let view = instance_view(&instance, Some(&current), Some(&task), Some(&rejected));
+        assert_eq!(view.latest_rejection_by_name.as_deref(), Some("原审批人姓名"));
+        rejected.assignee_name_snapshot = "  ".into();
+        let view = instance_view(&instance, Some(&current), Some(&task), Some(&rejected));
+        assert_eq!(view.latest_rejection_by.as_deref(), Some("reviewer"));
+        assert_eq!(view.latest_rejection_by_name, None);
+        let view = instance_view(&instance, Some(&current), Some(&task), None);
+        assert_eq!(view.latest_rejection_by_name, None);
     }
 
     /// 其他执行、来源单、提交版本、审批人和多任务均无法提供操作版本。

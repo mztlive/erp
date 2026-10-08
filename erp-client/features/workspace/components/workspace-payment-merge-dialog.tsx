@@ -96,7 +96,8 @@ export function WorkspacePaymentMergeDialog({
                                 >
                                     <div className="flex items-center justify-between gap-3">
                                         <span className="font-medium">
-                                            {item.sourceDocumentNo ?? "采购单"}
+                                            {item.sourceDocumentNo ??
+                                                "采购单号待补全"}
                                             {item.isAnchor ? " · 当前任务" : ""}
                                         </span>
                                         <MoneyValue

@@ -15,6 +15,8 @@ mod facts;
 mod fulfillment_operation_brief;
 mod fulfillment_queue;
 mod funds_document_brief;
+mod integration_brief;
+mod integration_brief_labels;
 mod inventory_settlement_brief;
 pub use inventory_settlement_brief::capture_stock_adjustment_display;
 mod operational_brief;

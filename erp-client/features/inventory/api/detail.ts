@@ -62,6 +62,8 @@ export async function fetchBalanceDetail(
             mapAdjustment(a, {
                 id: "",
                 sku_id: balance.skuId,
+                sku_code: balance.skuCode,
+                sku_name: balance.skuName,
                 quantity: "",
                 direction: "INCREASE",
             }),

@@ -422,7 +422,7 @@ function WorkspaceDocumentTaskDetail({
               currentNodeName: item.approval.currentNodeLabel,
               currentAssigneeName: item.approval.currentAssigneeLabel,
               latestRejection: item.approval.lastRejectReason,
-              latestRejectionBy: item.approval.lastRejectorLabel,
+              latestRejectionByName: item.approval.lastRejectorLabel,
               processName: item.approval.processName,
               processVersion: item.approval.processVersion,
           }

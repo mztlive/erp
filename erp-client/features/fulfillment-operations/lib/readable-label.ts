@@ -1,28 +1,18 @@
 /**
- * 履约作业面的可读文案。内部主键、UUID 形态单号不得上屏。
+ * 履约作业面的名称与业务编号分别按各自契约显示。
  */
 
-const OPAQUE_ID =
-    /^(?:[0-9a-f]{24,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i
-
-const PREFIXED_OPAQUE_ID =
-    /^(?:DLV|FH|GRN|SF|DN|PR|ED|PO|SO|CG)-[0-9a-f]{24,}$/i
+import { displayBusinessText, displayName } from "@/lib/display-name"
 
 /**
- * 值是否只是内部对象 id 或把 id 拼进前缀的伪单号。
+ * 业务单号、编码与数值只排除已知内部身份，保留合法的数字或 UUID 形态编码。
  */
-export function isOpaqueId(value: string): boolean {
-    const trimmed = value.trim()
-    return OPAQUE_ID.test(trimmed) || PREFIXED_OPAQUE_ID.test(trimmed)
-}
-
-/**
- * 用户可读的展示文案。空值和内部 id 一律丢掉。
- */
-export function displayText(value: string | null | undefined): string {
-    const trimmed = value?.trim() ?? ""
-    if (!trimmed || trimmed === "—" || isOpaqueId(trimmed)) return ""
-    return trimmed
+export function displayText(
+    value: string | null | undefined,
+    ...objectIds: Array<string | null | undefined>
+): string {
+    const text = displayBusinessText(value, ...objectIds)
+    return text && text !== "—" ? text : ""
 }
 
 type RemainingLine = Readonly<{
@@ -37,9 +27,9 @@ type RemainingLine = Readonly<{
 export function formatRemainingLines(lines: readonly RemainingLine[]): string {
     return lines
         .map((line) => {
-            const name = displayText(line.itemName)
+            const name = displayName(line.itemName)
             const quantity = displayText(line.remainingQuantity)
-            if (!name || !quantity) return ""
+            if (!name || name === "—" || !quantity) return ""
             return `${name} ${quantity}${displayText(line.unitCode)}`
         })
         .filter(Boolean)
@@ -53,5 +43,6 @@ export function lineItemTitle(
     itemName: string | undefined,
     index: number,
 ): string {
-    return displayText(itemName) || `明细 ${index + 1}`
+    const name = displayName(itemName)
+    return name && name !== "—" ? name : `明细 ${index + 1}`
 }

@@ -20,6 +20,10 @@ import {
     toDraftView,
 } from "@/features/inventory/api/mappers"
 import type { DocumentApprovalView } from "@/features/approval-workflow/types"
+import {
+    displayActorName,
+    displayReadableName,
+} from "@/features/approval-workflow/display"
 import type {
     BackendStockAdjustment,
     BackendStockAdjustmentDetail,
@@ -120,11 +124,14 @@ export const readInstanceResponsibility = (
     nextResponsible?: string
     currentNodeLabel?: string
 } => ({
-    nextResponsible:
-        approval?.instance?.currentAssigneeName ??
+    nextResponsible: displayActorName(
+        approval?.instance?.currentAssigneeName,
         approval?.instance?.currentAssignee,
-    currentNodeLabel:
-        approval?.instance?.currentNodeName ?? approval?.instance?.currentNode,
+    ),
+    currentNodeLabel: displayReadableName(
+        approval?.instance?.currentNodeName,
+        approval?.instance?.currentNode,
+    ),
 })
 
 /**

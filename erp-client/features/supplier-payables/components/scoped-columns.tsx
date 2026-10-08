@@ -13,6 +13,25 @@ import type {
     ScopedSupplierPaymentWire,
 } from "@/features/supplier-payables/api/scoped"
 import { scopeText } from "@/lib/ui-text"
+import {
+    businessLabelOrPlaceholder,
+    MISSING_SOURCE_DOCUMENT_NO,
+} from "../lib/display-labels"
+
+const scopedSourceLabel: Record<string, string> = {
+    PURCHASE_ORDER: "采购单",
+    SUPPLIER_SETTLEMENT: "供应商结算单",
+    SUPPLIER_SETTLEMENT_STATEMENT: "供应商结算单",
+}
+
+const scopedStatusLabel: Record<string, string> = {
+    OPEN: "未结",
+    PARTIAL: "部分结清",
+    SETTLED: "已结清",
+    DRAFT: "草稿",
+    POSTED: "已过账",
+    REVERSED: "已冲正",
+}
 
 /** 范围应付子账列：获授权份额常显，整单金额受限时为空并注明。 */
 export function createSupplierScopedPayableColumns(): ColumnDef<ScopedPayableAccountWire>[] {
@@ -24,10 +43,16 @@ export function createSupplierScopedPayableColumns(): ColumnDef<ScopedPayableAcc
             cell: ({ row }) => (
                 <div className="min-w-0">
                     <div className="num break-words text-sm font-medium">
-                        {row.original.source_document_id}
+                        {businessLabelOrPlaceholder(
+                            row.original.source_document_no,
+                            row.original.source_document_id,
+                            MISSING_SOURCE_DOCUMENT_NO,
+                        )}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                        {row.original.source_type}
+                        {scopedSourceLabel[
+                            row.original.source_type.toUpperCase()
+                        ] ?? "来源单据"}
                     </div>
                 </div>
             ),
@@ -98,7 +123,10 @@ export function createSupplierScopedPayableColumns(): ColumnDef<ScopedPayableAcc
             cell: ({ row }) => (
                 <BusinessStatusBadge
                     context="list"
-                    label={row.original.status}
+                    label={
+                        scopedStatusLabel[row.original.status.toUpperCase()] ??
+                        "状态待确认"
+                    }
                     tone="neutral"
                 />
             ),
@@ -185,7 +213,10 @@ export function createSupplierScopedPaymentColumns(): ColumnDef<ScopedSupplierPa
             cell: ({ row }) => (
                 <BusinessStatusBadge
                     context="list"
-                    label={row.original.status}
+                    label={
+                        scopedStatusLabel[row.original.status.toUpperCase()] ??
+                        "状态待确认"
+                    }
                     tone="neutral"
                 />
             ),
@@ -203,10 +234,20 @@ export function createSupplierScopedAllocationColumns(): ColumnDef<ScopedPurchas
             cell: ({ row }) => (
                 <div className="min-w-0">
                     <div className="num break-words text-sm font-medium">
-                        {row.original.invoice_no ?? row.original.invoice_id}
+                        {businessLabelOrPlaceholder(
+                            row.original.invoice_no,
+                            row.original.invoice_id,
+                            "发票号码待补全",
+                        )}
                     </div>
                     <div className="num text-xs text-muted-foreground">
-                        {row.original.payable_account_id}
+                        应付 ·{" "}
+                        {businessLabelOrPlaceholder(
+                            row.original.payable_no ||
+                                row.original.source_document_no,
+                            row.original.payable_account_id,
+                            "应付编号待补全",
+                        )}
                     </div>
                 </div>
             ),

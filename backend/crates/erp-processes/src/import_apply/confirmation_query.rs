@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
 use application_core::AuditActor;
-use erp_identity::SharedRbacService;
+use erp_identity::repository::prelude::*;
+use erp_identity::{AccessControlExt, SharedRbacService};
+use erp_import::repository::legacy_import::LegacyImportConfirmationRow;
 use erp_import::repository::prelude::*;
 use erp_import::{
     ConfirmationStatus, LegacyImportConfirmation, LegacyImportConfirmationFilter,
@@ -32,6 +34,7 @@ impl ImportApplyService {
     ///
     /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单。
+    ///
     /// 确认或任务查询失败、责任目的地解析失败，以及除 `Forbidden` 与 `NotFound` 以外的任务授权失败，返回对应错误。
     pub async fn confirmation_list(
         &self,
@@ -79,27 +82,40 @@ impl ImportApplyService {
                 },
                 Err(error) => return Err(error),
             };
-            items.push(LegacyImportConfirmationView {
-                id: row.id,
-                batch_id: row.batch_id.to_string(),
-                confirmation_scope: row.confirmation_scope,
-                owner_role: row.owner_role,
-                batch_version: row.batch_version,
-                trial_version: row.trial_version,
-                status: row.status,
-                decision: row.decision,
-                reason_code: row.reason_code,
-                comment: None,
-                work_item,
-                work_item_id,
-                decided_by: row.decided_by,
-                decided_at: row.decided_at.map(|at| at as i64),
-                version: row.version,
-                created_at: row.created_at,
-            });
+            items.push(confirmation_row_view(row, work_item));
         }
 
+        let ids = items.iter().filter_map(|item| item.decided_by.clone()).collect::<Vec<_>>();
+        let names = self.db.accounts().names_by_ids(&ids, &mut NoTransaction).await?;
+        for item in &mut items {
+            item.decided_by_name = item.decided_by.as_ref().and_then(|id| names.get(id).cloned());
+        }
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
+    }
+}
+
+fn confirmation_row_view(
+    row: LegacyImportConfirmationRow,
+    work_item: Option<ImportBusinessConfirmationWorkItemView>,
+) -> LegacyImportConfirmationView {
+    LegacyImportConfirmationView {
+        id: row.id,
+        batch_id: row.batch_id.to_string(),
+        confirmation_scope: row.confirmation_scope,
+        owner_role: row.owner_role,
+        batch_version: row.batch_version,
+        trial_version: row.trial_version,
+        status: row.status,
+        decision: row.decision,
+        reason_code: row.reason_code,
+        comment: None,
+        work_item,
+        work_item_id: row.work_item_id.to_string(),
+        decided_by: row.decided_by,
+        decided_by_name: None,
+        decided_at: row.decided_at.map(|at| at as i64),
+        version: row.version,
+        created_at: row.created_at,
     }
 }
 

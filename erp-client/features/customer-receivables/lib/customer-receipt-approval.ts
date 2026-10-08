@@ -137,12 +137,23 @@ export const readCustomerReceiptApprovalResponsibility = (
     nextResponsible?: string
     currentNodeLabel?: string
 } => ({
-    nextResponsible:
-        approval?.instance?.currentAssigneeName ??
+    nextResponsible: responsibilityName(
+        approval?.instance?.currentAssigneeName,
         approval?.instance?.currentAssignee,
-    currentNodeLabel:
-        approval?.instance?.currentNodeName ?? approval?.instance?.currentNode,
+    ),
+    currentNodeLabel: responsibilityName(
+        approval?.instance?.currentNodeName,
+        approval?.instance?.currentNode,
+    ),
 })
+
+function responsibilityName(
+    value?: string,
+    internalId?: string,
+): string | undefined {
+    const name = value?.trim()
+    return name && name !== internalId?.trim() ? name : undefined
+}
 
 /**
  * 判断当前任务是否属于客户回款单。

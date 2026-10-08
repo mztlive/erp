@@ -2,14 +2,14 @@
 
 use application_core::AuditActor;
 use erp_supply::dto::supplier_fulfillment::{
-    SupplierFulfillmentItemView, SupplierFulfillmentOrderDetailParams, SupplierOrderActionBlockerView,
-    SupplierOrderAddressView, SupplierOrderAllowedAction, SupplierOrderInvestigationEvidenceView,
-    SupplierOrderInvestigationOutcome, SupplierRefundFactView,
+    SupplierFulfillmentOrderDetailParams, SupplierOrderActionBlockerView, SupplierOrderAddressView,
+    SupplierOrderAllowedAction, SupplierOrderInvestigationEvidenceView, SupplierOrderInvestigationOutcome,
+    SupplierRefundFactView,
 };
 use erp_supply::entity::supplier_api::{SupplierApiCapabilityCode, SupplierApiConnection};
 use erp_supply::entity::supplier_fulfillment::{
     SupplierFulfillmentItem, SupplierFulfillmentOrder, SupplierFulfillmentOrderId, SupplierOrderAction,
-    SupplierOrderActionType,
+    SupplierOrderActionType, SupplierOrderStatusHistory,
 };
 use erp_supply::repository::prelude::*;
 use erp_supply::repository::{SupplierApiExt, SupplierFulfillmentExt};
@@ -19,13 +19,32 @@ use erp_workflow::repository::prelude::*;
 use erp_workflow::service::work_item::WorkItemAllowedAction;
 use persistence_core::NoTransaction;
 
-use crate::ports::work_item_authorization::WorkItemAuthorizationReadPort;
+use crate::ports::work_item_authorization::{AuthorizedTaskFact, WorkItemAuthorizationReadPort};
+use crate::purchase_center::repository::supplier_names::current_legal_names_by_account_ids;
 use crate::{Error, Result};
 
 /// 组合履约订单、主体名称、调查证据和正式任务授权的详情读取器。
 pub struct SupplierFulfillmentDetailReadService {
-    db: mongodb::Database,
+    pub(super) db: mongodb::Database,
     fulfillment: SupplierFulfillmentService,
+}
+
+struct OrderDetailFacts {
+    items: Vec<SupplierFulfillmentItem>,
+    actions: Vec<SupplierOrderAction>,
+    histories: Vec<SupplierOrderStatusHistory>,
+    refunds: Vec<SupplierRefundFactView>,
+}
+
+struct OrderActionProjection {
+    target_supplier_action_id: Option<String>,
+    last_investigation: Option<SupplierOrderInvestigationEvidenceView>,
+    allowed_actions: Vec<SupplierOrderAllowedAction>,
+}
+
+struct InvestigationAccess {
+    can_investigate: bool,
+    formal_entry: bool,
 }
 
 impl SupplierFulfillmentDetailReadService {
@@ -61,10 +80,9 @@ impl SupplierFulfillmentDetailReadService {
     /// * `NotFound` - 订单不存在，或已授权的正式任务不存在
     /// * `BusinessLogicError` - 正式任务与当前订单不匹配
     /// * `RepositoryError` - 数据库查询失败
+    ///
     /// 任务授权失败时返回对应错误。
     ///
-    /// # Panics
-    /// `formal` 分支只在 `work_item_id` 已解析为非空时进入。`expect` 只守这个已建立的不变式。
     pub async fn supplier_fulfillment_order_detail(
         &self,
         id: &str,
@@ -73,150 +91,33 @@ impl SupplierFulfillmentDetailReadService {
         task_auth: &dyn WorkItemAuthorizationReadPort,
     ) -> Result<SupplierFulfillmentOrderDetailView> {
         let order = self.fulfillment.load_order(id).await?;
-        let order_id = SupplierFulfillmentOrderId::new(id);
-        let items = self
-            .db
-            .supplier_fulfillment_items()
-            .find_items_by_order_ids(std::slice::from_ref(&order_id), &mut NoTransaction)
+        let facts = self.order_detail_facts(&SupplierFulfillmentOrderId::new(id)).await?;
+        let supplier_name = current_legal_names_by_account_ids(
+            &self.db,
+            std::slice::from_ref(&order.supplier_id),
+            &mut NoTransaction,
+        )
+        .await?
+        .remove(order.supplier_id.as_ref());
+        let mut action_blockers = display_blockers(supplier_name.is_some());
+        let projection = self
+            .order_action_projection(&order, &facts.actions, params, actor, task_auth, &mut action_blockers)
             .await?;
-        let actions =
-            self.db.supplier_order_actions().list_by_order_newest(&order_id, &mut NoTransaction).await?;
-        let histories = self
+        let display_items = self.item_display(facts.items).await?;
+        let connection_code = self
             .db
-            .supplier_order_status_histories()
-            .list_by_order_chronological(&order_id, &mut NoTransaction)
-            .await?;
-        let refund_views = self.refund_views_for_order(&order_id).await?;
-
-        let supplier_id = order.supplier_id.to_string();
-        let supplier_name =
-            crate::purchase_center::repository::supplier_names::current_legal_names_by_account_ids(
-                &self.db,
-                std::slice::from_ref(&order.supplier_id),
-                &mut NoTransaction,
-            )
+            .supplier_api_connections()
+            .find_by_id(&order.connection_id, &mut NoTransaction)
             .await?
-            .remove(&supplier_id);
-        let mut action_blockers = Vec::new();
-        if supplier_name.is_none() {
-            action_blockers.push(supplier_order_blocker(
-                "VIEW_SUPPLIER_NAME",
-                "SUPPLIER_NAME_MISSING",
-                "供应商主体或当前名称修订缺失，禁止以供应商 ID 伪装名称",
-            ));
-        }
-        action_blockers.push(supplier_order_blocker(
-            "REVEAL_ADDRESS",
-            "ADDRESS_REVEAL_NOT_REGISTERED",
-            "当前 W26 尚未注册可审计的短时地址揭示入口",
-        ));
-
-        let target_action =
-            actions.iter().find(|action| action.action_type != SupplierOrderActionType::Query);
-        let latest_investigation = target_action.and_then(|target| {
-            actions.iter().find_map(|candidate| {
-                let record = parse_investigation_evidence(candidate).ok()?;
-                (record.target_supplier_action_id() == target.base.id).then_some((candidate, record))
-            })
-        });
-        let target_supplier_action_id = target_action.map(|action| action.base.id.clone());
-        let last_investigation = latest_investigation
-            .as_ref()
-            .map(|(evidence, record)| investigation_evidence_view(&order, evidence, record));
-
-        let work_item_id = params.work_item_id.as_deref().map(str::trim).filter(|value| !value.is_empty());
-        let formal = if let Some(work_item_id) = work_item_id {
-            let view = task_auth.authorize(work_item_id, actor).await?;
-            if !matches!(
-                view.work_item_type,
-                WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException
-            ) || view.business_object_type != W26_BUSINESS_OBJECT_TYPE
-                || view.business_object_id != order.base.id
-                || view.subject_version != order.base.version.to_string()
-                || false
-            {
-                return Err(Error::BusinessLogicError("正式任务与当前供应商履约订单不匹配".to_string()));
-            }
-            Some(view)
-        } else {
-            None
-        };
-        let mut allowed_actions = Vec::new();
-        let can_process_formal = formal
-            .as_ref()
-            .is_some_and(|item| item.allowed_actions.contains(&WorkItemAllowedAction::Process));
-        let has_active_task = self
-            .db
-            .work_items()
-            .list_active_by_object(W26_BUSINESS_OBJECT_TYPE, id, &mut NoTransaction)
-            .await?
-            .into_iter()
-            .next()
-            .is_some();
-        let can_investigate = if formal.is_some() {
-            if !can_process_formal {
-                block_supplier_order_domain_actions(
-                    &mut action_blockers,
-                    "CURRENT_RESPONSIBILITY_REQUIRED",
-                    "当前账号不是开放任务的当前责任人",
-                );
-                false
-            } else {
-                let raw = self
-                    .db
-                    .work_items()
-                    .find_by_id(work_item_id.expect("formal work item id"), &mut NoTransaction)
-                    .await?
-                    .ok_or_else(|| Error::NotFound("供应商履约正式任务不存在".to_string()))?;
-                if ensure_task_actor_eligible(&self.db, &raw, actor.id(), &mut NoTransaction).await.is_err() {
-                    block_supplier_order_domain_actions(
-                        &mut action_blockers,
-                        "ACTOR_INELIGIBLE",
-                        "当前账号已不具备该供应商履约任务的角色或组织资格",
-                    );
-                    false
-                } else {
-                    true
-                }
-            }
-        } else if has_active_task {
-            block_supplier_order_domain_actions(
-                &mut action_blockers,
-                "FORMAL_WORK_ITEM_REQUIRED",
-                "当前订单存在正式异常任务，必须从该待办携带明确任务身份进入",
-            );
-            false
-        } else {
-            true
-        };
-
-        if can_investigate {
-            if let Some(target) = target_action {
-                self.project_supplier_order_actions(
-                    &order,
-                    target,
-                    latest_investigation.as_ref(),
-                    formal.is_some(),
-                    &mut allowed_actions,
-                    &mut action_blockers,
-                )
-                .await?;
-            } else {
-                block_supplier_order_domain_actions(
-                    &mut action_blockers,
-                    "ORIGINAL_SUPPLIER_ACTION_MISSING",
-                    "当前订单缺少可调查的原下单、取消或退款动作",
-                );
-            }
-        }
-
+            .map(|connection| connection.connection_code);
         Ok(SupplierFulfillmentOrderDetailView {
             order: order.into(),
-            items: items.into_iter().map(item_view).collect(),
-            status_history: histories.into_iter().map(Into::into).collect(),
-            actions: actions.into_iter().map(Into::into).collect(),
-            refund_facts: refund_views,
+            items: display_items,
+            status_history: facts.histories.into_iter().map(Into::into).collect(),
+            actions: facts.actions.into_iter().map(Into::into).collect(),
+            refund_facts: facts.refunds,
             supplier_name,
+            connection_code,
             address: SupplierOrderAddressView {
                 masked: None,
                 can_reveal: false,
@@ -224,11 +125,163 @@ impl SupplierFulfillmentDetailReadService {
                 blocker_message: Some("当前 W26 尚未注册可审计的短时地址揭示入口".to_string()),
             },
             work_item: None,
-            target_supplier_action_id,
-            last_investigation,
-            allowed_actions,
+            target_supplier_action_id: projection.target_supplier_action_id,
+            last_investigation: projection.last_investigation,
+            allowed_actions: projection.allowed_actions,
             action_blockers,
         })
+    }
+
+    async fn order_detail_facts(&self, order_id: &SupplierFulfillmentOrderId) -> Result<OrderDetailFacts> {
+        let items = self
+            .db
+            .supplier_fulfillment_items()
+            .find_items_by_order_ids(std::slice::from_ref(order_id), &mut NoTransaction)
+            .await?;
+        let actions =
+            self.db.supplier_order_actions().list_by_order_newest(order_id, &mut NoTransaction).await?;
+        let histories = self
+            .db
+            .supplier_order_status_histories()
+            .list_by_order_chronological(order_id, &mut NoTransaction)
+            .await?;
+        let refunds = self.refund_views_for_order(order_id).await?;
+        Ok(OrderDetailFacts { items, actions, histories, refunds })
+    }
+
+    async fn order_action_projection(
+        &self,
+        order: &SupplierFulfillmentOrder,
+        actions: &[SupplierOrderAction],
+        params: &SupplierFulfillmentOrderDetailParams,
+        actor: &AuditActor,
+        task_auth: &dyn WorkItemAuthorizationReadPort,
+        blockers: &mut Vec<SupplierOrderActionBlockerView>,
+    ) -> Result<OrderActionProjection> {
+        let target = actions.iter().find(|action| action.action_type != SupplierOrderActionType::Query);
+        let latest = target.and_then(|target| {
+            actions.iter().find_map(|candidate| {
+                let record = parse_investigation_evidence(candidate).ok()?;
+                (record.target_supplier_action_id() == target.base.id).then_some((candidate, record))
+            })
+        });
+        let access = self.investigation_access(order, params, actor, task_auth, blockers).await?;
+        let mut allowed_actions = Vec::new();
+        if access.can_investigate {
+            if let Some(target) = target {
+                self.project_supplier_order_actions(
+                    order,
+                    target,
+                    latest.as_ref(),
+                    access.formal_entry,
+                    &mut allowed_actions,
+                    blockers,
+                )
+                .await?;
+            } else {
+                block_supplier_order_domain_actions(
+                    blockers,
+                    "ORIGINAL_SUPPLIER_ACTION_MISSING",
+                    "当前订单缺少可调查的原下单、取消或退款动作",
+                );
+            }
+        }
+        Ok(OrderActionProjection {
+            target_supplier_action_id: target.map(|action| action.base.id.clone()),
+            last_investigation: latest
+                .as_ref()
+                .map(|(evidence, record)| investigation_evidence_view(order, evidence, record)),
+            allowed_actions,
+        })
+    }
+
+    async fn investigation_access(
+        &self,
+        order: &SupplierFulfillmentOrder,
+        params: &SupplierFulfillmentOrderDetailParams,
+        actor: &AuditActor,
+        task_auth: &dyn WorkItemAuthorizationReadPort,
+        blockers: &mut Vec<SupplierOrderActionBlockerView>,
+    ) -> Result<InvestigationAccess> {
+        let work_item_id = params.work_item_id.as_deref().map(str::trim).filter(|value| !value.is_empty());
+        let formal = self.formal_task(order, work_item_id, actor, task_auth).await?;
+        let has_active_task = self
+            .db
+            .work_items()
+            .list_active_by_object(W26_BUSINESS_OBJECT_TYPE, &order.base.id, &mut NoTransaction)
+            .await?
+            .into_iter()
+            .next()
+            .is_some();
+        let can_investigate = if let Some(formal) = &formal {
+            if !formal.allowed_actions.contains(&WorkItemAllowedAction::Process) {
+                block_supplier_order_domain_actions(
+                    blockers,
+                    "CURRENT_RESPONSIBILITY_REQUIRED",
+                    "当前账号不是开放任务的当前责任人",
+                );
+                false
+            } else {
+                self.formal_actor_eligible(work_item_id.expect("formal work item id"), actor, blockers)
+                    .await?
+            }
+        } else if has_active_task {
+            block_supplier_order_domain_actions(
+                blockers,
+                "FORMAL_WORK_ITEM_REQUIRED",
+                "当前订单存在正式异常任务，必须从该待办携带明确任务身份进入",
+            );
+            false
+        } else {
+            true
+        };
+        Ok(InvestigationAccess { can_investigate, formal_entry: formal.is_some() })
+    }
+
+    async fn formal_task(
+        &self,
+        order: &SupplierFulfillmentOrder,
+        work_item_id: Option<&str>,
+        actor: &AuditActor,
+        task_auth: &dyn WorkItemAuthorizationReadPort,
+    ) -> Result<Option<AuthorizedTaskFact>> {
+        let Some(work_item_id) = work_item_id else {
+            return Ok(None);
+        };
+        let view = task_auth.authorize(work_item_id, actor).await?;
+        if !matches!(
+            view.work_item_type,
+            WorkItemType::IntegrationResultUnknown | WorkItemType::BusinessException
+        ) || view.business_object_type != W26_BUSINESS_OBJECT_TYPE
+            || view.business_object_id != order.base.id
+            || view.subject_version != order.base.version.to_string()
+        {
+            return Err(Error::BusinessLogicError("正式任务与当前供应商履约订单不匹配".to_string()));
+        }
+        Ok(Some(view))
+    }
+
+    async fn formal_actor_eligible(
+        &self,
+        work_item_id: &str,
+        actor: &AuditActor,
+        blockers: &mut Vec<SupplierOrderActionBlockerView>,
+    ) -> Result<bool> {
+        let raw = self
+            .db
+            .work_items()
+            .find_by_id(work_item_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("供应商履约正式任务不存在".to_string()))?;
+        if ensure_task_actor_eligible(&self.db, &raw, actor.id(), &mut NoTransaction).await.is_err() {
+            block_supplier_order_domain_actions(
+                blockers,
+                "ACTOR_INELIGIBLE",
+                "当前账号已不具备该供应商履约任务的角色或组织资格",
+            );
+            return Ok(false);
+        }
+        Ok(true)
     }
 
     /// 以原供应商动作、连接能力和最新结构化证据投影 W26 动作。
@@ -339,6 +392,23 @@ impl SupplierFulfillmentDetailReadService {
     }
 }
 
+fn display_blockers(has_supplier_name: bool) -> Vec<SupplierOrderActionBlockerView> {
+    let mut blockers = Vec::new();
+    if !has_supplier_name {
+        blockers.push(supplier_order_blocker(
+            "VIEW_SUPPLIER_NAME",
+            "SUPPLIER_NAME_MISSING",
+            "供应商主体或当前名称修订缺失，禁止以供应商 ID 伪装名称",
+        ));
+    }
+    blockers.push(supplier_order_blocker(
+        "REVEAL_ADDRESS",
+        "ADDRESS_REVEAL_NOT_REGISTERED",
+        "当前 W26 尚未注册可审计的短时地址揭示入口",
+    ));
+    blockers
+}
+
 fn supplier_order_blocker(action: &str, code: &str, message: &str) -> SupplierOrderActionBlockerView {
     SupplierOrderActionBlockerView {
         action: action.to_string(),
@@ -379,27 +449,6 @@ fn investigation_evidence_view(
             == SupplierOrderInvestigationOutcome::VerifiedTerminal)
             .then(|| evidence.base.id.clone()),
         verified_resolution: record.verified_resolution(),
-    }
-}
-
-/// 从履约明细实体构造响应视图。
-///
-/// # 参数
-/// * `item` - 履约明细实体
-///
-/// # 返回
-/// 返回响应视图。
-fn item_view(item: SupplierFulfillmentItem) -> SupplierFulfillmentItemView {
-    SupplierFulfillmentItemView {
-        id: item.base.id,
-        supplier_fulfillment_order_id: item.supplier_fulfillment_order_id.to_string(),
-        supplier_offering_revision_id: item.supplier_offering_revision_id.to_string(),
-        supplier_sku_code_snapshot: item.supplier_sku_code_snapshot,
-        supplier_product_code_snapshot: item.supplier_product_code_snapshot,
-        quantity: item.quantity,
-        unit_cost_snapshot_gross: item.unit_cost_snapshot_gross,
-        cost_snapshot_total_gross: item.cost_snapshot_total_gross,
-        input_tax_rate: item.input_tax_rate,
     }
 }
 

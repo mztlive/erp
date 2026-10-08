@@ -15,6 +15,7 @@ use erp_import::{
 use erp_processes::import_apply::dto::{
     CompleteImportBusinessConfirmationResult, LegacyImportConfirmationView,
 };
+use erp_read_models::import_center;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
@@ -39,7 +40,8 @@ pub async fn legacy_import_batch_list(
     State(state): State<AppState>,
     Query(params): Query<LegacyImportBatchListParams>,
 ) -> Result<PageView<LegacyImportBatchListItem>> {
-    let page = state.legacy_import_service().batch_list(&params).await?;
+    let mut page = state.legacy_import_service().batch_list(&params).await?;
+    import_center::batch_names(&state.db(), &mut page.items).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -89,7 +91,8 @@ pub async fn legacy_import_batch_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<LegacyImportBatchView> {
-    let view = state.legacy_import_service().batch_detail(&id).await?;
+    let mut view = state.legacy_import_service().batch_detail(&id).await?;
+    import_center::batch_name(&state.db(), &mut view).await?;
 
     Ok(ApiResponse::ok_with_data(view))
 }

@@ -84,6 +84,7 @@ impl SupplierSettlementService {
     ///
     /// # 错误
     /// * `NotFound` - 结算单不存在
+    ///
     /// 仓储读取失败时返回对应错误。
     pub async fn load_statement(
         &self,

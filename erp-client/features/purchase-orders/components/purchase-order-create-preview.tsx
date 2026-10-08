@@ -283,9 +283,8 @@ function PurchaseOrderPreviewPaper({
                                   id: "target-warehouse",
                                   label: "采购入库目标仓",
                                   value:
-                                      preview.targetWarehouseName ??
-                                      preview.targetWarehouseId ??
-                                      "—",
+                                      preview.targetWarehouseName?.trim() ||
+                                      "仓库名称未提供",
                               },
                           ]
                         : []),

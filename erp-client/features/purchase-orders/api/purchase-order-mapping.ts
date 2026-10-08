@@ -40,6 +40,16 @@ import type {
     BackendPurchaseChangeOrder,
 } from "./purchase-order-wire-types"
 
+/** 展示名称缺失或误填为关联主键时，保留明确的可读占位。 */
+function readableName(
+    value: string | null | undefined,
+    objectId: string | null | undefined,
+    fallback: string,
+): string {
+    const name = value?.trim()
+    return name && name !== objectId?.trim() ? name : fallback
+}
+
 export function mapListItem(row: BackendListItem): PurchaseOrderListItem {
     const status = fromBackendStatus(row.status)
     const reviewStatus = fromBackendReviewStatus(row.review_status, status)
@@ -48,7 +58,9 @@ export function mapListItem(row: BackendListItem): PurchaseOrderListItem {
         purchaseNo: row.purchase_no || undefined,
         draftLabel:
             status === "DRAFT"
-                ? `草稿 · ${row.purchase_no || row.id.slice(0, 8)}`
+                ? row.purchase_no?.trim()
+                    ? `草稿 · ${row.purchase_no.trim()}`
+                    : "采购草稿"
                 : undefined,
         revisionNo: undefined,
         status,
@@ -59,7 +71,11 @@ export function mapListItem(row: BackendListItem): PurchaseOrderListItem {
         salesOrderId: row.sales_order_id,
         salesOrderNo: row.sales_order_no,
         supplierId: row.supplier_id,
-        supplierName: row.supplier_name,
+        supplierName: readableName(
+            row.supplier_name,
+            row.supplier_id,
+            "供应商名称未提供",
+        ),
         purchaseType: mapPurchaseType(String(row.purchase_type)),
         fulfillmentResponsibility: mapFulfillment(
             String(row.fulfillment_responsibility),
@@ -67,7 +83,11 @@ export function mapListItem(row: BackendListItem): PurchaseOrderListItem {
         paymentTermCode: row.payment_term_code ?? "",
         paymentTermLabel: paymentTermLabel(row.payment_term_code ?? ""),
         ownerUserId: row.owner_user_id ?? undefined,
-        ownerName: row.owner_name?.trim() || "—",
+        ownerName: readableName(
+            row.owner_name,
+            row.owner_user_id,
+            "负责人名称未提供",
+        ),
         grossAmount: row.gross_amount ?? "0",
         netAmount: row.net_amount ?? "0",
         taxAmount: row.tax_amount ?? "0",
@@ -171,7 +191,9 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
             purchaseNo: center.purchase_no || undefined,
             draftLabel:
                 status === "DRAFT"
-                    ? `草稿 · ${center.purchase_no || center.id.slice(0, 8)}`
+                    ? center.purchase_no?.trim()
+                        ? `草稿 · ${center.purchase_no.trim()}`
+                        : "采购草稿"
                     : undefined,
             status,
             statusLabel: PO_STATUS_LABEL[status],
@@ -188,7 +210,11 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
             salesOrderId: center.sales_order_id,
             salesOrderNo: center.sales_order_no,
             supplierId: center.supplier_id,
-            supplierSnapshot: center.supplier_name,
+            supplierSnapshot: readableName(
+                center.supplier_name,
+                center.supplier_id,
+                "供应商名称未提供",
+            ),
             purchaseType: mapPurchaseType(String(center.purchase_type)),
             fulfillmentResponsibility: mapFulfillment(
                 String(center.fulfillment_responsibility),
@@ -196,7 +222,11 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
             paymentTermCode: center.payment_term_code,
             paymentTermLabel: paymentTermLabel(center.payment_term_code),
             ownerUserId: center.owner_user_id,
-            ownerName: center.owner_name.trim() || "责任账号不可用",
+            ownerName: readableName(
+                center.owner_name,
+                center.owner_user_id,
+                "负责人名称未提供",
+            ),
             targetWarehouseId: center.target_warehouse_id ?? undefined,
             submittedBy: undefined,
             submittedAt: undefined,
@@ -327,10 +357,20 @@ export function mapBasis(basis: BackendBasis): PurchaseCreationBasis {
         salesOwnerName: basis.sales_owner_name ?? undefined,
         salesOrderRevisionId: basis.sales_order_revision_id,
         supplierId: basis.supplier_id,
-        supplierName: basis.supplier_name,
+        supplierName: readableName(
+            basis.supplier_name,
+            basis.supplier_id,
+            "供应商名称未提供",
+        ),
         stockBalanceId: basis.stock_balance_id ?? undefined,
         warehouseId: basis.warehouse_id ?? undefined,
-        warehouseName: basis.warehouse_name ?? undefined,
+        warehouseName: basis.warehouse_id
+            ? readableName(
+                  basis.warehouse_name,
+                  basis.warehouse_id,
+                  "仓库名称未提供",
+              )
+            : basis.warehouse_name?.trim() || undefined,
         sourceAvailableQuantity: basis.source_available_quantity ?? undefined,
         purchaseType: mapPurchaseType(basis.purchase_type ?? "PHYSICAL"),
         fulfillmentResponsibility: mapFulfillment(

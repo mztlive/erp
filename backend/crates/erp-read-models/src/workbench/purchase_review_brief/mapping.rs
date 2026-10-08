@@ -629,7 +629,7 @@ fn purchase_item_quantity(quantity: Option<&Quantity>, unit: Option<&str>, gross
 /// * `snapshot` - 提交时付款条件快照
 ///
 /// # 返回
-/// 返回先款比例、货到天数或合同约定；未知代码回退原码，先款门禁单独补「先款后货」。
+/// 返回先款比例、货到天数或合同约定；未知代码提示待核对，先款门禁单独补「先款后货」。
 /// 历史把经营类目编进付款条件代码时，只展示付款条件本身。
 ///
 /// # 错误
@@ -639,7 +639,9 @@ fn payment_term_label(snapshot: &PaymentTermSnapshot) -> Option<String> {
     if code.is_empty() {
         return snapshot.prepay_gate.then(|| "先款后货".to_string());
     }
-    let named = SupplierPaymentTerm::parse(&code).map(SupplierPaymentTerm::label).unwrap_or(code);
+    let named = SupplierPaymentTerm::parse(&code)
+        .map(SupplierPaymentTerm::label)
+        .unwrap_or_else(|_| "付款条件待核对".to_string());
     if snapshot.prepay_gate && !named.contains("先款") {
         Some(format!("{named} · 先款后货"))
     } else {
@@ -761,6 +763,11 @@ mod tests {
             payment_term_label(&payment("现结｜经营类目：礼盒", false)).as_deref(),
             Some("现结（审批通过日）")
         );
+        let mut unknown = payment("现结", false);
+        unknown.payment_term_code = "UNKNOWN-TERM-1".into();
+        assert_eq!(payment_term_label(&unknown).as_deref(), Some("付款条件待核对"));
+        unknown.prepay_gate = true;
+        assert_eq!(payment_term_label(&unknown).as_deref(), Some("付款条件待核对 · 先款后货"));
     }
 
     #[test]

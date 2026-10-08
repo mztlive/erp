@@ -84,6 +84,7 @@ impl ReturnsReadService {
     ///
     /// # 错误
     /// * `NotFound` - 退款单不存在
+    ///
     /// 仓储或审批绑定读取失败时返回对应错误。
     pub async fn customer_refund_detail(&self, id: &str) -> Result<CustomerRefundView> {
         self.customer_refund_view(id.to_string()).await
@@ -105,6 +106,7 @@ impl ReturnsReadService {
     ///
     /// # 错误
     /// * `NotFound` - 退款单不存在
+    ///
     /// 仓储或审批绑定读取失败时返回对应错误。
     async fn customer_refund_view(&self, id: String) -> Result<CustomerRefundView> {
         let refund = self

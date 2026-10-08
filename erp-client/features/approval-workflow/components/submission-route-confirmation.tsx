@@ -28,7 +28,7 @@ export function SubmissionRouteConfirmation({
 
     const firstNode = definition.nodes[0]
     const route = displayRoute(definition.nodes)
-    const firstLabel = firstNode.assigneeName?.trim() || firstNode.name
+    const firstLabel = displayRoute([firstNode])
 
     return (
         <Alert>

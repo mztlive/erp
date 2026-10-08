@@ -191,7 +191,7 @@ export async function fetchSalesOrderDetail(
         customerName:
             contractDisplay.customerName ||
             customerDisplay.customerName ||
-            detail.customer_id,
+            "客户名称未提供",
         contractNumber: contractDisplay.contractNumber,
         contractRevisionLabel: contractDisplay.contractRevisionLabel,
         ownerUserId: detail.owner_user_id || "",

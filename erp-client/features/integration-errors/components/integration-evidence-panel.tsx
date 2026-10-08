@@ -82,8 +82,9 @@ export function IntegrationEvidencePanel({
                         entries={item.auditTrail.map((entry) => ({
                             id: entry.id,
                             action:
-                                INTEGRATION_ACTION_LABEL[entry.action] ??
-                                entry.action,
+                                INTEGRATION_ACTION_LABEL[
+                                    entry.action.toUpperCase()
+                                ] ?? "处理记录",
                             operator: entry.actor,
                             occurredAt: entry.at,
                             occurredAtLabel: formatDateTime(

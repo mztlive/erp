@@ -23,6 +23,7 @@ import { trackingEntriesToDto } from "@/features/fulfillment-operations/lib/trac
 import { stripElectronicDeliveryApprovalField } from "@/features/fulfillment-operations/lib/electronic-delivery-no-approval"
 import { stripPurchaseReceiptApprovalField } from "@/features/fulfillment-operations/lib/purchase-receipt-no-approval"
 import { stripServiceFulfillmentApprovalField } from "@/features/fulfillment-operations/lib/service-fulfillment-no-approval"
+import { displayBusinessText } from "@/lib/display-name"
 import type {
     BackendDelivery,
     BackendDeliveryDetail,
@@ -330,7 +331,11 @@ export async function resolveUnknownFulfillmentResult(
                             operationId: input.operationId,
                             factType: "PURCHASE_RECEIPT",
                             factId: receipt.id,
-                            factNo: receipt.receipt_no,
+                            factNo:
+                                displayBusinessText(
+                                    receipt.receipt_no,
+                                    receipt.id,
+                                ) || "收货单号未提供",
                             formalStatus: "POSTED",
                             occurredAt:
                                 secsToIso(receipt.posted_at) || nowIso(),
@@ -341,7 +346,11 @@ export async function resolveUnknownFulfillmentResult(
                             acceptanceRequired: false,
                             acceptanceNextStep: "",
                             inventoryImpactSummary: "",
-                            reference: receipt.receipt_no,
+                            reference:
+                                displayBusinessText(
+                                    receipt.receipt_no,
+                                    receipt.id,
+                                ) ?? "",
                             salesOrderId: "",
                             salesOrderNo: "",
                         },
@@ -369,7 +378,11 @@ export async function resolveUnknownFulfillmentResult(
                             operationId: input.operationId,
                             factType: "DELIVERY",
                             factId: delivery.id,
-                            factNo: delivery.delivery_no,
+                            factNo:
+                                displayBusinessText(
+                                    delivery.delivery_no,
+                                    delivery.id,
+                                ) || "发货单号未提供",
                             formalStatus: delivery.status,
                             occurredAt:
                                 secsToIso(delivery.shipped_at) || nowIso(),
@@ -383,9 +396,13 @@ export async function resolveUnknownFulfillmentResult(
                             acceptanceRequired: true,
                             acceptanceNextStep: "",
                             inventoryImpactSummary: "",
-                            reference: delivery.delivery_no,
+                            reference:
+                                displayBusinessText(
+                                    delivery.delivery_no,
+                                    delivery.id,
+                                ) ?? "",
                             salesOrderId: delivery.sales_order_id,
-                            salesOrderNo: delivery.sales_order_id,
+                            salesOrderNo: "",
                         },
                     }
                 }

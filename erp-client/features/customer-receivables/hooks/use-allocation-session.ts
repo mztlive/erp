@@ -494,7 +494,7 @@ export function useAllocationSession({
                 description: isReceipt
                     ? `已进入审批。单号 ${res.factNo}。全部节点通过后过账核销。`
                     : `已生效单号 ${res.factNo}。未分配余额 ${res.unallocatedAmount}。`,
-                reference: res.operationId,
+                reference: res.factNo,
                 facts: [
                     {
                         label: isReceipt ? "回款单号" : "发票号码",
@@ -523,7 +523,6 @@ export function useAllocationSession({
                 status: "unknown",
                 title: resultText.unknown,
                 description: res.message,
-                reference: res.operationId,
                 pendingKey: res.idempotencyKey,
             })
             setConfirmOpen(false)

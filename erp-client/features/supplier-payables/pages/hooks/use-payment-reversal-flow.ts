@@ -145,7 +145,6 @@ export function usePaymentReversalFlow(args: {
                 status: "unknown",
                 title: "冲正结果待确认",
                 description: res.message,
-                reference: res.idempotencyKey,
                 operationId: res.idempotencyKey,
             })
             setReversalSubmitOpen(false)
@@ -162,7 +161,7 @@ export function usePaymentReversalFlow(args: {
             status: "succeeded",
             title: "冲正已提交审批",
             description: "已按已绑定的审批流程启动审批，原付款保留。",
-            reference: slot.key,
+            reference: res.reversal.reversalNo,
             facts: [
                 { label: "冲正单号", value: res.reversal.reversalNo },
                 { label: "当前状态", value: res.reversal.statusLabel },

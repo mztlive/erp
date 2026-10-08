@@ -4,6 +4,7 @@
  */
 
 import type { WorkItemProjection } from "@/features/work-items"
+import { displayName } from "@/lib/display-name"
 import type { IntegrationResolutionItemView } from "../types"
 import { ERROR_CLASS_LABEL, FUNDS_LABEL } from "../types"
 import {
@@ -48,14 +49,17 @@ export function mapErrorTask(
         identity: {
             itemType: "ERROR_TASK",
             id: task.id,
-            number: task.id,
+            number: task.display_number?.trim() || "",
             subjectHash: `v${task.version}`,
         },
         workItem,
         businessObject: {
             objectType: task.message_id ? "INBOX_MESSAGE" : "BUSINESS_OBJECT",
             objectId: task.business_object_id ?? task.message_id ?? task.id,
-            title: task.business_object_id ?? task.message_id ?? task.id,
+            title:
+                task.business_object_label?.trim() ||
+                formalWorkItem?.businessObjectLabel ||
+                "业务对象名称未提供",
         },
         classification: {
             code: task.error_class,
@@ -81,15 +85,17 @@ export function mapErrorTask(
         fundsImpactLabel: FUNDS_LABEL[fundsImpact],
         compensationOpen: false,
         ageLabel: ageLabel(task.created_at),
-        ownerRole: formalWorkItem?.ownerRoleLabel ?? task.owner_role ?? "—",
+        ownerRole: formalWorkItem?.ownerRoleLabel ?? "责任岗位未提供",
         ownerUser:
-            formalWorkItem?.ownerUser?.displayName ??
-            task.owner_user_id ??
-            undefined,
+            displayName(
+                formalWorkItem?.ownerUser?.displayName,
+                formalWorkItem?.ownerUser?.id,
+            ) ?? displayName(task.owner_user_name, task.owner_user_id),
         createdAt: tsToIso(task.created_at),
         message: task.message_id
             ? {
-                  eventIdSummary: task.message_id,
+                  eventIdSummary:
+                      task.message_label?.trim() || "消息名称未提供",
                   idempotencyKeySummary: "—",
                   businessFactKeySummary: "—",
                   schemaVersion: "—",

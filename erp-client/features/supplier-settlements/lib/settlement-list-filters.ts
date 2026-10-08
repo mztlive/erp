@@ -138,7 +138,7 @@ export function buildSettlementFilterChips(
         )?.supplierName
         chips.push({
             key: "supplierId",
-            label: `供应商：${supplierName ?? state.supplierId}`,
+            label: `供应商：${supplierName || "名称待补全"}`,
         })
     }
     const statuses = parseSettlementStatusParam(state.status)
@@ -165,26 +165,35 @@ export function buildSettlementFilterChips(
     if (state.ownerUserIds) {
         chips.push({
             key: "ownerUserIds",
-            label: `对账负责人：${state.ownerUserIds}`,
+            label: `对账负责人：已选择 ${selectedFilterCount(state.ownerUserIds)} 人`,
         })
     }
     if (state.operatorUserIds) {
         chips.push({
             key: "operatorUserIds",
-            label: `差异处理人：${state.operatorUserIds}`,
+            label: `差异处理人：已选择 ${selectedFilterCount(state.operatorUserIds)} 人`,
         })
     }
     if (state.handlerUserIds) {
         chips.push({
             key: "handlerUserIds",
-            label: `当前复核人：${state.handlerUserIds}`,
+            label: `当前复核人：已选择 ${selectedFilterCount(state.handlerUserIds)} 人`,
         })
     }
     if (state.orgUnitIds) {
         chips.push({
             key: "orgUnitIds",
-            label: `业务组织：${state.orgUnitIds}`,
+            label: `业务组织：已选择 ${selectedFilterCount(state.orgUnitIds)} 个`,
         })
     }
     return chips
+}
+
+function selectedFilterCount(value: string): number {
+    return new Set(
+        value
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean),
+    ).size
 }

@@ -20,6 +20,7 @@ impl ReturnsReadService {
     ///
     /// # 错误
     /// * `NotFound` - 冲正单不存在
+    ///
     /// 仓储或审批绑定读取失败时返回对应错误。
     pub async fn payment_reversal_detail(&self, id: &str) -> Result<PaymentReversalView> {
         self.payment_reversal_view(id.to_string()).await
@@ -41,6 +42,7 @@ impl ReturnsReadService {
     ///
     /// # 错误
     /// * `NotFound` - 冲正单不存在
+    ///
     /// 仓储或审批绑定读取失败时返回对应错误。
     async fn payment_reversal_view(&self, id: String) -> Result<PaymentReversalView> {
         let reversal = self

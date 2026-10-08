@@ -71,7 +71,7 @@ export function ItemsSection({
                     <TableRow>
                         <TableHead>商品</TableHead>
                         <TableHead>数量</TableHead>
-                        <TableHead>供应商订货编码</TableHead>
+                        <TableHead>供应商商品 / 订货编码</TableHead>
                         <TableHead>供给版本</TableHead>
                         <TableHead className="text-right">
                             下单成本（含税）
@@ -99,9 +99,6 @@ export function ItemsSection({
                                 {item.quantity} {item.unit}
                             </TableCell>
                             <TableCell>
-                                <div className="text-xs">
-                                    {item.supplierProductName}
-                                </div>
                                 <div className="num text-tiny text-muted-foreground">
                                     {item.supplierProductId}
                                 </div>

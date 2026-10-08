@@ -249,15 +249,20 @@ fn map_list_items(
 /// * `names` - 供应商法定名称映射
 ///
 /// # 返回
-/// 映射缺失时回退账号 ID 本身.
+/// 返回已登记名称；缺失或空白时返回明确的名称缺失提示。
 ///
 /// # 错误
 /// 无.
 ///
 /// # 约束
-/// 缺失不得报错，由调用方按约定回退展示.
-fn supplier_display(supplier_id: &str, names: &HashMap<String, String>) -> String {
-    names.get(supplier_id).cloned().unwrap_or_else(|| supplier_id.to_string())
+/// 账号标识仅用于定位名称，不能作为供应商名称展示。
+pub(super) fn supplier_display(supplier_id: &str, names: &HashMap<String, String>) -> String {
+    names
+        .get(supplier_id)
+        .map(|name| name.trim())
+        .filter(|name| !name.is_empty() && *name != supplier_id)
+        .unwrap_or("供应商名称不可用")
+        .to_owned()
 }
 
 /// 解析来源销售单业务单号.
@@ -383,7 +388,7 @@ mod query_mapping_tests {
         assert_eq!(items[0].current_submission_id.as_deref(), Some("sub-1"));
         assert_eq!(items[0].current_revision_id, None);
         assert_eq!(items[0].gross_amount, "10.00");
-        assert_eq!(items[0].supplier_name, "sup-1");
+        assert_eq!(items[0].supplier_name, "供应商名称不可用");
         assert_eq!(items[0].owner_user_id.as_deref(), Some("buyer-1"));
         assert_eq!(items[0].owner_name, "张三");
         assert_eq!((items[0].version, items[0].created_at), (2, 1_700_000_000));
@@ -452,12 +457,16 @@ mod query_mapping_tests {
         );
     }
 
-    /// 供应商缺失回退账号 ID 本身.
+    /// 供应商缺失、空白或名称被历史标识污染时明确提示，真实名称正常展示。
     #[test]
-    fn supplier_fallback_returns_account_id() {
-        assert_eq!(supplier_display("sup-1", &HashMap::new()), "sup-1".to_string());
+    fn supplier_display_requires_readable_name() {
+        assert_eq!(supplier_display("sup-1", &HashMap::new()), "供应商名称不可用");
         let mut names = HashMap::new();
-        names.insert("sup-1".to_string(), "供应商甲".to_string());
+        names.insert("sup-1".to_string(), "  ".to_string());
+        assert_eq!(supplier_display("sup-1", &names), "供应商名称不可用");
+        names.insert("sup-1".to_string(), "sup-1".to_string());
+        assert_eq!(supplier_display("sup-1", &names), "供应商名称不可用");
+        names.insert("sup-1".to_string(), "  供应商甲  ".to_string());
         assert_eq!(supplier_display("sup-1", &names), "供应商甲".to_string());
     }
 

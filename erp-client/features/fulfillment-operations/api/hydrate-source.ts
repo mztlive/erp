@@ -4,6 +4,7 @@
  */
 
 import { apiGet } from "@/lib/api"
+import { displayName } from "@/lib/display-name"
 import { displayText } from "@/features/fulfillment-operations/lib/readable-label"
 import type {
     FulfillmentOperation,
@@ -20,7 +21,9 @@ type SalesOrderLineSnapshot = Readonly<{
 
 type SalesOrderDisplay = Readonly<{
     id: string
+    customer_id?: string
     order_no?: string
+    current_revision_id?: string | null
     working_copy?: {
         customer_name?: string
         lines?: SalesOrderLineSnapshot[]
@@ -30,8 +33,10 @@ type SalesOrderDisplay = Readonly<{
         lines?: SalesOrderLineSnapshot[]
     }>
     revisions?: Array<{
+        id?: string
         customer_name?: string
         lines?: Array<{ item_name?: string; unit?: string | null }>
+        commercial_lines?: SalesOrderLineSnapshot[]
     }>
 }>
 
@@ -48,6 +53,7 @@ type PurchaseOrderDisplay = Readonly<{
     purchase_no?: string
     sales_order_id?: string
     sales_order_no?: string
+    supplier_id?: string
     supplier_name?: string
     lines?: PurchaseOrderLineSnapshot[]
 }>
@@ -67,23 +73,55 @@ function firstText(
     return undefined
 }
 
+function firstName(
+    objectIds: Array<string | null | undefined>,
+    ...values: Array<string | null | undefined>
+): string | undefined {
+    for (const value of values) {
+        const name = displayName(value, ...objectIds)
+        if (name && name !== "—") return name
+    }
+    return undefined
+}
+
+/** 头与行沿用同一版本；提交和版本历史均按最新在前返回。 */
+function salesSnapshot(detail: SalesOrderDisplay):
+    | {
+          customer_name?: string
+          lines?: SalesOrderLineSnapshot[]
+      }
+    | undefined {
+    if (detail.current_revision_id) {
+        const revision = detail.revisions?.find(
+            (candidate) => candidate.id === detail.current_revision_id,
+        )
+        return revision
+            ? {
+                  customer_name: revision.customer_name,
+                  lines: revision.commercial_lines,
+              }
+            : undefined
+    }
+    return detail.working_copy?.lines?.length
+        ? detail.working_copy
+        : detail.submissions?.[0]
+}
+
 function salesLineName(
     detail: SalesOrderDisplay,
     salesOrderLineId: string,
 ): { itemName?: string; unitCode?: string } {
-    const lines = [
-        ...(detail.working_copy?.lines ?? []),
-        ...(detail.submissions ?? []).flatMap(
-            (submission) => submission.lines ?? [],
-        ),
-    ]
+    const lines = salesSnapshot(detail)?.lines ?? []
     const line = lines.find(
         (candidate) =>
             candidate.sales_order_line_id === salesOrderLineId ||
             candidate.id === salesOrderLineId,
     )
     return {
-        itemName: firstText(line?.item_name_snapshot),
+        itemName: firstName(
+            [line?.id, line?.sales_order_line_id],
+            line?.item_name_snapshot,
+        ),
         unitCode: firstText(line?.unit_snapshot, line?.base_unit_code),
     }
 }
@@ -94,13 +132,18 @@ function purchaseLineName(
 ): { itemName?: string; unitCode?: string } {
     const match = (detail.lines ?? []).find(
         (candidate) =>
-            candidate.line_id === line.purchaseRevisionLineId ||
-            candidate.sales_order_line_id === line.salesOrderLineId ||
-            candidate.procurement_confirmation_line_id ===
-                line.salesOrderLineId,
+            (line.purchaseRevisionLineId &&
+                candidate.line_id === line.purchaseRevisionLineId) ||
+            (line.salesOrderLineId &&
+                (candidate.sales_order_line_id === line.salesOrderLineId ||
+                    candidate.procurement_confirmation_line_id ===
+                        line.salesOrderLineId)),
     )
     return {
-        itemName: firstText(match?.product_name),
+        itemName: firstName(
+            [match?.line_id, match?.sales_order_line_id],
+            match?.product_name,
+        ),
         unitCode: firstText(match?.base_unit_code),
     }
 }
@@ -134,7 +177,7 @@ async function loadWarehouse(warehouseId: string): Promise<string | undefined> {
         const warehouse = await apiGet<WarehouseDisplay>(
             `/admin/warehouses/${encodeURIComponent(warehouseId)}`,
         )
-        return firstText(warehouse.warehouse_code)
+        return displayText(warehouse.warehouse_code, warehouse.id) || undefined
     } catch {
         return undefined
     }
@@ -150,36 +193,43 @@ export async function enrichOperationDisplay(
     const purchaseOrderId = operation.source.purchaseOrderId?.trim() ?? ""
     const warehouseId = operation.source.warehouseId?.trim() ?? ""
 
-    const [salesOrder, purchaseOrder, warehouseLabel] = await Promise.all([
-        salesOrderId ? loadSalesOrder(salesOrderId) : Promise.resolve(null),
-        purchaseOrderId
-            ? loadPurchaseOrder(purchaseOrderId)
-            : Promise.resolve(null),
-        warehouseId ? loadWarehouse(warehouseId) : Promise.resolve(undefined),
-    ])
+    const [initialSalesOrder, purchaseOrder, warehouseLabel] =
+        await Promise.all([
+            salesOrderId ? loadSalesOrder(salesOrderId) : Promise.resolve(null),
+            purchaseOrderId
+                ? loadPurchaseOrder(purchaseOrderId)
+                : Promise.resolve(null),
+            warehouseId
+                ? loadWarehouse(warehouseId)
+                : Promise.resolve(undefined),
+        ])
+    const linkedSalesOrderId =
+        salesOrderId || purchaseOrder?.sales_order_id?.trim() || ""
+    const salesOrder =
+        initialSalesOrder ??
+        (!salesOrderId && linkedSalesOrderId
+            ? await loadSalesOrder(linkedSalesOrderId)
+            : null)
 
     const salesOrderNo = firstText(
-        salesOrder?.order_no,
-        purchaseOrder?.sales_order_no,
-        operation.source.salesOrderNo,
+        displayText(salesOrder?.order_no, linkedSalesOrderId),
+        displayText(purchaseOrder?.sales_order_no, linkedSalesOrderId),
+        displayText(operation.source.salesOrderNo, linkedSalesOrderId),
     )
-    const customerLabel = firstText(
-        salesOrder?.working_copy?.customer_name,
-        [...(salesOrder?.submissions ?? [])].at(-1)?.customer_name,
-        [...(salesOrder?.revisions ?? [])].at(-1)?.customer_name,
+    const customerLabel = firstName(
+        [salesOrder?.customer_id],
+        salesOrder ? salesSnapshot(salesOrder)?.customer_name : undefined,
         operation.source.customerLabel,
     )
     const purchaseNo = firstText(
-        purchaseOrder?.purchase_no,
-        operation.source.purchaseNo,
+        displayText(purchaseOrder?.purchase_no, purchaseOrderId),
+        displayText(operation.source.purchaseNo, purchaseOrderId),
     )
-    const supplierLabel = firstText(
+    const supplierLabel = firstName(
+        [purchaseOrder?.supplier_id],
         purchaseOrder?.supplier_name,
         operation.source.supplierLabel,
     )
-    const linkedSalesOrderId =
-        firstText(salesOrder?.id, purchaseOrder?.sales_order_id) ?? salesOrderId
-
     const lines = operation.lines.map((line) => {
         const fromPurchase = purchaseOrder
             ? purchaseLineName(purchaseOrder, line)
@@ -190,7 +240,12 @@ export async function enrichOperationDisplay(
         return {
             ...line,
             itemName:
-                firstText(
+                firstName(
+                    [
+                        line.lineId,
+                        line.salesOrderLineId,
+                        line.purchaseRevisionLineId,
+                    ],
                     line.itemName,
                     fromPurchase.itemName,
                     fromSales.itemName,
@@ -205,8 +260,8 @@ export async function enrichOperationDisplay(
     })
 
     const nextWarehouseLabel = firstText(
+        displayText(operation.source.warehouseLabel, warehouseId),
         warehouseLabel,
-        operation.source.warehouseLabel,
     )
 
     return {

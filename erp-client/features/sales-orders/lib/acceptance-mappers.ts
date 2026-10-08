@@ -13,6 +13,7 @@ import type {
     SaveAcceptanceDraftInput,
 } from "@/features/sales-orders/lib/acceptance-types"
 import { FACT_ONLY_NOTICE } from "@/features/sales-orders/lib/acceptance-types"
+import { displayBusinessText } from "@/lib/display-name"
 import { compareDecimal } from "@/lib/fixed-decimal"
 
 // ─── 后端形状 ────────────────────────────────────────────────────────────────
@@ -160,13 +161,15 @@ export function mapOverallResultToBackend(
 export function mapEligibleFact(
     f: BackendEligibleFact,
 ): AcceptanceEligibleFact {
+    const fulfillmentFactType = mapFactType(
+        f.fulfillment_fact_type,
+        f.delivery_type,
+    )
     return {
         fulfillmentLineId: f.fulfillment_line_id,
-        fulfillmentFactType: mapFactType(
-            f.fulfillment_fact_type,
-            f.delivery_type,
-        ),
-        fulfillmentNo: f.fulfillment_no,
+        fulfillmentFactType,
+        fulfillmentNo:
+            displayBusinessText(f.fulfillment_no) || "交付单号未提供",
         salesOrderLineId: f.sales_order_line_id,
         lineNo: f.line_no,
         itemSnapshot: f.item_snapshot,

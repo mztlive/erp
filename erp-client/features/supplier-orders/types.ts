@@ -307,7 +307,6 @@ type SupplierOrderItemView = {
     quantity: string
     unit: string
     supplierProductId: string
-    supplierProductName: string
     supplyVersion: string
     /** 下单成本快照；无字段权限时为 null */
     unitCostGross: string | null

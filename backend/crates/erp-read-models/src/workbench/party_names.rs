@@ -17,6 +17,7 @@ use crate::errors::Result;
 
 /// 简报里提交人段的标签，与 `brief.rs` 写入端保持一致。
 const SUBMITTER_LABEL: &str = "提交人";
+const RESPONSIBLE_LABEL: &str = "责任人";
 
 impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 在指定执行器上批量解析处理人姓名。
@@ -45,6 +46,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
                 owner.display_name = resolve_owner_display_name(&owner.id, &names);
             }
             apply_submitter_name(&mut item.summary_sections, &names);
+            apply_responsible_name(&mut item.summary_sections, &names);
         }
         Ok(())
     }
@@ -124,7 +126,12 @@ fn account_ids_for_lookup(items: &[WorkItemView]) -> Vec<String> {
         let submitter = submitter_section(&item.summary_sections)
             .map(|section| section.value.clone())
             .filter(|value| is_account_id(value));
-        owner.into_iter().chain(submitter)
+        let responsible = item
+            .summary_sections
+            .iter()
+            .filter(|section| section.label == RESPONSIBLE_LABEL)
+            .map(|section| section.value.clone());
+        owner.into_iter().chain(submitter).chain(responsible)
     }))
 }
 
@@ -160,12 +167,29 @@ fn apply_submitter_name(sections: &mut Vec<WorkItemSummarySection>, names: &Hash
     if !is_account_id(&sections[index].value) {
         return;
     }
-    match names.get(&sections[index].value).map(String::as_str).map(str::trim).filter(|name| !name.is_empty())
+    match names
+        .get(&sections[index].value)
+        .map(String::as_str)
+        .map(str::trim)
+        .filter(|name| !name.is_empty() && *name != sections[index].value.trim())
     {
         Some(name) => sections[index].value = name.to_string(),
         None => {
             sections.remove(index);
         },
+    }
+}
+
+/// 错误任务的责任人段由本次读取直接提供账号身份；缺姓名时显示占位。
+fn apply_responsible_name(sections: &mut [WorkItemSummarySection], names: &HashMap<String, String>) {
+    for section in sections.iter_mut().filter(|section| section.label == RESPONSIBLE_LABEL) {
+        section.value = names
+            .get(&section.value)
+            .map(String::as_str)
+            .map(str::trim)
+            .filter(|name| !name.is_empty() && *name != section.value.trim())
+            .unwrap_or("姓名未维护")
+            .to_string();
     }
 }
 
@@ -189,7 +213,10 @@ mod tests {
     use std::collections::HashMap;
 
     use super::super::dto::{ProcessingState, WorkItemPartyView, WorkItemView};
-    use super::{WorkItemSummarySection, account_ids_for_lookup, apply_submitter_name, is_account_id};
+    use super::{
+        WorkItemSummarySection, account_ids_for_lookup, apply_responsible_name, apply_submitter_name,
+        is_account_id,
+    };
 
     #[test]
     fn owner_ids_are_unique_and_skip_unassigned() {
@@ -236,6 +263,32 @@ mod tests {
         assert!(is_account_id("507f1f77bcf86cd799439011"));
         assert!(!is_account_id("周航"));
         assert!(!is_account_id("HT-7456920203"));
+    }
+
+    #[test]
+    fn responsible_accounts_use_same_batch_and_hide_missing_identity() {
+        let mut item = dummy_view(None);
+        item.summary_sections = vec![section("责任人", "operator-1")];
+        assert_eq!(account_ids_for_lookup(std::slice::from_ref(&item)), vec!["operator-1".to_string()]);
+        apply_responsible_name(&mut item.summary_sections, &HashMap::new());
+        assert_eq!(item.summary_sections[0].value, "姓名未维护");
+        let mut sections = vec![section("责任人", "operator-1")];
+        apply_responsible_name(
+            &mut sections,
+            &HashMap::from([("operator-1".to_string(), " 周航 ".to_string())]),
+        );
+        assert_eq!(sections[0].value, "周航");
+    }
+
+    #[test]
+    fn account_identity_stored_as_name_is_not_displayed() {
+        let names = HashMap::from([(SUBMITTER_ID.to_string(), format!(" {SUBMITTER_ID} "))]);
+        let mut submitter = vec![section("提交人", SUBMITTER_ID)];
+        apply_submitter_name(&mut submitter, &names);
+        assert!(submitter.is_empty());
+        let mut responsible = vec![section("责任人", SUBMITTER_ID)];
+        apply_responsible_name(&mut responsible, &names);
+        assert_eq!(responsible[0].value, "姓名未维护");
     }
 
     fn section(label: &str, value: &str) -> WorkItemSummarySection {

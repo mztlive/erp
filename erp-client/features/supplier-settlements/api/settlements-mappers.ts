@@ -12,6 +12,7 @@ import type {
 import {
     DIFF_STATUS_LABEL,
     DIFF_TYPE_LABEL,
+    REASON_CODE_LABEL,
     STATUS_LABEL,
     STATUS_TONE,
 } from "@/features/supplier-settlements/types"
@@ -21,6 +22,7 @@ import type {
     BackendStatement,
 } from "@/features/supplier-settlements/api/settlements-wire"
 import { compareDecimal } from "@/lib/fixed-decimal"
+import { settlementActor, settlementDisplayLabel } from "../lib/display-labels"
 
 function tsToIso(secs: number | null | undefined): string {
     if (secs == null || !Number.isFinite(Number(secs)) || Number(secs) <= 0)
@@ -57,6 +59,14 @@ function directionLabel(diff?: string): string | undefined {
 
 export function toListRow(s: BackendStatement): SettlementListRow {
     const status = asStatus(s.status)
+    const preparedBy = settlementActor(s.prepared_by, s.prepared_by_name)
+    const differenceHandler = settlementActor(
+        s.difference_handler_user_id || s.prepared_by,
+        s.difference_handler_user_id
+            ? s.difference_handler_name
+            : s.prepared_by_name,
+    )
+    const reviewedBy = settlementActor(s.reviewed_by, s.reviewed_by_name)
     const allowed = ["OPEN_CENTER", "VIEW", "OPEN_PREVIEW"]
     if (status !== "CONFIRMED" && status !== "VOIDED") {
         allowed.push("RESOLVE_DIFFERENCE")
@@ -65,7 +75,11 @@ export function toListRow(s: BackendStatement): SettlementListRow {
         statementId: s.id,
         statementNo: s.statement_no,
         supplierId: s.supplier_id,
-        supplierName: s.supplier_id,
+        supplierName: settlementDisplayLabel(
+            s.supplier_name,
+            s.supplier_id,
+            "供应商名称待补全",
+        ),
         periodStart: s.period_start,
         periodEnd: s.period_end,
         periodLabel: s.period_start.slice(0, 7),
@@ -77,24 +91,12 @@ export function toListRow(s: BackendStatement): SettlementListRow {
         differenceAmountGross: String(s.difference_amount),
         differenceDirectionLabel: directionLabel(String(s.difference_amount)),
         unresolvedDifferenceCount: 0,
-        preparedBy: s.prepared_by
-            ? { userId: s.prepared_by, displayName: s.prepared_by }
-            : undefined,
-        differenceHandler:
-            s.difference_handler_user_id || s.prepared_by
-                ? {
-                      userId: s.difference_handler_user_id || s.prepared_by,
-                      displayName:
-                          s.difference_handler_user_id || s.prepared_by,
-                  }
-                : undefined,
-        reviewedBy: s.reviewed_by
-            ? { userId: s.reviewed_by, displayName: s.reviewed_by }
-            : undefined,
-        preparedByLabel: s.prepared_by || "—",
-        differenceHandlerLabel:
-            s.difference_handler_user_id || s.prepared_by || "—",
-        reviewedByLabel: s.reviewed_by || "待复核人",
+        preparedBy,
+        differenceHandler,
+        reviewedBy,
+        preparedByLabel: preparedBy?.displayName ?? "—",
+        differenceHandlerLabel: differenceHandler?.displayName ?? "—",
+        reviewedByLabel: reviewedBy?.displayName ?? "待复核人",
         updatedAt: tsToIso(s.created_at),
         allowedActions: allowed,
         actionBlockers: [],
@@ -116,7 +118,11 @@ export function mapFormalReviewTask(
         ownerUser: item.owner_user_id
             ? {
                   id: item.owner_user_id,
-                  displayName: item.owner_user_id,
+                  displayName: settlementDisplayLabel(
+                      item.owner_user_name,
+                      item.owner_user_id,
+                      "姓名待补全",
+                  ),
               }
             : undefined,
         status: item.status,
@@ -168,12 +174,26 @@ export function toDetail(
                 referenceIds: evidence.evidence_reference_ids,
                 kind: "TICKET" as const,
                 label:
-                    evidence.opinion_code ??
-                    evidence.evidence_reference_ids.join("、"),
+                    (evidence.opinion_code &&
+                        REASON_CODE_LABEL[evidence.opinion_code]) ||
+                    evidence.evidence_reference_labels
+                        ?.filter(
+                            (label) =>
+                                label.trim() &&
+                                !evidence.evidence_reference_ids.includes(
+                                    label,
+                                ),
+                        )
+                        .join("、") ||
+                    "差异证据",
                 comment: evidence.comment ?? undefined,
                 by: {
                     userId: evidence.provided_by,
-                    displayName: evidence.provided_by,
+                    displayName: settlementDisplayLabel(
+                        evidence.provided_by_name,
+                        evidence.provided_by,
+                        "姓名待补全",
+                    ),
                 },
                 at: tsToIso(evidence.provided_at),
             })),
@@ -240,7 +260,11 @@ export function toDetail(
             id: s.id,
             statementNo: s.statement_no,
             supplierId: s.supplier_id,
-            supplierName: s.supplier_id,
+            supplierName: settlementDisplayLabel(
+                s.supplier_name,
+                s.supplier_id,
+                "供应商名称待补全",
+            ),
             periodStart: s.period_start,
             periodEnd: s.period_end,
             periodLabel: s.period_start.slice(0, 7),
@@ -255,20 +279,14 @@ export function toDetail(
             status,
             statusLabel: STATUS_LABEL[status],
             statusTone: STATUS_TONE[status],
-            preparedBy: s.prepared_by
-                ? { userId: s.prepared_by, displayName: s.prepared_by }
-                : undefined,
-            differenceHandler:
-                s.difference_handler_user_id || s.prepared_by
-                    ? {
-                          userId: s.difference_handler_user_id || s.prepared_by,
-                          displayName:
-                              s.difference_handler_user_id || s.prepared_by,
-                      }
-                    : undefined,
-            reviewedBy: s.reviewed_by
-                ? { userId: s.reviewed_by, displayName: s.reviewed_by }
-                : undefined,
+            preparedBy: settlementActor(s.prepared_by, s.prepared_by_name),
+            differenceHandler: settlementActor(
+                s.difference_handler_user_id || s.prepared_by,
+                s.difference_handler_user_id
+                    ? s.difference_handler_name
+                    : s.prepared_by_name,
+            ),
+            reviewedBy: settlementActor(s.reviewed_by, s.reviewed_by_name),
             lockVersion: s.version,
             subjectHash: s.subject_hash ?? undefined,
             sourceAsOf: tsToIso(s.source_as_of ?? s.created_at),
@@ -295,9 +313,30 @@ export function toDetail(
         },
         items: (d.items ?? []).map((it) => ({
             itemId: it.id,
-            supplierOrderNo: it.supplier_fulfillment_order_id,
-            externalOrderNo: it.supplier_fulfillment_order_id,
-            productName: it.supplier_fulfillment_item_id,
+            supplierOrderId: it.supplier_fulfillment_order_id,
+            supplierOrderNo: settlementDisplayLabel(
+                it.supplier_order_no,
+                it.supplier_fulfillment_order_id,
+                "供应商订单号待补全",
+            ),
+            externalOrderNo: settlementDisplayLabel(
+                it.external_order_no,
+                it.supplier_fulfillment_order_id,
+                "—",
+            ),
+            purchaseOrderId: it.purchase_order_id ?? undefined,
+            purchaseNo: it.purchase_order_id
+                ? settlementDisplayLabel(
+                      it.purchase_order_no,
+                      it.purchase_order_id,
+                      "采购单号待补全",
+                  )
+                : undefined,
+            productName: settlementDisplayLabel(
+                it.product_name,
+                it.supplier_fulfillment_item_id,
+                "商品名称待补全",
+            ),
             quantity: String(it.quantity),
             factLabel: "履约结算",
             orderAmountGross: String(it.order_amount),
@@ -323,7 +362,11 @@ export function toDetail(
         payable: s.payable_account_id
             ? {
                   payableAccountId: s.payable_account_id,
-                  payableNo: s.payable_account_id,
+                  payableNo: settlementDisplayLabel(
+                      s.payable_no,
+                      s.payable_account_id,
+                      "应付编号待补全",
+                  ),
                   grossAmount: String(s.erp_amount),
                   dueDate: "",
                   statusLabel: "已生成",

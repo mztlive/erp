@@ -14,6 +14,7 @@ import type {
 } from "@/features/sales-orders/lib/acceptance-types"
 import { FACT_ONLY_NOTICE } from "@/features/sales-orders/lib/acceptance-types"
 import { compactFixed, compareDecimal, sumFixed } from "@/lib/fixed-decimal"
+import { displayBusinessText } from "@/lib/display-name"
 import {
     mapOverallResult,
     mapOverallResultToBackend,
@@ -93,7 +94,9 @@ export async function postCustomerAcceptanceWorkspace(
 
         return {
             status: "succeeded",
-            acceptanceNo: header.acceptance_no,
+            acceptanceNo:
+                displayBusinessText(header.acceptance_no, header.id) ||
+                "验收单号未提供",
             acceptanceId: header.id,
             remainingEligibleCount: remainingFacts.length,
             remainingEligibleQuantityLabel: Array.from(quantitiesByUnit)
@@ -143,7 +146,9 @@ export async function reverseCustomerAcceptanceWorkspace(
         const header = "acceptance" in reversed ? reversed.acceptance : reversed
         return {
             status: "succeeded",
-            reverseAcceptanceNo: header.acceptance_no,
+            reverseAcceptanceNo:
+                displayBusinessText(header.acceptance_no, header.id) ||
+                "冲正单号未提供",
             reverseAcceptanceId: header.id,
             originalAcceptanceNo: input.originalAcceptanceNo,
         }

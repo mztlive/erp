@@ -39,7 +39,9 @@ export async function createSupplierOrderExportJob(
         expiresAt: job.result_expires_at
             ? tsToIso(job.result_expires_at)
             : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-        downloadLabel: `供应商订单_${job.job_no ?? job.id}.csv`,
+        downloadLabel: job.job_no
+            ? `供应商订单_${job.job_no}.csv`
+            : "供应商订单.csv",
         status: job.status === "completed" ? "succeeded" : "queued",
     }
 }

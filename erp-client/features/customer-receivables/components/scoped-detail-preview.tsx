@@ -19,6 +19,10 @@ import {
 } from "@/components/business/financial-preview"
 import { scopeText } from "@/lib/ui-text"
 import { getErrorMessage } from "@/lib/api/errors"
+import {
+    businessLabelOrPlaceholder,
+    MISSING_SALES_ORDER_NO,
+} from "../lib/display-labels"
 
 type Props = Readonly<{
     open: boolean
@@ -56,7 +60,11 @@ export function ReceivableScopeDetailPreview({
                 : "往来详情"
     const identity =
         data?.kind === "receivable"
-            ? `销售单 ${data.receivable.sales_order_id}`
+            ? `销售单 ${businessLabelOrPlaceholder(
+                  data.receivable.sales_order_no,
+                  data.receivable.sales_order_id,
+                  MISSING_SALES_ORDER_NO,
+              )}`
             : data?.kind === "receipt"
               ? `到账 ${data.receipt.received_at}`
               : data?.kind === "invoice"

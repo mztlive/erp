@@ -64,7 +64,7 @@ function SettlementCenterItems({
                                 <TableCell>
                                     <Link
                                         id={`supplier-settlements-items-row-${toAutomationIdSegment(it.itemId)}-supplier-order`}
-                                        href={`/supplier-api/orders?q=${encodeURIComponent(it.supplierOrderNo)}`}
+                                        href={`/supplier-api/orders?preview=${encodeURIComponent(it.supplierOrderId)}`}
                                         className="num font-medium text-primary underline-offset-2 hover:underline"
                                     >
                                         {it.supplierOrderNo}

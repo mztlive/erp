@@ -1,5 +1,11 @@
 //! 供应商结算跨域详情的唯一读模型。
+mod display;
+pub mod display_dto;
+mod display_facts;
+mod display_mapping;
 pub mod dto;
+mod statement_result;
+pub use statement_result::SettlementStatementResult;
 mod query;
 use mongodb::Database;
 /// 供应链快照与正式财务复核任务的读取入口。

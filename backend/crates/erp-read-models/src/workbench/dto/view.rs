@@ -563,7 +563,7 @@ fn seconds(value: Option<erp_core::common::time::Instant>) -> Option<u64> {
 ///
 /// # 错误
 /// 不返回错误。
-pub(super) fn role_label(role: &str) -> String {
+pub(crate) fn role_label(role: &str) -> String {
     match role {
         "role-sales" | "sales" => "销售",
         "sales_order_owner" => "负责销售",
@@ -571,6 +571,10 @@ pub(super) fn role_label(role: &str) -> String {
         "role-procurement" | "procurement" => "采购",
         "supplier_portal_reviewer" => "采购确认人",
         "role-operations" | "operations" => "运营",
+        "role-warehouse" | "warehouse" => "仓储",
+        "role-sysadmin" | "sysadmin" | "integration-operator" => "系统管理员",
+        "role-cashier" | "cashier" => "出纳",
+        "role-invoicer" | "invoicer" => "开票",
         "role-finance" | "finance" => "财务",
         "role-management" | "management" => "管理层",
         "sales_order_approver" => "销售单审批人",
@@ -588,4 +592,17 @@ pub(super) fn role_label(role: &str) -> String {
         _ => "责任人",
     }
     .to_string()
+}
+
+#[cfg(test)]
+mod role_name_tests {
+    use super::role_label;
+
+    #[test]
+    fn operational_roles_have_readable_labels_and_hide_unknown_codes() {
+        assert_eq!(role_label("role-warehouse"), "仓储");
+        assert_eq!(role_label("role-sysadmin"), "系统管理员");
+        assert_eq!(role_label("role-cashier"), "出纳");
+        assert_eq!(role_label("unknown-internal-role"), "责任人");
+    }
 }

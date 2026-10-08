@@ -425,7 +425,7 @@ impl SupplierSettlementDifferenceListParams {
 
 /// 供应商结算差异响应视图。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct SupplierSettlementDifferenceView {
+pub struct SupplierSettlementDifferenceView<E = SettlementDifferenceEvidenceView> {
     /// 实体主键。
     pub id: String,
     /// 所属结算明细。
@@ -447,7 +447,7 @@ pub struct SupplierSettlementDifferenceView {
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
     /// 当前差异已追加的正式补证记录。
-    pub evidence: Vec<SettlementDifferenceEvidenceView>,
+    pub evidence: Vec<E>,
 }
 
 /// 差异补证视图。
@@ -509,8 +509,8 @@ pub struct SettlementStatementListStatsView {
 
 /// 供应商结算单列表结果；统计与行数据使用同一过滤口径。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct SupplierSettlementStatementListView {
-    pub items: Vec<SupplierSettlementStatementView>,
+pub struct SupplierSettlementStatementListView<S = SupplierSettlementStatementView> {
+    pub items: Vec<S>,
     pub total: i64,
     pub page: u64,
     pub page_size: u32,

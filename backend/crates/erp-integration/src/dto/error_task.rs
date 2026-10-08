@@ -146,6 +146,10 @@ pub struct ErrorTaskView {
     pub message_id: Option<String>,
     /// 关联的业务对象。
     pub business_object_id: Option<String>,
+    /// 已验证关联对象的可读名称；没有对象类型时不猜测身份。
+    pub business_object_label: Option<String>,
+    /// 关联入站消息的来源系统名称与消息类型。
+    pub message_label: Option<String>,
     /// 错误分类。
     pub error_class: ErrorClass,
     /// 任务状态。
@@ -154,6 +158,8 @@ pub struct ErrorTaskView {
     pub owner_role: Option<String>,
     /// 责任人。
     pub owner_user_id: Option<String>,
+    /// 当前责任人姓名；关联缺失时为空。
+    pub owner_user_name: Option<String>,
     /// 重试次数。
     pub attempt_count: u32,
     /// 最近尝试时间（秒级时间戳）。
@@ -205,10 +211,13 @@ impl From<IntegrationErrorTask> for ErrorTaskView {
             id: task.base.id,
             message_id: task.message_id.map(|id| id.to_string()),
             business_object_id: task.business_object_id,
+            business_object_label: None,
+            message_label: None,
             error_class: task.error_class,
             status: task.status,
             owner_role: task.owner_role,
             owner_user_id: task.owner_user_id,
+            owner_user_name: None,
             attempt_count: task.attempt_count,
             last_attempt_at: task.last_attempt_at.map(|at| at.unix_secs()),
             last_attempt_summary: task.last_attempt_summary,

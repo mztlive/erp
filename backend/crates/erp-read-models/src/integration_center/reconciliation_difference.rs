@@ -1,5 +1,7 @@
 use application_core::AuditActor;
 use erp_core::ids::ReconciliationDifferenceId;
+use erp_identity::AccessControlExt;
+use erp_identity::repository::prelude::*;
 use erp_integration::dto::*;
 use erp_integration::entity::integration_ops::{
     DifferenceActionProjection, ReconciliationDifference, difference_terminal_policy,
@@ -17,6 +19,7 @@ use erp_workflow::repository::prelude::*;
 use persistence_core::NoTransaction;
 
 use super::IntegrationCenterReadService;
+use super::display::evidence_label;
 use crate::{Error, Result};
 
 impl IntegrationCenterReadService {
@@ -78,10 +81,14 @@ impl IntegrationCenterReadService {
             view.status = Some(latest.resulting_status);
             view.version = u64::from(latest.resolution_no);
         }
-        let resolutions = resolution_views(history);
+        let mut resolutions = resolution_views(history);
         let terminal = view.status.is_some_and(|status| status.is_terminal());
         let has_work_item = self.has_difference_work_item(&view.id).await?;
         let linked_evidence = self.evidence.discover_evidence(&subject, &mut NoTransaction).await?;
+        self.difference_names(std::slice::from_mut(&mut view)).await?;
+        view.left_fact_label = evidence_label(view.left_fact_reference.as_deref(), &linked_evidence);
+        view.right_fact_label = evidence_label(view.right_fact_reference.as_deref(), &linked_evidence);
+        self.resolution_names(&mut resolutions, &linked_evidence).await?;
         let policy = difference_evidence_policy(&difference);
         let (allowed_actions, action_blockers) =
             difference_action_projection(&difference, terminal, has_work_item, &linked_evidence);
@@ -95,6 +102,21 @@ impl IntegrationCenterReadService {
             reconciliation_reason_registry: (!terminal && !has_work_item)
                 .then(reconciliation_reason_registry),
         })
+    }
+
+    async fn resolution_names(
+        &self,
+        resolutions: &mut [ResolutionView],
+        linked_evidence: &[ControlledEvidenceRef],
+    ) -> Result<()> {
+        let ids = resolutions.iter().map(|item| item.handled_by.clone()).collect::<Vec<_>>();
+        let names = self.db.accounts().names_by_ids(&ids, &mut NoTransaction).await?;
+        for resolution in resolutions {
+            resolution.handled_by_name = names.get(&resolution.handled_by).cloned();
+            resolution.evidence_label =
+                evidence_label(resolution.evidence_reference.as_deref(), linked_evidence);
+        }
+        Ok(())
     }
 
     /// 多个正式责任关联时返回 `ConflictError`。
@@ -120,7 +142,9 @@ fn resolution_views(history: Vec<ResolutionHistoryRow>) -> Vec<ResolutionView> {
             resolution_action: row.resolution_action,
             resulting_status: row.resulting_status,
             evidence_reference: row.evidence_reference,
+            evidence_label: None,
             handled_by: row.handled_by,
+            handled_by_name: None,
             handled_at: row.handled_at.unix_secs(),
         })
         .collect()

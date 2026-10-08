@@ -8,6 +8,10 @@ import {
     type DocumentApprovalView,
     type ApprovalRuntimeInstanceDto,
 } from "@/features/approval-workflow/types"
+import {
+    displayActorName,
+    displayReadableName,
+} from "@/features/approval-workflow/display"
 import type {
     AdjustmentDetailView,
     AdjustmentDraftView,
@@ -33,6 +37,7 @@ import {
     SEGREGATION_NOTE,
 } from "@/features/inventory/api/display"
 import { fulfillmentTasksHref } from "@/lib/fulfillment-navigation"
+import { displayBusinessText } from "@/lib/display-name"
 import type {
     BackendStockAdjustment,
     BackendStockAdjustmentApproval,
@@ -379,8 +384,12 @@ export function mapAdjustment(
         warehouseId: a.warehouse_id,
         warehouseName: AUTHORIZED_WAREHOUSE_LABEL, // backend_gap
         skuId: line?.sku_id ?? "",
-        skuCode: line?.sku_id ?? "",
-        skuName: line?.sku_id ?? "",
+        skuCode:
+            displayBusinessText(line?.sku_code, line?.sku_id) ??
+            "未记录商品编码",
+        skuName:
+            displayReadableName(line?.sku_name, line?.sku_id) ??
+            "未记录商品名称",
         baseUnit: "",
         reasonType: reasonTypeFrontend(a.reason_type),
         reasonTypeLabel: reasonTypeLabel(a.reason_type),
@@ -389,15 +398,22 @@ export function mapAdjustment(
         status: st.status,
         statusLabel: st.statusLabel,
         statusTone: st.statusTone,
-        operatorLabel: a.prepared_by,
-        applicantLabel: a.submitted_by ?? undefined,
-        currentNodeLabel:
-            approval?.instance?.currentNodeName ??
+        operatorLabel:
+            displayActorName(a.prepared_by_name, a.prepared_by) ?? "未记录姓名",
+        applicantLabel: a.submitted_by
+            ? (displayActorName(a.submitted_by_name, a.submitted_by) ??
+              "未记录姓名")
+            : undefined,
+        currentNodeLabel: displayReadableName(
+            approval?.instance?.currentNodeName,
             approval?.instance?.currentNode,
-        currentAssigneeLabel:
-            a.current_assignee ??
-            approval?.instance?.currentAssigneeName ??
-            approval?.instance?.currentAssignee,
+        ),
+        currentAssigneeLabel: approval?.instance
+            ? displayActorName(
+                  approval.instance.currentAssigneeName,
+                  approval.instance.currentAssignee,
+              )
+            : displayActorName(a.current_assignee_name, a.current_assignee),
         createdAt: secsToIso(a.created_at),
     }
 }
@@ -418,8 +434,12 @@ export function toDraftView(
         warehouseId: a.warehouse_id,
         warehouseName: AUTHORIZED_WAREHOUSE_LABEL,
         skuId: line?.sku_id ?? "",
-        skuCode: line?.sku_id ?? "",
-        skuName: line?.sku_id ?? "",
+        skuCode:
+            displayBusinessText(line?.sku_code, line?.sku_id) ??
+            "未记录商品编码",
+        skuName:
+            displayReadableName(line?.sku_name, line?.sku_id) ??
+            "未记录商品名称",
         baseUnit: "",
         reasonType: reasonFe,
         reasonTypeLabel: reasonTypeLabel(a.reason_type),
@@ -432,7 +452,8 @@ export function toDraftView(
         status: st.status,
         statusLabel: st.statusLabel,
         balanceLockVersion,
-        operatorLabel: a.prepared_by,
+        operatorLabel:
+            displayActorName(a.prepared_by_name, a.prepared_by) ?? "未记录姓名",
         segregationNote: SEGREGATION_NOTE,
         approval: mapAdjustmentApproval(detail.approval),
     }

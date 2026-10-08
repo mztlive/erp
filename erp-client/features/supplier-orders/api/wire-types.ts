@@ -34,6 +34,9 @@ export type BackendItem = {
     supplier_offering_revision_id: string
     supplier_sku_code_snapshot: string
     supplier_product_code_snapshot?: string | null
+    product_name?: string | null
+    unit_name?: string | null
+    supplier_offering_revision_no?: number | null
     quantity: string
     unit_cost_snapshot_gross: string
     cost_snapshot_total_gross: string
@@ -104,6 +107,7 @@ export type BackendInvestigationResult = {
 
 export type BackendDetail = {
     order: BackendOrder
+    connection_code?: string | null
     items: BackendItem[]
     status_history: BackendStatusHistory[]
     actions: BackendAction[]

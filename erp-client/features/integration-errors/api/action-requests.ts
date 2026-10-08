@@ -55,7 +55,6 @@ export async function applyIntegrationTaskAction(
         title: titleByOutcome[result.evidence.outcome],
         description:
             "本次处理记录已追加；当前任务仍为待处理，取得完成凭证后需单独确认解决。",
-        reference: result.evidence.operation_id,
         outcome: result.evidence.outcome,
         nextAllowedActions: mapAllowedIntegrationActions(
             result.next_allowed_actions,
@@ -68,24 +67,10 @@ export async function applyIntegrationTaskAction(
         workItemStatus: result.work_item_status,
         stayOnItem: true,
         terminal: false,
-        facts: [
-            ...(result.evidence.business_result_reference
-                ? [
-                      {
-                          label: "业务结果",
-                          value: result.evidence.business_result_reference,
-                      },
-                  ]
-                : []),
-            ...(result.evidence.evidence_reference
-                ? [
-                      {
-                          label: "证据记录",
-                          value: result.evidence.evidence_reference,
-                      },
-                  ]
-                : []),
-        ],
+        facts: (input.evidenceRefs ?? []).map((evidence) => ({
+            label: "证据记录",
+            value: evidence.label,
+        })),
     }
 }
 
@@ -103,17 +88,14 @@ export async function resolveIntegrationTask(
         status: "succeeded",
         title: "已标记解决",
         description: "处理已完成，可进入下一项。",
-        reference: result.resolution_record_id,
         outcome: "RESOLVED",
         workItemStatus: result.work_item_status,
         stayOnItem: false,
         terminal: true,
-        facts: [
-            {
-                label: "完成凭证",
-                value: result.terminal_evidence_reference,
-            },
-        ],
+        facts: input.evidenceRefs.map((evidence) => ({
+            label: "完成凭证",
+            value: evidence.label,
+        })),
     }
 }
 
@@ -152,17 +134,12 @@ export async function applyDirectReconciliation(
         description: result.is_terminal
             ? "直接对账结论已登记；未完成或关闭任何处理任务。"
             : "差异处理记录已追加，当前差异仍待处理。",
-        reference: result.resolution_record_id,
         outcome: result.outcome,
         stayOnItem: !result.is_terminal,
         terminal: result.is_terminal,
-        facts: result.business_result_reference
-            ? [
-                  {
-                      label: "业务结果",
-                      value: result.business_result_reference,
-                  },
-              ]
-            : undefined,
+        facts: (input.decision.evidenceRefs ?? []).map((evidence) => ({
+            label: "证据记录",
+            value: evidence.label,
+        })),
     }
 }

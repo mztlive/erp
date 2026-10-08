@@ -1,4 +1,5 @@
 import { nextActionHintForWorkItemType } from "@/lib/ui-text"
+import { displayName } from "@/lib/display-name"
 
 const KNOWN_REASON_LABELS: Record<string, string> = {
     procurement_confirmation_dispatched: "销售已提交，需要采购确认能否供货",
@@ -64,8 +65,11 @@ export function displayImpactSummary(input: {
     return "不处理将卡住后续业务，请进入对应页面核对。"
 }
 
-export function displayOwnerName(displayName?: string | null): string {
-    const name = displayName?.trim() ?? ""
+export function displayOwnerName(
+    value?: string | null,
+    ownerId?: string | null,
+): string {
+    const name = displayName(value, ownerId) ?? ""
     if (!name || LEGACY_OWNER_PLACEHOLDERS.has(name)) return "处理人待确认"
     return name
 }

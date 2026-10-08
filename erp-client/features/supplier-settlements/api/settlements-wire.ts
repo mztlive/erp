@@ -14,6 +14,7 @@ export type BackendStatement = {
     id: string
     statement_no: string
     supplier_id: string
+    supplier_name?: string | null
     period_start: string
     period_end: string
     period_policy_id: string
@@ -26,11 +27,15 @@ export type BackendStatement = {
     difference_amount: string
     status: string
     prepared_by: string
+    prepared_by_name?: string | null
     business_org_unit_id?: string | null
     difference_handler_user_id?: string | null
+    difference_handler_name?: string | null
     reviewed_by?: string | null
+    reviewed_by_name?: string | null
     confirmed_at?: number | null
     payable_account_id?: string | null
+    payable_no?: string | null
     subject_hash?: string | null
     source_as_of?: number | null
     source_snapshot_at?: number | null
@@ -45,7 +50,12 @@ export type BackendItem = {
     id: string
     statement_id: string
     supplier_fulfillment_order_id: string
+    supplier_order_no?: string | null
+    external_order_no?: string | null
     supplier_fulfillment_item_id: string
+    product_name?: string | null
+    purchase_order_id?: string | null
+    purchase_order_no?: string | null
     quantity: string
     order_amount: string
     freight_amount: string
@@ -77,9 +87,11 @@ export type BackendDifference = {
 export type BackendDifferenceEvidence = {
     evidence_id: string
     evidence_reference_ids: string[]
+    evidence_reference_labels?: string[] | null
     opinion_code?: string | null
     comment?: string | null
     provided_by: string
+    provided_by_name?: string | null
     provided_at: number
 }
 
@@ -154,6 +166,7 @@ export type BackendReviewWorkItem = {
     owner_role: string
     owner_organization_id: string
     owner_user_id?: string | null
+    owner_user_name?: string | null
     action_blockers: BackendReviewActionBlocker[]
 }
 

@@ -237,7 +237,6 @@ export function ResultPanel({
             status={result.status}
             title={result.title}
             description={result.description}
-            reference={result.reference}
             facts={result.facts}
             actions={
                 <div className="flex flex-wrap gap-2">

@@ -94,6 +94,7 @@ impl CustomerAssignmentService {
     ///
     /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
+    ///
     /// 归属查询失败时返回仓储错误。
     pub async fn customer_assignment_list(
         &self,
@@ -157,6 +158,7 @@ impl CustomerAssignmentService {
     /// * `NotFound` - 客户、销售人员账号或目标归属不存在
     /// * `ConflictError` - 版本冲突或新归属窗口与剩余归属重叠
     /// * `ValidationError` - 请求体校验失败
+    ///
     /// 命令字段组合或归属窗口非法时返回校验或领域错误；授权、仓储或审计失败时返回对应错误。
     pub async fn apply_assignment(
         &self,

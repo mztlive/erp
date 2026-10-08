@@ -38,6 +38,7 @@ import {
 } from "@/features/fulfillment-operations/types"
 import { salesOrderHref } from "@/features/fulfillment-operations/pages/lib/gate-copy"
 import { displayText } from "@/features/fulfillment-operations/lib/readable-label"
+import { displayName } from "@/lib/display-name"
 import { sourceContextFields } from "@/features/fulfillment-operations/pages/lib/presentation"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
@@ -112,12 +113,18 @@ export function FulfillmentWorkSurface({
     onBack,
     onToggleShortcuts,
 }: FulfillmentWorkSurfaceProps) {
+    const purchaseNo = displayText(
+        operation.source.purchaseNo,
+        operation.source.purchaseOrderId,
+    )
+    const salesOrderNo = displayText(
+        operation.source.salesOrderNo,
+        operation.source.salesOrderId,
+    )
     const headerSubtitle = [
-        displayText(operation.source.customerLabel),
-        displayText(operation.source.purchaseNo)
-            ? `采购 ${displayText(operation.source.purchaseNo)}`
-            : "",
-        displayText(operation.source.supplierLabel),
+        displayName(operation.source.customerLabel),
+        purchaseNo ? `采购 ${purchaseNo}` : "",
+        displayName(operation.source.supplierLabel),
     ]
         .filter(Boolean)
         .join(" · ")
@@ -187,9 +194,7 @@ export function FulfillmentWorkSurface({
                                             operation.operationType
                                         ]
                                     }
-                                    {displayText(operation.source.salesOrderNo)
-                                        ? ` · ${displayText(operation.source.salesOrderNo)}`
-                                        : ""}
+                                    {salesOrderNo ? ` · ${salesOrderNo}` : ""}
                                 </CardTitle>
                                 {headerSubtitle ? (
                                     <CardDescription>

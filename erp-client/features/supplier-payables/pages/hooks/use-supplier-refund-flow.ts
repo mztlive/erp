@@ -138,7 +138,6 @@ export function useSupplierRefundFlow(args: {
                 status: "unknown",
                 title: "退款结果待确认",
                 description: res.message,
-                reference: res.idempotencyKey,
                 operationId: res.idempotencyKey,
             })
             setRefundSubmitOpen(false)
@@ -155,7 +154,7 @@ export function useSupplierRefundFlow(args: {
             status: "succeeded",
             title: "退款已提交审批",
             description: "已按已绑定的审批流程启动审批，原付款保留。",
-            reference: slot.key,
+            reference: res.refund.refundNo,
             facts: [
                 { label: "退款单号", value: res.refund.refundNo },
                 { label: "当前状态", value: res.refund.statusLabel },

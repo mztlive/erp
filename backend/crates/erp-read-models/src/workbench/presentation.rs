@@ -150,7 +150,7 @@ pub(crate) fn resolve_owner_display_name(owner_id: &str, names: &HashMap<String,
         .get(owner_id)
         .map(String::as_str)
         .map(str::trim)
-        .filter(|name| !name.is_empty() && *name != "当前处理人")
+        .filter(|name| !name.is_empty() && *name != "当前处理人" && *name != owner_id.trim())
         .unwrap_or(UNRESOLVED_OWNER_DISPLAY_NAME)
         .to_string()
 }
@@ -375,8 +375,10 @@ mod tests {
         let mut names = HashMap::new();
         names.insert("u1".to_string(), " 周航 ".to_string());
         names.insert("u2".to_string(), "当前处理人".to_string());
+        names.insert("u3".to_string(), " u3 ".to_string());
         assert_eq!(resolve_owner_display_name("u1", &names), "周航");
         assert_eq!(resolve_owner_display_name("u2", &names), UNRESOLVED_OWNER_DISPLAY_NAME);
+        assert_eq!(resolve_owner_display_name("u3", &names), UNRESOLVED_OWNER_DISPLAY_NAME);
         assert_eq!(resolve_owner_display_name("missing", &names), UNRESOLVED_OWNER_DISPLAY_NAME);
     }
 

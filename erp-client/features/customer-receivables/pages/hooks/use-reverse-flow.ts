@@ -239,7 +239,6 @@ export function useReverseFlow(args: {
                     status: "unknown",
                     title: "冲正结果待确认",
                     description: committed.message,
-                    reference: committed.idempotencyKey,
                 })
                 setReversalSubmitOpen(false)
                 if (intent)
@@ -256,7 +255,7 @@ export function useReverseFlow(args: {
                 status: "succeeded",
                 title: "冲正已提交审批",
                 description: committed.message,
-                reference: slot.key,
+                reference: committed.reverseFactNo,
                 facts: [{ label: "冲正单号", value: committed.reverseFactNo }],
             })
             reversalSlotRef.current = null
@@ -280,7 +279,6 @@ export function useReverseFlow(args: {
                 status: "unknown",
                 title: "冲正结果待确认",
                 description: res.message,
-                reference: res.idempotencyKey,
             })
             setReversalSubmitOpen(false)
             return
@@ -294,7 +292,7 @@ export function useReverseFlow(args: {
             status: "succeeded",
             title: "冲正已提交审批",
             description: "已按已绑定的审批流程启动审批，原回款保留。",
-            reference: slot.key,
+            reference: res.reversal.reversalNo,
             facts: [
                 { label: "冲正单号", value: res.reversal.reversalNo },
                 { label: "当前状态", value: res.reversal.statusLabel },
@@ -329,7 +327,6 @@ export function useReverseFlow(args: {
                     status: "unknown",
                     title: "退款结果待确认",
                     description: committed.message,
-                    reference: committed.idempotencyKey,
                 })
                 setRefundSubmitOpen(false)
                 if (intent)
@@ -346,7 +343,7 @@ export function useReverseFlow(args: {
                 status: "succeeded",
                 title: "退款已提交审批",
                 description: committed.message,
-                reference: slot.key,
+                reference: committed.reverseFactNo,
                 facts: [{ label: "退款单号", value: committed.reverseFactNo }],
             })
             refundSlotRef.current = null
@@ -370,7 +367,6 @@ export function useReverseFlow(args: {
                 status: "unknown",
                 title: "退款结果待确认",
                 description: res.message,
-                reference: res.idempotencyKey,
             })
             setRefundSubmitOpen(false)
             return
@@ -384,7 +380,7 @@ export function useReverseFlow(args: {
             status: "succeeded",
             title: "退款已提交审批",
             description: "已按已绑定的审批流程启动审批，原回款保留。",
-            reference: slot.key,
+            reference: res.refund.refundNo,
             facts: [
                 { label: "退款单号", value: res.refund.refundNo },
                 { label: "当前状态", value: res.refund.statusLabel },
@@ -431,7 +427,7 @@ export function useReverseFlow(args: {
                 status: "succeeded",
                 title: "反向记录已追加",
                 description: res.message,
-                reference: res.operationId,
+                reference: res.reverseFactNo,
                 facts: [
                     { label: "反向单号", value: res.reverseFactNo },
                     { label: "原记录", value: reverseConfirm.label },
@@ -449,7 +445,6 @@ export function useReverseFlow(args: {
                 status: "unknown",
                 title: "纠错结果不确定",
                 description: res.message,
-                reference: res.idempotencyKey,
             })
             setReverseConfirm(null)
             return

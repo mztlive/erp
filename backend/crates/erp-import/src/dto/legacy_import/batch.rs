@@ -63,6 +63,8 @@ pub struct LegacyImportBatchView {
     pub batch_no: String,
     /// 来源系统。
     pub source_system_id: String,
+    /// 来源系统可读名称，由跨域展示读取器补齐。
+    pub source_system_name: Option<String>,
     /// 本批来源对象集合。
     pub source_object_set: String,
     /// 期初业务基准日。
@@ -110,6 +112,7 @@ impl From<LegacyImportBatch> for LegacyImportBatchView {
             id: batch.base.id,
             batch_no: batch.batch_no,
             source_system_id: batch.source_system_id.to_string(),
+            source_system_name: None,
             source_object_set: batch.source_object_set,
             baseline_date: batch.baseline_date,
             successful_sanitized_file_asset_id: batch
@@ -141,6 +144,8 @@ pub struct LegacyImportBatchListItem {
     pub batch_no: String,
     /// 来源系统。
     pub source_system_id: String,
+    /// 来源系统可读名称，由跨域展示读取器补齐。
+    pub source_system_name: Option<String>,
     /// 本批来源对象集合。
     pub source_object_set: String,
     /// 期初业务基准日。

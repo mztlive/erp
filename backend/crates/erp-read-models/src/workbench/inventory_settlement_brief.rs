@@ -24,7 +24,7 @@ use super::authority::inventory::{
     stock_adjustment_fact,
 };
 use super::brief::{
-    BRIEF_LINE_LIMIT, BriefLine, ObjectBriefSource, format_instant_datetime, format_quantity,
+    BRIEF_LINE_LIMIT, BriefLine, BriefSection, ObjectBriefSource, format_instant_datetime, format_quantity,
     join_list_summary, non_empty, push_section,
 };
 use super::presentation::format_yuan;
@@ -141,101 +141,7 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
         let statements = self.facts_reader().read_settlement_statements(&ids, executor).await?;
         let context = self.supplier_settlement_brief_context(&statements, executor).await?;
         for statement in statements {
-            let period = format!("{} 至 {}", statement.period_start, statement.period_end);
-            let supplier = context.supplier_names.get(&statement.supplier_id.to_string()).cloned();
-            let items =
-                context.items_by_statement.get(&statement.base.id).map(Vec::as_slice).unwrap_or_default();
-            let differences = items
-                .iter()
-                .flat_map(|item| context.differences_by_item.get(&item.base.id).into_iter().flatten())
-                .collect::<Vec<_>>();
-            let pending_count = differences.iter().filter(|difference| difference.is_pending()).count();
-            let source_evidence = context.source_evidence_by_hash.get(&statement.source_snapshot_hash);
-            let all_lines = settlement_brief_lines(items, &differences, &context.evidence_by_difference);
-            let more_count = all_lines.len().saturating_sub(BRIEF_LINE_LIMIT) as u32;
-            let mut visible_lines = all_lines;
-            visible_lines.truncate(BRIEF_LINE_LIMIT);
-            let mut fact = WorkbenchObjectFact::from_authority(settlement_fact(
-                &statement,
-                supplier.clone(),
-                differences.len(),
-                pending_count,
-            ));
-            let mut sections = Vec::new();
-            push_section(&mut sections, "供应商", supplier.as_deref(), false);
-            push_section(&mut sections, "结算期间", Some(period.as_str()), false);
-            push_section(&mut sections, "结算状态", Some(statement.status.label()), false);
-            let external_bill = external_bill_label(&statement);
-            push_section(&mut sections, "供应商账单", external_bill.as_deref(), false);
-            let source_as_of = format_instant_datetime(statement.source_as_of);
-            push_section(&mut sections, "来源数据截至", Some(&source_as_of), false);
-            push_section(
-                &mut sections,
-                "ERP 金额",
-                Some(format_yuan(&statement.erp_amount)).as_deref(),
-                true,
-            );
-            push_section(
-                &mut sections,
-                "供应商金额",
-                Some(format_yuan(&statement.supplier_amount)).as_deref(),
-                true,
-            );
-            if !statement.difference_amount.to_decimal().is_zero() {
-                push_section(
-                    &mut sections,
-                    "差异",
-                    Some(format_yuan(&statement.difference_amount)).as_deref(),
-                    true,
-                );
-            }
-            let difference_summary = settlement_difference_summary(differences.len(), pending_count);
-            push_section(&mut sections, "差异处理", Some(&difference_summary), false);
-            if let Some(source) = source_evidence {
-                push_section(
-                    &mut sections,
-                    "账单证据",
-                    non_empty(&source.external_bill_evidence_reference_id).as_deref(),
-                    false,
-                );
-                let reference_count = source
-                    .lines
-                    .iter()
-                    .flat_map(|line| line.evidence_reference_ids.iter())
-                    .collect::<HashSet<_>>()
-                    .len();
-                let evidence_summary = format!("{} 行 · {} 项引用", source.lines.len(), reference_count);
-                push_section(&mut sections, "逐行来源证据", Some(&evidence_summary), false);
-            }
-            let supplement_count = differences
-                .iter()
-                .flat_map(|difference| {
-                    context.evidence_by_difference.get(&difference.base.id).into_iter().flatten()
-                })
-                .map(|evidence| evidence.evidence_reference_ids.len())
-                .sum::<usize>();
-            if supplement_count > 0 {
-                let supplement_summary = format!("{supplement_count} 项正式引用");
-                push_section(&mut sections, "差异补证", Some(&supplement_summary), false);
-            }
-            let review_instruction = settlement_review_instruction(differences.len(), pending_count);
-            push_section(&mut sections, "复核条件", Some(&review_instruction), false);
-            fact.display.brief_source = Some(ObjectBriefSource {
-                customer: supplier.clone(),
-                amount_label: Some(format_yuan(&statement.erp_amount)),
-                extra_sections: sections,
-                list_summary: join_list_summary([
-                    supplier,
-                    Some(period),
-                    Some(format_yuan(&statement.erp_amount)),
-                    (!statement.difference_amount.to_decimal().is_zero())
-                        .then(|| format!("差异 {}", format_yuan(&statement.difference_amount))),
-                    (pending_count > 0).then(|| format!("{pending_count} 项待处理")),
-                ]),
-                lines: visible_lines,
-                more_count,
-                submitter_name: non_empty(&statement.prepared_by),
-            });
+            let fact = settlement_workbench_fact(&statement, &context);
             facts.insert((ObjectKind::SupplierSettlement, statement.base.id.clone()), fact);
         }
         Ok(())
@@ -440,6 +346,120 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
     }
 }
 
+/// 统一生成结算任务展示，保持权威事实与可读简报的职责分离。
+fn settlement_workbench_fact(
+    statement: &SupplierSettlementStatement,
+    context: &SettlementBriefContext,
+) -> WorkbenchObjectFact {
+    let period = format!("{} 至 {}", statement.period_start, statement.period_end);
+    let supplier = context.supplier_names.get(&statement.supplier_id.to_string()).cloned();
+    let items = context.items_by_statement.get(&statement.base.id).map(Vec::as_slice).unwrap_or_default();
+    let differences = items
+        .iter()
+        .flat_map(|item| context.differences_by_item.get(&item.base.id).into_iter().flatten())
+        .collect::<Vec<_>>();
+    let pending_count = differences.iter().filter(|difference| difference.is_pending()).count();
+    let source_evidence = context.source_evidence_by_hash.get(&statement.source_snapshot_hash);
+    let all_lines = settlement_brief_lines(items, &differences, &context.evidence_by_difference);
+    let more_count = all_lines.len().saturating_sub(BRIEF_LINE_LIMIT) as u32;
+    let mut visible_lines = all_lines;
+    visible_lines.truncate(BRIEF_LINE_LIMIT);
+    let mut fact = WorkbenchObjectFact::from_authority(settlement_fact(
+        statement,
+        supplier.clone(),
+        differences.len(),
+        pending_count,
+    ));
+    let sections = settlement_sections(
+        statement,
+        supplier.as_deref(),
+        &period,
+        &differences,
+        pending_count,
+        context,
+        source_evidence,
+    );
+    fact.display.brief_source = Some(ObjectBriefSource {
+        customer: supplier.clone(),
+        amount_label: Some(format_yuan(&statement.erp_amount)),
+        extra_sections: sections,
+        list_summary: join_list_summary([
+            supplier,
+            Some(period),
+            Some(format_yuan(&statement.erp_amount)),
+            (!statement.difference_amount.to_decimal().is_zero())
+                .then(|| format!("差异 {}", format_yuan(&statement.difference_amount))),
+            (pending_count > 0).then(|| format!("{pending_count} 项待处理")),
+        ]),
+        lines: visible_lines,
+        more_count,
+        submitter_name: non_empty(&statement.prepared_by),
+    });
+    fact
+}
+
+fn settlement_sections(
+    statement: &SupplierSettlementStatement,
+    supplier: Option<&str>,
+    period: &str,
+    differences: &[&SupplierSettlementDifference],
+    pending_count: usize,
+    context: &SettlementBriefContext,
+    source_evidence: Option<&SupplierSettlementSourceEvidence>,
+) -> Vec<BriefSection> {
+    let mut sections = Vec::new();
+    push_section(&mut sections, "供应商", supplier, false);
+    push_section(&mut sections, "结算期间", Some(period), false);
+    push_section(&mut sections, "结算状态", Some(statement.status.label()), false);
+    let external_bill = external_bill_label(statement);
+    push_section(&mut sections, "供应商账单", external_bill.as_deref(), false);
+    let source_as_of = format_instant_datetime(statement.source_as_of);
+    push_section(&mut sections, "来源数据截至", Some(&source_as_of), false);
+    settlement_amount_sections(&mut sections, statement);
+    let difference_summary = settlement_difference_summary(differences.len(), pending_count);
+    push_section(&mut sections, "差异处理", Some(&difference_summary), false);
+    settlement_evidence_sections(&mut sections, differences, context, source_evidence);
+    let review_instruction = settlement_review_instruction(differences.len(), pending_count);
+    push_section(&mut sections, "复核条件", Some(&review_instruction), false);
+    sections
+}
+
+fn settlement_amount_sections(sections: &mut Vec<BriefSection>, statement: &SupplierSettlementStatement) {
+    push_section(sections, "ERP 金额", Some(format_yuan(&statement.erp_amount)).as_deref(), true);
+    push_section(sections, "供应商金额", Some(format_yuan(&statement.supplier_amount)).as_deref(), true);
+    if !statement.difference_amount.to_decimal().is_zero() {
+        push_section(sections, "差异", Some(format_yuan(&statement.difference_amount)).as_deref(), true);
+    }
+}
+
+fn settlement_evidence_sections(
+    sections: &mut Vec<BriefSection>,
+    differences: &[&SupplierSettlementDifference],
+    context: &SettlementBriefContext,
+    source_evidence: Option<&SupplierSettlementSourceEvidence>,
+) {
+    if let Some(source) = source_evidence {
+        push_section(sections, "账单证据", settlement_bill_evidence_label(source).as_deref(), false);
+        let reference_count = source
+            .lines
+            .iter()
+            .flat_map(|line| line.evidence_reference_ids.iter())
+            .collect::<HashSet<_>>()
+            .len();
+        let evidence_summary = format!("{} 行 · {} 项引用", source.lines.len(), reference_count);
+        push_section(sections, "逐行来源证据", Some(&evidence_summary), false);
+    }
+    let supplement_count = differences
+        .iter()
+        .flat_map(|difference| context.evidence_by_difference.get(&difference.base.id).into_iter().flatten())
+        .map(|evidence| evidence.evidence_reference_ids.len())
+        .sum::<usize>();
+    if supplement_count > 0 {
+        let supplement_summary = format!("{supplement_count} 项正式引用");
+        push_section(sections, "差异补证", Some(&supplement_summary), false);
+    }
+}
+
 /// 使用唯一构造器投影库存调整的权威字段、简报与审批主题版本。
 fn stock_adjustment_workbench_fact(
     adjustment: &StockAdjustment,
@@ -497,6 +517,20 @@ fn external_bill_label(statement: &SupplierSettlementStatement) -> Option<String
     Some(match version {
         Some(version) => format!("{number} · 版本 {version}"),
         None => number.to_string(),
+    })
+}
+
+/// 来源证据以已冻结账单号与版本展示，不暴露原始对象引用。
+fn settlement_bill_evidence_label(source: &SupplierSettlementSourceEvidence) -> Option<String> {
+    bill_evidence_name(&source.external_bill_no, &source.external_bill_version)
+}
+
+fn bill_evidence_name(number: &str, version: &str) -> Option<String> {
+    let number = non_empty(number)?;
+    let version = non_empty(version);
+    Some(match version {
+        Some(version) => format!("供应商账单 {number} · 版本 {version}"),
+        None => format!("供应商账单 {number}"),
     })
 }
 
@@ -697,6 +731,16 @@ mod tests {
         assert_eq!(MovementDirection::Increase.label(), "增加");
         assert_eq!(format_quantity(&qty("3"), None), "×3");
         assert_eq!(sku_brief_title("SKU-1", Some("福利卡"), Some("100 元")), "福利卡 100 元 · SKU-1");
+    }
+
+    #[test]
+    fn bill_evidence_uses_business_number_and_hides_missing_number() {
+        assert_eq!(
+            super::bill_evidence_name(" BILL-1001 ", " 2 ").as_deref(),
+            Some("供应商账单 BILL-1001 · 版本 2")
+        );
+        assert_eq!(super::bill_evidence_name("BILL-1001", "").as_deref(), Some("供应商账单 BILL-1001"));
+        assert!(super::bill_evidence_name("", "2").is_none());
     }
 
     #[test]

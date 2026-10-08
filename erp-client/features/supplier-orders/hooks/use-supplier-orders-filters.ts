@@ -331,7 +331,7 @@ export function useSupplierOrdersFilters(
         if (url.supplierId) {
             chips.push({
                 key: "supplierId",
-                label: `供应商：${selectedSupplierName ?? url.supplierId}`,
+                label: `供应商：${selectedSupplierName ?? "名称待读取"}`,
             })
         }
         if (url.fulfillmentStatuses?.length) {

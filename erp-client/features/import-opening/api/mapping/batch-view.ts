@@ -10,6 +10,7 @@ import type {
     ImportExecutionAction,
 } from "@/features/import-opening/types"
 import { BATCH_STATUS_LABEL } from "@/features/import-opening/types"
+import { displayName } from "@/lib/display-name"
 import type {
     BackendBatchDetail,
     BackendBatchListItem,
@@ -91,7 +92,9 @@ export function buildBatchView(
             confirmationId: c.id,
             scope,
             result: mapConfirmResult(c.status),
-            confirmedByLabel: c.decided_by ?? undefined,
+            confirmedByLabel:
+                displayName(c.decided_by_name, c.decided_by) ||
+                (c.decided_by ? "确认人名称未提供" : undefined),
             confirmedAt:
                 c.decided_at != null ? instantToIso(c.decided_at) : undefined,
             trialVersion: String(c.trial_version),
@@ -183,7 +186,9 @@ export function buildBatchView(
         environment: env,
         sourceSystem: {
             id: batch.source_system_id,
-            name: batch.source_system_id,
+            name:
+                displayName(batch.source_system_name, batch.source_system_id) ||
+                "来源系统名称未提供",
         },
         sourceObjectSet: parseObjectSet(batch.source_object_set),
         baselineDate: batch.baseline_date,

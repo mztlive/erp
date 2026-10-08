@@ -21,8 +21,10 @@ pub struct DocumentApprovalInstanceView {
     pub current_assignee_name: Option<String>,
     /// 最近驳回原因，不受详情历史页大小限制。
     pub latest_rejection: Option<String>,
-    /// 最近驳回操作人。
+    /// 最近驳回操作人标识。
     pub latest_rejection_by: Option<String>,
+    /// 最近驳回操作人的执行时姓名快照。
+    pub latest_rejection_by_name: Option<String>,
     /// 冻结提交版本。
     pub subject_version: Option<String>,
     /// 当前实例乐观锁版本。
@@ -64,6 +66,7 @@ impl DocumentApprovalInstanceView {
             current_assignee_name: None,
             latest_rejection: None,
             latest_rejection_by: None,
+            latest_rejection_by_name: None,
             subject_version: None,
             instance_version: None,
             current_execution_id: None,

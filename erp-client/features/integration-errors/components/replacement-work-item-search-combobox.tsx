@@ -43,7 +43,9 @@ export function ReplacementWorkItemSearchCombobox({
         )
         .map((item) => ({
             value: item.workItem!.workItemId,
-            label: `${item.identity.number} · ${item.businessObject.title}`,
+            label: [item.identity.number, item.businessObject.title]
+                .filter(Boolean)
+                .join(" · "),
             keywords: `${item.identity.id} ${item.businessObject.objectId}`,
         }))
 

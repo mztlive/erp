@@ -21,6 +21,7 @@ import {
     REFUND_STATUS_TONE,
 } from "@/features/supplier-orders/types"
 import { mapWorkItemDto } from "@/features/work-items/types"
+import { displayBusinessText, displayName } from "@/lib/display-name"
 import type { BackendDetail, BackendOrder } from "./wire-types"
 
 export const PAYMENT_OCCURRED_NOTICE =
@@ -89,11 +90,6 @@ function priorityOf(status: SupplierFulfillmentStatus): number {
     }
 }
 
-function displayName(value: string | null | undefined): string | undefined {
-    const name = value?.trim()
-    return name || undefined
-}
-
 export function mapListRow(o: BackendOrder): SupplierOrderListRow {
     const fulfillment = asFulfillment(o.fulfillment_status)
     const cancel = asCancel(o.cancel_status)
@@ -123,9 +119,12 @@ export function mapListRow(o: BackendOrder): SupplierOrderListRow {
         updatedAt: lastBusinessAt,
         lastBusinessAt,
         followUpUserId: o.follow_up_user_id ?? undefined,
-        followUpUserName: displayName(o.follow_up_user_name),
+        followUpUserName: displayName(
+            o.follow_up_user_name,
+            o.follow_up_user_id,
+        ),
         handlerUserId: o.handler_user_id ?? undefined,
-        handlerUserName: displayName(o.handler_user_name),
+        handlerUserName: displayName(o.handler_user_name, o.handler_user_id),
         businessOrgUnitId: o.business_org_unit_id ?? undefined,
         itemCount: 0,
         allowedActions: ["OPEN_CENTER", "NOTE"],
@@ -179,7 +178,7 @@ export function filterSummary(
     else if (query.view === "recent_completed") parts.push("最近完成")
     else parts.push("全部")
     if (query.q?.trim()) parts.push(`搜索「${query.q.trim()}」`)
-    if (query.supplierId) parts.push(query.supplierId)
+    if (query.supplierId) parts.push("供应商已筛选")
     if (query.fulfillmentStatuses?.length) {
         parts.push(
             query.fulfillmentStatuses
@@ -225,8 +224,12 @@ export function mapDetail(d: BackendDetail): SupplierOrderDetailView {
             paymentFactKey: "",
             fulfillmentChain: "ERP_AUTOMATED",
             supplierId: o.supplier_id,
-            supplierName: d.supplier_name ?? "",
-            connectionCode: o.connection_id,
+            supplierName:
+                displayName(d.supplier_name, o.supplier_id) ??
+                "供应商名称未提供",
+            connectionCode:
+                displayBusinessText(d.connection_code, o.connection_id) ??
+                "连接名称未提供",
             connectionEnvironment: "production",
             supplyVersion: "",
             externalOrderNo: o.external_order_no ?? undefined,
@@ -245,18 +248,17 @@ export function mapDetail(d: BackendDetail): SupplierOrderDetailView {
         items: (d.items ?? []).map((it) => ({
             itemId: it.id,
             productName:
-                it.supplier_product_code_snapshot ??
-                it.supplier_sku_code_snapshot,
+                displayName(it.product_name, it.id) ?? "商品名称未提供",
             skuCode: it.supplier_sku_code_snapshot,
             quantity: String(it.quantity),
-            unit: "件",
+            unit: displayName(it.unit_name) ?? "",
             supplierProductId:
                 it.supplier_product_code_snapshot ??
                 it.supplier_sku_code_snapshot,
-            supplierProductName:
-                it.supplier_product_code_snapshot ??
-                it.supplier_sku_code_snapshot,
-            supplyVersion: it.supplier_offering_revision_id,
+            supplyVersion:
+                it.supplier_offering_revision_no == null
+                    ? ""
+                    : String(it.supplier_offering_revision_no),
             unitCostGross: String(it.unit_cost_snapshot_gross),
             unitCostNet: null,
             inputTaxRate: String(it.input_tax_rate),

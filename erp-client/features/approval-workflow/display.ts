@@ -3,6 +3,7 @@
  */
 
 import { formatDateTime } from "@/lib/datetime"
+import { displayName } from "@/lib/display-name"
 
 import type { RecoveryOption } from "./types"
 
@@ -14,10 +15,6 @@ export type ApprovalStatusTone =
     | "warning"
     | "destructive"
     | "void"
-
-/** 32 位十六进制或标准 UUID。服务端人名偶尔回落成用户 id。 */
-const OPAQUE_ID =
-    /^(?:[0-9a-f]{24,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i
 
 export const INSTANCE_STATUS_LABEL: Record<string, string> = {
     RUNNING: "审批中",
@@ -95,14 +92,11 @@ export const executionStatusTone = (
     }
 }
 
-/**
- * 人员展示名。空值或内部 ID 不上屏，由调用方回落到「—」或省略。
- */
-export const displayActorName = (value?: string | null): string | undefined => {
-    const text = value?.trim()
-    if (!text || OPAQUE_ID.test(text)) return undefined
-    return text
-}
+/** 名称仅来自展示字段；已知对象标识和不透明 ID 不作为名称。 */
+export const displayReadableName = displayName
+
+/** 人员展示名。缺失时由调用方显示占位，不回退到人员标识。 */
+export const displayActorName = displayReadableName
 
 /**
  * Unix 秒时间戳转本地时间。无效值不上屏。
@@ -129,8 +123,9 @@ export const displayRound = (roundNo?: number | null): string =>
 export const displayProcessVersion = (input: {
     name?: string | null
     version?: string | number | null
+    id?: string | null
 }): string => {
-    const name = input.name?.trim() || "审批流程"
+    const name = displayReadableName(input.name, input.id) || "审批流程"
     const version = input.version == null ? "" : String(input.version).trim()
     return version ? `${name} v${version}` : name
 }
@@ -139,11 +134,15 @@ export const displayProcessVersion = (input: {
  * 有序节点路线，如「张三 → 李四 → 王五」。
  */
 export const displayRoute = (
-    nodes: readonly { name: string; assigneeName?: string }[],
+    nodes: readonly { key?: string; name: string; assigneeName?: string }[],
 ): string =>
     nodes
-        .map((node) => node.assigneeName?.trim() || node.name)
-        .filter(Boolean)
+        .map(
+            (node) =>
+                displayActorName(node.assigneeName) ||
+                displayReadableName(node.name, node.key) ||
+                "审批节点未标注",
+        )
         .join(" → ")
 
 /**

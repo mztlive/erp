@@ -15,6 +15,7 @@ import { stripDeliveryApprovalField } from "@/features/fulfillment-operations/li
 import { stripElectronicDeliveryApprovalField } from "@/features/fulfillment-operations/lib/electronic-delivery-no-approval"
 import { stripPurchaseReceiptApprovalField } from "@/features/fulfillment-operations/lib/purchase-receipt-no-approval"
 import { stripServiceFulfillmentApprovalField } from "@/features/fulfillment-operations/lib/service-fulfillment-no-approval"
+import { displayBusinessText } from "@/lib/display-name"
 import type {
     BackendDelivery,
     BackendElectronicDelivery,
@@ -41,7 +42,9 @@ export function formalFromReceipt(
         operationId,
         factType: "PURCHASE_RECEIPT",
         factId: posted.id,
-        factNo: posted.receipt_no,
+        factNo:
+            displayBusinessText(posted.receipt_no, posted.id) ||
+            "收货单号未提供",
         formalStatus: posted.status || "POSTED",
         occurredAt: secsToIso(posted.posted_at) || draft.occurredAt || nowIso(),
         operationType: "RECEIPT",
@@ -52,7 +55,7 @@ export function formalFromReceipt(
         acceptanceNextStep:
             "入库不等于验收。合格的货已入库并按销售单留好；等发货之后，再由销售去登记客户验收。",
         inventoryImpactSummary: "单据已确认；库存影响以库存台账为准。",
-        reference: posted.receipt_no,
+        reference: displayBusinessText(posted.receipt_no, posted.id) ?? "",
         salesOrderId: "",
         salesOrderNo: "",
     }
@@ -81,7 +84,9 @@ export function formalFromDelivery(
         operationId,
         factType: "DELIVERY",
         factId: posted.id,
-        factNo: posted.delivery_no,
+        factNo:
+            displayBusinessText(posted.delivery_no, posted.id) ||
+            "发货单号未提供",
         formalStatus: posted.status || "SHIPPED",
         occurredAt: secsToIso(posted.shipped_at) || draft.shippedAt || nowIso(),
         operationType: draft.type,
@@ -96,9 +101,9 @@ export function formalFromDelivery(
         inventoryImpactSummary: isWh
             ? "发货单已确认；库存与留货影响以库存台账为准。"
             : "供应商直发不影响自有库存。",
-        reference: posted.delivery_no,
+        reference: displayBusinessText(posted.delivery_no, posted.id) ?? "",
         salesOrderId: posted.sales_order_id,
-        salesOrderNo: posted.sales_order_id,
+        salesOrderNo: "",
     }
 }
 
@@ -122,7 +127,9 @@ export function formalFromElectronic(
         operationId,
         factType: "ELECTRONIC_DELIVERY",
         factId: posted.id,
-        factNo: posted.fulfillment_no,
+        factNo:
+            displayBusinessText(posted.fulfillment_no, posted.id) ||
+            "交付单号未提供",
         formalStatus: failed ? "FAILED" : "CONFIRMED",
         occurredAt:
             secsToIso(posted.occurred_at) || draft.occurredAt || nowIso(),
@@ -135,7 +142,7 @@ export function formalFromElectronic(
         acceptanceNextStep:
             "电子交付已确认，不影响自有库存。请销售在客户验收登记。",
         inventoryImpactSummary: "不影响自有库存。",
-        reference: posted.fulfillment_no,
+        reference: displayBusinessText(posted.fulfillment_no, posted.id) ?? "",
         salesOrderId: "",
         salesOrderNo: "",
     }
@@ -161,7 +168,9 @@ export function formalFromService(
         operationId,
         factType: "SERVICE_FULFILLMENT",
         factId: posted.id,
-        factNo: posted.fulfillment_no,
+        factNo:
+            displayBusinessText(posted.fulfillment_no, posted.id) ||
+            "履约单号未提供",
         formalStatus: failed ? "FAILED" : "CONFIRMED",
         occurredAt:
             secsToIso(posted.occurred_at) || draft.startedAt || nowIso(),
@@ -173,7 +182,7 @@ export function formalFromService(
         acceptanceRequired: !failed,
         acceptanceNextStep: "服务履约已确认。请销售在客户验收登记。",
         inventoryImpactSummary: "不影响自有库存。",
-        reference: posted.fulfillment_no,
+        reference: displayBusinessText(posted.fulfillment_no, posted.id) ?? "",
         salesOrderId: "",
         salesOrderNo: "",
     }

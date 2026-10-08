@@ -24,19 +24,25 @@ pub struct SettlementReviewWorkItemView {
     pub owner_organization_id: String,
     /// 当前个人责任人。
     pub owner_user_id: Option<String>,
+    /// 当前个人责任人的可读名称；缺失关联为空。
+    pub owner_user_name: Option<String>,
     /// 当前 actor 的领域动作阻断。
     pub action_blockers: Vec<SettlementReviewActionBlockerView>,
 }
 
 /// 结算单详情视图（结算单 + 全部明细 + 全部差异 + actor-specific 复核责任）。
 #[derive(Debug, Clone, Serialize)]
-pub struct SupplierSettlementStatementDetailView {
+pub struct SupplierSettlementStatementDetailView<
+    S = SupplierSettlementStatementView,
+    I = SupplierSettlementItemView,
+    E = SettlementDifferenceEvidenceView,
+> {
     /// 结算单头。
-    pub statement: SupplierSettlementStatementView,
+    pub statement: S,
     /// 结算明细。
-    pub items: Vec<SupplierSettlementItemView>,
+    pub items: Vec<I>,
     /// 结算差异。
-    pub differences: Vec<SupplierSettlementDifferenceView>,
+    pub differences: Vec<SupplierSettlementDifferenceView<E>>,
     /// 服务端汇总统计，客户端不得自行猜测处理状态。
     pub stats: SettlementStatementStatsView,
     /// 结算对象当前处理态。
@@ -55,7 +61,7 @@ pub struct SupplierSettlementStatementDetailView {
 
 /// 供应商结算正式复核结果。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct SettlementReviewDecisionResult {
+pub struct SettlementReviewDecisionResult<S = SupplierSettlementStatementView> {
     /// 固定结果状态。
     pub result_status: SettlementReviewDecisionStatus,
     /// 面向用户的稳定说明。
@@ -63,7 +69,7 @@ pub struct SettlementReviewDecisionResult {
     /// 原请求操作 ID。
     pub operation_id: String,
     /// 决定后的结算单投影。
-    pub statement: SupplierSettlementStatementView,
+    pub statement: S,
     /// 已完成的正式任务。
     pub work_item_id: String,
     /// 固定终态。

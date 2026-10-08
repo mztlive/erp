@@ -16,6 +16,10 @@ import type {
 import { formatDateTime } from "@/lib/datetime"
 import { instantToIso } from "@/features/customer-receivables/api/mappers"
 import { scopeText } from "@/lib/ui-text"
+import {
+    businessLabelOrPlaceholder,
+    MISSING_SALES_ORDER_NO,
+} from "../lib/display-labels"
 
 function restrictedReason(limited: boolean): ReactNode {
     return limited ? (
@@ -35,7 +39,11 @@ export function createScopedReceivableColumns(): ColumnDef<ScopedReceivableAccou
             cell: ({ row }) => (
                 <div className="flex min-w-0 flex-col items-start gap-1 whitespace-normal">
                     <span className="num break-words text-sm font-medium">
-                        {row.original.sales_order_id}
+                        {businessLabelOrPlaceholder(
+                            row.original.sales_order_no,
+                            row.original.sales_order_id,
+                            MISSING_SALES_ORDER_NO,
+                        )}
                     </span>
                     <span className="text-xs text-muted-foreground">
                         子账 #{row.original.account_seq}

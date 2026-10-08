@@ -47,8 +47,10 @@ impl IntegrationCenterReadService {
         let (allowed_actions, action_blockers) =
             error_action_projection(&task, work_item.is_some(), &linked_evidence);
         let resolution_evidence_policy = (!task.is_terminal() && work_item.is_some()).then_some(policy);
+        let mut task = task.into();
+        self.error_task_names(std::slice::from_mut(&mut task)).await?;
         Ok(ErrorTaskDetailView {
-            task: task.into(),
+            task,
             resolution,
             allowed_actions,
             action_blockers,

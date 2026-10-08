@@ -53,10 +53,12 @@ export function UpgradeBindingDialog({
     const currentLabel = displayProcessVersion({
         name: definition.name,
         version: definition.version,
+        id: definition.id,
     })
     const targetLabel = displayProcessVersion({
         name: definition.publishedName ?? definition.name,
         version: definition.publishedVersion,
+        id: definition.id,
     })
     const currentRoute = displayRoute(definition.nodes)
     const targetRoute = displayRoute(

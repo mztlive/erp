@@ -13,7 +13,11 @@ import type {
     ReviewDecisionInput,
     SubmitReviewInput,
 } from "@/features/supplier-settlements/types"
-import { RESOLUTION_TO_STATUS } from "@/features/supplier-settlements/types"
+import {
+    REASON_CODE_LABEL,
+    RESOLUTION_LABEL,
+} from "@/features/supplier-settlements/types"
+import { settlementDisplayLabel } from "../lib/display-labels"
 import type {
     BackendDifferenceDecisionResult,
     BackendDraftCommandResult,
@@ -47,7 +51,14 @@ export async function createSettlementDraft(
             lockVersion: created.version,
             facts: [
                 { label: "结算单号", value: created.statement_no },
-                { label: "供应商", value: created.supplier_id },
+                {
+                    label: "供应商",
+                    value: settlementDisplayLabel(
+                        created.supplier_name,
+                        created.supplier_id,
+                        "供应商名称待补全",
+                    ),
+                },
                 {
                     label: "期间",
                     value: `${input.periodStart} ~ ${input.periodEnd}`,
@@ -122,7 +133,6 @@ export async function appendDifferenceEvidence(
         status: "succeeded",
         title: "差异证据已登记",
         message: result.message,
-        reference: result.evidence.evidence_id,
         statementId: result.statement_id,
     }
 }
@@ -152,16 +162,18 @@ export async function resolveDifference(
                 ? "差异结论已登记"
                 : "差异处理结果待确认",
         message: result.message,
-        reference: result.operation_id,
         operationId: result.operation_id,
         statementId: result.statement_id,
         lockVersion: result.statement_lock_version,
         facts: [
             {
                 label: "结论",
-                value: RESOLUTION_TO_STATUS[input.resolution],
+                value: RESOLUTION_LABEL[input.resolution],
             },
-            { label: "原因", value: input.reasonCode },
+            {
+                label: "原因",
+                value: REASON_CODE_LABEL[input.reasonCode] ?? "其他原因",
+            },
         ],
     }
 }
@@ -192,7 +204,7 @@ export async function submitSettlementReview(
                 ? "已提交复核"
                 : "提交复核结果待确认",
         message: result.message,
-        reference: result.work_item_id ?? result.operation_id,
+        reference: result.statement.statement_no,
         operationId: result.operation_id,
         statementId: result.statement.id,
         lockVersion: result.statement.version,
@@ -233,10 +245,20 @@ export async function decideSettlementReview(
                   ? "结算已驳回"
                   : "结算已确认",
         message: result.message,
-        reference: result.payable_no ?? result.operation_id,
+        reference: settlementDisplayLabel(
+            result.payable_no,
+            result.payable_account_id,
+            result.statement.statement_no,
+        ),
         operationId: result.operation_id,
         statementId: result.statement.id,
-        payableNo: result.payable_no ?? undefined,
+        payableNo: result.payable_account_id
+            ? settlementDisplayLabel(
+                  result.payable_no,
+                  result.payable_account_id,
+                  "应付编号待补全",
+              )
+            : undefined,
         payableAccountId: result.payable_account_id ?? undefined,
         costDeltaGross: result.cost_delta_gross ?? undefined,
         lockVersion: result.statement.version,

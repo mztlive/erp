@@ -5,6 +5,7 @@
 
 import { displayText } from "@/features/fulfillment-operations/lib/readable-label"
 import type { FulfillmentOperation } from "@/features/fulfillment-operations/types"
+import { displayName } from "@/lib/display-name"
 
 export type ResponsibilityStatus =
     | "blocked"
@@ -60,9 +61,15 @@ export function sourceContextFields(
     operation: FulfillmentOperation,
     salesOrderHref?: string,
 ): readonly SourceContextField[] {
-    const warehouse = displayText(operation.source.warehouseLabel)
+    const warehouse = displayText(
+        operation.source.warehouseLabel,
+        operation.source.warehouseId,
+    )
     const fields: SourceContextField[] = []
-    const salesOrderNo = displayText(operation.source.salesOrderNo)
+    const salesOrderNo = displayText(
+        operation.source.salesOrderNo,
+        operation.source.salesOrderId,
+    )
     if (salesOrderNo) {
         fields.push({
             label: "销售单",
@@ -70,11 +77,14 @@ export function sourceContextFields(
             href: salesOrderHref,
         })
     }
-    const purchaseNo = displayText(operation.source.purchaseNo)
+    const purchaseNo = displayText(
+        operation.source.purchaseNo,
+        operation.source.purchaseOrderId,
+    )
     if (purchaseNo) fields.push({ label: "采购单", value: purchaseNo })
-    const customer = displayText(operation.source.customerLabel)
+    const customer = displayName(operation.source.customerLabel)
     if (customer) fields.push({ label: "客户", value: customer })
-    const supplier = displayText(operation.source.supplierLabel)
+    const supplier = displayName(operation.source.supplierLabel)
     if (supplier) fields.push({ label: "供应商", value: supplier })
     if (
         warehouse &&

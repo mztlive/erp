@@ -201,13 +201,17 @@ async fn project_difference_rows(
             id: row.id,
             business_object_type: row.business_object_type,
             business_object_id: row.business_object_id,
+            business_object_label: None,
             difference_type: row.difference_type,
             left_fact_reference: row.left_fact_reference,
+            left_fact_label: None,
             right_fact_reference: row.right_fact_reference,
+            right_fact_label: None,
             status,
             version,
             created_at: row.created_at,
             owner_user_id: row.owner_user_id.unwrap_or_default(),
+            owner_user_name: None,
         });
     }
     Ok(items)

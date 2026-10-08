@@ -266,7 +266,6 @@ export function useAdjustmentWorkflow({
                 status: "unknown",
                 title: resultText.unknown,
                 description: result.message,
-                reference: result.idempotencyKey,
                 pendingIdempotencyKey: result.idempotencyKey,
             })
 
@@ -319,7 +318,6 @@ export function useAdjustmentWorkflow({
                 status: "unknown",
                 title: "仍在查询最终结果",
                 description: r.message,
-                reference: r.idempotencyKey,
                 pendingIdempotencyKey: r.idempotencyKey,
             })
         } else {

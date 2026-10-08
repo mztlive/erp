@@ -26,8 +26,6 @@ export function IntegrationActionResult({
                         status={formalStatus(lastResult.status)}
                         title={lastResult.title}
                         description={lastResult.description}
-                        reference={lastResult.reference}
-                        referenceLabel="本次处理编号"
                         facts={lastResult.facts}
                         actions={
                             lastResult.terminal && !autoNext ? (

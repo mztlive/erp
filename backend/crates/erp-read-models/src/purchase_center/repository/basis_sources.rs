@@ -240,8 +240,8 @@ async fn stock_groups_from_coverage(
                 .current_revision_id
                 .as_deref()
                 .and_then(|revision_id| revisions.iter().find(|revision| revision.base.id == revision_id))
-                .map(|revision| revision.name.clone())
-                .unwrap_or_else(|| warehouse.base.id.clone());
+                .map(|revision| revision.name.as_str());
+            let name = warehouse_display(name, &warehouse.warehouse_code);
             (warehouse.base.id, name)
         })
         .collect::<HashMap<_, _>>();
@@ -252,4 +252,26 @@ async fn stock_groups_from_coverage(
         &active_warehouse_ids,
         &names,
     ))
+}
+
+/// 库存依据以仓库名称展示；缺少当前修订时使用稳定业务编号。
+fn warehouse_display(name: Option<&str>, warehouse_code: &str) -> String {
+    name.map(str::trim)
+        .filter(|name| !name.is_empty())
+        .or_else(|| Some(warehouse_code.trim()).filter(|code| !code.is_empty()))
+        .unwrap_or("仓库名称不可用")
+        .to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::warehouse_display;
+
+    #[test]
+    fn warehouse_basis_prefers_name_and_falls_back_to_business_code() {
+        assert_eq!(warehouse_display(Some("  北京通州仓  "), "WH-BJ-001"), "北京通州仓");
+        assert_eq!(warehouse_display(None, "WH-BJ-001"), "WH-BJ-001");
+        assert_eq!(warehouse_display(Some("  "), "  WH-BJ-001  "), "WH-BJ-001");
+        assert_eq!(warehouse_display(None, "  "), "仓库名称不可用");
+    }
 }

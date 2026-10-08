@@ -49,11 +49,11 @@ pub struct RefreshSettlementStatementRequest {
 
 /// 草稿创建或刷新结果。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct SettlementDraftCommandResult {
+pub struct SettlementDraftCommandResult<S = SupplierSettlementStatementView> {
     pub result_status: String,
     pub message: String,
     pub request_id: String,
-    pub statement: SupplierSettlementStatementView,
+    pub statement: S,
     pub item_count: usize,
     pub difference_count: usize,
 }

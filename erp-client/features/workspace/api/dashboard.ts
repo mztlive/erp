@@ -16,6 +16,7 @@ import {
 } from "@/features/work-items/api"
 import { mapWorkItemDto, type WorkItemDto } from "@/features/work-items/types"
 import { formatCurrencyFixed } from "@/lib/fixed-decimal"
+import { displayBusinessText, displayName } from "@/lib/display-name"
 import { hasPermission } from "@/lib/permissions"
 import { WORKSPACE_ROUTES, type WorkspaceId } from "@/lib/workspace-registry"
 
@@ -168,6 +169,12 @@ export function mapWorkspaceWorkItem(
     const configuredDestination = workspaceId(task.destinationWorkspaceId)
     const destinationWorkspaceId = configuredDestination ?? "W01"
     const ownerUserLabel = task.ownerUser?.displayName || "处理人待确认"
+    const businessObjectLabel = displayBusinessText(
+        dto.business_object_label,
+        dto.business_object_id,
+        dto.root_business_object_id,
+        dto.id,
+    )
 
     return {
         workItemId: task.workItemId,
@@ -182,12 +189,12 @@ export function mapWorkspaceWorkItem(
         subjectVersion: task.subjectVersion,
         stableNumber: fulfillmentStableNumber(
             dto.work_item_type,
-            dto.business_object_label,
+            businessObjectLabel,
             workspaceTypeLabel(dto.work_item_type, dto.business_object_type),
         ),
         objectTitle: fulfillmentTitle(
             dto.work_item_type,
-            dto.business_object_label,
+            businessObjectLabel,
             workspaceTypeLabel(dto.work_item_type, dto.business_object_type),
         ),
         counterpartyName: task.counterpartyLabel,
@@ -557,8 +564,16 @@ function startedInstanceToWorkItem(
     const destinationWorkspaceId = approvalDestination(businessObjectType)
     const status = startedStatus(item.status)
     const createdAt = unixToIso(item.startedAt)
-    const currentNodeLabel = item.currentNodeName ?? item.currentNodeKey
-    const currentAssigneeLabel = item.currentAssigneeName
+    const currentNodeLabel = displayName(
+        item.currentNodeName,
+        item.currentNodeKey,
+    )
+    const currentAssigneeLabel = displayName(item.currentAssigneeName)
+    const documentLabel = displayBusinessText(
+        item.documentLabel,
+        item.documentId,
+        item.instanceId,
+    )
     const listSummary = [currentNodeLabel, currentAssigneeLabel]
         .map((part) => part?.trim())
         .filter(Boolean)
@@ -585,15 +600,15 @@ function startedInstanceToWorkItem(
         businessObjectType,
         businessObjectId: item.documentId ?? item.instanceId,
         subjectVersion: item.subjectVersion ?? "",
-        stableNumber: item.documentLabel ?? "单号待补全",
+        stableNumber: documentLabel ?? "单号待补全",
         rootBusinessObjectId: summary?.rootBusinessObjectId,
         documentSummaryResolved: item.documentSummaryResolved,
         counterpartyName: summary?.counterpartyName,
         summarySections: summary?.summarySections,
         briefLines: summary?.briefLines,
         briefMoreCount: summary?.briefMoreCount,
-        objectTitle: item.documentLabel
-            ? `${typeLabel} ${item.documentLabel}`
+        objectTitle: documentLabel
+            ? `${typeLabel} ${documentLabel}`
             : typeLabel,
         status: status.workItemStatus,
         statusLabel: status.statusLabel,
@@ -605,7 +620,7 @@ function startedInstanceToWorkItem(
         ownerRole: "approval_initiator",
         ownerRoleLabel: "审批",
         ownerOrganizationLabel: "",
-        ownerUserLabel: item.currentAssigneeName ?? "处理人待确认",
+        ownerUserLabel: currentAssigneeLabel ?? "处理人待确认",
         reasonLabel: "我发起的审批",
         listSummary: summary?.listSummary || listSummary || undefined,
         impactSummary:
@@ -628,9 +643,8 @@ function startedInstanceToWorkItem(
         approval: {
             instanceId: item.instanceId,
             currentRoundNo: item.currentRoundNo,
-            currentNodeLabel:
-                item.currentNodeName ?? item.currentNodeKey ?? "—",
-            currentAssigneeLabel: item.currentAssigneeName ?? "—",
+            currentNodeLabel: currentNodeLabel ?? "审批节点未标注",
+            currentAssigneeLabel: currentAssigneeLabel ?? "审批人待确认",
             processName: item.processName ?? "审批流程",
             processVersion: item.processVersion ?? "",
             lastRejectReason: item.latestRejectionSummary,

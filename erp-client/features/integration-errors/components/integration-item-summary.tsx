@@ -48,7 +48,9 @@ export function IntegrationItemSummary({
                     tabIndex={-1}
                     className="outline-none"
                 >
-                    {item.identity.number} · {item.businessObject.title}
+                    {[item.identity.number, item.businessObject.title]
+                        .filter(Boolean)
+                        .join(" · ")}
                 </CardTitle>
                 <CardDescription>
                     {item.identity.itemType === "ERROR_TASK"
@@ -178,8 +180,8 @@ export function IntegrationItemSummary({
                                     after: item.difference.differenceSummary,
                                     note:
                                         DIFFERENCE_TYPE_LABEL[
-                                            item.difference.differenceType
-                                        ] ?? item.difference.differenceType,
+                                            item.difference.differenceType.toUpperCase()
+                                        ] ?? "差异说明未提供",
                                 },
                             ]}
                         />

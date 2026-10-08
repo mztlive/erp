@@ -34,6 +34,7 @@ impl SupplierFulfillmentService {
     /// # 错误
     /// * `NotFound` - 连接不存在，或供给修订不能全部加载
     /// * `BusinessLogicError` - 连接未启用、不属于下单供应商、缺少下单能力，或供给不属于该供应商或连接
+    ///
     /// 仓储读取失败时返回对应错误。
     pub async fn ensure_placeable(
         &self,

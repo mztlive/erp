@@ -76,8 +76,8 @@ function filterSummary(filters: FulfillmentQueueFilters): string {
         parts.push("指定仓库")
     }
     if (filters.q) parts.push(`单号 ${filters.q}`)
-    if (filters.salesOrderId) parts.push(`销售单 ${filters.salesOrderId}`)
-    if (filters.purchaseOrderId) parts.push(`采购单 ${filters.purchaseOrderId}`)
+    if (filters.salesOrderId) parts.push("指定销售单")
+    if (filters.purchaseOrderId) parts.push("指定采购单")
     return parts.join(" · ")
 }
 

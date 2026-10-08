@@ -53,7 +53,6 @@ export function AuditSection({
                         <TableHead>结果</TableHead>
                         <TableHead>操作人</TableHead>
                         <TableHead>时间</TableHead>
-                        <TableHead>任务号尾号</TableHead>
                         <TableHead>尝试</TableHead>
                     </TableRow>
                 </TableHeader>
@@ -78,9 +77,6 @@ export function AuditSection({
                                     "passthrough",
                                 )}
                             </TableCell>
-                            <TableCell className="num text-xs">
-                                {a.idempotencyKeyTail}
-                            </TableCell>
                             <TableCell className="num">
                                 {a.attemptCount}
                             </TableCell>
@@ -89,7 +85,7 @@ export function AuditSection({
                     {detail.actions.length === 0 ? (
                         <TableRow>
                             <TableCell
-                                colSpan={6}
+                                colSpan={5}
                                 className="py-6 text-center text-sm text-muted-foreground"
                             >
                                 暂无动作记录

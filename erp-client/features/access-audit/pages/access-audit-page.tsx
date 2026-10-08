@@ -1,10 +1,6 @@
 "use client"
 
-import {
-    DownloadIcon,
-    PlusIcon,
-    TriangleAlertIcon,
-} from "lucide-react"
+import { DownloadIcon, PlusIcon, TriangleAlertIcon } from "lucide-react"
 
 import {
     BusinessFailureState,

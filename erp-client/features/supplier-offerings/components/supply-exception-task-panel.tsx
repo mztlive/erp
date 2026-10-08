@@ -52,6 +52,7 @@ function sourceLabel(
     if (!offering) return task.businessObjectLabel
     return [
         offering.supplier_name ?? offering.supplier_no,
+        offering.sku_name,
         offering.supplier_sku_code,
         offering.sku_no,
     ]

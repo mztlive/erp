@@ -5,6 +5,7 @@ import { CheckIcon, CircleAlertIcon, Clock3Icon, MinusIcon } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
     displayActorName,
+    displayReadableName,
     displayRound,
 } from "@/features/approval-workflow/display"
 import type { ApprovalRuntimeInstance } from "@/features/approval-workflow/types"
@@ -21,20 +22,27 @@ export function WorkspaceApprovalProgress({
     const blocked = instance.status === "BLOCKED"
     const running = instance.status === "RUNNING"
     const active = running || blocked
-    const assignee =
-        displayActorName(instance.currentAssigneeName) ??
-        displayActorName(instance.currentAssignee)
+    const assignee = displayActorName(
+        instance.currentAssigneeName,
+        instance.currentAssignee,
+    )
     const version =
         instance.processVersion == null
             ? ""
             : String(instance.processVersion).trim()
-    const processName = instance.processName?.trim()
-    const rejectionBy = displayActorName(instance.latestRejectionBy)
+    const processName = displayReadableName(instance.processName)
+    const rejectionBy = displayActorName(
+        instance.latestRejectionByName,
+        instance.latestRejectionBy,
+    )
     const steps = [
         { label: "发起审批", detail: "已提交", state: "done", icon: CheckIcon },
         {
             label: active
-                ? instance.currentNodeName?.trim() || "审批处理"
+                ? displayReadableName(
+                      instance.currentNodeName,
+                      instance.currentNode,
+                  ) || "审批处理"
                 : "审批处理",
             detail: active
                 ? [

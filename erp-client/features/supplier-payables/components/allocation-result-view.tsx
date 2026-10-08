@@ -54,7 +54,7 @@ export function AllocationResultView({
                           .join(" ")
                     : result.description
             }
-            reference={result.reference ?? result.operationId}
+            reference={result.documentNo ?? result.reference}
             facts={result.facts}
             actions={
                 <>
@@ -68,7 +68,7 @@ export function AllocationResultView({
                             disabled={pending}
                             onClick={() => void onResolveUnknown()}
                         >
-                            {pending ? "查询中…" : "按操作号查询最终结果"}
+                            {pending ? "查询中…" : "查询最终结果"}
                         </LoadingButton>
                     ) : null}
                     {result.status === "blocked" &&

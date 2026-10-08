@@ -97,7 +97,11 @@ export function ReceivableCounterpartySearchCombobox({
     const selectedOption =
         selected.isError || selected.isFetching ? undefined : selected.data
     const rows = React.useMemo(() => {
-        const options = list.isError || list.isFetching ? [] : (list.data?.items.filter((item) => item.partyId !== value) ?? [])
+        const options =
+            list.isError || list.isFetching
+                ? []
+                : (list.data?.items.filter((item) => item.partyId !== value) ??
+                  [])
         if (
             !selectedOption ||
             options.some((item) => item.partyId === selectedOption.partyId)
@@ -135,7 +139,11 @@ export function ReceivableCounterpartySearchCombobox({
                 id={props.id}
                 failed={list.isError || selected.isError}
                 error={list.error ?? selected.error}
-                noScope={!list.isFetching && !list.isError && list.data?.empty_reason === "no_scope"}
+                noScope={
+                    !list.isFetching &&
+                    !list.isError &&
+                    list.data?.empty_reason === "no_scope"
+                }
                 onRetry={() => {
                     void list.refetch()
                     if (value) void selected.refetch()

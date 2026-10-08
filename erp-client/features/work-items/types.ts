@@ -11,6 +11,7 @@ import {
     displayOwnerName,
     displayReasonLabel,
 } from "./display"
+import { displayBusinessText, displayName } from "@/lib/display-name"
 
 export type WorkItemStatus = "OPEN" | "COMPLETED" | "CLOSED"
 
@@ -229,10 +230,11 @@ export function mapWorkItemDto(dto: WorkItemDto): WorkItemProjection {
                   status: dto.approval_context.status,
                   currentRoundNo: dto.approval_context.current_round_no,
                   currentNodeLabel:
-                      dto.approval_context.current_node_label.trim(),
-                  currentAssigneeLabel:
-                      dto.approval_context.current_assignee_label?.trim() ||
-                      undefined,
+                      displayName(dto.approval_context.current_node_label) ||
+                      "审批节点未标注",
+                  currentAssigneeLabel: displayName(
+                      dto.approval_context.current_assignee_label,
+                  ),
                   latestRejectionReason:
                       dto.approval_context.latest_rejection_reason?.trim() ||
                       undefined,
@@ -246,15 +248,23 @@ export function mapWorkItemDto(dto: WorkItemDto): WorkItemProjection {
         assignmentSource: dto.assignment_source,
         ownerRole: dto.owner_role,
         // 服务端始终下发中文 label；缺失时回退通用称呼，不把角色码上屏（AGENTS.md §5）。
-        ownerRoleLabel: dto.owner_role_label ?? "责任人",
+        ownerRoleLabel:
+            displayName(dto.owner_role_label, dto.owner_role) || "责任人",
         ownerOrganization: {
             id: ownerOrganization.id,
-            displayName: ownerOrganization.display_name,
+            displayName:
+                displayName(
+                    ownerOrganization.display_name,
+                    ownerOrganization.id,
+                ) || "责任组织名称未提供",
         },
         ownerUser: dto.owner_user
             ? {
                   id: dto.owner_user.id,
-                  displayName: displayOwnerName(dto.owner_user.display_name),
+                  displayName: displayOwnerName(
+                      dto.owner_user.display_name,
+                      dto.owner_user.id,
+                  ),
               }
             : dto.owner_user_id
               ? { id: dto.owner_user_id, displayName: displayOwnerName() }
@@ -264,8 +274,14 @@ export function mapWorkItemDto(dto: WorkItemDto): WorkItemProjection {
         businessObjectType: dto.business_object_type,
         businessObjectId: dto.business_object_id,
         rootBusinessObjectId: dto.root_business_object_id,
-        businessObjectLabel: dto.business_object_label ?? dto.work_item_type,
-        counterpartyLabel: dto.counterparty_label ?? undefined,
+        businessObjectLabel:
+            displayBusinessText(
+                dto.business_object_label,
+                dto.business_object_id,
+                dto.root_business_object_id,
+                dto.id,
+            ) || "业务对象名称未提供",
+        counterpartyLabel: displayName(dto.counterparty_label),
         subjectVersion: dto.subject_version,
         taskVersion:
             typeof dto.task_version === "string" &&

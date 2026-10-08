@@ -52,14 +52,17 @@ export function FulfillmentDeliveryForm({
                 ) : null}
                 <div className="grid gap-4 sm:grid-cols-2">
                     {draft.type === "WAREHOUSE_SHIP" &&
-                    displayText(draft.warehouseLabel) ? (
+                    displayText(draft.warehouseLabel, draft.warehouseId) ? (
                         <div className="space-y-1.5">
                             <Label htmlFor={`${prefix}-warehouse`}>
                                 发货仓
                             </Label>
                             <Input
                                 id={`${prefix}-warehouse`}
-                                value={displayText(draft.warehouseLabel)}
+                                value={displayText(
+                                    draft.warehouseLabel,
+                                    draft.warehouseId,
+                                )}
                                 disabled
                                 readOnly
                             />

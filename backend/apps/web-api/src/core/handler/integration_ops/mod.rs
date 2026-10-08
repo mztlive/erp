@@ -144,9 +144,10 @@ pub async fn error_task_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<ErrorTaskListParams>,
 ) -> Result<ErrorTaskListView> {
-    let page = erp_processes::adapters::scoped_integration_ops_service(state.db(), state.rbac())
+    let mut page = erp_processes::adapters::scoped_integration_ops_service(state.db(), state.rbac())
         .error_task_list(&params, &actor)
         .await?;
+    state.integration_center().error_task_names(&mut page.data.items).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -257,9 +258,10 @@ pub async fn difference_list(
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<DifferenceListParams>,
 ) -> Result<DifferenceListView> {
-    let page = erp_processes::adapters::scoped_integration_ops_service(state.db(), state.rbac())
+    let mut page = erp_processes::adapters::scoped_integration_ops_service(state.db(), state.rbac())
         .difference_list(&params, &actor)
         .await?;
+    state.integration_center().difference_names(&mut page.data.items).await?;
 
     Ok(ApiResponse::ok_with_data(page))
 }

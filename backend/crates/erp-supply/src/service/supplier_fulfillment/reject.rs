@@ -22,6 +22,7 @@ impl SupplierFulfillmentService {
     ///
     /// # 错误
     /// * `NotFound` - 不存在 `PLACE` 动作
+    ///
     /// 仓储查询失败时返回对应错误。
     pub async fn latest_place_action(&self, id: &str) -> Result<SupplierOrderAction> {
         self.db

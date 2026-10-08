@@ -47,7 +47,10 @@ export function FulfillmentReceiptForm({
                     <Input
                         id="fulfillment-operations-receipt-form-warehouse"
                         value={
-                            displayText(draft.warehouseLabel) || "待核对仓库"
+                            displayText(
+                                draft.warehouseLabel,
+                                draft.warehouseId,
+                            ) || "待核对仓库"
                         }
                         disabled
                         readOnly

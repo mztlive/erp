@@ -67,6 +67,8 @@ pub struct LegacyImportConfirmationView {
     pub work_item: Option<ImportBusinessConfirmationWorkItemView>,
     /// 实际确认或退回人。
     pub decided_by: Option<String>,
+    /// 实际决定人的姓名；账号关联缺失时为空。
+    pub decided_by_name: Option<String>,
     /// 实际确认或退回时间（秒级时间戳）。
     pub decided_at: Option<i64>,
     /// 乐观锁版本。
@@ -98,6 +100,7 @@ impl From<LegacyImportConfirmation> for LegacyImportConfirmationView {
             work_item_id: confirmation.work_item_id.to_string(),
             work_item: None,
             decided_by: confirmation.decided_by,
+            decided_by_name: None,
             decided_at: confirmation.decided_at.map(|at| at.unix_secs()),
             version: confirmation.base.version,
             created_at: confirmation.base.created_at,

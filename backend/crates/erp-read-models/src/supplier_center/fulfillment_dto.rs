@@ -8,7 +8,7 @@ pub struct SupplierFulfillmentOrderDetailView {
     /// 订单头。
     pub order: SupplierFulfillmentOrderView,
     /// 履约明细。
-    pub items: Vec<SupplierFulfillmentItemView>,
+    pub items: Vec<SupplierFulfillmentItemDisplayView>,
     /// 状态历史（按发生时间升序）。
     pub status_history: Vec<SupplierOrderStatusHistoryView>,
     /// 对供应商动作（按创建时间降序）。
@@ -17,6 +17,8 @@ pub struct SupplierFulfillmentOrderDetailView {
     pub refund_facts: Vec<SupplierRefundFactView>,
     /// 权威供应商名称；基础资料缺失时为空，禁止回退显示 ID。
     pub supplier_name: Option<String>,
+    /// 权威连接业务代码；关联缺失时为空。
+    pub connection_code: Option<String>,
     /// 地址的服务端安全投影。
     pub address: SupplierOrderAddressView,
     /// 当前操作人可见的 W26 正式任务。
@@ -33,4 +35,18 @@ pub struct SupplierFulfillmentOrderDetailView {
     /// W26 领域动作及展示事实阻断。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub action_blockers: Vec<SupplierOrderActionBlockerView>,
+}
+
+/// 履约明细与下单供给修订关联的可读资料。
+#[derive(Debug, Clone, Serialize)]
+pub struct SupplierFulfillmentItemDisplayView {
+    /// 原有履约明细字段保持扁平响应。
+    #[serde(flatten)]
+    pub item: SupplierFulfillmentItemView,
+    /// 对应公司 SKU 当前名称；基础资料缺失时为空。
+    pub product_name: Option<String>,
+    /// SKU 基础计量单位名称。
+    pub unit_name: Option<String>,
+    /// 下单时冻结的供应商供给修订号。
+    pub supplier_offering_revision_no: Option<u32>,
 }

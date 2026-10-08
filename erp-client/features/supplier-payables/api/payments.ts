@@ -11,6 +11,11 @@ import {
 } from "@/features/supplier-payables/api/shared"
 import { compareDecimal } from "@/lib/fixed-decimal"
 import { BANK_RECEIPT_PENDING_REFERENCE } from "@/features/supplier-payables/lib/allocation-model"
+import {
+    businessLabelOrPlaceholder,
+    MISSING_PURCHASE_ORDER_NO,
+    MISSING_SUPPLIER_NAME,
+} from "@/features/supplier-payables/lib/display-labels"
 import type {
     FormalSubmitResult,
     PaymentMergeCandidatesView,
@@ -71,7 +76,11 @@ export async function fetchPaymentMergeCandidates(
     return {
         anchorWorkItemId: payload.anchor_work_item_id,
         supplierId: payload.supplier_id,
-        supplierName: payload.supplier_name ?? undefined,
+        supplierName: businessLabelOrPlaceholder(
+            payload.supplier_name,
+            payload.supplier_id,
+            MISSING_SUPPLIER_NAME,
+        ),
         paymentRecipient: mapMergeRecipient(payload.payment_recipient),
         openTotal: payload.open_total,
         items: payload.items.map((item) => ({
@@ -80,7 +89,11 @@ export async function fetchPaymentMergeCandidates(
             payableAccountId: item.payable_account_id,
             subjectVersion: item.subject_version,
             sourceDocumentId: item.source_document_id,
-            sourceDocumentNo: item.source_document_no ?? undefined,
+            sourceDocumentNo: businessLabelOrPlaceholder(
+                item.source_document_no,
+                item.source_document_id,
+                MISSING_PURCHASE_ORDER_NO,
+            ),
             openTotal: item.open_total,
             dueDate: item.due_date ?? undefined,
             isAnchor: item.is_anchor,
@@ -203,9 +216,8 @@ export async function submitPayment(
                 title: "付款结果待确认",
                 description: errorMessage(
                     err,
-                    "付款结果暂无法确认，请按操作号查询最终结果。",
+                    "付款结果暂无法确认，请查询最终结果。",
                 ),
-                reference: commandInput.idempotencyKey,
                 operationId: commandInput.idempotencyKey,
             }
             return result

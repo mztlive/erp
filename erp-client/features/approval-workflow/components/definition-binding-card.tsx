@@ -4,7 +4,11 @@ import type * as React from "react"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
-import { displayProcessVersion } from "../display"
+import {
+    displayActorName,
+    displayProcessVersion,
+    displayReadableName,
+} from "../display"
 import type {
     ApprovalDefinitionBinding,
     ApprovalDefinitionNode,
@@ -68,6 +72,7 @@ export function DefinitionBindingCard({
                     {displayProcessVersion({
                         name: definition.name,
                         version: definition.version,
+                        id: definition.id,
                     })}
                 </BindingHeading>
             </CardHeader>
@@ -78,22 +83,32 @@ export function DefinitionBindingCard({
                     </p>
                 ) : (
                     <ol className="space-y-2 text-sm">
-                        {nodes.map((node, index) => (
-                            <li
-                                key={node.key}
-                                className="flex items-baseline gap-2"
-                            >
-                                <span className="text-muted-foreground">
-                                    {index + 1}.
-                                </span>
-                                <span>{node.name}</span>
-                                {node.assigneeName ? (
+                        {nodes.map((node, index) => {
+                            const assigneeName = displayActorName(
+                                node.assigneeName,
+                            )
+                            return (
+                                <li
+                                    key={node.key}
+                                    className="flex items-baseline gap-2"
+                                >
                                     <span className="text-muted-foreground">
-                                        {node.assigneeName}
+                                        {index + 1}.
                                     </span>
-                                ) : null}
-                            </li>
-                        ))}
+                                    <span>
+                                        {displayReadableName(
+                                            node.name,
+                                            node.key,
+                                        ) ?? "审批节点未标注"}
+                                    </span>
+                                    {assigneeName ? (
+                                        <span className="text-muted-foreground">
+                                            {assigneeName}
+                                        </span>
+                                    ) : null}
+                                </li>
+                            )
+                        })}
                     </ol>
                 )}
             </CardContent>

@@ -11,6 +11,7 @@ use crate::ports::{
     WarehouseFactsPort,
 };
 
+mod adjustment_display;
 mod adjustment_query;
 mod balance;
 mod mapping;

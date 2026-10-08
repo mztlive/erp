@@ -20,6 +20,7 @@ import type {
     SalesOrderRevisionSnapshot,
 } from "@/features/sales-orders/types"
 import { compareDecimal } from "@/lib/fixed-decimal"
+import { displayName } from "@/lib/display-name"
 import { deriveVoucherGiftPreview } from "@/features/sales-orders/lib/sales-order-create-model"
 import type { ApiError } from "@/lib/api/errors"
 
@@ -426,11 +427,16 @@ export function mapListItemFromBackend(
     return {
         id: row.id,
         documentNumber: row.order_no,
-        customerName: extras?.customerName ?? row.customer_id,
+        customerName:
+            displayName(extras?.customerName, row.customer_id) ||
+            displayName(row.customer_name, row.customer_id) ||
+            "客户名称未提供",
         contractId: row.contract_id ?? "",
         contractNumber: extras?.contractNumber ?? "",
         contractCompanyName:
-            extras?.contractCompanyName ?? extras?.customerName ?? "",
+            displayName(extras?.contractCompanyName, row.customer_id) ||
+            displayName(extras?.customerName, row.customer_id) ||
+            "",
         contractRevisionLabel:
             extras?.contractRevisionLabel ?? extras?.contractNumber ?? "",
         nature,
@@ -445,7 +451,14 @@ export function mapListItemFromBackend(
         receivedAmount: extras?.receivedAmount ?? "0.00",
         invoicedAmount: extras?.invoicedAmount ?? "0.00",
         ownerUserId: extras?.ownerUserId ?? row.owner_user_id ?? "",
-        ownerName: extras?.ownerName ?? row.owner_user_name?.trim() ?? "",
+        ownerName:
+            displayName(
+                extras?.ownerName,
+                extras?.ownerUserId,
+                row.owner_user_id,
+            ) ||
+            displayName(row.owner_user_name, row.owner_user_id) ||
+            "负责人名称未提供",
         submittedAt: formatInstant(row.created_at),
         welfareScene: extras?.welfareScene ?? "",
         remark: extras?.remark,

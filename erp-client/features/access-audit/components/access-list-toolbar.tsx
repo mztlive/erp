@@ -47,7 +47,11 @@ type AccessListToolbarProps = {
         key: Key,
         value: AccessFilterDraft[Key],
     ) => void
-    actionOptions?: readonly { value: string; label: string; disabled?: boolean }[]
+    actionOptions?: readonly {
+        value: string
+        label: string
+        disabled?: boolean
+    }[]
     filterError?: string | null
     resetMoreFilters?: () => void
     onCancelMoreFilters?: () => void

@@ -31,7 +31,7 @@ export function SupplierAccountsResultBanner({
                 }
                 title={lastResult.title}
                 description={lastResult.description}
-                reference={lastResult.reference ?? lastResult.operationId}
+                reference={lastResult.reference}
                 facts={lastResult.facts}
                 actions={
                     lastResult.returnTo && lastResult.status === "succeeded" ? (

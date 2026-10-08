@@ -9,6 +9,7 @@ import type {
 export type ScopedReceivableAccountWire = Readonly<{
     id: string
     sales_order_id: string
+    sales_order_no?: string | null
     account_seq: number
     status: string
     created_at: number

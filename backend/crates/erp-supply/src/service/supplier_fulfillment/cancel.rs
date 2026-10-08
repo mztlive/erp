@@ -89,6 +89,7 @@ impl SupplierFulfillmentService {
     ///
     /// # 错误
     /// * `BusinessLogicError` - 明细归属非法
+    ///
     /// 仓储读取明细失败时返回对应错误。
     pub async fn ensure_action_lines(
         &self,

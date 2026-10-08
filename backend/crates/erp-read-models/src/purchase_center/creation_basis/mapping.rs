@@ -10,6 +10,7 @@ use erp_procurement::service::purchase_order::creation_basis::business_date_of;
 use erp_procurement::service::purchase_order::shared::zero_amount;
 
 use super::super::dto::{CreationBasisLineView, CreationBasisView};
+use super::super::query;
 use crate::Result;
 /// 构造一条精确创建依据视图。
 ///
@@ -35,11 +36,7 @@ pub(super) fn build_basis_view(
     sales_owner_name: Option<String>,
     work_item_id: &str,
 ) -> Result<CreationBasisView> {
-    let supplier_name = facts
-        .supplier_names
-        .get(&group.scope.supplier_id.to_string())
-        .cloned()
-        .unwrap_or_else(|| group.scope.supplier_id.to_string());
+    let supplier_name = query::supplier_display(group.scope.supplier_id.as_ref(), &facts.supplier_names);
     let mut estimated = zero_amount();
     let mut lines = Vec::with_capacity(group.lines.len());
     for line in &group.lines {

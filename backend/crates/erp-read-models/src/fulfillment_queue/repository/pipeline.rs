@@ -23,6 +23,7 @@ const SERVICE_FULFILLMENTS: &str = <Database as FulfillmentExt>::SERVICE_FULFILL
 const PURCHASE_ORDERS: &str = <Database as PurchaseOrderExt>::PURCHASE_ORDERS;
 const SALES_ORDERS: &str = <Database as SalesOrderExt>::SALES_ORDERS;
 const WAREHOUSES: &str = <Database as WarehouseExt>::WAREHOUSES;
+const WAREHOUSE_REVISIONS: &str = <Database as WarehouseExt>::WAREHOUSE_REVISIONS;
 
 /// 构造履约责任队列聚合管道。
 ///
@@ -437,7 +438,31 @@ fn warehouse_lookup() -> Document {
                         "$expr": { "$eq": ["$id", "$$warehouse_id"] },
                     }
                 },
-                { "$project": { "_id": 0, "id": 1, "warehouse_code": 1 } },
+                {
+                    "$lookup": {
+                        "from": WAREHOUSE_REVISIONS,
+                        "let": { "revision_id": "$current_revision_id", "warehouse_id": "$id" },
+                        "pipeline": [
+                            { "$match": {
+                                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+                                "$expr": { "$and": [
+                                    { "$eq": ["$id", "$$revision_id"] },
+                                    { "$eq": ["$warehouse_id", "$$warehouse_id"] },
+                                ] },
+                            } },
+                            { "$project": { "_id": 0, "name": 1 } },
+                        ],
+                        "as": "_warehouse_name",
+                    }
+                },
+                { "$project": {
+                    "_id": 0,
+                    "id": 1,
+                    "warehouse_label": { "$ifNull": [
+                        { "$arrayElemAt": ["$_warehouse_name.name", 0] },
+                        "$warehouse_code",
+                    ] },
+                } },
             ],
             "as": "_warehouses",
         }

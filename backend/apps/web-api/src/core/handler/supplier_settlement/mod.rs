@@ -11,9 +11,11 @@ use axum::extract::{Path, Query, State};
 use axum::{Extension, Json};
 use erp_processes::supply_settlement::SupplierSettlementProcess;
 use erp_read_models::supplier_center::settlement::SupplierSettlementReadService;
-use erp_read_models::supplier_center::settlement::dto::{
-    SettlementReviewDecisionResult, SupplierSettlementStatementDetailView,
+use erp_read_models::supplier_center::settlement::display_dto::{
+    SettlementEvidenceDisplayView, SettlementItemDisplayView, SettlementStatementDisplayDetail,
+    SettlementStatementDisplayList, SettlementStatementDisplayView,
 };
+use erp_read_models::supplier_center::settlement::dto::SettlementReviewDecisionResult;
 use erp_supply::dto::supplier_settlement::{
     CreateSettlementStatementRequest, HandoverCandidateView, HandoverSettlementRequest,
     HandoverSettlementView, ReassignSettlementDifferenceHandlerRequest,
@@ -23,9 +25,8 @@ use erp_supply::dto::supplier_settlement::{
     SettlementDifferenceEvidenceResult, SettlementDraftCommandResult, SettlementPageView,
     SettlementReviewCommand, SubmitSettlementReviewRequest, SubmitSettlementReviewResult,
     SupplierSettlementDifferenceListParams, SupplierSettlementDifferenceView,
-    SupplierSettlementItemListParams, SupplierSettlementItemView, SupplierSettlementSourceEvidenceQuery,
-    SupplierSettlementSourceEvidenceView, SupplierSettlementStatementListParams,
-    SupplierSettlementStatementListView, SupplierSettlementStatementView, VoidSettlementRequest,
+    SupplierSettlementItemListParams, SupplierSettlementSourceEvidenceQuery,
+    SupplierSettlementSourceEvidenceView, SupplierSettlementStatementListParams, VoidSettlementRequest,
 };
 use erp_supply::service::supplier_settlement::SupplierSettlementService;
 
@@ -56,8 +57,9 @@ pub async fn supplier_settlement_statement_list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Query(params): Query<SupplierSettlementStatementListParams>,
-) -> Result<SupplierSettlementStatementListView> {
+) -> Result<SettlementStatementDisplayList> {
     let page = settlement_process(&state).statement_list(&params, &actor).await?;
+    let page = SupplierSettlementReadService::new(state.db()).statement_list_view(page).await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -80,7 +82,7 @@ pub async fn supplier_settlement_statement_detail(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
-) -> Result<SupplierSettlementStatementDetailView> {
+) -> Result<SettlementStatementDisplayDetail> {
     settlement_process(&state).require_detail(&actor, &id).await?;
     let view = SupplierSettlementReadService::new(state.db())
         .supplier_settlement_statement_detail(&id, &actor)
@@ -109,9 +111,10 @@ pub async fn supplier_settlement_statement_create(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<CreateSettlementStatementRequest>,
-) -> Result<SettlementDraftCommandResult> {
+) -> Result<SettlementDraftCommandResult<SettlementStatementDisplayView>> {
     let view = settlement_process(&state).create_statement(req, &actor).await?;
 
+    let view = SupplierSettlementReadService::new(state.db()).statement_result(view).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -128,8 +131,9 @@ pub async fn supplier_settlement_statement_refresh(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Json(req): Json<RefreshSettlementStatementRequest>,
-) -> Result<SettlementDraftCommandResult> {
+) -> Result<SettlementDraftCommandResult<SettlementStatementDisplayView>> {
     let view = settlement_process(&state).refresh_statement(&id, req, &actor).await?;
+    let view = SupplierSettlementReadService::new(state.db()).statement_result(view).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -188,9 +192,10 @@ pub async fn supplier_settlement_statement_submit_review(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Json(req): Json<SubmitSettlementReviewRequest>,
-) -> Result<SubmitSettlementReviewResult> {
+) -> Result<SubmitSettlementReviewResult<SettlementStatementDisplayView>> {
     let view = settlement_process(&state).submit_review(&id, req, &actor).await?;
 
+    let view = SupplierSettlementReadService::new(state.db()).statement_result(view).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -216,9 +221,10 @@ pub async fn supplier_settlement_statement_review_decide(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Json(req): Json<SettlementReviewCommand>,
-) -> Result<SettlementReviewDecisionResult> {
+) -> Result<SettlementReviewDecisionResult<SettlementStatementDisplayView>> {
     let view = settlement_process(&state).decide_review(&id, req, &actor).await?;
 
+    let view = SupplierSettlementReadService::new(state.db()).statement_result(view).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -244,9 +250,10 @@ pub async fn supplier_settlement_statement_void(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Json(req): Json<VoidSettlementRequest>,
-) -> Result<SupplierSettlementStatementView> {
+) -> Result<SettlementStatementDisplayView> {
     let view = settlement_process(&state).void_statement(&id, req, &actor).await?;
 
+    let view = SupplierSettlementReadService::new(state.db()).statement_result(view).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -268,9 +275,10 @@ pub async fn supplier_settlement_statement_void(
 pub async fn supplier_settlement_item_list(
     State(state): State<AppState>,
     Query(params): Query<SupplierSettlementItemListParams>,
-) -> Result<SettlementPageView<SupplierSettlementItemView>> {
+) -> Result<SettlementPageView<SettlementItemDisplayView>> {
     let page = SupplierSettlementService::new(state.db()).supplier_settlement_item_list(&params).await?;
 
+    let page = SupplierSettlementReadService::new(state.db()).item_page_view(page).await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -292,10 +300,11 @@ pub async fn supplier_settlement_item_list(
 pub async fn supplier_settlement_difference_list(
     State(state): State<AppState>,
     Query(params): Query<SupplierSettlementDifferenceListParams>,
-) -> Result<SettlementPageView<SupplierSettlementDifferenceView>> {
+) -> Result<SettlementPageView<SupplierSettlementDifferenceView<SettlementEvidenceDisplayView>>> {
     let page =
         SupplierSettlementService::new(state.db()).supplier_settlement_difference_list(&params).await?;
 
+    let page = SupplierSettlementReadService::new(state.db()).difference_page_view(page).await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -321,9 +330,11 @@ pub async fn supplier_settlement_difference_decide(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Json(req): Json<SettlementDifferenceDecisionRequest>,
-) -> Result<SettlementDifferenceDecisionResult> {
+) -> Result<SettlementDifferenceDecisionResult<SupplierSettlementDifferenceView<SettlementEvidenceDisplayView>>>
+{
     let view = settlement_process(&state).decide_difference(&id, req, &actor).await?;
 
+    let view = SupplierSettlementReadService::new(state.db()).difference_result_view(view).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -340,8 +351,9 @@ pub async fn supplier_settlement_difference_evidence_append(
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
     Json(req): Json<SettlementDifferenceEvidenceRequest>,
-) -> Result<SettlementDifferenceEvidenceResult> {
+) -> Result<SettlementDifferenceEvidenceResult<SettlementEvidenceDisplayView>> {
     let view = settlement_process(&state).append_difference_evidence(&id, req, &actor).await?;
+    let view = SupplierSettlementReadService::new(state.db()).evidence_result_view(view).await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 

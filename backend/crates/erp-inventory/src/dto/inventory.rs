@@ -6,6 +6,8 @@
 //! page/page_size）与 D01 source_registry 保持一致，本域按域内对象名提供
 //! 各列表视图。
 
+use std::collections::HashMap;
+
 use erp_core::ids::{SkuId, WarehouseId};
 use erp_core::money::Quantity;
 use serde::{Deserialize, Serialize};
@@ -14,6 +16,7 @@ use validator::Validate;
 use crate::entity::inventory::{
     AdjustmentReasonType, MovementDirection, MovementType, ReservationStatus, StockAdjustmentState,
 };
+use crate::ports::{SkuFact, SkuRevisionFact};
 
 /// 库存余额列表允许的排序字段白名单（api-contract §4：Service 层校验，禁止任意字段透传）。
 pub const STOCK_BALANCE_SORT_FIELDS: &[&str] = &["sku_id", "created_at"];
@@ -180,10 +183,16 @@ pub struct StockAdjustmentView {
     pub status: StockAdjustmentState,
     /// 仓储经办人。
     pub prepared_by: String,
+    /// 已授权调整单引用的仓储经办人当前姓名；关联缺失时为空。
+    pub prepared_by_name: Option<String>,
     /// 审批快照申请人；未提交时为空，不得用 `created_by` 顶替。
     pub submitted_by: Option<String>,
+    /// 审批快照申请人的当前姓名；关联缺失时为空。
+    pub submitted_by_name: Option<String>,
     /// 当前开放审批人。
     pub current_assignee: Option<String>,
+    /// 当前开放审批人的当前姓名；关联缺失时为空。
+    pub current_assignee_name: Option<String>,
     /// 仓储复核人。
     pub reviewed_by: Option<String>,
     /// 成本影响确认人。
@@ -205,10 +214,67 @@ pub struct StockAdjustmentLineView {
     pub id: String,
     /// 调整 SKU。
     pub sku_id: String,
+    /// 调整 SKU 的业务编码；关联缺失时为空。
+    pub sku_code: Option<String>,
+    /// 调整 SKU 的当前修订名称；关联缺失时为空。
+    pub sku_name: Option<String>,
     /// 调整数量。
     pub quantity: Quantity,
     /// 调整方向。
     pub direction: MovementDirection,
+}
+
+impl StockAdjustmentView {
+    /// 用当前人员事实补齐可读姓名，禁止用人员标识补位。
+    ///
+    /// # 参数
+    /// * `names` - 按人员标识索引的当前姓名。
+    ///
+    /// # 返回
+    /// 无返回值；缺失、空白或与人员标识相同的姓名保持为空。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    pub(crate) fn apply_names(&mut self, names: &HashMap<String, String>) {
+        self.prepared_by_name = readable_name(names.get(&self.prepared_by), &self.prepared_by);
+        self.submitted_by_name = self.submitted_by.as_ref().and_then(|id| readable_name(names.get(id), id));
+        self.current_assignee_name =
+            self.current_assignee.as_ref().and_then(|id| readable_name(names.get(id), id));
+    }
+}
+
+impl StockAdjustmentLineView {
+    /// 按当前 SKU 身份及其准确修订补齐业务编码与名称。
+    ///
+    /// # 参数
+    /// * `skus` - 按 SKU 标识索引的身份事实。
+    /// * `revisions` - 按修订标识索引的当前展示事实。
+    ///
+    /// # 返回
+    /// 无返回值；缺失、空白或与 SKU 标识相同的编码、名称保持为空。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    pub(crate) fn apply_sku_names(
+        &mut self,
+        skus: &HashMap<String, SkuFact>,
+        revisions: &HashMap<String, SkuRevisionFact>,
+    ) {
+        let sku = skus.get(&self.sku_id);
+        self.sku_code = readable_name(sku.map(|sku| &sku.sku_no), &self.sku_id);
+        self.sku_name = sku
+            .and_then(|sku| sku.current_revision_id.as_ref())
+            .and_then(|id| revisions.get(id))
+            .and_then(|revision| readable_name(Some(&revision.name), &self.sku_id));
+    }
+}
+
+fn readable_name(value: Option<&String>, id: &str) -> Option<String> {
+    let id = id.trim();
+    if id.is_empty() {
+        return None;
+    }
+    value.map(|value| value.trim()).filter(|value| !value.is_empty() && *value != id).map(str::to_string)
 }
 
 /// 库存调整单详情视图（表头 + 明细 + 过账流水 + 只读审批）。
@@ -551,6 +617,7 @@ pub struct CancelStockAdjustmentApprovalRequest {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::str::FromStr;
 
     use erp_core::ids::{SalesOrderLineId, SkuId, WarehouseId};
@@ -558,7 +625,8 @@ mod tests {
     use validator::Validate;
 
     use super::{
-        SortDir, StockAdjustmentLineUpdateInput, StockAdjustmentView, StockBalanceView, normalize_sort,
+        SortDir, StockAdjustmentLineUpdateInput, StockAdjustmentLineView, StockAdjustmentView,
+        StockBalanceView, normalize_sort,
     };
     use crate::dto::{
         StockAdjustmentListParams, StockBalanceListParams, StockMovementListParams,
@@ -567,6 +635,161 @@ mod tests {
     use crate::entity::inventory::{
         AdjustmentReasonType, MovementDirection, MovementType, ReservationStatus, StockAdjustmentState,
     };
+    use crate::ports::{SkuFact, SkuRevisionFact};
+
+    fn adjustment_view_for_names() -> StockAdjustmentView {
+        StockAdjustmentView {
+            id: "adjustment-1".into(),
+            adjustment_no: "ADJ-1".into(),
+            warehouse_id: "warehouse-1".into(),
+            reason_type: AdjustmentReasonType::StockGain,
+            status: StockAdjustmentState::Draft,
+            prepared_by: "operator-1".into(),
+            prepared_by_name: None,
+            submitted_by: Some("applicant-1".into()),
+            submitted_by_name: None,
+            current_assignee: Some("handler-1".into()),
+            current_assignee_name: None,
+            reviewed_by: None,
+            finance_reviewed_by: None,
+            note: None,
+            occurred_at: None,
+            version: "1".into(),
+            created_at: 1,
+        }
+    }
+
+    fn adjustment_line_for_names() -> StockAdjustmentLineView {
+        StockAdjustmentLineView {
+            id: "line-1".into(),
+            sku_id: "sku-1".into(),
+            sku_code: None,
+            sku_name: None,
+            quantity: Quantity::from_str("1").unwrap(),
+            direction: MovementDirection::Increase,
+        }
+    }
+
+    #[test]
+    fn adjustment_names_resolve_each_exact_person_id_and_preserve_ids() {
+        let mut view = adjustment_view_for_names();
+        view.apply_names(&HashMap::from([
+            ("operator-1".into(), "  赵卫东  ".into()),
+            ("applicant-1".into(), "林晓燕".into()),
+            ("handler-1".into(), "王慧敏".into()),
+        ]));
+        assert_eq!(view.prepared_by_name.as_deref(), Some("赵卫东"));
+        assert_eq!(view.submitted_by_name.as_deref(), Some("林晓燕"));
+        assert_eq!(view.current_assignee_name.as_deref(), Some("王慧敏"));
+        assert_eq!(view.prepared_by, "operator-1");
+        assert_eq!(view.submitted_by.as_deref(), Some("applicant-1"));
+        assert_eq!(view.current_assignee.as_deref(), Some("handler-1"));
+    }
+
+    #[test]
+    fn adjustment_names_keep_missing_blank_and_internal_ids_empty() {
+        let mut view = adjustment_view_for_names();
+        view.apply_names(&HashMap::from([
+            ("operator-1".into(), " \t ".into()),
+            ("applicant-1".into(), " applicant-1 ".into()),
+        ]));
+        assert!(view.prepared_by_name.is_none());
+        assert!(view.submitted_by_name.is_none());
+        assert!(view.current_assignee_name.is_none());
+        view.prepared_by = " ".into();
+        view.submitted_by = None;
+        view.current_assignee = Some(String::new());
+        view.apply_names(&HashMap::from([
+            (" ".into(), "错误的经办人".into()),
+            (String::new(), "错误的审批人".into()),
+        ]));
+        assert!(view.prepared_by_name.is_none());
+        assert!(view.submitted_by_name.is_none());
+        assert!(view.current_assignee_name.is_none());
+    }
+
+    #[test]
+    fn adjustment_names_clear_stale_names_when_associations_are_missing() {
+        let mut view = adjustment_view_for_names();
+        view.prepared_by_name = Some("旧经办人".into());
+        view.submitted_by_name = Some("旧申请人".into());
+        view.current_assignee_name = Some("旧审批人".into());
+        view.apply_names(&HashMap::new());
+        assert!(view.prepared_by_name.is_none());
+        assert!(view.submitted_by_name.is_none());
+        assert!(view.current_assignee_name.is_none());
+    }
+
+    #[test]
+    fn adjustment_sku_names_use_the_referenced_current_revision() {
+        let mut line = adjustment_line_for_names();
+        let skus = HashMap::from([(
+            "sku-1".into(),
+            SkuFact {
+                id: "sku-1".into(),
+                sku_no: " SKU-001 ".into(),
+                current_revision_id: Some("revision-1".into()),
+            },
+        )]);
+        let revisions = HashMap::from([
+            (
+                "revision-1".into(),
+                SkuRevisionFact { id: "revision-1".into(), name: " 礼品卡 ".into(), specification: None },
+            ),
+            (
+                "revision-other".into(),
+                SkuRevisionFact {
+                    id: "revision-other".into(), name: "其他商品".into(), specification: None
+                },
+            ),
+        ]);
+        line.apply_sku_names(&skus, &revisions);
+        assert_eq!(line.sku_code.as_deref(), Some("SKU-001"));
+        assert_eq!(line.sku_name.as_deref(), Some("礼品卡"));
+        assert_eq!(line.sku_id, "sku-1");
+        line.apply_sku_names(&skus, &HashMap::new());
+        assert_eq!(line.sku_code.as_deref(), Some("SKU-001"));
+        assert!(line.sku_name.is_none());
+        line.apply_sku_names(&HashMap::new(), &revisions);
+        assert!(line.sku_code.is_none());
+        assert!(line.sku_name.is_none());
+    }
+
+    #[test]
+    fn adjustment_sku_names_keep_blank_and_internal_ids_empty() {
+        for value in [" \t ", " sku-1 "] {
+            let mut line = adjustment_line_for_names();
+            let skus = HashMap::from([(
+                "sku-1".into(),
+                SkuFact {
+                    id: "sku-1".into(),
+                    sku_no: value.into(),
+                    current_revision_id: Some("revision-1".into()),
+                },
+            )]);
+            let revisions = HashMap::from([(
+                "revision-1".into(),
+                SkuRevisionFact { id: "revision-1".into(), name: value.into(), specification: None },
+            )]);
+            line.apply_sku_names(&skus, &revisions);
+            assert!(line.sku_code.is_none());
+            assert!(line.sku_name.is_none());
+        }
+    }
+
+    #[test]
+    fn adjustment_sku_codes_preserve_long_numeric_and_uuid_shaped_business_codes() {
+        for code in ["123456789012345678901234", "550e8400-e29b-41d4-a716-446655440000"] {
+            let mut line = adjustment_line_for_names();
+            let skus = HashMap::from([(
+                "sku-1".into(),
+                SkuFact { id: "sku-1".into(), sku_no: code.into(), current_revision_id: None },
+            )]);
+            line.apply_sku_names(&skus, &HashMap::new());
+            assert_eq!(line.sku_code.as_deref(), Some(code));
+            assert!(line.sku_name.is_none());
+        }
+    }
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {
@@ -770,8 +993,11 @@ mod tests {
             reason_type: AdjustmentReasonType::StockGain,
             status: StockAdjustmentState::Draft,
             prepared_by: "operator-1".to_string(),
+            prepared_by_name: None,
             submitted_by: Some("applicant-1".to_string()),
+            submitted_by_name: None,
             current_assignee: Some("handler-1".to_string()),
+            current_assignee_name: None,
             reviewed_by: None,
             finance_reviewed_by: None,
             note: None,

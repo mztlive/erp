@@ -2,6 +2,7 @@
 
 use erp_supplier::repository::prelude::*;
 pub mod fulfillment_detail;
+mod fulfillment_display;
 
 pub use fulfillment_detail::SupplierFulfillmentDetailReadService;
 

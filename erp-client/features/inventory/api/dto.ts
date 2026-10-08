@@ -72,8 +72,11 @@ export type BackendStockAdjustment = {
     reason_type: string
     status: string
     prepared_by: string
+    prepared_by_name?: string | null
     submitted_by?: string | null
+    submitted_by_name?: string | null
     current_assignee?: string | null
+    current_assignee_name?: string | null
     reviewed_by?: string | null
     finance_reviewed_by?: string | null
     note?: string | null
@@ -85,6 +88,8 @@ export type BackendStockAdjustment = {
 export type BackendStockAdjustmentLine = {
     id: string
     sku_id: string
+    sku_code?: string | null
+    sku_name?: string | null
     quantity: string
     direction: string
 }

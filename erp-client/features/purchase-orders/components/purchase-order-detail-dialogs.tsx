@@ -80,7 +80,7 @@ export function PurchaseOrderDetailDialogs({
                 fromStatus={{ label: "草稿", tone: "neutral" }}
                 toStatus={{ label: "已作废", tone: "destructive" }}
                 summary={[
-                    `采购草稿 ${order.identity.draftLabel ?? order.identity.purchaseOrderId}`,
+                    order.identity.draftLabel?.trim() || "采购草稿",
                     `来源销售单 ${order.header.salesOrderNo}`,
                 ]}
                 effects={[

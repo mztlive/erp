@@ -60,6 +60,21 @@ export const EVIDENCE_KIND_LABEL: Record<ControlledEvidenceKind, string> = {
 
 /** 对账差异类型中文映射（differenceType） */
 export const DIFFERENCE_TYPE_LABEL: Record<string, string> = {
+    MALL_MISSING: "商城无对应记录",
+    ERP_MISSING: "ERP 无对应记录",
+    STATUS_DIFFERENCE: "状态不一致",
+    CONTENT_FINGERPRINT_DIFFERENCE: "内容不一致",
+    DUPLICATE_IDENTITY: "重复业务记录",
+    AMOUNT_MISMATCH: "金额不一致",
+    REFUND_MISMATCH: "退款不一致",
+    BALANCE_MISMATCH: "余额不一致",
+    SETTLEMENT_MISMATCH: "结算不一致",
+    COST_MISMATCH: "成本不一致",
+    SUPPLIER_SUPPLY_MISMATCH: "供应商供给不一致",
+    SUPPLIER_ORDER_MISMATCH: "供应商订单不一致",
+    SUPPLY_MISMATCH: "供给不一致",
+    RESULT_UNKNOWN: "集成结果未知",
+    INTEGRATION_RESULT_UNKNOWN: "集成结果未知",
     AMOUNT_AND_LINE_COUNT: "金额与行数差异",
     MISSING_ERP_FACT: "ERP 无对应记录",
     MISSING_MALL_FACT: "商城无对应记录",

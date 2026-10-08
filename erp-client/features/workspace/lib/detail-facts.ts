@@ -6,6 +6,8 @@
  * 重心，常显字段影响审批判断，其余是查证用的背书信息。作业面全部展开，只用来排序。
  */
 
+import { displayName } from "@/lib/display-name"
+
 export type DetailSection = Readonly<{
     label: string
     value: string
@@ -49,10 +51,6 @@ const KEY_LABELS = new Set([
     "银行流水",
 ])
 
-/** 32 位十六进制或标准 UUID。 */
-const OPAQUE_ID =
-    /^(?:[0-9a-f]{24,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i
-
 export type WorkspaceDetailFacts = Readonly<{
     /** 金额条，主金额在首位。 */
     amounts: readonly DetailSection[]
@@ -63,16 +61,6 @@ export type WorkspaceDetailFacts = Readonly<{
     /** 已解析成人名的提交人，用于标题副行。 */
     submitter?: string
 }>
-
-/**
- * 值是否只是一串不可读的对象 id。
- *
- * 服务端 `submitter_name` 偶尔回落成用户 id，这种值对审批人没有信息量，
- * 不应占据决策视线。
- */
-export function isOpaqueId(value: string): boolean {
-    return OPAQUE_ID.test(value.trim())
-}
 
 /**
  * 把简报键值段拆成详情的三层。
@@ -97,16 +85,21 @@ export function splitDetailSections(
     for (const section of sections ?? []) {
         const value = section.value.trim()
         if (!value) continue
-        const entry: DetailSection = { ...section, value }
+        if (section.label === "提交人") {
+            submitter = displayName(value, section.objectId)
+            continue
+        }
+        const entry: DetailSection = {
+            ...section,
+            value:
+                section.objectId?.trim() === value &&
+                section.label !== "履约凭证"
+                    ? "业务单号未提供"
+                    : value,
+        }
 
         if (COUNTERPARTY_LABELS.has(section.label) && value === shown) continue
 
-        if (section.label === "提交人") {
-            // 未解析成人名时服务端回落成用户 id。内部 ID 不上屏（见 AGENTS.md §5），
-            // 且对审批人没有信息量，整段丢弃。
-            if (!isOpaqueId(value)) submitter = value
-            continue
-        }
         if (AMOUNT_ORDER.includes(section.label)) {
             amounts.push(entry)
             continue

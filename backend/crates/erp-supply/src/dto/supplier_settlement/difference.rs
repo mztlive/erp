@@ -65,13 +65,13 @@ impl SettlementDifferenceEvidenceRequest {
 /// 差异补证命令结果。
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct SettlementDifferenceEvidenceResult {
+pub struct SettlementDifferenceEvidenceResult<E = SettlementDifferenceEvidenceView> {
     pub result_status: String,
     pub message: String,
     pub request_id: String,
     pub statement_id: String,
     pub difference_id: String,
-    pub evidence: SettlementDifferenceEvidenceView,
+    pub evidence: E,
 }
 
 /// 结算差异正式处理结论。
@@ -129,7 +129,7 @@ pub enum SettlementDifferenceDecisionStatus {
 
 /// 结算差异决定结果。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct SettlementDifferenceDecisionResult {
+pub struct SettlementDifferenceDecisionResult<D = SupplierSettlementDifferenceView> {
     /// 固定结果状态。
     pub result_status: SettlementDifferenceDecisionStatus,
     /// 面向用户的稳定说明。
@@ -141,5 +141,5 @@ pub struct SettlementDifferenceDecisionResult {
     /// 差异决定后推进的结算单版本。
     pub statement_lock_version: u64,
     /// 正式差异投影。
-    pub difference: SupplierSettlementDifferenceView,
+    pub difference: D,
 }

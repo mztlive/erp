@@ -117,7 +117,7 @@ fn item_projection() -> Document {
         "purchase_order_id": "$operation.purchase_order_id",
         "purchase_order_no": "$_purchase_order.purchase_no",
         "warehouse_id": "$operation.warehouse_id",
-        "warehouse_label": "$_warehouse.warehouse_code",
+        "warehouse_label": "$_warehouse.warehouse_label",
         "sales_order_line_id": "$operation.sales_order_line_id",
         "purchase_line_sales_allocation_id": "$operation.purchase_line_sales_allocation_id",
         "quantity": "$operation.quantity",

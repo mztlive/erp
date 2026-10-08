@@ -32,11 +32,12 @@ pub(in crate::finance::funds_scope) struct AllocationSnapshot {
     summary: Vec<InvoiceShare>,
 }
 
-/// 当前页原分配实体和已登记票号，不装载其它分配。
+/// 当前页原分配实体、已登记票号与已授权来源单号，不装载其它分配。
 #[derive(Debug, Deserialize)]
 pub(in crate::finance::funds_scope) struct AllocationPageRow {
     pub item: PurchaseInvoiceAllocation,
     pub invoice_no: Option<String>,
+    pub source_document_no: Option<String>,
 }
 
 /// 最终授权口径的计数，空匹配保持零。
@@ -243,9 +244,10 @@ fn invoice_header_stages() -> Vec<Document> {
     ]
 }
 
-/// 页面只携带当前分配实体与票号，保留原解码校验。
+/// 页面只携带当前分配实体、票号与已授权来源单号，保留原解码校验。
 fn page_projection() -> Document {
-    doc! { "_id": 0, "invoice_no": { "$ifNull": ["$_invoice.invoice_no", null] }, "item": {
+    doc! { "_id": 0, "invoice_no": { "$ifNull": ["$_invoice.invoice_no", null] },
+    "source_document_no": { "$ifNull": ["$_source.document_no", null] }, "item": {
         "id": "$id", "version": "$version", "created_at": "$created_at", "updated_at": "$updated_at",
         "deleted_at": "$deleted_at", "invoice_id": "$invoice_id", "payable_account_id": "$payable_account_id",
         "allocation_seq": "$allocation_seq", "allocation_action": "$allocation_action",

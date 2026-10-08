@@ -18,6 +18,7 @@ import {
 import { mapSalesOrderApproval } from "@/features/sales-orders/lib/sales-order-approval"
 import { mapVoucherSalesOrderApproval } from "@/features/sales-orders/lib/voucher-sales-order-approval"
 import { multiplyFixed } from "@/lib/fixed-decimal"
+import { displayName } from "@/lib/display-name"
 import {
     formatEpochDate,
     mapListItemFromBackend,
@@ -196,9 +197,9 @@ export function mapDetailToListItem(
         },
         {
             customerName:
-                commercial.customerName ||
-                extras?.customerName ||
-                detail.customer_id,
+                displayName(commercial.customerName, detail.customer_id) ||
+                displayName(extras?.customerName, detail.customer_id) ||
+                "客户名称未提供",
             contractNumber:
                 commercial.contractNo || extras?.contractNumber || "",
             contractRevisionLabel:
@@ -215,7 +216,9 @@ export function mapDetailToListItem(
             invoicedAmount: detail.invoiced_total,
             lineItems: mapWorkingCopyLines(commercial.lines),
             ownerUserId: detail.owner_user_id || "",
-            ownerName: detail.owner_user_name || "未指定",
+            ownerName:
+                displayName(detail.owner_user_name, detail.owner_user_id) ||
+                "负责人名称未提供",
             customerContact: extras?.customerContact,
             paymentTerms: commercial.paymentTerms,
             taxRatePercent: commercial.taxRatePercent,
@@ -230,7 +233,10 @@ export function mapDetailToListItem(
                     : mapSalesOrderApproval(detail.approval),
             activeChangeOrder: extras?.activeChangeOrder,
             settlementEntity:
-                commercial.settlementPartyName || detail.settlement_party_id,
+                displayName(
+                    commercial.settlementPartyName,
+                    detail.settlement_party_id,
+                ) || "结算主体名称未提供",
             closeEligibility: detail.close_eligibility,
             startSalesChange: {
                 allowed: detail.can_start_sales_change_order,

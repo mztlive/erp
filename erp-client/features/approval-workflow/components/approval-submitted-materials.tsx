@@ -7,10 +7,21 @@ import { LoadingButton } from "@/components/ui/loading-button"
 import { Spinner } from "@/components/ui/spinner"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { getErrorMessage } from "@/lib/api"
+import { displayBusinessText } from "@/lib/display-name"
 import {
     useApprovalMaterials,
     useDownloadApprovalMaterial,
 } from "../hooks/use-approval-materials"
+import { displayActorName, displayReadableName } from "../display"
+
+const sectionValue = (section: {
+    value: string
+    object_id: string | null
+    numeric: boolean
+}) =>
+    !section.numeric && section.object_id?.trim() === section.value.trim()
+        ? "未记录名称"
+        : section.value
 
 const READABLE_MATERIAL_TYPES = new Set([
     "image/jpeg",
@@ -54,6 +65,13 @@ export function ApprovalSubmittedMaterials({
         subject_version: version,
     } = query.data
     const source = display.source
+    const submitterName = displayActorName(
+        source.submitter_name,
+        salesOrder?.submitted_by,
+    )
+    const counterpartyName =
+        displayReadableName(display.counterparty_label) ||
+        displayReadableName(source.customer)
     return (
         <article className="space-y-6 rounded-lg bg-card p-6 shadow-lg sm:p-10">
             <header className="space-y-2 border-b pb-5 pr-8">
@@ -64,12 +82,9 @@ export function ApprovalSubmittedMaterials({
                     提交版本 {version} ·
                     以下内容保留自此次提交，审批完成后单据的变化不在此处更新。
                 </p>
-                {!salesOrder &&
-                    (display.counterparty_label || source.customer) && (
-                        <p className="font-medium">
-                            {display.counterparty_label || source.customer}
-                        </p>
-                    )}
+                {!salesOrder && counterpartyName && (
+                    <p className="font-medium">{counterpartyName}</p>
+                )}
                 {!salesOrder && source.list_summary && (
                     <p className="text-sm">{source.list_summary}</p>
                 )}
@@ -77,8 +92,13 @@ export function ApprovalSubmittedMaterials({
             {salesOrder ? (
                 <ApprovalSalesOrderPaper
                     submission={salesOrder}
-                    documentNo={query.data.document_no}
-                    submitterName={source.submitter_name}
+                    documentNo={
+                        displayBusinessText(
+                            query.data.document_no,
+                            query.data.document_id,
+                        ) || "未记录单据编号"
+                    }
+                    submitterName={submitterName ?? null}
                 />
             ) : (
                 <>
@@ -102,7 +122,7 @@ export function ApprovalSubmittedMaterials({
                                         申请人
                                     </dt>
                                     <dd className="mt-1">
-                                        {source.submitter_name}
+                                        {submitterName || "未记录姓名"}
                                     </dd>
                                 </div>
                             )}
@@ -114,7 +134,7 @@ export function ApprovalSubmittedMaterials({
                                     <dd
                                         className={`mt-1 break-words ${section.numeric ? "num" : ""}`}
                                     >
-                                        {section.value}
+                                        {sectionValue(section)}
                                     </dd>
                                 </div>
                             ))}
@@ -129,7 +149,10 @@ export function ApprovalSubmittedMaterials({
                                         key={`${line.title}:${index}`}
                                         className="flex flex-wrap justify-between gap-3 py-3"
                                     >
-                                        <span>{line.title}</span>
+                                        <span>
+                                            {displayReadableName(line.title) ||
+                                                "未记录商品名称"}
+                                        </span>
                                         <span className="text-muted-foreground">
                                             {[line.quantity, line.due_label]
                                                 .filter(Boolean)
@@ -171,15 +194,22 @@ export function ApprovalSubmittedMaterials({
                         >
                             <div className="flex flex-wrap items-center justify-between gap-2">
                                 <p className="font-medium">
-                                    {sales.document_no} · 销售版本{" "}
-                                    {sales.revision_no}
+                                    {displayBusinessText(
+                                        sales.document_no,
+                                        sales.document_id,
+                                    ) || "未记录销售单号"}{" "}
+                                    · 销售版本 {sales.revision_no}
                                 </p>
                                 <p className="num font-semibold">
                                     {sales.source.amount_label}
                                 </p>
                             </div>
                             {sales.source.customer && (
-                                <p>{sales.source.customer}</p>
+                                <p>
+                                    {displayReadableName(
+                                        sales.source.customer,
+                                    ) || "未记录客户名称"}
+                                </p>
                             )}
                             <dl className="grid gap-3 sm:grid-cols-2">
                                 {sales.source.extra_sections.map((section) => (
@@ -188,7 +218,7 @@ export function ApprovalSubmittedMaterials({
                                             {section.label}
                                         </dt>
                                         <dd className="mt-1 break-words">
-                                            {section.value}
+                                            {sectionValue(section)}
                                         </dd>
                                     </div>
                                 ))}
@@ -199,7 +229,10 @@ export function ApprovalSubmittedMaterials({
                                         key={`${line.title}:${index}`}
                                         className="flex flex-wrap justify-between gap-2 py-2"
                                     >
-                                        <span>{line.title}</span>
+                                        <span>
+                                            {displayReadableName(line.title) ||
+                                                "未记录商品名称"}
+                                        </span>
                                         <span className="num text-muted-foreground">
                                             {line.quantity}
                                         </span>

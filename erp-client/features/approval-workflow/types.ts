@@ -183,6 +183,7 @@ export type ApprovalRuntimeInstanceDto = Readonly<{
     current_assignee_name?: string | null
     latest_rejection?: string | null
     latest_rejection_by?: string | null
+    latest_rejection_by_name?: string | null
     subject_version?: string | number | null
     instance_version?: string | number | null
     current_execution_id?: string | null
@@ -375,6 +376,7 @@ export type ApprovalRuntimeInstance = Readonly<{
     currentAssigneeName?: string
     latestRejection?: string
     latestRejectionBy?: string
+    latestRejectionByName?: string
     subjectVersion?: string
     instanceVersion?: string
     currentExecutionId?: string
@@ -537,14 +539,13 @@ export const mapRuntimeInstanceDto = (
     id: dto.id,
     status: dto.status,
     currentRoundNo: dto.current_round_no,
-    currentNode: optionalText(dto.current_node ?? dto.current_node_name),
-    currentNodeName: optionalText(dto.current_node_name ?? dto.current_node),
+    currentNode: optionalText(dto.current_node),
+    currentNodeName: optionalText(dto.current_node_name),
     currentAssignee: optionalText(dto.current_assignee),
-    currentAssigneeName: optionalText(
-        dto.current_assignee_name ?? dto.current_assignee,
-    ),
+    currentAssigneeName: optionalText(dto.current_assignee_name),
     latestRejection: optionalText(dto.latest_rejection),
     latestRejectionBy: optionalText(dto.latest_rejection_by),
+    latestRejectionByName: optionalText(dto.latest_rejection_by_name),
     subjectVersion: optionalVersion(dto.subject_version),
     instanceVersion: optionalVersion(dto.instance_version),
     currentExecutionId: optionalText(dto.current_execution_id),
@@ -571,7 +572,7 @@ export const mapHistoryItemDto = (
     roundNo: dto.round_no,
     executionNo: dto.execution_no ?? 0,
     nodeKey: dto.node_key,
-    nodeName: optionalText(dto.node_name) ?? dto.node_key,
+    nodeName: optionalText(dto.node_name) ?? "审批节点未标注",
     result: dto.result,
     assigneeName: optionalText(dto.assignee_name),
     decidedBy: optionalText(dto.decided_by),

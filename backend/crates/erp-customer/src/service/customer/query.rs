@@ -26,6 +26,7 @@ impl CustomerService {
     /// * `ValidationError` - 分页或筛选非法
     /// * `ConflictError` - 跨页缺版本或范围已变化
     /// * `Forbidden` - 没有 list 动作
+    ///
     /// 快照读取失败时返回对应错误。
     ///
     /// # 关键业务约束
@@ -58,6 +59,7 @@ impl CustomerService {
     /// # 错误
     /// * `NotFound` - 客户不存在或不在读取范围内
     /// * `ConflictError` - 查询过程中范围或客户版本变化
+    ///
     /// 动作未授权或详情读取失败时返回对应错误。
     ///
     /// # 关键业务约束

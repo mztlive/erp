@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog"
 
 import { approvalConflictMessage, isApprovalConflict } from "../api"
+import { displayReadableName } from "../display"
 import { documentIsEditableDraft } from "../api/document-cancel"
 import { createApprovalIdempotencyKey } from "../idempotency"
 import { useCancelApprovalMutation, useCancelBlockedMutation } from "../queries"
@@ -211,7 +212,10 @@ export function CancelApprovalDialog({
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                     <DialogDescription>
-                        当前节点：{currentNodeName ?? "—"}。撤回后单据将回到
+                        当前节点：
+                        {displayReadableName(currentNodeName) ??
+                            "审批节点未标注"}
+                        。撤回后单据将回到
                         {afterStatusLabel}。
                         {reviseRejected
                             ? "原单编号与审批记录保留，修改后需重新提交审批。"

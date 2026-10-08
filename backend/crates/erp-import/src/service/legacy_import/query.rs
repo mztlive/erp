@@ -184,6 +184,7 @@ impl From<LegacyImportBatchRow> for LegacyImportBatchListItem {
             id: row.id,
             batch_no: row.batch_no,
             source_system_id: row.source_system_id.to_string(),
+            source_system_name: None,
             source_object_set: row.source_object_set,
             baseline_date: row.baseline_date,
             import_rule_version: row.import_rule_version,

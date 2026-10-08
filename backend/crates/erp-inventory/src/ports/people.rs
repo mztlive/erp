@@ -19,6 +19,23 @@ pub struct AdjustmentPeopleFact {
 /// 库存调整人员事实端口；筛选只收窄仓库授权结果。
 #[async_trait]
 pub trait AdjustmentPeopleFactsPort: Send + Sync {
+    /// 按已授权调整单引用的人员标识批量读取当前姓名。
+    ///
+    /// # 参数
+    /// * `ids` - 当前已授权页或详情引用的人员标识。
+    /// * `executor` - 调用方执行器。
+    ///
+    /// # 返回
+    /// 返回以人员标识为键的姓名映射；缺失关联不返回对应键。
+    ///
+    /// # 错误
+    /// 端口未接线或读取失败。
+    async fn names_by_ids(
+        &self,
+        ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, String>>;
+
     /// 按调整单主键批量读取最新快照申请人与当前开放审批人。
     ///
     /// # 参数
@@ -77,6 +94,14 @@ pub struct FailClosedAdjustmentPeopleFactsPort;
 
 #[async_trait]
 impl AdjustmentPeopleFactsPort for FailClosedAdjustmentPeopleFactsPort {
+    async fn names_by_ids(
+        &self,
+        _ids: &[String],
+        _executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, String>> {
+        Err(Error::Internal("库存调整人员事实端口未接线".to_string()))
+    }
+
     async fn people_by_adjustment_ids(
         &self,
         _ids: &[String],

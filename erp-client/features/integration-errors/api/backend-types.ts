@@ -12,6 +12,10 @@ import type {
 
 export type BackendErrorTask = {
     id: string
+    display_number?: string | null
+    business_object_label?: string | null
+    owner_user_name?: string | null
+    message_label?: string | null
     message_id?: string | null
     business_object_id?: string | null
     error_class: string
@@ -35,6 +39,11 @@ export type BackendErrorTask = {
 
 export type BackendDifference = {
     id: string
+    display_number?: string | null
+    business_object_label?: string | null
+    owner_user_name?: string | null
+    left_fact_label?: string | null
+    right_fact_label?: string | null
     business_object_type: string
     business_object_id: string
     difference_type: string
@@ -51,6 +60,8 @@ export type BackendDifference = {
         resulting_status: string
         evidence_reference?: string | null
         handled_by: string
+        handled_by_name?: string | null
+        evidence_label?: string | null
         handled_at: number
     }>
     allowed_actions?: string[] | null

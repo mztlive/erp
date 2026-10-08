@@ -37,6 +37,10 @@ export function FulfillmentElectronicForm({
     onChange: (d: FulfillmentDraft) => void
     disabled?: boolean
 }) {
+    const salesOrderNo = displayText(
+        operation.source.salesOrderNo,
+        operation.source.salesOrderId,
+    )
     return (
         <section className="space-y-3" aria-label="电子交付表单">
             <h3 className="text-sm font-semibold">电子交付</h3>
@@ -125,10 +129,9 @@ export function FulfillmentElectronicForm({
                         <p className="text-sm font-medium">
                             {lineItemTitle(src?.itemName, i)}
                         </p>
-                        {displayText(operation.source.salesOrderNo) ? (
+                        {salesOrderNo ? (
                             <p className="text-xs text-muted-foreground">
-                                对应销售单{" "}
-                                {displayText(operation.source.salesOrderNo)}
+                                对应销售单 {salesOrderNo}
                             </p>
                         ) : null}
                         <div className="space-y-1.5">

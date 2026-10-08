@@ -119,6 +119,7 @@ impl CustomerService {
     /// * `BusinessLogicError` - 创建人账号不能登录
     /// * `ConflictError` - 客户编号重复或该主体已有客户角色（唯一索引透出）
     /// * `ValidationError` - 请求体校验失败
+    ///
     /// 编号、窗口或归属字段非法时返回领域错误；范围校验、审计或事务写入失败时返回对应错误。
     pub async fn create_customer(
         &self,
@@ -226,6 +227,7 @@ impl CustomerService {
     /// # 错误
     /// * `NotFound` - 客户角色不存在
     /// * `ConflictError` - 期望版本与当前版本不一致
+    ///
     /// 请求校验或状态迁移非法时返回校验或领域错误；范围校验、仓储更新或审计失败时返回对应错误。
     pub async fn update_customer(
         &self,
@@ -277,6 +279,7 @@ impl CustomerService {
     ///
     /// # 错误
     /// * `NotFound` - 客户角色不存在
+    ///
     /// 查询失败时返回仓储错误。
     pub async fn load_customer(&self, id: &str) -> Result<CustomerAccount> {
         self.db

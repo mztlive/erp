@@ -377,6 +377,12 @@ fn allocation_page_row(row: &AllocationPageRow) -> ScopedPurchaseInvoiceAllocati
         invoice_id: item.invoice_id.to_string(),
         invoice_no: row.invoice_no.clone(),
         payable_account_id: item.payable_account_id.to_string(),
+        source_document_no: row
+            .source_document_no
+            .as_deref()
+            .map(str::trim)
+            .filter(|number| !number.is_empty())
+            .map(str::to_owned),
         created_at: item.base.created_at,
         visible_allocated_amount: signed,
         allocated_gross_amount: Some(signed),
@@ -392,10 +398,8 @@ mod tests {
 
     use super::*;
 
-    /// 实际页面映射保留冲正方向和缺失票号，来源已授权份额完整可读。
-    #[test]
-    fn allocation_page_preserves_reverse_direction_and_missing_invoice_number() {
-        let row = AllocationPageRow {
+    fn allocation_page() -> AllocationPageRow {
+        AllocationPageRow {
             item: PurchaseInvoiceAllocation {
                 base: BaseModel::fake(),
                 invoice_id: InvoiceId::new("invoice"),
@@ -408,12 +412,34 @@ mod tests {
                 reverses_allocation_id: None,
             },
             invoice_no: None,
-        };
+            source_document_no: Some(" PO-20261009-001 ".into()),
+        }
+    }
+
+    /// 实际页面映射保留冲正方向、缺失票号与真实来源单号。
+    #[test]
+    fn allocation_page_preserves_reverse_direction_and_missing_invoice_number() {
+        let row = allocation_page();
         let item = allocation_page_row(&row);
         assert_eq!(item.visible_allocated_amount, "-30".parse().unwrap());
         assert_eq!(item.allocated_gross_amount, Some("-30".parse().unwrap()));
         assert_eq!(item.invoice_no, None);
         assert!(!item.permission_limited);
         assert_eq!(item.payable_account_id, "account");
+        assert_eq!(item.source_document_no.as_deref(), Some("PO-20261009-001"));
+    }
+
+    /// 来源单号缺失或全空白时保持空名称，不把应付子账内部主键作为名称返回。
+    #[test]
+    fn allocation_page_omits_missing_source_number() {
+        for source_document_no in [None, Some(" \t\n ".into())] {
+            let mut row = allocation_page();
+            row.source_document_no = source_document_no;
+            let item = allocation_page_row(&row);
+            assert_eq!(item.source_document_no, None);
+            assert_eq!(item.payable_account_id, "account");
+            let json = serde_json::to_value(&item).unwrap();
+            assert!(json.get("source_document_no").is_none());
+        }
     }
 }

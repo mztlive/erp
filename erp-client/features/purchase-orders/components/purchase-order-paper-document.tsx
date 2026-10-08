@@ -27,7 +27,9 @@ export function PurchaseOrderPaperDocument({
     const { identity, header, currentContent, progress } = order
     const costMasked = currentContent.costMasked
     const documentNumber =
-        identity.purchaseNo ?? identity.draftLabel ?? identity.purchaseOrderId
+        identity.purchaseNo?.trim() ||
+        identity.draftLabel?.trim() ||
+        "采购单号未提供"
 
     return (
         <PaperDocument<PurchaseOrderPaperLine>

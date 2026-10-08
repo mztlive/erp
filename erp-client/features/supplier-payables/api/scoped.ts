@@ -9,6 +9,7 @@ import type {
 export type ScopedPayableAccountWire = Readonly<{
     id: string
     source_document_id: string
+    source_document_no?: string | null
     source_type: string
     supplier_id: string
     status: string
@@ -52,6 +53,8 @@ export type ScopedPurchaseInvoiceAllocationWire = Readonly<{
     invoice_id: string
     invoice_no: string | null
     payable_account_id: string
+    payable_no?: string | null
+    source_document_no?: string | null
     created_at: number
     visible_allocated_amount: string
     allocated_gross_amount: string | null

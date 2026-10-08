@@ -96,15 +96,15 @@ export async function fetchSettlementList(
     const rows = statements.map(toListRow)
     const total = pageRes.total ?? rows.length
     const suppliersMap = new Map<string, string>()
-    for (const s of statements) suppliersMap.set(s.supplier_id, s.supplier_id)
+    for (const row of rows) suppliersMap.set(row.supplierId, row.supplierName)
 
     const filterParts = [
         input.view !== "pending" ? `视图=${VIEW_LABEL[input.view]}` : null,
-        input.supplierId ? `供应商=${input.supplierId}` : null,
-        input.ownerUserIds ? `对账负责人=${input.ownerUserIds}` : null,
-        input.operatorUserIds ? `差异处理人=${input.operatorUserIds}` : null,
-        input.handlerUserIds ? `当前复核人=${input.handlerUserIds}` : null,
-        input.orgUnitIds ? `业务组织=${input.orgUnitIds}` : null,
+        input.supplierId ? "已限定供应商" : null,
+        input.ownerUserIds ? "已限定对账负责人" : null,
+        input.operatorUserIds ? "已限定差异处理人" : null,
+        input.handlerUserIds ? "已限定当前复核人" : null,
+        input.orgUnitIds ? "已限定业务组织" : null,
         input.periodFrom || input.periodTo
             ? `期间=${input.periodFrom ?? "…"} ~ ${input.periodTo ?? "…"}`
             : null,

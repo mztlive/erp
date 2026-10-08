@@ -47,7 +47,9 @@ impl InventoryService {
         let (page, authorization, people) = self.search_stock_adjustments(&query, actor).await?;
         let meta = authorization.adjustment_list_meta();
         ensure_scope_version(query.paging.page, query.scope_version.as_deref(), meta.scope_version())?;
-        let items = page.items.into_iter().map(|row| adjustment_row_view(row, &people)).collect();
+        let mut items =
+            page.items.into_iter().map(|row| adjustment_row_view(row, &people)).collect::<Vec<_>>();
+        self.enrich_adjustment_people_names(&mut items).await?;
         Ok(InventoryListPage::from_page(
             PageView { items, total: page.total, page: query.paging.page, page_size: query.paging.page_size },
             meta,
@@ -264,8 +266,11 @@ fn adjustment_row_view(
         reason_type: row.reason_type,
         status: row.status,
         prepared_by: row.prepared_by,
+        prepared_by_name: None,
         submitted_by: fact.and_then(|fact| fact.submitted_by.clone()),
+        submitted_by_name: None,
         current_assignee: fact.and_then(|fact| fact.current_assignee.clone()),
+        current_assignee_name: None,
         reviewed_by: row.reviewed_by,
         finance_reviewed_by: row.finance_reviewed_by,
         note: row.note,
@@ -285,8 +290,11 @@ impl From<StockAdjustment> for StockAdjustmentView {
             reason_type: adjustment.reason_type,
             status: adjustment.status,
             prepared_by: adjustment.prepared_by,
+            prepared_by_name: None,
             submitted_by: None,
+            submitted_by_name: None,
             current_assignee: None,
+            current_assignee_name: None,
             reviewed_by: adjustment.reviewed_by,
             finance_reviewed_by: adjustment.finance_reviewed_by,
             note: adjustment.note,
@@ -320,6 +328,8 @@ impl From<StockAdjustmentLine> for StockAdjustmentLineView {
         Self {
             id: line.base.id,
             sku_id: line.sku_id.to_string(),
+            sku_code: None,
+            sku_name: None,
             quantity: line.quantity,
             direction: line.direction,
         }
@@ -339,8 +349,11 @@ mod people_projection_tests {
             reason_type: crate::entity::inventory::AdjustmentReasonType::StockGain,
             status: crate::entity::inventory::StockAdjustmentState::Draft,
             prepared_by: "operator-1".into(),
+            prepared_by_name: None,
             submitted_by: None,
+            submitted_by_name: None,
             current_assignee: None,
+            current_assignee_name: None,
             reviewed_by: None,
             finance_reviewed_by: None,
             note: None,

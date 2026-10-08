@@ -17,6 +17,7 @@ import {
     displayActorName,
     displayInstanceStatus,
     displayProcessVersion,
+    displayReadableName,
     displayRound,
     instanceStatusTone,
     isBlockedStatus,
@@ -91,12 +92,18 @@ export function RuntimeSummary({
         name: instance.processName,
         version: instance.processVersion,
     })
-    const currentNode = instance.currentNodeName ?? instance.currentNode ?? "—"
+    const currentNode =
+        displayReadableName(instance.currentNodeName, instance.currentNode) ??
+        "审批节点未标注"
     const currentAssignee =
-        displayActorName(instance.currentAssigneeName) ??
-        displayActorName(instance.currentAssignee) ??
-        "—"
-    const rejectionBy = displayActorName(instance.latestRejectionBy)
+        displayActorName(
+            instance.currentAssigneeName,
+            instance.currentAssignee,
+        ) ?? "审批人待确认"
+    const rejectionBy = displayActorName(
+        instance.latestRejectionByName,
+        instance.latestRejectionBy,
+    )
 
     return (
         <Card

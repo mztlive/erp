@@ -170,12 +170,18 @@ pub struct DifferenceView {
     pub business_object_type: String,
     /// 差异对象 ID。
     pub business_object_id: String,
+    /// 类型明确的关联对象业务编号或名称。
+    pub business_object_label: Option<String>,
     /// 差异分类。
     pub difference_type: String,
     /// 左侧不可变证据引用。
     pub left_fact_reference: Option<String>,
+    /// 服务端已验证的左侧证据名称。
+    pub left_fact_label: Option<String>,
     /// 右侧不可变证据引用。
     pub right_fact_reference: Option<String>,
+    /// 服务端已验证的右侧证据名称。
+    pub right_fact_label: Option<String>,
     /// 派生处理状态（`None` 表示尚无处理记录）。
     pub status: Option<ResultingStatus>,
     /// 最新追加式决定序号；初始为 `0`。
@@ -184,6 +190,8 @@ pub struct DifferenceView {
     pub created_at: u64,
     /// 当前处理人。
     pub owner_user_id: String,
+    /// 当前责任人姓名；关联缺失时为空。
+    pub owner_user_name: Option<String>,
 }
 
 /// 带范围版本的对账差异列表响应。
@@ -221,8 +229,12 @@ pub struct ResolutionView {
     pub resulting_status: ResultingStatus,
     /// 终态证据引用。
     pub evidence_reference: Option<String>,
+    /// 服务端已验证的证据名称；不以原始引用兜底。
+    pub evidence_label: Option<String>,
     /// 处理人。
     pub handled_by: String,
+    /// 处理人姓名；账号缺失时为空。
+    pub handled_by_name: Option<String>,
     /// 处理时间（秒级时间戳）。
     pub handled_at: i64,
 }
@@ -242,7 +254,9 @@ impl From<ReconciliationDifferenceResolution> for ResolutionView {
             resolution_action: resolution.resolution_action,
             resulting_status: resolution.resulting_status,
             evidence_reference: resolution.evidence_reference,
+            evidence_label: None,
             handled_by: resolution.handled_by,
+            handled_by_name: None,
             handled_at: resolution.handled_at.unix_secs(),
         }
     }
@@ -281,13 +295,17 @@ impl From<ReconciliationDifference> for DifferenceView {
             id: difference.base.id,
             business_object_type: difference.business_object_type,
             business_object_id: difference.business_object_id,
+            business_object_label: None,
             difference_type: difference.difference_type,
             left_fact_reference: difference.left_fact_reference,
+            left_fact_label: None,
             right_fact_reference: difference.right_fact_reference,
+            right_fact_label: None,
             status: None,
             version: 0,
             created_at: difference.base.created_at,
             owner_user_id: difference.owner_user_id,
+            owner_user_name: None,
         }
     }
 }

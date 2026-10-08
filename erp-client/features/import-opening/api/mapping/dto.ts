@@ -4,6 +4,7 @@ export type BackendBatchListItem = {
     id: string
     batch_no: string
     source_system_id: string
+    source_system_name?: string | null
     source_object_set: string
     baseline_date: string
     import_rule_version: string
@@ -76,6 +77,7 @@ export type BackendConfirmation = {
         destination_workspace_id: string
     } | null
     decided_by?: string | null
+    decided_by_name?: string | null
     decided_at?: number | null
     version: number
     created_at: number

@@ -7,7 +7,9 @@ import {
     RateValue,
 } from "@/components/business"
 import { multiplyFixed } from "@/lib/fixed-decimal"
+import { displayBusinessText } from "@/lib/display-name"
 import type { ApprovalSalesSubmission } from "../api/materials"
+import { displayActorName, displayReadableName } from "../display"
 
 const dateLabel = (value: number | null) =>
     value == null ? "—" : new Date(value * 1000).toLocaleDateString("zh-CN")
@@ -34,16 +36,18 @@ export function ApprovalSalesOrderPaper({
                 {
                     id: "seller",
                     label: "结算主体",
-                    name: submission.settlement_party_name || "—",
+                    name:
+                        displayReadableName(submission.settlement_party_name) ||
+                        "未记录结算主体名称",
                     fields: [
                         {
                             id: "applicant",
                             label: "申请人",
                             value:
-                                submitterName &&
-                                submitterName !== submission.submitted_by
-                                    ? submitterName
-                                    : "未记录姓名",
+                                displayActorName(
+                                    submitterName,
+                                    submission.submitted_by,
+                                ) || "未记录姓名",
                         },
                         {
                             id: "submitted",
@@ -57,7 +61,9 @@ export function ApprovalSalesOrderPaper({
                 {
                     id: "customer",
                     label: "客户",
-                    name: submission.customer_name,
+                    name:
+                        displayReadableName(submission.customer_name) ||
+                        "未记录客户名称",
                     fields: [
                         {
                             id: "contract",
@@ -67,7 +73,9 @@ export function ApprovalSalesOrderPaper({
                         {
                             id: "project",
                             label: "项目",
-                            value: submission.project_name || "—",
+                            value:
+                                displayReadableName(submission.project_name) ||
+                                "—",
                         },
                     ],
                 },
@@ -76,7 +84,9 @@ export function ApprovalSalesOrderPaper({
                 {
                     id: "payment",
                     label: "付款条件",
-                    value: submission.payment_term_name,
+                    value:
+                        displayReadableName(submission.payment_term_name) ||
+                        "未记录付款条件名称",
                 },
                 {
                     id: "invoice",
@@ -111,13 +121,23 @@ export function ApprovalSalesOrderPaper({
                     header: "商品 / 规格",
                     cell: (row) => (
                         <div>
-                            <div>{row.item_name_snapshot}</div>
-                            {row.spec_snapshot &&
-                                row.spec_snapshot !== row.sku_id && (
-                                    <div className="mt-1 text-xs text-muted-foreground">
-                                        {row.spec_snapshot}
-                                    </div>
-                                )}
+                            <div>
+                                {displayReadableName(
+                                    row.item_name_snapshot,
+                                    row.sku_id,
+                                ) || "未记录商品名称"}
+                            </div>
+                            {displayBusinessText(
+                                row.spec_snapshot,
+                                row.sku_id,
+                            ) && (
+                                <div className="mt-1 text-xs text-muted-foreground">
+                                    {displayBusinessText(
+                                        row.spec_snapshot,
+                                        row.sku_id,
+                                    )}
+                                </div>
+                            )}
                             {row.service_region && (
                                 <div className="mt-1 text-xs text-muted-foreground">
                                     服务区域：{row.service_region}
@@ -134,7 +154,8 @@ export function ApprovalSalesOrderPaper({
                         <QuantityValue
                             value={row.quantity ?? String(row.card_count ?? 0)}
                             unit={
-                                row.unit_snapshot || (isCard ? "张" : undefined)
+                                displayReadableName(row.unit_snapshot) ||
+                                (isCard ? "张" : undefined)
                             }
                         />
                     ),

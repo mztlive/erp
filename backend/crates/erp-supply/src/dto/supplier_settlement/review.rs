@@ -65,7 +65,7 @@ pub enum SettlementReviewSubmissionStatus {
 
 /// 提交结算复核结果。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct SubmitSettlementReviewResult {
+pub struct SubmitSettlementReviewResult<S = SupplierSettlementStatementView> {
     /// 固定结果状态。
     pub result_status: SettlementReviewSubmissionStatus,
     /// 面向用户的稳定结果说明。
@@ -73,7 +73,7 @@ pub struct SubmitSettlementReviewResult {
     /// 原请求操作 ID。
     pub operation_id: String,
     /// 提交后的结算单投影。
-    pub statement: SupplierSettlementStatementView,
+    pub statement: S,
     /// 同事务创建的正式复核任务。
     pub work_item_id: String,
 }

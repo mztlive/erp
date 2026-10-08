@@ -141,8 +141,8 @@ export async function fetchIntegrationQueue(
             `类别=${ERROR_CLASS_LABEL[query.errorClass] ?? query.errorClass}`,
         )
     if (query.q) filterParts.push(`搜索=${query.q}`)
-    if (handlers) filterParts.push(`当前处理人=${handlers}`)
-    if (operators) filterParts.push(`历史处理人=${operators}`)
+    if (handlers) filterParts.push("当前处理人已筛选")
+    if (operators) filterParts.push("历史处理人已筛选")
 
     let resolvedEntry: IntegrationQueueView["resolvedEntry"]
     if (query.resolveWorkItemId) {
