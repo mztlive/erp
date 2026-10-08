@@ -47,6 +47,7 @@ pub struct CompanyListParams {
 /// 公司选择及维护视图，不包含敏感账户信息。
 #[derive(Debug, Clone, Serialize)]
 pub struct CompanyView {
+    pub bank_name: Option<String>,
     pub id: String,
     pub party_no: String,
     pub version: u64,
@@ -73,6 +74,7 @@ impl TryFrom<Party> for CompanyView {
     fn try_from(party: Party) -> Result<Self> {
         let company = party.company_profile.ok_or_else(|| crate::Error::NotFound("公司主体不存在".into()))?;
         Ok(Self {
+            bank_name: company.bank_name,
             id: party.base.id,
             party_no: party.party_no,
             version: party.base.version,

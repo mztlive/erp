@@ -6241,6 +6241,22 @@
       },
       "location_count": 1,
       "reason": "在正式写入前验证导入动作、资源类型与认证人；实际业务和结果事件由 run_audited_event 统一执行，本工厂不单独持久化事件。"
+    },
+    {
+      "path": "crates/erp-party/src/service/party/builtin/mod.rs",
+      "function": "sync_builtin_companies",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "audit.persist"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "audit.persist": 1
+      },
+      "location_count": 1,
+      "reason": "启动同步六个内建我方主体及从属资料；仅发生变更的主体生成 company.bootstrap 审计，资料与审计共用同一事务 Executor，相同资料重跑不写审计。"
     }
   ]
 }

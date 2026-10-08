@@ -13,6 +13,7 @@
 //!   `*_ciphertext`（P3 加密填充）+ `*_query_hmac`（带密钥 HMAC 查询指纹）
 //!   双字段，明文字段永远不进入 `Debug` 输出。
 
+pub(crate) mod builtin;
 mod close;
 pub mod company;
 mod content_match;

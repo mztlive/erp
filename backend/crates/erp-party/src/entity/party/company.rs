@@ -9,6 +9,9 @@ pub struct CompanyProfile {
     pub short_name: Option<String>,
     pub aliases: Vec<String>,
     pub names: Vec<String>,
+    /// 开户行全称；账号未提供时仍保留开户资料。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bank_name: Option<String>,
 }
 
 /// 用于公司别名与导入供应商名称的确定性匹配。
@@ -70,7 +73,7 @@ impl CompanyProfile {
         }
         names.sort();
         names.dedup();
-        Ok(Self { legal_name, short_name, aliases, names })
+        Ok(Self { legal_name, short_name, aliases, names, bank_name: None })
     }
 }
 

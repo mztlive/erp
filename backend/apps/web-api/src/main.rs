@@ -123,6 +123,8 @@ async fn start(cfg: SafeConfig) -> Result<()> {
     erp_identity::ensure_root_role(&state.rbac()).await?;
     ensure_identity_foundation(&state.rbac()).await?;
     bootstrap_initial_admin(&state, config.bootstrap.initial_admin_password()).await?;
+    let changed = state.party_service().sync_builtin_companies(state.sensitive_data()).await?;
+    info!(changed, "内建公司主体同步完成");
     warm_storage_connection(state.storage()).await;
 
     spawn_config_watcher(

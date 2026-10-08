@@ -1,0 +1,50 @@
+[
+  {
+    "legal_name": "广东福尚云科技有限公司",
+    "credit_code": "91440106MAC9AC16X9",
+    "address": "广州市天河区华夏路28号3101房",
+    "telephone": "15360055429",
+    "bank_name": "招商银行股份有限公司广州淘金支行",
+    "bank_account": "120924765010000"
+  },
+  {
+    "legal_name": "广州福尚云科技研发有限公司",
+    "credit_code": "91440106MAD4M46DXH",
+    "address": "广州市天河区华夏路28号3102房",
+    "telephone": "13533580068",
+    "bank_name": "招商银行股份有限公司广州盈隆广场支行",
+    "bank_account": null
+  },
+  {
+    "legal_name": "广州福尚云食品有限公司",
+    "credit_code": "91440106MAD563DY7X",
+    "address": "广州市天河区华夏路28号3101房",
+    "telephone": "19202098684",
+    "bank_name": "招商银行股份有限公司广州盈隆广场支行",
+    "bank_account": "120924457610001"
+  },
+  {
+    "legal_name": "广东朱太帅贸易有限公司",
+    "credit_code": "91440101MA5D040GXD",
+    "address": "广州市天河区中山大道建中路5号3A06房-E67号",
+    "telephone": "13636298323",
+    "bank_name": "招商银行股份有限公司广州淘金支行",
+    "bank_account": "120927322910001"
+  },
+  {
+    "legal_name": "珠海智慧云福科技研发有限公司",
+    "credit_code": "91440106MADE3R1W14",
+    "address": "珠海市高新区唐家湾镇金唐路1号港湾1号科创园24栋C区1层318室",
+    "telephone": "13247393260",
+    "bank_name": "招商银行股份有限公司广州淘金支行",
+    "bank_account": "120926158310001"
+  },
+  {
+    "legal_name": "广东福尚云科技有限公司深圳分公司",
+    "credit_code": "91440300MAKA9K2P3C",
+    "address": "深圳市南山区粤海街道高新区社会科技南十二路012号曙光大厦1203",
+    "telephone": "13533580068",
+    "bank_name": "招商银行股份有限公司深圳华润城支行",
+    "bank_account": "755985000210224"
+  }
+]

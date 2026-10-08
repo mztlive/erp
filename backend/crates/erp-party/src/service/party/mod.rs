@@ -6,6 +6,7 @@
 //!   `PartyDomainRepository::append_party_revision` 声明「必须收到事务执行器」；
 //! - 软删除主体 / 查询 → 单集合，`&mut NoTransaction`。
 
+mod builtin;
 pub mod company;
 
 use std::sync::Arc;

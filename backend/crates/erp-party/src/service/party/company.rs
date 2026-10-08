@@ -55,10 +55,11 @@ impl PartyService {
     /// 名称或别名校验失败时返回 `ValidationError`。编号已占用且内容不一致、已删除或不是同一公司时返回 `ConflictError`。
     /// 创建事务、唯一索引冲突或随后回读失败时返回对应错误。
     pub async fn create_company(&self, req: SaveCompanyRequest, actor: &AuditActor) -> Result<CompanyView> {
-        let profile = req.profile()?;
+        let mut profile = req.profile()?;
         if let Some(existing) =
             self.db.parties().find_by_party_no_including_deleted(&req.party_no, &mut NoTransaction).await?
         {
+            profile.bank_name = existing.company_profile.as_ref().and_then(|p| p.bank_name.clone());
             if existing.company_profile.as_ref() == Some(&profile)
                 && existing.unified_credit_code == req.unified_credit_code
                 && existing.stable.status == req.status
@@ -106,7 +107,8 @@ impl PartyService {
         if req.party_no != existing.party_no {
             return Err(Error::ValidationError("公司编号不可修改".into()));
         }
-        let profile = req.profile()?;
+        let mut profile = req.profile()?;
+        profile.bank_name = existing.bank_name.clone();
         if req.version.is_some_and(|version| version < existing.version)
             && profile.legal_name == existing.legal_name
             && profile.short_name == existing.short_name
