@@ -58,16 +58,24 @@ const isProfile = (query: Query) =>
 /** 独立目录按类别隔离；业务查询按所属资源失效，不跨到其他查询族。 */
 function scopeFamily(query: Query): string {
     const key = query.queryKey
-    if (key[0] === "customer-receivables" &&
-        (key[1] === "counterparty-options" || key[1] === "counterparty-selected")) {
+    if (
+        key[0] === "customer-receivables" &&
+        (key[1] === "counterparty-options" ||
+            key[1] === "counterparty-selected")
+    ) {
         return JSON.stringify([key[0], "counterparty-directory"])
     }
     if (key[0] === "master-data" && key[1] === "product-filter-options") {
         return JSON.stringify(key.slice(0, 2))
     }
-    const depth = key[0] === "entity-selectors"
-        ? (key[1] === "person-directory" ? 3 : 2)
-        : key[0] === "historical-directory" ? 2 : 1
+    const depth =
+        key[0] === "entity-selectors"
+            ? key[1] === "person-directory"
+                ? 3
+                : 2
+            : key[0] === "historical-directory"
+              ? 2
+              : 1
     return JSON.stringify(key.slice(0, depth))
 }
 
@@ -80,13 +88,21 @@ export function subscribeScopeCache(client: QueryClient): () => void {
     let version: string | null = null
     let policy: number | undefined
     let organization: number | undefined
-    const pendingClears: { source: Query | undefined; error?: unknown; local: boolean }[] = []
+    const pendingClears: {
+        source: Query | undefined
+        error?: unknown
+        local: boolean
+    }[] = []
     const scopeVersions = new Map<string, string>()
     let clearing = false
     let disposed = false
     const rejected = new Set<string>()
 
-    const clear = async (source: Query | undefined, error?: unknown, local = false) => {
+    const clear = async (
+        source: Query | undefined,
+        error?: unknown,
+        local = false,
+    ) => {
         if (disposed) return
         if (clearing) {
             pendingClears.push({ source, error, local })
@@ -95,12 +111,15 @@ export function subscribeScopeCache(client: QueryClient): () => void {
         clearing = true
         try {
             const matches = (query: Query) =>
-                query !== source && !isProfile(query) &&
-                (!local || (source != null && scopeFamily(query) === scopeFamily(source)))
+                query !== source &&
+                !isProfile(query) &&
+                (!local ||
+                    (source != null &&
+                        scopeFamily(query) === scopeFamily(source)))
             // 先取消旧请求；取消完成之前也立即撤下已经显示的旧数据。
             const pending = client.cancelQueries(
                 { predicate: matches },
-                { revert: false },
+                { revert: false, silent: true },
             )
             for (const query of client
                 .getQueryCache()
@@ -111,14 +130,26 @@ export function subscribeScopeCache(client: QueryClient): () => void {
                         exact: true,
                     })
                 } else {
+                    // 缓存失效不等于请求失败。禁用查询不会自动重查，必须回到待查询状态。
+                    // 不使用 reset()，避免恢复 initialData 中已经失效的授权数据。
+                    const failure =
+                        query.isActive() && error != null
+                            ? error instanceof Error
+                                ? error
+                                : new Error("数据范围校验失败，请重新查询")
+                            : null
                     query.setState({
                         data: undefined,
+                        dataUpdateCount: 0,
                         dataUpdatedAt: 0,
-                        status: "error",
-                        error:
-                            error instanceof Error
-                                ? error
-                                : new Error("数据范围已更新，请重新查询"),
+                        status: failure ? "error" : "pending",
+                        error: failure,
+                        errorUpdateCount: failure ? 1 : 0,
+                        errorUpdatedAt: failure ? Date.now() : 0,
+                        fetchFailureCount: 0,
+                        fetchFailureReason: null,
+                        fetchMeta: null,
+                        isInvalidated: true,
                         fetchStatus: "idle",
                     })
                 }
@@ -134,7 +165,8 @@ export function subscribeScopeCache(client: QueryClient): () => void {
         } finally {
             clearing = false
             const pending = pendingClears.shift()
-            if (pending) void clear(pending.source, pending.error, pending.local)
+            if (pending)
+                void clear(pending.source, pending.error, pending.local)
         }
     }
 

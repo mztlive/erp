@@ -101,26 +101,57 @@ export function ContractUploadDialog(props: ContractUploadDialogProps) {
                             id="contract-import-upload-form"
                             onSubmit={(event) => {
                                 event.preventDefault()
-                                void state.form.handleSubmit()
+                                if (busy || state.form.state.isSubmitting)
+                                    return
+                                void state.form
+                                    .handleSubmit()
+                                    .catch(() => undefined)
                             }}
                             className="space-y-4"
                         >
-                            <state.form.AppField name="pdfFile">
+                            <state.form.AppField
+                                name="pdfFile"
+                                listeners={{
+                                    onChange: ({ value, fieldApi }) => {
+                                        if (
+                                            !value ||
+                                            busy ||
+                                            fieldApi.form.state.isSubmitting
+                                        )
+                                            return
+                                        // 请求错误由 mutation 状态统一展示。
+                                        void fieldApi.form
+                                            .handleSubmit()
+                                            .catch(() => undefined)
+                                    },
+                                }}
+                            >
                                 {(field) => (
                                     <field.PdfUploadField
                                         id="card-contracts-upload-pdf"
                                         label="已签署合同 PDF"
+                                        description="仅支持单个 PDF，文件不超过 20 MB。选择文件后自动上传并识别。"
                                         disabled={busy}
                                     />
                                 )}
                             </state.form.AppField>
-                            <state.form.AppForm>
-                                <state.form.SubmitButton
-                                    id="card-contracts-upload-submit"
-                                    loading={busy}
-                                    label={busy ? "正在上传…" : "开始识别"}
-                                />
-                            </state.form.AppForm>
+                            {state.uploadMutation.isPending ? (
+                                <p
+                                    className="flex items-center gap-2 text-sm text-muted-foreground"
+                                    role="status"
+                                >
+                                    <Spinner />
+                                    正在上传，完成后自动识别…
+                                </p>
+                            ) : state.uploadMutation.isError ? (
+                                <state.form.AppForm>
+                                    <state.form.SubmitButton
+                                        id="card-contracts-upload-submit"
+                                        loading={busy}
+                                        label="重新上传"
+                                    />
+                                </state.form.AppForm>
+                            ) : null}
                         </form>
                     ) : task ? (
                         <ContractImportTask

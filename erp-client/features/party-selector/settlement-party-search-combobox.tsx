@@ -64,6 +64,9 @@ export function SettlementPartySearchCombobox({
         enabled: Boolean(value),
         staleTime: STALE_TIME,
     })
+    const selectedFailed = Boolean(value) && selected.isError
+    const failed = list.isError || selectedFailed
+    const error = list.error ?? (selectedFailed ? selected.error : null)
     const snapshot =
         selectedSnapshot?.partyId === value ? selectedSnapshot : undefined
     const selectedRow =
@@ -103,11 +106,8 @@ export function SettlementPartySearchCombobox({
                     list.isFetching || (selected.isFetching && !selectedRow)
                 }
                 emptyLabel={
-                    list.isError || selected.isError
-                        ? getErrorMessage(
-                              list.error ?? selected.error,
-                              "结算主体加载失败，请重试",
-                          )
+                    failed
+                        ? getErrorMessage(error, "结算主体加载失败，请重试")
                         : list.data?.empty_reason === "no_scope"
                           ? (noScopeLabel ??
                             "当前角色无此目录的数据范围，请申请权限")
@@ -119,8 +119,8 @@ export function SettlementPartySearchCombobox({
             <SelectorQueryFeedback
                 noScopeLabel={noScopeLabel}
                 id={props.id}
-                failed={list.isError || selected.isError}
-                error={list.error ?? selected.error}
+                failed={failed}
+                error={error}
                 noScope={
                     !list.isFetching &&
                     !list.isError &&

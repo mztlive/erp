@@ -207,7 +207,7 @@ export function PersonDirectoryFilter({
                     </Button>
                 </p>
             ) : null}
-            {selected.isError ? (
+            {ids.length > 0 && selected.isError ? (
                 <p className="text-xs text-destructive" role="alert">
                     {selectedFailureCopy(selected.error)}
                     <Button
