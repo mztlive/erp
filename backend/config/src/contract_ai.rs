@@ -51,6 +51,7 @@ impl ContractAiConfig {
             || url.query().is_some()
             || url.fragment().is_some()
             || url.path().trim_end_matches('/').ends_with("/chat/completions")
+            || url.path().trim_end_matches('/').ends_with("/responses")
             || self.base_url.trim() != self.base_url
             || self.base_url.len() > 2048
             || self.provider_id.is_empty()
@@ -124,13 +125,22 @@ mod tests {
             "file:///tmp/model",
             " https://host/v1",
             "https://host/v1/chat/completions/",
+            "https://api.deepseek.com/responses",
+            "https://host/v1/responses/",
         ] {
             let mut config = config();
             config.base_url = base.into();
             let error = config.validate().unwrap_err().to_string();
             assert!(!error.contains(base));
         }
-        for base in ["http://localhost:8080/v1", "http://127.0.0.1:8080/v1", "http://[::1]:8080/v1"] {
+        for base in [
+            "http://localhost:8080/v1",
+            "http://127.0.0.1:8080/v1",
+            "http://[::1]:8080/v1",
+            "https://api.deepseek.com",
+            "https://api.deepseek.com/",
+            "https://gateway.example/v1",
+        ] {
             let mut config = config();
             config.base_url = base.into();
             config.validate().unwrap();

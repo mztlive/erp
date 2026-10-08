@@ -1,4 +1,4 @@
-//! Rig OpenAI Chat Completions 到合同全文提取 Port 的适配。
+//! Rig OpenAI Responses API 到合同全文提取 Port 的适配。
 mod diagnostics;
 mod output;
 mod rejection;
@@ -16,6 +16,7 @@ use rig_core::ProviderError;
 use rig_core::completion::CompletionRequest;
 use rig_core::http_client::{Error as HttpError, HttpClientExt};
 use rig_core::providers::openai::OpenAIConfig;
+use serde_json::json;
 use tokio::time::timeout;
 use transport::{BoundedHttp, Failure};
 
@@ -62,7 +63,7 @@ impl OpenAiContractExtractor {
     #[tracing::instrument(name = "contract_ai", skip_all, fields(
         provider_id = %self.provider_id, page_count = document.pages.len(),
         model = %self.model, base_url = %self.base_url,
-        response_format = "json_schema", strict = true,
+        protocol = "responses", response_format = "json_schema", strict = true,
         timeout_seconds = self.timeout.as_secs(), max_output_tokens = self.max_output_tokens
     ))]
     async fn extract_with(
@@ -78,11 +79,12 @@ impl OpenAiContractExtractor {
             .preamble(include_str!("prompt.txt"))
             .max_tokens(self.max_output_tokens)
             .output_schema(output::schema()?)
+            .additional_params(json!({"store": false}))
             .record_content_telemetry(true);
         let client = OpenAIConfig::new(self.api_key.clone())
             .with_base_url(self.base_url.trim_end_matches('/'))
             .connect(http);
-        let model = client.chat(&self.model);
+        let model = client.responses(&self.model);
         let start = Instant::now();
         tracing::info!(event = "contract_ai_started", "开始提取合同字段");
         // SDK 与适配器共享任务上下文，错误正文由诊断字段完整记录。
@@ -115,7 +117,8 @@ fn invalid_output() -> ImportFailure {
 
 fn provider_error(error: &ProviderError) -> ImportFailure {
     if let Some(status) = error.provider_response_status() {
-        return status_error(status.as_u16());
+        // Responses 解码失败也可能保留 HTTP 200；这不是供应商拒绝请求。
+        return if status.is_success() { invalid_output() } else { status_error(status.as_u16()) };
     }
     if let ProviderError::Http(error) = error {
         if let HttpError::Instance(inner) = error.as_ref() {

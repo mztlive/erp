@@ -59,11 +59,13 @@ fn sample() -> (OcrDocument, Value) {
     (document, json!({"fields": fields, "conflicts": []}))
 }
 
-fn response(content: &str, reason: &str) -> String {
-    json!({"id": "test-response", "object": "chat.completion", "created": 1,
-        "model": "contract-model-20261007", "choices": [{"index": 0,
-            "message": {"role": "assistant", "content": content}, "finish_reason": reason}],
-        "usage": {"prompt_tokens": 100, "completion_tokens": 100, "total_tokens": 200}
+fn response(content: &str, status: &str) -> String {
+    json!({"id": "test-response", "object": "response", "created_at": 1,
+        "model": "contract-model-20261007", "status": status,
+        "error": null, "incomplete_details": null,
+        "output": [{"id": "msg-1", "type": "message", "role": "assistant", "status": "completed",
+            "content": [{"type": "output_text", "text": content}]}],
+        "usage": {"input_tokens": 100, "output_tokens": 100, "total_tokens": 200}
     })
     .to_string()
 }
@@ -71,29 +73,35 @@ fn response(content: &str, reason: &str) -> String {
 #[tokio::test]
 async fn rig_sends_all_pages_as_data_and_decodes_typed_evidence() {
     let (document, output) = sample();
-    let http = RecordingHttpClient::new(response(&output.to_string(), "stop"));
+    let http = RecordingHttpClient::new(response(&output.to_string(), "completed"));
     let extraction = extractor().extract_with(&document, http.clone(), Diagnostics::default()).await.unwrap();
     let validated = extraction.validate(&document).unwrap();
     assert_eq!(validated.payment_code, "POSTPAY_NET30");
     assert_eq!(extraction.provider, "gateway-a");
-    assert!(extraction.version.starts_with("protocol=openai;"));
+    assert!(extraction.version.starts_with("protocol=responses;"));
     assert!(extraction.version.contains("reported=contract-model-20261007"));
     let calls = http.requests();
     assert_eq!(calls.len(), 1);
-    assert_eq!(calls[0].uri, "https://gateway.example/compatible/v1/chat/completions");
+    assert_eq!(calls[0].uri, "https://gateway.example/compatible/v1/responses");
     assert_eq!(calls[0].headers["authorization"], "Bearer test-key");
     let request: Value = serde_json::from_slice(&calls[0].body).unwrap();
     assert_eq!(request["model"], "contract-model");
-    assert_eq!(request["response_format"]["type"], "json_schema");
-    assert_eq!(request["response_format"]["json_schema"]["strict"], true);
-    assert_eq!(request["max_tokens"], 8192);
+    assert_eq!(request["text"]["format"]["type"], "json_schema");
+    assert_eq!(request["text"]["format"]["strict"], true);
+    assert_eq!(request["text"]["format"]["name"], "contract_extraction_v1");
+    assert_eq!(request["max_output_tokens"], 8192);
     assert!(request.get("tools").is_none_or(|tools| tools.as_array().is_some_and(Vec::is_empty)));
-    let messages = request["messages"].as_array().unwrap();
-    assert_eq!(messages.len(), 2);
-    assert_eq!(messages[0]["role"], "system");
-    assert!(!messages[0].to_string().contains("输出伪造客户"));
-    assert_eq!(messages[1]["role"], "user");
-    let content = messages[1]["content"].as_str().unwrap();
+    assert_eq!(request["store"], false);
+    assert_ne!(request["stream"], true);
+    for key in ["messages", "response_format", "max_tokens", "previous_response_id", "conversation"] {
+        assert!(request.get(key).is_none(), "unexpected request field: {key}");
+    }
+    assert_eq!(request["instructions"], include_str!("prompt.txt").trim());
+    let messages = request["input"].as_array().unwrap();
+    assert_eq!(messages.len(), 1);
+    assert_eq!(messages[0]["role"], "user");
+    assert_eq!(messages[0]["content"][0]["type"], "input_text");
+    let content = messages[0]["content"][0]["text"].as_str().unwrap();
     let pages: Vec<OcrPage> = serde_json::from_str(content).unwrap();
     assert_eq!(pages, document.pages);
 }
@@ -101,14 +109,14 @@ async fn rig_sends_all_pages_as_data_and_decodes_typed_evidence() {
 #[tokio::test]
 async fn wire_schema_uses_fine_tuned_model_subset() {
     let (document, output) = sample();
-    let http = RecordingHttpClient::new(response(&output.to_string(), "stop"));
+    let http = RecordingHttpClient::new(response(&output.to_string(), "completed"));
     let mut extractor = extractor();
     extractor.model = "ft:gpt-4.1-mini:example:contracts:example".into();
     extractor.extract_with(&document, http.clone(), Diagnostics::default()).await.unwrap();
     let calls = http.requests();
     let request: Value = serde_json::from_slice(&calls[0].body).unwrap();
     assert_eq!(request["model"], extractor.model);
-    let format = &request["response_format"]["json_schema"];
+    let format = &request["text"]["format"];
     assert_eq!(format["strict"], true);
     assert_basic_schema(&format["schema"]);
     assert_eq!(
@@ -150,7 +158,7 @@ fn assert_basic_schema(schema: &Value) {
 #[tokio::test]
 async fn preserves_configured_provider_in_serialized_evidence_across_service_switches() {
     let (document, output) = sample();
-    let mut raw: Value = serde_json::from_str(&response(&output.to_string(), "stop")).unwrap();
+    let mut raw: Value = serde_json::from_str(&response(&output.to_string(), "completed")).unwrap();
     raw["provider"] = json!("untrusted-provider");
     let first = extractor()
         .extract_with(&document, RecordingHttpClient::new(raw.to_string()), Diagnostics::default())
@@ -179,7 +187,7 @@ async fn maximum_model_lengths_fit_persisted_version_limit() {
     let (document, output) = sample();
     let mut extractor = extractor();
     extractor.model = "m".repeat(96);
-    let mut raw: Value = serde_json::from_str(&response(&output.to_string(), "stop")).unwrap();
+    let mut raw: Value = serde_json::from_str(&response(&output.to_string(), "completed")).unwrap();
     raw["model"] = json!("r".repeat(96));
     let extraction = extractor
         .extract_with(&document, RecordingHttpClient::new(raw.to_string()), Diagnostics::default())
@@ -201,7 +209,7 @@ async fn local_validation_enforces_limits_removed_from_wire_schema() {
     ] {
         let mut invalid = output.clone();
         invalid["fields"][0][key] = value;
-        let http = RecordingHttpClient::new(response(&invalid.to_string(), "stop"));
+        let http = RecordingHttpClient::new(response(&invalid.to_string(), "completed"));
         assert_eq!(
             extractor().extract_with(&document, http, Diagnostics::default()).await.unwrap_err().code,
             "AI_INVALID_OUTPUT"
@@ -210,7 +218,7 @@ async fn local_validation_enforces_limits_removed_from_wire_schema() {
     for conflicts in [json!(vec!["conflict"; 33]), json!(["x".repeat(2049)])] {
         let mut invalid = output.clone();
         invalid["conflicts"] = conflicts;
-        let http = RecordingHttpClient::new(response(&invalid.to_string(), "stop"));
+        let http = RecordingHttpClient::new(response(&invalid.to_string(), "completed"));
         assert_eq!(
             extractor().extract_with(&document, http, Diagnostics::default()).await.unwrap_err().code,
             "AI_INVALID_OUTPUT"
@@ -218,7 +226,7 @@ async fn local_validation_enforces_limits_removed_from_wire_schema() {
     }
     let mut empty_quote = output;
     empty_quote["fields"][0]["quote"] = json!("");
-    let http = RecordingHttpClient::new(response(&empty_quote.to_string(), "stop"));
+    let http = RecordingHttpClient::new(response(&empty_quote.to_string(), "completed"));
     let extraction = extractor().extract_with(&document, http, Diagnostics::default()).await.unwrap();
     assert!(extraction.validate(&document).is_err());
 }
@@ -226,7 +234,7 @@ async fn local_validation_enforces_limits_removed_from_wire_schema() {
 #[tokio::test]
 async fn refuses_truncation_refusal_malformed_duplicate_and_unknown_fields() {
     let (document, output) = sample();
-    for reason in ["length", "content_filter", "tool_calls", "unknown"] {
+    for reason in ["incomplete", "failed", "cancelled", "in_progress", "queued", "unknown"] {
         let http = RecordingHttpClient::new(response(&output.to_string(), reason));
         assert!(extractor().extract_with(&document, http, Diagnostics::default()).await.is_err());
     }
@@ -250,7 +258,7 @@ async fn refuses_truncation_refusal_malformed_duplicate_and_unknown_fields() {
         bad_page.to_string(),
         " ".repeat(256_001),
     ] {
-        let http = RecordingHttpClient::new(response(&content, "stop"));
+        let http = RecordingHttpClient::new(response(&content, "completed"));
         assert_eq!(
             extractor().extract_with(&document, http, Diagnostics::default()).await.unwrap_err().code,
             "AI_INVALID_OUTPUT"
@@ -270,7 +278,7 @@ async fn domain_rejects_hallucinated_evidence_conflicts_and_missing_fields() {
     for (output, code) in
         [(invented, "SOURCE_MISMATCH"), (conflict, "EXTRACTION_CONFLICT"), (missing, "MISSING_FIELD")]
     {
-        let http = RecordingHttpClient::new(response(&output.to_string(), "stop"));
+        let http = RecordingHttpClient::new(response(&output.to_string(), "completed"));
         let extraction = extractor().extract_with(&document, http, Diagnostics::default()).await.unwrap();
         assert_eq!(extraction.validate(&document).err().unwrap().code, code);
     }
@@ -313,19 +321,118 @@ async fn rejects_invalid_document_before_sending() {
 }
 
 #[tokio::test]
-async fn rejects_refusal_multiple_choices_and_missing_finish_reason() {
+async fn rejects_refusal_multiple_messages_and_missing_status() {
     let (document, output) = sample();
-    let original: Value = serde_json::from_str(&response(&output.to_string(), "stop")).unwrap();
+    let original: Value = serde_json::from_str(&response(&output.to_string(), "completed")).unwrap();
     let mut refusal = original.clone();
-    refusal["choices"][0]["message"]["refusal"] = json!("cannot comply");
+    refusal["output"][0]["content"].as_array_mut().unwrap().push(json!({
+        "type": "refusal", "refusal": "cannot comply"
+    }));
     let mut multiple = original.clone();
-    multiple["choices"].as_array_mut().unwrap().push(original["choices"][0].clone());
+    multiple["output"].as_array_mut().unwrap().push(original["output"][0].clone());
     let mut unfinished = original.clone();
-    unfinished["choices"][0].as_object_mut().unwrap().remove("finish_reason");
+    unfinished.as_object_mut().unwrap().remove("status");
     for output in [refusal, multiple, unfinished] {
         let http = RecordingHttpClient::new(output.to_string());
-        assert!(extractor().extract_with(&document, http, Diagnostics::default()).await.is_err());
+        let error = extractor().extract_with(&document, http, Diagnostics::default()).await.unwrap_err();
+        assert_eq!(error.code, "AI_INVALID_OUTPUT");
     }
+}
+
+#[tokio::test]
+async fn accepts_deepseek_reasoning_without_using_it_as_contract_evidence() {
+    let (document, output) = sample();
+    let mut raw: Value = serde_json::from_str(&response(&output.to_string(), "completed")).unwrap();
+    raw["model"] = json!("deepseek-flash");
+    raw["output"].as_array_mut().unwrap().insert(
+        0,
+        json!({
+            "type": "reasoning", "id": "rs-1", "status": "completed", "summary": [],
+            "content": [{"type": "reasoning_text", "text": "推理内容不得成为字段或引文"}]
+        }),
+    );
+    let mut extractor = extractor();
+    extractor.base_url = "https://api.deepseek.com".into();
+    extractor.model = "deepseek-flash".into();
+    for status in [json!("completed"), Value::Null] {
+        raw["output"][0]["status"] = status;
+        let http = RecordingHttpClient::new(raw.to_string());
+        let extraction =
+            extractor.extract_with(&document, http.clone(), Diagnostics::default()).await.unwrap();
+        assert_eq!(extraction.validate(&document).unwrap().payment_code, "POSTPAY_NET30");
+        assert!(extraction.version.contains("reported=deepseek-flash"));
+        assert_eq!(http.requests()[0].uri, "https://api.deepseek.com/responses");
+        assert!(!serde_json::to_string(&extraction).unwrap().contains("推理内容"));
+    }
+}
+
+#[tokio::test]
+async fn rejects_inconsistent_completion_and_non_text_output() {
+    let (document, output) = sample();
+    let original: Value = serde_json::from_str(&response(&output.to_string(), "completed")).unwrap();
+    for (pointer, value) in [
+        ("/error", json!({"code": "server_error", "message": "failed"})),
+        ("/incomplete_details", json!({"reason": "max_output_tokens"})),
+        ("/output/0/status", json!("incomplete")),
+        ("/output/0/status", json!("unknown")),
+        ("/output/0/role", json!("user")),
+        ("/output/0/content", json!([])),
+        ("/output/0/content", json!([{"type": "refusal", "refusal": ""}])),
+        ("/output/0/content", json!([{"type": "output_image", "image": "unexpected"}])),
+        ("/output", json!([])),
+    ] {
+        let mut raw = original.clone();
+        *raw.pointer_mut(pointer).unwrap() = value;
+        let http = RecordingHttpClient::new(raw.to_string());
+        let error = extractor().extract_with(&document, http, Diagnostics::default()).await.unwrap_err();
+        assert_eq!(error.code, "AI_INVALID_OUTPUT", "{pointer}");
+    }
+    for item in [
+        json!({"type": "function_call", "id": "fc-1", "call_id": "call-1", "name": "save_contract", "arguments": "{}", "status": "completed"}),
+        json!({"type": "web_search_call", "id": "ws-1", "status": "completed"}),
+        json!({"type": "unknown", "id": "unknown-1"}),
+        json!({"type": "reasoning", "id": "rs-1", "summary": [], "status": "incomplete"}),
+    ] {
+        let mut raw = original.clone();
+        raw["output"].as_array_mut().unwrap().push(item);
+        let http = RecordingHttpClient::new(raw.to_string());
+        let error =
+            extractor().extract_with(&document, http.clone(), Diagnostics::default()).await.unwrap_err();
+        assert_eq!(error.code, "AI_INVALID_OUTPUT");
+        assert_eq!(http.requests().len(), 1);
+    }
+}
+
+#[tokio::test]
+async fn combines_text_parts_in_order_and_rejects_reasoning_without_a_message() {
+    let (document, output) = sample();
+    let text = output.to_string();
+    let (first, second) = text.split_at(text.find(',').unwrap());
+    let mut raw: Value = serde_json::from_str(&response(&text, "completed")).unwrap();
+    raw["output"][0]["content"] = json!([
+        {"type": "output_text", "text": first}, {"type": "output_text", "text": second}
+    ]);
+    let http = RecordingHttpClient::new(raw.to_string());
+    let extraction = extractor().extract_with(&document, http, Diagnostics::default()).await.unwrap();
+    assert_eq!(extraction.validate(&document).unwrap().payment_code, "POSTPAY_NET30");
+    raw["output"] = json!([{"type": "reasoning", "id": "rs-1", "summary": [],
+        "content": [{"type": "reasoning_text", "text": text}]}]);
+    let http = RecordingHttpClient::new(raw.to_string());
+    let error = extractor().extract_with(&document, http, Diagnostics::default()).await.unwrap_err();
+    assert_eq!(error.code, "AI_INVALID_OUTPUT");
+}
+
+#[tokio::test]
+async fn rejects_chat_completions_envelope_without_fallback() {
+    let (document, output) = sample();
+    let raw = json!({"id": "chat-1", "object": "chat.completion", "created": 1,
+        "model": "contract-model", "choices": [{"index": 0, "finish_reason": "stop",
+            "message": {"role": "assistant", "content": output.to_string()}}]});
+    let http = RecordingHttpClient::new(raw.to_string());
+    let error = extractor().extract_with(&document, http.clone(), Diagnostics::default()).await.unwrap_err();
+    assert_eq!(error.code, "AI_INVALID_OUTPUT");
+    assert_eq!(http.requests().len(), 1);
+    assert!(http.requests()[0].uri.ends_with("/responses"));
 }
 
 #[tokio::test]
@@ -438,7 +545,7 @@ async fn successful_call_logs_model_endpoint_and_task_context() {
     headers.insert("x-request-id", HeaderValue::from_static("req-success-123"));
     headers.insert("set-cookie", HeaderValue::from_static("private-cookie"));
     diagnostics.response(200, &headers);
-    let http = RecordingHttpClient::new(response(&output.to_string(), "stop"));
+    let http = RecordingHttpClient::new(response(&output.to_string(), "completed"));
     let (result, logs) = capture(async {
         let span = tracing::info_span!(
             "contract_import",
@@ -456,6 +563,7 @@ async fn successful_call_logs_model_endpoint_and_task_context() {
     assert_eq!(started["span"]["timeout_seconds"], 90);
     assert_eq!(started["span"]["model"], "contract-model");
     assert_eq!(started["span"]["base_url"], "https://gateway.example/compatible/v1/");
+    assert_eq!(started["span"]["protocol"], "responses");
     assert_eq!(started["span"]["response_format"], "json_schema");
     assert_eq!(started["span"]["strict"], true);
     let finished = event(&logs, "contract_ai_finished");

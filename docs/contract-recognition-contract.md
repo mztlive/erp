@@ -60,8 +60,8 @@
 
 1. `erp-contract::ports::recognition::ContractOcr` 负责逐页 OCR；`ContractExtractor` 负责全文字段提取。不得把供应商 SDK 引入领域 crate。
 2. `erp-processes::contract_import::RecognitionProviders` 接收两个 trait 对象；应用组合根 `AppState::contract_import_process` 负责装配。
-3. OCR 由独立 `aliyun-ocr` crate 和组合层 `AliyunContractOcr` 实现，配置 `[aliyun_ocr]` 后启用，执行 [Aliyun OCR 接入合同](../backend/crates/aliyun-ocr/README.md)。AI 由组合层 `OpenAiContractExtractor` 使用 `rig-core` 的 OpenAI Chat Completions 协议实现，配置 `[contract_ai]` 后启用，执行 [AI 提取接入合同](contract-ai-contract.md)。缺省任一配置时对应端口仍使用 `UnconfiguredRecognition`。不得回退到人工字段或伪造识别成功。
-4. 后续供应商实现必须保留供应商与版本标识，遵守类型、页数、文本大小、超时、脱敏和原文依据合同。供应商 SDK 的错误、完整响应、密钥及全文禁止进入运行日志。
+3. OCR 由独立 `aliyun-ocr` crate 和组合层 `AliyunContractOcr` 实现，配置 `[aliyun_ocr]` 后启用，执行 [Aliyun OCR 接入合同](../backend/crates/aliyun-ocr/README.md)。AI 由组合层 `OpenAiContractExtractor` 使用 `rig-core` 的 OpenAI Responses API 协议实现，配置 `[contract_ai]` 后启用，执行 [AI 提取接入合同](contract-ai-contract.md)。缺省任一配置时对应端口仍使用 `UnconfiguredRecognition`。不得回退到人工字段或伪造识别成功。
+4. 后续供应商实现必须保留供应商与版本标识，遵守类型、页数、文本大小、超时和原文依据合同。OCR 日志执行 Aliyun OCR 接入合同；AI 日志执行 [AI 提取接入合同](contract-ai-contract.md)，允许记录完整请求、响应、原始错误和调用上下文。
 5. 配置与密钥只能通过现有 `SafeConfig` 接入；不得写入真实凭据或对外输出配置中的 AK/SK/STS token/API key。
 
 ## 6. 上线与回退

@@ -5,7 +5,7 @@ use erp_contract::entity::recognition::{ContractExtraction, ContractField, Extra
 use rig_core::completion::{CompletionResponse, FinishReason};
 use rig_core::schemars::Schema;
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use super::{Result, invalid_output};
 
@@ -69,20 +69,10 @@ pub(super) fn decode(
     requested_model: &str,
     provider_id: &str,
 ) -> Result<ContractExtraction> {
-    if response.finish_reason() != Some(FinishReason::Stop)
-        || response.tool_calls().next().is_some()
-        || response
-            .raw
-            .get("choices")
-            .and_then(|value| value.as_array())
-            .is_none_or(|choices| choices.len() != 1)
-    {
+    if response.finish_reason() != Some(FinishReason::Stop) || response.tool_calls().next().is_some() {
         return Err(invalid_output());
     }
-    if response.raw["choices"][0]["message"]["refusal"].as_str().is_some_and(|value| !value.is_empty()) {
-        return Err(invalid_output());
-    }
-    let text = response.text();
+    let text = response_text(&response.raw)?;
     if text.len() > 256_000 {
         return Err(invalid_output());
     }
@@ -93,9 +83,44 @@ pub(super) fn decode(
     }
     convert(
         output,
-        format!("protocol=openai;requested={requested_model};reported={model};prompt=contract-v1"),
+        format!("protocol=responses;requested={requested_model};reported={model};prompt=contract-v1"),
         provider_id,
     )
+}
+
+fn response_text(response: &Value) -> Result<String> {
+    if response["status"] != "completed"
+        || !response["error"].is_null()
+        || !response["incomplete_details"].is_null()
+    {
+        return Err(invalid_output());
+    }
+    let output = response["output"].as_array().ok_or_else(invalid_output)?;
+    let mut message = None;
+    for item in output {
+        match item["type"].as_str() {
+            // 推理内容不作为提取结果；正文必须是唯一且已完成的 assistant 消息。
+            Some("reasoning") if item["status"].is_null() || item["status"] == "completed" => {},
+            Some("message") if message.is_none() => message = Some(item),
+            _ => return Err(invalid_output()),
+        }
+    }
+    message_text(message.ok_or_else(invalid_output)?)
+}
+
+fn message_text(message: &Value) -> Result<String> {
+    if message["role"] != "assistant" || message["status"] != "completed" {
+        return Err(invalid_output());
+    }
+    let content = message["content"].as_array().ok_or_else(invalid_output)?;
+    let mut text = String::new();
+    for part in content {
+        if part["type"] != "output_text" {
+            return Err(invalid_output());
+        }
+        text.push_str(part["text"].as_str().ok_or_else(invalid_output)?);
+    }
+    Ok(text)
 }
 
 fn convert(output: Output, version: String, provider_id: &str) -> Result<ContractExtraction> {

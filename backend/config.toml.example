@@ -44,8 +44,9 @@ force_path_style = false
 # access_key_secret = "<RAM AccessKey Secret>"
 # security_token = "<STS SecurityToken>" # 使用临时凭据时填写；长期 AK/SK 删除此项
 
-# 可选合同 AI 提取。使用 rig-core 的 OpenAI Chat Completions 协议。
-# base_url 填 API 前缀，不包含 /chat/completions；模型必须支持 JSON Schema 结构化输出。
+# 可选合同 AI 提取。使用 rig-core 的 OpenAI Responses API 协议。
+# base_url 填 API 前缀，不包含 /responses 或 /chat/completions；模型必须支持 text.format 的严格 JSON Schema 输出。
+# DeepSeek 的 base_url 为 https://api.deepseek.com，model 可填 deepseek-flash。
 # 远程地址必须为 HTTPS；本地 loopback 服务允许 HTTP。配置只从本文件或 Nacos 读取。
 # [contract_ai]
 # provider_id = "contract-ai-primary" # 必填非敏感连接标识；更换供应商/网关时使用新标识
