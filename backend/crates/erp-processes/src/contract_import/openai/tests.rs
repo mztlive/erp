@@ -1,7 +1,12 @@
+use std::future::Future;
+use std::io::{self, Write};
+use std::sync::{Arc, Mutex};
+
 use erp_contract::entity::recognition::OcrPage;
-use rig_core::http_client::StatusCode;
+use rig_core::http_client::{HeaderMap, HeaderValue, StatusCode};
 use rig_core::test_utils::RecordingHttpClient;
 use serde_json::{Value, json};
+use tracing::Instrument;
 
 use super::*;
 
@@ -66,7 +71,7 @@ fn response(content: &str, reason: &str) -> String {
 async fn rig_sends_all_pages_as_data_and_decodes_typed_evidence() {
     let (document, output) = sample();
     let http = RecordingHttpClient::new(response(&output.to_string(), "stop"));
-    let extraction = extractor().extract_with(&document, http.clone()).await.unwrap();
+    let extraction = extractor().extract_with(&document, http.clone(), Diagnostics::default()).await.unwrap();
     let validated = extraction.validate(&document).unwrap();
     assert_eq!(validated.payment_code, "POSTPAY_NET30");
     assert_eq!(extraction.provider, "gateway-a");
@@ -98,7 +103,7 @@ async fn wire_schema_uses_fine_tuned_model_subset() {
     let http = RecordingHttpClient::new(response(&output.to_string(), "stop"));
     let mut extractor = extractor();
     extractor.model = "ft:gpt-4.1-mini:example:contracts:example".into();
-    extractor.extract_with(&document, http.clone()).await.unwrap();
+    extractor.extract_with(&document, http.clone(), Diagnostics::default()).await.unwrap();
     let calls = http.requests();
     let request: Value = serde_json::from_slice(&calls[0].body).unwrap();
     assert_eq!(request["model"], extractor.model);
@@ -146,12 +151,15 @@ async fn preserves_configured_provider_in_serialized_evidence_across_service_swi
     let (document, output) = sample();
     let mut raw: Value = serde_json::from_str(&response(&output.to_string(), "stop")).unwrap();
     raw["provider"] = json!("untrusted-provider");
-    let first = extractor().extract_with(&document, RecordingHttpClient::new(raw.to_string())).await.unwrap();
+    let first = extractor()
+        .extract_with(&document, RecordingHttpClient::new(raw.to_string()), Diagnostics::default())
+        .await
+        .unwrap();
     let mut second = extractor();
     second.provider_id = "gateway-b".into();
     second.base_url = "https://other.example/v1".into();
     let http = RecordingHttpClient::new(raw.to_string());
-    let second = second.extract_with(&document, http.clone()).await.unwrap();
+    let second = second.extract_with(&document, http.clone(), Diagnostics::default()).await.unwrap();
     assert_eq!(first.provider, "gateway-a");
     assert_eq!(second.provider, "gateway-b");
     assert_eq!(first.version, second.version);
@@ -172,8 +180,10 @@ async fn maximum_model_lengths_fit_persisted_version_limit() {
     extractor.model = "m".repeat(96);
     let mut raw: Value = serde_json::from_str(&response(&output.to_string(), "stop")).unwrap();
     raw["model"] = json!("r".repeat(96));
-    let extraction =
-        extractor.extract_with(&document, RecordingHttpClient::new(raw.to_string())).await.unwrap();
+    let extraction = extractor
+        .extract_with(&document, RecordingHttpClient::new(raw.to_string()), Diagnostics::default())
+        .await
+        .unwrap();
     extraction.validate(&document).unwrap();
     assert!(extraction.version.len() <= 256);
 }
@@ -191,18 +201,24 @@ async fn local_validation_enforces_limits_removed_from_wire_schema() {
         let mut invalid = output.clone();
         invalid["fields"][0][key] = value;
         let http = RecordingHttpClient::new(response(&invalid.to_string(), "stop"));
-        assert_eq!(extractor().extract_with(&document, http).await.unwrap_err().code, "AI_INVALID_OUTPUT");
+        assert_eq!(
+            extractor().extract_with(&document, http, Diagnostics::default()).await.unwrap_err().code,
+            "AI_INVALID_OUTPUT"
+        );
     }
     for conflicts in [json!(vec!["conflict"; 33]), json!(["x".repeat(2049)])] {
         let mut invalid = output.clone();
         invalid["conflicts"] = conflicts;
         let http = RecordingHttpClient::new(response(&invalid.to_string(), "stop"));
-        assert_eq!(extractor().extract_with(&document, http).await.unwrap_err().code, "AI_INVALID_OUTPUT");
+        assert_eq!(
+            extractor().extract_with(&document, http, Diagnostics::default()).await.unwrap_err().code,
+            "AI_INVALID_OUTPUT"
+        );
     }
     let mut empty_quote = output;
     empty_quote["fields"][0]["quote"] = json!("");
     let http = RecordingHttpClient::new(response(&empty_quote.to_string(), "stop"));
-    let extraction = extractor().extract_with(&document, http).await.unwrap();
+    let extraction = extractor().extract_with(&document, http, Diagnostics::default()).await.unwrap();
     assert!(extraction.validate(&document).is_err());
 }
 
@@ -211,7 +227,7 @@ async fn refuses_truncation_refusal_malformed_duplicate_and_unknown_fields() {
     let (document, output) = sample();
     for reason in ["length", "content_filter", "tool_calls", "unknown"] {
         let http = RecordingHttpClient::new(response(&output.to_string(), reason));
-        assert!(extractor().extract_with(&document, http).await.is_err());
+        assert!(extractor().extract_with(&document, http, Diagnostics::default()).await.is_err());
     }
     let mut duplicate = output.clone();
     duplicate["fields"].as_array_mut().unwrap().push(output["fields"][0].clone());
@@ -234,7 +250,10 @@ async fn refuses_truncation_refusal_malformed_duplicate_and_unknown_fields() {
         " ".repeat(256_001),
     ] {
         let http = RecordingHttpClient::new(response(&content, "stop"));
-        assert_eq!(extractor().extract_with(&document, http).await.unwrap_err().code, "AI_INVALID_OUTPUT");
+        assert_eq!(
+            extractor().extract_with(&document, http, Diagnostics::default()).await.unwrap_err().code,
+            "AI_INVALID_OUTPUT"
+        );
     }
 }
 
@@ -251,7 +270,7 @@ async fn domain_rejects_hallucinated_evidence_conflicts_and_missing_fields() {
         [(invented, "SOURCE_MISMATCH"), (conflict, "EXTRACTION_CONFLICT"), (missing, "MISSING_FIELD")]
     {
         let http = RecordingHttpClient::new(response(&output.to_string(), "stop"));
-        let extraction = extractor().extract_with(&document, http).await.unwrap();
+        let extraction = extractor().extract_with(&document, http, Diagnostics::default()).await.unwrap();
         assert_eq!(extraction.validate(&document).err().unwrap().code, code);
     }
 }
@@ -271,7 +290,8 @@ async fn sanitizes_provider_errors_and_never_retries() {
             StatusCode::from_u16(status).unwrap(),
             "secret-key confidential-contract",
         );
-        let error = extractor().extract_with(&document, http.clone()).await.unwrap_err();
+        let error =
+            extractor().extract_with(&document, http.clone(), Diagnostics::default()).await.unwrap_err();
         assert_eq!(error.code, code);
         assert!(!format!("{error:?}").contains("secret-key"));
         assert!(!format!("{error:?}").contains("confidential-contract"));
@@ -284,7 +304,10 @@ async fn rejects_invalid_document_before_sending() {
     let (mut document, _) = sample();
     document.pages[2].number = 4;
     let http = RecordingHttpClient::default();
-    assert_eq!(extractor().extract_with(&document, http.clone()).await.unwrap_err().code, "PAGE_UNREADABLE");
+    assert_eq!(
+        extractor().extract_with(&document, http.clone(), Diagnostics::default()).await.unwrap_err().code,
+        "PAGE_UNREADABLE"
+    );
     assert!(http.requests().is_empty());
 }
 
@@ -300,7 +323,7 @@ async fn rejects_refusal_multiple_choices_and_missing_finish_reason() {
     unfinished["choices"][0].as_object_mut().unwrap().remove("finish_reason");
     for output in [refusal, multiple, unfinished] {
         let http = RecordingHttpClient::new(output.to_string());
-        assert!(extractor().extract_with(&document, http).await.is_err());
+        assert!(extractor().extract_with(&document, http, Diagnostics::default()).await.is_err());
     }
 }
 
@@ -335,6 +358,7 @@ async fn cancels_pending_request_at_deadline_without_retry() {
             self.calls.fetch_add(1, Ordering::SeqCst);
             let guard = Guard(self.dropped.clone());
             async move {
+                tracing::error!("sdk-private-payload");
                 let _guard = guard;
                 pending().await
             }
@@ -364,7 +388,125 @@ async fn cancels_pending_request_at_deadline_without_retry() {
     let http = PendingHttp { calls: calls.clone(), dropped: dropped.clone() };
     let mut extractor = extractor();
     extractor.timeout = Duration::from_millis(20);
-    assert_eq!(extractor.extract_with(&document, http).await.unwrap_err().code, "AI_TIMEOUT");
+    let (result, logs) = capture(extractor.extract_with(&document, http, Diagnostics::default())).await;
+    assert_eq!(result.unwrap_err().code, "AI_TIMEOUT");
+    let finished = event(&logs, "contract_ai_finished");
+    assert_eq!(finished["level"], "WARN");
+    assert_eq!(finished["fields"]["timeout_source"], "application_deadline");
+    assert_eq!(finished["fields"]["error_code"], "AI_TIMEOUT");
+    assert!(finished["fields"].get("http_status").is_none());
+    assert!(!serde_json::to_string(&logs).unwrap().contains("sdk-private-payload"));
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     assert!(dropped.load(Ordering::SeqCst));
+}
+
+#[derive(Default)]
+struct Capture(Mutex<Vec<u8>>);
+
+impl Write for &Capture {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+async fn capture<F: Future>(future: F) -> (F::Output, Vec<Value>) {
+    let buffer = Arc::new(Capture::default());
+    let subscriber =
+        tracing_subscriber::fmt().json().without_time().with_ansi(false).with_writer(buffer.clone()).finish();
+    let output = future.with_subscriber(subscriber).await;
+    let bytes = buffer.0.lock().unwrap();
+    let logs =
+        String::from_utf8_lossy(&bytes).lines().map(|line| serde_json::from_str(line).unwrap()).collect();
+    (output, logs)
+}
+
+fn event<'a>(logs: &'a [Value], name: &str) -> &'a Value {
+    logs.iter().find(|entry| entry["fields"]["event"] == name).unwrap()
+}
+
+#[tokio::test]
+async fn successful_call_logs_safe_metadata_with_task_context() {
+    let (document, output) = sample();
+    let diagnostics = Diagnostics::default();
+    let mut headers = HeaderMap::new();
+    headers.insert("x-request-id", HeaderValue::from_static("req-success-123"));
+    headers.insert("set-cookie", HeaderValue::from_static("private-cookie"));
+    diagnostics.response(200, &headers);
+    let http = RecordingHttpClient::new(response(&output.to_string(), "stop"));
+    let (result, logs) = capture(async {
+        let span = tracing::info_span!(
+            "contract_import",
+            task_id = "task-1",
+            request_id = "request-1",
+            account = "operator"
+        );
+        extractor().extract_with(&document, http, diagnostics).instrument(span).await
+    })
+    .await;
+    assert!(result.is_ok());
+    let started = event(&logs, "contract_ai_started");
+    assert_eq!(started["span"]["provider_id"], "gateway-a");
+    assert_eq!(started["span"]["page_count"], 3);
+    assert_eq!(started["span"]["timeout_seconds"], 90);
+    let finished = event(&logs, "contract_ai_finished");
+    assert_eq!(finished["fields"]["outcome"], "succeeded");
+    assert_eq!(finished["fields"]["http_status"], 200);
+    assert_eq!(finished["fields"]["provider_request_id"], "req-success-123");
+    assert!(finished["fields"]["elapsed_ms"].is_u64());
+    assert_eq!(finished["spans"][0]["task_id"], "task-1");
+    assert_eq!(finished["spans"][0]["request_id"], "request-1");
+    let serialized = serde_json::to_string(&logs).unwrap();
+    for secret in ["private-cookie", "test-key", "contract-model", "gateway.example", "客户有限公司"] {
+        assert!(!serialized.contains(secret), "logs exposed {secret}");
+    }
+}
+
+#[tokio::test]
+async fn upstream_timeout_logs_status_and_request_id_without_provider_body() {
+    let (document, _) = sample();
+    for status in [408, 504] {
+        let diagnostics = Diagnostics::default();
+        let mut headers = HeaderMap::new();
+        headers.insert("x-dashscope-request-id", HeaderValue::from_static("req-upstream-123"));
+        headers.insert("set-cookie", HeaderValue::from_static("private-cookie"));
+        let http = RecordingHttpClient::with_error_headers(
+            StatusCode::from_u16(status).unwrap(),
+            "secret-key confidential-contract",
+            headers,
+        );
+        let (result, logs) = capture(extractor().extract_with(&document, http, diagnostics)).await;
+        assert_eq!(result.unwrap_err().code, "AI_TIMEOUT");
+        let finished = event(&logs, "contract_ai_finished");
+        assert_eq!(finished["level"], "WARN");
+        assert_eq!(finished["fields"]["timeout_source"], "upstream_http");
+        assert_eq!(finished["fields"]["http_status"], status);
+        assert_eq!(finished["fields"]["provider_request_id"], "req-upstream-123");
+        let serialized = serde_json::to_string(&logs).unwrap();
+        assert!(!serialized.contains("secret-key"));
+        assert!(!serialized.contains("confidential-contract"));
+        assert!(!serialized.contains("private-cookie"));
+    }
+}
+
+#[test]
+fn transport_timeouts_keep_distinct_sources_and_the_existing_business_code() {
+    use super::transport::TimeoutSource;
+
+    for (source, expected) in [
+        (TimeoutSource::Connect, "connect"),
+        (TimeoutSource::ResponseHeaders, "response_headers"),
+        (TimeoutSource::ResponseBody, "response_body"),
+    ] {
+        let error = ProviderError::from(HttpError::instance(Failure::Timeout(source)));
+        assert_eq!(provider_error(&error).code, "AI_TIMEOUT");
+        assert_eq!(timeout_source(&error), Some(expected));
+    }
+    let error = ProviderError::from(HttpError::instance(Failure::Unavailable));
+    assert_eq!(provider_error(&error).code, "AI_UNAVAILABLE");
+    assert_eq!(timeout_source(&error), None);
 }

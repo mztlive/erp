@@ -1,12 +1,12 @@
 //! HTTP 只等待领取结果；独立任务持有文件读取、识别及归档直至收尾。
 use std::future::Future;
 use std::sync::{Arc, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use application_core::AuditActor;
-use erp_contract::entity::recognition::ImportView;
-use erp_processes::Error as ProcessError;
+use erp_contract::entity::recognition::{ImportStatus, ImportView};
 use erp_processes::contract_import::{ContractImportProcess, ImportAttempt};
+use erp_processes::{Error as ProcessError, Result as ProcessResult};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, oneshot};
 use tokio::time::timeout;
 
@@ -42,6 +42,9 @@ pub(crate) async fn start(state: AppState, actor: AuditActor, id: String) -> Res
     .await
 }
 
+#[tracing::instrument(name = "contract_import", skip_all, fields(
+    account = actor.account(), request_id = actor.request_id(), task_id = %id
+))]
 async fn execute(
     state: AppState,
     process: ContractImportProcess,
@@ -49,6 +52,8 @@ async fn execute(
     id: String,
     attempt: ImportAttempt,
 ) {
+    let start = Instant::now();
+    tracing::info!(event = "contract_import_started", "开始执行合同识别任务");
     let pdf = timeout(Duration::from_secs(30), async {
         let source = process.source(&id, &actor).await.map_err(|_| ())?;
         state.storage().read(&source.storage_object_key).await.map_err(|_| ())
@@ -58,15 +63,31 @@ async fn execute(
         Ok(Ok(pdf)) => process.execute(attempt, &actor, &pdf).await,
         _ => process.source_failed(attempt).await,
     };
-    if let Err(error) = result {
+    log_outcome(result, start.elapsed());
+}
+
+fn log_outcome(result: ProcessResult<ImportView>, elapsed: Duration) {
+    let elapsed_ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX);
+    match result {
+        Ok(view) if matches!(view.status, ImportStatus::Failed) => tracing::warn!(
+            event = "contract_import_finished",
+            outcome = "failed",
+            elapsed_ms,
+            error_code = view.failure.as_ref().map(|failure| failure.code.as_str()),
+            "合同识别任务失败，结果已保存"
+        ),
+        Ok(view) => tracing::info!(
+            event = "contract_import_finished", status = ?view.status, elapsed_ms,
+            "合同识别任务状态已保存"
+        ),
         // 不输出原始错误、原文或供应商载荷；未知结果保留原任务用于查询。
-        tracing::error!(
-            account = actor.account(),
-            request_id = actor.request_id(),
-            task_id = id,
+        Err(error) => tracing::error!(
+            event = "contract_import_finished",
+            outcome = "unconfirmed",
+            elapsed_ms,
             outcome_unknown = matches!(error, ProcessError::OutcomeUnknown(_)),
             "合同识别任务未确认完成，请通过原任务查询或恢复"
-        );
+        ),
     }
 }
 
@@ -100,7 +121,63 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::io::{self, Write};
+    use std::sync::Mutex;
+
+    use erp_contract::entity::recognition::ImportFailure;
+    use serde_json::Value;
+
     use super::*;
+
+    #[derive(Default)]
+    struct Capture(Mutex<Vec<u8>>);
+
+    impl Write for &Capture {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn persisted_business_failure_is_warn_and_never_logs_the_failure_message() {
+        let view = ImportView {
+            expected_customer_id: None,
+            revision_target: None,
+            recoverable_at: None,
+            id: "task-1".into(),
+            version: 3,
+            file_name: "private-file.pdf".into(),
+            page_count: 4,
+            status: ImportStatus::Failed,
+            started_at: None,
+            extraction: None,
+            result: None,
+            failure: Some(ImportFailure::new("AI_TIMEOUT", "private-provider-message")),
+            customer_id: None,
+        };
+        let buffer = Arc::new(Capture::default());
+        let subscriber = tracing_subscriber::fmt().json().without_time().with_writer(buffer.clone()).finish();
+        tracing::subscriber::with_default(subscriber, || {
+            let span = tracing::info_span!("contract_import", task_id = "task-1", request_id = "request-1");
+            span.in_scope(|| log_outcome(Ok(view), Duration::from_secs(110)));
+        });
+        let bytes = buffer.0.lock().unwrap();
+        let logs = String::from_utf8_lossy(&bytes);
+        let event: Value = serde_json::from_str(logs.lines().next().unwrap()).unwrap();
+        assert_eq!(event["level"], "WARN");
+        assert_eq!(event["fields"]["event"], "contract_import_finished");
+        assert_eq!(event["fields"]["error_code"], "AI_TIMEOUT");
+        assert_eq!(event["fields"]["elapsed_ms"], 110_000);
+        assert_eq!(event["span"]["task_id"], "task-1");
+        assert_eq!(event["span"]["request_id"], "request-1");
+        assert!(!logs.contains("private-provider-message"));
+        assert!(!logs.contains("private-file.pdf"));
+    }
 
     #[tokio::test]
     async fn cancelled_http_waiter_does_not_cancel_claim_or_completion() {

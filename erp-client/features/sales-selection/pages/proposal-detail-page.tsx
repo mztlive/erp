@@ -1,90 +1,131 @@
 "use client"
 
-import { PageScaffold } from "@/components/business"
-import { useProposalQuery } from "@/features/sales-selection/queries"
+import { CopyIcon } from "lucide-react"
+
+import {
+    BusinessFailureState,
+    DetailPageHeader,
+    PageScaffold,
+} from "@/components/business"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
+import { toast } from "@/components/ui/toast"
+import { ProposalItems } from "@/features/sales-selection/components/proposal-items"
+import { ProposalSummary } from "@/features/sales-selection/components/proposal-summary"
+import { useProposalQuery } from "@/features/sales-selection/queries"
 import { FORM_LABEL, SUBMIT_MODE_LABEL } from "@/features/sales-selection/types"
+
+async function copyProposalNumber(proposalNo: string) {
+    try {
+        await navigator.clipboard.writeText(proposalNo)
+        toast.add({ title: "方案编号已复制", type: "success" })
+    } catch {
+        toast.add({
+            title: "请手动复制方案编号",
+            description: proposalNo,
+            type: "info",
+        })
+    }
+}
+
+const backToList = {
+    id: "selection-proposal-back",
+    label: "返回",
+    href: "/sales/selection",
+}
 
 export function ProposalDetailPage({ proposalId }: { proposalId: string }) {
     const query = useProposalQuery(proposalId)
     const proposal = query.data
-    if (query.isError)
+
+    if (query.isError) {
         return (
-            <PageScaffold density="compact">
-                <p role="alert">销售方案加载失败</p>
-                <Button
-                    id="selection-proposal-retry"
-                    onClick={() => void query.refetch()}
-                >
-                    重试
-                </Button>
+            <PageScaffold>
+                <DetailPageHeader title="销售方案" back={backToList} />
+                <BusinessFailureState
+                    id="selection-proposal"
+                    title="销售方案加载失败"
+                    description="请重试，或返回选品册确认是否有权查看该方案。"
+                    error={query.error}
+                    onRetry={() => void query.refetch()}
+                />
             </PageScaffold>
         )
-    if (!proposal) {
-        return <PageScaffold density="compact">正在加载销售方案…</PageScaffold>
     }
-    return (
-        <PageScaffold density="compact" className="gap-4">
-            <div>
-                <p className="text-sm text-muted-foreground">销售方案</p>
-                <h1 className="text-xl font-semibold">
-                    {proposal.proposal_no}
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                    {proposal.customer_name} · {FORM_LABEL[proposal.form]} ·{" "}
-                    {SUBMIT_MODE_LABEL[proposal.submit_mode]}
-                </p>
-            </div>
-            {proposal.total_amount ? (
-                <p className="text-lg font-medium">
-                    合计 ¥ {proposal.total_amount}
-                </p>
-            ) : (
-                <p className="text-sm text-muted-foreground">
-                    本次仅确认可选范围，无成交合计。
-                </p>
-            )}
-            <section>
-                <h2 className="mb-2 font-medium">已选商品</h2>
-                {proposal.display_lines.map((line, index) => (
-                    <p key={line.display_item_id} className="text-sm">
-                        {proposal.form === "PACKAGE"
-                            ? `套餐 ${index + 1}`
-                            : (proposal.sku_lines.find(
-                                  (sku) =>
-                                      sku.display_item_id ===
-                                      line.display_item_id,
-                              )?.name ?? "商品")}
-                        {line.quantity ? ` × ${line.quantity}` : ""}
-                        {line.line_amount
-                            ? ` · ¥ ${line.line_amount}`
-                            : ` · ¥ ${line.unit_price}`}
-                    </p>
-                ))}
-            </section>
-            <section className="grid gap-3">
-                <h2 className="font-medium">商品明细</h2>
-                {proposal.sku_lines.map((line, index) => (
-                    <div
-                        key={`${line.display_item_id}-${index}`}
-                        className="rounded-lg border p-3"
-                    >
-                        <p className="font-medium">{line.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                            {line.specification
-                                ?.map((attr) => `${attr.name}：${attr.value}`)
-                                .join(" · ")}
-                        </p>
-                        <p>
-                            单价 ¥{line.unit_price}
-                            {line.quantity != null &&
-                                ` · 数量 ${line.quantity} ${line.unit ?? ""}`}
-                            {line.line_amount != null &&
-                                ` · 金额 ¥${line.line_amount}`}
-                        </p>
+    if (!proposal) {
+        return (
+            <PageScaffold>
+                <DetailPageHeader title="销售方案" back={backToList} />
+                <div
+                    aria-busy="true"
+                    aria-label="正在加载销售方案"
+                    className="space-y-6"
+                >
+                    <span role="status" className="sr-only">
+                        正在加载销售方案…
+                    </span>
+                    <Skeleton className="h-24 w-full max-w-2xl rounded-xl" />
+                    <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_320px]">
+                        <Skeleton className="h-80 rounded-xl" />
+                        <Skeleton className="h-80 rounded-xl" />
                     </div>
-                ))}
-            </section>
+                </div>
+            </PageScaffold>
+        )
+    }
+
+    return (
+        <PageScaffold className="gap-8">
+            <DetailPageHeader
+                title={proposal.customer_name}
+                headingProps={{
+                    className: "text-page-title md:text-page-title",
+                }}
+                back={backToList}
+                navigationMeta="选品册 / 销售方案"
+                meta={
+                    <div className="flex flex-col items-start gap-3">
+                        <p className="text-base font-medium text-foreground">
+                            销售方案
+                        </p>
+                        <div className="flex max-w-full items-center gap-2">
+                            <span className="min-w-0 break-all">
+                                方案编号：
+                                <span className="num select-text">
+                                    {proposal.proposal_no}
+                                </span>
+                            </span>
+                            <Button
+                                id="selection-proposal-copy-number"
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label="复制方案编号"
+                                title="复制方案编号"
+                                onClick={() =>
+                                    void copyProposalNumber(
+                                        proposal.proposal_no,
+                                    )
+                                }
+                            >
+                                <CopyIcon aria-hidden="true" />
+                            </Button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <Badge variant="secondary">
+                                {FORM_LABEL[proposal.form]}
+                            </Badge>
+                            <Badge variant="secondary">
+                                {SUBMIT_MODE_LABEL[proposal.submit_mode]}
+                            </Badge>
+                        </div>
+                    </div>
+                }
+            />
+            <div className="grid min-w-0 items-start gap-8 xl:grid-cols-[minmax(0,1fr)_320px]">
+                <ProposalItems proposal={proposal} />
+                <ProposalSummary proposal={proposal} />
+            </div>
         </PageScaffold>
     )
 }

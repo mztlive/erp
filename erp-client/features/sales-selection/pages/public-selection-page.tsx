@@ -48,6 +48,7 @@ import {
 } from "../lib/public-flow"
 import { quantityStringSchema } from "../lib/validation"
 import type { PublicDisplayItemView, PublicPageView } from "../types"
+import { PublicSelectionReceipt } from "../components/public-selection-receipt"
 
 /** 读取公开选品事实，明确区分加载、结束、回执和可编辑状态。 */
 export const PublicSelectionPage = ({ token }: { token: string }) => {
@@ -91,7 +92,14 @@ export const PublicSelectionPage = ({ token }: { token: string }) => {
         )
 
     if (page.kind === "ENDED") return <Ended />
-    if (page.kind === "RECEIPT" && page.receipt) return <Receipt page={page} />
+    if (page.kind === "RECEIPT" && page.receipt)
+        return (
+            <PublicSelectionReceipt
+                token={token}
+                page={page}
+                receipt={page.receipt}
+            />
+        )
 
     return (
         <SelectionForm
@@ -121,62 +129,10 @@ const Ended = () => {
     )
 }
 
-/** 显示服务端已提交的客户明细和金额。 */
-const Receipt = ({ page }: { page: PublicPageView }) => {
-    const receipt = page.receipt!
-    return (
-        <main className="mx-auto min-h-screen max-w-lg bg-muted p-4 pb-12">
-            <div className="mb-4 rounded-3xl bg-card p-6 text-center shadow-xs border border-border/80">
-                <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-success-soft text-success-soft-foreground">
-                    <CheckCircle2 className="h-8 w-8" />
-                </div>
-                <h1 className="text-xl font-bold text-foreground">
-                    已提交选品
-                </h1>
-                <p className="mt-1 text-sm font-semibold text-foreground">
-                    {receipt.customer_name}
-                </p>
-                <div className="mt-3 inline-flex flex-col items-center gap-1 rounded-xl bg-background px-4 py-2 text-xs text-muted-foreground border border-border">
-                    <span className="font-mono font-medium">
-                        方案编号 {receipt.proposal_no}
-                    </span>
-                    <span className="text-muted-foreground">
-                        提交时间：{formatTime(receipt.submitted_at)}
-                    </span>
-                </div>
-            </div>
-
-            <div className="space-y-3">
-                <div className="flex items-center gap-2 px-1">
-                    <FileCheck className="h-4 w-4 text-primary" />
-                    <h2 className="text-sm font-semibold text-foreground">
-                        确认选品清单
-                    </h2>
-                </div>
-                <ChoiceSummary page={page} receipt />
-                {page.notices.map((notice) => (
-                    <div
-                        key={notice}
-                        className="rounded-xl bg-card p-3 text-xs text-muted-foreground border border-border/60 leading-relaxed"
-                    >
-                        {notice}
-                    </div>
-                ))}
-            </div>
-        </main>
-    )
-}
-
 /** 使用快照名称和后端金额核对所选内容。 */
-const ChoiceSummary = ({
-    page,
-    receipt = false,
-}: {
-    page: PublicPageView
-    receipt?: boolean
-}) => {
-    const choices = receipt ? page.receipt!.items : page.choices
-    const total = receipt ? page.receipt!.total_amount : page.total_amount
+const ChoiceSummary = ({ page }: { page: PublicPageView }) => {
+    const choices = page.choices
+    const total = page.total_amount
     return (
         <div className="space-y-3 rounded-2xl border border-border/80 bg-card p-4 shadow-xs">
             {choices.map((choice) => {
@@ -2035,9 +1991,4 @@ const SelectionForm = ({
             </Dialog>
         </main>
     )
-}
-
-/** 将服务端秒时间戳格式化为客户本地时间。 */
-const formatTime = (value: number) => {
-    return new Date(value * 1000).toLocaleString("zh-CN")
 }

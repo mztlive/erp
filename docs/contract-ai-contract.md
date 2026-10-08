@@ -36,6 +36,10 @@ max_output_tokens = 8192
 5. 提取证据的 `provider` 必须取自任务配置快照中的 `provider_id`，随原有任务与合同修订保存，不发送给模型。`version` 由适配器生成，包含 `protocol=openai`、配置请求模型、响应报告模型及提示词版本 `contract-v1`；模型未报告版本时标为 `unreported`。供应商响应不得覆盖配置的供应商标识，生成内容不得自报供应商或版本。服务切换不得改写历史证据；历史 `openai-compatible` 记录保留原值，不得推断或补填供应商。
 6. 失败保留原任务和已完成的有界阶段结果。没有自动重试；用户手动重试重新执行 OCR 与 AI，可能再次计费。超时取消本地等待，不保证供应商已取消已接收请求或免计费。
 7. 凭据、完整 OCR、模型输出和原始错误不得进入运行日志。适配器关闭 SDK 内容追踪并隔离 SDK 内部日志；HTTP 错误只保留状态用于分类，不读取错误正文。
+8. 后台任务须建立 `contract_import` 日志上下文，包含 `task_id`、`account`、`request_id`。任务开始记录 `contract_import_started`，持久化后的业务失败须以 WARN 记录 `contract_import_finished`、`error_code`、`elapsed_ms`；持久化异常或提交结果未知须以 ERROR 记录，不得仅因 HTTP 返回 200 判定识别成功。
+9. OCR 开始与完成须记录 `contract_ocr_started` / `contract_ocr_finished`、页数和耗时。识别阶段失败须记录 `contract_recognition_failed`、`stage`（`ocr` / `ai` / `validation`）、错误码、总耗时与当前阶段耗时；`RECOGNITION_TIMEOUT` 表示 180 秒总预算耗尽。
+10. AI 调用须记录 `contract_ai_started` / `contract_ai_finished`，通过 `contract_ai` 上下文关联 `provider_id`、页数、超时秒数和输出 token 上限。结束日志须包含结果、耗时以及已取得的 HTTP 状态和供应商请求 ID；失败须以 WARN 记录错误码。`timeout_source` 区分 `application_deadline`（应用等待截止）、`connect`（连接超时）、`response_headers`（发送请求或等待响应头超时）、`response_body`（读取响应超时）、`upstream_http`（上游 408/504）。总预算取消 AI 时，以识别阶段的 `RECOGNITION_TIMEOUT` 为准，不得伪报供应商超时。
+11. 供应商请求 ID 仅允许从 `x-request-id`、`x-dashscope-request-id`、`x-acs-request-id` 响应头提取，值须为 1～128 个 ASCII 字母、数字或 `-_.`；不符合约束时省略。不得记录其他响应头、错误正文、完整 URL、模型标识、合同文本或模型输出；不得为诊断开启 SDK 原始日志或额外发送计费请求。
 
 | 错误码 | 行为 |
 | --- | --- |

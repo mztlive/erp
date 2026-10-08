@@ -1,12 +1,14 @@
 //! Rig OpenAI Chat Completions 到合同全文提取 Port 的适配。
+mod diagnostics;
 mod output;
 #[cfg(test)]
 mod tests;
 mod transport;
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
+use diagnostics::Diagnostics;
 use erp_contract::entity::recognition::{ContractExtraction, ImportFailure, OcrDocument};
 use erp_contract::ports::recognition::ContractExtractor;
 use rig_core::ProviderError;
@@ -58,10 +60,15 @@ impl OpenAiContractExtractor {
         }
     }
 
+    #[tracing::instrument(name = "contract_ai", skip_all, fields(
+        provider_id = %self.provider_id, page_count = document.pages.len(),
+        timeout_seconds = self.timeout.as_secs(), max_output_tokens = self.max_output_tokens
+    ))]
     async fn extract_with(
         &self,
         document: &OcrDocument,
         http: impl HttpClientExt + 'static,
+        diagnostics: Diagnostics,
     ) -> Result<ContractExtraction> {
         let count = u32::try_from(document.pages.len()).map_err(|_| invalid_output())?;
         document.validate(count)?;
@@ -75,21 +82,33 @@ impl OpenAiContractExtractor {
             .with_base_url(self.base_url.trim_end_matches('/'))
             .connect(http);
         let model = client.chat(&self.model);
+        let start = Instant::now();
+        tracing::info!(event = "contract_ai_started", "开始提取合同字段");
         // SDK 内部错误/追踪不得记录合同正文、模型输出或服务端错误负载。
-        let response = timeout(self.timeout, model.call(request).with_subscriber(NoSubscriber::default()))
-            .await
-            .map_err(|_| ImportFailure::new("AI_TIMEOUT", "合同字段提取超时，请稍后重试"))?
-            .map_err(provider_error)?;
-        output::decode(response, &self.model, &self.provider_id)
+        let (result, timeout_source) =
+            match timeout(self.timeout, model.call(request).with_subscriber(NoSubscriber::default())).await {
+                Err(_) => (
+                    Err(ImportFailure::new("AI_TIMEOUT", "合同字段提取超时，请稍后重试")),
+                    Some("application_deadline"),
+                ),
+                Ok(Err(error)) => {
+                    diagnostics.error(&error);
+                    (Err(provider_error(&error)), timeout_source(&error))
+                },
+                Ok(Ok(response)) => (output::decode(response, &self.model, &self.provider_id), None),
+            };
+        diagnostics.finish(start, &result, timeout_source);
+        result
     }
 }
 
 #[async_trait]
 impl ContractExtractor for OpenAiContractExtractor {
     async fn extract(&self, document: &OcrDocument) -> Result<ContractExtraction> {
-        let http = BoundedHttp::new(self.timeout)
+        let diagnostics = Diagnostics::default();
+        let http = BoundedHttp::new(self.timeout, diagnostics.clone())
             .map_err(|_| ImportFailure::new("AI_UNAVAILABLE", "字段提取服务暂不可用，请稍后重试"))?;
-        self.extract_with(document, http).await
+        self.extract_with(document, http, diagnostics).await
     }
 }
 
@@ -97,7 +116,7 @@ fn invalid_output() -> ImportFailure {
     ImportFailure::new("AI_INVALID_OUTPUT", "字段提取结果不完整或格式无效，请重试或联系管理员")
 }
 
-fn provider_error(error: ProviderError) -> ImportFailure {
+fn provider_error(error: &ProviderError) -> ImportFailure {
     if let Some(status) = error.provider_response_status() {
         return match status.as_u16() {
             401 | 403 => ImportFailure::new("AI_UNAUTHORIZED", "字段提取服务凭据无效或未授权，请联系管理员"),
@@ -113,7 +132,7 @@ fn provider_error(error: ProviderError) -> ImportFailure {
     if let ProviderError::Http(error) = error {
         if let HttpError::Instance(inner) = error.as_ref() {
             match inner.downcast_ref::<Failure>() {
-                Some(Failure::Timeout) => {
+                Some(Failure::Timeout(_)) => {
                     return ImportFailure::new("AI_TIMEOUT", "合同字段提取超时，请稍后重试");
                 },
                 Some(Failure::ResponseSize) => return invalid_output(),
@@ -123,4 +142,17 @@ fn provider_error(error: ProviderError) -> ImportFailure {
         return ImportFailure::new("AI_UNAVAILABLE", "字段提取服务暂不可用，请稍后重试");
     }
     invalid_output()
+}
+
+fn timeout_source(error: &ProviderError) -> Option<&'static str> {
+    if error.provider_response_status().is_some_and(|status| matches!(status.as_u16(), 408 | 504)) {
+        return Some("upstream_http");
+    }
+    if let ProviderError::Http(error) = error
+        && let HttpError::Instance(inner) = error.as_ref()
+        && let Some(Failure::Timeout(source)) = inner.downcast_ref::<Failure>()
+    {
+        return Some(source.as_str());
+    }
+    None
 }

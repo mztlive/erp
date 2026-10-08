@@ -206,3 +206,104 @@ final result: passed
 5. 当前没有渲染差异结论或视觉修正复验记录；完成以上检查前不得标记视觉验收通过。本节不改变前述其他页面的独立验收结果。
 
 final result: blocked
+
+# 销售方案详情页验收合同（2026-10-08）
+
+## 执行范围
+
+1. 销售方案详情须采用已选方案 1：客户身份页头、左侧商品清单、右侧方案摘要。
+2. 生产变更限定为 `proposal-detail-page.tsx`、`proposal-items.tsx`、`proposal-summary.tsx`；复用现有查询、授权、图片读取和金额组件。
+3. 商品与套餐金额须直接展示方案返回值。不得在浏览器重算合计，不得把方案金额标为应收，不得新增自动开单入口。
+4. 单品只展示一次；套餐按陈列项分组并展示成员。商城兑换只展示可选范围与单价，不展示采购数量、小计或成交合计。
+5. 商品图片须通过当前用户授权读取方案封面；无封面显示“暂无图片”，读取失败显示完整提示。不得把设计示意包装写入业务数据。
+
+## 证据与环境
+
+- source visual truth：`/Users/huangjiajiang/.codex/generated_images/01a11992-e356-7043-9f77-97423adfb1dc/exec-7d427388-870a-4b85-9f86-948e049f5e74.png`。
+- evidence root：`/tmp/erp-proposal-preview.BsRjwp/qa/`。
+- implementation screenshot：`single-1536-final.png`。
+- full-view comparison：`comparison-final.png`；focused comparison：`comparison-detail-final.png`，均为左参考、右实现。
+- 主对照图与实装均为 1536 × 1024 像素；CSS viewport 为 1536 × 1024，device scale 为 1。另验收 1440、900、390px 窗口。
+- 窄窗口证据：`single-900.png`、`single-390.png`；分支证据：`package-1440.png`、`redeem-1440.png`、`empty-1440.png`、`loading.png`、`retry-before.png`、`retry-after.png`、`image-error-final.png`。
+- 预览为独立前端副本与只读示例 API，端口分别为 3200、3201。示例只保存在临时目录，不进入生产源码或业务库。
+- 原开发构建目录 `.next` 指向未挂载的 `/Volumes/Kingston`；原 3000 页面返回 500，10001 登录与健康请求超时。本验收不得据此声称真实方案、权限或图片存储链路已通过。
+
+## 验收标准与结果
+
+| 检查项 | 必须满足的行为 | 结果 |
+| --- | --- | --- |
+| 字体与层级 | 客户名为主标题；编号为辅助信息；合计为视觉重点 | 采用共享 26px 标题、14px 正文、44px 金额。参考图的大字号按项目令牌适配，通过 |
+| 布局与间距 | 桌面双栏，清单连续分隔；窄窗口摘要前置且不得横向撑破页面 | 1440、900、390px 检查通过；900px 摘要改为两列以减少占高 |
+| 色彩与样式 | 保留中性灰白、轻边框与黑色主按钮 | 共享主题与 UI 主题检查通过 |
+| 图片与图标 | 保留真实封面读取能力；无图与读取失败可区分 | 缺图、特殊字符资产引用编码及 404 提示通过；真实图片成功读取待 API 恢复后验证 |
+| 文案与数据 | 单品去重、套餐分组；兑换不显示成交合计；零金额与缺值区分 | 示例分支通过，零金额显示 ¥0.00，缺值显示 — |
+| 复制与导航 | 可复制方案编号；拒绝剪贴板访问时可手动复制；来源链接使用当前册 ID | 成功提示、失败提示、实际来源页跳转通过 |
+| 异常与自动化 | 加载有反馈，服务异常可重试；保留 `selection-proposal-retry` 原生 ID | 503 后点击重试恢复清单；页面操作 ID 完整且无重复 |
+| 运行错误 | 正常页面不得产生未捕获异常 | 浏览器 page error 为空；错误场景的 404/503 为预期模拟响应 |
+
+## 必修项复验
+
+| 级别 | 修正要求 | 最终证据 |
+| --- | --- | --- |
+| P2 | 900px 下摘要须压缩，避免字段纵排占用过多首屏 | `single-900.png`：金额与资料分两列，商品清单提前进入首屏 |
+| P2 | 图片失败提示须允许换行；无图不得创建图片查询 | `image-error-final.png`：首行显示完整失败提示，其余行显示“暂无图片” |
+| P2 | 共享错误组件不得改变原重试按钮 ID | `retry-before.png`、`retry-after.png` 与最终源码；重试按钮为 `selection-proposal-retry` |
+
+## 交付门禁
+
+- 已通过全量前端 lint、TypeScript 检查、改动文件格式检查、主题检查与 `git diff --check`。
+- 已通过隔离前端副本的 `npm run build -- --webpack`；最终三个生产文件与工作区版本一致。
+- 未新增或执行前端单元测试、后端集成测试、真实库写入或全量 E2E。
+- 无未解决的布局 P0/P1/P2 项；图片实物差异与侧栏菜单差异按真实资产和账号权限处理，不以生成图内容替代。
+- API 恢复后须补验真实方案与真实封面。本节通过结论仅适用于界面与模拟响应交互。
+
+final result: passed
+
+
+---
+
+# 客户选品回执验收合同与记录（2026-10-08）
+
+final result: passed
+
+验收范围：客户公开选品页的已提交回执，按本次选定的方案 3 实现；验收结论限于前端展示、响应式布局与本地清单生成，不构成真实提交链路或生产发布验收。
+
+## 验收对象与证据
+
+- source visual truth path：`/Users/huangjiajiang/.codex/generated_images/01a11997-4cd4-7e31-b8b9-d3a19076f2e2/exec-2d93fdbf-73dd-4056-9ca3-e7ba7d007658.png`。
+- implementation screenshot path：`/var/folders/hp/2pcnc0sd05zdp3blph8r6yjr0000gn/T/erp-selection-receipt-tndkyywk/receipt-mobile.jpg`。
+- full-view comparison evidence：同目录 `receipt-comparison.jpg`，左侧参考图、右侧生产构建实装图；已在同一比对图中核对。
+- viewport：主验收 390 × 844 CSS px；窄屏 320 × 844；桌面 1440 × 1024。
+- source pixel dimensions：853 × 1844；implementation pixel dimensions：390 × 844；density normalization：参考图归一到 390 × 844，与实装截图同尺寸比对。
+- state：已提交回执，3 款商品、共 3 份，金额分别为 82.00、81.00、83.00，含税合计 246.00；客户、编号及提交时间沿用参考图。
+- focused region comparison evidence：390px 比对图已可读，逐区核对成功提示、客户信息、商品行、总额与保存按钮，无须另裁切。
+- 其他证据：同目录 `receipt-stress-320.jpg`、`receipt-mall-320.jpg`、`receipt-desktop.jpg`；浏览器实际视口宽度已读取确认。
+- 预览地址：`http://127.0.0.1:3212/receipt-preview`。示例数据与三张示意商品照片只存在临时副本中；生产代码必须读取公开接口及商品封面。
+
+## 验收标准与结果
+
+| 验收项 | 必须满足的行为 | 结果 |
+| --- | --- | --- |
+| 信息结构 | 居中成功提示；单张回执收纳客户、编号、时间、商品与总额 | 通过 |
+| 字体与层级 | 使用 ERP 共享字体；正文、辅助信息、金额形成稳定层次 | 通过；标题 24px、商品 14px、辅助 12px、合计使用共享 summary 规格 |
+| 间距与布局 | 商品行使用轻分隔；删除嵌套编号框；390px 下保存按钮完整可见 | 通过；按钮位置 y=731.75 至 771.75 |
+| 颜色与令牌 | 白色卡片、中性画布、成功语义色、共享主按钮 | 通过；按钮按项目 lg 规格为 40px，保持既有主题合同 |
+| 图像与图标 | 读取真实公开封面；缺图保留可读提示；图标复用图标库 | 通过；预览三张 64px 图片加载成功，缺图状态已核对 |
+| 文案与口径 | 明确选品已提交；金额来自回执；不承诺付款或履约 | 通过 |
+| 窄屏与长内容 | 长客户名、商品名、规格、套餐明细及最大金额不得横向撑破 | 320px 实际视口核对通过；纵向内容自然滚动 |
+| 商城兑换 | 只显示商品，不显示按份数量、行金额与总额 | 3 行商品实装核对通过 |
+| 保存清单 | 动态加载 Excel 导出；生成时禁用重复点击；失败可重试；保留十进制原值及备注 | 生产构建中点击后经过“正在生成清单”并显示生成成功；未独立回读下载文件内容 |
+| 控制台 | 回执显示与保存清单不得产生业务警告或错误 | 生产构建观察窗口内无 warn/error |
+
+## 修正与复验
+
+1. P2：首轮 390px 页面总高度 924px，按钮超出首屏。已压缩成功区、元信息与商品行间距；最终生产构建截图中按钮完整位于首屏，回执高度 553.75px。
+2. 开发工具浮层不属于产品内容。最终比对采用生产构建，截图不包含开发工具浮层。
+3. 当前无未解决的 P0、P1、P2 视觉问题。正式商品照片与示意图不同，必须以业务封面为准。
+
+## 质量门禁与边界
+
+1. 本次四个源码文件的 lint、TypeScript、格式与 diff 检查通过；未新增或执行前端单元测试，未改动 E2E。
+2. 仓库默认 `.next` 指向未挂载的 Kingston 路径，原目录 `npm run build` 因 ENOENT 失败。临时副本使用 Webpack 完成生产构建与 standalone 打包；仅临时副本将追踪根设为 `/` 以覆盖外部 node_modules 软链接，仓库构建配置未修改。
+3. 全量 `format:check` 被 6 个既有文件阻断：`access-list-toolbar.tsx`、`access-audit-page.tsx`、`receivable-counterparty-search-combobox.tsx`、`data-scope/cache.ts`、`invoice-requests/scoped-view.ts`、`lib/selector-list.ts`。本次不得顺带格式化这些文件。
+4. 未调用真实客户提交接口，未写业务库；真实回执接口、封面权限与手机文件接收行为仍须在服务可用时验收。
