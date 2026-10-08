@@ -77,6 +77,8 @@ COPY --from=builder /tmp/bin/web-api /usr/local/bin/web-api
 
 USER erp
 
+RUN pdftoppm -v
+
 ENV RUST_LOG=info \
     LOG_FORMAT=json \
     TZ=Asia/Shanghai
