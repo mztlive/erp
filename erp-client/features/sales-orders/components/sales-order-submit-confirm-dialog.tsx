@@ -56,6 +56,11 @@ export function SalesOrderSubmitConfirmDialog({
                 </DialogHeader>
 
                 <PaperDocumentViewport
+                    id="sales-orders-submit-confirm-preview"
+                    role="region"
+                    aria-label="销售单提交预览"
+                    tabIndex={0}
+                    fitMode="width"
                     fitKey={`${snapshot.nature}-${snapshot.lineCount}`}
                 >
                     <SalesOrderSubmitPaper snapshot={snapshot} />
