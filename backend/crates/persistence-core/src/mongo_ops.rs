@@ -3,10 +3,15 @@
 //! MongoDB 驱动对“带会话”和“不带会话”提供了两套调用形态：前者需要显式传入
 //! `&mut ClientSession`，`find` 还会返回类型不同的 `SessionCursor`。本模块把这层分支
 //! 收敛到一处，使 Repository 只面向 [`Executor`](crate::Executor) 编写一份实现。
+//!
+//! 各操作返回装箱的 `BoxFuture` 而非 `async fn`：驱动内部的游标、会话等类型不再泄漏到
+//! 调用方 Future 中，上层 Port 实现证明 `Send` 时不必逐层展开驱动类型（erp-processes
+//! 全量编译实测减少约 20%）。改回 `async fn` 前须重新评估编译耗时。
 
 use std::borrow::Borrow;
 
 use futures_util::StreamExt;
+use futures_util::future::BoxFuture;
 use mongodb::Collection;
 use mongodb::bson::{Document, doc};
 use mongodb::options::{FindOptions, ReturnDocument};
@@ -43,16 +48,18 @@ macro_rules! exec_with_session {
 ///
 /// # 错误
 /// 当唯一索引冲突或 MongoDB 写入失败时返回错误。
-pub async fn insert_one<T>(
-    collection: &Collection<T>,
-    document: &T,
-    executor: &mut dyn Executor,
-) -> Result<()>
+pub fn insert_one<'a, T>(
+    collection: &'a Collection<T>,
+    document: &'a T,
+    executor: &'a mut dyn Executor,
+) -> BoxFuture<'a, Result<()>>
 where
-    T: Serialize + Send + Sync,
+    T: Serialize + Send + Sync + 'a,
 {
-    exec_with_session!(executor, collection.insert_one(document));
-    Ok(())
+    Box::pin(async move {
+        exec_with_session!(executor, collection.insert_one(document));
+        Ok(())
+    })
 }
 
 /// 按执行器语义批量插入文档。
@@ -70,24 +77,26 @@ where
 ///
 /// # 错误
 /// 当唯一索引冲突或 MongoDB 写入失败时返回错误。
-pub async fn insert_many<T, D>(
-    collection: &Collection<T>,
+pub fn insert_many<'a, T, D>(
+    collection: &'a Collection<T>,
     documents: D,
-    executor: &mut dyn Executor,
-) -> Result<()>
+    executor: &'a mut dyn Executor,
+) -> BoxFuture<'a, Result<()>>
 where
-    T: Serialize + Send + Sync,
-    D: IntoIterator + Send,
-    D::IntoIter: ExactSizeIterator + Send,
-    D::Item: Borrow<T> + Send,
+    T: Serialize + Send + Sync + 'a,
+    D: IntoIterator + Send + 'a,
+    D::IntoIter: ExactSizeIterator + Send + 'a,
+    D::Item: Borrow<T> + Send + 'a,
 {
-    let documents = documents.into_iter();
-    if documents.len() == 0 {
-        return Ok(());
-    }
+    Box::pin(async move {
+        let documents = documents.into_iter();
+        if documents.len() == 0 {
+            return Ok(());
+        }
 
-    exec_with_session!(executor, collection.insert_many(documents));
-    Ok(())
+        exec_with_session!(executor, collection.insert_many(documents));
+        Ok(())
+    })
 }
 
 /// 按执行器语义更新单个文档。
@@ -104,18 +113,20 @@ where
 ///
 /// # 错误
 /// 当 MongoDB 更新失败时返回错误。
-pub async fn update_one<T>(
-    collection: &Collection<T>,
+pub fn update_one<'a, T>(
+    collection: &'a Collection<T>,
     filter: Document,
     update: Document,
     upsert: bool,
-    executor: &mut dyn Executor,
-) -> Result<UpdateResult>
+    executor: &'a mut dyn Executor,
+) -> BoxFuture<'a, Result<UpdateResult>>
 where
-    T: Send + Sync,
+    T: Send + Sync + 'a,
 {
-    let result = exec_with_session!(executor, collection.update_one(filter, update).upsert(upsert));
-    Ok(result)
+    Box::pin(async move {
+        let result = exec_with_session!(executor, collection.update_one(filter, update).upsert(upsert));
+        Ok(result)
+    })
 }
 
 /// 按执行器语义执行单文档更新管道，并返回更新后的文档。
@@ -135,18 +146,21 @@ where
 ///
 /// # 错误
 /// 当 MongoDB 更新或文档反序列化失败时返回错误。
-pub async fn find_one_and_update_pipeline<T>(
-    collection: &Collection<T>,
+pub fn find_one_and_update_pipeline<'a, T>(
+    collection: &'a Collection<T>,
     filter: Document,
     pipeline: Vec<Document>,
-    executor: &mut dyn Executor,
-) -> Result<Option<T>>
+    executor: &'a mut dyn Executor,
+) -> BoxFuture<'a, Result<Option<T>>>
 where
-    T: DeserializeOwned + Send + Sync,
+    T: DeserializeOwned + Send + Sync + 'a,
 {
-    let operation = collection.find_one_and_update(filter, pipeline).return_document(ReturnDocument::After);
-    let document = exec_with_session!(executor, operation);
-    Ok(document)
+    Box::pin(async move {
+        let operation =
+            collection.find_one_and_update(filter, pipeline).return_document(ReturnDocument::After);
+        let document = exec_with_session!(executor, operation);
+        Ok(document)
+    })
 }
 
 /// 按执行器语义删除符合条件的全部文档。
@@ -161,16 +175,18 @@ where
 ///
 /// # 错误
 /// 当 MongoDB 删除失败时返回错误。
-pub async fn delete_many<T>(
-    collection: &Collection<T>,
+pub fn delete_many<'a, T>(
+    collection: &'a Collection<T>,
     filter: Document,
-    executor: &mut dyn Executor,
-) -> Result<DeleteResult>
+    executor: &'a mut dyn Executor,
+) -> BoxFuture<'a, Result<DeleteResult>>
 where
-    T: Send + Sync,
+    T: Send + Sync + 'a,
 {
-    let result = exec_with_session!(executor, collection.delete_many(filter));
-    Ok(result)
+    Box::pin(async move {
+        let result = exec_with_session!(executor, collection.delete_many(filter));
+        Ok(result)
+    })
 }
 
 /// 按执行器语义删除符合条件的单个文档。
@@ -185,16 +201,18 @@ where
 ///
 /// # 错误
 /// 当 MongoDB 删除失败时返回错误。
-pub async fn delete_one<T>(
-    collection: &Collection<T>,
+pub fn delete_one<'a, T>(
+    collection: &'a Collection<T>,
     filter: Document,
-    executor: &mut dyn Executor,
-) -> Result<DeleteResult>
+    executor: &'a mut dyn Executor,
+) -> BoxFuture<'a, Result<DeleteResult>>
 where
-    T: Send + Sync,
+    T: Send + Sync + 'a,
 {
-    let result = exec_with_session!(executor, collection.delete_one(filter));
-    Ok(result)
+    Box::pin(async move {
+        let result = exec_with_session!(executor, collection.delete_one(filter));
+        Ok(result)
+    })
 }
 
 /// 按执行器语义查询单个文档。
@@ -209,16 +227,18 @@ where
 ///
 /// # 错误
 /// 当 MongoDB 查询或反序列化失败时返回错误。
-pub async fn find_one<T>(
-    collection: &Collection<T>,
+pub fn find_one<'a, T>(
+    collection: &'a Collection<T>,
     filter: Document,
-    executor: &mut dyn Executor,
-) -> Result<Option<T>>
+    executor: &'a mut dyn Executor,
+) -> BoxFuture<'a, Result<Option<T>>>
 where
-    T: DeserializeOwned + Send + Sync,
+    T: DeserializeOwned + Send + Sync + 'a,
 {
-    let document = exec_with_session!(executor, collection.find_one(filter));
-    Ok(document)
+    Box::pin(async move {
+        let document = exec_with_session!(executor, collection.find_one(filter));
+        Ok(document)
+    })
 }
 
 /// 按执行器语义查询多个文档。
@@ -236,31 +256,33 @@ where
 ///
 /// # 错误
 /// 当 MongoDB 查询、游标读取或反序列化失败时返回错误。
-pub async fn find_many<T>(
-    collection: &Collection<T>,
+pub fn find_many<'a, T>(
+    collection: &'a Collection<T>,
     filter: Document,
     options: FindOptions,
-    executor: &mut dyn Executor,
-) -> Result<Vec<T>>
+    executor: &'a mut dyn Executor,
+) -> BoxFuture<'a, Result<Vec<T>>>
 where
-    T: DeserializeOwned + Send + Sync,
+    T: DeserializeOwned + Send + Sync + 'a,
 {
-    let mut documents = Vec::new();
-    match executor.session() {
-        Some(session) => {
-            let mut cursor = collection.find(filter).with_options(options).session(&mut *session).await?;
-            while let Some(document) = cursor.next(&mut *session).await.transpose()? {
-                documents.push(document);
-            }
-        },
-        None => {
-            let mut cursor = collection.find(filter).with_options(options).await?;
-            while let Some(document) = cursor.next().await.transpose()? {
-                documents.push(document);
-            }
-        },
-    }
-    Ok(documents)
+    Box::pin(async move {
+        let mut documents = Vec::new();
+        match executor.session() {
+            Some(session) => {
+                let mut cursor = collection.find(filter).with_options(options).session(&mut *session).await?;
+                while let Some(document) = cursor.next(&mut *session).await.transpose()? {
+                    documents.push(document);
+                }
+            },
+            None => {
+                let mut cursor = collection.find(filter).with_options(options).await?;
+                while let Some(document) = cursor.next().await.transpose()? {
+                    documents.push(document);
+                }
+            },
+        }
+        Ok(documents)
+    })
 }
 
 /// 按执行器语义判断是否存在符合条件的文档。
@@ -278,18 +300,20 @@ where
 ///
 /// # 错误
 /// 当 MongoDB 查询失败时返回错误。
-pub async fn exists<T>(
-    collection: &Collection<T>,
+pub fn exists<'a, T>(
+    collection: &'a Collection<T>,
     filter: Document,
-    executor: &mut dyn Executor,
-) -> Result<bool>
+    executor: &'a mut dyn Executor,
+) -> BoxFuture<'a, Result<bool>>
 where
-    T: Send + Sync,
+    T: Send + Sync + 'a,
 {
-    let collection = collection.clone_with_type::<ExistsDocument>();
-    let projection = doc! { "_id": 1 };
-    let document = exec_with_session!(executor, collection.find_one(filter).projection(projection));
-    Ok(document.is_some())
+    Box::pin(async move {
+        let collection = collection.clone_with_type::<ExistsDocument>();
+        let projection = doc! { "_id": 1 };
+        let document = exec_with_session!(executor, collection.find_one(filter).projection(projection));
+        Ok(document.is_some())
+    })
 }
 
 /// 存在性查询只关心是否命中；忽略 `_id` 的存储类型及所有业务字段。
@@ -308,16 +332,18 @@ struct ExistsDocument {}
 ///
 /// # 错误
 /// 当 MongoDB 统计失败时返回错误。
-pub async fn count_documents<T>(
-    collection: &Collection<T>,
+pub fn count_documents<'a, T>(
+    collection: &'a Collection<T>,
     filter: Document,
-    executor: &mut dyn Executor,
-) -> Result<u64>
+    executor: &'a mut dyn Executor,
+) -> BoxFuture<'a, Result<u64>>
 where
-    T: Send + Sync,
+    T: Send + Sync + 'a,
 {
-    let count = exec_with_session!(executor, collection.count_documents(filter));
-    Ok(count)
+    Box::pin(async move {
+        let count = exec_with_session!(executor, collection.count_documents(filter));
+        Ok(count)
+    })
 }
 
 #[cfg(test)]
