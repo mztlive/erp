@@ -96,3 +96,11 @@ println!("listen port: {}", snapshot.app.port);
 运行时可热更新 JWT 密钥。数据库连接、RBAC 与 S3 客户端属于启动时固定资源；Nacos 中的
 数据库或任一 S3 字段发生变化时，Web API 会记录 `restart_required = true` 并继续使用
 启动值，重启后才会生效。
+
+可选 `[dangaoshushu]` 配置由 `DangaoshushuConfig` 校验，缺省或 `enabled=false` 时关闭。
+启用须填写 ERP 连接 ID、供应商账户 ID、环境、HTTPS origin、渠道号和密钥；地址准备另须
+填写固定 `user_id`。计量单位、标准地区与人民币含税结算价口径必须明确映射，不从供应商
+目录猜测。完整模板见 [config.toml.example](../config.toml.example)，连接绑定、运行范围、
+推送与回滚执行 [蛋糕叔叔接入合同](../../docs/dangaoshushu-connector-contract.md)。
+供应商运行时使用启动快照，修改文件或 Nacos 后必须重启并核对技术引用，不能依赖热更新
+完成启停或凭据轮换。配置调试输出整体脱敏；真实密钥只保存在已忽略配置或受控 Nacos。

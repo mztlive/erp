@@ -66,7 +66,8 @@ pub struct Offer {
     pub sku: SupplierSku,
     pub name: String,
     pub specification: String,
-    pub unit: String,
+    /// 来源或显式规格映射未确认时为 None，不猜测为「件」。
+    pub unit: Option<String>,
     /// 当前完整供应报价；None 表示未取得，不得用零价替代。
     pub quote: Option<SupplyQuote>,
 }

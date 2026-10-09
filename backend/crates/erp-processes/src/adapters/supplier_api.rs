@@ -1,9 +1,12 @@
 //! 供应商 API 与引用注册表的默认失败关闭生产实现。
+use std::future::Future;
+use std::pin::Pin;
+
 use erp_supply::entity::failure::SupplierFailureClass;
-use erp_supply::entity::supplier_api::SupplierApiConnection;
+use erp_supply::entity::supplier_api::{SupplierApiConnection, SupplierHealthCheckType};
 use erp_supply::ports::supplier_api_gateway::{ClassifiedError, SupplierApiGateway};
 use erp_supply::ports::supplier_reference_registry::{
-    ResolvedSupplierReference, SupplierReferenceKind, SupplierReferenceRegistry,
+    ResolvedSupplierReference, SupplierReferenceKind, SupplierReferenceRegistry, SupplierReferenceTarget,
 };
 /// 未注入引用注册表时的默认失败关闭实现。
 pub struct UnavailableSupplierReferenceRegistry;
@@ -17,14 +20,8 @@ impl SupplierReferenceRegistry for UnavailableSupplierReferenceRegistry {
         &'a self,
         _kind: SupplierReferenceKind,
         _payload_reference: &'a str,
-        _environment: erp_supply::entity::supplier_api::ConnectionEnvironment,
-    ) -> std::pin::Pin<
-        Box<
-            dyn std::future::Future<Output = std::result::Result<ResolvedSupplierReference, ClassifiedError>>
-                + Send
-                + 'a,
-        >,
-    > {
+        _target: &'a SupplierReferenceTarget,
+    ) -> Pin<Box<dyn Future<Output = Result<ResolvedSupplierReference, ClassifiedError>> + Send + 'a>> {
         Box::pin(async {
             Err(ClassifiedError {
                 class: SupplierFailureClass::AuthSignature,
@@ -43,6 +40,7 @@ impl SupplierApiGateway for UnavailableSupplierApiGateway {
     ///
     /// # 参数
     /// * `connection` - 目标连接。
+    /// * `check_type` - 本次启动运行冻结的检查种类。
     ///
     /// # 返回
     /// 不返回成功值。
@@ -52,6 +50,7 @@ impl SupplierApiGateway for UnavailableSupplierApiGateway {
     fn health_check<'a>(
         &'a self,
         connection: &'a SupplierApiConnection,
+        _check_type: SupplierHealthCheckType,
     ) -> std::pin::Pin<
         Box<dyn std::future::Future<Output = std::result::Result<(), ClassifiedError>> + Send + 'a>,
     > {
@@ -75,6 +74,7 @@ mod tests {
     use erp_supply::entity::failure::SupplierFailureClass;
     use erp_supply::entity::supplier_api::{
         ConnectionEnvironment, SupplierApiConnection, SupplierApiConnectionData, SupplierApiConnectionStatus,
+        SupplierHealthCheckType,
     };
 
     use super::{ClassifiedError, SupplierApiGateway, UnavailableSupplierApiGateway};
@@ -99,8 +99,10 @@ mod tests {
     #[tokio::test]
     async fn default_gateway_fails_closed_with_classified_error() {
         let gateway = UnavailableSupplierApiGateway;
-        let error: ClassifiedError =
-            gateway.health_check(&sample_connection()).await.expect_err("默认网关必须失败关闭");
+        let error: ClassifiedError = gateway
+            .health_check(&sample_connection(), SupplierHealthCheckType::Connectivity)
+            .await
+            .expect_err("默认网关必须失败关闭");
         assert_eq!(error.class, SupplierFailureClass::TransientFailure);
         assert_eq!(error.code, "ENDPOINT_UNRESOLVED");
     }

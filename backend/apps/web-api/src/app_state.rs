@@ -14,12 +14,14 @@ use erp_processes::adapters::supplier_api::{
 use erp_processes::adapters::supplier_fulfillment_gateway::UnavailableSupplierGateway;
 use erp_processes::adapters::workflow::{WorkflowAuth, workflow_audit, workflow_auth, workflow_object_facts};
 use erp_processes::approval_dispatch::{ProcessObjectRead, ProcessUpgradeSubject};
+use erp_processes::connectors::dangaoshushu::DangaoshushuRuntime;
 use erp_processes::contract_import::aliyun::AliyunContractOcr;
 use erp_processes::contract_import::openai::OpenAiContractExtractor;
 use erp_processes::contract_import::{ContractImportProcess, RecognitionProviders};
 use erp_processes::integration_resolution::IntegrationResolutionProcess;
 use erp_processes::integration_resolution::evidence_adapter::MongoIntegrationEvidenceAuthority;
 use erp_read_models::integration_center::IntegrationCenterReadService;
+use erp_supply::ports::connector::common::ConnectorResult;
 use erp_supply::ports::supplier_api_gateway::SupplierApiGateway;
 use erp_supply::ports::supplier_gateway::SupplierGateway;
 use erp_supply::ports::supplier_reference_registry::SupplierReferenceRegistry;
@@ -72,6 +74,7 @@ pub struct ExternalConnectorPorts {
     supplier_reference_registry: Arc<dyn SupplierReferenceRegistry>,
     supplier_fulfillment: Arc<dyn SupplierGateway>,
     readiness: ExternalConnectorReadiness,
+    dangaoshushu: Option<Arc<DangaoshushuRuntime>>,
 }
 
 impl ExternalConnectorPorts {
@@ -90,6 +93,7 @@ impl ExternalConnectorPorts {
                 supplier_reference_registry: ConnectorMode::Configured,
                 supplier_fulfillment: ConnectorMode::Configured,
             },
+            dangaoshushu: None,
         }
     }
 
@@ -104,7 +108,28 @@ impl ExternalConnectorPorts {
                 supplier_reference_registry: ConnectorMode::FailClosed,
                 supplier_fulfillment: ConnectorMode::FailClosed,
             },
+            dangaoshushu: None,
         }
+    }
+
+    /// 从启动配置装配供应商协议与技术引用；旧履约网关继续失败关闭。
+    /// # 参数
+    /// `config` 是 SafeConfig 的启动快照。
+    /// # 返回
+    /// 缺省关闭集合，或蛋糕叔叔读取与技术引用运行时。
+    /// # 错误
+    /// 启用配置无法构建 HTTP 客户端时返回脱敏分类错误。
+    pub fn from_config(config: &Config) -> ConnectorResult<Self> {
+        let mut ports = Self::fail_closed();
+        if let Some(settings) = config.dangaoshushu.as_ref().filter(|settings| settings.enabled) {
+            let runtime = Arc::new(DangaoshushuRuntime::new(settings.clone())?);
+            ports.supplier_api = runtime.clone();
+            ports.supplier_reference_registry = runtime.clone();
+            ports.dangaoshushu = Some(runtime);
+            ports.readiness.supplier_api = ConnectorMode::Configured;
+            ports.readiness.supplier_reference_registry = ConnectorMode::Configured;
+        }
+        Ok(ports)
     }
 }
 
@@ -146,6 +171,16 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// 返回启动时装配的蛋糕叔叔连接，缺省配置保持关闭。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 已配置协议运行时，或 None。
+    /// # 错误
+    /// 无。
+    pub fn dangaoshushu_runtime(&self) -> Option<Arc<DangaoshushuRuntime>> {
+        self.external_connectors.dangaoshushu.clone()
+    }
     /// 创建 AppState 实例。
     ///
     /// # 参数
@@ -644,7 +679,48 @@ async fn run_approval_outbox_worker(
 
 #[cfg(test)]
 mod tests {
-    use super::{ConnectorMode, ExternalConnectorReadiness};
+    use super::{Config, ConnectorMode, ExternalConnectorPorts, ExternalConnectorReadiness};
+
+    fn connector_config(supplier: &str) -> Config {
+        Config::from_toml_str(&format!(
+            r#"
+            [app]
+            port=10001
+            secret="test-secret-that-is-at-least-32-bytes"
+            [database]
+            uri="mongodb://localhost:27017"
+            db_name="test"
+            [s3]
+            bucket="erp-assets"
+            region="cn-south-1"
+            endpoint="https://s3.example.com"
+            access_key_id="test-access-key"
+            secret_access_key="test-secret-key"
+            key_prefix="erp/uploads"
+            public_base_url="https://cdn.example.com"
+            {supplier}
+        "#
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn supplier_config_assembles_protocol_ports_without_enabling_legacy_dispatch() {
+        for supplier in ["", "[dangaoshushu]\nenabled=false"] {
+            let ports = ExternalConnectorPorts::from_config(&connector_config(supplier)).unwrap();
+            assert!(ports.dangaoshushu.is_none());
+            assert_eq!(ports.readiness.supplier_api, ConnectorMode::FailClosed);
+        }
+        let config = connector_config(
+            "[dangaoshushu]\nenabled=true\nconnection_id='connection-1'\nsupplier_id='supplier-1'\nchannel_no='test-channel'\nprivate_key='test-key'",
+        );
+        let ports = ExternalConnectorPorts::from_config(&config).unwrap();
+        assert!(ports.dangaoshushu.is_some());
+        assert_eq!(ports.readiness.supplier_api, ConnectorMode::Configured);
+        assert_eq!(ports.readiness.supplier_reference_registry, ConnectorMode::Configured);
+        assert_eq!(ports.readiness.supplier_fulfillment, ConnectorMode::FailClosed);
+        assert!(!ports.readiness.is_ready());
+    }
 
     #[test]
     fn readiness_requires_every_external_port() {

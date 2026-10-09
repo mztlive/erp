@@ -1,11 +1,11 @@
 //! 外部引用解析位于两次本域校验之间；提交事务始终重新读取连接。
 use application_core::AuditActor;
 use erp_supply::dto::supplier_api::SupplierConnectionCommandResult;
-use erp_supply::entity::supplier_api::{
-    ConnectionEnvironment, SupplierCommandOutcome, SupplierConnectionAction,
-};
+use erp_supply::entity::supplier_api::{SupplierCommandOutcome, SupplierConnectionAction};
 use erp_supply::ports::supplier_api_gateway::ClassifiedError;
-use erp_supply::ports::supplier_reference_registry::{ResolvedSupplierReference, SupplierReferenceKind};
+use erp_supply::ports::supplier_reference_registry::{
+    ResolvedSupplierReference, SupplierReferenceKind, SupplierReferenceTarget,
+};
 use erp_supply::service::supplier_api::SupplierApiService;
 use erp_supply::service::supplier_api::command::CommandIdentity;
 use persistence_core::{NoTransaction, Transactional};
@@ -127,7 +127,7 @@ struct ReferenceCommand<'a> {
     actor: &'a AuditActor,
 }
 impl ReferenceCommandPort for ReferenceCommand<'_> {
-    type Checked = ConnectionEnvironment;
+    type Checked = SupplierReferenceTarget;
     type Resolved = ResolvedSupplierReference;
     type Output = SupplierConnectionCommandResult;
     async fn preflight(&self) -> Result<Self::Checked> {
@@ -136,9 +136,9 @@ impl ReferenceCommandPort for ReferenceCommand<'_> {
             .domain()
             .load_reference_target(self.id, self.expected_version, &mut NoTransaction)
             .await?;
-        Ok(connection.environment)
+        Ok(SupplierReferenceTarget::from(&connection))
     }
-    async fn resolve(&self, environment: Self::Checked) -> Result<Self::Resolved> {
+    async fn resolve(&self, target: Self::Checked) -> Result<Self::Resolved> {
         let kind = match self.action {
             SupplierConnectionAction::UpdateBusinessProfile => SupplierReferenceKind::BusinessProfile,
             SupplierConnectionAction::BindEndpointReference => SupplierReferenceKind::Endpoint,
@@ -147,7 +147,7 @@ impl ReferenceCommandPort for ReferenceCommand<'_> {
         };
         self.process
             .reference_registry
-            .resolve(kind, self.payload_reference, environment)
+            .resolve(kind, self.payload_reference, &target)
             .await
             .map_err(reference_error)
     }
@@ -168,7 +168,16 @@ impl ReferenceCommandPort for ReferenceCommand<'_> {
 mod tests {
     use std::sync::{Arc, Mutex};
 
+    use config::DangaoshushuConfig;
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
+    use erp_supply::entity::supplier_api::{
+        ConnectionEnvironment, SupplierApiConnection, SupplierApiConnectionData, SupplierApiConnectionStatus,
+    };
+    use erp_supply::ports::supplier_reference_registry::SupplierReferenceRegistry;
+
     use super::*;
+    use crate::connectors::dangaoshushu::DangaoshushuRuntime;
     struct RecordingReference {
         calls: Arc<Mutex<Vec<&'static str>>>,
         fail_at: Option<usize>,
@@ -222,5 +231,84 @@ mod tests {
             );
             assert_eq!(*calls.lock().unwrap(), expected[..=fail_at]);
         }
+    }
+
+    struct RuntimeReference<'a> {
+        registry: &'a DangaoshushuRuntime,
+        target: SupplierReferenceTarget,
+        ticket: &'a str,
+        commits: Arc<Mutex<Vec<String>>>,
+    }
+    impl ReferenceCommandPort for RuntimeReference<'_> {
+        type Checked = SupplierReferenceTarget;
+        type Resolved = ResolvedSupplierReference;
+        type Output = ();
+        async fn preflight(&self) -> Result<Self::Checked> {
+            Ok(self.target.clone())
+        }
+        async fn resolve(&self, target: Self::Checked) -> Result<Self::Resolved> {
+            self.registry
+                .resolve(SupplierReferenceKind::Endpoint, self.ticket, &target)
+                .await
+                .map_err(reference_error)
+        }
+        async fn commit(self, resolved: Self::Resolved) -> Result<Self::Output> {
+            self.commits.lock().unwrap().push(resolved.internal_reference);
+            Ok(())
+        }
+    }
+    fn ticket_connection() -> SupplierApiConnection {
+        SupplierApiConnection::new(
+            SupplierApiConnectionId::new("connection-1"),
+            SupplierApiConnectionData {
+                supplier_id: SupplierAccountId::new("supplier-1"),
+                connection_code: "dgss-test".into(),
+                environment: ConnectionEnvironment::Testing,
+                endpoint_reference: "unbound".into(),
+                credential_reference: None,
+                rate_limit_policy: None,
+                status: SupplierApiConnectionStatus::Disabled,
+            },
+            "actor",
+        )
+        .unwrap()
+    }
+    #[tokio::test]
+    async fn ticket_target_mismatch_stops_before_commit_and_correct_target_commits() {
+        let settings: DangaoshushuConfig = serde_json::from_value(serde_json::json!({
+            "enabled": true, "connection_id": "connection-1", "supplier_id": "supplier-1",
+            "channel_no": "test-channel", "private_key": "test-key", "user_id": "user-1"
+        }))
+        .unwrap();
+        let runtime = DangaoshushuRuntime::new(settings).unwrap();
+        let connection = ticket_connection();
+        let tickets = runtime.reference_tickets(&connection, Instant::now()).unwrap();
+        let target = SupplierReferenceTarget::from(&connection);
+        let commits = Arc::new(Mutex::new(Vec::new()));
+        let wrong = SupplierReferenceTarget {
+            connection_id: SupplierApiConnectionId::new("connection-2"),
+            ..target.clone()
+        };
+        let error = execute_reference(RuntimeReference {
+            registry: &runtime,
+            target: wrong,
+            ticket: &tickets.endpoint_ticket,
+            commits: Arc::clone(&commits),
+        })
+        .await
+        .unwrap_err();
+        assert!(
+            matches!(error, Error::BusinessLogicError(message) if message.starts_with("DGSS_REFERENCE_TICKET_INVALID:"))
+        );
+        assert!(commits.lock().unwrap().is_empty());
+        execute_reference(RuntimeReference {
+            registry: &runtime,
+            target,
+            ticket: &tickets.endpoint_ticket,
+            commits: Arc::clone(&commits),
+        })
+        .await
+        .unwrap();
+        assert_eq!(commits.lock().unwrap().len(), 1);
     }
 }

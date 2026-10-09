@@ -18,6 +18,7 @@ use erp_supply::dto::supplier_api::{
 use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::response::ApiResponse;
+pub mod dangaoshushu;
 
 #[permission_macros::permission(
     group = "API 供应商连接",

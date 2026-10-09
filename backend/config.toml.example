@@ -55,3 +55,28 @@ force_path_style = false
 # model = "<provider model ID>"
 # timeout_seconds = 90 # 1..120；OCR 与 AI 仍共用 180 秒总预算
 # max_output_tokens = 8192 # 256..32768；超限截断导致任务失败，不截断后归档
+
+# 蛋糕叔叔：默认关闭。真实凭据只写入已忽略的 config.toml 或受控 Nacos。
+# 启用、绑定与回滚要求见 docs/dangaoshushu-connector-contract.md；修改后重启 Web API。
+[dangaoshushu]
+enabled = false
+connection_id = "" # ERP 中既有 API 连接 ID；与 supplier_id、environment 固定绑定
+supplier_id = "" # ERP 中蛋糕叔叔的供应商账户 ID
+environment = "testing" # testing / production；生产环境禁止使用测试 host
+base_url = "https://dev.dangaoss.cn" # 仅 HTTPS origin，不含接口路径、查询参数或凭据
+channel_no = ""
+private_key = ""
+user_id = "" # 供应商地址及订单使用的固定用户标识；准备地址前必须填写
+timestamp_unit = "milliseconds" # seconds / milliseconds
+timeout_seconds = 15 # 1..30；连接超时取此值与 5 秒中的较小值
+callback_max_skew_seconds = 300 # 1..900；按推送接收时间核验
+requests_per_second = 5 # 1..100；当前进程限额，等待配额最多 timeout_seconds，不重试请求
+clearing_price_is_tax_inclusive_cny = false # 核实结算价为人民币含税供货价后才可开启
+
+[dangaoshushu.spec_units]
+# 供应商 spec_id -> 与公司 SKU 一致的计量单位；缺失时不生成报价。
+# "<supplier-spec-id>" = "个"
+
+[dangaoshushu.city_regions]
+# 供应商 city_id -> 公司标准地区编码；值必须唯一，不直接混用两套地区 ID。
+# "<supplier-city-id>" = "<company-region-code>"

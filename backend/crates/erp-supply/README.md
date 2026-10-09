@@ -42,7 +42,7 @@
 | [src/service/supplier_settlement/mod.rs](src/service/supplier_settlement/mod.rs) | 结算单、差异和复核 |
 | [src/command_receipt/mod.rs](src/command_receipt/mod.rs) | 供应链命令身份、原载荷指纹与强类型结果 |
 | [src/ports/mod.rs](src/ports/mod.rs) | 供给资格、网关及引用登记合同 |
-| [src/ports/connector/README.md](src/ports/connector/README.md) | 已确认的供应商协议 trait：商品、可供、配送、订单步骤、回调和结算；尚未装配运行 |
+| [src/ports/connector/README.md](src/ports/connector/README.md) | 供应商协议 trait：商品、可供、配送、订单步骤、回调和结算；具体运行装配与正式业务切换按各接入合同执行 |
 | [src/indexes/mod.rs](src/indexes/mod.rs) | 四组业务索引与独立命令回执唯一索引 |
 | [src/entity/mod.rs](src/entity/mod.rs) | 本域实体、值对象和确定性规则 |
 | [src/repository/mod.rs](src/repository/mod.rs) | 本域 MongoDB 仓储与集合访问器 |

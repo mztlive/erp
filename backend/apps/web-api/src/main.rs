@@ -15,7 +15,7 @@ use erp_processes::background::{
 };
 use storage::{S3Storage, S3StorageConfig};
 use tracing::{info, warn};
-use web_api::app_state::AppState;
+use web_api::app_state::{AppState, ExternalConnectorPorts};
 use web_api::core::routes;
 use web_api::core::tracing::{TracingConfig, init_tracing};
 
@@ -116,7 +116,8 @@ async fn start(cfg: SafeConfig) -> Result<()> {
 
     let app_port = config.app.port;
 
-    let state = AppState::new(db, cfg.clone(), storage);
+    let connectors = ExternalConnectorPorts::from_config(&config)?;
+    let state = AppState::new_with_connectors(db, cfg.clone(), storage, connectors);
     persistence_core::ensure_transaction_support(&state.db()).await?;
     crate::indexes::ensure_indexes(&state.db()).await?;
     ensure_registered_approval_policies()?;

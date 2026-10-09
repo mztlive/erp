@@ -44,6 +44,7 @@
 | [src/lib.rs](src/lib.rs) | 公开命名用例与模块总表 |
 | [src/demo_master_data](src/demo_master_data) | JSON 演示种子、实际 ID 登记与仅保留 admin 的全库重置；执行要求见[演示主数据合同](../../../docs/demo-master-data-contract.md) |
 | [src/adapters/mod.rs](src/adapters/mod.rs) | 实际消费方适配器 |
+| [src/connectors/dangaoshushu/mod.rs](src/connectors/dangaoshushu/mod.rs) | 蛋糕叔叔新版协议客户端、配置技术引用、只读查询及推送加密接收；执行[接入合同](../../../docs/dangaoshushu-connector-contract.md) |
 | [src/approval_dispatch/mod.rs](src/approval_dispatch/mod.rs) | ApprovalActionRegistry 与审批分派 |
 | [src/audit/mod.rs](src/audit/mod.rs) | execute_audited、run_audited_event 与现有 run_audited；类型化动作和执行后安全投影 |
 | [src/order_to_cash/mod.rs](src/order_to_cash/mod.rs) | 销售到收款流程 |
@@ -78,3 +79,13 @@ env -u ERP_TEST_MONGO_URI cargo test -p erp-processes --lib --locked
 `contract_import::aliyun::AliyunContractOcr` 实现合同领域 `ContractOcr`。PDF 转图使用 Poppler，网络请求使用独立 [aliyun-ocr](../aliyun-ocr/README.md) crate；所有渲染及外部识别必须在数据库事务外执行。配置、资源限制、取消及验收边界按该接入合同执行。
 
 `contract_import::openai::OpenAiContractExtractor` 使用 `rig-agent` 标准 Extractor 与 `rig-core` OpenAI Responses provider 实现 `ContractExtractor`，通过内置 `submit` 输出函数提取全文字段和证据。模型不得参与主数据匹配或执行动作，配置与失败语义执行 [AI 提取接入合同](../../../docs/contract-ai-contract.md)。
+
+## 蛋糕叔叔
+
+`connectors::dangaoshushu::DangaoshushuConnector` 实现商品、可供、地区、地址与配送、单组订单、
+独立支付及回调协议。`DangaoshushuRuntime` 通过固定配置装配技术引用和只读健康检查；
+`reception::receive` 保存推送密文和刷新意图后应答。配置、管理端查询、技术绑定和新增集合
+的启停回滚须执行[接入合同](../../../docs/dangaoshushu-connector-contract.md)。
+
+旧履约网关继续失败关闭；目录同步尚未应用到正式供给，回调尚未装配补查与领域应用 worker。
+正式业务调用方须先完成各写步骤的意图、回执及恢复持久化，再切换到协议能力。

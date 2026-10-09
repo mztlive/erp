@@ -4794,9 +4794,9 @@
     },
     {
       "path": "crates/erp-processes/src/supplier_connection_execution/health.rs",
-      "function": "finish_health_job",
+      "function": "persist_health_result",
       "policy": "Audited",
-      "stage": "Transaction",
+      "stage": "PersistenceAdapter",
       "boundaries": [
         ".resource_log_with_id",
         "persist_log"
@@ -4806,7 +4806,7 @@
         "persist_log": 1
       },
       "location_count": 1,
-      "reason": "用例 finish_health_job 在自身事务或已声明 run_audited 边界通过 .resource_log_with_id、persist_log 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
+      "reason": "结果持久化步骤 persist_health_result 接收 finish_health_job 结果事务的同一 Executor，按后台任务、健康运行记录、审计事件的固定顺序写入；通过 .resource_log_with_id 和 persist_log 构造并保存结算审计，不开启新事务、不重放业务，不将本登记作为真实回滚或并发验收。"
     },
     {
       "path": "crates/erp-processes/src/supplier_profile/create.rs",

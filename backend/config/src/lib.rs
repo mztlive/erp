@@ -60,6 +60,8 @@ mod aliyun_ocr;
 pub use aliyun_ocr::AliyunOcrConfig;
 mod contract_ai;
 pub use contract_ai::ContractAiConfig;
+mod dangaoshushu;
+pub use dangaoshushu::{DangaoshushuConfig, SupplierTimestampUnit};
 mod command;
 mod errors;
 mod nacos;
@@ -98,6 +100,9 @@ pub struct Config {
     /// 可选 OpenAI 兼容合同提取服务。
     #[serde(default)]
     pub contract_ai: Option<ContractAiConfig>,
+    /// 可选蛋糕叔叔连接；凭据由 SafeConfig 提供，不存入业务表。
+    #[serde(default)]
+    pub dangaoshushu: Option<DangaoshushuConfig>,
 }
 
 /// 演示主数据开关。
@@ -342,6 +347,9 @@ impl Config {
         }
         if let Some(ai) = &self.contract_ai {
             ai.validate()?;
+        }
+        if let Some(supplier) = &self.dangaoshushu {
+            supplier.validate()?;
         }
         validate_s3_config(&self.s3)?;
         validate_bootstrap_password(self.bootstrap.initial_admin_password())?;

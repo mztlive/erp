@@ -48,6 +48,7 @@ mod sales_selection;
 mod source_registry;
 mod supplier;
 mod supplier_api;
+mod supplier_callbacks;
 mod supplier_fulfillment;
 mod supplier_offering;
 mod supplier_portal;
@@ -77,6 +78,7 @@ pub fn create(app_state: AppState) -> Router {
         .route("/health", get(health))
         .route("/ready", get(readiness))
         .merge(public::routes(app_state.clone()))
+        .merge(supplier_callbacks::routes())
         .nest("/account", account::routes(app_state.clone()))
         .nest("/supplier-portal", supplier_portal::routes(app_state.clone()))
         .nest("/admin", admin::routes(app_state.clone()))

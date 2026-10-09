@@ -16,6 +16,7 @@
 ## 负责的数据与能力
 
 - 入站消息、集成错误任务、对账差异和处理决定事实。
+- 供应商回调接收证据：原始正文密文、认证范围、来源身份及待补查目标；不直接应用正式供给或订单事实。
 - 处理决定校验、证据合同及本域状态持久化。
 
 ## 依赖与协作边界
@@ -34,6 +35,7 @@
 | [src/service/mod.rs](src/service/mod.rs) | IntegrationOpsService |
 | [src/ports/evidence.rs](src/ports/evidence.rs) | 证据事实合同 |
 | [src/entity/integration_ops/mod.rs](src/entity/integration_ops/mod.rs) | 消息、任务、差异和决定规则 |
+| [src/entity/supplier_callback.rs](src/entity/supplier_callback.rs) | `supplier_callback_receipts`：无可靠来源事件号的独立接收记录和刷新意图 |
 | [src/entity/mod.rs](src/entity/mod.rs) | 本域实体、值对象和确定性规则 |
 | [src/repository/mod.rs](src/repository/mod.rs) | 本域 MongoDB 仓储与集合访问器 |
 | [src/indexes/mod.rs](src/indexes/mod.rs) | 公开索引注册入口 |
@@ -45,6 +47,7 @@
 3. 新增或调整集合查询时同步评估索引；组合根复用本域公开索引入口，保持既有逐集合注册顺序。
 4. HTTP 请求和响应优先复用本域 DTO；扩展公开合同须同步检查 Process、ReadModel 和应用调用方。
 5. 业务改动补充本域库单元测试，覆盖成功、失败、边界及相关幂等或版本冲突路径。
+6. `supplier_callback_receipts` 仅增量创建集合与索引，回滚保留证据；`received` 表示等待补查，不能标作业务已处理。蛋糕叔叔消息的认证、应答、索引及启停按[接入合同](../../../docs/dangaoshushu-connector-contract.md)执行。
 
 ## 验证要求
 

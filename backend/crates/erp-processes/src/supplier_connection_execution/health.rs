@@ -6,12 +6,13 @@ use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_supply::entity::failure::SupplierFailureClass;
 use erp_supply::entity::supplier_api::{HealthCheckResult, SupplierApiConnection, SupplierHealthCheckRun};
-use erp_supply::ports::supplier_api_gateway::ClassifiedError;
+use erp_supply::ports::supplier_api_gateway::{ClassifiedError, SupplierApiGateway};
 use erp_supply::repository::SupplierApiExt;
 use erp_supply::service::supplier_api::SupplierApiService;
 use erp_supply::service::supplier_api::context::digest;
 use erp_support::{BackgroundJob, BulkJobExt, JobStatus};
-use persistence_core::Transactional;
+use mongodb::Database;
+use persistence_core::{Executor, Transactional};
 
 use super::SupplierConnectionExecutionProcess;
 use super::execution::{ConnectionJobExecutionPort, execute};
@@ -104,6 +105,7 @@ impl SupplierConnectionExecutionProcess {
                         .ok_or_else(|| Error::NotFound("连接不存在".to_string()))?;
                     let at = Instant::now();
                     let config_changed = connection.technical_config_version != run.technical_config_version;
+                    let service = SupplierApiService::new(db.clone());
                     if config_changed {
                         let error = ClassifiedError {
                             class: SupplierFailureClass::ResultUnknown,
@@ -116,9 +118,7 @@ impl SupplierConnectionExecutionProcess {
                         settle_health_failure(&mut job, &mut run, at, latency_ms, error)?;
                         connection.record_health(HealthCheckResult::Failed, at);
                         connection.stable.touch(actor.id());
-                        SupplierApiService::new(db.clone())
-                            .persist_connection(&mut connection, executor)
-                            .await?;
+                        service.persist_connection(&mut connection, executor).await?;
                         persist_health_failure_task(&db, &connection, &job, error, &actor, executor).await?;
                     } else {
                         job.record_progress(1, 0, 0, at)?;
@@ -126,25 +126,34 @@ impl SupplierConnectionExecutionProcess {
                         run.succeed(at, latency_ms)?;
                         connection.record_health(HealthCheckResult::Healthy, at);
                         connection.stable.touch(actor.id());
-                        SupplierApiService::new(db.clone())
-                            .persist_connection(&mut connection, executor)
-                            .await?;
+                        service.persist_connection(&mut connection, executor).await?;
                     }
-                    db.background_jobs().update(&mut job, executor).await?;
-                    SupplierApiService::new(db.clone()).persist_health_run(&mut run, executor).await?;
-                    let audit = actor.clone().resource_log_with_id(
-                        format!("w20-health-audit-{}", digest(&[&job.base.id])),
-                        "supplier_api_connection.health_check.settle",
-                        "supplier_api_connection",
-                        connection.base.id,
-                        Some(format!("job_id={};status={}", job.base.id, job.status.as_str())),
-                    )?;
-                    persist_log(&db, &audit, executor).await?;
-                    Ok(())
+                    persist_health_result(&db, connection, &mut job, &mut run, &actor, executor).await
                 })
             })
             .await
     }
+}
+
+async fn persist_health_result(
+    db: &Database,
+    connection: SupplierApiConnection,
+    job: &mut BackgroundJob,
+    run: &mut SupplierHealthCheckRun,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    db.background_jobs().update(job, executor).await?;
+    SupplierApiService::new(db.clone()).persist_health_run(run, executor).await?;
+    let audit = actor.clone().resource_log_with_id(
+        format!("w20-health-audit-{}", digest(&[&job.base.id])),
+        "supplier_api_connection.health_check.settle",
+        "supplier_api_connection",
+        connection.base.id,
+        Some(format!("job_id={};status={}", job.base.id, job.status.as_str())),
+    )?;
+    persist_log(db, &audit, executor).await?;
+    Ok(())
 }
 
 /// 生产适配器：start/finish 各自完成根事务，invoke 只持有已提交事实。
@@ -157,12 +166,133 @@ impl ConnectionJobExecutionPort for HealthExecution<'_> {
         self.0.start_health_job(job).await
     }
     async fn invoke(&self, started: &Self::Started) -> Self::Outcome {
-        let started_at = MonotonicInstant::now();
-        let outcome = self.0.gateway.health_check(&started.0).await;
-        let latency_ms = u64::try_from(started_at.elapsed().as_millis()).unwrap_or(u64::MAX);
-        (outcome, latency_ms)
+        invoke_health_check(self.0.gateway.as_ref(), started).await
     }
     async fn finish(&self, started: Self::Started, outcome: Self::Outcome, actor: &AuditActor) -> Result<()> {
         self.0.finish_health_job(started.1, started.2, outcome.0, outcome.1, actor).await
+    }
+}
+
+async fn invoke_health_check(
+    gateway: &dyn SupplierApiGateway,
+    started: &(SupplierApiConnection, BackgroundJob, SupplierHealthCheckRun),
+) -> (std::result::Result<(), ClassifiedError>, u64) {
+    let started_at = MonotonicInstant::now();
+    let outcome = gateway.health_check(&started.0, started.2.check_type).await;
+    let latency_ms = u64::try_from(started_at.elapsed().as_millis()).unwrap_or(u64::MAX);
+    (outcome, latency_ms)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::future::Future;
+    use std::pin::Pin;
+    use std::sync::Mutex;
+
+    use erp_core::ids::{BackgroundJobId, SupplierAccountId, SupplierApiConnectionId};
+    use erp_supply::entity::supplier_api::{
+        ConnectionEnvironment, SupplierApiConnectionData, SupplierApiConnectionStatus,
+        SupplierHealthCheckRunData, SupplierHealthCheckStatus, SupplierHealthCheckType,
+    };
+    use erp_support::{SupplierGovernanceJobKind, SupplierGovernanceJobSpec};
+
+    use super::*;
+
+    struct TypedHealthGateway(Mutex<Vec<(String, SupplierHealthCheckType)>>);
+    impl SupplierApiGateway for TypedHealthGateway {
+        fn health_check<'a>(
+            &'a self,
+            connection: &'a SupplierApiConnection,
+            check_type: SupplierHealthCheckType,
+        ) -> Pin<Box<dyn Future<Output = std::result::Result<(), ClassifiedError>> + Send + 'a>> {
+            Box::pin(async move {
+                self.0.lock().unwrap().push((connection.base.id.clone(), check_type));
+                if check_type == SupplierHealthCheckType::CapabilityMetadata {
+                    return Err(ClassifiedError {
+                        class: SupplierFailureClass::CapabilityGap,
+                        code: "DGSS_CAPABILITY_METADATA_UNSUPPORTED".into(),
+                        summary: "能力元数据未核验".into(),
+                    });
+                }
+                Ok(())
+            })
+        }
+    }
+
+    fn started(
+        check_type: SupplierHealthCheckType,
+    ) -> (SupplierApiConnection, BackgroundJob, SupplierHealthCheckRun) {
+        let connection = SupplierApiConnection::new(
+            SupplierApiConnectionId::new("conn-1"),
+            SupplierApiConnectionData {
+                supplier_id: SupplierAccountId::new("supplier-1"),
+                connection_code: "dgss-test".into(),
+                environment: ConnectionEnvironment::Testing,
+                endpoint_reference: "unbound".into(),
+                credential_reference: None,
+                rate_limit_policy: None,
+                status: SupplierApiConnectionStatus::Disabled,
+            },
+            "actor",
+        )
+        .unwrap();
+        let mut job = BackgroundJob::for_supplier_governance(SupplierGovernanceJobSpec {
+            job_id: BackgroundJobId::new("job-1"),
+            connection_id: "conn-1".into(),
+            kind: SupplierGovernanceJobKind::HealthCheck,
+            requested_by: "actor".into(),
+            idempotency_hash: "1234567890abcdef".into(),
+        })
+        .unwrap();
+        let mut run = SupplierHealthCheckRun::new(
+            "run-1",
+            SupplierHealthCheckRunData {
+                connection_id: SupplierApiConnectionId::new("conn-1"),
+                background_job_id: job.base.id.clone(),
+                check_type,
+                technical_config_version: connection.technical_config_version,
+                capability_versions: vec![],
+                requested_by: "actor".into(),
+                idempotency_key_hash: "1234567890abcdef".into(),
+                request_fingerprint: "1234567890abcdef".into(),
+            },
+        )
+        .unwrap();
+        job.start(Instant::now()).unwrap();
+        run.start(Instant::now()).unwrap();
+        (connection, job, run)
+    }
+
+    #[tokio::test]
+    async fn health_invoke_preserves_started_check_type_and_metadata_failure_is_not_success() {
+        let gateway = TypedHealthGateway(Mutex::new(vec![]));
+        for check_type in [
+            SupplierHealthCheckType::Connectivity,
+            SupplierHealthCheckType::Authentication,
+            SupplierHealthCheckType::CapabilityMetadata,
+        ] {
+            let mut started = started(check_type);
+            let (outcome, latency_ms) = invoke_health_check(&gateway, &started).await;
+            if check_type == SupplierHealthCheckType::CapabilityMetadata {
+                let error = outcome.unwrap_err();
+                assert_eq!(error.class, SupplierFailureClass::CapabilityGap);
+                assert_eq!(error.code, "DGSS_CAPABILITY_METADATA_UNSUPPORTED");
+                settle_health_failure(&mut started.1, &mut started.2, Instant::now(), latency_ms, &error)
+                    .unwrap();
+                assert_eq!(started.1.status, JobStatus::Failed);
+                assert_eq!(started.2.status, SupplierHealthCheckStatus::Failed);
+                assert_ne!(started.0.last_health_result, Some(HealthCheckResult::Healthy));
+            } else {
+                assert!(outcome.is_ok());
+            }
+        }
+        assert_eq!(
+            *gateway.0.lock().unwrap(),
+            [
+                ("conn-1".into(), SupplierHealthCheckType::Connectivity),
+                ("conn-1".into(), SupplierHealthCheckType::Authentication),
+                ("conn-1".into(), SupplierHealthCheckType::CapabilityMetadata),
+            ]
+        );
     }
 }

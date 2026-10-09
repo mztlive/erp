@@ -15,6 +15,25 @@ pub struct Recipient {
     pub phone: String,
     pub region: String,
     pub address: String,
+    /// 地址准备所需的结构化定位；供应商无此要求时可缺省。
+    pub geocoded_address: Option<GeocodedAddress>,
+}
+
+/// 结构化地址与坐标基准；禁止从自由文本猜测区县或转换坐标。
+#[derive(Clone, PartialEq, Eq)]
+pub struct GeocodedAddress {
+    pub city_name: String,
+    pub district: String,
+    pub latitude: String,
+    pub longitude: String,
+    pub coordinate_system: CoordinateSystem,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CoordinateSystem {
+    Bd09,
+    Gcj02,
+    Wgs84,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

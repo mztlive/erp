@@ -1,5 +1,30 @@
 //! 权威不透明引用注册表；内部引用禁止进入响应和日志。
+use std::future::Future;
+use std::pin::Pin;
+
+use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
+
 use super::supplier_api_gateway::ClassifiedError;
+use crate::entity::supplier_api::{ConnectionEnvironment, SupplierApiConnection};
+
+/// 本次绑定命令预检的目标身份；禁止以票据携带的身份替代目标连接。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SupplierReferenceTarget {
+    pub connection_id: SupplierApiConnectionId,
+    pub supplier_id: SupplierAccountId,
+    pub environment: ConnectionEnvironment,
+}
+
+impl From<&SupplierApiConnection> for SupplierReferenceTarget {
+    fn from(connection: &SupplierApiConnection) -> Self {
+        Self {
+            connection_id: SupplierApiConnectionId::new(connection.base.id.clone()),
+            supplier_id: connection.supplier_id.clone(),
+            environment: connection.environment,
+        }
+    }
+}
+
 /// 不透明引用种类。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SupplierReferenceKind {
@@ -30,28 +55,22 @@ pub trait SupplierReferenceRegistry: Send + Sync {
     /// 不返回错误。
     fn is_available(&self) -> bool;
 
-    /// 解析服务端签发的短时引用；实现必须校验种类、环境、用途和有效期。
+    /// 解析服务端签发的短时引用；实现必须校验目标身份、种类、用途和有效期。
     ///
     /// # 参数
     /// * `kind` - 引用种类。
     /// * `payload_reference` - 服务端签发的短时引用。
-    /// * `environment` - 连接环境。
+    /// * `target` - 本次命令预检的目标连接、供应商及环境。
     ///
     /// # 返回
     /// 校验通过时返回仅供后端配置写入的 `ResolvedSupplierReference`。
     ///
     /// # 错误
-    /// 种类、环境、用途或有效期不通过时返回 `ClassifiedError`。
+    /// 目标身份、种类、用途或有效期不通过时返回 `ClassifiedError`。
     fn resolve<'a>(
         &'a self,
         kind: SupplierReferenceKind,
         payload_reference: &'a str,
-        environment: crate::entity::supplier_api::ConnectionEnvironment,
-    ) -> std::pin::Pin<
-        Box<
-            dyn std::future::Future<Output = std::result::Result<ResolvedSupplierReference, ClassifiedError>>
-                + Send
-                + 'a,
-        >,
-    >;
+        target: &'a SupplierReferenceTarget,
+    ) -> Pin<Box<dyn Future<Output = Result<ResolvedSupplierReference, ClassifiedError>> + Send + 'a>>;
 }

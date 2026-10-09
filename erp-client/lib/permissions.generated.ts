@@ -5110,6 +5110,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "GET",
+                path: "/admin/supplier-api-connections/{id}/dangaoshushu/catalog",
+                description: "读取供应商协议目录资料",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "protocol_read",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-api-connections/{id}/dangaoshushu/reference-tickets",
+                description: "签发供应商技术绑定票据",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "manage_credential_reference",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
                 path: "/admin/supplier-api-connections",
                 description: "查询供应商 API 连接列表",
                 permission: {

@@ -1,6 +1,6 @@
 //! 供应商技术调用消费方合同；外部调用不持有事务。
 use crate::entity::failure::SupplierFailureClass;
-use crate::entity::supplier_api::SupplierApiConnection;
+use crate::entity::supplier_api::{SupplierApiConnection, SupplierHealthCheckType};
 /// 既有网关失败分类；是否可重试由编排层依据副作用及恢复证据判断。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClassifiedError {
@@ -24,6 +24,7 @@ pub trait SupplierApiGateway: Send + Sync {
     ///
     /// # 参数
     /// * `connection` - 目标连接（提供端点引用与限流策略上下文）
+    /// * `check_type` - 本次启动运行冻结的检查种类；不可用其他种类的成功替代。
     ///
     /// # 返回
     /// 检查成功返回 `Ok(())`；失败返回分类错误（可自动重试或转人工）。
@@ -33,6 +34,7 @@ pub trait SupplierApiGateway: Send + Sync {
     fn health_check<'a>(
         &'a self,
         connection: &'a SupplierApiConnection,
+        check_type: SupplierHealthCheckType,
     ) -> std::pin::Pin<
         Box<dyn std::future::Future<Output = std::result::Result<(), ClassifiedError>> + Send + 'a>,
     >;

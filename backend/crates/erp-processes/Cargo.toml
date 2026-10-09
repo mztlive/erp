@@ -8,7 +8,13 @@ autotests = false
 rig-agent = { workspace = true }
 aliyun-ocr = { workspace = true }
 rig-core = { workspace = true }
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["json", "multipart"] }
+config = { workspace = true }
+chrono = { workspace = true }
+md5 = { workspace = true }
+sha1 = { workspace = true }
+subtle = { workspace = true }
+hmac = { workspace = true }
 bytes = { workspace = true }
 image = { workspace = true }
 tempfile = { workspace = true }
@@ -46,7 +52,7 @@ id-generator = { workspace = true }
 mongodb = { workspace = true }
 persistence-core = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
+serde_json = { workspace = true, features = ["raw_value"] }
 storage = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "macros", "process", "fs", "io-util", "time", "sync"] }

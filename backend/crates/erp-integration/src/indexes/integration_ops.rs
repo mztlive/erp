@@ -67,6 +67,7 @@ pub async fn ensure(db: &Database) -> Result<()> {
                 .build(),
         )
         .await?;
+    super::supplier_callback::ensure(db).await?;
     Ok(())
 }
 
