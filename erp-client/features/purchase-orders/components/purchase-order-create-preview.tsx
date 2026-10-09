@@ -34,6 +34,7 @@ import {
     PO_STATUS_TONE,
     PURCHASE_TYPE_LABEL,
 } from "@/features/purchase-orders/types"
+import type { SourcingEditorRow } from "../lib/sourcing/editor-rows"
 import { multiplyFixed } from "@/lib/fixed-decimal"
 
 export type PurchaseOrderCreatePreviewDialogProps = {
@@ -41,6 +42,7 @@ export type PurchaseOrderCreatePreviewDialogProps = {
     previews: readonly PurchaseOrderPreview[]
     stockAllocations: readonly StockAllocationPreviewLine[]
     sourceOrder?: SourcingSalesOrder
+    scopeRows?: readonly SourcingEditorRow[]
     creating?: boolean
     unresolved?: boolean
     actionError?: { title: string; description: string } | null
@@ -57,6 +59,7 @@ export function PurchaseOrderCreatePreviewDialog({
     previews,
     stockAllocations,
     sourceOrder,
+    scopeRows = [],
     creating,
     unresolved,
     actionError,
@@ -65,6 +68,10 @@ export function PurchaseOrderCreatePreviewDialog({
     description,
 }: PurchaseOrderCreatePreviewDialogProps) {
     const [activeKey, setActiveKey] = React.useState("")
+    const excluded = scopeRows.filter(
+        (row) => !row.selected && !row.partiallySelected,
+    )
+    const partial = scopeRows.filter((row) => row.status === "部分分配")
     const activePreview =
         previews.find((preview) => preview.key === activeKey) ?? previews[0]
     const activeIndex = activePreview
@@ -107,6 +114,42 @@ export function PurchaseOrderCreatePreviewDialog({
                         {description ?? allocationSummary}
                     </DialogDescription>
                 </DialogHeader>
+
+                {scopeRows.length > 0 ? (
+                    <div className="shrink-0 border-b border-border px-6 py-3 text-sm">
+                        <p className="font-medium">
+                            本次分配 {scopeRows.length - excluded.length} 项 ·
+                            暂不分配 {excluded.length} 项
+                        </p>
+                        {excluded.length > 0 || partial.length > 0 ? (
+                            <div className="mt-2 max-h-32 overflow-auto space-y-1 text-xs text-muted-foreground">
+                                {excluded.map((row) => (
+                                    <p key={row.product.salesOrderLineId}>
+                                        {row.product.itemName} · 暂不分配 ·
+                                        本次不提交
+                                    </p>
+                                ))}
+                                {partial.map((row) => (
+                                    <p key={row.product.salesOrderLineId}>
+                                        {row.product.itemName} · 本次{" "}
+                                        <QuantityValue
+                                            value={row.quantity}
+                                            unit={row.product.unit}
+                                        />{" "}
+                                        · 剩余{" "}
+                                        <QuantityValue
+                                            value={row.remainingQuantity}
+                                            unit={row.product.unit}
+                                        />
+                                    </p>
+                                ))}
+                                <p>
+                                    未分配的需求仍需后续处理，本次确认不会将其标为完成。
+                                </p>
+                            </div>
+                        ) : null}
+                    </div>
+                ) : null}
 
                 {stockAllocations.length > 0 ? (
                     <div className="shrink-0 px-6 pt-4">
@@ -217,6 +260,7 @@ function PurchaseOrderPreviewPaper({
     preview: PurchaseOrderPreview
     index: number
     sourceOrder?: SourcingSalesOrder
+    scopeRows?: readonly SourcingEditorRow[]
 }) {
     return (
         <div data-testid={`purchase-create-preview-${preview.supplierId}`}>

@@ -14,3 +14,8 @@ export type SourcingBatchSelectionProps = {
     selectedProductIds: ReadonlySet<string>
     onToggleProducts: (ids: string[], selected: boolean) => void
 }
+
+/** 商品级本次处理范围；所有拆分来源一起暂停，并可恢复原选择。 */
+export type SourcingParticipationProps = {
+    onSetParticipation: (ids: readonly string[], included: boolean) => void
+}

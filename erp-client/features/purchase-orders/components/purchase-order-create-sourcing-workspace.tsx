@@ -11,6 +11,7 @@ import { buildSourcingEditorRows } from "../lib/sourcing/editor-rows"
 import type {
     SourcingEditorProps,
     SourcingBatchSelectionProps,
+    SourcingParticipationProps,
 } from "./create-sourcing/types"
 import { SourcingProductEditor } from "./sourcing-product-editor"
 import { SourcingProductSummaryList } from "./sourcing-product-summary-list"
@@ -21,8 +22,11 @@ export function PurchaseOrderCreateSourcingWorkspace({
     toolbar,
     selectedProductIds,
     onToggleProducts,
+    onSetParticipation,
     ...props
-}: SourcingEditorProps & SourcingBatchSelectionProps & { toolbar: ReactNode }) {
+}: SourcingEditorProps &
+    SourcingBatchSelectionProps &
+    SourcingParticipationProps & { toolbar: ReactNode }) {
     const { form, order } = props
     const [query, setQuery] = useState("")
     const [onlyPending, setOnlyPending] = useState(false)
@@ -124,6 +128,7 @@ export function PurchaseOrderCreateSourcingWorkspace({
                             rows={visible}
                             selectedProductIds={selectedProductIds}
                             onToggleProducts={onToggleProducts}
+                            onSetParticipation={onSetParticipation}
                             toolbar={toolbar}
                         />
                     ) : (
@@ -134,6 +139,7 @@ export function PurchaseOrderCreateSourcingWorkspace({
                             onSelect={select}
                             selectedProductIds={selectedProductIds}
                             onToggleProducts={onToggleProducts}
+                            onSetParticipation={onSetParticipation}
                         />
                     )}
                     {!narrow ? (
@@ -227,6 +233,9 @@ export function PurchaseOrderCreateSourcingWorkspace({
                                         >
                                             <SourcingProductEditor
                                                 {...props}
+                                                onSetParticipation={
+                                                    onSetParticipation
+                                                }
                                                 row={row}
                                             />
                                         </div>

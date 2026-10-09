@@ -31,12 +31,16 @@ export function SourcingAllocationEditor({
     canRemove,
     onRemoveSplit,
     compact = false,
+    showParticipation = true,
+    participationLabel = "本次分配",
 }: Pick<SourcingEditorProps, "form" | "order" | "onRemoveSplit"> & {
     product: SourcingProductLine
     line: SourcingLineInput
     index: number
     canRemove: boolean
     compact?: boolean
+    showParticipation?: boolean
+    participationLabel?: string
 }) {
     const option = findSourcingOption(product, line.basisId)
     const isStock = option?.sourceType === "EXISTING_STOCK"
@@ -53,25 +57,29 @@ export function SourcingAllocationEditor({
             )}
         >
             <div className="flex items-center justify-between gap-2">
-                <form.AppField name={`lines[${index}].selected`}>
-                    {(field) => (
-                        <label
-                            htmlFor={`${id}-select`}
-                            className="flex min-h-8 cursor-pointer items-center gap-2 text-xs font-medium"
-                        >
-                            <Checkbox
-                                id={`${id}-select`}
-                                checked={field.state.value === true}
-                                onCheckedChange={(checked) =>
-                                    field.handleChange(checked === true)
-                                }
-                                aria-label={`本次供给分配 ${product.itemName}`}
-                                data-testid={`purchase-sourcing-selected-${line.rowKey}`}
-                            />
-                            本次分配
-                        </label>
-                    )}
-                </form.AppField>
+                {showParticipation ? (
+                    <form.AppField name={`lines[${index}].selected`}>
+                        {(field) => (
+                            <label
+                                htmlFor={`${id}-select`}
+                                className="flex min-h-8 cursor-pointer items-center gap-2 text-xs font-medium"
+                            >
+                                <Checkbox
+                                    id={`${id}-select`}
+                                    checked={field.state.value === true}
+                                    onCheckedChange={(checked) =>
+                                        field.handleChange(checked === true)
+                                    }
+                                    aria-label={`本次供给分配 ${product.itemName}`}
+                                    data-testid={`purchase-sourcing-selected-${line.rowKey}`}
+                                />
+                                {participationLabel}
+                            </label>
+                        )}
+                    </form.AppField>
+                ) : (
+                    <span className="text-xs font-medium">供给方案</span>
+                )}
                 {canRemove ? (
                     <Button
                         id={`${id}-split-remove`}

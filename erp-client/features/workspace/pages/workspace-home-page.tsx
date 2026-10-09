@@ -287,21 +287,6 @@ export function WorkspaceHomeView({
 
     const paneActions = detailItem ? (
         <>
-            {sourcingTask && detailExpanded ? (
-                <Button
-                    id="workspace-sourcing-return-queue"
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                        setDetailFullscreen(false)
-                        setQueueVisibleTask(detailItem.workItemId)
-                    }}
-                >
-                    <ArrowLeftIcon />
-                    返回待办
-                </Button>
-            ) : null}
             <WorkspaceDetailFullscreenButton
                 expanded={detailExpanded}
                 onToggle={() => {

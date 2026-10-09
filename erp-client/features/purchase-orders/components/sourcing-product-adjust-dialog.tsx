@@ -13,7 +13,10 @@ import {
 } from "@/components/ui/dialog"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { buildSourcingEditorRows } from "../lib/sourcing/editor-rows"
-import type { SourcingEditorProps } from "./create-sourcing/types"
+import type {
+    SourcingParticipationProps,
+    SourcingEditorProps,
+} from "./create-sourcing/types"
 import { SourcingProductEditor } from "./sourcing-product-editor"
 
 /** 直接编辑共享草稿；关闭保留输入，完成时检查当前商品，最终写入仍由整单预览确认。 */
@@ -21,10 +24,11 @@ export function SourcingProductAdjustDialog({
     productId,
     onClose,
     ...props
-}: SourcingEditorProps & {
-    productId: string | null
-    onClose: () => void
-}) {
+}: SourcingEditorProps &
+    SourcingParticipationProps & {
+        productId: string | null
+        onClose: () => void
+    }) {
     const [showErrors, setShowErrors] = useState(false)
     const lastProductId = useRef(productId)
     if (productId) lastProductId.current = productId

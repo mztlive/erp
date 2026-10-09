@@ -52,6 +52,8 @@ import {
     sourcingFormValidationError,
 } from "@/features/purchase-orders/lib/purchase-order-create-validation"
 import { cn } from "@/lib/utils"
+import { buildSourcingEditorRows } from "../lib/sourcing/editor-rows"
+import { useSourcingParticipation } from "../hooks/use-sourcing-participation"
 import { canSplitSourcingProduct } from "../lib/sourcing-quantity"
 
 /**
@@ -309,6 +311,21 @@ export function PurchaseOrderCreatePage({
     }, [basesQuery.isPending, selectedOrderKey, linesResetToken, writeLines])
 
     const lines = useStore(form.store, (state) => state.values.lines)
+    const onSetParticipation = useSourcingParticipation(
+        form as unknown as PurchaseOrderCreateFormApi,
+        `${selectedOrderKey}:${linesResetToken}`,
+    )
+    const editorRows = React.useMemo(
+        () =>
+            selectedOrder ? buildSourcingEditorRows(selectedOrder, lines) : [],
+        [selectedOrder, lines],
+    )
+    const includedCount = editorRows.filter(
+        (row) => row.selected || row.partiallySelected,
+    ).length
+    const excludedCount = editorRows.length - includedCount
+    const scopeSummary = `本次分配 ${includedCount} 项 · 暂不分配 ${excludedCount} 项`
+
     const previews = React.useMemo(
         () => buildPurchaseOrderPreviews(selectedOrder, lines),
         [lines, selectedOrder],
@@ -417,7 +434,12 @@ export function PurchaseOrderCreatePage({
                     return [
                         {
                             ...line,
-                            selected: true,
+                            selected: lines.some(
+                                (candidate) =>
+                                    candidate.salesOrderLineId ===
+                                        line.salesOrderLineId &&
+                                    candidate.selected,
+                            ),
                             basisId,
                             quantity: option.maxCreateQuantity,
                             expectedDeliveryDate: option.expectedDeliveryDate,
@@ -496,20 +518,21 @@ export function PurchaseOrderCreatePage({
 
     const applyBestSourcingOptions = React.useCallback(() => {
         if (!selectedOrder) return
-        const base = buildDefaultSourcingLines(selectedOrder)
-        const next = assignBestSourcingOptions(selectedOrder, base)
+        const next = assignBestSourcingOptions(selectedOrder, lines)
         writeLines(next)
-        const filled = next.filter((line) => line.basisId).length
+        const filled = next.filter(
+            (line) => line.selected && line.basisId,
+        ).length
         toast.add({
             title: filled > 0 ? "已重新分配供给" : "没有可匹配的供给方案",
             description:
                 filled > 0
-                    ? "已优先分配现有库存，采购缺口优先推荐供应商直发。"
+                    ? "已为本次分配的商品优先分配现有库存，采购缺口优先推荐供应商直发；暂不分配的商品保持原方案。"
                     : "当前明细没有可用库存或合格采购供给。",
             type: filled > 0 ? "success" : "warning",
             timeout: 4000,
         })
-    }, [selectedOrder, writeLines])
+    }, [selectedOrder, lines, writeLines])
 
     const addSplitLine = React.useCallback(
         (salesOrderLineId: string) => {
@@ -576,7 +599,15 @@ export function PurchaseOrderCreatePage({
     )
 
     const canMatchBest = Boolean(
-        selectedOrder?.lines.some((line) => line.options.length > 0),
+        selectedOrder?.lines.some(
+            (product) =>
+                product.options.length > 0 &&
+                lines.some(
+                    (line) =>
+                        line.salesOrderLineId === product.salesOrderLineId &&
+                        line.selected,
+                ),
+        ),
     )
 
     const openPreview = React.useCallback(async () => {
@@ -684,11 +715,24 @@ export function PurchaseOrderCreatePage({
         <PurchaseOrderCreateBatchBar
             compact={embedded}
             selectedCount={selectedCount}
+            participatingCount={
+                editorRows.filter(
+                    (row) =>
+                        selectedProductIds.has(row.product.salesOrderLineId) &&
+                        (row.selected || row.partiallySelected),
+                ).length
+            }
             getApplicableCount={getApplicableCount}
             options={commonSourcingOptions}
             onApply={applyBatchSupplier}
             matchDisabled={!canMatchBest}
             onMatchBest={applyBestSourcingOptions}
+            onSetParticipation={
+                embedded
+                    ? (included) =>
+                          onSetParticipation([...selectedProductIds], included)
+                    : undefined
+            }
         />
     )
 
@@ -851,6 +895,7 @@ export function PurchaseOrderCreatePage({
                                     toolbar={batchBar}
                                     selectedProductIds={selectedProductIds}
                                     onToggleProducts={onToggleProducts}
+                                    onSetParticipation={onSetParticipation}
                                 />
                             ) : (
                                 <Skeleton className="h-40" />
@@ -937,6 +982,7 @@ export function PurchaseOrderCreatePage({
                                     (item) => item.id !== "lines",
                                 )}
                                 action={previewAction}
+                                scopeSummary={scopeSummary}
                             />
                         </div>
                     }
@@ -946,6 +992,7 @@ export function PurchaseOrderCreatePage({
                             (item) => item.id !== "lines",
                         )}
                         action={previewAction}
+                        scopeSummary={scopeSummary}
                     />
                 </WorkspaceTaskFooter>
             ) : null}
@@ -964,6 +1011,7 @@ export function PurchaseOrderCreatePage({
                 previews={previews}
                 stockAllocations={stockPreviews}
                 sourceOrder={selectedOrder}
+                scopeRows={editorRows}
                 creating={createMutation.isPending}
                 unresolved={submissionUnknown}
                 actionError={actionError}
@@ -982,7 +1030,9 @@ export function PurchaseOrderCreatePage({
 function PurchaseOrderCreateFooterTotals({
     items,
     action,
+    scopeSummary,
 }: {
+    scopeSummary: string
     items: readonly {
         id: string
         label: string
@@ -991,29 +1041,39 @@ function PurchaseOrderCreateFooterTotals({
     action: ReactNode
 }) {
     return (
-        <div className="@container flex w-full min-w-0 flex-col items-stretch gap-3 @min-[640px]/document:flex-row @min-[640px]/document:items-center @min-[640px]/document:justify-between">
-            <div className="min-w-0 flex-1 @min-[960px]/document:hidden">
-                <p className="text-xs text-muted-foreground">采购含税合计</p>
-                <p className="num mt-0.5 text-lg font-semibold">
-                    {items.find((item) => item.id === "gross")?.value}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                    将创建采购单{" "}
-                    {items.find((item) => item.id === "orders")?.value} ·
-                    库存预留 {items.find((item) => item.id === "stock")?.value}
-                </p>
+        <div className="w-full min-w-0 space-y-2">
+            <p role="status" className="text-sm font-medium">
+                {scopeSummary}
+            </p>
+            <div className="@container flex w-full min-w-0 flex-col items-stretch gap-3 @min-[640px]/document:flex-row @min-[640px]/document:items-center @min-[640px]/document:justify-between">
+                <div className="min-w-0 flex-1 @min-[960px]/document:hidden">
+                    <p className="text-xs text-muted-foreground">
+                        采购含税合计
+                    </p>
+                    <p className="num mt-0.5 text-lg font-semibold">
+                        {items.find((item) => item.id === "gross")?.value}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        将创建采购单{" "}
+                        {items.find((item) => item.id === "orders")?.value} ·
+                        库存预留{" "}
+                        {items.find((item) => item.id === "stock")?.value}
+                    </p>
+                </div>
+                <dl className="hidden min-w-0 flex-1 grid-cols-3 gap-x-6 gap-y-2 @min-[960px]/document:grid">
+                    {items.map((item) => (
+                        <div key={item.id} className="min-w-0">
+                            <dt className="text-xs text-muted-foreground">
+                                {item.label}
+                            </dt>
+                            <dd className="num mt-0.5 font-medium">
+                                {item.value}
+                            </dd>
+                        </div>
+                    ))}
+                </dl>
+                {action}
             </div>
-            <dl className="hidden min-w-0 flex-1 grid-cols-3 gap-x-6 gap-y-2 @min-[960px]/document:grid">
-                {items.map((item) => (
-                    <div key={item.id} className="min-w-0">
-                        <dt className="text-xs text-muted-foreground">
-                            {item.label}
-                        </dt>
-                        <dd className="num mt-0.5 font-medium">{item.value}</dd>
-                    </div>
-                ))}
-            </dl>
-            {action}
         </div>
     )
 }

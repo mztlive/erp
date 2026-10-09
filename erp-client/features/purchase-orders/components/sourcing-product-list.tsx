@@ -17,7 +17,11 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import type { SourcingBatchSelectionProps } from "./create-sourcing/types"
+import { SourcingParticipationControl } from "./sourcing-participation-control"
+import type {
+    SourcingParticipationProps,
+    SourcingBatchSelectionProps,
+} from "./create-sourcing/types"
 import type { SourcingEditorRow } from "../lib/sourcing/editor-rows"
 
 export function SourcingProductList({
@@ -27,12 +31,14 @@ export function SourcingProductList({
     onSelect,
     selectedProductIds,
     onToggleProducts,
-}: SourcingBatchSelectionProps & {
-    toolbar: ReactNode
-    rows: SourcingEditorRow[]
-    activeId?: string
-    onSelect: (id: string) => void
-}) {
+    onSetParticipation,
+}: SourcingBatchSelectionProps &
+    SourcingParticipationProps & {
+        toolbar: ReactNode
+        rows: SourcingEditorRow[]
+        activeId?: string
+        onSelect: (id: string) => void
+    }) {
     const selectedCount = rows.filter((row) =>
         selectedProductIds.has(row.product.salesOrderLineId),
     ).length
@@ -78,9 +84,9 @@ export function SourcingProductList({
                             </TableHead>
                             <TableHead>商品</TableHead>
                             <TableHead data-align="end">需求</TableHead>
-                            <TableHead data-align="end">分配</TableHead>
-                            <TableHead>履约方式</TableHead>
-                            <TableHead>状态</TableHead>
+                            <TableHead data-align="end">本次数量</TableHead>
+                            <TableHead>本次处理</TableHead>
+                            <TableHead>方案状态</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -91,7 +97,35 @@ export function SourcingProductList({
                             return (
                                 <TableRow
                                     key={id}
-                                    className="h-12"
+                                    id={`sourcing-list-${id}-row`}
+                                    tabIndex={0}
+                                    aria-label={`查看 ${row.product.itemName} 的供给方案`}
+                                    className="h-12 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                                    onClick={(event) => {
+                                        if (
+                                            event.target instanceof Element &&
+                                            event.target.closest(
+                                                'button, input, label, a, select, textarea, [role="switch"], [role="checkbox"]',
+                                            )
+                                        )
+                                            return
+                                        onSelect(row.product.salesOrderLineId)
+                                    }}
+                                    onKeyDown={(event) => {
+                                        if (
+                                            event.target !== event.currentTarget
+                                        )
+                                            return
+                                        if (
+                                            event.key === "Enter" ||
+                                            event.key === " "
+                                        ) {
+                                            event.preventDefault()
+                                            onSelect(
+                                                row.product.salesOrderLineId,
+                                            )
+                                        }
+                                    }}
                                     data-state={
                                         activeId ===
                                         row.product.salesOrderLineId
@@ -138,6 +172,11 @@ export function SourcingProductList({
                                         >
                                             {row.product.itemName}
                                         </button>
+                                        <p className="mt-0.5 text-xs text-muted-foreground">
+                                            {row.status === "暂不分配"
+                                                ? "方案已保留"
+                                                : row.route}
+                                        </p>
                                         {row.allocations.length > 1 ? (
                                             <p className="mt-0.5 text-xs text-muted-foreground">
                                                 {row.allocations.length} 个来源
@@ -159,7 +198,8 @@ export function SourcingProductList({
                                         data-align="end"
                                         className="py-2"
                                     >
-                                        {row.quantity === "—" ? (
+                                        {row.status === "暂不分配" ||
+                                        row.quantity === "—" ? (
                                             "—"
                                         ) : (
                                             <QuantityValue
@@ -168,12 +208,32 @@ export function SourcingProductList({
                                             />
                                         )}
                                     </TableCell>
-                                    <TableCell className="max-w-32 whitespace-normal py-2 text-xs">
-                                        {row.route}
+                                    <TableCell className="py-2">
+                                        <SourcingParticipationControl
+                                            idPrefix={`sourcing-list-${id}`}
+                                            itemName={row.product.itemName}
+                                            included={
+                                                row.selected ||
+                                                row.partiallySelected
+                                            }
+                                            onChange={(included) =>
+                                                onSetParticipation(
+                                                    [
+                                                        row.product
+                                                            .salesOrderLineId,
+                                                    ],
+                                                    included,
+                                                )
+                                            }
+                                        />
                                     </TableCell>
                                     <TableCell className="py-2">
                                         <StatusBadge
-                                            label={row.status}
+                                            label={
+                                                row.status === "暂不分配"
+                                                    ? "本次不提交"
+                                                    : row.status
+                                            }
                                             tone={
                                                 row.needsAttention
                                                     ? "warning"
@@ -182,6 +242,17 @@ export function SourcingProductList({
                                                       : "neutral"
                                             }
                                         />
+                                        {row.status === "部分分配" ? (
+                                            <p className="mt-1 text-xs text-muted-foreground">
+                                                剩余{" "}
+                                                <QuantityValue
+                                                    value={
+                                                        row.remainingQuantity
+                                                    }
+                                                    unit={row.product.unit}
+                                                />
+                                            </p>
+                                        ) : null}
                                     </TableCell>
                                 </TableRow>
                             )

@@ -1,4 +1,4 @@
-import { compareDecimal, sumFixed } from "@/lib/fixed-decimal"
+import { compareDecimal, subtractFixed, sumFixed } from "@/lib/fixed-decimal"
 import { sourcingFormValidationError } from "../purchase-order-create-validation"
 import { FULFILLMENT_RESPONSIBILITY_LABEL } from "../../types"
 import { findSourcingOption } from "./options"
@@ -14,6 +14,7 @@ export type SourcingEditorRow = {
     allocations: { line: SourcingLineInput; index: number }[]
     issues: string[]
     quantity: string
+    remainingQuantity: string
     route: string
     status: string
     needsAttention: boolean
@@ -48,6 +49,7 @@ export function buildSourcingEditorRows(
             ),
         ]
         let quantity = "0"
+        let remainingQuantity = "—"
         let partial = false
         try {
             quantity = sumFixed(
@@ -56,6 +58,16 @@ export function buildSourcingEditorRows(
             )
             quantity = formatQuantityUnits(quantityUnits(quantity))
             partial = compareDecimal(quantity, product.remainingQuantity, 6) < 0
+            remainingQuantity = partial
+                ? formatQuantityUnits(
+                      quantityUnits(
+                          subtractFixed(product.remainingQuantity, quantity, {
+                              maxScale: 6,
+                              outputScale: 6,
+                          }),
+                      ),
+                  )
+                : "0"
         } catch {
             quantity = "—"
         }
@@ -89,6 +101,7 @@ export function buildSourcingEditorRows(
             allocations,
             issues,
             quantity,
+            remainingQuantity,
             route: routes.join(" / ") || "未选来源",
             status,
             needsAttention:

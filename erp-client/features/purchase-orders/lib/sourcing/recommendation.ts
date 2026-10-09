@@ -195,38 +195,34 @@ export function pickBestSourcingOption(
     })[0]
 }
 
-/**
- * 为全部选源行填充库存优先的推荐供给和对应可分配量。
- *
- * 没有合格供给的行保持原值，不改勾选状态。
- *
- * @param order 当前选源销售单。
- * @param lines 表单选源行。
- * @returns 填充后的选源行。
- */
+/** 只重新推荐参与本次分配的商品；暂停的商品保留完整方案且不占推荐库存。 */
 export function assignBestSourcingOptions(
     order: SourcingSalesOrder | undefined,
     lines: readonly SourcingLineInput[],
 ): SourcingLineInput[] {
     if (!order) return lines.map((line) => ({ ...line }))
-    const recommended = buildDefaultSourcingLines(order)
-    if (recommended.some((line) => line.basisId)) return recommended
-    return lines.map((line) => {
-        const product = order.lines.find(
-            (candidate) => candidate.salesOrderLineId === line.salesOrderLineId,
+    const included = new Set(
+        lines
+            .filter((line) => line.selected)
+            .map((line) => line.salesOrderLineId),
+    )
+    const recommended = buildDefaultSourcingLines({
+        ...order,
+        lines: order.lines.filter((product) =>
+            included.has(product.salesOrderLineId),
+        ),
+    })
+    return order.lines.flatMap((product) => {
+        const current = lines.filter(
+            (line) => line.salesOrderLineId === product.salesOrderLineId,
         )
-        const option = pickBestSourcingOption(
-            product?.options ?? [],
-            product?.remainingQuantity,
+        const next = recommended.filter(
+            (line) => line.salesOrderLineId === product.salesOrderLineId,
         )
-        if (!option) return { ...line }
-        return {
-            ...line,
-            selected: true,
-            basisId: option.basisId,
-            quantity: option.maxCreateQuantity,
-            expectedDeliveryDate: option.expectedDeliveryDate,
-        }
+        return included.has(product.salesOrderLineId) &&
+            next.some((line) => line.basisId)
+            ? next
+            : current.map((line) => ({ ...line }))
     })
 }
 
