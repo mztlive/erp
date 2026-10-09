@@ -50,6 +50,7 @@ function StatusBadge({
     tone = "neutral",
     icon,
     label,
+    appearance = "badge",
     className,
     ...props
 }: Omit<React.ComponentProps<typeof Badge>, "variant" | "children"> & {
@@ -58,6 +59,8 @@ function StatusBadge({
     label: string
     /** 覆盖默认图标，例如用 ClockIcon 表示「等待中」。 */
     icon?: LucideIcon
+    /** 文本样式保留语义色与图标，适用于次级进度。 */
+    appearance?: "badge" | "text"
 }) {
     const Icon = icon ?? toneIcon[tone]
 
@@ -67,6 +70,11 @@ function StatusBadge({
             className={cn(
                 "gap-1 px-1.5 py-0 text-tiny font-medium tracking-tight border shadow-2xs",
                 tone === "void" && "line-through opacity-80",
+                appearance === "text" &&
+                    "border-transparent bg-transparent px-0 shadow-none",
+                appearance === "text" &&
+                    tone === "neutral" &&
+                    "text-muted-foreground",
                 className,
             )}
             {...props}

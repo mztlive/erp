@@ -36,6 +36,7 @@ export function SalesOrderDetailTabs({
     onSelectSection,
     onApprovalResult,
     sidebar,
+    beforeContent,
 }: {
     order: SalesOrderDetailView
 
@@ -54,6 +55,7 @@ export function SalesOrderDetailTabs({
     ) => void
     onApprovalResult: (result: SalesOrderDetailActionResult) => void
     sidebar?: ReactNode
+    beforeContent?: ReactNode
 }) {
     const items = visibleNav.map((item) => {
         const todoOnAcceptance = item.id === "acceptance" && Boolean(canAccept)
@@ -105,6 +107,8 @@ export function SalesOrderDetailTabs({
             listLabel="销售单分区"
             listClassName="border-border/70"
             sidebar={sidebar}
+            scrollMode="panels"
+            beforeContent={beforeContent}
         >
             <ObjectSectionTabsPanel value="overview" className="py-5">
                 <OverviewPanel

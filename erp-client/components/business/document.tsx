@@ -492,6 +492,8 @@ type RelatedDocument = Readonly<{
     id: string
     documentType: string
     documentNumber: string
+    /** 名称优先布局中的可读对象名，例如供应商名称。 */
+    name?: string
     status: DocumentStatus
     /**
      * 并行进度轨（履约/付款等）。有值时状态列加宽，供销售等角色扫单据是否卡住。
@@ -508,47 +510,77 @@ interface RelatedDocumentListProps extends Omit<
 > {
     documents: readonly RelatedDocument[]
     emptyContent?: React.ReactNode
+    layout?: "default" | "name-first"
+    identityLabel?: string
+    measureLabel?: string
 }
 
 function RelatedDocumentList({
     documents,
     emptyContent = "暂无关联单据",
+    layout = "default",
+    identityLabel = "单据",
+    measureLabel: columnMeasureLabel,
     className,
     ...props
 }: RelatedDocumentListProps) {
     const hasTracks = documents.some(
         (document) => (document.tracks?.length ?? 0) > 0,
     )
+    const nameFirst = layout === "name-first"
+    const columns = nameFirst
+        ? "grid-cols-[minmax(0,1fr)_auto] @xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(7rem,0.6fr)_4rem_4rem]"
+        : "md:grid-cols-12"
+    const identityColumn = nameFirst
+        ? "col-span-2 @xl:col-span-1"
+        : hasTracks
+          ? "md:col-span-3"
+          : "md:col-span-4"
+    const statusColumn = nameFirst
+        ? "row-span-3 @xl:row-span-1"
+        : hasTracks
+          ? "md:col-span-4"
+          : "md:col-span-2"
+    const ownerColumn = nameFirst
+        ? "text-right @xl:text-left"
+        : hasTracks
+          ? "md:col-span-1"
+          : "md:col-span-2"
 
     return (
         <div
             data-slot="related-document-list"
-            className={cn("min-w-0", className)}
+            className={cn("min-w-0 @container", className)}
             {...props}
         >
             {documents.length > 0 ? (
                 <>
                     <div
                         aria-hidden="true"
-                        className="hidden grid-cols-12 gap-3 border-b border-grid pb-2 text-xs font-medium text-muted-foreground md:grid"
+                        className={cn(
+                            "hidden gap-3 border-b border-grid pb-2 text-xs font-medium text-muted-foreground",
+                            columns,
+                            nameFirst ? "@xl:grid" : "md:grid",
+                        )}
                     >
-                        <span
-                            className={hasTracks ? "col-span-3" : "col-span-4"}
-                        >
-                            单据
-                        </span>
-                        <span
-                            className={hasTracks ? "col-span-4" : "col-span-2"}
-                        >
+                        <span className={identityColumn}>{identityLabel}</span>
+                        <span className={statusColumn}>
                             {hasTracks ? "状态 / 进度" : "状态"}
                         </span>
-                        <span className="col-span-2">金额或数量</span>
                         <span
-                            className={hasTracks ? "col-span-1" : "col-span-2"}
+                            className={nameFirst ? "text-right" : "col-span-2"}
                         >
-                            责任人
+                            {columnMeasureLabel ?? "金额或数量"}
                         </span>
-                        <span className="col-span-2 text-right">操作</span>
+                        <span className={ownerColumn}>责任人</span>
+                        <span
+                            className={cn(
+                                "text-right",
+                                !nameFirst && "col-span-2",
+                            )}
+                        >
+                            操作
+                        </span>
                     </div>
                     <ul className="divide-y divide-grid">
                         {documents.map((document) => {
@@ -562,35 +594,69 @@ function RelatedDocumentList({
                             return (
                                 <li
                                     key={document.id}
-                                    className="grid grid-cols-1 gap-3 py-4 first:pt-3 last:pb-0 md:grid-cols-12 md:items-center"
+                                    className={cn(
+                                        "grid grid-cols-1 gap-3 py-4 first:pt-3 last:pb-0",
+                                        columns,
+                                        nameFirst
+                                            ? "@xl:items-center"
+                                            : "md:items-center",
+                                    )}
                                 >
                                     <div
                                         className={cn(
                                             "min-w-0",
-                                            hasTracks
-                                                ? "md:col-span-3"
-                                                : "md:col-span-4",
+                                            identityColumn,
                                         )}
                                     >
-                                        <div className="text-xs text-muted-foreground">
-                                            {document.documentType}
+                                        <div
+                                            className={
+                                                nameFirst
+                                                    ? "text-sm font-medium break-words"
+                                                    : "text-xs text-muted-foreground"
+                                            }
+                                        >
+                                            {nameFirst
+                                                ? (document.name ??
+                                                  document.documentType)
+                                                : document.documentType}
                                         </div>
-                                        <div className="num truncate text-sm font-medium">
+                                        <div
+                                            title={document.documentNumber}
+                                            className={
+                                                nameFirst
+                                                    ? "num mt-1 truncate text-xs text-muted-foreground"
+                                                    : "num truncate text-sm font-medium"
+                                            }
+                                        >
                                             {document.documentNumber}
                                         </div>
                                     </div>
                                     <div
                                         className={cn(
                                             "min-w-0",
-                                            hasTracks
-                                                ? "md:col-span-4"
-                                                : "flex items-center gap-2 md:col-span-2",
+                                            statusColumn,
+                                            !hasTracks &&
+                                                !nameFirst &&
+                                                "flex items-center gap-2",
                                         )}
                                     >
-                                        <span className="mb-1 block text-xs text-muted-foreground md:hidden">
+                                        <span
+                                            className={cn(
+                                                "mb-1 block text-xs text-muted-foreground",
+                                                nameFirst
+                                                    ? "@xl:hidden"
+                                                    : "md:hidden",
+                                            )}
+                                        >
                                             {hasTracks ? "状态 / 进度" : "状态"}
                                         </span>
-                                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                                        <div
+                                            className={
+                                                nameFirst
+                                                    ? "flex flex-col items-start gap-2"
+                                                    : "flex flex-wrap items-center gap-x-3 gap-y-1.5"
+                                            }
+                                        >
                                             <StatusBadge
                                                 tone={document.status.tone}
                                                 label={document.status.label}
@@ -598,14 +664,32 @@ function RelatedDocumentList({
                                             {tracks.length > 0 ? (
                                                 <StatusTrackSummary
                                                     variant="inline"
+                                                    appearance={
+                                                        nameFirst
+                                                            ? "text"
+                                                            : "badge"
+                                                    }
                                                     className="gap-x-3 gap-y-1"
                                                     tracks={tracks}
                                                 />
                                             ) : null}
                                         </div>
                                     </div>
-                                    <div className="md:col-span-2">
-                                        <div className="text-xs text-muted-foreground">
+                                    <div
+                                        className={
+                                            nameFirst
+                                                ? "text-right"
+                                                : "md:col-span-2"
+                                        }
+                                    >
+                                        <div
+                                            className={cn(
+                                                "text-xs text-muted-foreground",
+                                                nameFirst &&
+                                                    columnMeasureLabel &&
+                                                    "@xl:hidden",
+                                            )}
+                                        >
                                             {measureLabel}
                                         </div>
                                         <div
@@ -626,21 +710,32 @@ function RelatedDocumentList({
                                             ) : null}
                                         </div>
                                     </div>
-                                    <div
-                                        className={
-                                            hasTracks
-                                                ? "md:col-span-1"
-                                                : "md:col-span-2"
-                                        }
-                                    >
-                                        <div className="text-xs text-muted-foreground md:hidden">
+                                    <div className={cn("min-w-0", ownerColumn)}>
+                                        <div
+                                            className={cn(
+                                                "text-xs text-muted-foreground",
+                                                nameFirst
+                                                    ? "@xl:hidden"
+                                                    : "md:hidden",
+                                            )}
+                                        >
                                             责任人
                                         </div>
-                                        <div className="truncate text-sm">
+                                        <div
+                                            className="truncate text-sm"
+                                            title={document.owner}
+                                        >
                                             {document.owner}
                                         </div>
                                     </div>
-                                    <div className="flex md:col-span-2 md:justify-end">
+                                    <div
+                                        className={cn(
+                                            "flex",
+                                            nameFirst
+                                                ? "col-start-2 justify-end @xl:col-start-auto"
+                                                : "md:col-span-2 md:justify-end",
+                                        )}
+                                    >
                                         {document.openAction}
                                     </div>
                                 </li>

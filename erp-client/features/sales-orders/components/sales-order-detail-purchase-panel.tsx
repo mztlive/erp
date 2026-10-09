@@ -156,6 +156,9 @@ export function PurchasePanel({ order }: { order: SalesOrderDetailView }) {
                     }
                 >
                     <RelatedDocumentList
+                        layout="name-first"
+                        identityLabel="供应商 / 采购单"
+                        measureLabel="含税金额"
                         documents={(listQuery.data?.rows ?? []).map((row) =>
                             toRelatedPurchaseDocument(row, {
                                 canPreview,
@@ -263,7 +266,8 @@ function toRelatedPurchaseDocument(
 ) {
     return {
         id: row.purchaseOrderId,
-        documentType: `采购单 · ${row.supplierName}`,
+        documentType: "采购单",
+        name: row.supplierName,
         documentNumber: displayPurchaseOrderNo(row),
         status: {
             label: row.statusLabel,

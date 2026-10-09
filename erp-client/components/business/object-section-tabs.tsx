@@ -1,5 +1,7 @@
 "use client"
 
+/* eslint-disable jsx-a11y/no-noninteractive-tabindex -- 独立滚动区使用具名 region，并须支持键盘翻页。 */
+
 import * as React from "react"
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -25,6 +27,10 @@ export type ObjectSectionTabsProps = Omit<
     children: React.ReactNode
     /** 分区正文右侧的摘要；与正文共用起点，在窄屏下移至正文之后。 */
     sidebar?: React.ReactNode
+    /** 固定高度详情页中，正文与侧栏独立滚动，分区导航保持可见。 */
+    scrollMode?: "page" | "panels"
+    /** 操作结果或专项处理区，与分区正文一起滚动。 */
+    beforeContent?: React.ReactNode
     /** 分区导航列表额外 class；默认已含吸顶与底边。 */
     listClassName?: string
     /** 传给 TabsList 的无障碍标签。 */
@@ -43,6 +49,8 @@ function ObjectSectionTabs({
     items,
     children,
     sidebar,
+    scrollMode = "page",
+    beforeContent,
     className,
     listClassName,
     listLabel = "对象分区",
@@ -51,6 +59,14 @@ function ObjectSectionTabs({
     ...props
 }: ObjectSectionTabsProps) {
     const baseId = idPrefix ?? id
+    const panelScroll = scrollMode === "panels"
+    const bodyRef = React.useRef<HTMLDivElement>(null)
+    const contentRef = React.useRef<HTMLDivElement>(null)
+    React.useEffect(() => {
+        if (!panelScroll) return
+        bodyRef.current?.scrollTo({ top: 0 })
+        contentRef.current?.scrollTo({ top: 0 })
+    }, [value, panelScroll])
     return (
         <Tabs
             id={baseId}
@@ -59,7 +75,11 @@ function ObjectSectionTabs({
             onValueChange={(next) => {
                 if (next) onValueChange(next)
             }}
-            className={cn("gap-0", className)}
+            className={cn(
+                "gap-0",
+                panelScroll && "min-h-0 flex-1 overflow-hidden",
+                className,
+            )}
             {...props}
         >
             <TabsList
@@ -69,6 +89,7 @@ function ObjectSectionTabs({
                     "sticky top-0 z-10 h-auto w-full justify-start gap-5 overflow-x-auto rounded-none border-b border-border bg-card px-0 py-0",
 
                     "group-data-horizontal/tabs:h-auto",
+                    panelScroll && "shrink-0",
                     listClassName,
                 )}
             >
@@ -90,14 +111,62 @@ function ObjectSectionTabs({
                 ))}
             </TabsList>
             {sidebar != null ? (
-                <div className="grid min-w-0 items-start gap-6 py-6 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
-                    <div className="min-w-0 [&>[data-slot=object-section-tabs-panel]]:py-0">
+                <div
+                    ref={bodyRef}
+                    id={
+                        panelScroll && baseId
+                            ? `${baseId}-body-scroll`
+                            : undefined
+                    }
+                    tabIndex={panelScroll ? 0 : undefined}
+                    role={panelScroll ? "region" : undefined}
+                    aria-label={panelScroll ? `${listLabel}内容区` : undefined}
+                    className={cn(
+                        "grid min-w-0 items-start gap-6 py-6 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_400px]",
+                        panelScroll &&
+                            "min-h-0 flex-1 overflow-y-auto overscroll-contain xl:grid-rows-[minmax(0,1fr)] xl:overflow-hidden",
+                    )}
+                >
+                    <div
+                        ref={contentRef}
+                        id={
+                            panelScroll && baseId
+                                ? `${baseId}-content-scroll`
+                                : undefined
+                        }
+                        tabIndex={panelScroll ? 0 : undefined}
+                        role={panelScroll ? "region" : undefined}
+                        aria-label={
+                            panelScroll ? `${listLabel}明细` : undefined
+                        }
+                        className={cn(
+                            "min-w-0 [&>[data-slot=object-section-tabs-panel]]:py-0",
+                            panelScroll &&
+                                "xl:h-full xl:min-h-0 xl:overflow-y-auto xl:overscroll-contain",
+                        )}
+                    >
+                        {beforeContent}
                         {children}
                     </div>
-                    {sidebar}
+                    {panelScroll ? (
+                        <div
+                            tabIndex={0}
+                            id={baseId ? `${baseId}-sidebar-scroll` : undefined}
+                            role="region"
+                            aria-label={`${listLabel}摘要`}
+                            className="min-w-0 xl:max-h-full xl:overflow-y-auto xl:overscroll-contain"
+                        >
+                            {sidebar}
+                        </div>
+                    ) : (
+                        sidebar
+                    )}
                 </div>
             ) : (
-                children
+                <>
+                    {beforeContent}
+                    {children}
+                </>
             )}
         </Tabs>
     )

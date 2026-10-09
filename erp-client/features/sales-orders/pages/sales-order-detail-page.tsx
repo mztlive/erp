@@ -200,91 +200,108 @@ export function SalesOrderDetailPage({
     }
 
     return (
-        <PageScaffold density="compact">
-            <SalesOrderIdentityHeader
-                back={{
-                    id: "sales-orders-detail-back",
-                    label: backLabel,
-                    href: backHref,
-                }}
-                navigationMeta={
-                    fromQueue
-                        ? fromWorkspace === "W01" || fromWorkspace === "W09"
-                            ? "从履约处理打开 · 查阅后可点返回，回到列表原位"
-                            : fromWorkspace === "W08"
-                              ? "从采购单打开 · 查阅后可点返回，回到列表原位"
-                              : "从工作台打开 · 查阅后可点返回，回到列表原位"
-                        : undefined
-                }
-                order={order}
-                identityOnly
-                secondaryActions={
-                    <SalesOrderDetailSecondaryActions
-                        order={order}
-                        canStartChange={derived.canStartChange}
-                        changeBlocker={derived.changeBlocker}
-                        changePending={startChangeCommand.isPending}
-                        onOpenChangeConfirm={() => setChangeConfirmOpen(true)}
-                        onApprovalResult={handleActionResult}
-                    />
-                }
-            />
-
-            {result ? (
-                <FormalActionResult
-                    status={result.status}
-                    title={result.title}
-                    description={result.description}
-                    reference={result.reference}
-                    facts={[
-                        {
-                            label: "销售单",
-                            value: order.documentNumber,
-                        },
-                        { label: "客户", value: order.customerName },
-                        ...(result.nextResponsible
-                            ? [
-                                  {
-                                      label: "下一步",
-                                      value: result.nextResponsible,
-                                  },
-                              ]
-                            : []),
-                    ]}
-                />
-            ) : null}
-
-            {section === "change-review" &&
-            changeOrderId &&
-            changeQuery.isPending ? (
-                <p role="status" className="text-sm text-muted-foreground">
-                    正在加载变更单…
-                </p>
-            ) : section === "change-review" &&
-              changeOrderId &&
-              changeQuery.isError ? (
-                <BusinessFailureState
-                    title="变更单读取失败"
-                    description="请重新打开该变更单，当前销售单的其他变更不会替代此次内容。"
-                />
-            ) : section === "change-review" ? (
-                <SalesChangeOrderApprovalSection
-                    readonlyApproval
-                    salesOrderId={order.id}
-                    nature={order.nature}
-                    changeOrder={
-                        changeOrderId
-                            ? (changeQuery.data ?? null)
-                            : (order.activeChangeOrder ?? null)
+        <PageScaffold density="compact" className="min-h-0 overflow-hidden">
+            <div className="shrink-0">
+                <SalesOrderIdentityHeader
+                    back={{
+                        id: "sales-orders-detail-back",
+                        label: backLabel,
+                        href: backHref,
+                    }}
+                    navigationMeta={
+                        fromQueue
+                            ? fromWorkspace === "W01" || fromWorkspace === "W09"
+                                ? "从履约处理打开 · 查阅后可点返回，回到列表原位"
+                                : fromWorkspace === "W08"
+                                  ? "从采购单打开 · 查阅后可点返回，回到列表原位"
+                                  : "从工作台打开 · 查阅后可点返回，回到列表原位"
+                            : undefined
                     }
-                    workItemId={focusedWorkItem?.workItemId}
-                    expectedTaskVersion={focusedWorkItem?.taskVersion}
-                    workItemAllowedActions={focusedWorkItem?.allowedActions}
-                    onResult={handleActionResult}
+                    order={order}
+                    identityOnly
+                    secondaryActions={
+                        <SalesOrderDetailSecondaryActions
+                            order={order}
+                            canStartChange={derived.canStartChange}
+                            changeBlocker={derived.changeBlocker}
+                            changePending={startChangeCommand.isPending}
+                            onOpenChangeConfirm={() =>
+                                setChangeConfirmOpen(true)
+                            }
+                            onApprovalResult={handleActionResult}
+                        />
+                    }
                 />
-            ) : null}
+            </div>
 
             <SalesOrderDetailTabs
+                beforeContent={
+                    <div className="space-y-4 empty:hidden [&:not(:empty)]:mb-6">
+                        {result ? (
+                            <FormalActionResult
+                                status={result.status}
+                                title={result.title}
+                                description={result.description}
+                                reference={result.reference}
+                                facts={[
+                                    {
+                                        label: "销售单",
+                                        value: order.documentNumber,
+                                    },
+                                    {
+                                        label: "客户",
+                                        value: order.customerName,
+                                    },
+                                    ...(result.nextResponsible
+                                        ? [
+                                              {
+                                                  label: "下一步",
+                                                  value: result.nextResponsible,
+                                              },
+                                          ]
+                                        : []),
+                                ]}
+                            />
+                        ) : null}
+
+                        {section === "change-review" &&
+                        changeOrderId &&
+                        changeQuery.isPending ? (
+                            <p
+                                role="status"
+                                className="text-sm text-muted-foreground"
+                            >
+                                正在加载变更单…
+                            </p>
+                        ) : section === "change-review" &&
+                          changeOrderId &&
+                          changeQuery.isError ? (
+                            <BusinessFailureState
+                                title="变更单读取失败"
+                                description="请重新打开该变更单，当前销售单的其他变更不会替代此次内容。"
+                            />
+                        ) : section === "change-review" ? (
+                            <SalesChangeOrderApprovalSection
+                                readonlyApproval
+                                salesOrderId={order.id}
+                                nature={order.nature}
+                                changeOrder={
+                                    changeOrderId
+                                        ? (changeQuery.data ?? null)
+                                        : (order.activeChangeOrder ?? null)
+                                }
+                                workItemId={focusedWorkItem?.workItemId}
+                                expectedTaskVersion={
+                                    focusedWorkItem?.taskVersion
+                                }
+                                workItemAllowedActions={
+                                    focusedWorkItem?.allowedActions
+                                }
+                                onResult={handleActionResult}
+                            />
+                        ) : null}
+                    </div>
+                }
                 order={order}
 
                 section={section}

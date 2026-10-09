@@ -139,12 +139,14 @@ interface StatusTrackSummaryProps extends Omit<
 > {
     tracks: readonly StatusTrack[]
     variant?: StatusTrackSummaryVariant
+    appearance?: "badge" | "text"
 }
 
 /** 并列展示互不覆盖的状态轴，例如主状态、履约、回款和开票。 */
 function StatusTrackSummary({
     tracks,
     variant = "inline",
+    appearance = "badge",
     className,
     "aria-label": ariaLabel = "业务状态",
     ...props
@@ -189,6 +191,7 @@ function StatusTrackSummary({
                     <dd className="min-w-0">
                         <BusinessStatusBadge
                             context={statusContext}
+                            appearance={appearance}
                             label={track.status.label}
                             tone={track.status.tone}
                             icon={track.status.icon}
