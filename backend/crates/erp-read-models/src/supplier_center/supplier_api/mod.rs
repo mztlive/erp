@@ -9,6 +9,7 @@ mod context;
 pub mod dto;
 mod jobs;
 mod query;
+mod references;
 /// 供应连接跨域只读入口。
 pub struct SupplierApiReadService {
     db: Database,

@@ -98,9 +98,11 @@ println!("listen port: {}", snapshot.app.port);
 启动值，重启后才会生效。
 
 可选 `[dangaoshushu]` 配置由 `DangaoshushuConfig` 校验，缺省或 `enabled=false` 时关闭。
-启用须填写 ERP 连接 ID、供应商账户 ID、环境、HTTPS origin、渠道号和密钥；地址准备另须
+登记须填写 HTTPS origin、渠道号和密钥；ERP 身份与环境只从后台连接读取。地址准备另须
 填写固定 `user_id`。计量单位、标准地区与人民币含税结算价口径必须明确映射，不从供应商
 目录猜测。完整模板见 [config.toml.example](../config.toml.example)，连接绑定、运行范围、
 推送与回滚执行 [蛋糕叔叔接入合同](../../docs/dangaoshushu-connector-contract.md)。
-供应商运行时使用启动快照，修改文件或 Nacos 后必须重启并核对技术引用，不能依赖热更新
+供应商技术参数使用启动快照，修改文件或 Nacos 后必须重启并在后台重新绑定引用，不能依赖热更新
 完成启停或凭据轮换。配置调试输出整体脱敏；真实密钥只保存在已忽略配置或受控 Nacos。
+
+蛋糕叔叔配置不得包含 `connection_id`、`supplier_id`、`environment`。这些信息由后台“供应商 API”连接记录持有；新建连接后在页面选择地址和渠道凭据，无需回填内部 ID。配置 `enabled` 只登记技术参数，业务启停由后台连接控制。

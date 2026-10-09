@@ -3,6 +3,7 @@ use std::future::Future;
 use std::pin::Pin;
 
 use erp_core::ids::{SupplierAccountId, SupplierApiConnectionId};
+use serde::{Deserialize, Serialize};
 
 use super::supplier_api_gateway::ClassifiedError;
 use crate::entity::supplier_api::{ConnectionEnvironment, SupplierApiConnection};
@@ -26,11 +27,28 @@ impl From<&SupplierApiConnection> for SupplierReferenceTarget {
 }
 
 /// 不透明引用种类。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum SupplierReferenceKind {
     BusinessProfile,
     Endpoint,
     Credential,
+}
+
+/// 后台选择器可见的配置别名与短时票据；不包含地址、密钥或内部引用。
+#[derive(Serialize)]
+pub struct SupplierReferenceOption {
+    pub reference_id: String,
+    pub alias: String,
+    pub version: String,
+    pub expires_at: i64,
+}
+
+/// 连接专属配置选择器参数。
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SupplierReferenceOptionsQuery {
+    pub kind: SupplierReferenceKind,
 }
 
 /// 权威引用注册表解析结果。
@@ -54,6 +72,22 @@ pub trait SupplierReferenceRegistry: Send + Sync {
     /// # 错误
     /// 不返回错误。
     fn is_available(&self) -> bool;
+
+    /// 列出适用于当前后台连接的可绑定配置。
+    /// # 参数
+    /// `kind` 为配置种类，`target` 来自本次读取的后台连接记录。
+    /// # 返回
+    /// 安全别名及短时票据；未装配目录时返回空列表。
+    /// # 错误
+    /// 配置目录不可用或票据签发失败时返回分类错误。
+    fn options<'a>(
+        &'a self,
+        _kind: SupplierReferenceKind,
+        _target: &'a SupplierReferenceTarget,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<SupplierReferenceOption>, ClassifiedError>> + Send + 'a>>
+    {
+        Box::pin(async { Ok(Vec::new()) })
+    }
 
     /// 解析服务端签发的短时引用；实现必须校验目标身份、种类、用途和有效期。
     ///

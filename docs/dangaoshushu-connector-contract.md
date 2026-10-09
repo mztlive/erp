@@ -3,7 +3,7 @@
 ## 1. 所有权与启用范围
 
 1. `erp-supply::ports::connector` 定义供应商无关协议；具体客户端由 `erp-processes::connectors::dangaoshushu` 实现。领域 crate 不得依赖该客户端。
-2. Web API 通过 `SafeConfig` 的启动快照装配一个固定连接实例。实例的连接、供应商、环境及凭据不得由业务请求或回调正文替换。
+2. Web API 通过 `SafeConfig` 登记技术配置及共享传输客户端。连接 ID、供应商、环境和业务启停只读取后台连接记录；按已绑定技术引用选择配置并生成连接专属客户端，不从配置文件或回调正文取得 ERP 身份。
 3. 当前运行入口包含技术引用票据签发、连接健康检查、授权只读目录查询，以及推送验签和加密接收。商品查询不创建公司商品，不写入正式供给、商业条款或可供投影。
 4. 客户端提供地址准备、配送方案、单组订单创建、独立支付结果通知和订单查询。正式 ERP 履约尚未装配这些分步能力；旧 `SupplierGateway` 继续失败关闭。不得通过旧 `dispatch` 隐藏地址、创建与支付三个动作。
 5. `catalog_sync` 返回能力缺口 `DGSS_CATALOG_APPLY_NOT_CONFIGURED`。回调接收记录停留在 `received`，当前没有自动补查及正式业务应用 worker。不得将目录读取、成功应答或健康检查解释为商品已同步或订单状态已生效。
@@ -16,9 +16,6 @@
 ```toml
 [dangaoshushu]
 enabled = false
-connection_id = ""
-supplier_id = ""
-environment = "testing"
 base_url = "https://dev.dangaoss.cn"
 channel_no = ""
 private_key = ""
@@ -38,13 +35,11 @@ clearing_price_is_tax_inclusive_cny = false
 
 | 字段 | 执行约束 |
 | --- | --- |
-| `enabled` | 缺省为 `false`；整节缺省或关闭时不装配蛋糕叔叔运行时 |
-| `connection_id`、`supplier_id` | 启用时必填，必须分别匹配 ERP 连接 ID 与该连接的供应商账户 ID；每项为 1 至 128 个 ASCII 字母、数字、`-`、`_`、`.` |
-| `environment` | 仅 `testing` 或 `production`；必须与 ERP 连接环境一致 |
-| `base_url` | HTTPS origin，不得含用户名、密码、接口路径、查询参数或片段；`production` 禁止使用 `dev.dangaoss.cn` |
-| `channel_no` | 启用时必填，使用供应商分配的渠道号；字符限制与连接 ID 相同 |
+| `enabled` | 缺省为 `false`；`true` 只登记可供后台选择的技术配置，不创建、不绑定、不启用业务连接 |
+| `base_url` | HTTPS origin，不得含用户名、密码、接口路径、查询参数或片段；后台生产连接不得选择或使用 `dev.dangaoss.cn` |
+| `channel_no` | 启用时必填，使用供应商分配的渠道号；仅允许 1 至 128 个 ASCII 字母、数字、`-`、`_`、`.` |
 | `private_key` | 启用时必填，不得含空白或控制字符，不得使用占位值；调试输出整体脱敏 |
-| `user_id` | 只读查询可留空；准备地址前必须填写供应商允许使用的固定用户标识，字符限制与连接 ID 相同 |
+| `user_id` | 只读查询可留空；准备地址前必须填写供应商允许使用的固定用户标识，仅允许 1 至 128 个 ASCII 字母、数字、`-`、`_`、`.` |
 | `timestamp_unit` | `seconds` 或 `milliseconds`，缺省为毫秒；出站按该项生成，入站只接受 10 位秒或 13 位毫秒时间戳 |
 | `timeout_seconds` | 1 至 30，缺省 15；连接超时为 `min(timeout_seconds, 5)` 秒 |
 | `callback_max_skew_seconds` | 1 至 900，缺省 300；推送时间与接收时间差超限即拒绝 |
@@ -53,19 +48,19 @@ clearing_price_is_tax_inclusive_cny = false
 | `spec_units` | `spec_id` 到公司 SKU 计量单位的明确映射；单位为 1 至 32 个字符，不得有首尾空白；缺项时保留单位未知并不生成报价 |
 | `city_regions` | 供应商 `city_id` 到公司标准地区编码的映射；键和值遵循 ID 字符限制，值必须唯一以保证可逆；缺少查询涉及的地区时拒绝映射 |
 
-1. `enabled=true` 时加载校验身份、HTTPS 地址、凭据、限额和映射；配置错误须阻止运行时装配。关闭模板允许保留空字段。
-2. 所有字段按进程启动快照使用。修改文件或 Nacos 后必须重启 Web API；Nacos 刷新不重新装配供应商客户端，也不关闭已运行的实例。
-3. 调整端点、渠道、密钥、绑定身份及参与技术指纹的设置后，须重新签发并绑定技术引用。旧引用不得继续调用新实例。
+1. `enabled=true` 时加载校验 HTTPS 地址、凭据、限额和映射；配置错误须阻止运行时装配。关闭模板允许保留空字段。
+2. 技术参数按进程启动快照使用，修改文件或 Nacos 后须重启 Web API。后台新建连接、绑定配置、变更环境或停用连接不要求回填文件或重启；每次调用重新读取连接记录。
+3. 调整端点、渠道、密钥及参与技术指纹的设置后，须在后台重新选择并绑定配置；旧引用不得继续调用新配置。连接身份和环境同时参与引用与配送上下文校验，禁止复制其他连接的引用。
 4. `spec_units` 只确定计量口径，不建立公司 SKU 的外部身份绑定。正式供给必须单独绑定公司 SKU、连接、`product_id` 与实际订货 `spec_id`。
 
 ## 3. 连接建立与技术绑定
 
 按以下顺序执行；所有管理端请求使用既有 JWT、RBAC 与连接数据范围校验。
 
-1. 在 ERP 供应商主档登记或核对蛋糕叔叔账户。通过既有 `POST /admin/supplier-api-connections` 建立 `environment="testing"`、`status="disabled"` 的连接，创建时省略 `endpoint_reference` 与 `credential_reference`。记录响应中的连接 ID；不得把渠道号当作 ERP 连接 ID。
-2. 将供应商账户 ID、连接 ID、测试端点、渠道号及密钥写入受控配置。先完成所需映射，保持商业价格口径开关关闭，设置 `enabled=true` 并重启。此步骤只启用协议入口，不启用自动履约。
-3. 调用 `POST /admin/supplier-api-connections/{connection_id}/dangaoshushu/reference-tickets`，取得响应 `data.endpoint_ticket`、`data.credential_ticket`、`data.expires_at`。需要 `supplier_api_connection:manage_credential_reference` 权限。票据有效期为五分钟，绑定连接、环境、类型和当前技术指纹；票据不得记录到普通日志。
-4. 在有效期内依次调用既有治理命令。第一条成功后重新读取连接，第二条使用最新 `version`；两个动作使用不同且稳定的幂等键。
+1. 在受控配置中填写蛋糕叔叔端点、渠道号、密钥及所需技术参数，设置 `enabled=true` 后重启一次 Web API。不得填写 `connection_id`、`supplier_id`、`environment`；这些值由后台连接记录持有。
+2. 在后台供应商主档登记或核对蛋糕叔叔账户。进入“供应商 API”，选择供应商、填写连接代码、选择测试环境并创建连接；系统自动生成连接 ID，初始业务状态为停用。
+3. 在连接详情的配置区分别选择“蛋糕叔叔接口地址”和“蛋糕叔叔渠道凭据”并保存。选择器调用 `GET /admin/supplier-api-connections/{id}/reference-options?kind=endpoint|credential`；服务端读取当前连接并按环境返回适用选项，测试地址不会出现在生产连接选项中。接口要求 `view_reference_metadata` 和相应的地址/凭据绑定权限；响应仅包含 `reference_id`、安全别名、环境标签和 `expires_at`，不返回密钥、地址正文或内部配置引用。
+4. 每条配置选项携带有效期五分钟的连接专属票据。前端按连接 ID、连接版本和种类隔离缓存，打开选择器时刷新选项，刷新完成前禁止提交；票据过期时重新选择。保存继续调用既有绑定命令并保留事务重验、版本、幂等和审计规则。自动化客户端可继续调用 `POST /admin/supplier-api-connections/{id}/dangaoshushu/reference-tickets` 后执行以下两个命令；第一条完成后重新读取连接版本。
 
 ```http
 POST /admin/supplier-api-connections/{connection_id}/commands
@@ -95,7 +90,7 @@ Authorization: Bearer <JWT>
 
 5. 两次绑定均完成后，执行只读查询。需要登记技术健康证据时，通过治理命令发送 `RUN_HEALTH_CHECK`、`check_type="AUTHENTICATION"`，使用当前连接版本与新的幂等键；按返回的后台任务查询结果，不把 HTTP 命令受理解释为检查完成。`CONNECTIVITY` 与 `AUTHENTICATION` 只读取品牌接口；`CAPABILITY_METADATA` 返回能力缺口 `DGSS_CAPABILITY_METADATA_UNSUPPORTED`，不得登记为成功。品牌接口成功不证明全部商品、配送、下单或售后能力已验收。
 6. 票据只用于端点和凭证引用。业务资料与能力确认继续遵循既有采购治理合同；该运行时不解析 `UPDATE_BUSINESS_PROFILE` 的业务资料引用，不得提交伪造引用以绕过确认。
-7. 配置身份、环境、软删除状态或技术引用不匹配时失败关闭。配置中的 `enabled` 与连接业务启停分别管理；紧急关闭全部协议入口须按 §8 修改配置并重启。
+7. 连接删除、技术引用不匹配或环境不适用时失败关闭。后台停用即时阻止后续业务客户端获取和新推送接收；授权目录诊断及健康检查允许在停用状态执行，用于绑定与启用前核验。配置中的 `enabled` 仅控制技术配置是否登记，移除整个技术配置须重启。
 
 本地启动命令在 `backend/` 执行：
 
@@ -153,7 +148,7 @@ GET /admin/supplier-api-connections/{connection_id}/dangaoshushu/catalog?kind=pr
 
 ## 6. 推送接收合同
 
-在供应商侧登记 HTTPS 公网回调地址，按消息类型使用以下路径。路径中的连接 ID 必须与配置一致，端点和凭证引用须已绑定。
+在供应商侧登记 HTTPS 公网回调地址，按消息类型使用以下路径。路径中的连接 ID 用于读取后台连接；该连接必须处于启用状态，并已绑定当前蛋糕叔叔端点和凭证引用。
 
 | 路径 | 推送类型 | 保存的刷新目标 |
 | --- | --- | --- |
@@ -190,11 +185,17 @@ GET /admin/supplier-api-connections/{connection_id}/dangaoshushu/catalog?kind=pr
 ## 8. 停用与回滚
 
 1. 停用前在供应商侧暂停或撤销推送地址，保留双方登记信息及最后接收时间；存在已创建或结果未知的外部订单时先登记人工跟踪清单。
-2. 通过既有连接治理 `DISABLE` 命令停用业务连接。若要关闭健康检查、授权只读查询和回调协议入口，还须将 `[dangaoshushu].enabled=false` 并重启 Web API；仅修改数据库连接状态不等同于关闭已装配协议实例。
-3. 关闭后，蛋糕叔叔运行时不再装配，授权协议查询返回未配置，回调返回非成功；已有 `supplier_callback_receipts`、连接引用、治理回执和后台任务均保留。
+2. 通过后台或既有连接治理 `DISABLE` 命令停用连接，后续业务客户端获取和新推送接收立即拒绝，不要求修改文件或重启。停用保留授权诊断查询和健康检查。要撤销该部署上的全部技术配置选项及诊断入口时，再将 `[dangaoshushu].enabled=false` 并重启。
+3. 关闭技术配置并重启后，蛋糕叔叔运行时不再装配，授权协议查询返回未配置，回调返回非成功；已有 `supplier_callback_receipts`、连接引用、治理回执和后台任务均保留。
 4. 程序回滚使用上一可用制品和对应配置，保留新增集合及两个索引。旧制品未引用该集合，增量数据不阻止旧路径运行；禁止将删除集合或清空待处理记录作为常规回滚步骤。
-5. 恢复接入时重新核对配置身份与技术指纹，完成技术引用绑定和只读健康核验，再恢复供应商推送。保存的 `received` 记录继续等待明确的补查与业务处置，不自动标为完成。
+5. 恢复接入时核对后台供应商、环境及技术配置，完成后台绑定、只读健康核验和业务启用，再恢复供应商推送。保存的 `received` 记录继续等待明确的补查与业务处置，不自动标为完成。
 6. 配置关闭及程序回滚不会撤销供应商已创建的地址、订单或支付通知；未知外部结果继续按原动作和单号调查，不自动补发写请求。
+
+### 配置升级与回滚
+
+1. 升级前保留受控配置备份，从 `[dangaoshushu]` 删除 `connection_id`、`supplier_id`、`environment` 三项；保留端点、渠道、密钥及其他技术参数。新版本拒绝旧字段，避免重复来源继续生效。
+2. 既有连接、供给、订单及接收集合结构不变，不重建业务对象。引用指纹规则已调整，既有绑定须在后台重新选择并保存，完成健康核验后再启用；不得直接修改数据库引用字段或健康结果。
+3. 回滚程序时同时恢复旧版受控配置，并按旧版绑定流程重新核验引用。保留接收证据与业务记录，不清库，不删除索引。
 
 ## 9. 验收执行要求
 

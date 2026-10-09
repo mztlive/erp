@@ -1,5 +1,8 @@
 "use client"
 
+import { useState } from "react"
+import { useOpaqueReferenceOptionsQuery } from "@/features/supplier-api-connections/hooks/use-opaque-reference-options"
+
 import { KeyRoundIcon } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -25,7 +28,6 @@ export function ReferenceBindDialog({
     onOpenChange,
     kind,
     conn,
-    optionsError,
     value,
     onValueChange,
     allowed,
@@ -36,13 +38,32 @@ export function ReferenceBindDialog({
     onOpenChange: (open: boolean) => void
     kind: "credential" | "endpoint"
     conn: ConnectionCenterView
-    optionsError: unknown
     value: string
     onValueChange: (value: string) => void
     allowed: boolean
     pending: boolean
     onSubmit: () => Promise<void>
 }) {
+    const optionsQuery = useOpaqueReferenceOptionsQuery(
+        conn.connectionId,
+        kind,
+        conn.version,
+        open && allowed,
+    )
+    const [selectionExpired, setSelectionExpired] = useState(false)
+    const selected = optionsQuery.data?.find(
+        (option) => option.referenceId === value,
+    )
+    const submit = async () => {
+        if (!selected || selected.expiresAt * 1000 <= Date.now()) {
+            setSelectionExpired(true)
+            onValueChange("")
+            await optionsQuery.refetch()
+            return
+        }
+        await onSubmit()
+    }
+    const optionsError = optionsQuery.isError ? optionsQuery.error : undefined
     const isProd = conn.environment === "PRODUCTION"
     const kindLabel = kind === "credential" ? "密钥配置" : "地址配置"
     const ref =
@@ -81,15 +102,25 @@ export function ReferenceBindDialog({
                             </AlertDescription>
                         </Alert>
                     ) : null}
+                    {selectionExpired ? (
+                        <p role="alert" className="text-sm text-destructive">
+                            配置选择已过期，请重新选择后保存。
+                        </p>
+                    ) : null}
                     <Label htmlFor={inputId}>
                         {kind === "credential" ? "密钥配置" : "地址配置"}
                     </Label>
                     <OpaqueReferenceSearchCombobox
-                        kind={kind}
+                        options={optionsQuery.data ?? []}
+                        loading={optionsQuery.isFetching}
+                        emptyLabel="当前环境没有可选择的配置，请先登记对应的供应商技术参数。"
                         id={inputId}
                         value={value || null}
                         onValueChange={(v) => {
-                            if (v) onValueChange(v)
+                            if (v) {
+                                setSelectionExpired(false)
+                                onValueChange(v)
+                            }
                         }}
                         placeholder={
                             kind === "credential"
@@ -118,8 +149,13 @@ export function ReferenceBindDialog({
                         id={`supplier-api-connections-reference-bind-${kind}-confirm`}
                         loading={pending}
                         type="button"
-                        disabled={!allowed || !value || pending}
-                        onClick={() => void onSubmit()}
+                        disabled={
+                            !allowed ||
+                            !selected ||
+                            pending ||
+                            optionsQuery.isFetching
+                        }
+                        onClick={() => void submit()}
                     >
                         {!pending && (
                             <KeyRoundIcon

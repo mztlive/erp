@@ -26,7 +26,7 @@ const MAX_DELIVERY_CHOICES: usize = 5000;
 impl DangaoshushuConnector {
     pub(super) fn address_proof(&self, context: &DeliveryContext) -> ConnectorResult<AddressProof> {
         let value: AddressProof = proof::decode(&self.settings.private_key, &context.reference)?;
-        if value.connection_id != self.settings.connection_id
+        if value.connection_id != self.connection_id.as_ref()
             || value.user_id != self.settings.user_id
             || value.configuration_hash != self.binding
         {
@@ -198,7 +198,7 @@ impl DangaoshushuConnector {
         proof::encode(
             &self.settings.private_key,
             &ChoiceProof {
-                connection_id: self.settings.connection_id.clone(),
+                connection_id: self.connection_id.to_string(),
                 configuration_hash: self.binding.clone(),
                 context_hash: proof::hash(&self.settings.private_key, context.reference.as_bytes()),
                 lines_hash: proof::lines_hash(&self.settings.private_key, lines)?,
@@ -352,7 +352,7 @@ impl DeliverySource for DangaoshushuConnector {
             proof::encode(
                 &self.settings.private_key,
                 &AddressProof {
-                    connection_id: self.settings.connection_id.clone(),
+                    connection_id: self.connection_id.to_string(),
                     configuration_hash: self.binding.clone(),
                     action_id: key.id.clone(),
                     payload_hash: key.payload_hash.clone(),
@@ -400,6 +400,7 @@ impl DeliverySource for DangaoshushuConnector {
 mod tests {
     use std::sync::{Arc, Mutex};
 
+    use erp_supply::entity::supplier_api::ConnectionEnvironment;
     use erp_supply::ports::connector::common::SupplierSku;
     use serde_json::json;
 
@@ -449,8 +450,9 @@ mod tests {
             reference: proof::encode(
                 &settings.private_key,
                 &AddressProof {
-                    configuration_hash: proof::configuration_hash(&settings).unwrap(),
-                    connection_id: settings.connection_id,
+                    configuration_hash: proof::binding_hash(&settings, &super::super::test_support::target())
+                        .unwrap(),
+                    connection_id: "connection-1".into(),
                     user_id: settings.user_id,
                     action_id: "address-action".into(),
                     payload_hash: "hash".into(),
@@ -521,20 +523,22 @@ mod tests {
     }
 
     #[test]
-    fn old_address_context_is_rejected_after_host_or_environment_change() {
+    fn old_address_context_is_rejected_after_host_or_backend_environment_change() {
         let context = context();
         for changed in ["host", "environment"] {
+            let mut changed_target = super::super::test_support::target();
             let mut changed_settings = settings();
             if changed == "host" {
                 changed_settings.base_url = "https://other.dangaoss.cn".into();
             } else {
-                changed_settings.environment = "production".into();
-                changed_settings.base_url = "https://api.dangaoss.cn".into();
+                changed_target.environment = ConnectionEnvironment::Production;
             }
-            let connector = DangaoshushuConnector::with_transport(
+            let connector = DangaoshushuConnector::bind(
                 changed_settings,
+                &changed_target,
                 Arc::new(FakeTransport { responses: Mutex::new(vec![]), requests: Mutex::new(vec![]) }),
-            );
+            )
+            .unwrap();
             assert!(connector.address_proof(&context).is_err());
         }
     }

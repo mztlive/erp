@@ -231,16 +231,6 @@ export type ConnectionListView = {
     hasModulePermission: boolean
     hasDataScope: boolean
     projectedAt: string
-    credentialOpaqueOptions: Array<{
-        referenceId: string
-        alias: string
-        version: string
-    }>
-    endpointOpaqueOptions: Array<{
-        referenceId: string
-        alias: string
-        version: string
-    }>
 }
 
 export type FormalOutcome =

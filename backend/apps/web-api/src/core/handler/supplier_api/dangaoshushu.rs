@@ -34,9 +34,8 @@ pub async fn read(
     let runtime =
         state.dangaoshushu_runtime().ok_or_else(|| Error::Unprocessable("蛋糕叔叔连接尚未配置".into()))?;
     let connection = state.supplier_api_service().load_connection(&id, &mut NoTransaction).await?;
-    runtime.validate_binding(&connection, true).map_err(|failure| Error::Unprocessable(failure.summary))?;
     let value =
-        runtime.connector().read(&query).await.map_err(|failure| Error::Unprocessable(failure.summary))?;
+        runtime.read(&connection, &query).await.map_err(|failure| Error::Unprocessable(failure.summary))?;
     Ok(ApiResponse::ok_with_data(value))
 }
 

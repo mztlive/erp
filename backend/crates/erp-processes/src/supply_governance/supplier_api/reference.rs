@@ -276,7 +276,7 @@ mod tests {
     #[tokio::test]
     async fn ticket_target_mismatch_stops_before_commit_and_correct_target_commits() {
         let settings: DangaoshushuConfig = serde_json::from_value(serde_json::json!({
-            "enabled": true, "connection_id": "connection-1", "supplier_id": "supplier-1",
+            "enabled": true,
             "channel_no": "test-channel", "private_key": "test-key", "user_id": "user-1"
         }))
         .unwrap();

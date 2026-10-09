@@ -19,6 +19,7 @@ use crate::app_state::AppState;
 use crate::core::errors::Result;
 use crate::core::response::ApiResponse;
 pub mod dangaoshushu;
+pub mod references;
 
 #[permission_macros::permission(
     group = "API 供应商连接",

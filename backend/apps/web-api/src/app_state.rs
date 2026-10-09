@@ -712,7 +712,7 @@ mod tests {
             assert_eq!(ports.readiness.supplier_api, ConnectorMode::FailClosed);
         }
         let config = connector_config(
-            "[dangaoshushu]\nenabled=true\nconnection_id='connection-1'\nsupplier_id='supplier-1'\nchannel_no='test-channel'\nprivate_key='test-key'",
+            "[dangaoshushu]\nenabled=true\nchannel_no='test-channel'\nprivate_key='test-key'",
         );
         let ports = ExternalConnectorPorts::from_config(&config).unwrap();
         assert!(ports.dangaoshushu.is_some());

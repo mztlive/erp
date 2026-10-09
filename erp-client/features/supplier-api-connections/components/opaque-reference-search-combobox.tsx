@@ -4,35 +4,27 @@ import {
     OptionCombobox,
     type OptionComboboxProps,
 } from "@/components/business/option-combobox"
-import { useOpaqueReferenceOptionsQuery } from "@/features/supplier-api-connections/hooks/use-opaque-reference-options"
-import { getErrorMessage } from "@/lib/api/errors"
+import type { ReferenceOption } from "@/features/supplier-api-connections/api/list"
 
 export type OpaqueReferenceSearchComboboxProps = Omit<
     OptionComboboxProps,
-    "options" | "loading"
-> & { kind: "credential" | "endpoint" }
+    "options"
+> & {
+    options: ReferenceOption[]
+}
 
-/** 不透明引用选择器；页面不接触引用目录请求，也不接触任何密钥正文。 */
+/** 展示服务端配置别名；短时票据仅用于绑定，不展示内部身份或凭据。 */
 export function OpaqueReferenceSearchCombobox({
-    kind,
-    emptyLabel,
+    options,
     ...props
 }: OpaqueReferenceSearchComboboxProps) {
-    const query = useOpaqueReferenceOptionsQuery(kind)
     return (
         <OptionCombobox
             {...props}
-            options={(query.data ?? []).map((option) => ({
+            options={options.map((option) => ({
                 value: option.referenceId,
                 label: `${option.alias} · ${option.version}`,
-                keywords: option.referenceId,
             }))}
-            loading={query.isFetching}
-            emptyLabel={
-                query.isError
-                    ? getErrorMessage(query.error, "引用目录加载失败，请重试")
-                    : (emptyLabel ?? "暂时没有可选择的引用资料")
-            }
         />
     )
 }

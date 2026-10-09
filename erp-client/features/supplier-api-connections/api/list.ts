@@ -82,20 +82,35 @@ export async function fetchConnectionList(
             secsToIso(
                 Math.max(0, ...pageResult.items.map((item) => item.created_at)),
             ) ?? new Date(0).toISOString(),
-        credentialOpaqueOptions: [],
-        endpointOpaqueOptions: [],
     }
 }
 
+export type ReferenceOption = {
+    referenceId: string
+    alias: string
+    version: string
+    expiresAt: number
+}
+
 export async function fetchOpaqueReferenceOptions(
+    connectionId: string,
     kind: "credential" | "endpoint",
-) {
-    const view = await fetchConnectionList({
-        environment: "all",
-        page: 1,
-        pageSize: 1,
-    })
-    return kind === "credential"
-        ? view.credentialOpaqueOptions
-        : view.endpointOpaqueOptions
+): Promise<ReferenceOption[]> {
+    const options = await apiGet<
+        Array<{
+            reference_id: string
+            alias: string
+            version: string
+            expires_at: number
+        }>
+    >(
+        `/admin/supplier-api-connections/${encodeURIComponent(connectionId)}/reference-options`,
+        { kind },
+    )
+    return options.map((option) => ({
+        referenceId: option.reference_id,
+        alias: option.alias,
+        version: option.version,
+        expiresAt: option.expires_at,
+    }))
 }

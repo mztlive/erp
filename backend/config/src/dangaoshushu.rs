@@ -1,4 +1,4 @@
-//! 蛋糕叔叔协议配置；连接身份、地区与计量映射由服务端固定。
+//! 蛋糕叔叔技术配置；ERP 连接身份与环境由后台连接记录提供。
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
@@ -15,18 +15,12 @@ pub enum SupplierTimestampUnit {
     Milliseconds,
 }
 
-/// 缺省或 enabled=false 时关闭；启用后必须补全身份、密钥及超时。
+/// 缺省或 enabled=false 时不登记技术配置；业务启停由后台连接控制。
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DangaoshushuConfig {
     #[serde(default)]
     pub enabled: bool,
-    #[serde(default)]
-    pub connection_id: String,
-    #[serde(default)]
-    pub supplier_id: String,
-    #[serde(default = "testing")]
-    pub environment: String,
     #[serde(default = "testing_url")]
     pub base_url: String,
     #[serde(default)]
@@ -54,9 +48,6 @@ pub struct DangaoshushuConfig {
     pub city_regions: BTreeMap<String, String>,
 }
 
-fn testing() -> String {
-    "testing".into()
-}
 fn testing_url() -> String {
     "https://dev.dangaoss.cn".into()
 }
@@ -89,9 +80,8 @@ impl DangaoshushuConfig {
         if !self.enabled {
             return Ok(());
         }
-        let invalid = || {
-            Error::Invalid("dangaoshushu requires valid connection, supplier, environment, HTTPS origin, credentials and limits".into())
-        };
+        let invalid =
+            || Error::Invalid("dangaoshushu requires a valid HTTPS origin, credentials and limits".into());
         let url = Url::parse(&self.base_url).map_err(|_| invalid())?;
         if url.scheme() != "https"
             || url.host_str().is_none()
@@ -102,11 +92,7 @@ impl DangaoshushuConfig {
             || !matches!(url.path(), "" | "/")
             || self.base_url.trim() != self.base_url
             || self.base_url.len() > 2048
-            || !matches!(self.environment.as_str(), "testing" | "production")
-            || (self.environment == "production" && url.host_str() == Some("dev.dangaoss.cn"))
-            || [self.connection_id.as_str(), self.supplier_id.as_str(), self.channel_no.as_str()]
-                .iter()
-                .any(|value| !identifier(value))
+            || !identifier(&self.channel_no)
             || self.private_key.is_empty()
             || self.private_key.len() > 8192
             || !self.private_key.bytes().all(|byte| byte.is_ascii_graphic())
@@ -152,7 +138,7 @@ mod tests {
     use super::*;
 
     fn configured() -> DangaoshushuConfig {
-        toml::from_str("enabled=true\nconnection_id='connection-1'\nsupplier_id='supplier-1'\nchannel_no='channel-1'\nprivate_key='test-secret'").unwrap()
+        toml::from_str("enabled=true\nchannel_no='channel-1'\nprivate_key='test-secret'").unwrap()
     }
 
     #[test]
@@ -184,9 +170,9 @@ mod tests {
         let mut config = configured();
         config.timeout_seconds = 0;
         assert!(config.validate().is_err());
-        let mut config = configured();
-        config.environment = "production".into();
-        assert!(config.validate().is_err());
+        for field in ["connection_id", "supplier_id", "environment"] {
+            assert!(toml::from_str::<DangaoshushuConfig>(&format!("{field}='obsolete'")).is_err());
+        }
         let mut config = configured();
         config.city_regions = BTreeMap::from([("2".into(), "110100".into()), ("3".into(), "110100".into())]);
         assert!(config.validate().is_err());

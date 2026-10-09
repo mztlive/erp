@@ -31,7 +31,7 @@ impl DangaoshushuConnector {
         valid_id(&request.merchant_order_no)?;
         let address = self.address_proof(&request.delivery_context)?;
         let choice: ChoiceProof = proof::decode(&self.settings.private_key, &request.delivery.reference)?;
-        if choice.connection_id != self.settings.connection_id
+        if choice.connection_id != self.connection_id.as_ref()
             || choice.configuration_hash != self.binding
             || choice.context_hash
                 != proof::hash(&self.settings.private_key, request.delivery_context.reference.as_bytes())
@@ -356,7 +356,11 @@ mod tests {
         }];
         let address = AddressProof {
             connection_id: "connection-1".into(),
-            configuration_hash: proof::configuration_hash(&super::super::test_support::settings()).unwrap(),
+            configuration_hash: proof::binding_hash(
+                &super::super::test_support::settings(),
+                &super::super::test_support::target(),
+            )
+            .unwrap(),
             action_id: "addr-action-1".into(),
             payload_hash: "hash".into(),
             user_id: "user-1".into(),
@@ -369,7 +373,11 @@ mod tests {
         let fee = "3.00".parse::<Amount>().unwrap();
         let choice = ChoiceProof {
             connection_id: "connection-1".into(),
-            configuration_hash: proof::configuration_hash(&super::super::test_support::settings()).unwrap(),
+            configuration_hash: proof::binding_hash(
+                &super::super::test_support::settings(),
+                &super::super::test_support::target(),
+            )
+            .unwrap(),
             context_hash: proof::hash("test-key", context.reference.as_bytes()),
             lines_hash: proof::lines_hash("test-key", &lines).unwrap(),
             rule_id: "rule-1".into(),

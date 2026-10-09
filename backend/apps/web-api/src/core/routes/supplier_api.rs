@@ -16,6 +16,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
 fn dangaoshushu_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
+            "/supplier-api-connections/{id}/reference-options",
+            with_permission(
+                get(supplier_api::references::options),
+                rbac,
+                supplier_api::references::options_permission_key(),
+            ),
+        )
+        .route(
             "/supplier-api-connections/{id}/dangaoshushu/catalog",
             with_permission(
                 get(supplier_api::dangaoshushu::read),

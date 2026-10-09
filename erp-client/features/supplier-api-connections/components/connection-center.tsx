@@ -33,7 +33,6 @@ import {
     useBindCredentialMutation,
     useBindEndpointMutation,
     useConnectionCenterQuery,
-    useConnectionListQuery,
     useDisableConnectionMutation,
     useEnableConnectionMutation,
     useRunHealthCheckMutation,
@@ -85,10 +84,6 @@ export function ConnectionCenter({
     const startCatalog = useStartCatalogSyncMutation()
     const disableMut = useDisableConnectionMutation()
     const enableMut = useEnableConnectionMutation()
-    const listQuery = useConnectionListQuery({
-        environment: "ALL",
-        page: 1,
-    })
 
     const conn = centerQuery.data
     const section = urlState.section
@@ -297,7 +292,6 @@ export function ConnectionCenter({
                 open={credOpen}
                 onOpenChange={setCredOpen}
                 conn={conn}
-                optionsError={listQuery.isError ? listQuery.error : undefined}
                 value={selectedRef}
                 onValueChange={setSelectedRef}
                 allowed={conn.allowedActions.includes(
@@ -321,7 +315,6 @@ export function ConnectionCenter({
                 open={endpointOpen}
                 onOpenChange={setEndpointOpen}
                 conn={conn}
-                optionsError={listQuery.isError ? listQuery.error : undefined}
                 value={selectedEndpointRef}
                 onValueChange={setSelectedEndpointRef}
                 allowed={conn.allowedActions.includes(

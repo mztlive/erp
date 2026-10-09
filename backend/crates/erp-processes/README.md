@@ -83,7 +83,7 @@ env -u ERP_TEST_MONGO_URI cargo test -p erp-processes --lib --locked
 ## 蛋糕叔叔
 
 `connectors::dangaoshushu::DangaoshushuConnector` 实现商品、可供、地区、地址与配送、单组订单、
-独立支付及回调协议。`DangaoshushuRuntime` 通过固定配置装配技术引用和只读健康检查；
+独立支付及回调协议。`DangaoshushuRuntime` 登记技术参数，按后台连接记录和所绑定引用创建客户端；后台选择器取得连接专属配置票据，健康检查复用相同绑定；
 `reception::receive` 保存推送密文和刷新意图后应答。配置、管理端查询、技术绑定和新增集合
 的启停回滚须执行[接入合同](../../../docs/dangaoshushu-connector-contract.md)。
 

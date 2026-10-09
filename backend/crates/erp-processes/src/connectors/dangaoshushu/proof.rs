@@ -2,6 +2,7 @@
 use config::DangaoshushuConfig;
 use erp_supply::ports::connector::common::ConnectorResult;
 use erp_supply::ports::connector::order::{CoordinateSystem, DeliveryMethod, OrderLine, Recipient};
+use erp_supply::ports::supplier_reference_registry::SupplierReferenceTarget;
 use hmac::{Hmac, KeyInit, Mac};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -41,14 +42,26 @@ pub(super) struct ChoiceProof {
 
 pub(super) fn configuration_hash(settings: &DangaoshushuConfig) -> ConnectorResult<String> {
     let bytes = to_vec(&json!({
-        "connection":settings.connection_id,"supplier":settings.supplier_id,
-        "environment":settings.environment,"base_url":settings.base_url,
+        "base_url":settings.base_url,
         "channel":settings.channel_no,"user":settings.user_id,
         "timestamp_unit":format!("{:?}",settings.timestamp_unit),
         "timeout":settings.timeout_seconds,"rate":settings.requests_per_second,
         "callback_skew":settings.callback_max_skew_seconds,
         "price_basis":settings.clearing_price_is_tax_inclusive_cny,
         "units":settings.spec_units,"regions":settings.city_regions
+    }))
+    .map_err(|_| mapping())?;
+    Ok(hash(&settings.private_key, &bytes))
+}
+
+pub(super) fn binding_hash(
+    settings: &DangaoshushuConfig,
+    target: &SupplierReferenceTarget,
+) -> ConnectorResult<String> {
+    let bytes = to_vec(&json!({
+        "configuration":configuration_hash(settings)?,
+        "connection":target.connection_id,"supplier":target.supplier_id,
+        "environment":target.environment.as_str()
     }))
     .map_err(|_| mapping())?;
     Ok(hash(&settings.private_key, &bytes))

@@ -5110,6 +5110,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "GET",
+                path: "/admin/supplier-api-connections/{id}/reference-options",
+                description: "查看供应商接口配置选项",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "view_reference_metadata",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
                 path: "/admin/supplier-api-connections/{id}/dangaoshushu/catalog",
                 description: "读取供应商协议目录资料",
                 permission: {

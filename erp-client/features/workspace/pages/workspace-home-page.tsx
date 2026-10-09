@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import {
-    ArrowLeftIcon,
     Maximize2Icon,
     Minimize2Icon,
     RefreshCwIcon,

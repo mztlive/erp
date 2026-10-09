@@ -59,10 +59,7 @@ force_path_style = false
 # 蛋糕叔叔：默认关闭。真实凭据只写入已忽略的 config.toml 或受控 Nacos。
 # 启用、绑定与回滚要求见 docs/dangaoshushu-connector-contract.md；修改后重启 Web API。
 [dangaoshushu]
-enabled = false
-connection_id = "" # ERP 中既有 API 连接 ID；与 supplier_id、environment 固定绑定
-supplier_id = "" # ERP 中蛋糕叔叔的供应商账户 ID
-environment = "testing" # testing / production；生产环境禁止使用测试 host
+enabled = false # 登记技术配置；供应商、连接、环境及业务启停在后台管理
 base_url = "https://dev.dangaoss.cn" # 仅 HTTPS origin，不含接口路径、查询参数或凭据
 channel_no = ""
 private_key = ""
