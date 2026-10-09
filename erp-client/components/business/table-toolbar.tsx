@@ -131,7 +131,10 @@ export function TableToolbar({
                     data-slot="table-toolbar-filter-status"
                     ref={scope?.setFilterStatus}
                     data-table-toolbar-content=""
-                    className="min-w-0 flex-1 basis-full empty:hidden sm:basis-auto"
+                    className={cn(
+                        "min-w-0 basis-full empty:hidden sm:basis-auto",
+                        children == null && "flex-1",
+                    )}
                 />
             ) : null}
             <div

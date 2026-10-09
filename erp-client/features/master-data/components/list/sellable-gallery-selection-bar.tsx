@@ -1,11 +1,17 @@
 "use client"
 
+import type { ReactNode } from "react"
+
+import { cn } from "@/lib/utils"
+import type { SellableListLayout } from "@/features/master-data/lib/sellable-list-layout"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 
 export function SellableGallerySelectionBar({
     idPrefix = "master-data-sellable-items-gallery",
+    layout = "gallery",
+    actions,
     resultCount,
     selectedCount,
     allSelected,
@@ -14,6 +20,8 @@ export function SellableGallerySelectionBar({
     onClear,
 }: {
     idPrefix?: string
+    layout?: SellableListLayout
+    actions?: ReactNode
     resultCount: number
     selectedCount: number
     allSelected: boolean
@@ -28,19 +36,29 @@ export function SellableGallerySelectionBar({
         >
             <label
                 htmlFor={`${idPrefix}-select-all`}
-                className="inline-flex items-center gap-2"
+                className={cn(
+                    "inline-flex items-center",
+                    layout === "gallery" && "gap-2",
+                )}
             >
-                <Checkbox
-                    id={`${idPrefix}-select-all`}
-                    checked={allSelected}
-                    indeterminate={someSelected}
-                    onCheckedChange={(checked) => {
-                        if (checked === true) onSelectAll()
-                        else onClear()
-                    }}
-                    disabled={resultCount === 0}
-                    aria-label={masterDataCopy.sellableSelectAll}
-                />
+                <span
+                    className={cn(
+                        "inline-flex shrink-0 items-center justify-center",
+                        layout === "table" && "w-table-column-selection",
+                    )}
+                >
+                    <Checkbox
+                        id={`${idPrefix}-select-all`}
+                        checked={allSelected}
+                        indeterminate={someSelected}
+                        onCheckedChange={(checked) => {
+                            if (checked === true) onSelectAll()
+                            else onClear()
+                        }}
+                        disabled={resultCount === 0}
+                        aria-label={masterDataCopy.sellableSelectAll}
+                    />
+                </span>
                 <span>
                     已选{" "}
                     <span className="num font-medium">{selectedCount}</span> /{" "}
@@ -67,6 +85,7 @@ export function SellableGallerySelectionBar({
             >
                 {masterDataCopy.sellableClearSelection}
             </Button>
+            {actions}
         </div>
     )
 }

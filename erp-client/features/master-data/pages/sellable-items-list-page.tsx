@@ -288,43 +288,6 @@ export function SellableItemsListPage() {
                         }
                         loading={state.listQuery.isFetching}
                         failed={state.listQuery.isError}
-                        idleHint={
-                            sourceKind === "SELECTION"
-                                ? `已勾选 ${selection.selectedCount} 件`
-                                : isGallery
-                                  ? "未勾选时发起选品按当前筛选；导出需先勾选"
-                                  : "导出与发起选品均按当前筛选"
-                        }
-                        statusActions={
-                            <div className="flex items-center">
-                                {canLaunchSelection ? (
-                                    <span
-                                        ref={launchButtonRef}
-                                        className="mr-1 inline-flex"
-                                    >
-                                        <Button
-                                            id="master-data-sellable-items-launch-selection"
-                                            type="button"
-                                            variant="default"
-                                            size="sm"
-                                            disabled={launchDisabled}
-                                            title={sourceSummary}
-                                            onClick={() =>
-                                                setSelectionLaunchOpen(true)
-                                            }
-                                        >
-                                            <PackageSearchIcon
-                                                data-icon="inline-start"
-                                                aria-hidden="true"
-                                            />
-                                            {sourceKind === "SELECTION"
-                                                ? `发起选品 ${selection.selectedCount}`
-                                                : "发起选品"}
-                                        </Button>
-                                    </span>
-                                ) : null}
-                            </div>
-                        }
                     />
                 }
                 tableActions={
@@ -335,6 +298,35 @@ export function SellableItemsListPage() {
                 }
                 selectionBar={
                     <SellableGallerySelectionBar
+                        layout={layout}
+                        actions={
+                            canLaunchSelection ? (
+                                <span
+                                    ref={launchButtonRef}
+                                    className="mr-1 inline-flex"
+                                >
+                                    <Button
+                                        id="master-data-sellable-items-launch-selection"
+                                        type="button"
+                                        variant="default"
+                                        size="sm"
+                                        disabled={launchDisabled}
+                                        title={sourceSummary}
+                                        onClick={() =>
+                                            setSelectionLaunchOpen(true)
+                                        }
+                                    >
+                                        <PackageSearchIcon
+                                            data-icon="inline-start"
+                                            aria-hidden="true"
+                                        />
+                                        {sourceKind === "SELECTION"
+                                            ? `发起选品 ${selection.selectedCount}`
+                                            : "发起选品"}
+                                    </Button>
+                                </span>
+                            ) : null
+                        }
                         idPrefix={
                             isGallery
                                 ? "master-data-sellable-items-gallery"

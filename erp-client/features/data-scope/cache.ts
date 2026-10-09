@@ -25,8 +25,13 @@ function authorizationVersion(data: unknown): string | null {
         value.userid,
         value.policy_version,
         value.organization_version,
-        value.role_ids,
-        value.permissions,
+        // 角色和权限是集合；接口顺序变化不代表授权变化，不能因此清空正在编辑的表单。
+        Array.isArray(value.role_ids)
+            ? [...value.role_ids].sort()
+            : value.role_ids,
+        Array.isArray(value.permissions)
+            ? [...value.permissions].sort()
+            : value.permissions,
     ])
 }
 

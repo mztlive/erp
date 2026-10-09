@@ -27,7 +27,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "@/components/ui/toast"
 import { PurchaseOrderCreateBatchBar } from "@/features/purchase-orders/components/purchase-order-create-batch-bar"
 import { PurchaseOrderCreatePreviewDialog } from "@/features/purchase-orders/components/purchase-order-create-preview"
-import { PurchaseOrderCreateSourcingCards } from "@/features/purchase-orders/components/purchase-order-create-sourcing-cards"
+import { PurchaseOrderCreateSourcingWorkspace } from "@/features/purchase-orders/components/purchase-order-create-sourcing-workspace"
 import { PurchaseOrderCreateSourcingTable } from "@/features/purchase-orders/components/purchase-order-create-sourcing-table"
 import { PurchaseOrderCreateSourcePanel } from "@/features/purchase-orders/components/purchase-order-create-source-panel"
 import {
@@ -80,9 +80,6 @@ export function PurchaseOrderCreatePage({
         props: SalesOrderPaperPreviewRenderProps,
     ) => ReactNode
 }) {
-    const SourcingEditor = embedded
-        ? PurchaseOrderCreateSourcingCards
-        : PurchaseOrderCreateSourcingTable
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
@@ -97,6 +94,10 @@ export function PurchaseOrderCreatePage({
     const [submissionUnknown, setSubmissionUnknown] = React.useState(false)
     const retrySubmissionRef = React.useRef<(() => Promise<void>) | null>(null)
     const [previewOpen, setPreviewOpen] = React.useState(false)
+    const [batchSelection, setBatchSelection] = React.useState<{
+        orderId: string
+        ids: string[]
+    }>({ orderId: "", ids: [] })
     const [linesResetToken, setLinesResetToken] = React.useState(0)
     const [sourcePaper, setSourcePaper] = React.useState<{
         id: string
@@ -327,17 +328,117 @@ export function PurchaseOrderCreatePage({
             : stockPreviews.length > 0
               ? `将建立 ${stockPreviews.length} 条库存预留；现有库存已满足本次分配，无需创建采购单。`
               : `将为供给缺口创建 ${previews.length} 张采购单提交审批，采购含税合计 ${previewTotals.gross}。`
-    const commonSourcingOptions = React.useMemo(
-        () => commonSourcingOptionsForSelected(selectedOrder, lines),
-        [lines, selectedOrder],
+    const selectedProductIds = React.useMemo(
+        () =>
+            new Set(
+                batchSelection.orderId === selectedSalesOrderId
+                    ? batchSelection.ids.filter((id) =>
+                          selectedOrder?.lines.some(
+                              (product) => product.salesOrderLineId === id,
+                          ),
+                      )
+                    : [],
+            ),
+        [batchSelection, selectedSalesOrderId, selectedOrder],
     )
-    const selectedCount = lines.filter((line) => line.selected).length
+    const onToggleProducts = React.useCallback(
+        (ids: string[], selected: boolean) => {
+            setBatchSelection((current) => {
+                const next = new Set(
+                    current.orderId === selectedSalesOrderId ? current.ids : [],
+                )
+                for (const id of ids) {
+                    if (selected) next.add(id)
+                    else next.delete(id)
+                }
+                return { orderId: selectedSalesOrderId, ids: [...next] }
+            })
+        },
+        [selectedSalesOrderId],
+    )
+    const batchLines = React.useMemo(
+        () =>
+            embedded
+                ? lines
+                      .filter((line) =>
+                          selectedProductIds.has(line.salesOrderLineId),
+                      )
+                      .map((line) => ({ ...line, selected: true }))
+                : lines.filter((line) => line.selected),
+        [embedded, lines, selectedProductIds],
+    )
+    const commonSourcingOptions = React.useMemo(
+        () =>
+            batchLines.length
+                ? commonSourcingOptionsForSelected(selectedOrder, batchLines)
+                : [],
+        [batchLines, selectedOrder],
+    )
+    const selectedCount = embedded ? selectedProductIds.size : batchLines.length
+    const getApplicableCount = (basisId: string) =>
+        embedded
+            ? (selectedOrder?.lines.filter(
+                  (product) =>
+                      selectedProductIds.has(product.salesOrderLineId) &&
+                      findSourcingOption(product, basisId),
+              ).length ?? 0)
+            : batchLines.filter((line) =>
+                  findSourcingOption(
+                      selectedOrder?.lines.find(
+                          (product) =>
+                              product.salesOrderLineId ===
+                              line.salesOrderLineId,
+                      ),
+                      basisId,
+                  ),
+              ).length
 
     const applyBatchSupplier = React.useCallback(
         (basisId: string) => {
             if (!selectedOrder) return
-            const selected = lines.filter((line) => line.selected)
-            const targets = selected.length > 0 ? selected : lines
+            const targets = batchLines
+            if (!targets.length) return
+            if (embedded) {
+                const replaced = new Set<string>()
+                const next = lines.flatMap((line) => {
+                    if (!selectedProductIds.has(line.salesOrderLineId))
+                        return [line]
+                    const product = selectedOrder.lines.find(
+                        (item) =>
+                            item.salesOrderLineId === line.salesOrderLineId,
+                    )
+                    const option = findSourcingOption(product, basisId)
+                    if (!option) return [line]
+                    if (replaced.has(line.salesOrderLineId)) return []
+                    replaced.add(line.salesOrderLineId)
+                    const warehouse =
+                        option.sourceType === "PURCHASE" &&
+                        option.fulfillmentResponsibility === "WAREHOUSE"
+                    return [
+                        {
+                            ...line,
+                            selected: true,
+                            basisId,
+                            quantity: option.maxCreateQuantity,
+                            expectedDeliveryDate: option.expectedDeliveryDate,
+                            targetWarehouseId: warehouse
+                                ? line.targetWarehouseId
+                                : "",
+                            targetWarehouseName: warehouse
+                                ? line.targetWarehouseName
+                                : "",
+                        },
+                    ]
+                })
+                writeLines(next)
+                toast.add({
+                    title: "已批量指定履约方案",
+                    description: `已更新 ${replaced.size} 个商品，其余商品保持原方案。`,
+                    type: "success",
+                    timeout: 4000,
+                })
+                return
+            }
             let applied = 0
             const targetKeys = new Set(targets.map((line) => line.rowKey))
             lines.forEach((line, index) => {
@@ -382,7 +483,15 @@ export function PurchaseOrderCreatePage({
                 timeout: 4000,
             })
         },
-        [form, lines, selectedOrder],
+        [
+            batchLines,
+            embedded,
+            form,
+            lines,
+            selectedOrder,
+            selectedProductIds,
+            writeLines,
+        ],
     )
 
     const applyBestSourcingOptions = React.useCallback(() => {
@@ -395,7 +504,7 @@ export function PurchaseOrderCreatePage({
             title: filled > 0 ? "已重新分配供给" : "没有可匹配的供给方案",
             description:
                 filled > 0
-                    ? "已优先分配现有库存，并为剩余缺口推荐采购方案。"
+                    ? "已优先分配现有库存，采购缺口优先推荐供应商直发。"
                     : "当前明细没有可用库存或合格采购供给。",
             type: filled > 0 ? "success" : "warning",
             timeout: 4000,
@@ -575,6 +684,7 @@ export function PurchaseOrderCreatePage({
         <PurchaseOrderCreateBatchBar
             compact={embedded}
             selectedCount={selectedCount}
+            getApplicableCount={getApplicableCount}
             options={commonSourcingOptions}
             onApply={applyBatchSupplier}
             matchDisabled={!canMatchBest}
@@ -619,7 +729,11 @@ export function PurchaseOrderCreatePage({
     return (
         <PageScaffold
             density={embedded ? "compact" : "default"}
-            className={embedded ? workspaceEmbeddedScaffoldClassName : "pb-8"}
+            className={
+                embedded
+                    ? cn(workspaceEmbeddedScaffoldClassName, "overflow-hidden")
+                    : "pb-8"
+            }
         >
             {embedded ? null : (
                 <PageHeader
@@ -645,7 +759,9 @@ export function PurchaseOrderCreatePage({
 
             <div
                 className={
-                    embedded ? "min-h-0 flex-1 overflow-auto" : undefined
+                    embedded
+                        ? "flex min-h-0 flex-1 flex-col overflow-hidden"
+                        : undefined
                 }
             >
                 {actionError ? (
@@ -695,32 +811,51 @@ export function PurchaseOrderCreatePage({
                     <form
                         className={cn(
                             "flex flex-col",
-                            embedded ? "gap-0" : "gap-4",
+                            embedded ? "min-h-0 flex-1 gap-0" : "gap-4",
                         )}
                         onSubmit={(event) => {
                             event.preventDefault()
                             event.stopPropagation()
                         }}
                     >
-                        <PurchaseOrderCreateSourcePanel
-                            workspace={workspace}
-                            selectedSalesOrderId={selectedSalesOrderId}
-                            selectedOrder={selectedOrder}
-                            disabled={Boolean(initialSalesOrderId)}
-                            flat={embedded}
-                            salesOrderReturnTo={salesOrderReturnTo}
-                            onPreviewSalesOrder={
-                                renderSalesOrderPreview
-                                    ? (id, title) =>
-                                          setSourcePaper({ id, title })
-                                    : undefined
-                            }
-                            onSalesOrderChange={(value) =>
-                                form.setFieldValue("salesOrderId", value)
-                            }
-                        />
+                        {embedded ? null : (
+                            <PurchaseOrderCreateSourcePanel
+                                workspace={workspace}
+                                selectedSalesOrderId={selectedSalesOrderId}
+                                selectedOrder={selectedOrder}
+                                disabled={Boolean(initialSalesOrderId)}
+                                flat={embedded}
+                                salesOrderReturnTo={salesOrderReturnTo}
+                                onPreviewSalesOrder={
+                                    renderSalesOrderPreview
+                                        ? (id, title) =>
+                                              setSourcePaper({ id, title })
+                                        : undefined
+                                }
+                                onSalesOrderChange={(value) =>
+                                    form.setFieldValue("salesOrderId", value)
+                                }
+                            />
+                        )}
 
-                        {selectedOrder ? (
+                        {selectedOrder && embedded ? (
+                            sourcingFormLinesReady(lines, selectedOrder) ? (
+                                <PurchaseOrderCreateSourcingWorkspace
+                                    key={selectedOrder.salesOrderId}
+                                    form={
+                                        form as unknown as PurchaseOrderCreateFormApi
+                                    }
+                                    order={selectedOrder}
+                                    onAddSplit={addSplitLine}
+                                    onRemoveSplit={removeSplitLine}
+                                    toolbar={batchBar}
+                                    selectedProductIds={selectedProductIds}
+                                    onToggleProducts={onToggleProducts}
+                                />
+                            ) : (
+                                <Skeleton className="h-40" />
+                            )
+                        ) : selectedOrder ? (
                             <section
                                 className={cn(
                                     "overflow-hidden",
@@ -759,7 +894,7 @@ export function PurchaseOrderCreatePage({
                                         lines,
                                         selectedOrder,
                                     ) ? (
-                                        <SourcingEditor
+                                        <PurchaseOrderCreateSourcingTable
                                             form={
                                                 form as unknown as PurchaseOrderCreateFormApi
                                             }
@@ -772,7 +907,7 @@ export function PurchaseOrderCreatePage({
                                     )}
                                     {!embedded ? (
                                         <p className="text-xs text-muted-foreground">
-                                            页面已自动优先分配现有库存；库存不足时，再按可覆盖数量、成本和交期推荐采购。可调整或拆分，同一采购维度会合并为一张采购单。
+                                            页面已自动优先分配现有库存；库存不足时优先推荐供应商直发，同类方案再按可覆盖数量、成本和交期排序。可调整或拆分，同一采购维度会合并为一张采购单。
                                         </p>
                                     ) : null}
                                 </div>
@@ -857,7 +992,18 @@ function PurchaseOrderCreateFooterTotals({
 }) {
     return (
         <div className="@container flex w-full min-w-0 flex-col items-stretch gap-3 @min-[640px]/document:flex-row @min-[640px]/document:items-center @min-[640px]/document:justify-between">
-            <dl className="grid min-w-0 flex-1 grid-cols-2 gap-x-6 gap-y-2 @min-[540px]:grid-cols-3">
+            <div className="min-w-0 flex-1 @min-[960px]/document:hidden">
+                <p className="text-xs text-muted-foreground">采购含税合计</p>
+                <p className="num mt-0.5 text-lg font-semibold">
+                    {items.find((item) => item.id === "gross")?.value}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                    将创建采购单{" "}
+                    {items.find((item) => item.id === "orders")?.value} ·
+                    库存预留 {items.find((item) => item.id === "stock")?.value}
+                </p>
+            </div>
+            <dl className="hidden min-w-0 flex-1 grid-cols-3 gap-x-6 gap-y-2 @min-[960px]/document:grid">
                 {items.map((item) => (
                     <div key={item.id} className="min-w-0">
                         <dt className="text-xs text-muted-foreground">

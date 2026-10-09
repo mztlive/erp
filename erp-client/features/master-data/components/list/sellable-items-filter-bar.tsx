@@ -33,7 +33,6 @@ export function SellableItemsFilterBar({
     resultCount,
     loading,
     failed,
-    idleHint = "导出与当前查询结果一致",
     statusActions,
 }: {
     searchInputRef: React.RefObject<HTMLInputElement | null>
@@ -43,7 +42,6 @@ export function SellableItemsFilterBar({
     resultCount?: number
     loading: boolean
     failed: boolean
-    idleHint?: string
     statusActions?: React.ReactNode
 }) {
     const directory = productFilterDirectoryState(filterOptions)
@@ -317,13 +315,17 @@ export function SellableItemsFilterBar({
                     </fieldset>
                 </div>
             }
-            resultStatus={listWorkspaceFilterStatusText({
-                loading,
-                failed,
-                resultCount,
-                noun: "件商品",
-                loadingLabel: "正在加载商品…",
-            })}
+            resultStatus={
+                loading || failed
+                    ? listWorkspaceFilterStatusText({
+                          loading,
+                          failed,
+                          resultCount,
+                          noun: "件商品",
+                          loadingLabel: "正在加载商品…",
+                      })
+                    : null
+            }
             chips={appliedChips}
             onClearChip={(key) =>
                 f.removeFilter(key as SellableAppliedChip["key"])
@@ -331,7 +333,6 @@ export function SellableItemsFilterBar({
             onClearAll={f.clearAllFilters}
             hasPendingChanges={f.hasPendingChanges}
             pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
-            idleHint={idleHint}
             statusActions={statusActions}
         />
     )

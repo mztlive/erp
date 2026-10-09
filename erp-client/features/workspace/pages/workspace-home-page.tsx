@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import {
+    ArrowLeftIcon,
     Maximize2Icon,
     Minimize2Icon,
     RefreshCwIcon,
@@ -86,8 +87,18 @@ export function WorkspaceHomeView({
     const [detailFullscreen, setDetailFullscreen] = React.useState(false)
     const [detailHidden, setDetailHidden] = React.useState(false)
     const detailItem = detailHidden ? undefined : selected
+    const [queueVisibleTask, setQueueVisibleTask] = React.useState<
+        string | null
+    >(null)
+    const sourcingTask =
+        detailItem?.workItemType === "PROCUREMENT_ORDER_CREATION" &&
+        detailItem.allowedActions.includes("PROCESS")
+    const detailExpanded =
+        detailFullscreen ||
+        (sourcingTask && queueVisibleTask !== detailItem?.workItemId)
     const selectTask = (item: NonNullable<typeof selected>) => {
         setDetailHidden(false)
+        setQueueVisibleTask(null)
         onSelectTask(item)
     }
     const closeDetail = () => {
@@ -108,13 +119,16 @@ export function WorkspaceHomeView({
     }, [selected])
 
     React.useEffect(() => {
-        if (!detailFullscreen) return
+        if (!detailExpanded) return
         const onKeyDown = (event: KeyboardEvent) => {
-            if (event.key === "Escape") setDetailFullscreen(false)
+            if (event.key === "Escape" && !event.defaultPrevented) {
+                setDetailFullscreen(false)
+                setQueueVisibleTask(detailItem?.workItemId ?? null)
+            }
         }
         window.addEventListener("keydown", onKeyDown)
         return () => window.removeEventListener("keydown", onKeyDown)
-    }, [detailFullscreen])
+    }, [detailExpanded, detailItem?.workItemId])
 
     if ((accountProfileQuery.isPending || dashboardQuery.isPending) && !view) {
         return <WorkspaceHomeSkeleton />
@@ -273,9 +287,27 @@ export function WorkspaceHomeView({
 
     const paneActions = detailItem ? (
         <>
+            {sourcingTask && detailExpanded ? (
+                <Button
+                    id="workspace-sourcing-return-queue"
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                        setDetailFullscreen(false)
+                        setQueueVisibleTask(detailItem.workItemId)
+                    }}
+                >
+                    <ArrowLeftIcon />
+                    返回待办
+                </Button>
+            ) : null}
             <WorkspaceDetailFullscreenButton
-                expanded={detailFullscreen}
-                onToggle={() => setDetailFullscreen((current) => !current)}
+                expanded={detailExpanded}
+                onToggle={() => {
+                    setDetailFullscreen(!detailExpanded)
+                    setQueueVisibleTask(detailItem.workItemId)
+                }}
             />
             <Button
                 id="workspace-detail-close"
@@ -307,7 +339,10 @@ export function WorkspaceHomeView({
     ) : null
 
     return (
-        <PageScaffold className="min-h-0" density="compact">
+        <PageScaffold
+            className="min-h-0 gap-2 [&>[data-slot=page-header]]:pb-0"
+            density="compact"
+        >
             <p
                 key={completionAnnouncement.sequence}
                 className="sr-only"
@@ -346,7 +381,7 @@ export function WorkspaceHomeView({
                 }
             />
 
-            <div className="border-b border-border pb-2">
+            <div className="border-b border-border pb-1">
                 <WorkspaceQueueScopeNav
                     metrics={metrics}
                     activeMetric={activeMetric}
@@ -394,10 +429,10 @@ export function WorkspaceHomeView({
                     data-slot="workspace-queue"
                     className={cn(
                         "flex min-h-0 min-w-0 flex-1 flex-col",
-                        detailFullscreen && "xl:hidden",
+                        detailExpanded && "xl:hidden",
                         detailItem &&
                             !narrowDetailOpen &&
-                            !detailFullscreen &&
+                            !detailExpanded &&
                             "xl:w-[420px] xl:flex-none 2xl:w-[450px]",
                     )}
                     aria-label={filterLabel}
@@ -441,7 +476,7 @@ export function WorkspaceHomeView({
                         aria-label={startedView ? "审批详情" : "任务详情"}
                         className={cn(
                             "hidden min-h-0 min-w-0 flex-col border-l border-grid bg-card xl:flex",
-                            detailFullscreen ? "flex-1 border-l-0" : "flex-1",
+                            detailExpanded ? "flex-1 border-l-0" : "flex-1",
                         )}
                     >
                         {detail}

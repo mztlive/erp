@@ -468,7 +468,7 @@ function WorkspaceDocumentTaskDetail({
 
     return (
         <WorkspaceTaskPane
-            className="@container/document [&>[data-slot=workspace-task-header]]:border-b-0 [&>[data-slot=workspace-task-header]]:pb-2"
+            className="@container/document [&>[data-slot=workspace-task-header]]:border-b-0 [&>[data-slot=workspace-task-header]]:pt-3 [&>[data-slot=workspace-task-header]]:pb-1"
             header={
                 <>
                     <h2 className="min-w-0 text-xl font-semibold tracking-tight">
@@ -536,7 +536,7 @@ function WorkspaceDocumentTaskDetail({
             aria-label="当前任务"
         >
             <div className="flex w-full flex-col">
-                <div className="flex flex-col gap-2 px-5 pt-2 pb-1 in-data-[slot=sheet-content]:px-7">
+                <div className="flex flex-col gap-1 px-5 pt-1 pb-1 in-data-[slot=sheet-content]:px-7">
                     <div className="flex items-start justify-between gap-3">
                         <h3 className="min-w-0 break-words text-lg font-semibold">
                             {canReadSensitive
@@ -597,11 +597,7 @@ function WorkspaceDocumentTaskDetail({
 
                 {primaryAmount ? (
                     <DetailBlock>
-                        <div
-                            className={cn(
-                                "flex flex-wrap items-end gap-x-8 gap-y-2 px-4 py-4",
-                            )}
-                        >
+                        <div className="flex flex-wrap items-end gap-x-8 gap-y-2">
                             <div className="flex flex-col gap-1">
                                 <span
                                     className={cn(
@@ -640,10 +636,6 @@ function WorkspaceDocumentTaskDetail({
                         <p className="text-sm text-muted-foreground">
                             正在读取单据事实…
                         </p>
-                    </DetailBlock>
-                ) : impactSummary ? (
-                    <DetailBlock title="说明">
-                        <p className="text-sm">{impactSummary}</p>
                     </DetailBlock>
                 ) : null}
 
@@ -742,13 +734,6 @@ function WorkspaceDocumentTaskDetail({
                     </DetailBlock>
                 ) : null}
 
-                {impactSummary && primaryAmount ? (
-                    <DetailBlock title="说明">
-                        <p className="text-sm leading-6 text-muted-foreground">
-                            {impactSummary}
-                        </p>
-                    </DetailBlock>
-                ) : null}
                 {approvalTask && instance ? (
                     <DetailBlock>
                         <WorkspaceApprovalProgress instance={instance} />

@@ -8,7 +8,7 @@ import type {
 } from "./types"
 
 /**
- * 为当前销售单生成默认供给分配：现有库存优先，剩余缺口再匹配采购。
+ * 为当前销售单生成默认供给分配：先消化现有库存，采购缺口优先供应商直发。
  *
  * @param order 当前选源销售单。
  * @returns 可写入表单的选源行。
@@ -146,8 +146,8 @@ const compareStockOptions = (
 /**
  * 为一条销售明细选出最优供给。
  *
- * 排序：能覆盖剩余数量优先，其次最低含税成本、最早交期、最大可创建量，
- * 再按供给方名称稳定排序。
+ * 排序：现有库存优先；采购方案中供应商直发优先，再比较剩余数量覆盖能力、
+ * 含税成本、交期、可创建量与供给方名称。
  *
  * @param options 该明细的可用供给。
  * @param remainingQuantity 销售剩余待分配数量；缺省时不比较覆盖能力。
@@ -161,6 +161,13 @@ export function pickBestSourcingOption(
     return [...options].sort((left, right) => {
         if (left.sourceType !== right.sourceType) {
             return left.sourceType === "EXISTING_STOCK" ? -1 : 1
+        }
+        if (left.sourceType === "PURCHASE") {
+            const leftDirect =
+                left.fulfillmentResponsibility === "SUPPLIER_DIRECT"
+            const rightDirect =
+                right.fulfillmentResponsibility === "SUPPLIER_DIRECT"
+            if (leftDirect !== rightDirect) return leftDirect ? -1 : 1
         }
         const leftCovers = optionCoversRemaining(left, remainingQuantity)
         const rightCovers = optionCoversRemaining(right, remainingQuantity)

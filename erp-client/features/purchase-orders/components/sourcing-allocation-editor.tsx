@@ -30,11 +30,13 @@ export function SourcingAllocationEditor({
     index,
     canRemove,
     onRemoveSplit,
+    compact = false,
 }: Pick<SourcingEditorProps, "form" | "order" | "onRemoveSplit"> & {
     product: SourcingProductLine
     line: SourcingLineInput
     index: number
     canRemove: boolean
+    compact?: boolean
 }) {
     const option = findSourcingOption(product, line.basisId)
     const isStock = option?.sourceType === "EXISTING_STOCK"
@@ -97,7 +99,10 @@ export function SourcingAllocationEditor({
             <div
                 className={cn(
                     "grid min-w-0 grid-cols-1 gap-3 @min-[420px]/sourcing:grid-cols-2",
-                    needsWarehouse && "@min-[680px]/sourcing:grid-cols-3",
+                    needsWarehouse &&
+                        (compact
+                            ? "@min-[560px]/sourcing:grid-cols-[minmax(0,0.75fr)_minmax(0,1fr)_minmax(0,1.1fr)]"
+                            : "@min-[680px]/sourcing:grid-cols-3"),
                 )}
             >
                 <div className="min-w-0 space-y-1.5">

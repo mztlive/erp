@@ -212,40 +212,50 @@ export function ListWorkspaceFilterBar({
             ) : null}
         </>
     ) : null
-    const statusRow = (
-        <div
-            className={cn(
-                "flex flex-wrap items-center gap-x-3 gap-y-2 text-xs",
-                statusHost
-                    ? undefined
-                    : density === "compact"
-                      ? "pt-1"
-                      : "border-t border-border/60 pt-3",
-            )}
-        >
-            <span role="status" className="shrink-0 text-muted-foreground">
-                {resultStatus}
-            </span>
-            {morePresentation !== "popover" ? appliedChips : null}
-            {idleHint || hasPendingChanges || statusActions ? (
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 sm:ml-auto">
-                    {idleHint || hasPendingChanges ? (
-                        <span
-                            role="status"
-                            className={
-                                hasPendingChanges
-                                    ? "font-medium text-warning-soft-foreground"
-                                    : "text-muted-foreground"
-                            }
-                        >
-                            {hasPendingChanges ? pendingHint : idleHint}
-                        </span>
-                    ) : null}
-                    {statusActions}
-                </div>
-            ) : null}
-        </div>
-    )
+    const statusRow =
+        resultStatus ||
+        (morePresentation !== "popover" && appliedChips) ||
+        idleHint ||
+        hasPendingChanges ||
+        statusActions ? (
+            <div
+                className={cn(
+                    "flex flex-wrap items-center gap-x-3 gap-y-2 text-xs",
+                    statusHost
+                        ? undefined
+                        : density === "compact"
+                          ? "pt-1"
+                          : "border-t border-border/60 pt-3",
+                )}
+            >
+                {resultStatus != null ? (
+                    <span
+                        role="status"
+                        className="shrink-0 text-muted-foreground"
+                    >
+                        {resultStatus}
+                    </span>
+                ) : null}
+                {morePresentation !== "popover" ? appliedChips : null}
+                {idleHint || hasPendingChanges || statusActions ? (
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 sm:ml-auto">
+                        {idleHint || hasPendingChanges ? (
+                            <span
+                                role="status"
+                                className={
+                                    hasPendingChanges
+                                        ? "font-medium text-warning-soft-foreground"
+                                        : "text-muted-foreground"
+                                }
+                            >
+                                {hasPendingChanges ? pendingHint : idleHint}
+                            </span>
+                        ) : null}
+                        {statusActions}
+                    </div>
+                ) : null}
+            </div>
+        ) : null
 
     return (
         <form

@@ -35,7 +35,7 @@ export function WorkspaceProcurementTask({
     const id = `workspace-procurement-${toAutomationIdSegment(item.workItemId)}`
     return (
         <WorkspaceTaskPane
-            className="@container/document"
+            className="@container/document [&>[data-slot=workspace-task-header]]:py-3 [&>[data-slot=workspace-task-body]]:flex [&>[data-slot=workspace-task-body]]:flex-col [&>[data-slot=workspace-task-body]]:overflow-hidden"
             header={
                 <>
                     <div className="min-w-0 space-y-2">
