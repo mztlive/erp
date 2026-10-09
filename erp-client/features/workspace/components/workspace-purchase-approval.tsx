@@ -1,7 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { ChevronRightIcon, FileTextIcon, PaperclipIcon } from "lucide-react"
+import { ChevronRightIcon, FileTextIcon } from "lucide-react"
 import {
     BusinessFailureState,
     MoneyValue,
@@ -42,10 +42,7 @@ export function WorkspacePurchaseApproval({
         workspaceTaskSurfacePadClassName,
         "border-b border-grid py-4",
     )
-    const preview = (
-        view: "all" | "source-sales" | "attachments",
-        revisionId?: string,
-    ) =>
+    const preview = (view: "all" | "source-sales", revisionId?: string) =>
         onPreview({
             kind: "approval_snapshot",
             objectId: instanceId,
@@ -84,7 +81,7 @@ export function WorkspacePurchaseApproval({
             </>
         )
 
-    const { display, purchase_lines: lines, attachments } = query.data
+    const { display, purchase_lines: lines } = query.data
     const sources = display.source_sales ?? []
     return (
         <>
@@ -127,13 +124,7 @@ export function WorkspacePurchaseApproval({
                                     </span>
                                 </dd>
                             </dl>
-                            <div
-                                className={cn(
-                                    "flex min-w-0 flex-col gap-2",
-                                    sources.length === 1 &&
-                                        "@min-[640px]/document:-mt-8",
-                                )}
-                            >
+                            <div className="flex min-w-0 flex-col justify-center">
                                 <Button
                                     id={`${prefix}-source-${toAutomationIdSegment(sales.revision_id)}`}
                                     variant="outline"
@@ -146,27 +137,7 @@ export function WorkspacePurchaseApproval({
                                     }
                                 >
                                     <FileTextIcon aria-hidden="true" />
-                                    查看来源销售资料
-                                    <ChevronRightIcon
-                                        className="ml-auto"
-                                        aria-hidden="true"
-                                    />
-                                </Button>
-                                <Button
-                                    id={`${prefix}-materials-${toAutomationIdSegment(sales.revision_id)}`}
-                                    variant="outline"
-                                    className="h-auto min-h-9 w-full justify-start whitespace-normal py-2 text-left"
-                                    onClick={() => preview("attachments")}
-                                >
-                                    <PaperclipIcon aria-hidden="true" />
-                                    <span>
-                                        合同 / 业务凭证
-                                        <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
-                                            {attachments.length
-                                                ? `本次提交资料 · ${attachments.length} 个附件`
-                                                : "本次提交未保留可读取附件"}
-                                        </span>
-                                    </span>
+                                    预览销售单
                                     <ChevronRightIcon
                                         className="ml-auto"
                                         aria-hidden="true"
@@ -266,47 +237,6 @@ export function WorkspacePurchaseApproval({
                 )}
             </section>
             {children}
-            <section
-                className={cn(sectionClass, "space-y-3")}
-                aria-label="附件资料"
-            >
-                <header className="flex items-center justify-between gap-3">
-                    <h3 className="text-sm font-semibold">附件资料</h3>
-                    {attachments.length > 0 && (
-                        <Button
-                            id={`${prefix}-all-attachments`}
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => preview("attachments")}
-                        >
-                            查看附件
-                            <ChevronRightIcon aria-hidden="true" />
-                        </Button>
-                    )}
-                </header>
-                {attachments.length ? (
-                    <ul className="divide-y divide-border/50">
-                        {attachments.map((file) => (
-                            <li
-                                key={file.file_asset_id}
-                                className="flex min-w-0 flex-wrap items-center gap-2 py-2 first:pt-0 last:pb-0"
-                            >
-                                <FileTextIcon
-                                    className="size-4 shrink-0 text-muted-foreground"
-                                    aria-hidden="true"
-                                />
-                                <span className="min-w-0 flex-1 text-sm wrap-anywhere">
-                                    {file.file_name}
-                                </span>
-                            </li>
-                        ))}
-                    </ul>
-                ) : (
-                    <p className="text-sm text-muted-foreground">
-                        此次提交未保留可读取的附件。
-                    </p>
-                )}
-            </section>
         </>
     )
 }

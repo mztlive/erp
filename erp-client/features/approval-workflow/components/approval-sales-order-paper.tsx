@@ -8,7 +8,10 @@ import {
 } from "@/components/business"
 import { multiplyFixed } from "@/lib/fixed-decimal"
 import { displayBusinessText } from "@/lib/display-name"
-import type { ApprovalSalesSubmission } from "../api/materials"
+import type {
+    ApprovalSalesSubmission,
+    ApprovalSalesRevision,
+} from "../api/materials"
 import { displayActorName, displayReadableName } from "../display"
 
 const dateLabel = (value: number | null) =>
@@ -20,18 +23,26 @@ export function ApprovalSalesOrderPaper({
     documentNo,
     submitterName,
 }: {
-    submission: ApprovalSalesSubmission
+    submission: ApprovalSalesSubmission | ApprovalSalesRevision
     documentNo: string
     submitterName: string | null
 }) {
-    const isCard = submission.business_type === "VOUCHER"
+    const isSubmission = "submission_no" in submission
+    const isCard = isSubmission
+        ? submission.business_type === "VOUCHER"
+        : !!submission.voucher_category_sku_id
+    const lines = isSubmission ? submission.lines : submission.commercial_lines
     return (
         <PaperDocument<ApprovalSalesSubmission["lines"][number]>
             frame="bare"
             title="销售单"
             documentNumber={documentNo}
             subtitle={isCard ? "卡券" : "实物及服务"}
-            version={`提交版本 ${submission.submission_no}`}
+            version={
+                isSubmission
+                    ? `提交版本 ${submission.submission_no}`
+                    : `销售版本 V${submission.revision_no}`
+            }
             parties={[
                 {
                     id: "seller",
@@ -46,14 +57,18 @@ export function ApprovalSalesOrderPaper({
                             value:
                                 displayActorName(
                                     submitterName,
-                                    submission.submitted_by,
+                                    isSubmission
+                                        ? submission.submitted_by
+                                        : undefined,
                                 ) || "未记录姓名",
                         },
                         {
                             id: "submitted",
-                            label: "提交时间",
+                            label: isSubmission ? "提交时间" : "生效时间",
                             value: new Date(
-                                submission.submitted_at * 1000,
+                                (isSubmission
+                                    ? submission.submitted_at
+                                    : submission.effective_at) * 1000,
                             ).toLocaleString("zh-CN", { hour12: false }),
                         },
                     ],
@@ -96,7 +111,10 @@ export function ApprovalSalesOrderPaper({
                 {
                     id: "receivable-due",
                     label: "收款到期日",
-                    value: submission.receivable_due_date || "—",
+                    value:
+                        (isSubmission
+                            ? submission.receivable_due_date
+                            : null) || "—",
                 },
                 ...(isCard
                     ? [
@@ -108,7 +126,7 @@ export function ApprovalSalesOrderPaper({
                       ]
                     : []),
             ]}
-            lineItemLabel={`销售明细 · 共 ${submission.lines.length} 行`}
+            lineItemLabel={`销售明细 · 共 ${lines.length} 行`}
             columns={[
                 {
                     id: "line",
@@ -240,7 +258,7 @@ export function ApprovalSalesOrderPaper({
                     cell: (row) => <MoneyValue value={row.gross_amount} />,
                 },
             ]}
-            rows={submission.lines}
+            rows={lines}
             getRowId={(row) => row.id}
             totals={[
                 {
@@ -261,7 +279,11 @@ export function ApprovalSalesOrderPaper({
                 },
             ]}
             remarks={submission.business_remark || undefined}
-            footer="本预览保留此次审批提交的销售内容及全部明细。"
+            footer={
+                isSubmission
+                    ? "本预览保留此次审批提交的销售内容及全部明细。"
+                    : "本预览展示本次采购审批锁定的销售版本及全部明细。"
+            }
         />
     )
 }

@@ -50,7 +50,7 @@ export function WorkspaceDocumentPaperDialog({
             >
                 <DialogTitle className="sr-only">
                     {target?.materialsView === "source-sales"
-                        ? "来源销售资料"
+                        ? "销售单预览"
                         : target?.materialsView === "attachments"
                           ? "合同、凭证及附件"
                           : target?.title
@@ -59,7 +59,7 @@ export function WorkspaceDocumentPaperDialog({
                 </DialogTitle>
                 <DialogDescription className="sr-only">
                     {target?.materialsView === "source-sales"
-                        ? "本次审批锁定的来源销售摘要及允许读取的附件。"
+                        ? "本次审批锁定的完整来源销售单及允许读取的附件。"
                         : target?.materialsView === "attachments"
                           ? "本次审批允许读取的合同、业务凭证及附件。"
                           : target?.kind === "approval_snapshot"

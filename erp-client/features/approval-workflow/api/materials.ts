@@ -5,6 +5,10 @@ export type ApprovalMaterials = {
     document_no: string
     sales_order?: ApprovalSalesSubmission | null
     purchase_lines?: ApprovalPurchaseLine[] | null
+    source_sales_orders?: {
+        document_no: string
+        revision: ApprovalSalesRevision
+    }[]
     subject_version: number
     document_type: string
     document_id: string
@@ -140,4 +144,21 @@ export async function downloadApprovalMaterial(
     anchor.click()
     anchor.remove()
     URL.revokeObjectURL(url)
+}
+
+/** 采购审批锁定的完整销售版本，复用销售单纸质预览。 */
+export type ApprovalSalesRevision = Omit<
+    ApprovalSalesSubmission,
+    | "submission_no"
+    | "business_type"
+    | "submitted_by"
+    | "submitted_at"
+    | "receivable_due_date"
+    | "lines"
+> & {
+    id: string
+    revision_no: number
+    effective_at: number
+    voucher_category_sku_id: string | null
+    commercial_lines: ApprovalSalesSubmission["lines"]
 }

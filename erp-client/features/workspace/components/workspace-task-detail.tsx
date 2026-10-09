@@ -489,6 +489,7 @@ function WorkspaceDocumentTaskDetail({
                             />
                         ) : null}
                         {canReadPaper &&
+                        !purchaseApproval &&
                         (approvalDocument || currentPaperKind) ? (
                             <IconActionButton
                                 id={`workspace-task-detail-read-${toAutomationIdSegment(item.workItemId)}`}

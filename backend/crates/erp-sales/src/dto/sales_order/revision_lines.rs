@@ -19,7 +19,7 @@ impl SalesOrderWorkingCopyLineView {
     ///
     /// # 错误
     /// 对应子类型缺失、类型冲突或引用其他公共行时拒绝。
-    pub(crate) fn from_revision_line(
+    pub fn from_revision_line(
         line: &SalesOrderRevisionLine,
         goods: Option<&SalesOrderGoodsServiceLineRevision>,
         voucher: Option<&SalesOrderVoucherLineRevision>,

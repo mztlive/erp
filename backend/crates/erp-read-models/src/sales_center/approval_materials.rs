@@ -14,6 +14,7 @@ use mongodb::Database;
 use persistence_core::NoTransaction;
 use serde::Serialize;
 
+use super::approval_source_sales::{ApprovalSourceSalesOrder, source_sales_orders};
 use crate::purchase_center::approval_materials::{ApprovalPurchaseLine, purchase_lines};
 use crate::{Error, Result};
 
@@ -24,6 +25,7 @@ pub struct ApprovalDocumentMaterials {
     pub materials: ApprovalMaterialsView,
     pub sales_order: Option<SubmissionView>,
     pub purchase_lines: Option<Vec<ApprovalPurchaseLine>>,
+    pub source_sales_orders: Vec<ApprovalSourceSalesOrder>,
 }
 
 /// 在实例读取授权后装载精确销售提交，不授予普通销售单读取资格。
@@ -50,7 +52,8 @@ pub async fn materials<A: WorkflowAuthorizationPort>(
     } else {
         None
     };
-    Ok(ApprovalDocumentMaterials { materials, sales_order, purchase_lines })
+    let source_sales_orders = source_sales_orders(db, &materials).await?;
+    Ok(ApprovalDocumentMaterials { materials, sales_order, purchase_lines, source_sales_orders })
 }
 
 async fn sales_submission(db: &Database, materials: &ApprovalMaterialsView) -> Result<SubmissionView> {

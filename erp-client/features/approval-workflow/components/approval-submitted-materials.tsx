@@ -65,13 +65,27 @@ export function ApprovalSubmittedMaterials({
     const {
         display,
         attachments,
-        sales_order: salesOrder,
+        sales_order: submittedSalesOrder,
         subject_version: version,
     } = query.data
-    const source = display.source
+    const sourceOrder =
+        view === "source-sales"
+            ? query.data.source_sales_orders?.find(
+                  (order) => order.revision.id === sourceRevisionId,
+              )
+            : undefined
+    const salesOrder =
+        view === "source-sales" ? sourceOrder?.revision : submittedSalesOrder
+    const sourceSnapshot = display.source_sales?.find(
+        (sales) => sales.revision_id === sourceRevisionId,
+    )
+    const source =
+        view === "source-sales" && sourceSnapshot
+            ? sourceSnapshot.source
+            : display.source
     const submitterName = displayActorName(
         source.submitter_name,
-        salesOrder?.submitted_by,
+        submittedSalesOrder?.submitted_by,
     )
     const counterpartyName =
         displayReadableName(display.counterparty_label) ||
@@ -81,7 +95,7 @@ export function ApprovalSubmittedMaterials({
             <header className="space-y-2 border-b pb-5 pr-8">
                 <h2 className="text-xl font-semibold">
                     {view === "source-sales"
-                        ? "来源销售资料"
+                        ? "销售单预览"
                         : view === "attachments"
                           ? "合同、凭证及附件"
                           : salesOrder
@@ -89,8 +103,10 @@ export function ApprovalSubmittedMaterials({
                             : "审批提交资料"}
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                    提交版本 {version} ·
-                    以下内容保留自此次提交，审批完成后单据的变化不在此处更新。
+                    {view === "source-sales"
+                        ? `销售版本 V${sourceSnapshot?.revision_no ?? "—"}`
+                        : `提交版本 ${version}`}{" "}
+                    · 以下内容保留自此次提交，审批完成后单据的变化不在此处更新。
                 </p>
                 {view === "all" && !salesOrder && counterpartyName && (
                     <p className="font-medium">{counterpartyName}</p>
@@ -99,17 +115,22 @@ export function ApprovalSubmittedMaterials({
                     <p className="text-sm">{source.list_summary}</p>
                 )}
             </header>
-            {view !== "all" ? null : salesOrder ? (
+            {view === "attachments" ? null : salesOrder ? (
                 <ApprovalSalesOrderPaper
                     submission={salesOrder}
                     documentNo={
                         displayBusinessText(
-                            query.data.document_no,
-                            query.data.document_id,
+                            sourceOrder?.document_no ?? query.data.document_no,
+                            sourceSnapshot?.document_id ??
+                                query.data.document_id,
                         ) || "未记录单据编号"
                     }
                     submitterName={submitterName ?? null}
                 />
+            ) : view === "source-sales" ? (
+                <p role="status" className="text-sm text-muted-foreground">
+                    此次审批的完整来源销售单暂不可读取，请刷新后重试；仍不可用时请联系管理员核对。
+                </p>
             ) : (
                 <>
                     {(source.amount_label ||
@@ -194,86 +215,83 @@ export function ApprovalSubmittedMaterials({
                     </section>
                 </>
             )}
-            {view !== "attachments" &&
-                (display.source_sales ?? []).length > 0 && (
-                    <section className="space-y-4 border-t pt-5">
-                        <h3 className="font-medium">关联销售单</h3>
-                        {display.source_sales
-                            ?.filter(
-                                (sales) =>
-                                    !sourceRevisionId ||
-                                    sales.revision_id === sourceRevisionId,
-                            )
-                            .map((sales) => (
-                                <article
-                                    key={sales.revision_id}
-                                    className="space-y-3 rounded-lg border p-4 text-sm"
-                                >
-                                    <div className="flex flex-wrap items-center justify-between gap-2">
-                                        <p className="font-medium">
-                                            {displayBusinessText(
-                                                sales.document_no,
-                                                sales.document_id,
-                                            ) || "未记录销售单号"}{" "}
-                                            · 销售版本 {sales.revision_no}
-                                        </p>
-                                        <p className="num font-semibold">
-                                            <span className="mr-2 text-xs font-normal text-muted-foreground">
-                                                整单销售金额
+            {view === "all" && (display.source_sales ?? []).length > 0 && (
+                <section className="space-y-4 border-t pt-5">
+                    <h3 className="font-medium">关联销售单</h3>
+                    {display.source_sales
+                        ?.filter(
+                            (sales) =>
+                                !sourceRevisionId ||
+                                sales.revision_id === sourceRevisionId,
+                        )
+                        .map((sales) => (
+                            <article
+                                key={sales.revision_id}
+                                className="space-y-3 rounded-lg border p-4 text-sm"
+                            >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <p className="font-medium">
+                                        {displayBusinessText(
+                                            sales.document_no,
+                                            sales.document_id,
+                                        ) || "未记录销售单号"}{" "}
+                                        · 销售版本 {sales.revision_no}
+                                    </p>
+                                    <p className="num font-semibold">
+                                        <span className="mr-2 text-xs font-normal text-muted-foreground">
+                                            整单销售金额
+                                        </span>
+                                        {sales.source.amount_label}
+                                    </p>
+                                </div>
+                                {sales.source.customer && (
+                                    <p>
+                                        {displayReadableName(
+                                            sales.source.customer,
+                                        ) || "未记录客户名称"}
+                                    </p>
+                                )}
+                                <dl className="grid gap-3 sm:grid-cols-2">
+                                    {sales.source.extra_sections.map(
+                                        (section) => (
+                                            <div key={section.label}>
+                                                <dt className="text-xs text-muted-foreground">
+                                                    {section.label}
+                                                </dt>
+                                                <dd className="mt-1 break-words">
+                                                    {sectionValue(section)}
+                                                </dd>
+                                            </div>
+                                        ),
+                                    )}
+                                </dl>
+                                <ul className="divide-y">
+                                    {sales.source.lines.map((line, index) => (
+                                        <li
+                                            key={`${line.title}:${index}`}
+                                            className="flex flex-wrap justify-between gap-2 py-2"
+                                        >
+                                            <span>
+                                                {displayReadableName(
+                                                    line.title,
+                                                ) || "未记录商品名称"}
                                             </span>
-                                            {sales.source.amount_label}
-                                        </p>
-                                    </div>
-                                    {sales.source.customer && (
-                                        <p>
-                                            {displayReadableName(
-                                                sales.source.customer,
-                                            ) || "未记录客户名称"}
-                                        </p>
-                                    )}
-                                    <dl className="grid gap-3 sm:grid-cols-2">
-                                        {sales.source.extra_sections.map(
-                                            (section) => (
-                                                <div key={section.label}>
-                                                    <dt className="text-xs text-muted-foreground">
-                                                        {section.label}
-                                                    </dt>
-                                                    <dd className="mt-1 break-words">
-                                                        {sectionValue(section)}
-                                                    </dd>
-                                                </div>
-                                            ),
-                                        )}
-                                    </dl>
-                                    <ul className="divide-y">
-                                        {sales.source.lines.map(
-                                            (line, index) => (
-                                                <li
-                                                    key={`${line.title}:${index}`}
-                                                    className="flex flex-wrap justify-between gap-2 py-2"
-                                                >
-                                                    <span>
-                                                        {displayReadableName(
-                                                            line.title,
-                                                        ) || "未记录商品名称"}
-                                                    </span>
-                                                    <span className="num text-muted-foreground">
-                                                        {line.quantity}
-                                                    </span>
-                                                </li>
-                                            ),
-                                        )}
-                                    </ul>
-                                    {sales.source.more_count > 0 && (
-                                        <p className="text-muted-foreground">
-                                            另有 {sales.source.more_count}{" "}
-                                            行未展示，请结合销售合同或凭证核对。
-                                        </p>
-                                    )}
-                                </article>
-                            ))}
-                    </section>
-                )}
+                                            <span className="num text-muted-foreground">
+                                                {line.quantity}
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                                {sales.source.more_count > 0 && (
+                                    <p className="text-muted-foreground">
+                                        另有 {sales.source.more_count}{" "}
+                                        行未展示，请结合销售合同或凭证核对。
+                                    </p>
+                                )}
+                            </article>
+                        ))}
+                </section>
+            )}
             <section className="space-y-3 border-t pt-5">
                 <h3 className="font-medium">
                     {display.source_sales?.length
