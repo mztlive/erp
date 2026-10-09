@@ -42,7 +42,6 @@ TestApi 接收调用方组装好的 Axum Router，在测试中直接调用路由
 以下命令在 `backend/` 目录执行：
 
 ```bash
-cargo check -p test-support --locked
 env -u ERP_TEST_MONGO_URI cargo test -p test-support --lib --locked
 ```
 

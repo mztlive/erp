@@ -36,7 +36,6 @@ id_type!(ExampleId) 生成字符串包装类型及转换代码；真正的 ID �
 以下命令在 `backend/` 目录执行：
 
 ```bash
-cargo check -p entity-macros --locked
 env -u ERP_TEST_MONGO_URI cargo test -p entity-macros --lib --locked
 ```
 

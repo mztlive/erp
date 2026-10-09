@@ -55,7 +55,6 @@
 以下命令在 `backend/` 目录执行：
 
 ```bash
-cargo check -p erp-finance --locked
 env -u ERP_TEST_MONGO_URI cargo test -p erp-finance --lib --locked
 ```
 

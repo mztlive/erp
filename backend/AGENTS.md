@@ -159,10 +159,10 @@ backend/
 
 ```bash
 cargo fmt --all
-cargo check -p <crate>
 env -u ERP_TEST_MONGO_URI cargo test -p <crate> --lib [<测试过滤>]
 ```
 
+- `cargo test --lib` 已编译该 crate 全部生产代码，同一轮禁再叠加 `cargo check -p <crate>`；check、test、clippy 各自产出独立编译产物，叠加会把同一改动重复编译。只确认编译、不跑测试时才用 `cargo check -p <crate>`。
 - 改公开类型或方法签名：追加 `cargo check --workspace`。
 - 一项功能完成时：`cargo clippy -p <crate> --all-targets`。
 - 改 `Cargo.toml` 依赖、跨 crate 引用、Service/Process/Repository 数据访问：`./scripts/check-domain-boundaries.sh --cutover`。

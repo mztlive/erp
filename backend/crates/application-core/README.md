@@ -44,7 +44,6 @@
 以下命令在 `backend/` 目录执行：
 
 ```bash
-cargo check -p application-core --locked
 env -u ERP_TEST_MONGO_URI cargo test -p application-core --lib --locked
 ```
 

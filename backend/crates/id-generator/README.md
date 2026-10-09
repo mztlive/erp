@@ -124,7 +124,6 @@ let number = generator
 以下命令在 `backend/` 目录执行：
 
 ```bash
-cargo check -p id-generator --locked
 env -u ERP_TEST_MONGO_URI cargo test -p id-generator --lib --locked
 ```
 
