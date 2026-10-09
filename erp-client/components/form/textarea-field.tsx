@@ -1,6 +1,7 @@
 "use client"
 
 import { Textarea } from "@/components/ui/textarea"
+import { InputGroupTextarea } from "@/components/ui/input-group"
 import {
     Field,
     FieldDescription,
@@ -14,6 +15,7 @@ import { cn } from "@/lib/utils"
 type TextareaFieldProps = {
     label: string
     hideLabel?: boolean
+    inInputGroup?: boolean
     description?: string
     placeholder?: string
     disabled?: boolean
@@ -32,6 +34,7 @@ type TextareaFieldProps = {
 export function TextareaField({
     label,
     hideLabel = false,
+    inInputGroup = false,
     description,
     placeholder,
     disabled,
@@ -43,6 +46,7 @@ export function TextareaField({
     id,
 }: TextareaFieldProps) {
     const field = useFieldContext<string>()
+    const Control = inInputGroup ? InputGroupTextarea : Textarea
     const isInvalid = field.state.meta.isTouched && !field.state.meta.isValid
     const errors = toFieldErrors(field.state.meta.errors)
     const resolvedId = id ?? field.name
@@ -64,7 +68,7 @@ export function TextareaField({
                 {label}
                 {required ? <span className="text-destructive">*</span> : null}
             </FieldLabel>
-            <Textarea
+            <Control
                 id={resolvedId}
                 name={field.name}
                 value={field.state.value ?? ""}
@@ -74,7 +78,10 @@ export function TextareaField({
                 maxLength={maxLength}
                 aria-invalid={isInvalid || undefined}
                 aria-describedby={describedBy || undefined}
-                className={textareaClassName}
+                className={cn(
+                    inInputGroup && "min-h-control",
+                    textareaClassName,
+                )}
                 onBlur={field.handleBlur}
                 onChange={(e) => field.handleChange(e.target.value)}
             />

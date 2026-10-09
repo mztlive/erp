@@ -39,7 +39,14 @@ const RECEIVE_GATE_COPY: PrepaymentGateCopy = {
 
 export function prepaymentGateCopy(
     isWarehouseShip: boolean,
+    isSupplierDirect = false,
 ): PrepaymentGateCopy {
+    if (isSupplierDirect)
+        return {
+            ...SHIP_GATE_COPY,
+            title: "先款条件",
+            blockedBody: "差额补齐之前，暂时不能确认供应商直发。",
+        }
     return isWarehouseShip ? SHIP_GATE_COPY : RECEIVE_GATE_COPY
 }
 

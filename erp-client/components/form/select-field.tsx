@@ -28,6 +28,7 @@ type SelectFieldProps = {
     loading?: boolean
     required?: boolean
     hideLabel?: boolean
+    inInputGroup?: boolean
     className?: string
     /** 输入框宽度等；历史 prop 名 selectClassName 仍可用 */
     selectClassName?: string
@@ -51,6 +52,7 @@ export function SelectField({
     loading,
     required,
     hideLabel = false,
+    inInputGroup = false,
     className,
     selectClassName,
     inputClassName,
@@ -81,6 +83,7 @@ export function SelectField({
                 {required ? <span className="text-destructive">*</span> : null}
             </FieldLabel>
             <OptionCombobox
+                inInputGroup={inInputGroup}
                 id={resolvedId}
                 options={options}
                 value={field.state.value || null}

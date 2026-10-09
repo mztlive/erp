@@ -19,7 +19,10 @@ import {
 } from "@/features/fulfillment-operations/pages/lib/presentation"
 import { FulfillmentPageStates } from "./fulfillment-page-states"
 import { FulfillmentResultPanel } from "./fulfillment-result-panel"
-import { FulfillmentWorkSurface } from "./fulfillment-work-surface"
+import {
+    FulfillmentWorkSurface,
+    type FulfillmentWorkSurfaceProps,
+} from "./fulfillment-work-surface"
 
 type FulfillmentOperationsWorkspaceProps = {
     controller: FulfillmentOperationsController
@@ -28,6 +31,7 @@ type FulfillmentOperationsWorkspaceProps = {
     roleLabel: string
     embedded?: boolean
     singleOperation?: boolean
+    deliveryDialog?: FulfillmentWorkSurfaceProps["deliveryDialog"]
     onBack: () => void
     onOpenAcceptance?: () => void
 }
@@ -40,6 +44,7 @@ export function FulfillmentOperationsWorkspace({
     roleLabel,
     embedded = false,
     singleOperation = false,
+    deliveryDialog,
     onBack,
     onOpenAcceptance,
 }: FulfillmentOperationsWorkspaceProps) {
@@ -117,9 +122,11 @@ export function FulfillmentOperationsWorkspace({
             ) : (
                 <div
                     className={
-                        singleOperation
-                            ? "min-h-[28rem] min-w-0"
-                            : "grid min-h-[28rem] min-w-0 gap-4 xl:grid-cols-[minmax(15rem,0.9fr)_minmax(0,2.1fr)]"
+                        deliveryDialog
+                            ? "min-w-0"
+                            : singleOperation
+                              ? "min-h-[28rem] min-w-0"
+                              : "grid min-h-[28rem] min-w-0 gap-4 xl:grid-cols-[minmax(15rem,0.9fr)_minmax(0,2.1fr)]"
                     }
                 >
                     {!singleOperation ? (
@@ -192,6 +199,7 @@ export function FulfillmentOperationsWorkspace({
                             controller.lastResult?.status === "unknown"
                         }
                         singleOperation={singleOperation}
+                        deliveryDialog={deliveryDialog}
                         showBack={!embedded && !singleOperation}
                         showSalesOrderLinks={!embedded && !singleOperation}
                         onDraftChange={controller.updateDraft}

@@ -62,6 +62,8 @@ export type OptionComboboxProps = {
     /** 输入框外层 InputGroup 的 className（宽度等） */
     inputClassName?: string
     size?: "sm" | "default"
+    /** 嵌入外层 InputGroup，由外层统一提供边框和焦点反馈。 */
+    inInputGroup?: boolean
     onBlur?: () => void
 }
 
@@ -103,6 +105,7 @@ export function OptionCombobox({
     className,
     inputClassName,
     size = "default",
+    inInputGroup = false,
     onBlur,
 }: OptionComboboxProps) {
     const items = React.useMemo(() => toInternal(options), [options])
@@ -171,6 +174,8 @@ export function OptionCombobox({
                         "w-full",
                         size === "sm" &&
                             "h-control-sm min-h-control-sm *:data-[slot=input-group-control]:h-control-sm *:data-[slot=input-group-control]:text-xs",
+                        inInputGroup &&
+                            "rounded-none border-0 bg-transparent shadow-none hover:bg-transparent has-[[data-slot=input-group-control]:focus-visible]:bg-transparent has-[[data-slot=input-group-control]:focus-visible]:ring-0 has-[[data-slot][aria-invalid=true]]:bg-transparent has-[[data-slot][aria-invalid=true]]:ring-0",
                         inputClassName,
                     )}
                 >

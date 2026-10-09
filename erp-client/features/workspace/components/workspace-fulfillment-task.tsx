@@ -6,6 +6,7 @@ import { z } from "zod"
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import {
     Dialog,
     DialogClose,
@@ -19,6 +20,7 @@ import { FieldGroup } from "@/components/ui/field"
 import type { FulfillmentQueueFilters } from "@/features/fulfillment-operations/api"
 import { PurchasePaymentReceipts } from "@/features/fulfillment-operations/components/purchase-payment-receipts"
 import { FULFILLMENT_ROLES } from "@/features/fulfillment-operations/lib/fulfillment-roles"
+import { OPERATION_TYPE_LABEL } from "@/features/fulfillment-operations/types"
 import { FulfillmentOperationsWorkspace } from "@/features/fulfillment-operations/pages/components/fulfillment-operations-workspace"
 import { FulfillmentPageStates } from "@/features/fulfillment-operations/pages/components/fulfillment-page-states"
 import { useFulfillmentOperationsController } from "@/features/fulfillment-operations/pages/hooks/use-fulfillment-operations-controller"
@@ -40,6 +42,8 @@ type WorkspaceFulfillmentTaskProps = Readonly<{
     item: WorkspaceWorkItem
     grantedPermissions: readonly string[]
     onTaskCompleted: (workItemId: string) => void
+    deliveryDialog?: boolean
+    onClose?: () => void
 }>
 
 const fulfillmentReassignSchema = z.object({
@@ -55,6 +59,8 @@ export function WorkspaceFulfillmentTask({
     item,
     grantedPermissions,
     onTaskCompleted,
+    deliveryDialog = false,
+    onClose,
 }: WorkspaceFulfillmentTaskProps) {
     const descriptor = workspaceFulfillmentDescriptor(item)
     const operationType = descriptor?.operationTypes[0]
@@ -90,22 +96,51 @@ export function WorkspaceFulfillmentTask({
 
     return (
         <WorkspaceTaskPane
+            className={
+                deliveryDialog
+                    ? "h-auto min-h-0 flex-1 overflow-hidden"
+                    : undefined
+            }
             header={
-                <WorkspaceTaskIdentityHeader
-                    item={item}
-                    title={fulfillmentTaskTitle(item, controller.operation)}
-                    subtitle={[
-                        `${item.ownerRoleLabel} · ${item.ownerUserLabel}`,
-                        displayText(controller.operation?.source.customerLabel),
-                    ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                >
-                    <WorkspaceFulfillmentReassignAction
+                deliveryDialog ? (
+                    <DialogHeader className="min-w-0 pr-10">
+                        <div className="flex flex-wrap items-center gap-3">
+                            <DialogTitle className="text-xl font-semibold">
+                                登记发货
+                            </DialogTitle>
+                            {operationType ? (
+                                <Badge variant="teal">
+                                    {OPERATION_TYPE_LABEL[operationType]}
+                                </Badge>
+                            ) : null}
+                        </div>
+                        <DialogDescription className="num break-all">
+                            {controller.operation
+                                ? `销售单：${displayText(controller.operation.source.salesOrderNo) || "单号未提供"}`
+                                : fulfillmentTaskTitle(item)}
+                        </DialogDescription>
+                    </DialogHeader>
+                ) : (
+                    <WorkspaceTaskIdentityHeader
                         item={item}
-                        onReassigned={() => onTaskCompleted(item.workItemId)}
-                    />
-                </WorkspaceTaskIdentityHeader>
+                        title={fulfillmentTaskTitle(item, controller.operation)}
+                        subtitle={[
+                            `${item.ownerRoleLabel} · ${item.ownerUserLabel}`,
+                            displayText(
+                                controller.operation?.source.customerLabel,
+                            ),
+                        ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                    >
+                        <WorkspaceFulfillmentReassignAction
+                            item={item}
+                            onReassigned={() =>
+                                onTaskCompleted(item.workItemId)
+                            }
+                        />
+                    </WorkspaceTaskIdentityHeader>
+                )
             }
             aria-label="当前履约任务"
         >
@@ -157,7 +192,7 @@ export function WorkspaceFulfillmentTask({
                 />
             ) : (
                 <div className="space-y-5">
-                    {descriptor.role === "procurement" ? (
+                    {!deliveryDialog && descriptor.role === "procurement" ? (
                         <PurchasePaymentReceipts workItemId={item.workItemId} />
                     ) : null}
                     <FulfillmentOperationsWorkspace
@@ -170,6 +205,21 @@ export function WorkspaceFulfillmentTask({
                         }
                         embedded
                         singleOperation
+                        deliveryDialog={
+                            deliveryDialog
+                                ? {
+                                      responsibleLabel: item.ownerUserLabel,
+                                      onClose,
+                                      paymentReceipts:
+                                          descriptor.role === "procurement" ? (
+                                              <PurchasePaymentReceipts
+                                                  workItemId={item.workItemId}
+                                                  compact
+                                              />
+                                          ) : null,
+                                  }
+                                : undefined
+                        }
                         onBack={() => undefined}
                     />
                 </div>
@@ -412,6 +462,11 @@ export function WorkspaceFulfillmentProcessAction(
 ) {
     const [open, setOpen] = React.useState(false)
     const completedTaskRef = React.useRef<string | null>(null)
+    const operationType = workspaceFulfillmentDescriptor(props.item)
+        ?.operationTypes[0]
+    const deliveryDialog =
+        operationType === "SUPPLIER_DIRECT" ||
+        operationType === "WAREHOUSE_SHIP"
     if (!props.item.allowedActions.includes("PROCESS")) return null
     return (
         <>
@@ -433,18 +488,33 @@ export function WorkspaceFulfillmentProcessAction(
             >
                 <DialogContent
                     id={`workspace-fulfillment-process-dialog-${toAutomationIdSegment(props.item.workItemId)}`}
-                    className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-5xl"
+                    closeButtonId={`workspace-fulfillment-process-close-${toAutomationIdSegment(props.item.workItemId)}`}
+                    className={
+                        deliveryDialog
+                            ? "flex max-h-[90dvh] w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
+                            : "flex max-h-[90vh] flex-col overflow-hidden sm:max-w-5xl"
+                    }
                 >
-                    <DialogHeader>
-                        <DialogTitle>处理履约</DialogTitle>
-                        <DialogDescription>
-                            填写本次履约信息并确认提交。
-                        </DialogDescription>
-                    </DialogHeader>
+                    {!deliveryDialog ? (
+                        <DialogHeader>
+                            <DialogTitle>处理履约</DialogTitle>
+                            <DialogDescription>
+                                填写本次履约信息并确认提交。
+                            </DialogDescription>
+                        </DialogHeader>
+                    ) : null}
                     {open ? (
-                        <div className="min-h-0 flex-1 overflow-y-auto">
+                        <div
+                            className={
+                                deliveryDialog
+                                    ? "flex min-h-0 flex-1 flex-col overflow-hidden"
+                                    : "min-h-0 flex-1 overflow-y-auto"
+                            }
+                        >
                             <WorkspaceFulfillmentTask
                                 {...props}
+                                deliveryDialog={deliveryDialog}
+                                onClose={() => setOpen(false)}
                                 onTaskCompleted={(id) => {
                                     completedTaskRef.current = id
                                     setOpen(false)

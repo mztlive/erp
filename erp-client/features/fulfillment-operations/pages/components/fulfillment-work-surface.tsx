@@ -43,6 +43,7 @@ import { sourceContextFields } from "@/features/fulfillment-operations/pages/lib
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import { FulfillmentGateStatus } from "./fulfillment-gate-status"
+import { FulfillmentDeliveryDialogSurface } from "./fulfillment-delivery-dialog-surface"
 
 export type FulfillmentWorkSurfaceProps = {
     operation: FulfillmentOperation
@@ -68,6 +69,11 @@ export type FulfillmentWorkSurfaceProps = {
     resultUnknown: boolean
     /** W01 内联作业面只处理任务绑定的单个对象。 */
     singleOperation?: boolean
+    deliveryDialog?: {
+        responsibleLabel: string
+        paymentReceipts?: React.ReactNode
+        onClose?: () => void
+    }
     showBack?: boolean
     showSalesOrderLinks?: boolean
     onDraftChange: (next: FulfillmentDraft) => void
@@ -103,6 +109,7 @@ export function FulfillmentWorkSurface({
     headingRef,
     resultUnknown,
     singleOperation = false,
+    deliveryDialog,
     showBack = true,
     showSalesOrderLinks = true,
     onDraftChange,
@@ -128,6 +135,59 @@ export function FulfillmentWorkSurface({
     ]
         .filter(Boolean)
         .join(" · ")
+
+    if (
+        deliveryDialog &&
+        (draft.type === "SUPPLIER_DIRECT" || draft.type === "WAREHOUSE_SHIP")
+    ) {
+        return (
+            <FulfillmentDeliveryDialogSurface
+                operation={operation}
+                draft={draft}
+                responsibleLabel={deliveryDialog.responsibleLabel}
+                paymentReceipts={deliveryDialog.paymentReceipts}
+                currentUrl={currentUrl}
+                snapshotUpdatedAt={snapshotUpdatedAt}
+                validationIssues={validationIssues}
+                showValidation={dirty}
+                saveMessage={saveMessage}
+                disabled={formalPending || !canExecute || resultUnknown}
+                readOnlyNote={!canExecute ? readOnlyNote : undefined}
+                headingRef={headingRef}
+                onDraftChange={onDraftChange}
+                actions={
+                    <>
+                        <Button
+                            id="fulfillment-operations-dialog-cancel"
+                            type="button"
+                            variant="outline"
+                            disabled={formalPending}
+                            onClick={deliveryDialog.onClose}
+                        >
+                            取消
+                        </Button>
+                        {canExecute ? (
+                            <FulfillmentExecuteActions
+                                operation={operation}
+                                singleOperation
+                                compact
+                                dirty={dirty}
+                                supportsSave={supportsSave}
+                                formalPending={formalPending}
+                                savePending={savePending}
+                                canPost={canPost}
+                                autoNext={autoNext}
+                                onSkip={onSkip}
+                                onDiscard={onDiscard}
+                                onSave={onSave}
+                                onConfirm={onConfirm}
+                            />
+                        ) : null}
+                    </>
+                }
+            />
+        )
+    }
 
     return (
         <div className={singleOperation ? "min-w-0" : "min-w-0 space-y-3"}>
@@ -312,6 +372,7 @@ export function FulfillmentWorkSurface({
 function FulfillmentExecuteActions({
     operation,
     singleOperation,
+    compact = false,
     dirty,
     supportsSave,
     formalPending,
@@ -325,6 +386,7 @@ function FulfillmentExecuteActions({
 }: {
     operation: FulfillmentOperation
     singleOperation: boolean
+    compact?: boolean
     dirty: boolean
     supportsSave: boolean
     formalPending: boolean
@@ -362,7 +424,7 @@ function FulfillmentExecuteActions({
                     放弃修改
                 </Button>
             ) : null}
-            {supportsSave ? (
+            {supportsSave && (!compact || dirty) ? (
                 <LoadingButton
                     id="fulfillment-operations-work-surface-save"
                     type="button"

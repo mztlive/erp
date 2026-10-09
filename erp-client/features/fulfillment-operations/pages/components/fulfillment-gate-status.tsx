@@ -12,10 +12,12 @@ import type { FulfillmentOperation } from "@/features/fulfillment-operations/typ
 import { clampZeroFixed, subtractFixed } from "@/lib/fixed-decimal"
 
 export type FulfillmentGateStatusProps = {
+    id?: string
     operation: FulfillmentOperation
     currentUrl: string
     snapshotUpdatedAt: string
     showPaymentAction?: boolean
+    presentation?: "badge" | "panel"
 }
 
 /**
@@ -23,17 +25,19 @@ export type FulfillmentGateStatusProps = {
  * 无先款要求时退化为中性徽章；先款未到时不展开完整卡片，只在悬停时给详情。
  */
 export function FulfillmentGateStatus({
+    id = "prepayment-gate",
     operation,
     currentUrl,
     snapshotUpdatedAt,
     showPaymentAction = true,
+    presentation = "badge",
 }: FulfillmentGateStatusProps) {
     const isShip = operation.operationType === "WAREHOUSE_SHIP"
     if (operation.gate.state === "NOT_APPLICABLE") {
         return (
             <BusinessStatusBadge
                 context="list"
-                id="prepayment-gate"
+                id={id}
                 tone="neutral"
                 label={isShip ? "发货条件：无先款要求" : "无先款要求"}
                 description={operation.gate.message}
@@ -43,9 +47,12 @@ export function FulfillmentGateStatus({
     const blocked = operation.gate.state === "BLOCKED"
     return (
         <PrepaymentGate
-            id="prepayment-gate"
-            presentation="badge"
-            copy={prepaymentGateCopy(isShip)}
+            id={id}
+            presentation={presentation}
+            copy={prepaymentGateCopy(
+                isShip,
+                operation.operationType === "SUPPLIER_DIRECT",
+            )}
             condition={{
                 kind: "amount",
                 required: operation.gate.requiredAmount ?? "—",

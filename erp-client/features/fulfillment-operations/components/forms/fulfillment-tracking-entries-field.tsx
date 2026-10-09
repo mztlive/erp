@@ -1,8 +1,11 @@
 "use client"
 
 import { z } from "zod"
+import { PlusIcon } from "lucide-react"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
+import { InputGroup } from "@/components/ui/input-group"
+import { Label } from "@/components/ui/label"
 import { CARRIER_OPTIONS } from "@/lib/business-options"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
@@ -40,6 +43,7 @@ export function FulfillmentTrackingEntriesField({
     onChange,
     onPendingInputChange,
     disabled,
+    compact = false,
 }: {
     id: string
     salesOrderLineId: string
@@ -47,6 +51,7 @@ export function FulfillmentTrackingEntriesField({
     onChange: (entries: DeliveryTrackingEntry[], inputAdded?: boolean) => void
     onPendingInputChange: (pending: boolean) => void
     disabled?: boolean
+    compact?: boolean
 }) {
     const packages = entries.filter(
         (entry) => entry.salesOrderLineId === salesOrderLineId,
@@ -82,12 +87,16 @@ export function FulfillmentTrackingEntriesField({
     })
     return (
         <div className="space-y-3 border-t border-border pt-3">
-            <p className="text-sm font-medium">
-                本明细物流号 · {packages.length} 个包裹
-            </p>
-            <p className="text-xs text-muted-foreground">
-                同一明细可登记多个包裹。一个包裹包含多项明细时，请在对应明细下分别登记同一物流号。
-            </p>
+            {!compact ? (
+                <>
+                    <p className="text-sm font-medium">
+                        本明细物流号 · {packages.length} 个包裹
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                        同一明细可登记多个包裹。一个包裹包含多项明细时，请在对应明细下分别登记同一物流号。
+                    </p>
+                </>
+            ) : null}
             {packages.length ? (
                 <ul className="space-y-2">
                     {packages.map((entry) => (
@@ -124,57 +133,86 @@ export function FulfillmentTrackingEntriesField({
                         </li>
                     ))}
                 </ul>
-            ) : (
+            ) : !compact ? (
                 <p className="text-xs text-muted-foreground">
                     请添加本明细的物流号。
                 </p>
-            )}
+            ) : null}
             <form
                 id={`${id}-form`}
-                className="grid gap-3 sm:grid-cols-2"
+                className="grid gap-3"
                 onSubmit={(event) => {
                     event.preventDefault()
                     event.stopPropagation()
                     void form.handleSubmit()
                 }}
             >
-                <form.AppField
-                    name="trackingNo"
-                    listeners={{
-                        onChange: ({ value }) =>
-                            onPendingInputChange(Boolean(value.trim())),
-                    }}
-                    children={(field) => (
-                        <field.TextareaField
-                            id={`${id}-tracking-no`}
-                            label="物流号"
-                            description="同一承运方可批量添加，每行一个物流号。"
-                            required
-                            disabled={disabled}
-                        />
-                    )}
-                />
-                <form.AppField
-                    name="carrier"
-                    children={(field) => (
-                        <field.SelectField
-                            id={`${id}-carrier`}
-                            label="承运方（可选）"
-                            options={CARRIER_OPTIONS}
-                            disabled={disabled}
-                            allowClear
-                            placeholder="选择快递或货拉拉"
-                        />
-                    )}
-                />
+                <Label htmlFor={`${id}-tracking-no`}>物流信息</Label>
+                <InputGroup
+                    className="h-auto items-stretch"
+                    aria-label="物流公司与快递单号"
+                    data-disabled={disabled || undefined}
+                >
+                    <form.AppField
+                        name="carrier"
+                        children={(field) => (
+                            <field.SelectField
+                                id={`${id}-carrier`}
+                                label="物流公司（可选）"
+                                options={CARRIER_OPTIONS}
+                                disabled={disabled}
+                                allowClear
+                                hideLabel
+                                inInputGroup
+                                className="w-40 shrink-0 border-r border-border sm:w-48"
+                                placeholder="选择物流公司"
+                            />
+                        )}
+                    />
+                    <form.AppField
+                        name="trackingNo"
+                        listeners={{
+                            onChange: ({ value }) =>
+                                onPendingInputChange(Boolean(value.trim())),
+                        }}
+                        children={(field) => (
+                            <field.TextareaField
+                                id={`${id}-tracking-no`}
+                                label="快递单号"
+                                placeholder="输入快递单号，多个号码可分行粘贴"
+                                rows={1}
+                                hideLabel
+                                inInputGroup
+                                className="min-w-0 flex-1"
+                                required
+                                disabled={disabled}
+                            />
+                        )}
+                    />
+                </InputGroup>
                 <form.AppForm>
                     <form.SubmitButton
                         id={`${id}-add`}
                         label="添加物流号"
+                        variant={compact ? "ghost" : "default"}
+                        size={compact ? "sm" : "default"}
+                        className={compact ? "justify-self-start" : undefined}
                         disabled={disabled}
-                    />
+                    >
+                        {compact ? (
+                            <>
+                                <PlusIcon data-icon="inline-start" />
+                                添加物流号
+                            </>
+                        ) : undefined}
+                    </form.SubmitButton>
                 </form.AppForm>
             </form>
+            {compact ? (
+                <p className="text-xs text-muted-foreground">
+                    同一商品可添加多个物流号；同一包裹包含多项商品时，请在对应商品下分别登记。
+                </p>
+            ) : null}
         </div>
     )
 }
