@@ -250,6 +250,7 @@ const REGISTERED_ACTIONS: &[AuditAction] = &[
     action("sales_order.submit", "sales_order_submission", "提交销售单"),
     action("sales_order.void", "sales_order", "作废销售单"),
     action("sales_return_case.create", "sales_return_case", "创建销售退货单"),
+    action("sales_selection_booklet.set_access_password", "sales_selection_booklet", "维护选品册访问密码"),
     action("service_fulfillment.confirm", "service_fulfillment", "确认服务履约"),
     action("service_fulfillment.create", "service_fulfillment", "创建服务履约单"),
     action("sku.listing.update", "sku", "变更规格上下架状态"),

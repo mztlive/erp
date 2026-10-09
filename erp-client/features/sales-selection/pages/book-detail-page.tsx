@@ -16,6 +16,10 @@ import {
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useAccountProfileQuery } from "@/features/auth/hooks/queries"
+import { hasPermission } from "@/lib/permissions"
+import { AccessPasswordDialog } from "@/features/sales-selection/components/access-password-dialog"
+import { BookDetailVoucherPanel } from "@/features/sales-selection/components/book-detail-voucher-panel"
 import { BookDetailHeader } from "@/features/sales-selection/components/book-detail-header"
 import { BookDetailSidebar } from "@/features/sales-selection/components/book-detail-sidebar"
 import { BookWorkflowBanner } from "@/features/sales-selection/components/book-workflow-banner"
@@ -34,12 +38,19 @@ import { cn } from "@/lib/utils"
  * @param bookId 选品册身份
  */
 export const BookDetailPage = ({ bookId }: { bookId: string }) => {
+    const profile = useAccountProfileQuery()
+    const canMaintain = hasPermission(
+        profile.data?.permissions,
+        "sales_selection_booklet:maintain",
+    )
     const detailQuery = useBookDetail(bookId)
     const operations = useBookOperations()
     const detail = detailQuery.data
     const [editing, setEditing] = React.useState(false)
+    const [passwordEditing, setPasswordEditing] = React.useState(false)
 
     const pending =
+        operations.accessPassword.isPending ||
         operations.prepare.isPending ||
         operations.regenerate.isPending ||
         operations.reprepare.isPending ||
@@ -95,6 +106,10 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
 
     const visibleItems = detail.items.filter((item) => !item.removed)
     const activeBookId = bookIdentity(detail) || bookId
+    const passwordDisabledReason =
+        detail.status === "PREPARING"
+            ? "商品正在准备，请等待准备结束后设置或修改访问密码。"
+            : undefined
 
     return (
         <PageScaffold density="compact">
@@ -104,6 +119,68 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                 operations={operations}
                 onEdit={() => setEditing(true)}
             />
+
+            <section
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4"
+                aria-label="选品册访问密码"
+            >
+                <div className="space-y-1">
+                    <h2 className="text-sm font-semibold">访问密码</h2>
+                    <p className="text-xs text-muted-foreground">
+                        {detail.access_password_set
+                            ? "客户需验证访问密码后查看选品册。"
+                            : "该选品册尚未设置密码，客户无法查看商品。请设置密码后发给客户。"}
+                    </p>
+                    {passwordDisabledReason && (
+                        <p
+                            id="sales-selection-detail-access-password-wait"
+                            className="text-xs text-muted-foreground"
+                        >
+                            {passwordDisabledReason}
+                        </p>
+                    )}
+                </div>
+                <Button
+                    id="sales-selection-detail-access-password"
+                    variant="outline"
+                    size="sm"
+                    disabled={
+                        pending ||
+                        !canMaintain ||
+                        Boolean(passwordDisabledReason)
+                    }
+                    title={
+                        !canMaintain
+                            ? "当前账号无权维护选品册密码"
+                            : passwordDisabledReason
+                    }
+                    aria-describedby={
+                        passwordDisabledReason
+                            ? "sales-selection-detail-access-password-wait"
+                            : undefined
+                    }
+                    onClick={() => setPasswordEditing(true)}
+                >
+                    {detail.access_password_set ? "修改密码" : "设置密码"}
+                </Button>
+            </section>
+            <AccessPasswordDialog
+                open={passwordEditing && canMaintain}
+                onOpenChange={setPasswordEditing}
+                busy={pending || !canMaintain}
+                disabledReason={passwordDisabledReason}
+                onSubmit={async (password) => {
+                    if (!canMaintain || pending || passwordDisabledReason)
+                        return
+                    await operations.accessPassword.mutateAsync({
+                        bookId: activeBookId,
+                        expected_version: detail.version,
+                        idempotency_key: createIdempotencyKey(),
+                        access_password: password,
+                    })
+                }}
+            />
+            <BookDetailVoucherPanel detail={detail} />
 
             {editing ? (
                 <ReprepareDialog

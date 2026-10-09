@@ -26,7 +26,7 @@ pub use scope::{SelectionReadScope, SelectionScopeClause};
 
 use crate::entity::sales_selection::{
     SalesSelectionBooklet, SalesSelectionDisplayItem, SalesSelectionPoolMember, SalesSelectionPrepareTask,
-    SalesSelectionProposal,
+    SalesSelectionProposal, SalesSelectionSession,
 };
 use crate::repository::extensions::SalesSelectionExt;
 use crate::repository::filter::push_undeleted;
@@ -391,6 +391,93 @@ impl<'a> SalesSelectionDomainRepository<'a> {
             .await
     }
 
+    /// 按本册参与人稳定身份读取独立会话。
+    ///
+    /// # 参数
+    /// * `booklet_id` - 选品册身份
+    /// * `participant_id` - 参与人身份；普通模式为空
+    /// * `executor` - 当前事务执行器
+    ///
+    /// # 返回
+    /// 返回匹配的个人会话。
+    ///
+    /// # 错误
+    /// 数据库查询失败时返回仓储错误。
+    pub async fn session_by_participant(
+        &self,
+        booklet_id: &str,
+        participant_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesSelectionSession>> {
+        let mut filter = doc! { "booklet_id": booklet_id, "participant_id": participant_id };
+        if participant_id.is_empty() {
+            filter.insert("participant_id", doc! { "$in": ["", null] });
+        }
+        self.db.sales_selection_sessions().find_one(filter, executor).await
+    }
+
+    /// 按所属册与提货券代码哈希读取独立会话。
+    ///
+    /// # 参数
+    /// * `booklet_id` - 选品册身份
+    /// * `voucher_hash` - 券码哈希
+    /// * `executor` - 当前事务执行器
+    ///
+    /// # 返回
+    /// 返回本册对应券码的个人会话。
+    ///
+    /// # 错误
+    /// 数据库查询失败时返回仓储错误。
+    pub async fn session_by_voucher_hash(
+        &self,
+        booklet_id: &str,
+        voucher_hash: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SalesSelectionSession>> {
+        self.db
+            .sales_selection_sessions()
+            .find_one(doc! { "booklet_id": booklet_id, "voucher_code_hash": voucher_hash }, executor)
+            .await
+    }
+
+    /// 读取指定册的全部独立会话。
+    ///
+    /// # 参数
+    /// * `booklet_id` - 已由调用方完成授权的选品册
+    /// * `executor` - 执行器
+    ///
+    /// # 返回
+    /// 返回普通会话或该册所有个人会话。
+    ///
+    /// # 错误
+    /// 数据库查询失败时返回仓储错误。
+    pub async fn sessions_for_booklet(
+        &self,
+        booklet_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesSelectionSession>> {
+        self.db.sales_selection_sessions().find_many(doc! { "booklet_id": booklet_id }, executor).await
+    }
+
+    /// 读取指定册全部已提交方案。
+    ///
+    /// # 参数
+    /// * `booklet_id` - 已由调用方完成授权的选品册
+    /// * `executor` - 执行器
+    ///
+    /// # 返回
+    /// 返回本册普通方案或所有个人方案。
+    ///
+    /// # 错误
+    /// 数据库查询失败时返回仓储错误。
+    pub async fn proposals_for_booklet(
+        &self,
+        booklet_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SalesSelectionProposal>> {
+        self.db.sales_selection_proposals().find_many(doc! { "booklet_id": booklet_id }, executor).await
+    }
+
     /// 按选品册读取方案。
     ///
     /// # 参数
@@ -407,7 +494,10 @@ impl<'a> SalesSelectionDomainRepository<'a> {
         booklet_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Option<SalesSelectionProposal>> {
-        self.db.sales_selection_proposals().find_one(doc! { "booklet_id": booklet_id }, executor).await
+        self.db
+            .sales_selection_proposals()
+            .find_one(doc! { "booklet_id": booklet_id, "participant_id": { "$in": ["", null] } }, executor)
+            .await
     }
 
     /// 持久化一次同步准备的全部结果。

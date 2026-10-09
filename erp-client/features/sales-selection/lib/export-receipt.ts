@@ -28,6 +28,19 @@ export async function downloadReceipt(
     sheet.addRow(["方案编号", receipt.proposal_no])
     sheet.addRow(["提交时间", content.submittedAt])
     sheet.addRow(["状态", "选品已提交"])
+    if (receipt.recipient) {
+        sheet.addRow(["收件人", receipt.recipient.name])
+        sheet.addRow(["联系电话", receipt.recipient.phone])
+        sheet.addRow([
+            "收件地址",
+            [
+                receipt.recipient.province,
+                receipt.recipient.city,
+                receipt.recipient.district,
+                receipt.recipient.address,
+            ].join(" "),
+        ])
+    }
     sheet.addRow([])
     const header = sheet.addRow([
         "商品名称",

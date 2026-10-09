@@ -1,10 +1,13 @@
 //! 选品册聚合根。
 
+use std::fmt;
+
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use erp_core::common::state::ensure_transition;
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{CustomerAccountId, SalesSelectionBookletId, SalesSelectionProposalId};
+use erp_core::money::Amount;
 use erp_core::validation::{normalize_required_text, normalize_required_text_ref};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -16,7 +19,7 @@ use super::tier::{TierRule, normalize_tiers};
 use super::types::{PrepareKind, SelectionForm, SubmitMode};
 
 /// 选品册创建数据。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SalesSelectionBookletData {
     /// 客户稳定身份。
     pub customer_id: CustomerAccountId,
@@ -32,6 +35,15 @@ pub struct SalesSelectionBookletData {
     pub form: SelectionForm,
     /// 提交方式。
     pub submit_mode: SubmitMode,
+    /// 访问密码哈希；历史选品册缺省为未设置。
+    #[serde(default)]
+    pub access_password_hash: Option<String>,
+    /// 提货券每人额度。
+    #[serde(default)]
+    pub per_person_budget: Option<Amount>,
+    /// 提货券发行人数。
+    #[serde(default)]
+    pub voucher_count: Option<u32>,
     /// 商品池来源。
     pub pool_source: PoolSource,
     /// 套餐档位；单品必须为空。
@@ -41,7 +53,7 @@ pub struct SalesSelectionBookletData {
 }
 
 /// 选品册。
-#[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
 pub struct SalesSelectionBooklet {
     #[serde(flatten)]
     pub base: BaseModel,
@@ -63,6 +75,15 @@ pub struct SalesSelectionBooklet {
     pub form: SelectionForm,
     /// 提交方式。
     pub submit_mode: SubmitMode,
+    /// 访问密码哈希；历史选品册缺省为未设置。
+    #[serde(default)]
+    pub access_password_hash: Option<String>,
+    /// 提货券每人额度。
+    #[serde(default)]
+    pub per_person_budget: Option<Amount>,
+    /// 提货券发行人数。
+    #[serde(default)]
+    pub voucher_count: Option<u32>,
     /// 商品池来源。
     pub pool_source: PoolSource,
     /// 档位规则。
@@ -109,6 +130,26 @@ pub struct SalesSelectionBooklet {
     pub voided_at: Option<Instant>,
 }
 
+impl fmt::Debug for SalesSelectionBookletData {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("SalesSelectionBookletData")
+            .field("form", &self.form)
+            .field("submit_mode", &self.submit_mode)
+            .finish_non_exhaustive()
+    }
+}
+
+impl fmt::Debug for SalesSelectionBooklet {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("SalesSelectionBooklet")
+            .field("id", &self.base.id)
+            .field("status", &self.status)
+            .finish_non_exhaustive()
+    }
+}
+
 impl SalesSelectionBooklet {
     /// 创建草稿选品册。
     ///
@@ -129,6 +170,8 @@ impl SalesSelectionBooklet {
         let owner =
             normalize_required_text(data.sales_owner_user_id, "销售负责人不能为空", 64, "销售负责人过长")?;
         let org = normalize_required_text(data.business_org_unit_id, "业务组织不能为空", 64, "业务组织过长")?;
+        validate_voucher_settings(data.submit_mode, data.per_person_budget, data.voucher_count)?;
+        validate_password_hash(data.access_password_hash.as_deref())?;
         let tiers = normalize_form_tiers(data.form, data.tiers)?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -139,6 +182,9 @@ impl SalesSelectionBooklet {
             business_org_unit_id: org,
             form: data.form,
             submit_mode: data.submit_mode,
+            access_password_hash: data.access_password_hash,
+            per_person_budget: data.per_person_budget,
+            voucher_count: data.voucher_count,
             pool_source: data.pool_source,
             tiers,
             status: BookletStatus::Draft,
@@ -435,6 +481,12 @@ impl SalesSelectionBooklet {
     /// # 错误
     /// 非已发布或已有方案时拒绝。
     pub fn mark_submitted(&mut self, proposal_id: SalesSelectionProposalId, now: Instant) -> Result<()> {
+        if self.submit_mode == SubmitMode::PickupVoucher {
+            if self.status != BookletStatus::Published {
+                return Err(Error::from("只有已发布的提货券选品册可以提交"));
+            }
+            return Ok(());
+        }
         if self.proposal_id.is_some() {
             return Err(Error::from("一本选品册只能有一份销售方案"));
         }
@@ -442,6 +494,50 @@ impl SalesSelectionBooklet {
         self.status = BookletStatus::Submitted;
         self.proposal_id = Some(proposal_id);
         self.submitted_at = Some(now);
+        Ok(())
+    }
+
+    /// 设置或更换访问密码哈希。
+    ///
+    /// # 参数
+    /// * `hash` - 服务端生成的密码哈希
+    /// * `actor_id` - 操作人
+    ///
+    /// # 返回
+    /// 保存哈希与更新人。
+    ///
+    /// # 错误
+    /// 准备中、存在活动任务、已作废、哈希为空或操作人非法时拒绝。
+    pub fn set_access_password_hash(&mut self, hash: String, actor_id: &str) -> Result<()> {
+        self.ensure_no_active_task()?;
+        if self.status == BookletStatus::Voided {
+            return Err(Error::from("已作废的选品册不能设置访问密码"));
+        }
+        validate_password_hash(Some(&hash))?;
+        let actor = normalize_actor(actor_id, "操作人不能为空")?;
+        self.access_password_hash = Some(hash);
+        self.updated_by = actor;
+        Ok(())
+    }
+
+    /// 验证服务端重算的个人选品合计。
+    ///
+    /// # 参数
+    /// * `total` - 根据冻结商品价格及份数计算的合计
+    ///
+    /// # 返回
+    /// 普通模式或提货券合计不超过个人额度时通过。
+    ///
+    /// # 错误
+    /// 提货券缺额度、合计为负或超额度时拒绝。
+    pub fn ensure_participant_total(&self, total: Amount) -> Result<()> {
+        if self.submit_mode != SubmitMode::PickupVoucher {
+            return Ok(());
+        }
+        let budget = self.per_person_budget.ok_or_else(|| Error::from("提货券每人额度未配置"))?;
+        if total < Amount::zero() || total > budget {
+            return Err(Error::from("选品金额不能超过每人额度"));
+        }
         Ok(())
     }
 
@@ -594,6 +690,31 @@ impl SalesSelectionBooklet {
     }
 }
 
+/// 校验提货券固定配置。
+fn validate_voucher_settings(mode: SubmitMode, budget: Option<Amount>, count: Option<u32>) -> Result<()> {
+    if mode != SubmitMode::PickupVoucher {
+        if budget.is_some() || count.is_some() {
+            return Err(Error::from("只有提货券模式可以设置每人额度和人数"));
+        }
+        return Ok(());
+    }
+    if !budget.is_some_and(|amount| amount > Amount::zero()) {
+        return Err(Error::from("提货券每人额度必须大于零"));
+    }
+    if !count.is_some_and(|value| (1..=1000).contains(&value)) {
+        return Err(Error::from("提货券人数必须是 1 到 1000 的整数"));
+    }
+    Ok(())
+}
+
+/// 拒绝空密码哈希；None 仅供历史文档读取与领域构造兼容。
+fn validate_password_hash(hash: Option<&str>) -> Result<()> {
+    if hash.is_some_and(|value| value.trim().is_empty()) {
+        return Err(Error::from("访问密码哈希不能为空"));
+    }
+    Ok(())
+}
+
 /// 按形态校验档位。
 ///
 /// # 参数
@@ -666,6 +787,9 @@ mod tests {
                 business_org_unit_id: "org-1".into(),
                 form: SelectionForm::SingleSku,
                 submit_mode: SubmitMode::ByQuantity,
+                access_password_hash: Some("password-hash".into()),
+                per_person_budget: None,
+                voucher_count: None,
                 pool_source: PoolSource::new(
                     PoolSourceKind::Filter,
                     Some(PoolFilterSnapshot::default()),
@@ -736,8 +860,14 @@ mod tests {
         let object = value.as_object_mut().expect("booklet object");
         object.remove("sales_owner_user_id");
         object.remove("business_org_unit_id");
+        object.remove("access_password_hash");
+        object.remove("per_person_budget");
+        object.remove("voucher_count");
         let restored: SalesSelectionBooklet =
             serde_json::from_value(value).expect("legacy booklet deserializes");
+        assert!(restored.access_password_hash.is_none());
+        assert!(restored.per_person_budget.is_none());
+        assert!(restored.voucher_count.is_none());
         assert!(!restored.has_persisted_scope());
         assert!(restored.sales_owner_user_id.is_empty());
         assert!(restored.business_org_unit_id.is_empty());
@@ -754,5 +884,151 @@ mod tests {
         assert!(booklet.close(Instant::now(), "u1").is_err());
         assert!(booklet.revoke_access("u1").is_ok());
         assert_eq!(booklet.status, BookletStatus::Submitted);
+    }
+    #[test]
+    fn voucher_configuration_rejects_invalid_budgets_and_counts() {
+        let positive = "100.00".parse().unwrap();
+        assert!(validate_voucher_settings(SubmitMode::PickupVoucher, Some(positive), Some(1)).is_ok());
+        assert!(validate_voucher_settings(SubmitMode::PickupVoucher, Some(positive), Some(1000)).is_ok());
+        for budget in [None, Some(Amount::zero()), Some("-1.00".parse().unwrap())] {
+            assert!(validate_voucher_settings(SubmitMode::PickupVoucher, budget, Some(1)).is_err());
+        }
+        for count in [None, Some(0), Some(1001)] {
+            assert!(validate_voucher_settings(SubmitMode::PickupVoucher, Some(positive), count).is_err());
+        }
+        assert!(validate_voucher_settings(SubmitMode::ByQuantity, Some(positive), None).is_err());
+    }
+
+    #[test]
+    fn voucher_submission_keeps_booklet_open_and_enforces_personal_budget() {
+        let mut booklet = draft();
+        booklet.submit_mode = SubmitMode::PickupVoucher;
+        booklet.per_person_budget = Some("100.00".parse().unwrap());
+        booklet.voucher_count = Some(2);
+        assert!(booklet.mark_submitted(SalesSelectionProposalId::new("p1"), Instant::now()).is_err());
+        booklet.status = BookletStatus::Published;
+        booklet.mark_submitted(SalesSelectionProposalId::new("p1"), Instant::now()).unwrap();
+        booklet.mark_submitted(SalesSelectionProposalId::new("p2"), Instant::now()).unwrap();
+        assert_eq!(booklet.status, BookletStatus::Published);
+        assert!(booklet.proposal_id.is_none());
+        assert!(booklet.submitted_at.is_none());
+        assert!(booklet.ensure_participant_total("100.00".parse().unwrap()).is_ok());
+        assert!(booklet.ensure_participant_total("100.01".parse().unwrap()).is_err());
+        assert!(booklet.ensure_participant_total("-0.01".parse().unwrap()).is_err());
+    }
+
+    #[test]
+    fn password_updates_preserve_booklet_facts_in_allowed_states() {
+        for status in [
+            BookletStatus::Draft,
+            BookletStatus::PendingPublish,
+            BookletStatus::Published,
+            BookletStatus::Submitted,
+            BookletStatus::Closed,
+        ] {
+            for password_hash in [None, Some("original-hash".into())] {
+                let mut booklet = draft();
+                booklet.status = status;
+                booklet.access_password_hash = password_hash;
+                booklet.proposal_id = Some(SalesSelectionProposalId::new("proposal-1"));
+                let mut expected = booklet.clone();
+                expected.access_password_hash = Some("new-hash".into());
+                expected.updated_by = "u2".into();
+
+                booklet.set_access_password_hash("new-hash".into(), "u2").unwrap();
+
+                assert_eq!(booklet, expected);
+            }
+        }
+    }
+
+    #[test]
+    fn password_updates_reject_preparing_or_active_tasks_without_mutation() {
+        for (status, task_id) in [
+            (BookletStatus::Preparing, None),
+            (BookletStatus::Preparing, Some("task-1")),
+            (BookletStatus::Draft, Some("task-1")),
+            (BookletStatus::PendingPublish, Some("task-1")),
+            (BookletStatus::Published, Some("task-1")),
+            (BookletStatus::Submitted, Some("task-1")),
+            (BookletStatus::Closed, Some("task-1")),
+        ] {
+            let mut booklet = draft();
+            booklet.status = status;
+            booklet.active_task_id = task_id.map(str::to_string);
+            booklet.pre_prepare_status = Some(BookletStatus::Draft);
+            let original = booklet.clone();
+
+            let error = booklet.set_access_password_hash("new-hash".into(), "u2").unwrap_err();
+
+            assert!(error.to_string().contains("准备任务"));
+            assert_eq!(booklet, original);
+        }
+    }
+
+    #[test]
+    fn invalid_password_updates_leave_booklet_unchanged() {
+        for (status, hash, actor) in [
+            (BookletStatus::Voided, "new-hash", "u2"),
+            (BookletStatus::Draft, " ", "u2"),
+            (BookletStatus::Draft, "new-hash", " "),
+        ] {
+            let mut booklet = draft();
+            booklet.status = status;
+            let original = booklet.clone();
+
+            assert!(booklet.set_access_password_hash(hash.into(), actor).is_err());
+            assert_eq!(booklet, original);
+        }
+    }
+    #[test]
+    fn booklet_debug_omits_password_and_link_credentials() {
+        let mut booklet = draft();
+        booklet.access_password_hash = Some("secret-password-hash".into());
+        booklet.link_token_hash = Some("secret-link-hash".into());
+        booklet.link_token_ciphertext = Some("secret-link-cipher".into());
+        let debug = format!("{booklet:?}");
+        assert!(debug.contains("book-1"));
+        assert!(debug.contains("Draft"));
+        assert!(!debug.contains("secret"));
+    }
+    #[test]
+    fn package_voucher_booklet_accepts_valid_tiers_and_personal_budget() {
+        let source = draft();
+        let data = SalesSelectionBookletData {
+            customer_id: source.customer_id,
+            customer_no: source.customer_no,
+            customer_name: source.customer_name,
+            sales_owner_user_id: source.sales_owner_user_id,
+            business_org_unit_id: source.business_org_unit_id,
+            form: SelectionForm::Package,
+            submit_mode: SubmitMode::PickupVoucher,
+            access_password_hash: source.access_password_hash,
+            per_person_budget: Some("100.00".parse().unwrap()),
+            voucher_count: Some(2),
+            pool_source: source.pool_source,
+            tiers: vec![TierRule {
+                tier_id: "tier-1".into(),
+                name: "100 元套餐".into(),
+                target_amount: "100.00".parse().unwrap(),
+                tolerance: Amount::zero(),
+                expected_count: 1,
+                sku_count: 2,
+            }],
+            created_by: source.created_by,
+        };
+        let booklet =
+            SalesSelectionBooklet::new(SalesSelectionBookletId::new("package-book"), data.clone()).unwrap();
+        assert_eq!(booklet.form, SelectionForm::Package);
+        assert_eq!(booklet.submit_mode, SubmitMode::PickupVoucher);
+        assert_eq!(booklet.tiers.len(), 1);
+        assert!(booklet.ensure_participant_total("100.00".parse().unwrap()).is_ok());
+        assert!(booklet.ensure_participant_total("100.01".parse().unwrap()).is_err());
+        let mut no_tiers = data;
+        no_tiers.tiers.clear();
+        assert!(
+            SalesSelectionBooklet::new(SalesSelectionBookletId::new("invalid-package-book"), no_tiers)
+                .is_err()
+        );
     }
 }

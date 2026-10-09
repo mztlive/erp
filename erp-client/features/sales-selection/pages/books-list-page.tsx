@@ -42,7 +42,9 @@ function queryFromSearchParams(searchParams: URLSearchParams): BookListQuery {
                 ? selectionForm
                 : "ALL",
         submit_mode:
-            submitMode === "BY_QUANTITY" || submitMode === "MALL_REDEEM"
+            submitMode === "BY_QUANTITY" ||
+            submitMode === "MALL_REDEEM" ||
+            submitMode === "PICKUP_VOUCHER"
                 ? submitMode
                 : "ALL",
         status: status || "ALL",

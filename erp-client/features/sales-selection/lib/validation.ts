@@ -85,9 +85,15 @@ export const createBookSchema = z
         selection_form: z.enum(["SINGLE_SKU", "PACKAGE"], {
             message: "请选择选品形态",
         }),
-        submit_mode: z.enum(["BY_QUANTITY", "MALL_REDEEM"], {
+        submit_mode: z.enum(["BY_QUANTITY", "MALL_REDEEM", "PICKUP_VOUCHER"], {
             message: "请选择提交方式",
         }),
+        access_password: z
+            .string()
+            .min(8, "访问密码至少 8 位")
+            .max(64, "访问密码最多 64 位"),
+        per_person_budget: z.string(),
+        voucher_count: z.string(),
         source_kind: z.enum(["FILTER", "SELECTION"], {
             message: "请选择商品来源",
         }),
@@ -96,6 +102,21 @@ export const createBookSchema = z
         tiers: z.array(tierRuleSchema).optional(),
     })
     .superRefine((value, ctx) => {
+        if (value.submit_mode === "PICKUP_VOUCHER") {
+            if (!targetAmountString.safeParse(value.per_person_budget).success)
+                ctx.addIssue({
+                    code: "custom",
+                    path: ["per_person_budget"],
+                    message: "每人额度必须为大于 0 的金额，最多两位小数",
+                })
+            const count = value.voucher_count.trim()
+            if (!/^[1-9]\d{0,3}$/.test(count) || BigInt(count) > BigInt(1000))
+                ctx.addIssue({
+                    code: "custom",
+                    path: ["voucher_count"],
+                    message: "提货码数量必须为 1 到 1000 的整数",
+                })
+        }
         if (value.selection_form === "PACKAGE") {
             const tiers = value.tiers ?? []
             if (tiers.length < 1 || tiers.length > 10) {
@@ -139,7 +160,7 @@ const sessionSelectionSchema = z.object({
  * @param submitMode 选品册提交方式
  */
 export const buildSaveSelectionSchema = (
-    submitMode: "BY_QUANTITY" | "MALL_REDEEM",
+    submitMode: "BY_QUANTITY" | "MALL_REDEEM" | "PICKUP_VOUCHER",
 ) =>
     z
         .object({
@@ -157,7 +178,7 @@ export const buildSaveSelectionSchema = (
                 })
             }
             value.selections.forEach((item, index) => {
-                if (submitMode === "BY_QUANTITY" && !item.quantity) {
+                if (submitMode !== "MALL_REDEEM" && !item.quantity) {
                     ctx.addIssue({
                         code: "custom",
                         path: ["selections", index, "quantity"],

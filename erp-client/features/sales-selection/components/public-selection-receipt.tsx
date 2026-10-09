@@ -5,6 +5,7 @@ import { useMutation } from "@tanstack/react-query"
 import { CheckCircle2, Download, ImageOff } from "lucide-react"
 import { MoneyValue, QuantityValue } from "@/components/business/values"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { publicImageUrl } from "../api"
 import { receiptContent, type ReceiptContent } from "../lib/receipt"
@@ -13,18 +14,23 @@ import type { PublicPageView, PublicReceiptView } from "../types"
 /** 客户提交后的只读回执，金额始终采用服务端提交结果。 */
 export function PublicSelectionReceipt({
     token,
+    accessToken,
+    onLock,
     page,
     receipt,
 }: {
     token: string
+    accessToken: string
+    onLock: () => void
     page: PublicPageView
     receipt: PublicReceiptView
 }) {
     const content = receiptContent(page, receipt)
+    const recipient = page.recipient ?? receipt.recipient
     const download = useMutation({
         mutationFn: async () => {
             const { downloadReceipt } = await import("../lib/export-receipt")
-            await downloadReceipt(receipt, content)
+            await downloadReceipt({ ...receipt, recipient }, content)
         },
     })
 
@@ -99,6 +105,7 @@ export function PublicSelectionReceipt({
                                     key={item.id}
                                     item={item}
                                     token={token}
+                                    accessToken={accessToken}
                                     byQuantity={content.byQuantity}
                                 />
                             ))}
@@ -122,6 +129,27 @@ export function PublicSelectionReceipt({
                         )}
                     </section>
 
+                    {recipient && (
+                        <section
+                            className="space-y-2 border-t border-grid py-4"
+                            aria-label="收件信息"
+                        >
+                            <h3 className="text-base font-semibold">
+                                收件信息
+                            </h3>
+                            <p className="text-sm">
+                                {recipient.name} · {recipient.phone}
+                            </p>
+                            <p className="break-words text-sm text-muted-foreground">
+                                {[
+                                    recipient.province,
+                                    recipient.city,
+                                    recipient.district,
+                                    recipient.address,
+                                ].join(" ")}
+                            </p>
+                        </section>
+                    )}
                     <footer className="flex items-center gap-2 border-t border-grid py-3 text-xs text-muted-foreground">
                         <CheckCircle2
                             className="size-4 shrink-0 text-success"
@@ -144,6 +172,16 @@ export function PublicSelectionReceipt({
                     </div>
                 )}
                 <div className="mt-6 space-y-3">
+                    <Button
+                        id="sales-selection-public-lock"
+                        variant="outline"
+                        className="w-full"
+                        onClick={onLock}
+                    >
+                        {page.submit_mode === "PICKUP_VOUCHER"
+                            ? "更换提货码"
+                            : "退出选品"}
+                    </Button>
                     <LoadingButton
                         id="sales-selection-receipt-download"
                         size="lg"
@@ -182,13 +220,15 @@ export function PublicSelectionReceipt({
 function ReceiptItem({
     item,
     token,
+    accessToken,
     byQuantity,
 }: {
     item: ReceiptContent["items"][number]
     token: string
+    accessToken: string
     byQuantity: boolean
 }) {
-    const src = publicImageUrl(token, item.coverPath)
+    const src = publicImageUrl(token, item.coverPath, accessToken)
     const [failedSrc, setFailedSrc] = React.useState<string>()
     return (
         <li className="flex items-start gap-3 py-3">

@@ -1,7 +1,9 @@
 {
   "version": 1,
   "measured_run": "20261004t000840_a493ef9ee056",
-  "measured_file_runs": {},
+  "measured_file_runs": {
+    "flow-27-selection-sharing.spec.ts": "20261009t100946_7c09f8dca88c"
+  },
   "estimated_files": [],
   "duration_seconds": {
     "flow-01-sales-warehouse.spec.ts": 64.399,
@@ -30,7 +32,7 @@
     "flow-24-identity-workflow-admin.spec.ts": 25.472,
     "flow-25-integration-governance.spec.ts": 6.27,
     "flow-26-opening-import.spec.ts": 6.775,
-    "flow-27-selection-sharing.spec.ts": 24.943,
+    "flow-27-selection-sharing.spec.ts": 44.576,
     "flow-28-supplier-offering-batch.spec.ts": 16.898,
     "flow-29-contract-template.spec.ts": 70.705,
     "flow-30-master-data-customer.spec.ts": 22.426,

@@ -1,13 +1,19 @@
 //! 选品会话：不编号、不进经营账本。
 
+use std::fmt;
+
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use erp_core::ids::{SalesSelectionBookletId, SalesSelectionDisplayItemId, SalesSelectionSessionId};
+use erp_core::ids::{
+    SalesSelectionBookletId, SalesSelectionDisplayItemId, SalesSelectionProposalId, SalesSelectionSessionId,
+};
 use erp_core::money::Amount;
+use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use super::limits::{QUANTITY_MAX, QUANTITY_MIN};
+use super::recipient::SelectionRecipient;
 use super::types::SubmitMode;
 
 /// 会话内一项选择。
@@ -20,18 +26,44 @@ pub struct SessionChoice {
 }
 
 /// 选品会话。
-#[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
 pub struct SalesSelectionSession {
     #[serde(flatten)]
     pub base: BaseModel,
     /// 所属选品册。
     pub booklet_id: SalesSelectionBookletId,
+    /// 参与人稳定身份；普通模式和历史会话为空。
+    #[serde(default)]
+    pub participant_id: String,
+    /// 提货券代码哈希。
+    #[serde(default)]
+    pub voucher_code_hash: Option<String>,
+    /// 提货券代码密文。
+    #[serde(default)]
+    pub voucher_code_ciphertext: Option<String>,
+    /// 个人提交生成的销售方案。
+    #[serde(default)]
+    pub proposal_id: Option<SalesSelectionProposalId>,
+    /// 提交时冻结的个人收件信息。
+    #[serde(default)]
+    pub recipient: Option<SelectionRecipient>,
     /// 会话版本，成功保存后递增。
     pub session_version: u64,
     /// 当前选择。
     pub choices: Vec<SessionChoice>,
     /// 提交后冻结。
     pub frozen: bool,
+}
+
+impl fmt::Debug for SalesSelectionSession {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("SalesSelectionSession")
+            .field("id", &self.base.id)
+            .field("session_version", &self.session_version)
+            .field("frozen", &self.frozen)
+            .finish_non_exhaustive()
+    }
 }
 
 impl SalesSelectionSession {
@@ -50,10 +82,48 @@ impl SalesSelectionSession {
         Self {
             base: BaseModel::new(id.to_string()),
             booklet_id,
+            participant_id: String::new(),
+            voucher_code_hash: None,
+            voucher_code_ciphertext: None,
+            proposal_id: None,
+            recipient: None,
             session_version: 1,
             choices: Vec::new(),
             frozen: false,
         }
+    }
+
+    /// 为一张提货券建立独立空会话。
+    ///
+    /// # 参数
+    /// * `id` - 会话身份
+    /// * `booklet_id` - 所属选品册
+    /// * `participant_id` - 参与人稳定身份
+    /// * `voucher_code_hash` - 券码哈希
+    /// * `voucher_code_ciphertext` - 券码密文
+    ///
+    /// # 返回
+    /// 返回版本为 1 的个人会话。
+    ///
+    /// # 错误
+    /// 参与人身份为空、超长或券码哈希、密文为空时拒绝。
+    pub fn new_participant(
+        id: SalesSelectionSessionId,
+        booklet_id: SalesSelectionBookletId,
+        participant_id: String,
+        voucher_code_hash: String,
+        voucher_code_ciphertext: String,
+    ) -> Result<Self> {
+        let participant_id =
+            normalize_required_text(participant_id, "参与人身份不能为空", 64, "参与人身份过长")?;
+        if voucher_code_hash.trim().is_empty() || voucher_code_ciphertext.trim().is_empty() {
+            return Err(Error::from("提货券代码哈希与密文不能为空"));
+        }
+        let mut session = Self::new(id, booklet_id);
+        session.participant_id = participant_id;
+        session.voucher_code_hash = Some(voucher_code_hash);
+        session.voucher_code_ciphertext = Some(voucher_code_ciphertext);
+        Ok(session)
     }
 
     /// 保存完整选择集合。
@@ -198,7 +268,7 @@ pub fn normalize_choices(
 /// 缺份数、携带份数或超出范围时拒绝。
 fn normalize_quantity(quantity: Option<u32>, submit_mode: SubmitMode) -> Result<Option<u32>> {
     match submit_mode {
-        SubmitMode::ByQuantity => {
+        SubmitMode::ByQuantity | SubmitMode::PickupVoucher => {
             let quantity = quantity.ok_or_else(|| Error::from("按份采购必须填写份数"))?;
             if !(QUANTITY_MIN..=QUANTITY_MAX).contains(&quantity) {
                 return Err(Error::from("份数必须是 1 到 100000 的整数"));
@@ -216,9 +286,9 @@ fn normalize_quantity(quantity: Option<u32>, submit_mode: SubmitMode) -> Result<
 
 #[cfg(test)]
 mod tests {
-    use erp_core::ids::SalesSelectionDisplayItemId;
+    use erp_core::ids::{SalesSelectionBookletId, SalesSelectionDisplayItemId, SalesSelectionSessionId};
 
-    use super::{SessionChoice, normalize_choices};
+    use super::{SalesSelectionSession, SessionChoice, normalize_choices};
     use crate::entity::sales_selection::types::SubmitMode;
 
     #[test]
@@ -240,5 +310,89 @@ mod tests {
         let error =
             normalize_choices(vec![choice.clone(), choice], SubmitMode::ByQuantity, &[id]).unwrap_err();
         assert!(error.to_string().contains("重复"));
+    }
+    #[test]
+    fn voucher_sessions_are_independent_and_require_quantity() {
+        let booklet_id = SalesSelectionBookletId::new("book-1");
+        let mut first = SalesSelectionSession::new_participant(
+            SalesSelectionSessionId::new("s1"),
+            booklet_id.clone(),
+            "person-1".into(),
+            "hash-1".into(),
+            "cipher-1".into(),
+        )
+        .unwrap();
+        let second = SalesSelectionSession::new_participant(
+            SalesSelectionSessionId::new("s2"),
+            booklet_id,
+            "person-2".into(),
+            "hash-2".into(),
+            "cipher-2".into(),
+        )
+        .unwrap();
+        let item = SalesSelectionDisplayItemId::new("d1");
+        first
+            .save(
+                1,
+                vec![SessionChoice { display_item_id: item.clone(), quantity: Some(2) }],
+                SubmitMode::PickupVoucher,
+                std::slice::from_ref(&item),
+            )
+            .unwrap();
+        assert_eq!(first.session_version, 2);
+        assert_eq!(second.session_version, 1);
+        assert!(second.choices.is_empty());
+        assert!(
+            normalize_choices(
+                vec![SessionChoice { display_item_id: item.clone(), quantity: None }],
+                SubmitMode::PickupVoucher,
+                std::slice::from_ref(&item)
+            )
+            .is_err()
+        );
+        assert!(
+            normalize_choices(
+                vec![SessionChoice { display_item_id: item.clone(), quantity: Some(0) }],
+                SubmitMode::PickupVoucher,
+                &[item]
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn legacy_session_defaults_participant_and_personal_fields() {
+        let session = SalesSelectionSession::new(
+            SalesSelectionSessionId::new("s1"),
+            SalesSelectionBookletId::new("book-1"),
+        );
+        let mut json = serde_json::to_value(session).unwrap();
+        let object = json.as_object_mut().unwrap();
+        for field in
+            ["participant_id", "voucher_code_hash", "voucher_code_ciphertext", "proposal_id", "recipient"]
+        {
+            object.remove(field);
+        }
+        let restored: SalesSelectionSession = serde_json::from_value(json).unwrap();
+        assert!(restored.participant_id.is_empty());
+        assert!(restored.voucher_code_hash.is_none());
+        assert!(restored.voucher_code_ciphertext.is_none());
+        assert!(restored.proposal_id.is_none());
+        assert!(restored.recipient.is_none());
+    }
+    #[test]
+    fn session_debug_omits_voucher_credentials() {
+        let session = SalesSelectionSession::new_participant(
+            SalesSelectionSessionId::new("s1"),
+            SalesSelectionBookletId::new("b1"),
+            "person-1".into(),
+            "secret-voucher-hash".into(),
+            "secret-voucher-cipher".into(),
+        )
+        .unwrap();
+        let debug = format!("{session:?}");
+        assert!(debug.contains("s1"));
+        assert!(!debug.contains("secret"));
+        assert!(!debug.contains("person-1"));
     }
 }

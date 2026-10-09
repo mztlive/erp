@@ -55,6 +55,25 @@ export function ProposalSummary({ proposal }: { proposal: ProposalView }) {
                     </dd>
                 </div>
             </dl>
+            {proposal.recipient && (
+                <section
+                    className="mt-6 space-y-2 border-t border-border pt-6 text-sm"
+                    aria-label="收件信息"
+                >
+                    <h2 className="font-medium">收件信息</h2>
+                    <p>
+                        {proposal.recipient.name} · {proposal.recipient.phone}
+                    </p>
+                    <p className="break-words text-muted-foreground">
+                        {[
+                            proposal.recipient.province,
+                            proposal.recipient.city,
+                            proposal.recipient.district,
+                            proposal.recipient.address,
+                        ].join(" ")}
+                    </p>
+                </section>
+            )}
             <Button
                 id="selection-proposal-open-book"
                 className="mt-8 w-full sm:col-span-2"

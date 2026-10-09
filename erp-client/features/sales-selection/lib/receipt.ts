@@ -7,7 +7,7 @@ export function receiptContent(
     page: PublicPageView,
     receipt: PublicReceiptView,
 ) {
-    const byQuantity = page.submit_mode === "BY_QUANTITY"
+    const byQuantity = page.submit_mode !== "MALL_REDEEM"
     const displayItems = new Map(page.items.map((item) => [item.item_id, item]))
     const items = receipt.items.map((choice) => {
         const item = displayItems.get(choice.item_id)

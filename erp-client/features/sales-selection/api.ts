@@ -1,5 +1,10 @@
 import { apiGet, apiPost, getApiBaseUrl } from "@/lib/api"
-import type { ProposalView, PublicPageView } from "./types"
+import type {
+    ProposalView,
+    PublicPageView,
+    PublicUnlockView,
+    SelectionRecipient,
+} from "./types"
 const proposals = "/admin/sales-selection-proposals"
 const publicBase = "/public/selection"
 
@@ -19,22 +24,28 @@ export async function fetchProposal(id: string): Promise<ProposalView> {
 export function publicImageUrl(
     token: string,
     coverPath?: string | null,
+    accessToken?: string,
 ): string | undefined {
     if (!coverPath) return undefined
-    if (coverPath.startsWith("http")) return coverPath
-    return `${getApiBaseUrl()}${publicBase}/${encodeURIComponent(token)}/images?ref=${encodeURIComponent(coverPath)}`
+    return `${getApiBaseUrl()}${publicBase}/${encodeURIComponent(token)}/images?ref=${encodeURIComponent(coverPath)}${accessToken ? `&access_token=${encodeURIComponent(accessToken)}` : ""}`
 }
 
-export async function fetchPublicPage(token: string): Promise<PublicPageView> {
+export async function fetchPublicPage(
+    token: string,
+    accessToken?: string,
+): Promise<PublicPageView> {
     return publicPageView(
         await apiGet<PublicPageWire>(
             `${publicBase}/${encodeURIComponent(token)}`,
+            undefined,
+            { session: "none", headers: selectionHeaders(accessToken) },
         ),
     )
 }
 
 export async function savePublicSession(
     token: string,
+    accessToken: string,
     input: {
         idempotencyKey: string
         expectedSessionVersion: number
@@ -49,13 +60,19 @@ export async function savePublicSession(
                 expected_session_version: input.expectedSessionVersion,
                 choices: input.choices,
             },
+            { session: "none", headers: selectionHeaders(accessToken) },
         ),
     )
 }
 
 export async function submitPublicSession(
     token: string,
-    input: { idempotencyKey: string; expectedSessionVersion: number },
+    accessToken: string,
+    input: {
+        idempotencyKey: string
+        expectedSessionVersion: number
+        recipient?: SelectionRecipient
+    },
 ): Promise<PublicPageView> {
     return publicPageView(
         await apiPost<PublicPageWire>(
@@ -63,7 +80,24 @@ export async function submitPublicSession(
             {
                 idempotency_key: input.idempotencyKey,
                 expected_session_version: input.expectedSessionVersion,
+                recipient: input.recipient,
             },
+            { session: "none", headers: selectionHeaders(accessToken) },
         ),
     )
+}
+
+const selectionHeaders = (accessToken?: string): Record<string, string> =>
+    accessToken ? { "X-Selection-Access": accessToken } : {}
+
+export async function unlockPublicSelection(
+    token: string,
+    input: { password: string; voucher_code?: string },
+): Promise<PublicUnlockView> {
+    const result = await apiPost<PublicUnlockView>(
+        `${publicBase}/${encodeURIComponent(token)}/unlock`,
+        input,
+        { session: "none" },
+    )
+    return { ...result, page: publicPageView(result.page) }
 }

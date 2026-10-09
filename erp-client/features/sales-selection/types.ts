@@ -1,5 +1,5 @@
 export type SelectionForm = "SINGLE_SKU" | "PACKAGE"
-export type SubmitMode = "BY_QUANTITY" | "MALL_REDEEM"
+export type SubmitMode = "BY_QUANTITY" | "MALL_REDEEM" | "PICKUP_VOUCHER"
 export type PoolSourceKind = "FILTER" | "SELECTION"
 export type BookletStatus =
     | "DRAFT"
@@ -9,7 +9,7 @@ export type BookletStatus =
     | "SUBMITTED"
     | "CLOSED"
     | "VOIDED"
-export type PublicPageKind = "SELECTING" | "RECEIPT" | "ENDED"
+export type PublicPageKind = "LOCKED" | "SELECTING" | "RECEIPT" | "ENDED"
 
 export type CreateTierInput = {
     name: string
@@ -70,7 +70,17 @@ export type PublicDisplayItemView = {
     members: Omit<DisplayMemberView, "sku_id">[]
 }
 
+export type SelectionRecipient = {
+    name: string
+    phone: string
+    province: string
+    city: string
+    district: string
+    address: string
+}
+
 export type PublicReceiptView = {
+    recipient?: SelectionRecipient | null
     proposal_no: string
     submitted_at: number
     customer_name: string
@@ -79,6 +89,9 @@ export type PublicReceiptView = {
 }
 
 export type BookletView = {
+    access_password_set: boolean
+    per_person_budget?: string | null
+    voucher_count?: number | null
     pool_filter?: PoolFilterSnapshot | null
     sku_ids?: string[]
     id: string
@@ -134,6 +147,10 @@ export type PublicChoiceView = {
 }
 
 export type PublicPageView = {
+    participant_id?: string | null
+    recipient?: SelectionRecipient | null
+    voucher_required: boolean
+    per_person_budget?: string | null
     kind: PublicPageKind
     customer_name?: string | null
     form?: SelectionForm | null
@@ -147,6 +164,8 @@ export type PublicPageView = {
 }
 
 export type ProposalView = {
+    participant_id?: string | null
+    recipient?: SelectionRecipient | null
     id: string
     proposal_no: string
     customer_id: string
@@ -198,6 +217,7 @@ export const FORM_LABEL: Record<SelectionForm, string> = {
 export const SUBMIT_MODE_LABEL: Record<SubmitMode, string> = {
     BY_QUANTITY: "按份采购",
     MALL_REDEEM: "商城兑换",
+    PICKUP_VOUCHER: "提货券",
 }
 
 export const SELECTION_FORM_LABEL = FORM_LABEL
@@ -250,6 +270,9 @@ export type SelectionBookDetail = BookletView & {
 }
 
 export type CreateBookInput = {
+    access_password: string
+    per_person_budget?: string
+    voucher_count?: number
     customer_id: string
     /** 显式销售负责人；必填，客户提交人不成为负责人。 */
     sales_owner_user_id: string
@@ -284,4 +307,26 @@ export type DisplayItem = {
     unit?: string | null
     members: DisplayMemberView[]
     missing_image: boolean
+}
+
+export type BookVoucherView = {
+    voucher_code: string
+    submitted: boolean
+    proposal_id?: string | null
+}
+
+export type BookSelectionDetailView = {
+    participant_id: string
+    voucher_code: string | null
+    proposal_id: string
+    proposal_no: string
+    submitted_at: number
+    recipient: SelectionRecipient | null
+    total_amount?: string | null
+    items: ProposalView["sku_lines"]
+}
+
+export type PublicUnlockView = {
+    access_token: string
+    page: PublicPageView
 }

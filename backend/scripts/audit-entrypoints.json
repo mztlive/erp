@@ -6257,6 +6257,34 @@
       },
       "location_count": 1,
       "reason": "启动同步六个内建我方主体及从属资料；仅发生变更的主体生成 company.bootstrap 审计，资料与审计共用同一事务 Executor，相同资料重跑不写审计。"
+    },
+    {
+      "path": "crates/erp-processes/src/sales_selection/password_audit.rs",
+      "function": "update_password",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        "run_audited_event"
+      ],
+      "call_counts": {
+        "run_audited_event": 1
+      },
+      "location_count": 1,
+      "reason": "密码维护领域写入、幂等收据与一次安全成功事件共用 run_audited_event 事务；重放不追加成功事件，审计只投影册身份。"
+    },
+    {
+      "path": "crates/erp-processes/src/sales_selection/password_audit.rs",
+      "function": "password_context",
+      "policy": "Audited",
+      "stage": "MetadataFactory",
+      "boundaries": [
+        "BusinessEventContext::new"
+      ],
+      "call_counts": {
+        "BusinessEventContext::new": 1
+      },
+      "location_count": 1,
+      "reason": "正式写入前校验认证人和已登记选品密码维护动作，绑定册身份；工厂不保存密码、访问凭证或个人信息，不单独持久化事件。"
     }
   ]
 }

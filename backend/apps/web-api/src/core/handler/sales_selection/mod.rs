@@ -1,6 +1,7 @@
 //! 销售选品 HTTP handler。
 
 mod access;
+pub mod protection;
 
 use std::net::SocketAddr;
 
@@ -8,7 +9,7 @@ use application_core::AuditActor;
 use axum::body::Body;
 use axum::extract::{ConnectInfo, Path, Query, State};
 use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, REFERRER_POLICY, X_CONTENT_TYPE_OPTIONS};
-use axum::http::{HeaderValue, StatusCode};
+use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::Response;
 use axum::{Extension, Json};
 use erp_processes::sales_selection::{
@@ -494,8 +495,10 @@ pub async fn public_page(
     State(state): State<AppState>,
     Path(token): Path<String>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
 ) -> Result<PublicSelectionPageView> {
-    Ok(ApiResponse::ok_with_data(process(&state).public_page(&token, &addr.ip().to_string()).await?))
+    let access = protection::selection_access(&headers);
+    Ok(ApiResponse::ok_with_data(process(&state).public_page(&token, access, &addr.ip().to_string()).await?))
 }
 
 /// 公开保存会话。
@@ -512,9 +515,13 @@ pub async fn public_save(
     State(state): State<AppState>,
     Path(token): Path<String>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Json(req): Json<SaveSelectionSessionRequest>,
 ) -> Result<PublicSelectionPageView> {
-    Ok(ApiResponse::ok_with_data(process(&state).public_save(token, req, addr.ip().to_string()).await?))
+    let access = protection::selection_access(&headers).unwrap_or_default().to_owned();
+    Ok(ApiResponse::ok_with_data(
+        process(&state).public_save(token, access, req, addr.ip().to_string()).await?,
+    ))
 }
 
 /// 公开提交。
@@ -531,9 +538,13 @@ pub async fn public_submit(
     State(state): State<AppState>,
     Path(token): Path<String>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Json(req): Json<SubmitSelectionSessionRequest>,
 ) -> Result<PublicSelectionPageView> {
-    Ok(ApiResponse::ok_with_data(process(&state).public_submit(token, req, addr.ip().to_string()).await?))
+    let access = protection::selection_access(&headers).unwrap_or_default().to_owned();
+    Ok(ApiResponse::ok_with_data(
+        process(&state).public_submit(token, access, req, addr.ip().to_string()).await?,
+    ))
 }
 
 /// 公开图片。
@@ -552,7 +563,14 @@ pub async fn public_image(
     Query(query): Query<PublicImageQuery>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> std::result::Result<Response, Error> {
-    respond_public_image(&state, &token, &query.asset_id, addr).await
+    respond_public_image(
+        &state,
+        &token,
+        &query.asset_id,
+        query.access_token.as_deref().unwrap_or_default(),
+        addr,
+    )
+    .await
 }
 
 /// 公开图片（路径参数兼容）。
@@ -567,9 +585,11 @@ pub async fn public_image(
 pub async fn public_image_path(
     State(state): State<AppState>,
     Path((token, asset_id)): Path<(String, String)>,
+    Query(query): Query<protection::ImageAccessQuery>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> std::result::Result<Response, Error> {
-    respond_public_image(&state, &token, &asset_id, addr).await
+    respond_public_image(&state, &token, &asset_id, query.access_token.as_deref().unwrap_or_default(), addr)
+        .await
 }
 
 /// 拒绝 P0 换品/自组。
@@ -587,11 +607,13 @@ pub async fn public_customize() -> Result<PublicSelectionPageView> {
 }
 
 /// 公开图片查询。
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 pub struct PublicImageQuery {
     /// 资产引用。
     #[serde(rename = "ref", alias = "asset_id")]
     pub asset_id: String,
+    /// 已解锁的访问凭证，不写入日志。
+    pub access_token: Option<String>,
 }
 
 /// 读取并封装公开图片响应。
@@ -611,10 +633,11 @@ async fn respond_public_image(
     state: &AppState,
     token: &str,
     asset_id: &str,
+    access: &str,
     addr: SocketAddr,
 ) -> std::result::Result<Response, Error> {
     let proc = process(state);
-    let key = proc.public_image_key(token, asset_id, &addr.ip().to_string()).await?;
+    let key = proc.public_image_key(token, asset_id, access, &addr.ip().to_string()).await?;
     let (bytes, content_type) = proc.read_image_bytes(&key).await?;
     let mut response = Response::new(Body::from(bytes));
     *response.status_mut() = StatusCode::OK;

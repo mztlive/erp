@@ -5,8 +5,11 @@ use aes_gcm::{Aes256Gcm, KeyInit};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use erp_core::{Error, Result};
+use hmac::{Hmac, Mac};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 
+use super::idempotency::IdempotencyOperation;
 use super::limits::LINK_TOKEN_BYTES;
 
 const CIPHERTEXT_VERSION: &str = "v1";
@@ -15,6 +18,27 @@ const CIPHERTEXT_VERSION: &str = "v1";
 #[derive(Clone)]
 pub struct LinkTokenCrypto {
     key: [u8; 32],
+    fingerprint_key: [u8; 32],
+}
+
+/// 含敏感字段请求的用途隔离指纹；只能由应用密钥编解码器生成。
+#[derive(Clone)]
+pub struct SelectionRequestFingerprint(String);
+
+impl SelectionRequestFingerprint {
+    /// 返回可持久化的 HMAC 指纹，不包含请求明文或无密钥密码摘要。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回指纹的版本标记与十六进制 HMAC。
+    ///
+    /// # 错误
+    /// 无。
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 impl LinkTokenCrypto {
@@ -29,7 +53,37 @@ impl LinkTokenCrypto {
     /// # 错误
     /// 无。
     pub fn from_secret(secret: &[u8]) -> Self {
-        Self { key: derive_key(secret, b"erp-sales-selection-link-token-v1") }
+        Self {
+            key: derive_key(secret, b"erp-sales-selection-link-token-v1"),
+            fingerprint_key: derive_key(secret, b"erp-sales-selection-request-fingerprint-v1"),
+        }
+    }
+
+    /// 为完整敏感请求生成稳定幂等指纹。
+    ///
+    /// # 参数
+    /// `operation` 为幂等操作域，`payload` 为包含原密码的完整请求及其资源身份。
+    ///
+    /// # 返回
+    /// 返回应用密钥与操作域共同绑定的 HMAC-SHA256 指纹。
+    ///
+    /// # 错误
+    /// 请求编码或 HMAC 初始化失败时拒绝，不包含敏感载荷。
+    pub fn request_fingerprint<T: Serialize>(
+        &self,
+        operation: IdempotencyOperation,
+        payload: &T,
+    ) -> Result<SelectionRequestFingerprint> {
+        let encoded = serde_json::to_vec(payload).map_err(|_| Error::from("选品请求指纹编码失败"))?;
+        let mut mac = <Hmac<Sha256> as hmac::KeyInit>::new_from_slice(&self.fingerprint_key)
+            .map_err(|_| Error::from("选品请求指纹初始化失败"))?;
+        mac.update(operation.as_str().as_bytes());
+        mac.update(&[0]);
+        mac.update(&encoded);
+        Ok(SelectionRequestFingerprint(format!(
+            "hmac-sha256-v1:{}",
+            hex::encode(mac.finalize().into_bytes())
+        )))
     }
 
     /// 生成至少 128 位安全随机令牌、查找哈希与密文。
@@ -86,7 +140,7 @@ impl LinkTokenCrypto {
     ///
     /// # 错误
     /// 加密失败时返回内部错误。
-    fn encrypt(&self, token: &str) -> Result<String> {
+    pub(super) fn encrypt(&self, token: &str) -> Result<String> {
         let cipher =
             Aes256Gcm::new_from_slice(&self.key).map_err(|_| Error::from("选品链接加密初始化失败"))?;
         let nonce = Nonce::<Aes256Gcm>::try_generate().map_err(|_| Error::from("选品链接随机数生成失败"))?;
@@ -153,7 +207,10 @@ fn random_bytes() -> [u8; LINK_TOKEN_BYTES] {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::{LinkTokenCrypto, token_hash};
+    use crate::entity::sales_selection::IdempotencyOperation;
 
     #[test]
     fn issue_round_trip_and_hash_lookup() {
@@ -163,5 +220,24 @@ mod tests {
         assert_eq!(hash, token_hash(&token));
         assert_eq!(crypto.decrypt(&ciphertext).unwrap(), token);
         assert!(!ciphertext.contains(&token));
+    }
+
+    #[test]
+    fn sensitive_fingerprint_is_stable_and_separates_key_operation_and_payload() {
+        let crypto = LinkTokenCrypto::from_secret(b"application-secret-one");
+        let other_crypto = LinkTokenCrypto::from_secret(b"application-secret-two");
+        let payload = json!({"access_password": "selection-password", "idempotency_key": "same-key"});
+        let operation = IdempotencyOperation::Create;
+        let first = crypto.request_fingerprint(operation, &payload).unwrap();
+        let replay = crypto.request_fingerprint(operation, &payload).unwrap();
+        assert_eq!(first.as_str(), replay.as_str());
+        assert!(first.as_str().starts_with("hmac-sha256-v1:"));
+        assert_ne!(first.as_str(), other_crypto.request_fingerprint(operation, &payload).unwrap().as_str());
+        assert_ne!(
+            first.as_str(),
+            crypto.request_fingerprint(IdempotencyOperation::SetAccessPassword, &payload).unwrap().as_str()
+        );
+        let changed = json!({"access_password": "changed-password", "idempotency_key": "same-key"});
+        assert_ne!(first.as_str(), crypto.request_fingerprint(operation, &changed).unwrap().as_str());
     }
 }

@@ -112,16 +112,29 @@ fn task_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 一册一份会话。
+/// 一册每人一份会话，提货券代码全局唯一。
 fn session_indexes() -> Vec<IndexModel> {
-    vec![unique_index("uk_sales_selection_sessions_booklet", doc! { "booklet_id": 1 })]
+    vec![
+        unique_index(
+            "uk_sales_selection_sessions_participant",
+            doc! { "booklet_id": 1, "participant_id": 1 },
+        ),
+        unique_partial_index(
+            "uk_sales_selection_sessions_voucher_hash",
+            doc! { "voucher_code_hash": 1 },
+            doc! { "voucher_code_hash": { "$type": "string" } },
+        ),
+    ]
 }
 
 /// 方案编号、一册一份方案、责任范围与客户查询。
 fn proposal_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_sales_selection_proposals_no", doc! { "proposal_no": 1 }),
-        unique_index("uk_sales_selection_proposals_booklet", doc! { "booklet_id": 1 }),
+        unique_index(
+            "uk_sales_selection_proposals_participant",
+            doc! { "booklet_id": 1, "participant_id": 1 },
+        ),
         named_index("idx_sales_selection_proposals_customer", doc! { "customer_id": 1, "submitted_at": -1 }),
         named_index(
             "idx_sales_selection_proposals_owner_org",
@@ -211,5 +224,24 @@ mod tests {
         let options = indexes[0].options.as_ref().unwrap();
         assert_eq!(options.expire_after, Some(std::time::Duration::ZERO));
         assert_ne!(options.unique, Some(true));
+    }
+    #[test]
+    fn participant_indexes_allow_independent_voucher_sessions_and_proposals() {
+        for indexes in [session_indexes(), proposal_indexes()] {
+            let participant = indexes
+                .iter()
+                .find(|index| index.keys == doc! { "booklet_id": 1, "participant_id": 1 })
+                .unwrap();
+            assert_eq!(participant.options.as_ref().unwrap().unique, Some(true));
+            assert!(!indexes.iter().any(|index| index.keys == doc! { "booklet_id": 1 }));
+        }
+        let sessions = session_indexes();
+        let code = sessions.iter().find(|index| index.keys == doc! { "voucher_code_hash": 1 }).unwrap();
+        let options = code.options.as_ref().unwrap();
+        assert_eq!(options.unique, Some(true));
+        assert_eq!(
+            options.partial_filter_expression,
+            Some(doc! { "voucher_code_hash": { "$type": "string" } })
+        );
     }
 }

@@ -66,11 +66,36 @@ impl SalesSelectionService {
         let (_token, token_hash, cipher) =
             crypto.issue().map_err(|error| Error::Internal(error.to_string()))?;
         booklet.publish(token_hash, cipher, Instant::now(), actor_id)?;
-        let session = SalesSelectionSession::new(
-            SalesSelectionSessionId::new(next_id()),
-            SalesSelectionBookletId::new(booklet.base.id.clone()),
-        );
-        self.commit_publish_tx(booklet, session, items, actor_id, key, hash).await
+        let sessions = self.publish_sessions(&booklet, crypto)?;
+        self.commit_publish_tx(booklet, sessions, items, actor_id, key, hash).await
+    }
+
+    fn publish_sessions(
+        &self,
+        book: &crate::entity::sales_selection::SalesSelectionBooklet,
+        crypto: &LinkTokenCrypto,
+    ) -> Result<Vec<SalesSelectionSession>> {
+        if book.access_password_hash.is_none() {
+            return Err(Error::ValidationError("请先设置选品访问密码".into()));
+        }
+        let book_id = SalesSelectionBookletId::new(book.base.id.clone());
+        if book.submit_mode != crate::entity::sales_selection::SubmitMode::PickupVoucher {
+            return Ok(vec![SalesSelectionSession::new(SalesSelectionSessionId::new(next_id()), book_id)]);
+        }
+        (0..book.voucher_count.unwrap_or(0))
+            .map(|_| {
+                let id = next_id();
+                let (_, hash, cipher) = crypto.issue()?;
+                SalesSelectionSession::new_participant(
+                    SalesSelectionSessionId::new(id.clone()),
+                    book_id.clone(),
+                    id,
+                    hash,
+                    cipher,
+                )
+                .map_err(Error::from)
+            })
+            .collect()
     }
 
     /// 事务内提交发布写入。
@@ -94,7 +119,7 @@ impl SalesSelectionService {
     async fn commit_publish_tx(
         &self,
         booklet: crate::entity::sales_selection::SalesSelectionBooklet,
-        session: SalesSelectionSession,
+        sessions: Vec<SalesSelectionSession>,
         items: Vec<crate::entity::sales_selection::SalesSelectionDisplayItem>,
         actor_id: &str,
         key: String,
@@ -106,13 +131,15 @@ impl SalesSelectionService {
         let token_version = booklet.link_token_version;
         let booklet_id = SalesSelectionBookletId::new(booklet.base.id.clone());
         let mut booklet_tx = booklet;
-        let session_tx = session;
+        let sessions_tx = sessions;
         client
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     let executor: &mut dyn Executor = executor;
                     db.sales_selection_booklets().update(&mut booklet_tx, executor).await?;
-                    db.sales_selection_sessions().create(&session_tx, executor).await?;
+                    for session in &sessions_tx {
+                        db.sales_selection_sessions().create(session, executor).await?;
+                    }
                     let view = Self::booklet_view(&booklet_tx, &items, None, None);
                     let record = Self::idempotency_record(IdempotencyStoreInput {
                         operation: IdempotencyOperation::Publish,

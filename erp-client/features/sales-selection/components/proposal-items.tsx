@@ -83,7 +83,7 @@ function LineValues({
 
 export function ProposalItems({ proposal }: { proposal: ProposalView }) {
     const isPackage = proposal.form === "PACKAGE"
-    const showQuantity = proposal.submit_mode === "BY_QUANTITY"
+    const showQuantity = proposal.submit_mode !== "MALL_REDEEM"
     const title = isPackage ? "套餐清单" : "商品清单"
     const linesByItem = new Map<string, SkuLine[]>()
     for (const line of proposal.sku_lines) {

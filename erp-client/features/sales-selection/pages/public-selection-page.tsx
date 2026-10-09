@@ -37,6 +37,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { subtractFixed } from "@/lib/fixed-decimal"
 import { publicImageUrl, savePublicSession, submitPublicSession } from "../api"
 import { usePublicSelectionQuery, salesSelectionKeys } from "../queries"
 import {
@@ -47,13 +48,36 @@ import {
     type Pick,
 } from "../lib/public-flow"
 import { quantityStringSchema } from "../lib/validation"
-import type { PublicDisplayItemView, PublicPageView } from "../types"
+import type {
+    PublicDisplayItemView,
+    PublicPageView,
+    SelectionRecipient,
+} from "../types"
 import { PublicSelectionReceipt } from "../components/public-selection-receipt"
+import {
+    PublicSelectionAccess,
+    useSelectionAccess,
+} from "../components/public-selection-access"
+import {
+    SelectionRecipientFields,
+    useSelectionRecipientForm,
+} from "../components/selection-recipient-fields"
+import { lineAmount, sumAmounts, compareMoney } from "../lib/money"
 
 /** 读取公开选品事实，明确区分加载、结束、回执和可编辑状态。 */
 export const PublicSelectionPage = ({ token }: { token: string }) => {
-    const query = usePublicSelectionQuery(token)
+    const access = useSelectionAccess(token)
+    const query = usePublicSelectionQuery(
+        token,
+        access.accessToken,
+        access.ready,
+    )
     const page = query.data
+    const accessToken = access.accessToken
+    const lockAccess = access.lock
+    React.useEffect(() => {
+        if (page?.kind === "LOCKED" && accessToken) lockAccess()
+    }, [page?.kind, accessToken, lockAccess])
 
     if (query.isError && (!page || requestFailure(query.error) === "ended"))
         return (
@@ -91,6 +115,13 @@ export const PublicSelectionPage = ({ token }: { token: string }) => {
             </main>
         )
 
+    if (page.kind === "LOCKED")
+        return (
+            <PublicSelectionAccess
+                voucherRequired={page.voucher_required}
+                access={access}
+            />
+        )
     if (page.kind === "ENDED") return <Ended />
     if (page.kind === "RECEIPT" && page.receipt)
         return (
@@ -98,13 +129,17 @@ export const PublicSelectionPage = ({ token }: { token: string }) => {
                 token={token}
                 page={page}
                 receipt={page.receipt}
+                accessToken={access.accessToken}
+                onLock={access.lock}
             />
         )
 
     return (
         <SelectionForm
-            key={token}
+            key={`${token}:${access.accessToken}`}
             token={token}
+            accessToken={access.accessToken}
+            onLock={access.lock}
             page={page}
             refresh={async () => (await query.refetch()).data}
         />
@@ -195,7 +230,7 @@ const ChoiceSummary = ({ page }: { page: PublicPageView }) => {
                     尚未选择商品
                 </p>
             )}
-            {page.submit_mode === "BY_QUANTITY" && total != null && (
+            {page.submit_mode !== "MALL_REDEEM" && total != null && (
                 <div className="flex items-center justify-between pt-2 border-t border-grid">
                     <span className="text-xs font-medium text-muted-foreground">
                         方案合计金额（含税）
@@ -261,14 +296,8 @@ interface FloorSection {
     items: PublicDisplayItemView[]
 }
 
-/** 安全地格式化分为元字符串，不调用浮点转换函数。 */
-const formatCents = (cents: number): string => {
-    const whole = Math.floor(cents / 100)
-    const frac = cents % 100
-    return `${whole}.${frac < 10 ? "0" : ""}${frac}`
-}
-
 interface SelectionReviewCenterProps {
+    accessToken: string
     token: string
     page: PublicPageView
     locked: boolean
@@ -276,13 +305,19 @@ interface SelectionReviewCenterProps {
     saving: boolean
     conflict: boolean
     dirty: boolean
+    message: string
+    request: PendingSelectionRequest | null
+    reconciling: boolean
+    onRecover: () => void
+    recipientForm: ReturnType<typeof useSelectionRecipientForm>
     onBack: () => void
-    onSubmit: () => void
+    onSubmit: (recipient?: SelectionRecipient) => void
     onRemoveItem: (itemId: string) => void
 }
 
 /** 全屏沉浸式·选品方案核对与确认中心（针对海量/几百款商品设计，提供高管KPI看板、已选内实时搜索、品类折叠手风琴与明细微调）。 */
 const SelectionReviewCenter = ({
+    accessToken,
     token,
     page,
     locked,
@@ -290,10 +325,22 @@ const SelectionReviewCenter = ({
     saving,
     conflict,
     dirty,
+    message,
+    request,
+    reconciling,
+    onRecover,
+    recipientForm,
     onBack,
     onSubmit,
     onRemoveItem,
 }: SelectionReviewCenterProps) => {
+    const voucher = page.submit_mode === "PICKUP_VOUCHER"
+    const overBudget = Boolean(
+        voucher &&
+        page.per_person_budget &&
+        page.total_amount &&
+        compareMoney(page.total_amount, page.per_person_budget) > 0,
+    )
     const mall = page.submit_mode === "MALL_REDEEM"
     const [searchQuery, setSearchQuery] = React.useState("")
     const [activeCategory, setActiveCategory] = React.useState<string>("ALL")
@@ -328,7 +375,7 @@ const SelectionReviewCenter = ({
                     choice: (typeof page.choices)[number]
                     item: PublicDisplayItemView | undefined
                 }>
-                subtotalCents: number
+                subtotal: string
             }
         >()
 
@@ -339,16 +386,14 @@ const SelectionReviewCenter = ({
             const entry = map.get(cat) ?? {
                 category: cat,
                 items: [],
-                subtotalCents: 0,
+                subtotal: "0.00",
             }
             entry.items.push({ choice, item })
-            if (choice.line_amount) {
-                const [intStr, decStr = ""] = choice.line_amount.split(".")
-                const intVal = Number.parseInt(intStr, 10) || 0
-                const decVal =
-                    Number.parseInt((decStr + "00").slice(0, 2), 10) || 0
-                entry.subtotalCents += intVal * 100 + decVal
-            }
+            if (choice.line_amount)
+                entry.subtotal = sumAmounts([
+                    entry.subtotal,
+                    choice.line_amount,
+                ])
             map.set(cat, entry)
         }
 
@@ -408,6 +453,7 @@ const SelectionReviewCenter = ({
                 {/* 1. 顶部导航栏 */}
                 <header className="shrink-0 bg-card border-b border-border/80 px-4 py-2.5 flex items-center justify-between z-10 shadow-2xs">
                     <button
+                        id="sales-selection-public-review-back"
                         type="button"
                         onClick={onBack}
                         className="flex items-center gap-1 text-foreground hover:text-primary text-xs font-semibold py-1 px-2 rounded-lg hover:bg-muted transition-colors border-0 bg-transparent cursor-pointer"
@@ -428,6 +474,31 @@ const SelectionReviewCenter = ({
 
                 {/* 2. 中间可滚动核对区域 */}
                 <div className="flex-1 overflow-y-auto p-3.5 space-y-3.5">
+                    {(message || request) && (
+                        <section
+                            role="status"
+                            className="space-y-2 rounded-xl border border-warning-border bg-warning-soft p-3 text-xs text-warning-soft-foreground"
+                        >
+                            <p>
+                                {message ||
+                                    "上次操作结果待核对，请先恢复本次请求。"}
+                            </p>
+                            {request &&
+                                ((!submitting && !saving) || reconciling) && (
+                                    <LoadingButton
+                                        id="sales-selection-public-reconcile"
+                                        size="sm"
+                                        loading={
+                                            (submitting || saving) &&
+                                            reconciling
+                                        }
+                                        onClick={onRecover}
+                                    >
+                                        核对并恢复本次操作
+                                    </LoadingButton>
+                                )}
+                        </section>
+                    )}
                     {/* 方案 KPI 看板 */}
                     <div className="rounded-2xl bg-card p-3.5 border border-border/80 shadow-2xs space-y-3">
                         <div className="flex items-center justify-between">
@@ -490,6 +561,7 @@ const SelectionReviewCenter = ({
                         <div className="relative">
                             <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
                             <Input
+                                id="sales-selection-public-review-search"
                                 type="text"
                                 placeholder="在已选商品中检索名称或规格..."
                                 value={searchQuery}
@@ -498,6 +570,7 @@ const SelectionReviewCenter = ({
                             />
                             {searchQuery && (
                                 <button
+                                    id="sales-selection-public-review-search-clear"
                                     type="button"
                                     onClick={() => setSearchQuery("")}
                                     className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-muted-foreground border-0 bg-transparent cursor-pointer"
@@ -511,6 +584,7 @@ const SelectionReviewCenter = ({
                         <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar py-0.5">
                             <div className="flex items-center gap-1 shrink-0">
                                 <button
+                                    id="sales-selection-public-review-category-all"
                                     type="button"
                                     onClick={() => setActiveCategory("ALL")}
                                     className={cn(
@@ -524,6 +598,7 @@ const SelectionReviewCenter = ({
                                 </button>
                                 {groupedChoices.map((g) => (
                                     <button
+                                        id={`sales-selection-public-review-category-${toAutomationIdSegment(g.category)}`}
                                         key={g.category}
                                         type="button"
                                         onClick={() =>
@@ -543,6 +618,7 @@ const SelectionReviewCenter = ({
 
                             <div className="flex items-center gap-1 shrink-0 text-2xs text-muted-foreground">
                                 <button
+                                    id="sales-selection-public-review-expand-all"
                                     type="button"
                                     onClick={expandAll}
                                     className="hover:text-primary px-1 border-0 bg-transparent cursor-pointer font-medium"
@@ -551,6 +627,7 @@ const SelectionReviewCenter = ({
                                 </button>
                                 <span className="text-muted-foreground">|</span>
                                 <button
+                                    id="sales-selection-public-review-collapse-all"
                                     type="button"
                                     onClick={collapseAll}
                                     className="hover:text-primary px-1 border-0 bg-transparent cursor-pointer font-medium"
@@ -565,9 +642,7 @@ const SelectionReviewCenter = ({
                     <div className="space-y-2.5">
                         {filteredGroups.map((group) => {
                             const isGroupCollapsed = !!collapsed[group.category]
-                            const groupSubtotal = formatCents(
-                                group.subtotalCents,
-                            )
+                            const groupSubtotal = group.subtotal
 
                             return (
                                 <div
@@ -576,6 +651,7 @@ const SelectionReviewCenter = ({
                                 >
                                     {/* 分类栏标头（点击折叠/展开） */}
                                     <button
+                                        id={`sales-selection-public-review-group-${toAutomationIdSegment(group.category)}`}
                                         type="button"
                                         onClick={() =>
                                             toggleCollapse(group.category)
@@ -595,11 +671,13 @@ const SelectionReviewCenter = ({
                                                 {group.items.length} 款
                                             </span>
                                         </div>
-                                        {!mall && group.subtotalCents > 0 && (
-                                            <span className="text-xs font-semibold text-primary">
-                                                小计 ¥ {groupSubtotal}
-                                            </span>
-                                        )}
+                                        {!mall &&
+                                            compareMoney(group.subtotal, "0") >
+                                                0 && (
+                                                <span className="text-xs font-semibold text-primary">
+                                                    小计 ¥ {groupSubtotal}
+                                                </span>
+                                            )}
                                     </button>
 
                                     {/* 分类内商品明细 */}
@@ -611,6 +689,7 @@ const SelectionReviewCenter = ({
                                                     const img = publicImageUrl(
                                                         token,
                                                         item.cover_path,
+                                                        accessToken,
                                                     )
                                                     return (
                                                         <div
@@ -776,6 +855,12 @@ const SelectionReviewCenter = ({
                         )}
                     </div>
 
+                    {voucher && (
+                        <SelectionRecipientFields
+                            form={recipientForm}
+                            disabled={locked}
+                        />
+                    )}
                     {/* 业务提醒与锁定说明 */}
                     <div className="rounded-2xl bg-warning-soft/70 p-3 border border-warning-border/60 text-warning-soft-foreground space-y-1">
                         <div className="flex items-center gap-1.5 text-xs font-bold">
@@ -783,7 +868,7 @@ const SelectionReviewCenter = ({
                             <span>确认提交须知</span>
                         </div>
                         <p className="text-tiny leading-relaxed text-warning-soft-foreground/90">
-                            确认提交后系统将锁定会话并生成唯一的正式销售方案编号，专属销售团队将按此方案推进合同签署、配货与开票。
+                            确认提交后将保存选品结果并生成销售方案。如需调整，请联系销售。
                         </p>
                         {page.notices.map((n) => (
                             <p
@@ -824,6 +909,7 @@ const SelectionReviewCenter = ({
 
                         <div className="flex items-center gap-2">
                             <Button
+                                id="sales-selection-public-review-modify"
                                 variant="outline"
                                 className="rounded-full"
                                 onClick={onBack}
@@ -833,9 +919,15 @@ const SelectionReviewCenter = ({
                             <LoadingButton
                                 id="sales-selection-public-submit"
                                 className="rounded-full"
-                                disabled={locked || conflict || dirty}
+                                disabled={
+                                    locked || conflict || dirty || overBudget
+                                }
                                 loading={submitting}
-                                onClick={onSubmit}
+                                onClick={() =>
+                                    voucher
+                                        ? void recipientForm.handleSubmit()
+                                        : onSubmit()
+                                }
                             >
                                 确认并提交选品
                             </LoadingButton>
@@ -849,16 +941,20 @@ const SelectionReviewCenter = ({
 
 /** 方案 2：经典双栏联动楼层系统（固定视口高，右侧瀑布流滚动实时带动左侧菜单更新位置）。 */
 const SelectionForm = ({
+    accessToken,
+    onLock,
     token,
     page,
     refresh,
 }: {
+    accessToken: string
+    onLock: () => void
     token: string
     page: PublicPageView
     refresh: () => Promise<PublicPageView | undefined>
 }) => {
     const client = useQueryClient()
-    const recoveryKey = `sales-selection-pending:${token}`
+    const recoveryKey = `sales-selection-pending:${token}:${accessToken}`
     const [request, setRequest] =
         React.useState<PendingSelectionRequest | null>(() =>
             readPendingRequest(recoveryKey),
@@ -872,7 +968,13 @@ const SelectionForm = ({
     const picks = useStore(form.store, (state) => state.values.picks)
     const [version, setVersion] = React.useState(page.session_version ?? 1)
     const [confirmed, setConfirmed] = React.useState<PublicPageView | null>(
-        null,
+        request?.kind === "submit" ? page : null,
+    )
+    const recipientForm = useSelectionRecipientForm(
+        (recipient) => submit(recipient),
+        request?.kind === "submit"
+            ? request.input.recipient
+            : (page.recipient ?? undefined),
     )
     const [latest, setLatest] = React.useState<PublicPageView | null>(null)
     const [conflict, setConflict] = React.useState(false)
@@ -881,6 +983,34 @@ const SelectionForm = ({
     const [message, setMessage] = React.useState("")
     const [reconciling, setReconciling] = React.useState(false)
     const mall = page.submit_mode === "MALL_REDEEM"
+    const voucher = page.submit_mode === "PICKUP_VOUCHER"
+    const selectionTotal = React.useMemo(() => {
+        if (mall) return null
+        try {
+            return sumAmounts(
+                page.items.flatMap((item) =>
+                    picks[item.item_id]?.selected
+                        ? [lineAmount(item.price, picks[item.item_id].quantity)]
+                        : [],
+                ),
+            )
+        } catch {
+            return null
+        }
+    }, [mall, page.items, picks])
+    const overBudget = Boolean(
+        voucher &&
+        page.per_person_budget &&
+        selectionTotal &&
+        compareMoney(selectionTotal, page.per_person_budget) > 0,
+    )
+    const remainingBudget =
+        voucher && page.per_person_budget && selectionTotal
+            ? subtractFixed(page.per_person_budget, selectionTotal, {
+                  maxScale: 2,
+                  outputScale: 2,
+              })
+            : null
 
     // 交互状态
     const [searchQuery, setSearchQuery] = React.useState("")
@@ -1035,11 +1165,14 @@ const SelectionForm = ({
         meta: { suppressErrorToast: true },
         mutationFn: (operation: PendingSelectionRequest) =>
             operation.kind === "save"
-                ? savePublicSession(token, operation.input)
-                : submitPublicSession(token, operation.input),
+                ? savePublicSession(token, accessToken, operation.input)
+                : submitPublicSession(token, accessToken, operation.input),
         onSuccess: (saved, operation) => {
             setReconciling(false)
-            client.setQueryData(salesSelectionKeys.public(token), saved)
+            client.setQueryData(
+                salesSelectionKeys.public(token, accessToken),
+                saved,
+            )
             keepRequest(null)
             setMessage(operation.kind === "save" ? "选择已保存" : "选品已提交")
             setVersion(saved.session_version ?? version)
@@ -1053,12 +1186,13 @@ const SelectionForm = ({
                     : null,
             )
         },
-        onError: async (error) => {
+        onError: async (error, operation) => {
             setReconciling(false)
-            setConfirmed(null)
             const kind = requestFailure(error)
             if (kind === "ended") {
                 keepRequest(null)
+                const current = await refresh()
+                if (current?.kind === "LOCKED") return
                 setEnded(true)
                 return
             }
@@ -1070,17 +1204,23 @@ const SelectionForm = ({
             }
             keepRequest(null)
             if (kind === "conflict") {
+                setConfirmed(null)
                 setConflict(true)
                 setMessage(
                     "其他页面已修改选择。你的本地选择已保留，请核对最新清单后继续。",
                 )
                 setLatest((await refresh()) ?? null)
-            } else
+            } else {
+                if (operation.kind === "save") {
+                    setConfirmed(null)
+                    setDirty(true)
+                }
                 setMessage(
                     error instanceof Error
                         ? error.message
                         : "保存未成功，请检查份数后重试。",
                 )
+            }
         },
     })
 
@@ -1119,6 +1259,12 @@ const SelectionForm = ({
                     ? {}
                     : { quantity: Number.parseInt(pick.quantity, 10) }),
             })
+        }
+        if (overBudget) {
+            setMessage(
+                `已选金额超过每人额度 ¥${page.per_person_budget}，请调整商品或份数。`,
+            )
+            return
         }
         if (confirm && !choices.length) {
             setMessage("请至少选择一项商品。")
@@ -1181,13 +1327,14 @@ const SelectionForm = ({
         mutation.mutate(next)
     }
 
-    const submit = () => {
+    function submit(recipient?: SelectionRecipient) {
         if (!confirmed || locked || conflict || dirty) return
         const next: PendingSelectionRequest = {
             kind: "submit",
             input: {
                 idempotencyKey: crypto.randomUUID(),
                 expectedSessionVersion: confirmed.session_version!,
+                recipient,
             },
         }
         keepRequest(next)
@@ -1199,7 +1346,7 @@ const SelectionForm = ({
     const renderCard = (item: PublicDisplayItemView) => {
         const pick = picks[item.item_id]
         const isSelected = pick?.selected ?? false
-        const image = publicImageUrl(token, item.cover_path)
+        const image = publicImageUrl(token, item.cover_path, accessToken)
         const [intPart, decPart] = item.price.split(".")
 
         return (
@@ -1214,6 +1361,7 @@ const SelectionForm = ({
             >
                 {/* 左侧: 1:1 方形图片/占位 */}
                 <button
+                    id={`sales-selection-public-image-${toAutomationIdSegment(item.item_id)}`}
                     type="button"
                     aria-label={`查看${item.name}详情`}
                     className="relative size-20 sm:size-22 rounded-xl overflow-hidden bg-background shrink-0 text-left block cursor-pointer border border-grid p-0"
@@ -1257,6 +1405,7 @@ const SelectionForm = ({
                 <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
                     <div>
                         <button
+                            id={`sales-selection-public-name-${toAutomationIdSegment(item.item_id)}`}
                             type="button"
                             onClick={() => setDetailItem(item)}
                             className="text-left w-full text-xs sm:text-sm font-semibold text-foreground leading-snug line-clamp-2 hover:text-primary transition-colors p-0 border-0 bg-transparent cursor-pointer"
@@ -1302,6 +1451,7 @@ const SelectionForm = ({
                             {isSelected && !mall ? (
                                 <div className="flex items-center gap-0.5 rounded-lg bg-muted/80 p-0.5 border border-border/80">
                                     <button
+                                        id={`sales-selection-public-decrease-${toAutomationIdSegment(item.item_id)}`}
                                         type="button"
                                         className="flex h-5 w-5 items-center justify-center rounded bg-card text-foreground shadow-2xs hover:bg-background disabled:opacity-40"
                                         disabled={
@@ -1346,6 +1496,7 @@ const SelectionForm = ({
                                         onClick={(e) => e.stopPropagation()}
                                     />
                                     <button
+                                        id={`sales-selection-public-increase-${toAutomationIdSegment(item.item_id)}`}
                                         type="button"
                                         className="flex h-5 w-5 items-center justify-center rounded bg-card text-foreground shadow-2xs hover:bg-background"
                                         disabled={locked || conflict}
@@ -1431,20 +1582,60 @@ const SelectionForm = ({
                                         |
                                     </span>
                                     <span>
-                                        {mall ? "商城兑换" : "按份采购"}
+                                        {mall
+                                            ? "商城兑换"
+                                            : voucher
+                                              ? "提货券"
+                                              : "按份采购"}
                                     </span>
                                 </p>
                             </div>
                         </div>
                         <Badge variant="info" className="shrink-0 rounded-full">
-                            {mall ? "意向可选库" : "批量采购"}
+                            {mall
+                                ? "意向可选库"
+                                : voucher
+                                  ? "个人提货"
+                                  : "批量采购"}
                         </Badge>
                     </div>
 
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                        {voucher && (
+                            <p
+                                id="sales-selection-public-budget"
+                                className={cn(
+                                    "text-xs",
+                                    overBudget
+                                        ? "text-destructive"
+                                        : "text-muted-foreground",
+                                )}
+                            >
+                                每人额度 ¥{page.per_person_budget} · 已选 ¥
+                                {selectionTotal ?? "—"} ·{" "}
+                                <span id="sales-selection-public-budget-remaining">
+                                    剩余额度 ¥{remainingBudget ?? "—"}
+                                </span>
+                                {overBudget ? " · 已超额" : ""}
+                            </p>
+                        )}
+                        <Button
+                            id="sales-selection-public-lock"
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            disabled={mutation.isPending}
+                            onClick={onLock}
+                            className="ml-auto"
+                        >
+                            {voucher ? "更换提货码" : "退出选品"}
+                        </Button>
+                    </div>
                     {/* 搜索框 */}
                     <div className="relative mt-1.5">
                         <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
                         <Input
+                            id="sales-selection-public-search"
                             type="text"
                             placeholder="搜索几百款商品、规格或名称..."
                             value={searchQuery}
@@ -1453,6 +1644,7 @@ const SelectionForm = ({
                         />
                         {searchQuery && (
                             <button
+                                id="sales-selection-public-search-clear"
                                 type="button"
                                 onClick={() => setSearchQuery("")}
                                 className="absolute right-2.5 top-2 text-muted-foreground hover:text-muted-foreground"
@@ -1479,7 +1671,7 @@ const SelectionForm = ({
                 )}
 
                 {/* 状态与未知结果恢复提示 */}
-                {(message || request) && (
+                {(message || request) && !confirmed && (
                     <div
                         role="status"
                         className="shrink-0 mx-3 my-2 rounded-xl border border-warning-border bg-warning-soft p-2.5 text-xs text-warning-soft-foreground shadow-2xs z-10"
@@ -1585,6 +1777,7 @@ const SelectionForm = ({
 
                             return (
                                 <button
+                                    id={`sales-selection-public-section-${toAutomationIdSegment(section.id)}`}
                                     key={section.id}
                                     ref={(el) => {
                                         leftTabRefs.current[section.id] = el
@@ -1686,6 +1879,7 @@ const SelectionForm = ({
                     <div className="flex items-center justify-between gap-3">
                         {/* 左侧：点击呼出已选清单 */}
                         <button
+                            id="sales-selection-public-open-cart"
                             type="button"
                             className="flex items-center gap-2.5 text-left cursor-pointer select-none active:opacity-80 transition-opacity border-0 bg-transparent p-0"
                             onClick={() => setCartDrawerOpen(true)}
@@ -1741,7 +1935,7 @@ const SelectionForm = ({
                                 }
                                 variant="outline"
                                 className="rounded-full"
-                                disabled={locked || conflict}
+                                disabled={locked || conflict || overBudget}
                                 onClick={() => persist(false)}
                             >
                                 保存选择
@@ -1756,7 +1950,7 @@ const SelectionForm = ({
                                         mutation.variables.confirm
                                     }
                                     className="rounded-full"
-                                    disabled={locked || conflict}
+                                    disabled={locked || conflict || overBudget}
                                     onClick={() => persist(true)}
                                 >
                                     核对并提交
@@ -1771,6 +1965,7 @@ const SelectionForm = ({
             {confirmed && (
                 <SelectionReviewCenter
                     token={token}
+                    accessToken={accessToken}
                     page={confirmed}
                     locked={locked}
                     submitting={
@@ -1783,6 +1978,16 @@ const SelectionForm = ({
                     }
                     conflict={conflict}
                     dirty={dirty}
+                    message={message}
+                    request={request}
+                    reconciling={reconciling}
+                    recipientForm={recipientForm}
+                    onRecover={() => {
+                        if (request) {
+                            setReconciling(true)
+                            mutation.mutate(request)
+                        }
+                    }}
                     onBack={() => setConfirmed(null)}
                     onSubmit={submit}
                     onRemoveItem={removeItemInReview}
@@ -1796,7 +2001,10 @@ const SelectionForm = ({
                     if (!open) setDetailItem(null)
                 }}
             >
-                <DialogContent className="max-w-lg rounded-3xl p-5 max-h-[85vh] overflow-y-auto space-y-4">
+                <DialogContent
+                    closeButtonId="sales-selection-public-item-close"
+                    className="max-w-lg rounded-3xl p-5 max-h-[85vh] overflow-y-auto space-y-4"
+                >
                     {detailItem && (
                         <>
                             <DialogHeader>
@@ -1810,12 +2018,14 @@ const SelectionForm = ({
                                 {publicImageUrl(
                                     token,
                                     detailItem.cover_path,
+                                    accessToken,
                                 ) ? (
                                     // eslint-disable-next-line @next/next/no-img-element
                                     <img
                                         src={publicImageUrl(
                                             token,
                                             detailItem.cover_path,
+                                            accessToken,
                                         )}
                                         alt=""
                                         className="h-full w-full object-cover"
@@ -1902,6 +2112,7 @@ const SelectionForm = ({
 
                             <div className="pt-2">
                                 <Button
+                                    id="sales-selection-public-item-toggle"
                                     size="lg"
                                     className="w-full rounded-2xl"
                                     onClick={() => {
@@ -1925,7 +2136,10 @@ const SelectionForm = ({
 
             {/* 6. 已选清单抽屉 (Cart Sheet) */}
             <Dialog open={cartDrawerOpen} onOpenChange={setCartDrawerOpen}>
-                <DialogContent className="max-w-lg rounded-3xl p-5 max-h-[75vh] flex flex-col">
+                <DialogContent
+                    closeButtonId="sales-selection-public-cart-close"
+                    className="max-w-lg rounded-3xl p-5 max-h-[75vh] flex flex-col"
+                >
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             <ShoppingBag className="h-5 w-5 text-primary" />
@@ -1958,6 +2172,7 @@ const SelectionForm = ({
                                                 </span>
                                             )}
                                             <Button
+                                                id={`sales-selection-public-cart-remove-${toAutomationIdSegment(item.item_id)}`}
                                                 variant="ghost"
                                                 size="sm"
                                                 onClick={() =>
@@ -1981,6 +2196,7 @@ const SelectionForm = ({
 
                     <div className="pt-2 border-t border-grid">
                         <Button
+                            id="sales-selection-public-cart-finish"
                             className="w-full rounded-full"
                             onClick={() => setCartDrawerOpen(false)}
                         >

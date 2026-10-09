@@ -97,6 +97,9 @@ export const BookCreateDialog = ({
             business_org_unit_id: "",
             selection_form: "SINGLE_SKU",
             submit_mode: "BY_QUANTITY",
+            access_password: "",
+            per_person_budget: "",
+            voucher_count: "1",
             source_kind: sourceKind,
             sku_ids: [...initialSkuIds],
             tiers: [] as TierRuleInput[],
@@ -117,6 +120,15 @@ export const BookCreateDialog = ({
                 business_org_unit_id: parsed.business_org_unit_id.trim(),
                 selection_form: parsed.selection_form,
                 submit_mode: parsed.submit_mode,
+                access_password: parsed.access_password,
+                per_person_budget:
+                    parsed.submit_mode === "PICKUP_VOUCHER"
+                        ? parsed.per_person_budget
+                        : undefined,
+                voucher_count:
+                    parsed.submit_mode === "PICKUP_VOUCHER"
+                        ? parseInt(parsed.voucher_count, 10)
+                        : undefined,
                 source_kind: sourceKind,
                 filter:
                     sourceKind === "FILTER" ? { ...initialFilter } : undefined,
@@ -151,6 +163,9 @@ export const BookCreateDialog = ({
                 business_org_unit_id: "",
                 selection_form: "SINGLE_SKU",
                 submit_mode: "BY_QUANTITY",
+                access_password: "",
+                per_person_budget: "",
+                voucher_count: "1",
                 source_kind: sourceKind,
                 sku_ids: [...initialSkuIds],
                 tiers: [],
@@ -204,6 +219,20 @@ export const BookCreateDialog = ({
                                     </p>
                                 ) : null}
                             </div>
+                        )}
+                    />
+                    <form.AppField
+                        name="access_password"
+                        children={(field) => (
+                            <field.TextField
+                                id="sales-selection-create-access-password"
+                                label="访问密码"
+                                required
+                                type="password"
+                                autoComplete="new-password"
+                                placeholder="设置 8 到 64 位访问密码"
+                                description="访问选品册时需要填写此密码，请与选品链接分别发送。"
+                            />
                         )}
                     />
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -325,11 +354,53 @@ export const BookCreateDialog = ({
                                             value: "MALL_REDEEM",
                                             label: "商城兑换",
                                         },
+                                        {
+                                            value: "PICKUP_VOUCHER",
+                                            label: "提货券",
+                                        },
                                     ]}
                                 />
                             )}
                         />
                     </div>
+                    <form.Subscribe
+                        selector={(state) => state.values.submit_mode}
+                        children={(submitMode) =>
+                            submitMode === "PICKUP_VOUCHER" ? (
+                                <div className="grid gap-4 rounded-lg border bg-muted/40 p-3 sm:grid-cols-2">
+                                    <form.AppField
+                                        name="per_person_budget"
+                                        children={(field) => (
+                                            <field.TextField
+                                                id="sales-selection-create-per-person-budget"
+                                                label="每人额度（元）"
+                                                required
+                                                inputMode="decimal"
+                                                placeholder="如 200.00"
+                                                description="每个提货码独享此额度，选品合计不得超出。"
+                                            />
+                                        )}
+                                    />
+                                    <form.AppField
+                                        name="voucher_count"
+                                        children={(field) => (
+                                            <field.TextField
+                                                id="sales-selection-create-voucher-count"
+                                                label="提货码数量"
+                                                required
+                                                inputMode="numeric"
+                                                placeholder="1 到 1000"
+                                                description="每人一个独立提货码，每个码只能提交一次。"
+                                            />
+                                        )}
+                                    />
+                                    <p className="text-xs text-muted-foreground sm:col-span-2">
+                                        所有人共用选品册访问密码，分别填写提货码并独立选品。提交时填写收件地址，每次提交自动生成一份销售方案。
+                                    </p>
+                                </div>
+                            ) : null
+                        }
+                    />
                     <form.Subscribe
                         selector={(state) => state.values.selection_form}
                         children={(selectionForm) =>

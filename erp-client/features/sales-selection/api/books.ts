@@ -10,6 +10,8 @@ import {
     sumActionableBookCounts,
 } from "@/features/sales-selection/lib/actionable-books"
 import type {
+    BookVoucherView,
+    BookSelectionDetailView,
     BookListQuery,
     BookListResult,
     CreateBookInput,
@@ -102,6 +104,9 @@ export const createBook = async (
     input: CreateBookInput,
 ): Promise<SelectionBookDetail> =>
     apiPost<SelectionBookDetail>("/admin/sales-selection-books", {
+        access_password: input.access_password,
+        per_person_budget: input.per_person_budget,
+        voucher_count: input.voucher_count,
         customer_id: input.customer_id,
         sales_owner_user_id: input.sales_owner_user_id,
         business_org_unit_id: input.business_org_unit_id,
@@ -243,3 +248,22 @@ export const voidBook = async (
         `/admin/sales-selection-books/${bookId}/void`,
         payload,
     )
+
+export const setBookAccessPassword = (
+    bookId: string,
+    payload: {
+        expected_version: number
+        idempotency_key: string
+        access_password: string
+    },
+): Promise<SelectionBookDetail> =>
+    apiPost(
+        `/admin/sales-selection-booklets/${bookId}/access-password`,
+        payload,
+    )
+export const fetchBookVouchers = (bookId: string): Promise<BookVoucherView[]> =>
+    apiGet(`/admin/sales-selection-booklets/${bookId}/vouchers`)
+export const fetchBookSelectionDetails = (
+    bookId: string,
+): Promise<BookSelectionDetailView[]> =>
+    apiGet(`/admin/sales-selection-booklets/${bookId}/selection-details`)

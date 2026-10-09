@@ -11,6 +11,8 @@ mod pool_member;
 mod prepare_task;
 mod pricing;
 mod proposal;
+mod public_access;
+mod recipient;
 mod session;
 mod sku_snapshot;
 mod status;
@@ -34,12 +36,14 @@ pub use proposal::{
     SalesSelectionProposal, SalesSelectionProposalData, SalesSelectionProposalDisplayLine,
     SalesSelectionProposalSkuLine, build_proposal_lines,
 };
+pub use public_access::{SelectionGrant, hash_selection_password, verify_selection_password};
+pub use recipient::SelectionRecipient;
 pub use session::{SalesSelectionSession, SessionChoice};
 pub use sku_snapshot::{ImageAssetSnapshot, SkuSnapshot, SpecificationAttributeSnapshot, sort_by_sku_id};
 pub use status::BookletStatus;
 pub use tier::TierRule;
-pub use token::{LinkTokenCrypto, token_hash};
+pub use token::{LinkTokenCrypto, SelectionRequestFingerprint, token_hash};
 pub use types::{
     PoolSourceKind, PrepareKind, PrepareStage, PrepareTaskStatus, ProposalSource, SearchStopReason,
-    SelectionForm, SubmitMode, normalize_idempotency_key,
+    SelectionForm, SubmitMode, normalize_idempotency_key, validate_access_password,
 };

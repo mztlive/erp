@@ -2155,6 +2155,7 @@ version = "0.1.0"
 dependencies = [
  "aes-gcm",
  "application-core",
+ "argon2",
  "async-trait",
  "base64 0.23.1",
  "bson",
@@ -2164,6 +2165,7 @@ dependencies = [
  "erp-core",
  "futures-util",
  "hex",
+ "hmac 0.13.0",
  "id-generator",
  "mongodb",
  "persistence-core",

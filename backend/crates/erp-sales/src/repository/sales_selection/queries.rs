@@ -282,7 +282,11 @@ impl SalesSelectionSessionRepositoryExt for Repository<'_, SalesSelectionSession
         booklet_id: &str,
         executor: &mut dyn persistence_core::Executor,
     ) -> persistence_core::Result<Option<SalesSelectionSession>> {
-        self.find_one(mongodb::bson::doc! { "booklet_id": booklet_id }, executor).await
+        self.find_one(
+            mongodb::bson::doc! { "booklet_id": booklet_id, "participant_id": { "$in": ["", null] } },
+            executor,
+        )
+        .await
     }
 }
 
@@ -366,7 +370,11 @@ impl SalesSelectionProposalRepositoryExt for Repository<'_, SalesSelectionPropos
         booklet_id: &str,
         executor: &mut dyn persistence_core::Executor,
     ) -> persistence_core::Result<Option<SalesSelectionProposal>> {
-        self.find_one(mongodb::bson::doc! { "booklet_id": booklet_id }, executor).await
+        self.find_one(
+            mongodb::bson::doc! { "booklet_id": booklet_id, "participant_id": { "$in": ["", null] } },
+            executor,
+        )
+        .await
     }
 
     async fn list_by_customer(

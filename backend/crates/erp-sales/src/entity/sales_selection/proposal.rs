@@ -11,6 +11,7 @@ use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use super::display_item::{DisplayKind, SalesSelectionDisplayItem};
+use super::recipient::SelectionRecipient;
 use super::session::SessionChoice;
 use super::types::{ProposalSource, SelectionForm, SubmitMode};
 
@@ -85,6 +86,12 @@ pub struct SalesSelectionProposalData {
     pub form: SelectionForm,
     /// 提交方式，必须取自选品册。
     pub submit_mode: SubmitMode,
+    /// 个人参与人身份；普通模式与历史方案为空。
+    #[serde(default)]
+    pub participant_id: String,
+    /// 提货券冻结的收件信息。
+    #[serde(default)]
+    pub recipient: Option<SelectionRecipient>,
     /// 已提交会话版本。
     pub session_version: u64,
     /// 提交时间。
@@ -116,6 +123,12 @@ pub struct SalesSelectionProposal {
     pub form: SelectionForm,
     /// 提交方式，必须取自选品册。
     pub submit_mode: SubmitMode,
+    /// 个人参与人身份；普通模式与历史方案为空。
+    #[serde(default)]
+    pub participant_id: String,
+    /// 提货券冻结的收件信息。
+    #[serde(default)]
+    pub recipient: Option<SelectionRecipient>,
     /// 已提交会话版本。
     pub session_version: u64,
     /// 提交时间。
@@ -152,6 +165,7 @@ impl SalesSelectionProposal {
         if data.business_org_unit_id.trim().is_empty() {
             return Err(Error::from("业务组织不能为空"));
         }
+        let recipient = validate_participant(data.submit_mode, &data.participant_id, data.recipient)?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             proposal_no: proposal_no.to_string(),
@@ -163,12 +177,33 @@ impl SalesSelectionProposal {
             batch_id: data.batch_id,
             form: data.form,
             submit_mode: data.submit_mode,
+            participant_id: data.participant_id.trim().to_string(),
+            recipient,
             session_version: data.session_version,
             submitted_at: data.submitted_at,
             source: ProposalSource::PublicLink,
             total_amount: data.total_amount,
         })
     }
+}
+
+/// 确认方案参与人与收件信息同提交模式一致。
+fn validate_participant(
+    mode: SubmitMode,
+    participant_id: &str,
+    recipient: Option<SelectionRecipient>,
+) -> Result<Option<SelectionRecipient>> {
+    if mode != SubmitMode::PickupVoucher {
+        if !participant_id.is_empty() || recipient.is_some() {
+            return Err(Error::from("普通选品方案不能携带个人提货券信息"));
+        }
+        return Ok(None);
+    }
+    if participant_id.trim().is_empty() || participant_id.chars().count() > 64 {
+        return Err(Error::from("提货券方案必须具有合法参与人身份"));
+    }
+    let recipient = recipient.ok_or_else(|| Error::from("提货券提交必须填写收件信息"))?;
+    Ok(Some(SelectionRecipient::new(recipient)?))
 }
 
 /// 由会话选择与陈列快照构建方案明细。
@@ -221,7 +256,7 @@ where
         sku_lines.extend(item_sku_lines);
     }
     let total = match submit_mode {
-        SubmitMode::ByQuantity => {
+        SubmitMode::ByQuantity | SubmitMode::PickupVoucher => {
             if display_total != sku_total {
                 return Err(Error::from("陈列项金额与商品金额不一致"));
             }
@@ -335,17 +370,19 @@ where
 mod tests {
     use std::str::FromStr;
 
+    use erp_core::common::time::Instant;
     use erp_core::ids::{
-        ProductId, SalesSelectionBookletId, SalesSelectionDisplayItemId, SalesSelectionProposalId, SkuId,
-        SkuRevisionId,
+        CustomerAccountId, ProductId, SalesSelectionBookletId, SalesSelectionDisplayItemId,
+        SalesSelectionProposalId, SkuId, SkuRevisionId,
     };
     use erp_core::money::Amount;
 
-    use super::build_proposal_lines;
+    use super::{SalesSelectionProposal, SalesSelectionProposalData, build_proposal_lines};
     use crate::entity::sales_selection::display_item::SalesSelectionDisplayItem;
     use crate::entity::sales_selection::session::SessionChoice;
     use crate::entity::sales_selection::sku_snapshot::SkuSnapshot;
     use crate::entity::sales_selection::types::SubmitMode;
+    use crate::entity::sales_selection::{PackageCoverRef, SelectionForm, SelectionRecipient};
 
     fn sku() -> SkuSnapshot {
         SkuSnapshot {
@@ -387,5 +424,138 @@ mod tests {
         assert_eq!(display[0].line_amount, total);
         assert_eq!(sku_lines[0].quantity, Some(3));
         assert_eq!(sku_lines[0].line_amount, total);
+    }
+    fn proposal_data() -> SalesSelectionProposalData {
+        SalesSelectionProposalData {
+            proposal_no: "P1".into(),
+            customer_id: CustomerAccountId::new("c1"),
+            customer_name: "客户甲".into(),
+            booklet_id: SalesSelectionBookletId::new("b1"),
+            sales_owner_user_id: "sales-1".into(),
+            business_org_unit_id: "org-1".into(),
+            batch_id: "batch".into(),
+            form: SelectionForm::SingleSku,
+            submit_mode: SubmitMode::PickupVoucher,
+            participant_id: "person-1".into(),
+            recipient: Some(SelectionRecipient {
+                name: "张三".into(),
+                phone: "13800138000".into(),
+                province: "浙江省".into(),
+                city: "杭州市".into(),
+                district: "西湖区".into(),
+                address: "文三路 1 号".into(),
+            }),
+            session_version: 2,
+            submitted_at: Instant::now(),
+            total_amount: Some("30.00".parse().unwrap()),
+        }
+    }
+
+    #[test]
+    fn voucher_proposal_freezes_recipient_and_requires_personal_identity() {
+        let proposal =
+            SalesSelectionProposal::new(SalesSelectionProposalId::new("p1"), proposal_data()).unwrap();
+        assert_eq!(proposal.participant_id, "person-1");
+        assert_eq!(proposal.recipient.as_ref().unwrap().name, "张三");
+        let mut data = proposal_data();
+        data.recipient = None;
+        assert!(SalesSelectionProposal::new(SalesSelectionProposalId::new("p2"), data).is_err());
+        let mut data = proposal_data();
+        data.participant_id = " ".into();
+        assert!(SalesSelectionProposal::new(SalesSelectionProposalId::new("p3"), data).is_err());
+        let mut data = proposal_data();
+        data.submit_mode = SubmitMode::ByQuantity;
+        assert!(SalesSelectionProposal::new(SalesSelectionProposalId::new("p4"), data).is_err());
+    }
+
+    #[test]
+    fn voucher_line_amounts_match_quantity_mode_exactly() {
+        let item = SalesSelectionDisplayItem::single_sku(
+            SalesSelectionDisplayItemId::new("d1"),
+            SalesSelectionBookletId::new("b1"),
+            "batch".into(),
+            sku(),
+        )
+        .unwrap();
+        let choices = vec![SessionChoice {
+            display_item_id: SalesSelectionDisplayItemId::new("d1"),
+            quantity: Some(3),
+        }];
+        let mut sequence = 0;
+        let (display, sku_lines, total) = build_proposal_lines(
+            &SalesSelectionProposalId::new("p1"),
+            SubmitMode::PickupVoucher,
+            &choices,
+            &[item],
+            || {
+                sequence += 1;
+                format!("id-{sequence}")
+            },
+        )
+        .unwrap();
+        assert_eq!(total, Some("30.00".parse().unwrap()));
+        assert_eq!(display[0].line_amount, total);
+        assert_eq!(sku_lines[0].line_amount, total);
+    }
+
+    #[test]
+    fn legacy_proposal_defaults_personal_fields() {
+        let mut data = proposal_data();
+        data.submit_mode = SubmitMode::ByQuantity;
+        data.participant_id.clear();
+        data.recipient = None;
+        let proposal = SalesSelectionProposal::new(SalesSelectionProposalId::new("p1"), data).unwrap();
+        let mut json = serde_json::to_value(proposal).unwrap();
+        json.as_object_mut().unwrap().remove("participant_id");
+        json.as_object_mut().unwrap().remove("recipient");
+        let restored: SalesSelectionProposal = serde_json::from_value(json).unwrap();
+        assert!(restored.participant_id.is_empty());
+        assert!(restored.recipient.is_none());
+    }
+    #[test]
+    fn package_voucher_totals_expand_every_member_and_preserve_personal_budget() {
+        let first = sku();
+        let mut second = sku();
+        second.sku_id = SkuId::new("sku-2");
+        second.sku_revision_id = SkuRevisionId::new("rev-2");
+        second.sales_visible_price_gross = "15.00".parse().unwrap();
+        let package = SalesSelectionDisplayItem::package(
+            SalesSelectionDisplayItemId::new("package-1"),
+            SalesSelectionBookletId::new("b1"),
+            "batch".into(),
+            "tier-1".into(),
+            vec![first, second],
+            PackageCoverRef {
+                file_asset_id: "cover-1".into(),
+                content_checksum: "checksum".into(),
+                storage_object_key: "selection/cover.png".into(),
+                generator_version: "test".into(),
+            },
+        )
+        .unwrap();
+        let choices = vec![SessionChoice {
+            display_item_id: SalesSelectionDisplayItemId::new("package-1"),
+            quantity: Some(3),
+        }];
+        let mut sequence = 0;
+        let (display_lines, sku_lines, total) = build_proposal_lines(
+            &SalesSelectionProposalId::new("p1"),
+            SubmitMode::PickupVoucher,
+            &choices,
+            &[package],
+            || {
+                sequence += 1;
+                format!("line-{sequence}")
+            },
+        )
+        .unwrap();
+        assert_eq!(total, Some("75.00".parse().unwrap()));
+        assert_eq!(display_lines[0].quantity, Some(3));
+        assert_eq!(display_lines[0].line_amount, total);
+        assert_eq!(sku_lines.len(), 2);
+        assert_eq!(sku_lines[0].quantity, Some(3));
+        assert_eq!(sku_lines[0].line_amount, Some("30.00".parse().unwrap()));
+        assert_eq!(sku_lines[1].quantity, Some(3));
+        assert_eq!(sku_lines[1].line_amount, Some("45.00".parse().unwrap()));
     }
 }

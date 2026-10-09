@@ -1,5 +1,5 @@
 import type { ApiError } from "@/lib/api"
-import type { PublicChoiceView } from "../types"
+import type { PublicChoiceView, SelectionRecipient } from "../types"
 
 export type Pick = { selected: boolean; quantity: string }
 export type Picks = Record<string, Pick>
@@ -15,7 +15,11 @@ export type PendingSelectionRequest =
       }
     | {
           kind: "submit"
-          input: { idempotencyKey: string; expectedSessionVersion: number }
+          input: {
+              idempotencyKey: string
+              expectedSessionVersion: number
+              recipient?: SelectionRecipient
+          }
       }
 
 /** 从已保存清单恢复表单选择与份数。 */

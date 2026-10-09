@@ -3325,6 +3325,66 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                     action: "get",
                 },
             },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-books/{id}/access-password",
+                description: "维护选品册访问密码",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "maintain",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-selection-books/{id}/vouchers",
+                description: "读取选品册个人提货码",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "copy_link",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-selection-books/{id}/selection-details",
+                description: "查询选品册个人选品明细",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "get",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-selection-booklets/{id}/access-password",
+                description: "维护选品册访问密码",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "maintain",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-selection-booklets/{id}/vouchers",
+                description: "读取选品册个人提货码",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "copy_link",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-selection-booklets/{id}/selection-details",
+                description: "查询选品册个人选品明细",
+                permission: {
+                    resource: "sales_selection_booklet",
+                    action: "get",
+                },
+            },
         ],
     },
     {

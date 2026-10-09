@@ -71,6 +71,8 @@ pub enum SubmitMode {
     ByQuantity,
     /// 商城兑换：客户只勾选范围，不填份数。
     MallRedeem,
+    /// 提货券：每人独立选择，按个人额度生成方案。
+    PickupVoucher,
 }
 
 impl SubmitMode {
@@ -88,6 +90,7 @@ impl SubmitMode {
         match self {
             Self::ByQuantity => "BY_QUANTITY",
             Self::MallRedeem => "MALL_REDEEM",
+            Self::PickupVoucher => "PICKUP_VOUCHER",
         }
     }
 
@@ -105,6 +108,7 @@ impl SubmitMode {
         match self {
             Self::ByQuantity => "按份采购",
             Self::MallRedeem => "商城兑换",
+            Self::PickupVoucher => "提货券",
         }
     }
 
@@ -119,7 +123,7 @@ impl SubmitMode {
     /// # 错误
     /// 无。
     pub fn requires_quantity(self) -> bool {
-        matches!(self, Self::ByQuantity)
+        matches!(self, Self::ByQuantity | Self::PickupVoucher)
     }
 }
 
@@ -355,4 +359,42 @@ pub fn normalize_idempotency_key(key: &str) -> Result<String> {
         return Err(Error::from("请求幂等键过长"));
     }
     Ok(trimmed.to_string())
+}
+
+/// 校验原始访问密码，不改变用户输入的空白。
+///
+/// # 参数
+/// * `password` - 原始密码
+///
+/// # 返回
+/// 8 到 64 个字符时通过。
+///
+/// # 错误
+/// 长度不足或超长时拒绝。
+pub fn validate_access_password(password: &str) -> Result<()> {
+    if !(8..=64).contains(&password.chars().count()) {
+        return Err(Error::from("访问密码必须是 8 到 64 个字符"));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn voucher_requires_quantity_and_has_stable_code() {
+        assert!(SubmitMode::PickupVoucher.requires_quantity());
+        assert_eq!(SubmitMode::PickupVoucher.as_str(), "PICKUP_VOUCHER");
+        assert_eq!(SubmitMode::PickupVoucher.label(), "提货券");
+        assert!(!SubmitMode::MallRedeem.requires_quantity());
+    }
+
+    #[test]
+    fn passwords_are_checked_without_normalization() {
+        assert!(validate_access_password("12345678").is_ok());
+        assert!(validate_access_password(&"中".repeat(64)).is_ok());
+        assert!(validate_access_password("1234567").is_err());
+        assert!(validate_access_password(&"a".repeat(65)).is_err());
+    }
 }

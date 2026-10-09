@@ -4,8 +4,11 @@
 //! `/sales-selection-booklets` 为同义路径。公开页走 `/public/selection/{token}`。
 //! 路径必须是字面量，供权限生成扫描。
 
-use axum::Router;
+use axum::http::HeaderValue;
+use axum::http::header::{CACHE_CONTROL, REFERRER_POLICY};
+use axum::response::Response;
 use axum::routing::{delete, get, post};
+use axum::{Router, middleware};
 use erp_identity::SharedRbacService;
 
 use crate::app_state::AppState;
@@ -32,6 +35,8 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
         )
         .merge(book_item_routes(rbac, true))
         .merge(book_item_routes(rbac, false))
+        .merge(book_protection_routes_books(rbac))
+        .merge(book_protection_routes_booklets(rbac))
         .route(
             "/sales-selection-proposals",
             with_permission(
@@ -364,6 +369,7 @@ fn book_item_routes_booklets(rbac: &SharedRbacService) -> Router<AppState> {
 pub fn public_routes() -> Router<AppState> {
     Router::new()
         .route("/public/selection/{token}", get(sales_selection::public_page))
+        .route("/public/selection/{token}/unlock", post(sales_selection::protection::public_unlock))
         .route(
             "/public/selection/{token}/session",
             post(sales_selection::public_save).put(sales_selection::public_save),
@@ -374,6 +380,7 @@ pub fn public_routes() -> Router<AppState> {
         .route("/public/selection/{token}/images/{asset_id}", get(sales_selection::public_image_path))
         .route("/public/selection/{token}/customize", post(sales_selection::public_customize))
         .route("/public/sales-selections/{token}", get(sales_selection::public_page))
+        .route("/public/sales-selections/{token}/unlock", post(sales_selection::protection::public_unlock))
         .route(
             "/public/sales-selections/{token}/session",
             post(sales_selection::public_save).put(sales_selection::public_save),
@@ -383,4 +390,81 @@ pub fn public_routes() -> Router<AppState> {
         .route("/public/sales-selections/{token}/images", get(sales_selection::public_image))
         .route("/public/sales-selections/{token}/images/{asset_id}", get(sales_selection::public_image_path))
         .route("/public/sales-selections/{token}/customize", post(sales_selection::public_customize))
+        .layer(middleware::map_response(private_public_response))
+}
+
+fn book_protection_routes_books(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/sales-selection-books/{id}/access-password",
+            with_permission(
+                post(sales_selection::protection::booklet_password),
+                rbac,
+                sales_selection::protection::booklet_password_permission_key(),
+            ),
+        )
+        .route(
+            "/sales-selection-books/{id}/vouchers",
+            with_permission(
+                get(sales_selection::protection::booklet_vouchers),
+                rbac,
+                sales_selection::protection::booklet_vouchers_permission_key(),
+            ),
+        )
+        .route(
+            "/sales-selection-books/{id}/selection-details",
+            with_permission(
+                get(sales_selection::protection::booklet_selection_details),
+                rbac,
+                sales_selection::protection::booklet_selection_details_permission_key(),
+            ),
+        )
+}
+
+fn book_protection_routes_booklets(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/sales-selection-booklets/{id}/access-password",
+            with_permission(
+                post(sales_selection::protection::booklet_password),
+                rbac,
+                sales_selection::protection::booklet_password_permission_key(),
+            ),
+        )
+        .route(
+            "/sales-selection-booklets/{id}/vouchers",
+            with_permission(
+                get(sales_selection::protection::booklet_vouchers),
+                rbac,
+                sales_selection::protection::booklet_vouchers_permission_key(),
+            ),
+        )
+        .route(
+            "/sales-selection-booklets/{id}/selection-details",
+            with_permission(
+                get(sales_selection::protection::booklet_selection_details),
+                rbac,
+                sales_selection::protection::booklet_selection_details_permission_key(),
+            ),
+        )
+}
+
+async fn private_public_response(mut response: Response) -> Response {
+    response.headers_mut().insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+    response.headers_mut().insert(REFERRER_POLICY, HeaderValue::from_static("no-referrer"));
+    response
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::body::Body;
+    use axum::http::header::{CACHE_CONTROL, REFERRER_POLICY};
+    use axum::response::Response;
+
+    #[tokio::test]
+    async fn protected_public_responses_disallow_caching_and_referrer_forwarding() {
+        let response = super::private_public_response(Response::new(Body::empty())).await;
+        assert_eq!(response.headers().get(CACHE_CONTROL).unwrap(), "private, no-store");
+        assert_eq!(response.headers().get(REFERRER_POLICY).unwrap(), "no-referrer");
+    }
 }

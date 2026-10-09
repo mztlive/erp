@@ -1,6 +1,9 @@
 //! 销售选品跨域流程：客户、商品池、图片与事务。
 
 mod adapters;
+mod password_audit;
+mod public_access;
+mod public_retry;
 mod scope_checks;
 
 use std::sync::Arc;
@@ -10,12 +13,11 @@ use erp_core::common::time::Instant;
 use erp_identity::SharedRbacService;
 use erp_sales::dto::sales_selection::{
     CopyLinkView, CreateSalesSelectionBookletRequest, DeleteDisplayItemRequest, PrepareSalesSelectionRequest,
-    PublicSelectionPageView, PublishSalesSelectionRequest, SalesSelectionBookletListParams,
-    SalesSelectionBookletView, SalesSelectionCommandRequest, SalesSelectionProposalListParams,
-    SalesSelectionProposalView, SalesSelectionSessionView, SaveSelectionSessionRequest,
-    SubmitSelectionSessionRequest,
+    PublishSalesSelectionRequest, SalesSelectionBookletListParams, SalesSelectionBookletView,
+    SalesSelectionCommandRequest, SalesSelectionProposalListParams, SalesSelectionProposalView,
+    SalesSelectionSessionView,
 };
-use erp_sales::entity::sales_selection::LinkTokenCrypto;
+use erp_sales::entity::sales_selection::{IdempotencyOperation, LinkTokenCrypto};
 use erp_sales::ports::sales_selection::SelectionImagePort;
 use erp_sales::repository::prelude::*;
 use erp_sales::service::sales_selection::SalesSelectionService;
@@ -118,6 +120,8 @@ impl SalesSelectionProcess {
         req: CreateSalesSelectionBookletRequest,
         actor: AuditActor,
     ) -> Result<SalesSelectionBookletView> {
+        let fingerprint = self.crypto.request_fingerprint(IdempotencyOperation::Create, &req)?;
+        let password_hash = public_access::password_hash(req.access_password.clone()).await?;
         let db = self.db.clone();
         let customer = CustomerAdapter { db: db.clone() };
         let rbac = self.require_rbac()?;
@@ -128,6 +132,8 @@ impl SalesSelectionProcess {
                 let actor = actor.clone();
                 let db = db.clone();
                 let rbac = rbac.clone();
+                let password_hash = password_hash.clone();
+                let fingerprint = fingerprint.clone();
                 Box::pin(async move {
                     let access = crate::adapters::selection_access(db.clone(), rbac);
                     check_create_scope(
@@ -139,7 +145,7 @@ impl SalesSelectionProcess {
                     )
                     .await?;
                     SalesSelectionService::new(db)
-                        .create(req, actor.id(), &customer, executor)
+                        .create(req, actor.id(), password_hash, fingerprint, &customer, executor)
                         .await
                         .map_err(Error::from)
                 })
@@ -455,113 +461,6 @@ impl SalesSelectionProcess {
         let catalog = CatalogAdapter { db: self.db.clone() };
         let images = ImageAdapter { db: self.db.clone(), storage: Arc::new(self.storage.clone()) };
         Ok(SalesSelectionService::new(self.db.clone()).run_due_prepare_tasks(&catalog, &images).await?)
-    }
-
-    /// 公开页。
-    ///
-    /// # 参数
-    /// * `token` - 令牌
-    /// * `ip` - 来源 IP
-    ///
-    /// # 返回
-    /// 返回公开视图。
-    ///
-    /// # 错误
-    /// 令牌无效或超限。
-    pub async fn public_page(&self, token: &str, ip: &str) -> Result<PublicSelectionPageView> {
-        self.admit_public("read", ip, Some(token), 120).await?;
-        let mut tx = persistence_core::NoTransaction;
-        Ok(SalesSelectionService::new(self.db.clone())
-            .public_page_by_token(token, Instant::now(), &mut tx)
-            .await?)
-    }
-
-    /// 公开保存。
-    ///
-    /// # 参数
-    /// * `token` - 令牌
-    /// * `req` - 请求
-    /// * `ip` - 来源 IP
-    ///
-    /// # 返回
-    /// 返回最新公开页。
-    ///
-    /// # 错误
-    /// 冲突、结束或超限。
-    pub async fn public_save(
-        &self,
-        token: String,
-        req: SaveSelectionSessionRequest,
-        ip: String,
-    ) -> Result<PublicSelectionPageView> {
-        self.admit_public("write", &ip, Some(&token), 30).await?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        client
-            .with_transaction(move |executor| {
-                let db = db.clone();
-                Box::pin(async move {
-                    SalesSelectionService::new(db)
-                        .public_save(&token, req, Instant::now(), executor)
-                        .await
-                        .map_err(Error::from)
-                })
-            })
-            .await
-    }
-
-    /// 公开提交。
-    ///
-    /// # 参数
-    /// * `token` - 令牌
-    /// * `req` - 请求
-    /// * `ip` - 来源 IP
-    ///
-    /// # 返回
-    /// 返回回执。
-    ///
-    /// # 错误
-    /// 冲突、结束或超限。
-    pub async fn public_submit(
-        &self,
-        token: String,
-        req: SubmitSelectionSessionRequest,
-        ip: String,
-    ) -> Result<PublicSelectionPageView> {
-        self.admit_public("submit", &ip, Some(&token), 10).await?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        client
-            .with_transaction(move |executor| {
-                let db = db.clone();
-                Box::pin(async move {
-                    SalesSelectionService::new(db)
-                        .public_submit(&token, req, Instant::now(), executor)
-                        .await
-                        .map_err(Error::from)
-                })
-            })
-            .await
-    }
-
-    /// 公开图片对象键。
-    ///
-    /// # 参数
-    /// * `token` - 令牌
-    /// * `asset_id` - 资产
-    /// * `ip` - 来源 IP
-    ///
-    /// # 返回
-    /// 返回快照对象键。
-    ///
-    /// # 错误
-    /// 越权或超限。
-    pub async fn public_image_key(&self, token: &str, asset_id: &str, ip: &str) -> Result<String> {
-        self.admit_public("image", ip, Some(token), 600).await?;
-        let mut tx = persistence_core::NoTransaction;
-        Ok(SalesSelectionService::new(self.db.clone())
-            .public_image_key(token, asset_id, Instant::now(), &mut tx)
-            .await?)
     }
 
     /// 读取已通过管理端客户权限校验的册图片。

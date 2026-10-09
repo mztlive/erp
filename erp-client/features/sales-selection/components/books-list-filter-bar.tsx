@@ -70,7 +70,11 @@ function selectionFormFromValue(value: string | null): SelectionFormDraft {
 }
 
 function submitModeFromValue(value: string | null): SubmitModeDraft {
-    return value === "BY_QUANTITY" || value === "MALL_REDEEM" ? value : "ALL"
+    return value === "BY_QUANTITY" ||
+        value === "MALL_REDEEM" ||
+        value === "PICKUP_VOUCHER"
+        ? value
+        : "ALL"
 }
 
 /**
@@ -339,6 +343,7 @@ export function BooksListFilterBar({
                             options={[
                                 { value: "BY_QUANTITY", label: "按份采购" },
                                 { value: "MALL_REDEEM", label: "商城兑换" },
+                                { value: "PICKUP_VOUCHER", label: "提货券" },
                             ]}
                             onValueChange={(value) =>
                                 setDraft((prev) => ({

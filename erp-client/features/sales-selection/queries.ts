@@ -8,8 +8,8 @@ export const salesSelectionKeys = {
     all: ["sales-selection"] as const,
     proposal: (id: string) =>
         [...salesSelectionKeys.all, "proposal", id] as const,
-    public: (token: string) =>
-        [...salesSelectionKeys.all, "public", token] as const,
+    public: (token: string, accessToken = "") =>
+        [...salesSelectionKeys.all, "public", token, accessToken] as const,
 }
 
 export function useProposalQuery(id: string | undefined) {
@@ -20,11 +20,15 @@ export function useProposalQuery(id: string | undefined) {
     })
 }
 
-export function usePublicSelectionQuery(token: string | undefined) {
+export function usePublicSelectionQuery(
+    token: string | undefined,
+    accessToken?: string,
+    enabled = true,
+) {
     return useQuery({
-        queryKey: salesSelectionKeys.public(token ?? ""),
-        queryFn: () => api.fetchPublicPage(token!),
-        enabled: Boolean(token),
+        queryKey: salesSelectionKeys.public(token ?? "", accessToken),
+        queryFn: () => api.fetchPublicPage(token!, accessToken),
+        enabled: Boolean(token) && enabled,
         retry: false,
     })
 }

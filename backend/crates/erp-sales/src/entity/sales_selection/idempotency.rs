@@ -31,6 +31,8 @@ pub enum IdempotencyOperation {
     RevokeAccess,
     /// 作废。
     Void,
+    /// 设置访问密码。
+    SetAccessPassword,
 }
 
 impl IdempotencyOperation {
@@ -55,6 +57,7 @@ impl IdempotencyOperation {
             Self::Close => "CLOSE",
             Self::RevokeAccess => "REVOKE_ACCESS",
             Self::Void => "VOID",
+            Self::SetAccessPassword => "SET_ACCESS_PASSWORD",
         }
     }
 
@@ -80,6 +83,7 @@ impl IdempotencyOperation {
                 | Self::Close
                 | Self::RevokeAccess
                 | Self::Void
+                | Self::SetAccessPassword
         )
     }
 }
@@ -242,6 +246,7 @@ mod tests {
         assert!(IdempotencyOperation::Close.replays_live_booklet());
         assert!(IdempotencyOperation::RevokeAccess.replays_live_booklet());
         assert!(IdempotencyOperation::Void.replays_live_booklet());
+        assert!(IdempotencyOperation::SetAccessPassword.replays_live_booklet());
         assert!(!IdempotencyOperation::SaveSession.replays_live_booklet());
         assert!(!IdempotencyOperation::Submit.replays_live_booklet());
     }

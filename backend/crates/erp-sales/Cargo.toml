@@ -5,6 +5,7 @@ edition = "2024"
 autotests = false
 
 [dependencies]
+argon2 = { workspace = true }
 bson = { workspace = true }
 sha2 = { workspace = true }
 aes-gcm = { workspace = true }
@@ -17,6 +18,7 @@ entity-macros = { workspace = true }
 erp-core = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }
+hmac = { workspace = true }
 id-generator = { workspace = true }
 mongodb = { workspace = true }
 persistence-core = { workspace = true }
