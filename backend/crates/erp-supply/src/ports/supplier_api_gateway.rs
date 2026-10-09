@@ -1,7 +1,7 @@
 //! 供应商技术调用消费方合同；外部调用不持有事务。
 use crate::entity::failure::SupplierFailureClass;
 use crate::entity::supplier_api::SupplierApiConnection;
-/// 外部调用错误分类（错误分类：临时故障/限流可自动重试，其余转人工，§7.7）。
+/// 既有网关失败分类；是否可重试由编排层依据副作用及恢复证据判断。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClassifiedError {
     /// 错误分类。
@@ -12,10 +12,10 @@ pub struct ClassifiedError {
     pub summary: String,
 }
 
-/// 供应商 API 网关（外部 HTTP 调用统一入口）。
+/// 既有供应商连接检查与目录同步入口；新协议接入使用 connector 模块的窄 trait。
 ///
-/// 实现要求（P3 §7、AGENTS.md 外部依赖容错）：统一设置超时（5 秒）、重试上限
-/// （2 次）与错误分类；依赖失败降级为可观测错误。默认实现
+/// 单次调用必须设置超时并返回分类结果；调度层负责有限退避和恢复，协议适配器不得
+/// 隐藏写重试。连接检查只读，不创建业务订单。默认实现
 /// `UnavailableSupplierApiGateway` 在端点引用无法解析为可调用地址时以分类错误
 /// 失败关闭（当前无地址配置注册表，`config://` 引用不可解析），测试注入 mock 验证
 /// 成功与失败两条路径。
@@ -37,7 +37,10 @@ pub trait SupplierApiGateway: Send + Sync {
         Box<dyn std::future::Future<Output = std::result::Result<(), ClassifiedError>> + Send + 'a>,
     >;
 
-    /// 执行一次目录同步；实现必须保持来源幂等，并且只能写入 W21 正式供给链路。
+    /// 保留既有目录同步调用入口；新实现由 OfferSource 读取，再由 Process 调用正式供给用例。
+    ///
+    /// 协议适配器不得直接写 ERP 仓储。切换前必须补齐分页、来源核验和断点恢复，
+    /// 不能把读取 HTTP 成功直接解释为目录业务已经同步完成。
     ///
     /// # 参数
     /// * `connection` - 目标供应商 API 连接。

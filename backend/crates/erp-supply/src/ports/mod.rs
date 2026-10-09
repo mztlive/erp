@@ -1,5 +1,6 @@
 //! 供应链消费的外部事实和网关合同。
 
+pub mod connector;
 pub mod data_scope;
 pub mod fulfillment_order_data_scope;
 pub mod offering_qualification;
