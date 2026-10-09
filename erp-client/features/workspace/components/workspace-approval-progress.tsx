@@ -14,7 +14,9 @@ import { cn } from "@/lib/utils"
 /** 展示提交、当前办理与结果三个阶段，不把阶段位置当作审批节点完成比例。 */
 export function WorkspaceApprovalProgress({
     instance,
+    compact = false,
 }: {
+    compact?: boolean
     instance: ApprovalRuntimeInstance
 }) {
     const approved = instance.status === "APPROVED"
@@ -72,8 +74,22 @@ export function WorkspaceApprovalProgress({
     ]
 
     return (
-        <section aria-label="审批进度" className="flex flex-col gap-5 py-1">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+        <section
+            aria-label="审批进度"
+            className={cn(
+                "flex flex-col",
+                compact
+                    ? "gap-3 @min-[640px]/document:flex-row @min-[640px]/document:flex-wrap @min-[640px]/document:items-start @min-[640px]/document:gap-4"
+                    : "gap-5 py-1",
+            )}
+        >
+            <div
+                className={cn(
+                    "flex flex-wrap items-center justify-between gap-2",
+                    compact &&
+                        "@min-[640px]/document:w-28 @min-[640px]/document:shrink-0 @min-[640px]/document:flex-col @min-[640px]/document:items-start",
+                )}
+            >
                 <h3 className="text-sm font-semibold">审批进度</h3>
                 <span className="text-xs text-muted-foreground">
                     {[
@@ -87,7 +103,13 @@ export function WorkspaceApprovalProgress({
                         .join(" · ")}
                 </span>
             </div>
-            <ol aria-label="审批阶段" className="grid grid-cols-3 pb-2">
+            <ol
+                aria-label="审批阶段"
+                className={cn(
+                    "grid grid-cols-3 pb-2",
+                    compact && "min-w-0 flex-1",
+                )}
+            >
                 {steps.map((step, index) => (
                     <li
                         key={["submitted", "processing", "result"][index]}
@@ -151,7 +173,10 @@ export function WorkspaceApprovalProgress({
                 ))}
             </ol>
             {blocked ? (
-                <Alert variant="destructive">
+                <Alert
+                    variant="destructive"
+                    className={compact ? "basis-full" : undefined}
+                >
                     <AlertTitle>审批受阻</AlertTitle>
                     <AlertDescription>
                         {instance.blockerMessage ??

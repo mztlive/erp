@@ -7,6 +7,7 @@ import { usePathname, useSearchParams } from "next/navigation"
 import { ArrowUpRightIcon, FileTextIcon } from "lucide-react"
 
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
+import { WorkspacePurchaseApproval } from "./workspace-purchase-approval"
 import { WorkspaceApprovalProgress } from "./workspace-approval-progress"
 import { useRecoveryOptionsQuery } from "@/features/approval-workflow/queries"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
@@ -365,6 +366,10 @@ function WorkspaceDocumentTaskDetail({
     const salesApproval =
         approvalDocument &&
         ["sales_order", "voucher_sales_order"].includes(item.businessObjectType)
+    const purchaseApproval =
+        approvalDocument &&
+        item.businessObjectType === "purchase_order" &&
+        Boolean(instanceId)
     const readActionLabel = approvalDocument
         ? salesApproval
             ? "预览完整销售单"
@@ -639,27 +644,62 @@ function WorkspaceDocumentTaskDetail({
                     </DetailBlock>
                 ) : null}
 
-                {documentFields.length > 0 ? (
-                    <DetailBlock>
-                        <FieldGrid
-                            sections={documentFields}
-                            returnTo={returnTo}
-                            onPreview={(section) => {
-                                const kind = linkedDocumentPaperKind(
-                                    section.label,
-                                )
-                                if (!kind || !section.objectId) return
-                                setPaper({
-                                    kind,
-                                    objectId: section.objectId,
-                                    title: `${section.label} ${section.value}`,
-                                })
-                            }}
-                        />
-                    </DetailBlock>
-                ) : null}
+                {purchaseApproval && instanceId ? (
+                    <WorkspacePurchaseApproval
+                        key={instanceId}
+                        instanceId={instanceId}
+                        onPreview={setPaper}
+                    >
+                        {documentFields.length > 0 ? (
+                            <DetailBlock title="采购信息" compact>
+                                <FieldGrid
+                                    className="gap-y-1"
+                                    sections={documentFields.filter(
+                                        (field) =>
+                                            field.label !== "来源销售单" &&
+                                            field.label !== "提交号",
+                                    )}
+                                    returnTo={returnTo}
+                                    onPreview={(section) => {
+                                        const kind = linkedDocumentPaperKind(
+                                            section.label,
+                                        )
+                                        if (!kind || !section.objectId) return
+                                        setPaper({
+                                            kind,
+                                            objectId: section.objectId,
+                                            title: `${section.label} ${section.value}`,
+                                        })
+                                    }}
+                                />
+                            </DetailBlock>
+                        ) : null}
+                    </WorkspacePurchaseApproval>
+                ) : (
+                    <>
+                        {documentFields.length > 0 ? (
+                            <DetailBlock>
+                                <FieldGrid
+                                    sections={documentFields}
+                                    returnTo={returnTo}
+                                    onPreview={(section) => {
+                                        const kind = linkedDocumentPaperKind(
+                                            section.label,
+                                        )
+                                        if (!kind || !section.objectId) return
+                                        setPaper({
+                                            kind,
+                                            objectId: section.objectId,
+                                            title: `${section.label} ${section.value}`,
+                                        })
+                                    }}
+                                />
+                            </DetailBlock>
+                        ) : null}
+                    </>
+                )}
 
-                {briefLines && briefLines.length > 0 ? (
+                {!purchaseApproval && briefLines && briefLines.length > 0 ? (
                     <DetailBlock
                         title={approvalDocument ? "提交资料摘要" : "明细"}
                         description={`${lineCount} 行`}
@@ -735,8 +775,11 @@ function WorkspaceDocumentTaskDetail({
                 ) : null}
 
                 {approvalTask && instance ? (
-                    <DetailBlock>
-                        <WorkspaceApprovalProgress instance={instance} />
+                    <DetailBlock compact={purchaseApproval}>
+                        <WorkspaceApprovalProgress
+                            instance={instance}
+                            compact={purchaseApproval}
+                        />
                     </DetailBlock>
                 ) : null}
             </div>
@@ -807,8 +850,10 @@ function DetailBlock({
     title,
     description,
     children,
+    compact = false,
 }: {
     title?: string
+    compact?: boolean
     description?: string
     children: ReactNode
 }) {
@@ -816,7 +861,8 @@ function DetailBlock({
         <section
             className={cn(
                 workspaceTaskSurfacePadClassName,
-                "flex flex-col gap-3 border-b border-grid py-4 last:border-b-0",
+                "flex flex-col border-b border-grid last:border-b-0",
+                compact ? "gap-2 py-3" : "gap-3 py-4",
             )}
         >
             {title ? (

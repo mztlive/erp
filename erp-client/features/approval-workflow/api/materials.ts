@@ -4,6 +4,7 @@ import { apiGet, apiGetBlob } from "@/lib/api"
 export type ApprovalMaterials = {
     document_no: string
     sales_order?: ApprovalSalesSubmission | null
+    purchase_lines?: ApprovalPurchaseLine[] | null
     subject_version: number
     document_type: string
     document_id: string
@@ -43,6 +44,27 @@ export type ApprovalMaterials = {
         content_type: string
         byte_size: number
     }[]
+}
+
+/** 精确采购提交与冻结销售版本的逐行对照，不按商品名称拼接。 */
+export type ApprovalPurchaseLine = {
+    id: string
+    line_no: number
+    title: string
+    specification: string | null
+    quantity: string | null
+    unit: string | null
+    unit_cost_gross: string | null
+    expected_delivery_date: string | null
+    source: {
+        revision_id: string
+        title: string
+        specification: string | null
+        quantity: string
+        unit: string
+        unit_price_gross: string
+        fulfillment_due_at: number
+    } | null
 }
 
 /** 审批实例授权返回的精确销售提交，不依赖普通销售单详情。 */

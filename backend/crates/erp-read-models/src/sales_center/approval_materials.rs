@@ -14,6 +14,7 @@ use mongodb::Database;
 use persistence_core::NoTransaction;
 use serde::Serialize;
 
+use crate::purchase_center::approval_materials::{ApprovalPurchaseLine, purchase_lines};
 use crate::{Error, Result};
 
 /// 审批资料及可选的完整销售提交；保留原资料接口字段。
@@ -22,6 +23,7 @@ pub struct ApprovalDocumentMaterials {
     #[serde(flatten)]
     pub materials: ApprovalMaterialsView,
     pub sales_order: Option<SubmissionView>,
+    pub purchase_lines: Option<Vec<ApprovalPurchaseLine>>,
 }
 
 /// 在实例读取授权后装载精确销售提交，不授予普通销售单读取资格。
@@ -43,7 +45,12 @@ pub async fn materials<A: WorkflowAuthorizationPort>(
     } else {
         None
     };
-    Ok(ApprovalDocumentMaterials { materials, sales_order })
+    let purchase_lines = if materials.document_type == "purchase_order" {
+        purchase_lines(db, &materials).await?
+    } else {
+        None
+    };
+    Ok(ApprovalDocumentMaterials { materials, sales_order, purchase_lines })
 }
 
 async fn sales_submission(db: &Database, materials: &ApprovalMaterialsView) -> Result<SubmissionView> {

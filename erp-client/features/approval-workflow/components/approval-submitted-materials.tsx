@@ -34,9 +34,13 @@ const READABLE_MATERIAL_TYPES = new Set([
 export function ApprovalSubmittedMaterials({
     instanceId,
     enabled,
+    view = "all",
+    sourceRevisionId,
 }: {
     instanceId: string
     enabled: boolean
+    view?: "all" | "source-sales" | "attachments"
+    sourceRevisionId?: string
 }) {
     const query = useApprovalMaterials(instanceId, enabled)
     const download = useDownloadApprovalMaterial(instanceId)
@@ -76,20 +80,26 @@ export function ApprovalSubmittedMaterials({
         <article className="space-y-6 rounded-lg bg-card p-6 shadow-lg sm:p-10">
             <header className="space-y-2 border-b pb-5 pr-8">
                 <h2 className="text-xl font-semibold">
-                    {salesOrder ? "销售单提交预览" : "审批提交资料"}
+                    {view === "source-sales"
+                        ? "来源销售资料"
+                        : view === "attachments"
+                          ? "合同、凭证及附件"
+                          : salesOrder
+                            ? "销售单提交预览"
+                            : "审批提交资料"}
                 </h2>
                 <p className="text-sm text-muted-foreground">
                     提交版本 {version} ·
                     以下内容保留自此次提交，审批完成后单据的变化不在此处更新。
                 </p>
-                {!salesOrder && counterpartyName && (
+                {view === "all" && !salesOrder && counterpartyName && (
                     <p className="font-medium">{counterpartyName}</p>
                 )}
-                {!salesOrder && source.list_summary && (
+                {view === "all" && !salesOrder && source.list_summary && (
                     <p className="text-sm">{source.list_summary}</p>
                 )}
             </header>
-            {salesOrder ? (
+            {view !== "all" ? null : salesOrder ? (
                 <ApprovalSalesOrderPaper
                     submission={salesOrder}
                     documentNo={
@@ -184,71 +194,86 @@ export function ApprovalSubmittedMaterials({
                     </section>
                 </>
             )}
-            {(display.source_sales ?? []).length > 0 && (
-                <section className="space-y-4 border-t pt-5">
-                    <h3 className="font-medium">关联销售单</h3>
-                    {display.source_sales?.map((sales) => (
-                        <article
-                            key={sales.revision_id}
-                            className="space-y-3 rounded-lg border p-4 text-sm"
-                        >
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                <p className="font-medium">
-                                    {displayBusinessText(
-                                        sales.document_no,
-                                        sales.document_id,
-                                    ) || "未记录销售单号"}{" "}
-                                    · 销售版本 {sales.revision_no}
-                                </p>
-                                <p className="num font-semibold">
-                                    {sales.source.amount_label}
-                                </p>
-                            </div>
-                            {sales.source.customer && (
-                                <p>
-                                    {displayReadableName(
-                                        sales.source.customer,
-                                    ) || "未记录客户名称"}
-                                </p>
-                            )}
-                            <dl className="grid gap-3 sm:grid-cols-2">
-                                {sales.source.extra_sections.map((section) => (
-                                    <div key={section.label}>
-                                        <dt className="text-xs text-muted-foreground">
-                                            {section.label}
-                                        </dt>
-                                        <dd className="mt-1 break-words">
-                                            {sectionValue(section)}
-                                        </dd>
+            {view !== "attachments" &&
+                (display.source_sales ?? []).length > 0 && (
+                    <section className="space-y-4 border-t pt-5">
+                        <h3 className="font-medium">关联销售单</h3>
+                        {display.source_sales
+                            ?.filter(
+                                (sales) =>
+                                    !sourceRevisionId ||
+                                    sales.revision_id === sourceRevisionId,
+                            )
+                            .map((sales) => (
+                                <article
+                                    key={sales.revision_id}
+                                    className="space-y-3 rounded-lg border p-4 text-sm"
+                                >
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <p className="font-medium">
+                                            {displayBusinessText(
+                                                sales.document_no,
+                                                sales.document_id,
+                                            ) || "未记录销售单号"}{" "}
+                                            · 销售版本 {sales.revision_no}
+                                        </p>
+                                        <p className="num font-semibold">
+                                            <span className="mr-2 text-xs font-normal text-muted-foreground">
+                                                整单销售金额
+                                            </span>
+                                            {sales.source.amount_label}
+                                        </p>
                                     </div>
-                                ))}
-                            </dl>
-                            <ul className="divide-y">
-                                {sales.source.lines.map((line, index) => (
-                                    <li
-                                        key={`${line.title}:${index}`}
-                                        className="flex flex-wrap justify-between gap-2 py-2"
-                                    >
-                                        <span>
-                                            {displayReadableName(line.title) ||
-                                                "未记录商品名称"}
-                                        </span>
-                                        <span className="num text-muted-foreground">
-                                            {line.quantity}
-                                        </span>
-                                    </li>
-                                ))}
-                            </ul>
-                            {sales.source.more_count > 0 && (
-                                <p className="text-muted-foreground">
-                                    另有 {sales.source.more_count}{" "}
-                                    行未展示，请结合销售合同或凭证核对。
-                                </p>
-                            )}
-                        </article>
-                    ))}
-                </section>
-            )}
+                                    {sales.source.customer && (
+                                        <p>
+                                            {displayReadableName(
+                                                sales.source.customer,
+                                            ) || "未记录客户名称"}
+                                        </p>
+                                    )}
+                                    <dl className="grid gap-3 sm:grid-cols-2">
+                                        {sales.source.extra_sections.map(
+                                            (section) => (
+                                                <div key={section.label}>
+                                                    <dt className="text-xs text-muted-foreground">
+                                                        {section.label}
+                                                    </dt>
+                                                    <dd className="mt-1 break-words">
+                                                        {sectionValue(section)}
+                                                    </dd>
+                                                </div>
+                                            ),
+                                        )}
+                                    </dl>
+                                    <ul className="divide-y">
+                                        {sales.source.lines.map(
+                                            (line, index) => (
+                                                <li
+                                                    key={`${line.title}:${index}`}
+                                                    className="flex flex-wrap justify-between gap-2 py-2"
+                                                >
+                                                    <span>
+                                                        {displayReadableName(
+                                                            line.title,
+                                                        ) || "未记录商品名称"}
+                                                    </span>
+                                                    <span className="num text-muted-foreground">
+                                                        {line.quantity}
+                                                    </span>
+                                                </li>
+                                            ),
+                                        )}
+                                    </ul>
+                                    {sales.source.more_count > 0 && (
+                                        <p className="text-muted-foreground">
+                                            另有 {sales.source.more_count}{" "}
+                                            行未展示，请结合销售合同或凭证核对。
+                                        </p>
+                                    )}
+                                </article>
+                            ))}
+                    </section>
+                )}
             <section className="space-y-3 border-t pt-5">
                 <h3 className="font-medium">
                     {display.source_sales?.length

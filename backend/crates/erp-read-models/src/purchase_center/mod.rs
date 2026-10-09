@@ -1,6 +1,7 @@
 //! 采购列表、对象中心、创建依据与责任规则的跨域只读组合。
 pub mod access;
 mod approval;
+pub(crate) mod approval_materials;
 mod approval_query;
 mod change;
 mod creation_basis;

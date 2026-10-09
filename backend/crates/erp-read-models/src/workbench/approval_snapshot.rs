@@ -1,5 +1,5 @@
 //! 审批展示快照的事务内捕获与授权后装载。
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use erp_workflow::entity::approval_integration::ApprovalSubjectSnapshot;
 use erp_workflow::entity::approval_integration::display_snapshot::ApprovalDisplaySnapshot;
@@ -96,9 +96,21 @@ fn apply_snapshot(facts: &mut WorkbenchObjectFactMap, snapshot: ApprovalSubjectS
         apply_legacy(fact, &snapshot);
         return;
     }
-    let Some(display) = snapshot.display.filter(|display| display.validate().is_ok()) else {
+    let Some(mut display) = snapshot.display.filter(|display| display.validate().is_ok()) else {
         return;
     };
+    if snapshot.document_type == DocumentType::PurchaseOrder {
+        let customers = display
+            .source_sales
+            .iter()
+            .filter_map(|sales| sales.source.customer.as_deref())
+            .filter(|name| !name.trim().is_empty())
+            .collect::<BTreeSet<_>>();
+        if !customers.is_empty() {
+            display.source.list_summary =
+                format!("客户：{}", customers.into_iter().collect::<Vec<_>>().join("、"));
+        }
+    }
     fact.display.subject_briefs.insert(
         snapshot.subject_version.to_string(),
         WorkbenchSubjectDisplay {
@@ -205,6 +217,39 @@ mod tests {
             assert!(old.counterparty_label.is_none());
             assert!(old.summary_sections.iter().any(|s| s.label == "历史资料"));
         }
+    }
+
+    #[test]
+    fn purchase_queue_uses_frozen_customer_without_changing_supplier_identity() {
+        use erp_workflow::entity::approval_integration::display_snapshot::ApprovalRelatedSalesSnapshot;
+        let mut snapshot = snapshot(DocumentType::PurchaseOrder);
+        let display = snapshot.display.as_mut().unwrap();
+        display.source.list_summary = "旧供应商摘要".into();
+        display.source_sales = vec![ApprovalRelatedSalesSnapshot {
+            document_id: "sales-1".into(),
+            document_no: "XS-1".into(),
+            revision_id: "revision-1".into(),
+            revision_no: 1,
+            source: ObjectBriefSource { customer: Some("冻结客户".into()), ..Default::default() },
+        }];
+        let policy =
+            object_policy(WorkItemType::DocumentApproval, DocumentType::PurchaseOrder.as_str()).unwrap();
+        let fact = super::super::WorkbenchObjectFact::from_authority(erp_workflow::ports::ObjectFact::new(
+            "document",
+            "采购单",
+            "owner",
+        ));
+        let key = (policy.object_kind, "document".into());
+        let mut facts = WorkbenchObjectFactMap::from([(key.clone(), fact)]);
+        apply_snapshot(&mut facts, snapshot.clone());
+        let summary = super::super::approval_list::document_summary(&facts[&key], Some(1)).unwrap();
+        assert_eq!(summary.counterparty_label.as_deref(), Some("原往来方"));
+        assert_eq!(summary.list_summary, "客户：冻结客户");
+        snapshot.subject_version = 2;
+        snapshot.display.as_mut().unwrap().source_sales.clear();
+        apply_snapshot(&mut facts, snapshot);
+        let summary = super::super::approval_list::document_summary(&facts[&key], Some(2)).unwrap();
+        assert_eq!(summary.list_summary, "旧供应商摘要");
     }
 
     /// 快照没有授权对象时不得制造可读事实。

@@ -23,6 +23,8 @@ export type WorkspacePaperTarget = Readonly<{
     kind: WorkspacePaperKind | "approval_snapshot"
     objectId: string
     title?: string
+    materialsView?: "all" | "source-sales" | "attachments"
+    sourceRevisionId?: string
 }>
 
 type WorkspaceDocumentPaperDialogProps = {
@@ -47,14 +49,22 @@ export function WorkspaceDocumentPaperDialog({
                 className="flex max-h-[min(96vh,56rem)] w-full max-w-[calc(100%-1.5rem)] flex-col gap-0 overflow-hidden border-0 bg-transparent p-0 shadow-none ring-0 sm:max-w-5xl dark:ring-0"
             >
                 <DialogTitle className="sr-only">
-                    {target?.title
-                        ? `${target.title} ${target.kind === "approval_snapshot" ? "提交资料" : "纸质预览"}`
-                        : "单据纸质预览"}
+                    {target?.materialsView === "source-sales"
+                        ? "来源销售资料"
+                        : target?.materialsView === "attachments"
+                          ? "合同、凭证及附件"
+                          : target?.title
+                            ? `${target.title} ${target.kind === "approval_snapshot" ? "提交资料" : "纸质预览"}`
+                            : "单据纸质预览"}
                 </DialogTitle>
                 <DialogDescription className="sr-only">
-                    {target?.kind === "approval_snapshot"
-                        ? "此次审批提交时保留的单据及附件，销售单包含全部提交明细，按当前审批访问资格读取。"
-                        : "系统业务数据的打印件；金额与状态以系统记录为准。版本、附件和关联单据仍在对应工作面查看。"}
+                    {target?.materialsView === "source-sales"
+                        ? "本次审批锁定的来源销售摘要及允许读取的附件。"
+                        : target?.materialsView === "attachments"
+                          ? "本次审批允许读取的合同、业务凭证及附件。"
+                          : target?.kind === "approval_snapshot"
+                            ? "此次审批提交时保留的单据及附件，销售单包含全部提交明细，按当前审批访问资格读取。"
+                            : "系统业务数据的打印件；金额与状态以系统记录为准。版本、附件和关联单据仍在对应工作面查看。"}
                     按 Esc 或点击遮罩关闭。
                 </DialogDescription>
 
@@ -80,6 +90,8 @@ export function WorkspaceDocumentPaperDialog({
                             <ApprovalSubmittedMaterials
                                 instanceId={target.objectId}
                                 enabled={open}
+                                view={target.materialsView}
+                                sourceRevisionId={target.sourceRevisionId}
                             />
                         ) : target ? (
                             <WorkspacePaperBody
