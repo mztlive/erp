@@ -1,5 +1,6 @@
 "use client"
 
+import { isValidElement } from "react"
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
 
 import { cn } from "@/lib/utils"
@@ -21,8 +22,24 @@ function Tooltip({ ...props }: TooltipPrimitive.Root.Props) {
     return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
 }
 
-function TooltipTrigger({ ...props }: TooltipPrimitive.Trigger.Props) {
-    return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
+function TooltipTrigger({
+    id,
+    render,
+    ...props
+}: TooltipPrimitive.Trigger.Props) {
+    // Base UI 用触发器 ID 注册并查找浮层归属；render 元素的 ID 会覆盖最终 DOM ID。
+    // 注册时沿用该 ID，避免打开后被误判为触发器已卸载而立即关闭。
+    const triggerId = isValidElement<{ id?: string }>(render)
+        ? (render.props.id ?? id)
+        : id
+    return (
+        <TooltipPrimitive.Trigger
+            data-slot="tooltip-trigger"
+            {...props}
+            id={triggerId}
+            render={render}
+        />
+    )
 }
 
 function TooltipContent({

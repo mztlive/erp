@@ -71,33 +71,6 @@ export function PurchaseOrderCreateSourcingWorkspace({
             ref={surface}
             className="@container/sourcing-workspace flex min-h-0 flex-1 flex-col overflow-hidden"
         >
-            {!narrow ? (
-                <div className="flex shrink-0 flex-wrap items-center gap-x-6 gap-y-2 border-b border-border px-4 py-2">
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                        {order.contractNumber ? (
-                            <span>
-                                合同{" "}
-                                <span className="text-foreground">
-                                    {order.contractNumber}
-                                </span>
-                            </span>
-                        ) : null}
-                        {order.salesOwnerName ? (
-                            <span>
-                                销售负责人{" "}
-                                <span className="text-foreground">
-                                    {order.salesOwnerName}
-                                </span>
-                            </span>
-                        ) : null}
-                    </div>
-                    <div className="min-w-0 flex-1">{toolbar}</div>
-                </div>
-            ) : (
-                <p className="shrink-0 border-b border-border px-4 py-3 text-xs text-muted-foreground">
-                    优先分配现有库存，采购优先直发。请核对分配结果。
-                </p>
-            )}
             <div className="grid min-h-0 flex-1 grid-rows-1 @min-[960px]/sourcing-workspace:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] @min-[960px]/sourcing-workspace:grid-rows-1">
                 <section
                     aria-label="供给商品列表"
@@ -155,6 +128,7 @@ export function PurchaseOrderCreateSourcingWorkspace({
                         />
                     ) : (
                         <SourcingProductList
+                            toolbar={toolbar}
                             rows={visible}
                             activeId={active?.product.salesOrderLineId}
                             onSelect={select}

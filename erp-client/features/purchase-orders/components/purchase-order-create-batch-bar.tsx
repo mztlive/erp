@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { SparklesIcon } from "lucide-react"
+import { ListFilterIcon, SparklesIcon } from "lucide-react"
 import { OptionCombobox } from "@/components/business/option-combobox"
 import { cn } from "@/lib/utils"
 import {
@@ -59,20 +59,37 @@ export function PurchaseOrderCreateBatchBar({
             )}
         >
             <Dialog open={open} onOpenChange={setOpen}>
-                <DialogTrigger
-                    id="procurement-orders-create-batch-toggle"
-                    render={
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={disabled || selectedCount === 0}
-                        />
-                    }
-                >
-                    批量指定来源
-                    {selectedCount > 0 ? `（${selectedCount}）` : ""}
-                </DialogTrigger>
+                <Tooltip>
+                    <TooltipTrigger
+                        render={
+                            <DialogTrigger
+                                id="procurement-orders-create-batch-toggle"
+                                render={
+                                    <Button
+                                        type="button"
+                                        size={compact ? "icon-sm" : "sm"}
+                                        variant={compact ? "ghost" : "outline"}
+                                        aria-label="批量指定来源"
+                                        disabled={
+                                            disabled || selectedCount === 0
+                                        }
+                                    />
+                                }
+                            />
+                        }
+                    >
+                        <ListFilterIcon aria-hidden="true" />
+                        {!compact
+                            ? `批量指定来源${selectedCount > 0 ? `（${selectedCount}）` : ""}`
+                            : null}
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        批量指定来源
+                        {selectedCount > 0
+                            ? `（已选 ${selectedCount} 行）`
+                            : "（请先选择商品）"}
+                    </TooltipContent>
+                </Tooltip>
                 <DialogContent
                     closeButtonId="procurement-orders-create-batch-close"
                     className="sm:max-w-lg"
@@ -158,20 +175,21 @@ export function PurchaseOrderCreateBatchBar({
                         <Button
                             id="procurement-orders-create-batch-match"
                             type="button"
-                            size="sm"
+                            size={compact ? "icon-sm" : "sm"}
+                            aria-label="重新自动分配（直发优先）"
                             variant={compact ? "ghost" : "outline"}
-                            className="ml-auto"
+                            className={compact ? undefined : "ml-auto"}
                             disabled={disabled || matchDisabled}
                             onClick={onMatchBest}
                             data-testid="purchase-create-match-best"
                         />
                     }
                 >
-                    <SparklesIcon data-icon="inline-start" />
-                    重新自动分配（直发优先）
+                    <SparklesIcon aria-hidden="true" />
+                    {!compact ? "重新自动分配（直发优先）" : null}
                 </TooltipTrigger>
                 <TooltipContent>
-                    重新推荐全部明细，将替换当前手工调整与拆分方案。
+                    重新自动分配（直发优先）：重新推荐全部明细，将替换当前手工调整与拆分方案。
                 </TooltipContent>
             </Tooltip>
         </div>

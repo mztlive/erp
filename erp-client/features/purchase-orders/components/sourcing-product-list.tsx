@@ -1,5 +1,6 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { QuantityValue } from "@/components/business"
 import {
     TableToolbar,
@@ -21,11 +22,13 @@ import type { SourcingEditorRow } from "../lib/sourcing/editor-rows"
 
 export function SourcingProductList({
     rows,
+    toolbar,
     activeId,
     onSelect,
     selectedProductIds,
     onToggleProducts,
 }: SourcingBatchSelectionProps & {
+    toolbar: ReactNode
     rows: SourcingEditorRow[]
     activeId?: string
     onSelect: (id: string) => void
@@ -35,7 +38,7 @@ export function SourcingProductList({
     ).length
     return (
         <TableToolbarScope>
-            <TableToolbar className="shrink-0 px-4 py-2">
+            <TableToolbar className="shrink-0 px-4 py-2" actions={toolbar}>
                 <span className="text-xs text-muted-foreground">
                     显示 {rows.length} 行 · 批量已选 {selectedProductIds.size}{" "}
                     行

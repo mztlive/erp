@@ -11,6 +11,7 @@ import {
     TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { PurchaseOrderCreatePage } from "@/features/purchase-orders/pages/purchase-order-create-page"
+import { useCreationBasesQuery } from "@/features/purchase-orders/hooks/queries"
 import { SalesOrderPaperPreviewDialog } from "@/features/sales-orders/components/sales-order-paper-preview-dialog"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { isBlockedWorkItem } from "../lib/work-item"
@@ -28,6 +29,13 @@ export function WorkspaceProcurementTask({
     onTaskCompleted?: (workItemId: string) => void
 }) {
     const [previewId, setPreviewId] = useState<string | null>(null)
+    const basesQuery = useCreationBasesQuery({
+        salesOrderId: item.businessObjectId,
+        workItemId: item.workItemId,
+    })
+    const order = basesQuery.data?.find(
+        (basis) => basis.salesOrderId === item.businessObjectId,
+    )
     const pathname = usePathname()
     const searchParams = useSearchParams()
     const returnTo = `${pathname}${searchParams.toString() ? `?${searchParams}` : ""}`
@@ -61,6 +69,22 @@ export function WorkspaceProcurementTask({
                             <span className="num text-xs text-muted-foreground">
                                 {stripDocumentNumberPrefix(item.stableNumber)}
                             </span>
+                            {order?.contractNumber ? (
+                                <span className="text-xs text-muted-foreground">
+                                    合同{" "}
+                                    <span className="text-foreground">
+                                        {order.contractNumber}
+                                    </span>
+                                </span>
+                            ) : null}
+                            {order?.salesOwnerName ? (
+                                <span className="text-xs text-muted-foreground">
+                                    销售负责人{" "}
+                                    <span className="text-foreground">
+                                        {order.salesOwnerName}
+                                    </span>
+                                </span>
+                            ) : null}
                         </div>
                     </div>
                     <WorkspaceTaskHeaderActions item={item}>
