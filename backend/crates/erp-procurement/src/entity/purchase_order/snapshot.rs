@@ -4,7 +4,7 @@
 
 use chrono::{Datelike, Days};
 use erp_core::common::time::BusinessDate;
-use erp_core::money::{Amount, Rate};
+use erp_core::money::{Amount, Rate, round_to_cent};
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -119,6 +119,43 @@ impl PaymentTermSnapshot {
         })
     }
 
+    /// 计算当前版本履约前必须达到的累计付款金额。
+    ///
+    /// # 参数
+    /// * `gross_amount` - 当前生效采购版本含税总额。
+    ///
+    /// # 返回
+    /// 非先款条件返回 `None`；同时冻结金额与比例时取较大门槛。
+    ///
+    /// # 错误
+    /// 先款门槛缺失、负值或比例运算溢出时返回错误。
+    pub fn required_prepayment(&self, gross_amount: Amount) -> Result<Option<Amount>> {
+        if !self.prepay_gate {
+            return Ok(None);
+        }
+        if self.prepay_minimum_amount.is_none() && self.prepay_minimum_ratio.is_none() {
+            return Err(Error::from("先款条件缺少冻结门槛"));
+        }
+        let fixed = self.prepay_minimum_amount.unwrap_or(Amount::zero());
+        if gross_amount < Amount::zero() || fixed < Amount::zero() {
+            return Err(Error::from("先款门槛金额不能为负"));
+        }
+        let proportional = match self.prepay_minimum_ratio {
+            Some(ratio) if ratio.to_decimal().is_sign_negative() => {
+                return Err(Error::from("先款门槛比例不能为负"));
+            },
+            Some(ratio) => {
+                let value = gross_amount
+                    .to_decimal()
+                    .checked_mul(ratio.to_decimal())
+                    .ok_or_else(|| Error::from("先款门槛金额超出支持范围"))?;
+                Amount::try_from(round_to_cent(value))?
+            },
+            None => Amount::zero(),
+        };
+        Ok(Some(fixed.max(proportional)))
+    }
+
     /// 计算采购应付的计划付款日。
     ///
     /// 先款/现结条件以采购最终通过日为付款日；货到 15/30 天条件以提交行中
@@ -167,6 +204,30 @@ mod tests {
     use erp_core::common::time::BusinessDate;
 
     use super::{PaymentTermSnapshot, SupplierSnapshot};
+
+    #[test]
+    fn required_prepayment_uses_frozen_thresholds_and_cent_rounding() {
+        let mut snapshot = PaymentTermSnapshot {
+            payment_term_code: "PREPAY_50".into(),
+            prepay_gate: true,
+            prepay_minimum_amount: None,
+            prepay_minimum_ratio: Some("0.5".parse().unwrap()),
+        };
+        assert_eq!(snapshot.required_prepayment("60".parse().unwrap()).unwrap(), Some("30".parse().unwrap()));
+        assert_eq!(
+            snapshot.required_prepayment("0.03".parse().unwrap()).unwrap(),
+            Some("0.02".parse().unwrap())
+        );
+        snapshot.prepay_minimum_amount = Some("40".parse().unwrap());
+        assert_eq!(snapshot.required_prepayment("60".parse().unwrap()).unwrap(), Some("40".parse().unwrap()));
+        snapshot.prepay_minimum_amount = None;
+        snapshot.prepay_minimum_ratio = None;
+        assert!(snapshot.required_prepayment("60".parse().unwrap()).is_err());
+        snapshot.prepay_minimum_ratio = Some("-0.5".parse().unwrap());
+        assert!(snapshot.required_prepayment("60".parse().unwrap()).is_err());
+        snapshot.prepay_gate = false;
+        assert_eq!(snapshot.required_prepayment("60".parse().unwrap()).unwrap(), None);
+    }
 
     #[test]
     fn supplier_snapshot_trims_and_requires_name() {

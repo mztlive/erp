@@ -1,5 +1,7 @@
 "use client"
 
+import { PaymentBasis } from "./payment-basis"
+import { paymentOutcome } from "@/features/supplier-payables/lib/payment-guidance"
 import { InvoiceAllocationTaxes } from "./invoice-allocation-taxes"
 
 import { ShieldAlertIcon } from "lucide-react"
@@ -176,6 +178,17 @@ export function SupplierAllocationWorkspace({
                         </div>
                         <AllocationFactFormCard
                             track={track}
+                            paymentBasis={
+                                track === "payment" ? (
+                                    <PaymentBasis
+                                        pool={pool}
+                                        selected={selected}
+                                        amounts={amounts}
+                                        disabled={isSubmitting}
+                                        onAmountChange={setAmountFor}
+                                    />
+                                ) : undefined
+                            }
                             existingInvoiceId={session.existingInvoiceId}
                             existingDocumentNo={session.existingDocumentNo}
                             existingUnallocated={session.existingUnallocated}
@@ -212,6 +225,12 @@ export function SupplierAllocationWorkspace({
                     pending={isSubmitting}
                     paymentAmount={factAmount}
                     recipient={paymentRecipient}
+                    paymentResults={pool
+                        .filter((item) => selected.has(item.payableAccountId))
+                        .map(
+                            (item) =>
+                                `${item.sourceDocumentNo} · ${item.paymentGuidance?.termLabel ?? "付款条件待核对"} · 本次 ¥${amounts[item.payableAccountId] || "0"}。${paymentOutcome(item, amounts[item.payableAccountId] ?? "")}`,
+                        )}
                     onOpenChange={setConfirmOpen}
                     onConfirm={() => void doSubmit()}
                     idPrefix="supplier-payables-payment-submit-confirm"

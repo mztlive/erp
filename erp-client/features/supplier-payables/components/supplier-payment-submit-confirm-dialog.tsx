@@ -9,6 +9,7 @@ export function SupplierPaymentSubmitConfirmDialog({
     pending,
     paymentAmount,
     recipient,
+    paymentResults = [],
     onOpenChange,
     onConfirm,
     id,
@@ -18,6 +19,7 @@ export function SupplierPaymentSubmitConfirmDialog({
     pending: boolean
     paymentAmount: string
     recipient?: PaymentRecipient
+    paymentResults?: readonly string[]
     onOpenChange: (open: boolean) => void
     onConfirm: () => void | Promise<void>
     id?: string
@@ -37,16 +39,17 @@ export function SupplierPaymentSubmitConfirmDialog({
             open={open}
             onOpenChange={onOpenChange}
             actionLabel="付款"
-            title="确认付款"
-            confirmLabel="确认付款"
+            title="确认登记付款"
+            confirmLabel="确认登记付款"
             fromStatus={{ label: "待付款", tone: "neutral" }}
             toStatus={{ label: "已过账", tone: "success" }}
-            description="确认后立即过账并核销。"
+            description="请核对实际银行付款与回单，确认后登记并核销。"
             summary={[
                 `收款户名 ${recipient?.accountName ?? "未加载"}`,
                 `开户行 ${bankLabel}`,
                 `收款账号 ${recipient?.accountNumberMasked ?? "未加载"}`,
-                `付款金额 ${paymentAmount || "0"}`,
+                `本次实际付款金额 ${paymentAmount || "0"}`,
+                ...paymentResults,
             ]}
             irreversibleEffects={["纠错须走付款冲正或供应商退款"]}
             pending={pending}

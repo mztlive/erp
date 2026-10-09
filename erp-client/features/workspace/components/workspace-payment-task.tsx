@@ -126,7 +126,7 @@ export function WorkspacePaymentTask({
                         payable ? (
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                                 <span>
-                                    待付{" "}
+                                    整单剩余应付{" "}
                                     <MoneyValue
                                         value={headerOpenTotal}
                                         taxBasis="gross"

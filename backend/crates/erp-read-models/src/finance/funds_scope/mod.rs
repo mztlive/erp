@@ -8,6 +8,7 @@ mod party_names;
 mod payable;
 mod payable_source;
 mod payment;
+mod payment_guidance;
 mod receipt;
 mod receivable;
 mod receivable_display;

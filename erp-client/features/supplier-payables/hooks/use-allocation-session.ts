@@ -1,5 +1,6 @@
 "use client"
 
+import { suggestedPayment } from "@/features/supplier-payables/lib/payment-guidance"
 import * as React from "react"
 
 import { useStore } from "@tanstack/react-form"
@@ -199,18 +200,22 @@ export function useAllocationSession(
         setSelected(next)
         const am: Record<string, string> = {}
         let prefillSum = BigInt(0)
+        let completeSuggestion = true
         for (const id of next) {
             const item = pool.find((p) => p.payableAccountId === id)
             if (!item) continue
             const open =
-                track === "payment" ? item.openTotal : item.openInvoiceableTotal
+                track === "payment"
+                    ? suggestedPayment(item)
+                    : item.openInvoiceableTotal
             am[id] = open
+            if (!open) completeSuggestion = false
             prefillSum += cents(open)
         }
         setAmounts((prev) => ({ ...am, ...prev }))
         // 预选目标时同步预填记录金额，避免重复输入（继续核销场景除外）
         if (!session.existingInvoiceId) {
-            const prefill = fromCents(prefillSum)
+            const prefill = completeSuggestion ? fromCents(prefillSum) : ""
             if (track === "payment") {
                 paymentForm.setFieldValue(
                     "amount",
@@ -383,12 +388,35 @@ export function useAllocationSession(
             return next
         })
         if (checked && !amounts[payableAccountId]) {
-            setAmounts((m) => ({ ...m, [payableAccountId]: open }))
+            const item = pool.find(
+                (item) => item.payableAccountId === payableAccountId,
+            )
+            const initial =
+                track === "payment"
+                    ? item
+                        ? suggestedPayment(item)
+                        : ""
+                    : open
+            setAmounts((m) => ({ ...m, [payableAccountId]: initial }))
         }
     }
 
     function setAmountFor(payableAccountId: string, value: string) {
         setAmounts((m) => ({ ...m, [payableAccountId]: value }))
+        if (track === "payment" && mergedPayment) {
+            let total = BigInt(0)
+            let complete = true
+            for (const id of selected) {
+                const amount =
+                    id === payableAccountId ? value : (amounts[id] ?? "")
+                if (!amount.trim()) complete = false
+                total += cents(amount)
+            }
+            paymentForm.setFieldValue(
+                "amount",
+                complete ? fromCents(total) : "",
+            )
+        }
     }
 
     function toggleSelectAll() {
@@ -404,7 +432,7 @@ export function useAllocationSession(
                 setAmounts((m) => {
                     const next = { ...m }
                     for (const p of pool) {
-                        next[p.payableAccountId] = p.openTotal
+                        next[p.payableAccountId] = suggestedPayment(p)
                     }
                     return next
                 })
@@ -420,7 +448,7 @@ export function useAllocationSession(
                 for (const p of pool) {
                     next[p.payableAccountId] =
                         track === "payment"
-                            ? p.openTotal
+                            ? suggestedPayment(p)
                             : p.openInvoiceableTotal
                 }
                 return next
@@ -430,18 +458,26 @@ export function useAllocationSession(
 
     function fillAllSelected() {
         if (!session) return
-        setAmounts((m) => {
-            const next = { ...m }
-            for (const p of pool) {
-                if (selected.has(p.payableAccountId)) {
-                    next[p.payableAccountId] =
-                        track === "payment"
-                            ? p.openTotal
-                            : p.openInvoiceableTotal
-                }
-            }
-            return next
-        })
+        const next = { ...amounts }
+        let total = BigInt(0)
+        let complete = true
+        for (const p of pool) {
+            if (!selected.has(p.payableAccountId)) continue
+            const value =
+                track === "payment"
+                    ? suggestedPayment(p)
+                    : p.openInvoiceableTotal
+            next[p.payableAccountId] = value
+            if (!value.trim()) complete = false
+            total += cents(value)
+        }
+        setAmounts(next)
+        if (track === "payment") {
+            paymentForm.setFieldValue(
+                "amount",
+                complete ? fromCents(total) : "",
+            )
+        }
     }
 
     async function handleSaveDraft() {

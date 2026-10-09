@@ -86,7 +86,9 @@ export function AllocationPoolCard({
                             disabled={selected.size === 0 || disabled}
                             onClick={onFillAllSelected}
                         >
-                            按开放余额填满
+                            {track === "payment"
+                                ? "按付款建议填写"
+                                : "按开放余额填满"}
                         </Button>
                     </div>
                 </div>

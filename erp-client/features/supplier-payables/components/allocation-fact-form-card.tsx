@@ -116,6 +116,7 @@ export type AllocationFactFormCardProps = {
     paymentRecipientReveal?: Omit<PaymentRecipientRevealProps, "recipient">
     /** 工作台付款作业面已有标题，不再套「付款信息」区块头。 */
     hideHeading?: boolean
+    paymentBasis?: React.ReactNode
 }
 
 /** 本次付款/进项发票记录卡：收款信息、记录表单与提交校验。 */
@@ -138,6 +139,7 @@ export function AllocationFactFormCard({
     paymentRecipient,
     paymentRecipientReveal,
     hideHeading = false,
+    paymentBasis,
 }: AllocationFactFormCardProps) {
     return (
         <section
@@ -156,6 +158,7 @@ export function AllocationFactFormCard({
                     </p>
                 </div>
             )}
+            {track === "payment" ? paymentBasis : null}
             {paymentRecipient && paymentRecipientReveal ? (
                 <div className="space-y-3 border-b border-border px-4 py-3">
                     <PaymentRecipientHeading
@@ -190,7 +193,7 @@ export function AllocationFactFormCard({
                             children={(field) => (
                                 <field.TextField
                                     id="supplier-payables-allocation-form-amount"
-                                    label="付款金额"
+                                    label="本次实际付款金额"
                                     required
                                     inputMode="decimal"
                                 />

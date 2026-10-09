@@ -13,6 +13,7 @@ import {
     mapBackendSourceType,
     mapPayableStatus,
     mapSourceType,
+    mapPaymentGuidance,
     payableEntryTypeLabel,
     projectInvoice,
     projectPayable,
@@ -435,6 +436,7 @@ export async function fetchAllocationSession(input: {
  * 范围列表不带分录时，付款只能核销详情里的增加分录，不能把子账 id 当成 entry id。
  */
 async function allocationPoolTarget(account: BackendPayableAccount) {
+    let guidance = mapPaymentGuidance(account.payment_guidance)
     const listed = (account.entries ?? []).find(
         (entry) => entry.direction === "increase",
     )
@@ -448,6 +450,7 @@ async function allocationPoolTarget(account: BackendPayableAccount) {
         }
         entryId = resolved
         dueDate = detail.payable.dueDate || dueDate
+        guidance = detail.payable.paymentGuidance ?? guidance
     }
     const sourceType = mapSourceType(account.source_type)
     return {
@@ -464,6 +467,7 @@ async function allocationPoolTarget(account: BackendPayableAccount) {
         ),
         sourceDocumentId: account.source_document_id,
         openTotal: account.open_total,
+        paymentGuidance: guidance,
         openInvoiceableTotal: account.open_invoiceable_total,
         dueDate,
         dueStateLabel: "未到期",

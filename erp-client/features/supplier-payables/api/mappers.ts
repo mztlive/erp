@@ -3,6 +3,7 @@
 import type { DocumentApprovalViewDto } from "@/features/approval-workflow/types"
 import type {
     PayableRow,
+    PaymentGuidance,
     PaymentAllocationLine,
     PaymentReversalRow,
     PaymentReversalSummary,
@@ -65,6 +66,32 @@ type BackendPaymentRecipient = {
     account_number_masked: string
 }
 
+type BackendPaymentGuidance = {
+    term_label: string
+    purchase_total: string
+    paid_total: string
+    prepay_gate: boolean
+    required_prepayment: string | null
+    prepayment_gap: string | null
+    suggested_amount: string | null
+}
+
+export function mapPaymentGuidance(
+    value?: BackendPaymentGuidance | null,
+): PaymentGuidance | null {
+    return value
+        ? {
+              termLabel: value.term_label,
+              purchaseTotal: value.purchase_total,
+              paidTotal: value.paid_total,
+              prepayGate: value.prepay_gate,
+              requiredPrepayment: value.required_prepayment,
+              prepaymentGap: value.prepayment_gap,
+              suggestedAmount: value.suggested_amount,
+          }
+        : null
+}
+
 export type BackendPayableAccount = {
     id: string
     source_document_id: string
@@ -83,6 +110,7 @@ export type BackendPayableAccount = {
     version: number
     created_at: number
     entries: BackendPayableEntry[]
+    payment_guidance?: BackendPaymentGuidance | null
     payment_recipient?: BackendPaymentRecipient | null
 }
 
@@ -315,6 +343,7 @@ export function projectPayable(a: BackendPayableAccount): PayableRow {
         grossTotal: a.gross_total,
         settledTotal: a.settled_total,
         openTotal: a.open_total,
+        paymentGuidance: mapPaymentGuidance(a.payment_guidance),
         invoicedTotal: a.invoiced_total,
         openInvoiceableTotal: a.open_invoiceable_total,
         dueDate: primary?.due_date ?? a.entries?.[0]?.due_date ?? "",

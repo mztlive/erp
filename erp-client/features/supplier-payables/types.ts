@@ -82,6 +82,17 @@ export type PaymentMergeCandidatesView = Readonly<{
     items: readonly PaymentMergeCandidate[]
 }>
 
+/** 采购生效条款与当前付款余额派生的建议。 */
+export type PaymentGuidance = Readonly<{
+    termLabel: string
+    purchaseTotal: string
+    paidTotal: string
+    prepayGate: boolean
+    requiredPrepayment: string | null
+    prepaymentGap: string | null
+    suggestedAmount: string | null
+}>
+
 export type PayableRow = Readonly<{
     payableAccountId: string
     supplierId: string
@@ -95,6 +106,7 @@ export type PayableRow = Readonly<{
     primaryEntryId: string
     entryLockVersion: number
     accountLockVersion: number
+    paymentGuidance?: PaymentGuidance | null
     grossTotal: string
     settledTotal: string
     openTotal: string
@@ -347,6 +359,7 @@ type AllocationPoolItem = Readonly<{
     sourceDocumentNo: string
     sourceDocumentId: string
     openTotal: string
+    paymentGuidance?: PaymentGuidance | null
     openInvoiceableTotal: string
     dueDate: string
     dueStateLabel: string

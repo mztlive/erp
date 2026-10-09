@@ -8,14 +8,15 @@
 //! `invoice`（进项发票分配）；公开类型名与 serde 形态保持不变。
 
 pub mod account;
+pub mod guidance;
 pub mod invoice;
 pub mod payment;
-
 pub use account::{
     CreatePayableAccountRequest, PageParams, PageView, PayableAccountListParams, PayableAccountListQuery,
     PayableAccountSummaryView, PayableAccountView, PayableEntryView, PaymentRecipientRevealView,
     PaymentRecipientView, PaymentReversalStatus, RevealPaymentRecipientRequest, SortDir,
 };
+pub use guidance::PaymentGuidanceView;
 pub use invoice::{
     PurchaseInvoiceAllocationLineRequest, PurchaseInvoiceAllocationListParams,
     PurchaseInvoiceAllocationListQuery, PurchaseInvoiceAllocationView, PurchaseInvoiceRegisteredView,

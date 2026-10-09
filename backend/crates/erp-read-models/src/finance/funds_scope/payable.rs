@@ -3,12 +3,16 @@
 use std::collections::HashMap;
 
 use application_core::AuditActor;
+use erp_core::ids::PayableAccountId;
+use erp_finance::dto::payable::PayableEntryView;
+use erp_finance::entity::payable::PayableAccount;
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableAccountRow, PayableExt};
 use erp_procurement::PurchaseAccess;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
+use super::super::payable::mapping::{payment_recipient_view, resolve_optional_payment_recipient_for_read};
 use super::authorization::*;
 use super::payable_source::source_key;
 use super::repository::accounts::{AccountPageRow, AccountSummaryRow};
@@ -265,7 +269,7 @@ impl FundsAccess {
     ) -> Result<Vec<ScopedPayableAccountRow>> {
         let ids = page.iter().map(|item| item.row.supplier_id.clone()).collect::<Vec<_>>();
         let names = self.supplier_legal_names(&ids, executor).await?;
-        Ok(page
+        let mut items = page
             .iter()
             .map(|item| {
                 let source = &item.source;
@@ -279,7 +283,9 @@ impl FundsAccess {
                 row.supplier_name = names.get(&item.row.supplier_id).cloned();
                 row
             })
-            .collect())
+            .collect::<Vec<_>>();
+        self.fill_payment_guidance(&mut items, executor).await?;
+        Ok(items)
     }
 
     /// 应付子账详情同一事务内解析、取数与裁剪；版本绑定来源采购单。
@@ -302,7 +308,6 @@ impl FundsAccess {
         purchase_access: &PurchaseAccess,
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedResult<ScopedPayableAccountRow>> {
-        use erp_core::ids::PayableAccountId;
         let (_access, authorization) =
             self.resolve_with_purchase(actor, "payable_account", "detail", purchase_access, executor).await?;
         let accounts = self
@@ -328,7 +333,27 @@ impl FundsAccess {
             linked_document_id: account.source_document_id.clone(),
             linked_document_version: fact.as_ref().map(|order| order.version).unwrap_or(0),
         };
-        let whole = true;
+        let data = self.payable_detail_data(&account, fact.as_ref(), executor).await?;
+        let parts = vec![format!("{}:{}", account.base.id, account.base.version), row_facts.version_part()];
+        Ok(FundsScopedResult {
+            data,
+            scope_version: scope_version(&authorization.context, &parts),
+            policy_version: authorization.context.policy_version,
+            organization_version: authorization.context.organizations.version,
+            as_of: authorization.context.as_of.as_utc().to_rfc3339(),
+            empty_reason: None,
+            scope_summary: "应付子账继承采购或供应商结算的真实来源边界",
+            ownership_basis: "linked_purchase_owner",
+        })
+    }
+
+    /// 在已验证来源资格的同一快照内装配应付详情。
+    async fn payable_detail_data(
+        &self,
+        account: &PayableAccount,
+        fact: Option<&LinkedPurchaseFact>,
+        executor: &mut dyn Executor,
+    ) -> Result<ScopedPayableAccountRow> {
         let mut data = cut_payable_account_row(
             &PayableAccountRow {
                 id: account.base.id.clone(),
@@ -345,19 +370,33 @@ impl FundsAccess {
                 version: account.base.version,
                 created_at: account.base.created_at,
             },
-            fact.as_ref(),
-            whole,
+            fact,
+            true,
         );
-        data.entries = self
+        data.entries = self.payable_detail_entries(account, executor).await?;
+        self.fill_payment_guidance(std::slice::from_mut(&mut data), executor).await?;
+        data.supplier_name = self.supplier_name_of(&account.supplier_id, executor).await?;
+        data.payment_recipient =
+            resolve_optional_payment_recipient_for_read(&self.db, &account.supplier_id, executor)
+                .await?
+                .as_ref()
+                .map(payment_recipient_view);
+        Ok(data)
+    }
+
+    /// 读取已授权子账的分录，保持原始分录身份供付款核销。
+    async fn payable_detail_entries(
+        &self,
+        account: &PayableAccount,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PayableEntryView>> {
+        Ok(self
             .db
             .payable_entries()
-            .find_entries_by_accounts(
-                &[erp_core::ids::PayableAccountId::new(account.base.id.clone())],
-                executor,
-            )
+            .find_entries_by_accounts(&[PayableAccountId::new(account.base.id.clone())], executor)
             .await?
             .into_iter()
-            .map(|entry| erp_finance::dto::payable::PayableEntryView {
+            .map(|entry| PayableEntryView {
                 id: entry.base.id,
                 entry_type: entry.entry_type,
                 direction: entry.direction,
@@ -368,28 +407,7 @@ impl FundsAccess {
                 source_sequence: entry.source_sequence,
                 posted_at: entry.posted_at,
             })
-            .collect();
-        data.supplier_name = self.supplier_name_of(&account.supplier_id, executor).await?;
-        data.payment_recipient =
-            crate::finance::payable::mapping::resolve_optional_payment_recipient_for_read(
-                &self.db,
-                &account.supplier_id,
-                executor,
-            )
-            .await?
-            .as_ref()
-            .map(crate::finance::payable::mapping::payment_recipient_view);
-        let parts = vec![format!("{}:{}", account.base.id, account.base.version), row_facts.version_part()];
-        Ok(FundsScopedResult {
-            data,
-            scope_version: scope_version(&authorization.context, &parts),
-            policy_version: authorization.context.policy_version,
-            organization_version: authorization.context.organizations.version,
-            as_of: authorization.context.as_of.as_utc().to_rfc3339(),
-            empty_reason: None,
-            scope_summary: "应付子账继承采购或供应商结算的真实来源边界",
-            ownership_basis: "linked_purchase_owner",
-        })
+            .collect())
     }
 }
 
@@ -442,6 +460,7 @@ pub(super) fn cut_payable_account_row(
         procurement_owner_user_id: fact.and_then(|order| order.owner_user_id.clone()),
         business_org_unit_id: fact.map(|order| order.business_org_unit_id.clone()),
         payment_recipient: None,
+        payment_guidance: None,
         entries: Vec::new(),
         source_document_no: fact.and_then(|order| {
             let number = order.document_no.trim();
