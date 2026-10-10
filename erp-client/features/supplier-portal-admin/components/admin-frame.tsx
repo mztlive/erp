@@ -2,7 +2,14 @@
 import type { ReactNode } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { PortalSurface } from "@/features/supplier-portal/components/surface"
+import { PageScaffold } from "@/components/business"
+import {
+    ListWorkspaceHeader,
+    ListWorkspaceViews,
+    listWorkspaceStyles,
+} from "@/components/business/list-workspace"
+import { Button } from "@/components/ui/button"
+import { ArrowUpRightIcon } from "lucide-react"
 import { usePortalAdminAccess } from "../hooks"
 const entries = [
     ["applications", "供应商申请", "supplier_portal_request:list"],
@@ -19,45 +26,49 @@ export function PortalAdminFrame({
     const pathname = usePathname()
     const access = usePortalAdminAccess()
     return (
-        <PortalSurface
-            title={title}
-            description="采购确认供应商商务变更；新品入库与销售上架分别执行。"
-            actions={
-                access.can("product:list") ? (
-                    <>
-                        <Link
+        <PageScaffold density="compact" className={listWorkspaceStyles.page}>
+            <ListWorkspaceHeader
+                eyebrow="采购与履约 · 供应商门户管理"
+                title={title}
+                description="采购确认供应商商务变更；新品入库与销售上架分别执行。"
+            >
+                {access.can("product:list") ? (
+                    <div className="flex flex-wrap justify-end gap-2">
+                        <Button
                             id="supplier-portal-admin-unlisted"
-                            className="text-sm text-primary"
-                            href="/master-data/products?productListingStatus=unlisted"
+                            variant="outline"
+                            render={
+                                <Link href="/master-data/products?productListingStatus=unlisted" />
+                            }
                         >
                             全部未上架商品
-                        </Link>
-                        <Link
+                            <ArrowUpRightIcon data-icon="inline-end" />
+                        </Button>
+                        <Button
                             id="supplier-portal-admin-partially-listed"
-                            className="text-sm text-primary"
-                            href="/master-data/products?productListingStatus=partially_listed"
+                            variant="outline"
+                            render={
+                                <Link href="/master-data/products?productListingStatus=partially_listed" />
+                            }
                         >
                             还有未上架规格
-                        </Link>
-                    </>
-                ) : null
-            }
-        >
-            <nav aria-label="供应商门户管理" className="flex flex-wrap gap-2">
-                {entries
+                            <ArrowUpRightIcon data-icon="inline-end" />
+                        </Button>
+                    </div>
+                ) : null}
+            </ListWorkspaceHeader>
+            <ListWorkspaceViews
+                ariaLabel="供应商门户管理"
+                items={entries
                     .filter(([, , permission]) => access.can(permission))
-                    .map(([path, label]) => (
-                        <Link
-                            id={`supplier-portal-admin-nav-${path}`}
-                            key={path}
-                            href={`/procurement/supplier-portal/${path}`}
-                            className={`rounded-md px-3 py-2 text-sm ${pathname.includes(`/${path}`) ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-accent"}`}
-                        >
-                            {label}
-                        </Link>
-                    ))}
-            </nav>
-            {children}
-        </PortalSurface>
+                    .map(([path, label]) => ({
+                        id: `supplier-portal-admin-nav-${path}`,
+                        label,
+                        href: `/procurement/supplier-portal/${path}`,
+                        active: pathname.includes(`/${path}`),
+                    }))}
+            />
+            <div className="flex min-w-0 flex-1 flex-col gap-6">{children}</div>
+        </PageScaffold>
     )
 }

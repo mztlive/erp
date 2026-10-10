@@ -4,6 +4,7 @@ import { z } from "zod"
 import type { ColumnDef } from "@tanstack/react-table"
 import { useAppForm } from "@/components/form"
 import { DataTable } from "@/components/business"
+import { ListToolbar } from "@/components/business/list"
 import { ListWorkSurface } from "@/components/business/list-workspace"
 import { SupplierSearchCombobox } from "@/features/entity-selectors"
 import { Button } from "@/components/ui/button"
@@ -177,30 +178,32 @@ export function PortalAdminAccountsPage() {
             <ListWorkSurface
                 ariaLabel="门户账号列表"
                 toolbar={
-                    <div className="w-full max-w-lg space-y-2">
-                        <label
-                            htmlFor="supplier-portal-accounts-filter-supplier"
-                            className="text-sm"
-                        >
-                            查看供应商账号
-                        </label>
-                        <SupplierSearchCombobox
-                            id="supplier-portal-accounts-filter-supplier"
-                            value={supplierId || undefined}
-                            disabled={
-                                !!editing ||
-                                mutation.isPending ||
-                                !!intent.current
-                            }
-                            onValueChange={(value) => {
-                                setSupplierId(value ?? "")
-                                setPagination((p) => ({ ...p, pageIndex: 0 }))
-                            }}
-                        />
-                    </div>
+                    <ListToolbar
+                        aria-label="供应商账号筛选"
+                        search={
+                            <SupplierSearchCombobox
+                                filterLabel="供应商"
+                                placeholder="请选择供应商"
+                                id="supplier-portal-accounts-filter-supplier"
+                                value={supplierId || undefined}
+                                disabled={
+                                    !!editing ||
+                                    mutation.isPending ||
+                                    !!intent.current
+                                }
+                                onValueChange={(value) => {
+                                    setSupplierId(value ?? "")
+                                    setPagination((p) => ({
+                                        ...p,
+                                        pageIndex: 0,
+                                    }))
+                                }}
+                            />
+                        }
+                    />
                 }
                 selectionBar={
-                    <span className="text-sm">
+                    <span className="text-xs text-muted-foreground">
                         共 {query.data?.total ?? 0} 个实名账号
                     </span>
                 }
@@ -215,18 +218,21 @@ export function PortalAdminAccountsPage() {
                         rowCount={query.data?.total ?? 0}
                         loading={query.isFetching}
                         errorState={
-                            <PortalError
-                                error={query.error}
-                                retry={() => void query.refetch()}
-                                id="supplier-portal-admin-accounts-retry"
-                            />
+                            query.isError ? (
+                                <PortalError
+                                    error={query.error}
+                                    retry={() => void query.refetch()}
+                                    id="supplier-portal-admin-accounts-retry"
+                                />
+                            ) : undefined
                         }
-                        emptyState={
-                            <p className="p-6 text-sm">
-                                {supplierId
-                                    ? "此供应商暂无门户账号。"
-                                    : "请选择供应商查看账号。"}
-                            </p>
+                        emptyTitle={
+                            supplierId
+                                ? "此供应商暂无门户账号。"
+                                : "请选择供应商"
+                        }
+                        emptyDescription={
+                            supplierId ? undefined : "选择供应商后查看账号。"
                         }
                     />
                 }

@@ -5,6 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { useRouter } from "next/navigation"
 import { OptionCombobox } from "@/components/business/option-combobox"
 import { DataTable } from "@/components/business"
+import { ListToolbar } from "@/components/business/list"
 import { ListWorkSurface } from "@/components/business/list-workspace"
 import { SupplierSearchCombobox } from "@/features/entity-selectors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -37,6 +38,7 @@ export function PortalAdminApplicationsPage() {
             {
                 id: "title",
                 header: "申请内容",
+                meta: { label: "申请内容", width: "flex" },
                 accessorFn: (row) =>
                     row.title ??
                     (row.input.name as string) ??
@@ -45,19 +47,26 @@ export function PortalAdminApplicationsPage() {
             {
                 accessorKey: "kind",
                 header: "类型",
+                meta: { label: "类型", width: "default" },
                 cell: ({ row }) =>
                     kindLabels[row.original.kind] ?? "供应合作申请",
             },
             {
                 accessorKey: "status",
                 header: "状态",
+                meta: { label: "状态", width: "status" },
                 cell: ({ row }) =>
                     statusLabels[row.original.status] ?? "待核对",
             },
-            { accessorKey: "reason", header: "申请原因" },
+            {
+                accessorKey: "reason",
+                header: "申请原因",
+                meta: { label: "申请原因", width: "reference" },
+            },
             {
                 accessorKey: "updated_at",
                 header: "更新时间",
+                meta: { label: "更新时间", width: "reference" },
                 cell: ({ row }) =>
                     timeLabel(
                         row.original.updated_at ?? row.original.created_at,
@@ -66,6 +75,7 @@ export function PortalAdminApplicationsPage() {
             {
                 id: "actions",
                 header: "操作",
+                meta: { label: "操作", width: "default" },
                 enableHiding: false,
                 cell: ({ row }) => (
                     <Link
@@ -104,38 +114,47 @@ export function PortalAdminApplicationsPage() {
             <ListWorkSurface
                 ariaLabel="供应商申请列表"
                 toolbar={
-                    <div className="w-full max-w-lg space-y-2">
-                        <label
-                            htmlFor="supplier-portal-requests-filter-supplier"
-                            className="text-sm"
-                        >
-                            查看供应商申请
-                        </label>
-                        <SupplierSearchCombobox
-                            id="supplier-portal-requests-filter-supplier"
-                            value={supplierId || undefined}
-                            onValueChange={(value) => {
-                                setSupplierId(value ?? "")
-                                setPagination((p) => ({ ...p, pageIndex: 0 }))
-                            }}
-                        />
-                        <OptionCombobox
-                            id="supplier-portal-admin-applications-status"
-                            aria-label="申请状态"
-                            value={status || null}
-                            onValueChange={(value) => {
-                                setStatus(value ?? "")
-                                setPagination((p) => ({ ...p, pageIndex: 0 }))
-                            }}
-                            options={Object.entries(statusLabels).map(
-                                ([value, label]) => ({ value, label }),
-                            )}
-                            placeholder="全部状态"
-                        />
-                    </div>
+                    <ListToolbar
+                        aria-label="供应商申请筛选"
+                        search={
+                            <SupplierSearchCombobox
+                                filterLabel="供应商"
+                                placeholder="请选择供应商"
+                                id="supplier-portal-requests-filter-supplier"
+                                value={supplierId || undefined}
+                                onValueChange={(value) => {
+                                    setSupplierId(value ?? "")
+                                    setPagination((p) => ({
+                                        ...p,
+                                        pageIndex: 0,
+                                    }))
+                                }}
+                            />
+                        }
+                        filters={
+                            <OptionCombobox
+                                filterLabel="申请状态"
+                                className="w-48 max-w-full"
+                                id="supplier-portal-admin-applications-status"
+                                aria-label="申请状态"
+                                value={status || null}
+                                onValueChange={(value) => {
+                                    setStatus(value ?? "")
+                                    setPagination((p) => ({
+                                        ...p,
+                                        pageIndex: 0,
+                                    }))
+                                }}
+                                options={Object.entries(statusLabels).map(
+                                    ([value, label]) => ({ value, label }),
+                                )}
+                                placeholder="全部状态"
+                            />
+                        }
+                    />
                 }
                 selectionBar={
-                    <span className="text-sm">
+                    <span className="text-xs text-muted-foreground">
                         共 {query.data?.total ?? 0} 条申请
                     </span>
                 }
@@ -155,18 +174,21 @@ export function PortalAdminApplicationsPage() {
                             )
                         }
                         errorState={
-                            <PortalError
-                                error={query.error}
-                                retry={() => void query.refetch()}
-                                id="supplier-portal-admin-requests-retry"
-                            />
+                            query.isError ? (
+                                <PortalError
+                                    error={query.error}
+                                    retry={() => void query.refetch()}
+                                    id="supplier-portal-admin-requests-retry"
+                                />
+                            ) : undefined
                         }
-                        emptyState={
-                            <p className="p-6 text-sm">
-                                {supplierId
-                                    ? "此供应商暂无可查看的申请。"
-                                    : "请选择供应商查看申请。"}
-                            </p>
+                        emptyTitle={
+                            supplierId
+                                ? "此供应商暂无可查看的申请。"
+                                : "请选择供应商"
+                        }
+                        emptyDescription={
+                            supplierId ? undefined : "选择供应商后查看申请。"
                         }
                     />
                 }

@@ -4,6 +4,7 @@ import { z } from "zod"
 import type { ColumnDef } from "@tanstack/react-table"
 import { useAppForm } from "@/components/form"
 import { DataTable } from "@/components/business"
+import { ListToolbar } from "@/components/business/list"
 import { ListWorkSurface } from "@/components/business/list-workspace"
 import {
     CompanySkuSearchCombobox,
@@ -257,26 +258,30 @@ export function PortalAdminCatalogPage() {
             <ListWorkSurface
                 ariaLabel="SKU定向开放"
                 toolbar={
-                    <div className="w-full max-w-lg space-y-2">
-                        <label
-                            htmlFor="supplier-portal-grants-filter-supplier"
-                            className="text-sm"
-                        >
-                            查看供应商开放目录
-                        </label>
-                        <SupplierSearchCombobox
-                            id="supplier-portal-grants-filter-supplier"
-                            value={supplierId || undefined}
-                            disabled={mutation.isPending || !!intent.current}
-                            onValueChange={(value) => {
-                                setSupplierId(value ?? "")
-                                setPagination((p) => ({ ...p, pageIndex: 0 }))
-                            }}
-                        />
-                    </div>
+                    <ListToolbar
+                        aria-label="供应商目录筛选"
+                        search={
+                            <SupplierSearchCombobox
+                                filterLabel="供应商"
+                                placeholder="请选择供应商"
+                                id="supplier-portal-grants-filter-supplier"
+                                value={supplierId || undefined}
+                                disabled={
+                                    mutation.isPending || !!intent.current
+                                }
+                                onValueChange={(value) => {
+                                    setSupplierId(value ?? "")
+                                    setPagination((p) => ({
+                                        ...p,
+                                        pageIndex: 0,
+                                    }))
+                                }}
+                            />
+                        }
+                    />
                 }
                 selectionBar={
-                    <span className="text-sm">
+                    <span className="text-xs text-muted-foreground">
                         共 {query.data?.total ?? 0} 项配置
                     </span>
                 }
@@ -291,18 +296,21 @@ export function PortalAdminCatalogPage() {
                         rowCount={query.data?.total ?? 0}
                         loading={query.isFetching}
                         errorState={
-                            <PortalError
-                                error={query.error}
-                                retry={() => void query.refetch()}
-                                id="supplier-portal-admin-grants-retry"
-                            />
+                            query.isError ? (
+                                <PortalError
+                                    error={query.error}
+                                    retry={() => void query.refetch()}
+                                    id="supplier-portal-admin-grants-retry"
+                                />
+                            ) : undefined
                         }
-                        emptyState={
-                            <p className="p-6 text-sm">
-                                {supplierId
-                                    ? "此供应商暂无定向开放配置。"
-                                    : "请选择供应商查看目录。"}
-                            </p>
+                        emptyTitle={
+                            supplierId
+                                ? "此供应商暂无定向开放配置。"
+                                : "请选择供应商"
+                        }
+                        emptyDescription={
+                            supplierId ? undefined : "选择供应商后查看目录。"
                         }
                     />
                 }
