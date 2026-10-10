@@ -248,7 +248,7 @@ function purchaseProgressTracks(row: PurchaseOrderListItem) {
                 tone:
                     row.paymentProgress === "已付"
                         ? ("success" as const)
-                        : row.paymentProgress === "部分"
+                        : row.paymentProgress === "部分付款"
                           ? ("info" as const)
                           : ("neutral" as const),
             },
