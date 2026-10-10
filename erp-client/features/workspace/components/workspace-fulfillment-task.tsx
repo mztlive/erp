@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/dialog"
 import { FieldGroup } from "@/components/ui/field"
 import type { FulfillmentQueueFilters } from "@/features/fulfillment-operations/api"
-import { PurchasePaymentReceipts } from "@/features/fulfillment-operations/components/purchase-payment-receipts"
 import { FULFILLMENT_ROLES } from "@/features/fulfillment-operations/lib/fulfillment-roles"
 import { OPERATION_TYPE_LABEL } from "@/features/fulfillment-operations/types"
 import { FulfillmentOperationsWorkspace } from "@/features/fulfillment-operations/pages/components/fulfillment-operations-workspace"
@@ -36,6 +35,7 @@ import { displayText } from "@/features/fulfillment-operations/lib/readable-labe
 import { fulfillmentTaskTitle } from "../lib/fulfillment-title"
 import { workspaceFulfillmentDescriptor } from "../lib/workspace-fulfillment"
 import type { WorkspaceWorkItem } from "../types"
+import { WorkspaceDeliveryGate } from "./workspace-delivery-brief"
 import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 
 type WorkspaceFulfillmentTaskProps = Readonly<{
@@ -192,9 +192,6 @@ export function WorkspaceFulfillmentTask({
                 />
             ) : (
                 <div className="space-y-5">
-                    {!deliveryDialog && descriptor.role === "procurement" ? (
-                        <PurchasePaymentReceipts workItemId={item.workItemId} />
-                    ) : null}
                     <FulfillmentOperationsWorkspace
                         controller={controller}
                         headerDescription="当前任务"
@@ -210,13 +207,6 @@ export function WorkspaceFulfillmentTask({
                                 ? {
                                       responsibleLabel: item.ownerUserLabel,
                                       onClose,
-                                      paymentReceipts:
-                                          descriptor.role === "procurement" ? (
-                                              <PurchasePaymentReceipts
-                                                  workItemId={item.workItemId}
-                                                  compact
-                                              />
-                                          ) : null,
                                   }
                                 : undefined
                         }
@@ -468,13 +458,28 @@ export function WorkspaceFulfillmentProcessAction(
         operationType === "SUPPLIER_DIRECT" ||
         operationType === "WAREHOUSE_SHIP"
     if (!props.item.allowedActions.includes("PROCESS")) return null
+    const actionLabel = deliveryDialog
+        ? "登记发货"
+        : operationType === "RECEIPT"
+          ? "登记入库"
+          : operationType === "ELECTRONIC"
+            ? "登记电子交付"
+            : operationType === "SERVICE"
+              ? "登记服务完成"
+              : "处理履约"
     return (
         <>
+            {deliveryDialog ? (
+                <WorkspaceDeliveryGate
+                    key={props.item.workItemId}
+                    item={props.item}
+                />
+            ) : null}
             <Button
                 id={`workspace-fulfillment-process-${toAutomationIdSegment(props.item.workItemId)}`}
                 onClick={() => setOpen(true)}
             >
-                处理履约
+                {actionLabel}
             </Button>
             <Dialog
                 open={open}

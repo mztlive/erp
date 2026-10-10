@@ -7,6 +7,9 @@ import { usePathname, useSearchParams } from "next/navigation"
 import { ArrowUpRightIcon, FileTextIcon } from "lucide-react"
 
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
+import { PurchasePaymentReceipts } from "@/features/fulfillment-operations/components/purchase-payment-receipts"
+import { workspaceFulfillmentDescriptor } from "../lib/workspace-fulfillment"
+import { WorkspaceDeliveryBrief } from "./workspace-delivery-brief"
 import { WorkspacePurchaseApproval } from "./workspace-purchase-approval"
 import { WorkspaceApprovalProgress } from "./workspace-approval-progress"
 import { useRecoveryOptionsQuery } from "@/features/approval-workflow/queries"
@@ -432,6 +435,10 @@ function WorkspaceDocumentTaskDetail({
               processVersion: item.approval.processVersion,
           }
         : undefined
+    const deliveryBrief =
+        item.workItemType === "FULFILLMENT_OPERATION" &&
+        item.businessObjectType === "delivery" &&
+        item.deliveryLines !== undefined
     const actions =
         approvalTask && !trackingTask ? (
             <ApprovalActionBar
@@ -541,7 +548,7 @@ function WorkspaceDocumentTaskDetail({
             footer={actions}
             aria-label="当前任务"
         >
-            <div className="flex w-full flex-col">
+            <div className="@container/delivery-brief flex w-full min-w-0 flex-col">
                 <div className="flex flex-col gap-1 px-5 pt-1 pb-1 in-data-[slot=sheet-content]:px-7">
                     <div className="flex items-start justify-between gap-3">
                         <h3 className="min-w-0 break-words text-lg font-semibold">
@@ -601,7 +608,8 @@ function WorkspaceDocumentTaskDetail({
                     </div>
                 ) : null}
 
-                {primaryAmount ? (
+                {deliveryBrief ? <WorkspaceDeliveryBrief item={item} /> : null}
+                {!deliveryBrief && primaryAmount ? (
                     <DetailBlock>
                         <div className="flex flex-wrap items-end gap-x-8 gap-y-2">
                             <div className="flex flex-col gap-1">
@@ -637,7 +645,7 @@ function WorkspaceDocumentTaskDetail({
                             ))}
                         </div>
                     </DetailBlock>
-                ) : documentFacts.isPending ? (
+                ) : !deliveryBrief && documentFacts.isPending ? (
                     <DetailBlock title="金额">
                         <p className="text-sm text-muted-foreground">
                             正在读取单据事实…
@@ -678,7 +686,7 @@ function WorkspaceDocumentTaskDetail({
                     </WorkspacePurchaseApproval>
                 ) : (
                     <>
-                        {documentFields.length > 0 ? (
+                        {!deliveryBrief && documentFields.length > 0 ? (
                             <DetailBlock>
                                 <FieldGrid
                                     sections={documentFields}
@@ -700,7 +708,10 @@ function WorkspaceDocumentTaskDetail({
                     </>
                 )}
 
-                {!purchaseApproval && briefLines && briefLines.length > 0 ? (
+                {!deliveryBrief &&
+                !purchaseApproval &&
+                briefLines &&
+                briefLines.length > 0 ? (
                     <DetailBlock
                         title={approvalDocument ? "提交资料摘要" : "明细"}
                         description={`${lineCount} 行`}
@@ -761,6 +772,16 @@ function WorkspaceDocumentTaskDetail({
                                       : `另有 ${briefMoreCount} 行，${openActionLabel}查看`}
                             </p>
                         ) : null}
+                    </DetailBlock>
+                ) : null}
+
+                {workspaceFulfillmentDescriptor(item)?.role ===
+                "procurement" ? (
+                    <DetailBlock>
+                        <PurchasePaymentReceipts
+                            workItemId={item.workItemId}
+                            embedded
+                        />
                     </DetailBlock>
                 ) : null}
 

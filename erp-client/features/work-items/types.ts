@@ -57,6 +57,20 @@ export type WorkItemApprovalContextDto = Readonly<{
 }>
 
 /** `/admin/work-items` 返回的单条任务。 */
+/** 当前发货批次的只读数量和交期，不代表整张销售单进度。 */
+export type DeliveryTaskLine = Readonly<{
+    id: string
+    title: string
+    specification?: string | null
+    unit?: string | null
+    quantity: string
+    shipped_quantity: string
+    pending_quantity: string
+    customer_due_date?: string | null
+    expected_delivery_date?: string | null
+    tracking: readonly string[]
+}>
+
 export type WorkItemDto = Readonly<{
     id: string
     work_item_type: string
@@ -94,6 +108,7 @@ export type WorkItemDto = Readonly<{
     reason_label?: string | null
     impact_summary?: string | null
     next_action_hint?: string | null
+    delivery_lines?: readonly DeliveryTaskLine[]
     summary_sections?: readonly Readonly<{
         label: string
         value: string
@@ -179,6 +194,7 @@ export type WorkItemProjection = Readonly<{
     reasonLabel: string
     impactSummary: string
     nextActionHint: string
+    deliveryLines?: readonly DeliveryTaskLine[]
     summarySections: readonly Readonly<{
         label: string
         value: string
@@ -305,6 +321,7 @@ export function mapWorkItemDto(dto: WorkItemDto): WorkItemProjection {
             nextActionHint: dto.next_action_hint,
             workItemType: dto.work_item_type,
         }),
+        deliveryLines: dto.delivery_lines,
         summarySections: (dto.summary_sections ?? []).map((section) => ({
             label: section.label,
             value: section.value,

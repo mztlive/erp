@@ -127,6 +127,9 @@ pub struct WorkItemView {
     pub next_action_hint: String,
     pub summary_sections: Vec<WorkItemSummarySection>,
     pub brief_lines: Vec<WorkItemBriefLine>,
+    /// 本发货批次的数量与交期；其他任务不返回。
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub delivery_lines: Vec<super::super::DeliveryTaskLine>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub brief_more_count: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -207,7 +210,7 @@ impl WorkItemView {
     /// # 错误
     /// 任务类型已退役、业务对象或责任角色未登记处理面、单据审批缺少已签署页面映射时返回 `Error::ValidationError`。
     pub(crate) fn from_fields(fields: WorkItemFields, queue_context_id: String) -> Result<Self> {
-        let WorkItemFields { inner, brief_source } = fields;
+        let WorkItemFields { inner, brief_source, delivery_lines } = fields;
         let route = handler_route(inner.work_item_type, &inner.business_object_type, &inner.owner_role)?;
         let owner_user = inner.owner_user_id.as_ref().map(|id| WorkItemPartyView {
             id: id.clone(),
@@ -215,6 +218,7 @@ impl WorkItemView {
         });
         let brief = brief_source.as_ref().map(|source| assemble_brief(source, inner.reason_code.as_deref()));
         Ok(Self {
+            delivery_lines,
             id: inner.id,
             work_item_type: inner.work_item_type,
             handler_key: route.handler_key.to_string(),
@@ -305,6 +309,7 @@ impl WorkItemView {
 pub(crate) struct WorkItemFields {
     inner: erp_workflow::dto::work_item::WorkItemFields,
     pub brief_source: Option<super::super::brief::ObjectBriefSource>,
+    pub delivery_lines: Vec<super::super::DeliveryTaskLine>,
 }
 
 impl Deref for WorkItemFields {
@@ -323,13 +328,13 @@ impl DerefMut for WorkItemFields {
 
 impl From<WorkItem> for WorkItemFields {
     fn from(item: WorkItem) -> Self {
-        Self { inner: item.into(), brief_source: None }
+        Self { inner: item.into(), brief_source: None, delivery_lines: Vec::new() }
     }
 }
 
 impl From<erp_workflow::WorkItemRow> for WorkItemFields {
     fn from(item: erp_workflow::WorkItemRow) -> Self {
-        Self { inner: item.into(), brief_source: None }
+        Self { inner: item.into(), brief_source: None, delivery_lines: Vec::new() }
     }
 }
 

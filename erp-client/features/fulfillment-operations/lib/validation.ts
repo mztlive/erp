@@ -154,7 +154,8 @@ export function clientValidation(
             issues.push({
                 id: `tracking-pending-${lineId}`,
                 label: "物流号",
-                message: "请先点击添加物流号，再保存或确认发货",
+                message:
+                    "物流号尚未添加，请按 Enter 或点击“添加”，再保存或确认发货",
                 targetId: `fulfillment-operations-${kind}-form-line-${toAutomationIdSegment(lineId)}-add`,
             })
         }

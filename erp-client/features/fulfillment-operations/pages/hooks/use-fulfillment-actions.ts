@@ -104,7 +104,9 @@ export function useFulfillmentActions({
                 draft.type === "SUPPLIER_DIRECT") &&
             draft.pendingTrackingLineIds?.length
         ) {
-            setActionError("请先点击添加物流号，再保存草稿")
+            setActionError(
+                "物流号尚未添加，请按 Enter 或点击“添加”，再保存草稿",
+            )
             return false
         }
         if (ledger.current.peek("post")) {

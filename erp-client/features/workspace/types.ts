@@ -6,7 +6,10 @@
  */
 
 import type { StatusTone } from "@/components/ui/status-badge"
-import type { WorkItemStatus } from "@/features/work-items/types"
+import type {
+    WorkItemStatus,
+    DeliveryTaskLine,
+} from "@/features/work-items/types"
 import type { WorkspaceId } from "@/lib/workspace-registry"
 
 export type WorkspaceDueFilter = "today" | "overdue"
@@ -95,6 +98,7 @@ export type WorkspaceWorkItem = Readonly<{
         quantity?: string
         dueLabel?: string
     }>[]
+    deliveryLines?: readonly DeliveryTaskLine[]
     briefMoreCount?: number
     /** 服务端已按审批版本解析摘要；空结果不得补拉当前单据替代。 */
     documentSummaryResolved?: boolean

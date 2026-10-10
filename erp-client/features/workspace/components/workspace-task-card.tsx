@@ -58,6 +58,13 @@ export function WorkspaceTaskCard({
 }) {
     const blocked = isBlockedWorkItem(item)
     const overdue = item.dueBucket === "overdue"
+    const fulfillment = item.workItemType === "FULFILLMENT_OPERATION"
+    const fulfillmentFacts = (item.summarySections ?? []).filter((field) =>
+        ["供应商", "发货仓库", "批次明细"].includes(field.label),
+    )
+    const deliveryDate = item.summarySections?.find(
+        (field) => field.label === "最早预计交付日",
+    )?.value
     const tracking = item.workItemType === "APPROVAL_INSTANCE"
     const amount =
         item.amountSummary ??
@@ -82,7 +89,11 @@ export function WorkspaceTaskCard({
                 dateTime={item.dueAt || undefined}
                 className="num text-xs sm:text-sm"
             >
-                {item.dueAt ? item.dueAtLabel : "未设截止"}
+                {item.dueAt
+                    ? item.dueAtLabel
+                    : fulfillment
+                      ? "任务未设截止"
+                      : "未设截止"}
             </time>
             {blocked ? (
                 <StatusBadge label="受阻" tone="warning" />
@@ -141,6 +152,14 @@ export function WorkspaceTaskCard({
                     >
                         {number}
                     </span>
+                    {fulfillment ? (
+                        <span className="mt-1 text-xs text-muted-foreground">
+                            {fulfillmentFacts
+                                .map((field) => field.value)
+                                .join(" · ")}
+                            {deliveryDate ? ` · 预计 ${deliveryDate}` : ""}
+                        </span>
+                    ) : null}
                     {supplyWarnings.map((section) => (
                         <span
                             key={section.value}
@@ -158,7 +177,10 @@ export function WorkspaceTaskCard({
             </span>
             <span className="flex flex-col items-end gap-2 @min-[600px]/workspace-queue:items-start">
                 <span
-                    className="num whitespace-nowrap text-sm font-medium"
+                    className={cn(
+                        "num whitespace-nowrap text-sm",
+                        fulfillment ? "text-muted-foreground" : "font-medium",
+                    )}
                     aria-label={
                         amount
                             ? amount.label + " " + amount.value

@@ -1,5 +1,6 @@
 "use client"
 
+import { PurchaseOrderPayments } from "./purchase-order-payments"
 import { MoneyValue } from "@/components/business"
 import {
     DetailHint,
@@ -28,35 +29,44 @@ export function PurchaseOrderDetailPayableSection({
     const amount = (value: string) =>
         costMasked ? "•••" : <MoneyValue value={value} />
     return (
-        <DetailSummary label="采购票款摘要">
-            <DetailSummaryItem
-                title="付款"
-                label="待付金额"
-                value={amount(summary.payableOpenAmount)}
-                detail={<>已付并核销 {amount(summary.paidAllocatedAmount)}</>}
-                hint={
-                    <DetailHint
-                        id="purchase-order-payment-hint"
-                        label="付款核销"
-                    >
-                        仅统计已核销到本单的付款金额，审批中的付款不计入。
-                    </DetailHint>
-                }
+        <div className="space-y-6">
+            <DetailSummary label="采购票款摘要">
+                <DetailSummaryItem
+                    title="付款"
+                    label="待付金额"
+                    value={amount(summary.payableOpenAmount)}
+                    detail={
+                        <>已付并核销 {amount(summary.paidAllocatedAmount)}</>
+                    }
+                    hint={
+                        <DetailHint
+                            id="purchase-order-payment-hint"
+                            label="付款核销"
+                        >
+                            仅统计已核销到本单的付款金额，审批中的付款不计入。
+                        </DetailHint>
+                    }
+                />
+                <DetailSummaryItem
+                    title="收票"
+                    label="已收票并核销"
+                    value={amount(summary.purchaseInvoiceAllocatedAmount)}
+                    detail={order.progress.invoice}
+                    hint={
+                        <DetailHint
+                            id="purchase-order-invoice-hint"
+                            label="收票核销"
+                        >
+                            仅统计已核销到本单的采购发票金额。
+                        </DetailHint>
+                    }
+                />
+            </DetailSummary>
+            <PurchaseOrderPayments
+                key={order.identity.purchaseOrderId}
+                purchaseOrderId={order.identity.purchaseOrderId}
+                costMasked={costMasked}
             />
-            <DetailSummaryItem
-                title="收票"
-                label="已收票并核销"
-                value={amount(summary.purchaseInvoiceAllocatedAmount)}
-                detail={order.progress.invoice}
-                hint={
-                    <DetailHint
-                        id="purchase-order-invoice-hint"
-                        label="收票核销"
-                    >
-                        仅统计已核销到本单的采购发票金额。
-                    </DetailHint>
-                }
-            />
-        </DetailSummary>
+        </div>
     )
 }

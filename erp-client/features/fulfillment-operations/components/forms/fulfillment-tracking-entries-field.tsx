@@ -148,65 +148,83 @@ export function FulfillmentTrackingEntriesField({
                 }}
             >
                 <Label htmlFor={`${id}-tracking-no`}>物流信息</Label>
-                <InputGroup
-                    className="h-auto items-stretch"
-                    aria-label="物流公司与快递单号"
-                    data-disabled={disabled || undefined}
-                >
-                    <form.AppField
-                        name="carrier"
-                        children={(field) => (
-                            <field.SelectField
-                                id={`${id}-carrier`}
-                                label="物流公司（可选）"
-                                options={CARRIER_OPTIONS}
-                                disabled={disabled}
-                                allowClear
-                                hideLabel
-                                inInputGroup
-                                className="w-40 shrink-0 border-r border-border sm:w-48"
-                                placeholder="选择物流公司"
-                            />
-                        )}
-                    />
-                    <form.AppField
-                        name="trackingNo"
-                        listeners={{
-                            onChange: ({ value }) =>
-                                onPendingInputChange(Boolean(value.trim())),
-                        }}
-                        children={(field) => (
-                            <field.TextareaField
-                                id={`${id}-tracking-no`}
-                                label="快递单号"
-                                placeholder="输入快递单号，多个号码可分行粘贴"
-                                rows={1}
-                                hideLabel
-                                inInputGroup
-                                className="min-w-0 flex-1"
-                                required
-                                disabled={disabled}
-                            />
-                        )}
-                    />
-                </InputGroup>
-                <form.AppForm>
-                    <form.SubmitButton
-                        id={`${id}-add`}
-                        label="添加物流号"
-                        variant={compact ? "ghost" : "default"}
-                        size={compact ? "sm" : "default"}
-                        className={compact ? "justify-self-start" : undefined}
-                        disabled={disabled}
+                <div className="flex items-start gap-2">
+                    <InputGroup
+                        className="h-auto flex-1 items-stretch"
+                        aria-label="物流公司与快递单号"
+                        data-disabled={disabled || undefined}
                     >
-                        {compact ? (
-                            <>
-                                <PlusIcon data-icon="inline-start" />
-                                添加物流号
-                            </>
-                        ) : undefined}
-                    </form.SubmitButton>
-                </form.AppForm>
+                        <form.AppField
+                            name="carrier"
+                            children={(field) => (
+                                <field.SelectField
+                                    id={`${id}-carrier`}
+                                    label="物流公司（可选）"
+                                    options={CARRIER_OPTIONS}
+                                    disabled={disabled}
+                                    allowClear
+                                    hideLabel
+                                    inInputGroup
+                                    className="w-40 shrink-0 border-r border-border sm:w-48"
+                                    placeholder="选择物流公司"
+                                />
+                            )}
+                        />
+                        <form.AppField
+                            name="trackingNo"
+                            listeners={{
+                                onChange: ({ value }) =>
+                                    onPendingInputChange(Boolean(value.trim())),
+                            }}
+                            children={(field) => (
+                                <field.TextareaField
+                                    id={`${id}-tracking-no`}
+                                    label="快递单号"
+                                    placeholder="输入快递单号后按 Enter 添加"
+                                    onKeyDown={(event) => {
+                                        if (
+                                            event.key !== "Enter" ||
+                                            event.shiftKey ||
+                                            event.ctrlKey ||
+                                            event.altKey ||
+                                            event.metaKey ||
+                                            event.nativeEvent.isComposing ||
+                                            event.keyCode === 229
+                                        )
+                                            return
+                                        event.preventDefault()
+                                        event.stopPropagation()
+                                        if (!disabled && !event.repeat)
+                                            void form.handleSubmit()
+                                    }}
+                                    rows={1}
+                                    hideLabel
+                                    inInputGroup
+                                    className="min-w-0 flex-1"
+                                    required
+                                    disabled={disabled}
+                                />
+                            )}
+                        />
+                    </InputGroup>
+                    <form.AppForm>
+                        <form.SubmitButton
+                            id={`${id}-add`}
+                            label="添加物流号"
+                            aria-label="添加物流号"
+                            variant="default"
+                            className="shrink-0"
+                            disabled={disabled}
+                        >
+                            <PlusIcon data-icon="inline-start" />
+                            添加
+                        </form.SubmitButton>
+                    </form.AppForm>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                    按 Enter 或点击“添加”；Shift+Enter
+                    换行，也可一次粘贴多个单号。
+                </p>
             </form>
             {compact ? (
                 <p className="text-xs text-muted-foreground">

@@ -35,7 +35,6 @@ export function FulfillmentDeliveryDialogSurface({
     operation,
     draft,
     responsibleLabel,
-    paymentReceipts,
     currentUrl,
     snapshotUpdatedAt,
     validationIssues,
@@ -50,7 +49,6 @@ export function FulfillmentDeliveryDialogSurface({
     operation: FulfillmentOperation
     draft: DeliveryDraft
     responsibleLabel: string
-    paymentReceipts?: ReactNode
     currentUrl: string
     snapshotUpdatedAt: string
     validationIssues: readonly ValidationIssue[]
@@ -174,7 +172,6 @@ export function FulfillmentDeliveryDialogSurface({
                 </p>
             ) : null}
             <div className="divide-y divide-border">
-                {paymentReceipts}
                 {operation.source.purchaseOrderId ||
                 operation.source.purchaseNo ? (
                     <Collapsible>

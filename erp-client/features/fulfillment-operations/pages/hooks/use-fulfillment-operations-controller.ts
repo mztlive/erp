@@ -198,7 +198,16 @@ export function useFulfillmentOperationsController({
                     : issues.map((issue) => issue.message).join("；")
             },
         },
-        onSubmit: () => setConfirmOpen(true),
+        onSubmit: async ({ value }): Promise<void> => {
+            if (
+                value.draft?.type === "SUPPLIER_DIRECT" ||
+                value.draft?.type === "WAREHOUSE_SHIP"
+            ) {
+                await actions.handlePost()
+                return
+            }
+            setConfirmOpen(true)
+        },
     })
     const draftValue = useSelector(
         draftForm.store,

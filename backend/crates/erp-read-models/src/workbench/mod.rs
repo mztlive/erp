@@ -59,3 +59,6 @@ mod approval_materials;
 pub use approval_materials::freeze_approval_materials;
 
 mod fulfillment_details;
+
+mod delivery_brief;
+pub use delivery_brief::DeliveryTaskLine;

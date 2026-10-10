@@ -3443,6 +3443,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "GET",
+                path: "/admin/purchase-orders/{id}/payments",
+                description: "查询采购单对象中心",
+                permission: {
+                    resource: "purchase_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-orders/{id}/payments/{payment_id}/receipt",
+                description: "查询采购单对象中心",
+                permission: {
+                    resource: "purchase_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
                 method: "POST",
                 path: "/admin/purchase-orders/{id}/draft",
                 description: "保存采购草稿",

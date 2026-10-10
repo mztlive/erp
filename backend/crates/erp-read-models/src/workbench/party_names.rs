@@ -94,7 +94,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     ///
     /// # 错误
     /// 账号查询失败时返回仓储错误。
-    async fn load_account_names(
+    pub(super) async fn load_account_names(
         &self,
         owner_ids: &[String],
         executor: &mut dyn Executor,
@@ -300,6 +300,7 @@ mod tests {
             AssignmentSource, WorkItemPriority, WorkItemStatus, WorkItemType,
         };
         WorkItemView {
+            delivery_lines: Vec::new(),
             id: "wi".to_string(),
             work_item_type: WorkItemType::ImportBusinessConfirmation,
             handler_key: "import_business_confirmation".to_string(),

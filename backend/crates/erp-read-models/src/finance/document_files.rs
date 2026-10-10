@@ -3,14 +3,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use application_core::AuditActor;
-use erp_core::ids::{
-    BusinessDocumentId, PayableAccountId, PurchaseOrderId, ReceivableAccountId, SupplierPaymentId,
-};
+use erp_core::ids::{BusinessDocumentId, PurchaseOrderId, ReceivableAccountId};
 use erp_core::money::Amount;
-use erp_finance::entity::payable::{PaymentAllocation, SupplierPaymentStatus};
+use erp_finance::entity::payable::PaymentAllocation;
 use erp_finance::entity::receivable::{InvoiceDirection, InvoiceStatus};
+use erp_finance::repository::ReceivableExt;
 use erp_finance::repository::prelude::*;
-use erp_finance::repository::{PayableExt, ReceivableExt};
 use erp_fulfillment::repository::FulfillmentExt;
 use erp_identity::SharedRbacService;
 use erp_support::repository::prelude::*;
@@ -19,6 +17,7 @@ use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use serde::Serialize;
 
+use super::purchase_payments::payment_records;
 use crate::sales_center::access::SalesAccess;
 use crate::{Error, Result};
 
@@ -41,7 +40,7 @@ pub struct FinancialFileView {
 
 impl FinancialFileView {
     /// 只从财务来源关系及文件展示字段构造响应。
-    fn new(document_id: String, document_no: String, file: FileAsset) -> Self {
+    pub(super) fn new(document_id: String, document_no: String, file: FileAsset) -> Self {
         Self {
             document_id,
             document_no,
@@ -210,36 +209,13 @@ impl BusinessFinanceFiles {
         purchase_id: &PurchaseOrderId,
         executor: &mut dyn Executor,
     ) -> Result<Vec<FinancialFileView>> {
-        let Some(account) = self.db.payable_accounts().find_by_purchase_order(purchase_id, executor).await?
-        else {
-            return Ok(vec![]);
-        };
-        let entries = self
-            .db
-            .payable_entries()
-            .find_entries_by_accounts(&[PayableAccountId::new(account.base.id)], executor)
-            .await?;
-        let ids = entries.into_iter().map(|e| e.base.id.into()).collect::<Vec<_>>();
-        let allocations = self.db.payment_allocations().find_allocations_by_entries(&ids, executor).await?;
-        let payment_ids = effective_payment_ids(&allocations);
-        let payments =
-            self.db.supplier_payments().find_supplier_payments_by_ids(&payment_ids, executor).await?;
-        let mut result = vec![];
         let mut seen_assets = BTreeSet::new();
-        for payment in payments.into_iter().filter(|p| p.status == SupplierPaymentStatus::Posted) {
-            if let Some(id) = payment.bank_receipt_asset_id {
-                let file = self
-                    .db
-                    .file_assets()
-                    .find_by_id(&id, executor)
-                    .await?
-                    .ok_or_else(|| Error::NotFound("付款回单不存在".into()))?;
-                if readable_file(&file) && seen_assets.insert(file.base.id.clone()) {
-                    result.push(FinancialFileView::new(payment.base.id, payment.payment_no, file));
-                }
-            }
-        }
-        Ok(result)
+        Ok(payment_records(&self.db, purchase_id, executor)
+            .await?
+            .into_iter()
+            .filter_map(|row| row.receipt)
+            .filter(|file| seen_assets.insert(file.file_asset_id.clone()))
+            .collect())
     }
 }
 
@@ -249,7 +225,7 @@ fn published_invoice(status: InvoiceStatus) -> bool {
 }
 
 /// 列表与下载同时关闭被销毁、隔离或无有效内容的文件。
-fn readable_file(file: &FileAsset) -> bool {
+pub(super) fn readable_file(file: &FileAsset) -> bool {
     file.destroyed_at.is_none()
         && file.byte_size > 0
         && !matches!(
@@ -260,17 +236,13 @@ fn readable_file(file: &FileAsset) -> bool {
 }
 
 /// 只返回在本采购应付上仍有正向净核销额的付款，全部冲减不能保留下载资格。
-fn effective_payment_ids(allocations: &[PaymentAllocation]) -> Vec<SupplierPaymentId> {
+pub(super) fn effective_payment_totals(allocations: &[PaymentAllocation]) -> BTreeMap<String, Amount> {
     let mut totals = BTreeMap::new();
     for row in allocations {
         let total = totals.entry(row.supplier_payment_id.to_string()).or_insert_with(Amount::zero);
         *total = row.allocation_action.apply_to_net(*total, row.allocated_amount);
     }
-    totals
-        .into_iter()
-        .filter(|(_, amount)| *amount > Amount::zero())
-        .map(|(id, _)| SupplierPaymentId::new(id))
-        .collect()
+    totals.into_iter().filter(|(_, amount)| *amount > Amount::zero()).collect()
 }
 
 /// 对下载请求按所属财务单和文件双键精确匹配，禁止跨单或替换资产。
@@ -318,7 +290,7 @@ mod tests {
     #[test]
     fn only_positive_net_payment_allocations_keep_the_source_relation() {
         use erp_core::common::time::Instant;
-        use erp_core::ids::{PayableEntryId, PaymentAllocationId};
+        use erp_core::ids::{PayableEntryId, PaymentAllocationId, SupplierPaymentId};
         use erp_finance::entity::payable::{AllocationAction, PaymentAllocationData};
         let allocation = |payment: &str, action, amount: &str| {
             PaymentAllocation::new(
@@ -339,11 +311,19 @@ mod tests {
         let rows = [
             allocation("positive", AllocationAction::Apply, "10"),
             allocation("positive", AllocationAction::Reverse, "3"),
+            allocation("another", AllocationAction::Apply, "2.35"),
+            allocation("another", AllocationAction::Apply, "0.65"),
             allocation("reversed", AllocationAction::Apply, "5"),
             allocation("reversed", AllocationAction::Reverse, "5"),
         ];
-        assert_eq!(effective_payment_ids(&rows), vec![SupplierPaymentId::new("positive")]);
-        assert!(effective_payment_ids(&[]).is_empty());
+        assert_eq!(
+            effective_payment_totals(&rows),
+            BTreeMap::from([
+                ("positive".to_string(), "7".parse().unwrap()),
+                ("another".to_string(), "3".parse().unwrap())
+            ])
+        );
+        assert!(effective_payment_totals(&[]).is_empty());
     }
 
     #[test]

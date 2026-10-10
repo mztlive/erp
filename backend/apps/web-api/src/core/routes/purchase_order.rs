@@ -75,6 +75,22 @@ fn purchase_document_routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/purchase-orders/{id}/payments",
+            with_permission(
+                get(purchase_order::payments::purchase_payments),
+                rbac,
+                purchase_order::payments::purchase_payments_permission_key(),
+            ),
+        )
+        .route(
+            "/purchase-orders/{id}/payments/{payment_id}/receipt",
+            with_permission(
+                get(purchase_order::payments::purchase_payment_receipt),
+                rbac,
+                purchase_order::payments::purchase_payment_receipt_permission_key(),
+            ),
+        )
+        .route(
             "/purchase-orders/{id}/draft",
             with_permission(
                 post(purchase_order::purchase_order_save_draft),

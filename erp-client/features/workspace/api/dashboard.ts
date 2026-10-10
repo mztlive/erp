@@ -249,6 +249,7 @@ export function mapWorkspaceWorkItem(
         documentSummaryResolved: task.workItemType === "DOCUMENT_APPROVAL",
         summarySections: task.summarySections,
         briefLines: task.briefLines,
+        deliveryLines: task.deliveryLines,
         briefMoreCount: task.briefMoreCount,
     }
 }

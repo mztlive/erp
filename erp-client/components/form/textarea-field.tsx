@@ -1,5 +1,6 @@
 "use client"
 
+import type { KeyboardEventHandler } from "react"
 import { Textarea } from "@/components/ui/textarea"
 import { InputGroupTextarea } from "@/components/ui/input-group"
 import {
@@ -25,6 +26,7 @@ type TextareaFieldProps = {
     className?: string
     textareaClassName?: string
     id?: string
+    onKeyDown?: KeyboardEventHandler<HTMLTextAreaElement>
 }
 
 /**
@@ -44,6 +46,7 @@ export function TextareaField({
     className,
     textareaClassName,
     id,
+    onKeyDown,
 }: TextareaFieldProps) {
     const field = useFieldContext<string>()
     const Control = inInputGroup ? InputGroupTextarea : Textarea
@@ -82,6 +85,7 @@ export function TextareaField({
                     inInputGroup && "min-h-control",
                     textareaClassName,
                 )}
+                onKeyDown={onKeyDown}
                 onBlur={field.handleBlur}
                 onChange={(e) => field.handleChange(e.target.value)}
             />

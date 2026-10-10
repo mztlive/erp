@@ -547,6 +547,7 @@ mod tests {
             next_action_hint: "处理".to_string(),
             summary_sections: Vec::new(),
             brief_lines: Vec::new(),
+            delivery_lines: Vec::new(),
             brief_more_count: None,
             list_summary: None,
             subject_version: "2".to_string(),

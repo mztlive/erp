@@ -71,7 +71,6 @@ export type FulfillmentWorkSurfaceProps = {
     singleOperation?: boolean
     deliveryDialog?: {
         responsibleLabel: string
-        paymentReceipts?: React.ReactNode
         onClose?: () => void
     }
     showBack?: boolean
@@ -145,7 +144,6 @@ export function FulfillmentWorkSurface({
                 operation={operation}
                 draft={draft}
                 responsibleLabel={deliveryDialog.responsibleLabel}
-                paymentReceipts={deliveryDialog.paymentReceipts}
                 currentUrl={currentUrl}
                 snapshotUpdatedAt={snapshotUpdatedAt}
                 validationIssues={validationIssues}

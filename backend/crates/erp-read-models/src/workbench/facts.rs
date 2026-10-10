@@ -28,6 +28,7 @@ pub(crate) struct WorkbenchObjectDisplay {
     pub(super) label: String,
     pub(super) counterparty_label: Option<String>,
     pub(super) impact_summary: Option<String>,
+    pub(super) delivery_lines: Vec<super::DeliveryTaskLine>,
     pub(super) brief_source: Option<brief::ObjectBriefSource>,
     pub(super) subject_briefs: HashMap<String, WorkbenchSubjectDisplay>,
 }
@@ -52,6 +53,7 @@ impl WorkbenchObjectDisplay {
             counterparty_label: None,
             impact_summary: None,
             brief_source: None,
+            delivery_lines: Vec::new(),
             subject_briefs: HashMap::new(),
         }
     }
@@ -176,6 +178,9 @@ pub(super) fn apply_object_display(fields: &mut dto::WorkItemFields, fact: &Work
     fields.root_business_object_id = fact.display.root_document_id.clone();
     let subject = fact.display.subject_briefs.get(&fields.subject_version);
     apply_subject_display(fields, fact, subject);
+    if fields.work_item_type == WorkItemType::FulfillmentOperation {
+        fields.delivery_lines = fact.display.delivery_lines.clone();
+    }
     if fields.work_item_type == WorkItemType::DocumentApproval
         && super::approval_list::document_summary(fact, fields.subject_version.parse().ok()).is_none()
         && subject.and_then(|value| value.brief_source.as_ref()).is_none()

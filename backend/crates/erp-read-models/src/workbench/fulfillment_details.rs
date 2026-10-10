@@ -92,6 +92,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         let warehouse_ids =
             rows.iter().filter_map(|r| r.warehouse_id.as_ref().map(ToString::to_string)).collect::<Vec<_>>();
         let warehouses = self.warehouse_labels(&warehouse_ids, executor).await?;
+        self.enrich_delivery_briefs(&rows, &lines, facts, executor).await?;
         for row in rows {
             let fields = delivery_fields(&row, &warehouses);
             let visible = lines
