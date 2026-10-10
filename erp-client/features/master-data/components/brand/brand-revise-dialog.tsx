@@ -13,7 +13,10 @@ import {
     notifySuccess,
     prepareBrandLogoFields,
 } from "@/features/master-data/components/shared/action-dialog-shared"
-import { useCreateRevisionMutation } from "@/features/master-data/hooks/queries"
+import {
+    useCreateRevisionMutation,
+    useFileAssetQuery,
+} from "@/features/master-data/hooks/queries"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { defaultImmediateEffectiveFrom } from "@/features/master-data/lib/resource-fields"
 import { currentResourceFieldValues } from "@/features/master-data/lib/resource-fields"
@@ -48,6 +51,7 @@ export function BrandReviseDialog({
     const pendingFilesRef = React.useRef<Map<string, File>>(new Map())
     const [logoAssetId, setLogoAssetId] = React.useState("")
     const [logoPreviewUrl, setLogoPreviewUrl] = React.useState("")
+    const logoQuery = useFileAssetQuery(logoAssetId || undefined)
 
     const form = useAppForm({
         defaultValues: emptyBrandForm(),
@@ -105,11 +109,14 @@ export function BrandReviseDialog({
         const values = currentResourceFieldValues(target)
         form.setFieldValue("name", target.name)
         form.setFieldValue("code", values.code ?? "")
-        form.setFieldValue("logo", values.logo ?? "")
         form.setFieldValue("changeReason", "")
         const logoAsset =
             "mediaAssets" in target ? target.mediaAssets?.logo?.[0] : undefined
-        setLogoAssetId(logoAsset?.assetId ?? "")
+        const assetId =
+            logoAsset?.assetId ??
+            ("brandLogoAssetId" in target ? target.brandLogoAssetId : undefined)
+        form.setFieldValue("logo", values.logo || (assetId ? "品牌 Logo" : ""))
+        setLogoAssetId(assetId ?? "")
         setLogoPreviewUrl(logoAsset?.url ?? "")
         setResult(null)
         setIdempotencyKey(newIdempotencyKey("revise-brand"))
@@ -121,25 +128,15 @@ export function BrandReviseDialog({
             idPrefix="master-data-brand-revise-dialog"
             open={open}
             onOpenChange={onOpenChange}
-            title={masterDataCopy.reviseTitle}
-            description={
-                <>
-                    {masterDataCopy.reviseDesc}
-                    {target ? (
-                        <>
-                            {" "}
-                            资料编号{" "}
-                            <span className="num">{target.stableNo}</span>
-                        </>
-                    ) : null}
-                </>
-            }
+            title="编辑品牌"
+            description={masterDataCopy.reviseDesc}
+            identity={target?.stableNo}
             form={form as never}
             result={result}
             pending={mutation.isPending}
             disabled={!target}
             submitLabel={masterDataCopy.reviseSubmit}
-            logoPreviewUrl={logoPreviewUrl}
+            logoPreviewUrl={logoPreviewUrl || logoQuery.data?.public_url || ""}
             onLogoFiles={(files) => {
                 for (const file of files) {
                     pendingFilesRef.current.set(`logo::${file.name}`, file)

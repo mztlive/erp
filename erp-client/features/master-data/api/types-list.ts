@@ -1,5 +1,6 @@
 /** W14 基础资料 · 列表查询与结果视图类型。 */
 
+import type { PriceFilterKind } from "@/lib/price-filter"
 import type { StatusTone } from "@/components/ui/status-badge"
 import type {
     ActionBlocker,
@@ -81,6 +82,8 @@ export type MasterDataListItem = Readonly<{
      * 列表与 Combobox 共用，避免只从 keyFacts 反解析。
      */
     dictionaryCode?: string
+    /** 品牌 Logo 文件资产，供卡片预览与编辑保留原图。 */
+    brandLogoAssetId?: string
     /**
      * 商品分类树：上级分类稳定 ID；根节点为空。
      * 仅 `categories` 资源使用。
@@ -132,6 +135,7 @@ export type MasterDataListQuery = Readonly<{
     sellableSupplyPreset?: SellableSupplyPreset
     productListingStatus?: ProductListingFilter
     productSupplyCoverage?: ProductSkuCoverageFilter
+    productPriceKind?: PriceFilterKind
     productSalesPriceMin?: string
     productSalesPriceMax?: string
     ownerUserIds?: string

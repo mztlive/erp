@@ -2,7 +2,13 @@
 
 import * as React from "react"
 import type { DateRange as CalendarDateRange, Matcher } from "react-day-picker"
-import { CalendarDaysIcon, ClockIcon, XIcon } from "lucide-react"
+import {
+    CalendarDaysIcon,
+    CheckIcon,
+    ClockIcon,
+    InfinityIcon,
+    XIcon,
+} from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
@@ -108,6 +114,7 @@ function DatePicker({
     disabled,
     disabledDates,
     clearable = true,
+    allowLongTerm = false,
     size = "lg",
     className,
     "aria-invalid": ariaInvalid,
@@ -120,6 +127,8 @@ function DatePicker({
     disabled?: boolean
     disabledDates?: Matcher | Matcher[]
     clearable?: boolean
+    /** 允许选择“长期”，并以该字符串作为字段值。 */
+    allowLongTerm?: boolean
     size?: DatePickerSize
     className?: string
     "aria-invalid"?: boolean
@@ -127,6 +136,7 @@ function DatePicker({
 }) {
     const [open, setOpen] = React.useState(false)
     const selected = parseDateValue(value)
+    const isLongTerm = allowLongTerm && value === "长期"
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
@@ -148,10 +158,17 @@ function DatePicker({
                         />
                     }
                 >
-                    <CalendarDaysIcon
-                        data-icon="inline-start"
-                        aria-hidden="true"
-                    />
+                    {isLongTerm ? (
+                        <InfinityIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                    ) : (
+                        <CalendarDaysIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                    )}
                     <span
                         className={cn(
                             "truncate",
@@ -179,6 +196,7 @@ function DatePicker({
                 <Calendar
                     idPrefix={id ? `${id}-calendar` : undefined}
                     mode="single"
+                    defaultMonth={selected}
                     selected={selected}
                     disabled={disabledDates}
                     onSelect={(next) => {
@@ -187,6 +205,34 @@ function DatePicker({
                         setOpen(false)
                     }}
                 />
+                {allowLongTerm ? (
+                    <div className="border-t p-3">
+                        <Button
+                            id={id ? `${id}-long-term` : undefined}
+                            type="button"
+                            variant={isLongTerm ? "secondary" : "outline"}
+                            className="w-full justify-start"
+                            disabled={disabled}
+                            aria-pressed={isLongTerm}
+                            onClick={() => {
+                                onValueChange?.("长期")
+                                setOpen(false)
+                            }}
+                        >
+                            <InfinityIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                            长期
+                            {isLongTerm ? (
+                                <CheckIcon
+                                    className="ml-auto"
+                                    aria-hidden="true"
+                                />
+                            ) : null}
+                        </Button>
+                    </div>
+                ) : null}
             </PopoverContent>
         </Popover>
     )

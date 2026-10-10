@@ -10,6 +10,7 @@ import { LifecycleMetricStrip } from "@/features/master-data/components/list/lif
 import { ListPageFrame } from "@/features/master-data/components/list/list-page-frame"
 import { DictionaryCompactList } from "@/features/master-data/components/list/dictionary-compact-list"
 import { BrandPreviewDialog } from "@/features/master-data/components/brand/brand-preview-dialog"
+import { BrandCardContent } from "@/features/master-data/components/brand/brand-card-content"
 import {
     BrandCreateDialog,
     BrandReviseDialog,
@@ -118,6 +119,7 @@ export function BrandsListPage() {
                         id="master-data-brands-list"
                         rows={state.rows}
                         codeLabel="品牌代码"
+                        renderCard={(row) => <BrandCardContent row={row} />}
                         selectedId={state.previewId}
                         pagination={filters.pagination}
                         onPaginationChange={filters.changePagination}

@@ -1,5 +1,5 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use erp_catalog::entity::catalog::{EnableStatus, ListingStatus, ProductKind, Sku};
+use erp_catalog::entity::catalog::{EnableStatus, ListingStatus, ProductKind, SellablePriceKind, Sku};
 use erp_catalog::repository::{CatalogExt, SellableSkuFilter, SellableSkuRow};
 use erp_core::common::time::BusinessDate;
 use erp_core::money::Amount;
@@ -195,6 +195,37 @@ fn amount_filter_bson(amount: Amount) -> Bson {
     Bson::Decimal128(amount.to_string().parse().expect("合法 Amount 必须可转换为 MongoDB Decimal128"))
 }
 
+/// 将单一价格口径的闭区间加入查询；缺价不命中。
+///
+/// # 参数
+/// * `pipeline` - 当前聚合阶段
+/// * `filter` - 价格口径与区间
+///
+/// # 返回
+/// 原地追加价格条件；无上下限时不追加。
+///
+/// # 错误
+/// 无。
+fn append_price_filter(pipeline: &mut Vec<Document>, filter: &SellableSkuFilter) {
+    if filter.sales_price_min.is_some() || filter.sales_price_max.is_some() {
+        let field = match filter.price_kind {
+            SellablePriceKind::Dropship => "sku_revision.sales_visible_price_gross",
+            SellablePriceKind::Bulk => "sku_revision.bulk_price_gross",
+            SellablePriceKind::Market => "sku_revision.market_price",
+        };
+        let mut range = doc! { "$type": "decimal" };
+        if let Some(minimum) = filter.sales_price_min {
+            range.insert("$gte", amount_filter_bson(minimum));
+        }
+        if let Some(maximum) = filter.sales_price_max {
+            range.insert("$lte", amount_filter_bson(maximum));
+        }
+        pipeline.push(doc! {
+            "$match": { (field): range }
+        });
+    }
+}
+
 /// 在资格聚合完成后追加可选业务筛选。
 ///
 /// # 参数
@@ -240,18 +271,7 @@ fn append_sellable_optional_filters(pipeline: &mut Vec<Document>, filter: &Sella
             }
         });
     }
-    if filter.sales_price_min.is_some() || filter.sales_price_max.is_some() {
-        let mut range = Document::new();
-        if let Some(minimum) = filter.sales_price_min {
-            range.insert("$gte", amount_filter_bson(minimum));
-        }
-        if let Some(maximum) = filter.sales_price_max {
-            range.insert("$lte", amount_filter_bson(maximum));
-        }
-        pipeline.push(doc! {
-            "$match": { "sku_revision.sales_visible_price_gross": range }
-        });
-    }
+    append_price_filter(pipeline, filter);
     if let Some(value) = filter.keyword.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
         let pattern = regex::escape(value);
         pipeline.push(doc! {
@@ -635,6 +655,36 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn price_filter_targets_only_selected_price_and_excludes_missing_values() {
+        for (kind, field) in [
+            (SellablePriceKind::Dropship, "sku_revision.sales_visible_price_gross"),
+            (SellablePriceKind::Bulk, "sku_revision.bulk_price_gross"),
+            (SellablePriceKind::Market, "sku_revision.market_price"),
+        ] {
+            let mut filter = SellableSkuFilter::as_of(BusinessDate::from_ymd(2026, 10, 11).unwrap());
+            filter.price_kind = kind;
+            let mut pipeline = Vec::new();
+            append_price_filter(&mut pipeline, &filter);
+            assert!(pipeline.is_empty());
+            let min = Amount::from_str("0.00").unwrap();
+            let max = Amount::from_str("99.90").unwrap();
+            for (lower, upper) in [(Some(min), None), (None, Some(max)), (Some(min), Some(max))] {
+                filter.sales_price_min = lower;
+                filter.sales_price_max = upper;
+                let mut pipeline = Vec::new();
+                append_price_filter(&mut pipeline, &filter);
+                assert_eq!(pipeline.len(), 1);
+                let matched = pipeline[0].get_document("$match").unwrap();
+                assert_eq!(matched.len(), 1);
+                let range = matched.get_document(field).unwrap();
+                assert_eq!(range.get_str("$type").unwrap(), "decimal");
+                assert_eq!(range.get("$gte"), lower.map(amount_filter_bson).as_ref());
+                assert_eq!(range.get("$lte"), upper.map(amount_filter_bson).as_ref());
+            }
+        }
+    }
+
     /// 公司商品池管道同时约束 SKU 已上架、当前修订与有效供给，并禁止投影采购成本。
     #[test]
     fn sellable_sku_pipeline_is_fail_closed_and_cost_safe() {
@@ -648,6 +698,7 @@ mod tests {
             supplier_id: Some("supplier-1".to_string()),
             supply_region: Some("全国".to_string()),
             max_supplier_count: Some(1),
+            price_kind: SellablePriceKind::Dropship,
             sales_price_min: Some(Amount::from_str("10.00").unwrap()),
             sales_price_max: Some(Amount::from_str("100.00").unwrap()),
             eligibility_as_of: date,

@@ -13,12 +13,14 @@ export function SupplyAmountField({
     id,
     label,
     unit,
+    placeholder,
     required = false,
     readOnly = false,
 }: {
     id: string
     label: string
     unit?: string
+    placeholder?: string
     required?: boolean
     readOnly?: boolean
 }) {
@@ -36,6 +38,7 @@ export function SupplyAmountField({
                     id={id}
                     name={field.name}
                     readOnly={readOnly}
+                    placeholder={placeholder}
                     inputMode="decimal"
                     value={field.state.value}
                     aria-required={required || undefined}

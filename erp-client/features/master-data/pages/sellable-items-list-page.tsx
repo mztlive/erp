@@ -24,7 +24,6 @@ import {
 import {
     ListWorkSurface,
     ListWorkspaceHeader,
-    ListWorkspaceViews,
     listWorkspaceEmptyStateClassName,
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
@@ -51,12 +50,6 @@ import {
     describePoolSource,
     resolvePoolSourceKind,
 } from "@/features/sales-selection/lib/pool-source"
-
-const supplyViews = [
-    { value: "all", label: "全部商品" },
-    { value: "single-supplier", label: "单一供应商" },
-    { value: "nationwide", label: "全国可供" },
-] as const
 
 export function SellableItemsListPage() {
     const router = useRouter()
@@ -85,9 +78,7 @@ export function SellableItemsListPage() {
     // 排序是视图状态而非筛选：全量结果已在客户端，本地排序不重新请求，也不参与「清除筛选」
     const [sorting, setSorting] = React.useState<SortingState>([])
     const hasActiveFilters =
-        filters.q.trim() !== "" ||
-        filters.hasStructuredSellableFilters ||
-        filters.supplyPreset != null
+        filters.q.trim() !== "" || filters.hasStructuredSellableFilters
     const listLoadFailed = state.listQuery.isError
     const exportsSelection = isGallery || selection.selectedCount > 0
     const exportPending = excelExport.pending || csvExportPending
@@ -147,11 +138,10 @@ export function SellableItemsListPage() {
                     productKind: filters.productKind,
                     productCategoryId: filters.productCategoryId,
                     productBrandId: filters.productBrandId,
-                    productSupplierId: filters.productSupplierId,
                     supplyRegion: filters.supplyRegion,
+                    productPriceKind: filters.productPriceKind,
                     productSalesPriceMin: filters.productSalesPriceMin,
                     productSalesPriceMax: filters.productSalesPriceMax,
-                    sellableSupplyPreset: filters.supplyPreset,
                 },
                 selectedIds: selection.selectedIds,
                 fallbackRows: state.rows,
@@ -262,21 +252,6 @@ export function SellableItemsListPage() {
 
             <ListWorkSurface
                 ariaLabel="可售商品列表"
-                views={
-                    <ListWorkspaceViews
-                        ariaLabel="供应快捷筛选"
-                        hint="勾选后可导出带主图的表格，或做成选品册"
-                        items={supplyViews.map(({ value, label }) => ({
-                            id: `master-data-sellable-preset-${value}`,
-                            label,
-                            count: state.listQuery.data
-                                ? state.supplyPresetCounts[value]
-                                : "—",
-                            active: (filters.supplyPreset ?? "all") === value,
-                            onClick: () => filters.applySupplyPreset(value),
-                        }))}
-                    />
-                }
                 toolbar={
                     <SellableItemsFilterBar
                         searchInputRef={searchInputRef}
@@ -476,17 +451,12 @@ export function SellableItemsListPage() {
                     sourceKind={sourceKind}
                     sourceSummary={sourceSummary}
                     initialFilter={{
-                        max_supplier_count:
-                            filters.supplyPreset === "single-supplier"
-                                ? 1
-                                : undefined,
-                        nationwide_only: filters.supplyPreset === "nationwide",
                         q: filters.q.trim() || undefined,
                         product_kind: filters.productKind,
                         category_id: filters.productCategoryId,
                         brand_id: filters.productBrandId,
-                        supplier_id: filters.productSupplierId,
                         supply_region: filters.supplyRegion,
+                        price_kind: filters.productPriceKind,
                         sales_price_min: filters.productSalesPriceMin,
                         sales_price_max: filters.productSalesPriceMax,
                     }}

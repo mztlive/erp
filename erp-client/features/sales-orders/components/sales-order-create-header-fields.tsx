@@ -2,6 +2,8 @@
 
 import { useSelector } from "@tanstack/react-form"
 import { z } from "zod"
+import type { SettlementPartyComboboxItem } from "@/components/business/entity-comboboxes"
+import { SalesOrderCreateSettlementField } from "./sales-order-create-settlement-field"
 
 import {
     PAYMENT_TERM_OPTIONS,
@@ -20,6 +22,8 @@ export type SalesOrderCreateHeaderFieldsProps = {
     form: SalesOrderCreateFormApi
     /** 继续编辑 / 驳回改单：业务性质锁定，不可再改。 */
     natureLocked: boolean
+    contractResolved: boolean
+    settlementSnapshot?: SettlementPartyComboboxItem
     applyNature: (nature: SalesOrderNature) => void
     /** 明细已有内容时先弹确认，确认后才真正切换。 */
     onNatureChangeRequest: (nature: SalesOrderNature) => void
@@ -28,6 +32,8 @@ export type SalesOrderCreateHeaderFieldsProps = {
 export function SalesOrderCreateHeaderFields({
     form,
     natureLocked,
+    contractResolved,
+    settlementSnapshot,
     applyNature,
     onNatureChangeRequest,
 }: SalesOrderCreateHeaderFieldsProps) {
@@ -36,7 +42,7 @@ export function SalesOrderCreateHeaderFields({
         (state) => state.values.orderBasis === "contract",
     )
     return (
-        <div className="grid min-w-0 grid-cols-1 items-start gap-x-6 gap-y-5 sm:grid-cols-2">
+        <div className="grid min-w-0 grid-cols-1 items-start gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
             <form.AppField name="nature">
                 {(field) => {
                     const previousNature = field.state.value
@@ -93,65 +99,80 @@ export function SalesOrderCreateHeaderFields({
                     />
                 )}
             </form.AppField>
-            <form.AppField
-                name="paymentTerms"
-                validators={{
-                    onBlur: z.string().min(1, "请选择付款条件"),
-                }}
-            >
-                {(field) => (
-                    <field.SelectField
-                        id="sales-orders-create-header-payment-terms"
-                        label="付款条件"
-                        required
-                        options={PAYMENT_TERM_OPTIONS}
-                        disabled={hasContract}
-                        description={hasContract ? "沿用合同约定" : undefined}
-                    />
-                )}
-            </form.AppField>
-            <form.AppField name="invoiceType">
-                {(field) => (
-                    <field.SelectField
-                        id="sales-orders-create-header-invoice-type"
-                        label="开票要求"
-                        required
-                        disabled={hasContract}
-                        options={[
-                            "增值税专用发票",
-                            "增值税普通发票",
-                            "不开发票",
-                        ].map((value) => ({ value, label: value }))}
-                        description={hasContract ? "沿用合同约定" : undefined}
-                    />
-                )}
-            </form.AppField>
-            <form.AppField
-                name="taxRatePercent"
-                validators={{
-                    onBlur: decimalInput("税率", 6).refine(
-                        (value) => decimalAtMost(value, "100", 6),
-                        "税率不能超过 100%",
-                    ),
-                }}
-            >
-                {(field) => (
-                    <field.TextField
-                        id="sales-orders-create-header-tax-rate"
-                        label="税率（%）"
-                        required
-                        type="number"
-                        disabled={hasContract}
-                        description={hasContract ? "沿用合同约定" : undefined}
-                        className="max-w-36"
-                        inputClassName="num text-right"
-                    />
-                )}
-            </form.AppField>
+            <SalesOrderCreateSettlementField
+                form={form}
+                settlementSnapshot={settlementSnapshot}
+                hasContract={hasContract}
+            />
+            {!contractResolved ? (
+                <>
+                    <form.AppField
+                        name="paymentTerms"
+                        validators={{
+                            onBlur: z.string().min(1, "请选择付款条件"),
+                        }}
+                    >
+                        {(field) => (
+                            <field.SelectField
+                                id="sales-orders-create-header-payment-terms"
+                                label="付款条件"
+                                required
+                                options={PAYMENT_TERM_OPTIONS}
+                                disabled={hasContract}
+                                description={
+                                    hasContract ? "沿用合同约定" : undefined
+                                }
+                            />
+                        )}
+                    </form.AppField>
+                    <form.AppField name="invoiceType">
+                        {(field) => (
+                            <field.SelectField
+                                id="sales-orders-create-header-invoice-type"
+                                label="开票要求"
+                                required
+                                disabled={hasContract}
+                                options={[
+                                    "增值税专用发票",
+                                    "增值税普通发票",
+                                    "不开发票",
+                                ].map((value) => ({ value, label: value }))}
+                                description={
+                                    hasContract ? "沿用合同约定" : undefined
+                                }
+                            />
+                        )}
+                    </form.AppField>
+                    <form.AppField
+                        name="taxRatePercent"
+                        validators={{
+                            onBlur: decimalInput("税率", 6).refine(
+                                (value) => decimalAtMost(value, "100", 6),
+                                "税率不能超过 100%",
+                            ),
+                        }}
+                    >
+                        {(field) => (
+                            <field.TextField
+                                id="sales-orders-create-header-tax-rate"
+                                label="税率（%）"
+                                required
+                                type="number"
+                                disabled={hasContract}
+                                description={
+                                    hasContract ? "沿用合同约定" : undefined
+                                }
+                                className="max-w-36"
+                                inputClassName="num text-right"
+                            />
+                        )}
+                    </form.AppField>
+                </>
+            ) : null}
             <form.Subscribe selector={(state) => state.values.nature}>
                 {(nature) =>
                     nature === "card_voucher" ? (
-                        <div className="grid grid-cols-1 gap-4 border-t border-grid pt-3 sm:col-span-2 sm:grid-cols-2">
+                        <div className="grid grid-cols-1 gap-4 border-t border-grid pt-3 sm:col-span-2 sm:grid-cols-2 lg:col-span-3">
                             <form.AppField
                                 name="fulfillmentDeadline"
                                 validators={{

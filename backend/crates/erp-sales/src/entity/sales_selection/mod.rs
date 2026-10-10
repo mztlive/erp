@@ -28,7 +28,7 @@ pub use idempotency::{
 };
 pub use image::{FirstNonEmptyMemberImage, PackageCoverRef, PackageImageGenerator};
 pub use limits::*;
-pub use pool::{PoolFilterSnapshot, PoolSource};
+pub use pool::{PoolFilterSnapshot, PoolPriceKind, PoolSource};
 pub use pool_member::SalesSelectionPoolMember;
 pub use prepare_task::{SalesSelectionPrepareTask, SalesSelectionPrepareTaskData};
 pub use pricing::{abs_diff, try_add, try_mul_u32, try_sum};

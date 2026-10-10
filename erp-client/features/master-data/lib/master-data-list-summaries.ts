@@ -1,3 +1,4 @@
+import { PRICE_FILTER_LABELS, type PriceFilterKind } from "@/lib/price-filter"
 import {
     masterDataCopy,
     lifecycleFilterLabel,
@@ -45,6 +46,7 @@ export function buildDictionaryFilterSnapshotLabel(input: {
 export function buildSellableFilterSnapshotLabel(input: {
     q: string
     productKind?: ProductKind
+    productPriceKind?: PriceFilterKind
     productSalesPriceMin?: string
     productSalesPriceMax?: string
     supplyRegion?: string
@@ -73,7 +75,7 @@ export function buildSellableFilterSnapshotLabel(input: {
             : []),
         ...(input.productSalesPriceMin || input.productSalesPriceMax
             ? [
-                  `一件代发价=${input.productSalesPriceMin ? `¥${input.productSalesPriceMin}` : "不限"}–${input.productSalesPriceMax ? `¥${input.productSalesPriceMax}` : "不限"}`,
+                  `${PRICE_FILTER_LABELS[input.productPriceKind ?? "dropship"]}=${input.productSalesPriceMin ? `¥${input.productSalesPriceMin}` : "不限"}–${input.productSalesPriceMax ? `¥${input.productSalesPriceMax}` : "不限"}`,
               ]
             : []),
         input.q.trim() ? `搜索=${input.q.trim()}` : "搜索=空",
@@ -163,6 +165,7 @@ export function buildSupplierFilterSnapshotLabel(input: {
 export function buildSellableTableDescription(input: {
     q: string
     productKind?: ProductKind
+    productPriceKind?: PriceFilterKind
     productSalesPriceMin?: string
     productSalesPriceMax?: string
     supplyRegion?: string
@@ -192,7 +195,7 @@ export function buildSellableTableDescription(input: {
     }
     if (input.productSalesPriceMin || input.productSalesPriceMax) {
         active.push(
-            `一件代发价 ${input.productSalesPriceMin ? `¥${input.productSalesPriceMin}` : "不限"}–${input.productSalesPriceMax ? `¥${input.productSalesPriceMax}` : "不限"}`,
+            `${PRICE_FILTER_LABELS[input.productPriceKind ?? "dropship"]} ${input.productSalesPriceMin ? `¥${input.productSalesPriceMin}` : "不限"}–${input.productSalesPriceMax ? `¥${input.productSalesPriceMax}` : "不限"}`,
         )
     }
     if (active.length === 0) {

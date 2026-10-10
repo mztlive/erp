@@ -12,7 +12,7 @@ use validator::Validate;
 
 use super::PageView;
 use crate::dto::validate_sales_price_range;
-use crate::entity::catalog::ProductKind;
+use crate::entity::catalog::{ProductKind, SellablePriceKind};
 use crate::error::{Error, Result};
 use crate::repository::CatalogExt;
 
@@ -37,9 +37,12 @@ pub struct SellableSkuListParams {
     /// 当前有效供给去重供应商数量上限（含）；用于「单一供应商」快捷视图。
     #[validate(range(min = 1, message = "供应商数量上限必须大于0"))]
     pub max_supplier_count: Option<u32>,
-    /// 一件代发含税参考价下限（含）。
+    /// 价格筛选口径；单个区间只匹配一种价格。
+    #[serde(default)]
+    pub price_kind: SellablePriceKind,
+    /// 所选含税参考价下限（含）。
     pub sales_price_min: Option<Amount>,
-    /// 一件代发含税参考价上限（含）。
+    /// 所选含税参考价上限（含）。
     pub sales_price_max: Option<Amount>,
     /// 服务端解释的资格业务日期；空表示服务端今天。
     pub eligibility_as_of: Option<BusinessDate>,
@@ -192,6 +195,7 @@ pub fn prepare_sellable_sku_list(params: &SellableSkuListParams) -> Result<Sella
         supplier_id: normalized_text(params.supplier_id.as_deref()),
         supply_region: normalized_text(params.supply_region.as_deref()),
         max_supplier_count: params.max_supplier_count,
+        price_kind: params.price_kind,
         sales_price_min: params.sales_price_min,
         sales_price_max: params.sales_price_max,
         eligibility_as_of,
@@ -290,6 +294,48 @@ mod tests {
         assert!(item.supplier_codes.is_empty());
         let wire = serde_json::to_value(item).unwrap();
         assert!(wire.get("supplier_ids").is_none());
+    }
+
+    #[test]
+    fn price_filter_keeps_one_kind_and_validates_range() {
+        use super::prepare_sellable_sku_list;
+        use crate::entity::catalog::SellablePriceKind;
+
+        for (wire, kind) in [
+            ("dropship", SellablePriceKind::Dropship),
+            ("bulk", SellablePriceKind::Bulk),
+            ("market", SellablePriceKind::Market),
+        ] {
+            for (min, max) in [(Some("0.00"), None), (None, Some("99.90")), (Some("5.00"), Some("5.00"))] {
+                let params: SellableSkuListParams = serde_json::from_value(serde_json::json!({
+                    "price_kind": wire, "sales_price_min": min, "sales_price_max": max
+                }))
+                .unwrap();
+                let filter = prepare_sellable_sku_list(&params).unwrap();
+                assert_eq!(filter.price_kind, kind);
+                assert_eq!(filter.sales_price_min, params.sales_price_min);
+                assert_eq!(filter.sales_price_max, params.sales_price_max);
+            }
+            for (min, max) in [("10.01", "10.00"), ("-0.01", "10.00"), ("0.00", "-0.01")] {
+                let params: SellableSkuListParams = serde_json::from_value(serde_json::json!({
+                    "price_kind": wire, "sales_price_min": min, "sales_price_max": max
+                }))
+                .unwrap();
+                assert!(prepare_sellable_sku_list(&params).is_err());
+            }
+        }
+        let default: SellableSkuListParams = serde_json::from_str("{}").unwrap();
+        assert_eq!(default.price_kind, SellablePriceKind::Dropship);
+        assert!(
+            serde_json::from_value::<SellableSkuListParams>(serde_json::json!({"price_kind": "unknown"}))
+                .is_err()
+        );
+        assert!(
+            serde_json::from_value::<SellableSkuListParams>(
+                serde_json::json!({"price_kind": ["bulk", "market"]})
+            )
+            .is_err()
+        );
     }
 
     /// 公司商品池分页上限固定为一百，阻止无界销售查询。

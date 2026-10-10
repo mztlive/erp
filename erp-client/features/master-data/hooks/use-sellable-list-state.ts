@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { PRICE_FILTER_LABELS } from "@/lib/price-filter"
 
 import { useSellableListFilters } from "@/features/master-data/hooks/use-sellable-list-filters"
 import {
@@ -19,10 +20,6 @@ import {
 } from "@/features/master-data/lib/product-filter-directory"
 import { PRODUCT_KIND_LABELS } from "@/features/master-data/types"
 import type { SellableAppliedChip } from "@/features/master-data/components/list/sellable-list-toolbar"
-import {
-    filterBySellableSupplyPreset,
-    SELLABLE_SUPPLY_PRESET_LABELS,
-} from "@/features/master-data/lib/sellable-supply-preset"
 
 export function useSellableListState(
     searchInputRef: React.RefObject<HTMLInputElement | null>,
@@ -34,8 +31,8 @@ export function useSellableListState(
         productKind: filters.productKind,
         productCategoryId: filters.productCategoryId,
         productBrandId: filters.productBrandId,
-        productSupplierId: filters.productSupplierId,
         supplyRegion: filters.supplyRegion,
+        productPriceKind: filters.productPriceKind,
         productSalesPriceMin: filters.productSalesPriceMin,
         productSalesPriceMax: filters.productSalesPriceMax,
     })
@@ -44,25 +41,9 @@ export function useSellableListState(
     const [previewId, setPreviewId] = React.useState<string | null>(null)
 
     // DataTable 需要可变数组：整份结果直接交给表格做排序与分页
-    const baseRows = React.useMemo(
+    const rows = React.useMemo(
         () => [...(listQuery.data?.rows ?? [])],
         [listQuery.data?.rows],
-    )
-    const rows = React.useMemo(
-        () => filterBySellableSupplyPreset(baseRows, filters.supplyPreset),
-        [baseRows, filters.supplyPreset],
-    )
-    const supplyPresetCounts = React.useMemo(
-        () => ({
-            all: baseRows.length,
-            "single-supplier": filterBySellableSupplyPreset(
-                baseRows,
-                "single-supplier",
-            ).length,
-            nationwide: filterBySellableSupplyPreset(baseRows, "nationwide")
-                .length,
-        }),
-        [baseRows],
     )
     const previewRow = React.useMemo(
         () => rows.find((row) => row.stableId === previewId) ?? null,
@@ -83,24 +64,11 @@ export function useSellableListState(
         (option) => option.label,
         directory,
     )
-    const selectedSupplierLabel = directorySelectionLabel(
-        filters.productSupplierId,
-        directory.suppliers,
-        (option) => option.value,
-        (option) => option.label,
-        directory,
-    )
     /** 所有已生效条件均可从 chip 单独撤销。 */
     const appliedChips = React.useMemo<readonly SellableAppliedChip[]>(() => {
         const chips: SellableAppliedChip[] = []
         if (filters.q.trim()) {
             chips.push({ key: "q", label: `搜索：${filters.q.trim()}` })
-        }
-        if (filters.supplyPreset) {
-            chips.push({
-                key: "supplyPreset",
-                label: SELLABLE_SUPPLY_PRESET_LABELS[filters.supplyPreset],
-            })
         }
         if (filters.productKind) {
             chips.push({
@@ -120,12 +88,6 @@ export function useSellableListState(
                 label: `品牌：${selectedBrandLabel}`,
             })
         }
-        if (filters.productSupplierId) {
-            chips.push({
-                key: "productSupplierId",
-                label: `供应商：${selectedSupplierLabel}`,
-            })
-        }
         if (filters.supplyRegion) {
             chips.push({
                 key: "supplyRegion",
@@ -137,7 +99,7 @@ export function useSellableListState(
             const maximum = filters.productSalesPriceMax ?? "不限"
             chips.push({
                 key: "salesPrice",
-                label: `一件代发价：${minimum} 至 ${maximum}`,
+                label: `${PRICE_FILTER_LABELS[filters.productPriceKind]}：${minimum} 至 ${maximum}`,
             })
         }
         return chips
@@ -146,14 +108,12 @@ export function useSellableListState(
         filters.productCategoryId,
         filters.productKind,
         filters.productSalesPriceMax,
+        filters.productPriceKind,
         filters.productSalesPriceMin,
-        filters.productSupplierId,
         filters.q,
-        filters.supplyPreset,
         filters.supplyRegion,
         selectedBrandLabel,
         selectedCategoryLabel,
-        selectedSupplierLabel,
     ])
 
     const filterSnapshotLabel = React.useMemo(
@@ -161,26 +121,22 @@ export function useSellableListState(
             buildSellableFilterSnapshotLabel({
                 q: filters.q,
                 productKind: filters.productKind,
+                productPriceKind: filters.productPriceKind,
                 productSalesPriceMin: filters.productSalesPriceMin,
                 productSalesPriceMax: filters.productSalesPriceMax,
                 supplyRegion: filters.supplyRegion,
                 selectedCategoryLabel,
                 selectedBrandLabel,
-                selectedSupplierLabel,
-                supplyPresetLabel: filters.supplyPreset
-                    ? SELLABLE_SUPPLY_PRESET_LABELS[filters.supplyPreset]
-                    : undefined,
             }),
         [
             filters.productKind,
             filters.productSalesPriceMax,
+            filters.productPriceKind,
             filters.productSalesPriceMin,
             filters.q,
             filters.supplyRegion,
-            filters.supplyPreset,
             selectedBrandLabel,
             selectedCategoryLabel,
-            selectedSupplierLabel,
         ],
     )
     const sellableTableDescription = React.useMemo(
@@ -188,28 +144,24 @@ export function useSellableListState(
             buildSellableTableDescription({
                 q: filters.q,
                 productKind: filters.productKind,
+                productPriceKind: filters.productPriceKind,
                 productSalesPriceMin: filters.productSalesPriceMin,
                 productSalesPriceMax: filters.productSalesPriceMax,
                 supplyRegion: filters.supplyRegion,
                 selectedCategoryLabel,
                 selectedBrandLabel,
-                selectedSupplierLabel,
-                supplyPresetLabel: filters.supplyPreset
-                    ? SELLABLE_SUPPLY_PRESET_LABELS[filters.supplyPreset]
-                    : undefined,
                 rowCount: rows.length,
             }),
         [
             filters.productKind,
             filters.productSalesPriceMax,
+            filters.productPriceKind,
             filters.productSalesPriceMin,
             filters.q,
             filters.supplyRegion,
-            filters.supplyPreset,
             rows.length,
             selectedBrandLabel,
             selectedCategoryLabel,
-            selectedSupplierLabel,
         ],
     )
 
@@ -222,11 +174,10 @@ export function useSellableListState(
                 productKind: filters.productKind,
                 productCategoryId: filters.productCategoryId,
                 productBrandId: filters.productBrandId,
-                productSupplierId: filters.productSupplierId,
                 supplyRegion: filters.supplyRegion,
+                productPriceKind: filters.productPriceKind,
                 productSalesPriceMin: filters.productSalesPriceMin,
                 productSalesPriceMax: filters.productSalesPriceMax,
-                sellableSupplyPreset: filters.supplyPreset,
             },
             filterSnapshotLabel,
             resourceLabel("sellable-items"),
@@ -247,7 +198,6 @@ export function useSellableListState(
         previewId,
         setPreviewId,
         rows,
-        supplyPresetCounts,
         previewRow,
         appliedChips,
         filterSnapshotLabel,

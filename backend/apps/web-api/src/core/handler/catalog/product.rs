@@ -600,3 +600,38 @@ pub async fn product_detail_sku_revisions(
 
     Ok(ApiResponse::ok_with_data(page))
 }
+
+#[cfg(test)]
+mod tests {
+    use axum::extract::Query;
+    use axum::http::Uri;
+    use erp_catalog::entity::catalog::SellablePriceKind;
+
+    use super::SellableSkuListParams;
+
+    #[test]
+    fn price_filter_query_accepts_one_kind_and_rejects_invalid_or_repeated_values() {
+        for (value, kind) in [
+            ("dropship", SellablePriceKind::Dropship),
+            ("bulk", SellablePriceKind::Bulk),
+            ("market", SellablePriceKind::Market),
+        ] {
+            let uri: Uri = format!(
+                "/admin/sellable-skus?price_kind={value}&sales_price_min=10.00&sales_price_max=20.00"
+            )
+            .parse()
+            .unwrap();
+            let Query(params) = Query::<SellableSkuListParams>::try_from_uri(&uri).unwrap();
+            assert_eq!(params.price_kind, kind);
+            assert_eq!(params.sales_price_min.unwrap().to_string(), "10.00");
+        }
+        for query in [
+            "price_kind=unknown",
+            "price_kind=bulk&price_kind=market",
+            "price_kind=bulk&sales_price_min=oops",
+        ] {
+            let uri: Uri = format!("/admin/sellable-skus?{query}").parse().unwrap();
+            assert!(Query::<SellableSkuListParams>::try_from_uri(&uri).is_err());
+        }
+    }
+}

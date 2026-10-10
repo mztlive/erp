@@ -16,7 +16,7 @@ const STEP_FIELDS = [
         "customer_credit_code",
         "company_name",
         "company_credit_code",
-        "createCustomer",
+        "customerMode",
     ],
     ["contract_no", "payment_terms", "invoice_type", "tax_point"],
     ["signed_at", "valid_from", "valid_to", "business_scope"],
@@ -25,7 +25,7 @@ const STEP_FIELDS = [
 export const importNewCustomerCreditCodeSchema = z
     .string()
     .trim()
-    .min(1, "请填写统一社会信用代码后再确认建立客户档案")
+    .min(1, "请填写统一社会信用代码")
     .regex(/^[A-Za-z0-9]{18}$/, "统一社会信用代码须为 18 位字母数字")
 
 export function importReviewFieldStep(field: string): ImportReviewStep {
@@ -61,13 +61,13 @@ export function importReviewSchema({
             signed_at: required("签订日期"),
             valid_from: required("生效日期"),
             valid_to: required("有效期止"),
-            business_scope: required("业务范围"),
+            business_scope: z.string().trim(),
             customerId: z.string(),
             companyId: z.string().min(1, "请选择系统中的我方签约主体"),
-            createCustomer: z.boolean(),
+            customerMode: z.enum(["existing", "create"]),
         })
         .superRefine((value, ctx) => {
-            if (!value.customerId && value.createCustomer) {
+            if (value.customerMode === "create") {
                 const creditCode = importNewCustomerCreditCodeSchema.safeParse(
                     value.customer_credit_code,
                 )
@@ -79,13 +79,19 @@ export function importReviewSchema({
                     })
             }
             if (
-                !value.customerId &&
-                !(value.createCustomer && canCreate && !expectedCustomerId)
+                value.customerMode === "create" &&
+                (!canCreate || expectedCustomerId)
             )
                 ctx.addIssue({
                     code: "custom",
+                    path: ["customerMode"],
+                    message: "当前操作不能建立客户档案，请选择已有客户",
+                })
+            if (value.customerMode === "existing" && !value.customerId)
+                ctx.addIssue({
+                    code: "custom",
                     path: ["customerId"],
-                    message: "请选择系统客户，或确认匹配并建立客户档案",
+                    message: "请选择合同签约方对应的客户档案",
                 })
             if (
                 value.customerId &&
@@ -99,7 +105,7 @@ export function importReviewSchema({
                     code: "custom",
                     path: ["customerId"],
                     message:
-                        "签约名称或信用代码与所选客户不一致，请展开主体信息核对后修正。",
+                        "签约信息与所选客户不一致，请在客户区域核对并确认档案信息。",
                 })
             if (
                 value.companyId &&
@@ -115,7 +121,7 @@ export function importReviewSchema({
                     code: "custom",
                     path: ["companyId"],
                     message:
-                        "签约名称或信用代码与所选我方主体不一致，请展开主体信息核对后修正。",
+                        "签约信息与所选我方主体不一致，请在我方主体区域核对并确认档案信息。",
                 })
         })
 }

@@ -137,16 +137,6 @@ export function SellableGalleryCard({
                         </p>
                     ) : null}
                     <p>
-                        SKU <span className="num">{row.stableNo}</span>
-                        {item?.productNo ? (
-                            <>
-                                <span aria-hidden="true"> · </span>
-                                SPU{" "}
-                                <span className="num">{item.productNo}</span>
-                            </>
-                        ) : null}
-                    </p>
-                    <p>
                         集采起订量{" "}
                         {item?.bulkMinQuantity ? (
                             <QuantityValue
@@ -156,15 +146,6 @@ export function SellableGalleryCard({
                         ) : (
                             "—"
                         )}
-                    </p>
-                    <p
-                        className="truncate"
-                        title={item?.supplierCodes?.join("、")}
-                    >
-                        供应商编号{" "}
-                        <span className="num">
-                            {item?.supplierCodes?.join("、") || "—"}
-                        </span>
                     </p>
                     <SupplyRegions regions={item?.supplyRegions ?? []} />
                     <p

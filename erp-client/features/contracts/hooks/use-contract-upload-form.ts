@@ -219,8 +219,9 @@ export function useContractUploadForm(options: UseContractUploadFormOptions) {
         confirmMutation.reset()
         previewMutation.reset()
         request.current = null
+        // 保留默认值，避免窗口挂载时 useForm.update 将未触碰的文件重置为空。
         // reset 不触发字段 onChange 自动提交；入口文件只提交一次。
-        form.reset({ pdfFile: file })
+        form.reset({ pdfFile: file }, { keepDefaultValues: true })
         void form.handleSubmit().catch(() => undefined)
     }, [
         options.open,

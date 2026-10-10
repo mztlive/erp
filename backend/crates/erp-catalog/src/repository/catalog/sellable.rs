@@ -3,7 +3,7 @@ use erp_core::common::time::BusinessDate;
 use erp_core::money::{Amount, Quantity};
 use serde::{Deserialize, Serialize};
 
-use crate::entity::catalog::ProductKind;
+use crate::entity::catalog::{ProductKind, SellablePriceKind};
 
 /// 公司商品池列表筛选条件。
 ///
@@ -27,9 +27,11 @@ pub struct SellableSkuFilter {
     pub supply_region: Option<String>,
     /// 当前有效供给去重供应商数量上限（含）；`None` 表示不按供应保障筛选。
     pub max_supplier_count: Option<u32>,
-    /// 一件代发含税参考价下限（含）；`None` 表示无下限。
+    /// 价格筛选口径；单个区间只匹配一种价格。
+    pub price_kind: SellablePriceKind,
+    /// 所选含税参考价下限（含）；`None` 表示无下限。
     pub sales_price_min: Option<Amount>,
-    /// 一件代发含税参考价上限（含）；`None` 表示无上限。
+    /// 所选含税参考价上限（含）；`None` 表示无上限。
     pub sales_price_max: Option<Amount>,
     /// 服务端解释的销售资格业务日期。
     pub eligibility_as_of: BusinessDate,
@@ -60,6 +62,7 @@ impl SellableSkuFilter {
             supplier_id: None,
             supply_region: None,
             max_supplier_count: None,
+            price_kind: SellablePriceKind::default(),
             sales_price_min: None,
             sales_price_max: None,
             eligibility_as_of,

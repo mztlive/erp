@@ -42,6 +42,7 @@ const FIELDS: Record<string, string> = {
 export function ContractImportTask({
     task,
     showExtraction = true,
+    showCloseHint = true,
     busy,
     recoveryAvailable,
     contextError,
@@ -54,6 +55,7 @@ export function ContractImportTask({
 }: {
     task: ImportTask
     showExtraction?: boolean
+    showCloseHint?: boolean
     busy: boolean
     recoveryAvailable: boolean
     contextError?: string
@@ -102,7 +104,10 @@ export function ContractImportTask({
                 </Alert>
             ) : null}
             {processing && !recoveryAvailable ? (
-                <ContractImportProgress stage={task.stage} />
+                <ContractImportProgress
+                    stage={task.stage}
+                    showCloseHint={showCloseHint}
+                />
             ) : null}
             {task.status === "review" ? (
                 <Alert>

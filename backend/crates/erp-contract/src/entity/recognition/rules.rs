@@ -69,7 +69,7 @@ impl ContractValues {
     /// # 错误
     /// 必填缺失、开票类型或税率不在允许集合、日期无效，或有效期止早于生效日时返回 `ImportFailure`。
     pub(super) fn validate_values(&self) -> Result<ValidatedFields> {
-        for field in [ContractNo, CustomerName, CompanyName, BusinessScope] {
+        for field in [ContractNo, CustomerName, CompanyName] {
             self.required(field)?;
         }
         let (payment_code, payment_name) = self.payment()?;

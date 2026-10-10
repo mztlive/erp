@@ -25,6 +25,7 @@ pub struct ProductBrandRow {
     /// 品牌名称。
     pub name: String,
     /// 品牌 Logo（已登记受控文件，D05）。
+    #[serde(rename = "logo_file_asset_id")]
     pub logo_asset_id: Option<String>,
     /// 启停状态。
     pub status: EnableStatus,
@@ -437,6 +438,47 @@ fn unit_of_measure_projection() -> Document {
         "status": 1,
         "version": 1,
         "created_at": 1,
+    }
+}
+
+#[cfg(test)]
+mod logo_projection_tests {
+    use mongodb::bson::{Bson, Document, deserialize_from_document, doc};
+
+    use super::ProductBrandRow;
+    use crate::dto::catalog::ProductBrandView;
+
+    fn stored_brand() -> Document {
+        doc! {
+            "id": "brand-1",
+            "brand_code": "B-001",
+            "name": "品牌一",
+            "status": "active",
+            "version": 1_i64,
+            "created_at": 1_i64,
+        }
+    }
+
+    #[test]
+    fn list_view_preserves_stored_logo_asset() {
+        let mut document = stored_brand();
+        document.insert("logo_file_asset_id", "asset-logo-1");
+        let row: ProductBrandRow = deserialize_from_document(document).unwrap();
+        let view = ProductBrandView::from(row);
+
+        assert_eq!(view.logo_asset_id.as_deref(), Some("asset-logo-1"));
+    }
+
+    #[test]
+    fn list_view_accepts_missing_or_null_logo() {
+        for logo in [None, Some(Bson::Null)] {
+            let mut document = stored_brand();
+            if let Some(value) = logo {
+                document.insert("logo_file_asset_id", value);
+            }
+            let row: ProductBrandRow = deserialize_from_document(document).unwrap();
+            assert_eq!(ProductBrandView::from(row).logo_asset_id, None);
+        }
     }
 }
 

@@ -4,15 +4,12 @@ import { useSelector } from "@tanstack/react-form"
 import { UploadIcon } from "lucide-react"
 
 import { toFieldErrors } from "@/components/form"
-import type { SettlementPartyComboboxItem } from "@/components/business/entity-comboboxes"
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
 import { SalesOrderCreateEvidenceField } from "@/features/sales-orders/components/sales-order-create-evidence-field"
 import {
     ContractSearchCombobox,
     CustomerSearchCombobox,
-    SettlementPartySearchCombobox,
 } from "@/features/entity-selectors"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
@@ -20,8 +17,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 export type SalesOrderCreateContractSectionProps = {
     form: SalesOrderCreateFormApi
     customerLocked?: boolean
-    settlementSnapshot?: SettlementPartyComboboxItem
-    contractFetching: boolean
     onContractChange: (contractId: string) => void
     onOrderBasisChange: (basis: "contract" | "evidence") => void
     onUploadClick: () => void
@@ -30,8 +25,6 @@ export type SalesOrderCreateContractSectionProps = {
 export function SalesOrderCreateContractSection({
     form,
     customerLocked = false,
-    settlementSnapshot,
-    contractFetching,
     onContractChange,
     onOrderBasisChange,
     onUploadClick,
@@ -184,43 +177,6 @@ export function SalesOrderCreateContractSection({
                         )
                     }}
                 </form.AppField>
-                <form.AppField name="settlementPartyId">
-                    {(field) => (
-                        <Field>
-                            <FieldLabel htmlFor="sales-orders-create-settlement">
-                                结算主体
-                                <span className="text-destructive">*</span>
-                            </FieldLabel>
-                            <SettlementPartySearchCombobox
-                                id="sales-orders-create-settlement"
-                                purpose="sales-order"
-                                selectedSnapshot={settlementSnapshot}
-                                disabled={
-                                    customerFromContract && contractFetching
-                                }
-                                value={field.state.value || undefined}
-                                onValueChange={(id) =>
-                                    field.handleChange(id ?? "")
-                                }
-                                onItemChange={(item) =>
-                                    form.setFieldValue(
-                                        "settlementEntity",
-                                        item?.displayName ?? "",
-                                    )
-                                }
-                                placeholder="搜索并选择结算主体"
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                {basis === "contract"
-                                    ? "默认使用合同的我方签约主体，可按本次销售安排调整。"
-                                    : "选择本次销售的结算主体，补合同时保留此选择。"}
-                            </p>
-                            <FieldError
-                                errors={toFieldErrors(field.state.meta.errors)}
-                            />
-                        </Field>
-                    )}
-                </form.AppField>
                 {basis === "contract" ? (
                     <form.AppField name="contractId">
                         {(field) => {
@@ -276,24 +232,6 @@ export function SalesOrderCreateContractSection({
                     />
                 )}
             </div>
-            <form.Subscribe
-                selector={(state) => state.values.contractRevisionLabel}
-            >
-                {(label) =>
-                    label ? (
-                        <div className="flex flex-wrap items-center gap-3 rounded-lg bg-muted/50 px-3 py-3 text-sm">
-                            <Badge variant="outline" className="font-normal">
-                                {label}
-                            </Badge>
-                            {contractFetching ? (
-                                <span className="text-muted-foreground">
-                                    加载中…
-                                </span>
-                            ) : null}
-                        </div>
-                    ) : null
-                }
-            </form.Subscribe>
         </div>
     )
 }

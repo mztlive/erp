@@ -120,6 +120,41 @@ fn confirmation_accepts_edits_but_requires_valid_business_values() {
 }
 
 #[test]
+fn confirmation_allows_missing_or_empty_business_scope() {
+    let (doc, extraction) = sample();
+    let mut command =
+        ConfirmImport { create_customer: false, version: 1, fields: extraction.draft(&doc).fields };
+    command.fields.remove(&BusinessScope);
+    let (validated, values) = command.validate().unwrap();
+    assert_eq!(validated.contract_no, "HT-1");
+    assert!(!values.fields.contains_key(&BusinessScope));
+    for scope in [None, Some(String::new()), Some(" \n\t ".into())] {
+        command.fields.insert(BusinessScope, scope);
+        let (validated, values) = command.validate().unwrap();
+        assert_eq!(validated.payment_code, "POSTPAY_NET30");
+        assert!(!values.fields.contains_key(&BusinessScope));
+    }
+    command.fields.insert(ContractNo, None);
+    let error = command.validate().err().unwrap();
+    assert_eq!(error.code, "MISSING_FIELD");
+    assert_eq!(error.field, Some(ContractNo));
+}
+
+#[test]
+fn confirmation_preserves_business_scope_and_enforces_length_limit() {
+    let (doc, extraction) = sample();
+    let mut command =
+        ConfirmImport { create_customer: false, version: 1, fields: extraction.draft(&doc).fields };
+    command.fields.insert(BusinessScope, Some("  定制保温杯  ".into()));
+    assert_eq!(command.validate().unwrap().1.fields[&BusinessScope], "定制保温杯");
+    assert_eq!(extraction.fields[&BusinessScope].value, "年节礼包");
+    command.fields.insert(BusinessScope, Some("x".repeat(4096)));
+    assert_eq!(command.validate().unwrap().1.fields[&BusinessScope].len(), 4096);
+    command.fields.insert(BusinessScope, Some("x".repeat(4097)));
+    assert_eq!(command.validate().err().unwrap().code, "INVALID_CONFIRMATION");
+}
+
+#[test]
 fn settlement_fields_are_optional_and_legacy_values_remain_readable() {
     let (doc, extraction) = sample();
     let mut command =

@@ -88,6 +88,7 @@ export function mapBrandRow(dto: ProductBrandDto): MasterDataListItem {
         stableNo: dto.brand_code,
         name: dto.name,
         dictionaryCode: dto.brand_code,
+        brandLogoAssetId: dto.logo_asset_id?.trim() || undefined,
         lifecycleStatus: lifecycle,
         lifecycleStatusLabel: lifecycleLabel(lifecycle),
         lifecycleTone: lifecycleTone(lifecycle),

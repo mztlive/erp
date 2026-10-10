@@ -1,4 +1,4 @@
-//! 本地嵌入的生成图片经对象存储和正式商品更新原子登记；重复执行只补空图。
+//! 图片与价格缺项合并为一次正式商品修订；重复执行保留已有值。
 
 use std::collections::HashMap;
 
@@ -13,33 +13,60 @@ use sha2::{Digest, Sha256};
 
 use super::plan::DemoStep;
 use super::record::DemoMasterRecord;
-use super::{DemoMasterDataService, image_assets};
+use super::seed::SeedRequest;
+use super::{DemoMasterDataService, image_assets, prices};
 use crate::adapters::catalog_access;
 use crate::attachments::product_update_with_assets;
 use crate::{Error, Result};
 
 impl DemoMasterDataService {
-    /// 仅给已登记的演示商品补图；失败可再次生成继续。
+    /// 仅给已登记的演示商品补齐图片及价格缺项；失败可再次生成继续。
     /// # 参数
     /// `actor` 为操作人；`step` 为种子；`records` 为实际 ID 登记。
     /// # 返回
-    /// 所有登记的启用 SKU 有主图，商品有轮播图；已有图不替换。
+    /// 登记的模板 SKU 补齐价格，启用 SKU 有主图，商品有轮播图；已有值不替换。
     /// # 错误
     /// 归属、图片、存储或商品版本冲突时返回错误，禁止报告生成完成。
-    pub(super) async fn ensure_product_images(
+    pub(super) async fn ensure_product_defaults(
         &self,
         actor: &AuditActor,
         step: &DemoStep,
         records: &HashMap<String, DemoMasterRecord>,
     ) -> Result<()> {
         let record = records.get(&step.key).ok_or_else(|| Error::NotFound("演示商品尚未登记".into()))?;
-        let mut request = self.image_update_request(actor, &record.entity_id).await?;
+        let mut request = self.product_update_request(actor, &record.entity_id).await?;
+        let SeedRequest::Product(template) = &step.request else {
+            return Err(Error::ValidationError("商品补齐必须使用商品种子".into()));
+        };
+        let prices_changed = prices::fill_missing(&mut request.skus, &template.skus, record);
         let missing = request.skus.iter().any(|sku| {
             needs_image(sku.sku_id.as_ref().map(AsRef::as_ref), sku.main_image_asset_id.is_some(), record)
         });
-        if !missing && !request.carousel_media.is_empty() {
+        if !prices_changed && !missing && !request.carousel_media.is_empty() {
             return Ok(());
         }
+        if prices_changed {
+            request.change_reason = Some("补齐演示商品价格及展示资料".into());
+        }
+        let pending = self.fill_images(step, record, &mut request).await?;
+        product_update_with_assets(
+            self.db.clone(),
+            self.rbac.clone(),
+            record.entity_id.clone(),
+            request,
+            pending,
+            actor.clone(),
+        )
+        .await?;
+        Ok(())
+    }
+
+    async fn fill_images(
+        &self,
+        step: &DemoStep,
+        record: &DemoMasterRecord,
+        request: &mut UpdateProductRequest,
+    ) -> Result<Vec<PendingFileAssetRequest>> {
         let image = image_assets::for_product(&step.key)?;
         let mut pending = Vec::new();
         for sku in &mut request.skus {
@@ -56,19 +83,10 @@ impl DemoMasterDataService {
                 alt_text: Some(step.request.label().into()),
             });
         }
-        product_update_with_assets(
-            self.db.clone(),
-            self.rbac.clone(),
-            record.entity_id.clone(),
-            request,
-            pending,
-            actor.clone(),
-        )
-        .await?;
-        Ok(())
+        Ok(pending)
     }
 
-    async fn image_update_request(
+    async fn product_update_request(
         &self,
         actor: &AuditActor,
         product_id: &str,

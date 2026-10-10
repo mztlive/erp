@@ -40,8 +40,10 @@ export function importStageLabel(stage?: ContractImportStage | null) {
 
 export function ContractImportProgress({
     stage,
+    showCloseHint = true,
 }: {
     stage?: ContractImportStage | null
+    showCloseHint?: boolean
 }) {
     const current = STAGES.findIndex((item) => item.key === stage)
     const active = STAGES[current]
@@ -121,13 +123,15 @@ export function ContractImportProgress({
                         </ol>
                     </>
                 ) : null}
-                <p className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
-                    <InfoIcon
-                        className="mt-0.5 size-3.5 shrink-0"
-                        aria-hidden="true"
-                    />
-                    可以关闭窗口，任务将在后台继续处理。
-                </p>
+                {showCloseHint ? (
+                    <p className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
+                        <InfoIcon
+                            className="mt-0.5 size-3.5 shrink-0"
+                            aria-hidden="true"
+                        />
+                        可以关闭窗口，任务将在后台继续处理。
+                    </p>
+                ) : null}
             </div>
         </div>
     )

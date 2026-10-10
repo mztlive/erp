@@ -2,16 +2,9 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useStore } from "@tanstack/react-form"
-import { ChevronRightIcon } from "lucide-react"
 import { useAppForm, toFieldErrors } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { NativeCheckbox } from "@/components/ui/checkbox"
-import {
-    Collapsible,
-    CollapsibleContent,
-    CollapsibleTrigger,
-} from "@/components/ui/collapsible"
 import {
     Field,
     FieldDescription,
@@ -29,6 +22,8 @@ import {
     importReviewFieldStep,
     type ImportReviewStep,
 } from "../lib/import-review"
+import { ContractImportReviewWarnings } from "./contract-import-review-warnings"
+import { ContractImportCustomerChoice } from "./contract-import-customer-choice"
 import { getErrorMessage } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
 import type { ContractImportTask, ConfirmContractImport } from "../api/upload"
@@ -38,22 +33,6 @@ import {
     useImportCustomer,
 } from "../hooks/import-identity-queries"
 
-const FIELDS = {
-    contract_no: "合同编号",
-    customer_name: "对方签约名称",
-    customer_credit_code: "对方统一社会信用代码",
-    company_name: "我方签约名称",
-    company_credit_code: "我方统一社会信用代码",
-    settlement_name: "结算主体",
-    settlement_credit_code: "结算主体统一社会信用代码",
-    payment_terms: "付款条件",
-    invoice_type: "开票要求",
-    tax_point: "税率",
-    signed_at: "签订日期",
-    valid_from: "生效日期",
-    valid_to: "有效期止",
-    business_scope: "业务范围",
-} as const
 const PAYMENT = [
     "先款 100%",
     "先款 50%",
@@ -80,6 +59,7 @@ export type ContractImportReviewSubmitState = {
     canSubmit: boolean
     validSteps: boolean[]
     isSubmitting: boolean
+    stepHints?: string[]
 }
 
 export function ContractImportReview(props: Props) {
@@ -201,7 +181,9 @@ function ContractImportReviewForm({
         business_scope: task.draft?.fields.business_scope ?? "",
         customerId: matches.customer?.id ?? expectedCustomerId ?? "",
         companyId: matches.company?.id ?? "",
-        createCustomer: false,
+        customerMode: (!expectedCustomerId && !matches.hasAvailableCustomers
+            ? "create"
+            : "existing") as "existing" | "create",
     }))
     const form = useAppForm({
         defaultValues: defaults,
@@ -235,7 +217,7 @@ function ContractImportReviewForm({
             const {
                 customerId: _customerId,
                 companyId: _companyId,
-                createCustomer,
+                customerMode: _customerMode,
                 ...fields
             } = value
             await onConfirm({
@@ -246,7 +228,7 @@ function ContractImportReviewForm({
                         text.trim() || null,
                     ]),
                 ),
-                ...(createCustomer && !value.customerId
+                ...(value.customerMode === "create" && !value.customerId
                     ? { create_customer: true }
                     : {}),
             })
@@ -257,6 +239,12 @@ function ContractImportReviewForm({
     const customer = useImportCustomer(customerId)
     const company = useCompanyQuery(companyId || undefined)
     const values = useStore(form.store, (state) => state.values)
+    const createOnly =
+        !expectedCustomerId && !matches.hasAvailableCustomers && !customerId
+    useEffect(() => {
+        if (createOnly && values.customerMode !== "create")
+            form.setFieldValue("customerMode", "create")
+    }, [createOnly, values.customerMode, form])
     const result = importReviewSchema({
         canCreate,
         expectedCustomerId,
@@ -274,6 +262,18 @@ function ContractImportReviewForm({
     const termsValid = !invalidSteps.has(1)
     const datesValid = !invalidSteps.has(2)
     const canSubmit = result.success
+    const stepHints = [0, 1, 2].map((index) =>
+        index === 0 && createOnly && !canCreate
+            ? "当前没有可选客户，请联系有权限的同事建档或调整客户归属"
+            : result.success
+              ? ""
+              : (result.error.issues.find(
+                    (issue) =>
+                        importReviewFieldStep(String(issue.path[0] ?? "")) ===
+                        index,
+                )?.message ?? ""),
+    )
+    const [identityHint, termsHint, datesHint] = stepHints
     const isSubmitting = useStore(form.store, (state) => state.isSubmitting)
     const lookupBlocked =
         customer.isError ||
@@ -290,9 +290,13 @@ function ContractImportReviewForm({
                 datesValid,
             ],
             isSubmitting,
+            stepHints: [identityHint, termsHint, datesHint],
         })
     }, [
         canSubmit,
+        identityHint,
+        termsHint,
+        datesHint,
         identitiesValid,
         termsValid,
         datesValid,
@@ -331,6 +335,57 @@ function ContractImportReviewForm({
             company.data.unified_credit_code ?? "",
         )
     }, [company.data, form])
+    const customerDraft = useRef({
+        name: defaults.customer_name,
+        code: defaults.customer_credit_code,
+    })
+    const selectedCustomer = useRef({
+        id: defaults.customerId,
+        name: defaults.customer_name,
+        code: defaults.customer_credit_code,
+    })
+    const changeCustomerMode = (mode: "existing" | "create") => {
+        if (mode === values.customerMode || expectedCustomerId) return
+        chosenCustomer.current = ""
+        if (mode === "create") {
+            selectedCustomer.current = {
+                id: values.customerId,
+                name: values.customer_name,
+                code: values.customer_credit_code,
+            }
+            form.setFieldValue("customerId", "")
+            form.setFieldValue("customer_name", customerDraft.current.name)
+            form.setFieldValue(
+                "customer_credit_code",
+                customerDraft.current.code,
+            )
+        } else {
+            customerDraft.current = {
+                name: values.customer_name,
+                code: values.customer_credit_code,
+            }
+            form.setFieldValue("customerId", selectedCustomer.current.id)
+            form.setFieldValue("customer_name", selectedCustomer.current.name)
+            form.setFieldValue(
+                "customer_credit_code",
+                selectedCustomer.current.code,
+            )
+        }
+        form.setFieldValue("customerMode", mode)
+    }
+    const customerConflict = Boolean(
+        customerId &&
+        customer.data &&
+        !result.success &&
+        result.error.issues.some((issue) => issue.path[0] === "customerId"),
+    )
+    const companyConflict = Boolean(
+        companyId &&
+        company.data &&
+        !result.success &&
+        result.error.issues.some((issue) => issue.path[0] === "companyId"),
+    )
+    const warnings = task.draft?.warnings ?? []
     const locked = busy || disabled
     return (
         <form
@@ -355,52 +410,174 @@ function ContractImportReviewForm({
                 <div className="space-y-1">
                     <h3 className="text-base font-semibold">签约双方</h3>
                     <p className="text-sm text-muted-foreground">
-                        请选择或确认签约双方信息
+                        核对客户与我方签约主体。
                     </p>
                 </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                    <form.AppField name="customerId">
-                        {(field) => (
-                            <Field>
-                                <FieldLabel htmlFor="contract-import-customer">
-                                    客户（对方签约主体）
-                                </FieldLabel>
-                                <CustomerSearchCombobox
-                                    id="contract-import-customer"
-                                    value={field.state.value || undefined}
-                                    selectedItem={matches.customer}
-                                    disabled={
-                                        locked || Boolean(expectedCustomerId)
-                                    }
-                                    placeholder="搜索并选择系统客户"
-                                    onValueChange={(id) => {
-                                        chosenCustomer.current = id ?? ""
-                                        field.handleChange(id ?? "")
-                                        field.handleBlur()
-                                        form.setFieldValue(
-                                            "createCustomer",
-                                            false,
-                                        )
-                                    }}
-                                />
-                                <FieldDescription>
-                                    {field.state.value &&
-                                    field.state.value !== defaults.customerId
-                                        ? "已手动选择，请与合同原文核对"
-                                        : matches.customerMessage}
-                                </FieldDescription>
-                                <FieldError
-                                    errors={toFieldErrors(
-                                        field.state.meta.errors,
+                <ContractImportCustomerChoice
+                    mode={values.customerMode}
+                    recognizedName={task.draft?.fields.customer_name}
+                    matched={Boolean(matches.customer)}
+                    createOnly={createOnly}
+                    candidates={matches.customerCandidates}
+                    selectedCustomerId={customerId}
+                    onSelectCustomer={(id) => {
+                        chosenCustomer.current = id
+                        form.setFieldValue("customerId", id)
+                    }}
+                    expectedCustomerId={expectedCustomerId}
+                    disabled={locked || customer.isFetching}
+                    canCreate={canCreate}
+                    onModeChange={changeCustomerMode}
+                >
+                    {createOnly && !canCreate ? null : values.customerMode ===
+                      "existing" ? (
+                        <form.AppField name="customerId">
+                            {(field) => (
+                                <Field>
+                                    <FieldLabel htmlFor="contract-import-customer">
+                                        系统客户
+                                    </FieldLabel>
+                                    <CustomerSearchCombobox
+                                        id="contract-import-customer"
+                                        value={field.state.value || undefined}
+                                        selectedItem={matches.customer}
+                                        disabled={
+                                            locked ||
+                                            Boolean(expectedCustomerId)
+                                        }
+                                        placeholder="搜索并选择系统客户"
+                                        onValueChange={(id) => {
+                                            chosenCustomer.current = id ?? ""
+                                            field.handleChange(id ?? "")
+                                            field.handleBlur()
+                                        }}
+                                    />
+                                    <FieldDescription>
+                                        {field.state.value
+                                            ? field.state.value !==
+                                              defaults.customerId
+                                                ? "已手动选择，请与合同原文核对"
+                                                : matches.customerMessage
+                                            : "请选择合同签约方对应的客户档案"}
+                                    </FieldDescription>
+                                    {customer.data ? (
+                                        <p className="text-xs text-muted-foreground">
+                                            统一社会信用代码：
+                                            {customer.data.creditCode ||
+                                                "未登记"}
+                                        </p>
+                                    ) : null}
+                                    <FieldError
+                                        errors={toFieldErrors(
+                                            field.state.meta.errors,
+                                        )}
+                                    />
+                                </Field>
+                            )}
+                        </form.AppField>
+                    ) : (
+                        <div className="space-y-4">
+                            <div className="grid gap-4 sm:grid-cols-2">
+                                <form.AppField name="customer_name">
+                                    {(field) => (
+                                        <field.TextField
+                                            id="contract-import-new-customer-name"
+                                            label="客户名称"
+                                            required
+                                            disabled={locked || !canCreate}
+                                        />
                                     )}
-                                />
-                            </Field>
-                        )}
-                    </form.AppField>
+                                </form.AppField>
+                                <form.AppField
+                                    name="customer_credit_code"
+                                    validators={{
+                                        onChange: ({ value, fieldApi }) =>
+                                            fieldApi.form.state.values
+                                                .customerMode === "create"
+                                                ? importNewCustomerCreditCodeSchema.safeParse(
+                                                      value,
+                                                  ).error?.issues[0]?.message
+                                                : undefined,
+                                        onBlur: ({ value, fieldApi }) =>
+                                            fieldApi.form.state.values
+                                                .customerMode === "create"
+                                                ? importNewCustomerCreditCodeSchema.safeParse(
+                                                      value,
+                                                  ).error?.issues[0]?.message
+                                                : undefined,
+                                    }}
+                                >
+                                    {(field) => (
+                                        <field.TextField
+                                            id="contract-import-new-customer-code"
+                                            label="统一社会信用代码"
+                                            required
+                                            placeholder="请输入18位统一社会信用代码"
+                                            description={
+                                                task.draft?.fields
+                                                    .customer_credit_code
+                                                    ? "请与合同原文核对"
+                                                    : "原文未识别，请补充。"
+                                            }
+                                            disabled={locked || !canCreate}
+                                        />
+                                    )}
+                                </form.AppField>
+                            </div>
+                            <p className="text-xs leading-relaxed text-muted-foreground">
+                                最终确认归档时优先复用已有档案，缺少时再创建。
+                            </p>
+                        </div>
+                    )}
+                    {customerConflict ? (
+                        <Alert variant="warning">
+                            <AlertDescription>
+                                合同签约信息与所选客户档案不一致，请对照原文核对。
+                                原文信用代码：
+                                {task.draft?.fields.customer_credit_code ||
+                                    "未识别"}
+                                。
+                            </AlertDescription>
+                            <Button
+                                id="contract-import-apply-customer-identity"
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="mt-2 w-fit"
+                                disabled={
+                                    locked ||
+                                    customer.isFetching ||
+                                    customer.data?.statusTone !== "success"
+                                }
+                                onClick={() => {
+                                    if (!customer.data) return
+                                    form.setFieldValue(
+                                        "customer_name",
+                                        customer.data.legalName,
+                                    )
+                                    form.setFieldValue(
+                                        "customer_credit_code",
+                                        customer.data.creditCode,
+                                    )
+                                }}
+                            >
+                                确认使用所选客户信息
+                            </Button>
+                        </Alert>
+                    ) : null}
+                    <ContractImportReviewWarnings
+                        warnings={warnings}
+                        scope="customer"
+                    />
+                </ContractImportCustomerChoice>
+                <div className="rounded-lg border border-border p-4 space-y-3">
                     <form.AppField name="companyId">
                         {(field) => (
                             <Field>
-                                <FieldLabel htmlFor="contract-import-company">
+                                <FieldLabel
+                                    htmlFor="contract-import-company"
+                                    className="font-semibold"
+                                >
                                     我方签约主体
                                 </FieldLabel>
                                 <CompanySearchCombobox
@@ -418,6 +595,7 @@ function ContractImportReviewForm({
                                     field.state.value !== defaults.companyId
                                         ? "已手动选择，请与合同原文核对"
                                         : matches.companyMessage}
+                                    。结算主体可在销售单中另行调整。
                                 </FieldDescription>
                                 <FieldError
                                     errors={toFieldErrors(
@@ -427,10 +605,54 @@ function ContractImportReviewForm({
                             </Field>
                         )}
                     </form.AppField>
+                    {company.data?.unified_credit_code ? (
+                        <p className="text-xs text-muted-foreground">
+                            统一社会信用代码：{company.data.unified_credit_code}
+                        </p>
+                    ) : null}
+                    {companyConflict ? (
+                        <Alert variant="warning">
+                            <AlertDescription>
+                                签约信息与所选我方主体不一致，请核对原文。
+                                合同识别：
+                                {task.draft?.fields.company_name ||
+                                    "未识别名称"}{" "}
+                                ·{" "}
+                                {task.draft?.fields.company_credit_code ||
+                                    "未识别信用代码"}
+                            </AlertDescription>
+                            <Button
+                                id="contract-import-apply-company-identity"
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="mt-2 w-fit"
+                                disabled={
+                                    locked ||
+                                    company.isFetching ||
+                                    company.data?.status !== "active"
+                                }
+                                onClick={() => {
+                                    if (!company.data) return
+                                    form.setFieldValue(
+                                        "company_name",
+                                        company.data.legal_name,
+                                    )
+                                    form.setFieldValue(
+                                        "company_credit_code",
+                                        company.data.unified_credit_code ?? "",
+                                    )
+                                }}
+                            >
+                                确认使用所选我方主体信息
+                            </Button>
+                        </Alert>
+                    ) : null}
+                    <ContractImportReviewWarnings
+                        warnings={warnings}
+                        scope="company"
+                    />
                 </div>
-                <p className="text-xs text-muted-foreground">
-                    结算主体默认采用我方签约主体，可在销售单中另行调整。
-                </p>
                 {customer.isError || company.isError ? (
                     <Alert variant="destructive">
                         <AlertDescription>
@@ -441,175 +663,6 @@ function ContractImportReviewForm({
                         </AlertDescription>
                     </Alert>
                 ) : null}
-                <form.Subscribe selector={(state) => state.values.customerId}>
-                    {(id) =>
-                        !id && !expectedCustomerId ? (
-                            <form.AppField name="createCustomer">
-                                {(field) => (
-                                    <Field className="gap-4 border-t border-border pt-5">
-                                        <div className="space-y-1">
-                                            <h4 className="text-sm font-medium">
-                                                客户建档信息
-                                            </h4>
-                                            <p className="text-xs text-muted-foreground">
-                                                核对名称和信用代码，确认归档时匹配或建立客户档案。
-                                            </p>
-                                        </div>
-                                        <div className="grid gap-3 sm:grid-cols-2">
-                                            <form.AppField name="customer_name">
-                                                {(name) => (
-                                                    <name.TextField
-                                                        id="contract-import-new-customer-name"
-                                                        label="对方签约名称"
-                                                        required
-                                                        disabled={locked}
-                                                    />
-                                                )}
-                                            </form.AppField>
-                                            <form.AppField
-                                                name="customer_credit_code"
-                                                validators={{
-                                                    onChange: field.state.value
-                                                        ? importNewCustomerCreditCodeSchema
-                                                        : undefined,
-                                                    onBlur: field.state.value
-                                                        ? importNewCustomerCreditCodeSchema
-                                                        : undefined,
-                                                }}
-                                            >
-                                                {(code) => (
-                                                    <code.TextField
-                                                        id="contract-import-new-customer-code"
-                                                        label="统一社会信用代码"
-                                                        required={
-                                                            field.state.value
-                                                        }
-                                                        description="确认匹配或建档时必填，请填写 18 位字母数字；已有客户可在上方直接选择。"
-                                                        disabled={locked}
-                                                    />
-                                                )}
-                                            </form.AppField>
-                                        </div>
-                                        <div className="space-y-2 rounded-lg border border-warning-border bg-warning-soft p-3">
-                                            <div className="flex items-start gap-2">
-                                                <NativeCheckbox
-                                                    id="contract-import-create-customer"
-                                                    checked={field.state.value}
-                                                    disabled={
-                                                        locked || !canCreate
-                                                    }
-                                                    onCheckedChange={(
-                                                        checked,
-                                                    ) =>
-                                                        field.handleChange(
-                                                            checked,
-                                                        )
-                                                    }
-                                                />
-                                                <FieldLabel
-                                                    htmlFor="contract-import-create-customer"
-                                                    className="leading-relaxed"
-                                                >
-                                                    确认按名称和信用代码匹配或建立客户档案
-                                                </FieldLabel>
-                                            </div>
-                                            <FieldDescription>
-                                                {canCreate
-                                                    ? "确认归档时复用已有企业；尚无客户身份时将新建客户。名称或信用代码冲突需先修正。"
-                                                    : "你没有创建客户的权限，请选择已有客户或由有权限的同事先建档。"}
-                                            </FieldDescription>
-                                        </div>
-                                    </Field>
-                                )}
-                            </form.AppField>
-                        ) : null
-                    }
-                </form.Subscribe>
-                <Collapsible>
-                    <CollapsibleTrigger
-                        id="contract-import-identity-details"
-                        className="group flex items-center gap-1 text-sm text-muted-foreground"
-                    >
-                        <ChevronRightIcon className="size-4 group-data-panel-open:rotate-90" />
-                        核对签约名称与信用代码
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="mt-3 space-y-3">
-                        <p className="text-xs text-muted-foreground">
-                            原文对方：
-                            {task.draft?.fields.customer_name || "未识别"} ·{" "}
-                            {task.draft?.fields.customer_credit_code ||
-                                "未识别信用代码"}
-                            <br />
-                            原文我方：
-                            {task.draft?.fields.company_name || "未识别"} ·{" "}
-                            {task.draft?.fields.company_credit_code ||
-                                "未识别信用代码"}
-                        </p>
-                        {customer.data ? (
-                            <p className="text-xs text-muted-foreground">
-                                所选客户：{customer.data.legalName} ·{" "}
-                                {customer.data.creditCode || "未登记信用代码"}
-                            </p>
-                        ) : null}
-                        {company.data ? (
-                            <p className="text-xs text-muted-foreground">
-                                所选我方主体：{company.data.legal_name} ·{" "}
-                                {company.data.unified_credit_code ||
-                                    "未登记信用代码"}
-                            </p>
-                        ) : null}
-                        <form.Subscribe
-                            selector={(state) => state.values.customerId}
-                        >
-                            {(id) =>
-                                id ? (
-                                    <div className="grid gap-3 sm:grid-cols-2">
-                                        <form.AppField name="customer_name">
-                                            {(field) => (
-                                                <field.TextField
-                                                    id="contract-import-edit-customer-name"
-                                                    label="对方签约名称"
-                                                    required
-                                                    disabled={locked}
-                                                />
-                                            )}
-                                        </form.AppField>
-                                        <form.AppField name="customer_credit_code">
-                                            {(field) => (
-                                                <field.TextField
-                                                    id="contract-import-edit-customer-credit-code"
-                                                    label="对方信用代码"
-                                                    disabled={locked}
-                                                />
-                                            )}
-                                        </form.AppField>
-                                    </div>
-                                ) : null
-                            }
-                        </form.Subscribe>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                            <form.AppField name="company_name">
-                                {(field) => (
-                                    <field.TextField
-                                        id="contract-import-edit-company-name"
-                                        label="我方签约名称"
-                                        required
-                                        disabled={locked}
-                                    />
-                                )}
-                            </form.AppField>
-                            <form.AppField name="company_credit_code">
-                                {(field) => (
-                                    <field.TextField
-                                        id="contract-import-edit-company-credit-code"
-                                        label="我方信用代码"
-                                        disabled={locked}
-                                    />
-                                )}
-                            </form.AppField>
-                        </div>
-                    </CollapsibleContent>
-                </Collapsible>
             </section>
             <section
                 hidden={step !== 1}
@@ -669,6 +722,10 @@ function ContractImportReviewForm({
                         )}
                     </form.AppField>
                 </div>
+                <ContractImportReviewWarnings
+                    warnings={warnings}
+                    scope="terms"
+                />
             </section>
             <section
                 hidden={step !== 2}
@@ -704,10 +761,11 @@ function ContractImportReviewForm({
                     </form.AppField>
                     <form.AppField name="valid_to">
                         {(field) => (
-                            <field.TextField
+                            <field.DateField
                                 id="contract-import-edit-valid-to"
                                 label="有效期止"
-                                placeholder="YYYY-MM-DD 或长期"
+                                placeholder="选择日期或长期"
+                                allowLongTerm
                                 required
                                 disabled={locked}
                             />
@@ -718,38 +776,21 @@ function ContractImportReviewForm({
                     {(field) => (
                         <field.TextareaField
                             id="contract-import-edit-business-scope"
-                            label="业务范围"
-                            required
+                            label="业务范围（选填）"
                             disabled={locked}
                             maxLength={4096}
                         />
                     )}
                 </form.AppField>
+                <ContractImportReviewWarnings
+                    warnings={warnings}
+                    scope="dates"
+                />
+                <ContractImportReviewWarnings
+                    warnings={warnings}
+                    scope="other"
+                />
             </section>
-            {task.draft?.warnings.length ? (
-                <Collapsible>
-                    <CollapsibleTrigger
-                        id="contract-import-warnings-toggle"
-                        className="group flex items-center gap-1 text-sm text-muted-foreground"
-                    >
-                        <ChevronRightIcon className="size-4 group-data-panel-open:rotate-90" />
-                        查看需要核对的识别信息
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                        <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-muted-foreground">
-                            {task.draft.warnings.map((warning) => (
-                                <li key={warning}>
-                                    {Object.entries(FIELDS).reduce(
-                                        (text, [key, label]) =>
-                                            text.replaceAll(key, label),
-                                        warning,
-                                    )}
-                                </li>
-                            ))}
-                        </ul>
-                    </CollapsibleContent>
-                </Collapsible>
-            ) : null}
         </form>
     )
 }

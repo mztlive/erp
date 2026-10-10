@@ -54,7 +54,16 @@ const HEADER_VALIDATION_FIELDS = [
         targetId: "sales-orders-create-header-tax-rate",
     },
     { name: "customerName", label: "客户", targetId: "contractId" },
-    { name: "settlementEntity", label: "结算主体", targetId: "contractId" },
+    {
+        name: "settlementEntity",
+        label: "结算主体",
+        targetId: "sales-orders-create-settlement",
+    },
+    {
+        name: "settlementPartyId",
+        label: "结算主体",
+        targetId: "sales-orders-create-settlement",
+    },
 ] as const
 
 export type SalesOrderCreateTotalBarProps = {

@@ -38,6 +38,7 @@ export function DictionaryCompactList({
     codeLabel,
     selectedId,
     onPreview,
+    renderCard,
 }: {
     id: string
     rows: readonly MasterDataListItem[]
@@ -55,6 +56,7 @@ export function DictionaryCompactList({
     codeLabel: string
     selectedId: string | null
     onPreview: (row: MasterDataListItem) => void
+    renderCard?: (row: MasterDataListItem) => React.ReactNode
 }) {
     const pageIndex = Math.min(
         pagination.pageIndex,
@@ -131,9 +133,15 @@ export function DictionaryCompactList({
                     正在更新列表…
                 </p>
             ) : null}
-            <ul className="divide-y divide-border">
+            <ul
+                className={
+                    renderCard
+                        ? "grid grid-cols-[repeat(auto-fill,minmax(min(100%,15rem),1fr))] gap-4 pb-2"
+                        : "divide-y divide-border"
+                }
+            >
                 {pageRows.map((row) => (
-                    <li key={row.stableId}>
+                    <li key={row.stableId} className="min-w-0">
                         <button
                             id={`${id}-row-${toAutomationIdSegment(row.stableId)}`}
                             data-row-id={row.stableId}
@@ -143,31 +151,44 @@ export function DictionaryCompactList({
                             aria-expanded={selectedId === row.stableId}
                             onClick={() => onPreview(row)}
                             className={cn(
-                                "flex w-full items-center gap-3 rounded-md px-3 py-3.5 text-left transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:gap-6",
-                                selectedId === row.stableId && "bg-muted/60",
+                                "w-full text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                                renderCard
+                                    ? "group flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card hover:border-foreground/25 hover:bg-muted/20"
+                                    : "flex items-center gap-3 rounded-md px-3 py-3.5 hover:bg-muted/50 sm:gap-6",
+                                selectedId === row.stableId &&
+                                    (renderCard
+                                        ? "border-ring bg-muted/30 ring-1 ring-ring"
+                                        : "bg-muted/60"),
                             )}
                         >
-                            <span className="min-w-0 flex-1 space-y-1">
-                                <span className="block break-words text-sm font-medium text-foreground">
-                                    {row.name}
-                                </span>
-                                <span className="block break-all text-xs text-muted-foreground">
-                                    {codeLabel}：
-                                    <span className="num">
-                                        {row.dictionaryCode ?? row.stableNo}
+                            {renderCard ? (
+                                renderCard(row)
+                            ) : (
+                                <>
+                                    <span className="min-w-0 flex-1 space-y-1">
+                                        <span className="block break-words text-sm font-medium text-foreground">
+                                            {row.name}
+                                        </span>
+                                        <span className="block break-all text-xs text-muted-foreground">
+                                            {codeLabel}：
+                                            <span className="num">
+                                                {row.dictionaryCode ??
+                                                    row.stableNo}
+                                            </span>
+                                        </span>
                                     </span>
-                                </span>
-                            </span>
-                            <span className="shrink-0">
-                                <BusinessStatusBadge
-                                    label={row.lifecycleStatusLabel}
-                                    tone={row.lifecycleTone}
-                                />
-                            </span>
-                            <ChevronRightIcon
-                                className="size-4 shrink-0 text-muted-foreground"
-                                aria-hidden
-                            />
+                                    <span className="shrink-0">
+                                        <BusinessStatusBadge
+                                            label={row.lifecycleStatusLabel}
+                                            tone={row.lifecycleTone}
+                                        />
+                                    </span>
+                                    <ChevronRightIcon
+                                        className="size-4 shrink-0 text-muted-foreground"
+                                        aria-hidden
+                                    />
+                                </>
+                            )}
                         </button>
                     </li>
                 ))}

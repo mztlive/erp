@@ -13,11 +13,8 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { BrandLogoField } from "@/features/master-data/components/brand/brand-logo-field"
 import type { BrandFormValues } from "@/features/master-data/components/brand/brand-form-model"
-import {
-    DialogScrollBody,
-    MediaSingleField,
-} from "@/features/master-data/components/shared/action-dialog-shared"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type { MasterDataMutationResult } from "@/features/master-data/types"
 
@@ -26,6 +23,7 @@ export function BrandFormDialogFrame({
     onOpenChange,
     title,
     description,
+    identity,
     form,
     result,
     pending,
@@ -40,6 +38,7 @@ export function BrandFormDialogFrame({
     onOpenChange: (open: boolean) => void
     title: string
     description: React.ReactNode
+    identity?: string
     form: {
         AppField: React.ComponentType<{
             name: keyof BrandFormValues
@@ -53,6 +52,9 @@ export function BrandFormDialogFrame({
                     label: string
                     required?: boolean
                     id?: string
+                    placeholder?: string
+                    rows?: number
+                    textareaClassName?: string
                 }>
                 handleChange: (value: string) => void
                 state: { value: string }
@@ -88,37 +90,46 @@ export function BrandFormDialogFrame({
             }}
         >
             <DialogContent
-                className="flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg"
+                className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl"
                 closeButtonId={`${prefix}-close`}
             >
-                <DialogHeader>
-                    <DialogTitle>{title}</DialogTitle>
+                <DialogHeader className="shrink-0 gap-2 border-b px-6 py-5 pr-14">
+                    <DialogTitle className="text-lg">{title}</DialogTitle>
+                    {identity ? (
+                        <p className="num text-xs text-muted-foreground">
+                            资料编号：{identity}
+                        </p>
+                    ) : null}
                     {description ? (
                         <DialogDescription>{description}</DialogDescription>
                     ) : null}
                 </DialogHeader>
-                <DialogScrollBody>
-                    {result?.outcome === "blocked" ? (
-                        <FormalActionResult
-                            status="blocked"
-                            title={masterDataCopy.createBlockedTitle}
-                            description={result.message}
-                        />
-                    ) : null}
-                    {result?.outcome !== "succeeded" ? (
-                        <form
-                            className="grid gap-3"
-                            onSubmit={(event) => {
-                                event.preventDefault()
-                                void form.handleSubmit()
-                            }}
-                        >
-                            <div className="grid gap-3 sm:grid-cols-2">
+                {result?.outcome !== "succeeded" ? (
+                    <form
+                        className="flex min-h-0 flex-1 flex-col"
+                        onSubmit={(event) => {
+                            event.preventDefault()
+                            void form.handleSubmit()
+                        }}
+                    >
+                        <div className="grid min-h-0 gap-5 overflow-y-auto px-6 py-5">
+                            {result?.outcome === "blocked" ? (
+                                <FormalActionResult
+                                    status="blocked"
+                                    title={
+                                        identity
+                                            ? masterDataCopy.reviseBlockedTitle
+                                            : masterDataCopy.createBlockedTitle
+                                    }
+                                    description={result.message}
+                                />
+                            ) : null}
+                            <div className="grid gap-4 sm:grid-cols-2">
                                 <form.AppField
                                     name="name"
                                     children={(field) => (
                                         <field.TextField
-                                            label="名称"
+                                            label="品牌名称"
                                             id={`${prefix}-name`}
                                             required
                                         />
@@ -138,14 +149,11 @@ export function BrandFormDialogFrame({
                             <form.AppField
                                 name="logo"
                                 children={(field) => (
-                                    <MediaSingleField
+                                    <BrandLogoField
                                         id={`${prefix}-logo`}
-                                        label={masterDataCopy.fBrandLogo}
-                                        hint={masterDataCopy.brandLogoHint}
                                         value={field.state.value}
                                         onChange={field.handleChange}
-                                        selectedHint="Logo · 1:1 · 已选择"
-                                        aspectRatio="1:1"
+                                        disabled={pending || disabled}
                                         previewUrl={logoPreviewUrl}
                                         onFilesSelected={onLogoFiles}
                                     />
@@ -162,38 +170,43 @@ export function BrandFormDialogFrame({
                                                 : masterDataCopy.fieldChangeReason
                                         }
                                         id={`${prefix}-change-reason`}
+                                        placeholder={
+                                            identity
+                                                ? "例如：调整品牌名称、更新品牌 Logo"
+                                                : "填写品牌创建说明"
+                                        }
+                                        rows={3}
+                                        textareaClassName="min-h-20 resize-none"
                                         required
                                     />
                                 )}
                             />
-                            <DialogFooter>
-                                <DialogClose
-                                    render={
-                                        <Button
-                                            id={`${prefix}-cancel`}
-                                            type="button"
-                                            variant="outline"
-                                            disabled={pending || disabled}
-                                        />
-                                    }
-                                >
-                                    取消
-                                </DialogClose>
-                                <form.AppForm>
-                                    <form.SubmitButton
-                                        id={`${prefix}-submit`}
-                                        label={
-                                            pending ? "提交中…" : submitLabel
-                                        }
-                                        pendingLabel="提交中…"
-                                        loading={pending}
+                        </div>
+                        <DialogFooter className="shrink-0 flex-row items-center justify-end border-t bg-surface-sunken/40 px-6 py-4">
+                            <DialogClose
+                                render={
+                                    <Button
+                                        id={`${prefix}-cancel`}
+                                        type="button"
+                                        variant="outline"
                                         disabled={pending || disabled}
                                     />
-                                </form.AppForm>
-                            </DialogFooter>
-                        </form>
-                    ) : null}
-                </DialogScrollBody>
+                                }
+                            >
+                                取消
+                            </DialogClose>
+                            <form.AppForm>
+                                <form.SubmitButton
+                                    id={`${prefix}-submit`}
+                                    label={pending ? "提交中…" : submitLabel}
+                                    pendingLabel="提交中…"
+                                    loading={pending}
+                                    disabled={pending || disabled}
+                                />
+                            </form.AppForm>
+                        </DialogFooter>
+                    </form>
+                ) : null}
             </DialogContent>
         </Dialog>
     )

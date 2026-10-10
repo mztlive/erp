@@ -3,14 +3,16 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use erp_catalog::entity::catalog::{SpecificationSignatureRead, read_specification_signature};
+use erp_catalog::entity::catalog::{
+    SellablePriceKind, SpecificationSignatureRead, read_specification_signature,
+};
 use erp_catalog::ports::supply::CatalogSupplyQueryPort;
 use erp_core::common::time::BusinessDate;
 use erp_customer::CustomerAccountStatus;
 use erp_sales::Result as SalesResult;
 use erp_sales::dto::sales_selection::SelectionSourceSkuView;
 use erp_sales::entity::sales_selection::{
-    ImageAssetSnapshot, PoolFilterSnapshot, SpecificationAttributeSnapshot,
+    ImageAssetSnapshot, PoolFilterSnapshot, PoolPriceKind, SpecificationAttributeSnapshot,
 };
 use erp_sales::ports::sales_selection::{
     SelectionCatalogPort, SelectionCustomerFact, SelectionCustomerPort, SelectionImagePort, SelectionSkuFact,
@@ -110,6 +112,11 @@ impl SelectionCatalogPort for CatalogAdapter {
             supplier_id: filter.supplier_id.clone(),
             supply_region: filter.supply_region.clone(),
             max_supplier_count: filter.max_supplier_count,
+            price_kind: match filter.price_kind {
+                PoolPriceKind::Dropship => SellablePriceKind::Dropship,
+                PoolPriceKind::Bulk => SellablePriceKind::Bulk,
+                PoolPriceKind::Market => SellablePriceKind::Market,
+            },
             sales_price_min: filter.sales_price_min,
             sales_price_max: filter.sales_price_max,
             eligibility_as_of: as_of,

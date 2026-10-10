@@ -20,6 +20,7 @@ function sellableListParams(
         brand_id: query.productBrandId,
         supplier_id: query.productSupplierId,
         supply_region: query.supplyRegion,
+        price_kind: query.productPriceKind,
         sales_price_min: query.productSalesPriceMin,
         sales_price_max: query.productSalesPriceMax,
         eligibility_as_of: query.eligibilityAsOf,

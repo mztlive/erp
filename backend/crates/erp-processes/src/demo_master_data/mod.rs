@@ -20,6 +20,7 @@ mod offerings;
 mod organization;
 mod person_scopes;
 mod plan;
+mod prices;
 mod removal;
 mod repository;
 mod responsibility;

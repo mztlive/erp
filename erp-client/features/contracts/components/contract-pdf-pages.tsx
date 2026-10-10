@@ -7,7 +7,13 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 
 /** 只渲染当前页；不执行 PDF 脚本，字体与解码资源从同源加载。 */
-export function ContractPdfPages({ blob }: { blob: Blob }) {
+export function ContractPdfPages({
+    blob,
+    idPrefix = "contract-import-pdf",
+}: {
+    blob: Blob
+    idPrefix?: string
+}) {
     const [document, setDocument] = useState<PDFDocumentProxy>()
     const [page, setPage] = useState(1)
     const [width, setWidth] = useState(0)
@@ -96,7 +102,7 @@ export function ContractPdfPages({ blob }: { blob: Blob }) {
         <>
             <div
                 ref={container}
-                id="contract-import-pdf-pages"
+                id={`${idPrefix}-pages`}
                 aria-label="合同原文页，可滚动查看"
                 className="relative flex min-h-64 flex-1 items-start justify-center overflow-auto rounded-md border border-border bg-background lg:min-h-0"
             >
@@ -127,7 +133,7 @@ export function ContractPdfPages({ blob }: { blob: Blob }) {
             </div>
             <div className="flex shrink-0 items-center justify-center gap-4">
                 <Button
-                    id="contract-import-pdf-previous"
+                    id={`${idPrefix}-previous`}
                     type="button"
                     variant="outline"
                     size="icon-sm"
@@ -147,7 +153,7 @@ export function ContractPdfPages({ blob }: { blob: Blob }) {
                     {document ? `${page} / ${document.numPages}` : "加载中"}
                 </span>
                 <Button
-                    id="contract-import-pdf-next"
+                    id={`${idPrefix}-next`}
                     type="button"
                     variant="outline"
                     size="icon-sm"

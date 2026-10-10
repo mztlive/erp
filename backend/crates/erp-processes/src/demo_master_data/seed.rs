@@ -144,6 +144,7 @@ fn validate_product(row: &CreateProductRequest, previous: &HashMap<String, DemoK
     reference(previous, row.brand_id.as_ref(), DemoKind::Brand)?;
     reference(previous, row.category_id.as_ref(), DemoKind::Category)?;
     for sku in &row.skus {
+        super::prices::validate(sku)?;
         reference(previous, sku.base_unit_id.as_ref(), DemoKind::Unit)?;
         if sku.sku_id.is_some() || sku.expected_sku_revision_id.is_some() || sku.reenable {
             return Err(Error::ValidationError("演示种子不能引用已有 SKU ID".into()));
@@ -205,16 +206,17 @@ mod tests {
             panic!("商品必须最后生成")
         };
         assert_eq!(product.skus[0].sales_visible_price_gross.unwrap().to_string(), "100.00");
-        assert!(product.skus[0].factory_price_gross.is_none());
-        assert!(product.skus[0].bulk_price_gross.is_none());
-        assert!(product.skus[0].bulk_min_quantity.is_none());
+        assert_eq!(product.skus[0].factory_price_gross.unwrap().to_string(), "90.00");
+        assert_eq!(product.skus[0].bulk_price_gross.unwrap().to_string(), "95.00");
+        assert_eq!(product.skus[0].market_price.unwrap().to_string(), "100.00");
+        assert_eq!(product.skus[0].bulk_min_quantity.unwrap(), "100".parse().unwrap());
         assert_eq!(product.skus[0].sku_no, "DEMO-MD-P-27");
         assert!(steps.iter().all(|step| !step.request.label().is_empty()));
     }
 
-    /// 用声明的公司价执行正式数量取价规则，并保留缺少可选价格的对照规格。
+    /// 两个规格均维护完整参考价；门槛由公司 SKU 决定，不采用供应商 MOQ。
     #[test]
-    fn demo_multispec_prices_cover_bulk_threshold_and_fallback() {
+    fn demo_multispec_prices_cover_bulk_threshold() {
         let steps = load(include_str!("master-data.json")).unwrap();
         let SeedRequest::Product(product) =
             &steps.iter().find(|step| step.key == "DEMO-MD-P-28").unwrap().request
@@ -237,16 +239,45 @@ mod tests {
         assert_eq!(prices.reference_price("9".parse::<Quantity>().unwrap()).unwrap().to_string(), "129.00");
         assert_eq!(prices.reference_price("10".parse::<Quantity>().unwrap()).unwrap().to_string(), "119.00");
         let light = &product.skus[1];
-        assert!(light.factory_price_gross.is_none() && light.market_price.is_none());
-        let fallback = SkuSalesPrices {
+        assert_eq!(light.factory_price_gross.unwrap().to_string(), "69.00");
+        assert_eq!(light.market_price.unwrap().to_string(), "129.00");
+        let light_prices = SkuSalesPrices {
             sales_visible_price_gross: light.sales_visible_price_gross,
             bulk_price_gross: light.bulk_price_gross,
             bulk_min_quantity: light.bulk_min_quantity,
         };
         assert_eq!(
-            fallback.reference_price("100".parse::<Quantity>().unwrap()).unwrap().to_string(),
+            light_prices.reference_price("9".parse::<Quantity>().unwrap()).unwrap().to_string(),
             "99.00"
         );
+        assert_eq!(
+            light_prices.reference_price("10".parse::<Quantity>().unwrap()).unwrap().to_string(),
+            "89.00"
+        );
+    }
+
+    #[test]
+    fn every_demo_sku_has_four_prices_and_uses_its_bulk_threshold() {
+        let steps = load(include_str!("master-data.json")).unwrap();
+        let mut count = 0;
+        for step in steps {
+            let SeedRequest::Product(product) = step.request else { continue };
+            for sku in product.skus {
+                super::super::prices::validate(&sku).unwrap();
+                assert!(sku.factory_price_gross <= sku.bulk_price_gross, "{}", sku.sku_no);
+                assert!(sku.bulk_price_gross < sku.sales_visible_price_gross, "{}", sku.sku_no);
+                assert!(sku.sales_visible_price_gross <= sku.market_price, "{}", sku.sku_no);
+                let prices = SkuSalesPrices {
+                    sales_visible_price_gross: sku.sales_visible_price_gross,
+                    bulk_price_gross: sku.bulk_price_gross,
+                    bulk_min_quantity: sku.bulk_min_quantity,
+                };
+                assert_eq!(prices.reference_price("1".parse().unwrap()), sku.sales_visible_price_gross);
+                assert_eq!(prices.reference_price(sku.bulk_min_quantity.unwrap()), sku.bulk_price_gross);
+                count += 1;
+            }
+        }
+        assert_eq!(count, 29);
     }
 
     /// 每条供应商输入均须通过真实商务版本工厂，并覆盖全部固定条件与自然周期。

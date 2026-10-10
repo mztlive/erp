@@ -8,6 +8,19 @@ use serde::{Deserialize, Serialize};
 use super::limits::{POOL_SKU_MAX, POOL_SKU_MIN};
 use super::types::PoolSourceKind;
 
+/// 选品来源的单一价格筛选口径，由目录适配器映射到目录价格。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PoolPriceKind {
+    /// 一件代发价；旧快照默认采用此口径。
+    #[default]
+    Dropship,
+    /// 集采价。
+    Bulk,
+    /// 市场价。
+    Market,
+}
+
 /// 与公司商品池列表对齐的筛选条件；不含分页。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct PoolFilterSnapshot {
@@ -28,6 +41,9 @@ pub struct PoolFilterSnapshot {
     pub supply_region: Option<String>,
     /// 去重供应商数量上限。
     pub max_supplier_count: Option<u32>,
+    /// 所选价格口径；与上下限一同冻结。
+    #[serde(default)]
+    pub price_kind: PoolPriceKind,
     /// 售价下限。
     pub sales_price_min: Option<Amount>,
     /// 售价上限。
@@ -44,8 +60,13 @@ impl PoolFilterSnapshot {
     /// 空白字段变为 `None`；分页参数不得进入本结构。
     ///
     /// # 错误
-    /// 售价下限大于上限时拒绝。
+    /// 售价为负或下限大于上限时拒绝。
     pub fn normalize(self) -> Result<Self> {
+        if self.sales_price_min.is_some_and(|value| value < Amount::zero())
+            || self.sales_price_max.is_some_and(|value| value < Amount::zero())
+        {
+            return Err(Error::from("销售价不能为负数"));
+        }
         if let (Some(min), Some(max)) = (self.sales_price_min, self.sales_price_max)
             && min > max
         {
@@ -60,6 +81,7 @@ impl PoolFilterSnapshot {
             supplier_id: blank_to_none(self.supplier_id),
             supply_region: blank_to_none(self.supply_region),
             max_supplier_count: self.max_supplier_count,
+            price_kind: self.price_kind,
             sales_price_min: self.sales_price_min,
             sales_price_max: self.sales_price_max,
         })
@@ -154,6 +176,29 @@ mod tests {
 
     use super::{PoolSource, normalize_selected_sku_ids};
     use crate::entity::sales_selection::types::PoolSourceKind;
+
+    #[test]
+    fn price_filter_snapshot_preserves_kind_and_rejects_invalid_ranges() {
+        use super::{PoolFilterSnapshot, PoolPriceKind};
+
+        let old: PoolFilterSnapshot = serde_json::from_str("{}").unwrap();
+        assert_eq!(old.price_kind, PoolPriceKind::Dropship);
+        for kind in ["dropship", "bulk", "market"] {
+            let input = serde_json::json!({"price_kind": kind, "sales_price_min": "0.00", "sales_price_max": "90.00"});
+            let normalized =
+                serde_json::from_value::<PoolFilterSnapshot>(input).unwrap().normalize().unwrap();
+            assert_eq!(serde_json::to_value(&normalized).unwrap()["price_kind"], kind);
+            for (min, max) in [("-1.00", "10.00"), ("20.00", "10.00"), ("0.00", "-0.01")] {
+                let input =
+                    serde_json::json!({"price_kind": kind, "sales_price_min": min, "sales_price_max": max});
+                assert!(serde_json::from_value::<PoolFilterSnapshot>(input).unwrap().normalize().is_err());
+            }
+        }
+        assert!(
+            serde_json::from_value::<PoolFilterSnapshot>(serde_json::json!({"price_kind": "unknown"}))
+                .is_err()
+        );
+    }
 
     #[test]
     fn selection_dedups_and_sorts() {

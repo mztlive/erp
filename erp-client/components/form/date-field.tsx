@@ -21,6 +21,7 @@ type DateFieldProps = {
     disabled?: boolean
     required?: boolean
     clearable?: boolean
+    allowLongTerm?: boolean
     disabledDates?: Matcher | Matcher[]
     className?: string
     inputClassName?: string
@@ -28,7 +29,7 @@ type DateFieldProps = {
 }
 
 /**
- * 绑定 TanStack Form field 的日期选择（`YYYY-MM-DD` 字符串）。
+ * 绑定 TanStack Form field 的日期选择（`YYYY-MM-DD` 字符串，可选允许“长期”）。
  * 通过 `form.AppField` → `field.DateField` 使用。
  */
 export function DateField({
@@ -39,6 +40,7 @@ export function DateField({
     disabled,
     required,
     clearable = true,
+    allowLongTerm = false,
     disabledDates,
     className,
     inputClassName,
@@ -76,6 +78,7 @@ export function DateField({
                 placeholder={placeholder}
                 disabled={disabled}
                 clearable={clearable}
+                allowLongTerm={allowLongTerm}
                 disabledDates={disabledDates}
                 className={inputClassName}
                 aria-invalid={isInvalid || undefined}

@@ -1,5 +1,7 @@
 "use client"
 
+import { PRICE_FILTER_LABELS, parsePriceFilterKind } from "@/lib/price-filter"
+
 import { useState } from "react"
 import { useAppForm } from "@/components/form"
 import { LoadingButton } from "@/components/ui/loading-button"
@@ -86,7 +88,15 @@ export const ReprepareDialog = ({
         },
     })
     const filters = Object.entries(detail.pool_filter ?? {}).filter(
-        ([key, value]) => key !== "q" && value != null && value !== false,
+        ([key, value]) =>
+            key !== "q" &&
+            value != null &&
+            value !== false &&
+            (key !== "price_kind" ||
+                Boolean(
+                    detail.pool_filter?.sales_price_min ||
+                    detail.pool_filter?.sales_price_max,
+                )),
     )
     const labels: Record<keyof PoolFilterSnapshot, string> = {
         q: "关键字",
@@ -96,6 +106,7 @@ export const ReprepareDialog = ({
         supplier_id: "供应商",
         supply_region: "供货区域",
         max_supplier_count: "供应商数量上限",
+        price_kind: "价格类型",
         sales_price_min: "最低售价",
         sales_price_max: "最高售价",
         nationwide_only: "全国可供",
@@ -157,7 +168,7 @@ export const ReprepareDialog = ({
                                         {filters
                                             .map(
                                                 ([key, value]) =>
-                                                    `${labels[key as keyof PoolFilterSnapshot]}：${value === true ? "是" : value}`,
+                                                    `${labels[key as keyof PoolFilterSnapshot]}：${key === "price_kind" ? PRICE_FILTER_LABELS[parsePriceFilterKind(String(value))] : value === true ? "是" : value}`,
                                             )
                                             .join("；")}
                                     </p>

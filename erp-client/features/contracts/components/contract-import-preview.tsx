@@ -3,17 +3,27 @@
 import { FileTextIcon, ExternalLinkIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
+import { cn } from "@/lib/utils"
 import { getErrorMessage } from "@/lib/api/errors"
 import type { ContractImportTask } from "../api/upload"
 import { useImportPreview } from "../hooks/use-import-preview"
 import { ContractPdfPages } from "./contract-pdf-pages"
 
-export function ContractImportPreview({ task }: { task: ContractImportTask }) {
+export function ContractImportPreview({
+    task,
+    className,
+}: {
+    task: ContractImportTask
+    className?: string
+}) {
     const preview = useImportPreview(task.id)
     return (
         <aside
             aria-label="合同原文"
-            className="flex h-[560px] min-w-0 flex-col gap-4 rounded-lg bg-muted/40 p-4 lg:h-auto lg:min-h-0"
+            className={cn(
+                "flex h-[560px] min-w-0 flex-col gap-4 rounded-lg bg-muted/40 p-4 lg:h-auto lg:min-h-0",
+                className,
+            )}
         >
             <div className="flex min-w-0 items-start gap-3">
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">

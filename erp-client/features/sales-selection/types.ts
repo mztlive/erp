@@ -1,3 +1,5 @@
+import type { PriceFilterKind } from "@/lib/price-filter"
+
 export type SelectionForm = "SINGLE_SKU" | "PACKAGE"
 export type SubmitMode = "BY_QUANTITY" | "MALL_REDEEM" | "PICKUP_VOUCHER"
 export type PoolSourceKind = "FILTER" | "SELECTION"
@@ -28,6 +30,7 @@ export type PoolFilterSnapshot = {
     supplier_id?: string
     supply_region?: string
     max_supplier_count?: number
+    price_kind?: PriceFilterKind
     sales_price_min?: string
     sales_price_max?: string
 }

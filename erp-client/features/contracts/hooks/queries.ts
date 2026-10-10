@@ -9,6 +9,7 @@ import {
     uploadContractPdf,
 } from "@/features/contracts/api/contracts"
 import type { UploadContractPdfInput } from "@/features/contracts/types"
+import { previewContractFile } from "../api/preview"
 
 const contractKeys = {
     all: ["contracts"] as const,
@@ -51,6 +52,21 @@ export function useContractCenterQuery(contractId: string) {
         queryKey: contractKeys.detail(contractId),
         queryFn: () => fetchContractCenter(contractId),
         enabled: Boolean(contractId),
+    })
+}
+
+export function useContractFilePreviewQuery(
+    contractId: string,
+    fileId: string,
+    enabled: boolean,
+) {
+    return useQuery({
+        queryKey: [...contractKeys.detail(contractId), "preview", fileId],
+        queryFn: () => previewContractFile(contractId, fileId),
+        enabled: enabled && Boolean(contractId && fileId),
+        staleTime: Infinity,
+        gcTime: 0,
+        retry: false,
     })
 }
 

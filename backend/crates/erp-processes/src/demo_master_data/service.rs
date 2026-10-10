@@ -148,7 +148,7 @@ impl DemoMasterDataService {
                 .await?;
             if step.kind == plan::DemoKind::Product {
                 let records = self.record_map().await?;
-                self.ensure_product_images(actor, step, &records).await?;
+                self.ensure_product_defaults(actor, step, &records).await?;
                 self.ensure_sellable(step, &offerings, &records).await?;
             }
             tally(&mut report, outcome)?;

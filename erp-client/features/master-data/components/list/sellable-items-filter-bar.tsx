@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { PRICE_FILTER_OPTIONS, parsePriceFilterKind } from "@/lib/price-filter"
 
 import { CategoryCombobox, OptionCombobox } from "@/components/business"
 import { DirectoryFilterControl } from "@/features/master-data/components/list/directory-filter-control"
@@ -47,12 +48,7 @@ export function SellableItemsFilterBar({
     const directory = productFilterDirectoryState(filterOptions)
     const priceInputRef = React.useRef<HTMLInputElement>(null)
     const moreCount = appliedChips.filter(({ key }) =>
-        [
-            "productBrandId",
-            "productSupplierId",
-            "supplyRegion",
-            "salesPrice",
-        ].includes(key),
+        ["productBrandId", "supplyRegion", "salesPrice"].includes(key),
     ).length
     React.useEffect(() => {
         if (f.productSalesPriceError && f.sellableFilterPanelOpen)
@@ -190,44 +186,6 @@ export function SellableItemsFilterBar({
                                 </DirectoryFilterControl>
                             </ListWorkspaceFilterField>
                             <ListWorkspaceFilterField
-                                htmlFor={`${prefix}-supplier`}
-                                label="供应商"
-                            >
-                                <DirectoryFilterControl
-                                    id={`${prefix}-supplier`}
-                                    failed={directory.failed}
-                                    unavailable={directory.supplierUnavailable}
-                                    noScope={directory.supplierNoScope}
-                                    error={directory.error}
-                                    onRetry={directory.refetch}
-                                >
-                                    <OptionCombobox
-                                        id={`${prefix}-supplier`}
-                                        className="w-full"
-                                        aria-label="供应商"
-                                        value={f.productSupplierIdDraft}
-                                        onValueChange={
-                                            f.setProductSupplierIdDraft
-                                        }
-                                        options={directory.suppliers}
-                                        loading={directory.fetching}
-                                        retainMissingSelection={false}
-                                        placeholder="全部供应商"
-                                        emptyLabel={directoryOptionEmptyLabel({
-                                            unavailable:
-                                                directory.supplierUnavailable,
-                                            unavailableLabel:
-                                                "当前账号无供应商查询权限",
-                                            noScope: directory.supplierNoScope,
-                                            failed: directory.failed,
-                                            emptyLabel: "没有符合条件的供应商",
-                                        })}
-                                        searchPlaceholder="搜索供应商名称或代码"
-                                    />
-                                </DirectoryFilterControl>
-                            </ListWorkspaceFilterField>
-                            <ListWorkspaceFilterField
-                                className="sm:col-span-2"
                                 htmlFor={`${prefix}-region`}
                                 label="可供区域"
                             >
@@ -247,15 +205,35 @@ export function SellableItemsFilterBar({
                     </fieldset>
                     <fieldset className="min-w-0">
                         <legend className="mb-3 text-xs font-medium">
-                            一件代发价格
+                            价格筛选
                         </legend>
-                        <ListWorkspaceFilterField label="含税售价 · 元">
+                        <ListWorkspaceFilterField
+                            className="mb-3"
+                            htmlFor={`${prefix}-price-kind`}
+                            label="价格类型"
+                        >
+                            <OptionCombobox
+                                id={`${prefix}-price-kind`}
+                                className="w-full"
+                                aria-label="价格类型"
+                                value={f.productPriceKindDraft}
+                                onValueChange={(value) =>
+                                    f.setProductPriceKindDraft(
+                                        parsePriceFilterKind(value),
+                                    )
+                                }
+                                allowClear={false}
+                                options={PRICE_FILTER_OPTIONS}
+                                placeholder="一件代发价"
+                            />
+                        </ListWorkspaceFilterField>
+                        <ListWorkspaceFilterField label="含税价格 · 元">
                             <div className="flex min-w-0 items-center gap-2">
                                 <Input
                                     id={`${prefix}-price-min`}
                                     ref={priceInputRef}
                                     className="h-control w-0 min-w-0 flex-1"
-                                    aria-label="最低一件代发价"
+                                    aria-label="最低价"
                                     placeholder="最低价"
                                     inputMode="decimal"
                                     autoComplete="off"
@@ -281,7 +259,7 @@ export function SellableItemsFilterBar({
                                 <Input
                                     id={`${prefix}-price-max`}
                                     className="h-control w-0 min-w-0 flex-1"
-                                    aria-label="最高一件代发价"
+                                    aria-label="最高价"
                                     placeholder="最高价"
                                     inputMode="decimal"
                                     autoComplete="off"
