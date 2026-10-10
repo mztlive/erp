@@ -6352,7 +6352,7 @@
     },
     {
       "path": "crates/erp-processes/src/finance_posting/payable/payment_request/draft.rs",
-      "function": "create",
+      "function": "create_draft",
       "policy": "Audited",
       "stage": "Transaction",
       "boundaries": [
@@ -6364,7 +6364,7 @@
         "persist_log": 1
       },
       "location_count": 1,
-      "reason": "付款申请的草稿、审批、撤回、关闭或实际付款在所属用例事务内以同一Executor保存业务与对应审计；记录冻结身份、原因及金额，保留命令版本和原结果。"
+      "reason": "单份与批量草稿创建共用此步骤；使用调用方同一 Executor 保存来源校验后的草稿、成功审计及可选原命令回执，草稿不占用应付额度。"
     },
     {
       "path": "crates/erp-processes/src/finance_posting/payable/payment_request/draft.rs",
@@ -6443,6 +6443,20 @@
       },
       "location_count": 1,
       "reason": "命令使用冻结申请和当前动作资格，通过授权事务边界保存付款申请、实际付款或审批提交及原命令结果；业务与审计由同一Executor执行，原键恢复不得重复扣款或写成功事件。"
+    },
+    {
+      "path": "crates/erp-processes/src/finance_posting/payable/payment_request/batch.rs",
+      "function": "create_batch",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        ".run_authorized_policy_transaction"
+      ],
+      "call_counts": {
+        ".run_authorized_policy_transaction": 1
+      },
+      "location_count": 1,
+      "reason": "批量创建在授权事务中逐份调用 create_draft，全部草稿、审计及回执原子保存；原操作恢复只读取既有结果，不重复创建或记录成功事件。"
     }
   ]
 }

@@ -7,8 +7,8 @@ use application_core::{AuditActor, PageView};
 use axum::extract::{Path, Query, State};
 use axum::{Extension, Json};
 use erp_finance::dto::payable::payment_request::{
-    CancelPurchasePaymentRequest, PurchasePaymentRequestQuery, SavePurchasePaymentRequest,
-    SubmitPurchasePaymentRequest,
+    CancelPurchasePaymentRequest, CreatePaymentRequestBatch, PurchasePaymentRequestQuery,
+    SavePurchasePaymentRequest, SubmitPurchasePaymentRequest,
 };
 use erp_finance::entity::payable::PurchasePaymentRequest;
 use erp_processes::adapters::MongoPurchaseDataScope;
@@ -213,4 +213,26 @@ pub async fn close(
     Json(req): Json<CancelPurchasePaymentRequest>,
 ) -> Result<PurchasePaymentRequest> {
     Ok(ApiResponse::ok_with_data(process(&state).close(&id, req, &actor).await?))
+}
+
+#[permission_macros::permission(
+    group = "采购付款申请",
+    group_desc = "采购申请、财务审核和批准额度内付款",
+    desc = "批量创建采购付款申请",
+    resource = "purchase_payment_request",
+    action = "create"
+)]
+/// 原子保存跨供应商的多份独立草稿。
+/// # 参数
+/// 当前账号、完整批次及稳定操作号。
+/// # 返回
+/// 按传入顺序返回全部草稿。
+/// # 错误
+/// 任一申请非法时整批失败，同操作号异载荷拒绝。
+pub async fn create_batch(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(req): Json<CreatePaymentRequestBatch>,
+) -> Result<Vec<PurchasePaymentRequest>> {
+    Ok(ApiResponse::ok_with_data(process(&state).create_batch(req, &actor).await?))
 }

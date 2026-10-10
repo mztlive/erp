@@ -1,5 +1,7 @@
 //! 草稿不占用应付金额；保存时仍逐单证明申请资格。
+use application_core::CommandReceipt;
 use erp_audit::AuditActorLogs;
+use erp_finance::FinanceCommandReceiptService;
 use erp_finance::dto::payable::payment_request::SavePurchasePaymentRequest;
 use persistence_core::Transactional;
 
@@ -23,27 +25,14 @@ impl PurchasePaymentRequestProcess {
         if req.expected_version.is_some() {
             return Err(Error::ValidationError("新申请不能指定已有版本".into()));
         }
-        let mut request = PurchasePaymentRequest::new(id_generator::next_id(), req.data, actor.id())?;
+        let request = PurchasePaymentRequest::new(id_generator::next_id(), req.data, actor.id())?;
         let db = self.db.clone();
         let rbac = self.rbac.clone();
         let actor = actor.clone();
         db.client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move {
-                    require_sources(&db, &rbac, &request, &actor, "create", executor).await?;
-                    let basis =
-                        source::prepare_submission(&db, &rbac, &request, &actor, false, executor).await?;
-                    request.set_draft_basis(basis)?;
-                    db.purchase_payment_requests().create(&request, executor).await?;
-                    let audit = actor.resource_log(
-                        "purchase_payment_request.create",
-                        "purchase_payment_request",
-                        request.base.id.clone(),
-                    )?;
-                    persist_log(&db, &audit, executor).await?;
-                    Ok(request)
-                })
+                Box::pin(async move { create_draft(&db, &rbac, request, &actor, None, executor).await })
             })
             .await
     }
@@ -92,4 +81,35 @@ impl PurchasePaymentRequestProcess {
             })
             .await
     }
+}
+
+pub(super) async fn create_draft(
+    db: &Database,
+    rbac: &SharedRbacService,
+    mut request: PurchasePaymentRequest,
+    actor: &AuditActor,
+    command: Option<&CommandReceipt>,
+    executor: &mut dyn Executor,
+) -> Result<PurchasePaymentRequest> {
+    require_sources(db, rbac, &request, actor, "create", executor).await?;
+    let basis = source::prepare_submission(db, rbac, &request, actor, false, executor).await?;
+    request.set_draft_basis(basis)?;
+    for line in &request.lines {
+        if line.requested_amount > line.open_total.checked_sub(line.other_reserved_total) {
+            return Err(Error::ConflictError("采购可申请余额已变化，请刷新后重新核对".into()));
+        }
+    }
+    db.purchase_payment_requests().create(&request, executor).await?;
+    let audit = actor.clone().resource_log(
+        "purchase_payment_request.create",
+        "purchase_payment_request",
+        request.base.id.clone(),
+    )?;
+    if let Some(command) = command {
+        FinanceCommandReceiptService::new(db.clone())
+            .save_resource(command, request.base.id.clone(), audit.base.id.clone(), executor)
+            .await?;
+    }
+    persist_log(db, &audit, executor).await?;
+    Ok(request)
 }

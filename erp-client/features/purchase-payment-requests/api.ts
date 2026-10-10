@@ -52,6 +52,8 @@ type BankAccount = {
     is_default?: boolean
 }
 type CandidateDto = {
+    purchase_summary?: string
+    prepayment_gap?: string | null
     payable_account_id: string
     purchase_order_id: string
     purchase_no: string
@@ -157,6 +159,8 @@ function mapCandidate(item: CandidateDto): PaymentCandidate {
         purchase_order_id: item.purchase_order_id,
         purchase_order_no: item.purchase_no,
         purchase_version: 0,
+        purchase_summary: item.purchase_summary,
+        prepayment_gap: item.prepayment_gap,
         supplier_id: item.supplier_id,
         supplier_name: item.supplier_name,
         our_company_id: item.payer_party_id,
@@ -323,6 +327,24 @@ export async function saveRequest(
         ? await apiPut<RequestDto>(`${ROOT}/${encodeURIComponent(id)}`, body)
         : await apiPost<RequestDto>(ROOT, body)
     return mapRequest(dto)
+}
+export type BatchDraftCommand = {
+    idempotency_key: string
+    requests: RequestDraftInput[]
+}
+export async function saveRequestBatch(command: BatchDraftCommand) {
+    const rows = await apiPost<RequestDto[]>(`${ROOT}/batch`, {
+        idempotency_key: command.idempotency_key,
+        requests: command.requests.map((input) => ({
+            supplier_id: input.supplier_id,
+            payee_bank_account_id: input.bank_account_id,
+            lines: input.lines,
+            desired_payment_date: input.desired_payment_date,
+            reason: input.description,
+            attachment_ids: input.attachment_ids,
+        })),
+    })
+    return rows.map(mapRequest)
 }
 export async function commandRequest(
     id: string,

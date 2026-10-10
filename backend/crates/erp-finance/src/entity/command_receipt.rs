@@ -265,7 +265,8 @@ fn resource_for_command(action: &str, resource_type: &str, id: String) -> Result
             FinanceCommandResource::SalesInvoiceRequest(SalesInvoiceRequestId::new(id))
         },
         (
-            "purchase_payment_request.submit"
+            "purchase_payment_request.create"
+            | "purchase_payment_request.submit"
             | "purchase_payment_request.withdraw"
             | "purchase_payment_request.close",
             "purchase_payment_request",

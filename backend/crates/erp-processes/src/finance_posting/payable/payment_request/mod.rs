@@ -19,6 +19,7 @@ use crate::{Error, Result};
 
 mod account;
 mod basis;
+mod batch;
 mod cancel;
 mod current_sales;
 mod draft;

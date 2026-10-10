@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use application_core::AuditActor;
 use erp_core::common::time::BusinessDate;
-use erp_core::ids::{PurchaseOrderId, SupplierAccountId};
+use erp_core::ids::{PurchaseOrderId, PurchaseOrderRevisionId, SupplierAccountId};
 use erp_core::money::Amount;
 use erp_finance::entity::payable::PayableAccount;
 use erp_finance::repository::PayableExt;
@@ -144,21 +144,25 @@ impl PurchasePaymentRequestReadService {
         account: &PayableAccount,
         executor: &mut dyn Executor,
     ) -> Result<PurchasePaymentRequestCandidate> {
-        let supplier = self
+        let bank_accounts = self.candidate_accounts(order, executor).await?;
+        let lines = self
             .db
-            .supplier_accounts()
-            .find_by_id(order.supplier_id.as_ref(), executor)
-            .await?
-            .ok_or_else(|| Error::ConflictError("付款申请供应商不存在".into()))?;
-        let bank_accounts = self
-            .db
-            .party_bank_accounts()
-            .list_current_on(&supplier.party_id, BusinessDate::today(), executor)
-            .await?
-            .into_iter()
-            .map(PartyBankAccountView::from)
-            .collect();
+            .purchase_order()
+            .list_revision_lines(&PurchaseOrderRevisionId::new(&revision.base.id), executor)
+            .await?;
+        let purchase_summary = lines
+            .iter()
+            .take(3)
+            .filter_map(|line| line.product_name_snapshot.as_deref())
+            .collect::<Vec<_>>()
+            .join("、");
+        let prepayment_gap = revision
+            .payment_term_snapshot
+            .required_prepayment(account.gross_total)?
+            .map(|required| required.checked_sub(account.settled_total).max(Amount::zero()));
         Ok(PurchasePaymentRequestCandidate {
+            purchase_summary,
+            prepayment_gap,
             purchase_order_id: order.base.id.clone(),
             purchase_no: order.purchase_no.clone(),
             purchase_revision_id: revision.base.id.clone(),
@@ -176,5 +180,25 @@ impl PurchasePaymentRequestReadService {
                 .map_err(|error| Error::Internal(error.to_string()))?,
             bank_accounts,
         })
+    }
+    async fn candidate_accounts(
+        &self,
+        order: &PurchaseOrder,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PartyBankAccountView>> {
+        let supplier = self
+            .db
+            .supplier_accounts()
+            .find_by_id(order.supplier_id.as_ref(), executor)
+            .await?
+            .ok_or_else(|| Error::ConflictError("付款申请供应商不存在".into()))?;
+        Ok(self
+            .db
+            .party_bank_accounts()
+            .list_current_on(&supplier.party_id, BusinessDate::today(), executor)
+            .await?
+            .into_iter()
+            .map(PartyBankAccountView::from)
+            .collect())
     }
 }

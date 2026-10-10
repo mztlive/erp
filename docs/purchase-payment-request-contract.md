@@ -85,6 +85,16 @@ flowchart TD
 5. 原采购计划付款日仅作资金安排参考，不能代替申请、审核或证明尾款到期。只有先款比例的采购单不得自动推断尾款日期或预填全部尾款；采购须核对后明确填写本次申请金额及日期。
 6. 申请自身上传的附件身份与采购、销售来源材料分别保存。草稿编辑须保留申请自身附件，仅将本次新增上传并入申请附件；不得将展示材料中的来源附件反写为申请人上传附件。来源材料继续沿真实关系展示及授权读取。
 
+### 5.1 批量选单与草稿保存
+
+1. 从付款申请列表新建时，须先选择采购单，再填写申请；从采购单详情进入时，仅预选该采购单。不得自动包含同供应商的其他采购单。
+2. 选单允许跨供应商、跨我方付款主体。系统按供应商身份及付款主体身份分组，名称差异不改变身份归组；供应商和付款主体只读，不能手工改选。
+3. 每组独立填写逐单金额、有效收款账户、希望付款日、申请说明及自有附件。同组多张采购单可以拆成独立申请后选择不同账户；同一采购应付不得在同一批次重复出现。
+4. 返回选单须保留仍被选择采购单的金额及各组付款安排。取消勾选的采购单不得进入本次保存载荷或合计。修改已有草稿只修改原申请，不得借编辑入口创建跨供应商或跨主体的额外申请。
+5. 一次批量保存接受 1 至 50 份草稿。服务端须在同一事务逐份校验来源、账户、主体、申请资格及当前可申请余额，保存全部草稿、审计和成功回执；任一项失败时整批回滚。草稿不占用应付余额，不启动审批或实际付款。
+6. 批次操作号与完整规范化载荷绑定；相同操作号、相同载荷只返回原草稿，相同操作号、不同载荷必须拒绝。客户端在结果未知时保留原操作号、原表单和已上传附件身份，禁止修改后换号重建；须查询本次保存结果。
+7. 保存成功须逐份展示申请单号、付款关系和金额，提供打开申请的入口。每份申请继续独立提交审核、占用余额及执行付款。
+
 ## 6. 金额、占用与生命周期
 
 按每笔采购应付分别计算：
@@ -197,6 +207,7 @@ flowchart TD
 | `GET /purchase-payment-requests/candidates` | 可申请采购、继承主体与脱敏账户候选 | `purchase_payment_request:create` |
 | `GET /purchase-payment-requests/{id}` | 冻结依据与当前余额分别展示的整单详情 | `purchase_payment_request:detail` |
 | `GET /purchase-payment-requests/{id}/submissions/{version}` | 沿全部历史来源授权读取该轮不可变提交依据 | `purchase_payment_request:detail` |
+| `POST /purchase-payment-requests/batch` | 原子创建多份独立草稿并恢复原批次结果 | `purchase_payment_request:create` |
 | `POST /purchase-payment-requests` | 保存不占用额度的申请草稿 | `purchase_payment_request:create` |
 | `PUT /purchase-payment-requests/{id}` | 按当前版本修改本人可编辑草稿 | `purchase_payment_request:update` |
 | `POST /purchase-payment-requests/{id}/submit` | 冻结来源、原子占用并启动财务审核 | `purchase_payment_request:submit` |
@@ -209,6 +220,8 @@ flowchart TD
 | `GET /purchase-payment-requests/{id}/materials/{file_asset_id}/download` | 下载冻结允许的同版本文件 | `purchase_payment_request:detail` |
 
 1. 草稿表单为 `data`：`supplier_id`、`payee_bank_account_id`、`lines[{payable_account_id, amount}]`、`desired_payment_date`、`reason`、`attachment_ids`。主体由正式采购来源继承；客户端不得填写或改选主体。
+批量创建入参为 `{ idempotency_key, requests: [data] }`，`data` 与单份草稿一致；返回按入参顺序排列的申请数组。上传须先完成，再将每组自有附件身份放入对应 `data.attachment_ids`。
+
 2. 修改草稿须带 `expected_version`。提交须带当前版本与 `idempotency_key`；撤回、关闭还须填写 `reason`。提交、撤回、关闭与付款的未知结果只能沿原命令身份恢复。
 3. 实际付款命令须带 `payment_request_id`、`expected_request_version`、当前任务及账户版本，并与路径申请身份一致；分配对象只能为该申请已批准采购行。
 4. 申请保存在 `purchase_payment_requests`，每轮不可变提交保存在 `purchase_payment_request_snapshots`，以申请身份和提交版本、审批实例建立唯一约束。每笔应付的 `payment_request_reserved_total` 为共享占用约束；实际付款保留申请身份、我方付款主体及逐申请采购分配。新集合索引由财务领域定义，web-api 与 CLI 组合根统一登记。

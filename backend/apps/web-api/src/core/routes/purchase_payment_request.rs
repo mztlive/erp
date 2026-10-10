@@ -71,6 +71,14 @@ fn command_routes(rbac: &SharedRbacService) -> Router<AppState> {
 fn draft_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
+            "/purchase-payment-requests/batch",
+            with_permission(
+                post(purchase_payment_request::create_batch),
+                rbac,
+                purchase_payment_request::create_batch_permission_key(),
+            ),
+        )
+        .route(
             "/purchase-payment-requests",
             with_permission(
                 post(purchase_payment_request::create),

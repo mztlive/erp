@@ -87,6 +87,8 @@ pub struct PaymentRequestAttachmentView {
 /// 已证明申请动作和采购正式来源的候选；收款账户仅为候选且全部脱敏。
 #[derive(Debug, Clone, Serialize)]
 pub struct PurchasePaymentRequestCandidate {
+    pub purchase_summary: String,
+    pub prepayment_gap: Option<Amount>,
     pub purchase_order_id: String,
     pub purchase_no: String,
     pub purchase_revision_id: String,

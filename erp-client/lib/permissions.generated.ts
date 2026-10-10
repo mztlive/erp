@@ -3640,6 +3640,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
+                path: "/admin/purchase-payment-requests/batch",
+                description: "批量创建采购付款申请",
+                permission: {
+                    resource: "purchase_payment_request",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
                 path: "/admin/purchase-payment-requests",
                 description: "创建采购付款申请",
                 permission: {

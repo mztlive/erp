@@ -24,6 +24,8 @@ export type PaymentCandidate = {
     purchase_order_id: string
     purchase_order_no: string
     purchase_version: number
+    prepayment_gap?: string | null
+    purchase_summary?: string
     supplier_id: string
     supplier_name: string
     our_company_id: string

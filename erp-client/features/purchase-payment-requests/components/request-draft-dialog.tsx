@@ -1,46 +1,25 @@
 "use client"
 
-import { useMutation } from "@tanstack/react-query"
-import { useRouter } from "next/navigation"
-import { z } from "zod"
-import { useAppForm } from "@/components/form"
+import { useEffect, useState } from "react"
+import Link from "next/link"
+import { useStore } from "@tanstack/react-form"
 import { MoneyValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
     DialogContent,
     DialogDescription,
-    DialogFooter,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Field, FieldLabel } from "@/components/ui/field"
-import { uploadEvidenceFileAsset } from "@/features/file-assets/api/file-assets"
 import { getErrorMessage } from "@/lib/api"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { compareDecimal, sumFixed } from "@/lib/fixed-decimal"
-import {
-    usePaymentCandidatesQuery,
-    useSaveRequestMutation,
-} from "../hooks/queries"
+import { usePaymentCandidatesQuery } from "../hooks/queries"
+import { useDraftForm } from "../hooks/use-draft-form"
+import { draftSchema, regroup, totalOf } from "../lib/draft"
 import type { PaymentCandidate, PaymentRequest } from "../types"
-
-const groupKey = (candidate: PaymentCandidate) =>
-    `${candidate.supplier_id}:${candidate.our_company_id}`
-function positive(value: string) {
-    try {
-        return compareDecimal(value, "0", 2) > 0
-    } catch {
-        return false
-    }
-}
-function totalOf(values: Record<string, string>) {
-    return sumFixed(Object.values(values).filter(positive), {
-        maxScale: 2,
-        outputScale: 2,
-    })
-}
+import { RequestDraftGroup } from "./request-draft-group"
+import { RequestOrderPicker } from "./request-order-picker"
 
 export function RequestDraftDialog({
     open,
@@ -54,43 +33,59 @@ export function RequestDraftDialog({
     request?: PaymentRequest
 }) {
     const query = usePaymentCandidatesQuery(open)
+    const [locked, setLocked] = useState(false)
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (!locked) onOpenChange(next)
+            }}
+        >
             <DialogContent
                 id="ppr-create-dialog"
                 closeButtonId="ppr-create-dialog-close"
-                className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-4xl"
+                showCloseButton={!locked}
+                className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-clip p-0 sm:max-w-6xl"
             >
-                <DialogHeader>
-                    <DialogTitle>
-                        {request ? "修改付款申请" : "新建采购付款申请"}
-                    </DialogTitle>
-                    <DialogDescription>
-                        同一供应商、我方付款主体与收款账户分别申请。请按每张采购单明确填写本次金额；保存草稿后核对并提交财务审核。
-                    </DialogDescription>
-                </DialogHeader>
-                {query.isPending ? (
-                    <p className="py-8 text-sm text-muted-foreground">
-                        正在读取可申请采购单…
-                    </p>
-                ) : query.isError ? (
-                    <div role="alert" className="space-y-3">
-                        <p>{getErrorMessage(query.error, "采购单读取失败")}</p>
-                        <Button
-                            id="ppr-create-retry"
-                            variant="outline"
-                            onClick={() => void query.refetch()}
-                        >
-                            重试
-                        </Button>
+                {query.isPending || query.isError ? (
+                    <div className="space-y-4 p-6">
+                        <DialogHeader>
+                            <DialogTitle>申请采购付款</DialogTitle>
+                            <DialogDescription>
+                                从已生效采购单中选择本次付款来源。
+                            </DialogDescription>
+                        </DialogHeader>
+                        {query.isPending ? (
+                            <p className="py-8 text-muted-foreground">
+                                正在读取可申请采购单…
+                            </p>
+                        ) : (
+                            <>
+                                <p role="alert">
+                                    {getErrorMessage(
+                                        query.error,
+                                        "采购单读取失败",
+                                    )}
+                                </p>
+                                <Button
+                                    id="ppr-create-retry"
+                                    onClick={() => void query.refetch()}
+                                >
+                                    重试
+                                </Button>
+                            </>
+                        )}
                     </div>
                 ) : (
-                    <RequestDraftForm
-                        candidates={query.data}
-                        purchaseOrderId={purchaseOrderId}
-                        request={request}
-                        onClose={() => onOpenChange(false)}
-                    />
+                    open && (
+                        <RequestDraftForm
+                            candidates={query.data}
+                            request={request}
+                            purchaseOrderId={purchaseOrderId}
+                            onClose={() => onOpenChange(false)}
+                            onLockChange={setLocked}
+                        />
+                    )
                 )}
             </DialogContent>
         </Dialog>
@@ -98,386 +93,371 @@ export function RequestDraftDialog({
 }
 
 function RequestDraftForm({
-    candidates,
+    candidates: allCandidates,
     purchaseOrderId,
     request,
     onClose,
+    onLockChange,
 }: {
     candidates: PaymentCandidate[]
     purchaseOrderId?: string
     request?: PaymentRequest
     onClose: () => void
+    onLockChange: (value: boolean) => void
 }) {
-    const router = useRouter()
-    const save = useSaveRequestMutation()
-    const upload = useMutation({
-        mutationFn: (files: File[]) =>
-            Promise.all(files.map(uploadEvidenceFileAsset)),
-    })
-    const initialCandidate =
-        candidates.find(
-            (candidate) => candidate.purchase_order_id === purchaseOrderId,
-        ) ??
-        candidates.find(
-            (candidate) =>
-                candidate.supplier_id === request?.supplier_id &&
-                candidate.our_company_id === request?.our_company_id,
-        )
-    const groups = Array.from(
-        new Map(
-            candidates.map((candidate) => [groupKey(candidate), candidate]),
-        ).values(),
+    const candidates = request
+        ? allCandidates.filter(
+              (item) =>
+                  item.supplier_id === request.supplier_id &&
+                  item.our_company_id === request.our_company_id,
+          )
+        : allCandidates
+    const [step, setStep] = useState(purchaseOrderId || request ? 2 : 1)
+    const [saved, setSaved] = useState<PaymentRequest[] | null>(null)
+    const { form, unknown, error, recover, pending } = useDraftForm(
+        candidates,
+        purchaseOrderId,
+        request,
+        (rows) => {
+            setSaved(rows)
+            onLockChange(false)
+        },
     )
-    const schema = z
-        .object({
-            group: z.string().min(1, "请选择供应商和付款主体"),
-            account: z.string().min(1, "请选择有效收款账户"),
-            date: z.string().min(1, "请填写希望付款日"),
-            description: z
-                .string()
-                .trim()
-                .min(1, "请填写申请说明")
-                .max(2000, "申请说明最多 2000 字"),
-            amounts: z.record(z.string(), z.string()),
-            files: z.array(z.custom<File>()),
-        })
-        .superRefine((value, context) => {
-            const selected = candidates.filter(
-                (candidate) => groupKey(candidate) === value.group,
-            )
-            let count = 0
-            for (const candidate of selected) {
-                const amount =
-                    value.amounts[candidate.payable_account_id]?.trim()
-                if (!amount) continue
-                count += 1
-                if (!positive(amount))
-                    context.addIssue({
-                        code: "custom",
-                        path: ["amounts", candidate.payable_account_id],
-                        message: "请填写大于零且最多两位小数的金额",
-                    })
-                else if (
-                    compareDecimal(amount, candidate.available_amount, 2) > 0
-                )
-                    context.addIssue({
-                        code: "custom",
-                        path: ["amounts", candidate.payable_account_id],
-                        message: "申请金额超过当前可申请余额",
-                    })
-            }
-            if (count === 0)
-                context.addIssue({
-                    code: "custom",
-                    path: ["amounts"],
-                    message: "请至少填写一张采购单的本次申请金额",
-                })
-        })
-    const form = useAppForm({
-        defaultValues: {
-            group: initialCandidate ? groupKey(initialCandidate) : "",
-            account:
-                request?.payment_recipient.bank_account_id ??
-                initialCandidate?.payment_recipient?.bank_account_id ??
-                "",
-            date: request?.desired_payment_date ?? "",
-            description: request?.description ?? "",
-            amounts: Object.fromEntries(
-                candidates.map((candidate) => [
-                    candidate.payable_account_id,
-                    request?.lines.find(
-                        (line) =>
-                            line.payable_account_id ===
-                            candidate.payable_account_id,
-                    )?.requested_amount ?? "",
-                ]),
-            ) as Record<string, string>,
-            files: [] as File[],
-        },
-        validators: { onSubmit: schema },
-        onSubmit: async ({ value }) => {
-            const group = candidates.filter(
-                (candidate) => groupKey(candidate) === value.group,
-            )
-            const candidate = group[0]
-            const account = candidate?.bank_accounts.find(
-                (item) => item.bank_account_id === value.account,
-            )
-            if (!candidate || !account) return
-            const attachments = await upload.mutateAsync(value.files)
-            const result = await save.mutateAsync({
-                id: request?.id,
-                version: request?.version,
-                data: {
-                    supplier_id: candidate.supplier_id,
-                    bank_account_id: account.bank_account_id,
-                    bank_account_version: account.version,
-                    desired_payment_date: value.date,
-                    description: value.description.trim(),
-                    attachment_ids: [
-                        ...(request?.attachment_ids ?? []),
-                        ...attachments.map((file) => file.id),
-                    ],
-                    lines: group
-                        .filter((item) =>
-                            positive(
-                                value.amounts[item.payable_account_id] ?? "",
-                            ),
-                        )
-                        .map((item) => ({
-                            payable_account_id: item.payable_account_id,
-                            amount: value.amounts[item.payable_account_id],
-                        })),
-                },
-            })
-            onClose()
-            router.push(
-                `/procurement/payment-requests/${encodeURIComponent(result.id)}`,
-            )
-        },
-    })
+    const [openGroup, setOpenGroup] = useState<string | null>(
+        form.state.values.groups[0]?.key ?? null,
+    )
+    const submitting = useStore(form.store, (state) => state.isSubmitting)
+    const busy = submitting || pending
+    useEffect(() => {
+        onLockChange(busy || unknown)
+    }, [busy, unknown, onLockChange])
+    useEffect(() => () => onLockChange(false), [onLockChange])
+    const moveNext = () => {
+        const values = form.state.values
+        const groups = regroup(values.selectedIds, candidates, values.groups)
+        form.setFieldValue("groups", groups)
+        if (!groups.some((group) => group.key === openGroup))
+            setOpenGroup(groups[0]?.key ?? null)
+        setStep(2)
+    }
+    if (saved)
+        return (
+            <>
+                <DialogHeader className="border-b p-6">
+                    <DialogTitle>已保存 {saved.length} 份申请草稿</DialogTitle>
+                    <DialogDescription>
+                        草稿尚未提交审核，也未占用采购余额。请分别打开申请，核对后提交财务审核。
+                    </DialogDescription>
+                </DialogHeader>
+                <div
+                    id="ppr-create-results"
+                    className="min-h-0 space-y-3 overflow-y-auto p-6"
+                >
+                    {saved.map((row) => (
+                        <div
+                            key={row.id}
+                            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4"
+                        >
+                            <div>
+                                <p className="num font-medium">
+                                    {row.request_no}
+                                </p>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                    {
+                                        candidates.find(
+                                            (item) =>
+                                                item.supplier_id ===
+                                                row.supplier_id,
+                                        )?.supplier_name
+                                    }{" "}
+                                    · {row.our_company_name}
+                                </p>
+                                <p className="mt-2 text-sm">
+                                    {row.lines.length} 张采购单 ·{" "}
+                                    <MoneyValue value={row.total_amount} />
+                                </p>
+                            </div>
+                            <Button
+                                id={`ppr-result-${toAutomationIdSegment(row.id)}`}
+                                variant="outline"
+                                render={
+                                    <Link
+                                        href={`/procurement/payment-requests/${encodeURIComponent(row.id)}`}
+                                    />
+                                }
+                                onClick={onClose}
+                            >
+                                打开申请
+                            </Button>
+                        </div>
+                    ))}
+                </div>
+                <div className="flex justify-end border-t p-4">
+                    <Button id="ppr-create-done" onClick={onClose}>
+                        完成
+                    </Button>
+                </div>
+            </>
+        )
     return (
         <form
             id="ppr-create-form"
-            className="space-y-6"
+            className="flex min-h-0 flex-col overflow-hidden"
             onSubmit={(event) => {
                 event.preventDefault()
+                if (step === 1) {
+                    if (form.state.values.selectedIds.length) moveNext()
+                    return
+                }
+                const values = form.state.values
+                const validation = draftSchema(candidates).safeParse(values)
+                if (!validation.success) {
+                    const invalid = values.groups.find((group, index) =>
+                        validation.error.issues.some(
+                            (issue) =>
+                                (issue.path[0] === "groups" &&
+                                    issue.path[1] === index) ||
+                                (issue.path[0] === "amounts" &&
+                                    group.ids.includes(String(issue.path[1]))),
+                        ),
+                    )
+                    if (invalid) setOpenGroup(invalid.key)
+                }
                 void form.handleSubmit().catch(() => undefined)
             }}
         >
-            <form.AppField name="group">
-                {(field) => (
-                    <field.SelectField
-                        id="ppr-create-group"
-                        label="供应商 · 我方付款主体"
-                        required
-                        options={groups.map((candidate) => ({
-                            value: groupKey(candidate),
-                            label: `${candidate.supplier_name} · ${candidate.our_company_name}`,
-                        }))}
-                        onValueChange={(value) => {
-                            form.setFieldValue(
-                                "amounts",
-                                Object.fromEntries(
-                                    candidates.map((candidate) => [
-                                        candidate.payable_account_id,
-                                        "",
-                                    ]),
-                                ),
-                            )
-                            form.setFieldValue(
-                                "account",
-                                candidates.find(
-                                    (candidate) =>
-                                        groupKey(candidate) === value,
-                                )?.payment_recipient?.bank_account_id ?? "",
-                            )
-                        }}
-                    />
-                )}
-            </form.AppField>
-            {groups.length > 1 && (
-                <p className="text-xs text-muted-foreground">
-                    跨供应商或跨我方付款主体的采购单须分别申请，主体来自采购引用的销售生效版本。
-                </p>
-            )}
-            <form.Subscribe selector={(state) => state.values.group}>
-                {(selectedGroup) => {
-                    const group = candidates.filter(
-                        (candidate) => groupKey(candidate) === selectedGroup,
-                    )
-                    return (
-                        <>
-                            <form.AppField name="account">
-                                {(field) => (
-                                    <field.SelectField
-                                        id="ppr-create-account"
-                                        label="供应商收款账户"
-                                        required
-                                        options={(
-                                            group[0]?.bank_accounts ?? []
-                                        ).map((account) => ({
-                                            value: account.bank_account_id,
-                                            label: `${account.account_name} · ${account.bank_name} · ${account.account_number_masked}`,
-                                        }))}
-                                        description="提交后冻结选定账户；账户变更须关闭未付部分并重新申请。"
-                                    />
-                                )}
-                            </form.AppField>
-                            <section
-                                aria-label="逐采购单申请金额"
-                                className="space-y-3"
-                            >
-                                <h3 className="text-sm font-medium">
-                                    逐采购单申请金额
-                                </h3>
-                                {group.length === 0 ? (
-                                    <p className="text-sm text-muted-foreground">
-                                        请选择供应商和付款主体。
-                                    </p>
-                                ) : (
-                                    group.map((candidate) => (
-                                        <div
-                                            key={candidate.payable_account_id}
-                                            className="grid min-w-0 gap-3 border-b py-4 sm:grid-cols-[minmax(0,1fr)_12rem]"
-                                        >
-                                            <div className="space-y-2">
-                                                <p className="num font-medium">
-                                                    {
-                                                        candidate.purchase_order_no
-                                                    }
-                                                </p>
-                                                <p className="text-xs text-muted-foreground">
-                                                    {
-                                                        candidate.payment_term_name
-                                                    }
-                                                </p>
-                                                <dl className="flex flex-wrap gap-x-5 gap-y-2 text-xs">
-                                                    <div>
-                                                        采购总额{" "}
-                                                        <MoneyValue
-                                                            value={
-                                                                candidate.total_amount
-                                                            }
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        有效已付{" "}
-                                                        <MoneyValue
-                                                            value={
-                                                                candidate.paid_amount
-                                                            }
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        其他申请占用{" "}
-                                                        <MoneyValue
-                                                            value={
-                                                                candidate.reserved_amount
-                                                            }
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        可申请{" "}
-                                                        <MoneyValue
-                                                            value={
-                                                                candidate.available_amount
-                                                            }
-                                                        />
-                                                    </div>
-                                                </dl>
-                                            </div>
-                                            <form.AppField
-                                                name={`amounts.${candidate.payable_account_id}`}
-                                            >
-                                                {(field) => (
-                                                    <field.TextField
-                                                        id={`ppr-create-line-${toAutomationIdSegment(candidate.payable_account_id)}`}
-                                                        label="本次申请金额"
-                                                        inputMode="decimal"
-                                                        placeholder="填写本次金额"
-                                                    />
-                                                )}
-                                            </form.AppField>
-                                        </div>
-                                    ))
-                                )}
-                            </section>
-                        </>
-                    )
-                }}
-            </form.Subscribe>
-            <div className="grid gap-5 sm:grid-cols-2">
-                <form.AppField name="date">
-                    {(field) => (
-                        <field.TextField
-                            id="ppr-create-desired-payment-date"
-                            type="date"
-                            label="希望付款日"
-                            required
-                        />
-                    )}
-                </form.AppField>
-                <form.Subscribe selector={(state) => state.values.amounts}>
-                    {(amounts) => (
-                        <div className="self-end rounded-lg bg-muted p-3">
-                            <p className="text-xs text-muted-foreground">
-                                本次申请合计
-                            </p>
-                            <MoneyValue value={totalOf(amounts)} size="hero" />
-                        </div>
-                    )}
-                </form.Subscribe>
-            </div>
-            <form.AppField name="description">
-                {(field) => (
-                    <field.TextareaField
-                        id="ppr-create-description"
-                        label="申请说明"
-                        required
-                        placeholder="说明对账范围、付款安排及业务依据"
-                    />
-                )}
-            </form.AppField>
-            <form.Field name="files">
-                {(field) => (
-                    <Field>
-                        <FieldLabel htmlFor="ppr-create-attachments">
-                            对账材料及其他依据（可选）
-                        </FieldLabel>
-                        <Input
-                            id="ppr-create-attachments"
-                            type="file"
-                            multiple
-                            accept="application/pdf,image/jpeg,image/png,image/webp"
-                            onChange={(event) =>
-                                field.handleChange(
-                                    Array.from(event.target.files ?? []),
-                                )
-                            }
-                        />
-                        <p className="text-xs text-muted-foreground">
-                            支持 PDF、JPG、PNG、WebP，每份不超过 5 MB。
-                        </p>
-                    </Field>
-                )}
-            </form.Field>
-            {(save.isError || upload.isError) && (
-                <p role="alert" className="text-sm text-destructive">
-                    {getErrorMessage(
-                        save.error ?? upload.error,
-                        "保存失败，请重试",
-                    )}
-                </p>
-            )}
-            <form.Subscribe selector={(state) => state.errors}>
-                {(errors) =>
-                    errors.length ? (
-                        <p role="alert" className="text-sm text-destructive">
-                            请核对必填项和逐单申请金额。
-                        </p>
-                    ) : null
+            <DialogHeader className="shrink-0 border-b px-6 py-5 pr-16">
+                <DialogTitle>
+                    {request
+                        ? "修改付款申请"
+                        : step === 1
+                          ? "选择本次付款的采购单"
+                          : "填写付款申请"}
+                </DialogTitle>
+                <DialogDescription>
+                    {step === 1
+                        ? "支持跨供应商选择采购单，下一步按付款关系分别生成申请。"
+                        : "逐份填写金额与付款安排，完成后统一保存草稿。"}
+                </DialogDescription>
+                <div
+                    className="mt-3 flex items-center gap-3 text-xs"
+                    aria-label={`当前第 ${step} 步`}
+                >
+                    <span
+                        className={
+                            step === 1
+                                ? "font-medium text-foreground"
+                                : "text-muted-foreground"
+                        }
+                    >
+                        1 选择采购单
+                    </span>
+                    <span aria-hidden="true" className="h-px w-10 bg-border" />
+                    <span
+                        className={
+                            step === 2
+                                ? "font-medium text-foreground"
+                                : "text-muted-foreground"
+                        }
+                    >
+                        2 填写申请
+                    </span>
+                </div>
+            </DialogHeader>
+            <form.Subscribe
+                selector={(state) =>
+                    [state.values.groups, state.errors] as const
                 }
+            >
+                {([groups, errors]) => (
+                    <>
+                        <div className="min-h-0 flex-1 overflow-y-auto">
+                            <fieldset
+                                disabled={busy || unknown}
+                                className="min-w-0 space-y-4 px-6 py-5 disabled:opacity-70"
+                            >
+                                {step === 1 ? (
+                                    <RequestOrderPicker
+                                        form={form}
+                                        candidates={candidates}
+                                        editing={!!request}
+                                    />
+                                ) : (
+                                    <>
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <p className="text-sm text-muted-foreground">
+                                                已选{" "}
+                                                {groups.reduce(
+                                                    (count, group) =>
+                                                        count +
+                                                        group.ids.length,
+                                                    0,
+                                                )}{" "}
+                                                张采购单，分为 {groups.length}{" "}
+                                                份申请
+                                            </p>
+                                            <Button
+                                                id="ppr-create-reselect"
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => setStep(1)}
+                                            >
+                                                重新选择采购单
+                                            </Button>
+                                        </div>
+                                        {!groups.length && (
+                                            <p
+                                                role="alert"
+                                                className="rounded-lg border p-6 text-sm"
+                                            >
+                                                当前采购来源不可申请，请返回上一步重新选择。
+                                            </p>
+                                        )}
+                                        {groups.map((group, index) => (
+                                            <RequestDraftGroup
+                                                key={group.key}
+                                                form={form}
+                                                group={group}
+                                                index={index}
+                                                candidates={candidates}
+                                                editing={!!request}
+                                                open={openGroup === group.key}
+                                                onOpenChange={(open) =>
+                                                    setOpenGroup(
+                                                        open ? group.key : null,
+                                                    )
+                                                }
+                                            />
+                                        ))}
+
+                                        {!!errors.length && (
+                                            <p
+                                                role="alert"
+                                                className="text-sm text-destructive"
+                                            >
+                                                请核对各组必填项和逐单申请金额。
+                                            </p>
+                                        )}
+                                    </>
+                                )}
+                            </fieldset>
+                        </div>
+                        <div className="shrink-0 space-y-3 border-t bg-background px-6 py-4">
+                            {error && (
+                                <p
+                                    role="alert"
+                                    className="text-sm text-destructive"
+                                >
+                                    {getErrorMessage(
+                                        error,
+                                        "保存失败，请核对后重试",
+                                    )}
+                                </p>
+                            )}
+                            {unknown && (
+                                <p role="alert" className="text-sm">
+                                    保存结果暂无法确认。请点击“查询本次保存结果”，系统将恢复原次结果，不会重复创建草稿。
+                                </p>
+                            )}
+                            <div className="flex flex-wrap items-center justify-between gap-4">
+                                <form.Subscribe
+                                    selector={(state) => state.values}
+                                >
+                                    {(values) => (
+                                        <div>
+                                            <p className="text-xs text-muted-foreground">
+                                                {step === 1
+                                                    ? `已选 ${values.selectedIds.length} 张采购单`
+                                                    : `将保存 ${values.groups.length} 份申请草稿`}
+                                            </p>
+                                            {step === 2 && (
+                                                <>
+                                                    <MoneyValue
+                                                        value={totalOf(
+                                                            values.groups.flatMap(
+                                                                (group) =>
+                                                                    group.ids.map(
+                                                                        (id) =>
+                                                                            values
+                                                                                .amounts[
+                                                                                id
+                                                                            ] ??
+                                                                            "",
+                                                                    ),
+                                                            ),
+                                                        )}
+                                                        size="section"
+                                                    />
+                                                    <p className="mt-1 text-xs text-muted-foreground">
+                                                        各份申请分别提交审核、分别跟踪付款
+                                                    </p>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
+                                </form.Subscribe>
+                                <div className="flex gap-2">
+                                    <Button
+                                        id="ppr-create-cancel"
+                                        type="button"
+                                        variant="outline"
+                                        disabled={busy || unknown}
+                                        onClick={
+                                            step === 1
+                                                ? onClose
+                                                : () => setStep(1)
+                                        }
+                                    >
+                                        {step === 1 ? "取消" : "上一步"}
+                                    </Button>
+                                    {step === 1 ? (
+                                        <form.Subscribe
+                                            selector={(state) =>
+                                                state.values.selectedIds.length
+                                            }
+                                        >
+                                            {(count) => (
+                                                <Button
+                                                    id="ppr-create-next"
+                                                    type="button"
+                                                    disabled={!count}
+                                                    onClick={moveNext}
+                                                >
+                                                    下一步：填写申请
+                                                </Button>
+                                            )}
+                                        </form.Subscribe>
+                                    ) : (
+                                        <Button
+                                            id="ppr-create-submit"
+                                            type={unknown ? "button" : "submit"}
+                                            onClick={
+                                                unknown
+                                                    ? () => {
+                                                          void recover().catch(
+                                                              () => undefined,
+                                                          )
+                                                      }
+                                                    : undefined
+                                            }
+                                            disabled={busy || !groups.length}
+                                        >
+                                            {busy
+                                                ? "正在保存…"
+                                                : unknown
+                                                  ? "查询本次保存结果"
+                                                  : request
+                                                    ? "保存申请草稿"
+                                                    : `保存 ${groups.length} 份申请草稿`}
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </>
+                )}
             </form.Subscribe>
-            <DialogFooter>
-                <Button
-                    id="ppr-create-cancel"
-                    variant="outline"
-                    type="button"
-                    onClick={onClose}
-                >
-                    取消
-                </Button>
-                <Button
-                    id="ppr-create-submit"
-                    type="submit"
-                    disabled={save.isPending || upload.isPending}
-                >
-                    {save.isPending || upload.isPending
-                        ? "正在保存…"
-                        : "保存申请草稿"}
-                </Button>
-            </DialogFooter>
         </form>
     )
 }
