@@ -9,6 +9,7 @@ export type PersonDirectoryItem = {
     account: string
     status: "active" | "suspended" | "archived"
     org_label?: string | null
+    primary_org_unit_id?: string | null
 }
 
 export type PersonDirectoryPage = {

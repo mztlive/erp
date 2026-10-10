@@ -275,7 +275,7 @@ fn org_label(state: &OrganizationState, primary_org: Option<&str>) -> Option<Str
     state
         .units
         .iter()
-        .find(|unit| unit.base.id == org_id && !unit.base.is_deleted())
+        .find(|unit| unit.base.id == org_id && unit.enabled && !unit.base.is_deleted())
         .map(|unit| unit.name.clone())
 }
 
@@ -300,6 +300,7 @@ fn page_from_result(
     for item in &mut items {
         let org = authorized.organizations.own_org(&item.id, authorized.as_of)?;
         item.org_label = org_label(&authorized.organizations, org);
+        item.primary_org_unit_id = org.filter(|_| item.org_label.is_some()).map(ToOwned::to_owned);
     }
     Ok(PersonDirectoryPage::from_page(
         PageView { items, total, page, page_size },
@@ -313,9 +314,71 @@ fn page_from_result(
 
 #[cfg(test)]
 mod tests {
+    use entity_core::BaseModel;
+
     use super::*;
+    use crate::dto::PersonDirectoryItem;
     use crate::entity::access_control::ScopeClause;
+    use crate::entity::account_core::AccountStatus;
+    use crate::entity::organization::{OrgMembership, OrgUnit, OrgUnitKind, OrgValidity};
     use crate::repository::person_directory_query::version_fixture;
+
+    #[test]
+    fn directory_returns_effective_primary_org_and_clears_expired_membership() {
+        let unit = OrgUnit::new(
+            "org".into(),
+            "销售部".into(),
+            None,
+            OrgUnitKind::Department,
+            "admin".into(),
+            "初始化".into(),
+        )
+        .unwrap();
+        let membership = OrgMembership {
+            base: BaseModel::fake(),
+            user_id: "sales".into(),
+            org_unit_id: "org".into(),
+            validity: OrgValidity {
+                valid_from: Instant::from_unix_secs(1),
+                valid_to: Some(Instant::from_unix_secs(10)),
+            },
+            changed_by: "admin".into(),
+            reason: "入职".into(),
+        };
+        for (at, enabled, expected) in [(5, true, Some("org")), (10, true, None), (5, false, None)] {
+            let mut unit = unit.clone();
+            unit.enabled = enabled;
+            let authorized = AuthorizedDirectory {
+                scope: ResolvedScope {
+                    role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
+                    user_limit: None,
+                },
+                organizations: OrganizationState {
+                    units: vec![unit.clone()],
+                    memberships: vec![membership.clone()],
+                    ..Default::default()
+                },
+                policy_version: 1,
+                scope_version: "scope".into(),
+                as_of: Instant::from_unix_secs(at),
+                actor_id: "admin".into(),
+            };
+            let result = DirectoryResult {
+                items: vec![PersonDirectoryItem {
+                    id: "sales".into(),
+                    name: "销售员".into(),
+                    account: "sales".into(),
+                    status: AccountStatus::Active,
+                    org_label: None,
+                    primary_org_unit_id: None,
+                }],
+                ..Default::default()
+            };
+            let page = page_from_result(result, 1, 20, &authorized, "scope".into()).unwrap();
+            assert_eq!(page.items[0].primary_org_unit_id.as_deref(), expected);
+            assert_eq!(page.items[0].org_label.as_deref(), expected.map(|_| "销售部"));
+        }
+    }
 
     #[test]
     fn changed_display_or_empty_authorization_invalidates_previous_version() {

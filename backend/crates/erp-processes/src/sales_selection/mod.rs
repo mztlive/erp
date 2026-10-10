@@ -200,6 +200,7 @@ impl SalesSelectionProcess {
         view.sales_owner_name = owner_display_names(&self.db, &[view.sales_owner_user_id.clone()])
             .await?
             .remove(&view.sales_owner_user_id);
+        view.source_skus = adapters::source_skus(&self.db, &view.sku_ids).await?;
         Ok(view)
     }
 

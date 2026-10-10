@@ -122,6 +122,9 @@ components:
               account: {type: string}
               status: {type: string, enum: [active, suspended, archived]}
               org_label: {type: [string, 'null']}
+              primary_org_unit_id:
+                type: [string, 'null']
+                description: 授权时点的有效主属组织 ID，用于业务录入自动带值；服务端写入时必须重新校验。
         total: {type: integer, minimum: 0}
         page: {type: integer, minimum: 1}
         page_size: {type: integer, minimum: 1, maximum: 100}

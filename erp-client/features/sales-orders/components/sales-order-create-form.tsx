@@ -13,10 +13,12 @@ import {
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { toast } from "@/components/ui/toast"
+import { Button } from "@/components/ui/button"
 import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
 import { getErrorMessage } from "@/lib/api/errors"
 import type { FormalCommandKeyLedger } from "@/lib/formal-command"
 import { ContractUploadDialog } from "@/features/contracts/contract-upload-dialog"
+import { useContractFilePicker } from "@/features/contracts/hooks/use-contract-file-picker"
 import { useContractCenterQuery } from "@/features/contracts/queries"
 import type { UploadContractPdfResult } from "@/features/contracts/types"
 import { useCustomerCenterQuery } from "@/features/customers/queries"
@@ -36,6 +38,7 @@ import { useSalesOrderCreateSubmission } from "@/features/sales-orders/hooks/use
 import { useSalesLineProcurementResponsibilities } from "@/features/sales-orders/hooks/use-sales-line-procurement-responsibilities"
 import { SalesOrderCreateAlerts } from "@/features/sales-orders/components/sales-order-create-alerts"
 import { SalesOrderCreateContractSection } from "@/features/sales-orders/components/sales-order-create-contract-section"
+import { SalesOrderCreateEntry } from "@/features/sales-orders/components/sales-order-create-entry"
 import { SalesOrderCreateHeaderFields } from "@/features/sales-orders/components/sales-order-create-header-fields"
 import { SalesOrderCreateLineItemsSection } from "@/features/sales-orders/components/sales-order-create-line-items-section"
 import { SalesOrderCreateTotalBar } from "@/features/sales-orders/components/sales-order-create-total-bar"
@@ -79,6 +82,14 @@ export function SalesOrderCreateForm({
         initialDraft?.contractId || initialContractId,
     )
     const [uploadOpen, setUploadOpen] = React.useState(false)
+    const [uploadFile, setUploadFile] = React.useState<File | null>(null)
+    const picker = useContractFilePicker((file) => {
+        setUploadFile(file)
+        setUploadOpen(true)
+    })
+    const [entryOpen, setEntryOpen] = React.useState(
+        purpose === "create" && !initialDraft && !initialContractId,
+    )
     const preferredRevisionRef = React.useRef(
         initialDraft?.requestedContractRevisionId || initialContractRevisionId,
     )
@@ -375,6 +386,7 @@ export function SalesOrderCreateForm({
             form.setFieldValue("customerName", "")
             form.setFieldValue("settlementEntity", "")
             form.setFieldValue("settlementPartyId", "")
+            setEntryOpen(false)
         },
         [form, queryClient],
     )
@@ -454,93 +466,143 @@ export function SalesOrderCreateForm({
                 )
             ) : null}
 
-            <form
-                className="flex min-w-0 flex-1 flex-col"
-                noValidate
-                onSubmit={(event) => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    void form.handleSubmit()
-                }}
-            >
-                <div
-                    className={
-                        chrome === "page"
-                            ? "flex min-w-0 flex-1 flex-col rounded-xl border border-grid bg-card"
-                            : "flex min-w-0 flex-1 flex-col"
-                    }
+            {entryOpen ? (
+                <SalesOrderCreateEntry
+                    selectedFileName={uploadFile?.name}
+                    onResumeImport={() => setUploadOpen(true)}
+                    onUpload={(file) => {
+                        setUploadFile(file)
+                        setUploadOpen(true)
+                    }}
+                    onSelectBasis={(basis) => {
+                        handleOrderBasisChange(basis)
+                        setEntryOpen(false)
+                    }}
+                />
+            ) : (
+                <form
+                    className="flex min-w-0 flex-1 flex-col"
+                    noValidate
+                    onSubmit={(event) => {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        void form.handleSubmit()
+                    }}
                 >
-                    <section
-                        className="min-w-0 space-y-5 p-4 sm:p-5"
-                        aria-labelledby="sales-create-contract-title"
+                    <div
+                        className={
+                            chrome === "page"
+                                ? "flex min-w-0 flex-1 flex-col rounded-xl border border-grid bg-card"
+                                : "flex min-w-0 flex-1 flex-col"
+                        }
                     >
-                        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                        <section
+                            className="min-w-0 space-y-5 p-4 sm:p-5"
+                            aria-labelledby="sales-create-contract-title"
+                        >
+                            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                                <h2
+                                    id="sales-create-contract-title"
+                                    className="font-heading text-base font-semibold"
+                                >
+                                    客户与合同
+                                </h2>
+                                {!submission.draftIdentity &&
+                                purpose === "create" ? (
+                                    <form.Subscribe
+                                        selector={(state) =>
+                                            state.values.evidenceUploadPending
+                                        }
+                                    >
+                                        {(uploading) => (
+                                            <Button
+                                                id="sales-orders-create-change-entry"
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                disabled={
+                                                    uploading ||
+                                                    submission.isSubmitting
+                                                }
+                                                onClick={() =>
+                                                    setEntryOpen(true)
+                                                }
+                                            >
+                                                更换开单方式
+                                            </Button>
+                                        )}
+                                    </form.Subscribe>
+                                ) : null}
+                                {chrome === "none" ? owner : null}
+                            </div>
+                            <SalesOrderCreateContractSection
+                                form={form}
+                                customerLocked={
+                                    submission.draftIdentity != null
+                                }
+                                settlementSnapshot={settlementSnapshot}
+                                contractFetching={contractQuery.isFetching}
+                                onContractChange={handleContractChange}
+                                onOrderBasisChange={handleOrderBasisChange}
+                                onUploadClick={picker.selectFile}
+                            />
+                        </section>
+                        <section
+                            className="min-w-0 space-y-5 border-t border-grid p-4 sm:p-5"
+                            aria-labelledby="sales-create-settlement-title"
+                        >
                             <h2
-                                id="sales-create-contract-title"
+                                id="sales-create-settlement-title"
                                 className="font-heading text-base font-semibold"
                             >
-                                客户与合同
+                                业务与结算
                             </h2>
-                            {chrome === "none" ? owner : null}
-                        </div>
-                        <SalesOrderCreateContractSection
+                            <SalesOrderCreateHeaderFields
+                                form={form}
+                                natureLocked={natureLocked}
+                                applyNature={applyNature}
+                                onNatureChangeRequest={setPendingNature}
+                            />
+                        </section>
+                        <SalesOrderCreateLineItemsSection
                             form={form}
-                            customerLocked={submission.draftIdentity != null}
-                            settlementSnapshot={settlementSnapshot}
-                            contractFetching={contractQuery.isFetching}
-                            onContractChange={handleContractChange}
-                            onOrderBasisChange={handleOrderBasisChange}
-                            onUploadClick={() => setUploadOpen(true)}
+                            procurementOwners={
+                                procurementResponsibilityQuery.byRowKey
+                            }
+                            procurementFetching={
+                                procurementResponsibilityQuery.isFetching
+                            }
+                            procurementError={
+                                procurementResponsibilityQuery.isError &&
+                                !procurementResponsibilityQuery.data
+                            }
                         />
-                    </section>
-                    <section
-                        className="min-w-0 space-y-5 border-t border-grid p-4 sm:p-5"
-                        aria-labelledby="sales-create-settlement-title"
-                    >
-                        <h2
-                            id="sales-create-settlement-title"
-                            className="font-heading text-base font-semibold"
-                        >
-                            业务与结算
-                        </h2>
-                        <SalesOrderCreateHeaderFields
+                        <SalesOrderCreateTotalBar
                             form={form}
-                            natureLocked={natureLocked}
-                            applyNature={applyNature}
-                            onNatureChangeRequest={setPendingNature}
+                            isSubmitting={submission.isSubmitting}
+                            onSaveDraftClick={() => {
+                                submission.submitIntentRef.current =
+                                    "SAVE_DRAFT"
+                            }}
+                            onSubmitClick={() => {
+                                submission.submitIntentRef.current = "SUBMIT"
+                            }}
                         />
-                    </section>
-                    <SalesOrderCreateLineItemsSection
-                        form={form}
-                        procurementOwners={
-                            procurementResponsibilityQuery.byRowKey
-                        }
-                        procurementFetching={
-                            procurementResponsibilityQuery.isFetching
-                        }
-                        procurementError={
-                            procurementResponsibilityQuery.isError &&
-                            !procurementResponsibilityQuery.data
-                        }
-                    />
-                    <SalesOrderCreateTotalBar
-                        form={form}
-                        isSubmitting={submission.isSubmitting}
-                        onSaveDraftClick={() => {
-                            submission.submitIntentRef.current = "SAVE_DRAFT"
-                        }}
-                        onSubmitClick={() => {
-                            submission.submitIntentRef.current = "SUBMIT"
-                        }}
-                    />
-                </div>
-            </form>
+                    </div>
+                </form>
+            )}
 
             <div id="sales-orders-create-contract-upload-dialog">
+                <input
+                    id="sales-orders-create-contract-upload-input"
+                    type="file"
+                    {...picker.inputProps}
+                />
                 <ContractUploadDialog
                     open={uploadOpen}
                     onOpenChange={setUploadOpen}
                     autoAccept
+                    initialFile={uploadFile}
                     initialCustomerId={selectedCustomerId || undefined}
                     onSuccess={(result) => {
                         void handleUploadSuccess(result)

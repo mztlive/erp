@@ -70,6 +70,9 @@ pub struct PersonDirectoryItem {
     pub status: AccountStatus,
     /// 授权时点的主属组织名称；没有组织时为空。
     pub org_label: Option<String>,
+    /// 授权时点的有效主属组织；仅用于录入带值，写入时仍须重新校验。
+    #[serde(default)]
+    pub primary_org_unit_id: Option<String>,
 }
 
 /// 人员目录页。版本独立于业务列表。

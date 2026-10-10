@@ -547,6 +547,8 @@ impl AppState {
             self.sensitive_data(),
             self.rbac(),
             self.config_snapshot().demo.master_data_enabled(),
+            self.storage().clone(),
+            self.config_snapshot().app.secret.as_bytes(),
         )
     }
 

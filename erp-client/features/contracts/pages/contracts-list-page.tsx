@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { DownloadIcon, FileUpIcon } from "lucide-react"
+import { DownloadIcon, FileUpIcon, HistoryIcon } from "lucide-react"
 
 import { PageActions, PageScaffold } from "@/components/business"
 import {
@@ -17,6 +17,7 @@ import { useContractListActions } from "@/features/contracts/hooks/use-contract-
 import { useContractListColumns } from "@/features/contracts/hooks/use-contract-list-columns"
 import { useContractsList } from "@/features/contracts/hooks/use-contracts-list"
 import { useContractCenterQuery } from "@/features/contracts/hooks/queries"
+import { useContractFilePicker } from "@/features/contracts/hooks/use-contract-file-picker"
 
 export function ContractsListPage() {
     const list = useContractsList()
@@ -26,6 +27,11 @@ export function ContractsListPage() {
     const [previewId, setPreviewId] = React.useState<string | null>(null)
     const [paperId, setPaperId] = React.useState<string | null>(null)
     const [uploadOpen, setUploadOpen] = React.useState(list.upload === "1")
+    const [uploadFile, setUploadFile] = React.useState<File | null>(null)
+    const picker = useContractFilePicker((file) => {
+        setUploadFile(file)
+        setUploadOpen(true)
+    })
 
     const previewRow = React.useMemo(
         () =>
@@ -51,6 +57,11 @@ export function ContractsListPage() {
 
     return (
         <PageScaffold density="compact" className={styles.page}>
+            <input
+                id="contracts-list-upload-input"
+                type="file"
+                {...picker.inputProps}
+            />
             <ListWorkspaceHeader
                 eyebrow="销售"
                 title="合同"
@@ -94,10 +105,17 @@ export function ContractsListPage() {
                             },
                         },
                         {
+                            actionKey: "import-history",
+                            label: "导入记录",
+                            icon: HistoryIcon,
+                            variant: "outline",
+                            onClick: () => setUploadOpen(true),
+                        },
+                        {
                             actionKey: "upload",
                             label: "上传合同 PDF",
                             icon: FileUpIcon,
-                            onClick: () => setUploadOpen(true),
+                            onClick: picker.selectFile,
                         },
                     ]}
                 />
@@ -117,7 +135,7 @@ export function ContractsListPage() {
                 onRetry={() => {
                     void contractsQuery.refetch()
                 }}
-                onOpenUpload={() => setUploadOpen(true)}
+                onOpenUpload={picker.selectFile}
                 onPreview={setPreviewId}
                 highlightedContractId={
                     actions.highlightedContractId ?? undefined
@@ -144,6 +162,7 @@ export function ContractsListPage() {
 
             <ContractUploadDialog
                 open={uploadOpen}
+                initialFile={uploadFile}
                 onOpenChange={setUploadOpen}
                 initialCustomerId={customerId ?? ""}
                 onSuccess={actions.handleUploadSuccess}

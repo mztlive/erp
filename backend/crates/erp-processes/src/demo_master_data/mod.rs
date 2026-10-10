@@ -12,6 +12,9 @@ mod ensure_supplier;
 mod ensure_warehouse;
 mod foundation;
 mod foundation_validation;
+mod image_assets;
+mod image_request;
+mod images;
 mod lifecycle;
 mod offerings;
 mod organization;
@@ -35,6 +38,7 @@ pub use foundation::DemoFoundationReport;
 pub use record::ensure_indexes;
 pub use removal::DemoResetReport;
 pub use service::{ApplyDemoMasterDataRequest, DemoChunkReport, DemoStatus};
+use storage::S3Storage;
 
 /// 演示主数据生成与删除。
 pub struct DemoMasterDataService {
@@ -42,4 +46,6 @@ pub struct DemoMasterDataService {
     pub(super) sensitive: Arc<SensitiveDataCodec>,
     pub(super) rbac: SharedRbacService,
     enabled: bool,
+    storage: S3Storage,
+    image_secret: Vec<u8>,
 }

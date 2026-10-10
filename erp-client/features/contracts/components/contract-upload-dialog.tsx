@@ -154,7 +154,15 @@ export function ContractUploadDialog(props: ContractUploadDialogProps) {
                                 ) : null}
                             </Alert>
                         ) : null}
-                        {!state.selectedId ? (
+                        {!state.selectedId && state.uploadMutation.isPending ? (
+                            <p
+                                className="flex items-center gap-2 py-8 text-sm text-muted-foreground"
+                                role="status"
+                            >
+                                <Spinner />
+                                正在上传，完成后自动识别…
+                            </p>
+                        ) : !state.selectedId ? (
                             <form
                                 id="contract-import-upload-form"
                                 onSubmit={(event) => {

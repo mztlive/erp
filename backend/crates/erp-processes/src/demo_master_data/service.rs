@@ -9,6 +9,7 @@ use erp_identity::{AccessControlExt, AccountCoreRepositoryExt, SharedRbacService
 use erp_party::{PartyStatus, SensitiveDataCodec};
 use erp_warehouse::WarehouseService;
 use persistence_core::NoTransaction;
+use storage::S3Storage;
 
 use super::ensure_dictionary::EnsureOutcome;
 use super::plan::{self, DemoCounts, DemoStep};
@@ -70,6 +71,8 @@ impl DemoMasterDataService {
     /// * `sensitive` - 客户和供应商资料使用的密文编解码器
     /// * `rbac` - 当前授权快照
     /// * `enabled` - 配置是否允许写入
+    /// * `storage` - 演示商品图片使用的受控对象存储
+    /// * `image_secret` - 内容指纹密钥
     ///
     /// # 返回
     /// 返回未执行任何写入的服务。
@@ -81,8 +84,10 @@ impl DemoMasterDataService {
         sensitive: Arc<SensitiveDataCodec>,
         rbac: SharedRbacService,
         enabled: bool,
+        storage: S3Storage,
+        image_secret: &[u8],
     ) -> Self {
-        Self { db, sensitive, rbac, enabled }
+        Self { db, sensitive, rbac, enabled, storage, image_secret: image_secret.to_vec() }
     }
 
     /// 返回各类演示主数据的计划数量和当前数量。
@@ -142,7 +147,9 @@ impl DemoMasterDataService {
                 )
                 .await?;
             if step.kind == plan::DemoKind::Product {
-                self.ensure_sellable(step, &offerings, &self.record_map().await?).await?;
+                let records = self.record_map().await?;
+                self.ensure_product_images(actor, step, &records).await?;
+                self.ensure_sellable(step, &offerings, &records).await?;
             }
             tally(&mut report, outcome)?;
         }

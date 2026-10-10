@@ -119,7 +119,7 @@ pub fn search_packages(
         }
         let (tier_packages, report) = search_one_tier(pool, tier, &occupied, generator, seed)?;
         if tier_packages.is_empty() {
-            return Err(Error::from(format!("档位「{}」未得到可交付套餐，整次准备失败", tier.name)));
+            return Err(empty_tier_error(pool, tier, &report));
         }
         for package in &tier_packages {
             occupied.insert(package.combination_key());
@@ -131,6 +131,30 @@ pub fn search_packages(
         return Err(Error::from("套餐陈列项数不得超过 200"));
     }
     Ok((packages, reports))
+}
+
+/// 区分金额无解和已找到组合但主图失败，返回可执行的修正提示。
+fn empty_tier_error(pool: &[SkuSnapshot], tier: &TierRule, report: &TierSearchReport) -> Error {
+    let reason = if report.image_failures > 0 {
+        let missing = pool
+            .iter()
+            .filter(|sku| sku.image.is_none())
+            .take(5)
+            .map(|sku| sku.name.as_str())
+            .collect::<Vec<_>>();
+        if missing.is_empty() {
+            "符合金额的组合未能生成主图，请检查商品图片后重试".to_string()
+        } else {
+            format!(
+                "符合金额的组合缺少可用主图，请先为以下商品补充图片后重新准备：{}{}",
+                missing.join("、"),
+                if pool.iter().filter(|sku| sku.image.is_none()).count() > 5 { "等" } else { "" }
+            )
+        }
+    } else {
+        "未找到未使用且符合金额与件数要求的组合，请调整目标金额、容差、件数或商品来源".to_string()
+    };
+    Error::from(format!("档位「{}」准备失败：{reason}；原陈列保持不变", tier.name))
 }
 
 /// 搜索一档。
@@ -702,6 +726,18 @@ mod tests {
         let pool = vec![sku("a", "p1", "40.00", false), sku("b", "p2", "60.00", false)];
         let error =
             search_packages(&pool, &[tier()], &HashSet::new(), &FirstNonEmptyMemberImage, 0).unwrap_err();
-        assert!(error.to_string().contains("未得到可交付套餐"));
+        let message = error.to_string();
+        assert!(message.contains("补充图片"));
+        assert!(message.contains("a、b"));
+        assert!(!message.contains("调整目标金额"));
+    }
+
+    #[test]
+    fn unsatisfied_amount_is_not_reported_as_missing_images() {
+        let pool = vec![sku("a", "p1", "10.00", false), sku("b", "p2", "10.00", false)];
+        let error =
+            search_packages(&pool, &[tier()], &HashSet::new(), &FirstNonEmptyMemberImage, 0).unwrap_err();
+        assert!(error.to_string().contains("调整目标金额"));
+        assert!(!error.to_string().contains("补充图片"));
     }
 }

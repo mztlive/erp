@@ -12,6 +12,7 @@ import {
     DialogTitle,
     DialogDescription,
 } from "@/components/ui/dialog"
+import { SourceSkuPicker } from "./source-sku-picker"
 import { TierEditor } from "./tier-editor"
 import { useBookOperations } from "../hooks/queries"
 import { createIdempotencyKey, tierRuleSchema } from "../lib/validation"
@@ -30,7 +31,7 @@ export const ReprepareDialog = ({
     const form = useAppForm({
         defaultValues: {
             q: detail.pool_filter?.q ?? "",
-            skuText: detail.sku_ids?.join("\n") ?? "",
+            skuIds: detail.sku_ids ?? [],
             tiers: detail.tiers,
         },
         onSubmit: async ({ value }) => {
@@ -50,9 +51,7 @@ export const ReprepareDialog = ({
                 setError("请设置 1 到 10 个档位")
                 return
             }
-            const skuIds = [
-                ...new Set(value.skuText.split(/[\s,，、]+/).filter(Boolean)),
-            ]
+            const skuIds = [...new Set(value.skuIds)]
             if (
                 detail.source_kind === "SELECTION" &&
                 (skuIds.length < 1 || skuIds.length > 500)
@@ -165,23 +164,13 @@ export const ReprepareDialog = ({
                                 )}
                             </>
                         ) : (
-                            <form.Field name="skuText">
+                            <form.Field name="skuIds">
                                 {(field) => (
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="selection-reprepare-skus">
-                                            已选商品编号（每行一个）
-                                        </Label>
-                                        <textarea
-                                            id="selection-reprepare-skus"
-                                            className="min-h-28 rounded-md border p-2"
-                                            value={field.state.value}
-                                            onChange={(e) =>
-                                                field.handleChange(
-                                                    e.target.value,
-                                                )
-                                            }
-                                        />
-                                    </div>
+                                    <SourceSkuPicker
+                                        value={field.state.value}
+                                        initialRows={detail.source_skus ?? []}
+                                        onChange={field.handleChange}
+                                    />
                                 )}
                             </form.Field>
                         )}

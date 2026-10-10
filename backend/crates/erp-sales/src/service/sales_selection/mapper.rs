@@ -78,6 +78,8 @@ impl SalesSelectionService {
     pub fn booklet_list_item(booklet: &SalesSelectionBooklet) -> SalesSelectionBookletListItemView {
         let head = booklet_head(booklet);
         SalesSelectionBookletListItemView {
+            display_count: 0,
+            proposal_no: None,
             book_id: head.id.clone(),
             id: head.id,
             version: head.version,
@@ -119,6 +121,7 @@ impl SalesSelectionService {
         let (display_count, removed_count, missing_image_count) = booklet_item_counts(items);
         let head = booklet_head(booklet);
         SalesSelectionBookletView {
+            source_skus: Vec::new(),
             pool_filter: booklet.pool_source.filter.clone(),
             sku_ids: booklet.pool_source.sku_ids.iter().flatten().map(ToString::to_string).collect(),
             book_id: head.id.clone(),

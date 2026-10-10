@@ -2060,6 +2060,7 @@ dependencies = [
  "tracing-subscriber",
  "validator",
  "zip",
+ "zune-jpeg",
 ]
 
 [[package]]

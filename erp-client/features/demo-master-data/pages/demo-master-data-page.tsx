@@ -160,7 +160,7 @@ export function DemoMasterDataPage() {
             ) : null}
             {apply.data && apply.data.length > 0 ? (
                 <Alert>
-                    <AlertTitle>有一部分没有生成</AlertTitle>
+                    <AlertTitle>生成说明</AlertTitle>
                     <AlertDescription>
                         <ul className="list-disc pl-4">
                             {apply.data.map((notice) => (

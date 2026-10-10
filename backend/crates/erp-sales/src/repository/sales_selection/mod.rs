@@ -3,6 +3,7 @@
 //! 单集合 CRUD 直接复用 `owned` 仓储；本模块只承载跨集合多步骤写入入口与
 //! 列表投影查询。集合名统一取 `SalesSelectionExt` 关联常量。
 
+mod list_summary;
 mod proposal_scope;
 mod queries;
 mod rate;

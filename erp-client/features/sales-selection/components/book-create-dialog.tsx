@@ -74,6 +74,7 @@ export const BookCreateDialog = ({
 }) => {
     const operations = useBookOperations()
     const [ownerSearch, setOwnerSearch] = React.useState("")
+    const [orgName, setOrgName] = React.useState("")
     const ownerOptionsQuery = usePersonDirectoryList({
         category: "sales",
         q: ownerSearch,
@@ -88,6 +89,8 @@ export const BookCreateDialog = ({
             userId: person.id,
             displayName: person.name,
             userCode: person.account,
+            orgId: person.primary_org_unit_id ?? "",
+            orgName: person.org_label ?? "",
         }))
 
     const form = useAppForm({
@@ -157,6 +160,7 @@ export const BookCreateDialog = ({
     const wasOpen = React.useRef(false)
     React.useEffect(() => {
         if (open && !wasOpen.current) {
+            setOrgName("")
             form.reset({
                 customer_id: "",
                 sales_owner_user_id: "",
@@ -248,9 +252,17 @@ export const BookCreateDialog = ({
                                         owners={ownerOptions}
                                         loading={ownerOptionsQuery.isFetching}
                                         value={field.state.value || undefined}
-                                        onValueChange={(next) =>
+                                        onValueChange={(next) => {
                                             field.handleChange(next ?? "")
-                                        }
+                                            const owner = ownerOptions.find(
+                                                (item) => item.userId === next,
+                                            )
+                                            form.setFieldValue(
+                                                "business_org_unit_id",
+                                                owner?.orgId ?? "",
+                                            )
+                                            setOrgName(owner?.orgName ?? "")
+                                        }}
                                         placeholder="搜索负责人或工号"
                                         onSearchChange={setOwnerSearch}
                                         filterMode="remote"
@@ -288,23 +300,34 @@ export const BookCreateDialog = ({
                                     </Label>
                                     <Input
                                         id="sales-selection-create-org"
-                                        value={field.state.value}
-                                        onChange={(event) =>
-                                            field.handleChange(
-                                                event.target.value,
-                                            )
-                                        }
-                                        onBlur={field.handleBlur}
-                                        placeholder="负责人有效主属组织 ID"
+                                        value={orgName}
+                                        readOnly
+                                        placeholder="选择负责销售后自动带入"
                                         aria-label="业务组织"
                                     />
+                                    <form.Subscribe
+                                        selector={(state) =>
+                                            state.values.sales_owner_user_id
+                                        }
+                                    >
+                                        {(ownerId) =>
+                                            ownerId && !field.state.value ? (
+                                                <p
+                                                    className="text-xs text-destructive"
+                                                    role="alert"
+                                                >
+                                                    该销售尚未配置有效主属组织，请联系管理员在“组织与人员”中设置后重新选择。
+                                                </p>
+                                            ) : null
+                                        }
+                                    </form.Subscribe>
                                     {field.state.meta.isTouched &&
                                     !field.state.meta.isValid ? (
                                         <p
                                             className="text-xs text-destructive"
                                             role="alert"
                                         >
-                                            请填写业务组织
+                                            请为负责销售配置有效主属组织
                                         </p>
                                     ) : null}
                                 </div>

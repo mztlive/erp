@@ -79,8 +79,22 @@ impl SalesSelectionService {
         let filter = booklet_filter(params, authorized_scope)?;
         let domain = crate::repository::sales_selection::SalesSelectionDomainRepository::new(&self.db);
         let result = domain.search_booklets(&filter, executor).await?;
+        let ids = result.items.iter().map(|book| book.base.id.clone()).collect::<Vec<_>>();
+        let summaries = domain.booklet_summaries(&ids, executor).await?;
+        let items = result
+            .items
+            .iter()
+            .map(|book| {
+                let mut view = Self::booklet_list_item(book);
+                if let Some(summary) = summaries.iter().find(|row| row.id == view.id) {
+                    view.display_count = summary.display_count;
+                    view.proposal_no = summary.proposal_no.clone();
+                }
+                view
+            })
+            .collect();
         Ok(SalesSelectionBookletPage {
-            items: result.items.iter().map(Self::booklet_list_item).collect(),
+            items,
             total: result.total,
             page: filter.page,
             page_size: filter.page_size,

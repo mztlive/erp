@@ -8,6 +8,7 @@ use erp_catalog::ports::supply::CatalogSupplyQueryPort;
 use erp_core::common::time::BusinessDate;
 use erp_customer::CustomerAccountStatus;
 use erp_sales::Result as SalesResult;
+use erp_sales::dto::sales_selection::SelectionSourceSkuView;
 use erp_sales::entity::sales_selection::{
     ImageAssetSnapshot, PoolFilterSnapshot, SpecificationAttributeSnapshot,
 };
@@ -17,6 +18,28 @@ use erp_sales::ports::sales_selection::{
 use mongodb::Database;
 use persistence_core::NoTransaction;
 use storage::S3Storage;
+
+use crate::adapters::catalog_supply_query::MongoCatalogSupplyQuery;
+
+/// 回显已通过册详情权限验证的来源，不扩大来源或返回采购价格。
+/// # 参数
+/// `db` 为当前数据库，`ids` 仅允许来自已授权册。
+/// # 返回
+/// 当前仍可售来源的名称与业务编号。
+/// # 错误
+/// 查询失败时返回错误。
+pub(super) async fn source_skus(db: &Database, ids: &[String]) -> crate::Result<Vec<SelectionSourceSkuView>> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let rows = MongoCatalogSupplyQuery::new(db.clone())
+        .find_sellable_skus_by_ids(ids, BusinessDate::today(), &mut NoTransaction)
+        .await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| SelectionSourceSkuView { sku_id: row.sku_id, name: row.name, sku_no: row.sku_no })
+        .collect())
+}
 
 /// 客户适配器。
 pub(super) struct CustomerAdapter {

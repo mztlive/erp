@@ -81,7 +81,10 @@ export const createBookSchema = z
         /** 显式销售负责人；必填，客户提交人不成为负责人。 */
         sales_owner_user_id: z.string().trim().min(1, "请选择负责销售"),
         /** 业务组织；必填，取负责人有效主属组织。 */
-        business_org_unit_id: z.string().trim().min(1, "请填写业务组织"),
+        business_org_unit_id: z
+            .string()
+            .trim()
+            .min(1, "请为负责销售配置有效主属组织"),
         selection_form: z.enum(["SINGLE_SKU", "PACKAGE"], {
             message: "请选择选品形态",
         }),

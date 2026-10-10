@@ -20,6 +20,8 @@ export type UseContractUploadFormOptions = {
     open: boolean
     onOpenChange: (open: boolean) => void
     initialCustomerId?: string
+    /** 页面入口选中的文件，打开窗口后沿用同一上传、识别与核对流程。 */
+    initialFile?: File | null
     revisionTarget?: { contractId: string; version: number }
     onSuccess?: (result: UploadContractPdfResult) => void
     autoAccept?: boolean
@@ -196,6 +198,39 @@ export function useContractUploadForm(options: UseContractUploadFormOptions) {
         form.reset()
         request.current = null
     }
+    const consumedFile = React.useRef<File | null>(null)
+    React.useEffect(() => {
+        const file = options.initialFile
+        if (
+            !options.open ||
+            !file ||
+            consumedFile.current === file ||
+            uploadMutation.isPending ||
+            runMutation.isPending ||
+            confirmMutation.isPending ||
+            form.state.isSubmitting
+        )
+            return
+        consumedFile.current = file
+        setSelectedId("")
+        setPreview({ id: "", url: "" })
+        uploadMutation.reset()
+        runMutation.reset()
+        confirmMutation.reset()
+        previewMutation.reset()
+        request.current = null
+        // reset 不触发字段 onChange 自动提交；入口文件只提交一次。
+        form.reset({ pdfFile: file })
+        void form.handleSubmit().catch(() => undefined)
+    }, [
+        options.open,
+        options.initialFile,
+        form,
+        uploadMutation,
+        runMutation,
+        confirmMutation,
+        previewMutation,
+    ])
     function acceptTask(task: ContractImportTask) {
         const result = task.result
         if (

@@ -261,6 +261,10 @@ pub struct PublicChoiceRequest {
 /// 选品册列表行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SalesSelectionBookletListItemView {
+    /// 当前有效且未移除的陈列数量。
+    pub display_count: u32,
+    /// 已关联方案的业务编号；尚未提交或个人提货模式为空。
+    pub proposal_no: Option<String>,
     /// 身份。
     pub id: String,
     /// 与 `id` 相同，兼容内部列表字段。
@@ -297,7 +301,21 @@ pub struct SalesSelectionBookletListItemView {
 
 /// 选品册详情。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SelectionSourceSkuView {
+    /// 来源商品稳定身份，仅用于提交。
+    pub sku_id: String,
+    /// 当前可售商品名称。
+    pub name: String,
+    /// 用户可识别的 SKU 编号。
+    pub sku_no: String,
+}
+
+/// 选品册详情。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SalesSelectionBookletView {
+    /// 已授权册的来源商品回显；未返回的来源已不可售，客户端不得丢弃其身份。
+    #[serde(default)]
+    pub source_skus: Vec<SelectionSourceSkuView>,
     /// 固定来源类型内可编辑的原条件。
     pub pool_filter: Option<PoolFilterSnapshot>,
     /// 去重后的原勾选。

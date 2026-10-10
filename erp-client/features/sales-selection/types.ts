@@ -89,6 +89,7 @@ export type PublicReceiptView = {
 }
 
 export type BookletView = {
+    source_skus?: SourceSku[]
     access_password_set: boolean
     per_person_budget?: string | null
     voucher_count?: number | null
@@ -139,6 +140,8 @@ export type BookletView = {
     proposal_id?: string | null
     public_path?: string | null
 }
+
+export type SourceSku = { sku_id: string; name: string; sku_no: string }
 
 export type PublicChoiceView = {
     item_id: string
