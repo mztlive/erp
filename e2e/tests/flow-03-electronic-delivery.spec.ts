@@ -2,7 +2,7 @@
  * 流程: [flow-03] 虚拟商品电子交付
  * 文档: docs/erp-phase-1.md §7.3.3 + §7.4（供给分配）+ §6.2 电子交付记录
  * 账号: admin（目录补齐）→ xiaoshou（客户/合同/销售单/验收）
- *       → caigou（采购确认、供给分配、电子交付）→ caiwu（采购单审批）
+ *       → caigou（采购确认、供给分配、电子交付）→ caigoushenpi（采购单审批）
  *
  * 验收：采购生效生成电子交付任务；采购提交对象、实际时间、结果与图片凭证；
  *       销售登记客户验收。交付不走审批，不影响自有库存。
@@ -29,6 +29,7 @@ import {
     pickCalendarDay,
     readHeaderDocumentNumber,
     selectWorkspaceFamily,
+    expectSourcingCounts,
 } from '../helpers/ui'
 
 test.describe.configure({ mode: 'serial' })
@@ -484,15 +485,12 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
             await expect(page.getByRole('heading', { name: '供给分配' })).toBeVisible({
                 timeout: 20000,
             })
-            await expect(page.getByText(VIRTUAL_PRODUCT_NAME).first()).toBeVisible({ timeout: 20000 })
+            await expect(page.getByRole('region', { name: '供给商品列表' }).getByRole('button', { name: `调整 ${VIRTUAL_PRODUCT_NAME}`, exact: true })).toBeVisible({ timeout: 20000 })
             await expect(page.getByText('现有库存').filter({ visible: true })).toHaveCount(0)
             await expect(page.getByText('电子交付').filter({ visible: true }).first()).toBeVisible({
                 timeout: 20000,
             })
-            await expect(page.getByText('将创建采购单')).toBeVisible()
-            await expect(page.getByText('1 张')).toBeVisible()
-            await expect(page.getByText('将建立库存预留')).toBeVisible()
-            await expect(page.getByText('0 条')).toBeVisible()
+            await expectSourcingCounts(page, 1, 0)
             await page.getByTestId('purchase-create-preview').click()
             const preview = page.getByRole('dialog', { name: '预览供给分配' })
             await expect(preview).toBeVisible({ timeout: 20000 })
@@ -525,7 +523,7 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
     }
 
     {
-        const { context, page } = await openLoggedInWorkspace(browser, 'caiwu')
+        const { context, page } = await openLoggedInWorkspace(browser, 'caigoushenpi')
         try {
             await openWorkspaceTask(page, /采购单审批/, salesOrderNo, 'approval')
             await expect(
@@ -577,9 +575,8 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
             expect(purchaseNo).toMatch(/^PO-/)
 
             await openElectronicFulfillment(page, purchaseNo)
-            await openFulfillmentWorkspaceForm(page)
-            await expectProcurementPaymentReceipt(page, supplierPayment!)
-            const deliveryDialog = page.getByRole('dialog', { name: '处理履约' })
+            const deliveryDialog = await openFulfillmentWorkspaceForm(page)
+            await expectProcurementPaymentReceipt(page, supplierPayment!, purchaseNo)
             await expect(page.locator('[aria-label="电子交付表单"]')).toBeVisible({ timeout: 30000 })
             await expect(deliveryDialog.getByText(salesOrderNo).first()).toBeVisible({ timeout: 20000 })
             await expect(deliveryDialog.getByText(ELECTRONIC_SUPPLIER).first()).toBeVisible({

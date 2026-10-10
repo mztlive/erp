@@ -6,6 +6,7 @@ import {
     parsePeriodicTerm,
     periodicPaymentTerm,
     periodicSettlement,
+    RECONCILIATION_CYCLES,
 } from "@/lib/supplier-payment-terms"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -141,6 +142,29 @@ export function SupplierEditorCommercialSection({
                             {cycle
                                 ? `按最晚预计交付日所属自然周期结算，期末后 ${term?.days ?? "—"} 个自然日计划付款。`
                                 : "先款与现结按采购最终审批日；历史货到账期按最晚预计交付日计算。"}
+                        </p>
+                    </FieldShell>
+                    <FieldShell>
+                        <Label htmlFor="master-data-supplier-commercial-reconciliation-cycle-combobox">
+                            {masterDataCopy.fReconciliationCycle}
+                        </Label>
+                        <OptionCombobox
+                            id="master-data-supplier-commercial-reconciliation-cycle-combobox"
+                            value={values.reconciliationCycle || null}
+                            onValueChange={(value) =>
+                                setFieldValue(
+                                    "reconciliationCycle",
+                                    value ?? "",
+                                )
+                            }
+                            options={RECONCILIATION_CYCLES}
+                            allowClear={false}
+                            placeholder="请选择对账频率"
+                            disabled={!canEdit}
+                            className="w-full"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            对账频率与付款周期分别约定；每月对账可以按季或按年付款。
                         </p>
                     </FieldShell>
                     <FieldShell>

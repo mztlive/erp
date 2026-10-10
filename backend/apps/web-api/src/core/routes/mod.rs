@@ -40,6 +40,7 @@ mod legacy_import;
 mod party;
 mod payable;
 mod purchase_order;
+mod purchase_payment_request;
 mod receivable;
 mod returns;
 mod sales_order;

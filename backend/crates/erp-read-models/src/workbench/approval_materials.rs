@@ -24,6 +24,7 @@ use crate::sales_center::materials::{
 };
 use crate::{Error, Result};
 
+mod payment_request;
 mod related_sales;
 
 /// 在原提交事务内冻结显示与附件版本，历史快照不补取当前材料。
@@ -67,6 +68,14 @@ pub async fn freeze_approval_materials(
     if snapshot.document_type == DocumentType::SalesChangeOrder {
         materials.extend(sales_change_evidence(db, &mut snapshot, executor).await?);
     }
+    if snapshot.document_type == DocumentType::PurchasePaymentRequest {
+        let (sources, files) = payment_request::capture(db, &snapshot, executor).await?;
+        if let Some(display) = &mut snapshot.display {
+            display.source_sales = sources;
+            display.validate()?;
+        }
+        materials.extend(files);
+    }
     snapshot.with_material_files(unique_materials(materials)).map_err(Error::from)
 }
 
@@ -100,6 +109,7 @@ async fn direct_materials(
     if let Some(id) = evidence(db, snapshot.document_type, &snapshot.business_object_id, executor).await? {
         ids.insert(id.to_string());
     }
+    ids.extend(payment_request::direct_ids(db, snapshot, executor).await?);
     if ids.len() > 100 {
         return Err(Error::ValidationError("审批材料最多 100 个文件".into()));
     }

@@ -48,6 +48,8 @@ pub enum RuntimeInstanceStatusFilter {
     Running,
     /// 已通过。
     Approved,
+    /// 已最终驳回。
+    Rejected,
     /// 已取消。
     Cancelled,
     /// 受阻。
@@ -61,7 +63,7 @@ impl RuntimeInstanceStatusFilter {
     /// 无。
     ///
     /// # 返回
-    /// 返回 `RUNNING`、`APPROVED`、`CANCELLED` 或 `BLOCKED`。
+    /// 返回 `RUNNING`、`APPROVED`、`REJECTED`、`CANCELLED` 或 `BLOCKED`。
     ///
     /// # 错误
     /// 不返回错误。
@@ -69,6 +71,7 @@ impl RuntimeInstanceStatusFilter {
         match self {
             Self::Running => "RUNNING",
             Self::Approved => "APPROVED",
+            Self::Rejected => "REJECTED",
             Self::Cancelled => "CANCELLED",
             Self::Blocked => "BLOCKED",
         }

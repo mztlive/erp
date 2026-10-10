@@ -1,6 +1,6 @@
 "use client"
 
-import { REJECT_RESTART_COPY } from "../labels"
+import { rejectionPolicyCopy } from "../labels"
 import type { DefinitionDetailView } from "../types"
 
 /** 已发布及历史版本以节点顺序展示，不复用草稿的禁用表单或生成默认节点。 */
@@ -18,7 +18,8 @@ export function DefinitionReadView({
                 <div className="space-y-1.5">
                     <h2 className="text-base font-semibold">{detail.name}</h2>
                     <p className="text-sm text-muted-foreground">
-                        按以下顺序依次审批。{REJECT_RESTART_COPY}
+                        按以下顺序依次审批。
+                        {rejectionPolicyCopy(detail.document_type)}
                     </p>
                 </div>
                 <span className="text-xs text-muted-foreground">

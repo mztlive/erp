@@ -10,6 +10,7 @@
  * - 完整目标编辑后提交；驳回后修改同一变更单，重提形成新提交并重新经过仓储与财务
  */
 import { archiveContractViaUi } from "../helpers/contracts"
+import { authorizePurchasePaymentRequest } from "../helpers/payments"
 import path from "node:path"
 
 import { test, expect, type Page } from "../helpers/test"
@@ -327,7 +328,7 @@ test("[flow-09] 采购变更实改后驳回，修改原单重提并生效", asyn
                 }),
             ).toBeVisible(VISIBLE)
             await expect(
-                procurement.page.getByText("销售明细与供给方案"),
+                procurement.page.getByRole("region", { name: "供给商品列表" }),
             ).toBeVisible(VISIBLE)
             await procurement.page
                 .getByTestId("purchase-create-match-best")
@@ -337,7 +338,7 @@ test("[flow-09] 采购变更实改后驳回，修改原单重提并生效", asyn
                 /已重新分配供给|没有可匹配的供给方案/,
             )
             await expect(
-                procurement.page.getByText("销售明细与供给方案"),
+                procurement.page.getByRole("region", { name: "供给商品列表" }),
             ).toBeVisible(VISIBLE)
             const expandSourcing = procurement.page
                 .getByRole("button", { name: "调整方案" })
@@ -415,14 +416,14 @@ test("[flow-09] 采购变更实改后驳回，修改原单重提并生效", asyn
         }
     }
 
-    // 5. 财务审批采购单 → 采购单生效、形成应付；本流程不付款、不入库
+    // 5. 采购部门审批采购单 → 采购单生效、形成应付；本流程不付款、不入库
     {
-        const finance = await openLoggedInWorkspace(browser, "caiwu")
+        const finance = await openLoggedInWorkspace(browser, "caigoushenpi")
         try {
             await approveWorkspaceTask(
                 finance.page,
                 /采购单审批/,
-                "财务总监审批",
+                "采购部门审批",
                 purchaseNo,
             )
         } finally {
@@ -878,10 +879,11 @@ test("[flow-09] 采购变更实改后驳回，修改原单重提并生效", asyn
     {
         const cashier = await openLoggedInWorkspace(browser, "fukuan")
         try {
+            const paymentRequest = await authorizePurchasePaymentRequest(cashier.page, purchaseNo)
             await openWorkspaceTask(
                 cashier.page,
-                /供应商付款处理/,
-                purchaseNo,
+                /供应商付款处理|待付款申请/,
+                paymentRequest.request_no,
                 "finance",
             )
             const paymentTask = cashier.page.getByLabel("当前付款任务")
@@ -890,11 +892,9 @@ test("[flow-09] 采购变更实改后驳回，修改原单重提并生效", asyn
                 paymentTask.getByText(purchaseNo, { exact: true }).first(),
             ).toBeVisible(VISIBLE)
             await expect(
-                paymentTask.getByText(/^待付\s/).first(),
+                paymentTask.getByText(/^本申请未付批准金额/).first(),
             ).toContainText(EFFECTIVE_GROSS_DISPLAY, VISIBLE)
-            await paymentTask
-                .getByRole("link", { name: "打开采购单", exact: true })
-                .click()
+            await cashier.page.goto(`/procurement/orders/${purchaseOrderId}`)
             await expect(cashier.page).toHaveURL(
                 new RegExp(`/procurement/orders/${purchaseOrderId}(?:\\?|$)`),
                 VISIBLE,

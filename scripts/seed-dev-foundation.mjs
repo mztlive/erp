@@ -8,7 +8,7 @@
  * 销售提交实物单前必须能解析默认采购调度人。付款与销项开票任务必须先有启用的财务责任规则，否则生产任务会失败关闭。
  * 默认负责人读自 dev-foundation.json。已有启用默认规则但负责人不同时，本脚本改回规格负责人。
  * 演示主数据接口只在缺少启用规则时创建，不改已有负责人。
- * 财务三人分责：caiwu 为财务总监，只审批采购单、资金单和库存调整，不得提交回款、退款或冲正；
+ * 财务三人分责：caiwu 为财务总监，只审批付款申请、资金单和库存调整，不得提交回款、退款或冲正；
  * fukuan 为出纳，执行付款任务并提交客户回款/退款/冲正；kaipiao 为默认开票负责人。
  * 供应商付款不得发布或启动独立审批。
  * PROCESS_REQUIRED 审批定义由 publish-approval-definitions.mjs 单独发布。
@@ -497,7 +497,7 @@ async function main() {
   console.log("销售负责人: xiaoshou");
   console.log("库存调整经办: cangchu（caiwu 只审批）");
   console.log(`默认采购调度人: ${seeded[FOUNDATION.procurement_responsibility_owner].account}`);
-  console.log("采购单审批人（财务总监）: caiwu");
+  console.log("采购单审批人（采购部门）: caigoushenpi；付款申请审核人（财务总监）: caiwu");
   for (const rule of financeRules()) {
     const title =
       rule.operation === "SUPPLIER_PAYMENT" ? "默认付款任务负责人（出纳）" : rule.label;

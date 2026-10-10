@@ -1,5 +1,7 @@
 //! `supplier_payment` 供应商付款事实（数据模型 §6.9、无独立审批的付款执行合同）。
 
+use std::collections::HashSet;
+
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use erp_core::common::state::{DocumentState, ensure_transition};
@@ -9,6 +11,8 @@ use erp_core::money::Amount;
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
+
+use super::PaymentRequestAllocation;
 
 /// 付款单号最大长度。
 const PAYMENT_NO_MAX_LEN: usize = 64;
@@ -158,6 +162,16 @@ pub struct SupplierPayment {
     pub posted_at: Option<Instant>,
     /// 付款单状态。
     pub status: SupplierPaymentStatus,
+    /// 批准本次付款的采购付款申请；普通采购付款必须绑定。
+    #[serde(deserialize_with = "present_identity")]
+    pub payment_request_id: Option<String>,
+    /// 本次实际付款使用的我方主体及名称快照。
+    #[serde(deserialize_with = "present_identity")]
+    pub payer_party_id: Option<String>,
+    #[serde(deserialize_with = "present_identity")]
+    pub payer_party_name: Option<String>,
+    /// 本次逐申请采购应付付款分配，保留冲正关系及原批准范围。
+    pub request_allocations: Vec<PaymentRequestAllocation>,
     /// 付款单号。
     pub payment_no: String,
     /// 收款供应商。
@@ -169,6 +183,8 @@ pub struct SupplierPayment {
     pub paid_at: Instant,
     /// 含税付款金额。
     pub amount: Amount,
+    /// 已正式冲正的付款金额；部分冲正保留未冲正余额的付款身份。
+    pub reversed_amount: Amount,
     /// 银行流水号。
     pub bank_reference: Option<String>,
     /// 银行回单图片资产；异常旧数据可能为空，新付款必须提供。
@@ -214,11 +230,16 @@ impl SupplierPayment {
             posted_by: None,
             posted_at: None,
             status: SupplierPaymentStatus::Draft,
+            payment_request_id: None,
+            payer_party_id: None,
+            payer_party_name: None,
+            request_allocations: Vec::new(),
             payment_no,
             supplier_id: data.supplier_id,
             payee_bank_account_id: Some(data.payee_bank_account_id),
             paid_at: data.paid_at,
             amount: data.amount,
+            reversed_amount: Amount::zero(),
             bank_reference,
             bank_receipt_asset_id: Some(data.bank_receipt_asset_id),
         })
@@ -257,6 +278,86 @@ impl SupplierPayment {
             return Err(Error::from("供应商付款须通过付款执行入口过账"));
         }
         self.status = to;
+        if to == SupplierPaymentStatus::Reversed {
+            self.reversed_amount = self.amount;
+        }
+        Ok(())
+    }
+
+    /// 返回原付款扣除正式冲正后的有效金额。
+    ///
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 返回仍有效的实际付款金额，原付款金额不变。
+    /// # 错误
+    /// 不返回错误，冲正规则保持累计金额不超额。
+    pub fn effective_amount(&self) -> Amount {
+        self.amount.checked_sub(self.reversed_amount)
+    }
+
+    /// 证明付款保留完整的原申请、我方主体和逐采购付款依据。
+    ///
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 返回非空原付款申请身份；分配合计始终按原实际付款金额验证。
+    /// # 错误
+    /// 身份或主体缺失、分配为空、重复、非正、溢出或金额不一致时拒绝。
+    pub fn require_payment_request_basis(&self) -> Result<&str> {
+        let request_id = self
+            .payment_request_id
+            .as_deref()
+            .filter(|id| !id.trim().is_empty())
+            .ok_or_else(|| Error::from("供应商付款缺少原付款申请身份"))?;
+        if self.payer_party_id.as_deref().is_none_or(|id| id.trim().is_empty())
+            || self.payer_party_name.as_deref().is_none_or(|name| name.trim().is_empty())
+        {
+            return Err(Error::from("供应商付款缺少我方付款主体审核依据"));
+        }
+        if self.request_allocations.is_empty() {
+            return Err(Error::from("供应商付款缺少逐申请采购付款分配"));
+        }
+        let mut accounts = HashSet::new();
+        let mut total = Amount::zero().to_decimal();
+        for allocation in &self.request_allocations {
+            if allocation.payable_account_id.trim().is_empty()
+                || !accounts.insert(&allocation.payable_account_id)
+            {
+                return Err(Error::from("逐申请采购付款分配身份为空或重复"));
+            }
+            ensure_positive_amount(&allocation.amount)?;
+            total = total
+                .checked_add(allocation.amount.to_decimal())
+                .ok_or_else(|| Error::from("逐申请采购付款分配合计溢出"))?;
+        }
+        if total != self.amount.to_decimal() {
+            return Err(Error::from("逐申请采购付款分配合计必须等于实际付款金额"));
+        }
+        Ok(request_id)
+    }
+
+    /// 记录一笔正式冲正，部分冲正后仍允许处理剩余有效付款。
+    ///
+    /// # 参数
+    /// * `amount` - 本次正式冲正金额。
+    /// # 返回
+    /// 成功时增加累计冲正；仅在原付款全部失效时变为已冲正。
+    /// # 错误
+    /// 原付款未过账、非正金额或超过有效付款余额时返回错误且不修改实体。
+    pub fn record_reversal(&mut self, amount: Amount) -> Result<()> {
+        if self.status != SupplierPaymentStatus::Posted {
+            return Err(Error::from("只有仍有有效金额的已过账付款可以冲正"));
+        }
+        self.require_payment_request_basis()?;
+        ensure_positive_amount(&amount)?;
+        if amount > self.effective_amount() {
+            return Err(Error::from("本次冲正金额超过原付款剩余有效金额"));
+        }
+        self.reversed_amount = self.reversed_amount.checked_add(amount);
+        if self.effective_amount() == Amount::zero() {
+            self.status = SupplierPaymentStatus::Reversed;
+        }
         Ok(())
     }
 
@@ -281,6 +382,7 @@ impl SupplierPayment {
         if self.status != SupplierPaymentStatus::Draft {
             return Err(Error::from("只有草稿状态的供应商付款单可以由付款任务过账"));
         }
+        self.require_payment_request_basis()?;
         ensure_execution_allocations(&self.amount, allocations)?;
         let actor_id = normalize_required_text(
             actor_id.to_string(),
@@ -311,6 +413,14 @@ impl SupplierPayment {
     pub fn is_posted(&self) -> bool {
         self.status == SupplierPaymentStatus::Posted
     }
+}
+
+/// 接受草稿显式空身份，但禁止缺字段旧文档隐式补为 None。
+fn present_identity<'de, D>(deserializer: D) -> std::result::Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<String>::deserialize(deserializer)
 }
 
 /// 校验金额为正数。
@@ -360,6 +470,16 @@ mod tests {
         }
     }
 
+    fn bound_payment() -> SupplierPayment {
+        let mut payment = SupplierPayment::new(SupplierPaymentId::new("sp-1"), data(), "creator").unwrap();
+        payment.payment_request_id = Some("request-1".into());
+        payment.payer_party_id = Some("company-1".into());
+        payment.payer_party_name = Some("我方公司".into());
+        payment.request_allocations =
+            vec![PaymentRequestAllocation { payable_account_id: "account-1".into(), amount: payment.amount }];
+        payment
+    }
+
     #[test]
     fn new_trims_text_fields_and_starts_as_draft() {
         let payment = SupplierPayment::new(SupplierPaymentId::new("sp-1"), data(), " creator ").unwrap();
@@ -379,6 +499,84 @@ mod tests {
     fn new_rejects_missing_or_overlong_creator() {
         assert!(SupplierPayment::new(SupplierPaymentId::new("sp-1"), data(), "   ").is_err());
         assert!(SupplierPayment::new(SupplierPaymentId::new("sp-1"), data(), "x".repeat(129)).is_err());
+    }
+
+    #[test]
+    fn missing_request_identity_fields_are_not_implicitly_added_for_old_documents() {
+        let draft = SupplierPayment::new(SupplierPaymentId::new("sp-1"), data(), "creator").unwrap();
+        let serialized = serde_json::to_value(&draft).unwrap();
+        assert_eq!(serde_json::from_value::<SupplierPayment>(serialized.clone()).unwrap(), draft);
+        for field in ["payment_request_id", "payer_party_id", "payer_party_name"] {
+            let mut incomplete = serialized.clone();
+            incomplete.as_object_mut().unwrap().remove(field);
+            let error = serde_json::from_value::<SupplierPayment>(incomplete).unwrap_err();
+            assert!(error.to_string().contains(field));
+        }
+    }
+
+    #[test]
+    fn unbound_or_tampered_basis_cannot_post_or_reverse_money() {
+        let allocations = [PendingPaymentAllocation::new(
+            PayableEntryId::new("pe-1"),
+            Amount::from_str("1000.00").unwrap(),
+        )
+        .unwrap()];
+        let unbound = SupplierPayment::new(SupplierPaymentId::new("sp-1"), data(), "creator").unwrap();
+        let mut cases = vec![unbound];
+        for edit in [
+            |payment: &mut SupplierPayment| payment.payment_request_id = None,
+            |payment: &mut SupplierPayment| payment.payment_request_id = Some(" ".into()),
+            |payment: &mut SupplierPayment| payment.payer_party_id = None,
+            |payment: &mut SupplierPayment| payment.payer_party_id = Some(" ".into()),
+            |payment: &mut SupplierPayment| payment.payer_party_name = None,
+            |payment: &mut SupplierPayment| payment.payer_party_name = Some(" ".into()),
+            |payment: &mut SupplierPayment| payment.request_allocations.clear(),
+            |payment: &mut SupplierPayment| payment.request_allocations[0].payable_account_id.clear(),
+            |payment: &mut SupplierPayment| payment.request_allocations[0].amount = Amount::zero(),
+            |payment: &mut SupplierPayment| {
+                payment.request_allocations[0].amount = Amount::from_str("-1.00").unwrap();
+            },
+            |payment: &mut SupplierPayment| {
+                payment.request_allocations[0].amount = Amount::from_str("999.99").unwrap();
+            },
+            |payment: &mut SupplierPayment| {
+                payment.request_allocations[0].amount = Amount::from_str("500.00").unwrap();
+                payment.request_allocations.push(payment.request_allocations[0].clone());
+            },
+        ] {
+            let mut payment = bound_payment();
+            edit(&mut payment);
+            cases.push(payment);
+        }
+        for mut payment in cases {
+            let draft = payment.clone();
+            assert!(payment.require_payment_request_basis().is_err());
+            assert!(
+                payment.post_from_execution(&allocations, "executor", Instant::from_unix_secs(2)).is_err()
+            );
+            assert_eq!(payment, draft);
+            payment.status = SupplierPaymentStatus::Posted;
+            let posted = payment.clone();
+            assert!(payment.record_reversal(Amount::from_str("1.00").unwrap()).is_err());
+            assert_eq!(payment, posted);
+        }
+    }
+
+    #[test]
+    fn partial_reversal_preserves_original_payment_request_basis() {
+        let mut payment = bound_payment();
+        let original_allocations = payment.request_allocations.clone();
+        let allocations = [PendingPaymentAllocation::new(
+            PayableEntryId::new("pe-1"),
+            Amount::from_str("1000.00").unwrap(),
+        )
+        .unwrap()];
+        payment.post_from_execution(&allocations, "executor", Instant::from_unix_secs(2)).unwrap();
+        payment.record_reversal(Amount::from_str("250.00").unwrap()).unwrap();
+        assert_eq!(payment.require_payment_request_basis().unwrap(), "request-1");
+        assert_eq!(payment.request_allocations, original_allocations);
+        assert_eq!(payment.effective_amount(), Amount::from_str("750.00").unwrap());
+        assert_eq!(payment.status, SupplierPaymentStatus::Posted);
     }
 
     #[test]
@@ -415,7 +613,7 @@ mod tests {
 
     #[test]
     fn payment_is_posted_once_from_execution() {
-        let mut payment = SupplierPayment::new(SupplierPaymentId::new("sp-1"), data(), "creator").unwrap();
+        let mut payment = bound_payment();
         payment
             .post_from_execution(
                 &[PendingPaymentAllocation::new(
@@ -460,13 +658,13 @@ mod tests {
         assert!(tr(S::Reversed, S::Posted).is_err());
         assert!(tr(S::Reversed, S::Draft).is_err());
 
-        let mut payment = SupplierPayment::new(SupplierPaymentId::new("sp-1"), data(), "creator").unwrap();
+        let mut payment = bound_payment();
         assert!(payment.transition(S::Reversed).is_err(), "实体迁移拒绝跨级");
     }
 
     #[test]
     fn direct_post_requires_allocations_and_cannot_repeat() {
-        let mut payment = SupplierPayment::new(SupplierPaymentId::new("sp-1"), data(), "creator").unwrap();
+        let mut payment = bound_payment();
         let allocations = [PendingPaymentAllocation::new(
             PayableEntryId::new("pe-1"),
             Amount::from_str("1000.00").unwrap(),
@@ -479,7 +677,7 @@ mod tests {
 
     #[test]
     fn execution_identity_is_distinct_and_cannot_be_overwritten_by_retry_or_reversal() {
-        let mut payment = SupplierPayment::new(SupplierPaymentId::new("sp-1"), data(), "creator").unwrap();
+        let mut payment = bound_payment();
         let allocations = [PendingPaymentAllocation::new(
             PayableEntryId::new("pe-1"),
             Amount::from_str("1000.00").unwrap(),
@@ -507,8 +705,7 @@ mod tests {
         )
         .unwrap()];
         for executor in ["   ".to_string(), "x".repeat(129)] {
-            let mut payment =
-                SupplierPayment::new(SupplierPaymentId::new("sp-1"), data(), "creator").unwrap();
+            let mut payment = bound_payment();
             let before = payment.clone();
             assert!(
                 payment.post_from_execution(&allocations, &executor, Instant::from_unix_secs(2)).is_err()
@@ -518,8 +715,7 @@ mod tests {
         for (posted_by, posted_at) in
             [(Some("old".to_string()), None), (None, Some(Instant::from_unix_secs(1)))]
         {
-            let mut payment =
-                SupplierPayment::new(SupplierPaymentId::new("sp-1"), data(), "creator").unwrap();
+            let mut payment = bound_payment();
             payment.posted_by = posted_by;
             payment.posted_at = posted_at;
             let before = payment.clone();
@@ -532,7 +728,7 @@ mod tests {
 
     #[test]
     fn direct_post_rejects_empty_under_or_over_allocated_lines() {
-        let mut payment = SupplierPayment::new(SupplierPaymentId::new("sp-1"), data(), "creator").unwrap();
+        let mut payment = bound_payment();
         assert!(payment.post_from_execution(&[], "executor", Instant::from_unix_secs(2)).is_err());
         assert!(
             payment

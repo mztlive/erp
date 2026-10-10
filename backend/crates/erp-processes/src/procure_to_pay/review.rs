@@ -16,8 +16,8 @@ use erp_fulfillment::entity::fulfillment::{
 use erp_fulfillment::repository::FulfillmentExt;
 use erp_procurement::dto::purchase_order::PurchaseReviewResult;
 use erp_procurement::entity::purchase_order::{
-    FulfillmentResponsibility, PurchaseLineType, PurchaseOrder, PurchaseOrderSubmission,
-    PurchaseOrderSubmissionLine,
+    FulfillmentResponsibility, PurchaseLineType, PurchaseOrder, PurchaseOrderRevision,
+    PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
 };
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_workflow::entity::work_item::WorkItemStatus;
@@ -26,6 +26,7 @@ use persistence_core::{Executor, NoTransaction};
 
 use super::PurchaseOrderProcess;
 use super::allocation_maintenance::prepare_current_sales_allocations;
+use super::payment_subject::revalidate_payment_subject;
 use crate::{Error, Result};
 
 impl PurchaseOrderProcess {
@@ -79,21 +80,11 @@ impl PurchaseOrderProcess {
             .domain()
             .build_effective_revision(&order, &submission, &submission_lines, revision_no)
             .await?;
-        let payable = self.build_payable(&order, &submission, &submission_lines, actor.id()).await?;
+        let payable =
+            self.build_payable(&order, &submission, &submission_lines, &revision.base.id, actor.id()).await?;
         let cost_entries =
             self.build_confirmed_cost_entries(&submission, &submission_lines, revision_no).await?;
-        let result = PurchaseReviewResult::new(
-            String::new(),
-            WorkItemStatus::Completed.as_str().to_string(),
-            "0".to_string(),
-            order.approval_subject_version.to_string(),
-            "APPROVED".to_string(),
-            format!("PO-V{revision_no}"),
-        )
-        .with_revision_id(revision.base.id.clone())
-        .with_revision_no(revision_no)
-        .with_payable_entry_id(payable.1.base.id.clone())
-        .with_lock_version(order.base.version);
+        let result = formalized_order_result(&order, &revision, &payable.1.base.id);
         Ok(PreparedFormalizedOrder {
             persist: FormalizedOrderPersist {
                 order,
@@ -114,6 +105,7 @@ impl PurchaseOrderProcess {
         order: &PurchaseOrder,
         submission: &PurchaseOrderSubmission,
         submission_lines: &[PurchaseOrderSubmissionLine],
+        purchase_revision_id: &str,
         actor_id: &str,
     ) -> Result<(erp_finance::entity::payable::PayableAccount, erp_finance::entity::payable::PayableEntry)>
     {
@@ -134,6 +126,9 @@ impl PurchaseOrderProcess {
             erp_finance::service::payable::purchase_initial::InitialPurchasePayable {
                 order_id: &order.base.id,
                 submission_id: &submission.base.id,
+                purchase_revision_id,
+                settlement_party_id: submission.payment_subject.settlement_party_id.as_ref(),
+                settlement_party_name: &submission.payment_subject.settlement_party_name,
                 supplier_id: order.supplier_id.clone(),
                 gross_amount: submission.gross_amount,
                 due_date,
@@ -167,6 +162,27 @@ impl PurchaseOrderProcess {
             revision_no,
         )?)
     }
+}
+
+/// 从冻结版本与应付分录投影本次正式生效结果。
+fn formalized_order_result(
+    order: &PurchaseOrder,
+    revision: &PurchaseOrderRevision,
+    payable_entry_id: &str,
+) -> PurchaseReviewResult {
+    let revision_no = revision.revision.revision_no;
+    PurchaseReviewResult::new(
+        String::new(),
+        WorkItemStatus::Completed.as_str().to_string(),
+        "0".to_string(),
+        order.approval_subject_version.to_string(),
+        "APPROVED".to_string(),
+        format!("PO-V{revision_no}"),
+    )
+    .with_revision_id(revision.base.id.clone())
+    .with_revision_no(revision_no)
+    .with_payable_entry_id(payable_entry_id.to_string())
+    .with_lock_version(order.base.version)
 }
 
 /// 采购单正式生效写入所需的单据、版本、应付与成本。
@@ -487,6 +503,7 @@ impl FormalizedOrderPersist {
             cost_entries,
         } = persist;
         let actor_id = actor.id().to_string();
+        revalidate_payment_subject(db, &submission.payment_subject, session).await?;
         erp_procurement::service::purchase_order::formalization::ensure_review_sources(
             &submission,
             &submission_lines,
@@ -517,7 +534,7 @@ impl FormalizedOrderPersist {
 }
 
 impl FormalizedPurchaseEffects {
-    /// 本次原始应付账户与分录；须先写入后创建付款工作项。
+    /// 本次原始应付账户与分录；采购生效仅形成应付，不授予付款执行资格。
     ///
     /// # 参数
     /// 无。

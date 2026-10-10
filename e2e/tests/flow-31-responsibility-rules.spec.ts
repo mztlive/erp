@@ -102,6 +102,7 @@ async function saveRule(
     method: string,
     endpoint: string,
     buttonId: string,
+    expectedBody?: Record<string, unknown>,
 ): Promise<Rule> {
     const [response] = await Promise.all([
         page.waitForResponse(
@@ -111,6 +112,9 @@ async function saveRule(
         ),
         page.locator(`#${buttonId}`).click(),
     ])
+    if (expectedBody) {
+        expect(response.request().postDataJSON()).toMatchObject(expectedBody)
+    }
     const rule = await uiResult<Rule>(response)
     await expect(page.locator('[data-slot="dialog-content"]')).toBeHidden()
     await dismissToasts(page)
@@ -167,8 +171,10 @@ test("[flow-31] 财务责任规则页面维护、执行资格和服务端版本�
     await chooseOption(
         page,
         page.locator("#finance-responsibilities-rule-owner"),
-        /fukuan/,
+        /·\s*fukuan$/,
+        "fukuan",
     )
+    await expect(page.locator("#finance-responsibilities-rule-owner")).toHaveValue(/·\s*fukuan$/)
     const created = await saveRule(
         page,
         "POST",
@@ -215,12 +221,17 @@ test("[flow-31] 财务责任规则页面维护、执行资格和服务端版本�
         .getByRole("row")
         .filter({ hasText: supplier!.supplier_no })
         .click()
-    await page.locator("#finance-responsibilities-rule-enabled").click()
+    const financeEnabled = page.locator("#finance-responsibilities-rule-enabled")
+    await expect(page.getByRole("dialog", { name: "编辑财务责任规则", exact: true })).toBeVisible()
+    await expect(financeEnabled).toHaveAttribute("aria-checked", "true")
+    await financeEnabled.press("Space")
+    await expect(financeEnabled).toHaveAttribute("aria-checked", "false")
     const disabled = await saveRule(
         page,
         "PUT",
         `/admin/finance-responsibility-rules/${created.id}`,
         "finance-responsibilities-rule-submit",
+        { status: "disabled", version: created.version },
     )
     expect(disabled).toMatchObject({
         id: created.id,
@@ -348,8 +359,10 @@ test("[flow-31] 精确采购责任优先、停用回退、逐行失败和版本�
     await chooseOption(
         page,
         page.locator("#procurement-responsibility-rules-dialog-owner"),
-        /caigou/,
+        /·\s*caigou$/,
+        "caigou",
     )
+    await expect(page.locator("#procurement-responsibility-rules-dialog-owner")).toHaveValue(/·\s*caigou$/)
     const created = await saveRule(
         page,
         "POST",
@@ -395,9 +408,11 @@ test("[flow-31] 精确采购责任优先、停用回退、逐行失败和版本�
     )
 
     await page.getByRole("row").filter({ hasText: sku!.sku_no }).click()
-    await page
-        .locator("#procurement-responsibility-rules-dialog-enabled")
-        .click()
+    const procurementEnabled = page.locator("#procurement-responsibility-rules-dialog-enabled")
+    await expect(page.getByRole("dialog", { name: "编辑采购责任规则", exact: true })).toBeVisible()
+    await expect(procurementEnabled).toHaveAttribute("aria-checked", "true")
+    await procurementEnabled.press("Space")
+    await expect(procurementEnabled).toHaveAttribute("aria-checked", "false")
     const disabled = await saveRule(
         page,
         "PUT",

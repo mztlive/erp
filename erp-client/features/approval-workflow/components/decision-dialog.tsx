@@ -40,6 +40,7 @@ export function DecisionDialog({
     workItemId,
     expectedTaskVersion,
     defaultDecision,
+    documentType,
     allowedActions,
     context,
     onApplied,
@@ -50,6 +51,7 @@ export function DecisionDialog({
     workItemId: string
     expectedTaskVersion: string
     defaultDecision: ApprovalDecision
+    documentType?: string
     allowedActions: readonly string[]
     context?: Readonly<{
         documentLabel?: string
@@ -68,6 +70,10 @@ export function DecisionDialog({
     const appliedViewRef = React.useRef<ApprovalCommandView | null>(null)
     const canApprove = allowedActions.includes("APPROVE")
     const canReject = allowedActions.includes("REJECT")
+    const closesPaymentRequest = documentType === "purchase_payment_request"
+    const rejectDescription = closesPaymentRequest
+        ? "驳回后结束本次申请并释放未付金额，采购重新提交后重新审核。"
+        : "驳回后，重新提交将从首节点审批。"
 
     const form = useAppForm({
         defaultValues: {
@@ -138,7 +144,7 @@ export function DecisionDialog({
                     </DialogTitle>
                     <DialogDescription>
                         {defaultDecision === "REJECT"
-                            ? "驳回后，重新提交将从首节点审批。"
+                            ? rejectDescription
                             : "请核对本次审批结果。"}
                     </DialogDescription>
                 </DialogHeader>
@@ -169,7 +175,9 @@ export function DecisionDialog({
                             <dd className="min-w-0 break-words">
                                 {context.impactSummary?.trim() ||
                                     (defaultDecision === "REJECT"
-                                        ? "驳回后从首节点进入下一轮审批。"
+                                        ? closesPaymentRequest
+                                            ? rejectDescription
+                                            : "驳回后从首节点进入下一轮审批。"
                                         : "通过后进入下一审批节点；如无后续节点，则完成本轮审批。")}
                             </dd>
                         </dl>

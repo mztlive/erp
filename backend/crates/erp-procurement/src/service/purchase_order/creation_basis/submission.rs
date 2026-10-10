@@ -5,7 +5,8 @@ use id_generator::next_id;
 use persistence_core::Executor;
 
 use crate::entity::purchase_order::{
-    BasisScope, PurchaseOrderSubmission, PurchaseOrderSubmissionData, SupplierSnapshot,
+    BasisScope, PaymentSubjectSnapshot, PurchaseOrderSubmission, PurchaseOrderSubmissionData,
+    SupplierSnapshot,
 };
 use crate::ports::creation_basis::CreationBasisSupplierPort;
 use crate::{Error, Result};
@@ -32,6 +33,7 @@ pub async fn build_draft_submission(
     order_id: &PurchaseOrderId,
     scope: &BasisScope,
     supplier_name: &str,
+    payment_subject: PaymentSubjectSnapshot,
     totals: (Amount, Amount, Amount),
     executor: &mut dyn Executor,
 ) -> Result<PurchaseOrderSubmission> {
@@ -54,6 +56,7 @@ pub async fn build_draft_submission(
             fulfillment_responsibility: scope.fulfillment_responsibility,
             supplier_revision_id: revision_id,
             supplier_snapshot: SupplierSnapshot::new(supplier_name.to_string())?,
+            payment_subject,
             payment_term_snapshot: crate::entity::purchase_order::PaymentTermSnapshot::new(
                 payment_term.canonical_code,
                 payment_term.prepay_gate,
@@ -161,6 +164,13 @@ mod tests {
             &PurchaseOrderId::new("po-1"),
             &scope(code),
             "供应商名称",
+            PaymentSubjectSnapshot::new(
+                "party-1".to_string().into(),
+                "我方公司".into(),
+                "so-1".to_string().into(),
+                "sales-rev-1".to_string().into(),
+            )
+            .unwrap(),
             (zero, zero, zero),
             &mut executor,
         )

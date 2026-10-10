@@ -481,9 +481,9 @@ throw new Error('E2E replica election timeout');"""
         self.summary["managed_mongo"]["cleanup"] = "removed"
         self.mongo_data_owned = False
 
-    async def reset(self, config: Path, db_name: str, env: dict[str, str], report_dir: Path) -> None:
+    async def reset(self, config: Path, db_name: str, env: dict[str, str], report_dir: Path, *, preserve_definitions: bool = True) -> None:
         command = ["bash", str(BACKEND / "scripts/reset-dev-business-data.sh"), "--config", str(config)]
-        reset_env = {**env, "ERP_RESET_ONLY": "1", "ERP_RESET_E2E": "1", "ERP_RESET_INCLUDE_CATALOG": "0"}
+        reset_env = {**env, "ERP_RESET_ONLY": "1", "ERP_RESET_E2E": "1" if preserve_definitions else "0", "ERP_RESET_INCLUDE_CATALOG": "0"}
         preview = report_dir / "reset-preview.log"
         preview_output = []
         await self.command(command, preview, reset_env, capture=preview_output)
@@ -616,7 +616,9 @@ print('Dropped E2E database: ' + name);
                 "--nsInclude", f"{self.source_db}.*", "--nsFrom", f"{self.source_db}.*", "--nsTo", f"{db_name}.*", "--stopOnError", "--noIndexRestore",
             ], report_dir / "restore.log", timeout=600)
             if self.env.get("E2E_RESET", "1") != "0":
-                await self.reset(config, db_name, env, report_dir)
+                # The private clone starts with current seed definitions; source
+                # development approval chains may belong to an earlier contract.
+                await self.reset(config, db_name, env, report_dir, preserve_definitions=False)
             result["durations_seconds"]["database_prepare"] = round(time.monotonic() - phase, 3)
             phase = time.monotonic()
             seed_enabled = self.env.get("E2E_SEED", "1") != "0"

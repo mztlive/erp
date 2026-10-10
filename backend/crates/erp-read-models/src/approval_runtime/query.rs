@@ -45,8 +45,52 @@ pub(crate) async fn load_document_runtime(
     let Some(instance) = db.bpm_workflow().find_latest_by_subject(&subject, executor).await? else {
         return Ok(None);
     };
+    ensure_instance_binding(&instance, kind, id, binding, None)?;
+    load_runtime_facts(db, instance, executor).await.map(Some)
+}
+
+/// 按单据保存的精确实例身份读取，重提实例不得按创建时间推断。
+///
+/// # 参数
+/// * `db` / `kind` / `id` - 已授权单据的数据库、类型与身份。
+/// * `binding` / `instance_id` / `subject_version` - 单据冻结定义、本次实例与提交版本。
+/// * `executor` - 调用方执行器。
+/// # 返回
+/// 返回该实例的真实运行摘要与有界历史。
+/// # 错误
+/// 实例缺失、身份、主题或冻结定义不一致时拒绝，运行事实不一致时拒绝。
+pub(crate) async fn load_document_runtime_for_instance(
+    db: &Database,
+    kind: DocumentType,
+    id: &str,
+    binding: Option<&ApprovalDefinitionBinding>,
+    instance_id: &str,
+    subject_version: u32,
+    executor: &mut dyn Executor,
+) -> Result<DocumentRuntime> {
+    let instance = db
+        .bpm_workflow()
+        .find_instance_by_id(&ApprovalProcessInstanceId::new(instance_id), executor)
+        .await?
+        .filter(|instance| instance.base.id == instance_id)
+        .ok_or_else(|| Error::ConflictError("单据冻结的审批实例不存在".into()))?;
+    ensure_instance_binding(&instance, kind, id, binding, Some((instance_id, subject_version)))?;
+    load_runtime_facts(db, instance, executor).await
+}
+
+fn ensure_instance_binding(
+    instance: &ApprovalProcessInstance,
+    kind: DocumentType,
+    id: &str,
+    binding: Option<&ApprovalDefinitionBinding>,
+    reference: Option<(&str, u32)>,
+) -> Result<()> {
+    let subject = erp_workflow::entity::approval_integration::subject_ref_for(kind, id)
+        .map_err(|error| Error::ValidationError(error.to_string()))?;
     if instance.subject != subject
         || instance.process_kind != process_kind_of(kind)
+        || reference
+            .is_some_and(|(id, version)| instance.base.id != id || instance.subject_version != version)
         || binding.is_none_or(|binding| {
             instance.process_definition_id != binding.approval_process_definition_id
                 || instance.definition_version != binding.approval_definition_version
@@ -54,7 +98,7 @@ pub(crate) async fn load_document_runtime(
     {
         return Err(Error::ConflictError("单据审批实例与冻结绑定不一致".into()));
     }
-    load_runtime_facts(db, instance, executor).await.map(Some)
+    Ok(())
 }
 
 /// 当前执行链、任务数和最新驳回均来自持久化事实。
@@ -97,7 +141,9 @@ fn ensure_current_execution(
         (None, None)
             if matches!(
                 instance.status,
-                ApprovalProcessInstanceStatus::Approved | ApprovalProcessInstanceStatus::Cancelled
+                ApprovalProcessInstanceStatus::Approved
+                    | ApprovalProcessInstanceStatus::Rejected
+                    | ApprovalProcessInstanceStatus::Cancelled
             ) =>
         {
             Ok(())
@@ -259,6 +305,51 @@ mod tests {
         (instance, current, task)
     }
 
+    /// 同秒重提以保存的实例和提交版本为准，旧实例和其他绑定不得替代。
+    #[test]
+    fn exact_instance_reference_rejects_same_time_previous_submission_and_foreign_binding() {
+        let (mut current, _, _) = running();
+        let binding = ApprovalDefinitionBinding::new(
+            current.process_definition_id.clone(),
+            current.definition_version,
+            Instant::from_unix_secs(10),
+        )
+        .unwrap();
+        let mut previous = current.clone();
+        previous.base.id = "zz-previous".into();
+        previous.subject_version = 2;
+        current.base.id = "aa-current".into();
+        assert_eq!(previous.started_at, current.started_at);
+        assert!(previous.base.id > current.base.id);
+        let check = |instance: &ApprovalProcessInstance, binding: Option<&ApprovalDefinitionBinding>| {
+            ensure_instance_binding(
+                instance,
+                DocumentType::SalesChangeOrder,
+                "change",
+                binding,
+                Some(("aa-current", 3)),
+            )
+        };
+        check(&current, Some(&binding)).unwrap();
+        assert!(check(&previous, Some(&binding)).is_err());
+        assert!(check(&current, None).is_err());
+        let mut invalid = current.clone();
+        invalid.subject_version = 2;
+        assert!(check(&invalid, Some(&binding)).is_err());
+        invalid = current.clone();
+        invalid.subject = SubjectRef::new("sales_change_order", "other").unwrap();
+        assert!(check(&invalid, Some(&binding)).is_err());
+        invalid = current.clone();
+        invalid.process_kind = ProcessKind::SalesOrder;
+        assert!(check(&invalid, Some(&binding)).is_err());
+        invalid = current.clone();
+        invalid.definition_version += 1;
+        assert!(check(&invalid, Some(&binding)).is_err());
+        invalid = current;
+        invalid.process_definition_id = ApprovalProcessDefinitionId::new("other");
+        assert!(check(&invalid, Some(&binding)).is_err());
+    }
+
     /// 真实实例、执行和任务大版本均原样传输，驳回不依赖首屏八条历史。
     #[test]
     fn runtime_projection_preserves_authoritative_versions_and_rejection() {
@@ -329,6 +420,25 @@ mod tests {
             assert!(ensure_runtime_tasks(&instance, Some(&current), &[invalid]).is_err());
         }
         assert!(ensure_runtime_tasks(&instance, Some(&current), &[task.clone(), task]).is_err());
+    }
+
+    /// 审批批准、驳回和撤回均不再持有当前执行令牌，保留的令牌仍须拒绝。
+    #[test]
+    fn terminal_runtime_requires_no_current_execution_or_open_tasks() {
+        let (mut instance, current, task) = running();
+        for status in [
+            ApprovalProcessInstanceStatus::Approved,
+            ApprovalProcessInstanceStatus::Rejected,
+            ApprovalProcessInstanceStatus::Cancelled,
+        ] {
+            instance.status = status;
+            instance.current_node_execution_id = None;
+            ensure_current_execution(&instance, None).unwrap();
+            ensure_runtime_tasks(&instance, None, &[]).unwrap();
+            assert!(ensure_current_execution(&instance, Some(&current)).is_err());
+            assert!(ensure_runtime_tasks(&instance, None, std::slice::from_ref(&task)).is_err());
+            assert!(!runtime_cancellable(&instance, None, 0));
+        }
     }
 
     /// 普通取消只适用于匹配任务数的运行事实，结构受阻和终态不带取消动作。

@@ -79,6 +79,10 @@ fn purchase_change_history_keeps_frozen_supplier_amount_and_lines() {
                 "base_revision_id": "base", "supplier_id": "supplier", "purchase_type": "PHYSICAL",
                 "fulfillment_responsibility": "WAREHOUSE", "supplier_revision_id": "supplier-revision",
                 "supplier_snapshot": {"supplier_name": supplier},
+                "payment_subject": {
+                    "settlement_party_id": "company", "settlement_party_name": "我方公司",
+                    "sales_order_id": "sales", "sales_order_revision_id": "sales-revision"
+                },
                 "payment_term_snapshot": {"payment_term_code": "NET30", "prepay_gate": false},
                 "gross_amount": amount, "net_amount": amount, "tax_amount": "0.00", "status": "PENDING"
             }),

@@ -14,7 +14,7 @@ use erp_supplier::repository::prelude::*;
 use erp_supplier::{SupplierAccount, SupplierExt};
 use erp_support::FileAssetExt;
 use erp_support::repository::prelude::*;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
 
 use super::dto::{
@@ -86,6 +86,37 @@ impl PayableReadService {
         let mut views = vec![self.supplier_payment_view(id.to_string(), true).await?];
         self.attach_supplier_payment_reversals(&mut views).await?;
         views.pop().ok_or_else(|| Error::Internal("供应商付款详情装配失败".to_string()))
+    }
+
+    /// 在原权限校验事务内读取实际付款、核销、回单及冲正的完整详情。
+    ///
+    /// # 参数
+    /// * `id` - 付款事实身份。
+    /// * `executor` - 当前资格校验使用的原事务执行器。
+    /// # 返回
+    /// 返回与同一事务事实一致的供应商付款视图。
+    /// # 错误
+    /// 付款不存在、回单缺失或关联事实读取失败时返回错误。
+    pub async fn supplier_payment_detail_with_executor(
+        &self,
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<SupplierPaymentView> {
+        let ids = [SupplierPaymentId::new(id)];
+        let payments = self.db.supplier_payments().find_supplier_payments_by_ids(&ids, executor).await?;
+        let ordered = ordered_supplier_payments(&ids, &payments)?;
+        let allocations = self.db.payment_allocations().find_allocations_by_payments(&ids, executor).await?;
+        let (totals, grouped) = payment_allocation_groups(&ordered, &allocations);
+        let enriched =
+            display::enrich_payment_allocation_views_batched_with_executor(&self.db, grouped, executor)
+                .await?;
+        let suppliers = self.supplier_displays_by_ids_with_executor(&ordered, executor).await?;
+        let receipts = self.bank_receipt_views_by_ids_with_executor(&ordered, executor).await?;
+        let recipients = self.recipient_views_by_ids_with_executor(&ordered, executor).await?;
+        let mut views =
+            map_supplier_payment_views(&ordered, totals, enriched, &suppliers, &receipts, &recipients);
+        self.attach_supplier_payment_reversals_with_executor(&mut views, executor).await?;
+        views.pop().ok_or_else(|| Error::Internal("供应商付款详情装配失败".into()))
     }
 
     /// 装配供应商付款单视图（FIN-R02 单笔入口，经批量装载保持与列表一致）。
@@ -182,15 +213,21 @@ impl PayableReadService {
         &self,
         payments: &[&SupplierPayment],
     ) -> Result<HashMap<String, (Option<String>, Option<String>)>> {
+        self.supplier_displays_by_ids_with_executor(payments, &mut NoTransaction).await
+    }
+
+    async fn supplier_displays_by_ids_with_executor(
+        &self,
+        payments: &[&SupplierPayment],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, (Option<String>, Option<String>)>> {
         let mut seen = HashSet::new();
-        let mut supplier_ids = Vec::new();
-        for payment in payments {
-            if seen.insert(payment.supplier_id.to_string()) {
-                supplier_ids.push(payment.supplier_id.clone());
-            }
-        }
-        let suppliers =
-            self.db.supplier_accounts().find_accounts_by_ids(&supplier_ids, &mut NoTransaction).await?;
+        let supplier_ids = payments
+            .iter()
+            .filter(|payment| seen.insert(payment.supplier_id.to_string()))
+            .map(|payment| payment.supplier_id.clone())
+            .collect::<Vec<_>>();
+        let suppliers = self.db.supplier_accounts().find_accounts_by_ids(&supplier_ids, executor).await?;
         let mut seen_parties = HashSet::new();
         let mut party_ids = Vec::new();
         for supplier in &suppliers {
@@ -198,15 +235,14 @@ impl PayableReadService {
                 party_ids.push(supplier.party_id.clone());
             }
         }
-        let parties = self.db.parties().find_parties_by_ids(&party_ids, &mut NoTransaction).await?;
+        let parties = self.db.parties().find_parties_by_ids(&party_ids, executor).await?;
         let revision_ids: Vec<String> = parties
             .iter()
             .filter_map(|party| party.stable.current_revision_id.clone())
             .collect::<HashSet<_>>()
             .into_iter()
             .collect();
-        let revisions =
-            self.db.party_revisions().find_revisions_by_ids(&revision_ids, &mut NoTransaction).await?;
+        let revisions = self.db.party_revisions().find_revisions_by_ids(&revision_ids, executor).await?;
         let suppliers_by_id: HashMap<&str, &SupplierAccount> =
             suppliers.iter().map(|supplier| (supplier.base.id.as_str(), supplier)).collect();
         let parties_by_id: HashMap<String, Option<String>> = parties
@@ -245,6 +281,14 @@ impl PayableReadService {
         &self,
         payments: &[&SupplierPayment],
     ) -> Result<HashMap<String, SupplierPaymentBankReceiptView>> {
+        self.bank_receipt_views_by_ids_with_executor(payments, &mut NoTransaction).await
+    }
+
+    async fn bank_receipt_views_by_ids_with_executor(
+        &self,
+        payments: &[&SupplierPayment],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, SupplierPaymentBankReceiptView>> {
         let mut seen = HashSet::new();
         let mut asset_ids = Vec::new();
         for payment in payments {
@@ -254,7 +298,7 @@ impl PayableReadService {
                 asset_ids.push(FileAssetId::new(asset_id.to_string()));
             }
         }
-        let assets = self.db.file_assets().find_by_ids(&asset_ids, &mut NoTransaction).await?;
+        let assets = self.db.file_assets().find_by_ids(&asset_ids, executor).await?;
         let assets_by_id: HashMap<&str, &erp_support::FileAsset> =
             assets.iter().map(|asset| (asset.base.id.as_str(), asset)).collect();
         let mut views = HashMap::with_capacity(payments.len());
@@ -285,6 +329,14 @@ impl PayableReadService {
         &self,
         payments: &[&SupplierPayment],
     ) -> Result<HashMap<String, PaymentRecipientView>> {
+        self.recipient_views_by_ids_with_executor(payments, &mut NoTransaction).await
+    }
+
+    async fn recipient_views_by_ids_with_executor(
+        &self,
+        payments: &[&SupplierPayment],
+        executor: &mut dyn Executor,
+    ) -> Result<HashMap<String, PaymentRecipientView>> {
         let mut seen = HashSet::new();
         let mut account_ids = Vec::new();
         for payment in payments {
@@ -295,7 +347,7 @@ impl PayableReadService {
             }
         }
         let accounts =
-            self.db.party_bank_accounts().find_bank_accounts_by_ids(&account_ids, &mut NoTransaction).await?;
+            self.db.party_bank_accounts().find_bank_accounts_by_ids(&account_ids, executor).await?;
         let accounts_by_id: HashMap<&str, &PartyBankAccount> =
             accounts.iter().map(|account| (account.base.id.as_str(), account)).collect();
         let mut views = HashMap::new();
@@ -383,11 +435,13 @@ fn map_supplier_payment_views(
                 payment_recipient: recipient_views.get(payment.base.id.as_str()).cloned(),
                 paid_at: payment.paid_at,
                 amount: payment.amount,
+                reversed_amount: payment.reversed_amount,
+                effective_amount: payment.effective_amount(),
                 bank_reference: payment.bank_reference.clone(),
                 bank_receipt: receipt_views.get(payment.base.id.as_str()).cloned(),
                 version: payment.base.version,
                 created_at: payment.base.created_at,
-                unallocated_amount: payment.amount.checked_sub(allocated_total),
+                unallocated_amount: payment.effective_amount().checked_sub(allocated_total),
                 allocated_total,
                 allocations: enriched,
                 related_reversals: Vec::new(),
@@ -435,7 +489,11 @@ fn payment_allocation_view(allocations: &[PaymentAllocation]) -> (Amount, Vec<Pa
 
 #[cfg(test)]
 mod tests {
-    use super::load_payment_projections;
+    use erp_core::common::time::Instant;
+    use erp_core::ids::{FileAssetId, PartyBankAccountId, SupplierAccountId, SupplierPaymentId};
+    use erp_finance::entity::payable::{SupplierPayment, SupplierPaymentData};
+
+    use super::{load_payment_projections, map_supplier_payment_views};
     use crate::Error;
 
     /// 独立投影的成功结果保持原装配次序。
@@ -460,6 +518,38 @@ mod tests {
             )
             .await;
             assert!(matches!(result, Err(Error::NotFound(message)) if message == first_failure.to_string()));
+        }
+    }
+
+    /// 冲正款不是可再次核销的未分配资金，部分和全额冲正均使用有效金额。
+    #[test]
+    fn unallocated_payment_balance_excludes_formal_reversals() {
+        let mut payment = SupplierPayment::new(
+            SupplierPaymentId::new("payment"),
+            SupplierPaymentData {
+                payment_no: "FK-1".into(),
+                supplier_id: SupplierAccountId::new("supplier"),
+                payee_bank_account_id: PartyBankAccountId::new("bank"),
+                paid_at: Instant::now(),
+                amount: "100".parse().unwrap(),
+                bank_reference: None,
+                bank_receipt_asset_id: FileAssetId::new("receipt"),
+            },
+            "cashier",
+        )
+        .unwrap();
+        for (reversed, allocated, unallocated) in [("40", "60", "0"), ("40", "50", "10"), ("100", "0", "0")] {
+            payment.reversed_amount = reversed.parse().unwrap();
+            let views = map_supplier_payment_views(
+                &[&payment],
+                vec![allocated.parse().unwrap()],
+                vec![Vec::new()],
+                &Default::default(),
+                &Default::default(),
+                &Default::default(),
+            );
+            assert_eq!(views[0].reversed_amount, reversed.parse().unwrap());
+            assert_eq!(views[0].unallocated_amount, unallocated.parse().unwrap());
         }
     }
 

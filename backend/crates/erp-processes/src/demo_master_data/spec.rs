@@ -215,7 +215,7 @@ mod tests {
     #[test]
     fn approval_chains_keep_submitters_off_their_own_nodes() {
         let spec = foundation_spec();
-        assert_eq!(spec.approvals.len(), 12);
+        assert_eq!(spec.approvals.len(), 13);
         for approval in &spec.approvals {
             assert!(document_type(&approval.document_type).is_ok(), "{}", approval.document_type);
             assert!(account_by_login_key(&approval.submitter).is_some(), "{}", approval.submitter);
@@ -288,7 +288,11 @@ mod tests {
             .iter()
             .map(|rule| account_by_login_key(&rule.owner).expect("财务责任人"))
             .collect::<Vec<_>>();
-        assert!(owners.iter().all(|owner| owner.role_id == "role-finance"));
+        assert_eq!(
+            owners.iter().map(|owner| owner.role_id.as_str()).collect::<Vec<_>>(),
+            ["role-cashier", "role-invoice-clerk"]
+        );
+        assert_eq!(account_by_login_key("finance").unwrap().role_id, "role-finance-director");
         assert_eq!(owners.iter().map(|owner| owner.key.as_str()).collect::<Vec<_>>(), ["payment", "invoice"]);
         assert!(owners.iter().all(|owner| owner.key != "finance"));
     }

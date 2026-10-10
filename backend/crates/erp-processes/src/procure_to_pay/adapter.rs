@@ -266,20 +266,20 @@ pub fn purchase_order_object_readable(organization_id: &str, assignee_user_id: &
     crate::document_object_readable(organization_id, assignee_user_id)
 }
 
-/// 责任组织取来源销售单结算主体，不得用空串或当前登录人组织补位。
+/// 采购审批责任组织使用采购单冻结的业务部门。
 ///
 /// # 参数
-/// * `sales_order` - 来源销售单
+/// * `order` - 采购单
 ///
 /// # 返回
 /// 返回非空责任组织。
 ///
 /// # 错误
-/// 结算主体为空时返回校验错误。
-pub fn purchase_order_responsible_org_id(sales_order: &SalesOrder) -> Result<String> {
-    let org = sales_order.settlement_party_id.to_string();
+/// 业务部门为空时返回校验错误。
+pub fn purchase_order_responsible_org_id(order: &PurchaseOrder) -> Result<String> {
+    let org = order.business_org_unit_id.clone();
     if org.trim().is_empty() {
-        return Err(Error::ValidationError("采购单来源销售单缺少结算主体，无法冻结责任组织".to_string()));
+        return Err(Error::ValidationError("采购单缺少业务部门，无法冻结审批责任组织".to_string()));
     }
     Ok(org)
 }
@@ -303,7 +303,7 @@ pub fn purchase_order_responsible_org_id(sales_order: &SalesOrder) -> Result<Str
 /// 正式号为空、明细为空、金额或数量非法、明细行数溢出或组织为空时返回校验错误。
 pub fn build_purchase_order_snapshot(
     order: &PurchaseOrder,
-    sales_order: &SalesOrder,
+    _sales_order: &SalesOrder,
     submission: &PurchaseOrderSubmission,
     lines: &[PurchaseOrderSubmissionLine],
     submitted_by: &str,
@@ -317,7 +317,7 @@ pub fn build_purchase_order_snapshot(
     }
     Ok(ApprovalSubjectSnapshotPayload {
         document_no: order.purchase_no.clone(),
-        responsible_org_id: purchase_order_responsible_org_id(sales_order)?,
+        responsible_org_id: purchase_order_responsible_org_id(order)?,
         submitted_by: submitted_by.to_string(),
         submitted_at,
         counterparty: Some(ApprovalSubjectCounterparty::Supplier {
@@ -358,9 +358,9 @@ mod tests {
     };
     use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
     use erp_procurement::entity::purchase_order::{
-        FulfillmentResponsibility, PaymentTermSnapshot, PurchaseLineType, PurchaseOrderData,
-        PurchaseOrderStatus, PurchaseOrderSubmissionData, PurchaseOrderSubmissionLineData, PurchaseType,
-        SupplierSnapshot,
+        FulfillmentResponsibility, PaymentSubjectSnapshot, PaymentTermSnapshot, PurchaseLineType,
+        PurchaseOrderData, PurchaseOrderStatus, PurchaseOrderSubmissionData, PurchaseOrderSubmissionLineData,
+        PurchaseType, SupplierSnapshot,
     };
     use erp_sales::entity::sales_order::{BusinessType, OriginSystem, SalesOrderData};
 
@@ -412,6 +412,13 @@ mod tests {
         PurchaseOrderSubmission::new(
             PurchaseOrderSubmissionId::new("sub-1"),
             PurchaseOrderSubmissionData {
+                payment_subject: PaymentSubjectSnapshot::new(
+                    "party-1".to_string().into(),
+                    "我方公司".into(),
+                    "so-1".to_string().into(),
+                    "sales-rev-1".to_string().into(),
+                )
+                .unwrap(),
                 purchase_order_id: PurchaseOrderId::new("po-1"),
                 submission_no: "SUB-000001".into(),
                 supplier_id: SupplierAccountId::new("sup-1"),
@@ -558,7 +565,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(payload.document_no, "PO-1");
-        assert_eq!(payload.responsible_org_id, "party-1");
+        assert_eq!(payload.responsible_org_id, "org-procurement");
         assert_eq!(payload.submitted_by, "user-1");
         assert_eq!(payload.total_amount.unwrap().to_string(), "10");
         assert_eq!(payload.total_quantity.unwrap().to_string(), "2");

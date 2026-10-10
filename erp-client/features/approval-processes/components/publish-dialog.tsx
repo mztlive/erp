@@ -22,7 +22,7 @@ import {
 import {
     documentTypeLabel,
     publishPathPreview,
-    REJECT_RESTART_COPY,
+    rejectionPolicyCopy,
     versionLabel,
 } from "../labels"
 import { usePublishDefinitionMutation } from "../queries"
@@ -104,7 +104,7 @@ export function PublishDialog({
                         {path || "尚未配置审批人"}
                     </p>
                     <p data-testid="publish-reject-copy">
-                        {REJECT_RESTART_COPY}
+                        {rejectionPolicyCopy(detail.document_type)}
                     </p>
                     <p className="text-muted-foreground">
                         发布后当前已发布版本将退役。已绑定单据和进行中的审批不受影响。

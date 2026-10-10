@@ -35,6 +35,7 @@ use persistence_core::Executor;
 
 use super::super::creation_basis::supplier::CreationBasisSupplierAdapter;
 use super::super::draft_edit::advance_guard_and_load_coverage;
+use super::super::payment_subject::revalidate_payment_subject;
 use super::supply_selection::revalidate_selected_supply;
 use crate::adapters::freeze_approval_materials;
 use crate::audit::persist_log;
@@ -285,6 +286,7 @@ impl StartPosting<'_> {
 
     /// 沿冻结身份重验当前供给、条款及可供版本，不静默刷新来源。
     async fn supply_selection(&self, executor: &mut dyn Executor) -> Result<()> {
+        revalidate_payment_subject(self.db, &self.input.submission.payment_subject, executor).await?;
         revalidate_selected_supply(
             self.db,
             &self.input.submission.supplier_id,

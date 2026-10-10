@@ -5,13 +5,14 @@
  * 也不得建模 ProcessKind、SubjectRef、TransitionPlan 或内部 BPM 事件。
  */
 
-/** 合同 §4.3 固定 20 个单据类型（snake_case 线协议值）。 */
+/** 固定单据类型（snake_case 线协议值）。 */
 export const DOCUMENT_TYPES = [
     "sales_order",
     "voucher_sales_order",
     "sales_change_order",
     "purchase_order",
     "purchase_change_order",
+    "purchase_payment_request",
     "stock_adjustment",
     "customer_receipt",
     "sales_invoice_request",
@@ -45,13 +46,14 @@ export const NO_APPROVAL_DOCUMENT_TYPES = [
     "purchase_return_order",
 ] as const satisfies readonly DocumentType[]
 
-/** 合同签署为必须审批的 11 个类型。 */
+/** 合同签署为必须审批的单据类型。 */
 export const PROCESS_REQUIRED_DOCUMENT_TYPES = [
     "sales_order",
     "voucher_sales_order",
     "sales_change_order",
     "purchase_order",
     "purchase_change_order",
+    "purchase_payment_request",
     "stock_adjustment",
     "customer_receipt",
     "sales_invoice_request",

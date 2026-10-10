@@ -461,6 +461,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         self.load_sales_change_review_facts(keys, &mut facts, executor).await?;
         self.load_receivable_account_facts(keys, &mut facts, executor).await?;
         self.load_payable_account_facts(keys, &mut facts, executor).await?;
+        self.load_purchase_payment_request_facts(keys, &mut facts, executor).await?;
         self.load_customer_receipt_facts(keys, &mut facts, executor).await?;
         self.load_customer_refund_facts(keys, &mut facts, executor).await?;
         self.load_receipt_reversal_facts(keys, &mut facts, executor).await?;

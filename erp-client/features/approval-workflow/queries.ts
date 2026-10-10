@@ -61,6 +61,7 @@ const invalidateApprovalCaches = async (
             "sales-change-orders",
             "purchase-orders",
             "purchase-change-orders",
+            "purchase-payment-requests",
             "customer-receivables",
             "supplier-payables",
             "stock-adjustments",

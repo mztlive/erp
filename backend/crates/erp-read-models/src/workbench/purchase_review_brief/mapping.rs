@@ -691,6 +691,7 @@ fn non_empty(value: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use erp_procurement::entity::purchase_order::PaymentSubjectSnapshot;
     /// 将供应商受控付款规则映射为采购测试使用的消费事实。
     fn resolve_procurement_payment_term(
         code: &str,
@@ -739,6 +740,13 @@ mod tests {
         PurchaseOrderSubmission::new(
             PurchaseOrderSubmissionId::new(id),
             PurchaseOrderSubmissionData {
+                payment_subject: PaymentSubjectSnapshot::new(
+                    "party-1".to_string().into(),
+                    "我方公司".into(),
+                    "so-1".to_string().into(),
+                    "sales-rev-1".to_string().into(),
+                )
+                .unwrap(),
                 purchase_order_id: PurchaseOrderId::new(purchase_order_id),
                 submission_no: submission_no.to_string(),
                 supplier_id: SupplierAccountId::new("supplier-1"),

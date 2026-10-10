@@ -62,7 +62,7 @@
 | 编号 | 业务命令 | 已核实入口与读取位置 | 目标拥有领域及必须保留的结果 |
 | --- | --- | --- | --- |
 | A01 | 登记进项发票 `purchase_invoice_allocation.post` | [payable/invoice.rs](../backend/crates/erp-processes/src/finance_posting/payable/invoice.rs)，`register_purchase_invoice`，58、143 行 | `erp-finance`；发票 ID、原登记结果与分配事实 |
-| A02 | 提交供应商付款 `supplier_payment.commit` | [payable/payment.rs](../backend/crates/erp-processes/src/finance_posting/payable/payment.rs)，`commit_supplier_payment_with_assets` / `committed_payment_view` | `erp-finance`；付款 ID、附件是否已提交的返回语义，禁止重复付款或分配 |
+| A02 | 按已批准申请提交供应商付款 `supplier_payment.commit` | [payable/payment.rs](../backend/crates/erp-processes/src/finance_posting/payable/payment.rs)，`commit_purchase_payment_request_with_assets` / `committed_payment_view` | `erp-finance`；付款 ID、附件是否已提交的返回语义，禁止重复付款或分配 |
 | A03 | 新建并提交客户回款 `customer_receipt.commit` | [customer_receipt.rs](../backend/crates/erp-processes/src/finance_posting/receivable/customer_receipt.rs)，`replay_committed_receipt` / `recover_committed_receipt` | `erp-finance`；回款 ID及已提交结果 |
 | A04 | 提交已有回款 `customer_receipt.submit` | [customer_receipt_submit.rs](../backend/crates/erp-processes/src/finance_posting/receivable/customer_receipt_submit.rs)，`committed_submit` / `matches_committed_submit` | `erp-finance`；原单与原请求指纹；保留授权先行及同 Executor 查询 |
 | A05 | 登记并过账销项发票 `invoice.commit` | [receivable/invoice.rs](../backend/crates/erp-processes/src/finance_posting/receivable/invoice.rs)，`commit_invoice_with_assets` / `committed_invoice_view`；[invoice_attachments.rs](../backend/crates/erp-processes/src/finance_posting/receivable/invoice_attachments.rs) 构造身份 | `erp-finance`；发票 ID与当前附件归一化；旧附件指纹 parser 删除 |

@@ -134,6 +134,28 @@ export function SupplierPaymentDetailBody({
                         description="本单含税付款总额"
                     />
                     <ReadOnlyField
+                        id="supplier-payables-payment-detail-field-effective-amount-input"
+                        label="有效付款金额"
+                        value={
+                            <MoneyValue
+                                value={row.effectiveAmount}
+                                taxBasis="gross"
+                            />
+                        }
+                        description="原付款金额减去已过账冲正金额"
+                    />
+                    <ReadOnlyField
+                        id="supplier-payables-payment-detail-field-reversed-amount-input"
+                        label="已冲正金额"
+                        value={
+                            <MoneyValue
+                                value={row.reversedAmount}
+                                taxBasis="gross"
+                            />
+                        }
+                        description="原付款事实与冲正记录分别保留"
+                    />
+                    <ReadOnlyField
                         id="supplier-payables-payment-detail-field-bank-reference-input"
                         label="银行流水号"
                         value={row.bankReferenceMasked}

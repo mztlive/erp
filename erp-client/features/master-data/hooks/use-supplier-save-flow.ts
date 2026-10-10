@@ -5,6 +5,7 @@ import { useSelector } from "@tanstack/react-form"
 
 import type { SupplierEditor } from "@/features/master-data/hooks/use-supplier-editor"
 import { settlementLabel } from "@/features/master-data/api/presentation"
+import { reconciliationCycleLabel } from "@/lib/supplier-payment-terms"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import {
     validateSupplierEditorFields,
@@ -133,6 +134,11 @@ export function useSupplierSaveFlow(editor: SupplierEditor) {
                     : "—",
             },
             {
+                label: masterDataCopy.fReconciliationCycle,
+                value:
+                    reconciliationCycleLabel(values.reconciliationCycle) || "—",
+            },
+            {
                 label: masterDataCopy.fSupplierRating,
                 value: values.supplierRating || "—",
             },
@@ -146,6 +152,7 @@ export function useSupplierSaveFlow(editor: SupplierEditor) {
             values.contactName,
             values.paymentTerm,
             values.settlement,
+            values.reconciliationCycle,
             values.supplierRating,
         ],
     )

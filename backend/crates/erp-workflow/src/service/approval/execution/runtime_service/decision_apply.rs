@@ -19,6 +19,7 @@ use decision_prepare::{
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
+use super::super::apply_plan::DomainActionKind;
 use super::super::authorization::hidden_forbidden;
 use super::super::idempotency::{
     ReceiptBranch, decision_identity, map_receipt_first_write_error, normalize_idempotency_key,
@@ -33,7 +34,7 @@ use super::{
     ApprovalRuntimeService, commit_or_recover, find_receipt_for_identity, hidden_not_found,
     persisted_command_view_with_executor, recover_by_replay,
 };
-use crate::entity::approval_integration::ApprovalSubjectSnapshot;
+use crate::entity::approval_integration::{ApprovalDomainAction, ApprovalSubjectSnapshot};
 use crate::entity::work_item::{
     ApprovalDecisionTaskError, AssignmentSource, WorkItem, WorkItemStatus, WorkItemType,
 };
@@ -340,6 +341,15 @@ async fn submit_decision_apply(
         .map_err(map_receipt_first_write_error)?;
     if prepared.should_finalize {
         action_port.execute(loaded.spec.on_final_approve, &prepared.action_context, actor, executor).await?;
+    } else if prepared.writes.domain_action == Some(DomainActionKind::Reject) {
+        action_port
+            .execute(
+                ApprovalDomainAction::PurchasePaymentRequestReject,
+                &prepared.action_context,
+                actor,
+                executor,
+            )
+            .await?;
     }
     persist_decision_writes(db, persist_decision_input(&loaded, &prepared, command, audit_port), executor)
         .await?;

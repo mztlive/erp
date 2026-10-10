@@ -26,9 +26,11 @@ pub use finance_responsibility::{
     FinanceResponsibilityRuleSet, FinanceResponsibilityScope,
 };
 pub use finance_task::{
-    FINANCE_OWNER_ROLE, PAYABLE_OBJECT_TYPE, PayablePurchaseAdmissionFact, RECEIVABLE_OBJECT_TYPE,
-    SalesInvoiceTaskReason, SalesInvoiceTaskSpec, SupplierPaymentTaskReason, SupplierPaymentTaskSpec,
-    is_purchase_payable, is_zero_amount, matches_sales_invoice_identity, matches_supplier_payment_identity,
+    FINANCE_OWNER_ROLE, PAYABLE_OBJECT_TYPE, PURCHASE_PAYMENT_REQUEST_OBJECT_TYPE,
+    PayablePurchaseAdmissionFact, RECEIVABLE_OBJECT_TYPE, SalesInvoiceTaskReason, SalesInvoiceTaskSpec,
+    SupplierPaymentTaskReason, SupplierPaymentTaskSpec, is_purchase_payable, is_zero_amount,
+    matches_purchase_payment_request_identity, matches_sales_invoice_identity,
+    matches_supplier_payment_identity, new_approved_purchase_payment_request_task,
     new_approved_sales_invoice_task, new_sales_invoice_task, new_supplier_payment_task, payment_due_at,
     sales_invoice_impact_summary, supplier_payment_impact_summary,
 };

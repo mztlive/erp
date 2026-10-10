@@ -36,5 +36,20 @@ export const periodicPaymentTerm = (settlement: string, days = "15") => {
     const entry = periodicSettlement(settlement)
     return entry ? `PERIOD_${entry.period}_${days}` : ""
 }
-export const reconciliationCycle = (settlement: string) =>
-    periodicSettlement(settlement)?.value ?? "none"
+export const RECONCILIATION_CYCLES = [
+    { value: "daily", label: "每日对账" },
+    { value: "weekly", label: "每周对账" },
+    { value: "monthly", label: "每月对账" },
+    { value: "quarterly", label: "每季对账" },
+    { value: "half_yearly", label: "每半年对账" },
+    { value: "yearly", label: "每年对账" },
+    { value: "none", label: "无固定周期" },
+] as const
+
+export const reconciliationCycle = (value: string) =>
+    RECONCILIATION_CYCLES.find(
+        (cycle) => cycle.value === value || cycle.label === value,
+    )?.value
+
+export const reconciliationCycleLabel = (value?: string | null) =>
+    RECONCILIATION_CYCLES.find((cycle) => cycle.value === value)?.label

@@ -1,6 +1,6 @@
 //! `purchase_order_revision` / `purchase_order_revision_line`（数据模型 §6.6）。
 //!
-//! 采购生效版本是不可变修订：财务审核通过时由已通过提交原样复制（§8.1 第 4 条）。
+//! 采购生效版本是不可变修订：采购内部审批通过时由已通过提交原样复制（§8.1 第 4 条）。
 //! 版本按 §4.4 内联结构化快照（供应商名称、付款条件门禁、商品名称、规格、单位），
 //! 后续基础资料修改不改变历史单据。修订一经形成不得修改内容（§4.5）。
 
@@ -16,7 +16,6 @@ use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::entity::purchase_order::PurchaseOfferingSource;
 use crate::entity::purchase_order::change_order::{PurchaseChangeSubmission, PurchaseChangeSubmissionLine};
 use crate::entity::purchase_order::line_common::{PurchaseLineDataRef, normalize_and_validate_line};
 use crate::entity::purchase_order::offering_source::ensure_offering_source;
@@ -25,6 +24,7 @@ use crate::entity::purchase_order::purchase_submission::{
 };
 use crate::entity::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
 use crate::entity::purchase_order::types::PurchaseLineType;
+use crate::entity::purchase_order::{PaymentSubjectSnapshot, PurchaseOfferingSource};
 
 /// 采购版本创建数据（不含系统字段）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -37,6 +37,8 @@ pub struct PurchaseOrderRevisionData {
     pub supplier_revision_id: SupplierCommercialProfileRevisionId,
     /// 供应商快照。
     pub supplier_snapshot: SupplierSnapshot,
+    /// 来源正式销售版本冻结的我方付款主体与来源身份。
+    pub payment_subject: PaymentSubjectSnapshot,
     /// 付款条件与先款后货门禁快照。
     pub payment_term_snapshot: PaymentTermSnapshot,
     /// 含税行汇总。
@@ -62,6 +64,8 @@ pub struct PurchaseOrderRevision {
     pub supplier_revision_id: SupplierCommercialProfileRevisionId,
     /// 供应商名称等结构化快照。
     pub supplier_snapshot: SupplierSnapshot,
+    /// 来源正式销售版本冻结的我方付款主体与来源身份。
+    pub payment_subject: PaymentSubjectSnapshot,
     /// 付款条件与先款后货门禁快照。
     pub payment_term_snapshot: PaymentTermSnapshot,
     /// 含税行汇总。
@@ -98,6 +102,7 @@ impl PurchaseOrderRevision {
             purchase_order_id: data.purchase_order_id,
             supplier_revision_id: data.supplier_revision_id,
             supplier_snapshot: data.supplier_snapshot,
+            payment_subject: data.payment_subject,
             payment_term_snapshot: data.payment_term_snapshot,
             gross_amount: data.gross_amount,
             net_amount: data.net_amount,
@@ -153,6 +158,7 @@ impl PurchaseOrderRevision {
                 revision_no,
                 supplier_revision_id: submission.supplier_revision_id.clone(),
                 supplier_snapshot: submission.supplier_snapshot.clone(),
+                payment_subject: submission.payment_subject.clone(),
                 payment_term_snapshot: submission.payment_term_snapshot.clone(),
                 gross_amount: submission.gross_amount,
                 net_amount: submission.net_amount,
@@ -191,6 +197,7 @@ impl PurchaseOrderRevision {
                 revision_no,
                 supplier_revision_id: submission.supplier_revision_id.clone(),
                 supplier_snapshot: submission.supplier_snapshot.clone(),
+                payment_subject: submission.payment_subject.clone(),
                 payment_term_snapshot: submission.payment_term_snapshot.clone(),
                 gross_amount: submission.gross_amount,
                 net_amount: submission.net_amount,
@@ -593,6 +600,7 @@ mod tests {
         PurchaseOrderRevision, PurchaseOrderRevisionData, PurchaseOrderRevisionLine,
         PurchaseOrderRevisionLineData,
     };
+    use crate::entity::purchase_order::PaymentSubjectSnapshot;
     use crate::entity::purchase_order::purchase_submission::{
         PurchaseOrderSubmission, PurchaseOrderSubmissionData, PurchaseOrderSubmissionLine,
         PurchaseOrderSubmissionLineData,
@@ -617,6 +625,13 @@ mod tests {
 
     fn revision_data() -> PurchaseOrderRevisionData {
         PurchaseOrderRevisionData {
+            payment_subject: PaymentSubjectSnapshot::new(
+                "party-1".to_string().into(),
+                "我方公司".into(),
+                "so-1".to_string().into(),
+                "sales-rev-1".to_string().into(),
+            )
+            .unwrap(),
             purchase_order_id: PurchaseOrderId::new("po-1"),
             revision_no: 1,
             supplier_revision_id: SupplierCommercialProfileRevisionId::new("spr-1"),
@@ -663,6 +678,13 @@ mod tests {
         let mut submission = PurchaseOrderSubmission::new(
             PurchaseOrderSubmissionId::new("sub-1"),
             PurchaseOrderSubmissionData {
+                payment_subject: PaymentSubjectSnapshot::new(
+                    "party-1".to_string().into(),
+                    "我方公司".into(),
+                    "so-1".to_string().into(),
+                    "sales-rev-1".to_string().into(),
+                )
+                .unwrap(),
                 purchase_order_id: PurchaseOrderId::new("po-1"),
                 submission_no: "SUB-000001".to_string(),
                 supplier_id: SupplierAccountId::new("sup-1"),
@@ -746,6 +768,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(revision.revision.revision_no, 2);
+        assert_eq!(revision.payment_subject, pending_submission().payment_subject);
         assert_eq!(revision.gross_amount, line.gross_amount);
         assert_eq!(line.purchase_order_revision_id.as_ref(), "por-2");
     }

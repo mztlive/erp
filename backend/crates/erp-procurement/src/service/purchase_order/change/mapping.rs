@@ -118,6 +118,7 @@ impl PurchaseOrderService {
                 fulfillment_responsibility: order.fulfillment_responsibility,
                 supplier_revision_id: base_revision.supplier_revision_id.clone(),
                 supplier_snapshot: base_revision.supplier_snapshot.clone(),
+                payment_subject: base_revision.payment_subject.clone(),
                 payment_term_snapshot,
                 gross_amount: gross,
                 net_amount: net,
@@ -137,7 +138,7 @@ impl PurchaseOrderService {
 /// 返回当前版本销售关联和分配数量已规范化的行。
 ///
 /// # 错误
-/// 商品行缺少稳定销售行、数量或当前销售版本对应行时返回一致性错误。
+/// 商品行缺少稳定销售行、数量或当前销售版本对应行，或精确 SKU 不一致时返回错误。
 ///
 /// # 关键业务约束
 /// 商品行 `allocated_quantity` 恒等于变更后的 `quantity`，物流行清空销售关联。
@@ -162,6 +163,11 @@ pub fn enrich_change_lines(
         let sales_line = sales_lines.get(&stable_id).ok_or_else(|| {
             Error::BusinessLogicError("采购变更商品行在销售当前版本中没有对应稳定行".to_string())
         })?;
+        if line.sku_id.as_deref() != Some(sales_line.sku_id.as_ref()) {
+            return Err(Error::BusinessLogicError(
+                "采购变更商品行SKU与销售当前版本不一致，不能刷新采购来源".into(),
+            ));
+        }
         let quantity = line
             .quantity
             .clone()
@@ -225,15 +231,44 @@ mod tests {
     fn current_sales_fact_rebinds_stable_line_and_uses_changed_quantity() {
         let facts = HashMap::from([(
             "stable-1".into(),
-            CurrentSalesRevisionLineFact { revision_line_id: "current-line-1".into() },
+            CurrentSalesRevisionLineFact {
+                revision_line_id: "current-line-1".into(),
+                sku_id: "sku-1".to_string().into(),
+            },
         )]);
-        let result = enrich_change_lines(&[item()], &facts).unwrap();
+        let mut changed = item();
+        changed.unit_cost_gross = Some("12".into());
+        let result = enrich_change_lines(std::slice::from_ref(&changed), &facts).unwrap();
         let line = &result[0];
         assert_eq!(line.procurement_confirmation_line_id.as_deref(), Some("stable-1"));
         assert_eq!(line.sales_order_line_id.as_deref(), Some("stable-1"));
         assert_eq!(line.sales_order_revision_line_id.as_deref(), Some("current-line-1"));
         assert_eq!(line.sales_order_submission_line_id, None);
         assert_eq!(line.allocated_quantity.as_deref(), Some("2"));
+        assert_eq!(line.sku_id.as_deref(), Some("sku-1"));
+        assert_eq!(line.unit_cost_gross.as_deref(), Some("12"));
+        assert_eq!(changed.sales_order_revision_line_id.as_deref(), Some("old-revision-line"));
+    }
+
+    #[test]
+    fn current_sales_sku_change_rejects_refreshing_original_purchase_source() {
+        let facts = HashMap::from([(
+            "stable-1".into(),
+            CurrentSalesRevisionLineFact {
+                revision_line_id: "current-line-2".into(),
+                sku_id: "sku-2".to_string().into(),
+            },
+        )]);
+        let original = item();
+        let error = enrich_change_lines(std::slice::from_ref(&original), &facts).unwrap_err();
+        assert!(matches!(
+            error,
+            Error::BusinessLogicError(message)
+                if message == "采购变更商品行SKU与销售当前版本不一致，不能刷新采购来源"
+        ));
+        assert_eq!(original.sku_id.as_deref(), Some("sku-1"));
+        assert_eq!(original.sales_order_revision_line_id.as_deref(), Some("old-revision-line"));
+        assert_eq!(original.allocated_quantity.as_deref(), Some("1"));
     }
 
     #[test]
@@ -259,7 +294,10 @@ mod tests {
         );
         let facts = HashMap::from([(
             "stable-fallback".into(),
-            CurrentSalesRevisionLineFact { revision_line_id: "current-fallback".into() },
+            CurrentSalesRevisionLineFact {
+                revision_line_id: "current-fallback".into(),
+                sku_id: "sku-1".to_string().into(),
+            },
         )]);
         let error = enrich_change_lines(&[line.clone()], &facts).unwrap_err();
         assert!(matches!(error, Error::BusinessLogicError(message) if message == "采购变更商品行缺少数量"));

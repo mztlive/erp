@@ -17,7 +17,7 @@ use erp_supplier::SupplierExt;
 use erp_supply::repository::SupplierSettlementExt;
 use erp_supply::repository::prelude::*;
 use mongodb::Database;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction};
 
 use super::PayableReadService;
 use super::dto::{PaymentAllocationView, SupplierPaymentReversalView, SupplierPaymentView};
@@ -51,12 +51,20 @@ impl PayableReadService {
         &self,
         views: &mut [SupplierPaymentView],
     ) -> Result<()> {
+        self.attach_supplier_payment_reversals_with_executor(views, &mut NoTransaction).await
+    }
+
+    pub(super) async fn attach_supplier_payment_reversals_with_executor(
+        &self,
+        views: &mut [SupplierPaymentView],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         let payment_ids = supplier_payment_ids(views);
         if payment_ids.is_empty() {
             return Ok(());
         }
         let reversals =
-            self.db.payment_reversals().find_reversals_by_payments(&payment_ids, &mut NoTransaction).await?;
+            self.db.payment_reversals().find_reversals_by_payments(&payment_ids, executor).await?;
         let mut grouped = group_payment_reversals(reversals);
         for view in views {
             view.related_reversals = grouped.remove(&view.id).unwrap_or_default();
@@ -137,12 +145,20 @@ pub(super) async fn enrich_payment_allocation_views_batched(
     db: &Database,
     grouped: Vec<Vec<PaymentAllocationView>>,
 ) -> Result<Vec<Vec<PaymentAllocationView>>> {
+    enrich_payment_allocation_views_batched_with_executor(db, grouped, &mut NoTransaction).await
+}
+
+pub(super) async fn enrich_payment_allocation_views_batched_with_executor(
+    db: &Database,
+    grouped: Vec<Vec<PaymentAllocationView>>,
+    executor: &mut dyn Executor,
+) -> Result<Vec<Vec<PaymentAllocationView>>> {
     let lengths: Vec<usize> = grouped.iter().map(Vec::len).collect();
     let flat: Vec<PaymentAllocationView> = grouped.into_iter().flatten().collect();
     if flat.is_empty() {
         return Ok(lengths.into_iter().map(|_| Vec::new()).collect());
     }
-    let enriched = enrich_payment_allocation_views(db, flat).await?;
+    let enriched = enrich_payment_allocation_views(db, flat, executor).await?;
     let mut iter = enriched.into_iter();
     let mut batched = Vec::with_capacity(lengths.len());
     for len in lengths {
@@ -165,8 +181,9 @@ pub(super) async fn enrich_payment_allocation_views_batched(
 async fn enrich_payment_allocation_views(
     db: &Database,
     views: Vec<PaymentAllocationView>,
+    executor: &mut dyn Executor,
 ) -> Result<Vec<PaymentAllocationView>> {
-    let sources = load_allocation_sources(db, &views).await?;
+    let sources = load_allocation_sources(db, &views, executor).await?;
     Ok(views
         .into_iter()
         .map(|mut view| {
@@ -212,12 +229,13 @@ fn apply_allocation_source(view: &mut PaymentAllocationView, source: Option<&All
 async fn load_allocation_sources(
     db: &Database,
     views: &[PaymentAllocationView],
+    executor: &mut dyn Executor,
 ) -> Result<HashMap<String, AllocationSource>> {
     let entry_ids = allocation_entry_ids(views);
-    let entries = db.payable_entries().find_entries_by_ids(&entry_ids, &mut NoTransaction).await?;
-    let accounts = load_accounts_for_entries(db, &entries).await?;
+    let entries = db.payable_entries().find_entries_by_ids(&entry_ids, executor).await?;
+    let accounts = load_accounts_for_entries(db, &entries, executor).await?;
     let mut document_nos = HashMap::new();
-    collect_source_document_nos(db, accounts.values(), &mut document_nos).await?;
+    collect_source_document_nos(db, accounts.values(), &mut document_nos, executor).await?;
     Ok(map_allocation_sources(&entries, &accounts, &document_nos))
 }
 
@@ -258,6 +276,7 @@ fn allocation_entry_ids(views: &[PaymentAllocationView]) -> Vec<PayableEntryId> 
 async fn load_accounts_for_entries(
     db: &Database,
     entries: &[PayableEntry],
+    executor: &mut dyn Executor,
 ) -> Result<HashMap<String, PayableAccount>> {
     let mut seen = HashSet::new();
     let mut account_ids = Vec::new();
@@ -267,7 +286,7 @@ async fn load_accounts_for_entries(
             account_ids.push(PayableAccountId::new(id));
         }
     }
-    let accounts = db.payable_accounts().find_accounts_by_ids(&account_ids, &mut NoTransaction).await?;
+    let accounts = db.payable_accounts().find_accounts_by_ids(&account_ids, executor).await?;
     Ok(accounts.into_iter().map(|account| (account.base.id.clone(), account)).collect())
 }
 
@@ -291,6 +310,7 @@ async fn collect_source_document_nos<'a, I>(
     db: &Database,
     accounts: I,
     document_nos: &mut HashMap<String, Option<String>>,
+    executor: &mut dyn Executor,
 ) -> Result<()>
 where
     I: IntoIterator<Item = &'a PayableAccount>,
@@ -310,10 +330,9 @@ where
             },
         }
     }
-    let mut executor = NoTransaction;
-    let purchase_map = db.purchase_order().purchase_nos_by_ids(&purchase_ids, &mut executor).await?;
+    let purchase_map = db.purchase_order().purchase_nos_by_ids(&purchase_ids, executor).await?;
     let statement_map =
-        db.supplier_settlement_statements().statement_nos_by_ids(&statement_ids, &mut executor).await?;
+        db.supplier_settlement_statements().statement_nos_by_ids(&statement_ids, executor).await?;
     document_nos.extend(merge_source_document_nos(&pending, &purchase_map, &statement_map));
     Ok(())
 }

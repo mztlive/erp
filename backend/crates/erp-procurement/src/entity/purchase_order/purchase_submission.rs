@@ -1,6 +1,6 @@
 //! `purchase_order_submission` 采购提交（数据模型 §6.6）。
 //!
-//! 提交是不可变采购内容快照：进入待审核后头、行冻结；财务审批、工作任务及
+//! 提交是不可变采购内容快照：进入待审核后头、行冻结；采购内部审批、工作任务及
 //! `workflow_action` 必须引用具体提交，不得审批可变采购主表（§6.6）。
 //! 提交没有 `fact_no`/`occurred_at`/`recorded_at` 语义字段，按 §6.6 字典精确建模，
 //! 不套用 `FactBase`。
@@ -17,6 +17,7 @@ use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 pub use super::purchase_submission_line::{PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData};
+use crate::entity::purchase_order::PaymentSubjectSnapshot;
 use crate::entity::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
 use crate::entity::purchase_order::types::{FulfillmentResponsibility, PurchaseType, status_display};
 
@@ -45,7 +46,7 @@ pub enum SubmissionStatus {
     Superseded,
 }
 
-/// 财务审核强类型结论。
+/// 采购内部审核强类型结论。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "review_result", rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum PurchaseOrderReviewDecision {
@@ -88,6 +89,8 @@ pub struct PurchaseOrderSubmissionData {
     pub supplier_revision_id: SupplierCommercialProfileRevisionId,
     /// 提交时供应商快照。
     pub supplier_snapshot: SupplierSnapshot,
+    /// 来源正式销售版本冻结的我方付款主体与来源身份。
+    pub payment_subject: PaymentSubjectSnapshot,
     /// 付款条件和先款后货门禁快照。
     pub payment_term_snapshot: PaymentTermSnapshot,
     /// 含税行汇总。
@@ -128,6 +131,8 @@ pub struct PurchaseOrderSubmission {
     pub supplier_revision_id: SupplierCommercialProfileRevisionId,
     /// 提交时供应商快照。
     pub supplier_snapshot: SupplierSnapshot,
+    /// 来源正式销售版本冻结的我方付款主体与来源身份。
+    pub payment_subject: PaymentSubjectSnapshot,
     /// 付款条件和先款后货门禁快照。
     pub payment_term_snapshot: PaymentTermSnapshot,
     /// 含税行汇总。
@@ -142,9 +147,9 @@ pub struct PurchaseOrderSubmission {
     pub submitted_at: Option<Instant>,
     /// 提交审计人；与 `submitted_at` 成对出现。
     pub submitted_by: Option<String>,
-    /// 财务审核时间；与 `reviewed_by` 成对出现。
+    /// 采购内部审核时间；与 `reviewed_by` 成对出现。
     pub reviewed_at: Option<Instant>,
-    /// 财务审核人。
+    /// 采购内部审核人。
     pub reviewed_by: Option<String>,
     /// 驳回时的结构化原因代码；通过时为空。
     pub review_reason_code: Option<String>,
@@ -184,6 +189,7 @@ impl PurchaseOrderSubmission {
             fulfillment_responsibility: data.fulfillment_responsibility,
             supplier_revision_id: data.supplier_revision_id,
             supplier_snapshot: data.supplier_snapshot,
+            payment_subject: data.payment_subject,
             payment_term_snapshot: data.payment_term_snapshot,
             gross_amount: data.gross_amount,
             net_amount: data.net_amount,
@@ -266,6 +272,7 @@ impl PurchaseOrderSubmission {
                 fulfillment_responsibility: draft.fulfillment_responsibility,
                 supplier_revision_id: draft.supplier_revision_id.clone(),
                 supplier_snapshot: draft.supplier_snapshot.clone(),
+                payment_subject: draft.payment_subject.clone(),
                 payment_term_snapshot: draft.payment_term_snapshot.clone(),
                 gross_amount: draft.gross_amount,
                 net_amount: draft.net_amount,
@@ -303,7 +310,7 @@ impl PurchaseOrderSubmission {
         Ok(())
     }
 
-    /// 提交财务审核。
+    /// 提交采购内部审核。
     ///
     /// 从草稿进入待审核并写入提交审计；提交后头行冻结。
     ///
@@ -329,7 +336,7 @@ impl PurchaseOrderSubmission {
         Ok(())
     }
 
-    /// 记录财务审核正式结论与处理审计。
+    /// 记录采购内部审核正式结论与处理审计。
     ///
     /// 只能对待审核提交执行；通过 → `Approved`，驳回 → `Rejected`。
     ///
@@ -545,6 +552,7 @@ mod tests {
         PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData, PurchaseOrderSubmissionUpdate,
         SubmissionStatus,
     };
+    use crate::entity::purchase_order::PaymentSubjectSnapshot;
     use crate::entity::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
     use crate::entity::purchase_order::types::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};
 
@@ -565,6 +573,13 @@ mod tests {
 
     fn submission_data() -> PurchaseOrderSubmissionData {
         PurchaseOrderSubmissionData {
+            payment_subject: PaymentSubjectSnapshot::new(
+                "party-1".to_string().into(),
+                "我方公司".into(),
+                "so-1".to_string().into(),
+                "sales-rev-1".to_string().into(),
+            )
+            .unwrap(),
             purchase_order_id: PurchaseOrderId::new("po-1"),
             submission_no: " SUB-01 ".to_string(),
             supplier_id: SupplierAccountId::new("sup-1"),
@@ -650,6 +665,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(formal.status, SubmissionStatus::Pending);
+        assert_eq!(formal.payment_subject, draft.payment_subject);
         assert_eq!(formal.content_source(), "SUBMISSION");
         assert!(!formal.reviewer_is_separated("buyer-1"));
         assert!(formal.reviewer_is_separated("finance-1"));

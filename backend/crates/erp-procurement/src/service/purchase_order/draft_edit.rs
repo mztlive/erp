@@ -158,6 +158,7 @@ pub fn build_draft_replacement(
             fulfillment_responsibility: old_draft.fulfillment_responsibility,
             supplier_revision_id: old_draft.supplier_revision_id.clone(),
             supplier_snapshot: old_draft.supplier_snapshot.clone(),
+            payment_subject: old_draft.payment_subject.clone(),
             payment_term_snapshot: old_draft.payment_term_snapshot.clone(),
             gross_amount: gross,
             net_amount: net,

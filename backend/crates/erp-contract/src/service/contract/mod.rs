@@ -26,19 +26,21 @@ use crate::entity::contract::{Contract, ContractRevision};
 use crate::error::{Error, Result};
 use crate::ports::{
     AccountNamePort, ContractAuditPort, ContractDataScopePort, ContractParticipantPort, CustomerAccountFact,
-    CustomerAssignmentFactsPort, CustomerFactsPort, PreparedContractAudit,
+    CustomerAssignmentFactsPort, CustomerFactsPort, PreparedContractAudit, SigningCompanyPort,
 };
 use crate::repository::ContractExt;
 use crate::repository::prelude::*;
 
 pub mod access;
 mod archive;
+mod company;
 mod query;
 mod scope;
 
 pub use access::ContractAccess;
 pub use archive::{PlannedContractArchive, plan_first_archive, plan_upload_archive};
 pub(crate) use archive::{conflict_if_stale_version, customer_eligibility, plan_next_revision};
+use company::{require_signing_company, required_settlement};
 
 /// 合同范围解析及合法参与事实必须成组装配；缺少任一项均不能形成完整授权。
 pub struct ContractScopePorts {
@@ -57,6 +59,7 @@ pub struct ContractService {
     customers: Arc<dyn CustomerFactsPort>,
     assignments: Arc<dyn CustomerAssignmentFactsPort>,
     accounts: Arc<dyn AccountNamePort>,
+    companies: Arc<dyn SigningCompanyPort>,
     data_scope: Arc<dyn ContractDataScopePort>,
     participants: Arc<dyn ContractParticipantPort>,
 }
@@ -70,6 +73,7 @@ impl ContractService {
     /// * `customers` - 客户存在性与编号事实
     /// * `assignments` - 客户归属可见范围
     /// * `accounts` - 负责人显示名
+    /// * `companies` - 我方公司身份及启停事实
     /// * `scope_ports` - 成组装配的公共范围与合法参与端口
     ///
     /// # 返回
@@ -86,6 +90,7 @@ impl ContractService {
         customers: Arc<dyn CustomerFactsPort>,
         assignments: Arc<dyn CustomerAssignmentFactsPort>,
         accounts: Arc<dyn AccountNamePort>,
+        companies: Arc<dyn SigningCompanyPort>,
         scope_ports: ContractScopePorts,
     ) -> Self {
         Self {
@@ -94,6 +99,7 @@ impl ContractService {
             customers,
             assignments,
             accounts,
+            companies,
             data_scope: scope_ports.data_scope,
             participants: scope_ports.participants,
         }
@@ -161,6 +167,7 @@ impl ContractService {
         let db = self.db.clone();
         let audit_port = self.audit.clone();
         let access = self.access();
+        let companies = self.companies.clone();
         let actor_for_tx = actor.clone();
         let mut contract_for_tx = planned.contract.clone();
         let revision = planned.revision;
@@ -173,6 +180,12 @@ impl ContractService {
             actor_for_tx,
             Box::new(move |db, executor| {
                 Box::pin(async move {
+                    require_signing_company(
+                        companies.as_ref(),
+                        &contract_for_tx.settlement_party_id,
+                        executor,
+                    )
+                    .await?;
                     db.contract()
                         .create_contract_with_revision(&mut contract_for_tx, &revision, executor)
                         .await?;
@@ -206,9 +219,9 @@ impl ContractService {
         actor_id: &str,
     ) -> Result<PlannedContractArchive> {
         req.validate()?;
-        let customer = self.ensure_active_customer(&req.customer_id).await?;
-        let settlement_party_id =
-            req.settlement_party_id.clone().unwrap_or_else(|| customer.party_id.clone());
+        self.ensure_active_customer(&req.customer_id).await?;
+        let settlement_party_id = required_settlement(req.settlement_party_id.as_ref())?;
+        require_signing_company(self.companies.as_ref(), &settlement_party_id, &mut NoTransaction).await?;
         plan_upload_archive(req, file_asset_id, settlement_party_id, actor_id)
     }
 
@@ -232,6 +245,7 @@ impl ContractService {
         revision: &ContractRevision,
         executor: &mut dyn Executor,
     ) -> Result<()> {
+        require_signing_company(self.companies.as_ref(), &contract.settlement_party_id, executor).await?;
         self.db.contract().create_contract_with_revision(contract, revision, executor).await?;
         Ok(())
     }

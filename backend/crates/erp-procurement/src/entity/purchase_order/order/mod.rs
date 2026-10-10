@@ -101,7 +101,7 @@ pub struct PurchaseOrder {
     /// 入仓采购目标仓库；兼容旧数据缺少该字段。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_warehouse_id: Option<WarehouseId>,
-    /// 财务审核状态。
+    /// 采购内部审核状态。
     pub review_status: PurchaseReviewStatus,
     /// 付款进度。
     pub payment_progress: ProgressStatus,
@@ -109,7 +109,7 @@ pub struct PurchaseOrder {
     pub invoice_progress: ProgressStatus,
     /// 履约进度。
     pub fulfillment_progress: ProgressStatus,
-    /// 当前待财务审核的不可变提交。
+    /// 当前待采购内部审核的不可变提交。
     pub current_submission_id: Option<String>,
     /// 审批提交版本，初值 0。
     #[serde(default)]

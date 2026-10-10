@@ -39,7 +39,10 @@ export function buildPaymentColumns(input: {
             },
             cell: ({ row }) => (
                 <div className="text-end text-sm">
-                    <MoneyValue value={row.original.amount} taxBasis="gross" />
+                    <MoneyValue
+                        value={row.original.effectiveAmount}
+                        taxBasis="gross"
+                    />
                     <div className="text-xs text-muted-foreground">
                         未付款{" "}
                         <MoneyValue value={row.original.unallocatedAmount} />

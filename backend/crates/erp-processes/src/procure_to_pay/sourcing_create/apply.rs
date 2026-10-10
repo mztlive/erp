@@ -5,6 +5,7 @@ use erp_sales::entity::sales_order::SalesOrder;
 use erp_workflow::entity::work_item::WorkItem;
 use mongodb::Database;
 
+use super::super::source_guard::ensure_sources_current;
 use super::{
     CREATE_SOURCING_ACTION, CREATE_SOURCING_ITEM_PREFIX, CreateBasisCommand, CreateFromSourcingApplyInput,
     CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderLineRequest, CreatePurchaseOrderResult,
@@ -67,6 +68,7 @@ async fn prepare_plan(
     )
     .await?;
     let mut order = load_effective_sales_order(db, input.sales_order_id, executor).await?;
+    ensure_sources_current(db, &order, executor).await?;
     let (groups, stock_groups) =
         sourcing_groups_for_order(db, &order, task.responsibility_scope_ids(), executor).await?;
     let plan = SourcingPlan::plan(

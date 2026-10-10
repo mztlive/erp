@@ -1,6 +1,10 @@
 "use client"
 
 import { PurchaseOrderPayments } from "./purchase-order-payments"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { MoneyValue } from "@/components/business"
 import {
     DetailHint,
@@ -18,6 +22,7 @@ export function PurchaseOrderDetailPayableSection({
     order: PurchaseOrderCenterView
     costMasked: boolean
 }) {
+    const profile = useAccountProfileQuery()
     const summary = order.payableSummary
     if (!summary) {
         return (
@@ -30,6 +35,24 @@ export function PurchaseOrderDetailPayableSection({
         costMasked ? "•••" : <MoneyValue value={value} />
     return (
         <div className="space-y-6">
+            {hasPermission(
+                profile.data?.permissions,
+                "purchase_payment_request:create",
+            ) && (
+                <div className="flex justify-end">
+                    <Button
+                        id="purchase-order-payment-request-create"
+                        variant="outline"
+                        render={
+                            <Link
+                                href={`/procurement/payment-requests?${new URLSearchParams({ create: "1", purchaseOrderId: order.identity.purchaseOrderId })}`}
+                            />
+                        }
+                    >
+                        申请采购付款
+                    </Button>
+                </div>
+            )}
             <DetailSummary label="采购票款摘要">
                 <DetailSummaryItem
                     title="付款"

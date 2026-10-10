@@ -352,9 +352,9 @@ mod query_mapping_tests {
     use erp_core::money::Amount;
     use erp_finance::entity::payable::{PayableAccount, PayableAccountData, PayableSourceType};
     use erp_procurement::entity::purchase_order::{
-        FulfillmentResponsibility, PaymentTermSnapshot, ProgressStatus, PurchaseOrderStatus,
-        PurchaseOrderSubmission, PurchaseOrderSubmissionData, PurchaseReviewStatus, PurchaseType,
-        SupplierSnapshot,
+        FulfillmentResponsibility, PaymentSubjectSnapshot, PaymentTermSnapshot, ProgressStatus,
+        PurchaseOrderStatus, PurchaseOrderSubmission, PurchaseOrderSubmissionData, PurchaseReviewStatus,
+        PurchaseType, SupplierSnapshot,
     };
 
     use super::{
@@ -435,7 +435,7 @@ mod query_mapping_tests {
         )
         .unwrap();
         let mut facts = PurchaseOrderListFacts::default();
-        facts.sales_order_nos.insert("so-1".into(), "SO-1".into());
+        facts.sales_order_nos.insert("so-1".to_string(), "SO-1".into());
         for (paid, expected) in [
             ("0", ProgressStatus::None),
             ("30", ProgressStatus::Partial),
@@ -460,6 +460,13 @@ mod query_mapping_tests {
         PurchaseOrderSubmission::new(
             PurchaseOrderSubmissionId::new(id.to_string()),
             PurchaseOrderSubmissionData {
+                payment_subject: PaymentSubjectSnapshot::new(
+                    "party-1".to_string().into(),
+                    "我方公司".into(),
+                    "so-1".to_string().into(),
+                    "sales-rev-1".to_string().into(),
+                )
+                .unwrap(),
                 purchase_order_id: PurchaseOrderId::new("po-1"),
                 submission_no: format!("SUB-{id}"),
                 supplier_id: SupplierAccountId::new("sup-1"),

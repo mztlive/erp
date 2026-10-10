@@ -353,9 +353,9 @@ mod isolation_tests {
     use erp_core::ids::{PurchaseOrderId, SalesOrderId, SupplierAccountId};
     use erp_core::money::Amount;
     use erp_procurement::entity::purchase_order::{
-        FulfillmentResponsibility, PaymentTermSnapshot, PurchaseOrder, PurchaseOrderData,
-        PurchaseOrderStatus, PurchaseOrderSubmission, PurchaseOrderSubmissionData, PurchaseType,
-        SupplierSnapshot,
+        FulfillmentResponsibility, PaymentSubjectSnapshot, PaymentTermSnapshot, PurchaseOrder,
+        PurchaseOrderData, PurchaseOrderStatus, PurchaseOrderSubmission, PurchaseOrderSubmissionData,
+        PurchaseType, SupplierSnapshot,
     };
     use erp_procurement::repository::PurchaseOrderExt;
     use erp_procurement::repository::purchase_order::PurchaseOrderFilter;
@@ -484,6 +484,13 @@ mod isolation_tests {
             let current = PurchaseOrderSubmission::new(
                 erp_core::ids::PurchaseOrderSubmissionId::new("sub-current"),
                 PurchaseOrderSubmissionData {
+                    payment_subject: PaymentSubjectSnapshot::new(
+                        "party-1".to_string().into(),
+                        "我方公司".into(),
+                        "so-1".to_string().into(),
+                        "sales-rev-1".to_string().into(),
+                    )
+                    .unwrap(),
                     purchase_order_id: PurchaseOrderId::new("po-1"),
                     submission_no: "SUB-current".to_string(),
                     supplier_id: SupplierAccountId::new("sup-1"),
@@ -514,6 +521,13 @@ mod isolation_tests {
             let history = PurchaseOrderSubmission::new(
                 erp_core::ids::PurchaseOrderSubmissionId::new("sub-history"),
                 PurchaseOrderSubmissionData {
+                    payment_subject: PaymentSubjectSnapshot::new(
+                        "party-1".to_string().into(),
+                        "我方公司".into(),
+                        "so-1".to_string().into(),
+                        "sales-rev-1".to_string().into(),
+                    )
+                    .unwrap(),
                     purchase_order_id: PurchaseOrderId::new("po-1"),
                     submission_no: "SUB-history".to_string(),
                     supplier_id: SupplierAccountId::new("sup-1"),

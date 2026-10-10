@@ -1,12 +1,11 @@
 //! 供应商付款单查询、银行回单与过账编排。
 
-use std::collections::HashSet;
 use std::future::Future;
 use std::sync::Arc;
 
 use application_core::{AuditActor, CommandReceipt};
 use erp_audit::{AuditAction, AuditActorLogs, AuditField, AuditFieldKind, BusinessEventContext};
-use erp_core::ids::{FileAssetId, PartyBankAccountId, PartyId, SupplierPaymentId, WorkItemId};
+use erp_core::ids::{PartyBankAccountId, SupplierPaymentId, WorkItemId};
 use erp_finance::dto::payable::SupplierPaymentView;
 use erp_finance::entity::payable::{PendingPaymentAllocation, SupplierPayment, SupplierPaymentData};
 use erp_finance::repository::PayableExt;
@@ -14,10 +13,8 @@ use erp_finance::repository::prelude::*;
 use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::payable::PaymentSettlementFacts;
 use erp_identity::SharedRbacService;
-use erp_party::PartyExt;
-use erp_read_models::Result as ReadResult;
 use erp_supplier::{SupplierAccount, SupplierExt};
-use erp_support::{BankReceiptEvidencePolicy, FileAssetExt, FileAssetView, PendingAttachmentBatch};
+use erp_support::{FileAssetExt, FileAssetView, PendingAttachmentBatch};
 use erp_workflow::ApprovalObjectReadPort;
 use erp_workflow::entity::document_registry::{BusinessDocument, DocumentType};
 use erp_workflow::service::approval::binding::BindPublishedDefinitionCommand;
@@ -30,15 +27,18 @@ use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
 use super::dto::CommitSupplierPaymentRequest;
-use super::mapping::resolve_current_party_payment_recipient;
 use super::posting::post_supplier_payment;
 use super::{
-    PayableService, SupplierPaymentBankReceiptSnapshot, SupplierPaymentWithAssetsResult, payment_task,
+    PayableService, SupplierPaymentBankReceiptSnapshot, SupplierPaymentWithAssetsResult, payment_request,
 };
 use crate::adapters::{funds_access_with_rbac, purchase_access};
 use crate::audit::persist_log;
 use crate::finance_posting::command_recovery::{recovered_resource, recovered_view};
 use crate::{Error, Result};
+
+mod receipt;
+
+use receipt::{ensure_bank_receipt_asset, resolve_payment_receipt};
 
 const PAYMENT_COMMIT: AuditAction = AuditAction {
     code: "supplier_payment.commit",
@@ -172,6 +172,33 @@ impl PayableService {
         pending_assets: Arc<dyn PendingAttachmentBatch>,
         actor: &AuditActor,
     ) -> Result<SupplierPaymentWithAssetsResult> {
+        let _ = (req, pending_assets, actor);
+        Err(Error::ConflictError("旧采购应付直付入口已停止，请从已批准付款申请登记付款".into()))
+    }
+
+    /// 从已批准采购付款申请原子登记实际付款和回单。
+    /// # 参数
+    /// * `id` - 路径所指定的付款申请。
+    /// * `req` - 精确申请、任务、账户版本及逐分录分配和幂等键。
+    /// * `pending_assets` - 首笔新付款必须消费的本次上传回单；原回执重放可为空。
+    /// * `actor` - 申请任务指定的出纳。
+    /// # 返回
+    /// 返回确定提交的详情读取结果和回单提交资格。
+    /// # 错误
+    /// 未批准、额度不足、来源漂移、非指定出纳，或新付款引用既有资产时拒绝。
+    pub async fn commit_purchase_payment_request_with_assets(
+        &self,
+        id: &str,
+        req: CommitSupplierPaymentRequest,
+        pending_assets: Arc<dyn PendingAttachmentBatch>,
+        actor: &AuditActor,
+    ) -> Result<SupplierPaymentWithAssetsResult> {
+        if req.payment_request_id != id {
+            return Err(Error::ValidationError("付款申请身份与路径不一致".into()));
+        }
+        if !req.additional_work_items.is_empty() {
+            return Err(Error::ValidationError("本次付款只允许一份已批准申请".into()));
+        }
         req.validate()?;
         let command_receipt = CommandReceipt::from_payload(
             "supplier-payment-commit-",
@@ -181,13 +208,21 @@ impl PayableService {
             &req.idempotency_key,
             &req,
         )?;
+        let authority = PaymentResultAuthority {
+            request_id: id.to_owned(),
+            work_item_id: req.work_item_id.clone(),
+            actor: actor.clone(),
+        };
         if let Some(payment_id) = FinanceCommandReceiptService::new(self.db.clone())
             .committed_resource_id(&command_receipt, &mut NoTransaction)
             .await?
         {
-            return Ok(
-                read_payment_result(self.read().supplier_payment_detail(&payment_id), false, None).await
-            );
+            return Ok(read_payment_result(
+                self.authorized_payment_detail(&payment_id, &authority),
+                false,
+                None,
+            )
+            .await);
         }
         let has_pending_assets = !pending_assets.is_empty();
         let prepared = PreparedSupplierPayment::prepare(req, pending_assets.as_ref(), actor.id())?;
@@ -207,7 +242,7 @@ impl PayableService {
                 Box::pin(transaction.execute(executor))
             })
             .await;
-        self.committed_payment_view(result, &command_receipt, has_pending_assets).await
+        self.committed_payment_view(result, &command_receipt, has_pending_assets, &authority).await
     }
 
     /// 按原命令收据恢复与未知提交规则回读付款结果。
@@ -216,6 +251,7 @@ impl PayableService {
         transaction_result: Result<(SupplierPayment, bool)>,
         command_receipt: &CommandReceipt,
         has_pending_assets: bool,
+        authority: &PaymentResultAuthority,
     ) -> Result<SupplierPaymentWithAssetsResult> {
         let (payment, fresh) = match transaction_result {
             Ok(payment) => payment,
@@ -226,7 +262,7 @@ impl PayableService {
                     .await;
                 let recovered = recovered_resource(error, recovered.map_err(Error::from))?;
                 return Ok(read_payment_result(
-                    self.read().supplier_payment_detail(&recovered.id),
+                    self.authorized_payment_detail(&recovered.id, authority),
                     has_pending_assets && assets_may_be_committed,
                     recovered.original_unknown,
                 )
@@ -234,24 +270,70 @@ impl PayableService {
             },
         };
         Ok(read_payment_result(
-            self.read().supplier_payment_detail(&payment.base.id),
+            self.authorized_payment_detail(&payment.base.id, authority),
             has_pending_assets && fresh,
             None,
         )
         .await)
     }
+
+    async fn authorized_payment_detail(
+        &self,
+        id: &str,
+        authority: &PaymentResultAuthority,
+    ) -> Result<SupplierPaymentView> {
+        let db = self.db.clone();
+        let rbac = self.authorization_rbac.clone();
+        let read = self.read();
+        let id = id.to_owned();
+        let authority = authority.clone();
+        self.db
+            .client()
+            .clone()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let payment = db
+                        .supplier_payments()
+                        .find_by_id(&id, executor)
+                        .await?
+                        .ok_or_else(|| Error::NotFound("原付款结果不存在".into()))?;
+                    payment_request::execution::authorize_payment_result(
+                        &db,
+                        &rbac,
+                        &authority.request_id,
+                        &authority.work_item_id,
+                        &payment,
+                        &authority.actor,
+                        executor,
+                    )
+                    .await?;
+                    read.supplier_payment_detail_with_executor(&id, executor).await.map_err(Error::from)
+                })
+            })
+            .await
+    }
 }
 
 /// 回读付款详情，同时保留已确定的附件提交状态和首次未知提交错误。
-async fn read_payment_result(
-    view: impl Future<Output = ReadResult<SupplierPaymentView>>,
+async fn read_payment_result<E>(
+    view: impl Future<Output = std::result::Result<SupplierPaymentView, E>>,
     assets_committed: bool,
     original_unknown: Option<Error>,
-) -> SupplierPaymentWithAssetsResult {
+) -> SupplierPaymentWithAssetsResult
+where
+    Error: From<E>,
+{
     SupplierPaymentWithAssetsResult {
         view: recovered_view(view.await.map_err(Error::from), original_unknown),
         assets_committed,
     }
+}
+
+#[derive(Clone)]
+struct PaymentResultAuthority {
+    request_id: String,
+    work_item_id: WorkItemId,
+    actor: AuditActor,
 }
 
 /// 收据已完成重放检查后，本次付款的强类型事务输入。
@@ -260,22 +342,22 @@ struct PreparedSupplierPayment {
     allocations: Vec<PendingPaymentAllocation>,
     work_item_id: WorkItemId,
     expected_task_version: u64,
-    additional_tasks: Vec<(WorkItemId, u64)>,
+    payment_request_id: String,
+    expected_request_version: u64,
     expected_payee_bank_account_id: PartyBankAccountId,
     expected_payee_bank_account_version: u64,
 }
 
 impl PreparedSupplierPayment {
-    /// 按既有临时引用、任务版本、付款与分配次序构造事务输入。
+    /// 按本次上传临时引用、任务版本、付款与分配次序构造事务输入。
     fn prepare(
         mut req: CommitSupplierPaymentRequest,
         pending_assets: &dyn PendingAttachmentBatch,
         created_by: &str,
     ) -> Result<Self> {
-        let used_assets = resolve_payment_receipt_references(&mut req, pending_assets)?;
-        pending_assets.ensure_all_used(&used_assets)?;
+        resolve_payment_receipt(&mut req, pending_assets)?;
         let expected_task_version = expected_task_version(&req.expected_task_version)?;
-        let additional_tasks = lock_additional_payment_tasks(&req.additional_work_items)?;
+
         let expected_payee_bank_account_id =
             PartyBankAccountId::new(req.expected_payee_bank_account_id.trim());
         req.payment.validate()?;
@@ -298,7 +380,8 @@ impl PreparedSupplierPayment {
             allocations,
             work_item_id: req.work_item_id,
             expected_task_version,
-            additional_tasks,
+            payment_request_id: req.payment_request_id,
+            expected_request_version: req.expected_request_version,
             expected_payee_bank_account_id,
             expected_payee_bank_account_version: req.expected_payee_bank_account_version,
         })
@@ -331,17 +414,19 @@ impl SupplierPaymentTransaction {
         }
         let context = BusinessEventContext::new(self.actor.clone(), PAYMENT_COMMIT)?
             .with_command_id(Some(self.command_receipt.id().to_string()))?;
+        let request = payment_request::load(&self.db, &self.prepared.payment_request_id, executor).await?;
+        let recipient = request
+            .payee_account
+            .as_ref()
+            .ok_or_else(|| Error::ConflictError("申请缺少批准收款账户".into()))?;
+        if recipient.account_id != self.prepared.expected_payee_bank_account_id.as_ref()
+            || recipient.version != self.prepared.expected_payee_bank_account_version
+        {
+            return Err(Error::ConflictError("实际付款账户与申请冻结账户不一致".into()));
+        }
         let supplier = self.load_supplier(executor).await?;
         self.persist_document(&supplier, executor).await?;
         self.persist_payment(executor).await?;
-        lock_expected_payment_recipient(
-            &self.db,
-            &supplier.party_id,
-            &self.prepared.expected_payee_bank_account_id,
-            self.prepared.expected_payee_bank_account_version,
-            executor,
-        )
-        .await?;
         self.finish_payment(&context, executor).await?;
         receipts
             .save_resource(
@@ -360,17 +445,18 @@ impl SupplierPaymentTransaction {
         context: &BusinessEventContext,
         executor: &mut dyn Executor,
     ) -> Result<()> {
-        let facts = payment_task::record_payment_execution(
+        let facts = payment_request::execution::record_payment_execution(
             &self.db,
             &self.rbac,
-            payment_task::PaymentExecutionCommand {
-                work_item_id: &self.prepared.work_item_id,
-                expected_task_version: self.prepared.expected_task_version,
-                additional_tasks: &self.prepared.additional_tasks,
-                supplier_id: &self.prepared.payment.supplier_id,
+            payment_request::execution::PaymentRequestExecutionInput {
+                request_id: &self.prepared.payment_request_id,
+                version: self.prepared.expected_request_version,
+                task_id: &self.prepared.work_item_id,
+                task_version: self.prepared.expected_task_version,
+                payment: &mut self.prepared.payment,
                 allocations: &self.prepared.allocations,
+                actor: &self.actor,
             },
-            &self.actor,
             executor,
         )
         .await?;
@@ -384,6 +470,7 @@ impl SupplierPaymentTransaction {
             executor,
         )
         .await?;
+        payment_request::execution::sync_task(&self.db, &self.prepared.payment_request_id, executor).await?;
         Ok(())
     }
 
@@ -435,105 +522,15 @@ impl SupplierPaymentTransaction {
         .await
     }
 
-    /// 保持回单验证、资产登记及付款创建次序，完整命令统一记录一次事件。
+    /// 同一事务登记本批次资产、校验回单证据并创建付款，完整命令统一记录一次事件。
     async fn persist_payment(&self, executor: &mut dyn Executor) -> Result<()> {
         let payment = &self.prepared.payment;
+        self.pending_assets.persist(&self.db, executor).await?;
         ensure_bank_receipt_asset(&self.db, payment.require_bank_receipt()?, &self.pending_assets, executor)
             .await?;
-        self.pending_assets.persist(&self.db, executor).await?;
         self.db.supplier_payments().create(payment, executor).await?;
         Ok(())
     }
-}
-
-/// 把附加付款任务的字符串版本解析为乐观锁。
-///
-/// # 参数
-/// * `items` - 提交命令中的附加任务身份
-///
-/// # 返回
-/// 返回与输入顺序一致的任务 ID 与正整数版本。
-///
-/// # 错误
-/// 任一版本不是正整数字符串时返回校验错误。
-fn lock_additional_payment_tasks(
-    items: &[super::dto::PaymentExecutionTaskRef],
-) -> Result<Vec<(WorkItemId, u64)>> {
-    let mut locks = Vec::with_capacity(items.len());
-    for item in items {
-        locks.push((item.work_item_id.clone(), expected_task_version(&item.expected_task_version)?));
-    }
-    Ok(locks)
-}
-
-/// 在付款事务内校验并占用页面所见收款账户版本。
-///
-/// 该 CAS 写入递增账户版本，使付款事务与默认账户切换、停用、删除或内容修改
-/// 在同一事实行上串行化；任一并发写入成功后，另一方必须刷新重试。
-///
-/// # 错误
-/// 账户身份/版本漂移或 CAS 写入冲突时返回业务冲突。
-async fn lock_expected_payment_recipient(
-    db: &Database,
-    party_id: &PartyId,
-    expected_id: &PartyBankAccountId,
-    expected_version: u64,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let mut recipient = resolve_current_party_payment_recipient(db, party_id, executor).await?;
-    if !recipient.matches_expected(expected_id, expected_version) {
-        return Err(Error::ConflictError("供应商收款账户已变化，请刷新付款任务并重新核对".to_string()));
-    }
-    db.party_bank_accounts().update(&mut recipient, executor).await.map_err(payment_recipient_lock_error)
-}
-
-/// 把收款账户占用冲突映射为可操作的刷新提示。
-fn payment_recipient_lock_error(error: persistence_core::Error) -> Error {
-    match error {
-        persistence_core::Error::OptimisticLockingError
-        | persistence_core::Error::TransientTransactionConflict(_) => {
-            Error::ConflictError("供应商收款账户已变化，请刷新付款任务并重新核对".to_string())
-        },
-        other => other.into(),
-    }
-}
-
-/// 解析本次付款字段中的临时回单引用。
-fn resolve_payment_receipt_references(
-    req: &mut CommitSupplierPaymentRequest,
-    pending_assets: &dyn PendingAttachmentBatch,
-) -> Result<HashSet<String>> {
-    let mut used = HashSet::new();
-    pending_assets.resolve_id(&mut req.payment.bank_receipt_asset_id, &mut used)?;
-    Ok(used)
-}
-
-/// 在付款事务内校验正式或本批次待登记的银行回单资产。
-///
-/// 待登记资产已在事务前经 [`BankReceiptEvidencePolicy::validate`] 同一入口
-/// 完成全量规则校验（与 stored 元数据共用规则），事务内只确认临时引用属于
-/// 本批次；正式资产按已落库元数据再次执行同一策略。
-async fn ensure_bank_receipt_asset(
-    db: &Database,
-    asset_id: &FileAssetId,
-    pending_assets: &dyn PendingAttachmentBatch,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    if pending_assets.contains_id(asset_id) {
-        return Ok(());
-    }
-    let asset = db
-        .file_assets()
-        .find_by_id(asset_id.as_ref(), executor)
-        .await?
-        .ok_or_else(|| Error::NotFound("银行回单不存在".to_string()))?;
-    BankReceiptEvidencePolicy::validate(
-        &asset.content_type,
-        asset.sensitivity_class,
-        asset.retention_class,
-        asset.destroyed_at.is_some(),
-    )
-    .map_err(|error| Error::ValidationError(error.to_string()))
 }
 
 /// 证明供应商付款为无审批单据并持久化未绑定注册行。
@@ -588,6 +585,8 @@ mod tests {
             payment_recipient: None,
             paid_at: Instant::from_unix_secs(1),
             amount: Amount::zero(),
+            reversed_amount: Amount::zero(),
+            effective_amount: Amount::zero(),
             bank_reference: None,
             bank_receipt: None,
             version: 1,
@@ -637,6 +636,18 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn committed_result_qualification_loss_preserves_registered_receipt() {
+        let result = read_payment_result(
+            async { Err(Error::Forbidden("当前付款结果读取资格已撤销".into())) },
+            true,
+            None,
+        )
+        .await;
+        assert!(result.assets_committed);
+        assert!(matches!(result.view, Err(Error::Forbidden(_))));
+    }
+
+    #[tokio::test]
     async fn recovered_unknown_detail_failure_preserves_assets_and_original_unknown_source() {
         let result = read_payment_result(
             async { Err(ReadError::Internal("新的详情读取错误".into())) },
@@ -656,7 +667,9 @@ mod tests {
     async fn successful_detail_read_preserves_view_for_committed_and_replayed_payments() {
         for assets_committed in [true, false] {
             let expected = payment_view();
-            let result = read_payment_result(async { Ok(expected.clone()) }, assets_committed, None).await;
+            let result =
+                read_payment_result(async { Ok::<_, ReadError>(expected.clone()) }, assets_committed, None)
+                    .await;
 
             assert_eq!(result.assets_committed, assets_committed);
             assert_eq!(result.view.unwrap(), expected);
@@ -666,7 +679,8 @@ mod tests {
     #[tokio::test]
     async fn recovered_unknown_detail_success_returns_confirmed_view_and_keeps_assets() {
         let expected = payment_view();
-        let result = read_payment_result(async { Ok(expected.clone()) }, true, Some(unknown())).await;
+        let result =
+            read_payment_result(async { Ok::<_, ReadError>(expected.clone()) }, true, Some(unknown())).await;
 
         assert!(result.assets_committed);
         assert_eq!(result.view.unwrap(), expected);

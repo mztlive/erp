@@ -1,13 +1,21 @@
 //! 采购变更冻结提交前的来源销售和付款事实组合。
+use std::collections::HashMap;
+
+use erp_core::ids::SalesOrderRevisionId;
 use erp_procurement::dto::purchase_order::{SavePurchaseOrderLine, SubmitPurchaseChangeRequest};
 use erp_procurement::entity::purchase_order::{
     PurchaseChangeOrder, PurchaseChangeSubmission, PurchaseOrder, PurchaseOrderRevision,
 };
+use erp_procurement::ports::change::CurrentSalesRevisionLineFact;
+use erp_procurement::service::purchase_order::change::mapping::{
+    enrich_change_lines, prepare_submission_header,
+};
 use erp_sales::repository::SalesOrderExt;
-use erp_sales::repository::prelude::*;
 use persistence_core::NoTransaction;
 
 use super::super::PurchaseOrderProcess;
+use super::super::adapters::current_revision_lines;
+use super::super::payment_subject::load_payment_subject;
 use crate::{Error, Result};
 impl PurchaseOrderProcess {
     /// 将采购变更目标行绑定到来源销售单当前版本行。
@@ -40,29 +48,22 @@ impl PurchaseOrderProcess {
             .current_revision_id
             .as_ref()
             .ok_or_else(|| Error::BusinessLogicError("来源销售单缺少当前版本".to_string()))?;
-        let revision_lines = self
-            .db
-            .sales_order_revision_lines()
-            .list_lines_by_revision(
-                &erp_core::ids::SalesOrderRevisionId::new(revision_id.clone()),
-                &mut NoTransaction,
-            )
-            .await?;
+        let revision_lines =
+            current_revision_lines(&self.db, &SalesOrderRevisionId::new(revision_id), &mut NoTransaction)
+                .await?;
         let by_stable_id = revision_lines
             .into_iter()
             .map(|line| {
                 (
                     line.sales_order_line_id.to_string(),
-                    erp_procurement::ports::change::CurrentSalesRevisionLineFact {
-                        revision_line_id: line.base.id,
+                    CurrentSalesRevisionLineFact {
+                        revision_line_id: line.sales_order_revision_line_id.to_string(),
+                        sku_id: line.sku_id,
                     },
                 )
             })
-            .collect::<std::collections::HashMap<_, _>>();
-        Ok(erp_procurement::service::purchase_order::change::mapping::enrich_change_lines(
-            lines,
-            &by_stable_id,
-        )?)
+            .collect::<HashMap<_, _>>();
+        Ok(enrich_change_lines(lines, &by_stable_id)?)
     }
     /// 保留原行校验/金额、付款代码解析、提交序号查询及 ID 分配的顺序。
     ///
@@ -86,14 +87,30 @@ impl PurchaseOrderProcess {
         _supplier_name: &str,
         req: &SubmitPurchaseChangeRequest,
     ) -> Result<PurchaseChangeSubmission> {
-        let header = erp_procurement::service::purchase_order::change::mapping::prepare_submission_header(
-            base_revision,
-            req,
-        )?;
+        let header = prepare_submission_header(base_revision, req)?;
         let payment_term_snapshot = self.payment_term_snapshot(&header.payment_term_code).await?;
-        Ok(self
+        let mut submission = self
             .domain()
             .build_change_submission(change, order, base_revision, header, payment_term_snapshot)
-            .await?)
+            .await?;
+        let sales = self
+            .db
+            .sales_orders()
+            .find_by_id(&order.sales_order_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("来源销售单不存在".into()))?;
+        let current = sales
+            .stable
+            .current_revision_id
+            .as_ref()
+            .ok_or_else(|| Error::ConflictError("来源销售单缺少正式版本".into()))?;
+        submission.payment_subject = load_payment_subject(
+            &self.db,
+            &order.sales_order_id,
+            &SalesOrderRevisionId::new(current.clone()),
+            &mut NoTransaction,
+        )
+        .await?;
+        Ok(submission)
     }
 }

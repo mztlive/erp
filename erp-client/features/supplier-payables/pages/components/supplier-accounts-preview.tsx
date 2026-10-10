@@ -100,8 +100,6 @@ export function SupplierAccountsPreview({
     reversalQuery,
     onRequestRefundSubmit,
     onRequestReversalSubmit,
-    returnTo,
-    fromWorkspace,
     paymentTaskPayableAccountId,
     canRegisterInvoice = false,
     onClose,
@@ -452,27 +450,17 @@ export function SupplierAccountsPreview({
                                 登记进项发票
                             </Button>
                         ) : null}
-                        {canRegisterPayment ? (
+                        {payable.sourceType === "PURCHASE_ORDER" ? (
                             <Button
                                 id="supplier-payables-preview-register-payment"
                                 type="button"
-                                onClick={() => {
-                                    onOpenSession({
-                                        track: "payment",
-                                        supplierId: payable.supplierId,
-                                        preselectPayableAccountId:
-                                            payable.payableAccountId,
-                                        purchaseOrderId:
-                                            payable.sourceType ===
-                                            "PURCHASE_ORDER"
-                                                ? payable.sourceDocumentId
-                                                : undefined,
-                                        returnTo,
-                                        fromWorkspace,
-                                    })
-                                }}
+                                render={
+                                    <Link
+                                        href={`/procurement/payment-requests?${new URLSearchParams({ purchaseOrderId: payable.sourceDocumentId, create: "1" })}`}
+                                    />
+                                }
                             >
-                                登记付款
+                                申请采购付款
                             </Button>
                         ) : null}
                     </>

@@ -108,6 +108,9 @@ export type BackendPurchaseCoverage = {
     covered_quantity: string
     remaining_quantity: string
     progress: string
+    source_changed: boolean
+    outdated_purchase_quantity: string
+    outdated_purchase_count: number
 }
 
 /** 服务端权威计算的结案资格。 */

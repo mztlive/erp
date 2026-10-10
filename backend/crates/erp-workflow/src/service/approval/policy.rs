@@ -1,4 +1,4 @@
-//! 合同 §4.3 基线 20 行 + 1 个新增项，共 21 行穷尽审批政策（见 `ALL_DOCUMENT_TYPES`）。
+//! 已登记的 22 种单据使用穷尽审批政策（见 `ALL_DOCUMENT_TYPES`）。
 //!
 //! 政策由代码注册，禁止默认政策、Noop 动作或复制 `process_kind.rs` 映射。
 
@@ -12,8 +12,8 @@ use crate::error::{Error, ErrorCode, Result};
 /// 历史销售单草稿可能仍带有的采购确认用途键。发布不再要求，保存时清除。
 pub const SALES_ORDER_PROCUREMENT_CONFIRMATION: &str = "SALES_ORDER_PROCUREMENT_CONFIRMATION";
 
-/// 合同 §4.3 基线 20 个单据类型 + 1 个新增项（共 21），复用实体层权威穷尽集合。
-pub const ALL_DOCUMENT_TYPES: [DocumentType; 21] = DocumentType::ALL;
+/// 已登记的 22 种单据类型，复用实体层权威穷尽集合。
+pub const ALL_DOCUMENT_TYPES: [DocumentType; 22] = DocumentType::ALL;
 
 const NO_PURPOSES: &[ApprovalNodePurpose] = &[];
 
@@ -288,51 +288,10 @@ impl DocumentApprovalPolicy {
 pub fn policy_of(document_type: DocumentType) -> Result<DocumentApprovalPolicy> {
     debug_assert_snapshot_prefixes();
     match document_type {
-        DocumentType::SalesOrder => process_required(
-            document_type,
-            NO_PURPOSES,
-            ApprovalSubjectVersionSource::SalesOrderSubmissionNo,
-            SALES_PURCHASE_SNAPSHOT,
-            ApprovalDomainAction::SalesOrderStartApprovalSubmission,
-            ApprovalDomainAction::SalesOrderFormalizeApprovedSubmission,
-            ApprovalDomainAction::SalesOrderCancelApprovalSubmission,
-        ),
-        DocumentType::VoucherSalesOrder => process_required(
-            document_type,
-            NO_PURPOSES,
-            ApprovalSubjectVersionSource::SalesOrderSubmissionNo,
-            SALES_PURCHASE_SNAPSHOT,
-            ApprovalDomainAction::VoucherSalesOrderStartApprovalSubmission,
-            ApprovalDomainAction::VoucherSalesOrderFormalizeApprovedSubmission,
-            ApprovalDomainAction::VoucherSalesOrderCancelApprovalSubmission,
-        ),
-        DocumentType::SalesChangeOrder => process_required(
-            document_type,
-            NO_PURPOSES,
-            ApprovalSubjectVersionSource::SalesChangeSubmissionNo,
-            SALES_PURCHASE_SNAPSHOT,
-            ApprovalDomainAction::SalesChangeOrderSubmitSalesChange,
-            ApprovalDomainAction::SalesChangeOrderApplyEffectiveChange,
-            ApprovalDomainAction::SalesChangeOrderCancelApproval,
-        ),
-        DocumentType::PurchaseOrder => process_required(
-            document_type,
-            NO_PURPOSES,
-            ApprovalSubjectVersionSource::EntityApprovalSubjectVersion,
-            SALES_PURCHASE_SNAPSHOT,
-            ApprovalDomainAction::PurchaseOrderSubmit,
-            ApprovalDomainAction::PurchaseOrderFormalizeApprovedOrder,
-            ApprovalDomainAction::PurchaseOrderCancelApproval,
-        ),
-        DocumentType::PurchaseChangeOrder => process_required(
-            document_type,
-            NO_PURPOSES,
-            ApprovalSubjectVersionSource::EntityApprovalSubjectVersion,
-            SALES_PURCHASE_SNAPSHOT,
-            ApprovalDomainAction::PurchaseChangeOrderSubmitChange,
-            ApprovalDomainAction::PurchaseChangeOrderApplyEffectiveChange,
-            ApprovalDomainAction::PurchaseChangeOrderCancelApproval,
-        ),
+        DocumentType::SalesOrder | DocumentType::VoucherSalesOrder | DocumentType::SalesChangeOrder => {
+            sales_policy(document_type)
+        },
+        DocumentType::PurchaseOrder | DocumentType::PurchaseChangeOrder => purchase_policy(document_type),
         DocumentType::StockAdjustment => process_required(
             document_type,
             NO_PURPOSES,
@@ -342,44 +301,15 @@ pub fn policy_of(document_type: DocumentType) -> Result<DocumentApprovalPolicy> 
             ApprovalDomainAction::StockAdjustmentPost,
             ApprovalDomainAction::StockAdjustmentCancelApproval,
         ),
-        DocumentType::SalesInvoiceRequest => finance_required(
-            document_type,
-            ApprovalDomainAction::SalesInvoiceRequestSubmit,
-            ApprovalDomainAction::SalesInvoiceRequestApprove,
-            ApprovalDomainAction::SalesInvoiceRequestCancelApproval,
-        ),
-        DocumentType::CustomerReceipt => finance_required(
-            document_type,
-            ApprovalDomainAction::CustomerReceiptSubmit,
-            ApprovalDomainAction::CustomerReceiptPost,
-            ApprovalDomainAction::CustomerReceiptCancelApproval,
-        ),
-        DocumentType::SupplierPayment => Ok(no_approval(document_type)),
-        DocumentType::CustomerRefund => finance_required(
-            document_type,
-            ApprovalDomainAction::CustomerRefundSubmit,
-            ApprovalDomainAction::CustomerRefundPost,
-            ApprovalDomainAction::CustomerRefundCancelApproval,
-        ),
-        DocumentType::SupplierRefund => finance_required(
-            document_type,
-            ApprovalDomainAction::SupplierRefundSubmit,
-            ApprovalDomainAction::SupplierRefundPost,
-            ApprovalDomainAction::SupplierRefundCancelApproval,
-        ),
-        DocumentType::ReceiptReversal => finance_required(
-            document_type,
-            ApprovalDomainAction::ReceiptReversalSubmit,
-            ApprovalDomainAction::ReceiptReversalPost,
-            ApprovalDomainAction::ReceiptReversalCancelApproval,
-        ),
-        DocumentType::PaymentReversal => finance_required(
-            document_type,
-            ApprovalDomainAction::PaymentReversalSubmit,
-            ApprovalDomainAction::PaymentReversalPost,
-            ApprovalDomainAction::PaymentReversalCancelApproval,
-        ),
-        DocumentType::PurchaseReceipt
+        DocumentType::SalesInvoiceRequest
+        | DocumentType::PurchasePaymentRequest
+        | DocumentType::CustomerReceipt
+        | DocumentType::CustomerRefund
+        | DocumentType::SupplierRefund
+        | DocumentType::ReceiptReversal
+        | DocumentType::PaymentReversal => finance_policy(document_type),
+        DocumentType::SupplierPayment
+        | DocumentType::PurchaseReceipt
         | DocumentType::Delivery
         | DocumentType::ElectronicDelivery
         | DocumentType::ServiceFulfillment
@@ -388,6 +318,98 @@ pub fn policy_of(document_type: DocumentType) -> Result<DocumentApprovalPolicy> 
         | DocumentType::SalesReturnCase
         | DocumentType::PurchaseReturnOrder => Ok(no_approval(document_type)),
     }
+}
+
+fn sales_policy(document_type: DocumentType) -> Result<DocumentApprovalPolicy> {
+    let (version, start, approve, cancel) = match document_type {
+        DocumentType::SalesOrder => (
+            ApprovalSubjectVersionSource::SalesOrderSubmissionNo,
+            ApprovalDomainAction::SalesOrderStartApprovalSubmission,
+            ApprovalDomainAction::SalesOrderFormalizeApprovedSubmission,
+            ApprovalDomainAction::SalesOrderCancelApprovalSubmission,
+        ),
+        DocumentType::VoucherSalesOrder => (
+            ApprovalSubjectVersionSource::SalesOrderSubmissionNo,
+            ApprovalDomainAction::VoucherSalesOrderStartApprovalSubmission,
+            ApprovalDomainAction::VoucherSalesOrderFormalizeApprovedSubmission,
+            ApprovalDomainAction::VoucherSalesOrderCancelApprovalSubmission,
+        ),
+        DocumentType::SalesChangeOrder => (
+            ApprovalSubjectVersionSource::SalesChangeSubmissionNo,
+            ApprovalDomainAction::SalesChangeOrderSubmitSalesChange,
+            ApprovalDomainAction::SalesChangeOrderApplyEffectiveChange,
+            ApprovalDomainAction::SalesChangeOrderCancelApproval,
+        ),
+        _ => return Err(Error::Internal("非销售审批类型不得使用销售政策".into())),
+    };
+    process_required(document_type, NO_PURPOSES, version, SALES_PURCHASE_SNAPSHOT, start, approve, cancel)
+}
+
+fn purchase_policy(document_type: DocumentType) -> Result<DocumentApprovalPolicy> {
+    let (start, approve, cancel) = match document_type {
+        DocumentType::PurchaseOrder => (
+            ApprovalDomainAction::PurchaseOrderSubmit,
+            ApprovalDomainAction::PurchaseOrderFormalizeApprovedOrder,
+            ApprovalDomainAction::PurchaseOrderCancelApproval,
+        ),
+        DocumentType::PurchaseChangeOrder => (
+            ApprovalDomainAction::PurchaseChangeOrderSubmitChange,
+            ApprovalDomainAction::PurchaseChangeOrderApplyEffectiveChange,
+            ApprovalDomainAction::PurchaseChangeOrderCancelApproval,
+        ),
+        _ => return Err(Error::Internal("非采购审批类型不得使用采购政策".into())),
+    };
+    process_required(
+        document_type,
+        NO_PURPOSES,
+        ApprovalSubjectVersionSource::EntityApprovalSubjectVersion,
+        SALES_PURCHASE_SNAPSHOT,
+        start,
+        approve,
+        cancel,
+    )
+}
+
+fn finance_policy(document_type: DocumentType) -> Result<DocumentApprovalPolicy> {
+    let (start, approve, cancel) = match document_type {
+        DocumentType::SalesInvoiceRequest => (
+            ApprovalDomainAction::SalesInvoiceRequestSubmit,
+            ApprovalDomainAction::SalesInvoiceRequestApprove,
+            ApprovalDomainAction::SalesInvoiceRequestCancelApproval,
+        ),
+        DocumentType::PurchasePaymentRequest => (
+            ApprovalDomainAction::PurchasePaymentRequestSubmit,
+            ApprovalDomainAction::PurchasePaymentRequestApprove,
+            ApprovalDomainAction::PurchasePaymentRequestCancelApproval,
+        ),
+        DocumentType::CustomerReceipt => (
+            ApprovalDomainAction::CustomerReceiptSubmit,
+            ApprovalDomainAction::CustomerReceiptPost,
+            ApprovalDomainAction::CustomerReceiptCancelApproval,
+        ),
+        DocumentType::CustomerRefund => (
+            ApprovalDomainAction::CustomerRefundSubmit,
+            ApprovalDomainAction::CustomerRefundPost,
+            ApprovalDomainAction::CustomerRefundCancelApproval,
+        ),
+        DocumentType::SupplierRefund => (
+            ApprovalDomainAction::SupplierRefundSubmit,
+            ApprovalDomainAction::SupplierRefundPost,
+            ApprovalDomainAction::SupplierRefundCancelApproval,
+        ),
+        DocumentType::ReceiptReversal => (
+            ApprovalDomainAction::ReceiptReversalSubmit,
+            ApprovalDomainAction::ReceiptReversalPost,
+            ApprovalDomainAction::ReceiptReversalCancelApproval,
+        ),
+        DocumentType::PaymentReversal => (
+            ApprovalDomainAction::PaymentReversalSubmit,
+            ApprovalDomainAction::PaymentReversalPost,
+            ApprovalDomainAction::PaymentReversalCancelApproval,
+        ),
+        _ => return Err(Error::Internal("非资金审批类型不得使用资金政策".into())),
+    };
+    finance_required(document_type, start, approve, cancel)
 }
 
 /// 要求该类型政策为必须审批并返回完整政策。
@@ -543,6 +565,7 @@ fn owner_role(document_type: DocumentType) -> Result<WorkItemOwnerRole> {
         DocumentType::PurchaseOrder => "purchase_order_approver",
         DocumentType::PurchaseChangeOrder => "purchase_change_order_approver",
         DocumentType::StockAdjustment => "stock_adjustment_approver",
+        DocumentType::PurchasePaymentRequest => "purchase_payment_request_approver",
         DocumentType::CustomerReceipt => "customer_receipt_approver",
         DocumentType::SalesInvoiceRequest => "sales_invoice_request_approver",
         DocumentType::CustomerRefund => "customer_refund_approver",
@@ -581,6 +604,10 @@ fn ensure_real_action(action: ApprovalDomainAction) -> Result<()> {
         | ApprovalDomainAction::SalesInvoiceRequestSubmit
         | ApprovalDomainAction::SalesInvoiceRequestApprove
         | ApprovalDomainAction::SalesInvoiceRequestCancelApproval
+        | ApprovalDomainAction::PurchasePaymentRequestSubmit
+        | ApprovalDomainAction::PurchasePaymentRequestApprove
+        | ApprovalDomainAction::PurchasePaymentRequestReject
+        | ApprovalDomainAction::PurchasePaymentRequestCancelApproval
         | ApprovalDomainAction::CustomerReceiptSubmit
         | ApprovalDomainAction::CustomerReceiptPost
         | ApprovalDomainAction::CustomerReceiptCancelApproval
@@ -624,10 +651,10 @@ mod tests {
     use super::*;
     use crate::service::approval::process_kind::{document_type_of, process_kind_of};
 
-    /// 21 行政策穷尽：12 个 PROCESS_REQUIRED 逐行断言矩阵，9 个 NO_APPROVAL 仅身份字段。
+    /// 22 行政策穷尽：13 个 PROCESS_REQUIRED 逐行断言矩阵，9 个 NO_APPROVAL 仅身份字段。
     #[test]
     fn policies_are_exhaustive_and_match_process_kind() {
-        assert_eq!(ALL_DOCUMENT_TYPES.len(), 21);
+        assert_eq!(ALL_DOCUMENT_TYPES.len(), 22);
         let mut required = 0;
         let mut no_approval = 0;
         for document_type in ALL_DOCUMENT_TYPES {
@@ -646,7 +673,7 @@ mod tests {
                 },
             }
         }
-        assert_eq!(required, 12);
+        assert_eq!(required, 13);
         assert_eq!(no_approval, 9);
     }
 
@@ -779,6 +806,15 @@ mod tests {
                 start: ApprovalDomainAction::StockAdjustmentSubmit,
                 approve: ApprovalDomainAction::StockAdjustmentPost,
                 cancel: ApprovalDomainAction::StockAdjustmentCancelApproval,
+            }),
+            DocumentType::PurchasePaymentRequest => Some(ExpectedRequiredPolicy {
+                purposes: NO_PURPOSES,
+                version: ApprovalSubjectVersionSource::EntityApprovalSubjectVersion,
+                snapshot: FINANCE_SNAPSHOT,
+                owner_role: "purchase_payment_request_approver",
+                start: ApprovalDomainAction::PurchasePaymentRequestSubmit,
+                approve: ApprovalDomainAction::PurchasePaymentRequestApprove,
+                cancel: ApprovalDomainAction::PurchasePaymentRequestCancelApproval,
             }),
             DocumentType::CustomerReceipt => Some(ExpectedRequiredPolicy {
                 purposes: NO_PURPOSES,

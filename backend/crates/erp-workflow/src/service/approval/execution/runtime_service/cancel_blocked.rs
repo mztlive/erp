@@ -578,7 +578,19 @@ async fn persist_cancel_operation(
     )
     .await?;
     audit_port.persist(&audit, executor).await?;
-    Ok(map_command_view(&writes.instance, None, None, Some("DRAFT".into()), None, writes.commit, false))
+    let subject_status = match source.document_type {
+        DocumentType::PurchasePaymentRequest => "withdrawn",
+        _ => "DRAFT",
+    };
+    Ok(map_command_view(
+        &writes.instance,
+        None,
+        None,
+        Some(subject_status.into()),
+        None,
+        writes.commit,
+        false,
+    ))
 }
 
 /// 明确领域取消上下文；审计文本不承担此合同。

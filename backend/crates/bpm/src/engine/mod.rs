@@ -17,7 +17,7 @@ mod transition_plan;
 
 pub use cancel::{CancelCommand, cancel};
 pub use cancel_plan::{CancelPlan, CancelPlanInput, plan_cancel};
-pub use decision::{DecideCommand, block_current, decide};
+pub use decision::{DecideCommand, block_current, decide, reject_terminal};
 pub use event::{BpmEvent, BpmEventKind};
 pub use resume::{ResumeCommand, resume};
 pub use start::{StartAssigneeBinding, StartCommand, start};
@@ -166,7 +166,7 @@ mod tests {
     use super::{
         CancelCommand, CommitRequired, DecideCommand, DefinitionGraph, Eligibility, EngineError,
         ResumeCommand, StartAssigneeBinding, StartCommand, TaskCloseReason, TaskIntent, block_current,
-        cancel, decide, resume, start,
+        cancel, decide, reject_terminal, resume, start,
     };
     use crate::ids::{
         ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessDefinitionId,
@@ -321,6 +321,44 @@ mod tests {
         assert_eq!(plan.commit, CommitRequired::TerminalApproved);
         assert_eq!(plan.instance.status, ApprovalProcessInstanceStatus::Approved);
         assert!(plan.instance.current_node_execution_id.is_none());
+    }
+
+    #[test]
+    fn terminal_rejection_finishes_without_restart_or_new_tasks() {
+        let started = start_two_node(eligible("u1", "张三"));
+        let current = started.created_executions[0].clone();
+        let command = DecideCommand {
+            decision: ApprovalDecision::Reject,
+            reason: Some("依据不符".into()),
+            actor: participant("u1"),
+            current_eligibility: eligible("u1", "张三"),
+            next_eligibility: blocked("u1", "张三", ApprovalBlockerCode::ApproverAccountInactive),
+            next_execution_id: ApprovalNodeExecutionId::new("unused"),
+            next_execution_no: 2,
+            now: at(20),
+        };
+        let plan =
+            reject_terminal(started.instance.clone(), current.clone(), &two_node_graph(), command.clone())
+                .unwrap();
+        assert_eq!(plan.instance.status, ApprovalProcessInstanceStatus::Rejected);
+        assert_eq!(plan.instance.current_round_no, 1);
+        assert!(plan.instance.current_node_execution_id.is_none());
+        assert!(plan.instance.ended_at.is_some());
+        assert!(plan.created_executions.is_empty());
+        assert!(plan.created_assignees.is_empty());
+        assert!(matches!(plan.task_intents.as_slice(), [TaskIntent::CompleteTask { .. }]));
+        assert_eq!(plan.updated_executions[0].status, ApprovalNodeExecutionStatus::Rejected);
+        let mut empty_reason = command.clone();
+        empty_reason.reason = Some("   ".into());
+        assert!(
+            reject_terminal(started.instance.clone(), current.clone(), &two_node_graph(), empty_reason)
+                .is_err()
+        );
+        let mut inactive = command;
+        inactive.current_eligibility = blocked("u1", "张三", ApprovalBlockerCode::ApproverAccountInactive);
+        let blocked_plan = reject_terminal(started.instance, current, &two_node_graph(), inactive).unwrap();
+        assert_eq!(blocked_plan.commit, CommitRequired::Blocked);
+        assert_eq!(blocked_plan.instance.status, ApprovalProcessInstanceStatus::Blocked);
     }
 
     /// 任一节点驳回都进入下一轮入口，subject_version 不变。

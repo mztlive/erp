@@ -138,6 +138,8 @@ export type BackendSupplierPayment = {
     payment_recipient?: BackendPaymentRecipient | null
     paid_at: number
     amount: string
+    reversed_amount: string
+    effective_amount: string
     bank_reference?: string | null
     bank_receipt?: {
         asset_id: string
@@ -422,6 +424,8 @@ export function projectPayment(p: BackendSupplierPayment): PaymentRow {
         ),
         paidAt: instantToIso(p.paid_at),
         amount: p.amount,
+        reversedAmount: p.reversed_amount,
+        effectiveAmount: p.effective_amount,
         bankReferenceMasked: maskBank(p.bank_reference),
         bankReceipt: p.bank_receipt
             ? {

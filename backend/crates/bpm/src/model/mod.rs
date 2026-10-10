@@ -64,6 +64,8 @@ pub enum ProcessKind {
     CustomerReceipt,
     /// 销项开票申请。
     SalesInvoiceRequest,
+    /// 采购付款申请审批。
+    PurchasePaymentRequest,
     /// 供应商付款流程。
     SupplierPayment,
     /// 客户退款流程。
@@ -101,7 +103,7 @@ impl ProcessKind {
     /// # 返回
     /// 返回非空且不超过 [`Self::MAX_LEN`] 的稳定字符串。
     /// 种类与稳定代码的唯一真相源；`as_str`/`try_from_code` 均由此查表。
-    const TABLE: [(Self, &'static str); 21] = [
+    const TABLE: [(Self, &'static str); 22] = [
         (Self::SalesOrder, "sales_order"),
         (Self::VoucherSalesOrder, "voucher_sales_order"),
         (Self::SalesChangeOrder, "sales_change_order"),
@@ -110,6 +112,7 @@ impl ProcessKind {
         (Self::StockAdjustment, "stock_adjustment"),
         (Self::CustomerReceipt, "customer_receipt"),
         (Self::SalesInvoiceRequest, "sales_invoice_request"),
+        (Self::PurchasePaymentRequest, "purchase_payment_request"),
         (Self::SupplierPayment, "supplier_payment"),
         (Self::CustomerRefund, "customer_refund"),
         (Self::SupplierRefund, "supplier_refund"),
@@ -422,6 +425,7 @@ mod tests {
             ProcessKind::StockAdjustment,
             ProcessKind::CustomerReceipt,
             ProcessKind::SalesInvoiceRequest,
+            ProcessKind::PurchasePaymentRequest,
             ProcessKind::SupplierPayment,
             ProcessKind::CustomerRefund,
             ProcessKind::SupplierRefund,
@@ -436,7 +440,7 @@ mod tests {
             ProcessKind::SalesReturnCase,
             ProcessKind::PurchaseReturnOrder,
         ];
-        assert_eq!(kinds.len(), 21);
+        assert_eq!(kinds.len(), 22);
         for kind in kinds {
             assert!(!kind.as_str().is_empty());
             assert!(kind.as_str().len() <= PROCESS_KIND_MAX_LEN);

@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use erp_core::common::time::Instant;
 use erp_core::ids::{SalesOrderId, WorkItemId};
 use erp_core::money::Quantity;
-use erp_read_models::purchase_center::repository::load_sales_procurement_coverage;
+use erp_read_models::sales_center::order::load_current_procurement_coverage_for_sync;
 use erp_sales::entity::sales_order::SalesOrder;
 use erp_sales::repository::SalesOrderExt;
 use erp_workflow::WorkItemExt;
@@ -111,7 +111,7 @@ pub async fn sync_procurement_tasks_for_sales_order(
         .find_by_id(sales_order_id, executor)
         .await?
         .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
-    let coverage = load_sales_procurement_coverage(db, &order, executor).await?;
+    let coverage = load_current_procurement_coverage_for_sync(db, &order, executor).await?;
     let remaining_by_line = coverage
         .lines
         .into_iter()

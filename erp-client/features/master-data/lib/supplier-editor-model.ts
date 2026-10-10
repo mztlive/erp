@@ -1,6 +1,7 @@
 import { parseSupplierTaxRates } from "@/lib/supplier-tax-rates"
 import { currentResourceFieldValues } from "@/features/master-data/lib/resource-fields"
 import { settlementCode } from "@/features/master-data/api/presentation"
+import { reconciliationCycle } from "@/lib/supplier-payment-terms"
 import type { MasterDataCenterView } from "@/features/master-data/types"
 import {
     isSupplierPaymentTermCode,
@@ -17,6 +18,7 @@ export type SupplierEditorFormValues = Readonly<{
     address: string
     capability: string
     settlement: string
+    reconciliationCycle: string
     paymentTerm: string
     businessCategory: string
     signingEntity: string
@@ -93,6 +95,8 @@ export function validateSupplierEditorFields(
     if (!values.signingEntity.trim()) return "请选择公司签约主体"
     if (!values.paymentEntity.trim()) return "请选择公司付款主体"
     if (!settlementCode(values.settlement)) return "请选择结算方式"
+    if (!reconciliationCycle(values.reconciliationCycle))
+        return "请选择对账频率"
     if (!isSupplierPaymentTermCode(values.paymentTerm)) {
         return "请选择具体付款条件"
     }
@@ -143,6 +147,8 @@ export function hydrateSupplierEditor(
         address: fields.address ?? "",
         capability: fields.capability ?? "",
         settlement: settlementCode(fields.settlement) ?? "",
+        reconciliationCycle:
+            reconciliationCycle(fields.reconciliationCycle ?? "") ?? "",
         paymentTerm:
             resolvedPaymentTerm &&
             isSupplierPaymentTermCode(resolvedPaymentTerm)
@@ -205,6 +211,7 @@ export function createSupplierEditorDefaults(
         address: "",
         capability: "",
         settlement: "",
+        reconciliationCycle: "none",
         paymentTerm: "",
         businessCategory: "",
         signingEntity: "",

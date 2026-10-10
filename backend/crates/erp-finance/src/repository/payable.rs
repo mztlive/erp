@@ -60,3 +60,6 @@ impl<'a> PayableRepository<'a> {
 }
 
 pub(super) use super::sort_doc_with_id as sort_doc;
+pub mod payment_request;
+pub mod payment_request_snapshot;
+pub use account::PayableAccountReservationExt;

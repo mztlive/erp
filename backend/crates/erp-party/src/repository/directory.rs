@@ -41,6 +41,7 @@ pub(crate) async fn snapshot(
 fn pipeline(scope: &DirectoryScope, query: &DirectoryQuery) -> Vec<Document> {
     let mut filter = doc! { "deleted_at": 0 };
     filter.insert("party_kind", "enterprise");
+    filter.insert("company_profile", doc! { "$exists": true, "$ne": null });
     let mut clauses = Vec::new();
     if let Some(ids) = &scope.ids {
         clauses.push(doc! { "id": { "$in": ids } });
@@ -91,6 +92,8 @@ mod tests {
         };
         let stages = pipeline(&scope, &query);
         let filter = stages[0].get_document("$match").unwrap();
+        assert_eq!(filter.get_str("party_kind").unwrap(), "enterprise");
+        assert_eq!(filter.get_document("company_profile").unwrap(), &doc! { "$exists": true, "$ne": null });
         let clauses = filter.get_array("$and").unwrap();
         assert_eq!(clauses.len(), 2);
         assert_eq!(clauses[0].as_document().unwrap(), &doc! {"id": {"$in": ["allowed"]}});

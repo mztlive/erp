@@ -224,7 +224,7 @@ async fn persist_created_order_start(
     now: Instant,
     executor: &mut dyn Executor,
 ) -> Result<SubmittedCreatedOrder> {
-    let organization_id = purchase_order_responsible_org_id(sales_order)?;
+    let organization_id = purchase_order_responsible_org_id(&frozen.order)?;
     let _ = purchase_order_object_readable(&organization_id, actor.id())?;
     let snapshot = build_purchase_order_snapshot(
         &frozen.order,

@@ -53,6 +53,7 @@ import {
     readHeaderDocumentNumber,
     salesOrderAmountSummary,
     selectWorkspaceFamily,
+    expectSourcingCounts,
 } from "../helpers/ui"
 
 test.describe.configure({ mode: "serial" })
@@ -239,7 +240,7 @@ test("销项与进项红票按 Invoice 强类型命令登记，不进审批且�
         await allocateAndSubmitPurchaseOrder(caigou2.page, order.orderNo)
         await caigou2.context.close()
 
-        const caiwu = await openRole(browser, extra, "caiwu")
+        const caiwu = await openRole(browser, extra, "caigoushenpi")
         await approveWorkspaceTask(caiwu.page, "采购单审批")
         await caiwu.context.close()
 
@@ -590,8 +591,12 @@ async function approveWorkspaceTask(page: Page, typeLabel: string, hint?: string
 async function allocateAndSubmitPurchaseOrder(page: Page, orderNo: string) {
     await openWorkspaceTask(page, "待供给分配", orderNo, "procurement")
     await expect(page.getByRole("heading", { name: "供给分配" })).toBeVisible({ timeout: LONG })
-    await expect(page.getByText("将创建采购单")).toBeVisible({ timeout: TIMEOUT })
+    await expectSourcingCounts(page)
     await expandSourcingEditor(page)
+    const purchaseSource = page.getByRole("region", { name: "当前商品供给编辑" })
+        .locator('[id$="-sourcing-option"]')
+    await expect(purchaseSource).toHaveCount(1)
+    await chooseOption(page, purchaseSource, /入仓/, "入仓")
     const warehouse = page
         .locator('[id^="procurement-orders-create-row-"][id$="-warehouse"]')
         .first()

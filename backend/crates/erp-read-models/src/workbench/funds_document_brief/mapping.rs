@@ -813,6 +813,7 @@ mod tests {
         let mut revision = SalesOrderRevision::new(
             SalesOrderRevisionId::new("revision-1"),
             SalesOrderRevisionData {
+                settlement_party_id: "party-1".to_string().into(),
                 sales_order_id: SalesOrderId::new("sales-1"),
                 revision_no: 1,
                 revision_source: RevisionSource::ErpApproval,

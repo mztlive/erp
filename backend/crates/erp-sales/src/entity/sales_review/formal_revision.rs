@@ -28,6 +28,7 @@ impl FormalRevisionHeader {
     fn from_sales_change_submission(submission: &SalesChangeSubmission) -> Result<Self> {
         Ok(Self {
             sales_order_id: submission.sales_order_id.clone(),
+            settlement_party_id: submission.settlement_party_id.clone(),
             content_hash: SalesContentHash::submission(&submission.base.id)?.into_wire(),
             contract_revision_id: submission.contract_revision_id.clone(),
             snapshot: submission.sales_order_header_snapshot(),
@@ -335,6 +336,7 @@ mod tests {
         assert_eq!(aggregate.revision.revision_source, RevisionSource::SalesChange);
         assert_eq!(aggregate.revision.previous_revision_id, Some(SalesOrderRevisionId::new("rev-1")));
         assert_eq!(aggregate.revision.content_hash, "sub:cs-1");
+        assert_eq!(aggregate.revision.settlement_party_id, submission.settlement_party_id);
         assert_eq!(aggregate.revision.customer_snapshot.customer_name, "东方企业");
         assert_eq!(aggregate.revision.business_remark.as_deref(), Some("变更后执行"));
         assert_eq!(aggregate.lines.len(), 1);

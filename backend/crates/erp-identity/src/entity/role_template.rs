@@ -76,6 +76,7 @@ impl BuiltinRoleTemplate {
             "role-procurement" => &[
                 "配置跨销售的采购协同范围、商品供应商共享范围及库存仓库范围。",
                 "设置采购责任规则，配置人员、仓库和结算主体候选目录。",
+                "采购内部审批须指定申请人以外的采购审批人；付款申请另交财务审核。",
             ],
             "role-operations" => &[
                 "为商品及卡券销售协同配置适用范围；配置人员和仓库候选目录。",
@@ -114,6 +115,12 @@ impl BuiltinRoleTemplate {
         let (id, name, description, setup) = kind.metadata();
         let mut permissions = Vec::new();
         for permission in &self.permissions {
+            if permission.resource() == "purchase_payment_request" {
+                if kind.allows_payment_request(permission.action()) {
+                    permissions.push(permission.clone());
+                }
+                continue;
+            }
             if kind.allows_write(permission.resource()) || Self::shared_operation(permission) {
                 permissions.push(permission.clone());
             } else if permission.action() == "*" {
@@ -191,13 +198,19 @@ pub enum FinancePosition {
 }
 
 impl FinancePosition {
+    /// 付款申请分别授予财务关闭和出纳付款，三个岗位共同保留读取。
+    fn allows_payment_request(self, action: &str) -> bool {
+        matches!(action, "list" | "detail")
+            || matches!((self, action), (Self::Director, "close") | (Self::Cashier, "pay"))
+    }
+
     /// 返回岗位固定身份、职责和必须由管理员配置的责任。
     fn metadata(self) -> (&'static str, &'static str, &'static str, &'static [&'static str]) {
         match self {
             Self::Director => (
                 "role-finance-director",
                 "财务总监",
-                "审批采购与票款单据，管理成本、结算及财务责任配置。",
+                "审核采购付款申请与票款单据，管理成本、结算及财务责任配置。",
                 &[
                     "指派为财务审批节点负责人；不得审批本人提交。",
                     "配置客户、销售、采购及结算查看范围；库存复核配置仓库范围。",

@@ -46,6 +46,8 @@ pub enum DocumentType {
     CustomerReceipt,
     /// 销项开票申请。
     SalesInvoiceRequest,
+    /// 采购付款申请。
+    PurchasePaymentRequest,
     /// 供应商付款单。
     SupplierPayment,
     /// 发票。
@@ -68,11 +70,11 @@ impl DocumentType {
     /// 返回全部已登记单据类型的权威穷尽集合。
     ///
     /// # 返回
-    /// 按审批政策矩阵的稳定顺序提供全部二十一个单据类型。
+    /// 按审批政策矩阵的稳定顺序提供全部二十二个单据类型。
     ///
     /// # 约束
     /// 解析、审批政策目录和穷尽测试必须复用本集合，不维护第二份变体清单。
-    pub const ALL: [Self; 21] = [
+    pub const ALL: [Self; 22] = [
         Self::SalesOrder,
         Self::VoucherSalesOrder,
         Self::SalesChangeOrder,
@@ -81,6 +83,7 @@ impl DocumentType {
         Self::StockAdjustment,
         Self::CustomerReceipt,
         Self::SalesInvoiceRequest,
+        Self::PurchasePaymentRequest,
         Self::SupplierPayment,
         Self::CustomerRefund,
         Self::SupplierRefund,
@@ -121,6 +124,7 @@ impl DocumentType {
             Self::StockAdjustment => "库存调整单",
             Self::CustomerReceipt => "客户回款单",
             Self::SalesInvoiceRequest => "销项开票申请",
+            Self::PurchasePaymentRequest => "采购付款申请",
             Self::SupplierPayment => "供应商付款单",
             Self::Invoice => "发票",
             Self::SalesReturnCase => "销售退货单",
@@ -157,6 +161,7 @@ impl DocumentType {
             Self::StockAdjustment => "stock_adjustment",
             Self::CustomerReceipt => "customer_receipt",
             Self::SalesInvoiceRequest => "sales_invoice_request",
+            Self::PurchasePaymentRequest => "purchase_payment_request",
             Self::SupplierPayment => "supplier_payment",
             Self::Invoice => "invoice",
             Self::SalesReturnCase => "sales_return_case",
@@ -797,7 +802,7 @@ mod tests {
         assert_eq!(doc.formalized_at.unwrap(), first);
     }
 
-    /// 验证全部二十一个冻结代码都能精确解析。
+    /// 验证全部二十二个冻结代码都能精确解析。
     ///
     /// # 参数
     /// 无。
@@ -812,7 +817,7 @@ mod tests {
     /// 用例覆盖 `DocumentType` 的完整稳定代码集合。
     #[test]
     fn document_type_try_from_code_accepts_all_stable_codes() {
-        assert_eq!(DocumentType::ALL.len(), 21);
+        assert_eq!(DocumentType::ALL.len(), 22);
         for expected in DocumentType::ALL {
             assert_eq!(DocumentType::try_from_code(expected.as_str()).unwrap(), expected);
         }
@@ -857,6 +862,7 @@ mod tests {
             (DocumentType::StockAdjustment, "stock_adjustment", "库存调整单"),
             (DocumentType::CustomerReceipt, "customer_receipt", "客户回款单"),
             (DocumentType::SalesInvoiceRequest, "sales_invoice_request", "销项开票申请"),
+            (DocumentType::PurchasePaymentRequest, "purchase_payment_request", "采购付款申请"),
             (DocumentType::SupplierPayment, "supplier_payment", "供应商付款单"),
             (DocumentType::Invoice, "invoice", "发票"),
             (DocumentType::SalesReturnCase, "sales_return_case", "销售退货单"),
@@ -866,7 +872,7 @@ mod tests {
             (DocumentType::ReceiptReversal, "receipt_reversal", "回款冲正单"),
             (DocumentType::PaymentReversal, "payment_reversal", "付款冲正单"),
         ];
-        assert_eq!(ROWS.len(), 21);
+        assert_eq!(ROWS.len(), 22);
 
         for (variant, code, label) in ROWS {
             assert_eq!(variant.as_str(), *code);

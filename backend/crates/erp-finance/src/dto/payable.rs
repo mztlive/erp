@@ -128,6 +128,8 @@ mod tests {
         use super::payment::CommitSupplierPaymentRequest;
 
         let without_recipient = serde_json::json!({
+            "payment_request_id": "request-1",
+            "expected_request_version": 1,
             "work_item_id": "wi-1",
             "expected_task_version": "3",
             "payment": {
@@ -144,6 +146,8 @@ mod tests {
         assert!(serde_json::from_value::<CommitSupplierPaymentRequest>(without_recipient).is_err());
 
         let blank_recipient = serde_json::from_value::<CommitSupplierPaymentRequest>(serde_json::json!({
+            "payment_request_id": "request-1",
+            "expected_request_version": 1,
             "work_item_id": "wi-1",
             "expected_task_version": "3",
             "expected_payee_bank_account_id": " ",
@@ -163,6 +167,8 @@ mod tests {
         assert!(blank_recipient.validate().is_err());
 
         let missing_version = serde_json::json!({
+            "payment_request_id": "request-1",
+            "expected_request_version": 1,
             "work_item_id": "wi-1",
             "expected_task_version": "3",
             "expected_payee_bank_account_id": "bank-1",
@@ -180,12 +186,14 @@ mod tests {
         assert!(serde_json::from_value::<CommitSupplierPaymentRequest>(missing_version).is_err());
     }
 
-    /// 附加付款任务缺省为空，旧客户端不传字段时仍按单任务付款。
+    /// 附加付款任务缺省为空，申请授权的单次付款只执行当前任务。
     #[test]
     fn payment_commit_defaults_additional_work_items_to_empty() {
         use super::payment::CommitSupplierPaymentRequest;
 
         let request = serde_json::from_value::<CommitSupplierPaymentRequest>(serde_json::json!({
+            "payment_request_id": "request-1",
+            "expected_request_version": 1,
             "work_item_id": "wi-1",
             "expected_task_version": "3",
             "expected_payee_bank_account_id": "bank-1",
@@ -201,7 +209,7 @@ mod tests {
             "allocations": [{"payable_entry_id": "pe-1", "allocated_amount": "10.00"}],
             "idempotency_key": "k1"
         }))
-        .expect("旧付款命令必须可反序列化");
+        .expect("付款申请授权命令必须可反序列化");
         assert!(request.additional_work_items.is_empty());
         assert!(request.validate().is_ok());
     }
@@ -292,3 +300,4 @@ mod reversal_status_wire_tests {
         }
     }
 }
+pub mod payment_request;

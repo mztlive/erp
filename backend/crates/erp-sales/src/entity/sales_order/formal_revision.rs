@@ -5,7 +5,7 @@
 
 use erp_core::common::time::Instant;
 use erp_core::ids::{
-    ContractRevisionId, SalesOrderGoodsServiceLineRevisionId, SalesOrderId, SalesOrderLineId,
+    ContractRevisionId, PartyId, SalesOrderGoodsServiceLineRevisionId, SalesOrderId, SalesOrderLineId,
     SalesOrderRevisionId, SalesOrderRevisionLineId, SalesOrderVoucherLineRevisionId, SkuId,
 };
 use erp_core::money::{Amount, Rate};
@@ -224,6 +224,8 @@ pub struct SalesOrderRevisionAggregate {
 pub(crate) struct FormalRevisionHeader {
     /// 稳定销售单。
     pub sales_order_id: SalesOrderId,
+    /// 来源提交冻结的我方结算主体身份。
+    pub settlement_party_id: PartyId,
     /// 内容指纹，当前合同为 `sub:{submission_id}`。
     pub content_hash: String,
     /// 生效时合同版本。
@@ -263,6 +265,7 @@ impl FormalRevisionHeader {
     pub(crate) fn from_sales_order_submission(submission: &SalesOrderSubmission) -> Result<Self> {
         Ok(Self {
             sales_order_id: submission.sales_order_id.clone(),
+            settlement_party_id: submission.settlement_party_id.clone(),
             content_hash: super::content_hash::SalesContentHash::submission(&submission.base.id)?.into_wire(),
             contract_revision_id: submission.contract_revision_id.clone(),
             snapshot: submission.header_snapshot_data(),
@@ -440,6 +443,7 @@ fn build_revision_header(
         revision_id.clone(),
         SalesOrderRevisionData {
             sales_order_id: header.sales_order_id,
+            settlement_party_id: header.settlement_party_id,
             revision_no: context.revision_no,
             revision_source: context.revision_source,
             previous_revision_id: context.previous_revision_id,
@@ -786,6 +790,7 @@ mod tests {
         assert_eq!(aggregate.revision.revision_source, RevisionSource::ErpApproval);
         assert_eq!(aggregate.revision.previous_revision_id, Some(SalesOrderRevisionId::new("rev-prev")));
         assert_eq!(aggregate.revision.content_hash, "sub:s-1");
+        assert_eq!(aggregate.revision.settlement_party_id, submission.settlement_party_id);
         assert_eq!(aggregate.revision.customer_snapshot.customer_name, "东方企业");
         assert_eq!(aggregate.revision.project_name.as_deref(), Some("端午福利项目"));
         assert_eq!(aggregate.revision.gross_amount, amt("59.94"));

@@ -187,7 +187,11 @@ export async function chooseOption(
     // Base UI 默认 input 点击即打开。等所属 Listbox 挂载，避免加载期间误点 trigger 又关掉浮层。
     await expect(input).toHaveAttribute("aria-expanded", "true", { timeout: UI_TIMEOUT })
     await expect(input).toHaveAttribute("aria-controls", /.+/, { timeout: UI_TIMEOUT })
-    const popup = visibleComboboxPopup(page, await input.getAttribute("aria-controls"))
+    const controlledId = await input.getAttribute("aria-controls")
+    const popup = visibleComboboxPopup(page, controlledId)
+    const ownedPopup = page.locator('[data-slot="combobox-content"]').filter({
+        has: page.locator(`[id=${JSON.stringify(controlledId)}]`),
+    })
 
     const listed = comboboxOption(popup, inputId, option)
     try {
@@ -205,6 +209,7 @@ export async function chooseOption(
     // 退场期间 isVisible 可能为 true，而下一次 click/innerText 会空等默认 actionTimeout。
     if (typeof option === "string") {
         await expectComboboxValue(page, input, option)
+        await expect(ownedPopup).toBeHidden({ timeout: 5_000 })
         return
     }
     try {
@@ -213,6 +218,7 @@ export async function chooseOption(
     } catch {
         throw new Error(`combobox 选项未提交：下拉仍打开（${String(option)}）`)
     }
+    await expect(ownedPopup).toBeHidden({ timeout: 5_000 })
 }
 
 const MONTH_NAMES_EN = [
@@ -404,24 +410,64 @@ export async function optionalStepVisible(
 }
 
 /**
- * 工作台履约任务先展示摘要，点「处理履约」后才打开表单对话框。
- * 对话框和「处理履约」按钮谁先出现走哪条，不固定等待。
+ * openWorkspaceTask 已按 family、任务类型与来源提示选定任务。
+ * 当前任务按履约类型显示登记入口，使用同一 workItem 的原生 id 打开对应表单。
  */
 export async function openFulfillmentWorkspaceForm(page: Page) {
-    const dialog = page.getByRole("dialog", { name: "处理履约" })
-    const trigger = page.getByRole("button", { name: "处理履约" })
-    await expect(dialog.or(trigger).first()).toBeVisible({ timeout: UI_TIMEOUT })
-    if (await dialog.isVisible()) return dialog
-    // 入库详情比仓发高，按钮会落在任务面板滚动区外。force 点击不滚动，坐标打在按钮外面。
-    // 点开任务后详情会重绘，刚解析到的按钮可能在滚动前脱离文档，所以重试到对话框出现。
+    const opened = page
+        .getByRole("dialog")
+        .filter({ has: page.locator('[aria-label="当前履约任务"]') })
+        .filter({ visible: true })
+    const task = page.getByRole("region", {
+        name: "当前工作台任务",
+        exact: true,
+    })
+    const trigger = task
+        .getByRole("button", {
+            name: /^(登记发货|登记入库|登记电子交付|登记服务完成|处理履约)$/,
+        })
+        .and(task.locator('button[id^="workspace-fulfillment-process-"]'))
+    await expect(opened.or(trigger).filter({ visible: true })).toHaveCount(1, {
+        timeout: UI_TIMEOUT,
+    })
+    if (await opened.count()) {
+        await expectFulfillmentForm(opened)
+        return opened
+    }
+    const triggerId = await trigger.getAttribute("id")
+    expect(triggerId).toMatch(/^workspace-fulfillment-process-.+/)
+    const taskId = triggerId!.slice("workspace-fulfillment-process-".length)
+    const dialog = page.locator(
+        `[role="dialog"][id=${JSON.stringify(`workspace-fulfillment-process-dialog-${taskId}`)}]`,
+    )
+    const action = (await trigger.innerText()).trim()
+    const formLabels: Record<string, string[]> = {
+        登记发货: ["供应商直发表单", "公司仓发表单"],
+        登记入库: ["入库表单"],
+        登记电子交付: ["电子交付表单"],
+        登记服务完成: ["线下服务表单"],
+    }
+    // 任务详情会随轮询重绘；每次重新解析同一 workItem 的按钮并等待它的对话框。
     await expect(async () => {
         if (await dialog.isVisible()) return
-        const button = page.getByRole("button", { name: "处理履约" })
+        const button = task.locator(`[id=${JSON.stringify(triggerId)}]`)
         await button.scrollIntoViewIfNeeded({ timeout: 5_000 })
         await button.click({ timeout: 5_000 })
         await expect(dialog).toBeVisible({ timeout: 5_000 })
     }).toPass({ timeout: UI_TIMEOUT })
+    await expectFulfillmentForm(dialog, formLabels[action])
     return dialog
+}
+
+async function expectFulfillmentForm(
+    dialog: Locator,
+    labels = ["供应商直发表单", "公司仓发表单", "入库表单", "电子交付表单", "线下服务表单"],
+) {
+    const form = dialog.locator(
+        labels.map((label) => `[aria-label=${JSON.stringify(label)}]`).join(", "),
+    )
+    await expect(form).toHaveCount(1, { timeout: UI_TIMEOUT })
+    await expect(form).toBeVisible({ timeout: UI_TIMEOUT })
 }
 
 /**
@@ -516,6 +562,28 @@ function workspaceTaskLocator(
         .first()
 }
 
+/** 验证当前供给任务实际可见的桌面或紧凑摘要，避免同时读取隐藏布局。 */
+export async function expectSourcingCounts(
+    page: Page,
+    purchaseOrders?: number,
+    stockReservations?: number,
+): Promise<void> {
+    const footer = page.getByRole("region", { name: "当前工作台任务" })
+        .locator('[data-slot="workspace-task-footer"]:visible')
+    await expect(footer).toHaveCount(1, { timeout: UI_TIMEOUT })
+    const totals = footer.locator("dl:visible").or(
+        footer.locator("p:visible").filter({ hasText: /^将创建采购单\s/ }),
+    )
+    await expect(totals).toHaveCount(1, { timeout: UI_TIMEOUT })
+    await expect(totals).toBeVisible({ timeout: UI_TIMEOUT })
+    if (purchaseOrders !== undefined) {
+        await expect(totals).toContainText(new RegExp(`将创建采购单\\s*${purchaseOrders}\\s*张`))
+    }
+    if (stockReservations !== undefined) {
+        await expect(totals).toContainText(new RegExp(`(?:将建立)?库存预留\\s*${stockReservations}\\s*条`))
+    }
+}
+
 /**
  * 打开 W01 待办。不要往 `#workspace-queue-toolbar-search-input` 填单号/往来方，
  * 后端搜索不匹配这些字段，会把列表滤空。
@@ -550,6 +618,15 @@ export async function openWorkspaceTask(
     const empty = page.getByText(
         /当前没有待处理事项|当前筛选没有待办|范围内没有待办/,
     )
+    // 供给分配可自动展开为全屏；先返回队列，再按正式任务标签及来源 hint 选择。
+    const exitFullscreen = page.getByRole("button", { name: "退出全屏", exact: true })
+    await expect.poll(async () =>
+        (await list.isVisible().catch(() => false)) ||
+        (await empty.first().isVisible().catch(() => false)) ||
+        (await exitFullscreen.isVisible().catch(() => false)),
+        { timeout: UI_TIMEOUT },
+    ).toBe(true)
+    if (await exitFullscreen.isVisible().catch(() => false)) await exitFullscreen.click()
     await expect(list.or(empty).first()).toBeVisible({ timeout: UI_TIMEOUT })
 
     const task = workspaceTaskLocator(page, typeLabel, hint)
@@ -572,8 +649,11 @@ export async function openWorkspaceTask(
         }
     }
 
+    let selectedTaskId = ""
     try {
         await expect(task).toBeVisible({ timeout: UI_TIMEOUT })
+        selectedTaskId = (await task.getAttribute("id")) ?? ""
+        expect(selectedTaskId, "所选待办须有正式任务身份").toMatch(/^workspace-task-.+/)
         await task.click()
     } catch {
         const labels = await workspaceTaskButtons(page)
@@ -587,6 +667,12 @@ export async function openWorkspaceTask(
             `工作台未找到任务: ${String(typeLabel)}${hint ? ` / ${hint}` : ""}${scopeNote}\n现有: ${labels.filter(Boolean).join(" | ") || emptyText || "（空）"}`,
         )
     }
+    // 已自动显示详情时 region 会立刻可见，仍须等待此次选择写入真实任务身份。
+    await expect.poll(() => {
+        const id = new URL(page.url()).searchParams.get("currentWorkItemId") ?? ""
+        const segment = id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
+        return id ? `workspace-task-${segment}` : ""
+    }, { timeout: UI_TIMEOUT }).toBe(selectedTaskId)
     await expect(page.getByRole("region", { name: "当前工作台任务" })).toBeVisible({
         timeout: UI_TIMEOUT,
     })

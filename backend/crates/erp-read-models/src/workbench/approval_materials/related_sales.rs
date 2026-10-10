@@ -295,7 +295,7 @@ mod tests {
     };
     use erp_procurement::entity::facts::PaymentTermFact;
     use erp_procurement::entity::purchase_order::{
-        FulfillmentResponsibility, PaymentTermSnapshot, PurchaseOrderSubmissionData,
+        FulfillmentResponsibility, PaymentSubjectSnapshot, PaymentTermSnapshot, PurchaseOrderSubmissionData,
         PurchaseOrderSubmissionLineData, PurchaseType, SubmissionStatus, SupplierSnapshot,
     };
     use erp_sales::entity::sales_order::{
@@ -308,6 +308,13 @@ mod tests {
         let mut submission = PurchaseOrderSubmission::new(
             PurchaseOrderSubmissionId::new("purchase-submission"),
             PurchaseOrderSubmissionData {
+                payment_subject: PaymentSubjectSnapshot::new(
+                    "party-1".to_string().into(),
+                    "我方公司".into(),
+                    "so-1".to_string().into(),
+                    "sales-rev-1".to_string().into(),
+                )
+                .unwrap(),
                 purchase_order_id: PurchaseOrderId::new("purchase-order"),
                 submission_no: PurchaseOrderSubmission::next_submission_no(&[]).unwrap(),
                 supplier_id: SupplierAccountId::new("supplier"),

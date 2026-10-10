@@ -15,6 +15,7 @@ pub(super) enum Step {
     SalesChange,
     Receivable,
     Payable,
+    PaymentRequest,
     CustomerReceipt,
     CustomerRefund,
     ReceiptReversal,
@@ -30,7 +31,7 @@ pub(super) enum Step {
     SupplierOffering,
     SupplierPortal,
 }
-const ORDER: [Step; 21] = [
+const ORDER: [Step; 22] = [
     Step::Sales,
     Step::Purchase,
     Step::Fulfillment,
@@ -38,6 +39,7 @@ const ORDER: [Step; 21] = [
     Step::SalesChange,
     Step::Receivable,
     Step::Payable,
+    Step::PaymentRequest,
     Step::CustomerReceipt,
     Step::CustomerRefund,
     Step::ReceiptReversal,
@@ -161,6 +163,7 @@ mod tests {
                 Step::SalesChange,
                 Step::Receivable,
                 Step::Payable,
+                Step::PaymentRequest,
                 Step::CustomerReceipt,
                 Step::CustomerRefund,
                 Step::ReceiptReversal,
@@ -177,8 +180,8 @@ mod tests {
                 Step::SupplierPortal,
             ]
         );
-        assert_eq!(executor.calls, 21);
-        assert_eq!(facts.len(), 21);
+        assert_eq!(executor.calls, 22);
+        assert_eq!(facts.len(), 22);
     }
     #[tokio::test]
     async fn each_first_read_error_preserves_variant_and_stops_later_reads() {

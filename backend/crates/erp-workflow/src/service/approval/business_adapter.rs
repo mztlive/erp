@@ -160,14 +160,15 @@ impl BindingRevalidationContext {
     /// 不返回错误。
     pub fn scope_object(&self, document_type: DocumentType) -> WorkflowScopeObject {
         let order = OrderTaskSource::approval_kind(document_type).is_some();
+        let department_owned = order || document_type == DocumentType::PurchasePaymentRequest;
         WorkflowScopeObject {
             order_source: order.then(|| self.order_source.clone()).flatten(),
             customer_id: order.then(|| self.customer_id.clone()).flatten(),
             owner_user_id: self.scope_owner_user_id.clone().unwrap_or_else(|| self.creator_id.clone()),
-            business_org_unit_id: order.then(|| self.business_org_unit_id.clone()).flatten(),
+            business_org_unit_id: department_owned.then(|| self.business_org_unit_id.clone()).flatten(),
             warehouse_id: (document_type == DocumentType::StockAdjustment)
                 .then(|| self.organization_id.clone()),
-            settlement_party_id: (!order && document_type != DocumentType::StockAdjustment)
+            settlement_party_id: (!department_owned && document_type != DocumentType::StockAdjustment)
                 .then(|| self.organization_id.clone()),
         }
     }
@@ -429,6 +430,10 @@ mod tests {
         assert_eq!(sales.business_org_unit_id.as_deref(), Some("department"));
         assert_eq!(sales.owner_user_id, "sales-owner");
         assert!(sales.warehouse_id.is_none() && sales.settlement_party_id.is_none());
+        let payment_request = context.scope_object(super::DocumentType::PurchasePaymentRequest);
+        assert_eq!(payment_request.business_org_unit_id.as_deref(), Some("department"));
+        assert!(payment_request.settlement_party_id.is_none());
+        assert!(payment_request.order_source.is_none());
         let warehouse = context.scope_object(super::DocumentType::StockAdjustment);
         assert_eq!(warehouse.warehouse_id.as_deref(), Some("responsibility-id"));
         assert!(warehouse.business_org_unit_id.is_none() && warehouse.settlement_party_id.is_none());
@@ -441,7 +446,7 @@ mod tests {
     use super::*;
     use crate::service::approval::policy::{ALL_DOCUMENT_TYPES, policy_of};
 
-    /// 12 个必须审批类型的适配器规格完整，9 个无审批类型不得注册空适配器。
+    /// 13 个必须审批类型的适配器规格完整，9 个无审批类型不得注册空适配器。
     #[test]
     fn adapter_registry_is_complete_and_no_approval_has_no_adapter() {
         let mut required = 0;
@@ -461,7 +466,7 @@ mod tests {
                 },
             }
         }
-        assert_eq!(required, 12);
+        assert_eq!(required, 13);
         assert_eq!(no_approval, 9);
     }
 

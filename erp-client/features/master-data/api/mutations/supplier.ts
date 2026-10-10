@@ -194,7 +194,9 @@ export async function createSupplier(
                     : null,
             clear_bank_account: false,
             settlement_mode: settlementToBackend(fields.settlement),
-            reconciliation_cycle: reconciliationCycle(fields.settlement ?? ""),
+            reconciliation_cycle: reconciliationCycle(
+                fields.reconciliationCycle ?? "",
+            ),
             payment_term_snapshot: paymentTermSnapshotOf(fields.paymentTerm),
             business_category: fields.businessCategory?.trim() || null,
             invoice_type: invoiceToBackend(fields.invoiceType),
@@ -315,7 +317,9 @@ export async function updateSupplierRevision(
                     : null,
             clear_bank_account: fields.clearBankAccount === true,
             settlement_mode: settlementToBackend(fields.settlement),
-            reconciliation_cycle: reconciliationCycle(fields.settlement ?? ""),
+            reconciliation_cycle: reconciliationCycle(
+                fields.reconciliationCycle ?? "",
+            ),
             payment_term_snapshot: paymentTermSnapshotOf(fields.paymentTerm),
             business_category: fields.businessCategory?.trim() || null,
             invoice_type: invoiceToBackend(fields.invoiceType),

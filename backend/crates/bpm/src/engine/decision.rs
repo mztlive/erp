@@ -7,7 +7,7 @@ use super::{DefinitionGraph, Eligibility, EngineError, EngineResult};
 use crate::ids::ApprovalNodeExecutionId;
 use crate::model::types::{
     ApprovalBlockerCode, ApprovalDecision, ApprovalExecutionAssignmentSource, ApprovalNodeExecutionStatus,
-    ApprovalProcessInstanceStatus, ApprovalTerminalResult, ApprovalTransitionEvent,
+    ApprovalTerminalResult, ApprovalTransitionEvent,
 };
 use crate::model::{
     ApprovalNodeExecution, ApprovalProcessInstance, ApprovalTransitionDefinition, ParticipantId, Timestamp,
@@ -78,6 +78,53 @@ pub fn decide(
         ApprovalDecision::Approve => apply_approve(instance, current, graph, edges.0, command),
         ApprovalDecision::Reject => apply_reject(instance, current, graph, edges.1, command),
     }
+}
+
+/// 驳回当前执行并终止实例，不生成新轮次或新任务。
+///
+/// # 参数
+/// * `instance` / `current` - 当前实例与活动令牌。
+/// * `graph` - 冻结流程定义；仍须证明当前决定连线合法。
+/// * `command` - 当前决定人、资格、必填原因和确定时间。
+/// # 返回
+/// 返回终态驳回计划；当前资格失效时返回可提交的阻塞计划。
+/// # 错误
+/// 非驳回命令、空原因、令牌不一致或定义非法时返回错误。
+pub fn reject_terminal(
+    mut instance: ApprovalProcessInstance,
+    mut current: ApprovalNodeExecution,
+    graph: &DefinitionGraph,
+    command: DecideCommand,
+) -> EngineResult<TransitionPlan> {
+    ensure_current_token(&instance, &current)?;
+    if command.decision != ApprovalDecision::Reject {
+        return Err(EngineError::InvalidCommand("终态驳回只接受驳回命令"));
+    }
+    if let Some(code) = command.current_eligibility.blocked_code() {
+        return block_current(instance, current, code, command.now);
+    }
+    let (_, reject_edge) = match require_decision_edges(graph, &current.node_key) {
+        Ok(edges) => edges,
+        Err(EngineError::GraphCorrupted) => {
+            return block_current(
+                instance,
+                current,
+                ApprovalBlockerCode::DefinitionGraphCorrupted,
+                command.now,
+            );
+        },
+        Err(error) => return Err(error),
+    };
+    ensure_reject_to_entry(graph, reject_edge)?;
+    let reason = command
+        .reason
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or(EngineError::InvalidCommand("驳回原因不能为空"))?;
+    current.record_reject(command.actor.clone(), reason, command.now)?;
+    instance.complete_rejected(command.now)?;
+    Ok(completed_current_plan(instance, current, command.actor, BpmEventKind::NodeRejected))
 }
 
 /// 通过当前节点，再进入下一节点或最终通过。
@@ -220,9 +267,7 @@ fn ensure_current_token(
     instance: &ApprovalProcessInstance,
     current: &ApprovalNodeExecution,
 ) -> EngineResult<()> {
-    if instance.status == ApprovalProcessInstanceStatus::Approved
-        || instance.status == ApprovalProcessInstanceStatus::Cancelled
-    {
+    if instance.status.is_terminal() {
         return Err(EngineError::InvalidCommand("终态实例不得提交决定"));
     }
     let Some(current_id) = instance.current_node_execution_id.as_ref() else {

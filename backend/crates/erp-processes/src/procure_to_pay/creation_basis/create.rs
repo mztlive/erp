@@ -37,9 +37,11 @@ use super::super::adapter::{purchase_order_object_readable, purchase_order_respo
 use super::super::adapters::payment_term::parse;
 use super::super::authorization::{PurchaseOrderAuthorization, ensure_purchase_order_actor_account};
 use super::super::create_submit::{CreatedDraftBundle, submit_created_draft};
+use super::super::payment_subject::load_payment_subject;
 use super::super::procurement_task_sync::{
     load_owned_open_procurement_task, sync_procurement_tasks_for_sales_order,
 };
+use super::super::source_guard::ensure_sources_current;
 use super::super::sourcing_create::sequence::PurchaseCreationEventSequence;
 use super::supplier::CreationBasisSupplierAdapter;
 use super::{procurement_quantity_changed, validate_requested_quantities};
@@ -73,8 +75,6 @@ pub struct CreateBasisCommand<'a> {
 
 /// 待一次性持久化的采购草稿聚合。
 struct PreparedDraftWrite<'a> {
-    /// 来源销售单。
-    sales_order: &'a SalesOrder,
     /// 新采购单。
     order: &'a PurchaseOrder,
     /// 当前草稿提交。
@@ -251,6 +251,7 @@ async fn create_from_basis_apply(
     )
     .await?;
     let mut order = load_effective_sales_order(db, command.sales_order_id, executor).await?;
+    ensure_sources_current(db, &order, executor).await?;
     let groups = basis_groups_for_order(db, &order, task.responsibility_scope_ids(), executor).await?;
     let selected = find_requested_group(
         &sales_order_basis_fact(&order),
@@ -327,13 +328,8 @@ pub async fn persist_basis_draft(
 ) -> Result<CreatePurchaseOrderResult> {
     let PreparedBasisDraft { order, submission, lines } =
         prepare_basis_draft(db, rbac, input, command, executor).await?;
-    let write = PreparedDraftWrite {
-        sales_order: input.sales_order,
-        order: &order,
-        submission: &submission,
-        lines: &lines,
-        actor: command.actor,
-    };
+    let write =
+        PreparedDraftWrite { order: &order, submission: &submission, lines: &lines, actor: command.actor };
     let document = write_prepared_draft(db, rbac, object_read, &write, executor).await?;
     let purchase_order_id = order.base.id.clone();
     let bundle = CreatedDraftBundle {
@@ -456,6 +452,7 @@ async fn prepare_basis_submission(
         &PurchaseOrderId::new(order.base.id.clone()),
         &group.scope,
         &supplier_name,
+        load_payment_subject(db, &order.sales_order_id, &order.sales_order_revision_id, executor).await?,
         computed.totals,
         executor,
     )
@@ -473,7 +470,7 @@ async fn prepare_basis_submission(
 /// # 参数
 /// * `db` - MongoDB 数据库
 /// * `rbac` - 审批绑定授权源
-/// * `write` - 来源销售单、采购聚合与审计操作人
+/// * `write` - 采购聚合与审计操作人
 /// * `executor` - 数据访问执行器
 ///
 /// # 返回
@@ -491,7 +488,7 @@ async fn write_prepared_draft(
     write: &PreparedDraftWrite<'_>,
     executor: &mut dyn Executor,
 ) -> Result<BusinessDocument> {
-    let organization_id = purchase_order_responsible_org_id(write.sales_order)?;
+    let organization_id = purchase_order_responsible_org_id(write.order)?;
     let _ = purchase_order_object_readable(&organization_id, write.actor.id())?;
     let bind_command = BindPublishedDefinitionCommand {
         document_type: DocumentType::PurchaseOrder,

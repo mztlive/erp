@@ -25,6 +25,8 @@ pub struct PurchaseChangePayableInput {
     pub supplier_id: SupplierAccountId,
     /// 本次目标采购版本。
     pub revision_id: PurchaseOrderRevisionId,
+    pub settlement_party_id: String,
+    pub settlement_party_name: String,
     /// 冻结基准版本含税金额。
     pub base_gross: Amount,
     /// 目标版本含税金额。
@@ -87,6 +89,9 @@ impl PurchaseChangePayableWrite {
                 self.input.new_gross,
             )
             .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+        account.purchase_revision_id = Some(self.input.revision_id.to_string());
+        account.settlement_party_id = Some(self.input.settlement_party_id.clone());
+        account.settlement_party_name = Some(self.input.settlement_party_name.clone());
         let entry = PayableEntry::new(
             self.entry_id.clone(),
             PayableEntryData {
@@ -120,6 +125,39 @@ pub fn prepare_purchase_change_payable(
     input: PurchaseChangePayableInput,
 ) -> Result<Option<PurchaseChangePayableWrite>> {
     build(input, || PayableEntryId::new(next_id()), BusinessDate::today, Instant::now)
+}
+
+/// 同步正式采购主体和版本，包括金额未变化的正式变更。
+///
+/// # 参数
+/// * `db` - 财务数据库。
+/// * `order_id` - 采购单身份。
+/// * `revision_id` - 最新正式采购版本。
+/// * `party_id` - 正式来源我方主体。
+/// * `party_name` - 正式主体名称快照。
+/// * `executor` - 采购变更生效的同一事务执行器。
+/// # 返回
+/// 成功时更新既有应付的来源身份并保留金额和占用。
+/// # 错误
+/// 来源缺失或 CAS 写入失败时返回错误。
+pub async fn sync_purchase_subject(
+    db: &Database,
+    order_id: &PurchaseOrderId,
+    revision_id: &PurchaseOrderRevisionId,
+    party_id: &str,
+    party_name: &str,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let mut account = db
+        .payable_accounts()
+        .find_by_purchase_order(order_id, executor)
+        .await?
+        .ok_or_else(|| Error::BusinessLogicError("采购单缺少正式应付子账".into()))?;
+    account.purchase_revision_id = Some(revision_id.to_string());
+    account.settlement_party_id = Some(party_id.to_owned());
+    account.settlement_party_name = Some(party_name.to_owned());
+    db.payable_accounts().update(&mut account, executor).await?;
+    Ok(())
 }
 
 /// 生产使用原身份和时钟来源，单测注入值验证零差额与确定身份。
@@ -159,6 +197,8 @@ mod tests {
             purchase_order_id: PurchaseOrderId::new("po-1"),
             supplier_id: SupplierAccountId::new("supplier-1"),
             revision_id: PurchaseOrderRevisionId::new("revision-2"),
+            settlement_party_id: "company-1".into(),
+            settlement_party_name: "我方公司".into(),
             base_gross: amount(base),
             new_gross: amount(new),
         }

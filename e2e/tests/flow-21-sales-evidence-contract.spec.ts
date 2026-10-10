@@ -230,7 +230,12 @@ async function uploadContract(
 ): Promise<Contract> {
     await page.goto("/sales/contracts")
     await page.locator("#page-actions-action-upload").click()
-    await archiveContractViaUi(page, { contractNo, customerName, pdf: PDF_PATH, paymentTerms })
+    await archiveContractViaUi(page, {
+        contractNo,
+        customerName,
+        pdf: PDF_PATH,
+        paymentTerms,
+    })
     const contracts = await apiGet<ApiPage<Contract>>(
         token,
         "/admin/contracts",
@@ -259,7 +264,7 @@ async function createNoContractDraft(
     await chooseOption(
         page,
         page.locator("#sales-orders-create-settlement"),
-        customerName,
+        SIGNING_COMPANY,
     )
     const [uploadedResponse] = await Promise.all([
         page.waitForResponse(
@@ -531,9 +536,13 @@ test("[flow-21] 信用代码可空、无合同凭证采购审批、合同筛选�
         `E2E-EVIDENCE-${suffix}-OTHER`,
     )
     const companies = await apiGet<ApiPage<{ id: string; legal_name: string }>>(
-        token, "/admin/companies", { page_size: 100 },
+        token,
+        "/admin/companies",
+        { page_size: 100 },
     )
-    const signingCompany = companies.items.find((company) => company.legal_name === SIGNING_COMPANY)
+    const signingCompany = companies.items.find(
+        (company) => company.legal_name === SIGNING_COMPANY,
+    )
     expect(signingCompany).toBeDefined()
     expect(firstContract.settlement_party_id).toBe(signingCompany!.id)
 
@@ -551,8 +560,8 @@ test("[flow-21] 信用代码可空、无合同凭证采购审批、合同筛选�
     )
     expect(pdfDraft.order.customer_id).toBe(customer.id)
     expect(imageDraft.order.customer_id).toBe(customer.id)
-    expect(pdfDraft.order.settlement_party_id).toBe(customer.party_id)
-    expect(imageDraft.order.settlement_party_id).toBe(customer.party_id)
+    expect(pdfDraft.order.settlement_party_id).toBe(signingCompany!.id)
+    expect(imageDraft.order.settlement_party_id).toBe(signingCompany!.id)
 
     await test.step("服务端拒绝无凭证开单，已上传凭证可从原销售单授权下载", async () => {
         const invalid = structuredClone(pdfDraft.body)
@@ -616,7 +625,8 @@ test("[flow-21] 信用代码可空、无合同凭证采购审批、合同筛选�
             {
                 version: pdfDraft.order.version,
                 contract_id: replacementContract.id,
-                requested_contract_revision_id: replacementContract.current_revision_id,
+                requested_contract_revision_id:
+                    replacementContract.current_revision_id,
             },
             /合同条款不一致.*付款条件/,
         )
@@ -725,6 +735,9 @@ test("[flow-21] 信用代码可空、无合同凭证采购审批、合同筛选�
                 )
                 originalApproval =
                     await openFrozenApprovalMaterials(restrictedPage)
+                expect(originalApproval.materials.sales_order?.status).toBe(
+                    "IN_REVIEW",
+                )
                 expect(originalApproval.materials).toMatchObject({
                     document_type: "sales_order",
                     document_id: submitted.id,
@@ -756,7 +769,7 @@ test("[flow-21] 信用代码可空、无合同凭证采购审批、合同筛选�
                 })
                 await expect(
                     materialsDialog.getByRole("heading", {
-                        name: "审批提交资料",
+                        name: "销售单提交预览",
                         exact: true,
                     }),
                 ).toBeVisible(VISIBLE)
@@ -773,18 +786,20 @@ test("[flow-21] 信用代码可空、无合同凭证采购审批、合同筛选�
                     file: originalApproval.materials.attachments[0]!,
                     bytes: PNG,
                 })
-                const foreignFile = await restrictedPage.request.get(
-                    `${API_BASE}/admin/approval-instances/${originalApproval.instanceId}/materials/${pdfDraft.order.evidence_file_asset_ids[0]!}/download`,
-                    {
-                        headers: {
-                            Authorization: `Bearer ${procurementToken}`,
+                for (const action of ["preview", "download"] as const) {
+                    const foreignFile = await restrictedPage.request.get(
+                        `${API_BASE}/admin/approval-instances/${originalApproval.instanceId}/materials/${pdfDraft.order.evidence_file_asset_ids[0]!}/${action}`,
+                        {
+                            headers: {
+                                Authorization: `Bearer ${procurementToken}`,
+                            },
                         },
-                    },
-                )
-                expect(
-                    foreignFile.status(),
-                    "当前审批实例不得读取另一销售单上传的凭证",
-                ).toBe(404)
+                    )
+                    expect(
+                        foreignFile.status(),
+                        "当前审批实例不得读取另一销售单上传的凭证",
+                    ).toBe(404)
+                }
                 await restrictedPage
                     .locator("#workspace-document-paper-dialog-close")
                     .click()
@@ -816,6 +831,18 @@ test("[flow-21] 信用代码可空、无合同凭证采购审批、合同筛选�
             payment_term_code: "POSTPAY_NET15",
             tax_point: "13.00",
         })
+        // 审批只推进提交生命周期；批准前后的冻结正文和附件必须逐字段一致。
+        const approvedMaterials = await apiGet<FrozenApprovalMaterials>(
+            token,
+            `/admin/approval-instances/${originalApproval.instanceId}/materials`,
+        )
+        expect(approvedMaterials).toEqual({
+            ...originalApproval.materials,
+            sales_order: {
+                ...originalApproval.materials.sales_order!,
+                status: "APPROVED",
+            },
+        })
         imageDraft.order = await supplementContract(
             page,
             token,
@@ -827,7 +854,7 @@ test("[flow-21] 信用代码可空、无合同凭证采购审批、合同筛选�
             token,
             `/admin/approval-instances/${originalApproval.instanceId}/materials`,
         )
-        expect(historicalMaterials).toEqual(originalApproval.materials)
+        expect(historicalMaterials).toEqual(approvedMaterials)
         expect(
             historicalMaterials.attachments.map((file) => file.file_asset_id),
         ).toEqual([evidenceId])
@@ -865,7 +892,9 @@ test("[flow-21] 信用代码可空、无合同凭证采购审批、合同筛选�
             ).toBe(404)
             const originalEvidence = await page.request.get(
                 `${historicalPath}/${evidenceId}/${action}`,
-                { headers: { Authorization: `Bearer ${token}` } },
+                {
+                    headers: { Authorization: `Bearer ${token}` },
+                },
             )
             expect(originalEvidence.ok()).toBe(true)
             expect(originalEvidence.headers()["content-type"]).toBe(

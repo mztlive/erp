@@ -435,7 +435,7 @@ const FIXED_TASK_ROUTES: &[FixedRoute] = &[
     ),
     (
         WorkItemType::SupplierPaymentExecution,
-        &["payable_account"],
+        &["purchase_payment_request"],
         "supplier_payment_execution",
         "W12",
         "付款执行任务业务对象未注册",
@@ -546,13 +546,140 @@ fn document_approval_route(business_object_type: &str) -> Result<(&'static str, 
         "sales_invoice_request" | "customer_receipt" | "customer_refund" | "receipt_reversal" => {
             Ok(("document_approval", "W11"))
         },
-        "supplier_refund" | "payment_reversal" => Ok(("document_approval", "W12")),
+        "purchase_payment_request" | "supplier_refund" | "payment_reversal" => {
+            Ok(("document_approval", "W12"))
+        },
         _ => Err(Error::ValidationError("APPROVAL_DOCUMENT_ROUTE_UNMAPPED".to_string())),
     }
 }
 
 fn seconds(value: Option<erp_core::common::time::Instant>) -> Option<u64> {
     value.and_then(|instant| u64::try_from(instant.unix_secs()).ok())
+}
+
+#[cfg(test)]
+mod payment_request_tests {
+    use bpm::ids::ApprovalNodeExecutionId;
+    use erp_core::common::time::Instant;
+    use erp_core::ids::WorkItemId;
+    use erp_workflow::entity::work_item::{
+        DocumentApprovalWorkItemData, SupplierPaymentTaskReason, SupplierPaymentTaskSpec,
+        new_approved_purchase_payment_request_task,
+    };
+
+    use super::*;
+    use crate::workbench::access::ViewAccess;
+    use crate::workbench::action_projection::ActionProjection;
+
+    /// 正式付款申请审批任务可同时进入队列及统计投影，保留精确执行和决定动作。
+    #[test]
+    fn payment_request_approval_has_matching_queue_and_stats_routes() {
+        let at = Instant::now();
+        let fields: WorkItemFields = WorkItem::new_document_approval(
+            WorkItemId::new("payment-request-task"),
+            DocumentApprovalWorkItemData {
+                approval_node_execution_id: ApprovalNodeExecutionId::new("payment-request-execution"),
+                business_object_type: "purchase_payment_request".into(),
+                business_object_id: "payment-request".into(),
+                subject_version: "2".into(),
+                owner_role: "purchase_payment_request_approver".into(),
+                owner_organization_id: "procurement-org".into(),
+                owner_user_id: "finance-approver".into(),
+                priority: WorkItemPriority::Normal,
+                due_at: Some(at),
+            },
+            at,
+        )
+        .unwrap()
+        .into();
+        let allowed =
+            vec![WorkItemAllowedAction::View, WorkItemAllowedAction::Approve, WorkItemAllowedAction::Reject];
+        let projection = ActionProjection::from_fields(fields.clone(), ViewAccess::ready(allowed.clone()))
+            .expect("合法付款申请不得阻断整个待办统计");
+        let mut view = WorkItemView::from_fields(fields, "finance-queue".into())
+            .expect("合法付款申请必须显示在审批队列");
+        assert_eq!(view.handler_key, "document_approval");
+        assert_eq!(view.destination_workspace_id, "W12");
+        assert_eq!(
+            view.route_context.as_ref().and_then(|context| context.document_type.as_deref()),
+            Some("purchase_payment_request")
+        );
+        assert_eq!(view.subject_version, "2");
+        assert_eq!(view.due_at, seconds(Some(at)));
+        assert_eq!(projection.business_object_type, view.business_object_type);
+        assert_eq!(projection.business_object_id, view.business_object_id);
+        assert_eq!(projection.owner_user_id, view.owner_user_id);
+        assert_eq!(projection.approval_node_execution_id, view.approval_node_execution_id);
+        assert_eq!(view.approval_node_execution_id.as_deref(), Some("payment-request-execution"));
+        projection.apply(&mut view);
+        assert_eq!(view.processing_state, ProcessingState::Ready);
+        assert_eq!(view.allowed_actions, allowed);
+    }
+
+    /// 批准申请产生的真实付款任务在队列和统计中使用同一申请身份。
+    #[test]
+    fn approved_payment_request_execution_has_matching_queue_and_stats_routes() {
+        let fields = approved_execution_fields();
+        let allowed = vec![WorkItemAllowedAction::View, WorkItemAllowedAction::Process];
+        let projection = ActionProjection::from_fields(fields.clone(), ViewAccess::ready(allowed.clone()))
+            .expect("批准申请的付款执行任务不得阻断待办统计");
+        let mut view = WorkItemView::from_fields(fields.clone(), "cashier-queue".into())
+            .expect("批准申请的付款执行任务必须显示在出纳队列");
+        assert_eq!(view.handler_key, "supplier_payment_execution");
+        assert_eq!(view.destination_workspace_id, "W12");
+        assert!(view.route_context.is_none());
+        assert_eq!(view.business_object_type, "purchase_payment_request");
+        assert_eq!(view.business_object_id, "approved-payment-request");
+        assert_eq!(view.subject_version, "2");
+        assert_eq!(view.due_at, seconds(fields.due_at));
+        assert_eq!(view.reason_code.as_deref(), Some("PURCHASE_PAYMENT_REQUEST_APPROVED"));
+        assert_eq!(projection.business_object_type, view.business_object_type);
+        assert_eq!(projection.business_object_id, view.business_object_id);
+        assert_eq!(projection.owner_user_id, view.owner_user_id);
+        assert!(view.approval_node_execution_id.is_none());
+        projection.apply(&mut view);
+        assert_eq!(view.processing_state, ProcessingState::Ready);
+        assert_eq!(view.allowed_actions, allowed);
+    }
+
+    /// 旧应付子账付款任务不得绕过批准申请进入列表或统计。
+    #[test]
+    fn legacy_payable_execution_is_rejected_by_queue_and_stats_routes() {
+        let mut fields = approved_execution_fields();
+        fields.business_object_type = "payable_account".into();
+        fields.business_object_id = "legacy-payable-account".into();
+        let stats = ActionProjection::from_fields(
+            fields.clone(),
+            ViewAccess::ready(vec![WorkItemAllowedAction::View, WorkItemAllowedAction::Process]),
+        );
+        let queue = WorkItemView::from_fields(fields, "cashier-queue".into());
+        assert!(
+            matches!(stats, Err(Error::ValidationError(message)) if message == "付款执行任务业务对象未注册")
+        );
+        assert!(
+            matches!(queue, Err(Error::ValidationError(message)) if message == "付款执行任务业务对象未注册")
+        );
+    }
+
+    fn approved_execution_fields() -> WorkItemFields {
+        new_approved_purchase_payment_request_task(
+            WorkItemId::new("approved-payment-request-task"),
+            SupplierPaymentTaskSpec {
+                account_id: "approved-payment-request".into(),
+                subject_version: "2".into(),
+                owner_organization_id: "procurement-org".into(),
+                owner_user_id: "cashier".into(),
+                reason: SupplierPaymentTaskReason::Initial,
+                due_at: Instant::now(),
+                open_total: "100.00".parse().unwrap(),
+            },
+            "finance:SUPPLIER_PAYMENT:DEFAULT",
+            "approved-payment-request",
+            "FK202610100001",
+        )
+        .expect("正式批准付款申请任务工厂应生成合法身份")
+        .into()
+    }
 }
 
 /// 把责任角色码翻译成界面文案。

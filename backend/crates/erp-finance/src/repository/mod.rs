@@ -25,6 +25,10 @@ pub use owned::{
     PaymentAllocationRepository, PurchaseInvoiceAllocationRepository, ReceiptAllocationRepository,
     ReceivableAccountRepository, ReceivableEntryOffsetRepository, ReceivableEntryRepository,
 };
+pub use payable::payment_request::{PurchasePaymentRequestExt, PurchasePaymentRequestRepositoryExt};
+pub use payable::payment_request_snapshot::{
+    PurchasePaymentRequestSnapshotExt, PurchasePaymentRequestSnapshotRepository,
+};
 pub use payable::{
     PayableAccountFilter, PayableAccountRow, PayableRepository, PurchaseInvoiceAllocationFilter,
     SupplierPaymentFilter, SupplierPaymentRow,

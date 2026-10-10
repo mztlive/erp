@@ -26,6 +26,7 @@ impl AuthorizationPolicy {
     pub fn for_action(resource: &str, action: &str) -> Result<Self> {
         let policy = match (resource, action) {
             ("approval_instance", _)
+            | ("purchase_payment_request", "pay")
             | ("supplier_settlement_statement", "confirm")
             | ("reconciliation_difference", "decide") => Self::Task,
             ("integration_error_task" | "reconciliation_difference", "create") => Self::Role,
@@ -41,6 +42,7 @@ impl AuthorizationPolicy {
                 | "invoice"
                 | "sales_invoice_request"
                 | "payable_account"
+                | "purchase_payment_request"
                 | "supplier_payment"
                 | "purchase_invoice_allocation",
                 _,
@@ -162,6 +164,8 @@ mod tests {
     fn inherited_and_task_configuration_is_rejected() {
         for (resource, action) in [
             ("approval_instance", "decide"),
+            ("purchase_payment_request", "submit"),
+            ("purchase_payment_request", "pay"),
             ("contract", "list"),
             ("cost_entry", "list"),
             ("cost_entry", "detail"),

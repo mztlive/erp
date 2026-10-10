@@ -356,7 +356,7 @@ mod tests {
     };
     use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
     use erp_procurement::entity::purchase_order::{
-        FulfillmentResponsibility, PaymentTermSnapshot, PurchaseChangeOrderData,
+        FulfillmentResponsibility, PaymentSubjectSnapshot, PaymentTermSnapshot, PurchaseChangeOrderData,
         PurchaseChangeSubmissionData, PurchaseChangeSubmissionLineData, PurchaseLineType, PurchaseType,
         SupplierSnapshot,
     };
@@ -401,6 +401,13 @@ mod tests {
         PurchaseChangeSubmission::new(
             PurchaseChangeSubmissionId::new("pcs-1"),
             PurchaseChangeSubmissionData {
+                payment_subject: PaymentSubjectSnapshot::new(
+                    "party-1".to_string().into(),
+                    "我方公司".into(),
+                    "so-1".to_string().into(),
+                    "sales-rev-1".to_string().into(),
+                )
+                .unwrap(),
                 purchase_change_order_id: PurchaseChangeOrderId::new("pco-1"),
                 submission_no: "CS-000001".into(),
                 base_revision_id: PurchaseOrderRevisionId::new("por-1"),

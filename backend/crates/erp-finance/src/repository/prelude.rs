@@ -5,10 +5,11 @@ pub use super::cost::{
     CostEntryProfitLossExt, CostEntryReadScopeExt, CostEntryRepositoryExt,
 };
 pub use super::fulfillment_facts::PayableAccountFulfillmentFactsExt;
+pub use super::payable::payment_request::PurchasePaymentRequestRepositoryExt;
 pub use super::payable::{
-    PayableAccountInvoicingExt, PayableAccountRepositoryExt, PayableAccountSettlementExt,
-    PayableEntryOffsetRepositoryExt, PayableEntryRepositoryExt, PaymentAllocationRepositoryExt,
-    PurchaseInvoiceAllocationRepositoryExt, SupplierPaymentRepositoryExt,
+    PayableAccountInvoicingExt, PayableAccountRepositoryExt, PayableAccountReservationExt,
+    PayableAccountSettlementExt, PayableEntryOffsetRepositoryExt, PayableEntryRepositoryExt,
+    PaymentAllocationRepositoryExt, PurchaseInvoiceAllocationRepositoryExt, SupplierPaymentRepositoryExt,
 };
 pub use super::receivable::{
     CustomerReceiptRepositoryExt, InvoiceRepositoryExt, ReceiptAllocationRepositoryExt,

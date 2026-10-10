@@ -17,6 +17,7 @@ fn sources() -> Sources {
     let revision = SalesOrderRevision::new(
         "revision-1".to_owned().into(),
         SalesOrderRevisionData {
+            settlement_party_id: "party-1".to_string().into(),
             sales_order_id: "order-1".to_owned().into(),
             revision_no: 1,
             revision_source: RevisionSource::ErpApproval,

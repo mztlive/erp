@@ -2,8 +2,9 @@
 
 use application_core::AuditActor;
 use erp_identity::entity::rbac::PermissionSet;
-use erp_identity::service::iam::{create_missing_predefined_role, predefined_role_permissions};
-use erp_identity::{CreateRoleParams, Permission};
+use erp_identity::entity::role_template::BuiltinRoleState;
+use erp_identity::service::iam::builtin_role_templates;
+use erp_identity::{CreateRoleParams, GenerateBuiltinRolesRequest, Permission};
 
 use super::spec::{AccountSpec, FoundationFile};
 use super::{DemoFoundationReport, DemoMasterDataService, spec};
@@ -35,7 +36,11 @@ impl DemoRole {
     /// # 错误
     /// 未登记岗位或必要权限声明缺失时拒绝。
     pub(super) fn for_account(foundation: &FoundationFile, account: &AccountSpec) -> Result<Self> {
-        let mut permissions = predefined_role_permissions(&account.role_id)?;
+        let mut permissions = builtin_role_templates()?
+            .into_iter()
+            .find(|template| template.id == account.role_id)
+            .ok_or_else(|| Error::ValidationError(format!("未登记的演示岗位模板：{}", account.role_id)))?
+            .permissions;
         let required = foundation
             .required_permissions
             .get(&account.key)
@@ -71,13 +76,38 @@ impl DemoMasterDataService {
         report: &mut DemoFoundationReport,
     ) -> Result<()> {
         let foundation = spec::foundation_spec();
+        self.ensure_builtin_roles(foundation, actor).await?;
         for account in &foundation.accounts {
-            create_missing_predefined_role(&self.rbac, &account.role_id, actor).await?;
             let role = DemoRole::for_account(foundation, account)?;
             let changed = self.rbac.ensure_seeded_role(&role.id, role.request, actor.clone()).await?;
             if changed {
                 report.notices.push(format!("已补齐演示账号 {} 的专用岗位权限", account.account));
             }
+        }
+        Ok(())
+    }
+
+    async fn ensure_builtin_roles(&self, foundation: &FoundationFile, actor: &AuditActor) -> Result<()> {
+        let catalog = self.rbac.builtin_role_catalog(actor).await?;
+        let missing = catalog
+            .templates
+            .into_iter()
+            .filter(|template| {
+                template.state == BuiltinRoleState::Missing
+                    && foundation.accounts.iter().any(|account| account.role_id == template.template.id)
+            })
+            .map(|template| template.template.id)
+            .collect::<Vec<_>>();
+        if !missing.is_empty() {
+            self.rbac
+                .generate_builtin_roles(
+                    GenerateBuiltinRolesRequest {
+                        template_ids: missing,
+                        expected_policy_version: catalog.policy_version,
+                    },
+                    actor.clone(),
+                )
+                .await?;
         }
         Ok(())
     }
@@ -87,7 +117,6 @@ impl DemoMasterDataService {
 mod tests {
     use std::collections::HashSet;
 
-    use erp_identity::service::iam::builtin_role_templates;
     use erp_workflow::FinanceResponsibilityOperation;
 
     use super::*;
@@ -124,6 +153,7 @@ mod tests {
     #[test]
     fn all_demo_roles_cover_current_templates_and_required_actions() {
         let foundation = spec::foundation_spec();
+        let catalog = builtin_role_templates().unwrap();
         let mut ids = HashSet::new();
         for account in &foundation.accounts {
             let role = DemoRole::for_account(foundation, account).unwrap();
@@ -131,7 +161,9 @@ mod tests {
             assert_ne!(role.id, account.role_id);
             assert_eq!(role.account_role_ids(account), [account.role_id.clone(), role.id.clone()]);
             let permissions = PermissionSet::new(role.request.permissions);
-            let baseline = PermissionSet::new(predefined_role_permissions(&account.role_id).unwrap());
+            let baseline = PermissionSet::new(
+                catalog.iter().find(|template| template.id == account.role_id).unwrap().permissions.clone(),
+            );
             assert!(permissions.covers(&baseline));
             for required in &foundation.required_permissions[&account.key] {
                 assert!(permissions.covers_one(&Permission::parse(required).unwrap()), "{required}");
@@ -153,6 +185,27 @@ mod tests {
         }
         let sales = DemoRole::for_account(foundation, &foundation.accounts[0]).unwrap();
         assert!(sales.request.permissions.contains(&Permission::parse("sales_person:list").unwrap()));
+    }
+
+    /// 演示授权使用与脚本种子相同的细分模板，不能重新合并财审、付款与开票写权限。
+    #[test]
+    fn demo_finance_positions_keep_approval_and_execution_separate() {
+        let foundation = spec::foundation_spec();
+        let permissions = |key: &str| {
+            let account = foundation.accounts.iter().find(|account| account.key == key).unwrap();
+            PermissionSet::new(DemoRole::for_account(foundation, account).unwrap().request.permissions)
+        };
+        let finance = permissions("finance");
+        let cashier = permissions("payment");
+        let invoice = permissions("invoice");
+        let approve = Permission::parse("approval_instance:decide").unwrap();
+        let pay = Permission::parse("purchase_payment_request:pay").unwrap();
+        assert!(finance.covers_one(&approve));
+        assert!(!finance.covers_one(&pay));
+        assert!(cashier.covers_one(&pay));
+        assert!(!cashier.covers_one(&approve));
+        assert!(!invoice.covers_one(&pay));
+        assert!(!invoice.covers_one(&approve));
     }
 
     /// 未登记岗位及缺失声明在任何角色写入前拒绝。

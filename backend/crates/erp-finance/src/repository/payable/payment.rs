@@ -179,6 +179,21 @@ pub trait SupplierPaymentRepositoryExt {
         executor: &mut dyn Executor,
     ) -> Result<Vec<SupplierPayment>>;
 
+    /// 按付款申请身份读取有界的完整实际付款事实。
+    ///
+    /// # 参数
+    /// * `request_id` - 已授权的付款申请身份。
+    /// * `executor` - 当前事务执行器。
+    /// # 返回
+    /// 按实际付款时间和身份倒序，最多返回 10001 条，供读取层拒绝超限。
+    /// # 错误
+    /// 仓储查询或反序列化失败时返回错误。
+    async fn list_for_payment_request(
+        &self,
+        request_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierPayment>>;
+
     /// 分页检索供应商付款单列表（投影查询）。
     ///
     /// 只返回 [`SupplierPaymentRow`] 所需的列表字段；付款单号支持字面量
@@ -219,6 +234,16 @@ impl SupplierPaymentRepositoryExt for persistence_core::Repository<'_, SupplierP
         }
         let ids: Vec<String> = payment_ids.iter().map(ToString::to_string).collect();
         self.find_many(doc! { "id": { "$in": ids } }, executor).await
+    }
+
+    async fn list_for_payment_request(
+        &self,
+        request_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierPayment>> {
+        let options = FindOptions::builder().sort(doc! {"paid_at": -1, "id": -1}).limit(10_001).build();
+        let filter = doc! {"payment_request_id": request_id, "deleted_at": NOT_DELETED_TIMESTAMP_BSON};
+        mongo_ops::find_many(&self.collection(), filter, options, executor).await
     }
 
     async fn search_supplier_payments(

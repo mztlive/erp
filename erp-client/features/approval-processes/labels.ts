@@ -16,6 +16,7 @@ export const DOCUMENT_TYPE_LABEL: Record<DocumentType, string> = {
     sales_change_order: "销售变更单",
     purchase_order: "采购单",
     purchase_change_order: "采购变更单",
+    purchase_payment_request: "采购付款申请",
     stock_adjustment: "库存调整单",
     customer_receipt: "客户回款单",
     sales_invoice_request: "开票申请",
@@ -157,6 +158,12 @@ export const versionLabel = (version: number | null | undefined): string => {
 /** 固定驳回语义说明。 */
 export const REJECT_RESTART_COPY =
     "任一层驳回后，将从第一位审批人开始下一轮审批。"
+
+/** 付款申请驳回终止本次审批，重新提交须重新冻结并审核。 */
+export const rejectionPolicyCopy = (documentType: DocumentType): string =>
+    documentType === "purchase_payment_request"
+        ? "任一层驳回后，本次申请结束并释放未付金额；重新提交后从第一位审批人重新审核。"
+        : REJECT_RESTART_COPY
 
 /**
  * 把线性审批人显示名拼成发布预览路径。

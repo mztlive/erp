@@ -21,6 +21,7 @@ export function WorkspaceApprovalProgress({
 }) {
     const approved = instance.status === "APPROVED"
     const cancelled = instance.status === "CANCELLED"
+    const rejected = instance.status === "REJECTED"
     const blocked = instance.status === "BLOCKED"
     const running = instance.status === "RUNNING"
     const active = running || blocked
@@ -53,7 +54,7 @@ export function WorkspaceApprovalProgress({
                   ].join(" · ")
                 : approved
                   ? "已完成"
-                  : cancelled
+                  : cancelled || rejected
                     ? "已结束"
                     : "状态待确认",
             state: blocked
@@ -63,13 +64,30 @@ export function WorkspaceApprovalProgress({
                   : approved
                     ? "done"
                     : "muted",
-            icon: blocked ? CircleAlertIcon : approved ? CheckIcon : Clock3Icon,
+            icon:
+                blocked || rejected
+                    ? CircleAlertIcon
+                    : approved
+                      ? CheckIcon
+                      : Clock3Icon,
         },
         {
-            label: cancelled ? "审批撤回" : "审批完成",
-            detail: approved ? "已通过" : cancelled ? "已撤回" : "待完成",
-            state: approved ? "done" : cancelled ? "cancelled" : "muted",
-            icon: approved ? CheckIcon : MinusIcon,
+            label: cancelled ? "审批撤回" : rejected ? "审批驳回" : "审批完成",
+            detail: approved
+                ? "已通过"
+                : cancelled
+                  ? "已撤回"
+                  : rejected
+                    ? "已驳回"
+                    : "待完成",
+            state: approved
+                ? "done"
+                : cancelled
+                  ? "cancelled"
+                  : rejected
+                    ? "blocked"
+                    : "muted",
+            icon: approved ? CheckIcon : rejected ? CircleAlertIcon : MinusIcon,
         },
     ]
 

@@ -172,7 +172,7 @@ impl FinanceResponsibilityOperation {
     pub fn required_permission_codes(self) -> Option<&'static [&'static str]> {
         match self {
             Self::SupplierPayment => WorkItemType::SupplierPaymentExecution
-                .supplier_payment_execution_permissions("payable_account"),
+                .supplier_payment_execution_permissions("purchase_payment_request"),
             Self::SalesInvoice => {
                 WorkItemType::SalesInvoiceExecution.sales_invoice_execution_permissions("receivable_account")
             },
@@ -552,17 +552,7 @@ mod tests {
     fn operation_permission_contracts_are_complete_and_ordered() {
         assert_eq!(
             FinanceResponsibilityOperation::SupplierPayment.required_permission_codes(),
-            Some(
-                [
-                    "payable_account:list",
-                    "payable_account:detail",
-                    "party_bank_account:reveal",
-                    "supplier_payment:list",
-                    "supplier_payment:detail",
-                    "supplier_payment:commit",
-                ]
-                .as_slice()
-            )
+            Some(["purchase_payment_request:detail", "purchase_payment_request:pay",].as_slice())
         );
         assert_eq!(
             FinanceResponsibilityOperation::SalesInvoice.required_permission_codes(),

@@ -675,9 +675,12 @@ function approvalDestination(documentType: string): WorkspaceId {
         return "W11"
     }
     if (
-        ["supplier_payment", "supplier_refund", "payment_reversal"].includes(
-            documentType,
-        )
+        [
+            "supplier_payment",
+            "supplier_refund",
+            "payment_reversal",
+            "purchase_payment_request",
+        ].includes(documentType)
     ) {
         return "W12"
     }
@@ -703,6 +706,12 @@ function startedStatus(status: string): Pick<
                 workItemStatus: "CLOSED",
                 statusLabel: "已取消",
                 statusTone: "neutral",
+            }
+        case "REJECTED":
+            return {
+                workItemStatus: "CLOSED",
+                statusLabel: "已驳回",
+                statusTone: "destructive",
             }
         case "BLOCKED":
             return {

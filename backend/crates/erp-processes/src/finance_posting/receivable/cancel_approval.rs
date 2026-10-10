@@ -27,7 +27,7 @@ use crate::audit::persist_log;
 use crate::{Error, Result};
 
 /// 已加载的可撤回运行事实。
-pub(super) struct LoadedCancelRuntime {
+pub(crate) struct LoadedCancelRuntime {
     /// 绑定定义图。
     pub graph: DefinitionGraph,
     /// 非终态实例。
@@ -55,7 +55,7 @@ pub(super) struct LoadedCancelRuntime {
 ///
 /// # 错误
 /// 实例或当前执行缺失、状态与开放任务数量不一致或仓储失败时返回错误。
-pub(super) async fn load_cancel_runtime(
+pub(crate) async fn load_cancel_runtime(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
     subject: &bpm::SubjectRef,
@@ -167,7 +167,7 @@ pub fn build_customer_receipt_cancel_input(
 ///
 /// # 关键业务约束
 /// 运行事实、任务关闭与单据回写必须同事务；CAS 失败时回滚。
-pub(super) struct CustomerReceiptCancelPersistInput {
+pub(crate) struct CustomerReceiptCancelPersistInput {
     /// 已执行 `cancel_action` 的回款单。
     pub receipt: CustomerReceipt,
     /// `prepare_cancel` 结果。
@@ -201,7 +201,7 @@ pub(super) struct CustomerReceiptCancelPersistInput {
 ///
 /// # 关键业务约束
 /// Replay 不得重复关闭任务；Apply 必须关闭开放任务并写回草稿。
-pub(super) async fn persist_customer_receipt_cancel(
+pub(crate) async fn persist_customer_receipt_cancel(
     db: &Database,
     input: CustomerReceiptCancelPersistInput,
 ) -> Result<()> {

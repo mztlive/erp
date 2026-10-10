@@ -11,7 +11,6 @@ use erp_procurement::entity::purchase_order::{
     PurchaseSubmitReceipt,
 };
 use erp_procurement::repository::{PurchaseCommandExt, PurchaseOrderExt};
-use erp_sales::repository::SalesOrderExt;
 use erp_workflow::service::approval::execution::command_recovery_delay;
 use erp_workflow::service::document_registry::find_approval_binding;
 use persistence_core::{NoTransaction, Transactional};
@@ -270,12 +269,7 @@ impl PurchaseOrderProcess {
                         .find_by_id(&purchase_order_id, executor)
                         .await?
                         .ok_or_else(|| Error::NotFound("采购单不存在".to_string()))?;
-                    let sales_order = db
-                        .sales_orders()
-                        .find_by_id(&order.sales_order_id, executor)
-                        .await?
-                        .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
-                    let organization_id = purchase_order_responsible_org_id(&sales_order)?;
+                    let organization_id = purchase_order_responsible_org_id(&order)?;
                     let _ = purchase_order_object_readable(&organization_id, &actor_id)?;
                     let binding = find_approval_binding(&db, &purchase_order_id, executor)
                         .await

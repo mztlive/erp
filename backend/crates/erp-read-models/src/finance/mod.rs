@@ -3,6 +3,7 @@
 pub mod document_files;
 pub mod dto;
 pub mod payable;
+pub mod payment_request;
 pub(crate) mod purchase_payments;
 
 pub mod receivable;

@@ -134,7 +134,7 @@ impl PurchaseOrderProcess {
             .find_by_id(&draft.order.sales_order_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
-        let organization_id = purchase_order_responsible_org_id(&sales_order)?;
+        let organization_id = purchase_order_responsible_org_id(&draft.order)?;
         let _ = purchase_order_object_readable(&organization_id, command.actor.id())?;
         assign_formal_purchase_no(&mut draft.order)?;
         let mut document = find_registered_document(&self.db, command.purchase_order_id, &mut NoTransaction)

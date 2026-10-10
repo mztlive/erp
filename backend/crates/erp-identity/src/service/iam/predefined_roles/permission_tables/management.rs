@@ -54,6 +54,8 @@ pub(crate) const MANAGEMENT_PERMISSIONS: &[&str] = &[
     "payable_account:detail",
     "supplier_payment:list",
     "supplier_payment:detail",
+    "purchase_payment_request:list",
+    "purchase_payment_request:detail",
     "cost_entry:list",
     "cost_entry:detail",
     "cost_allocation:list",

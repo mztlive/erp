@@ -300,6 +300,13 @@ export const RESOURCE_FIELDS: Readonly<
             listFact: true,
         },
         {
+            key: "reconciliationCycle",
+            label: masterDataCopy.fReconciliationCycle,
+            kind: "select",
+            required: true,
+            listFact: true,
+        },
+        {
             key: "capability",
             label: masterDataCopy.fCapability,
             kind: "checkbox-group",

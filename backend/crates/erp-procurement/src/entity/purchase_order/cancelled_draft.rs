@@ -125,6 +125,7 @@ fn reopened_header(
             fulfillment_responsibility: source.fulfillment_responsibility,
             supplier_revision_id: source.supplier_revision_id.clone(),
             supplier_snapshot: source.supplier_snapshot.clone(),
+            payment_subject: source.payment_subject.clone(),
             payment_term_snapshot: source.payment_term_snapshot.clone(),
             gross_amount: source.gross_amount,
             net_amount: source.net_amount,
@@ -149,8 +150,9 @@ mod tests {
     use super::*;
     use crate::dto::purchase_order::SavePurchaseOrderLinePatch;
     use crate::entity::purchase_order::{
-        FulfillmentResponsibility, PaymentTermSnapshot, PurchaseLineType, PurchaseOrderData,
-        PurchaseOrderReviewDecision, PurchaseOrderSubmissionLineData, PurchaseType, SupplierSnapshot,
+        FulfillmentResponsibility, PaymentSubjectSnapshot, PaymentTermSnapshot, PurchaseLineType,
+        PurchaseOrderData, PurchaseOrderReviewDecision, PurchaseOrderSubmissionLineData, PurchaseType,
+        SupplierSnapshot,
     };
     use crate::service::purchase_order::draft_edit::build_draft_replacement;
 
@@ -240,6 +242,13 @@ mod tests {
         let mut source = PurchaseOrderSubmission::new(
             PurchaseOrderSubmissionId::new("formal-1"),
             PurchaseOrderSubmissionData {
+                payment_subject: PaymentSubjectSnapshot::new(
+                    "party-1".to_string().into(),
+                    "我方公司".into(),
+                    "so-1".to_string().into(),
+                    "sales-rev-1".to_string().into(),
+                )
+                .unwrap(),
                 purchase_order_id: PurchaseOrderId::new("po-1"),
                 submission_no: "SUB-000001".into(),
                 supplier_id: SupplierAccountId::new("supplier-1"),

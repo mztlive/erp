@@ -201,12 +201,17 @@ export async function submitSalesInvoiceRequest(
     await expect(page.getByText(/本单可申请/)).toBeVisible({ timeout: TIMEOUT })
 
     await page.locator("#invoice-request-amount").fill(input.amount)
+    const title = page.locator("#invoice-request-title")
+    const taxNumber = page.locator("#invoice-request-tax-number")
+    await expect(title).toHaveAttribute("readonly", "")
+    await expect(taxNumber).toHaveAttribute("readonly", "")
     if (input.title) {
-        await page.locator("#invoice-request-title").fill(input.title)
+        await expect(title).toHaveValue(input.title, { timeout: TIMEOUT })
     } else {
-        await expect(page.locator("#invoice-request-title")).not.toHaveValue("")
+        await expect(title).not.toHaveValue("", { timeout: TIMEOUT })
     }
-    await page.locator("#invoice-request-tax-number").fill(input.taxNumber)
+    await expect(taxNumber).toHaveValue(input.taxNumber, { timeout: TIMEOUT })
+    const frozenTitle = await title.inputValue()
     await page.locator("#invoice-request-content").fill(input.content ?? "商品")
     await page
         .locator("#invoice-request-reason")
@@ -223,6 +228,13 @@ export async function submitSalesInvoiceRequest(
     await submit.click({ force: true })
     const response = await posted
     expect(response.ok(), await response.text()).toBeTruthy()
+    expect(response.request().postDataJSON()).toMatchObject({
+        data: {
+            amount: input.amount,
+            invoice_title: frozenTitle,
+            tax_number: input.taxNumber,
+        },
+    })
     await expect(
         page
             .locator('[aria-label="开票申请详情"]')

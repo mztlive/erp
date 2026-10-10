@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
 import { emptyEditorNode } from "../draft-nodes"
-import { REJECT_RESTART_COPY } from "../labels"
+import { rejectionPolicyCopy } from "../labels"
 import type { DocumentType, EditorNode, EligibleAssignee } from "../types"
 import { AssigneeCombobox } from "./assignee-combobox"
 
@@ -63,7 +63,7 @@ export function NodeListEditor({
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                 <h3 className="text-sm font-medium">审批节点</h3>
                 <p className="text-xs text-muted-foreground">
-                    {nodes.length} 个节点 · {REJECT_RESTART_COPY}
+                    {nodes.length} 个节点 · {rejectionPolicyCopy(documentType)}
                 </p>
             </div>
             <ol className="flex flex-col">

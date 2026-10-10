@@ -241,7 +241,7 @@ impl SupplierCommercialProfileRevision {
         let (payment_term_snapshot, business_category) =
             split_payment_term_fields(data.payment_term_snapshot, data.business_category)?;
         let payment_term = SupplierPaymentTerm::parse(&payment_term_snapshot)?;
-        ensure_settlement_rules(payment_term, data.settlement_mode, data.reconciliation_cycle)?;
+        ensure_settlement_rules(payment_term, data.settlement_mode)?;
         let change_reason = normalize_required_text(
             data.change_reason,
             "变更原因不能为空",
@@ -374,28 +374,10 @@ fn split_payment_term_fields(
     Ok((payment_term_snapshot, explicit.or(encoded)))
 }
 
-/// 周期结算的付款规则与对账周期须一致；存量非周期资料维持原规则。
-fn ensure_settlement_rules(
-    term: SupplierPaymentTerm,
-    mode: SettlementMode,
-    cycle: ReconciliationCycle,
-) -> Result<()> {
+/// 付款条件须与结算方式一致；对账频率独立于付款周期。
+fn ensure_settlement_rules(term: SupplierPaymentTerm, mode: SettlementMode) -> Result<()> {
     if term.settlement_mode() != mode {
         return Err(Error::from("结算方式与付款条件不一致，请重新选择"));
-    }
-    let Some((period, _)) = term.calendar_due() else {
-        return Ok(());
-    };
-    use erp_core::common::calendar::CalendarPeriod;
-    let expected = match period {
-        CalendarPeriod::Week => ReconciliationCycle::Weekly,
-        CalendarPeriod::Month => ReconciliationCycle::Monthly,
-        CalendarPeriod::Quarter => ReconciliationCycle::Quarterly,
-        CalendarPeriod::HalfYear => ReconciliationCycle::HalfYearly,
-        CalendarPeriod::Year => ReconciliationCycle::Yearly,
-    };
-    if cycle != expected {
-        return Err(Error::from("对账周期与自然结算周期不一致"));
     }
     Ok(())
 }
@@ -699,27 +681,53 @@ mod tests {
         );
     }
     #[test]
-    fn periodic_settlement_requires_matching_reconciliation_cycle() {
-        let valid = SupplierCommercialProfileRevisionData {
-            settlement_mode: SettlementMode::Monthly,
+    fn payment_period_and_reconciliation_frequency_are_independent() {
+        let terms = [
+            (SettlementMode::Monthly, "PERIOD_MONTH_15"),
+            (SettlementMode::Quarterly, "PERIOD_QUARTER_15"),
+            (SettlementMode::Yearly, "PERIOD_YEAR_15"),
+            (SettlementMode::CashSettlement, "CASH_ON_APPROVAL"),
+        ];
+        let cycles = [
+            ReconciliationCycle::Daily,
+            ReconciliationCycle::Weekly,
+            ReconciliationCycle::Monthly,
+            ReconciliationCycle::Quarterly,
+            ReconciliationCycle::HalfYearly,
+            ReconciliationCycle::Yearly,
+            ReconciliationCycle::None,
+        ];
+        for (mode, term) in terms {
+            for cycle in cycles {
+                let data = SupplierCommercialProfileRevisionData {
+                    settlement_mode: mode,
+                    reconciliation_cycle: cycle,
+                    payment_term_snapshot: term.into(),
+                    ..profile_data()
+                };
+                let profile = SupplierCommercialProfileRevision::new(
+                    SupplierCommercialProfileRevisionId::new("p"),
+                    data,
+                )
+                .unwrap();
+                assert_eq!(profile.settlement_mode, mode);
+                assert_eq!(profile.payment_term_snapshot, term);
+                assert_eq!(profile.reconciliation_cycle, cycle);
+            }
+        }
+    }
+
+    #[test]
+    fn independent_reconciliation_does_not_allow_mismatched_payment_mode() {
+        let invalid = SupplierCommercialProfileRevisionData {
+            settlement_mode: SettlementMode::Yearly,
             reconciliation_cycle: ReconciliationCycle::Monthly,
-            payment_term_snapshot: "PERIOD_MONTH_15".into(),
+            payment_term_snapshot: "PERIOD_QUARTER_15".into(),
             ..profile_data()
         };
-        assert!(
-            SupplierCommercialProfileRevision::new(
-                SupplierCommercialProfileRevisionId::new("p"),
-                valid.clone()
-            )
-            .is_ok()
-        );
-        let invalid = SupplierCommercialProfileRevisionData {
-            reconciliation_cycle: ReconciliationCycle::Weekly,
-            ..valid
-        };
-        assert!(
+        let error =
             SupplierCommercialProfileRevision::new(SupplierCommercialProfileRevisionId::new("p"), invalid)
-                .is_err()
-        );
+                .unwrap_err();
+        assert_eq!(error.to_string(), "结算方式与付款条件不一致，请重新选择");
     }
 }

@@ -12,7 +12,10 @@ import {
 } from "@/components/ui/table"
 import { paymentTermCode, paymentTermLabel } from "@/lib/business-options"
 import { compareDecimal } from "@/lib/fixed-decimal"
-import { periodicSettlement } from "@/lib/supplier-payment-terms"
+import {
+    periodicSettlement,
+    reconciliationCycleLabel,
+} from "@/lib/supplier-payment-terms"
 import { percentageFromRate } from "@/features/supplier-offerings/lib/offering-forms"
 import type { PortalApplication } from "@/features/supplier-portal/types"
 
@@ -53,7 +56,7 @@ const termsFields: FieldSpec[] = [
 ]
 const cooperationFields: FieldSpec[] = [
     field("settlement_mode", "结算方式", "settlement"),
-    field("reconciliation_cycle", "对账周期", "cycle"),
+    field("reconciliation_cycle", "对账频率", "cycle"),
     field("payment_term", "付款条件", "payment"),
 ]
 const productFields: FieldSpec[] = [
@@ -183,8 +186,7 @@ function valueContent(
         )
     if (kind === "cycle")
         return (
-            periodicSettlement(raw)?.label.replace(/结$/, "对账") ??
-            { none: "无固定周期", NONE: "无固定周期" }[raw] ??
+            reconciliationCycleLabel(raw) ??
             (raw ? chineseValue(raw) : "未填写")
         )
     if (kind === "payment")

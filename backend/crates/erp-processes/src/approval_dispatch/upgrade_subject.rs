@@ -94,7 +94,9 @@ fn classify_upgrade_subject(document_type: DocumentType) -> Result<UpgradeSubjec
         DocumentType::PurchaseOrder => Ok(UpgradeSubjectKind::PurchaseOrder),
         DocumentType::PurchaseChangeOrder => Ok(UpgradeSubjectKind::PurchaseChangeOrder),
         DocumentType::StockAdjustment => Ok(UpgradeSubjectKind::StockAdjustment),
-        DocumentType::SalesInvoiceRequest => Ok(UpgradeSubjectKind::InvoiceRequestRejected),
+        DocumentType::SalesInvoiceRequest | DocumentType::PurchasePaymentRequest => {
+            Ok(UpgradeSubjectKind::InvoiceRequestRejected)
+        },
         DocumentType::CustomerReceipt => Ok(UpgradeSubjectKind::CustomerReceipt),
         DocumentType::CustomerRefund => Ok(UpgradeSubjectKind::CustomerRefund),
         DocumentType::SupplierRefund => Ok(UpgradeSubjectKind::SupplierRefund),
@@ -125,8 +127,10 @@ fn classify_upgrade_subject(document_type: DocumentType) -> Result<UpgradeSubjec
 /// # 错误
 /// 恒返回冲突：开票申请创建即提交，不支持升级已提交申请的审批绑定。
 fn reject_invoice_request_upgrade(document_type: DocumentType) -> Error {
-    let _ = document_type;
-    Error::ConflictError("开票申请创建即提交，不支持升级已提交申请的审批绑定".into())
+    Error::ConflictError(format!(
+        "{}提交时冻结审批绑定，不支持升级已提交申请的审批绑定",
+        document_type.label()
+    ))
 }
 
 impl ApprovalUpgradeSubjectFacts {

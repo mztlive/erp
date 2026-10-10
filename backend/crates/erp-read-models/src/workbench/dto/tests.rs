@@ -185,7 +185,8 @@ fn customer_acceptance_maps_to_w06_fulfillment_family() {
 #[test]
 fn supplier_payment_execution_maps_to_w12_finance_family() {
     let route =
-        handler_route(WorkItemType::SupplierPaymentExecution, "payable_account", "role-finance").unwrap();
+        handler_route(WorkItemType::SupplierPaymentExecution, "purchase_payment_request", "role-finance")
+            .unwrap();
 
     assert_eq!(route.handler_key, "supplier_payment_execution");
     assert_eq!(route.destination_workspace_id, "W12");
@@ -194,6 +195,9 @@ fn supplier_payment_execution_maps_to_w12_finance_family() {
     assert!(WORK_ITEM_TYPES.contains(&WorkItemType::SupplierPaymentExecution));
     assert!(
         handler_route(WorkItemType::SupplierPaymentExecution, "supplier_payment", "role-finance").is_err()
+    );
+    assert!(
+        handler_route(WorkItemType::SupplierPaymentExecution, "payable_account", "role-finance").is_err()
     );
 }
 

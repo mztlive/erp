@@ -343,7 +343,7 @@ pub async fn supplier_payment_bank_receipt(
 }
 
 /// 校验 multipart 中的银行回单字段与命令临时引用一一对应。
-fn validate_bank_receipt_upload(
+pub(crate) fn validate_bank_receipt_upload(
     req: &CommitSupplierPaymentRequest,
     files: &[PendingAssetFile],
 ) -> std::result::Result<(), Error> {
@@ -443,6 +443,8 @@ mod tests {
     #[test]
     fn bank_receipt_file_must_match_pending_image_reference() {
         let request = serde_json::from_value::<CommitSupplierPaymentRequest>(serde_json::json!({
+            "payment_request_id": "ppr-1",
+            "expected_request_version": 1,
             "work_item_id": "wi-1",
             "expected_task_version": "1",
             "expected_payee_bank_account_id": "bank-1",

@@ -1,4 +1,3 @@
-use erp_core::common::calendar::CalendarPeriod;
 use erp_core::validation::normalize_required_text;
 use serde::{Deserialize, Serialize};
 
@@ -40,18 +39,6 @@ impl CooperationRequest {
         let term = SupplierPaymentTerm::parse(&self.payment_term)?;
         if term.settlement_mode() != self.settlement_mode {
             return Err(Error::ValidationError("付款条件与结算方式不一致".into()));
-        }
-        if let Some((period, _)) = term.calendar_due() {
-            let cycle = match period {
-                CalendarPeriod::Week => ReconciliationCycle::Weekly,
-                CalendarPeriod::Month => ReconciliationCycle::Monthly,
-                CalendarPeriod::Quarter => ReconciliationCycle::Quarterly,
-                CalendarPeriod::HalfYear => ReconciliationCycle::HalfYearly,
-                CalendarPeriod::Year => ReconciliationCycle::Yearly,
-            };
-            if self.reconciliation_cycle != cycle {
-                return Err(Error::ValidationError("对账周期与自然结算周期不一致".into()));
-            }
         }
         self.payment_term = term.code();
         Ok(self)

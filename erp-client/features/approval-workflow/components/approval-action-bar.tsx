@@ -207,6 +207,7 @@ export function ApprovalActionBar({
                     workItemId={workItemId}
                     expectedTaskVersion={expectedTaskVersion}
                     defaultDecision={dialog === "reject" ? "REJECT" : "APPROVE"}
+                    documentType={documentType}
                     allowedActions={allowedActions}
                     context={decisionContext}
                     onApplied={onDecisionApplied}

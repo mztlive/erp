@@ -17,6 +17,8 @@ use crate::error::{Error, Result};
 use crate::repository::WorkItemExt;
 use crate::repository::prelude::*;
 
+pub(in crate::service::approval::execution) mod due;
+
 /// 完成或关闭审批任务所需的同一决定上下文。
 pub(super) struct CompleteOrCloseTasksInput<'a> {
     pub(super) complete_tasks: &'a [ApprovalNodeExecutionId],
@@ -125,6 +127,7 @@ pub(super) async fn create_open_tasks(
     input: CreateOpenTasksInput<'_>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
+    let due_at = due::inherited_due_at(db, input.writes, executor).await?;
     for (index, intent) in input.writes.create_tasks.iter().enumerate() {
         let TaskIntent::HumanTaskRequested { execution_id, assignee, .. } = intent else {
             continue;
@@ -140,7 +143,7 @@ pub(super) async fn create_open_tasks(
                 owner_organization_id: input.owner_organization_id.to_string(),
                 owner_user_id: assignee.as_str().to_string(),
                 priority: WorkItemPriority::Normal,
-                due_at: None,
+                due_at,
             },
             input.now,
         )

@@ -6,6 +6,7 @@ use entity_macros::Entity;
 use erp_core::ids::{CustomerReceiptId, InvoiceId, SalesInvoiceRequestId, SupplierPaymentId};
 use serde::{Deserialize, Serialize};
 
+use crate::entity::payable::PurchasePaymentRequestId;
 use crate::{Error, Result};
 
 /// 进项发票登记命令的稳定动作。
@@ -41,6 +42,8 @@ pub enum FinanceCommandResource {
     Invoice(InvoiceId),
     /// 销项开票申请。
     SalesInvoiceRequest(SalesInvoiceRequestId),
+    /// 采购付款申请。
+    PurchasePaymentRequest(PurchasePaymentRequestId),
 }
 
 impl FinanceCommandResource {
@@ -51,6 +54,7 @@ impl FinanceCommandResource {
             Self::CustomerReceipt(id) => id.as_ref(),
             Self::Invoice(id) => id.as_ref(),
             Self::SalesInvoiceRequest(id) => id.as_ref(),
+            Self::PurchasePaymentRequest(id) => id.as_ref(),
         }
     }
 }
@@ -260,6 +264,12 @@ fn resource_for_command(action: &str, resource_type: &str, id: String) -> Result
         ("sales_invoice_request.submit" | "sales_invoice_request.cancel", "sales_invoice_request") => {
             FinanceCommandResource::SalesInvoiceRequest(SalesInvoiceRequestId::new(id))
         },
+        (
+            "purchase_payment_request.submit"
+            | "purchase_payment_request.withdraw"
+            | "purchase_payment_request.close",
+            "purchase_payment_request",
+        ) => FinanceCommandResource::PurchasePaymentRequest(PurchasePaymentRequestId::new(id)),
         _ => return Err(corrupted_receipt()),
     };
     Ok(result)
@@ -335,6 +345,9 @@ mod tests {
             ("invoice.commit", "invoice"),
             ("sales_invoice_request.submit", "sales_invoice_request"),
             ("sales_invoice_request.cancel", "sales_invoice_request"),
+            ("purchase_payment_request.submit", "purchase_payment_request"),
+            ("purchase_payment_request.withdraw", "purchase_payment_request"),
+            ("purchase_payment_request.close", "purchase_payment_request"),
         ] {
             let command =
                 CommandReceipt::from_payload("finance-", "actor", action, resource_type, "key", &10).unwrap();

@@ -536,6 +536,7 @@ mod tests {
 
     fn header_data() -> SalesOrderRevisionData {
         SalesOrderRevisionData {
+            settlement_party_id: "party-1".to_string().into(),
             sales_order_id: SalesOrderId::new("o-1"),
             revision_no: 1,
             revision_source: RevisionSource::ErpApproval,

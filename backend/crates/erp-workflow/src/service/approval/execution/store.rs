@@ -401,6 +401,7 @@ fn apply_task_intents(
     writes: &PlannedWrites,
     ctx: &TaskApplyContext,
 ) -> std::result::Result<(), ApplyError> {
+    let due_at = inherited_task_due_at(store, writes)?;
     for intent in &writes.create_tasks {
         let TaskIntent::HumanTaskRequested { execution_id, assignee, .. } = intent else {
             continue;
@@ -419,7 +420,7 @@ fn apply_task_intents(
                 owner_organization_id: ctx.owner_organization_id.clone(),
                 owner_user_id: assignee.as_str().to_string(),
                 priority: WorkItemPriority::Normal,
-                due_at: None,
+                due_at,
             },
             ctx.now,
         )
@@ -433,6 +434,33 @@ fn apply_task_intents(
         close_open_tasks(store, execution_id, reason, &ctx.actor_id, ctx.now)?;
     }
     Ok(())
+}
+
+/// 内存持久化沿已登记的同实例任务复用生产日期身份校验。
+fn inherited_task_due_at(
+    store: &MemoryRuntimeStore,
+    writes: &PlannedWrites,
+) -> std::result::Result<Option<Instant>, ApplyError> {
+    if writes.instance.process_kind != bpm::ProcessKind::PurchasePaymentRequest
+        || writes.create_tasks.is_empty()
+    {
+        return Ok(None);
+    }
+    for task in store.work_items.values() {
+        let Some(execution) = task
+            .approval_node_execution_id
+            .as_ref()
+            .and_then(|id| store.executions.get(id.as_ref()))
+            .filter(|execution| execution.process_instance_id.as_ref() == writes.instance.base.id)
+        else {
+            continue;
+        };
+        return super::runtime_service::tasks::due::task_due_at(&writes.instance, execution, task)
+            .map(Some)
+            .map_err(|error| ApplyError::Invariant(error.to_string()));
+    }
+    // 首节点日期由业务提交事务在任务创建后冻结；内存入口保持相同分工。
+    Ok(None)
 }
 
 /// 完成指定执行下全部开放审批任务。

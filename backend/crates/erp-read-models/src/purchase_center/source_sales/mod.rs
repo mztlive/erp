@@ -37,7 +37,7 @@ use crate::{Error, Result};
 ///
 /// # 错误
 /// 销售版本关系不一致、来源销售单或版本不存在、版本不属于来源销售单，或销售行与账号读取失败时返回对应错误。
-pub(super) async fn source_sales(
+pub(crate) async fn source_sales(
     db: &Database,
     order: &PurchaseOrder,
     purchase_lines: &[PurchaseOrderLineView],

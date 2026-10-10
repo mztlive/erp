@@ -120,12 +120,19 @@ export type SalesOrderLineItem = {
     dueDate?: string
 }
 
-export type ProcurementProgressStatus = "pending" | "partial" | "covered"
+export type ProcurementProgressStatus =
+    | "pending"
+    | "partial"
+    | "covered"
+    | "source_changed"
 
 export type SalesOrderProcurementProgress = {
     salesQuantity: string
     coveredQuantity: string
     remainingQuantity: string
+    sourceChanged: boolean
+    outdatedPurchaseQuantity: string
+    outdatedPurchaseCount: number
     status: ProcurementProgressStatus
     label: string
     tone: StatusTone

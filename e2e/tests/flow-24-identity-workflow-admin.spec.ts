@@ -230,35 +230,39 @@ test("[flow-24] 角色、人员统一保存与权限撤销不会扩大客户数�
     );
   });
 
-  await test.step("内建岗位补齐缺失角色，重复生成保留既有角色权限", async () => {
+  await test.step("内建岗位按目录只允许补齐缺失角色，重复生成保留既有角色权限", async () => {
     const before = (await apiGet<Role[]>(token, "/admin/roles")).find(
       (row) => row.id === "role-sales",
     )!;
     const catalog = await apiGet<BuiltinRoleCatalog>(token, "/admin/role-templates");
     const missing = catalog.templates.filter((row) => row.recommended && row.can_generate);
-    expect(missing.length, "隔离源库保留旧财务角色，分岗内建模板须可补齐").toBeGreaterThan(0);
     await admin.goto("/system/access-audit?view=roles");
     await admin.locator("#roles-builtin-open").click();
     const dialog = admin.getByRole("dialog").filter({
       has: admin.getByRole("heading", { name: "生成岗位角色", exact: true }),
     });
-    await expect(dialog.getByRole("checkbox", { name: "销售", exact: true })).toBeDisabled();
-    const generated = await uiWrite<Array<{ id: string; created: boolean }>>(
-      admin,
-      "POST",
-      "/admin/role-templates/generate",
-      () => admin.locator("#roles-builtin-generate").click(),
-    );
-    expect(generated.map((row) => row.id).sort()).toEqual(missing.map((row) => row.id).sort());
-    expect(generated.every((row) => row.created)).toBe(true);
-    const roles = await apiGet<Role[]>(token, "/admin/roles");
-    for (const template of missing) {
-      expect(
-        roles
-          .find((row) => row.id === template.id)
-          ?.permissions.slice()
-          .sort(),
-      ).toEqual(template.permissions.slice().sort());
+    await expect(dialog.locator("#roles-builtin-role-sales-select")).toBeDisabled();
+    for (const template of catalog.templates.filter((row) => !row.can_generate)) {
+      await expect(dialog.locator(`#roles-builtin-${template.id}-select`)).toBeDisabled();
+    }
+    if (missing.length > 0) {
+      const generated = await uiWrite<Array<{ id: string; created: boolean }>>(
+        admin,
+        "POST",
+        "/admin/role-templates/generate",
+        () => admin.locator("#roles-builtin-generate").click(),
+      );
+      expect(generated.map((row) => row.id).sort()).toEqual(missing.map((row) => row.id).sort());
+      expect(generated.every((row) => row.created)).toBe(true);
+      const roles = await apiGet<Role[]>(token, "/admin/roles");
+      for (const template of missing) {
+        expect(roles.find((row) => row.id === template.id)?.permissions.slice().sort())
+          .toEqual(template.permissions.slice().sort());
+      }
+    } else {
+      // 隔离准备已按正式目录生成岗位，零缺失时不得提供重复生成的 UI 操作。
+      await expect(dialog.locator("#roles-builtin-generate")).toBeDisabled();
+      await expect(dialog.locator("#roles-builtin-generate")).toHaveText("生成所选 0 个岗位");
     }
     const refreshed = await apiGet<BuiltinRoleCatalog>(token, "/admin/role-templates");
     const repeated = await ok<Array<{ id: string; created: boolean }>>(

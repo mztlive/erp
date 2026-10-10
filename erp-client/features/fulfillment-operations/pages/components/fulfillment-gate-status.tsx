@@ -94,7 +94,7 @@ export function FulfillmentGateStatus({
                             />
                         }
                     >
-                        去登记付款
+                        申请采购付款
                     </Button>
                 ) : undefined
             }

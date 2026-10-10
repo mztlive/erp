@@ -53,7 +53,7 @@ pub(super) fn revalidate_published_graph(graph: &DefinitionGraph) -> Result<()> 
 ///
 /// # 关键业务约束
 /// 审批人集合由 BPM 图确定性提取，Service 只编排外部资格判断。
-pub(super) async fn revalidate_binding_graph(
+pub async fn revalidate_binding_graph(
     _db: &Database,
     rbac: &impl WorkflowAuthorizationPort,
     _object_read: &dyn ApprovalObjectReadPort,

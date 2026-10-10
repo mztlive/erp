@@ -33,6 +33,8 @@ use erp_finance::dto::payable as dto;
 mod invoice;
 use erp_read_models::finance::payable::mapping;
 mod payment;
+pub mod payment_request;
+pub use payment_request::PurchasePaymentRequestProcess;
 mod payment_merge;
 pub mod payment_task;
 mod posting;

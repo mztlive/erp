@@ -26,6 +26,10 @@ pub enum ApprovalDomainAction {
     SalesInvoiceRequestSubmit,
     SalesInvoiceRequestApprove,
     SalesInvoiceRequestCancelApproval,
+    PurchasePaymentRequestSubmit,
+    PurchasePaymentRequestApprove,
+    PurchasePaymentRequestReject,
+    PurchasePaymentRequestCancelApproval,
     CustomerReceiptSubmit,
     CustomerReceiptPost,
     CustomerReceiptCancelApproval,
@@ -45,7 +49,7 @@ pub enum ApprovalDomainAction {
 
 impl ApprovalDomainAction {
     /// 全部已登记审批领域动作的稳定穷尽集合。
-    pub const ALL: [Self; 36] = [
+    pub const ALL: [Self; 40] = [
         Self::SalesOrderStartApprovalSubmission,
         Self::SalesOrderFormalizeApprovedSubmission,
         Self::SalesOrderCancelApprovalSubmission,
@@ -67,6 +71,10 @@ impl ApprovalDomainAction {
         Self::SalesInvoiceRequestSubmit,
         Self::SalesInvoiceRequestApprove,
         Self::SalesInvoiceRequestCancelApproval,
+        Self::PurchasePaymentRequestSubmit,
+        Self::PurchasePaymentRequestApprove,
+        Self::PurchasePaymentRequestReject,
+        Self::PurchasePaymentRequestCancelApproval,
         Self::CustomerReceiptSubmit,
         Self::CustomerReceiptPost,
         Self::CustomerReceiptCancelApproval,
@@ -117,6 +125,10 @@ impl ApprovalDomainAction {
             Self::SalesInvoiceRequestSubmit
             | Self::SalesInvoiceRequestApprove
             | Self::SalesInvoiceRequestCancelApproval => DocumentType::SalesInvoiceRequest,
+            Self::PurchasePaymentRequestSubmit
+            | Self::PurchasePaymentRequestApprove
+            | Self::PurchasePaymentRequestReject
+            | Self::PurchasePaymentRequestCancelApproval => DocumentType::PurchasePaymentRequest,
             Self::CustomerReceiptSubmit | Self::CustomerReceiptPost | Self::CustomerReceiptCancelApproval => {
                 DocumentType::CustomerReceipt
             },
@@ -188,6 +200,10 @@ impl ApprovalDomainAction {
             Self::SalesInvoiceRequestSubmit => "InvoiceRequestProcess::submit",
             Self::SalesInvoiceRequestApprove => "InvoiceRequestProcess::approve",
             Self::SalesInvoiceRequestCancelApproval => "InvoiceRequestProcess::cancel",
+            Self::PurchasePaymentRequestSubmit => "PurchasePaymentRequestProcess::submit",
+            Self::PurchasePaymentRequestApprove => "PurchasePaymentRequestProcess::approve",
+            Self::PurchasePaymentRequestReject => "PurchasePaymentRequestProcess::reject",
+            Self::PurchasePaymentRequestCancelApproval => "PurchasePaymentRequestProcess::cancel",
             Self::CustomerReceiptSubmit => "ReceivableService::submit_customer_receipt",
             Self::CustomerReceiptPost => "ReceivableService::post_customer_receipt",
             Self::CustomerReceiptCancelApproval => "ReceivableService::cancel_customer_receipt_approval",
@@ -215,9 +231,9 @@ mod tests {
 
     #[test]
     fn all_actions_have_document_type_and_stable_code() {
-        assert_eq!(ApprovalDomainAction::ALL.len(), 36);
+        assert_eq!(ApprovalDomainAction::ALL.len(), 40);
         let actions = ApprovalDomainAction::ALL.into_iter().collect::<HashSet<_>>();
-        assert_eq!(actions.len(), 36);
+        assert_eq!(actions.len(), 40);
         for action in actions {
             assert!(!action.document_type().as_str().is_empty());
             assert!(!action.as_str().is_empty());

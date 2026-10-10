@@ -27,11 +27,11 @@ function fixture(initial = {}) {
   return { transport, writes, state: () => state };
 }
 
-test("首次补齐全部岗位部门与 11 个账号归属；重跑零写入", async () => {
+test("首次补齐全部岗位部门与 12 个账号归属；重跑零写入", async () => {
   const api = fixture();
   await ensureDevOrganization("test", { transport: api.transport, accounts, now: 100 });
   assert.equal(api.state().units.length, 8);
-  assert.equal(api.state().memberships.length, 11);
+  assert.equal(api.state().memberships.length, 12);
   for (const spec of DEV_DEPARTMENTS) {
     const unit = api.state().units.find((row) => row.name === spec.name);
     assert.deepEqual(api.state().memberships.filter((row) => row.org_unit_id === unit.id).map((row) => row.user_id).sort(), spec.accounts.map((account) => `u-${account}`).sort());
@@ -75,6 +75,6 @@ test("组织初始化不依赖销售领导角色且保留旧管理历史", async
   const api = fixture({ management: [legacy] });
   await ensureDevOrganization("test", { transport: api.transport, accounts: accounts.map((account) => ({ ...account, role_ids: [] })), now: 100 });
   assert.deepEqual(api.state().management, [legacy]);
-  assert.equal(api.state().memberships.length, 11);
+  assert.equal(api.state().memberships.length, 12);
   assert.ok(api.writes.every(({ change }) => ["create_unit", "transfer_member"].includes(change.operation)));
 });

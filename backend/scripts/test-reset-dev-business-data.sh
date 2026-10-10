@@ -81,6 +81,8 @@ for collection in \
     approval_notification_outbox \
     work_items \
     sales_invoice_requests \
+    purchase_payment_requests \
+    purchase_payment_request_snapshots \
     sales_selection_booklets \
     sales_selection_prepare_tasks \
     sales_selection_display_items \
@@ -144,6 +146,7 @@ const business = [
   'returns_command_receipts', 'fulfillment_command_receipts', 'supply_command_receipts',
   'import_command_receipts', 'integration_command_receipts', 'work_item_command_receipts',
   'stock_adjustment_cancellations', 'approval_cancellation_facts',
+  'purchase_payment_requests', 'purchase_payment_request_snapshots',
 ];
 const masterReceipts = [
   'supplier_offering_handover_command_receipts', 'product_handover_command_receipts',

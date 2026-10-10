@@ -3,7 +3,7 @@
  * 文档: docs/erp-phase-1.md §7.4（供给失效/停止可供/资质失效时采购单不得创建，
  *       走销售变更单）+ §4.4（生效后禁止回到审批改选源）+ §6.3（销售变更单）
  * 使用账号: admin（采购责任默认调度人、停止可供）、xiaoshou（客户/合同/销售单/变更单）、
- *           caigou（销售审批、供给分配）、caiwu（变更单财务复核）、
+ *           caigou（销售审批、供给分配）、caigoushenpi（采购审批负向核对）、caiwu（变更单财务复核）、
  *           cangchu（库存预占负向核对）
  *
  * 验收约束:
@@ -49,13 +49,14 @@ const FLOW_TIMEOUT = 12 * 60 * 1000
 const CONTRACT_PDF = path.resolve(process.cwd(), "fixtures/sample-contract.pdf")
 const SKU_KEYWORD = "龙井"
 const SKU_NAME = "狮峰明前龙井礼盒"
+const SKU_DISPLAY_NAME = `${SKU_NAME} 250g`
 const SKU_NO = "TEA-SF-LJ-250"
 const SALES_QTY = "2"
 const MINIMAL_PDF = Buffer.from(
     "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n",
 )
 
-type LoginName = "xiaoshou" | "caigou" | "caiwu" | "cangchu" | "admin"
+type LoginName = "xiaoshou" | "caigou" | "caigoushenpi" | "caiwu" | "cangchu" | "admin"
 type Session = { context: BrowserContext; page: Page }
 
 function orderTitleRow(page: Page, customerName: string) {
@@ -118,8 +119,9 @@ async function expectAllocationCannotCreatePurchase(page: Page, salesOrderNo: st
     expect(Array.isArray(bases)).toBe(true)
     await expect(page.getByRole("heading", { name: "供给分配", exact: true })).toBeVisible({ timeout: UI_TIMEOUT })
 
-    const empty = page.getByText("当前没有待分配供给", { exact: true })
-    const table = page.getByRole("heading", { name: "销售明细与供给方案" })
+    const task = page.getByRole("region", { name: "当前供给分配任务", exact: true })
+    const empty = task.getByText("当前没有待分配供给", { exact: true })
+    const table = task.getByRole("region", { name: "供给商品列表", exact: true })
     if (bases.length === 0) {
         await expect(empty).toBeVisible({ timeout: UI_TIMEOUT })
         await expect(
@@ -131,14 +133,14 @@ async function expectAllocationCannotCreatePurchase(page: Page, salesOrderNo: st
     }
     await expect(table).toBeVisible({ timeout: UI_TIMEOUT })
 
-    const rematch = page.getByRole("button", { name: "重新自动分配" })
+    const rematch = table.getByRole("button", { name: "重新自动分配（直发优先）", exact: true })
     if (await rematch.count()) {
         await rematch.click()
         await expectToast(page, /没有可匹配的供给方案|已重新分配供给/)
     }
-    await expect(page.getByText("将创建采购单").locator("xpath=..")).toContainText("0 张")
-    await expect(page.getByText("将建立库存预留").locator("xpath=..")).toContainText("0 条")
-    await page.getByRole("button", { name: "预览供给分配" }).click()
+    await expect(task.getByText("将创建采购单", { exact: true }).locator("xpath=following-sibling::dd[1]")).toHaveText("0 张")
+    await expect(task.getByText("将建立库存预留", { exact: true }).locator("xpath=following-sibling::dd[1]")).toHaveText("0 条")
+    await task.getByRole("button", { name: "预览供给分配", exact: true }).click()
     await expectToast(page, "无法预览供给分配")
     await expect(
         page.getByText(/请选择履约方案|请至少选择一条本次供给分配明细|该履约方案已失效|没有可匹配的供给方案/),
@@ -451,13 +453,17 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
         await expect(page.getByRole("heading", { name: "供给分配" })).toBeVisible({
             timeout: UI_TIMEOUT,
         })
-        await expect(page.getByRole("heading", { name: "销售明细与供给方案" })).toBeVisible({
+        const allocationTask = page.getByRole("region", { name: "当前供给分配任务", exact: true })
+        const productList = allocationTask.getByRole("region", { name: "供给商品列表", exact: true })
+        await expect(productList).toBeVisible({
             timeout: UI_TIMEOUT,
         })
-        await expect(page.getByRole("combobox", { name: /^履约方案，/ })).toBeVisible({ timeout: UI_TIMEOUT })
-        await expect(page.getByRole("combobox", { name: /^履约方案，/ })).toHaveValue(/入仓|直发/)
-        await expect(page.getByText("将创建采购单").locator("xpath=..")).toContainText(/[1-9]\s*张/)
-        await expect(page.getByRole("button", { name: "预览供给分配" })).toBeVisible()
+        await expect(productList.getByRole("row", { name: `查看 ${SKU_DISPLAY_NAME} 的供给方案`, exact: true })).toBeVisible({ timeout: UI_TIMEOUT })
+        const currentEditor = allocationTask.getByRole("region", { name: "当前商品供给编辑", exact: true })
+        await expect(currentEditor.getByRole("combobox", { name: `履约方案，${SKU_DISPLAY_NAME}`, exact: true })).toBeVisible({ timeout: UI_TIMEOUT })
+        await expect(currentEditor.getByRole("combobox", { name: `履约方案，${SKU_DISPLAY_NAME}`, exact: true })).toHaveValue(/入仓|直发/)
+        await expect(allocationTask.getByText("将创建采购单", { exact: true }).locator("xpath=following-sibling::dd[1]")).toHaveText(/[1-9]\s*张/)
+        await expect(allocationTask.getByRole("button", { name: "预览供给分配", exact: true })).toBeVisible()
 
         // 5) 供给分配确认前停止该 SKU 的有效供给。
         // 采购岗位没有供给列表范围。旧种子没有责任字段时先交接给建档管理员。
@@ -523,8 +529,8 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
         )
         expect(reservations.total).toBe(0)
 
-        // 8) 财务工作台不得出现采购单审批实例；履约任务不得出现
-        page = await switchTo("caiwu")
+        // 8) 采购审批人工作台不得出现采购单审批实例；履约任务不得出现
+        page = await switchTo("caigoushenpi")
         await page.goto("/workspace")
         await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
             timeout: UI_TIMEOUT,
@@ -616,6 +622,9 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
             timeout: UI_TIMEOUT,
         })
         await approveWithoutSourcingFields(page)
+        page = await switchTo("caigoushenpi")
+        await page.goto("/workspace?family=approval")
+        await expect(page.locator("#workspace-home-refresh")).toBeEnabled({ timeout: UI_TIMEOUT })
         await expect(page.getByRole("button", { name: /采购单审批/ })).toHaveCount(0)
 
         // 13) 变更生效后：版本递增，SKU 未改，供给仍失效，仍不得建采购单/履约/关闭

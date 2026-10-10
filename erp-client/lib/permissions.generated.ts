@@ -457,6 +457,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                     action: "detail",
                 },
             },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/work-items/{id}/purchase-payment-request",
+                description: "读取付款申请任务上下文",
+                permission: {
+                    resource: "work_item",
+                    action: "detail",
+                },
+            },
         ],
     },
     {
@@ -3579,6 +3589,142 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "purchase_change_order",
                     action: "submit",
+                },
+            },
+        ],
+    },
+    {
+        name: "采购付款申请",
+        description: "采购申请、财务审核和批准额度内付款",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-payment-requests",
+                description: "查询采购付款申请",
+                permission: {
+                    resource: "purchase_payment_request",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-payment-requests/candidates",
+                description: "查询可申请采购来源",
+                permission: {
+                    resource: "purchase_payment_request",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-payment-requests/{id}",
+                description: "读取采购付款申请",
+                permission: {
+                    resource: "purchase_payment_request",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-payment-requests/{id}/submissions/{version}",
+                description: "读取采购付款申请历史提交",
+                permission: {
+                    resource: "purchase_payment_request",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-payment-requests",
+                description: "创建采购付款申请",
+                permission: {
+                    resource: "purchase_payment_request",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/purchase-payment-requests/{id}",
+                description: "修改采购付款申请草稿",
+                permission: {
+                    resource: "purchase_payment_request",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-payment-requests/{id}/submit",
+                description: "提交采购付款申请审核",
+                permission: {
+                    resource: "purchase_payment_request",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-payment-requests/{id}/withdraw",
+                description: "撤回采购付款申请",
+                permission: {
+                    resource: "purchase_payment_request",
+                    action: "withdraw",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-payment-requests/{id}/close",
+                description: "关闭采购付款申请未付部分",
+                permission: {
+                    resource: "purchase_payment_request",
+                    action: "close",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-payment-requests/{id}/reveal-account",
+                description: "主动查看当前付款申请完整收款账号",
+                permission: {
+                    resource: "party_bank_account",
+                    action: "reveal",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-payment-requests/{id}/payments/commit",
+                description: "在批准采购付款申请内登记付款",
+                permission: {
+                    resource: "purchase_payment_request",
+                    action: "pay",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-payment-requests/{id}/materials/{file_asset_id}/download",
+                description: "下载本付款申请冻结材料",
+                permission: {
+                    resource: "purchase_payment_request",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-payment-requests/{id}/materials/{file_asset_id}/preview",
+                description: "预览本付款申请冻结材料",
+                permission: {
+                    resource: "purchase_payment_request",
+                    action: "detail",
                 },
             },
         ],

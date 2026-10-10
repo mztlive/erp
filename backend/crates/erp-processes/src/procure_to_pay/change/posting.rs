@@ -1,20 +1,21 @@
 //! 采购变更生效真实步骤，统一使用调用方执行器；失败不得推进后继写入。
 use async_trait::async_trait;
 use erp_audit::AuditLog;
-use erp_core::ids::PayableAccountId;
+use erp_finance::service::payable::purchase_change::sync_purchase_subject;
 use erp_procurement::entity::purchase_order::PurchaseOrder;
 use erp_procurement::service::purchase_order::allocation_maintenance::{
     PreparedSalesAllocations, persist_current_sales_allocations,
 };
+use erp_procurement::service::purchase_order::change::EffectiveChangeWrite;
 use erp_sales::repository::SalesOrderExt;
 use mongodb::Database;
 use persistence_core::Executor;
 
 use super::super::allocation_maintenance::prepare_current_sales_allocations;
+use super::super::payment_subject::revalidate_payment_subject;
 use super::super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 use super::effect::EffectiveChangePosting;
 use crate::audit::persist_log;
-use crate::finance_posting::payable::payment_task::sync_purchase_payment_task_after_change;
 use crate::{Error, Result};
 
 /// 原事务中的真实跨域操作；没有成本构造或成本写入步骤，因为原差额成本恒空。
@@ -27,7 +28,6 @@ enum EffectStep {
     CurrentOrder,
     ProcurementTasks,
     Payable,
-    PaymentTask,
     Submission,
     Change,
     Audit,
@@ -36,7 +36,7 @@ enum EffectStep {
 /// 生产适配器与失败替身共用的真实写步骤合同。
 #[async_trait]
 trait EffectSteps: Send {
-    /// 非零差额才需要写入应付和同步付款任务。
+    /// 非零差额才需要写入应付。
     fn has_payable_change(&self) -> bool;
 
     /// 执行单步并直接传播原错误，执行器必须保持调用方的同一借用。
@@ -54,12 +54,11 @@ async fn execute(steps: &mut impl EffectSteps, executor: &mut dyn Executor) -> R
         CurrentOrder,
         ProcurementTasks,
         Payable,
-        PaymentTask,
         Submission,
         Change,
         Audit,
     ] {
-        if matches!(step, Payable | PaymentTask) && !steps.has_payable_change() {
+        if matches!(step, Payable) && !steps.has_payable_change() {
             continue;
         }
         steps.apply(step, executor).await?;
@@ -74,18 +73,6 @@ struct MongoEffect<'a> {
     audit: AuditLog,
     actor_id: &'a str,
     allocations: Option<PreparedSalesAllocations>,
-    payable_account_id: Option<PayableAccountId>,
-}
-
-impl MongoEffect<'_> {
-    /// 使用已更新的真实应付身份在同一执行器内同步采购变更付款任务。
-    async fn sync_payment_task(&self, executor: &mut dyn Executor) -> Result<()> {
-        let account_id = self
-            .payable_account_id
-            .as_ref()
-            .ok_or_else(|| Error::Internal("采购变更差额缺少已更新的应付子账身份".into()))?;
-        sync_purchase_payment_task_after_change(self.db, account_id, executor).await
-    }
 }
 
 #[async_trait]
@@ -99,6 +86,9 @@ impl EffectSteps for MongoEffect<'_> {
         let purchase = &mut self.write.purchase;
         match step {
             SalesGuard => {
+                revalidate_payment_subject(self.db, &purchase.revision.payment_subject, executor).await?;
+                purchase.order.sales_order_revision_id =
+                    purchase.revision.payment_subject.sales_order_revision_id.clone();
                 advance_source_sales_procurement_guard(self.db, &purchase.order, self.actor_id, executor)
                     .await?
             },
@@ -121,17 +111,18 @@ impl EffectSteps for MongoEffect<'_> {
                     .ok_or_else(|| Error::Internal("采购变更生效步骤缺少已准备分配".into()))?;
                 persist_current_sales_allocations(self.db, allocations, executor).await?;
             },
-            CurrentOrder => purchase.persist_current_order(self.db, self.actor_id, executor).await?,
+            CurrentOrder => {
+                persist_current_purchase(self.db, purchase, self.actor_id, executor).await?;
+            },
             ProcurementTasks => {
                 sync_procurement_tasks_for_sales_order(self.db, &purchase.order.sales_order_id, executor)
                     .await?
             },
             Payable => {
                 if let Some(payable) = self.write.payable.as_ref() {
-                    self.payable_account_id = Some(payable.persist(self.db, executor).await?);
+                    payable.persist(self.db, executor).await?;
                 }
             },
-            PaymentTask => self.sync_payment_task(executor).await?,
             Submission => purchase.persist_approved_submission(self.db, executor).await?,
             Change => purchase.persist_change(self.db, executor).await?,
             Audit => {
@@ -140,6 +131,26 @@ impl EffectSteps for MongoEffect<'_> {
         }
         Ok(())
     }
+}
+
+/// 正式采购版本切换与应付主体同步共用调用方执行器，零金额变更也必须推进依据。
+async fn persist_current_purchase(
+    db: &Database,
+    purchase: &mut EffectiveChangeWrite,
+    actor_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    purchase.persist_current_order(db, actor_id, executor).await?;
+    sync_purchase_subject(
+        db,
+        &purchase.order.base.id.clone().into(),
+        &purchase.revision.base.id.clone().into(),
+        purchase.revision.payment_subject.settlement_party_id.as_ref(),
+        &purchase.revision.payment_subject.settlement_party_name,
+        executor,
+    )
+    .await?;
+    Ok(())
 }
 
 /// 事务内写入生效修订、指针、差额与变更单。
@@ -166,7 +177,7 @@ pub(super) async fn persist_effective_writes(
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<u64> {
-    let mut steps = MongoEffect { db, write, audit, actor_id, allocations: None, payable_account_id: None };
+    let mut steps = MongoEffect { db, write, audit, actor_id, allocations: None };
     execute(&mut steps, executor).await?;
     Ok(steps.write.purchase.order.base.version)
 }
@@ -189,6 +200,9 @@ async fn advance_source_sales_procurement_guard(
         .find_by_id(&order.sales_order_id, session)
         .await?
         .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
+    if sales_order.stable.current_revision_id.as_deref() != Some(order.sales_order_revision_id.as_ref()) {
+        return Err(Error::ConflictError("销售来源版本在采购变更审批期间已变化，请重新提交采购变更".into()));
+    }
     sales_order.advance_procurement_guard(actor_id)?;
     db.sales_orders().update(&mut sales_order, session).await?;
     Ok(())
@@ -236,7 +250,6 @@ mod tests {
             CurrentOrder,
             ProcurementTasks,
             Payable,
-            PaymentTask,
             Submission,
             Change,
             Audit,
@@ -267,18 +280,16 @@ mod tests {
         }
     }
 
-    /// 零差额生效不写财务差额或同步付款任务，其他正式写入步骤保持次序。
+    /// 零差额生效只跳过差额分录，正式版本及主体依据继续同步。
     #[tokio::test]
-    async fn zero_delta_skips_payable_and_payment_task_without_skipping_other_effects() {
+    async fn zero_delta_skips_delta_without_skipping_current_subject_effects() {
         let mut executor = TestExecutor { identity: 1 };
         let identity = &mut executor as *mut TestExecutor as usize;
         let mut steps =
             RecordingSteps { calls: Vec::new(), identity, fail_at: None, has_payable_change: false };
         execute(&mut steps, &mut executor).await.unwrap();
-        let expected = expected()
-            .into_iter()
-            .filter(|step| !matches!(step, EffectStep::Payable | EffectStep::PaymentTask))
-            .collect::<Vec<_>>();
+        let expected =
+            expected().into_iter().filter(|step| !matches!(step, EffectStep::Payable)).collect::<Vec<_>>();
         assert_eq!(steps.calls, expected);
     }
 }

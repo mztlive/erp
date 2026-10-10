@@ -90,6 +90,7 @@ impl PurchaseOrderService {
                 fulfillment_responsibility: draft.fulfillment_responsibility,
                 supplier_revision_id: draft.supplier_revision_id.clone(),
                 supplier_snapshot: draft.supplier_snapshot.clone(),
+                payment_subject: draft.payment_subject.clone(),
                 payment_term_snapshot: draft.payment_term_snapshot.clone(),
                 gross_amount: gross,
                 net_amount: net,

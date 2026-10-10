@@ -6,14 +6,16 @@
  *   admin    采购责任规则（默认调度人 → caigou）
  *   xiaoshou 客户 / 合同 / 销售单 / 客户验收
  *   caigou   销售单采购确认、供给分配（选供应商直发）、代发履约
- *   caiwu    采购单财务审批
+ *   caigoushenpi 采购部门内部审批
+ *   caiwu    付款申请财务审核
  *   fukuan   若种子供应商为先款，则在付款任务确认入账
  *   cangchu  负向：不得出现采购入库履约任务
  *
  * 文档-代码差异（以代码为准）:
  *   1. 文档 §7.3.1 在采购确认节点「按供应商创建采购单并选源」；
  *      代码：采购确认只通过/驳回，选源只在销售单生效后的供给分配任务。
- *   2. 文档称「代发出库单」；界面履约类型为「供应商直发」，主按钮「确认发货」。
+ *   2. 文档称「代发出库单」；当前任务打开「登记发货」，类型为「供应商直发」，
+ *      主按钮「确认发货」直接提交当前任务关联发货单，不另弹第二次确认。
  *   3. 文档 7.3.2 未提先款门槛；种子供应商狮峰茶叶付款条件 PREPAY_50，
  *      直发确认前可能必须先由出纳完成付款任务。
  *   4. 文档写「采购提交采购单」；代码由供给分配确认同一事务创建并立即提交审批。
@@ -57,7 +59,59 @@ const MINIMAL_PDF = Buffer.from(
     "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000068 00000 n \n0000000125 00000 n \ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n210\n%%EOF\n",
 )
 
-type LoginName = "xiaoshou" | "caigou" | "caiwu" | "cangchu" | "fukuan" | "admin"
+type LoginName = "xiaoshou" | "caigou" | "caiwu" | "caigoushenpi" | "cangchu" | "fukuan" | "admin"
+
+type DirectDeliveryDetail = {
+    delivery: {
+        id: string
+        delivery_type: string
+        sales_order_id: string
+        purchase_order_id: string
+        warehouse_id: string | null
+        status: string
+        version: number
+        tracking_entries: Array<{ sales_order_line_id: string; tracking_no: string; carrier: string }>
+    }
+    lines: Array<{
+        id: string
+        sales_order_line_id: string
+        quantity: string
+        stock_reservation_id: string | null
+        purchase_line_sales_allocation_id: string | null
+    }>
+}
+
+async function currentDirectTask(page: Page, salesOrderId: string, purchaseOrderId: string) {
+    const workItemId = new URL(page.url()).searchParams.get("currentWorkItemId")
+    expect(workItemId).toBeTruthy()
+    const token = await page.evaluate(() => localStorage.getItem("erp.token"))
+    expect(token).toBeTruthy()
+    const task = await apiGet<{ id: string; business_object_type: string; business_object_id: string }>(
+        token!, `/admin/work-items/${workItemId}`,
+    )
+    expect(task.id).toBe(workItemId)
+    expect(task.business_object_type).toBe("delivery")
+    const queue = await apiGet<{ items: Array<{
+        work_item_id: string; operation_id: string; operation_type: string;
+        sales_order_id: string; purchase_order_id: string; gate_state: string;
+    }> }>(token!, "/admin/work-items/fulfillment-queue", {
+        operation_id: task.business_object_id,
+        operation_types: "SUPPLIER_DIRECT",
+        page: 1,
+        page_size: 1,
+        timezone: "Asia/Shanghai",
+    })
+    expect(queue.items).toHaveLength(1)
+    const operation = queue.items[0]!
+    expect(operation).toMatchObject({
+        work_item_id: workItemId,
+        operation_id: task.business_object_id,
+        operation_type: "SUPPLIER_DIRECT",
+        sales_order_id: salesOrderId,
+        purchase_order_id: purchaseOrderId,
+    })
+    return { workItemId, deliveryId: task.business_object_id, token: token!, gateState: operation.gate_state }
+}
 
 function isoPlusDays(days: number): string {
     const date = new Date()
@@ -133,7 +187,9 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
     const otherLineTrackingNo = `SF-SECOND-${stamp.slice(-10)}`
     const sharedTrackingNo = `SHARED-${stamp.slice(-10)}`
     let salesLineIds: string[] = []
+    let salesOrderId = ""
     let salesOrderNo = ""
+    let purchaseOrderId = ""
     let purchaseOrderNo = ""
     let acceptanceNo = ""
     let session: LoggedInSession | undefined
@@ -249,7 +305,8 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
         })
         salesOrderNo = await readHeaderDocumentNumber(page)
         expect(salesOrderNo.length).toBeGreaterThan(0)
-        const salesOrderId = new URL(page.url()).pathname.split("/").at(-1)
+        salesOrderId = new URL(page.url()).pathname.split("/").at(-1) ?? ""
+        expect(salesOrderId).toBeTruthy()
         const order = await apiGet<{ lines: Array<{ id: string; line_no: number }> }>(
             await apiToken("xiaoshou"),
             `/admin/sales-orders/${salesOrderId}`,
@@ -306,23 +363,22 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
         await expect(page.getByRole("heading", { name: "供给分配" })).toBeVisible({
             timeout: 20000,
         })
-        await expect(page.getByText("销售明细与供给方案")).toBeVisible({
+        await expect(page.getByRole("region", { name: "供给商品列表" })).toBeVisible({
             timeout: 20000,
         })
-        await expandSourcingEditor(page, new RegExp(SKU_KEYWORD))
-        await expandSourcingEditor(page, new RegExp(SECOND_SKU_KEYWORD))
-
-        const sourcing = page.locator(
-            '[id^="procurement-orders-create-row-"][id$="-sourcing-option"]',
-        )
-        await expect(sourcing).toHaveCount(2)
-        for (let index = 0; index < 2; index += 1) {
-            await chooseOption(page, sourcing.nth(index), DIRECT_OPTION, "供应商直发")
-            await expect(sourcing.nth(index)).toHaveValue(new RegExp("供应商直发"))
-            await expect(sourcing.nth(index)).not.toHaveValue(WAREHOUSE_OPTION)
+        const products = page.getByRole("region", { name: "供给商品列表" });
+        await expect(products.getByRole("button", { name: /^调整 / })).toHaveCount(2);
+        for (const product of [SKU_KEYWORD, SECOND_SKU_KEYWORD]) {
+            await expandSourcingEditor(page, new RegExp(product));
+            const editor = page.getByRole("region", { name: "当前商品供给编辑" });
+            const sourcing = editor.locator('[id^="procurement-orders-create-row-"][id$="-sourcing-option"]:visible');
+            await expect(sourcing).toHaveCount(1);
+            await chooseOption(page, sourcing, DIRECT_OPTION, "供应商直发");
+            await expect(sourcing).toHaveValue(new RegExp("供应商直发"));
+            await expect(sourcing).not.toHaveValue(WAREHOUSE_OPTION);
+            await expect(editor.locator('[id$="-warehouse"]:visible')).toHaveCount(0);
+            await expect(editor.getByRole("combobox", { name: "仓库", exact: true })).toHaveCount(0);
         }
-        await expect(page.locator('[id$="-warehouse"]')).toHaveCount(0)
-        await expect(page.getByRole("combobox", { name: "仓库", exact: true })).toHaveCount(0)
 
         await page.locator("#procurement-orders-create-preview").click()
         const preview = page.getByRole("dialog", { name: "预览供给分配" })
@@ -352,11 +408,14 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
             (await poRow.getByRole("button", { name: /打开采购单/ }).textContent()) ?? ""
         ).trim()
         expect(purchaseOrderNo.length).toBeGreaterThan(0)
+        const purchaseHref = await poRow.getByRole("button", { name: /打开采购单/ }).getAttribute("href")
+        expect(purchaseHref).toMatch(/^\/procurement\/orders\/[A-Za-z0-9]+$/)
+        purchaseOrderId = purchaseHref!.split("/").at(-1)!
     }
 
-    // ── 8. 财务总监审批采购单生效 ──
+    // ── 8. 采购部门审批采购单生效 ──
     {
-        page = await switchTo("caiwu")
+        page = await switchTo("caigoushenpi")
         await openWorkspaceTask(page, "采购单审批", salesOrderNo, "approval")
         await expect(page.getByText("供给来源 / 履约责任")).toHaveCount(0)
         await approveCurrentDocument(page)
@@ -383,36 +442,67 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
         await assertInventoryUntouched(page, salesOrderNo)
     }
 
-    // ── 10. 若先款门槛拦住直发，出纳先完成付款任务 ──
+    // ── 10. 当前采购先款门槛拦住直发，付款申请批准并实际付款后才可发货 ──
     {
         page = await switchTo("caigou")
         await openWorkspaceTask(page, "履约处理", legalName, "fulfillment")
-        await expect(page.getByText("供应商直发").first()).toBeVisible({ timeout: 20000 })
-        await openFulfillmentWorkspaceForm(page)
-        await expect(page.locator('[aria-label="供应商直发表单"]')).toBeVisible({
+        const task = await currentDirectTask(page, salesOrderId, purchaseOrderId)
+        expect(task.gateState).toBe("BLOCKED")
+        const dialog = await openFulfillmentWorkspaceForm(page)
+        await expect(dialog).toHaveAttribute("id", `workspace-fulfillment-process-dialog-${task.workItemId}`)
+        await expect(dialog.locator('[aria-label="供应商直发表单"]')).toBeVisible({
             timeout: 20000,
         })
-        const confirmBtn = page.locator("#fulfillment-operations-work-surface-confirm")
-        const blocked =
-            (await page.getByText(/先款未到|暂时不能/).isVisible().catch(() => false)) ||
-            !(await confirmBtn.isEnabled())
-
-        if (blocked) {
-            page = await switchTo("fukuan")
-            await payOnlySupplierTask(page, purchaseOrderNo)
-        }
+        const current = dialog.getByRole("region", { name: "当前履约任务", exact: true })
+        const gate = current.locator("#prepayment-gate")
+        await expect(gate).toHaveText("查看条件")
+        await gate.click()
+        const gateDetails = current.locator("#fulfillment-dialog-gate-details")
+        await expect(gateDetails).toBeVisible()
+        await expect(gateDetails).toHaveAttribute("data-allowed", "false")
+        await expect(dialog.locator("#fulfillment-operations-work-surface-confirm")).toBeDisabled()
+        page = await switchTo("fukuan")
+        await payOnlySupplierTask(page, purchaseOrderNo)
     }
 
     // ── 11. 采购：登记代发（不经仓库）并确认发货 ──
     {
         page = await switchTo("caigou")
         await openWorkspaceTask(page, "履约处理", legalName, "fulfillment")
-        await openFulfillmentWorkspaceForm(page)
-        await expect(page.locator('[aria-label="供应商直发表单"]')).toBeVisible({
+        const task = await currentDirectTask(page, salesOrderId, purchaseOrderId)
+        expect(task.gateState).toBe("SATISFIED")
+        const dialog = await openFulfillmentWorkspaceForm(page)
+        await expect(dialog).toHaveAttribute("id", `workspace-fulfillment-process-dialog-${task.workItemId}`)
+        const current = dialog.getByRole("region", { name: "当前履约任务", exact: true })
+        const header = current.locator('[data-slot="dialog-header"]')
+        await expect(header.getByText("供应商直发", { exact: true })).toBeVisible()
+        await expect(header.getByText(`销售单：${salesOrderNo}`, { exact: true })).toBeVisible()
+        await expect(current.locator('#prepayment-gate[data-slot="prepayment-gate"]')).toHaveAttribute("data-allowed", "true")
+        const form = current.locator('[aria-label="供应商直发表单"]')
+        await expect(form).toBeVisible({
             timeout: 20000,
         })
-        await expect(page.getByText("不走自有仓库，库存不变")).toBeVisible()
-        await expect(page.locator('[id^="fulfillment-operations-direct-form-line-"][id$="-tracking-no"]')).toHaveCount(2)
+        await expect(form.locator('[id$="-warehouse"]')).toHaveCount(0)
+        await expect(form.locator('[id^="fulfillment-operations-direct-form-line-"][id$="-tracking-no"]')).toHaveCount(2)
+        const before = await apiGet<DirectDeliveryDetail>(task.token, `/admin/deliveries/${task.deliveryId}`)
+        expect(before.delivery).toMatchObject({
+            id: task.deliveryId, delivery_type: "SUPPLIER_DIRECT", status: "DRAFT",
+            sales_order_id: salesOrderId, purchase_order_id: purchaseOrderId, warehouse_id: null,
+        })
+        expect(before.lines).toHaveLength(2)
+        expect(before.lines.map(line => line.sales_order_line_id).sort()).toEqual([...salesLineIds].sort())
+        for (const [index, lineId] of salesLineIds.entries()) {
+            const line = before.lines.find(row => row.sales_order_line_id === lineId)!
+            expect(line.quantity).toBe("1")
+            expect(line.stock_reservation_id).toBeNull()
+            expect(line.purchase_line_sales_allocation_id).toBeTruthy()
+            const tracking = form.locator(`#fulfillment-operations-direct-form-line-${lineId}-tracking-no`)
+            await expect(tracking).toBeVisible()
+            const row = tracking.locator('xpath=ancestor::div[./div/p[starts-with(normalize-space(.), "本次发货")]]')
+            await expect(row).toHaveCount(1)
+            await expect(row.getByText(index === 0 ? "狮峰明前龙井礼盒 250g" : "狮峰陈皮普洱礼盒 500g", { exact: true })).toBeVisible()
+            await expect(row.locator('xpath=./div/p[starts-with(normalize-space(.), "本次发货")]')).toHaveText(/^本次发货\s*1\s*盒$/)
+        }
         await fillDeliveryTrackingEntries(page, {
             kind: "direct",
             entries: [
@@ -424,19 +514,23 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
             ],
         })
         await expect(
-            page.locator("#fulfillment-operations-work-surface-confirm"),
+            dialog.locator("#fulfillment-operations-work-surface-confirm"),
         ).toBeEnabled({ timeout: 20000 })
-        await page.locator("#fulfillment-operations-work-surface-confirm").click()
-        const confirm = page.getByRole("alertdialog", { name: "确认发货？" })
-        await expect(confirm).toBeVisible({ timeout: 20000 })
         const posted = page.waitForResponse(response =>
-            response.request().method() === "POST" && /\/deliveries\/[^/]+\/post$/.test(response.url()),
+            response.request().method() === "POST" &&
+            new URL(response.url()).pathname === `/admin/deliveries/${task.deliveryId}/post`,
+            { timeout: 20000 },
         )
-        await confirm.locator("#fulfillment-operations-workspace-confirm-confirm").click()
+        await dialog.locator("#fulfillment-operations-work-surface-confirm").click()
         const postedResponse = await posted
-        expect(postedResponse.ok(), "供应商直发必须已由后端确认后才能关闭会话").toBeTruthy()
-        const delivery = (await postedResponse.json()).data
-        expect(delivery.status).toBe("SHIPPED")
+        expect(postedResponse.ok(), await postedResponse.text()).toBe(true)
+        const envelope = await postedResponse.json()
+        expect(envelope.success).toBe(true)
+        const delivery = envelope.data
+        expect(delivery).toMatchObject({
+            id: task.deliveryId, delivery_type: "SUPPLIER_DIRECT", status: "SHIPPED",
+            sales_order_id: salesOrderId, purchase_order_id: purchaseOrderId, warehouse_id: null,
+        })
         const expectedTrackingEntries = [
             { sales_order_line_id: salesLineIds[0], tracking_no: trackingNo, carrier: "顺丰速运" },
             { sales_order_line_id: salesLineIds[0], tracking_no: secondTrackingNo, carrier: "货拉拉" },
@@ -444,12 +538,19 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
             { sales_order_line_id: salesLineIds[1], tracking_no: otherLineTrackingNo, carrier: "顺丰速运" },
             { sales_order_line_id: salesLineIds[1], tracking_no: sharedTrackingNo, carrier: "货拉拉" },
         ]
-        expect(postedResponse.request().postDataJSON().tracking_entries).toEqual(expectedTrackingEntries)
+        expect(postedResponse.request().postDataJSON()).toMatchObject({ version: before.delivery.version, tracking_entries: expectedTrackingEntries })
         expect(delivery.tracking_entries).toEqual(expectedTrackingEntries)
         expect(delivery).not.toHaveProperty("tracking_no")
         expect(delivery).not.toHaveProperty("tracking_numbers")
         expect(delivery).not.toHaveProperty("carrier")
-        await expect(confirm).toBeHidden({ timeout: 20000 })
+        await expect(dialog).toBeHidden({ timeout: 20000 })
+        const after = await apiGet<DirectDeliveryDetail>(task.token, `/admin/deliveries/${task.deliveryId}`)
+        expect(after.delivery).toMatchObject({
+            id: task.deliveryId, delivery_type: "SUPPLIER_DIRECT", status: "SHIPPED",
+            sales_order_id: salesOrderId, purchase_order_id: purchaseOrderId, warehouse_id: null,
+            tracking_entries: expectedTrackingEntries,
+        })
+        expect(after.lines).toEqual(before.lines)
     }
 
     // ── 12. 销售：客户验收通过 ──

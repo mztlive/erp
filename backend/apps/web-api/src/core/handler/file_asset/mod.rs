@@ -160,9 +160,16 @@ pub async fn file_asset_upload(
             erp_read_models::sales_center::access::SalesAccess::new(state.db(), state.rbac())
                 .require_attachment(&actor, "update", document_id.as_ref())
                 .await?;
-            service.register_file_asset_with_attachment(request, document_id, fields.usage, &actor).await
+            service
+                .register_content_checked_file_asset_with_attachment(
+                    request,
+                    document_id,
+                    fields.usage,
+                    &actor,
+                )
+                .await
         },
-        None => service.register_file_asset(request, &actor).await,
+        None => service.register_content_checked_file_asset(request, &actor).await,
     };
     let mut asset = match result {
         Ok(asset) => asset,

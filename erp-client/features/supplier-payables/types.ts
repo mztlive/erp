@@ -164,6 +164,8 @@ export type PaymentRow = Readonly<{
     supplierName: string
     paidAt: string
     amount: string
+    reversedAmount: string
+    effectiveAmount: string
     bankReferenceMasked: string
     bankReceipt?: Readonly<{
         assetId: string

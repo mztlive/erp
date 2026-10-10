@@ -27,6 +27,7 @@ pub(crate) async fn ensure_indexes(db: &mongodb::Database) -> persistence_core::
     erp_import::indexes::ensure(db).await?;
     erp_party::indexes::ensure(db).await?;
     erp_finance::indexes::ensure_payable(db).await?;
+    erp_finance::indexes::ensure_purchase_payment_requests(db).await?;
     erp_finance::indexes::ensure_command_receipts(db).await?;
     erp_procurement::indexes::ensure(db).await?;
     erp_finance::indexes::ensure_receivable(db).await?;

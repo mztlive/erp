@@ -47,6 +47,21 @@ pub trait WorkItemRepositoryFinanceExt {
         executor: &mut dyn Executor,
     ) -> Result<Vec<WorkItem>>;
 
+    /// 查询付款申请的全部执行任务，最新生命周期任务在前。
+    ///
+    /// # 参数
+    /// * `request_id` - 采购付款申请主键。
+    /// * `executor` - 同一事务的执行器。
+    /// # 返回
+    /// 返回只绑定本申请的付款任务。
+    /// # 错误
+    /// 查询或解码失败时返回持久化错误。
+    async fn list_payment_execution_by_request_newest_first(
+        &self,
+        request_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>>;
+
     /// 查询应收子账全部销项开票执行任务并把最新任务排在前面。
     ///
     /// # 参数
@@ -100,6 +115,23 @@ impl WorkItemRepositoryFinanceExt for Repository<'_, WorkItem> {
                 "business_object_id": { "$in": payable_account_ids },
                 "owner_user_id": owner_user_id,
             },
+            executor,
+        )
+        .await
+    }
+
+    async fn list_payment_execution_by_request_newest_first(
+        &self,
+        request_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>> {
+        self.find_many_sorted(
+            doc! {
+                "business_object_type": "purchase_payment_request",
+                "business_object_id": request_id,
+                "work_item_type": WorkItemType::SupplierPaymentExecution.as_str(),
+            },
+            doc! { "updated_at": -1, "created_at": -1 },
             executor,
         )
         .await

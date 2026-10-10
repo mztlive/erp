@@ -3,7 +3,6 @@
  */
 
 import { apiGet, type Page } from "@/lib/api"
-import { fetchPartyOption } from "@/features/entity-selectors"
 
 import type {
     AllocationDraftLine,
@@ -169,7 +168,12 @@ export async function createAllocationSession(
     let prefillAllocations: AllocationDraftLine[] = []
     let customerId = input.customerId ?? ""
     let customerName = input.customerName ?? ""
-    let counterpartyPartyName = input.counterpartyPartyName
+    const counterpartyPartyName =
+        accounts.find(
+            (account) =>
+                account.counterparty_party_id === input.counterpartyPartyId &&
+                account.counterparty_party_name?.trim(),
+        )?.counterparty_party_name ?? input.counterpartyPartyName
 
     if (input.mode === "receipt" && input.existingFactId) {
         const r = await apiGet<BackendCustomerReceipt>(
@@ -186,12 +190,16 @@ export async function createAllocationSession(
                     "无法读取该回款的完整信息，请刷新或申请完整读取权限后再继续核销。",
             }
         }
-        const party = await fetchPartyOption(r.counterparty_party_id)
-        counterpartyPartyName = party?.displayName ?? counterpartyPartyName
+        if (r.counterparty_party_id !== input.counterpartyPartyId) {
+            throw {
+                kind: "Validation",
+                message: "该回款不属于本次往来主体，请重新选择回款与核销范围。",
+            }
+        }
         existingFactNo = r.receipt_no
         existingFactVersion = r.version
         approval = mapCustomerReceiptApproval(r.approval)
-        customerId = r.customer_id ?? ""
+        customerId = r.customer_id ?? input.customerId ?? ""
         customerName = input.customerName ?? ""
         fact = {
             receivedAt: receiptReceivedAtInput(r.received_at),
@@ -260,11 +268,25 @@ export async function createAllocationSession(
     }
 
     // Resolve the customer from the same immutable account scope.
-    if (!customerId && accounts.length > 0) {
-        const account = accounts[0]
-        customerId = account?.customer_id ?? ""
+    const customerAccounts = accounts.filter(
+        (account) =>
+            account.counterparty_party_id === input.counterpartyPartyId &&
+            (!customerId || account.customer_id === customerId),
+    )
+    const customerAccount = customerAccounts.find((account) =>
+        account.customer_name?.trim(),
+    )
+    if (
+        customerAccount &&
+        (customerId ||
+            customerAccounts.every(
+                (account) =>
+                    account.customer_id === customerAccount.customer_id,
+            ))
+    ) {
+        customerId ||= customerAccount.customer_id
         customerName = businessLabelOrPlaceholder(
-            account?.customer_name,
+            customerAccount.customer_name,
             customerId,
             MISSING_CUSTOMER_NAME,
         )

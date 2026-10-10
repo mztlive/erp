@@ -36,6 +36,7 @@ import {
     pickCalendarDay,
     readHeaderDocumentNumber,
     selectWorkspaceFamily,
+    expectSourcingCounts,
 } from "../helpers/ui";
 
 test.describe.configure({ mode: "serial" });
@@ -494,12 +495,7 @@ test("flow-19 已生效销售单禁止直接作废：预占和仓发草稿保持
         await expect(
             page.getByRole("heading", { name: /供给分配|销售明细与供给方案/ }).first(),
         ).toBeVisible({ timeout: UI_TIMEOUT });
-        await expect(page.getByText("将创建采购单").locator("xpath=..")).toContainText(
-            "0 张",
-        );
-        await expect(page.getByText("将建立库存预留").locator("xpath=..")).toContainText(
-            "1 条",
-        );
+        await expectSourcingCounts(page, 0, 1);
         await page.locator("#procurement-orders-create-preview").click();
         const previewDialog = page.getByRole("dialog", { name: "预览供给分配" });
         await expect(previewDialog).toBeVisible({ timeout: UI_TIMEOUT });

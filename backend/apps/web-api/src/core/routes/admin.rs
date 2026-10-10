@@ -8,9 +8,9 @@ use crate::core::middleware::{authenticate, with_permission};
 use crate::core::routes::{
     access_control, approval_instance, bulk_job, catalog, contract, cost, customer, customer_quality,
     demo_master_data, document_registry, file_asset, financial_files, fulfillment, integration_ops,
-    inventory, legacy_import, party, payable, purchase_order, receivable, returns, sales_order, sales_review,
-    sales_selection, source_registry, supplier, supplier_api, supplier_fulfillment, supplier_offering,
-    supplier_portal, supplier_settlement, warehouse, work_item,
+    inventory, legacy_import, party, payable, purchase_order, purchase_payment_request, receivable, returns,
+    sales_order, sales_review, sales_selection, source_registry, supplier, supplier_api,
+    supplier_fulfillment, supplier_offering, supplier_portal, supplier_settlement, warehouse, work_item,
 };
 
 /// 管理后台路由入口。
@@ -43,6 +43,7 @@ pub fn routes(state: AppState) -> Router<AppState> {
         .merge(party::routes(&rbac_service))
         .merge(payable::routes(&rbac_service))
         .merge(purchase_order::routes(&rbac_service))
+        .merge(purchase_payment_request::routes(&rbac_service))
         .merge(receivable::routes(&rbac_service))
         .merge(returns::routes(&rbac_service))
         .merge(sales_order::routes(&rbac_service))

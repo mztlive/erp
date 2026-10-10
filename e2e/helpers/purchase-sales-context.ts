@@ -17,13 +17,52 @@ type FrozenSource = {
     customer: string | null
     amount_label: string | null
     lines: Array<{ title: string; quantity: string | null }>
+    more_count: number
     extra_sections: Array<{ label: string; value: string }>
 }
 
+type FrozenSalesLine = {
+    id: string
+    line_no: number
+    item_name_snapshot: string
+    quantity: string | null
+    card_count: number | null
+    unit_price_gross: string | null
+    gross_amount: string
+    tax_amount: string
+}
+
+type FrozenSalesBody = {
+    customer_name: string
+    contract_no: string | null
+    settlement_party_name: string | null
+    payment_term_name: string
+    invoice_type: string
+    gross_amount: string
+    net_amount: string
+    tax_amount: string
+}
+
 export type FrozenApprovalMaterials = {
+    document_no: string
     document_type: string
     document_id: string
     subject_version: number
+    sales_order?:
+        | (FrozenSalesBody & {
+              submission_no: number
+              status: string
+              lines: FrozenSalesLine[]
+          })
+        | null
+    source_sales_orders: Array<{
+        document_no: string
+        revision: FrozenSalesBody & {
+            id: string
+            revision_no: number
+            commercial_lines: FrozenSalesLine[]
+        }
+    }>
     display: {
         source: FrozenSource
         source_sales?: Array<{
@@ -95,7 +134,7 @@ async function apiWrite<T>(
 
 /** 仅隔离后端临时收窄通用读取，保留原采购范围和实际任务资格；调用方必须 finally 恢复。 */
 export async function restrictSalesMaterialReader(
-    account: "caigou" | "caiwu",
+    account: "caigou" | "caiwu" | "caigoushenpi",
     runId: string,
 ): Promise<() => Promise<void>> {
     expect(
@@ -129,7 +168,7 @@ export async function restrictSalesMaterialReader(
     expect(permissions).toContain("approval_instance:read")
     expect(permissions).toContain("approval_instance:decide")
     expect(permissions).not.toContain("*:*")
-    if (account === "caiwu")
+    if (account === "caiwu" || account === "caigoushenpi")
         expect(permissions).toContain("purchase_order:detail")
     const roleId = await apiWrite<string>("POST", "/admin/roles", token, {
         name: `E2E精确销售材料-${account}-${runId}`,
@@ -178,33 +217,181 @@ export async function expectGenericSalesMaterialReadsDenied(
     }
 }
 
-/** 通过当前工作台任务打开冻结资料，返回实际请求中的审批实例身份。 */
-export async function openFrozenApprovalMaterials(page: Page): Promise<{
+/** 从当前任务打开完整冻结销售纸张，核对提交或正式版本及全部明细。 */
+export async function openFrozenApprovalMaterials(
+    page: Page,
+    sourceRevisionId?: string,
+): Promise<{
     instanceId: string
     materials: FrozenApprovalMaterials
 }> {
-    const loaded = page.waitForResponse(
-        (response) =>
-            response.request().method() === "GET" &&
-            /\/admin\/approval-instances\/[^/]+\/materials$/.test(
-                new URL(response.url()).pathname,
-            ),
-    )
-    await page
-        .getByRole("button", { name: "查看提交资料", exact: true })
-        .click()
-    const response = await loaded
+    const currentTask = page
+        .getByRole("region", { name: "当前工作台任务", exact: true })
+        .filter({ visible: true })
+    await expect(currentTask).toHaveCount(1, VISIBLE)
+    await expect(currentTask).toBeVisible(VISIBLE)
+    const workItemId = new URL(page.url()).searchParams.get("currentWorkItemId")
+    expect(workItemId, "冻结资料必须从已选定的当前审批任务打开").toBeTruthy()
+    const action = sourceRevisionId
+        ? currentTask
+              .getByRole("button", { name: "预览销售单", exact: true })
+              .and(
+                  currentTask.locator(
+                      `[id$="-source-${idSegment(sourceRevisionId)}"]`,
+                  ),
+              )
+        : currentTask.getByRole("button", {
+              name: "预览完整销售单",
+              exact: true,
+          })
+    await expect(action.filter({ visible: true })).toHaveCount(1, VISIBLE)
+    await expect(action).toBeVisible(VISIBLE)
+    const actionId = await action.getAttribute("id")
+    if (sourceRevisionId) {
+        expect(actionId).toMatch(/^workspace-purchase-approval-.+-source-/)
+    } else {
+        expect(
+            [
+                `workspace-task-detail-read-${idSegment(workItemId!)}`,
+                `workspace-task-detail-preview-submission-${idSegment(workItemId!)}`,
+            ],
+            "完整销售资料入口必须属于 URL 选定的当前审批任务",
+        ).toContain(actionId)
+    }
+    const [response] = await Promise.all([
+        page.waitForResponse(
+            (item) =>
+                item.request().method() === "GET" &&
+                /\/admin\/approval-instances\/[^/]+\/materials$/.test(
+                    new URL(item.url()).pathname,
+                ),
+        ),
+        action.click(),
+    ])
     expect(response.ok(), await response.text()).toBe(true)
     const instanceId = new URL(response.url()).pathname.split("/").at(-2)!
+    if (sourceRevisionId) {
+        expect(actionId).toBe(
+            `workspace-purchase-approval-${idSegment(instanceId)}-source-${idSegment(sourceRevisionId)}`,
+        )
+    }
     const result = (await response.json()) as {
         success: boolean
         data: FrozenApprovalMaterials
     }
     expect(result.success).toBe(true)
-    await expect(
-        page.getByRole("heading", { name: "审批提交资料", exact: true }),
-    ).toBeVisible(VISIBLE)
+    const dialog = page.getByRole("dialog", {
+        name: sourceRevisionId ? "销售单预览" : /提交资料$/,
+        exact: true,
+    })
+    await expect(dialog).toHaveCount(1, VISIBLE)
+    await expect(dialog).toBeVisible(VISIBLE)
+    const paper = dialog
+        .getByRole("article", { name: "纸质单据预览", exact: true })
+        .and(dialog.locator('[data-slot="paper-document"]'))
+    await expect(paper).toHaveCount(1, VISIBLE)
+    await expect(paper).toBeVisible(VISIBLE)
+    const paperHeading = paper.getByRole("heading", {
+        name: "销售单",
+        level: 1,
+        exact: true,
+    })
+    await expect(paperHeading).toHaveCount(1, VISIBLE)
+    await expect(paperHeading).toBeVisible(VISIBLE)
+    if (sourceRevisionId) {
+        const allowed = result.data.display.source_sales ?? []
+        expect(result.data.source_sales_orders).toHaveLength(allowed.length)
+        for (const source of allowed) {
+            const full = result.data.source_sales_orders.find(
+                (order) => order.revision.id === source.revision_id,
+            )
+            expect(full, "冻结允许的每个销售版本必须返回完整正文").toBeTruthy()
+            expect(full!.document_no).toBe(source.document_no)
+            expect(full!.revision.revision_no).toBe(source.revision_no)
+            expect(full!.revision.commercial_lines).toHaveLength(
+                source.source.lines.length + source.source.more_count,
+            )
+        }
+        const full = result.data.source_sales_orders.find(
+            (order) => order.revision.id === sourceRevisionId,
+        )
+        expect(full, "预览必须使用指定的冻结正式销售版本").toBeTruthy()
+        await expect(paper).toContainText(full!.document_no)
+        await expect(paper).toContainText(
+            `销售版本 V${full!.revision.revision_no}`,
+        )
+        await expectCompleteFrozenSalesPaper(
+            paper,
+            full!.revision,
+            full!.revision.commercial_lines,
+        )
+    } else {
+        const full = result.data.sales_order
+        expect(full, "销售审批必须返回此次完整提交").toBeTruthy()
+        expect(full!.submission_no).toBe(result.data.subject_version)
+        expect(full!.lines).toHaveLength(
+            result.data.display.source.lines.length +
+                result.data.display.source.more_count,
+        )
+        await expect(paper).toContainText(result.data.document_no)
+        await expect(paper).toContainText(`提交版本 ${full!.submission_no}`)
+        await expectCompleteFrozenSalesPaper(paper, full!, full!.lines)
+    }
     return { instanceId, materials: result.data }
+}
+
+async function expectCompleteFrozenSalesPaper(
+    paper: Locator,
+    body: FrozenSalesBody,
+    lines: FrozenSalesLine[],
+): Promise<void> {
+    expect(lines.length, "完整销售纸张必须包含销售明细").toBeGreaterThan(0)
+    for (const name of [
+        body.customer_name,
+        body.settlement_party_name,
+        body.payment_term_name,
+        body.invoice_type,
+    ]) {
+        expect(name, "销售正文的客户、我方主体和商务快照必须完整").toBeTruthy()
+        await expect(paper).toContainText(name!)
+    }
+    if (body.contract_no) await expect(paper).toContainText(body.contract_no)
+    const section = paper.getByRole("region", {
+        name: `销售明细 · 共 ${lines.length} 行`,
+        exact: true,
+    })
+    const rows = section.locator("tbody tr")
+    await expect(rows).toHaveCount(lines.length)
+    for (const [index, line] of lines.entries()) {
+        const row = rows.nth(index)
+        await expect(row.getByRole("cell").first()).toHaveText(
+            String(line.line_no),
+        )
+        await expect(row).toContainText(line.item_name_snapshot)
+        const quantity = line.quantity ?? String(line.card_count)
+        await expect(
+            row.locator('[data-slot="quantity-value"] > span').first(),
+        ).toHaveText(decimalPattern(quantity))
+        if (line.unit_price_gross) {
+            await expect(
+                row.locator('[data-slot="money-value-number"]').first(),
+            ).toHaveText(displayedCurrency(line.unit_price_gross))
+        }
+        await expect(
+            row.locator('[data-slot="money-value-number"]').last(),
+        ).toHaveText(displayedCurrency(line.gross_amount))
+        await expect(
+            row.locator('[data-slot="money-value-number"]').nth(-2),
+        ).toHaveText(displayedCurrency(line.tax_amount))
+    }
+    const totals = paper.getByRole("region", { name: "金额汇总", exact: true })
+    for (const amount of [
+        body.net_amount,
+        body.tax_amount,
+        body.gross_amount,
+    ]) {
+        await expect(totals).toContainText(displayedCurrency(amount))
+    }
 }
 
 async function expectMaterialHeaders(
@@ -295,23 +482,44 @@ export async function expectApprovalMaterialPreviewAndDownload(
     expect(file.byte_size).toBe(bytes.length)
     const path = `/admin/approval-instances/${instanceId}/materials/${file.file_asset_id}`
     const prefix = `approval-submitted-material-${idSegment(file.file_asset_id)}`
-    const preview = page.waitForResponse(
-        (response) =>
-            response.request().method() === "GET" &&
-            new URL(response.url()).pathname === `${path}/preview`,
-    )
-    await page.locator(`#${prefix}-preview`).click()
-    const response = await preview
-    await expectMaterialHeaders(response, bytes)
-    expect(response.headers()["content-type"]).toBe(file.content_type)
-    const image = page.getByRole("img", { name: file.file_name, exact: true })
-    await expectPresentedBlob(
-        file.content_type === "application/pdf"
-            ? page.locator("#approval-material-preview-document")
-            : image,
-        bytes,
-        file.content_type !== "application/pdf",
-    )
+    const [materialPage, response] = await Promise.all([
+        page.context().waitForEvent("page"),
+        page
+            .context()
+            .waitForEvent(
+                "response",
+                (item) =>
+                    item.request().method() === "GET" &&
+                    new URL(item.url()).pathname === `${path}/preview`,
+            ),
+        page.locator(`#${prefix}-preview`).click(),
+    ])
+    try {
+        const previewUrl = new URL(materialPage.url())
+        expect(previewUrl.pathname).toBe("/approval-materials")
+        expect(previewUrl.searchParams.get("instance")).toBe(instanceId)
+        expect(previewUrl.searchParams.get("file")).toBe(file.file_asset_id)
+        await expectMaterialHeaders(response, bytes)
+        expect(response.headers()["content-type"]).toBe(file.content_type)
+        await expect(
+            materialPage.getByRole("heading", {
+                name: file.file_name,
+                exact: true,
+            }),
+        ).toBeVisible(VISIBLE)
+        await expectPresentedBlob(
+            file.content_type === "application/pdf"
+                ? materialPage.locator("#approval-material-preview-document")
+                : materialPage.getByRole("img", {
+                      name: file.file_name,
+                      exact: true,
+                  }),
+            bytes,
+            file.content_type !== "application/pdf",
+        )
+    } finally {
+        await materialPage.close()
+    }
     const [download, downloadedResponse] = await Promise.all([
         page.waitForEvent("download"),
         page.waitForResponse(
@@ -330,7 +538,6 @@ export async function expectApprovalMaterialPreviewAndDownload(
     const downloadedPath = await download.path()
     expect(downloadedPath).toBeTruthy()
     expect(await fs.readFile(downloadedPath!)).toEqual(bytes)
-    await page.locator("#approval-material-preview-close").click()
 }
 
 /** 构造已上传、未关联该采购的真实 PDF 资产，验证上下文接口不能任意下载文件。 */

@@ -13,11 +13,11 @@ pub enum WorkItemType {
     FulfillmentOperation,
     /// 发货或交付完成后，由销售登记客户验收结果。
     CustomerAcceptanceRegistration,
-    /// 已确认应付的供应商付款执行。
+    /// 已批准采购付款申请的供应商付款执行。
     SupplierPaymentExecution,
     /// 应收子账尚有可开票额度时的销项开票执行。
     SalesInvoiceExecution,
-    /// 采购单财务审核。
+    /// 采购单内部审核。
     PurchaseOrderReview,
     /// 销售变更履约影响复核。
     SalesChangeImpactReview,
@@ -81,6 +81,8 @@ pub enum WorkItemBriefObjectKind {
     CustomerRefund,
     /// 回款冲正。
     ReceiptReversal,
+    /// 采购付款申请。
+    PurchasePaymentRequest,
     /// 供应商付款。
     SupplierPayment,
     /// 供应商退款。
@@ -182,9 +184,9 @@ const WORK_ITEM_BRIEF_RELATIONS: &[WorkItemBriefRelation] = &[
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::SupplierPaymentExecution,
-        object_kind: WorkItemBriefObjectKind::PayableAccount,
-        business_object_type: "payable_account",
-        read_permission: "payable_account:detail",
+        object_kind: WorkItemBriefObjectKind::PurchasePaymentRequest,
+        business_object_type: "purchase_payment_request",
+        read_permission: "purchase_payment_request:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::SalesInvoiceExecution,
@@ -278,6 +280,12 @@ const WORK_ITEM_BRIEF_RELATIONS: &[WorkItemBriefRelation] = &[
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::DocumentApproval,
+        object_kind: WorkItemBriefObjectKind::PurchasePaymentRequest,
+        business_object_type: "purchase_payment_request",
+        read_permission: "purchase_payment_request:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::DocumentApproval,
         object_kind: WorkItemBriefObjectKind::SalesInvoiceRequest,
         business_object_type: "sales_invoice_request",
         read_permission: "sales_invoice_request:detail",
@@ -332,7 +340,7 @@ impl WorkItemType {
             Self::CustomerAcceptanceRegistration => "客户验收登记",
             Self::SupplierPaymentExecution => "供应商付款处理",
             Self::SalesInvoiceExecution => "销项开票处理",
-            Self::PurchaseOrderReview => "采购单财务审核",
+            Self::PurchaseOrderReview => "采购单内部审核",
             Self::SalesChangeImpactReview => "销售变更履约影响复核",
             Self::SalesChangeFinanceReview => "销售变更财务影响复核",
             Self::CardFundsReview => "卡券票款复核",
@@ -711,9 +719,11 @@ mod tests {
             WorkItemType::DocumentApproval.assignment_separation_policy(),
             WorkItemAssignmentSeparationPolicy::ApprovalHistory
         );
-        let payable = WorkItemType::SupplierPaymentExecution.brief_relation("payable_account").unwrap();
-        assert_eq!(payable.object_kind, WorkItemBriefObjectKind::PayableAccount);
-        assert_eq!(payable.read_permission, "payable_account:detail");
+        let request =
+            WorkItemType::SupplierPaymentExecution.brief_relation("purchase_payment_request").unwrap();
+        assert_eq!(request.object_kind, WorkItemBriefObjectKind::PurchasePaymentRequest);
+        assert_eq!(request.read_permission, "purchase_payment_request:detail");
+        assert!(WorkItemType::SupplierPaymentExecution.brief_relation("payable_account").is_none());
         let acceptance = WorkItemType::CustomerAcceptanceRegistration.brief_relation("sales_order").unwrap();
         assert_eq!(acceptance.object_kind, WorkItemBriefObjectKind::SalesOrder);
         assert_eq!(acceptance.read_permission, "sales_order:detail");

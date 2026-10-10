@@ -19,6 +19,7 @@ export type ApprovalStatusTone =
 export const INSTANCE_STATUS_LABEL: Record<string, string> = {
     RUNNING: "审批中",
     APPROVED: "已通过",
+    REJECTED: "已驳回",
     CANCELLED: "已撤回",
     BLOCKED: "受阻",
 }
@@ -60,6 +61,8 @@ export const instanceStatusTone = (
             return "success"
         case "CANCELLED":
             return "void"
+        case "REJECTED":
+            return "destructive"
         case "BLOCKED":
             return "destructive"
         case "RUNNING":
@@ -153,7 +156,7 @@ export const isBlockedStatus = (status?: string | null): boolean =>
 
 /**
  * 判断实例是否仍在途。只认服务端 `RUNNING` / `BLOCKED`；
- * `APPROVED` / `CANCELLED` 是终态，未知码不当成进行中。
+ * `APPROVED` / `REJECTED` / `CANCELLED` 是终态，未知码不当成进行中。
  */
 export const isOpenInstanceStatus = (status?: string | null): boolean =>
     status === "RUNNING" || status === "BLOCKED"

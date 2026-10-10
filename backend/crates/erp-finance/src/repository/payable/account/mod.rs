@@ -10,11 +10,13 @@ use crate::entity::payable::{PayableAccountStatus, PayableSourceType};
 
 mod invoicing;
 mod query;
+mod reservation;
 mod settlement;
 mod write;
 
 pub use invoicing::PayableAccountInvoicingExt;
 pub use query::PayableAccountRepositoryExt;
+pub use reservation::PayableAccountReservationExt;
 pub use settlement::PayableAccountSettlementExt;
 
 #[cfg(test)]

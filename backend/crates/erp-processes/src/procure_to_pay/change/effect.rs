@@ -139,6 +139,8 @@ impl PurchaseOrderProcess {
             purchase_order_id: write.order.base.id.clone().into(),
             supplier_id: write.order.supplier_id.clone(),
             revision_id: write.revision.base.id.clone().into(),
+            settlement_party_id: write.revision.payment_subject.settlement_party_id.to_string(),
+            settlement_party_name: write.revision.payment_subject.settlement_party_name.clone(),
             base_gross: base_revision.gross_amount,
             new_gross: write.revision.gross_amount,
         })?;

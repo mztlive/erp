@@ -2488,20 +2488,6 @@
     },
     {
       "path": "crates/erp-processes/src/finance_posting/payable/payment.rs",
-      "function": "commit_supplier_payment_with_assets",
-      "policy": "Audited",
-      "stage": "MetadataFactory",
-      "boundaries": [
-        ".run_authorized_policy_transaction"
-      ],
-      "call_counts": {
-        ".run_authorized_policy_transaction": 1
-      },
-      "location_count": 1,
-      "reason": "元数据工厂/准备步骤 commit_supplier_payment_with_assets 通过 .run_authorized_policy_transaction 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
-    },
-    {
-      "path": "crates/erp-processes/src/finance_posting/payable/payment.rs",
       "function": "execute",
       "policy": "Audited",
       "stage": "MetadataFactory",
@@ -6285,6 +6271,178 @@
       },
       "location_count": 1,
       "reason": "正式写入前校验认证人和已登记选品密码维护动作，绑定册身份；工厂不保存密码、访问凭证或个人信息，不单独持久化事件。"
+    },
+    {
+      "path": "crates/erp-processes/src/finance_posting/payable/payment.rs",
+      "function": "commit_purchase_payment_request_with_assets",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        ".run_authorized_policy_transaction"
+      ],
+      "call_counts": {
+        ".run_authorized_policy_transaction": 1
+      },
+      "location_count": 1,
+      "reason": "命令使用冻结申请和当前动作资格，通过授权事务边界保存付款申请、实际付款或审批提交及原命令结果；业务与审计由同一Executor执行，原键恢复不得重复扣款或写成功事件。"
+    },
+    {
+      "path": "crates/erp-processes/src/finance_posting/payable/payment_request/account.rs",
+      "function": "reveal",
+      "policy": "Audited",
+      "stage": "SpecialLifecycle",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "当前合法任务与敏感角色、来源、账户版本复验后主动揭示；使用同一Executor写入揭示审计，不记录完整账号明文。"
+    },
+    {
+      "path": "crates/erp-processes/src/finance_posting/payable/payment_request/cancel.rs",
+      "function": "close",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "付款申请的草稿、审批、撤回、关闭或实际付款在所属用例事务内以同一Executor保存业务与对应审计；记录冻结身份、原因及金额，保留命令版本和原结果。"
+    },
+    {
+      "path": "crates/erp-processes/src/finance_posting/payable/payment_request/cancel.rs",
+      "function": "stop_approval",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "付款申请的草稿、审批、撤回、关闭或实际付款在所属用例事务内以同一Executor保存业务与对应审计；记录冻结身份、原因及金额，保留命令版本和原结果。"
+    },
+    {
+      "path": "crates/erp-processes/src/finance_posting/payable/payment_request/cancel.rs",
+      "function": "withdraw",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "付款申请的草稿、审批、撤回、关闭或实际付款在所属用例事务内以同一Executor保存业务与对应审计；记录冻结身份、原因及金额，保留命令版本和原结果。"
+    },
+    {
+      "path": "crates/erp-processes/src/finance_posting/payable/payment_request/draft.rs",
+      "function": "create",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "付款申请的草稿、审批、撤回、关闭或实际付款在所属用例事务内以同一Executor保存业务与对应审计；记录冻结身份、原因及金额，保留命令版本和原结果。"
+    },
+    {
+      "path": "crates/erp-processes/src/finance_posting/payable/payment_request/draft.rs",
+      "function": "update",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "付款申请的草稿、审批、撤回、关闭或实际付款在所属用例事务内以同一Executor保存业务与对应审计；记录冻结身份、原因及金额，保留命令版本和原结果。"
+    },
+    {
+      "path": "crates/erp-processes/src/finance_posting/payable/payment_request/execution.rs",
+      "function": "approve",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "付款申请的草稿、审批、撤回、关闭或实际付款在所属用例事务内以同一Executor保存业务与对应审计；记录冻结身份、原因及金额，保留命令版本和原结果。"
+    },
+    {
+      "path": "crates/erp-processes/src/finance_posting/payable/payment_request/execution.rs",
+      "function": "audit_payment",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "付款申请的草稿、审批、撤回、关闭或实际付款在所属用例事务内以同一Executor保存业务与对应审计；记录冻结身份、原因及金额，保留命令版本和原结果。"
+    },
+    {
+      "path": "crates/erp-processes/src/finance_posting/payable/payment_request/submit.rs",
+      "function": "persist",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "付款申请的草稿、审批、撤回、关闭或实际付款在所属用例事务内以同一Executor保存业务与对应审计；记录冻结身份、原因及金额，保留命令版本和原结果。"
+    },
+    {
+      "path": "crates/erp-processes/src/finance_posting/payable/payment_request/submit.rs",
+      "function": "submit",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        ".run_authorized_policy_transaction"
+      ],
+      "call_counts": {
+        ".run_authorized_policy_transaction": 1
+      },
+      "location_count": 1,
+      "reason": "命令使用冻结申请和当前动作资格，通过授权事务边界保存付款申请、实际付款或审批提交及原命令结果；业务与审计由同一Executor执行，原键恢复不得重复扣款或写成功事件。"
     }
   ]
 }

@@ -265,6 +265,7 @@ export const masterDataCopy = {
     fContactPhone: "联系电话",
     fAddress: "供应商地址",
     fSettlement: "结算方式",
+    fReconciliationCycle: "对账频率",
     fPaymentTerm: "付款条件",
     fCapability: "能力",
     fBusinessCategory: "经营类目",

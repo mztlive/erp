@@ -54,7 +54,7 @@ export function paymentRegistrationHref(
     purchaseOrderId: string | undefined,
     currentUrl: string,
 ): string {
-    return `/finance/supplier-accounts?from=W01&purchaseOrderId=${purchaseOrderId ?? ""}&returnTo=${encodeURIComponent(currentUrl)}`
+    return `/procurement/payment-requests?create=1&purchaseOrderId=${purchaseOrderId ?? ""}&returnTo=${encodeURIComponent(currentUrl)}`
 }
 
 /**

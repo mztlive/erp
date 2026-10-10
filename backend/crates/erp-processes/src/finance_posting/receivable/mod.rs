@@ -21,7 +21,7 @@ use crate::adapters::identity::shared_rbac_service;
 
 mod account;
 mod adapter;
-mod cancel_approval;
+pub(crate) mod cancel_approval;
 mod customer_receipt;
 mod customer_receipt_command;
 mod customer_receipt_posting;
@@ -38,7 +38,7 @@ pub(crate) mod invoice_request;
 
 pub(crate) mod invoice_task;
 mod red_invoice;
-mod start_approval;
+pub(crate) mod start_approval;
 
 pub use invoice::InvoiceWithAssetsResult;
 

@@ -1,7 +1,7 @@
 /**
  * 流程: [flow-12] 同一销售明细拆分：库存直配 + 采购缺口
  * 文档: docs/erp-phase-1.md §7.4（同一明细允许库存与采购拆分满足）
- * 使用账号: cangchu（盘盈/入库/仓发）、caiwu（库存调整与采购单审批）、
+ * 使用账号: cangchu（盘盈/入库/仓发）、caiwu（库存调整审批）、caigoushenpi（采购单审批）、
  *           xiaoshou（客户/合同/销售单/验收）、caigou（销售审批与供给分配）
  *
  * 文档-代码差异（以代码为准）:
@@ -21,6 +21,8 @@ import path from "node:path"
 import { expect, test, type BrowserContext, type Locator, type Page } from "../helpers/test"
 
 import { createCustomerViaUi } from "../helpers/customers"
+import { apiGet } from "../helpers/api"
+import { toAutomationIdSegment } from "../../erp-client/lib/automation-id"
 import { addDeliveryTrackingEntry, uploadAcceptanceEvidence } from "../helpers/fulfillment"
 import { FRONTEND_BASE_URL } from "../helpers/env"
 import {
@@ -40,6 +42,7 @@ import {
     pickCalendarDay,
     readHeaderDocumentNumber,
     selectWorkspaceFamily,
+    expectSourcingCounts,
 } from "../helpers/ui"
 
 const FRONTEND_BASE = FRONTEND_BASE_URL
@@ -223,7 +226,7 @@ async function selectedSourcingLabel(page: Page, combo: Locator): Promise<string
 async function sourcingEditorControl(
     page: Page,
     option: RegExp,
-    field: "quantity" | "warehouse",
+    field: "quantity" | "warehouse" | "sourcing-option",
 ) {
     const combos = page.locator('[id$="-sourcing-option"]')
     await expect(combos.first()).toBeVisible({ timeout: TIMEOUT })
@@ -248,18 +251,22 @@ async function confirmSplitAllocation(page: Page, salesOrderNo: string) {
     await expectToast(page, /已重新分配供给|没有可匹配的供给方案/)
     await expandSourcingEditor(page)
     const stockQty = await sourcingEditorControl(page, /可用/, "quantity")
+    // 推荐采购缺口优先直发，本流程必须显式改同一供应商采购行为入仓；保留库存拆分。
+    const purchaseSource = await sourcingEditorControl(page, /供应商直发|入仓/, "sourcing-option")
+    await chooseOption(page, purchaseSource, /杭州狮峰.*入仓/, "入仓")
     const purchaseQty = await sourcingEditorControl(page, /入仓/, "quantity")
     const warehouseInput = await sourcingEditorControl(page, /入仓/, "warehouse")
     await expect(stockQty).toBeVisible({ timeout: TIMEOUT })
     await expect(purchaseQty).toBeVisible({ timeout: TIMEOUT })
+    await expect(stockQty).toHaveValue(STOCK_QTY)
+    await expect(purchaseQty).toHaveValue(PURCHASE_QTY)
     await warehouseInput.click()
     await warehouseInput.fill(WAREHOUSE_CODE)
     await expect(page.getByRole("option", { name: new RegExp(WAREHOUSE_CODE) })).toBeVisible({
         timeout: TIMEOUT,
     })
     await page.getByRole("option", { name: new RegExp(WAREHOUSE_CODE) }).click()
-    await expect(page.getByText("将建立库存预留", { exact: true }).locator("xpath=..")).toContainText("1 条")
-    await expect(page.getByText("将创建采购单", { exact: true }).locator("xpath=..")).toContainText("1 张")
+    await expectSourcingCounts(page, 1, 1)
     await stockQty.fill("4")
     await purchaseQty.fill(PURCHASE_QTY)
     await page.getByRole("button", { name: "预览供给分配" }).click()
@@ -330,8 +337,10 @@ function fulfillmentTaskButtons(page: Page, hints: string[]): Locator {
 }
 
 async function closeFulfillmentDialog(page: Page) {
-    const dialog = page.getByRole("dialog", { name: "处理履约" })
-    if (!(await dialog.isVisible().catch(() => false))) return
+    const dialog = page.locator('[role="dialog"][id^="workspace-fulfillment-process-dialog-"]')
+        .filter({ visible: true })
+    if (!(await dialog.count())) return
+    await expect(dialog).toHaveCount(1)
     await page.keyboard.press("Escape")
     const hidden = await dialog.waitFor({ state: "hidden", timeout: 5_000 }).then(() => true).catch(() => false)
     if (hidden) return
@@ -352,7 +361,7 @@ async function completeFulfillment(
     page: Page,
     salesOrderNo: string,
     kind: "入库" | "仓发",
-    extra?: { quantity?: string; trackingNo?: string; customerName?: string; purchaseNo?: string },
+    extra?: { quantity?: string; trackingNo?: string; customerName?: string; purchaseNo?: string; salesOrderId?: string },
 ) {
     await page.goto(`${FRONTEND_BASE}/workspace`)
     await expect(page.getByRole("heading", { name: "我的工作台" })).toBeVisible({
@@ -385,8 +394,7 @@ async function completeFulfillment(
         // 处理履约是模态框，打开后待办列表不再可访问。单号必须在点击前从任务卡读走。
         const cardLabel = `${(await card.getAttribute("aria-label")) ?? ""} ${(await card.innerText().catch(() => "")) || ""}`
         await card.click()
-        await openFulfillmentWorkspaceForm(page)
-        const dialog = page.getByRole("dialog", { name: "处理履约" })
+        const dialog = await openFulfillmentWorkspaceForm(page)
         const loaded = dialog.locator(
             '[aria-label="入库表单"], [aria-label="公司仓发表单"], [aria-label="供应商直发表单"], [aria-label="电子交付表单"]',
         )
@@ -439,10 +447,11 @@ async function completeFulfillment(
     await expect(page.locator('[aria-label="公司仓发表单"]')).toBeVisible({
         timeout: TIMEOUT,
     })
-    await addDeliveryTrackingEntry(page, {
+    const trackingNo = extra?.trackingNo ?? `SF12-${Date.now()}`
+    const trackingInputId = await addDeliveryTrackingEntry(page, {
         kind: "ship",
         lineIndex: 0,
-        trackingNo: extra?.trackingNo ?? `SF12-${Date.now()}`,
+        trackingNo,
         carrier: "顺丰速运",
     })
     if (extra?.quantity) {
@@ -452,15 +461,49 @@ async function completeFulfillment(
             ),
         ).toBeVisible({ timeout: TIMEOUT })
     }
-    await page.getByRole("button", { name: "确认发货" }).click()
-    const confirm = page.getByRole("alertdialog", { name: "确认发货？" })
-    await expect(confirm).toBeVisible({ timeout: TIMEOUT })
-    const shipped = page.waitForResponse(response => response.request().method() === "POST" && /\/deliveries\/[^/]+\/post$/.test(response.url()))
-    await confirm.getByRole("button", { name: "确认发货" }).click()
+    const dialog = await openFulfillmentWorkspaceForm(page)
+    const workItemId = new URL(page.url()).searchParams.get("currentWorkItemId")
+    expect(workItemId).toBeTruthy()
+    expect(extra?.salesOrderId).toBeTruthy()
+    await expect(dialog).toHaveAttribute("id", `workspace-fulfillment-process-dialog-${workItemId}`)
+    const token = await page.evaluate(() => localStorage.getItem("erp.token"))
+    expect(token).toBeTruthy()
+    const task = await apiGet<{
+        id: string; business_object_type: string; business_object_id: string; status: string;
+    }>(token!, `/admin/work-items/${workItemId}`)
+    expect(task).toMatchObject({ id: workItemId, business_object_type: "delivery", status: "OPEN" })
+    const source = await apiGet<{
+        total: number;
+        items: Array<{ work_item_id: string; operation_id: string; operation_type: string;
+            sales_order_id: string; sales_order_no: string }>;
+    }>(token!, "/admin/work-items/fulfillment-queue", {
+        operation_id: task.business_object_id, operation_types: "WAREHOUSE_SHIP",
+        page: 1, page_size: 1, timezone: "Asia/Shanghai",
+    })
+    expect(source.total).toBe(1)
+    expect(source.items).toHaveLength(1)
+    expect(source.items[0]).toMatchObject({
+        work_item_id: workItemId, operation_id: task.business_object_id,
+        operation_type: "WAREHOUSE_SHIP", sales_order_id: extra!.salesOrderId, sales_order_no: salesOrderNo,
+    })
+    const shipped = page.waitForResponse(response => response.request().method() === "POST" &&
+        new URL(response.url()).pathname === `/admin/deliveries/${task.business_object_id}/post`,
+        { timeout: TIMEOUT })
+    await dialog.locator("#fulfillment-operations-work-surface-confirm").click()
     const shippedResponse = await shipped
-    expect(shippedResponse.ok()).toBeTruthy()
-    expect((await shippedResponse.json()).data.status).toBe("SHIPPED")
-    await expect(confirm).toBeHidden({ timeout: TIMEOUT })
+    expect(shippedResponse.ok(), await shippedResponse.text()).toBe(true)
+    const delivery = (await shippedResponse.json()).data
+    expect(delivery).toMatchObject({
+        id: task.business_object_id, status: "SHIPPED", delivery_type: "WAREHOUSE_SHIP",
+        sales_order_id: extra!.salesOrderId, purchase_order_id: null,
+    })
+    expect(delivery.tracking_entries).toHaveLength(1)
+    expect(delivery.tracking_entries[0]).toMatchObject({ tracking_no: trackingNo, carrier: "顺丰速运" })
+    expect(trackingInputId).toBe(`fulfillment-operations-ship-form-line-${toAutomationIdSegment(delivery.tracking_entries[0].sales_order_line_id)}-tracking-no`)
+    expect(await apiGet(token!, `/admin/work-items/${workItemId}`)).toMatchObject({
+        id: workItemId, business_object_id: task.business_object_id, status: "COMPLETED",
+    })
+    await expect(dialog).toBeHidden({ timeout: TIMEOUT })
 }
 
 async function registerAcceptance(page: Page, salesOrderNo: string) {
@@ -565,8 +608,8 @@ test("同一销售明细拆分：库存直配 + 采购缺口", async ({ browser 
         await closeSession(procurement)
     }
 
-    // 7. 财务审批采购单（创建时已提交，不得再走草稿送审）
-    const financePo = await openLoggedInWorkspace(browser, "caiwu")
+    // 7. 采购部门审批采购单（创建时已提交，不得再走草稿送审）
+    const financePo = await openLoggedInWorkspace(browser, "caigoushenpi")
     try {
         await openWorkspaceTask(financePo.page, "采购单审批", salesOrderNo, "approval")
         await approveCurrentDocument(financePo.page)
@@ -587,6 +630,7 @@ test("同一销售明细拆分：库存直配 + 采购缺口", async ({ browser 
     const fulfillment = await openLoggedInWorkspace(browser, "cangchu")
     try {
         await completeFulfillment(fulfillment.page, salesOrderNo, "仓发", {
+            salesOrderId,
             quantity: STOCK_QTY,
             trackingNo: `SF-STOCK-${Date.now()}`,
             customerName,
@@ -606,6 +650,7 @@ test("同一销售明细拆分：库存直配 + 采购缺口", async ({ browser 
         await expect(purchasedReservation).toBeVisible({ timeout: TIMEOUT })
         await expect(purchasedReservation.locator('[data-column-id="qty"] .num')).toHaveText(`${PURCHASE_QTY} / ${PURCHASE_QTY}`)
         await completeFulfillment(fulfillment.page, salesOrderNo, "仓发", {
+            salesOrderId,
             quantity: PURCHASE_QTY,
             trackingNo: `SF-PO-${Date.now()}`,
             customerName,

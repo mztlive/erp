@@ -239,8 +239,8 @@ mod tests {
     use super::{PurchaseOrderLineView, TotalsView};
     use crate::dto::purchase_order::SavePurchaseOrderLine;
     use crate::entity::purchase_order::{
-        PaymentTermSnapshot, PurchaseLineType, PurchaseOrderRevision, PurchaseOrderRevisionData,
-        PurchaseOrderRevisionLine, PurchaseOrderSubmissionLine, SupplierSnapshot,
+        PaymentSubjectSnapshot, PaymentTermSnapshot, PurchaseLineType, PurchaseOrderRevision,
+        PurchaseOrderRevisionData, PurchaseOrderRevisionLine, PurchaseOrderSubmissionLine, SupplierSnapshot,
     };
     use crate::entity::test_support::payment_term;
 
@@ -328,6 +328,13 @@ mod tests {
             let mut revision = PurchaseOrderRevision::new(
                 PurchaseOrderRevisionId::new("rev-1"),
                 PurchaseOrderRevisionData {
+                    payment_subject: PaymentSubjectSnapshot::new(
+                        "party-1".to_string().into(),
+                        "我方公司".into(),
+                        "so-1".to_string().into(),
+                        "sales-rev-1".to_string().into(),
+                    )
+                    .unwrap(),
                     purchase_order_id: PurchaseOrderId::new("po-1"),
                     revision_no: 1,
                     supplier_revision_id: SupplierCommercialProfileRevisionId::new("supplier-rev-1"),

@@ -180,9 +180,9 @@ pub(super) fn settlement_guard(id: &str, amount: &Bson) -> Document {
         "id": id,
         "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
         "$expr": {
-            "$lte": [
-                { "$add": ["$settled_total", amount] },
-                "$gross_total",
+            "$and": [
+                { "$lte": [{ "$add": ["$settled_total", amount] }, "$gross_total"] },
+                { "$lte": [amount, { "$subtract": ["$open_total", "$payment_request_reserved_total"] }] },
             ],
         },
     }

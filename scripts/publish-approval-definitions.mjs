@@ -6,12 +6,12 @@
  * 按合同（approval-workflow-contract.md §4.3/§4.4）每个 PROCESS_REQUIRED 类型
  * 必须先创建并发布定义，单据才能进入审批；否则创建返回 APPROVAL_PROCESS_NOT_CONFIGURED。
  *
- * SupplierPayment 固定为 NO_APPROVAL：采购单最终审批提供付款授权，出纳在付款任务中直接
+ * SupplierPayment 固定为 NO_APPROVAL：采购付款申请最终审批提供本次付款授权，出纳在付款任务中直接
  * 登记并过账，不得为 supplier_payment 创建或发布审批定义。
  *
  * 节点与审批人按下列来源确定（文档有部门时序则照文档；未指定审批人时按岗位分离
  * 与资金/库存内控）。提交人不得审批自己的单据（ForbidSubmitterAsApprover）。
- * 财务三人共用 role-finance，因此资金单必须由出纳 fukuan 提交、总监 caiwu 只审批；
+ * 财务三人分别绑定总监、出纳、开票岗位角色；资金单由出纳 fukuan 提交、总监 caiwu 只审批；
  * 总监自己提交会在运行时失败。本脚本在发布前后校验约定提交人不在任何审批节点。
  *
  * | 类型 | 提交人 | 审批链 | 来源 |
@@ -19,7 +19,8 @@
  * | SalesOrder | xiaoshou | 采购确认 | erp-phase-1.md §7.1 / §7.3.1 |
  * | VoucherSalesOrder | xiaoshou | 销售领导 → 运营 → 财务总监 | 二期 §16；一期商城开单不走此链，但类型必须有已发布定义 |
  * | SalesChangeOrder | xiaoshou | 采购确认履约影响 → 财务复核 | erp-phase-1.md §6.5.1 |
- * | PurchaseOrder | caigou | 财务总监审批 | erp-phase-1.md §11 |
+ * | PurchaseOrder | caigou | 采购部门审批(caigoushenpi) | purchase-payment-request-contract.md §2 |
+ * | PurchasePaymentRequest | caigou | 财务总监审核 | purchase-payment-request-contract.md §2 |
  * | PurchaseChangeOrder | caigou | 仓储确认库存发货影响 → 财务复核 | erp-phase-1.md §6.5.2 |
  * | StockAdjustment | cangchu | 财务审批成本影响 | erp-phase-1.md §6.5.5；仓储提交、财务审成本 |
  * | CustomerReceipt | fukuan | 财务总监审批入账 | erp-phase-1.md §9.1；出纳经办、总监审批 |

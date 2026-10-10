@@ -11,7 +11,7 @@ use crate::entity::document_registry::DocumentType;
 /// 将 ERP 单据类型映射为 BPM 流程种类。
 ///
 /// # 参数
-/// * `document_type` - 合同固定的 20 种单据类型之一
+/// * `document_type` - 合同固定的 22 种单据类型之一
 ///
 /// # 返回
 /// 返回与该单据类型一一对应的流程种类。
@@ -31,6 +31,7 @@ pub fn process_kind_of(document_type: DocumentType) -> ProcessKind {
         | DocumentType::StockAdjustment
         | DocumentType::SalesInvoiceRequest
         | DocumentType::CustomerReceipt
+        | DocumentType::PurchasePaymentRequest
         | DocumentType::SupplierPayment
         | DocumentType::CustomerRefund
         | DocumentType::SupplierRefund
@@ -70,6 +71,7 @@ pub fn document_type_of(process_kind: ProcessKind) -> DocumentType {
         | ProcessKind::StockAdjustment
         | ProcessKind::SalesInvoiceRequest
         | ProcessKind::CustomerReceipt
+        | ProcessKind::PurchasePaymentRequest
         | ProcessKind::SupplierPayment
         | ProcessKind::CustomerRefund
         | ProcessKind::SupplierRefund

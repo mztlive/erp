@@ -29,6 +29,7 @@ mod line_amounts;
 mod line_common;
 mod offering_source;
 mod order;
+mod payment_subject;
 mod purchase_revision;
 mod purchase_submission;
 mod purchase_submission_line;
@@ -51,7 +52,7 @@ pub use command_receipt::{
 };
 pub use coverage::{
     ProcurementCoverageFacts, SalesProcurementCoverage, SalesProcurementCoverageLine,
-    build_procurement_coverage,
+    build_procurement_coverage, ensure_creation_sources_current,
 };
 pub use coverage_summary::ProcurementCoverageSummary;
 pub use creation_basis::{
@@ -67,6 +68,7 @@ pub use order::{
     ProgressStatus, PurchaseOrder, PurchaseOrderData, PurchaseOrderStatus, PurchaseOrderUpdate,
     PurchaseReviewStatus,
 };
+pub use payment_subject::PaymentSubjectSnapshot;
 pub use purchase_revision::{
     PurchaseOrderRevision, PurchaseOrderRevisionData, PurchaseOrderRevisionLine,
     PurchaseOrderRevisionLineData,

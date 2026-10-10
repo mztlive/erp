@@ -159,6 +159,7 @@ impl EffectiveChangeWrite {
         executor: &mut dyn Executor,
     ) -> Result<()> {
         self.order.apply_change_revision(self.revision.base.id.clone().into(), actor_id)?;
+        self.order.sales_order_revision_id = self.revision.payment_subject.sales_order_revision_id.clone();
         db.purchase_orders().update(&mut self.order, executor).await?;
         Ok(())
     }

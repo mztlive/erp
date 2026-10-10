@@ -2,27 +2,24 @@ import { expect, type Page } from "@playwright/test"
 
 import { expectToast, UI_TIMEOUT } from "./ui"
 
-/**
- * 工作台供给方案默认收起。改选源前先展开「调整方案」。
- */
+/** 在供给商品列表选择要编辑的真实商品，等待独立编辑区切换完成。 */
 export async function expandSourcingEditor(
     page: Page,
     productName?: string | RegExp,
 ): Promise<void> {
-    const scope = productName
-        ? page
-              .getByRole("region", {
-                  name:
-                      typeof productName === "string"
-                          ? `${productName}的供给方案`
-                          : new RegExp(`${productName.source}.*的供给方案`),
-              })
-              .first()
-        : page
-    const adjust = scope.getByRole("button", { name: "调整方案" }).first()
-    if (await adjust.isVisible().catch(() => false)) {
+    const task = page.getByRole("region", { name: "当前供给分配任务" })
+    const editor = task.getByRole("region", { name: "当前商品供给编辑" })
+    if (productName) {
+        const source = typeof productName === "string"
+            ? productName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+            : productName.source
+        const adjust = task.getByRole("region", { name: "供给商品列表" })
+            .getByRole("button", { name: new RegExp(`^调整[\\s\\S]*(?:${source})`) })
+        await expect(adjust).toBeVisible({ timeout: UI_TIMEOUT })
         await adjust.click()
+        await expect(editor.getByRole("heading", { name: productName })).toBeVisible({ timeout: UI_TIMEOUT })
     }
+    await expect(editor).toBeVisible({ timeout: UI_TIMEOUT })
 }
 
 /**

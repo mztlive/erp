@@ -20,6 +20,7 @@ pub const DEFINITION_UPGRADED_AUDIT_ACTION: &str = "approval.definition.upgraded
 pub use bind::{
     attach_published_binding, bind_published_definition_on_document_create, binding_from_published,
 };
+pub use revalidate::revalidate_binding_graph;
 pub use types::{
     BindPublishedDefinitionCommand, BindingDecision, UpgradeBindingOutcome, UpgradeBindingResultView,
     UpgradeBindingView, UpgradeUnsubmittedDefinitionCommand,

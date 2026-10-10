@@ -21,10 +21,11 @@ export type ApprovalAllowedAction =
 /** 受阻实例的唯一合法恢复动作。 */
 export type RecoveryOption = "RESUME_CURRENT_APPROVER" | "CANCEL_BLOCKED"
 
-/** 实例状态。`REJECTED` 不是合同终态。 */
+/** 实例状态。付款申请驳回结束本次审批，其它单据沿用重新审批政策。 */
 export type ApprovalInstanceStatus =
     | "RUNNING"
     | "APPROVED"
+    | "REJECTED"
     | "CANCELLED"
     | "BLOCKED"
 

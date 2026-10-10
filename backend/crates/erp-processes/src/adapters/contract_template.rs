@@ -11,7 +11,7 @@ use persistence_core::Executor;
 
 use super::contract::MongoContractAudit;
 
-struct MongoSigningCompanies(Database);
+pub(super) struct MongoSigningCompanies(pub Database);
 
 #[async_trait]
 impl SigningCompanyPort for MongoSigningCompanies {

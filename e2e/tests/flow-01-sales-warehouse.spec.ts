@@ -18,6 +18,8 @@ import path from "node:path";
 import { test, expect, type Page } from "../helpers/test";
 
 import { createCustomerViaUi } from "../helpers/customers";
+import { apiGet } from "../helpers/api";
+import { toAutomationIdSegment } from "../../erp-client/lib/automation-id";
 import { addDeliveryTrackingEntry, uploadAcceptanceEvidence } from "../helpers/fulfillment";
 import { submitSalesInvoiceRequest } from "../helpers/invoices";
 import { openLoggedInWorkspace, type LoggedInSession } from "../helpers/login";
@@ -36,6 +38,7 @@ import {
     openWorkspaceTask,
     pickCalendarDay,
     readHeaderDocumentNumber,
+    expectSourcingCounts,
 } from "../helpers/ui";
 
 const UI_TIMEOUT = 20_000;
@@ -53,7 +56,7 @@ type LoginName =
     | "xiaoshou"
     | "caigou"
     | "cangchu"
-    | "caiwu"
+    | "caiwu" | "caigoushenpi"
     | "fukuan"
     | "kaipiao"
     | "admin";
@@ -63,12 +66,11 @@ function orderTitleRow(page: Page, customerName: string) {
 }
 
 async function confirmFormal(page: Page, title: string | RegExp, confirmName: string | RegExp) {
-    const dialog = page.getByRole("alertdialog").or(page.getByRole("dialog")).filter({
-        hasText: title,
-    });
-    await expect(dialog.first()).toBeVisible({ timeout: UI_TIMEOUT });
-    await dialog.getByRole("button", { name: confirmName }).click();
-    await expect(dialog.first()).toBeHidden({ timeout: UI_TIMEOUT });
+    const dialog = page.getByRole("alertdialog", { name: title, exact: true });
+    await expect(dialog).toHaveCount(1);
+    await expect(dialog).toBeVisible({ timeout: UI_TIMEOUT });
+    await dialog.getByRole("button", { name: confirmName, exact: true }).click();
+    await expect(dialog).toBeHidden({ timeout: UI_TIMEOUT });
 }
 
 function plusDaysIso(days: number): string {
@@ -211,7 +213,7 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
         await expect(page.getByRole("heading", { name: "供给分配" })).toBeVisible({
             timeout: UI_TIMEOUT,
         });
-        await expect(page.getByRole("heading", { name: "销售明细与供给方案" })).toBeVisible({
+        await expect(page.getByRole("region", { name: "供给商品列表" })).toBeVisible({
             timeout: UI_TIMEOUT,
         });
         await expandSourcingEditor(page);
@@ -225,8 +227,7 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
             .first();
         await expect(warehouseInput).toBeVisible({ timeout: UI_TIMEOUT });
         await chooseOption(page, warehouseInput, new RegExp(WAREHOUSE_CODE), WAREHOUSE_CODE);
-        await expect(page.getByText("将创建采购单").locator("xpath=..")).toContainText("1 张");
-        await expect(page.getByText("将建立库存预留").locator("xpath=..")).toContainText("0 条");
+        await expectSourcingCounts(page, 1, 0);
         await page.locator("#procurement-orders-create-preview").click();
         const previewDialog = page.getByRole("dialog", { name: "预览供给分配" });
         await expect(previewDialog).toBeVisible({ timeout: UI_TIMEOUT });
@@ -250,8 +251,8 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
             { timeout: UI_TIMEOUT },
         );
 
-        // 6) 采购单由供给分配立即提交，财务总监审批后生效并形成应付
-        page = await switchTo("caiwu");
+        // 6) 采购单由供给分配立即提交，采购部门审批后生效并形成应付
+        page = await switchTo("caigoushenpi");
         await openWorkspaceTask(page, "采购单审批", salesOrderNo, "approval");
         await approveCurrentDocument(page);
 
@@ -315,11 +316,9 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
                 await openWorkspaceTask(page, "履约处理", customerName, "fulfillment");
             }
         }
-        if (await page.getByRole("button", { name: "处理履约" }).isVisible().catch(() => false)) {
-            await openFulfillmentWorkspaceForm(page);
-        }
-        await expect(page.locator('[aria-label="公司仓发表单"]')).toBeVisible({ timeout: UI_TIMEOUT });
-        await addDeliveryTrackingEntry(page, {
+        const shippingDialog = await openFulfillmentWorkspaceForm(page);
+        await expect(shippingDialog.locator('[aria-label="公司仓发表单"]')).toBeVisible({ timeout: UI_TIMEOUT });
+        const trackingInputId = await addDeliveryTrackingEntry(page, {
             kind: "ship",
             lineIndex: 0,
             trackingNo: `SF${stamp}`,
@@ -330,8 +329,47 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
                 new RegExp(`^本次发货\\s*${SALES_QTY}(?:\\.0+)?(?:\\s*盒)?$`),
             ),
         ).toBeVisible({ timeout: UI_TIMEOUT });
-        await page.locator("#fulfillment-operations-work-surface-confirm").click();
-        await confirmFormal(page, "确认发货？", "确认发货");
+        const workItemId = new URL(page.url()).searchParams.get("currentWorkItemId");
+        expect(workItemId).toBeTruthy();
+        await expect(shippingDialog).toHaveAttribute("id", `workspace-fulfillment-process-dialog-${workItemId}`);
+        const token = await page.evaluate(() => localStorage.getItem("erp.token"));
+        expect(token).toBeTruthy();
+        const task = await apiGet<{
+            id: string; business_object_type: string; business_object_id: string; status: string;
+        }>(token!, `/admin/work-items/${workItemId}`);
+        expect(task).toMatchObject({ id: workItemId, business_object_type: "delivery", status: "OPEN" });
+        const source = await apiGet<{
+            total: number;
+            items: Array<{ work_item_id: string; operation_id: string; operation_type: string;
+                sales_order_id: string; sales_order_no: string }>;
+        }>(token!, "/admin/work-items/fulfillment-queue", {
+            operation_id: task.business_object_id, operation_types: "WAREHOUSE_SHIP",
+            page: 1, page_size: 1, timezone: "Asia/Shanghai",
+        });
+        expect(source.total).toBe(1);
+        expect(source.items).toHaveLength(1);
+        expect(source.items[0]).toMatchObject({
+            work_item_id: workItemId, operation_id: task.business_object_id,
+            operation_type: "WAREHOUSE_SHIP", sales_order_id: salesOrderId, sales_order_no: salesOrderNo,
+        });
+        const shipped = page.waitForResponse(response => response.request().method() === "POST" &&
+            new URL(response.url()).pathname === `/admin/deliveries/${task.business_object_id}/post`,
+            { timeout: UI_TIMEOUT });
+        await shippingDialog.locator("#fulfillment-operations-work-surface-confirm").click();
+        const shippedResponse = await shipped;
+        expect(shippedResponse.ok(), await shippedResponse.text()).toBe(true);
+        const delivery = (await shippedResponse.json()).data;
+        expect(delivery).toMatchObject({
+            id: task.business_object_id, status: "SHIPPED", delivery_type: "WAREHOUSE_SHIP",
+            sales_order_id: salesOrderId, purchase_order_id: null,
+        });
+        expect(delivery.tracking_entries).toHaveLength(1);
+        expect(delivery.tracking_entries[0]).toMatchObject({ tracking_no: `SF${stamp}`, carrier: "顺丰速运" });
+        expect(trackingInputId).toBe(`fulfillment-operations-ship-form-line-${toAutomationIdSegment(delivery.tracking_entries[0].sales_order_line_id)}-tracking-no`);
+        expect(await apiGet(token!, `/admin/work-items/${workItemId}`)).toMatchObject({
+            id: workItemId, business_object_id: task.business_object_id, status: "COMPLETED",
+        });
+        await expect(shippingDialog).toBeHidden({ timeout: UI_TIMEOUT });
 
         // 8) 销售登记客户验收。验收后未回款不得关闭；开票未完成不阻塞关闭
         page = await switchTo("xiaoshou");

@@ -91,6 +91,12 @@ pub struct PaymentExecutionTaskRef {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct CommitSupplierPaymentRequest {
+    /// 本次付款唯一批准来源，旧应付直接付款不具备执行资格。
+    #[validate(length(min = 1, max = 128, message = "付款申请身份不能为空"))]
+    pub payment_request_id: String,
+    /// 与付款、关闭并发互斥的申请乐观锁版本。
+    #[validate(range(min = 1, message = "付款申请版本必须大于0"))]
+    pub expected_request_version: u64,
     /// 当前开放付款执行任务。
     pub work_item_id: WorkItemId,
     /// 查询所得任务乐观锁版本。
@@ -214,6 +220,10 @@ pub struct SupplierPaymentView {
     pub paid_at: Instant,
     /// 含税付款金额。
     pub amount: Amount,
+    /// 已正式冲正金额，原始付款事实金额保持不变。
+    pub reversed_amount: Amount,
+    /// 冲正后仍有效的付款金额。
+    pub effective_amount: Amount,
     /// 银行流水号。
     pub bank_reference: Option<String>,
     /// 银行回单图片元数据；历史付款可能为空。

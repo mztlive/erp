@@ -24,6 +24,7 @@
  * 10. 供给分配确认同一事务创建并立即提交采购单，不得留下未提交草稿。
  */
 import { archiveContractViaUi } from "../helpers/contracts";
+import { payOnlySupplierTask, supplierPaymentTaskPattern } from "../helpers/payments";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,6 +37,8 @@ import {
 } from "../helpers/test";
 
 import { createCustomerViaUi } from "../helpers/customers";
+import { apiGet } from "../helpers/api";
+import { toAutomationIdSegment } from "../../erp-client/lib/automation-id";
 import { addDeliveryTrackingEntry, uploadAcceptanceEvidence } from "../helpers/fulfillment";
 import { submitSalesInvoiceRequest } from "../helpers/invoices";
 import { openLoggedInWorkspace } from "../helpers/login";
@@ -92,7 +95,7 @@ type LoginName =
     | "lisiyong"
     | "caigou"
     | "cangchu"
-    | "caiwu"
+    | "caiwu" | "caigoushenpi"
     | "fukuan"
     | "kaipiao"
     | "admin";
@@ -113,15 +116,6 @@ function uniqueCreditCode(stamp: string): string {
 
 function orderTitleRow(page: Page, customerName: string) {
     return page.getByRole("heading", { name: customerName }).locator("xpath=..");
-}
-
-async function confirmFormal(page: Page, title: string | RegExp, confirmName: string | RegExp) {
-    const dialog = page.getByRole("alertdialog").or(page.getByRole("dialog")).filter({
-        hasText: title,
-    });
-    await expect(dialog.first()).toBeVisible({ timeout: UI_TIMEOUT });
-    await dialog.getByRole("button", { name: confirmName }).click();
-    await expect(dialog.first()).toBeHidden({ timeout: UI_TIMEOUT });
 }
 
 async function factValue(page: Page, label: string) {
@@ -151,26 +145,6 @@ async function assertNoReturnCreateUi(page: Page) {
     await expect(page.getByRole("button", { name: "过账" })).toHaveCount(0);
 }
 
-async function uploadBankReceipt(page: Page, fileName: string) {
-    const input = page.locator("#supplier-payables-allocation-form-bank-receipt-input");
-    if (await input.count()) {
-        await input.setInputFiles({
-            name: fileName,
-            mimeType: "image/png",
-            buffer: PNG_1X1,
-        });
-        return;
-    }
-    const fallback = page.locator('input[type="file"]').first();
-    if (await fallback.count()) {
-        await fallback.setInputFiles({
-            name: fileName,
-            mimeType: "image/png",
-            buffer: PNG_1X1,
-        });
-    }
-}
-
 async function confirmSupplierPaymentIfGated(page: Page): Promise<boolean> {
     const gate = page.locator("#prepayment-gate");
     const confirmBtn = page.locator("#fulfillment-operations-work-surface-confirm");
@@ -190,36 +164,8 @@ async function assertDirectShipQuantity(page: Page) {
     ).toBeVisible({ timeout: UI_TIMEOUT });
 }
 
-async function submitSupplierPayment(page: Page, stamp: string, purchaseNo: string) {
-    await openWorkspaceTask(page, "供应商付款处理", purchaseNo, "finance");
-    await expect(page.getByText(purchaseNo).first()).toBeVisible({ timeout: UI_TIMEOUT });
-    const payAmount = page.locator("#supplier-payables-allocation-form-amount");
-    await expect(payAmount).toBeVisible({ timeout: UI_TIMEOUT });
-    await expect(payAmount).toHaveValue(/^[1-9]\d*(?:\.\d+)?$|^0\.0*[1-9]\d*$/);
-    const bankRef = page.locator("#supplier-payables-allocation-form-bank-reference");
-    if (await bankRef.count()) {
-        await bankRef.fill(`BR${stamp}`);
-    }
-    await uploadBankReceipt(page, `bank-receipt-${stamp}.png`);
-    await page.locator("#supplier-payables-allocation-form-submit").click();
-    const payDialog = page.getByRole("alertdialog").filter({ hasText: "确认付款" });
-    await expect(payDialog).toBeVisible({ timeout: UI_TIMEOUT });
-    await expect(payDialog.getByText("提交审批")).toHaveCount(0);
-    const committed = page.waitForResponse(
-        (response) =>
-            response.request().method() === "POST" &&
-            response.url().includes("/admin/supplier-payments/commit"),
-        { timeout: 60_000 },
-    );
-    const confirm = payDialog.locator("#supplier-payables-payment-submit-confirm-confirm");
-    if (await confirm.count()) {
-        await confirm.click();
-    } else {
-        await payDialog.getByRole("button", { name: "确认付款" }).click();
-    }
-    const response = await committed;
-    expect(response.ok(), await response.text()).toBe(true);
-    await expect(payDialog).toBeHidden({ timeout: UI_TIMEOUT });
+async function submitSupplierPayment(page: Page, _stamp: string, purchaseNo: string) {
+    await payOnlySupplierTask(page, purchaseNo);
 }
 
 test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async ({ browser }) => {
@@ -234,6 +180,7 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
     let salesOrderId = "";
     let salesOrderNo = "";
     let purchaseOrderNo = "";
+    let supplierPaymentDone = false;
     let receiptNo = "";
     let salesInvoiceNo = "";
     let customerRefundNo = "";
@@ -386,8 +333,8 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         );
         await expect(orderTitleRow(page, customerName).getByText("已关闭")).toHaveCount(0);
 
-        // 7) 采购单财务审批
-        page = await switchTo("caiwu");
+        // 7) 采购部门内部审批
+        page = await switchTo("caigoushenpi");
         await openWorkspaceTask(page, "采购单审批", salesOrderNo, "approval");
         await approveCurrentDocument(page);
 
@@ -426,6 +373,7 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         if (await confirmSupplierPaymentIfGated(page)) {
             page = await switchTo("fukuan");
             await submitSupplierPayment(page, stamp, purchaseOrderNo);
+            supplierPaymentDone = true;
             page = await switchTo("caigou");
             await openWorkspaceTask(page, "履约处理", customerName, "fulfillment");
             await openFulfillmentWorkspaceForm(page);
@@ -433,7 +381,7 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
 
         // 10) 采购登记代发并确认发货
         await expect(page.locator('[aria-label="供应商直发表单"]')).toBeVisible({ timeout: UI_TIMEOUT });
-        await addDeliveryTrackingEntry(page, {
+        let trackingInputId = await addDeliveryTrackingEntry(page, {
             kind: "direct",
             lineIndex: 0,
             trackingNo,
@@ -444,10 +392,11 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         if (!(await confirmShip.isEnabled().catch(() => false))) {
             page = await switchTo("fukuan");
             await submitSupplierPayment(page, stamp, purchaseOrderNo);
+            supplierPaymentDone = true;
             page = await switchTo("caigou");
             await openWorkspaceTask(page, "履约处理", customerName, "fulfillment");
             await openFulfillmentWorkspaceForm(page);
-            await addDeliveryTrackingEntry(page, {
+            trackingInputId = await addDeliveryTrackingEntry(page, {
                 kind: "direct",
                 lineIndex: 0,
                 trackingNo,
@@ -458,12 +407,49 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await expect(page.locator("#fulfillment-operations-work-surface-confirm")).toBeEnabled({
             timeout: UI_TIMEOUT,
         });
-        await page.locator("#fulfillment-operations-work-surface-confirm").click();
-        const shipped = page.waitForResponse(response => response.request().method() === "POST" && /\/deliveries\/[^/]+\/post$/.test(response.url()));
-        await confirmFormal(page, "确认发货？", "确认发货");
+        const dialog = await openFulfillmentWorkspaceForm(page);
+        const workItemId = new URL(page.url()).searchParams.get("currentWorkItemId");
+        expect(workItemId).toBeTruthy();
+        await expect(dialog).toHaveAttribute("id", `workspace-fulfillment-process-dialog-${workItemId}`);
+        const token = await page.evaluate(() => localStorage.getItem("erp.token"));
+        expect(token).toBeTruthy();
+        const task = await apiGet<{
+            id: string; business_object_type: string; business_object_id: string; status: string;
+        }>(token!, `/admin/work-items/${workItemId}`);
+        expect(task).toMatchObject({ id: workItemId, business_object_type: "delivery", status: "OPEN" });
+        const source = await apiGet<{
+            total: number;
+            items: Array<{ work_item_id: string; operation_id: string; operation_type: string;
+                sales_order_id: string; sales_order_no: string; purchase_order_id: string; purchase_order_no: string }>;
+        }>(token!, "/admin/work-items/fulfillment-queue", {
+            operation_id: task.business_object_id, operation_types: "SUPPLIER_DIRECT",
+            page: 1, page_size: 1, timezone: "Asia/Shanghai",
+        });
+        expect(source.total).toBe(1);
+        expect(source.items).toHaveLength(1);
+        expect(source.items[0]).toMatchObject({
+            work_item_id: workItemId, operation_id: task.business_object_id, operation_type: "SUPPLIER_DIRECT",
+            sales_order_id: salesOrderId, sales_order_no: salesOrderNo, purchase_order_no: purchaseOrderNo,
+        });
+        expect(source.items[0].purchase_order_id).toBeTruthy();
+        const shipped = page.waitForResponse(response => response.request().method() === "POST" &&
+            new URL(response.url()).pathname === `/admin/deliveries/${task.business_object_id}/post`,
+            { timeout: UI_TIMEOUT });
+        await dialog.locator("#fulfillment-operations-work-surface-confirm").click();
         const shippedResponse = await shipped;
-        expect(shippedResponse.ok()).toBeTruthy();
-        expect((await shippedResponse.json()).data.status).toBe("SHIPPED");
+        expect(shippedResponse.ok(), await shippedResponse.text()).toBe(true);
+        const delivery = (await shippedResponse.json()).data;
+        expect(delivery).toMatchObject({
+            id: task.business_object_id, status: "SHIPPED", delivery_type: "SUPPLIER_DIRECT",
+            sales_order_id: salesOrderId, purchase_order_id: source.items[0].purchase_order_id,
+        });
+        expect(delivery.tracking_entries).toHaveLength(1);
+        expect(delivery.tracking_entries[0]).toMatchObject({ tracking_no: trackingNo, carrier: "顺丰速运" });
+        expect(trackingInputId).toBe(`fulfillment-operations-direct-form-line-${toAutomationIdSegment(delivery.tracking_entries[0].sales_order_line_id)}-tracking-no`);
+        expect(await apiGet(token!, `/admin/work-items/${workItemId}`)).toMatchObject({
+            id: workItemId, business_object_id: task.business_object_id, status: "COMPLETED",
+        });
+        await expect(dialog).toBeHidden({ timeout: UI_TIMEOUT });
 
         // 11) 销售登记部分拒收（1 件拒收 + 1 件通过，整件拒收不能记入验收）
         page = await switchTo("xiaoshou");
@@ -693,13 +679,14 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         });
         const payTask = page
             .getByRole("list", { name: "待办列表" })
-            .getByRole("button", { name: new RegExp(`供应商付款处理[\\s\\S]*${purchaseOrderNo}`) });
-        if (await payTask.count()) {
+            .getByRole("button", { name: supplierPaymentTaskPattern(purchaseOrderNo) });
+        if (!supplierPaymentDone || await payTask.count()) {
             await submitSupplierPayment(page, `${stamp}B`, purchaseOrderNo);
+            supplierPaymentDone = true;
         }
 
-        // 18) 财务登记进项蓝票（红票依据）。进项登记入口在 W12，flow-07 由 caiwu 操作
-        page = await switchTo("caiwu");
+        // 18) 开票岗登记进项蓝票（红票依据），与财审、付款职责分离
+        page = await switchTo("kaipiao");
         await page.goto("/finance/supplier-accounts");
         await expect(page.getByRole("heading", { name: "供应商往来" })).toBeVisible({
             timeout: UI_TIMEOUT,

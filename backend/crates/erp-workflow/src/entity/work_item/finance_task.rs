@@ -21,6 +21,8 @@ use super::entity::{AssignmentSource, WorkItem, WorkItemData, WorkItemPriority, 
 pub const RECEIVABLE_OBJECT_TYPE: &str = "receivable_account";
 /// 应付财务任务的业务对象类型。
 pub const PAYABLE_OBJECT_TYPE: &str = "payable_account";
+/// 已批准采购付款申请的执行对象类型。
+pub const PURCHASE_PAYMENT_REQUEST_OBJECT_TYPE: &str = "purchase_payment_request";
 /// 财务任务的责任角色。
 pub const FINANCE_OWNER_ROLE: &str = "role-finance";
 
@@ -61,6 +63,8 @@ impl SalesInvoiceTaskReason {
 /// 供应商付款任务产生原因（W12，应付域复用同一 contract）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SupplierPaymentTaskReason {
+    /// 采购付款申请全部审批通过。
+    ApprovedPurchasePaymentRequest,
     /// 采购最终通过形成应付。
     Initial,
     /// 冲正重新产生余额后重开。
@@ -82,6 +86,7 @@ impl SupplierPaymentTaskReason {
     /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::ApprovedPurchasePaymentRequest => "PURCHASE_PAYMENT_REQUEST_APPROVED",
             Self::Initial => "PAYABLE_PAYMENT_REQUIRED",
             Self::ReopenedByReversal => "PAYABLE_REOPENED_BY_REVERSAL",
             Self::ReopenedByPurchaseChange => "PAYABLE_REOPENED_BY_PURCHASE_CHANGE",
@@ -278,6 +283,67 @@ pub fn new_supplier_payment_task(
         },
         responsibility_key,
     )
+}
+
+/// 为已批准采购付款申请建立独立到人的执行任务。
+///
+/// # 参数
+/// * `id` - 新任务身份。
+/// * `spec` - 申请版本、业务组织、责任人、希望付款日和申请未付金额。
+/// * `responsibility_key` - 已解析的供应商付款责任规则键。
+/// * `request_id` / `request_no` - 已批准的申请身份与编号。
+/// # 返回
+/// 返回只绑定本次批准申请的开放任务。
+/// # 错误
+/// 申请身份为空、未付金额非正、责任字段非法时返回错误。
+pub fn new_approved_purchase_payment_request_task(
+    id: WorkItemId,
+    spec: SupplierPaymentTaskSpec,
+    responsibility_key: &str,
+    request_id: &str,
+    request_no: &str,
+) -> Result<WorkItem> {
+    if request_id.trim().is_empty() || request_no.trim().is_empty() || spec.open_total <= Amount::zero() {
+        return Err(Error::from("批准的付款申请身份与未付金额必须有效"));
+    }
+    WorkItem::new_with_responsibility_key(
+        id,
+        WorkItemData {
+            work_item_type: WorkItemType::SupplierPaymentExecution,
+            business_object_type: PURCHASE_PAYMENT_REQUEST_OBJECT_TYPE.to_string(),
+            business_object_id: request_id.to_string(),
+            subject_version: spec.subject_version,
+            owner_role: FINANCE_OWNER_ROLE.to_string(),
+            owner_organization_id: spec.owner_organization_id,
+            owner_user_id: spec.owner_user_id,
+            assignment_source: AssignmentSource::SystemRule,
+            priority: WorkItemPriority::Normal,
+            due_at: Some(spec.due_at),
+            reason_code: Some(SupplierPaymentTaskReason::ApprovedPurchasePaymentRequest.as_str().to_string()),
+            impact_summary: Some(format!("申请 {request_no} · 待付款 {} 元", spec.open_total)),
+        },
+        format!("{responsibility_key}:request:{request_id}"),
+    )
+}
+
+/// 证明任务只能执行指定申请的未付批准额度。
+///
+/// # 参数
+/// * `task` - 当前执行任务。
+/// * `request_id` - 付款申请主键。
+/// # 返回
+/// 类型、对象、责任角色、原因及申请责任键全部一致时返回 true。
+/// # 错误
+/// 无；旧应付直付任务返回 false。
+pub fn matches_purchase_payment_request_identity(task: &WorkItem, request_id: &str) -> bool {
+    task.work_item_type == WorkItemType::SupplierPaymentExecution
+        && task.business_object_type == PURCHASE_PAYMENT_REQUEST_OBJECT_TYPE
+        && task.business_object_id == request_id
+        && task.owner_role == FINANCE_OWNER_ROLE
+        && task.reason_code.as_deref() == Some("PURCHASE_PAYMENT_REQUEST_APPROVED")
+        && task.responsibility_key().is_some_and(|key| {
+            key.starts_with("finance:SUPPLIER_PAYMENT:") && key.ends_with(&format!(":request:{request_id}"))
+        })
 }
 
 /// 校验任务与指定应收子账的销项开票身份（W11 identity）。
@@ -482,6 +548,43 @@ mod tests {
                 "KP-003"
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn approved_payment_request_task_owns_only_its_request_authorization() {
+        let mut task = new_approved_purchase_payment_request_task(
+            WorkItemId::new("payment-task"),
+            supplier_spec(),
+            "finance:SUPPLIER_PAYMENT:rule",
+            "request-1",
+            "FK-001",
+        )
+        .unwrap();
+        assert!(matches_purchase_payment_request_identity(&task, "request-1"));
+        assert!(!matches_purchase_payment_request_identity(&task, "request-2"));
+        assert!(!matches_supplier_payment_identity(&task, "pa-1"));
+        assert_eq!(task.business_object_id, "request-1");
+        assert_eq!(task.subject_version, "5");
+        assert!(task.impact_summary.as_deref().unwrap().contains("FK-001"));
+        task.complete_when_payment_request_paid(Instant::from_unix_secs(200)).unwrap();
+        assert_eq!(task.status, WorkItemStatus::Completed);
+        let mut no_balance = supplier_spec();
+        no_balance.open_total = Amount::zero();
+        assert!(
+            new_approved_purchase_payment_request_task(
+                WorkItemId::new("invalid"),
+                no_balance,
+                "finance:SUPPLIER_PAYMENT:rule",
+                "request-1",
+                "FK-001",
+            )
+            .is_err()
+        );
+        let old_task = supplier_task();
+        assert!(!matches_purchase_payment_request_identity(&old_task, "request-1"));
+        assert!(
+            old_task.work_item_type.required_execution_permissions(&old_task.business_object_type).is_none()
         );
     }
 

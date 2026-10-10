@@ -22,6 +22,7 @@ import {
     DetailSummaryItem,
 } from "@/components/business/detail-presentation"
 import { useSalesOrderDetailPermissions } from "@/features/sales-orders/hooks/use-sales-order-detail-permissions"
+import { SalesOrderProcurementSourceNotice } from "@/features/sales-orders/components/sales-order-procurement-source-notice"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
 const RELATED_PURCHASE_PAGE_SIZE = 100
@@ -97,7 +98,10 @@ export function PurchasePanel({ order }: { order: SalesOrderDetailView }) {
                     value={progress.remainingQuantity}
                     detail={
                         <span data-testid="sales-order-purchase-progress">
-                            供给目标 {progress.salesQuantity} · 已覆盖{" "}
+                            供给目标 {progress.salesQuantity} ·{" "}
+                            {progress.sourceChanged
+                                ? "当前版本已覆盖"
+                                : "已覆盖"}{" "}
                             {progress.coveredQuantity}
                         </span>
                     }
@@ -115,11 +119,18 @@ export function PurchasePanel({ order }: { order: SalesOrderDetailView }) {
                     }
                     detail={
                         <span data-testid="sales-order-purchase-status">
-                            {statusSummary || progress.label}
+                            {progress.sourceChanged
+                                ? progress.label
+                                : statusSummary || progress.label}
                         </span>
                     }
                 />
             </DetailSummary>
+
+            <SalesOrderProcurementSourceNotice
+                id="sales-order-purchase-source-changed-notice"
+                progress={progress}
+            />
 
             {permissions.accountQuery.isPending ? (
                 <div

@@ -10,6 +10,8 @@ import {
     parsePeriodicTerm,
     periodicPaymentTerm,
     reconciliationCycle,
+    reconciliationCycleLabel,
+    RECONCILIATION_CYCLES,
 } from "@/lib/supplier-payment-terms"
 import { portalCooperationApplication, portalSaveApplication } from "../api"
 import {
@@ -34,6 +36,12 @@ const prepayments = [
 ]
 const schema = z.object({
     settlement: z.string().min(1, "请选择结算方式"),
+    reconciliationCycle: z
+        .string()
+        .refine(
+            (value) => reconciliationCycle(value) !== undefined,
+            "请选择对账频率",
+        ),
     term: z.string(),
     days: z
         .string()
@@ -64,6 +72,12 @@ export function PortalCooperationPage() {
                                     : "待核对")}
                         </p>
                         <p>采购联系人：{query.data.contact_name ?? "未配置"}</p>
+                        <p>
+                            对账频率：
+                            {reconciliationCycleLabel(
+                                query.data.reconciliation_cycle,
+                            ) ?? "未配置"}
+                        </p>
                         <p>联系电话：{query.data.contact_phone ?? "未提供"}</p>
                     </div>
                     <PortalCooperationEditor profile={query.data} />
@@ -108,6 +122,11 @@ export function PortalCooperationEditor({
                     "monthly",
             ),
             term,
+            reconciliationCycle: String(
+                draft?.input.reconciliation_cycle ??
+                    profile.reconciliation_cycle ??
+                    "",
+            ),
             days: String(periodic?.days ?? 15),
             expectedSupplierVersion:
                 typeof draft?.input.expected_supplier_version === "number"
@@ -132,7 +151,7 @@ export function PortalCooperationEditor({
                 expected_supplier_version: value.expectedSupplierVersion,
                 expected_profile_id: value.expectedProfileId,
                 settlement_mode: value.settlement,
-                reconciliation_cycle: reconciliationCycle(value.settlement),
+                reconciliation_cycle: value.reconciliationCycle,
                 payment_term:
                     value.settlement === "prepayment"
                         ? value.term
@@ -188,6 +207,11 @@ export function PortalCooperationEditor({
                     ? paymentTermLabel(profile.payment_term)
                     : "待核对"}
             </p>
+            <p className="text-sm text-muted-foreground">
+                当前生效对账频率：
+                {reconciliationCycleLabel(profile.reconciliation_cycle) ??
+                    "未配置"}
+            </p>
             {draft && (
                 <Button
                     id="supplier-portal-cooperation-use-current"
@@ -214,7 +238,7 @@ export function PortalCooperationEditor({
                 id="supplier-portal-cooperation-recheck-conflict"
                 currentSummary={
                     currentProfile.data?.payment_term
-                        ? `当前付款条件：${paymentTermLabel(currentProfile.data.payment_term)}。请核对原申请内容仍适用。`
+                        ? `当前付款条件：${paymentTermLabel(currentProfile.data.payment_term)}；对账频率：${reconciliationCycleLabel(currentProfile.data.reconciliation_cycle) ?? "未配置"}。请核对原申请内容仍适用。`
                         : undefined
                 }
                 disabled={mutation.isPending}
@@ -263,6 +287,19 @@ export function PortalCooperationEditor({
                         label="结算方式"
                         allowClear={false}
                         options={settlements}
+                        disabled={disabled}
+                    />
+                )}
+            </form.AppField>
+            <form.AppField name="reconciliationCycle">
+                {(field) => (
+                    <field.SelectField
+                        id="supplier-portal-cooperation-reconciliation-cycle"
+                        label="对账频率"
+                        allowClear={false}
+                        options={RECONCILIATION_CYCLES}
+                        required
+                        description="对账频率与付款周期分别约定；每月对账可以按季或按年付款。"
                         disabled={disabled}
                     />
                 )}

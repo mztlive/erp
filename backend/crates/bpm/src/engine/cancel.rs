@@ -73,7 +73,9 @@ fn ensure_cancellable(
 ) -> EngineResult<()> {
     match instance.status {
         ApprovalProcessInstanceStatus::Running | ApprovalProcessInstanceStatus::Blocked => {},
-        ApprovalProcessInstanceStatus::Approved | ApprovalProcessInstanceStatus::Cancelled => {
+        ApprovalProcessInstanceStatus::Approved
+        | ApprovalProcessInstanceStatus::Rejected
+        | ApprovalProcessInstanceStatus::Cancelled => {
             return Err(EngineError::InvalidCommand("终态实例不得取消"));
         },
     }

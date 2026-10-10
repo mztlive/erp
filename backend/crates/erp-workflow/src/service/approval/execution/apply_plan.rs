@@ -15,6 +15,8 @@ pub enum DomainActionKind {
     Start,
     /// 最终通过动作。必须先于实例终态写入。
     FinalApprove,
+    /// 终态驳回，释放提交占用。
+    Reject,
     /// 撤回或受阻取消动作。
     Cancel,
 }

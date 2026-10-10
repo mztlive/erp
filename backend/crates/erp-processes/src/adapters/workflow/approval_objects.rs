@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use erp_customer::CustomerExt;
-use erp_finance::repository::{PayableExt, ReceivableExt};
+use erp_finance::repository::{PayableExt, PurchasePaymentRequestExt, ReceivableExt};
 use erp_inventory::InventoryExt;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_read_models::workbench::authority::WorkItemFactsReader;
@@ -58,6 +58,21 @@ pub(super) async fn load(
             party(row.created_by, row.counterparty_party_id.to_string()),
         );
     }
+    for row in db
+        .purchase_payment_requests()
+        .list_active_by_ids(&ids(keys, DocumentType::PurchasePaymentRequest), executor)
+        .await?
+    {
+        result.insert(
+            (DocumentType::PurchasePaymentRequest, row.base.id),
+            WorkflowScopeObject {
+                owner_user_id: row.created_by,
+                business_org_unit_id: row.org_unit_id,
+                settlement_party_id: Some(row.payer_party_id),
+                ..Default::default()
+            },
+        );
+    }
     let receipt_ids = ids(keys, DocumentType::CustomerReceipt);
     for row in db.customer_receipts().list_active_by_ids(&receipt_ids, executor).await? {
         result.insert(
@@ -84,41 +99,7 @@ async fn orders(db: &Database, keys: &Keys, executor: &mut dyn Executor) -> Resu
         .collect();
     let facts = WorkItemFactsReader::new(db.clone()).load(&fact_keys, executor).await?;
     let sources = facts.values().filter_map(|f| f.order_scope_source.clone()).collect::<BTreeSet<_>>();
-    let sales = sources
-        .iter()
-        .filter_map(|s| if let OrderTaskSource::Sales(id) = s { Some(id.clone()) } else { None })
-        .collect::<Vec<_>>();
-    let purchases = sources
-        .iter()
-        .filter_map(|s| if let OrderTaskSource::Purchase(id) = s { Some(id.clone()) } else { None })
-        .collect::<Vec<_>>();
-    let mut by_source = BTreeMap::new();
-    for row in db.sales_orders().list_active_by_ids(&sales, executor).await? {
-        let source = OrderTaskSource::Sales(row.base.id);
-        by_source.insert(
-            source.clone(),
-            WorkflowScopeObject {
-                customer_id: Some(row.customer_id.to_string()),
-                owner_user_id: row.sales_owner_user_id,
-                business_org_unit_id: Some(row.business_org_unit_id),
-                order_source: Some(source),
-                ..Default::default()
-            },
-        );
-    }
-    for row in db.purchase_orders().list_active_by_ids(&purchases, executor).await? {
-        let owner = row.current_owner_user_id()?.to_string();
-        let source = OrderTaskSource::Purchase(row.base.id);
-        by_source.insert(
-            source.clone(),
-            WorkflowScopeObject {
-                owner_user_id: owner,
-                business_org_unit_id: Some(row.business_org_unit_id),
-                order_source: Some(source),
-                ..Default::default()
-            },
-        );
-    }
+    let by_source = load_order_sources(db, &sources, executor).await?;
     let mut result = HashMap::new();
     for (kind, id) in keys {
         let Some(fact_kind) = OrderTaskSource::approval_kind(*kind) else {
@@ -216,6 +197,59 @@ async fn reversals(
             result.insert((DocumentType::ReceiptReversal, row.base.id), party(row.created_by, id.clone()));
         }
     }
+    payment_reversals(db, keys, result, executor).await?;
+    Ok(())
+}
+
+async fn load_order_sources(
+    db: &Database,
+    sources: &BTreeSet<OrderTaskSource>,
+    executor: &mut dyn Executor,
+) -> Result<BTreeMap<OrderTaskSource, WorkflowScopeObject>> {
+    let sales = sources
+        .iter()
+        .filter_map(|s| if let OrderTaskSource::Sales(id) = s { Some(id.clone()) } else { None })
+        .collect::<Vec<_>>();
+    let purchases = sources
+        .iter()
+        .filter_map(|s| if let OrderTaskSource::Purchase(id) = s { Some(id.clone()) } else { None })
+        .collect::<Vec<_>>();
+    let mut by_source = BTreeMap::new();
+    for row in db.sales_orders().list_active_by_ids(&sales, executor).await? {
+        let source = OrderTaskSource::Sales(row.base.id);
+        by_source.insert(
+            source.clone(),
+            WorkflowScopeObject {
+                customer_id: Some(row.customer_id.to_string()),
+                owner_user_id: row.sales_owner_user_id,
+                business_org_unit_id: Some(row.business_org_unit_id),
+                order_source: Some(source),
+                ..Default::default()
+            },
+        );
+    }
+    for row in db.purchase_orders().list_active_by_ids(&purchases, executor).await? {
+        let owner = row.current_owner_user_id()?.to_string();
+        let source = OrderTaskSource::Purchase(row.base.id);
+        by_source.insert(
+            source.clone(),
+            WorkflowScopeObject {
+                owner_user_id: owner,
+                business_org_unit_id: Some(row.business_org_unit_id),
+                order_source: Some(source),
+                ..Default::default()
+            },
+        );
+    }
+    Ok(by_source)
+}
+
+async fn payment_reversals(
+    db: &Database,
+    keys: &Keys,
+    result: &mut WorkflowScopeObjects,
+    executor: &mut dyn Executor,
+) -> Result<()> {
     let rows = db
         .payment_reversals()
         .list_active_by_ids(&ids(keys, DocumentType::PaymentReversal), executor)

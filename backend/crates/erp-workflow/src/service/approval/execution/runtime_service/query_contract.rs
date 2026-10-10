@@ -219,6 +219,7 @@ mod runtime_instance_list_query_tests {
             None,
             Some(RuntimeInstanceStatusFilter::Running),
             Some(RuntimeInstanceStatusFilter::Approved),
+            Some(RuntimeInstanceStatusFilter::Rejected),
             Some(RuntimeInstanceStatusFilter::Cancelled),
             Some(RuntimeInstanceStatusFilter::Blocked),
         ];

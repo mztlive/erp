@@ -77,11 +77,7 @@ export function useSupplierAccountsNavigation({
 
     React.useEffect(() => {
         if (deepLinkHandled.current || !data?.moduleAllowed) return
-        if (
-            (sessionTrack === "payment" ||
-                sessionTrack === "purchase_invoice") &&
-            supplierId
-        ) {
+        if (sessionTrack === "purchase_invoice" && supplierId) {
             deepLinkHandled.current = true
             setSession({
                 track: sessionTrack,
@@ -96,35 +92,6 @@ export function useSupplierAccountsNavigation({
             })
             return
         }
-        if (
-            fromWorkspace !== "W01" &&
-            fromWorkspace !== "W08" &&
-            fromWorkspace !== "W09"
-        ) {
-            return
-        }
-        if (!purchaseOrderId) return
-        const payable = data.payables.find(
-            (candidate) =>
-                candidate.sourceType === "PURCHASE_ORDER" &&
-                candidate.sourceDocumentId === purchaseOrderId,
-        )
-        const resolvedSupplierId = supplierId ?? payable?.supplierId
-        if (!resolvedSupplierId) return
-
-        deepLinkHandled.current = true
-        setSession({
-            track: "payment",
-            supplierId: resolvedSupplierId,
-            purchaseOrderId,
-            returnTo,
-            fromWorkspace,
-            preselectPayableAccountId: payable?.payableAccountId,
-        })
-        patchUrl(
-            { session: "payment", supplierId: resolvedSupplierId },
-            { replace: true },
-        )
     }, [
         data,
         detailId,

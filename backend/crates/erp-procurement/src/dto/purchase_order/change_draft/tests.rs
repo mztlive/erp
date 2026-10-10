@@ -13,8 +13,9 @@ use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 
 use super::*;
 use crate::entity::purchase_order::{
-    FulfillmentResponsibility, PaymentTermSnapshot, PurchaseChangeOrderData, PurchaseChangeSubmissionData,
-    PurchaseChangeSubmissionLineData, PurchaseOrderRevisionData, PurchaseType, SupplierSnapshot,
+    FulfillmentResponsibility, PaymentSubjectSnapshot, PaymentTermSnapshot, PurchaseChangeOrderData,
+    PurchaseChangeSubmissionData, PurchaseChangeSubmissionLineData, PurchaseOrderRevisionData, PurchaseType,
+    SupplierSnapshot,
 };
 
 /// 构造原采购变更草稿。
@@ -36,6 +37,13 @@ fn submission() -> PurchaseChangeSubmission {
     PurchaseChangeSubmission::new(
         PurchaseChangeSubmissionId::new("submission-1"),
         PurchaseChangeSubmissionData {
+            payment_subject: PaymentSubjectSnapshot::new(
+                "party-1".to_string().into(),
+                "我方公司".into(),
+                "so-1".to_string().into(),
+                "sales-rev-1".to_string().into(),
+            )
+            .unwrap(),
             purchase_change_order_id: PurchaseChangeOrderId::new("change-1"),
             submission_no: "CS-000001".into(),
             base_revision_id: PurchaseOrderRevisionId::new("revision-1"),
@@ -128,6 +136,13 @@ fn revision() -> PurchaseOrderRevision {
     PurchaseOrderRevision::new(
         PurchaseOrderRevisionId::new("revision-1"),
         PurchaseOrderRevisionData {
+            payment_subject: PaymentSubjectSnapshot::new(
+                "party-1".to_string().into(),
+                "我方公司".into(),
+                "so-1".to_string().into(),
+                "sales-rev-1".to_string().into(),
+            )
+            .unwrap(),
             purchase_order_id: PurchaseOrderId::new("order-1"),
             revision_no: 1,
             supplier_revision_id: header.supplier_revision_id,

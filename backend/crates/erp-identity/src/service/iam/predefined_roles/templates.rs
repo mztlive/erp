@@ -75,6 +75,17 @@ mod tests {
         assert!(!has("role-finance-director", "customer_receipt:create"));
         assert!(!has("role-cashier", "invoice:post"));
         assert!(!has("role-invoice-clerk", "supplier_payment:commit"));
+        assert!(has("role-cashier", "purchase_payment_request:pay"));
+        assert!(has("role-finance-director", "purchase_payment_request:close"));
+        assert!(!has("role-finance-director", "purchase_payment_request:pay"));
+        assert!(!has("role-cashier", "purchase_payment_request:close"));
+        assert!(!has("role-invoice-clerk", "purchase_payment_request:pay"));
+        assert!(!has("role-invoice-clerk", "purchase_payment_request:close"));
+        for id in ["role-finance-director", "role-cashier", "role-invoice-clerk"] {
+            assert!(!has(id, "purchase_payment_request:create"));
+        }
+        assert!(has("role-procurement", "purchase_payment_request:submit"));
+        assert!(!has("role-procurement", "purchase_payment_request:pay"));
         for id in ["role-finance", "role-finance-director", "role-cashier", "role-invoice-clerk"] {
             assert!(has(id, "finance_ledger:read"));
         }

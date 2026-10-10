@@ -12,6 +12,7 @@ use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+use crate::entity::purchase_order::PaymentSubjectSnapshot;
 use crate::entity::purchase_order::purchase_submission::SubmissionStatus;
 use crate::entity::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
 use crate::entity::purchase_order::types::{FulfillmentResponsibility, PurchaseType};
@@ -43,6 +44,8 @@ pub struct PurchaseChangeSubmissionData {
     pub supplier_revision_id: SupplierCommercialProfileRevisionId,
     /// 提交时供应商快照。
     pub supplier_snapshot: SupplierSnapshot,
+    /// 来源正式销售版本冻结的我方付款主体与来源身份。
+    pub payment_subject: PaymentSubjectSnapshot,
     /// 付款条件和先款后货门禁快照。
     pub payment_term_snapshot: PaymentTermSnapshot,
     /// 含税行汇总。
@@ -76,6 +79,8 @@ pub struct PurchaseChangeSubmission {
     pub supplier_revision_id: SupplierCommercialProfileRevisionId,
     /// 提交时供应商快照。
     pub supplier_snapshot: SupplierSnapshot,
+    /// 来源正式销售版本冻结的我方付款主体与来源身份。
+    pub payment_subject: PaymentSubjectSnapshot,
     /// 付款条件和先款后货门禁快照。
     pub payment_term_snapshot: PaymentTermSnapshot,
     /// 含税行汇总。
@@ -120,6 +125,7 @@ impl PurchaseChangeSubmission {
             fulfillment_responsibility: data.fulfillment_responsibility,
             supplier_revision_id: data.supplier_revision_id,
             supplier_snapshot: data.supplier_snapshot,
+            payment_subject: data.payment_subject,
             payment_term_snapshot: data.payment_term_snapshot,
             gross_amount: data.gross_amount,
             net_amount: data.net_amount,
@@ -277,6 +283,7 @@ mod tests {
     use erp_core::money::Amount;
 
     use super::{PurchaseChangeSubmission, PurchaseChangeSubmissionData};
+    use crate::entity::purchase_order::PaymentSubjectSnapshot;
     use crate::entity::purchase_order::purchase_submission::SubmissionStatus;
     use crate::entity::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
     use crate::entity::purchase_order::types::{FulfillmentResponsibility, PurchaseType};
@@ -298,6 +305,13 @@ mod tests {
 
     fn change_submission_data() -> PurchaseChangeSubmissionData {
         PurchaseChangeSubmissionData {
+            payment_subject: PaymentSubjectSnapshot::new(
+                "party-1".to_string().into(),
+                "我方公司".into(),
+                "so-1".to_string().into(),
+                "sales-rev-1".to_string().into(),
+            )
+            .unwrap(),
             purchase_change_order_id: PurchaseChangeOrderId::new("pco-1"),
             submission_no: "CS-01".to_string(),
             base_revision_id: PurchaseOrderRevisionId::new("por-1"),

@@ -4,7 +4,7 @@
  *
  * 账号、部门、审批链和默认责任规则的规格在后端 crate 的 dev-foundation.json，演示主数据接口读取同一份。
  * 账号对齐 docs/erp-phase-1.md §11 部门职责与预定义角色（role-sales 等）。
- * 财务按岗位分离拆成总监 / 出纳 / 开票人三个账号，共用 role-finance。
+ * 财务按岗位分离拆成总监 / 出纳 / 开票人三个账号，分别绑定独立岗位角色。
  * 超级管理员 admin 不在此创建，由 CLI init-admin 或本入口的 reset-db.sh 修复。
  *
  * 用法: 由 seed-dev-foundation.mjs / publish-approval-definitions.mjs 导入
@@ -210,13 +210,16 @@ export async function ensureRoleBoundAdmin(adminToken, spec, roles, options = {}
   }
 
   const roleIds = Array.isArray(account.role_ids) ? account.role_ids : [];
-  if (!roleIds.includes(spec.roleId)) {
+  const desiredRoleIds = process.env.ERP_E2E_ISOLATED === "1"
+    ? [spec.roleId]
+    : [...new Set([...roleIds, spec.roleId])];
+  if (JSON.stringify([...roleIds].sort()) !== JSON.stringify([...desiredRoleIds].sort())) {
     await call("PUT", `/admin/admins/${encodeURIComponent(account.id)}/role`, {
       token: adminToken,
-      body: { role_ids: [...roleIds, spec.roleId] },
+      body: { role_ids: desiredRoleIds },
     });
-    account = { ...account, role_ids: [...roleIds, spec.roleId] };
-    console.log(`已为 ${spec.account} 补上${role.name}角色`);
+    account = { ...account, role_ids: desiredRoleIds };
+    console.log(`已为 ${spec.account} 对齐${role.name}角色`);
   }
   return account;
 }
@@ -239,15 +242,9 @@ export async function ensureDevAccounts(adminToken, options = {}) {
     });
   }
   const roles = await listRoles(adminToken);
-  // Only the disposable test copy receives newly required contract identity reads.
-  // Existing development/production role edits remain untouched.
+  // 隔离副本须使用本次代码的完整岗位合同；复制源库的旧权限不能决定本次验收行为。
   if (process.env.ERP_E2E_ISOLATED === "1") {
-    const sales = roles.find((role) => role.id === "role-sales");
-    const permissions = [...new Set([...sales.permissions, "company:list", "company:detail"])];
-    if (permissions.length !== sales.permissions.length) {
-      await call("PUT", `/admin/roles/${sales.id}`, { token: adminToken, body: { permissions } });
-      sales.permissions = permissions;
-    }
+    await syncIsolatedDevRolePermissions(adminToken, catalog, roles);
   }
   const seeded = {};
   for (const [key, spec] of Object.entries(ACCOUNTS)) {
@@ -269,6 +266,31 @@ export async function ensureDevAccounts(adminToken, options = {}) {
     throw new Error("销售、销售领导、采购、运营、仓储必须是不同账号");
   }
   return seeded;
+}
+
+/** 隔离 E2E 固定岗位按服务器当前模板和演示必要动作准备；调用方不得对源库调用。 */
+export async function syncIsolatedDevRolePermissions(adminToken, catalog, roles, transport = call) {
+  const requiredRoles = new Set(Object.values(ACCOUNTS).map((account) => account.roleId));
+  for (const roleId of requiredRoles) {
+    const template = catalog.templates.find((row) => row.id === roleId);
+    const role = roles.find((row) => row.id === roleId);
+    if (!template || !role || !Array.isArray(template.permissions)) {
+      throw new Error(`隔离岗位 ${roleId} 缺少服务器模板或已生成角色`);
+    }
+    const required = FOUNDATION.accounts.filter((account) => account.role_id === roleId)
+      .flatMap((account) => FOUNDATION.required_permissions[account.key] ?? []);
+    const permissions = [...new Set([
+      ...template.permissions,
+      ...required,
+      ...(roleId === "role-sales" ? ["company:list", "company:detail"] : []),
+    ])].sort();
+    if (JSON.stringify(permissions) === JSON.stringify([...role.permissions].sort())) continue;
+    await transport("PUT", `/admin/roles/${encodeURIComponent(roleId)}`, {
+      token: adminToken, body: { permissions },
+    });
+    role.permissions = permissions;
+    console.log(`隔离岗位已同步本次权限合同: ${roleId}`);
+  }
 }
 
 /**

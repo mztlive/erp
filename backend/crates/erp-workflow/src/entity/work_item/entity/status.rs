@@ -62,6 +62,21 @@ impl WorkItem {
         Ok(())
     }
 
+    /// 在本申请批准未付额度归零时完成申请付款任务。
+    ///
+    /// # 参数
+    /// * `at` - 申请全部付清时间。
+    /// # 返回
+    /// 完成任务并记录系统结束时间。
+    /// # 错误
+    /// 非申请付款任务、非开放任务或带审批执行引用时返回错误。
+    pub fn complete_when_payment_request_paid(&mut self, at: Instant) -> Result<()> {
+        if self.business_object_type != "purchase_payment_request" {
+            return Err(Error::from("只有付款申请任务可以按申请付清完成"));
+        }
+        self.complete_when_payable_settled(at)
+    }
+
     /// 在应收剩余可开票额度归零时自动完成销项开票执行任务。
     ///
     /// # 参数
@@ -391,11 +406,11 @@ mod tests {
         assert_eq!(task.completed_by.as_deref(), Some("__system__"));
         assert_eq!(
             WorkItemType::SupplierPaymentExecution
-                .supplier_payment_execution_permissions("payable_account")
+                .supplier_payment_execution_permissions("purchase_payment_request")
                 .unwrap()
                 .last()
                 .copied(),
-            Some("supplier_payment:commit")
+            Some("purchase_payment_request:pay")
         );
         assert!(WorkItemType::SupplierPaymentExecution.uses_explicit_owner_authorization());
     }

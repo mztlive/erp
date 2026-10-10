@@ -119,11 +119,13 @@ function RuleDialog({
     onOpenChange,
     target,
     owners,
+    ownersReady,
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
     target?: FinanceResponsibilityRule
     owners: readonly FinanceResponsibilityOwnerOption[]
+    ownersReady: boolean
 }) {
     const mutation = useSaveFinanceResponsibilityRuleMutation()
     const form = useAppForm({
@@ -157,10 +159,6 @@ function RuleDialog({
             }
         },
     })
-
-    React.useEffect(() => {
-        if (open) form.reset(defaultValues(target))
-    }, [form, open, target])
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -346,7 +344,11 @@ function RuleDialog({
                                         id="finance-responsibilities-rule-submit"
                                         type="submit"
                                         data-testid="finance-responsibility-save"
-                                        disabled={!canSubmit || pending}
+                                        disabled={
+                                            !canSubmit ||
+                                            pending ||
+                                            !ownersReady
+                                        }
                                     >
                                         {pending ? "保存中…" : "保存规则"}
                                     </LoadingButton>
@@ -372,6 +374,10 @@ export function FinanceResponsibilityRulesPage() {
     const ownersQuery = useFinanceResponsibilityOwnerOptionsQuery(canManage)
     const [dialogOpen, setDialogOpen] = React.useState(false)
     const [editing, setEditing] = React.useState<FinanceResponsibilityRule>()
+    const [dialogSession, startDialogSession] = React.useReducer(
+        (session: number) => session + 1,
+        0,
+    )
     const columns = useFinanceResponsibilityColumns()
 
     if (profileQuery.isPending) {
@@ -427,10 +433,12 @@ export function FinanceResponsibilityRulesPage() {
     const ownerUnavailable = ownersQuery.isPending || ownersQuery.isError
     const openCreate = () => {
         setEditing(undefined)
+        startDialogSession()
         setDialogOpen(true)
     }
     const openEdit = (rule: FinanceResponsibilityRule) => {
         setEditing(rule)
+        startDialogSession()
         setDialogOpen(true)
     }
 
@@ -560,12 +568,14 @@ export function FinanceResponsibilityRulesPage() {
                     }
                 />
             </div>
-            {canManage && ownersQuery.data ? (
+            {canManage ? (
                 <RuleDialog
+                    key={dialogSession}
                     open={dialogOpen}
                     onOpenChange={setDialogOpen}
                     target={editing}
-                    owners={ownersQuery.data}
+                    owners={ownersQuery.data ?? []}
+                    ownersReady={!ownerUnavailable}
                 />
             ) : null}
         </PageScaffold>

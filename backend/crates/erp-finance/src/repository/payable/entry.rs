@@ -246,6 +246,20 @@ fn minimum_due_dates_pipeline(
 
 #[allow(async_fn_in_trait)]
 pub trait PayableEntryOffsetRepositoryExt {
+    /// 批量读取增加分录的冲减抵销事实，避免申请详情逐行查询。
+    ///
+    /// # 参数
+    /// * `increase_entry_ids` - 需要读取的增加分录身份。
+    /// * `executor` - 当前来源读取或付款事务执行器。
+    /// # 返回
+    /// 返回引用这些分录的全部抵销；空输入不访问数据库。
+    /// # 错误
+    /// 查询或反序列化失败时返回仓储错误。
+    async fn find_offsets_by_increases(
+        &self,
+        increase_entry_ids: &[PayableEntryId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PayableEntryOffset>>;
     /// 按减少分录取回全部抵销（按抵销序号升序）。
     ///
     /// 用于校验「减少分录分配合计等于其金额」（数据模型 §6.9）。
@@ -286,6 +300,17 @@ pub trait PayableEntryOffsetRepositoryExt {
 }
 
 impl PayableEntryOffsetRepositoryExt for persistence_core::Repository<'_, PayableEntryOffset> {
+    async fn find_offsets_by_increases(
+        &self,
+        increase_entry_ids: &[PayableEntryId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PayableEntryOffset>> {
+        if increase_entry_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids = increase_entry_ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        self.find_many(doc! {"increase_entry_id": {"$in": ids}}, executor).await
+    }
     async fn find_offsets_by_decrease(
         &self,
         decrease_entry_id: &PayableEntryId,

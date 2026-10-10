@@ -53,6 +53,7 @@ import {
     pickCalendarDay,
     readHeaderDocumentNumber,
     salesOrderAmountSummary,
+    expectSourcingCounts,
 } from "../helpers/ui"
 
 // 两个退款用例各自创建业务数据；单 worker 顺序执行，前一个失败也必须执行后一个。
@@ -437,9 +438,7 @@ test.describe("flow-16 客户退款单", () => {
             ).toBeVisible({
                 timeout: LONG,
             })
-            await expect(caigou.page.getByText("将创建采购单")).toBeVisible({
-                timeout: TIMEOUT,
-            })
+            await expectSourcingCounts(caigou.page)
             await expandSourcingEditor(caigou.page)
             const sourcing = caigou.page.locator('[id$="-sourcing-option"]')
             await expect(sourcing.first()).toBeVisible({ timeout: TIMEOUT })
@@ -540,8 +539,8 @@ test.describe("flow-16 客户退款单", () => {
             }
             await caigou.context.close()
 
-            // ── 3. 财务：采购单审批通过，形成应付 ──
-            const caiwuPo = await openRole(browser, extra, "caiwu")
+            // ── 3. 采购部门：采购单审批通过，形成应付 ──
+            const caiwuPo = await openRole(browser, extra, "caigoushenpi")
             await openWorkspaceTask(
                 caiwuPo.page,
                 "采购单审批",
@@ -553,31 +552,48 @@ test.describe("flow-16 客户退款单", () => {
             ).match(/PO-[0-9a-f]+/i) ?? [""])[0]
             expect(purchaseNo.length).toBeGreaterThan(2)
             await confirmApprove(caiwuPo.page)
-            await caiwuPo.page.goto("/finance/supplier-accounts")
+            await caiwuPo.context.close()
+            // 采购审批与财务只读核对应付由各自岗位执行，财审不得登记付款。
+            const financeReader = await openRole(browser, extra, "caiwu")
+            await financeReader.page.goto("/finance/supplier-accounts")
             await expect(
-                caiwuPo.page.getByRole("heading", { name: "供应商往来" }),
+                financeReader.page.getByRole("heading", { name: "供应商往来" }),
             ).toBeVisible({
                 timeout: LONG,
             })
             await expect(
-                caiwuPo.page.getByText(new RegExp(SUPPLIER_SHORT)).first(),
+                financeReader.page.getByText(new RegExp(SUPPLIER_SHORT)).first(),
             ).toBeVisible({
                 timeout: LONG,
             })
-            await expect(caiwuPo.page.getByText("未结").first()).toBeVisible({
+            await expect(financeReader.page.getByText("未结").first()).toBeVisible({
                 timeout: TIMEOUT,
             })
-            await expect(
-                caiwuPo.page.locator(
-                    "#supplier-payables-header-register-payment",
-                ),
-            ).toBeDisabled()
-            await caiwuPo.context.close()
+            const supplierWorkspace = financeReader.page.locator('[data-slot="page-scaffold"]').filter({
+                has: financeReader.page.getByRole("heading", { name: "供应商往来", exact: true }),
+            })
+            await expect(supplierWorkspace).toHaveCount(1)
+            const paymentRequestLink = supplierWorkspace.getByRole("group", { name: "页面操作", exact: true })
+                .locator('a[href="/procurement/payment-requests"]')
+            await expect(paymentRequestLink).toHaveCount(1)
+            await expect(paymentRequestLink).toHaveText("采购付款申请")
+            await expect(paymentRequestLink).toBeVisible({ timeout: TIMEOUT })
+            await expect(paymentRequestLink).toHaveAttribute("href", "/procurement/payment-requests")
+            const financeProfile = await apiGet<{ account: string; permissions: string[] }>(
+                await apiToken("caiwu"), "/account/profile",
+            )
+            expect(financeProfile.account).toBe("caiwu")
+            expect(financeProfile.permissions.filter((permission) =>
+                ["*", "*:*", "*:pay", "purchase_payment_request:*", "purchase_payment_request:pay"].includes(permission),
+            )).toEqual([])
+            await expect(financeReader.page.getByRole("button", { name: "登记付款", exact: true })).toHaveCount(0)
+            await expect(financeReader.page.locator("#ppr-pay-submit")).toHaveCount(0)
+            await financeReader.context.close()
 
             // ── 4. 出纳：W01 付款任务一次确认入账（NO_APPROVAL）──
             const fukuanPay = await openRole(browser, extra, "fukuan")
-            await payOnlySupplierTask(fukuanPay.page)
-            await expectToast(fukuanPay.page, /付款已登记/)
+            const payment = await payOnlySupplierTask(fukuanPay.page, purchaseNo)
+            expect(payment.status).toBe("posted")
 
             await fukuanPay.page.goto("/finance/supplier-accounts?view=payment")
             await expect(
@@ -596,8 +612,7 @@ test.describe("flow-16 客户退款单", () => {
                 .press("Enter")
             const paymentRow = fukuanPay.page
                 .getByRole("row")
-                .filter({ hasText: "已过账" })
-                .first()
+                .filter({ hasText: payment.payment_no })
             await expect(
                 paymentRow.getByText("已过账", { exact: true }),
             ).toBeVisible({
@@ -747,8 +762,7 @@ test.describe("flow-16 客户退款单", () => {
                 .press("Enter")
             const postedPayment = fukuanAssert.page
                 .getByRole("row")
-                .filter({ hasText: "已过账" })
-                .first()
+                .filter({ hasText: payment.payment_no })
             await expect(
                 postedPayment.getByText("已过账", { exact: true }),
             ).toBeVisible({

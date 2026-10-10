@@ -209,6 +209,8 @@ const DROP_GROUPS = [
       "payable_entry_offsets",
       "payable_entries",
       "supplier_payments",
+      "purchase_payment_request_snapshots",
+      "purchase_payment_requests",
       "payable_accounts",
       "cost_allocations",
       "cost_entries",

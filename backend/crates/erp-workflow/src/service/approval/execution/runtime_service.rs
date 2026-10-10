@@ -12,7 +12,7 @@ mod query_contract;
 mod read_auth;
 mod resume_apply;
 mod task_read;
-mod tasks;
+pub(super) mod tasks;
 pub use task_read::{approval_task_readable_with_executor, approval_tasks_readable_with_executor};
 mod upgrade;
 

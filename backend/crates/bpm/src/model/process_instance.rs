@@ -188,6 +188,9 @@ impl ApprovalProcessInstance {
             (ApprovalProcessInstanceStatus::Approved, _) => {
                 Err(ModelError::InvalidStatus("已最终通过的审批实例不得撤回"))
             },
+            (ApprovalProcessInstanceStatus::Rejected, _) => {
+                Err(ModelError::InvalidStatus("已最终驳回的审批实例不得撤回"))
+            },
             (ApprovalProcessInstanceStatus::Cancelled, _) => {
                 Err(ModelError::InvalidStatus("已取消的审批实例不得重复撤回"))
             },
@@ -295,6 +298,25 @@ impl ApprovalProcessInstance {
     pub fn complete_approved(&mut self, at: Timestamp) -> ModelResult<()> {
         self.ensure_not_terminal()?;
         self.status = ApprovalProcessInstanceStatus::Approved;
+        self.current_node_execution_id = None;
+        self.clear_blocker_projection();
+        self.ended_at = Some(at);
+        touch_base(&mut self.base, at)
+    }
+
+    /// 最终驳回并终止当前审批令牌。
+    ///
+    /// # 参数
+    /// * `at` - 驳回决定时间。
+    /// # 返回
+    /// 清空当前执行和阻塞投影并记录结束时间。
+    /// # 错误
+    /// 非运行中实例、时间非法或版本溢出时返回错误。
+    pub fn complete_rejected(&mut self, at: Timestamp) -> ModelResult<()> {
+        if self.status != ApprovalProcessInstanceStatus::Running {
+            return Err(ModelError::InvalidStatus("只有运行中的实例可以最终驳回"));
+        }
+        self.status = ApprovalProcessInstanceStatus::Rejected;
         self.current_node_execution_id = None;
         self.clear_blocker_projection();
         self.ended_at = Some(at);

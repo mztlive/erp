@@ -12,7 +12,7 @@ mod query;
 pub use crate::finance::purchase_payments::PurchasePaymentView;
 pub mod repository;
 mod scope;
-mod source_sales;
+pub(crate) mod source_sales;
 use std::sync::Arc;
 
 pub use change::query::PurchaseChangeListView;

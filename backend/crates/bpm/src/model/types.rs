@@ -211,7 +211,7 @@ impl ApprovalDecision {
     }
 }
 
-/// 运行实例状态。驳回不是实例终态。
+/// 运行实例状态。调用方可选择驳回重启或驳回终止政策。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ApprovalProcessInstanceStatus {
@@ -219,6 +219,8 @@ pub enum ApprovalProcessInstanceStatus {
     Running,
     /// 最终通过。
     Approved,
+    /// 最终驳回。
+    Rejected,
     /// 已取消。
     Cancelled,
     /// 受阻。
@@ -232,7 +234,7 @@ impl ApprovalProcessInstanceStatus {
     /// 无。
     ///
     /// # 返回
-    /// 返回 `RUNNING`、`APPROVED`、`CANCELLED` 或 `BLOCKED`。
+    /// 返回 `RUNNING`、`APPROVED`、`REJECTED`、`CANCELLED` 或 `BLOCKED`。
     ///
     /// # 错误
     /// 不返回错误。
@@ -240,6 +242,7 @@ impl ApprovalProcessInstanceStatus {
         match self {
             Self::Running => "RUNNING",
             Self::Approved => "APPROVED",
+            Self::Rejected => "REJECTED",
             Self::Cancelled => "CANCELLED",
             Self::Blocked => "BLOCKED",
         }
@@ -251,12 +254,12 @@ impl ApprovalProcessInstanceStatus {
     /// 无。
     ///
     /// # 返回
-    /// 最终通过或取消时返回 `true`。受阻与运行中返回 `false`。
+    /// 最终通过、最终驳回或取消时返回 `true`。受阻与运行中返回 `false`。
     ///
     /// # 错误
     /// 不返回错误。
     pub fn is_terminal(self) -> bool {
-        matches!(self, Self::Approved | Self::Cancelled)
+        matches!(self, Self::Approved | Self::Rejected | Self::Cancelled)
     }
 }
 

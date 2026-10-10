@@ -3,6 +3,7 @@
 use application_core::AuditActor;
 use bpm::engine::{CommitRequired, DefinitionGraph, Eligibility};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
+use bpm::model::types::ApprovalDecision;
 use bpm::model::{
     ApprovalInstanceAssignee, ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId, Timestamp,
 };
@@ -280,11 +281,7 @@ async fn revalidate_decision_eligibilities(
     executor: &mut dyn Executor,
 ) -> Result<(DefinitionGraph, Eligibility, Eligibility)> {
     let separation_policy = process_required_separation_policy(loaded.document_type)?;
-    let graph = db
-        .bpm_workflow()
-        .load_definition_graph(&loaded.instance.process_definition_id, executor)
-        .await?
-        .ok_or_else(|| Error::ConflictError("审批实例绑定的定义不存在".to_string()))?;
+    let graph = load_frozen_definition_graph(db, loaded, executor).await?;
     let current_eligibility = revalidate_decision_approver(
         db,
         rbac,
@@ -300,6 +297,11 @@ async fn revalidate_decision_eligibilities(
         executor,
     )
     .await?;
+    if loaded.document_type == DocumentType::PurchasePaymentRequest
+        && command.decision == ApprovalDecision::Reject
+    {
+        return Ok((graph, current_eligibility.clone(), current_eligibility));
+    }
     let decision_target = graph
         .decision_target_node_key(&loaded.execution.node_key, command.decision)
         .map_err(map_runtime_graph_error)?;
@@ -327,6 +329,17 @@ async fn revalidate_decision_eligibilities(
         None => current_eligibility.clone(),
     };
     Ok((graph, current_eligibility, next_eligibility))
+}
+
+async fn load_frozen_definition_graph(
+    db: &Database,
+    loaded: &OpenDecisionRuntime,
+    executor: &mut dyn Executor,
+) -> Result<DefinitionGraph> {
+    db.bpm_workflow()
+        .load_definition_graph(&loaded.instance.process_definition_id, executor)
+        .await?
+        .ok_or_else(|| Error::ConflictError("审批实例绑定的定义不存在".to_string()))
 }
 
 /// 调用决定规划器；新命令落入回放分支时按内部错误失败。

@@ -72,6 +72,7 @@ export type WorkspaceId =
     | "W26"
     | "W27"
     | "W29"
+    | "W30"
 
 /** 侧栏角标键：由 Shell 映射到对应工作面的实时计数，无数据时隐藏。 */
 export type WorkspaceNavBadgeKey =
@@ -199,6 +200,8 @@ function defaultNavPermissionsFor(
                 "integration_error_task:list",
                 "reconciliation_difference:list",
             ]
+        case "W30":
+            return ["purchase_payment_request:list"]
         default:
             return []
     }
@@ -283,6 +286,13 @@ export function filterNavGroupsByPermissions(
 
 /** Full workspace index (mall phase-2 IDs removed; re-add on redo). */
 export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
+    {
+        id: "W30",
+        name: "采购付款申请",
+        mode: "M2+M4+M5",
+        mainRoute: "/procurement/payment-requests",
+        navHref: "/procurement/payment-requests",
+    },
     {
         id: "W01",
         name: "今日工作台",
@@ -502,6 +512,10 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
         {
             label: "采购与履约",
             items: [
+                {
+                    routeId: "W30",
+                    icon: WalletCardsIcon,
+                },
                 {
                     routeId: "W08",
                     icon: ClipboardListIcon,

@@ -22,6 +22,7 @@ pub use inventory_settlement_brief::capture_stock_adjustment_display;
 mod operational_brief;
 mod owner_qualification;
 mod party_names;
+mod payment_request;
 mod presentation;
 mod purchase_review_brief;
 mod query;

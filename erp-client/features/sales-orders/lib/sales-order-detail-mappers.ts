@@ -117,6 +117,22 @@ export function mapProcurementProgress(
     const coveredQuantity = coverage?.covered_quantity ?? "0"
     const remainingQuantity = coverage?.remaining_quantity ?? "0"
     const progress = coverage?.progress ?? "0"
+    const quantities = {
+        salesQuantity,
+        coveredQuantity,
+        remainingQuantity,
+        sourceChanged: coverage?.source_changed ?? false,
+        outdatedPurchaseQuantity: coverage?.outdated_purchase_quantity ?? "0",
+        outdatedPurchaseCount: coverage?.outdated_purchase_count ?? 0,
+    }
+    if (quantities.sourceChanged) {
+        return {
+            ...quantities,
+            status: "source_changed",
+            label: "采购依据待更新",
+            tone: "warning",
+        }
+    }
     const status =
         compareDecimal(salesQuantity, "0", 6) > 0 &&
         (compareDecimal(remainingQuantity, "0", 6) <= 0 ||
@@ -129,9 +145,7 @@ export function mapProcurementProgress(
 
     if (status === "covered") {
         return {
-            salesQuantity,
-            coveredQuantity,
-            remainingQuantity,
+            ...quantities,
             status,
             label: "采购已覆盖",
             tone: "success",
@@ -139,18 +153,14 @@ export function mapProcurementProgress(
     }
     if (status === "partial") {
         return {
-            salesQuantity,
-            coveredQuantity,
-            remainingQuantity,
+            ...quantities,
             status,
             label: "部分采购",
             tone: "warning",
         }
     }
     return {
-        salesQuantity,
-        coveredQuantity,
-        remainingQuantity,
+        ...quantities,
         status,
         label: "待采购",
         tone: "neutral",

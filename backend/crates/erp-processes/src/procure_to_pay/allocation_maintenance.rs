@@ -24,7 +24,7 @@ pub(super) async fn prepare_current_sales_allocations(
     executor: &mut dyn Executor,
 ) -> Result<PreparedSalesAllocations> {
     Ok(erp_procurement::service::purchase_order::allocation_maintenance::prepare_current_sales_allocations(
-        &super::adapters::SalesAllocationAdapter(db.clone()),
+        &super::adapters::SalesAllocationAdapter(db.clone(), order.sales_order_revision_id.clone()),
         order,
         revision_lines,
         executor,

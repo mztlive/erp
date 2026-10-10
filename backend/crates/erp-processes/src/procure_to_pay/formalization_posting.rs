@@ -14,7 +14,6 @@ use crate::{Error, Result};
 enum Step {
     Purchase,
     Payable,
-    PaymentTask,
     Costs,
     Fulfillment,
     Audit,
@@ -26,9 +25,7 @@ trait PostingSteps: Send {
 }
 /// 生产流程与失败替身共同使用的顺序入口。
 async fn execute(steps: &mut impl PostingSteps, executor: &mut dyn Executor) -> Result<()> {
-    for step in
-        [Step::Purchase, Step::Payable, Step::PaymentTask, Step::Costs, Step::Fulfillment, Step::Audit]
-    {
+    for step in [Step::Purchase, Step::Payable, Step::Costs, Step::Fulfillment, Step::Audit] {
         steps.apply(step, executor).await?;
     }
     Ok(())
@@ -51,7 +48,7 @@ impl PostingSteps for MongoPosting<'_> {
     /// 按固定步骤消费写入计划；计划缺失或该步失败时保留原错误。
     ///
     /// # 参数
-    /// * `step` - 采购、应付、付款任务、成本、履约或审计。
+    /// * `step` - 采购、应付、成本、履约或审计。
     /// * `executor` - 调用方唯一执行器。
     ///
     /// # 返回
@@ -71,13 +68,6 @@ impl PostingSteps for MongoPosting<'_> {
             Step::Payable => {
                 let payable = self.effects()?.payable();
                 erp_finance::service::payable::purchase_initial::persist(
-                    self.db, &payable.0, &payable.1, executor,
-                )
-                .await?;
-            },
-            Step::PaymentTask => {
-                let payable = self.effects()?.payable();
-                crate::finance_posting::payable::payment_task::ensure_purchase_payment_task(
                     self.db, &payable.0, &payable.1, executor,
                 )
                 .await?;
@@ -104,7 +94,7 @@ impl PostingSteps for MongoPosting<'_> {
         Ok(())
     }
 }
-/// 在根事务原位置执行采购、应付、付款任务、成本、履约与审计；不新建事务或重排步骤。
+/// 在根事务原位置执行采购、应付、成本、履约与审计；不新建事务或重排步骤。
 ///
 /// # 参数
 /// * `db` - 各步写入使用的数据库。
@@ -114,7 +104,7 @@ impl PostingSteps for MongoPosting<'_> {
 /// * `executor` - 调用方唯一执行器。
 ///
 /// # 返回
-/// 六步按既定顺序写完。
+/// 五步按既定顺序写完。
 ///
 /// # 错误
 /// 任一步失败时返回原错误，不再执行后续步骤。
@@ -156,7 +146,7 @@ mod tests {
         }
     }
     #[tokio::test]
-    async fn formalization_preserves_domain_finance_task_fulfillment_audit_order() {
+    async fn formalization_preserves_domain_finance_fulfillment_audit_order() {
         let mut executor = TestExecutor { _identity: 1 };
         let mut steps = RecordingSteps {
             calls: Vec::new(),
@@ -164,15 +154,11 @@ mod tests {
             fail_at: None,
         };
         execute(&mut steps, &mut executor).await.unwrap();
-        assert_eq!(
-            steps.calls,
-            [Step::Purchase, Step::Payable, Step::PaymentTask, Step::Costs, Step::Fulfillment, Step::Audit]
-        );
+        assert_eq!(steps.calls, [Step::Purchase, Step::Payable, Step::Costs, Step::Fulfillment, Step::Audit]);
     }
     #[tokio::test]
     async fn every_failure_preserves_original_error_and_stops_later_writes() {
-        let order =
-            [Step::Purchase, Step::Payable, Step::PaymentTask, Step::Costs, Step::Fulfillment, Step::Audit];
+        let order = [Step::Purchase, Step::Payable, Step::Costs, Step::Fulfillment, Step::Audit];
         for (index, step) in order.into_iter().enumerate() {
             let mut executor = TestExecutor { _identity: 1 };
             let mut steps = RecordingSteps {

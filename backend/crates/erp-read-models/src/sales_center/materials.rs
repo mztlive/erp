@@ -528,6 +528,7 @@ mod tests {
         SalesOrderRevision::new(
             SalesOrderRevisionId::new(id),
             SalesOrderRevisionData {
+                settlement_party_id: "party-1".to_string().into(),
                 sales_order_id: SalesOrderId::new(order),
                 revision_no: number,
                 revision_source: RevisionSource::ErpApproval,

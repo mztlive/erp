@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
+import { SalesOrderProcurementSourceNotice } from "@/features/sales-orders/components/sales-order-procurement-source-notice"
 
 const RELATED_LANE_COPY = {
     purchase: {
@@ -75,7 +76,11 @@ export function RelatedLanes({
                 lane="purchase"
                 count={order.related.purchaseOrders}
                 status={progress.label}
-                progressDetail={`销售总数量 ${progress.salesQuantity} · 已覆盖 ${progress.coveredQuantity} · 剩余 ${progress.remainingQuantity}`}
+                progressDetail={
+                    progress.sourceChanged
+                        ? `销售总数量 ${progress.salesQuantity} · 当前版本已覆盖 ${progress.coveredQuantity} · 待覆盖 ${progress.remainingQuantity}`
+                        : `销售总数量 ${progress.salesQuantity} · 已覆盖 ${progress.coveredQuantity} · 剩余 ${progress.remainingQuantity}`
+                }
                 progressTestId="sales-order-procurement-progress"
             />,
         )
@@ -110,5 +115,15 @@ export function RelatedLanes({
             />,
         )
     }
-    return <ul className="divide-y divide-grid">{items}</ul>
+    return (
+        <div className="space-y-3">
+            <ul className="divide-y divide-grid">{items}</ul>
+            {lanes.includes("purchase") ? (
+                <SalesOrderProcurementSourceNotice
+                    id="sales-order-procurement-source-changed-notice"
+                    progress={order.related.procurementProgress}
+                />
+            ) : null}
+        </div>
+    )
 }

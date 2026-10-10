@@ -44,7 +44,7 @@ use crate::{Error, Result};
 ///
 /// # 错误
 /// 定义不存在或仓储失败时返回冲突或仓储错误。
-pub(super) async fn load_bound_definition_graph(
+pub(crate) async fn load_bound_definition_graph(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
 ) -> Result<DefinitionGraph> {
@@ -63,7 +63,7 @@ pub(super) async fn load_bound_definition_graph(
 ///
 /// # 错误
 /// 定义不存在或仓储失败时返回错误。
-pub(super) async fn load_bound_definition_graph_with_executor(
+pub(crate) async fn load_bound_definition_graph_with_executor(
     db: &Database,
     binding: &ApprovalDefinitionBinding,
     executor: &mut dyn Executor,
@@ -100,7 +100,7 @@ fn engine_graph(graph: erp_workflow::repository::bpm::DefinitionGraph) -> Defini
 ///
 /// # 错误
 /// 幂等键非法或仓储失败时返回错误。
-pub(super) async fn load_start_receipt(
+pub(crate) async fn load_start_receipt(
     db: &Database,
     subject: &SubjectRef,
     subject_version: u32,
@@ -123,7 +123,7 @@ pub(super) async fn load_start_receipt(
 ///
 /// # 错误
 /// 幂等键非法或仓储失败时返回错误。
-pub(super) async fn load_start_receipt_with_executor(
+pub(crate) async fn load_start_receipt_with_executor(
     db: &Database,
     subject: &SubjectRef,
     subject_version: u32,
@@ -171,7 +171,7 @@ pub(super) async fn load_start_receipt_with_executor(
 ///
 /// # 关键业务约束
 /// 审批人取自已发布节点，不接受客户端选择。
-pub(super) struct DocumentStartInput<'a> {
+pub(crate) struct DocumentStartInput<'a> {
     /// 必须审批的业务类型。
     pub document_type: DocumentType,
     /// 绑定定义图。
@@ -212,7 +212,7 @@ pub(super) struct DocumentStartInput<'a> {
 ///
 /// # 关键业务约束
 /// 定义版本必须与冻结绑定一致；对象读取权失败时收敛为 BLOCKED。
-pub(super) fn build_document_start_input(input: DocumentStartInput<'_>) -> Result<StartExecutionInput> {
+pub(crate) fn build_document_start_input(input: DocumentStartInput<'_>) -> Result<StartExecutionInput> {
     let DocumentStartInput {
         document_type,
         graph,
@@ -312,7 +312,7 @@ fn start_bindings_from_graph(
 ///
 /// # 关键业务约束
 /// 运行事实、不可变快照与入口任务必须与单据迁移同事务。
-pub(super) struct CustomerReceiptStartPersistInput {
+pub(crate) struct CustomerReceiptStartPersistInput {
     /// 已进入 `IN_APPROVAL` 的回款单。
     pub receipt: CustomerReceipt,
     /// 审计操作人。
@@ -349,7 +349,7 @@ pub(super) struct CustomerReceiptStartPersistInput {
 /// 提交由外层创建命令先完成自身幂等仲裁；本方法作为不可独立调用的审批子步骤，
 /// 其写段固定为“启动收据 -> 注册行启动守卫 -> 回款单 -> BPM”。
 /// 成功财务回执与业务事件由外层主命令在同一执行器写入，本子步骤不重复记录。
-pub(super) async fn persist_customer_receipt_start_apply(
+pub(crate) async fn persist_customer_receipt_start_apply(
     db: &Database,
     input: CustomerReceiptStartPersistInput,
     executor: &mut dyn Executor,
@@ -402,7 +402,7 @@ pub(super) async fn persist_customer_receipt_start_apply(
 }
 
 /// 启动时固定的业务类型及提交快照。
-pub(super) struct RuntimeSubject<'a> {
+pub(crate) struct RuntimeSubject<'a> {
     pub document_type: DocumentType,
     pub snapshot_payload: &'a ApprovalSubjectSnapshotPayload,
 }
@@ -423,7 +423,7 @@ pub(super) struct RuntimeSubject<'a> {
 ///
 /// # 错误
 /// 计划缺少入口执行、快照构造、展示捕获或任一步写入失败时返回错误。
-pub(super) async fn persist_runtime_writes(
+pub(crate) async fn persist_runtime_writes(
     db: &Database,
     writes: &erp_workflow::service::approval::execution::apply_plan::PlannedWrites,
     subject: RuntimeSubject<'_>,

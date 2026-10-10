@@ -157,6 +157,37 @@ mod tests {
         assert_eq!(reject_writes.instance.subject_version, 1);
     }
 
+    #[test]
+    fn purchase_payment_request_rejection_releases_domain_authorization_without_restart() {
+        let started = prepare_start(start_input(eligible("u1", "张三"), None)).unwrap();
+        let PreparedExecution::Apply(mut writes) = started else {
+            panic!("启动必须写入");
+        };
+        writes.instance.process_kind = ProcessKind::PurchasePaymentRequest;
+        writes.instance.subject = SubjectRef::new("purchase_payment_request", "req-1").unwrap();
+        let prepared = prepare_decision(decision_input(
+            writes.instance,
+            writes.created_executions[0].clone(),
+            ApprovalDecision::Reject,
+            Some("对账依据不完整".into()),
+            eligible("u1", "张三"),
+            eligible("u1", "张三"),
+            None,
+        ))
+        .unwrap();
+        let PreparedExecution::Apply(rejected) = prepared else {
+            panic!("决定必须写入");
+        };
+        assert_eq!(rejected.instance.status, ApprovalProcessInstanceStatus::Rejected);
+        assert_eq!(rejected.instance.current_round_no, 1);
+        assert_eq!(rejected.domain_action, Some(super::DomainActionKind::Reject));
+        assert!(rejected.create_tasks.is_empty());
+        assert!(rejected.created_executions.is_empty());
+        assert!(rejected.created_assignees.is_empty());
+        assert_eq!(rejected.complete_tasks.len(), 1);
+        assert_eq!(rejected.updated_executions[0].status, ApprovalNodeExecutionStatus::Rejected);
+    }
+
     /// 重复命令同载荷回读，异载荷冲突。
     #[test]
     fn execution_idempotent_replay_and_payload_conflict() {
@@ -450,6 +481,67 @@ mod tests {
         )
         .unwrap_err();
         assert!(conflict.to_string().contains("APPROVAL_IDEMPOTENCY_PAYLOAD_CONFLICT"));
+    }
+
+    #[test]
+    fn payment_request_next_approval_task_keeps_date_and_rejects_cross_submission_source() {
+        use erp_core::common::time::Instant;
+
+        use super::runtime_service::tasks::due::task_due_at;
+        use super::store::{MemoryRuntimeStore, RecordingDomainActions, TaskApplyContext, commit_writes};
+
+        let mut input = start_input(eligible("u1", "张三"), None);
+        input.process_kind = ProcessKind::PurchasePaymentRequest;
+        input.subject = SubjectRef::new("purchase_payment_request", "req-1").unwrap();
+        input.command.graph.definition.process_kind = ProcessKind::PurchasePaymentRequest;
+        let PreparedExecution::Apply(started) = prepare_start(input).unwrap() else {
+            panic!("启动必须写入");
+        };
+        let mut ctx = TaskApplyContext {
+            work_item_id: "wi-1".into(),
+            business_object_type: "purchase_payment_request".into(),
+            business_object_id: "req-1".into(),
+            subject_version: "1".into(),
+            owner_role: "purchase_payment_request_approver".into(),
+            owner_organization_id: "org-1".into(),
+            actor_id: "u1".into(),
+            now: Instant::from_unix_secs(10),
+        };
+        let mut store = MemoryRuntimeStore::default();
+        let domain = RecordingDomainActions::default();
+        commit_writes(&mut store, &started, &ctx, &domain).unwrap();
+        let due_at = Instant::from_unix_secs(1_700_000_000);
+        let mut original = store.work_items().next().unwrap().clone();
+        original.due_at = Some(due_at);
+        store.insert_work_item(original.clone());
+        let execution = &started.created_executions[0];
+        assert_eq!(task_due_at(&started.instance, execution, &original).unwrap(), due_at);
+        let mut wrong_submission = original.clone();
+        wrong_submission.subject_version = "2".into();
+        assert!(task_due_at(&started.instance, execution, &wrong_submission).is_err());
+        let mut missing_date = original.clone();
+        missing_date.due_at = None;
+        assert!(task_due_at(&started.instance, execution, &missing_date).is_err());
+
+        let mut decision = decision_input(
+            started.instance.clone(),
+            execution.clone(),
+            ApprovalDecision::Approve,
+            None,
+            eligible("u1", "张三"),
+            eligible("u2", "李四"),
+            None,
+        );
+        decision.command.graph.definition.process_kind = ProcessKind::PurchasePaymentRequest;
+        let PreparedExecution::Apply(approved) = prepare_decision(decision).unwrap() else {
+            panic!("通过必须写入");
+        };
+        ctx.work_item_id = "wi-2".into();
+        commit_writes(&mut store, &approved, &ctx, &domain).unwrap();
+        let next = store.work_items().find(|task| task.base.id == "wi-2").unwrap();
+        assert_eq!(next.due_at, Some(due_at));
+        assert_eq!(next.owner_user_id.as_deref(), Some("u2"));
+        assert_eq!(next.subject_version, "1");
     }
 
     /// 运行路径不接受旧恢复动作名称。

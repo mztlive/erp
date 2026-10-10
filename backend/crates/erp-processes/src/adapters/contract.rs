@@ -25,6 +25,7 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
 use super::contract_data_scope::MongoContractDataScope;
+use super::contract_template::MongoSigningCompanies;
 use crate::audit::persist_log;
 
 /// 把合同审计事实写入 `erp-audit` 的 Mongo adapter。
@@ -380,6 +381,7 @@ pub fn contract_service(db: Database) -> ContractService {
         MongoContractCustomers::shared(db.clone()),
         MongoContractAssignments::shared(db.clone()),
         MongoContractAccounts::shared(db.clone()),
+        Arc::new(MongoSigningCompanies(db.clone())),
         ContractScopePorts {
             data_scope: FailClosedContractDataScopePort::shared(),
             participants: FailClosedContractParticipantPort::shared(),
@@ -408,6 +410,7 @@ pub fn scoped_contract_service(db: Database, rbac: SharedRbacService) -> Contrac
         MongoContractCustomers::shared(db.clone()),
         MongoContractAssignments::shared(db.clone()),
         MongoContractAccounts::shared(db.clone()),
+        Arc::new(MongoSigningCompanies(db.clone())),
         ContractScopePorts {
             data_scope: MongoContractDataScope::shared(db.clone(), rbac),
             participants: MongoContractParticipants::shared(db),

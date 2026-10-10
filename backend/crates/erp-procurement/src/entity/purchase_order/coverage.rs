@@ -11,7 +11,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use erp_core::ids::{PurchaseOrderRevisionId, PurchaseOrderSubmissionId};
+use erp_core::ids::{PurchaseOrderRevisionId, PurchaseOrderSubmissionId, SalesOrderRevisionId};
 use erp_core::money::Quantity;
 use erp_core::{Error, Result};
 use rust_decimal::Decimal;
@@ -81,6 +81,34 @@ pub struct ProcurementCoverageFacts {
     pub allocations: Vec<PurchaseLineSalesAllocation>,
     /// 现有库存直接分配形成的预占（Repository 已排除采购入库预占）。
     pub reservations: Vec<ExistingStockReservationFact>,
+}
+
+/// 新增供给前要求所有有效正式采购已经采用销售当前正式版本。
+///
+/// # 参数
+/// * `current_sales_revision_id` - 来源销售单当前正式版本身份。
+/// * `orders` - 同一销售单全部未作废采购；不得按当前销售行过滤。
+/// # 返回
+/// 所有有效正式采购来源均已更新时返回 `Ok(())`。
+/// # 错误
+/// 仍有有效正式采购引用旧销售版本时拒绝，须先完成正式采购变更。
+pub fn ensure_creation_sources_current(
+    current_sales_revision_id: &SalesOrderRevisionId,
+    orders: &[PurchaseOrder],
+) -> Result<()> {
+    if orders.iter().any(|order| {
+        order.base.deleted_at == 0
+            && matches!(
+                order.stable.status,
+                PurchaseOrderStatus::Effective
+                    | PurchaseOrderStatus::PartiallyExecuted
+                    | PurchaseOrderStatus::Completed
+            )
+            && &order.sales_order_revision_id != current_sales_revision_id
+    }) {
+        return Err(Error::from("仍有有效采购引用旧销售正式版本，须先完成正式采购变更后再分配供给"));
+    }
+    Ok(())
 }
 
 /// 由采购覆盖事实构造逐行与总体采购覆盖结果。
@@ -581,7 +609,8 @@ mod tests {
 
     use super::{
         ProcurementCoverageFacts, add_covered, build_procurement_coverage, coverage_summary,
-        current_revision_ids, current_submission_ids, reservation_covered_quantity, zero_quantity,
+        current_revision_ids, current_submission_ids, ensure_creation_sources_current,
+        reservation_covered_quantity, zero_quantity,
     };
     use crate::entity::facts::{
         CurrentRevisionFact, ExistingStockReservationFact, FactIdentity, ProductFact, ProductKind,
@@ -817,6 +846,63 @@ mod tests {
             allocations: vec![allocation("alloc-1", "porl-1", "sorl-1", "3")],
             reservations: vec![reservation("rsv-1", "sol-1", "1", "1")],
         }
+    }
+
+    /// 价格变更保持稳定行，删行及换稳定行均不能避开整个销售来源的旧采购检查。
+    #[test]
+    fn changed_formal_source_blocks_creation_regardless_of_current_target_lines() {
+        let current = SalesOrderRevisionId::new("sor-2");
+        for status in [
+            PurchaseOrderStatus::Effective,
+            PurchaseOrderStatus::PartiallyExecuted,
+            PurchaseOrderStatus::Completed,
+        ] {
+            for target in [Some("sol-1"), None, Some("sol-replacement")] {
+                let mut facts = facts_with_two_coverage_sources();
+                facts.revision.as_mut().unwrap().base.id = current.to_string();
+                facts.purchase_orders[1].stable.status = status;
+                facts.revision_lines =
+                    target.map(|stable| vec![revision_line("sorl-2", stable, 1)]).unwrap_or_default();
+                facts.goods_lines =
+                    target.map(|_| vec![goods_line("sorl-2", "sku-1", "10")]).unwrap_or_default();
+                let error = ensure_creation_sources_current(&current, &facts.purchase_orders).unwrap_err();
+                assert_eq!(
+                    error.to_string(),
+                    "仍有有效采购引用旧销售正式版本，须先完成正式采购变更后再分配供给"
+                );
+                assert_eq!(facts.purchase_orders[1].sales_order_revision_id.as_ref(), "sor-1");
+                assert_eq!(facts.allocations[0].sales_order_revision_line_id.as_ref(), "sorl-1");
+            }
+        }
+    }
+
+    /// 逐单正式变更允许进行，但全部旧有效采购更新前不得新增供给。
+    #[test]
+    fn all_formal_purchase_sources_must_be_updated_before_new_creation() {
+        let current = SalesOrderRevisionId::new("sor-2");
+        let mut orders = vec![
+            purchase_order("po-1", PurchaseOrderStatus::Effective, None, Some("por-1")),
+            purchase_order("po-2", PurchaseOrderStatus::PartiallyExecuted, None, Some("por-2")),
+        ];
+        orders[0].sales_order_revision_id = current.clone();
+        assert!(ensure_creation_sources_current(&current, &orders).is_err());
+        orders[1].sales_order_revision_id = current.clone();
+        ensure_creation_sources_current(&current, &orders).unwrap();
+        ensure_creation_sources_current(&current, &[]).unwrap();
+    }
+
+    /// 新版没有旧有效正式采购时可创建，作废和删除事实不阻断。
+    #[test]
+    fn non_formal_or_retired_purchases_do_not_block_current_source_creation() {
+        let current = SalesOrderRevisionId::new("sor-2");
+        let mut orders = vec![
+            purchase_order("po-draft", PurchaseOrderStatus::Draft, Some("sub-1"), None),
+            purchase_order("po-approval", PurchaseOrderStatus::InApproval, Some("sub-2"), None),
+            purchase_order("po-void", PurchaseOrderStatus::Voided, None, Some("por-3")),
+            purchase_order("po-deleted", PurchaseOrderStatus::Effective, None, Some("por-4")),
+        ];
+        orders[3].base.deleted_at = 1;
+        ensure_creation_sources_current(&current, &orders).unwrap();
     }
 
     /// 覆盖累加使用稳定销售行键且保持定点精度。

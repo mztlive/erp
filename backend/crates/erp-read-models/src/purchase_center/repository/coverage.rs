@@ -138,11 +138,11 @@ mod isolation_tests {
         InventoryExt, ReservationStatus, StockReservation, StockReservationData, StockReservationSourceType,
     };
     use erp_procurement::entity::purchase_order::{
-        FulfillmentResponsibility, PaymentTermSnapshot, PurchaseLineType, PurchaseOrder, PurchaseOrderData,
-        PurchaseOrderRevision, PurchaseOrderRevisionData, PurchaseOrderRevisionLine,
-        PurchaseOrderRevisionLineData, PurchaseOrderStatus, PurchaseOrderSubmission,
-        PurchaseOrderSubmissionData, PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData,
-        PurchaseType, SupplierSnapshot,
+        FulfillmentResponsibility, PaymentSubjectSnapshot, PaymentTermSnapshot, PurchaseLineType,
+        PurchaseOrder, PurchaseOrderData, PurchaseOrderRevision, PurchaseOrderRevisionData,
+        PurchaseOrderRevisionLine, PurchaseOrderRevisionLineData, PurchaseOrderStatus,
+        PurchaseOrderSubmission, PurchaseOrderSubmissionData, PurchaseOrderSubmissionLine,
+        PurchaseOrderSubmissionLineData, PurchaseType, SupplierSnapshot,
     };
     use erp_procurement::repository::PurchaseOrderExt;
     use erp_sales::entity::sales_order::revision::{
@@ -163,6 +163,7 @@ mod isolation_tests {
         SalesOrderRevision::new(
             SalesOrderRevisionId::new(id),
             SalesOrderRevisionData {
+                settlement_party_id: "party-1".to_string().into(),
                 sales_order_id: SalesOrderId::new("so-1"),
                 revision_no: 1,
                 revision_source: RevisionSource::ErpApproval,
@@ -304,6 +305,13 @@ mod isolation_tests {
         PurchaseOrderSubmission::new(
             PurchaseOrderSubmissionId::new(id),
             PurchaseOrderSubmissionData {
+                payment_subject: PaymentSubjectSnapshot::new(
+                    "party-1".to_string().into(),
+                    "我方公司".into(),
+                    "so-1".to_string().into(),
+                    "sales-rev-1".to_string().into(),
+                )
+                .unwrap(),
                 purchase_order_id: PurchaseOrderId::new(order_id),
                 submission_no: format!("SUB-{id}"),
                 supplier_id: SupplierAccountId::new("sup-1"),
@@ -365,6 +373,13 @@ mod isolation_tests {
         PurchaseOrderRevision::new(
             PurchaseOrderRevisionId::new(id),
             PurchaseOrderRevisionData {
+                payment_subject: PaymentSubjectSnapshot::new(
+                    "party-1".to_string().into(),
+                    "我方公司".into(),
+                    "so-1".to_string().into(),
+                    "sales-rev-1".to_string().into(),
+                )
+                .unwrap(),
                 purchase_order_id: PurchaseOrderId::new(order_id),
                 revision_no: 1,
                 supplier_revision_id: SupplierCommercialProfileRevisionId::new("suprev-1"),

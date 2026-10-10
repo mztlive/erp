@@ -60,6 +60,56 @@ async fn dispatch_action(
 ) -> ServiceResult<()> {
     match action {
         ApprovalDomainAction::SalesOrderFormalizeApprovedSubmission
+        | ApprovalDomainAction::VoucherSalesOrderFormalizeApprovedSubmission
+        | ApprovalDomainAction::SalesChangeOrderApplyEffectiveChange
+        | ApprovalDomainAction::SalesOrderCancelApprovalSubmission
+        | ApprovalDomainAction::VoucherSalesOrderCancelApprovalSubmission
+        | ApprovalDomainAction::SalesChangeOrderCancelApproval => {
+            dispatch_sales(registry, action, context, actor, executor).await
+        },
+        ApprovalDomainAction::PurchaseOrderFormalizeApprovedOrder
+        | ApprovalDomainAction::PurchaseChangeOrderApplyEffectiveChange
+        | ApprovalDomainAction::PurchaseOrderCancelApproval
+        | ApprovalDomainAction::PurchaseChangeOrderCancelApproval => {
+            dispatch_procurement(registry, action, context, actor, executor).await
+        },
+        ApprovalDomainAction::StockAdjustmentPost | ApprovalDomainAction::StockAdjustmentCancelApproval => {
+            dispatch_inventory(registry, action, context, actor, executor).await
+        },
+        ApprovalDomainAction::SalesInvoiceRequestApprove
+        | ApprovalDomainAction::SalesInvoiceRequestCancelApproval
+        | ApprovalDomainAction::CustomerReceiptPost
+        | ApprovalDomainAction::CustomerReceiptCancelApproval => {
+            dispatch_finance(registry, action, context, actor, executor).await
+        },
+        ApprovalDomainAction::CustomerRefundPost
+        | ApprovalDomainAction::SupplierRefundPost
+        | ApprovalDomainAction::ReceiptReversalPost
+        | ApprovalDomainAction::PaymentReversalPost
+        | ApprovalDomainAction::CustomerRefundCancelApproval
+        | ApprovalDomainAction::SupplierRefundCancelApproval
+        | ApprovalDomainAction::ReceiptReversalCancelApproval
+        | ApprovalDomainAction::PaymentReversalCancelApproval => {
+            dispatch_reverse(registry, action, context, actor, executor).await
+        },
+        ApprovalDomainAction::PurchasePaymentRequestApprove
+        | ApprovalDomainAction::PurchasePaymentRequestReject
+        | ApprovalDomainAction::PurchasePaymentRequestCancelApproval => {
+            dispatch_payment_request(registry, action, context, actor, executor).await
+        },
+        _ => rejected_action(action),
+    }
+}
+
+async fn dispatch_sales(
+    registry: &ApprovalActionRegistry,
+    action: ApprovalDomainAction,
+    context: &ApprovalActionContext,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> ServiceResult<()> {
+    match action {
+        ApprovalDomainAction::SalesOrderFormalizeApprovedSubmission
         | ApprovalDomainAction::VoucherSalesOrderFormalizeApprovedSubmission => {
             require_transaction(executor)?;
             crate::order_to_cash::SalesOrderFormalizationProcess::new(
@@ -75,6 +125,39 @@ async fn dispatch_action(
                 .apply_effective_change_apply(context.business_object_id(), actor, executor)
                 .await
         },
+        ApprovalDomainAction::SalesOrderCancelApprovalSubmission
+        | ApprovalDomainAction::VoucherSalesOrderCancelApprovalSubmission => {
+            crate::order_to_cash::cancel_approval(
+                &registry.db,
+                context.business_object_id(),
+                action,
+                actor,
+                executor,
+            )
+            .await
+        },
+        ApprovalDomainAction::SalesChangeOrderCancelApproval => {
+            crate::sales_change::cancel_approval(
+                &registry.db,
+                context.business_object_id(),
+                action,
+                actor,
+                executor,
+            )
+            .await
+        },
+        _ => rejected_action(action),
+    }
+}
+
+async fn dispatch_procurement(
+    registry: &ApprovalActionRegistry,
+    action: ApprovalDomainAction,
+    context: &ApprovalActionContext,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> ServiceResult<()> {
+    match action {
         ApprovalDomainAction::PurchaseOrderFormalizeApprovedOrder => {
             require_transaction(executor)?;
             crate::procure_to_pay::PurchaseOrderFormalizationProcess::new(
@@ -90,6 +173,38 @@ async fn dispatch_action(
                 .apply_effective_change_apply(context.business_object_id(), actor, executor)
                 .await
         },
+        ApprovalDomainAction::PurchaseOrderCancelApproval => {
+            crate::procure_to_pay::cancel_order_approval(
+                &registry.db,
+                context.business_object_id(),
+                action,
+                actor,
+                executor,
+            )
+            .await
+        },
+        ApprovalDomainAction::PurchaseChangeOrderCancelApproval => {
+            crate::procure_to_pay::cancel_change_approval_apply(
+                &registry.db,
+                context.business_object_id(),
+                action,
+                actor,
+                executor,
+            )
+            .await
+        },
+        _ => rejected_action(action),
+    }
+}
+
+async fn dispatch_inventory(
+    registry: &ApprovalActionRegistry,
+    action: ApprovalDomainAction,
+    context: &ApprovalActionContext,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> ServiceResult<()> {
+    match action {
         ApprovalDomainAction::StockAdjustmentPost => {
             crate::inventory_adjustment::InventoryAdjustmentService::new(
                 registry.db.clone(),
@@ -99,6 +214,28 @@ async fn dispatch_action(
             .await
             .map(|_| ())
         },
+        ApprovalDomainAction::StockAdjustmentCancelApproval => {
+            crate::inventory_adjustment::cancel_approval::cancel_stock_adjustment_approval_apply(
+                &registry.db,
+                context,
+                action,
+                actor,
+                executor,
+            )
+            .await
+        },
+        _ => rejected_action(action),
+    }
+}
+
+async fn dispatch_finance(
+    registry: &ApprovalActionRegistry,
+    action: ApprovalDomainAction,
+    context: &ApprovalActionContext,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> ServiceResult<()> {
+    match action {
         ApprovalDomainAction::SalesInvoiceRequestApprove => {
             crate::finance_posting::receivable::invoice_request::approve(
                 &registry.db,
@@ -127,6 +264,28 @@ async fn dispatch_action(
             )
             .await
         },
+        ApprovalDomainAction::CustomerReceiptCancelApproval => {
+            crate::finance_posting::receivable::cancel_customer_receipt_approval_apply(
+                &registry.db,
+                context.business_object_id(),
+                action,
+                actor,
+                executor,
+            )
+            .await
+        },
+        _ => rejected_action(action),
+    }
+}
+
+async fn dispatch_reverse(
+    registry: &ApprovalActionRegistry,
+    action: ApprovalDomainAction,
+    context: &ApprovalActionContext,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> ServiceResult<()> {
+    match action {
         ApprovalDomainAction::CustomerRefundPost | ApprovalDomainAction::SupplierRefundPost => {
             require_transaction(executor)?;
             crate::reverse_flow::finalize_approved_return(
@@ -150,67 +309,6 @@ async fn dispatch_action(
                 .post_payment_reversal_apply(context.business_object_id(), actor, executor)
                 .await
         },
-        ApprovalDomainAction::SalesOrderCancelApprovalSubmission
-        | ApprovalDomainAction::VoucherSalesOrderCancelApprovalSubmission => {
-            crate::order_to_cash::cancel_approval(
-                &registry.db,
-                context.business_object_id(),
-                action,
-                actor,
-                executor,
-            )
-            .await
-        },
-        ApprovalDomainAction::SalesChangeOrderCancelApproval => {
-            crate::sales_change::cancel_approval(
-                &registry.db,
-                context.business_object_id(),
-                action,
-                actor,
-                executor,
-            )
-            .await
-        },
-        ApprovalDomainAction::PurchaseOrderCancelApproval => {
-            crate::procure_to_pay::cancel_order_approval(
-                &registry.db,
-                context.business_object_id(),
-                action,
-                actor,
-                executor,
-            )
-            .await
-        },
-        ApprovalDomainAction::PurchaseChangeOrderCancelApproval => {
-            crate::procure_to_pay::cancel_change_approval_apply(
-                &registry.db,
-                context.business_object_id(),
-                action,
-                actor,
-                executor,
-            )
-            .await
-        },
-        ApprovalDomainAction::StockAdjustmentCancelApproval => {
-            crate::inventory_adjustment::cancel_approval::cancel_stock_adjustment_approval_apply(
-                &registry.db,
-                context,
-                action,
-                actor,
-                executor,
-            )
-            .await
-        },
-        ApprovalDomainAction::CustomerReceiptCancelApproval => {
-            crate::finance_posting::receivable::cancel_customer_receipt_approval_apply(
-                &registry.db,
-                context.business_object_id(),
-                action,
-                actor,
-                executor,
-            )
-            .await
-        },
         ApprovalDomainAction::CustomerRefundCancelApproval
         | ApprovalDomainAction::SupplierRefundCancelApproval
         | ApprovalDomainAction::ReceiptReversalCancelApproval
@@ -225,11 +323,41 @@ async fn dispatch_action(
             )
             .await
         },
-        _ => Err(ServiceError::BusinessLogicError(format!(
-            "动作 {} 必须由业务域提交入口执行，审批运行时不得反向调用",
-            action.as_str()
-        ))),
+        _ => rejected_action(action),
     }
+}
+
+async fn dispatch_payment_request(
+    registry: &ApprovalActionRegistry,
+    action: ApprovalDomainAction,
+    context: &ApprovalActionContext,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> ServiceResult<()> {
+    use crate::finance_posting::payable::payment_request;
+    require_transaction(executor)?;
+    payment_request::validate_approval_context(&registry.db, context, executor).await?;
+    let id = context.business_object_id();
+    let reason = context.reason().unwrap_or("审批取消，详细信息见审批记录");
+    match action {
+        ApprovalDomainAction::PurchasePaymentRequestApprove => {
+            payment_request::approve(&registry.db, id, actor, executor).await
+        },
+        ApprovalDomainAction::PurchasePaymentRequestReject => {
+            payment_request::reject(&registry.db, id, actor, reason, executor).await
+        },
+        ApprovalDomainAction::PurchasePaymentRequestCancelApproval => {
+            payment_request::cancel_approval(&registry.db, id, actor, reason, executor).await
+        },
+        _ => rejected_action(action),
+    }
+}
+
+fn rejected_action(action: ApprovalDomainAction) -> ServiceResult<()> {
+    Err(ServiceError::BusinessLogicError(format!(
+        "动作 {} 必须由业务域提交入口执行，审批运行时不得反向调用",
+        action.as_str()
+    )))
 }
 
 /// 审批领域动作必须复用调用方事务；没有会话时拒绝，避免在事务外生效。

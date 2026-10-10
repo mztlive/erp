@@ -50,6 +50,7 @@ import {
     openWorkspaceTask,
     pickCalendarDay,
     readHeaderDocumentNumber,
+    expectSourcingCounts,
 } from "../helpers/ui";
 
 const UI_TIMEOUT = 20_000;
@@ -387,12 +388,7 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
         await expect(
             page.getByRole("heading", { name: /供给分配|销售明细与供给方案/ }).first(),
         ).toBeVisible({ timeout: UI_TIMEOUT });
-        await expect(page.getByText("将创建采购单").locator("xpath=..")).toContainText(
-            "0 张",
-        );
-        await expect(page.getByText("将建立库存预留").locator("xpath=..")).toContainText(
-            "1 条",
-        );
+        await expectSourcingCounts(page, 0, 1);
         await page.locator("#procurement-orders-create-preview").click();
         const previewDialog = page.getByRole("dialog", { name: "预览供给分配" });
         await expect(previewDialog).toBeVisible({ timeout: UI_TIMEOUT });
@@ -456,8 +452,25 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
                 new RegExp(`^本次发货\\s*${SALE_QTY}(?:\\.0+)?(?:\\s*盒)?$`),
             ),
         ).toBeVisible({ timeout: UI_TIMEOUT });
+        const shippedResponse = page.waitForResponse(
+            (response) => response.request().method() === "POST" &&
+                /^\/admin\/deliveries\/[^/]+\/post$/.test(new URL(response.url()).pathname),
+            { timeout: UI_TIMEOUT },
+        );
         await page.locator("#fulfillment-operations-work-surface-confirm").click();
-        await confirmFormal(page, "确认发货？", "确认发货");
+        const shipped = await shippedResponse;
+        expect(shipped.ok(), await shipped.text()).toBe(true);
+        expect((await shipped.json()).data).toMatchObject({
+            delivery_type: "WAREHOUSE_SHIP",
+            sales_order_id: salesOrderId,
+            purchase_order_id: null,
+            status: "SHIPPED",
+            tracking_entries: [{
+                sales_order_line_id: salesLineId,
+                tracking_no: `SF${stamp}`,
+                carrier: "顺丰速运",
+            }],
+        });
 
         await assertBalanceNumbers(page, {
             onHand: AFTER_RESERVE_AVAILABLE,
@@ -515,7 +528,7 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
 
         page = await switchTo("fukuan");
         await page.goto("/workspace");
-        await expect(page.getByRole("button", { name: /供应商付款处理/ })).toHaveCount(0);
+        await expect(page.getByRole("button", { name: /供应商付款处理|待付款申请/ })).toHaveCount(0);
     } finally {
         await session?.context.close();
     }

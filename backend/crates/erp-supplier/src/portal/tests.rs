@@ -178,10 +178,34 @@ fn invalid_business_terms_and_empty_reason_are_rejected_before_mutation() {
     value.expected_supplier_version = 0;
     assert!(value.normalized().is_err());
     let mut value = request();
-    value.payment_term = "PERIOD_MONTH_30".into();
+    value.payment_term = "PERIOD_MONTH_367".into();
     value.settlement_mode = SettlementMode::Monthly;
     value.reconciliation_cycle = ReconciliationCycle::Weekly;
     assert!(value.normalized().is_err());
+}
+
+#[test]
+fn cooperation_terms_preserve_independent_reconciliation_frequency() {
+    for (mode, term) in [
+        (SettlementMode::Monthly, "PERIOD_MONTH_15"),
+        (SettlementMode::Quarterly, "PERIOD_QUARTER_15"),
+        (SettlementMode::Yearly, "PERIOD_YEAR_15"),
+        (SettlementMode::CashSettlement, "CASH_ON_APPROVAL"),
+    ] {
+        let proposal = CooperationRequest {
+            settlement_mode: mode,
+            reconciliation_cycle: ReconciliationCycle::Monthly,
+            payment_term: format!(" {term} "),
+            ..request()
+        };
+        let normalized = proposal.normalized().unwrap();
+        assert_eq!(normalized.settlement_mode, mode);
+        assert_eq!(normalized.payment_term, term);
+        assert_eq!(normalized.reconciliation_cycle, ReconciliationCycle::Monthly);
+    }
+    let mut invalid = serde_json::to_value(request()).unwrap();
+    invalid["reconciliation_cycle"] = serde_json::json!("fortnightly");
+    assert!(serde_json::from_value::<CooperationRequest>(invalid).is_err());
 }
 
 fn formal_facts() -> (SupplierAccount, SupplierCommercialProfileRevision) {

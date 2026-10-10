@@ -1,6 +1,6 @@
 //! 决定编排核心：通过、驳回与当前责任人失效阻塞。
 
-use bpm::engine::{CommitRequired, DecideCommand, TransitionPlan, block_current, decide};
+use bpm::engine::{CommitRequired, DecideCommand, TransitionPlan, block_current, decide, reject_terminal};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId};
 use bpm::model::types::{ApprovalBlockerCode, ApprovalDecision};
 use bpm::model::{ApprovalCommandReceipt, ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId};
@@ -10,6 +10,8 @@ use super::authorization::ensure_triple_responsibility;
 use super::idempotency::{ReceiptBranch, decision_identity};
 use super::start::map_engine_error;
 use super::{ExecutionCommandInput, PreparedExecution};
+use crate::entity::approval_integration::document_type_of;
+use crate::entity::document_registry::DocumentType;
 use crate::error::{Error, Result};
 
 /// 决定编排输入。
@@ -81,6 +83,9 @@ pub fn prepare_decision(input: DecisionExecutionInput) -> Result<PreparedExecuti
     if input.open_task_count > 1 {
         return prepare_open_task_conflict(input);
     }
+    let terminal_reject = input.decision == ApprovalDecision::Reject
+        && document_type_of(input.instance.process_kind) == DocumentType::PurchasePaymentRequest;
+    let decide = if terminal_reject { reject_terminal } else { decide };
     let plan = decide(
         input.instance,
         input.current,
@@ -97,10 +102,19 @@ pub fn prepare_decision(input: DecisionExecutionInput) -> Result<PreparedExecuti
         },
     )
     .map_err(map_engine_error)?;
-    let domain_action =
-        (plan.commit == CommitRequired::TerminalApproved).then_some(DomainActionKind::FinalApprove);
+    let domain_action = decision_domain_action(&plan, terminal_reject);
     let receipt = receipt_from_plan(input.receipt_id, identity.current(), &plan, input.command.now)?;
     Ok(PreparedExecution::Apply(Box::new(apply_plan(plan, receipt, domain_action))))
+}
+
+fn decision_domain_action(plan: &TransitionPlan, terminal_reject: bool) -> Option<DomainActionKind> {
+    if plan.commit == CommitRequired::TerminalApproved {
+        Some(DomainActionKind::FinalApprove)
+    } else if terminal_reject && plan.instance.status.is_terminal() {
+        Some(DomainActionKind::Reject)
+    } else {
+        None
+    }
 }
 
 /// 收据构造失败时返回校验错误。

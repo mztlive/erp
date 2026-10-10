@@ -53,10 +53,10 @@ export const HANDLER_REGISTRY: Readonly<Record<string, HandlerRegistration>> = {
         baseHref: "/procurement/orders",
     },
     supplier_payment_execution: {
-        workItemTypeLabel: "供应商付款处理",
+        workItemTypeLabel: "待付款申请",
         family: "finance",
         destinationWorkspaceId: "W12",
-        baseHref: "/finance/supplier-accounts",
+        baseHref: "/procurement/payment-requests",
     },
     sales_invoice_execution: {
         workItemTypeLabel: "销项开票处理",
@@ -220,6 +220,12 @@ function buildDocumentApprovalHref(
             }
             return withParams("/finance/customer-accounts", params)
         case "W12": {
+            if (item.businessObjectType === "purchase_payment_request") {
+                return withParams(
+                    `/procurement/payment-requests/${encodeURIComponent(businessObjectId)}`,
+                    params,
+                )
+            }
             const previewKind = supplierApprovalPreviewKind(
                 item.businessObjectType,
             )
@@ -359,18 +365,14 @@ export function buildHandlerHref(item: HandlerNavigationInput): string | null {
                 params,
             )
         case "supplier_payment_execution": {
-            const purchaseOrderId = requiredValue(item.rootBusinessObjectId)
-            if (!purchaseOrderId || purchaseOrderId === businessObjectId) {
+            if (item.businessObjectType !== "purchase_payment_request")
                 return null
-            }
             params.set("from", "W01")
-            params.set("view", "payable")
-            params.set("session", "payment")
-            params.set("purchaseOrderId", purchaseOrderId)
-            params.set("detailId", businessObjectId)
-            params.set("previewKind", "payable")
             params.set("currentWorkItemId", workItemId)
-            return withParams(registration.baseHref, params)
+            return withParams(
+                `${registration.baseHref}/${encodeURIComponent(businessObjectId)}`,
+                params,
+            )
         }
         case "sales_invoice_execution": {
             const salesOrderId = requiredValue(item.rootBusinessObjectId)

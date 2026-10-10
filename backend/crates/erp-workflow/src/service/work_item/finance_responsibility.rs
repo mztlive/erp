@@ -620,7 +620,7 @@ mod tests {
             required_finance_permissions(FinanceResponsibilityOperation::SupplierPayment)
                 .unwrap()
                 .iter()
-                .any(|code| crate::ports::permission_covers(code, "supplier_payment:commit"))
+                .any(|code| crate::ports::permission_covers(code, "purchase_payment_request:pay"))
         );
         assert!(
             required_finance_permissions(FinanceResponsibilityOperation::SalesInvoice)

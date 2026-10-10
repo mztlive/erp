@@ -152,7 +152,7 @@ export function SupplierAccountRecordPreview({
                                         kind: "payment",
                                         id: payment.paymentId,
                                         no: payment.paymentNo,
-                                        amount: payment.amount,
+                                        amount: payment.effectiveAmount,
                                         supplierName: payment.supplierName,
                                     })
                                 }}
@@ -171,7 +171,7 @@ export function SupplierAccountRecordPreview({
                                         sourcePaymentNo: payment.paymentNo,
                                         supplierId: payment.supplierId,
                                         supplierName: payment.supplierName,
-                                        amount: payment.amount,
+                                        amount: payment.effectiveAmount,
                                     })
                                 }}
                             >

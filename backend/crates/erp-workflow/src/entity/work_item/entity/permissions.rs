@@ -256,7 +256,7 @@ impl WorkItemType {
     /// * `business_object_type` - 付款执行任务固定对象类型
     ///
     /// # 返回
-    /// `SUPPLIER_PAYMENT_EXECUTION + payable_account` 返回完整权限；其它组合返回 `None`。
+    /// `SUPPLIER_PAYMENT_EXECUTION + purchase_payment_request` 返回完整权限；其它组合返回 `None`。
     ///
     /// # 错误
     /// 不返回错误。
@@ -264,17 +264,10 @@ impl WorkItemType {
         self,
         business_object_type: &str,
     ) -> Option<&'static [&'static str]> {
-        if !self.is_supplier_payment_execution() || business_object_type != "payable_account" {
+        if !self.is_supplier_payment_execution() || business_object_type != "purchase_payment_request" {
             return None;
         }
-        Some(&[
-            "payable_account:list",
-            "payable_account:detail",
-            "party_bank_account:reveal",
-            "supplier_payment:list",
-            "supplier_payment:detail",
-            "supplier_payment:commit",
-        ])
+        Some(&["purchase_payment_request:detail", "purchase_payment_request:pay"])
     }
 
     /// 返回 W11 销项开票执行所需的完整权限集合。

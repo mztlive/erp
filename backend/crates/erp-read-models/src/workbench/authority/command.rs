@@ -306,6 +306,7 @@ impl super::recipe::CommandFactReads for super::WorkItemFactsReader {
             Step::SalesChange => self.load_sales_change_review_facts(keys, facts, executor).await,
             Step::Receivable => self.load_receivable_account_facts(keys, facts, executor).await,
             Step::Payable => self.load_payable_account_facts(keys, facts, executor).await,
+            Step::PaymentRequest => self.load_purchase_payment_request_facts(keys, facts, executor).await,
             Step::CustomerReceipt => self.load_customer_receipt_facts(keys, facts, executor).await,
             Step::CustomerRefund => self.load_customer_refund_facts(keys, facts, executor).await,
             Step::ReceiptReversal => self.load_receipt_reversal_facts(keys, facts, executor).await,

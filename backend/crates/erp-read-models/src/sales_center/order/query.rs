@@ -4,11 +4,10 @@ mod customer_names;
 mod detail;
 
 use std::collections::{HashMap, HashSet};
-use std::str::FromStr;
 
 use application_core::AuditActor;
 use erp_contract::repository::prelude::*;
-use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId};
+use erp_core::ids::{SalesOrderId, SalesOrderSubmissionId};
 use erp_customer::repository::prelude::*;
 use erp_identity::repository::prelude::*;
 use erp_identity::{AccessControlExt, Permission, subject};
@@ -24,35 +23,10 @@ use super::dto::{
 };
 use super::status::stage_code_label_tone;
 use super::{SalesOrderReadService, dto};
-use crate::{Error, Result};
+use crate::Result;
 
 /// 销售单阶段责任快照：`(责任角色, 责任人账号, 责任人姓名, 时限)`。
 type StageOwnerSnapshot = HashMap<String, (Option<String>, Option<String>, Option<String>, Option<u64>)>;
-
-/// 构造尚无当前销售版本时的零采购覆盖视图。
-///
-/// # 参数
-/// 无。
-///
-/// # 返回
-/// 返回目标、覆盖、剩余和进度均为零的视图。
-///
-/// # 错误
-/// 不返回错误。
-///
-/// # Panics
-/// 零数量与零进度字面量必须可解析。`expect` 只在这些常量本身非法时触发。
-///
-/// # 关键业务约束
-/// 零值只用于未生效销售单，不掩盖已生效销售单的当前版本缺失。
-fn empty_sales_procurement_coverage() -> SalesProcurementCoverageView {
-    SalesProcurementCoverageView {
-        total_quantity: erp_core::money::Quantity::from_str("0").expect("零数量合法"),
-        covered_quantity: erp_core::money::Quantity::from_str("0").expect("零数量合法"),
-        remaining_quantity: erp_core::money::Quantity::from_str("0").expect("零数量合法"),
-        progress: erp_core::money::Rate::from_str("0").expect("零进度合法"),
-    }
-}
 
 impl SalesOrderReadService {
     /// 分页查询销售单列表。
@@ -163,6 +137,9 @@ impl SalesOrderReadService {
         coverage: &SalesProcurementCoverageView,
         actor: Option<&AuditActor>,
     ) -> Result<PurchaseCreationAccessView> {
+        if let Some(message) = coverage.source_change_blocker() {
+            return Ok(blocked_purchase_creation_access(message));
+        }
         if let Some(message) = order.procurement_creation_blocker(coverage.remaining_quantity) {
             return Ok(blocked_purchase_creation_access(message));
         }
@@ -226,43 +203,6 @@ impl SalesOrderReadService {
             .list_open_procurement_owned_by(actor_id, Some(sales_order_id), None, &mut NoTransaction)
             .await?
             .len())
-    }
-
-    /// 计算销售单当前版本采购目标、覆盖、剩余与进度。
-    ///
-    /// # 参数
-    /// * `order` - 销售稳定单
-    ///
-    /// # 返回
-    /// 有当前版本时返回按采购当前指针计算的覆盖视图；草稿无当前版本时返回零值。
-    ///
-    /// # 错误
-    /// 当前版本、采购指针或覆盖数量不一致，以及仓储读取失败时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 正式采购只读取当前采购版本及其 allocation，草稿类只读取当前提交。
-    async fn sales_procurement_coverage(
-        &self,
-        order: &erp_sales::entity::sales_order::SalesOrder,
-    ) -> Result<SalesProcurementCoverageView> {
-        let Some(revision_id) = order.current_revision_id() else {
-            return Ok(empty_sales_procurement_coverage());
-        };
-        let facts = crate::purchase_center::repository::load_procurement_coverage_facts(
-            &self.db,
-            &SalesOrderRevisionId::new(revision_id),
-            &SalesOrderId::new(order.base.id.clone()),
-            &mut NoTransaction,
-        )
-        .await?;
-        let coverage = erp_procurement::entity::purchase_order::build_procurement_coverage(facts)
-            .map_err(Error::Logic)?;
-        Ok(SalesProcurementCoverageView {
-            total_quantity: coverage.summary.total_quantity,
-            covered_quantity: coverage.summary.covered_quantity,
-            remaining_quantity: coverage.summary.remaining_quantity,
-            progress: coverage.summary.progress,
-        })
     }
 
     /// 解析当前审核轨阶段的责任角色、责任人和时限（详情页专用）。

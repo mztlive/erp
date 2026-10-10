@@ -67,6 +67,10 @@ pub(crate) const FINANCE_PERMISSIONS: &[&str] = &[
     // 供应商往来
     "payable_account:*",
     "supplier_payment:*",
+    "purchase_payment_request:list",
+    "purchase_payment_request:detail",
+    "purchase_payment_request:pay",
+    "purchase_payment_request:close",
     "purchase_invoice_allocation:*",
     // 成本与结算
     "cost_entry:*",

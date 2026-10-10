@@ -26,6 +26,7 @@ import type {
     RevisionTimelineEntry,
 } from "@/features/master-data/types"
 import { paymentTermLabel } from "@/lib/business-options"
+import { reconciliationCycleLabel } from "@/lib/supplier-payment-terms"
 import { baseCenter } from "./base"
 
 export async function centerSupplier(
@@ -146,6 +147,10 @@ export async function centerSupplier(
         fact("联系电话", contact?.telephone),
         fact("结算方式", settlementLabel(profile?.settlement_mode)),
         fact(
+            "对账频率",
+            reconciliationCycleLabel(profile?.reconciliation_cycle),
+        ),
+        fact(
             "付款条件",
             profile?.payment_term_snapshot
                 ? paymentTermLabel(profile.payment_term_snapshot)
@@ -210,6 +215,11 @@ export async function centerSupplier(
             value: profile?.payment_term_snapshot
                 ? paymentTermLabel(profile.payment_term_snapshot)
                 : "—",
+        },
+        {
+            label: "对账频率",
+            value:
+                reconciliationCycleLabel(profile?.reconciliation_cycle) || "—",
         },
         {
             label: "发票类型",

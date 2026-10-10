@@ -11,7 +11,7 @@ use crate::{Error, Result};
 impl SalesCommandAccess {
     /// 校验所选结算主体并读取当前法定名称。
     /// # 参数
-    /// `authorized_default` 为已授权合同默认主体或旧无合同客户主体；`selected` 为所选主体。
+    /// `authorized_default` 为已授权合同默认主体；`selected` 为所选我方公司主体。
     /// `executor` 沿用调用方事务。
     /// # 返回
     /// 经授权且启用的企业主体名称。
@@ -23,6 +23,15 @@ impl SalesCommandAccess {
         selected: &PartyId,
         executor: &mut dyn Executor,
     ) -> Result<String> {
+        let selected_company = self
+            .db
+            .parties()
+            .find_by_id(selected.as_ref(), executor)
+            .await?
+            .filter(|party| party.is_active() && party.company_profile.is_some());
+        if selected_company.is_none() {
+            return Err(Error::ValidationError("我方结算主体必须是启用的我方公司".into()));
+        }
         if selected != authorized_default {
             let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
                 .resolve(&self.actor, "settlement_party", "list", executor)

@@ -34,6 +34,12 @@ use crate::repository::prelude::*;
 /// 文件资产列表筛选条件类型（经 `FileAssetExt` 关联类型跨 crate 可达）。
 type FileAssetFilter = <mongodb::Database as FileAssetExt>::FileAssetFilter;
 
+/// 区分直接元数据登记与已完成真实内容检查的受控上传。
+enum AssetRegistrationOrigin {
+    Metadata,
+    ContentCheckedUpload,
+}
+
 /// 文件资产服务。
 ///
 /// 提供文件资产登记、单据附件关联、安全检查与销毁编排。
@@ -164,7 +170,7 @@ impl FileAssetService {
         req: RegisterFileAssetRequest,
         actor: &AuditActor,
     ) -> Result<FileAssetView> {
-        self.register_file_asset_command(req, None, actor).await
+        self.register_file_asset_command(req, None, AssetRegistrationOrigin::Metadata, actor).await
     }
 
     /// 登记文件资产，并在同一事务内建立业务单据附件关联。
@@ -190,7 +196,62 @@ impl FileAssetService {
         usage: AttachmentUsage,
         actor: &AuditActor,
     ) -> Result<FileAssetView> {
-        self.register_file_asset_command(req, Some((document_id, usage)), actor).await
+        self.register_file_asset_command(
+            req,
+            Some((document_id, usage)),
+            AssetRegistrationOrigin::Metadata,
+            actor,
+        )
+        .await
+    }
+
+    /// 登记受控上传已完成真实基础内容检查的文件资产。
+    ///
+    /// 调用方必须先完成文件字节、大小及 MIME 检查；该入口只记录
+    /// `CONTENT_CHECKED`，不登记病毒或恶意内容安全扫描通过。
+    /// # 参数
+    /// * `req` - 已完成内容检查并保存对象字节的服务端登记数据
+    /// * `actor` - 已通过鉴权的真实上传人
+    /// # 返回
+    /// 返回基础内容已检查的文件资产，创建人固定为当前上传人。
+    /// # 错误
+    /// 元数据非法、重复对象键或登记与审计事务失败时返回错误。
+    pub async fn register_content_checked_file_asset(
+        &self,
+        req: RegisterFileAssetRequest,
+        actor: &AuditActor,
+    ) -> Result<FileAssetView> {
+        self.register_file_asset_command(req, None, AssetRegistrationOrigin::ContentCheckedUpload, actor)
+            .await
+    }
+
+    /// 登记受控上传完成内容检查的文件，并原子建立业务附件关联。
+    ///
+    /// 调用方须先验证真实文件内容及当前单据附件资格；直接元数据登记
+    /// 不得使用本入口。该入口保持后续扫描、隔离、到期和销毁治理规则。
+    /// # 参数
+    /// * `req` - 已完成真实内容检查的服务端文件元数据
+    /// * `document_id` - 已授权的业务单据
+    /// * `usage` - 附件用途
+    /// * `actor` - 已通过鉴权的真实上传人
+    /// # 返回
+    /// 返回基础内容已检查的资产；资产、关联和审计沿同一事务保存。
+    /// # 错误
+    /// 请求非法、单据未登记、重复对象键或事务失败时返回错误。
+    pub async fn register_content_checked_file_asset_with_attachment(
+        &self,
+        req: RegisterFileAssetRequest,
+        document_id: BusinessDocumentId,
+        usage: AttachmentUsage,
+        actor: &AuditActor,
+    ) -> Result<FileAssetView> {
+        self.register_file_asset_command(
+            req,
+            Some((document_id, usage)),
+            AssetRegistrationOrigin::ContentCheckedUpload,
+            actor,
+        )
+        .await
     }
 
     /// 执行文件资产登记命令，并按需在同一事务内追加附件关联。
@@ -198,10 +259,10 @@ impl FileAssetService {
         &self,
         req: RegisterFileAssetRequest,
         attachment_target: Option<(BusinessDocumentId, AttachmentUsage)>,
+        origin: AssetRegistrationOrigin,
         actor: &AuditActor,
     ) -> Result<FileAssetView> {
-        req.validate()?;
-        let asset = FileAsset::new(FileAssetId::new(next_id()), req.into_data(actor.id())?)?;
+        let asset = Self::registration_asset(req, actor.id(), origin)?;
         let asset_audit = self.audit.resource_log(
             actor.clone(),
             "file_asset.register",
@@ -250,6 +311,20 @@ impl FileAssetService {
             .await?;
 
         Ok(asset.into())
+    }
+
+    /// 校验受控登记输入，以真实上传人构造资产并保留来源对应检查状态。
+    fn registration_asset(
+        req: RegisterFileAssetRequest,
+        actor_id: &str,
+        origin: AssetRegistrationOrigin,
+    ) -> Result<FileAsset> {
+        req.validate()?;
+        let mut asset = FileAsset::new(FileAssetId::new(next_id()), req.into_data(actor_id)?)?;
+        if matches!(origin, AssetRegistrationOrigin::ContentCheckedUpload) {
+            asset.mark_content_checked()?;
+        }
+        Ok(asset)
     }
 
     /// 建立单据附件关联。
@@ -455,10 +530,94 @@ mod tests {
     use erp_core::common::time::Instant;
     use erp_core::ids::FileAssetId;
 
+    use super::{AssetRegistrationOrigin, FileAssetService, RegisterFileAssetRequest};
     use crate::entity::file_asset::{
         ContentHmac, FileAsset, FileAssetData, RetentionClass, SecurityScanStatus, SensitivityClass,
         content_fingerprint,
     };
+
+    fn registration() -> RegisterFileAssetRequest {
+        RegisterFileAssetRequest {
+            storage_object_key: "obj/upload.png".into(),
+            file_name: "upload.png".into(),
+            content_type: "image/png".into(),
+            byte_size: 1,
+            content_hmac: content_fingerprint("checked-content", b"secret"),
+            sensitivity_class: SensitivityClass::Sensitive,
+            retention_class: RetentionClass::LongTerm,
+            expires_at: None,
+        }
+    }
+
+    #[test]
+    fn checked_upload_records_usable_content_and_real_uploader_without_passing_scan() {
+        let asset = FileAssetService::registration_asset(
+            registration(),
+            "procurement-1",
+            AssetRegistrationOrigin::ContentCheckedUpload,
+        )
+        .unwrap();
+        assert_eq!(asset.created_by, "procurement-1");
+        assert_ne!(asset.created_by, "other-uploader");
+        assert_eq!(asset.security_scan_status, SecurityScanStatus::ContentChecked);
+        assert!(asset.is_usable_at(Instant::now()));
+    }
+
+    #[test]
+    fn metadata_registration_remains_pending_and_invalid_input_cannot_gain_checked_status() {
+        let asset = FileAssetService::registration_asset(
+            registration(),
+            "procurement-1",
+            AssetRegistrationOrigin::Metadata,
+        )
+        .unwrap();
+        assert_eq!(asset.security_scan_status, SecurityScanStatus::Pending);
+        assert!(!asset.is_usable_at(Instant::now()));
+        let mut invalid = registration();
+        invalid.content_hmac = "not-a-valid-fingerprint".into();
+        assert!(
+            FileAssetService::registration_asset(
+                invalid,
+                "procurement-1",
+                AssetRegistrationOrigin::ContentCheckedUpload,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn checked_upload_preserves_expiry_quarantine_rejection_and_destroyed_guards() {
+        let mut expiring = registration();
+        expiring.retention_class = RetentionClass::SevenDays;
+        expiring.expires_at = Some(10);
+        let expired = FileAssetService::registration_asset(
+            expiring,
+            "procurement-1",
+            AssetRegistrationOrigin::ContentCheckedUpload,
+        )
+        .unwrap();
+        assert!(expired.is_usable_at(Instant::from_unix_secs(9)));
+        assert!(!expired.is_usable_at(Instant::from_unix_secs(10)));
+        for status in [SecurityScanStatus::Quarantined, SecurityScanStatus::Rejected] {
+            let mut asset = FileAssetService::registration_asset(
+                registration(),
+                "procurement-1",
+                AssetRegistrationOrigin::ContentCheckedUpload,
+            )
+            .unwrap();
+            asset.mark_scan_result(status).unwrap();
+            assert!(!asset.is_usable_at(Instant::now()));
+            assert!(asset.mark_content_checked().is_err());
+        }
+        let mut destroyed = FileAssetService::registration_asset(
+            registration(),
+            "procurement-1",
+            AssetRegistrationOrigin::ContentCheckedUpload,
+        )
+        .unwrap();
+        destroyed.destroy(Instant::now()).unwrap();
+        assert!(!destroyed.is_usable_at(Instant::now()));
+    }
 
     fn asset() -> FileAsset {
         FileAsset::new(

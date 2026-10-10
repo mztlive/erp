@@ -90,6 +90,7 @@ export type SupplierFields = Readonly<{
     address?: string
     clearAddress?: boolean
     settlement?: string
+    reconciliationCycle?: string
     paymentTerm?: string
     capability?: string
     businessCategory?: string

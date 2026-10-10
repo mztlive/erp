@@ -110,6 +110,23 @@ impl Pagination for PartyBankAccountFilter {
 /// 银行账户集合仓储的域查询扩展。
 #[allow(async_fn_in_trait)]
 pub trait PartyBankAccountRepositoryExt {
+    /// 锁定冻结账户版本，资金执行写锁与账户维护串行化。
+    ///
+    /// # 参数
+    /// * `id` - 本次申请冻结的收款账户。
+    /// * `version` - 审核冻结的账户内容版本。
+    /// * `executor` - 调用方事务执行器。
+    /// # 返回
+    /// 版本仍有效且写锁成功时返回 `true`。
+    /// # 错误
+    /// 数据库写入失败时返回错误。锁序号不改变审核内容版本。
+    async fn lock_for_payment_request(
+        &self,
+        id: &str,
+        version: u64,
+        executor: &mut dyn Executor,
+    ) -> Result<bool>;
+
     /// 分页检索银行账户列表（投影查询，敏感字段不进投影）。
     ///
     /// 排序字段经仓储白名单校验（`created_at`/`bank_account_no`/`valid_from`），
@@ -245,6 +262,23 @@ pub trait PartyBankAccountRepositoryExt {
 }
 
 impl PartyBankAccountRepositoryExt for Repository<'_, PartyBankAccount> {
+    async fn lock_for_payment_request(
+        &self,
+        id: &str,
+        version: u64,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        let filter = doc! { "id": id, "version": i64::try_from(version)
+        .map_err(|_| persistence_core::Error::EntityMetadataOutOfRange("账户版本"))?,
+        "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        let update = doc! { "$inc": { "payment_request_lock": 1_i64 } };
+        let result = match executor.session() {
+            Some(session) => self.collection().update_one(filter, update).session(session).await?,
+            None => self.collection().update_one(filter, update).await?,
+        };
+        Ok(result.modified_count == 1)
+    }
+
     async fn search_party_bank_accounts(
         &self,
         filter: &PartyBankAccountFilter,

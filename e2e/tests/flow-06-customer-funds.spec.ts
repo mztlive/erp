@@ -11,7 +11,7 @@
  * - 一次工作台开票只能核销当前任务绑定的一张应收子账，不能一张发票跨多张销售单。
  * - 回款正式入账后列表状态文案是「已过账」（按钮不用「过账」）。
  * - 销售单开票进度完成态文案是「已开齐」，不是文档表格里的「已完成」。
- * - 财务三人共用 role-finance：caiwu 可能看见「登记回款」，提交时被 ForbidSubmitterAsApprover 拒绝。
+ * - 财务岗位分别使用财务总监、出纳和开票员角色；caiwu 仅复核，不具备回款创建或提交权限。
  */
 import { archiveContractViaUi } from "../helpers/contracts"
 import { test, expect, type Browser, type BrowserContext, type Page } from "../helpers/test"
@@ -31,7 +31,7 @@ import {
 import { loginViaUi, openLoggedInWorkspace } from "../helpers/login"
 import { expectReceiptPreview, submitReceiptReversalRequest } from "../helpers/receipts"
 import { assertReceiptRegistrationDraft } from "../helpers/receipt-registration"
-import { API_BASE, apiToken } from "../helpers/api"
+import { API_BASE, apiGet, apiToken } from "../helpers/api"
 import {
     approveCurrentDocument,
     chooseOption,
@@ -109,9 +109,13 @@ test.describe("flow-06 客户票款：分次回款、销项发票、核销与冲
             await page.goto(`/sales/orders/${orderB.id}`)
             await expectEffectiveSalesOrder(page, orderB.orderNo)
 
-            // ── 3. 负向：caiwu 不得自己提交回款（岗位分离，运行时 ForbidSubmitterAsApprover）──
+            // ── 3. 负向：财务总监没有回款登记权限，伪造合法请求同样被服务端拒绝且不影响账 ──
             const caiwuDenied = await openRole(browser, extra, "caiwu")
-            await assertCaiwuCannotSubmitReceipt(caiwuDenied.page, legalName)
+            await assertCaiwuCannotSubmitReceipt(caiwuDenied.page, {
+                customerId,
+                salesOrderIds: [orderA.id, orderB.id],
+                stamp,
+            })
             await caiwuDenied.context.close()
 
             // ── 4. 出纳分次回款：多单核销、已有草稿提交；先部分再结清 ──
@@ -159,6 +163,7 @@ test.describe("flow-06 客户票款：分次回款、销项发票、核销与冲
                     data: {
                         receipt_no: draftNo,
                         counterparty_party_id: counterpartyPartyId,
+                        customer_id: customerId,
                         received_at: receivedAt,
                         amount: "100.00",
                         bank_reference: `BANK-DRAFT-F06-${stamp}`,
@@ -167,7 +172,8 @@ test.describe("flow-06 客户票款：分次回款、销项发票、核销与冲
                 expect(created.ok(), await created.text()).toBeTruthy()
                 const draft = (await created.json()) as { data: { id: string; status: string; version: number } }
                 expect(draft.data.status).toBe("draft")
-                await fukuan.page.goto(`/finance/customer-accounts?view=receipt&previewKind=receipt&previewId=${encodeURIComponent(draft.data.id)}`)
+                // 沿同主体的真实应收来源进入草稿，名称来自冻结销售依据。
+                await fukuan.page.goto(`/finance/customer-accounts?view=receivable&previewKind=receipt&previewId=${encodeURIComponent(draft.data.id)}`)
                 await expectReceiptPreview(fukuan.page, draftNo)
                 await fukuan.page.locator("#customer-receivables-preview-receipt-continue-allocate").click()
                 await expect(fukuan.page.getByRole("heading", { name: "继续核销回款", exact: true })).toBeVisible()
@@ -652,46 +658,97 @@ async function registerReceiptAllocatingBothOrders(
     return { receiptNo, receiptId, counterpartyPartyId }
 }
 
-async function assertCaiwuCannotSubmitReceipt(page: Page, customerName: string) {
-    // 种子财务角色共用回款权限；等待实际权限加载后验证运行时岗位分离。
-    await startReceiptSession(page, customerName)
-    await page.locator("#customer-receivables-session-amount").fill("1.00")
-    await page.locator("#customer-receivables-session-bank-reference").fill("CAI-WU-SHOULD-FAIL")
-    const selection = page
-        .locator("#customer-receivables-session-allocations")
-        .getByRole("checkbox")
-        .first()
-    await expect(selection).toBeVisible({ timeout: LONG })
-    await selection.check()
-    await expect(selection).toBeChecked()
-    const fill = page.getByRole("button", { name: "填入剩余" }).first()
-    await expect(fill).toBeEnabled({ timeout: LONG })
-    await fill.click()
-    const submit = page.locator("#customer-receivables-session-submit")
-    await expect(submit).toBeEnabled({ timeout: LONG })
-    await submit.click()
-    const confirm = page.locator("#customer-receivables-session-receipt-confirm-dialog-confirm")
-    await expect(confirm).toBeVisible({ timeout: LONG })
-    const rejected = page.waitForResponse(
-        (response) =>
-            response.request().method() === "POST" &&
-            new URL(response.url()).pathname === "/admin/customer-receipts/commit",
-        { timeout: 60_000 },
-    )
-    await confirm.click()
-    const response = await rejected
-    const result = (await response.json()) as {
-        success?: boolean
-        code?: string
-        errorMessage?: string
+async function assertCaiwuCannotSubmitReceipt(
+    page: Page,
+    input: { customerId: string; salesOrderIds: readonly [string, string]; stamp: string },
+) {
+    await page.goto("/finance/customer-accounts")
+    await waitHeading(page, "客户往来")
+    const register = page.locator("#customer-receivables-header-register-receipt")
+    await expect(register).toBeVisible({ timeout: LONG })
+    await expect(register).toBeDisabled()
+    await expect(register).toHaveAttribute("title", /当前账号没有执行此操作的权限/)
+    await expect(page.getByRole("heading", { name: "登记回款", exact: true })).toHaveCount(0)
+
+    type Receivable = {
+        id: string
+        sales_order_id: string
+        counterparty_party_id: string
+        gross_total: string
+        settled_total: string
+        open_total: string
+        version: number
+        entries: { id: string; direction: string; amount: string }[]
     }
-    expect(response.status(), result.errorMessage).toBe(400)
-    expect(result.success).toBe(false)
-    expect(result.code).toBe("INVALID_REQUEST")
-    expect(result.errorMessage).toContain("提交人不得审批自己的单据")
-    await expect(
-        page.getByText(/提交人不得审批自己的单据/),
-    ).toBeVisible({ timeout: LONG })
+    type ReceiptPage = { items: { id: string; receipt_no: string }[]; total: number }
+    const adminToken = await apiToken("admin")
+    const readReceivables = () => Promise.all(input.salesOrderIds.map((salesOrderId) =>
+        apiGet<{ items: Receivable[] }>(adminToken, "/admin/receivable-accounts", {
+            sales_order_id: salesOrderId,
+            page_size: 100,
+        }),
+    ))
+    const before = await readReceivables()
+    for (const [index, result] of before.entries()) {
+        expect(result.items).toHaveLength(1)
+        expect(result.items[0]).toMatchObject({
+            sales_order_id: input.salesOrderIds[index],
+            gross_total: UNIT_PRICE,
+            settled_total: "0.00",
+            open_total: UNIT_PRICE,
+        })
+    }
+    const account = before[0].items[0]
+    expect(before[1].items[0].counterparty_party_id).toBe(account.counterparty_party_id)
+    const entry = account.entries.find((item) => item.direction === "increase")
+    expect(entry).toBeDefined()
+    expect(entry!.amount).toBe(UNIT_PRICE)
+    const readReceipts = () => apiGet<ReceiptPage>(adminToken, "/admin/customer-receipts", {
+        counterparty_party_id: account.counterparty_party_id,
+        page_size: 100,
+    })
+    const receiptsBefore = await readReceipts()
+    expect(receiptsBefore.items).toEqual([])
+    expect(receiptsBefore.total).toBe(0)
+
+    // 身份、到账金额及分录均取自真实有效来源，拒绝必须来自岗位权限而非非法载荷。
+    const receipt = {
+        receipt_no: `DENIED-F06-${input.stamp}`,
+        counterparty_party_id: account.counterparty_party_id,
+        customer_id: input.customerId,
+        received_at: Math.floor(Date.now() / 1000),
+        amount: "1.00",
+        bank_reference: `CAI-WU-SHOULD-FAIL-${input.stamp}`,
+    }
+    const submit = {
+        receipt_id: null,
+        expected_version: null,
+        receipt,
+        allocations: [{ receivable_entry_id: entry!.id, allocated_amount: "1.00" }],
+        idempotency_key: `denied-f06-${input.stamp}`,
+    }
+    const token = await apiToken("caiwu")
+    for (const [endpoint, data] of [
+        ["/admin/customer-receipts", receipt],
+        ["/admin/customer-receipts/commit", submit],
+    ] as const) {
+        const response = await page.request.post(`${API_BASE}${endpoint}`, {
+            headers: { Authorization: `Bearer ${token}` },
+            data,
+        })
+        const result = (await response.json()) as { success?: boolean; code?: string; errorMessage?: string }
+        expect(response.status(), result.errorMessage).toBe(403)
+        expect(result.success).toBe(false)
+        expect(result.code).toBe("PERMISSION_DENIED")
+        expect(result.errorMessage).toContain("当前账号没有执行此操作的权限")
+    }
+    const receiptsAfter = await readReceipts()
+    expect(receiptsAfter.items, "拒绝创建和提交后，不得产生回款草稿或审批中回款").toEqual(receiptsBefore.items)
+    expect(receiptsAfter.total, "拒绝请求不得改变回款记录总数").toBe(receiptsBefore.total)
+    const after = await readReceivables()
+    for (const [index, result] of after.entries()) {
+        expect(result.items, "拒绝请求不得改变应收金额、核销、分录或账务版本").toEqual(before[index].items)
+    }
 }
 
 // ─── 销项发票（W01 开票任务）──────────────────────────────────────────────

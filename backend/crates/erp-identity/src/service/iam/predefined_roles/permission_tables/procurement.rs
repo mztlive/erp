@@ -75,6 +75,13 @@ pub(crate) const PROCUREMENT_PERMISSIONS: &[&str] = &[
     "sales_order:detail",
     "procurement_person:list",
     "purchase_order:*",
+    "purchase_payment_request:list",
+    "purchase_payment_request:detail",
+    "purchase_payment_request:create",
+    "purchase_payment_request:update",
+    "purchase_payment_request:submit",
+    "purchase_payment_request:withdraw",
+    "purchase_payment_request:close",
     "purchase_change_order:*",
     // 销售变更履约影响确认（财务复核仍由 work_item 责任角色隔离）
     "sales_change_order:list",

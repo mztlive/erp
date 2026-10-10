@@ -19,7 +19,8 @@ pub async fn ensure(db: &mongodb::Database) -> persistence_core::Result<()> {
     cost::ensure(db).await?;
     payable::ensure(db).await?;
     receivable::ensure(db).await?;
-    command_receipt::ensure(db).await
+    command_receipt::ensure(db).await?;
+    payment_request::ensure(db).await
 }
 
 // 启动组合根按基线交错顺序使用单一领域索引实现。
@@ -27,3 +28,5 @@ pub use command_receipt::{FINANCE_COMMAND_ID_INDEX, ensure as ensure_command_rec
 pub use cost::ensure as ensure_cost;
 pub use payable::ensure as ensure_payable;
 pub use receivable::ensure as ensure_receivable;
+mod payment_request;
+pub use payment_request::ensure as ensure_purchase_payment_requests;

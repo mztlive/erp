@@ -22,6 +22,7 @@ pub mod organization;
 pub mod party;
 pub mod payable;
 pub mod purchase_order;
+pub mod purchase_payment_request;
 pub mod receivable;
 pub mod returns;
 pub mod sales_order;

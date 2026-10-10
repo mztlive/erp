@@ -189,6 +189,7 @@ export function buildResourceFields(
                 contactPhone: pickField(values, "contactPhone"),
                 address: pickField(values, "address"),
                 settlement: pickField(values, "settlement"),
+                reconciliationCycle: pickField(values, "reconciliationCycle"),
                 paymentTerm: pickField(values, "paymentTerm"),
                 capability: pickField(values, "capability"),
                 businessCategory: pickField(values, "businessCategory"),

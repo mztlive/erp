@@ -336,6 +336,13 @@ mod tests {
             "creator",
         )
         .unwrap();
+        payment.payment_request_id = Some("request-1".into());
+        payment.payer_party_id = Some("company-1".into());
+        payment.payer_party_name = Some("我方公司".into());
+        payment.request_allocations = vec![crate::entity::payable::PaymentRequestAllocation {
+            payable_account_id: "account-1".into(),
+            amount: amount("100"),
+        }];
         payment
             .post_from_execution(
                 &[PendingPaymentAllocation::new(PayableEntryId::new("entry"), amount("100")).unwrap()],

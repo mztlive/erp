@@ -16,6 +16,10 @@ pub struct InitialPurchasePayable<'a> {
     pub order_id: &'a str,
     /// 冻结采购提交主键。
     pub submission_id: &'a str,
+    /// 正式生效采购版本。
+    pub purchase_revision_id: &'a str,
+    pub settlement_party_id: &'a str,
+    pub settlement_party_name: &'a str,
     /// 冻结供应商身份。
     pub supplier_id: SupplierAccountId,
     /// 原始含税应付金额。
@@ -35,7 +39,7 @@ pub struct InitialPurchasePayable<'a> {
 /// # 错误
 /// 子账或分录实体构造失败时返回对应错误。
 pub fn prepare(input: InitialPurchasePayable<'_>, actor_id: &str) -> Result<(PayableAccount, PayableEntry)> {
-    let account = crate::entity::payable::PayableAccount::new(
+    let mut account = crate::entity::payable::PayableAccount::new(
         erp_core::ids::PayableAccountId::new(next_id()),
         crate::entity::payable::PayableAccountData {
             source_document_id: input.order_id.to_string(),
@@ -48,6 +52,9 @@ pub fn prepare(input: InitialPurchasePayable<'_>, actor_id: &str) -> Result<(Pay
         },
         actor_id,
     )?;
+    account.purchase_revision_id = Some(input.purchase_revision_id.to_owned());
+    account.settlement_party_id = Some(input.settlement_party_id.to_owned());
+    account.settlement_party_name = Some(input.settlement_party_name.to_owned());
     let entry = crate::entity::payable::PayableEntry::new(
         PayableEntryId::new(next_id()),
         crate::entity::payable::PayableEntryData {

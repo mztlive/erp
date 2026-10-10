@@ -66,6 +66,11 @@ pub(crate) const WIRED_CONSUMERS: &[(&str, &[&str], &[ScopeDimension])] = &[
     ("invoice", &["list", "detail"], &[ScopeDimension::InternalOrg]),
     ("sales_invoice_request", &["list", "detail"], &[ScopeDimension::InternalOrg]),
     ("payable_account", &["list", "detail"], &[ScopeDimension::InternalOrg]),
+    (
+        "purchase_payment_request",
+        &["list", "detail", "create", "update", "submit", "withdraw", "close", "pay"],
+        &[ScopeDimension::InternalOrg],
+    ),
     ("supplier_payment", &["list", "detail"], &[ScopeDimension::InternalOrg]),
     ("purchase_invoice_allocation", &["list"], &[ScopeDimension::InternalOrg]),
     ("integration_error_task", &["list", "detail", "create"], &[ScopeDimension::InternalOrg]),

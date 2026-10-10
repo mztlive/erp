@@ -10,7 +10,7 @@ use erp_identity::{Permission, SharedRbacService};
 use erp_workflow::service::approval::execution::RuntimeHistoryPage;
 use mongodb::Database;
 use persistence_core::Executor;
-pub(crate) use query::load_document_runtime;
+pub(crate) use query::{load_document_runtime, load_document_runtime_for_instance};
 
 /// 与同一业务读取快照绑定的实际运行摘要和有界历史。
 pub(crate) struct DocumentRuntime {

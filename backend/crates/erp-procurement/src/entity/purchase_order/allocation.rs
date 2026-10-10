@@ -9,6 +9,7 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use erp_core::ids::{
     PurchaseLineSalesAllocationId, PurchaseOrderRevisionLineId, SalesOrderLineId, SalesOrderRevisionLineId,
+    SkuId,
 };
 use erp_core::money::{Amount, Quantity};
 use erp_core::{Error, Result};
@@ -24,6 +25,8 @@ pub struct CurrentSalesAllocationLine {
     pub sales_order_line_id: SalesOrderLineId,
     /// 销售当前版本行身份。
     pub sales_order_revision_line_id: SalesOrderRevisionLineId,
+    /// 精确销售商品行的 SKU；正式分配不得把其他 SKU 冒充本销售行。
+    pub sku_id: SkuId,
 }
 
 /// 采购当前版本销售分配计划。
@@ -55,6 +58,9 @@ pub enum CurrentSalesAllocationPlanError {
     /// 正式分配数量没有完整覆盖采购数量。
     #[error("采购版本行分配数量必须等于采购数量")]
     QuantityMismatch,
+    /// 采购 SKU 与当前正式销售行 SKU 不一致或缺失。
+    #[error("采购版本行SKU与销售当前版本不一致，不能刷新采购来源")]
+    SkuMismatch,
     /// Service 提供的分配主键数量与商品/服务行数量不一致。
     #[error("采购分配标识数量与商品/服务行数量不一致")]
     AllocationIdCountMismatch,
@@ -150,7 +156,7 @@ impl CurrentSalesAllocationPlan {
     /// 返回重绑定采购行、正式分配实体和采购行到分配主键的查找表。
     ///
     /// # 错误
-    /// 稳定行、数量或分配主键缺失，当前销售版本无法匹配，数量不相等，或单行
+    /// 稳定行、数量或分配主键缺失，当前销售版本无法匹配，SKU 或数量不相等，或单行
     /// 分配实体不满足自身不变式时返回错误。
     ///
     /// # 关键约束
@@ -200,7 +206,7 @@ impl CurrentSalesAllocationPlan {
 /// 失败时返回错误。
 ///
 /// # 关键约束
-/// 校验顺序保持稳定行、当前版本行、采购数量、分配数量、数量相等、主键；成功后
+/// 校验顺序保持稳定行、当前版本行、采购数量、分配数量、数量相等、SKU、主键；成功后
 /// 才按销售当前版本事实重写采购行关联。
 fn build_current_sales_allocation(
     purchase_line: &mut PurchaseOrderRevisionLine,
@@ -224,6 +230,9 @@ fn build_current_sales_allocation(
         purchase_line.allocated_quantity.ok_or(CurrentSalesAllocationPlanError::MissingAllocatedQuantity)?;
     if allocated != quantity {
         return Err(CurrentSalesAllocationPlanError::QuantityMismatch);
+    }
+    if purchase_line.sku_id.as_ref() != Some(&current_sales_line.sku_id) {
+        return Err(CurrentSalesAllocationPlanError::SkuMismatch);
     }
     let allocation_id =
         allocation_ids.next().ok_or(CurrentSalesAllocationPlanError::AllocationIdCountMismatch)?;
@@ -377,6 +386,7 @@ mod tests {
     /// 仅包含分配规则需要的两个稳定身份，不引入销售仓储或其它快照字段。
     fn current_sales_line(stable_id: &str, revision_line_id: &str) -> CurrentSalesAllocationLine {
         CurrentSalesAllocationLine {
+            sku_id: SkuId::new("sku-1"),
             sales_order_line_id: SalesOrderLineId::new(stable_id),
             sales_order_revision_line_id: SalesOrderRevisionLineId::new(revision_line_id),
         }
@@ -491,6 +501,24 @@ mod tests {
         assert_eq!(plan.allocations[1].base.id, "alloc-2");
         assert_eq!(plan.allocation_ids_by_purchase_line["porl-1"].as_ref(), "alloc-1");
         assert_eq!(plan.allocation_ids_by_purchase_line["porl-2"].as_ref(), "alloc-2");
+    }
+
+    /// 当前来源同稳定行换 SKU 时不得构造新 allocation，原采购行与历史引用保持不变。
+    #[test]
+    fn current_sales_plan_rejects_changed_sku_without_rebinding_purchase_lines() {
+        let original = item_purchase_line("porl-1", "sol-1", "confirm-1", "2");
+        let mut current = current_sales_line("sol-1", "current-sorl");
+        current.sku_id = SkuId::new("sku-2");
+        let purchase_lines = vec![original.clone()];
+        let error = CurrentSalesAllocationPlan::build(
+            &purchase_lines,
+            &[current],
+            vec![PurchaseLineSalesAllocationId::new("new-allocation")],
+        )
+        .unwrap_err();
+        assert!(matches!(error, CurrentSalesAllocationPlanError::SkuMismatch));
+        assert_eq!(error.to_string(), "采购版本行SKU与销售当前版本不一致，不能刷新采购来源");
+        assert_eq!(purchase_lines, vec![original]);
     }
 
     /// 验证计划按既有优先级拒绝缺失匹配事实和数量不一致。

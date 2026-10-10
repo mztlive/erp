@@ -189,6 +189,13 @@ pub struct PayableAccount {
     pub settled_total: Amount,
     /// 剩余开放含税余额（`gross_total - settled_total`）。
     pub open_total: Amount,
+    /// 审批中及批准未付申请占用；与付款核销写入共享本账户事务保护。
+    pub payment_request_reserved_total: Amount,
+    /// 正式采购来源我方结算主体；API 结算来源不适用。
+    pub settlement_party_id: Option<String>,
+    pub settlement_party_name: Option<String>,
+    /// 最新生效的正式采购版本；不能用提交身份或当前草稿替代。
+    pub purchase_revision_id: Option<String>,
     /// 可收票含税总额。
     pub invoiceable_total: Amount,
     /// 净已收票含税总额。
@@ -211,6 +218,10 @@ impl PartialEq for PayableAccount {
             && self.gross_total == other.gross_total
             && self.settled_total == other.settled_total
             && self.open_total == other.open_total
+            && self.payment_request_reserved_total == other.payment_request_reserved_total
+            && self.settlement_party_id == other.settlement_party_id
+            && self.settlement_party_name == other.settlement_party_name
+            && self.purchase_revision_id == other.purchase_revision_id
             && self.invoiceable_total == other.invoiceable_total
             && self.invoiced_total == other.invoiced_total
             && self.open_invoiceable_total == other.open_invoiceable_total
@@ -263,6 +274,10 @@ impl PayableAccount {
             gross_total: data.gross_total,
             settled_total: data.settled_total,
             open_total,
+            payment_request_reserved_total: Amount::zero(),
+            settlement_party_id: None,
+            settlement_party_name: None,
+            purchase_revision_id: None,
             invoiceable_total: data.invoiceable_total,
             invoiced_total: data.invoiced_total,
             open_invoiceable_total: open_invoiceable,

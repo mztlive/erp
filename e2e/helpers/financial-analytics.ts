@@ -4,6 +4,7 @@ import { expect, type Page } from "./test";
 import { API_BASE, apiGet } from "./api";
 import { approveCurrentDocument, openWorkspaceTask } from "./ui";
 import { expandSourcingEditor } from "./sourcing";
+import { openLoggedInWorkspace } from "./login";
 import { uploadAcceptanceEvidence } from "./fulfillment";
 
 const VISIBLE = { timeout: 20_000 };
@@ -91,6 +92,9 @@ export async function prepareAnalyticsOrders(
   evidenceId: string;
   orders: [AnalyticsOrder, AnalyticsOrder];
 }> {
+  const companies = await apiGet<{ items: Array<{ id: string; party_no: string; legal_name: string }> }>(adminToken, "/admin/companies", { status: "active", page_size: 100 });
+  const ourCompany = companies.items.find((company) => company.party_no === "FSY" || company.legal_name === "北京福尚云科技有限公司");
+  expect(ourCompany, "销售与采购必须引用已建档的我方公司主体").toBeTruthy();
   const customerName = `盈亏验收客户${suffix}`;
   const customer = await analyticsCommand<{ customer_id: string }>(
     token,
@@ -127,6 +131,7 @@ export async function prepareAnalyticsOrders(
         editor_user_id: sales!.id,
         requested_contract_revision_id: null,
         no_contract_terms: {
+          settlement_party_id: ourCompany!.id,
           payment_term_code: "POSTPAY_NET15",
           payment_term_name: "货到 15 天",
           invoice_type: "增值税专用发票",
@@ -171,14 +176,14 @@ export async function prepareAnalyticsOrders(
   };
 }
 
-/** 完成一笔真实采购、服务及客户验收，让实际成本和覆盖证据自然产生。 */
-export async function completeAnalyticsService(
+export type AnalyticsPurchase = { purchaseId: string; procurementNet: string; procurementGross: string; service: { id: string; version: number; purchase_order_id: string } };
+
+/** 创建并通过一张真实采购，付款和履约仍由后续正式命令分别执行。 */
+export async function createAnalyticsPurchase(
   order: AnalyticsOrder,
-  salesPage: Page,
   procurementPage: Page,
-  financePage: Page,
   procurementToken: string,
-): Promise<{ purchaseId: string; procurementNet: string; procurementGross: string }> {
+): Promise<AnalyticsPurchase> {
   await openWorkspaceTask(procurementPage, "待供给分配", order.order_no, "procurement");
   await expandSourcingEditor(procurementPage, "家电上门安装");
   await procurementPage.locator("#procurement-orders-create-preview").click();
@@ -193,8 +198,15 @@ export async function completeAnalyticsService(
   const response = await submitted;
   expect(response.ok(), await response.text()).toBe(true);
   await expect(procurementPage.getByText("已创建 1 张采购单并提交审批。")).toBeVisible(VISIBLE);
-  await openWorkspaceTask(financePage, "采购单审批", order.order_no, "approval");
-  await approveCurrentDocument(financePage);
+  const browser = procurementPage.context().browser();
+  if (!browser) throw new Error("采购审批需要浏览器上下文");
+  const approver = await openLoggedInWorkspace(browser, "caigoushenpi");
+  try {
+    await openWorkspaceTask(approver.page, "采购单审批", order.order_no, "approval");
+    await approveCurrentDocument(approver.page);
+  } finally {
+    await approver.context.close();
+  }
   const line = order.lines[0]!;
   const services = await apiGet<{
     items: Array<{ id: string; version: number; purchase_order_id: string }>;
@@ -208,6 +220,19 @@ export async function completeAnalyticsService(
     `/admin/purchase-orders/${service.purchase_order_id}`,
   );
   expect(purchase.status).toBe("EFFECTIVE");
+  return { purchaseId: service.purchase_order_id, procurementNet: purchase.totals.net, procurementGross: purchase.totals.gross, service };
+}
+
+/** 完成一笔真实采购、服务及客户验收，让实际成本和覆盖证据自然产生。 */
+export async function completeAnalyticsService(
+  order: AnalyticsOrder,
+  salesPage: Page,
+  procurementPage: Page,
+  _financePage: Page,
+  procurementToken: string,
+): Promise<{ purchaseId: string; procurementNet: string; procurementGross: string }> {
+  const purchase = await createAnalyticsPurchase(order, procurementPage, procurementToken);
+  const service = purchase.service;
   const form = new FormData();
   const reference = "pending-file:analytics-service";
   const now = Math.floor(Date.now() / 1000);
@@ -250,8 +275,8 @@ export async function completeAnalyticsService(
   const acceptance = await accepted;
   expect(acceptance.ok(), await acceptance.text()).toBe(true);
   return {
-    purchaseId: service.purchase_order_id,
-    procurementNet: purchase.totals.net,
-    procurementGross: purchase.totals.gross,
+    purchaseId: purchase.purchaseId,
+    procurementNet: purchase.procurementNet,
+    procurementGross: purchase.procurementGross,
   };
 }

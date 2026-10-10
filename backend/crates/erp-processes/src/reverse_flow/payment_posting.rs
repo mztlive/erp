@@ -223,6 +223,15 @@ impl PaymentReversalPostingPort for MongoPaymentReversal<'_> {
     }
 
     async fn reverse_finance(&self, write: Self::Write, executor: &mut dyn Executor) -> Result<()> {
+        let (payment, allocations) = write.payment_request_reversal(self.db, executor).await?;
+        crate::finance_posting::payable::payment_request::restore_reversed_payment(
+            self.db,
+            &payment,
+            &allocations,
+            self.actor,
+            executor,
+        )
+        .await?;
         write.persist(self.db, executor).await?;
         Ok(())
     }

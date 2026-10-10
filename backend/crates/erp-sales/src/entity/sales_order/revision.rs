@@ -11,7 +11,7 @@ use entity_macros::Entity;
 use erp_core::common::revision::RevisionBase;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
-    ContractRevisionId, PartyRevisionId, SalesOrderGoodsServiceLineRevisionId, SalesOrderId,
+    ContractRevisionId, PartyId, PartyRevisionId, SalesOrderGoodsServiceLineRevisionId, SalesOrderId,
     SalesOrderLineId, SalesOrderRevisionId, SalesOrderRevisionLineId, SalesOrderVoucherLineRevisionId, SkuId,
     SkuRevisionId,
 };
@@ -92,6 +92,8 @@ impl RevisionSource {
 pub struct SalesOrderRevisionData {
     /// 稳定销售单。
     pub sales_order_id: SalesOrderId,
+    /// 本正式版本冻结的我方结算主体身份。
+    pub settlement_party_id: PartyId,
     /// 聚合内从 1 递增的版本号。
     pub revision_no: u32,
     /// 版本来源。
@@ -135,6 +137,8 @@ pub struct SalesOrderRevision {
     pub revision: RevisionBase,
     /// 稳定销售单。
     pub sales_order_id: SalesOrderId,
+    /// 本正式版本冻结的我方结算主体身份，不随销售主表改写。
+    pub settlement_party_id: PartyId,
     /// 版本来源。
     pub revision_source: RevisionSource,
     /// 前一生效版本。
@@ -196,6 +200,9 @@ impl SalesOrderRevision {
         if data.revision_no == 0 {
             return Err(Error::from("版本号必须为正整数"));
         }
+        if data.settlement_party_id.as_ref().trim().is_empty() {
+            return Err(Error::from("正式销售版本必须冻结我方结算主体身份"));
+        }
         let content_hash = normalize_required_text(
             data.content_hash,
             "内容指纹不能为空",
@@ -215,6 +222,7 @@ impl SalesOrderRevision {
             base: BaseModel::new(id.to_string()),
             revision: RevisionBase::new(data.revision_no),
             sales_order_id: data.sales_order_id,
+            settlement_party_id: data.settlement_party_id,
             revision_source: data.revision_source,
             previous_revision_id: data.previous_revision_id,
             content_hash,
@@ -643,6 +651,7 @@ mod tests {
 
     fn header_data() -> SalesOrderRevisionData {
         SalesOrderRevisionData {
+            settlement_party_id: "party-1".to_string().into(),
             sales_order_id: SalesOrderId::new("o-1"),
             revision_no: 1,
             revision_source: RevisionSource::ErpApproval,

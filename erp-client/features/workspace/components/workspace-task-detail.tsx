@@ -65,7 +65,7 @@ import {
 import { WorkspaceInvoiceTask } from "./workspace-invoice-task"
 import { WorkspaceImportTask } from "./workspace-import-task"
 import { WorkspaceIntegrationTask } from "./workspace-integration-task"
-import { WorkspacePaymentTask } from "./workspace-payment-task"
+import { PurchasePaymentRequestTask } from "@/features/purchase-payment-requests/components/purchase-payment-request-task"
 import { WorkspaceProcurementTask } from "./workspace-procurement-task"
 import { WorkspaceSettlementTask } from "./workspace-settlement-task"
 import { WorkspaceSupplierInvestigationTask } from "./workspace-supplier-investigation-task"
@@ -122,6 +122,30 @@ function WorkspaceTaskSurface({
     grantedPermissions = [],
     onTaskCompleted,
 }: WorkspaceTaskDetailProps) {
+    if (
+        item.businessObjectType === "purchase_payment_request" &&
+        ((item.workItemType === "SUPPLIER_PAYMENT_EXECUTION" &&
+            item.handlerKey === "supplier_payment_execution") ||
+            ((item.workItemType === "DOCUMENT_APPROVAL" ||
+                item.workItemType === "APPROVAL_INSTANCE") &&
+                item.handlerKey === "document_approval"))
+    ) {
+        return (
+            <WorkspaceTaskPane
+                header={<WorkspaceTaskIdentityHeader item={item} />}
+                aria-label="采购付款申请任务"
+            >
+                <PurchasePaymentRequestTask
+                    item={item}
+                    onDecisionApplied={(view: ApprovalCommandView) =>
+                        onDecisionApplied?.(view, item.workItemId)
+                    }
+                    onTaskCompleted={() => onTaskCompleted?.(item.workItemId)}
+                />
+            </WorkspaceTaskPane>
+        )
+    }
+
     // 非执行者统一阅读服务端摘要，避免挂载建单、确认或异常处理表单。
     if (
         item.workItemType !== "DOCUMENT_APPROVAL" &&
@@ -232,19 +256,6 @@ function WorkspaceTaskSurface({
     ) {
         return (
             <WorkspaceSupplyExceptionTask
-                item={item}
-                onTaskCompleted={onTaskCompleted}
-            />
-        )
-    }
-
-    // 供应商付款处理 → WorkspacePaymentTask
-    if (
-        item.workItemType === "SUPPLIER_PAYMENT_EXECUTION" &&
-        item.businessObjectType === "payable_account"
-    ) {
-        return (
-            <WorkspacePaymentTask
                 item={item}
                 onTaskCompleted={onTaskCompleted}
             />
@@ -497,6 +508,7 @@ function WorkspaceDocumentTaskDetail({
                         ) : null}
                         {canReadPaper &&
                         !purchaseApproval &&
+                        !salesApproval &&
                         (approvalDocument || currentPaperKind) ? (
                             <IconActionButton
                                 id={`workspace-task-detail-read-${toAutomationIdSegment(item.workItemId)}`}

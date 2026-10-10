@@ -8,12 +8,14 @@ import type { ApprovalDefinitionBinding } from "../types"
 /**
  * 提交确认上的固定审批路线与驳回说明。
  *
- * 驳回只表达「从第一节点开始下一轮」，不展示可选驳回目标。
+ * 按单据政策说明驳回结果，不展示可选驳回目标。
  */
 export function SubmissionRouteConfirmation({
     definition,
+    documentType,
 }: {
     definition?: ApprovalDefinitionBinding
+    documentType?: string
 }) {
     if (!definition || definition.nodes.length === 0) {
         return (
@@ -36,7 +38,9 @@ export function SubmissionRouteConfirmation({
             <AlertDescription>
                 <p>{route}</p>
                 <p className="mt-2">
-                    任一层驳回后，将从{firstLabel}开始下一轮审批。
+                    {documentType === "purchase_payment_request"
+                        ? `任一层驳回后，本次申请结束并释放未付金额；重新提交后从${firstLabel}重新审核。`
+                        : `任一层驳回后，将从${firstLabel}开始下一轮审批。`}
                 </p>
             </AlertDescription>
         </Alert>
