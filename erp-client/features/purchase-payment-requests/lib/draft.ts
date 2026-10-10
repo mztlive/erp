@@ -1,5 +1,16 @@
 import { z } from "zod"
-import { compareDecimal, sumFixed } from "@/lib/fixed-decimal"
+import {
+    compareDecimal,
+    formatCurrencyFixed,
+    minFixed,
+    normalizeFixed,
+    subtractFixed,
+    sumFixed,
+} from "@/lib/fixed-decimal"
+import {
+    isSupplierPaymentTermCode,
+    paymentTermCode,
+} from "@/lib/business-options"
 import type { PaymentCandidate, PaymentRequest } from "../types"
 
 export const groupKey = (candidate: PaymentCandidate) =>
@@ -10,6 +21,55 @@ export function positive(value: string) {
     } catch {
         return false
     }
+}
+/** 仅使用生效采购条款；已付由预付款缺口扣除，在途申请另行扣除。 */
+export function suggestedRequestAmount(candidate: PaymentCandidate): string {
+    const code = paymentTermCode(candidate.payment_term_code ?? "")
+    if (
+        !code ||
+        !isSupplierPaymentTermCode(code) ||
+        !positive(candidate.available_amount)
+    )
+        return ""
+    const prepay = code.startsWith("PREPAY_")
+    if (candidate.prepay_gate !== prepay) return ""
+    const options = { maxScale: 2, outputScale: 2 } as const
+    if (!prepay) return normalizeFixed(candidate.available_amount, options)
+    if (!candidate.prepayment_gap || !positive(candidate.prepayment_gap))
+        return ""
+    const remaining = subtractFixed(
+        candidate.prepayment_gap,
+        candidate.reserved_amount,
+        options,
+    )
+    return positive(remaining)
+        ? minFixed(remaining, candidate.available_amount, options)
+        : ""
+}
+
+/** 首次选中时预填；用户修改或主动清空后，返回选单不得覆盖。 */
+export function prefillRequestAmounts(
+    ids: string[],
+    candidates: PaymentCandidate[],
+    amounts: Record<string, string>,
+) {
+    const next = { ...amounts }
+    for (const candidate of candidates) {
+        const id = candidate.payable_account_id
+        if (ids.includes(id) && next[id] === undefined)
+            next[id] = suggestedRequestAmount(candidate)
+    }
+    return next
+}
+
+export function requestAmountError(
+    value: string,
+    available: string,
+): string | undefined {
+    if (!positive(value)) return "请填写大于零且最多两位小数的金额"
+    if (compareDecimal(value, available, 2) > 0)
+        return `本次最多可申请 ${formatCurrencyFixed(available, { maxScale: 2, minimumFractionDigits: 2 })}`
+    return undefined
 }
 export function totalOf(values: string[]) {
     return sumFixed(values.filter(positive), { maxScale: 2, outputScale: 2 })
@@ -27,6 +87,19 @@ export type DraftValues = {
     amounts: Record<string, string>
     groups: DraftGroup[]
 }
+/** 希望付款日默认业务当天，不表示合同到期日或实际付款日。 */
+function defaultRequestDate(): string {
+    const parts = new Intl.DateTimeFormat("en", {
+        timeZone: "Asia/Shanghai",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    }).formatToParts(new Date())
+    const part = (type: string) =>
+        parts.find((item) => item.type === type)!.value
+    return `${part("year")}-${part("month")}-${part("day")}`
+}
+
 export function regroup(
     ids: string[],
     candidates: PaymentCandidate[],
@@ -49,7 +122,7 @@ export function regroup(
                 key,
                 ids: [id],
                 account: candidate.payment_recipient?.bank_account_id ?? "",
-                date: "",
+                date: defaultRequestDate(),
                 description: "",
                 files: [],
             })
@@ -76,12 +149,14 @@ export function draftDefaults(
     return {
         selectedIds: ids,
         groups,
-        amounts: Object.fromEntries(
-            (request?.lines ?? []).map((line) => [
-                line.payable_account_id,
-                line.requested_amount,
-            ]),
-        ),
+        amounts: request
+            ? Object.fromEntries(
+                  request.lines.map((line) => [
+                      line.payable_account_id,
+                      line.requested_amount,
+                  ]),
+              )
+            : prefillRequestAmounts(ids, candidates, {}),
     }
 }
 export function draftSchema(candidates: PaymentCandidate[]) {
@@ -143,15 +218,7 @@ export function draftSchema(candidates: PaymentCandidate[]) {
                     const amount = values.amounts[id] ?? ""
                     const message = !candidate
                         ? "采购来源已不可用，请重新选择"
-                        : !positive(amount)
-                          ? "请填写大于零且最多两位小数的金额"
-                          : compareDecimal(
-                                  amount,
-                                  candidate.available_amount,
-                                  2,
-                              ) > 0
-                            ? "申请金额超过当前可申请余额"
-                            : null
+                        : requestAmountError(amount, candidate.available_amount)
                     if (message)
                         context.addIssue({
                             code: "custom",

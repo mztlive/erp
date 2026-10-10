@@ -123,10 +123,49 @@ export function RequestOrderPicker({
                                     {visible.map((item) => (
                                         <TableRow
                                             key={item.payable_account_id}
-                                            className="border-t data-[selected=true]:bg-muted/30"
-                                            data-selected={selected.has(
+                                            id={`ppr-select-row-${toAutomationIdSegment(item.payable_account_id)}`}
+                                            className="cursor-pointer border-t outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                                            tabIndex={0}
+                                            aria-selected={selected.has(
                                                 item.payable_account_id,
                                             )}
+                                            data-state={
+                                                selected.has(
+                                                    item.payable_account_id,
+                                                )
+                                                    ? "selected"
+                                                    : undefined
+                                            }
+                                            onClick={(event) => {
+                                                if (
+                                                    (
+                                                        event.target as HTMLElement
+                                                    ).closest(
+                                                        "input, button, a, label",
+                                                    )
+                                                )
+                                                    return
+                                                event.currentTarget
+                                                    .querySelector<HTMLInputElement>(
+                                                        'input[type="checkbox"]',
+                                                    )
+                                                    ?.click()
+                                            }}
+                                            onKeyDown={(event) => {
+                                                if (
+                                                    event.target !==
+                                                        event.currentTarget ||
+                                                    (event.key !== " " &&
+                                                        event.key !== "Enter")
+                                                )
+                                                    return
+                                                event.preventDefault()
+                                                event.currentTarget
+                                                    .querySelector<HTMLInputElement>(
+                                                        'input[type="checkbox"]',
+                                                    )
+                                                    ?.click()
+                                            }}
                                         >
                                             <TableCell className="p-3">
                                                 <NativeCheckbox

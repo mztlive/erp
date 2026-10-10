@@ -9,9 +9,10 @@ import {
     CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { Field } from "@/components/ui/field"
+import { formatCurrencyFixed } from "@/lib/fixed-decimal"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { DraftForm } from "../hooks/use-draft-form"
-import { totalOf, type DraftGroup } from "../lib/draft"
+import { requestAmountError, totalOf, type DraftGroup } from "../lib/draft"
 import type { PaymentCandidate } from "../types"
 
 export function RequestDraftGroup({
@@ -197,13 +198,35 @@ export function RequestDraftGroup({
                             </div>
                             <form.AppField
                                 name={`amounts.${candidate.payable_account_id}`}
+                                validators={{
+                                    onChange: ({ value }) =>
+                                        requestAmountError(
+                                            value,
+                                            candidate.available_amount,
+                                        ),
+                                    onBlur: ({ value }) =>
+                                        requestAmountError(
+                                            value,
+                                            candidate.available_amount,
+                                        ),
+                                }}
                             >
                                 {(field) => (
                                     <field.TextField
                                         id={`ppr-create-line-${toAutomationIdSegment(candidate.payable_account_id)}`}
                                         label="本次申请金额"
                                         required
+                                        type="number"
                                         inputMode="decimal"
+                                        min="0.01"
+                                        max={candidate.available_amount}
+                                        step="0.01"
+                                        description={
+                                            field.state.meta.isTouched &&
+                                            !field.state.meta.isValid
+                                                ? undefined
+                                                : `最多 ${formatCurrencyFixed(candidate.available_amount, { maxScale: 2, minimumFractionDigits: 2 })}`
+                                        }
                                         placeholder="填写本次金额"
                                     />
                                 )}

@@ -16,7 +16,12 @@ import { getErrorMessage } from "@/lib/api"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { usePaymentCandidatesQuery } from "../hooks/queries"
 import { useDraftForm } from "../hooks/use-draft-form"
-import { draftSchema, regroup, totalOf } from "../lib/draft"
+import {
+    draftSchema,
+    prefillRequestAmounts,
+    regroup,
+    totalOf,
+} from "../lib/draft"
 import type { PaymentCandidate, PaymentRequest } from "../types"
 import { RequestDraftGroup } from "./request-draft-group"
 import { RequestOrderPicker } from "./request-order-picker"
@@ -136,6 +141,14 @@ function RequestDraftForm({
         const values = form.state.values
         const groups = regroup(values.selectedIds, candidates, values.groups)
         form.setFieldValue("groups", groups)
+        form.setFieldValue(
+            "amounts",
+            prefillRequestAmounts(
+                values.selectedIds,
+                candidates,
+                values.amounts,
+            ),
+        )
         if (!groups.some((group) => group.key === openGroup))
             setOpenGroup(groups[0]?.key ?? null)
         setStep(2)
@@ -202,6 +215,7 @@ function RequestDraftForm({
     return (
         <form
             id="ppr-create-form"
+            noValidate
             className="flex min-h-0 flex-col overflow-hidden"
             onSubmit={(event) => {
                 event.preventDefault()

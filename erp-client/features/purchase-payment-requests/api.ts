@@ -161,6 +161,8 @@ function mapCandidate(item: CandidateDto): PaymentCandidate {
         purchase_version: 0,
         purchase_summary: item.purchase_summary,
         prepayment_gap: item.prepayment_gap,
+        payment_term_code: item.payment_terms.payment_term_code,
+        prepay_gate: item.payment_terms.prepay_gate,
         supplier_id: item.supplier_id,
         supplier_name: item.supplier_name,
         our_company_id: item.payer_party_id,
