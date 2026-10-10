@@ -82,7 +82,7 @@ export function progressDisplay(
     const normalized = (code ?? "NONE").toUpperCase()
     if (kind === "payment") {
         if (normalized === "NONE") return "未付"
-        if (normalized === "PARTIAL") return "部分"
+        if (normalized === "PARTIAL") return "部分付款"
         if (normalized === "COMPLETED") return "已付"
     }
     if (kind === "invoice") {

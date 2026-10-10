@@ -5,10 +5,13 @@ mod detail;
 use std::collections::HashMap;
 
 use application_core::AuditActor;
+use erp_finance::entity::payable::PayableAccountStatus;
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
 use erp_procurement::dto::purchase_order::{PageView, PurchaseOrderListParams};
-use erp_procurement::entity::purchase_order::{PurchaseOrderRevision, PurchaseOrderSubmission};
+use erp_procurement::entity::purchase_order::{
+    ProgressStatus, PurchaseOrderRevision, PurchaseOrderSubmission,
+};
 use erp_procurement::repository::purchase_order::PurchaseOrderRow;
 use persistence_core::NoTransaction;
 use validator::Validate;
@@ -213,6 +216,7 @@ fn map_list_items(
             );
             let raw_owner = row.owner_user_id.filter(|owner| !owner.trim().is_empty());
             let (owner_user_id, owner_name) = owner_display(raw_owner, &facts.owner_names);
+            let payment_progress = payment_progress(facts.payment_statuses.get(&row.id).copied());
             Ok(PurchaseOrderListItemView {
                 id: row.id,
                 purchase_no: row.purchase_no,
@@ -230,7 +234,7 @@ fn map_list_items(
                 gross_amount: totals.0,
                 net_amount: totals.1,
                 tax_amount: totals.2,
-                payment_progress: row.payment_progress,
+                payment_progress,
                 invoice_progress: row.invoice_progress,
                 fulfillment_progress: row.fulfillment_progress,
                 current_submission_id: row.current_submission_id,
@@ -240,6 +244,15 @@ fn map_list_items(
             })
         })
         .collect()
+}
+
+/// 付款进度只转换财务子账状态；无应付账时无已确认付款。
+fn payment_progress(status: Option<PayableAccountStatus>) -> ProgressStatus {
+    match status {
+        None | Some(PayableAccountStatus::Open) => ProgressStatus::None,
+        Some(PayableAccountStatus::PartiallySettled) => ProgressStatus::Partial,
+        Some(PayableAccountStatus::Settled) => ProgressStatus::Completed,
+    }
 }
 
 /// 解析供应商展示名.
@@ -337,6 +350,7 @@ mod query_mapping_tests {
 
     use erp_core::ids::{PurchaseOrderId, PurchaseOrderSubmissionId, SalesOrderId, SupplierAccountId};
     use erp_core::money::Amount;
+    use erp_finance::entity::payable::{PayableAccount, PayableAccountData, PayableSourceType};
     use erp_procurement::entity::purchase_order::{
         FulfillmentResponsibility, PaymentTermSnapshot, ProgressStatus, PurchaseOrderStatus,
         PurchaseOrderSubmission, PurchaseOrderSubmissionData, PurchaseReviewStatus, PurchaseType,
@@ -401,6 +415,44 @@ mod query_mapping_tests {
     fn list_mapping_rejects_missing_sales_order() {
         let error = map_list_items(vec![list_row("po-1")], &PurchaseOrderListFacts::default()).unwrap_err();
         assert!(matches!(error, crate::Error::Internal(_)));
+    }
+
+    #[test]
+    fn list_payment_progress_follows_posted_finance_totals_and_reversals() {
+        let amount = |value| Amount::from_str(value).unwrap();
+        let mut account = PayableAccount::new(
+            "payable-1".to_string().into(),
+            PayableAccountData {
+                source_document_id: "po-1".into(),
+                supplier_id: "sup-1".to_string().into(),
+                source_type: PayableSourceType::PurchaseOrder,
+                gross_total: amount("60"),
+                settled_total: Amount::zero(),
+                invoiceable_total: amount("60"),
+                invoiced_total: Amount::zero(),
+            },
+            "cashier",
+        )
+        .unwrap();
+        let mut facts = PurchaseOrderListFacts::default();
+        facts.sales_order_nos.insert("so-1".into(), "SO-1".into());
+        for (paid, expected) in [
+            ("0", ProgressStatus::None),
+            ("30", ProgressStatus::Partial),
+            ("60", ProgressStatus::Completed),
+            ("30", ProgressStatus::Partial),
+            ("0", ProgressStatus::None),
+        ] {
+            account.sync_totals(amount(paid), Amount::zero(), "cashier").unwrap();
+            facts.payment_statuses.insert("po-1".into(), account.stable.status);
+            let mut row = list_row("po-1");
+            row.payment_progress = ProgressStatus::None;
+            let items = map_list_items(vec![row], &facts).unwrap();
+            assert_eq!(items[0].payment_progress, expected, "paid={paid}");
+        }
+        facts.payment_statuses.clear();
+        let items = map_list_items(vec![list_row("po-1")], &facts).unwrap();
+        assert_eq!(items[0].payment_progress, ProgressStatus::None);
     }
 
     /// 构造最小提交头用于金额映射测试.

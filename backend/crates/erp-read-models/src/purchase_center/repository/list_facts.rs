@@ -2,20 +2,25 @@
 //!
 //! 分页投影仍由 [`PurchaseOrderFilter`] 承担过滤、软删除、稳定排序与总数语义；
 //! 本模块在同一调用方 executor 下一次批量返回列表行所需的全部关联事实：
-//! 供应商当前法定名称、来源销售单业务单号、负责人展示名与当前提交/版本表头。
+//! 供应商当前法定名称、来源销售单业务单号、负责人展示名、当前提交/版本表头与财务核销状态。
 //! 指针选择、缺失校验、金额格式化与 View 回退由 Service 负责；本模块只做
 //! 持久化读取，查询次数与页大小无关，不得出现逐行 N+1。
 
 use std::collections::{HashMap, HashSet};
 
-use erp_core::ids::{PurchaseOrderRevisionId, PurchaseOrderSubmissionId, SalesOrderId, SupplierAccountId};
+use erp_core::ids::{
+    PurchaseOrderId, PurchaseOrderRevisionId, PurchaseOrderSubmissionId, SalesOrderId, SupplierAccountId,
+};
+use erp_finance::entity::payable::PayableAccountStatus;
+use erp_finance::repository::PayableExt;
+use erp_finance::repository::prelude::*;
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
 use erp_procurement::entity::purchase_order::{PurchaseOrderRevision, PurchaseOrderSubmission};
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::repository::prelude::*;
-use erp_procurement::repository::purchase_order::PurchaseOrderFilter;
 use erp_procurement::repository::purchase_order::scope::PurchaseReadScope;
+use erp_procurement::repository::purchase_order::{PurchaseOrderFilter, PurchaseOrderRow};
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
 use erp_supplier::repository::prelude::*;
@@ -28,6 +33,8 @@ use persistence_core::{Executor, PageResult, Result};
 /// 完整性错误或约定回退解释，本层不做业务回退。
 #[derive(Debug, Clone, Default)]
 pub struct PurchaseOrderListFacts {
+    /// 当前页采购单 ID 到财务应付子账状态；付款核销与冲正同步维护。
+    pub payment_statuses: HashMap<String, PayableAccountStatus>,
     /// 供应商账号 ID 到当前法定名称的映射。
     pub supplier_names: HashMap<String, String>,
     /// 来源销售单 ID 到业务单号的映射。
@@ -58,7 +65,7 @@ pub struct PurchaseOrderListFacts {
 ///
 /// # 约束
 /// 查询次数与页大小无关：列表分页、供应商名称、销售单、负责人、当前提交与
-/// 当前版本各一次批量读取，不得出现逐行 N+1。提交指针只查提交集合、版本指针
+/// 当前版本及财务应付子账各一次批量读取，不得出现逐行 N+1。提交指针只查提交集合、版本指针
 /// 只查版本集合，两种命名空间不得交叉；历史提交与历史版本不进入结果；分页
 /// 过滤、稳定排序与总数语义与 [`PurchaseOrderFilter`] 完全一致。
 /// 授权条件由调用方传入，本层不得按登录用户推断权限。
@@ -67,13 +74,13 @@ pub async fn load_purchase_order_list_page(
     filter: &PurchaseOrderFilter,
     scope: &PurchaseReadScope,
     executor: &mut dyn Executor,
-) -> Result<(PageResult<erp_procurement::repository::purchase_order::PurchaseOrderRow>, PurchaseOrderListFacts)>
-{
+) -> Result<(PageResult<PurchaseOrderRow>, PurchaseOrderListFacts)> {
     let page = db.purchase_orders().search_purchase_orders(filter, scope, executor).await?;
     if page.items.is_empty() {
         return Ok((page, PurchaseOrderListFacts::default()));
     }
     let supplier_ids = unique_supplier_ids(&page);
+    let payment_statuses = current_payment_statuses(db, &page, executor).await?;
     let supplier_names =
         super::supplier_names::current_legal_names_by_account_ids(db, &supplier_ids, executor).await?;
     let sales_ids = unique_sales_ids(&page);
@@ -104,8 +111,31 @@ pub async fn load_purchase_order_list_page(
         .collect::<HashMap<_, _>>();
     Ok((
         page,
-        PurchaseOrderListFacts { supplier_names, sales_order_nos, owner_names, submissions, revisions },
+        PurchaseOrderListFacts {
+            payment_statuses,
+            supplier_names,
+            sales_order_nos,
+            owner_names,
+            submissions,
+            revisions,
+        },
     ))
+}
+
+/// 按当前授权页批量读取财务核销状态，查询次数与页大小无关。
+async fn current_payment_statuses(
+    db: &Database,
+    page: &PageResult<PurchaseOrderRow>,
+    executor: &mut dyn Executor,
+) -> Result<HashMap<String, PayableAccountStatus>> {
+    let order_ids: Vec<PurchaseOrderId> = page.items.iter().map(|row| row.id.clone().into()).collect();
+    Ok(db
+        .payable_accounts()
+        .find_by_purchase_orders(&order_ids, executor)
+        .await?
+        .into_iter()
+        .map(|account| (account.source_document_id, account.stable.status))
+        .collect())
 }
 
 /// 提取列表页去重后的负责人账号 ID。
@@ -121,9 +151,7 @@ pub async fn load_purchase_order_list_page(
 ///
 /// # 约束
 /// 去重只用于缩小 `$in` 范围，不改变任何业务语义；空白与缺失由 Service 回退。
-fn unique_owner_ids(
-    page: &PageResult<erp_procurement::repository::purchase_order::PurchaseOrderRow>,
-) -> Vec<String> {
+fn unique_owner_ids(page: &PageResult<PurchaseOrderRow>) -> Vec<String> {
     crate::support::dedup_trimmed_nonempty(page.items.iter().filter_map(|row| row.owner_user_id.as_deref()))
 }
 
@@ -140,9 +168,7 @@ fn unique_owner_ids(
 ///
 /// # 约束
 /// 去重只用于缩小 `$in` 范围，不改变任何业务语义。
-fn unique_supplier_ids(
-    page: &PageResult<erp_procurement::repository::purchase_order::PurchaseOrderRow>,
-) -> Vec<SupplierAccountId> {
+fn unique_supplier_ids(page: &PageResult<PurchaseOrderRow>) -> Vec<SupplierAccountId> {
     crate::support::dedup_ordered(page.items.iter().map(|row| row.supplier_id.clone()))
 }
 
@@ -159,9 +185,7 @@ fn unique_supplier_ids(
 ///
 /// # 约束
 /// 去重只用于缩小 `$in` 范围，不改变过滤、排序与总数语义。
-fn unique_sales_ids(
-    page: &PageResult<erp_procurement::repository::purchase_order::PurchaseOrderRow>,
-) -> Vec<SalesOrderId> {
+fn unique_sales_ids(page: &PageResult<PurchaseOrderRow>) -> Vec<SalesOrderId> {
     crate::support::dedup_ordered(page.items.iter().map(|row| row.sales_order_id.clone()))
 }
 
@@ -180,9 +204,7 @@ fn unique_sales_ids(
 /// # 约束
 /// 提交指针只用于提交集合查询，版本指针只用于版本集合查询，不得交叉；
 /// 历史提交与历史版本不进入集合，缺失指针由 Service 回退零值。
-fn split_pointer_ids(
-    page: &PageResult<erp_procurement::repository::purchase_order::PurchaseOrderRow>,
-) -> (Vec<String>, Vec<String>) {
+fn split_pointer_ids(page: &PageResult<PurchaseOrderRow>) -> (Vec<String>, Vec<String>) {
     let mut submissions = Vec::new();
     let mut revisions = Vec::new();
     let mut seen_submissions = HashSet::new();

@@ -9,7 +9,6 @@ import {
     StatusTrackSummary,
     taxAmountToneClass,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { displayPurchaseOrderNo } from "@/features/purchase-orders/lib/purchase-orders-list-helpers"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -30,40 +29,43 @@ export function buildPurchaseOrdersListColumns({
         {
             id: "document",
             accessorFn: (row) => displayPurchaseOrderNo(row),
-            header: "采购单号",
-            meta: { label: "采购单号", width: "reference" },
+            header: "供应商 / 采购单",
+            meta: { label: "供应商 / 采购单", width: "reference" },
             cell: ({ row }) => (
                 <div className="flex min-w-0 items-center gap-2">
                     <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                            <Button
-                                type="button"
-                                variant="link"
-                                size="xs"
-                                className="num h-auto px-0 text-sm"
-                                aria-label={`打开采购单 ${displayPurchaseOrderNo(row.original)}`}
-                                render={
-                                    <Link
-                                        href={`/procurement/orders/${row.original.purchaseOrderId}`}
-                                        id={`procurement-orders-list-row-${toAutomationIdSegment(row.original.purchaseOrderId)}-open`}
-                                    />
-                                }
+                        <div className="flex min-w-0 items-center gap-2">
+                            <span
+                                className="truncate text-sm font-medium"
+                                title={row.original.supplierName}
                             >
-                                {displayPurchaseOrderNo(row.original)}
-                            </Button>
+                                {row.original.supplierName}
+                            </span>
                             <BusinessStatusBadge
                                 context="list"
                                 label={row.original.statusLabel}
                                 tone={row.original.statusTone}
                             />
                         </div>
-                        <div className="truncate text-xs text-muted-foreground">
-                            {row.original.supplierName}
-                        </div>
+                        <Button
+                            type="button"
+                            variant="link"
+                            size="xs"
+                            className="num h-auto max-w-full justify-start px-0 text-xs font-normal text-muted-foreground"
+                            aria-label={`打开采购单 ${displayPurchaseOrderNo(row.original)}`}
+                            title={displayPurchaseOrderNo(row.original)}
+                            render={
+                                <Link
+                                    href={`/procurement/orders/${row.original.purchaseOrderId}`}
+                                    id={`procurement-orders-list-row-${toAutomationIdSegment(row.original.purchaseOrderId)}-open`}
+                                />
+                            }
+                        >
+                            <span className="truncate">
+                                {displayPurchaseOrderNo(row.original)}
+                            </span>
+                        </Button>
                     </div>
-                    <Badge variant="secondary" className="shrink-0">
-                        {PURCHASE_TYPE_LABEL[row.original.purchaseType]}
-                    </Badge>
                 </div>
             ),
         },
@@ -120,7 +122,7 @@ export function buildPurchaseOrdersListColumns({
                                     row.original.paymentProgress === "已付"
                                         ? "success"
                                         : row.original.paymentProgress ===
-                                            "部分"
+                                            "部分付款"
                                           ? "info"
                                           : "neutral",
                             },

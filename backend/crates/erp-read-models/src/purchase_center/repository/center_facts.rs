@@ -12,6 +12,7 @@ use erp_core::ids::{
     SupplierAccountId,
 };
 use erp_core::money::Amount;
+use erp_finance::entity::payable::PayableAccountStatus;
 use erp_finance::repository::PayableExt;
 use erp_finance::repository::prelude::*;
 use erp_identity::AccessControlExt;
@@ -177,6 +178,7 @@ async fn load_serial_facts(
         allocations,
         changes,
         payable: payable.map(|account| PurchasePayableFact {
+            status: account.stable.status,
             open_total: account.open_total,
             settled_total: account.settled_total,
             invoiced_total: account.invoiced_total,
@@ -269,6 +271,7 @@ async fn load_payable_nt(
 ) -> Result<Option<PurchasePayableFact>> {
     let payable = db.payable_accounts().find_by_purchase_order(&order_id, &mut NoTransaction).await?;
     Ok(payable.map(|account| PurchasePayableFact {
+        status: account.stable.status,
         open_total: account.open_total,
         settled_total: account.settled_total,
         invoiced_total: account.invoiced_total,
@@ -707,6 +710,8 @@ mod isolation_tests {
 /// 采购中心消费的应付余额；账户不存在由外层 Option 表达。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PurchasePayableFact {
+    /// 与核销金额在同一财务写入中更新的当前状态。
+    pub status: PayableAccountStatus,
     /// 原应付账户未结余额。
     pub open_total: Amount,
     /// 原应付账户已付款分摊累计。

@@ -4,12 +4,12 @@ use erp_procurement::dto::purchase_order::{
     PurchaseChangeSummaryView, PurchaseOrderLineView, PurchaseSalesAllocationView, TotalsView,
 };
 use erp_procurement::entity::purchase_order::{
-    PurchaseChangeOrder, PurchaseLineSalesAllocation, PurchaseOrder,
+    ProgressStatus, PurchaseChangeOrder, PurchaseLineSalesAllocation, PurchaseOrder,
 };
 use erp_workflow::service::document_registry::find_approval_binding;
 use persistence_core::NoTransaction;
 
-use super::{center_content_source, owner_display, sales_no_for, supplier_display};
+use super::{center_content_source, owner_display, payment_progress, sales_no_for, supplier_display};
 use crate::purchase_center::PurchaseOrderReadService;
 use crate::purchase_center::approval_query::load_document_approval;
 use crate::purchase_center::dto::{
@@ -38,6 +38,7 @@ struct CenterContent {
 
 /// 已读取的分配、变更和财务事实，只执行无 I/O 的映射。
 struct CenterRelations {
+    payment_progress: ProgressStatus,
     revision_no: Option<u32>,
     allocations: Vec<PurchaseSalesAllocationView>,
     changes: Vec<PurchaseChangeSummaryView>,
@@ -127,6 +128,7 @@ fn center_content(facts: &PurchaseOrderCenterFacts) -> CenterContent {
 
 /// 原始事实消费顺序保持分配、变更、版本号及应付汇总。
 fn center_relations(facts: PurchaseOrderCenterFacts) -> CenterRelations {
+    let payment_progress = payment_progress(facts.payable.as_ref().map(|account| account.status));
     let allocations = allocation_views(facts.allocations);
     let changes = change_views(facts.changes);
     let revision_no = facts.current_revision.as_ref().map(|revision| revision.revision.revision_no);
@@ -135,7 +137,7 @@ fn center_relations(facts: PurchaseOrderCenterFacts) -> CenterRelations {
         paid_allocated_amount: account.settled_total,
         purchase_invoice_allocated_amount: account.invoiced_total,
     });
-    CenterRelations { revision_no, allocations, changes, payable_summary }
+    CenterRelations { payment_progress, revision_no, allocations, changes, payable_summary }
 }
 
 /// 生效采购销售分配逐字段转换，保留输入次序及所有精确十进制金额。
@@ -193,7 +195,7 @@ fn center_view(
         owner_user_id: identity.owner_user_id,
         owner_name: identity.owner_name,
         target_warehouse_id: order.target_warehouse_id.as_ref().map(ToString::to_string),
-        payment_progress: order.payment_progress,
+        payment_progress: relations.payment_progress,
         invoice_progress: order.invoice_progress,
         fulfillment_progress: order.fulfillment_progress,
         current_submission_id: order.current_submission_id.clone(),
@@ -208,5 +210,39 @@ fn center_view(
         payable_summary: relations.payable_summary,
         approval,
         created_at: order.base.created_at,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use erp_core::money::Amount;
+    use erp_finance::entity::payable::PayableAccountStatus;
+
+    use super::*;
+    use crate::purchase_center::repository::PurchasePayableFact;
+
+    #[test]
+    fn detail_payment_progress_and_summary_share_current_payable_fact() {
+        let amount = |value| Amount::from_str(value).unwrap();
+        let facts = PurchaseOrderCenterFacts {
+            payable: Some(PurchasePayableFact {
+                status: PayableAccountStatus::PartiallySettled,
+                open_total: amount("30"),
+                settled_total: amount("30"),
+                invoiced_total: Amount::zero(),
+            }),
+            ..Default::default()
+        };
+        let relations = center_relations(facts);
+        assert_eq!(relations.payment_progress, ProgressStatus::Partial);
+        let summary = relations.payable_summary.unwrap();
+        assert_eq!(summary.paid_allocated_amount, amount("30"));
+        assert_eq!(summary.payable_open_amount, amount("30"));
+
+        let relations = center_relations(PurchaseOrderCenterFacts::default());
+        assert_eq!(relations.payment_progress, ProgressStatus::None);
+        assert!(relations.payable_summary.is_none());
     }
 }

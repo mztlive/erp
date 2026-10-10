@@ -66,6 +66,21 @@ pub trait PayableAccountRepositoryExt {
         executor: &mut dyn Executor,
     ) -> Result<Option<PayableAccount>>;
 
+    /// 批量读取指定采购单的应付子账，复用来源唯一索引。
+    ///
+    /// # 参数
+    /// * `order_ids` - 已授权的当前页采购单身份。
+    /// * `executor` - 调用方的数据访问执行器。
+    /// # 返回
+    /// 返回未删除的采购应付子账；空输入直接返回空集合。
+    /// # 错误
+    /// 数据库查询或反序列化失败时返回错误。
+    async fn find_by_purchase_orders(
+        &self,
+        order_ids: &[PurchaseOrderId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PayableAccount>>;
+
     /// 读取指定供应商尚未结清的采购应付子账。
     ///
     /// # 参数
@@ -130,6 +145,25 @@ impl PayableAccountRepositoryExt for persistence_core::Repository<'_, PayableAcc
         self.find_one(
             doc! {
                 "source_document_id": purchase_order_id.to_string(),
+                "source_type": PayableSourceType::PurchaseOrder.as_str(),
+            },
+            executor,
+        )
+        .await
+    }
+
+    async fn find_by_purchase_orders(
+        &self,
+        order_ids: &[PurchaseOrderId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PayableAccount>> {
+        if order_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids: Vec<&str> = order_ids.iter().map(AsRef::as_ref).collect();
+        self.find_many(
+            doc! {
+                "source_document_id": { "$in": ids },
                 "source_type": PayableSourceType::PurchaseOrder.as_str(),
             },
             executor,
