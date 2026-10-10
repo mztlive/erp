@@ -18,6 +18,7 @@ export function useSalesInvoiceFiles(salesOrderId: string) {
         staleTime: 0,
     })
     const download = useMutation({
+        meta: { suppressErrorToast: true },
         mutationFn: (file: FinancialFile) =>
             downloadSalesInvoiceFile(salesOrderId, file),
         onError: (error) =>
@@ -40,6 +41,7 @@ export function usePurchasePaymentReceipts(workItemId: string) {
         staleTime: 0,
     })
     const download = useMutation({
+        meta: { suppressErrorToast: true },
         mutationFn: (file: FinancialFile) =>
             downloadPurchasePaymentReceipt(workItemId, file),
         onError: (error) =>

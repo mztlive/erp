@@ -227,10 +227,18 @@ export function SupplierAllocationWorkspace({
                     recipient={paymentRecipient}
                     paymentResults={pool
                         .filter((item) => selected.has(item.payableAccountId))
-                        .map(
-                            (item) =>
-                                `${item.sourceDocumentNo} · ${item.paymentGuidance?.termLabel ?? "付款条件待核对"} · 本次 ¥${amounts[item.payableAccountId] || "0"}。${paymentOutcome(item, amounts[item.payableAccountId] ?? "")}`,
-                        )}
+                        .map((item) => ({
+                            id: item.payableAccountId,
+                            documentNo: item.sourceDocumentNo,
+                            termLabel:
+                                item.paymentGuidance?.termLabel ??
+                                "付款条件待核对",
+                            amount: amounts[item.payableAccountId] || "0",
+                            outcome: paymentOutcome(
+                                item,
+                                amounts[item.payableAccountId] ?? "",
+                            ),
+                        }))}
                     onOpenChange={setConfirmOpen}
                     onConfirm={() => void doSubmit()}
                     idPrefix="supplier-payables-payment-submit-confirm"

@@ -49,6 +49,12 @@ let public_url = storage.public_url("images/example.png")?;
 `read` 会将 S3 `NoSuchKey` 转换为 `storage::Error::NotFound`。`delete` 先通过
 `HeadObject` 确认对象存在，对象不存在时返回同样的 `NotFound`。
 
+COS 标准域名上的 JPG、JPEG、PNG、GIF、WebP 对象读取必须在签名前追加
+`ci-process=originImage`，取得上传原图，避免自动压缩改变文件大小和内容指纹。
+其他 S3 服务及非图片对象保持标准 `GetObject`。文件下载仍须校验登记的大小、
+类型和内容指纹；禁止以压缩结果覆盖已登记指纹或跳过校验。
+原图参数遵循 [COS 获取原图接口](https://cloud.tencent.com/document/product/436/119346)。
+
 上传已持有 `Vec<u8>` 时，使用 `save_owned_with_content_type` 转移请求体所有权；
 调用前必须完成文件校验、字节数记录和内容指纹计算。旧的借用入口保持原合同。
 应用启动可限时调用 `warm_connection` 预建连接；预热失败不得改变启动资格。

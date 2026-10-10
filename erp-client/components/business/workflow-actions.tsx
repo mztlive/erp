@@ -206,8 +206,8 @@ export type FormalActionConfirmDialogProps = ControllableDialogProps & {
     formContent?: React.ReactNode
     /** 覆盖确认层宽度等布局，默认 `sm:max-w-xl`。 */
     contentClassName?: string
-    /** 横版把状态变化放到标题行右侧，并加宽确认层。 */
-    layout?: "stack" | "landscape"
+    /** 横版加宽确认层；紧凑版省略装饰图标，将状态放到标题旁。 */
+    layout?: "stack" | "landscape" | "compact"
     nextDepartment?: React.ReactNode
     irreversibleEffects?: readonly React.ReactNode[]
     pending?: boolean
@@ -296,31 +296,52 @@ function FormalActionConfirmDialog({
         nextDepartment != null ||
         irreversibleEffects.length > 0
 
-    const header = (
-        <AlertDialogHeader className="place-items-start justify-items-start text-left has-data-[slot=alert-dialog-media]:grid-cols-[auto_minmax(0,1fr)]">
-            <AlertDialogMedia className="row-span-2 mb-0 self-start text-primary">
-                <FileCheck2Icon aria-hidden="true" />
-            </AlertDialogMedia>
-            <AlertDialogTitle>{title ?? `确认${actionLabel}`}</AlertDialogTitle>
-            <AlertDialogDescription
-                render={<div />}
-                className="col-start-2 text-left"
-            >
-                {description === undefined
-                    ? "请核对状态变化和业务影响后再继续。"
-                    : description}
-            </AlertDialogDescription>
-            {layout === "stack" ? (
-                <div className="col-start-2 mt-1">
+    const header =
+        layout === "compact" ? (
+            <AlertDialogHeader className="block space-y-2 text-left">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <AlertDialogTitle>
+                        {title ?? `确认${actionLabel}`}
+                    </AlertDialogTitle>
                     <StatusChangeStrip
                         sourceStatus={sourceStatus}
                         targetStatus={targetStatus}
                         compact
                     />
                 </div>
-            ) : null}
-        </AlertDialogHeader>
-    )
+                <AlertDialogDescription render={<div />}>
+                    {description === undefined
+                        ? "请核对状态变化和业务影响后再继续。"
+                        : description}
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+        ) : (
+            <AlertDialogHeader className="place-items-start justify-items-start text-left has-data-[slot=alert-dialog-media]:grid-cols-[auto_minmax(0,1fr)]">
+                <AlertDialogMedia className="row-span-2 mb-0 self-start text-primary">
+                    <FileCheck2Icon aria-hidden="true" />
+                </AlertDialogMedia>
+                <AlertDialogTitle>
+                    {title ?? `确认${actionLabel}`}
+                </AlertDialogTitle>
+                <AlertDialogDescription
+                    render={<div />}
+                    className="col-start-2 text-left"
+                >
+                    {description === undefined
+                        ? "请核对状态变化和业务影响后再继续。"
+                        : description}
+                </AlertDialogDescription>
+                {layout === "stack" ? (
+                    <div className="col-start-2 mt-1">
+                        <StatusChangeStrip
+                            sourceStatus={sourceStatus}
+                            targetStatus={targetStatus}
+                            compact
+                        />
+                    </div>
+                ) : null}
+            </AlertDialogHeader>
+        )
 
     return (
         <AlertDialog

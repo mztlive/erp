@@ -13,6 +13,7 @@ use aws_sdk_s3::{Client, Config};
 use url::Url;
 
 use crate::content_cache::ContentCache;
+use crate::cos::original_image_uri;
 use crate::path::{is_blank_or_padded, normalize_prefix, object_key_path};
 use crate::{Error, Result};
 
@@ -376,7 +377,21 @@ impl S3Storage {
     pub async fn read_stream<P: AsRef<Path>>(&self, path: P) -> Result<ByteStream> {
         let key = self.object_key(path.as_ref())?;
         let started = Instant::now();
-        let response = self.client.get_object().bucket(&self.bucket).key(key).send().await.map_err(get_error);
+        let response = self
+            .client
+            .get_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .customize()
+            .map_request(|mut request| {
+                if let Some(uri) = original_image_uri(request.uri())? {
+                    request.set_uri(uri).map_err(s3_error)?;
+                }
+                Ok::<_, Error>(request)
+            })
+            .send()
+            .await
+            .map_err(get_error);
         record_operation("get_object_headers", started, response.is_ok());
         let response = response?;
         Ok(response.body)
@@ -776,6 +791,37 @@ mod tests {
             request.uri(),
             "https://s3.example.com/erp-assets/tenant-a/uploads/images/example.png?x-id=GetObject"
         );
+        Ok(())
+    }
+
+    /// COS 原图参数必须进入真实 SDK 请求，并在请求发送前完成签名。
+    #[tokio::test]
+    async fn reads_cos_original_image_with_signed_query() -> Result<()> {
+        let (http_client, receiver) = capture_request(None);
+        let sdk_config = Config::builder()
+            .behavior_version_latest()
+            .credentials_provider(test_credentials())
+            .region(Region::new("ap-guangzhou"))
+            .endpoint_url("https://cos.ap-guangzhou.myqcloud.com")
+            .force_path_style(true)
+            .http_client(http_client)
+            .build();
+        let storage = S3Storage::from_client(
+            Client::from_conf(sdk_config),
+            TEST_BUCKET,
+            Some(TEST_PREFIX),
+            TEST_PUBLIC_BASE_URL,
+        )?;
+
+        storage.read_immutable("receipts/bank copy.png", "registered-fingerprint").await?;
+
+        let request = receiver.expect_request();
+        assert_eq!(request.method(), "GET");
+        assert_eq!(
+            request.uri(),
+            "https://cos.ap-guangzhou.myqcloud.com/erp-assets/tenant-a/uploads/receipts/bank%20copy.png?x-id=GetObject&ci-process=originImage"
+        );
+        assert!(request.headers().get("authorization").is_some());
         Ok(())
     }
 
