@@ -377,9 +377,9 @@ pub struct SalesInvoiceAllocationView {
     /// 分配含税金额。
     pub allocated_gross_amount: Amount,
     /// 分配不含税金额。
-    pub allocated_net_amount: Amount,
+    pub allocated_net_amount: Option<Amount>,
     /// 分配税额。
-    pub allocated_tax_amount: Amount,
+    pub allocated_tax_amount: Option<Amount>,
     /// 红票反向分配引用的原蓝票分配。
     pub reverses_allocation_id: Option<String>,
 }
@@ -399,16 +399,16 @@ pub struct InvoiceView {
     pub party_id: String,
     /// 发票代码。
     pub invoice_code: Option<String>,
-    /// 发票号码。
-    pub invoice_no: String,
+    /// 发票号码；附件登记未采集时为空。
+    pub invoice_no: Option<String>,
     /// 开票日期（`YYYY-MM-DD`）。
-    pub invoice_date: BusinessDate,
+    pub invoice_date: Option<BusinessDate>,
     /// 含税金额。
     pub gross_amount: Amount,
-    /// 不含税金额。
-    pub net_amount: Amount,
-    /// 税额。
-    pub tax_amount: Amount,
+    /// 不含税金额；附件登记未采集时为空。
+    pub net_amount: Option<Amount>,
+    /// 税额；附件登记未采集时为空，不表示零税额。
+    pub tax_amount: Option<Amount>,
     /// 发票尾差。
     pub rounding_adjustment_amount: Amount,
     /// 尾差原因。

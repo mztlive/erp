@@ -56,7 +56,7 @@ export function ReceivableScopeDetailPreview({
             : data?.kind === "receipt"
               ? `回款单 ${data.receipt.receipt_no}`
               : data?.kind === "invoice"
-                ? `发票 ${data.invoice.invoice_no}`
+                ? `发票 ${data.invoice.invoice_no ?? "附件登记"}`
                 : "往来详情"
     const identity =
         data?.kind === "receivable"
@@ -68,7 +68,9 @@ export function ReceivableScopeDetailPreview({
             : data?.kind === "receipt"
               ? `到账 ${data.receipt.received_at}`
               : data?.kind === "invoice"
-                ? `开票 ${data.invoice.invoice_date}`
+                ? data.invoice.invoice_date
+                    ? `开票 ${data.invoice.invoice_date}`
+                    : "票面信息以附件为准"
                 : undefined
     const limited =
         data?.kind === "receivable"

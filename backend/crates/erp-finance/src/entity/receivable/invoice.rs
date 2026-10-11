@@ -290,20 +290,20 @@ pub struct Invoice {
     pub party_id: PartyId,
     /// 发票代码。
     pub invoice_code: Option<String>,
-    /// 发票号码。
-    pub invoice_no: String,
+    /// 发票号码；附件登记未采集时为空。
+    pub invoice_no: Option<String>,
     /// 规范化发票代码（去空白转大写，去重键）。
     pub normalized_code: Option<String>,
     /// 规范化发票号码（去空白转大写，去重键）。
     pub normalized_no: String,
     /// 开票日期。
-    pub invoice_date: BusinessDate,
+    pub invoice_date: Option<BusinessDate>,
     /// 含税金额。
     pub gross_amount: Amount,
-    /// 不含税金额。
-    pub net_amount: Amount,
-    /// 税额。
-    pub tax_amount: Amount,
+    /// 不含税金额；附件登记未采集时为空。
+    pub net_amount: Option<Amount>,
+    /// 税额；附件登记未采集时为空，不表示零税额。
+    pub tax_amount: Option<Amount>,
     /// 发票尾差。
     pub rounding_adjustment_amount: Amount,
     /// 尾差原因。
@@ -387,13 +387,13 @@ impl Invoice {
             accounting_direction: derive_accounting_direction(data.invoice_kind),
             party_id: data.party_id,
             invoice_code,
-            invoice_no,
+            invoice_no: Some(invoice_no),
             normalized_code,
             normalized_no,
-            invoice_date: data.invoice_date,
+            invoice_date: Some(data.invoice_date),
             gross_amount: data.gross_amount,
-            net_amount: data.net_amount,
-            tax_amount: data.tax_amount,
+            net_amount: Some(data.net_amount),
+            tax_amount: Some(data.tax_amount),
             rounding_adjustment_amount: data.rounding_adjustment_amount,
             rounding_reason,
             original_invoice_id: data.original_invoice_id,
@@ -420,20 +420,21 @@ impl Invoice {
             return Err(Error::from("已登记或已红冲的发票不可编辑"));
         }
         let gross = update.gross_amount.unwrap_or(self.gross_amount);
-        let net = update.net_amount.unwrap_or(self.net_amount);
-        let tax = update.tax_amount.unwrap_or(self.tax_amount);
+        let (current_net, current_tax) = self.tax_breakdown()?;
+        let net = update.net_amount.unwrap_or(current_net);
+        let tax = update.tax_amount.unwrap_or(current_tax);
         validate_amounts(gross, net, tax)?;
         if let Some(gross) = update.gross_amount {
             self.gross_amount = gross;
         }
         if let Some(net) = update.net_amount {
-            self.net_amount = net;
+            self.net_amount = Some(net);
         }
         if let Some(tax) = update.tax_amount {
-            self.tax_amount = tax;
+            self.tax_amount = Some(tax);
         }
         if let Some(date) = update.invoice_date {
-            self.invoice_date = date;
+            self.invoice_date = Some(date);
         }
         if let Some(adjustment) = update.rounding_adjustment_amount {
             self.rounding_adjustment_amount = adjustment;
@@ -447,9 +448,9 @@ impl Invoice {
             self.normalized_code = self.invoice_code.as_ref().map(|code| code.to_uppercase());
         }
         if let Some(no) = update.invoice_no {
-            self.invoice_no =
-                normalize_required_text(no, "发票号码不能为空", INVOICE_NO_MAX_LEN, "发票号码过长")?;
-            self.normalized_no = self.invoice_no.to_uppercase();
+            let no = normalize_required_text(no, "发票号码不能为空", INVOICE_NO_MAX_LEN, "发票号码过长")?;
+            self.normalized_no = no.to_uppercase();
+            self.invoice_no = Some(no);
         }
         self.stable.touch(updated_by);
         Ok(())
@@ -579,7 +580,7 @@ mod tests {
     fn new_normalizes_and_derives_accounting_direction() {
         let invoice = Invoice::new(InvoiceId::new("inv-1"), data(), "admin-1").unwrap();
 
-        assert_eq!(invoice.invoice_no, "01234567");
+        assert_eq!(invoice.invoice_no.as_deref(), Some("01234567"));
         assert_eq!(invoice.invoice_code.as_deref(), Some("1100199999"));
         assert_eq!(invoice.normalized_no, "01234567");
         assert_eq!(invoice.normalized_code.as_deref(), Some("1100199999"));
@@ -630,7 +631,7 @@ mod tests {
             )
             .unwrap();
         assert_eq!(invoice.gross_amount, Amount::from_str("2000.00").unwrap());
-        assert_eq!(invoice.invoice_no, "99887766");
+        assert_eq!(invoice.invoice_no.as_deref(), Some("99887766"));
         assert_eq!(invoice.normalized_no, "99887766");
         assert_eq!(invoice.stable.updated_by, "admin-2");
 

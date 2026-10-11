@@ -372,13 +372,19 @@ export function projectInvoice(
     const status = mapInvoiceStatus(invoice.status)
     const isPosted = status === "registered" || status === "reversed"
     const allowed: AllowedAction[] = ["VIEW_DETAIL"]
-    if (invoice.invoice_kind === "blue" && status === "registered") {
+    if (
+        invoice.invoice_kind === "blue" &&
+        status === "registered" &&
+        invoice.invoice_no != null &&
+        invoice.net_amount != null &&
+        invoice.tax_amount != null
+    ) {
         allowed.push("CONTINUE_ALLOCATE", "ISSUE_RED_INVOICE")
     }
     return {
         invoiceId: invoice.id,
         invoiceCode: invoice.invoice_code ?? undefined,
-        invoiceNo: invoice.invoice_no,
+        invoiceNo: invoice.invoice_no ?? "附件登记",
         invoiceKind: invoice.invoice_kind,
         invoiceKindLabel: invoice.invoice_kind === "red" ? "红票" : "蓝票",
         counterpartyPartyId: invoice.party_id,
@@ -393,7 +399,7 @@ export function projectInvoice(
             undefined,
             MISSING_CUSTOMER_NAME,
         ),
-        invoiceDate: invoice.invoice_date,
+        invoiceDate: invoice.invoice_date ?? "—",
         grossAmount: invoice.gross_amount,
         netAmount: invoice.net_amount,
         taxAmount: invoice.tax_amount,

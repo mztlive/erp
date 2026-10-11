@@ -1,24 +1,20 @@
 "use client"
 
-import * as React from "react"
-import { useQueryClient } from "@tanstack/react-query"
+import Link from "next/link"
+import { sourceSalesOrderHref } from "../lib/source-sales-order"
 import { useInvoiceRequests } from "@/features/invoice-requests/hooks/queries"
 import { subtractFixed } from "@/lib/fixed-decimal"
 import type { InvoiceRequest } from "@/features/invoice-requests/api"
 
 import {
+    MoneyValue,
     WorkspaceTaskPane,
     workspaceTaskSurfacePadClassName,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { LoadingButton } from "@/components/ui/loading-button"
-import { AllocationSessionScreen } from "@/features/customer-receivables/pages/components/allocation-session-screen"
-import {
-    useCreateAllocationSessionMutation,
-    useCustomerAccountsDetailQuery,
-    useAllocationSessionQuery,
-} from "@/features/customer-receivables/hooks/queries"
+import { WorkspaceInvoiceUpload } from "./workspace-invoice-upload"
+import { useCustomerAccountsDetailQuery } from "@/features/customer-receivables/hooks/queries"
 import type { ReceivableAccountRow } from "@/features/customer-receivables/types"
 import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -26,7 +22,6 @@ import { cn } from "@/lib/utils"
 
 import type { WorkspaceWorkItem } from "../types"
 import {
-    invoiceExecutionIsComplete,
     workspaceInvoiceDescriptor,
     workspaceInvoiceMatchesReceivable,
 } from "../lib/workspace-invoice"
@@ -102,13 +97,26 @@ export function WorkspaceInvoiceTask({
             header={
                 <WorkspaceTaskIdentityHeader
                     item={item}
-                    subtitle={[
-                        `${item.ownerRoleLabel} · ${item.ownerUserLabel}`,
-                        receivable?.customerName,
-                        receivable?.salesOrderNo,
-                    ]
-                        .filter(Boolean)
-                        .join(" · ")}
+                    title="登记销项发票"
+                    subtitle={
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <span>
+                                {receivable?.counterpartyPartyName ||
+                                    item.counterpartyName}
+                            </span>
+                            {receivable?.salesOrderId ? (
+                                <Link
+                                    id="workspace-invoice-source-sales"
+                                    href={sourceSalesOrderHref(
+                                        receivable.salesOrderId,
+                                    )}
+                                    className="underline-offset-4 hover:underline"
+                                >
+                                    销售单 {receivable.salesOrderNo}
+                                </Link>
+                            ) : null}
+                        </div>
+                    }
                 />
             }
             aria-label="当前开票任务"
@@ -232,124 +240,64 @@ function WorkspaceInvoiceSession({
     receivable: ReceivableAccountRow
     onTaskCompleted?: (workItemId: string) => void
 }) {
-    const queryClient = useQueryClient()
-    const [resetNonce, setResetNonce] = React.useState(0)
-    const fingerprint = `${item.workItemId}:${item.taskVersion}:${receivable.accountId}:${resetNonce}`
-    const [draftSessionId, setDraftSessionId] = React.useState<string>()
-    const [createError, setCreateError] = React.useState<unknown>(null)
-    const createSession = useCreateAllocationSessionMutation()
-    const sessionQuery = useAllocationSessionQuery(draftSessionId ?? null)
-
-    React.useEffect(() => {
-        let cancelled = false
-        setDraftSessionId(undefined)
-        setCreateError(null)
-        void createSession
-            .mutateAsync({
-                mode: "invoice",
-                counterpartyPartyId: receivable.counterpartyPartyId,
-                counterpartyPartyName: receivable.counterpartyPartyName,
-                customerId: receivable.customerId,
-                customerName: receivable.customerName,
-                salesOrderId: receivable.salesOrderId,
-                receivableAccountId: receivable.accountId,
-                from: "W01",
-            })
-            .then((session) => {
-                if (cancelled) return
-                queryClient.setQueryData(
-                    ["customer-receivables", "session", session.draftSessionId],
-                    {
-                        ...session,
-                        pool: session.pool.map((target) => ({
-                            ...target,
-                            openAmount: receivable.openInvoiceableTotal,
-                        })),
-                    },
-                )
-                setDraftSessionId(session.draftSessionId)
-            })
-            .catch((error: unknown) => {
-                if (cancelled) return
-                setCreateError(error)
-            })
-        return () => {
-            cancelled = true
-        }
-        // 只随任务身份与重置次数重建会话，不把 mutation 实例放进依赖。
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [fingerprint])
-
-    if (createError) {
-        return (
-            <Alert variant="destructive">
-                <AlertTitle>无法开始本次开票</AlertTitle>
-                <AlertDescription className="flex flex-col gap-3">
-                    <span>{getErrorMessage(createError, "请刷新后重试")}</span>
-                    <LoadingButton
-                        id={`workspace-invoice-session-retry-${toAutomationIdSegment(item.workItemId)}`}
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="self-start"
-                        disabled={createSession.isPending}
-                        loading={createSession.isPending}
-                        onClick={() => setResetNonce((value) => value + 1)}
-                    >
-                        {createSession.isPending ? "重试中…" : "重试"}
-                    </LoadingButton>
-                </AlertDescription>
-            </Alert>
-        )
-    }
-
     return (
-        <>
-            <section
-                className="mx-5 mt-4 rounded-lg border p-4 text-sm"
-                aria-label="已批准开票要求"
-            >
-                <p className="font-semibold">
-                    {request.request_no} · 本次剩余批准金额{" "}
-                    {receivable.openInvoiceableTotal} 元
-                </p>
-                <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div
+            className={cn(
+                workspaceTaskSurfacePadClassName,
+                "@container/invoice space-y-6 py-5",
+            )}
+        >
+            <dl className="grid grid-cols-1 gap-3 rounded-lg border border-grid p-4 @min-[540px]/invoice:grid-cols-3">
+                {[
+                    ["批准金额", request.data.amount],
+                    ["已登记", request.invoiced_amount],
+                    ["剩余可开票", receivable.openInvoiceableTotal],
+                ].map(([label, value]) => (
+                    <div
+                        key={label}
+                        className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 @min-[540px]/invoice:border-l @min-[540px]/invoice:pl-4 @min-[540px]/invoice:first:border-l-0 @min-[540px]/invoice:first:pl-0"
+                    >
+                        <dt className="text-sm text-muted-foreground">
+                            {label}
+                        </dt>
+                        <dd>
+                            <MoneyValue
+                                value={value}
+                                className="font-semibold"
+                            />
+                        </dd>
+                    </div>
+                ))}
+            </dl>
+            <section aria-label="已批准开票资料" className="space-y-3">
+                <h3 className="text-base font-semibold">已批准开票资料</h3>
+                <dl className="grid gap-x-6 gap-y-4 rounded-lg border border-grid bg-muted/30 p-4 text-sm @min-[540px]/invoice:grid-cols-2">
                     {[
-                        ["开票抬头", request.data?.invoice_title || "—"],
-                        ["税号", request.data?.tax_number || "—"],
-                        ["开票内容", request.data?.invoice_content || "—"],
-                        ["申请事由", request.data?.reason || "—"],
+                        ["开票抬头", request.data.invoice_title],
+                        ["税号", request.data.tax_number],
+                        ["开票内容", request.data.invoice_content],
+                        ["申请事由", request.data.reason],
                     ].map(([label, value]) => (
-                        <div key={label}>
+                        <div
+                            key={label}
+                            className="grid grid-cols-[5rem_minmax(0,1fr)] gap-3"
+                        >
                             <dt className="text-muted-foreground">{label}</dt>
-                            <dd className="break-words">{value}</dd>
+                            <dd className="break-words">{value || "—"}</dd>
                         </div>
                     ))}
                 </dl>
+                <p className="text-xs text-muted-foreground">
+                    关联应收：{item.objectTitle} · {receivable.salesOrderNo}
+                </p>
             </section>
-            <AllocationSessionScreen
-                isPending={!draftSessionId || sessionQuery.isPending}
-                session={sessionQuery.data}
-                onBackToList={() => setResetNonce((value) => value + 1)}
-                onClose={() => setResetNonce((value) => value + 1)}
-                onPosted={(result) => {
-                    if (
-                        invoiceExecutionIsComplete(
-                            result.allocatedTotal,
-                            receivable.openInvoiceableTotal,
-                        )
-                    ) {
-                        onTaskCompleted?.(item.workItemId)
-                    }
-                }}
-                canOperate
-                workItemId={item.workItemId}
-                expectedTaskVersion={item.taskVersion}
-                taskReceivableAccountId={item.businessObjectId}
-                embedded
-                hideSessionClose
-                closeLabel="继续处理"
+            <WorkspaceInvoiceUpload
+                key={`${item.workItemId}:${item.taskVersion}`}
+                item={item}
+                request={request}
+                amount={receivable.openInvoiceableTotal}
+                onTaskCompleted={onTaskCompleted}
             />
-        </>
+        </div>
     )
 }

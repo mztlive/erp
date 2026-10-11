@@ -41,8 +41,8 @@ pub use self::command::{
 pub use self::draft_update::UpdateCustomerReceiptRequest;
 pub use self::facts::{ReceivableInvoiceFactView, ReceivableReceiptFactView};
 pub use self::invoice::{
-    CommitInvoiceRequest, CommitRedInvoiceRequest, CreateInvoiceRequest, PostInvoiceRequest,
-    SalesInvoiceAllocationLineRequest,
+    CommitInvoiceRequest, CommitRedInvoiceRequest, CompleteInvoiceRequest, CreateInvoiceRequest,
+    PostInvoiceRequest, SalesInvoiceAllocationLineRequest,
 };
 pub use self::query::{
     CustomerReceiptListParams, CustomerReceiptListQuery, InvoiceListParams, InvoiceListQuery, InvoiceView,
@@ -255,11 +255,11 @@ mod tests {
             invoice_kind: InvoiceKind::Blue,
             party_id: "p-1".into(),
             invoice_code: None,
-            invoice_no: "001".into(),
-            invoice_date: BusinessDate::from_ymd(2026, 8, 6).expect("日期合法"),
+            invoice_no: Some("001".into()),
+            invoice_date: Some(BusinessDate::from_ymd(2026, 8, 6).expect("日期合法")),
             gross_amount: Amount::from_str("100").expect("金额合法"),
-            net_amount: Amount::from_str("88.50").expect("金额合法"),
-            tax_amount: Amount::from_str("11.50").expect("金额合法"),
+            net_amount: Some(Amount::from_str("88.50").expect("金额合法")),
+            tax_amount: Some(Amount::from_str("11.50").expect("金额合法")),
             rounding_adjustment_amount: Amount::from_str("0").expect("金额合法"),
             rounding_reason: None,
             original_invoice_id: None,

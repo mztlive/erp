@@ -28,17 +28,17 @@ pub struct ReceivableInvoiceFactView {
     /// 发票 ID。
     pub invoice_id: String,
     /// 发票号码。
-    pub invoice_no: String,
+    pub invoice_no: Option<String>,
     /// 蓝票或红票稳定代码（`BLUE` / `RED`）。
     pub direction: String,
     /// 开票业务日期（`YYYY-MM-DD`）。
-    pub issued_at: String,
+    pub issued_at: Option<String>,
     /// 含税金额。
     pub gross_amount: Amount,
     /// 不含税金额。
-    pub net_amount: Amount,
+    pub net_amount: Option<Amount>,
     /// 税额。
-    pub tax_amount: Amount,
+    pub tax_amount: Option<Amount>,
     /// 当前应收账户的净分配含税金额。
     pub allocated_to_account: Amount,
     /// 当前发票是否已被红冲。

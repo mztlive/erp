@@ -256,8 +256,8 @@ fn purchase_allocation_view(
                 allocation_action: action,
                 receivable_account_id: allocation.payable_account_id.to_string(),
                 allocated_gross_amount: allocation.allocated_gross_amount,
-                allocated_net_amount: allocation.allocated_net_amount,
-                allocated_tax_amount: allocation.allocated_tax_amount,
+                allocated_net_amount: Some(allocation.allocated_net_amount),
+                allocated_tax_amount: Some(allocation.allocated_tax_amount),
                 reverses_allocation_id: allocation.reverses_allocation_id.as_ref().map(|id| id.to_string()),
             }
         })

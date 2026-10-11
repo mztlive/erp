@@ -19,7 +19,7 @@ use persistence_core::Executor;
 use validator::Validate;
 
 use super::invoice::register_created_invoice_document;
-use super::invoice_posting::{InvoicePostingInput, post_invoice_apply};
+use super::invoice_posting::{InvoicePostingAllocations, InvoicePostingInput, post_invoice_apply};
 use crate::{Error, Result};
 
 /// 本次已规范化的发票事务输入，不保存 S3 字节。
@@ -60,7 +60,7 @@ impl InvoiceCommitTransaction {
             InvoicePostingInput {
                 work_item_id: &self.work_item_id,
                 expected_task_version: self.expected_task_version,
-                plan_lines: &lines,
+                allocations: InvoicePostingAllocations::Detailed(&lines),
                 actor: &self.actor,
                 action: "invoice.commit",
                 command_receipt: Some(&self.receipt),

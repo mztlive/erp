@@ -75,8 +75,8 @@ export type BackendInvoiceAllocation = {
     allocation_action: "apply" | "reverse"
     receivable_account_id: string
     allocated_gross_amount: string
-    allocated_net_amount: string
-    allocated_tax_amount: string
+    allocated_net_amount: string | null
+    allocated_tax_amount: string | null
     reverses_allocation_id?: string | null
 }
 
@@ -124,11 +124,11 @@ export type BackendInvoice = {
     invoice_kind: "blue" | "red"
     party_id: string
     invoice_code?: string | null
-    invoice_no: string
-    invoice_date: string
+    invoice_no: string | null
+    invoice_date: string | null
     gross_amount: string
-    net_amount: string
-    tax_amount: string
+    net_amount: string | null
+    tax_amount: string | null
     rounding_adjustment_amount: string
     rounding_reason?: string | null
     original_invoice_id?: string | null

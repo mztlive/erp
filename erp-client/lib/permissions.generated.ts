@@ -4327,6 +4327,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/invoices/complete-with-files",
+                description: "上传附件并完成开票",
+                permission: {
+                    resource: "invoice",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
                 method: "PUT",
                 path: "/admin/customer-receipts/{id}",
                 description: "修改原财务单据草稿",

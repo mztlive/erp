@@ -103,6 +103,50 @@ export function WorkspaceTaskCard({
         </>
     )
 
+    if (item.workItemType === "SALES_INVOICE_EXECUTION") {
+        return (
+            <button
+                id={`workspace-task-${toAutomationIdSegment(item.workItemId)}`}
+                type="button"
+                aria-label={`销项开票 ${title}${sourceSales ? " " + sourceSales.orderNo : ""}`}
+                aria-current={selected ? "true" : undefined}
+                onClick={() => onSelect(item)}
+                className={cn(
+                    "relative w-full space-y-2 px-5 py-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                    selected
+                        ? "bg-muted/60 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-foreground"
+                        : "hover:bg-muted/30",
+                )}
+            >
+                <span className="flex items-start justify-between gap-2">
+                    <span className="min-w-0 break-words font-medium">
+                        {title}
+                    </span>
+                    <StatusBadge
+                        label={blocked ? "受阻" : "待开票"}
+                        tone={blocked ? "warning" : "info"}
+                    />
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                    销项开票{sourceSales ? ` · ${sourceSales.orderNo}` : ""}
+                </span>
+                <span className="flex items-baseline justify-between gap-2">
+                    <span className="text-xs text-muted-foreground">
+                        剩余待开票
+                    </span>
+                    <span className="num text-sm font-semibold">
+                        {amount?.value ?? "—"}
+                    </span>
+                </span>
+                {item.dueAt ? (
+                    <span className="block text-xs text-muted-foreground">
+                        {item.dueAtLabel}
+                    </span>
+                ) : null}
+            </button>
+        )
+    }
+
     return (
         <button
             type="button"

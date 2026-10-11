@@ -199,8 +199,8 @@ export type SalesInvoiceRow = Readonly<{
     customerName: string
     invoiceDate: string
     grossAmount: string
-    netAmount: string
-    taxAmount: string
+    netAmount: string | null
+    taxAmount: string | null
     roundingAdjustmentAmount?: string
     roundingAdjustmentReason?: string
     allocatedTotal: string

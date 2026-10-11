@@ -152,7 +152,7 @@ pub struct ScopedInvoiceRow {
     /// 发票主键。
     pub id: String,
     /// 发票号码。
-    pub invoice_no: String,
+    pub invoice_no: Option<String>,
     /// 发票方向。
     pub invoice_direction: erp_finance::entity::receivable::InvoiceDirection,
     /// 蓝红类型。
@@ -160,7 +160,7 @@ pub struct ScopedInvoiceRow {
     /// 发票状态。
     pub status: erp_finance::entity::receivable::InvoiceStatus,
     /// 开票日期。
-    pub invoice_date: erp_core::common::time::BusinessDate,
+    pub invoice_date: Option<erp_core::common::time::BusinessDate>,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
     /// 获授权分配份额合计。
@@ -925,11 +925,11 @@ mod tests {
             let invoice = page(
                 vec![ScopedInvoiceRow {
                     id: "inv-1".into(),
-                    invoice_no: "FP-1".into(),
+                    invoice_no: Some("FP-1".into()),
                     invoice_direction: direction,
                     invoice_kind: InvoiceKind::Blue,
                     status: InvoiceStatus::Registered,
-                    invoice_date: BusinessDate::from_ymd(2026, 9, 23).unwrap(),
+                    invoice_date: Some(BusinessDate::from_ymd(2026, 9, 23).unwrap()),
                     created_at: 1,
                     visible_allocated_share: zero_amount(),
                     gross_amount: Some(zero_amount()),

@@ -52,11 +52,11 @@ export type ScopedCustomerReceiptWire = Readonly<{
 
 export type ScopedInvoiceWire = Readonly<{
     id: string
-    invoice_no: string
+    invoice_no: string | null
     invoice_direction: string
     invoice_kind: string
     status: string
-    invoice_date: string
+    invoice_date: string | null
     created_at: number
     visible_allocated_share: string
     gross_amount: string | null

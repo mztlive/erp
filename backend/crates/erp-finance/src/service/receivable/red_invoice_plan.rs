@@ -32,8 +32,8 @@ pub fn sales_red_invoice_allocation_plan(
     related: &[SalesInvoiceAllocation],
     requested: Option<Amount>,
 ) -> Result<RedInvoiceAllocationPlan> {
-    let basis = sales_red_invoice_allocation_bases(blue);
-    let reversals = sales_red_invoice_allocation_reversals(related);
+    let basis = sales_red_invoice_allocation_bases(blue)?;
+    let reversals = sales_red_invoice_allocation_reversals(related)?;
     RedInvoiceAllocationPlan::build(InvoiceDirection::Sales, basis, &reversals, requested)
         .map_err(map_red_invoice_allocation_plan_error)
 }
@@ -86,53 +86,53 @@ fn allocation_reversals<T>(
 /// 返回保持查询顺序的正向分配基数，非 `APPLY` 事实被忽略。
 ///
 /// # 错误
-/// 不返回错误。
+/// 正向分配未采集票面税额时拒绝。
 ///
 /// # 约束
 /// 只复制事实字段，不扣减历史红冲或执行金额计算。
-fn sales_red_invoice_allocation_bases(blue: &[SalesInvoiceAllocation]) -> Vec<RedInvoiceAllocationBasis> {
-    allocation_bases(
-        blue,
-        |line| line.allocation_action == AllocationAction::Apply,
-        |line| RedInvoiceAllocationBasis {
-            original_allocation_id: line.base.id.clone(),
-            account_id: line.receivable_account_id.to_string(),
-            allocation_seq: line.allocation_seq,
-            gross: line.allocated_gross_amount,
-            net: line.allocated_net_amount,
-            tax: line.allocated_tax_amount,
-        },
-    )
+fn sales_red_invoice_allocation_bases(
+    blue: &[SalesInvoiceAllocation],
+) -> Result<Vec<RedInvoiceAllocationBasis>> {
+    blue.iter()
+        .filter(|line| line.allocation_action == AllocationAction::Apply)
+        .map(|line| {
+            let (net, tax) = allocation_tax(line)?;
+            Ok(RedInvoiceAllocationBasis {
+                original_allocation_id: line.base.id.clone(),
+                account_id: line.receivable_account_id.to_string(),
+                allocation_seq: line.allocation_seq,
+                gross: line.allocated_gross_amount,
+                net,
+                tax,
+            })
+        })
+        .collect()
 }
 
-/// 将销项历史反向分配转换为领域红冲事实输入。
-///
-/// # 参数
-/// * `related` - 同一批应收账户下的全部相关销项分配事实
-///
-/// # 返回
-/// 返回所有携带原分配引用的 `REVERSE` 事实，保持查询顺序。
-///
-/// # 错误
-/// 不返回错误。
-///
-/// # 约束
-/// 缺少反向引用的损坏事实沿用旧逻辑忽略，由领域计划只匹配原分配身份。
+/// 仅将实际反向分配转换为税额已知的红冲依据。
 fn sales_red_invoice_allocation_reversals(
     related: &[SalesInvoiceAllocation],
-) -> Vec<RedInvoiceAllocationReversal> {
-    allocation_reversals(
-        related,
-        |line| line.allocation_action == AllocationAction::Reverse,
-        |line| {
-            line.reverses_allocation_id.as_ref().map(|original_id| RedInvoiceAllocationReversal {
+) -> Result<Vec<RedInvoiceAllocationReversal>> {
+    related
+        .iter()
+        .filter(|line| line.allocation_action == AllocationAction::Reverse)
+        .filter_map(|line| line.reverses_allocation_id.as_ref().map(|id| (line, id)))
+        .map(|(line, original_id)| {
+            let (net, tax) = allocation_tax(line)?;
+            Ok(RedInvoiceAllocationReversal {
                 original_allocation_id: original_id.to_string(),
                 gross: line.allocated_gross_amount,
-                net: line.allocated_net_amount,
-                tax: line.allocated_tax_amount,
+                net,
+                tax,
             })
-        },
-    )
+        })
+        .collect()
+}
+
+fn allocation_tax(line: &SalesInvoiceAllocation) -> Result<(Amount, Amount)> {
+    line.allocated_net_amount
+        .zip(line.allocated_tax_amount)
+        .ok_or_else(|| Error::BusinessLogicError("附件登记未采集票面税额，不支持票面红冲".into()))
 }
 
 /// 按账户聚合红票 reversal 含税增量（FIN-R11）。

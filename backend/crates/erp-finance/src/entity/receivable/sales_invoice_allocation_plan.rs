@@ -304,11 +304,11 @@ mod tests {
         let net: Amount = plan
             .new_allocations()
             .iter()
-            .fold(Amount::zero(), |sum, a| sum.checked_add(a.allocated_net_amount));
+            .fold(Amount::zero(), |sum, a| sum.checked_add(a.allocated_net_amount.unwrap()));
         let tax: Amount = plan
             .new_allocations()
             .iter()
-            .fold(Amount::zero(), |sum, a| sum.checked_add(a.allocated_tax_amount));
+            .fold(Amount::zero(), |sum, a| sum.checked_add(a.allocated_tax_amount.unwrap()));
         assert_eq!(gross, Amount::from_str("100.00").unwrap());
         assert_eq!(net, Amount::from_str("94.00").unwrap());
         assert_eq!(tax, Amount::from_str("6.00").unwrap());

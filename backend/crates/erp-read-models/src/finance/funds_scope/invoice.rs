@@ -751,8 +751,8 @@ mod tests {
                 allocation_action: AllocationAction::Apply,
                 receivable_account_id: id.into(),
                 allocated_gross_amount: amount,
-                allocated_net_amount: amount,
-                allocated_tax_amount: zero_amount(),
+                allocated_net_amount: Some(amount),
+                allocated_tax_amount: Some(zero_amount()),
                 reverses_allocation_id: None,
             },
         }

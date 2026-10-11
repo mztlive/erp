@@ -2,7 +2,9 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Multipart, State};
-use erp_finance::dto::receivable::{CommitInvoiceRequest, CreateInvoiceRequest, InvoiceView};
+use erp_finance::dto::receivable::{
+    CommitInvoiceRequest, CompleteInvoiceRequest, CreateInvoiceRequest, InvoiceView,
+};
 use erp_processes::attachments::PendingFileAssets;
 use erp_processes::finance_posting::receivable::ReceivableProcess;
 use erp_support::SensitivityClass;
@@ -92,6 +94,47 @@ pub async fn invoice_commit_with_files(
     let outcome = ReceivableProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .commit_invoice_with_assets(req, pending, &actor)
+        .await;
+    let result = finish_asset_command(&state, &uploads, outcome, |result| result.assets_committed).await?;
+    Ok(ApiResponse::ok_with_data(result.view))
+}
+
+#[permission_macros::permission(
+    group = "客户往来",
+    group_desc = "应收台账、回款与销项发票管理",
+    desc = "上传附件并完成开票",
+    resource = "invoice",
+    action = "post"
+)]
+/// 按剩余批准金额完成开票并关联附件；重放删除未消费上传。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 当前认证账号
+/// * `multipart` - 开票 JSON 命令和按临时引用命名的文件
+///
+/// # 返回
+/// 原销项发票响应。
+///
+/// # 错误
+/// 文件或事务失败时拒绝；提交结果未知时保留存储对象。
+pub async fn invoice_complete_with_files(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    mut multipart: Multipart,
+) -> Result<InvoiceView> {
+    let (req, files) = extract_command_with_asset_files::<CompleteInvoiceRequest>(&mut multipart).await?;
+    let uploads = store_pending_asset_files(&state, files, |_| SensitivityClass::Sensitive).await?;
+    let pending = match PendingFileAssets::prepare(uploads.clone(), &actor) {
+        Ok(pending) => pending.shared(),
+        Err(error) => {
+            delete_pending_asset_objects(&state, &uploads).await;
+            return Err(error.into());
+        },
+    };
+    let outcome = ReceivableProcess::new(state.db())
+        .with_object_read(state.approval_object_read())
+        .complete_invoice_with_assets(req, pending, &actor)
         .await;
     let result = finish_asset_command(&state, &uploads, outcome, |result| result.assets_committed).await?;
     Ok(ApiResponse::ok_with_data(result.view))

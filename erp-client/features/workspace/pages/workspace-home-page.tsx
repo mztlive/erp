@@ -417,7 +417,10 @@ export function WorkspaceHomeView({
                         detailItem &&
                             !narrowDetailOpen &&
                             !detailExpanded &&
-                            "xl:w-[420px] xl:flex-none 2xl:w-[450px]",
+                            (detailItem.workItemType ===
+                            "SALES_INVOICE_EXECUTION"
+                                ? "xl:w-[340px] xl:flex-none 2xl:w-[360px]"
+                                : "xl:w-[420px] xl:flex-none 2xl:w-[450px]"),
                     )}
                     aria-label={filterLabel}
                 >

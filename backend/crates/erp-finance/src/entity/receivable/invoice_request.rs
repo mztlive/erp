@@ -230,6 +230,23 @@ impl SalesInvoiceRequest {
         self.status = InvoiceRequestStatus::Draft;
         Ok(())
     }
+    /// 读取附件确认应完成的全部剩余批准金额。
+    /// # 参数
+    /// 用户核对附件时的申请版本。
+    /// # 返回
+    /// 当前已批准申请的正数剩余额度。
+    /// # 错误
+    /// 版本变化、尚未批准、已完成或额度无效时拒绝。
+    pub fn completion_amount(&self, expected_version: u64) -> Result<Amount> {
+        if self.base.version != expected_version {
+            return Err(Error::from("开票申请额度已变化，请刷新后重新核对"));
+        }
+        if self.status != InvoiceRequestStatus::Approved || self.remaining() <= Amount::zero() {
+            return Err(Error::from("开票申请尚未批准或已完成"));
+        }
+        Ok(self.remaining())
+    }
+
     /// 消耗实际登记发票的授权金额；红冲不恢复原申请授权。
     ///
     /// # 参数

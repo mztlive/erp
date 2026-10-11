@@ -17,6 +17,7 @@ pub mod customer_receipt;
 pub mod external_facts;
 pub mod funds_ledger;
 pub mod invoice;
+mod invoice_evidence;
 pub mod invoice_request;
 pub mod invoice_request_source;
 pub use invoice_request::*;

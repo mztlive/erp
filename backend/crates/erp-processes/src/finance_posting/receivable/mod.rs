@@ -33,6 +33,7 @@ mod dto;
 mod invoice;
 mod invoice_attachments;
 mod invoice_commit;
+mod invoice_evidence;
 mod invoice_posting;
 pub(crate) mod invoice_request;
 

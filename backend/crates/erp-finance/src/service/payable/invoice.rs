@@ -48,7 +48,7 @@ impl PayableService {
         let views = allocations.iter().map(purchase_invoice_allocation_view).collect();
         Ok(PurchaseInvoiceRegisteredView {
             invoice_id: invoice_id.to_string(),
-            invoice_no: invoice.invoice_no,
+            invoice_no: invoice.invoice_no.ok_or_else(|| Error::Internal("进项发票缺少号码".into()))?,
             gross_amount: invoice.gross_amount,
             allocations: views,
         })
@@ -208,11 +208,12 @@ pub async fn prepare_purchase_invoice_allocations(
         .collect();
     let allocation_ids: Vec<PurchaseInvoiceAllocationId> =
         (0..lines.len()).map(|_| PurchaseInvoiceAllocationId::new(next_id())).collect();
+    let (net, tax) = invoice_for_tx.tax_breakdown()?;
     let plan = PurchaseInvoiceAllocationPlan::new(
         invoice_for_tx.base.id.clone().into(),
         invoice_for_tx.gross_amount,
-        invoice_for_tx.net_amount,
-        invoice_for_tx.tax_amount,
+        net,
+        tax,
         &lines,
         &allocation_ids,
     )?;

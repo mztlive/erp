@@ -131,7 +131,7 @@ impl BusinessFinanceFiles {
                 if readable_file(&file) && seen_assets.insert(file.base.id.clone()) {
                     result.push(FinancialFileView::new(
                         invoice.base.id.clone(),
-                        invoice.invoice_no.clone(),
+                        invoice.invoice_no.clone().unwrap_or_else(|| "附件登记".into()),
                         file,
                     ));
                 }

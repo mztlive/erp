@@ -152,3 +152,19 @@ fn exhausted_approval_version_preserves_draft() {
     assert!(req.submit(amount("1000")).is_err());
     assert_eq!(req, before);
 }
+
+#[test]
+fn attachment_completion_uses_only_current_approved_remainder() {
+    let mut req = request("600");
+    assert!(req.completion_amount(req.base.version).is_err());
+    req.submit(amount("1000")).unwrap();
+    assert!(req.completion_amount(req.base.version).is_err());
+    req.approve().unwrap();
+    req.record_invoice(amount("200")).unwrap();
+    assert_eq!(req.completion_amount(req.base.version).unwrap(), amount("400"));
+    assert!(req.completion_amount(req.base.version + 1).is_err());
+    req.record_invoice(req.completion_amount(req.base.version).unwrap()).unwrap();
+    assert_eq!(req.status, InvoiceRequestStatus::Completed);
+    assert_eq!(req.invoiced_amount, amount("600"));
+    assert!(req.completion_amount(req.base.version).is_err());
+}

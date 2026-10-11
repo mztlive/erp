@@ -127,3 +127,42 @@ pub struct CommitRedInvoiceRequest {
     #[validate(length(min = 1, max = 128, message = "幂等键不能为空"))]
     pub idempotency_key: String,
 }
+
+/// 按剩余批准额度上传附件并完成开票；金额、主体及目标由服务端读取。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct CompleteInvoiceRequest {
+    /// 当前开票任务。
+    pub work_item_id: WorkItemId,
+    /// 用户看到的任务版本。
+    #[validate(custom(function = "non_blank", message = "任务版本不能为空"))]
+    #[validate(length(max = 20))]
+    pub expected_task_version: String,
+    /// 已批准申请版本，防止上传过程中额度变化。
+    pub expected_request_version: u64,
+    /// 至少一个发票凭证，multipart 使用临时文件引用。
+    #[validate(length(min = 1, max = 32, message = "请上传 1 至 32 个发票附件"))]
+    pub attachment_asset_ids: Vec<FileAssetId>,
+    /// 同一次确认及重试保持一致。
+    #[validate(custom(function = "non_blank", message = "操作号不能为空"))]
+    #[validate(length(max = 128))]
+    pub idempotency_key: String,
+}
+
+#[cfg(test)]
+mod evidence_request_tests {
+    use super::*;
+    #[test]
+    fn evidence_requires_files_and_rejects_client_amounts() {
+        let mut payload = serde_json::json!({"work_item_id":"task","expected_task_version":"1","expected_request_version":2,"attachment_asset_ids":["file"],"idempotency_key":"key"});
+        assert!(
+            serde_json::from_value::<CompleteInvoiceRequest>(payload.clone()).unwrap().validate().is_ok()
+        );
+        payload["attachment_asset_ids"] = serde_json::json!([]);
+        assert!(
+            serde_json::from_value::<CompleteInvoiceRequest>(payload.clone()).unwrap().validate().is_err()
+        );
+        payload["gross_amount"] = serde_json::json!("1.00");
+        assert!(serde_json::from_value::<CompleteInvoiceRequest>(payload).is_err());
+    }
+}

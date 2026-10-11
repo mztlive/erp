@@ -10,7 +10,9 @@ use erp_core::ids::{ReceivableAccountId, SalesOrderId, WorkItemId};
 use erp_finance::entity::receivable::sales_invoice_allocation_plan::SalesInvoiceAllocationLine;
 use erp_finance::entity::receivable::{Invoice, ReceivableAccount};
 use erp_finance::service::command_receipt::FinanceCommandReceiptService;
-use erp_finance::service::receivable::invoice_posting::persist_sales_invoice_allocations;
+use erp_finance::service::receivable::invoice_posting::{
+    persist_evidence_allocation, persist_sales_invoice_allocations,
+};
 use mongodb::Database;
 use persistence_core::Executor;
 
@@ -41,10 +43,16 @@ fn dedup_sorted(mut ids: Vec<String>) -> Vec<String> {
 pub(super) struct InvoicePostingInput<'a> {
     pub work_item_id: &'a WorkItemId,
     pub expected_task_version: u64,
-    pub plan_lines: &'a [SalesInvoiceAllocationLine],
+    pub allocations: InvoicePostingAllocations<'a>,
     pub actor: &'a AuditActor,
     pub action: &'static str,
     pub command_receipt: Option<&'a CommandReceipt>,
+}
+
+/// 票面录入与附件登记分别保留其已知金额事实。
+pub(super) enum InvoicePostingAllocations<'a> {
+    Detailed(&'a [SalesInvoiceAllocationLine]),
+    Evidence(&'a ReceivableAccountId),
 }
 
 /// 在调用方已有事务中，按既定顺序把已校验发票写入财务、任务、销售和审计。
@@ -128,8 +136,12 @@ impl InvoicePostingSteps for MongoInvoicePosting<'_> {
     }
 
     async fn record_execution(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        let account_ids =
-            self.input.plan_lines.iter().map(|line| line.receivable_account_id.clone()).collect::<Vec<_>>();
+        let account_ids = match self.input.allocations {
+            InvoicePostingAllocations::Detailed(lines) => {
+                lines.iter().map(|line| line.receivable_account_id.clone()).collect::<Vec<_>>()
+            },
+            InvoicePostingAllocations::Evidence(account) => vec![account.clone()],
+        };
         let request_id = invoice_task::record_invoice_execution(
             self.db,
             invoice_task::InvoiceExecutionInput {
@@ -148,14 +160,22 @@ impl InvoicePostingSteps for MongoInvoicePosting<'_> {
     }
 
     async fn persist_finance(&mut self, executor: &mut dyn Executor) -> Result<()> {
-        let (accounts, account_ids) = persist_sales_invoice_allocations(
-            self.db,
-            self.invoice,
-            self.input.plan_lines,
-            self.input.actor.id(),
-            executor,
-        )
-        .await?;
+        let (accounts, account_ids) = match self.input.allocations {
+            InvoicePostingAllocations::Detailed(lines) => {
+                persist_sales_invoice_allocations(
+                    self.db,
+                    self.invoice,
+                    lines,
+                    self.input.actor.id(),
+                    executor,
+                )
+                .await?
+            },
+            InvoicePostingAllocations::Evidence(account) => {
+                persist_evidence_allocation(self.db, self.invoice, account, self.input.actor.id(), executor)
+                    .await?
+            },
+        };
         self.accounts = accounts;
         self.account_ids = account_ids;
         Ok(())
@@ -177,23 +197,20 @@ impl InvoicePostingSteps for MongoInvoicePosting<'_> {
             .with_command_id(self.input.command_receipt.map(|command| command.id().to_string()))?;
         let audit = context.log(BusinessEventContent {
             target_id: self.invoice.base.id.clone(),
-            target_number: Some(self.invoice.invoice_no.clone()),
+            target_number: self.invoice.invoice_no.clone(),
             result: BusinessEventResult::Succeeded,
             field_changes: vec![],
-            facts: vec![
-                AuditFact {
-                    field: "gross_amount".to_string(),
-                    value: AuditValue::Amount { value: self.invoice.gross_amount },
-                },
-                AuditFact {
-                    field: "net_amount".to_string(),
-                    value: AuditValue::Amount { value: self.invoice.net_amount },
-                },
-                AuditFact {
-                    field: "tax_amount".to_string(),
-                    value: AuditValue::Amount { value: self.invoice.tax_amount },
-                },
-            ],
+            facts: [
+                ("gross_amount", Some(self.invoice.gross_amount)),
+                ("net_amount", self.invoice.net_amount),
+                ("tax_amount", self.invoice.tax_amount),
+            ]
+            .into_iter()
+            .filter_map(|(field, amount)| {
+                amount
+                    .map(|value| AuditFact { field: field.to_string(), value: AuditValue::Amount { value } })
+            })
+            .collect(),
         })?;
         self.audit_event_id = Some(audit.base.id.clone());
         persist_log(self.db, &audit, executor).await?;

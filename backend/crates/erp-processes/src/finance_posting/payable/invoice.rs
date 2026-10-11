@@ -194,15 +194,16 @@ impl<P: PurchaseInvoiceCommandPort> AuditedCommand for RegisterPurchaseInvoiceCo
         let invoice = self.port.persist_invoice(registration, executor).await?;
         let invoice_id = InvoiceId::new(invoice.base.id.clone());
         self.port.save_receipt(registration, invoice_id.clone(), self.audit_event_id, executor).await?;
-        Ok(AuditedWrite::Fresh { result: invoice_id, content: registered_event_content(&invoice) })
+        Ok(AuditedWrite::Fresh { result: invoice_id, content: registered_event_content(&invoice)? })
     }
 }
 
 /// 登记事件只记录含税、不含税和税额。
-fn registered_event_content(invoice: &Invoice) -> BusinessEventContent {
-    BusinessEventContent {
+fn registered_event_content(invoice: &Invoice) -> Result<BusinessEventContent> {
+    let (net, tax) = invoice.tax_breakdown()?;
+    Ok(BusinessEventContent {
         target_id: invoice.base.id.clone(),
-        target_number: Some(invoice.invoice_no.clone()),
+        target_number: invoice.invoice_no.clone(),
         result: BusinessEventResult::Succeeded,
         field_changes: vec![],
         facts: vec![
@@ -210,16 +211,10 @@ fn registered_event_content(invoice: &Invoice) -> BusinessEventContent {
                 field: "gross_amount".to_string(),
                 value: AuditValue::Amount { value: invoice.gross_amount },
             },
-            AuditFact {
-                field: "net_amount".to_string(),
-                value: AuditValue::Amount { value: invoice.net_amount },
-            },
-            AuditFact {
-                field: "tax_amount".to_string(),
-                value: AuditValue::Amount { value: invoice.tax_amount },
-            },
+            AuditFact { field: "net_amount".to_string(), value: AuditValue::Amount { value: net } },
+            AuditFact { field: "tax_amount".to_string(), value: AuditValue::Amount { value: tax } },
         ],
-    }
+    })
 }
 
 struct MongoPurchaseInvoiceCommand {

@@ -211,10 +211,10 @@ export function createScopedInvoiceColumns(): ColumnDef<ScopedInvoiceWire>[] {
             cell: ({ row }) => (
                 <div className="min-w-0">
                     <div className="num break-words text-sm font-medium">
-                        {row.original.invoice_no}
+                        {row.original.invoice_no ?? "附件登记"}
                     </div>
                     <div className="num text-xs text-muted-foreground">
-                        {row.original.invoice_date}
+                        {row.original.invoice_date ?? "—"}
                     </div>
                 </div>
             ),

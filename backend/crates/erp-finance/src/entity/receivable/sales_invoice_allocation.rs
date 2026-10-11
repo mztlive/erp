@@ -32,7 +32,8 @@ pub struct SalesInvoiceAllocationData {
 
 /// 销项发票分配实体（正式事实，数据模型 §6.8）。
 ///
-/// `(invoice_id, allocation_seq)` 唯一；金额三元组满足 gross = net + tax 恒等。
+/// `(invoice_id, allocation_seq)` 唯一；采集票面税额时满足 gross = net + tax 恒等。
+/// 附件登记只保存批准含税金额，不含税金额及税额均为空。
 /// 蓝票净分配不得超过发票有效余额与目标子账 `open_invoiceable_total`、红票只
 /// 允许反向原蓝票分配且累计不超过原有效分配是跨行约束，由 P3 登记事务双侧
 /// 锁定校验（§8.3）。分配行过账后不可更新或删除。
@@ -51,9 +52,9 @@ pub struct SalesInvoiceAllocation {
     /// 分配含税金额。
     pub allocated_gross_amount: Amount,
     /// 分配不含税金额。
-    pub allocated_net_amount: Amount,
+    pub allocated_net_amount: Option<Amount>,
     /// 分配税额。
-    pub allocated_tax_amount: Amount,
+    pub allocated_tax_amount: Option<Amount>,
     /// 红票引用的原蓝票分配。
     pub reverses_allocation_id: Option<SalesInvoiceAllocationId>,
 }
@@ -87,8 +88,8 @@ impl SalesInvoiceAllocation {
             allocation_seq: data.allocation_seq,
             allocation_action: data.allocation_action,
             allocated_gross_amount: data.allocated_gross_amount,
-            allocated_net_amount: data.allocated_net_amount,
-            allocated_tax_amount: data.allocated_tax_amount,
+            allocated_net_amount: Some(data.allocated_net_amount),
+            allocated_tax_amount: Some(data.allocated_tax_amount),
             reverses_allocation_id: data.reverses_allocation_id,
         })
     }
@@ -174,7 +175,7 @@ mod tests {
 
         assert_eq!(
             allocation.allocated_gross_amount,
-            allocation.allocated_net_amount.checked_add(allocation.allocated_tax_amount),
+            allocation.allocated_net_amount.unwrap().checked_add(allocation.allocated_tax_amount.unwrap()),
             "gross = net + tax 必须精确成立"
         );
         assert_eq!(allocation.allocated_gross_amount, erp_core::money::Amount::from_str("29.97").unwrap());

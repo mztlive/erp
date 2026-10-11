@@ -34,16 +34,16 @@ pub struct InvoiceRow {
     pub party_id: String,
     /// 发票代码。
     pub invoice_code: Option<String>,
-    /// 发票号码。
-    pub invoice_no: String,
+    /// 发票号码；附件登记未采集时为空。
+    pub invoice_no: Option<String>,
     /// 开票日期（YYYY-MM-DD）。
-    pub invoice_date: BusinessDate,
+    pub invoice_date: Option<BusinessDate>,
     /// 含税金额。
     pub gross_amount: Amount,
-    /// 不含税金额。
-    pub net_amount: Amount,
-    /// 税额。
-    pub tax_amount: Amount,
+    /// 不含税金额；附件登记未采集时为空。
+    pub net_amount: Option<Amount>,
+    /// 税额；附件登记未采集时为空，不表示零税额。
+    pub tax_amount: Option<Amount>,
     /// 发票尾差。
     pub rounding_adjustment_amount: Amount,
     /// 尾差原因。

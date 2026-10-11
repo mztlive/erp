@@ -205,7 +205,7 @@ export async function postAllocation(
             status: "succeeded",
             mode: "invoice",
             factId: posted.id,
-            factNo: posted.invoice_no,
+            factNo: posted.invoice_no ?? "附件登记",
             allocatedTotal: posted.allocated_total,
             unallocatedAmount: posted.unallocated_amount,
             operationId: commandInput.idempotencyKey,

@@ -215,6 +215,17 @@ export async function createAllocationSession(
                 `/admin/invoices/${encodeURIComponent(input.existingFactId)}`,
             ),
         )
+        if (
+            inv.invoice_no == null ||
+            inv.invoice_date == null ||
+            inv.net_amount == null ||
+            inv.tax_amount == null
+        ) {
+            throw {
+                kind: "Validation",
+                message: "附件登记已按批准金额完成，无需继续分配。",
+            }
+        }
         existingFactNo = inv.invoice_no
         fact = {
             invoiceCode: inv.invoice_code ?? undefined,

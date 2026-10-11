@@ -219,6 +219,17 @@ fn additional_document_routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/invoices/complete-with-files",
+            with_permission(
+                upload::multipart_route(
+                    post(receivable::invoice_files::invoice_complete_with_files),
+                    32 * upload::MAX_UPLOAD_FILE_BYTES + 1024 * 1024,
+                ),
+                rbac,
+                receivable::invoice_files::invoice_complete_with_files_permission_key(),
+            ),
+        )
+        .route(
             "/customer-receipts/{id}",
             with_permission(
                 put(receivable::draft_update::customer_receipt_update),

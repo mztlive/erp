@@ -99,7 +99,7 @@ pub fn invoice_fact_views(snapshot: &ReceivableSnapshot) -> Vec<ReceivableInvoic
                     InvoiceKind::Red => "RED",
                 }
                 .to_string(),
-                issued_at: invoice.invoice_date.to_string(),
+                issued_at: invoice.invoice_date.map(|date| date.to_string()),
                 gross_amount: invoice.gross_amount,
                 net_amount: invoice.net_amount,
                 tax_amount: invoice.tax_amount,

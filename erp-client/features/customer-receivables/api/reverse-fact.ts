@@ -156,7 +156,7 @@ export async function reverseFact(
         const result: ReverseFactResult = {
             status: "succeeded",
             reverseFactId: red.id,
-            reverseFactNo: red.invoice_no,
+            reverseFactNo: red.invoice_no ?? "附件登记",
             operationId: commandInput.idempotencyKey,
             message: "已登记独立红票并追加反向分配，原蓝票保留。",
         }

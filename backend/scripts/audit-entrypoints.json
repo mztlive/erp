@@ -2681,6 +2681,20 @@
       "reason": "元数据工厂/准备步骤 commit_invoice_with_assets 通过 .run_authorized_policy_transaction 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
     },
     {
+      "path": "crates/erp-processes/src/finance_posting/receivable/invoice_evidence.rs",
+      "function": "complete_invoice_with_assets",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        ".run_authorized_policy_transaction"
+      ],
+      "call_counts": {
+        ".run_authorized_policy_transaction": 1
+      },
+      "location_count": 1,
+      "reason": "附件开票命令在授权事务内经 EvidenceCommand::execute 委托 post_invoice_apply，沿同一 Executor 写入 invoice.commit 业务事件和财务回执；本登记只核对入口边界，不替代真实提交与回滚验收。"
+    },
+    {
       "path": "crates/erp-processes/src/finance_posting/receivable/invoice.rs",
       "function": "persist_created_invoice",
       "policy": "Audited",

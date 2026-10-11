@@ -306,8 +306,8 @@ async fn find_red_idempotent(
     if existing.invoice_kind == InvoiceKind::Red
         && existing.original_invoice_id.as_ref() == Some(&InvoiceId::new(original.base.id.clone()))
         && existing.gross_amount == red_gross
-        && existing.net_amount == red_net
-        && existing.tax_amount == red_tax
+        && existing.net_amount == Some(red_net)
+        && existing.tax_amount == Some(red_tax)
     {
         return Ok(Some(existing.base.id));
     }

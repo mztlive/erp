@@ -30,7 +30,11 @@ export function InvoiceFilesField({
     onChange,
     disabled,
     errors,
+    label = "发票附件（可选）",
+    density = "default",
 }: {
+    density?: "default" | "compact"
+    label?: string
     files: readonly File[]
     onChange: (files: File[]) => void
     disabled: boolean
@@ -40,9 +44,7 @@ export function InvoiceFilesField({
     const invalid = errors.length > 0
     return (
         <Field data-invalid={invalid || undefined}>
-            <FieldLabel htmlFor={`${baseId}-input`}>
-                发票附件（可选）
-            </FieldLabel>
+            <FieldLabel htmlFor={`${baseId}-input`}>{label}</FieldLabel>
             {files.length > 0 ? (
                 <AttachmentGroup>
                     {files.map((file) => {
@@ -85,6 +87,7 @@ export function InvoiceFilesField({
             ) : null}
             <FileUpload
                 idPrefix={baseId}
+                density={density}
                 accept={INVOICE_FILE_ACCEPT}
                 multiple
                 disabled={disabled}

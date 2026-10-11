@@ -63,8 +63,8 @@ fn receipt(row: ReceivableReceiptFactView) -> InvoiceReviewRecord {
 
 fn invoice(row: ReceivableInvoiceFactView) -> InvoiceReviewRecord {
     InvoiceReviewRecord {
-        number: row.invoice_no,
-        date: row.issued_at,
+        number: row.invoice_no.unwrap_or_else(|| "附件登记".into()),
+        date: row.issued_at.unwrap_or_else(|| "—".into()),
         amount: row.allocated_to_account,
         status: if row.reversed {
             "已红冲"
@@ -101,12 +101,12 @@ mod tests {
     fn red_invoice_keeps_its_signed_account_allocation() {
         let row = invoice(ReceivableInvoiceFactView {
             invoice_id: "internal".into(),
-            invoice_no: "FP-001".into(),
-            issued_at: "2026-10-12".into(),
+            invoice_no: Some("FP-001".into()),
+            issued_at: Some("2026-10-12".into()),
             direction: "RED".into(),
             gross_amount: "1000".parse().unwrap(),
-            net_amount: "1000".parse().unwrap(),
-            tax_amount: Amount::zero(),
+            net_amount: Some("1000".parse().unwrap()),
+            tax_amount: Some(Amount::zero()),
             allocated_to_account: "-165".parse().unwrap(),
             reversed: false,
         });

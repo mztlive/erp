@@ -29,6 +29,7 @@ use validator::Validate;
 use super::ReceivableProcess;
 use super::dto::{CommitInvoiceRequest, CreateInvoiceRequest, InvoiceView, PostInvoiceRequest};
 use super::invoice_commit::InvoiceCommitTransaction;
+use super::invoice_posting::InvoicePostingAllocations;
 use crate::audit::persist_log;
 use crate::finance_posting::command_recovery::{recovered_resource, recovered_view};
 use crate::{Error, Result};
@@ -192,7 +193,7 @@ impl ReceivableProcess {
     }
 
     /// 结果恢复保留未知提交语义；已提交附件后读取失败不能触发存储补偿。
-    async fn committed_invoice_view(
+    pub(super) async fn committed_invoice_view(
         &self,
         result: Result<(String, bool)>,
         receipt: &CommandReceipt,
@@ -265,7 +266,7 @@ impl ReceivableProcess {
                     super::invoice_posting::InvoicePostingInput {
                         work_item_id: &work_item_id,
                         expected_task_version,
-                        plan_lines: &plan_lines,
+                        allocations: InvoicePostingAllocations::Detailed(&plan_lines),
                         actor: &actor_owned,
                         action: "invoice.post",
                         command_receipt: None,
@@ -478,9 +479,12 @@ pub(super) async fn register_created_invoice_document(
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let bind_command = invoice_bind_command(invoice, actor.id())?;
-    let document =
-        new_registered_document(&invoice.base.id, DocumentType::Invoice, invoice.invoice_no.clone())
-            .map_err(crate::Error::from)?;
+    let document = new_registered_document(
+        &invoice.base.id,
+        DocumentType::Invoice,
+        invoice.invoice_no.clone().unwrap_or_else(|| format!("开票登记-{}", invoice.base.id)),
+    )
+    .map_err(crate::Error::from)?;
     persist_unbound_invoice_document(db, rbac, object_read, document, &bind_command, actor, executor).await
 }
 
@@ -598,9 +602,12 @@ mod invoice_no_approval_tests {
         assert_eq!(command.business_object_id, invoice.base.id);
         assert_eq!(command.context.organization_id, "party-1");
 
-        let mut document =
-            new_registered_document(&invoice.base.id, DocumentType::Invoice, invoice.invoice_no.clone())
-                .expect("可注册");
+        let mut document = new_registered_document(
+            &invoice.base.id,
+            DocumentType::Invoice,
+            invoice.invoice_no.clone().unwrap_or_else(|| format!("开票登记-{}", invoice.base.id)),
+        )
+        .expect("可注册");
         assert!(document.approval_binding.is_none());
         let empty = apply_invoice_create_binding(&mut document, None).expect("空绑定");
         assert!(empty.is_none());

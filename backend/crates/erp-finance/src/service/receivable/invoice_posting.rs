@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use erp_core::ids::SalesInvoiceAllocationId;
+use erp_core::ids::{ReceivableAccountId, SalesInvoiceAllocationId};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
@@ -40,11 +40,12 @@ pub async fn persist_sales_invoice_allocations(
 ) -> Result<(Vec<ReceivableAccount>, Vec<String>)> {
     let allocation_ids: Vec<SalesInvoiceAllocationId> =
         (0..plan_lines.len()).map(|_| SalesInvoiceAllocationId::new(next_id())).collect();
+    let (net, tax) = invoice.tax_breakdown()?;
     let plan = SalesInvoiceAllocationPlan::new(
         invoice.base.id.clone().into(),
         invoice.gross_amount,
-        invoice.net_amount,
-        invoice.tax_amount,
+        net,
+        tax,
         plan_lines,
         &allocation_ids,
     )?;
@@ -72,4 +73,41 @@ pub async fn persist_sales_invoice_allocations(
     db.invoices().update(invoice, executor).await?;
     db.receivable().create_sales_invoice_allocations_many(plan.new_allocations(), executor).await?;
     Ok((accounts, account_id_strs))
+}
+
+/// 将附件登记的批准含税额度计入绑定应收，不生成未知票面税额。
+/// # 参数
+/// 数据库、附件登记记录、申请绑定应收、登记人及调用方事务。
+/// # 返回
+/// 受影响应收及其身份。
+/// # 错误
+/// 主体不符、额度不足、非法登记或持久化失败时拒绝。
+pub async fn persist_evidence_allocation(
+    db: &Database,
+    invoice: &mut Invoice,
+    account_id: &ReceivableAccountId,
+    actor_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<(Vec<ReceivableAccount>, Vec<String>)> {
+    let allocation =
+        invoice.evidence_allocation(SalesInvoiceAllocationId::new(next_id()), account_id.clone())?;
+    let account = db
+        .receivable_accounts()
+        .find_by_id(account_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("应收往来子账不存在".into()))?;
+    if account.counterparty_party_id != invoice.party_id {
+        return Err(Error::BusinessLogicError("禁止跨往来主体开票".into()));
+    }
+    let result = db
+        .receivable_accounts()
+        .apply_invoicings_many(&[(account_id.clone(), invoice.gross_amount)], actor_id, executor)
+        .await?;
+    if !result.rejected.is_empty() {
+        return Err(Error::BusinessLogicError("子账剩余可开票额度不足，开票被拒绝".into()));
+    }
+    invoice.mark_registered(actor_id)?;
+    db.invoices().update(invoice, executor).await?;
+    db.receivable().create_sales_invoice_allocations_many(&[allocation], executor).await?;
+    Ok((vec![account], vec![account_id.to_string()]))
 }

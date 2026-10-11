@@ -369,10 +369,18 @@ export function InvoiceDetailBody({
                         <span className="num">{row.invoiceCode || "—"}</span>
                     </PreviewFact>
                     <PreviewFact label="不含税金额">
-                        <MoneyValue value={row.netAmount} />
+                        {row.netAmount == null ? (
+                            "未单独采集"
+                        ) : (
+                            <MoneyValue value={row.netAmount} />
+                        )}
                     </PreviewFact>
                     <PreviewFact label="税额">
-                        <MoneyValue value={row.taxAmount} />
+                        {row.taxAmount == null ? (
+                            "未单独采集"
+                        ) : (
+                            <MoneyValue value={row.taxAmount} />
+                        )}
                     </PreviewFact>
                 </dl>
             </PreviewSection>
