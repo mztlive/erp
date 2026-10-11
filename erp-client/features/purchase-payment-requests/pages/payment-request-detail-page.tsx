@@ -1,43 +1,46 @@
 "use client"
 
-import Link from "next/link"
-import { ArrowLeftIcon, RefreshCwIcon } from "lucide-react"
-import { PageScaffold } from "@/components/business"
-import {
-    ListWorkspaceHeader,
-    listWorkspaceStyles,
-} from "@/components/business/list-workspace"
+import { RefreshCwIcon } from "lucide-react"
+import { DetailPageHeader, PageScaffold } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { getErrorMessage } from "@/lib/api"
 import { usePaymentRequestQuery } from "../hooks/queries"
 import { RequestDetail } from "../components/request-detail"
+import { requestStatusLabel, requestStatusTone } from "../lib/display"
 
 export function PaymentRequestDetailPage({ requestId }: { requestId: string }) {
     const query = usePaymentRequestQuery(requestId)
     return (
-        <PageScaffold density="compact" className={listWorkspaceStyles.page}>
-            <ListWorkspaceHeader
-                eyebrow="采购 · 财务"
-                title="采购付款申请"
-                description={query.data?.request_no}
-            >
-                <Button
-                    id="ppr-detail-back"
-                    variant="outline"
-                    render={<Link href="/procurement/payment-requests" />}
-                >
-                    <ArrowLeftIcon />
-                    返回申请列表
-                </Button>
-                <Button
-                    id="ppr-detail-refresh"
-                    variant="ghost"
-                    onClick={() => void query.refetch()}
-                >
-                    <RefreshCwIcon />
-                    刷新
-                </Button>
-            </ListWorkspaceHeader>
+        <PageScaffold>
+            <DetailPageHeader
+                back={{
+                    id: "ppr-detail-back",
+                    label: "返回申请列表",
+                    href: "/procurement/payment-requests",
+                }}
+                title={query.data?.supplier_name ?? "采购付款申请"}
+                numberLabel="申请单号"
+                documentNumber={query.data?.request_no}
+                primaryStatus={
+                    query.data
+                        ? {
+                              label: requestStatusLabel[query.data.status],
+                              tone: requestStatusTone[query.data.status],
+                          }
+                        : undefined
+                }
+                secondaryActions={
+                    <Button
+                        id="ppr-detail-refresh"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => void query.refetch()}
+                    >
+                        <RefreshCwIcon />
+                        刷新
+                    </Button>
+                }
+            />
             {query.isPending ? (
                 <p className="py-8 text-sm text-muted-foreground">
                     正在读取付款申请…
@@ -50,8 +53,8 @@ export function PaymentRequestDetailPage({ requestId }: { requestId: string }) {
                     )}
                 </p>
             ) : (
-                <div className="max-w-5xl">
-                    <RequestDetail request={query.data} />
+                <div className="min-w-0">
+                    <RequestDetail key={requestId} request={query.data} />
                 </div>
             )}
         </PageScaffold>

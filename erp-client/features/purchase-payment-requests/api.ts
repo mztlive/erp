@@ -204,6 +204,7 @@ function mapRequest(dto: RequestDto): PaymentRequest {
         supplier_name:
             dto.supplier_name ||
             dto.purchase_previews?.[0]?.supplier_name ||
+            dto.lines[0]?.source_snapshot.purchase_preview.supplier_name ||
             "未记录供应商名称",
         our_company_id: dto.payer_party_id,
         our_company_name: dto.payer_party_name,
@@ -330,11 +331,11 @@ export async function saveRequest(
         : await apiPost<RequestDto>(ROOT, body)
     return mapRequest(dto)
 }
-export type BatchDraftCommand = {
+export type BatchSubmitCommand = {
     idempotency_key: string
     requests: RequestDraftInput[]
 }
-export async function saveRequestBatch(command: BatchDraftCommand) {
+export async function submitRequestBatch(command: BatchSubmitCommand) {
     const rows = await apiPost<RequestDto[]>(`${ROOT}/batch`, {
         idempotency_key: command.idempotency_key,
         requests: command.requests.map((input) => ({

@@ -38,21 +38,25 @@ export function PurchaseOrderDetailPayableSection({
             {hasPermission(
                 profile.data?.permissions,
                 "purchase_payment_request:create",
-            ) && (
-                <div className="flex justify-end">
-                    <Button
-                        id="purchase-order-payment-request-create"
-                        variant="outline"
-                        render={
-                            <Link
-                                href={`/procurement/payment-requests?${new URLSearchParams({ create: "1", purchaseOrderId: order.identity.purchaseOrderId })}`}
-                            />
-                        }
-                    >
-                        申请采购付款
-                    </Button>
-                </div>
-            )}
+            ) &&
+                hasPermission(
+                    profile.data?.permissions,
+                    "purchase_payment_request:submit",
+                ) && (
+                    <div className="flex justify-end">
+                        <Button
+                            id="purchase-order-payment-request-create"
+                            variant="outline"
+                            render={
+                                <Link
+                                    href={`/procurement/payment-requests?${new URLSearchParams({ create: "1", purchaseOrderId: order.identity.purchaseOrderId })}`}
+                                />
+                            }
+                        >
+                            申请采购付款
+                        </Button>
+                    </div>
+                )}
             <DetailSummary label="采购票款摘要">
                 <DetailSummaryItem
                     title="付款"

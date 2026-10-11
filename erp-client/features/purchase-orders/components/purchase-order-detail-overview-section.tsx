@@ -1,6 +1,8 @@
 "use client"
 
 import type { ReactNode } from "react"
+import Link from "next/link"
+import { ArrowUpRightIcon } from "lucide-react"
 
 import { MoneyValue } from "@/components/business"
 import { LinesTable } from "@/features/purchase-orders/components/purchase-order-surfaces"
@@ -10,6 +12,7 @@ import {
     type PurchaseOrderCenterView,
 } from "@/features/purchase-orders/types"
 import { DetailRecordSection } from "@/components/business/detail-presentation"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 function OverviewField({
     label,
@@ -59,10 +62,21 @@ export function PurchaseOrderDetailOverviewSection({
             <DetailRecordSection title="交易约定">
                 <dl className="grid gap-x-8 gap-y-4 2xl:grid-cols-2">
                     <OverviewField label="来源销售单">
-                        <div className="space-y-2">
-                            <p className="num break-all">
-                                {order.header.salesOrderNo}
-                            </p>
+                        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                            <Link
+                                id={`procurement-orders-source-sales-${toAutomationIdSegment(order.identity.purchaseOrderId)}-detail`}
+                                href={`/sales/orders/${encodeURIComponent(order.header.salesOrderId)}`}
+                                className="inline-flex max-w-full items-center gap-1 rounded-sm text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                                aria-label={`查看销售单 ${order.header.salesOrderNo}`}
+                            >
+                                <span className="num break-all">
+                                    {order.header.salesOrderNo}
+                                </span>
+                                <ArrowUpRightIcon
+                                    className="size-3.5 shrink-0"
+                                    aria-hidden="true"
+                                />
+                            </Link>
                             <PurchaseOrderSourceSales order={order} />
                         </div>
                     </OverviewField>

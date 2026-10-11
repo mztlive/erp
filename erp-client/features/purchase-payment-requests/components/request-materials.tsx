@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { XIcon } from "lucide-react"
+import { useState, type ReactNode } from "react"
+import { FileTextIcon, XIcon } from "lucide-react"
 import { MoneyValue, PaperDocument, QuantityValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
@@ -34,11 +34,15 @@ export function RequestMaterials({
     workItemId,
     submissionVersion,
     idPrefix = "ppr",
+    summary = false,
+    action,
 }: {
     request: PaymentRequest
     workItemId?: string
     submissionVersion?: number
     idPrefix?: string
+    summary?: boolean
+    action?: ReactNode
 }) {
     const query = usePaymentMaterialsQuery(
         request.id,
@@ -61,15 +65,20 @@ export function RequestMaterials({
             className="space-y-4 border-t pt-5"
             aria-label="冻结采购销售与审核材料"
         >
-            <div>
-                <h3 className="font-medium">采购、销售与审核材料</h3>
-                <p className="mt-1 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="text-base font-semibold">
+                    {summary ? "审核材料" : "采购、销售与审核材料"}
+                </h3>
+                {action}
+            </div>
+            {!summary && (
+                <p className="text-xs text-muted-foreground">
                     {request.status === "draft"
                         ? "以下为保存草稿时核对的生效来源；提交时将再次校验并冻结。"
                         : "以下预览保留申请提交时的来源版本。"}
                     采购成本与销售成交金额分别展示。
                 </p>
-            </div>
+            )}
             {query.isPending ? (
                 <p className="text-sm text-muted-foreground">
                     正在读取来源资料…
@@ -87,7 +96,7 @@ export function RequestMaterials({
                         重试
                     </Button>
                 </div>
-            ) : (
+            ) : !summary ? (
                 <div className="space-y-4">
                     <div className="flex flex-wrap gap-2">
                         {query.data.purchases.map((purchase) => (
@@ -96,6 +105,7 @@ export function RequestMaterials({
                                 id={`${idPrefix}-purchase-preview-${toAutomationIdSegment(purchase.purchase_order_id)}`}
                                 variant="outline"
                                 size="sm"
+                                className="max-w-full"
                                 onClick={() =>
                                     setPreview({
                                         kind: "purchase",
@@ -105,8 +115,10 @@ export function RequestMaterials({
                                     })
                                 }
                             >
-                                采购 {purchase.purchase_order_no} · V
-                                {purchase.version}
+                                <span className="min-w-0 truncate">
+                                    采购 {purchase.purchase_order_no} · V
+                                    {purchase.version}
+                                </span>
                             </Button>
                         ))}
                     </div>
@@ -117,6 +129,7 @@ export function RequestMaterials({
                                 id={`${idPrefix}-sales-preview-${toAutomationIdSegment(sales.revision_id)}`}
                                 variant="outline"
                                 size="sm"
+                                className="max-w-full"
                                 onClick={() =>
                                     setPreview({
                                         kind: "sales",
@@ -124,8 +137,10 @@ export function RequestMaterials({
                                     })
                                 }
                             >
-                                销售 {sales.sales_order_no} · V
-                                {sales.revision_no}
+                                <span className="min-w-0 truncate">
+                                    销售 {sales.sales_order_no} · V
+                                    {sales.revision_no}
+                                </span>
                             </Button>
                         ))}
                     </div>
@@ -135,21 +150,25 @@ export function RequestMaterials({
                         </p>
                     )}
                 </div>
-            )}
+            ) : null}
             {files.length ? (
-                <ul className="space-y-2">
+                <ul className="divide-y divide-border">
                     {files.map((file) => (
                         <li
-                            className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                            className="flex items-center justify-between gap-4 py-3 text-sm"
                             key={file.file_asset_id}
                         >
-                            <span className="min-w-0 break-all">
-                                {file.file_name}
-                            </span>
+                            <div className="flex min-w-0 items-center gap-3">
+                                <FileTextIcon className="size-5 shrink-0 text-muted-foreground" />
+                                <span className="min-w-0 break-all">
+                                    {file.file_name}
+                                </span>
+                            </div>
                             <Button
                                 id={`${idPrefix}-attachment-${toAutomationIdSegment(file.file_asset_id)}-download`}
                                 variant="outline"
                                 size="sm"
+                                className="shrink-0"
                                 disabled={download.isPending}
                                 onClick={() =>
                                     download.mutate({
@@ -165,11 +184,11 @@ export function RequestMaterials({
                         </li>
                     ))}
                 </ul>
-            ) : (
+            ) : !query.isPending && !query.isError ? (
                 <p className="text-xs text-muted-foreground">
                     未上传对账材料或其他附件。
                 </p>
-            )}
+            ) : null}
             {download.isError && (
                 <p role="alert" className="text-sm text-destructive">
                     {getErrorMessage(download.error, "附件读取失败")}

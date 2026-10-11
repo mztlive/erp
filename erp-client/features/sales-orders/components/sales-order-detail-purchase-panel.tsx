@@ -12,13 +12,26 @@ import { Button } from "@/components/ui/button"
 import { PurchaseOrderPaperDialog } from "@/features/purchase-orders/components/purchase-order-paper-dialog"
 import { usePurchaseOrdersQuery } from "@/features/purchase-orders/hooks/queries"
 import { displayPurchaseOrderNo } from "@/features/purchase-orders/lib/purchase-orders-list-helpers"
-import type { PurchaseOrderListItem } from "@/features/purchase-orders/types"
+import type {
+    PurchaseOrderListItem,
+    PurchaseOrderStatus,
+} from "@/features/purchase-orders/types"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import { useSalesOrderDetailPermissions } from "@/features/sales-orders/hooks/use-sales-order-detail-permissions"
 import { SalesOrderProcurementProgress } from "@/features/sales-orders/components/sales-order-procurement-progress"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
 const RELATED_PURCHASE_PAGE_SIZE = 100
+
+/** 销售扫采购单时，阻塞态优先：审批中/草稿先于已生效。 */
+const PURCHASE_STATUS_SUMMARY_ORDER: readonly PurchaseOrderStatus[] = [
+    "PENDING_REVIEW",
+    "DRAFT",
+    "EFFECTIVE",
+    "PARTIAL",
+    "COMPLETED",
+    "VOID",
+]
 
 function PreviewButton({
     id,
@@ -68,9 +81,16 @@ export function PurchasePanel({ order }: { order: SalesOrderDetailView }) {
     )
 
     const [previewId, setPreviewId] = React.useState<string | null>(null)
+    const statusSummary = purchaseOrderStatusSummary(
+        canList ? (listQuery.data?.rows ?? []) : [],
+    )
     return (
         <div className="space-y-6">
-            <SalesOrderProcurementProgress order={order} surface="purchase" />
+            <SalesOrderProcurementProgress
+                order={order}
+                surface="purchase"
+                statusSummary={statusSummary}
+            />
 
             {permissions.accountQuery.isPending ? (
                 <div
@@ -150,6 +170,28 @@ function PurchaseCountOnlyNotice({ count }: { count: number }) {
                 : "本单还没有采购单。"}
         </div>
     )
+}
+
+function purchaseOrderStatusSummary(
+    rows: readonly PurchaseOrderListItem[],
+): string {
+    if (rows.length === 0) return ""
+    const counts = new Map<
+        PurchaseOrderStatus,
+        { label: string; count: number }
+    >()
+    for (const row of rows) {
+        const current = counts.get(row.status)
+        if (current) {
+            current.count += 1
+        } else {
+            counts.set(row.status, { label: row.statusLabel, count: 1 })
+        }
+    }
+    return PURCHASE_STATUS_SUMMARY_ORDER.flatMap((status) => {
+        const item = counts.get(status)
+        return item ? [`${item.count} 张${item.label}`] : []
+    }).join(" · ")
 }
 
 function purchaseProgressTracks(row: PurchaseOrderListItem) {

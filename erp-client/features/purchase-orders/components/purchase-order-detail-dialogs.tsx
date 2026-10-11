@@ -98,20 +98,21 @@ export function PurchaseOrderDetailDialogs({
                 open={changeConfirmOpen}
                 onOpenChange={onChangeConfirmOpenChange}
                 title="发起采购变更"
-                actionLabel="创建变更"
-                confirmLabel="创建工作副本"
+                description="将根据当前采购单创建变更草稿，填写调整内容和原因后再提交审批。"
+                actionLabel="创建变更草稿"
+                confirmLabel="创建变更草稿"
+                cancelLabel="暂不变更"
+                layout="compact"
+                showStatusChange={false}
                 fromStatus={{
                     label: order.identity.statusLabel,
                     tone: order.identity.statusTone,
                 }}
-                toStatus={{ label: "变更工作副本", tone: "warning" }}
+                toStatus={{ label: "变更草稿", tone: "warning" }}
+                summaryTitle="变更须知"
                 summary={[
-                    `基准版本 v${order.identity.revisionNo ?? 1}`,
-                    "已发生入库/发货/付款/发票记录不回退",
-                ]}
-                effects={[
-                    "创建采购变更工作副本（同对象页签）",
-                    "不得在原版本表单直接覆写",
+                    "变更审批通过并生效后，才会更新采购单。",
+                    "已记录的入库、发货、付款和发票不会因发起变更而撤销。",
                 ]}
                 pending={changePending}
                 onConfirm={onConfirmChange}

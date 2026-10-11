@@ -10,7 +10,7 @@ import {
     fetchSubmission,
     revealAccount,
     saveRequest,
-    saveRequestBatch,
+    submitRequestBatch,
 } from "../api"
 
 export const paymentRequestKeys = {
@@ -148,7 +148,10 @@ export function useAccountRevealMutation() {
     })
 }
 
-export function useSaveRequestBatchMutation() {
+export function useSubmitRequestBatchMutation() {
     const invalidate = useInvalidate()
-    return useMutation({ mutationFn: saveRequestBatch, onSuccess: invalidate })
+    return useMutation({
+        mutationFn: submitRequestBatch,
+        onSuccess: invalidate,
+    })
 }

@@ -9,7 +9,6 @@ import {
     SensitiveValue,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import {
     Dialog,
     DialogContent,
@@ -40,19 +39,8 @@ import type {
     RequestCommand,
 } from "../types"
 import { RequestDraftDialog } from "./request-draft-dialog"
-import { RequestMaterials } from "./request-materials"
 import { RequestPaymentForm } from "./request-payment-form"
-import { RequestPaymentHistory } from "./request-payment-history"
-import { RequestSubmissionHistory } from "./request-submission-history"
-
-const progressLabel: Record<string, string> = {
-    NONE: "尚未履约",
-    PARTIAL: "部分履约",
-    COMPLETED: "已完成履约",
-    PENDING: "待履约",
-    NOT_STARTED: "尚未履约",
-    COMPLETE: "已完成履约",
-}
+import { RequestDetailContent } from "./request-detail-content"
 
 export function RequestDetail({
     request,
@@ -78,7 +66,6 @@ export function RequestDetail({
     const approval = request.approval
         ? mapDocumentApprovalViewDto(request.approval)
         : undefined
-    const basisLabel = request.status === "draft" ? "保存时" : "提交时"
     const actions = new Set(
         request.allowed_actions.map((action) => action.toUpperCase()),
     )
@@ -96,225 +83,74 @@ export function RequestDetail({
         request.status === "paid" ? "终止付款授权" : "关闭未付部分"
     return (
         <div className="space-y-6">
-            <section className="space-y-4" aria-label="付款申请摘要">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                        <p className="text-xs text-muted-foreground">
-                            {request.our_company_name}
-                        </p>
-                        <h2 className="mt-1 text-xl font-semibold">
-                            {request.supplier_name}
-                        </h2>
-                        <p className="num mt-1 text-xs text-muted-foreground">
-                            {request.request_no}
-                        </p>
-                    </div>
-                    <Badge variant="secondary">
-                        {requestStatusLabel[request.status]}
-                    </Badge>
-                </div>
-                <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <Amount title="申请总额" value={request.total_amount} />
-                    <Amount title="有效已付" value={request.paid_amount} />
-                    <Amount title="剩余待付" value={request.unpaid_amount} />
-                    <Amount title="已关闭未付" value={request.closed_amount} />
-                </dl>
-                <dl className="grid gap-4 text-sm sm:grid-cols-2">
-                    <div>
-                        <dt className="text-xs text-muted-foreground">
-                            采购申请人
-                        </dt>
-                        <dd className="mt-1">{request.applicant_name}</dd>
-                    </div>
-                    <div>
-                        <dt className="text-xs text-muted-foreground">
-                            希望付款日
-                        </dt>
-                        <dd className="num mt-1">
-                            {request.desired_payment_date}
-                        </dd>
-                    </div>
-                    <div>
-                        <dt className="text-xs text-muted-foreground">
-                            收款户名 / 开户行
-                        </dt>
-                        <dd className="mt-1">
-                            {request.payment_recipient.account_name} ·{" "}
-                            {request.payment_recipient.bank_name}
-                        </dd>
-                    </div>
-                    <div>
-                        <dt className="text-xs text-muted-foreground">
-                            收款账号
-                        </dt>
-                        <dd className="num mt-1">
-                            {isApprovalTask &&
-                            task &&
-                            hasPermission(
-                                profile.data?.permissions,
-                                "party_bank_account:reveal",
-                            ) ? (
-                                <SensitiveValue
-                                    id="ppr-review-recipient-account"
-                                    label="收款账号"
-                                    maskedValue={
-                                        request.payment_recipient
-                                            .account_number_masked
-                                    }
-                                    onReveal={() =>
-                                        reveal.mutateAsync({ request, task })
-                                    }
-                                />
-                            ) : (
-                                request.payment_recipient.account_number_masked
-                            )}
-                        </dd>
-                    </div>
-                </dl>
-                <div>
-                    <h3 className="text-xs text-muted-foreground">申请说明</h3>
-                    <p className="mt-1 whitespace-pre-wrap text-sm">
-                        {request.description}
-                    </p>
-                </div>
-                {request.status === "closed" && (
-                    <p className="rounded-lg bg-muted p-3 text-sm">
-                        付款授权已终止：{request.close_reason || "未记录原因"}
-                        。已付记录继续保留，冲正后不恢复付款授权。
-                    </p>
-                )}
-            </section>
-            <section
-                className="space-y-3 border-t pt-5"
-                aria-label="逐采购申请与付款进度"
-            >
-                <h3 className="font-medium">逐采购单金额与进度</h3>
-                {request.lines.map((line) => (
-                    <article
-                        key={line.payable_account_id}
-                        className="space-y-3 border-b pb-4 text-sm"
-                    >
-                        <div className="flex flex-wrap justify-between gap-3">
-                            <p className="num font-medium">
-                                {line.purchase_order_no} · V
-                                {line.purchase_version}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                                {line.payment_term_name}
-                            </p>
-                        </div>
-                        <dl className="grid gap-3 sm:grid-cols-3">
-                            <Amount
-                                title="本次申请"
-                                value={line.requested_amount}
-                            />
-                            <Amount
-                                title="本申请已付"
-                                value={line.paid_amount}
-                            />
-                            <Amount
-                                title="本申请剩余待付"
-                                value={line.unpaid_amount}
-                            />
-                            <Amount
-                                title={`${basisLabel}采购总额`}
-                                value={line.total_amount}
-                            />
-                            <Amount
-                                title={`${basisLabel}有效已付`}
-                                value={line.source_paid_amount}
-                            />
-                            <Amount
-                                title={`${basisLabel}剩余应付`}
-                                value={line.open_amount}
-                            />
-                            <Amount
-                                title={`${basisLabel}其他申请占用`}
-                                value={line.reserved_amount}
-                            />
-                        </dl>
-                        <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground">
-                            <span>
-                                当前采购剩余应付{" "}
-                                <MoneyValue
-                                    value={
-                                        line.current_open_amount ??
-                                        line.open_amount
-                                    }
-                                />
-                            </span>
-                            {line.current_reserved_amount != null && (
-                                <span>
-                                    当前申请占用{" "}
-                                    <MoneyValue
-                                        value={line.current_reserved_amount}
-                                    />
-                                </span>
-                            )}
-                            {line.current_fulfillment && (
-                                <span>
-                                    {progressLabel[line.current_fulfillment] ??
-                                        "履约进度待核对"}
-                                </span>
-                            )}
-                        </div>
-                        {line.source_changed && (
-                            <p
-                                role="alert"
-                                className="text-xs text-destructive"
-                            >
-                                {request.status === "paid"
-                                    ? "采购来源已变更，如需付款冲正，请先终止原付款授权。"
-                                    : "采购来源已变更，请关闭未付部分后重新申请。"}
-                            </p>
-                        )}
-                    </article>
-                ))}
-            </section>
-            <RequestMaterials request={request} workItemId={scopedWorkItemId} />
-            {!task && <RequestSubmissionHistory request={request} />}
-            <RequestPaymentHistory
+            <RequestDetailContent
                 request={request}
+                embedded={Boolean(task)}
                 workItemId={scopedWorkItemId}
-            />
-            {approval && (
-                <section
-                    aria-label="付款申请财务审核"
-                    className="space-y-4 border-t pt-5"
-                >
-                    <h3 className="font-medium">财务审核</h3>
-                    <ApprovalReadonly
-                        approval={approval}
-                        id="ppr-approval-readonly"
-                    />
-                    {isApprovalTask && task && (
-                        <ApprovalActionBar
-                            id="ppr-approval-actions"
-                            documentType="purchase_payment_request"
-                            documentId={request.id}
-                            allowedActions={task.allowedActions}
-                            workItemId={task.workItemId}
-                            expectedTaskVersion={task.taskVersion}
-                            instance={approval.instance}
-                            definition={approval.definition}
-                            hiddenActions={[
-                                "CANCEL",
-                                "CANCEL_APPROVAL",
-                                "OPEN_DOCUMENT",
-                                "VIEW",
-                            ]}
-                            decisionContext={{
-                                documentLabel: request.request_no,
-                                amountLabel: request.total_amount,
-                                impactSummary:
-                                    "批准后交由指定出纳按本申请逐单金额付款；驳回结束本次审核并释放未付金额。",
-                            }}
-                            onDecisionApplied={onDecisionApplied}
-                            presentation="workspace"
+                account={
+                    isApprovalTask &&
+                    task &&
+                    hasPermission(
+                        profile.data?.permissions,
+                        "party_bank_account:reveal",
+                    ) ? (
+                        <SensitiveValue
+                            id="ppr-review-recipient-account"
+                            label="收款账号"
+                            maskedValue={
+                                request.payment_recipient.account_number_masked
+                            }
+                            onReveal={() =>
+                                reveal.mutateAsync({ request, task })
+                            }
                         />
-                    )}
-                </section>
-            )}
+                    ) : (
+                        <span className="num">
+                            {request.payment_recipient.account_number_masked}
+                        </span>
+                    )
+                }
+                approval={
+                    approval ? (
+                        <section
+                            aria-label="付款申请财务审核"
+                            className="space-y-4 border-t pt-5"
+                        >
+                            <h3 className="font-medium">财务审核</h3>
+                            <ApprovalReadonly
+                                approval={approval}
+                                id="ppr-approval-readonly"
+                            />
+                            {isApprovalTask && task && (
+                                <ApprovalActionBar
+                                    id="ppr-approval-actions"
+                                    documentType="purchase_payment_request"
+                                    documentId={request.id}
+                                    allowedActions={task.allowedActions}
+                                    workItemId={task.workItemId}
+                                    expectedTaskVersion={task.taskVersion}
+                                    instance={approval.instance}
+                                    definition={approval.definition}
+                                    hiddenActions={[
+                                        "CANCEL",
+                                        "CANCEL_APPROVAL",
+                                        "OPEN_DOCUMENT",
+                                        "VIEW",
+                                    ]}
+                                    decisionContext={{
+                                        documentLabel: request.request_no,
+                                        amountLabel: request.total_amount,
+                                        impactSummary:
+                                            "批准后交由指定出纳按本申请逐单金额付款；驳回结束本次审核并释放未付金额。",
+                                    }}
+                                    onDecisionApplied={onDecisionApplied}
+                                    presentation="workspace"
+                                />
+                            )}
+                        </section>
+                    ) : null
+                }
+            />
             {!isPaymentTask && (
                 <div className="flex flex-wrap justify-end gap-2">
                     {actions.has("EDIT") && (
@@ -448,17 +284,6 @@ export function RequestDetail({
         </div>
     )
 }
-function Amount({ title, value }: { title: string; value: string }) {
-    return (
-        <div>
-            <dt className="text-xs text-muted-foreground">{title}</dt>
-            <dd className="mt-1">
-                <MoneyValue value={value} />
-            </dd>
-        </div>
-    )
-}
-
 function ReasonCommandDialog({
     request,
     action,

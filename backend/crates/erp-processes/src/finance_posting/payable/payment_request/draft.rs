@@ -1,7 +1,5 @@
 //! 草稿不占用应付金额；保存时仍逐单证明申请资格。
-use application_core::CommandReceipt;
 use erp_audit::AuditActorLogs;
-use erp_finance::FinanceCommandReceiptService;
 use erp_finance::dto::payable::payment_request::SavePurchasePaymentRequest;
 use persistence_core::Transactional;
 
@@ -32,7 +30,7 @@ impl PurchasePaymentRequestProcess {
         db.client()
             .clone()
             .with_transaction(move |executor| {
-                Box::pin(async move { create_draft(&db, &rbac, request, &actor, None, executor).await })
+                Box::pin(async move { create_draft(&db, &rbac, request, &actor, executor).await })
             })
             .await
     }
@@ -88,7 +86,6 @@ pub(super) async fn create_draft(
     rbac: &SharedRbacService,
     mut request: PurchasePaymentRequest,
     actor: &AuditActor,
-    command: Option<&CommandReceipt>,
     executor: &mut dyn Executor,
 ) -> Result<PurchasePaymentRequest> {
     require_sources(db, rbac, &request, actor, "create", executor).await?;
@@ -105,11 +102,6 @@ pub(super) async fn create_draft(
         "purchase_payment_request",
         request.base.id.clone(),
     )?;
-    if let Some(command) = command {
-        FinanceCommandReceiptService::new(db.clone())
-            .save_resource(command, request.base.id.clone(), audit.base.id.clone(), executor)
-            .await?;
-    }
     persist_log(db, &audit, executor).await?;
     Ok(request)
 }

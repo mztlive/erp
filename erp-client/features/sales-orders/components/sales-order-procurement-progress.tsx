@@ -12,9 +12,16 @@ import { cn } from "@/lib/utils"
 export function SalesOrderProcurementProgress({
     order,
     surface,
+    statusSummary,
 }: {
-    order: SalesOrderDetailView
+    order: {
+        related: Pick<
+            SalesOrderDetailView["related"],
+            "purchaseOrders" | "procurementProgress"
+        >
+    }
     surface: "overview" | "purchase"
+    statusSummary?: string
 }) {
     const progress = order.related.procurementProgress
     const hasGap = compareDecimal(progress.remainingQuantity, "0", 6) > 0
@@ -138,6 +145,7 @@ export function SalesOrderProcurementProgress({
                                 </span>{" "}
                                 笔
                             </p>
+                            {statusSummary ? <p>{statusSummary}</p> : null}
                         </div>
                     </div>
                 </div>
@@ -169,6 +177,7 @@ export function SalesOrderProcurementProgress({
                                                     value={
                                                         line.remainingQuantity
                                                     }
+                                                    tone="warning"
                                                     unit={line.unit}
                                                 />
                                             </p>

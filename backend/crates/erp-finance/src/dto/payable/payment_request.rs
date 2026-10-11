@@ -48,7 +48,7 @@ pub struct PurchasePaymentRequestQuery {
     pub page_size: Option<u32>,
 }
 
-/// 一次操作原子创建多份独立草稿，命令身份用于恢复原结果。
+/// 一次操作原子创建并提交多份独立申请，命令身份用于恢复原结果。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CreatePaymentRequestBatch {

@@ -352,17 +352,10 @@ export function usePurchaseOrderDetailEditActions({
         if (response.status === "succeeded") {
             setResult({
                 status: "succeeded",
-                title: "已创建采购变更工作副本",
+                title: "采购变更草稿已创建",
                 description:
-                    "生效字段锁定；不覆盖已发生付款、发票或履约记录。变更以基准版本创建目标提交。",
+                    "请在「变更」页填写调整内容和原因，再提交审批。变更生效前，采购单仍按原内容执行。",
                 reference: response.reference,
-                facts: [
-                    { label: "变更记录", value: "已创建" },
-                    {
-                        label: "基准版本",
-                        value: `v${response.data.baseRevisionNo}`,
-                    },
-                ],
             })
             await refetch()
             router.replace(

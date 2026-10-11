@@ -510,3 +510,11 @@ final result: passed
 - 交互：已验证分组互斥展开、隐藏组填写内容保留、付款依据展开、漏填保存时自动展开第一份错误申请。缺失项拦截成功，未产生申请草稿。
 - 工程校验：lint、格式、TypeScript 检查与生产构建通过；浏览器错误日志为空。
 - final result: passed
+
+
+## 采购付款申请详情页（方案 1）
+
+验收报告：[采购付款申请详情页验收](logs/payment-request-design/design-qa.md)。
+桌面截图：[最终实现](logs/payment-request-design/desktop.png)。
+
+final result: passed

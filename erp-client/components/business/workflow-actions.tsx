@@ -195,6 +195,8 @@ export type FormalActionConfirmDialogProps = ControllableDialogProps & {
     cancelLabel?: string
     fromStatus: WorkflowStatus
     toStatus: WorkflowStatus
+    /** 创建关联草稿等不改变原单状态的动作可隐藏状态流转。 */
+    showStatusChange?: boolean
     /** 提交前需要核对的业务对象、金额等摘要。 */
     summary?: readonly React.ReactNode[]
     summaryTitle?: string
@@ -233,6 +235,7 @@ function FormalActionConfirmDialog({
     cancelLabel = "返回修改",
     fromStatus,
     toStatus,
+    showStatusChange = true,
     summary = [],
     summaryTitle = "核对信息",
     actionVariant,
@@ -303,11 +306,13 @@ function FormalActionConfirmDialog({
                     <AlertDialogTitle>
                         {title ?? `确认${actionLabel}`}
                     </AlertDialogTitle>
-                    <StatusChangeStrip
-                        sourceStatus={sourceStatus}
-                        targetStatus={targetStatus}
-                        compact
-                    />
+                    {showStatusChange ? (
+                        <StatusChangeStrip
+                            sourceStatus={sourceStatus}
+                            targetStatus={targetStatus}
+                            compact
+                        />
+                    ) : null}
                 </div>
                 <AlertDialogDescription render={<div />}>
                     {description === undefined
@@ -331,7 +336,7 @@ function FormalActionConfirmDialog({
                         ? "请核对状态变化和业务影响后再继续。"
                         : description}
                 </AlertDialogDescription>
-                {layout === "stack" ? (
+                {layout === "stack" && showStatusChange ? (
                     <div className="col-start-2 mt-1">
                         <StatusChangeStrip
                             sourceStatus={sourceStatus}
@@ -362,11 +367,13 @@ function FormalActionConfirmDialog({
                 {layout === "landscape" ? (
                     <div className="grid items-center gap-4 sm:grid-cols-[minmax(0,1fr)_auto]">
                         {header}
-                        <StatusChangeStrip
-                            sourceStatus={sourceStatus}
-                            targetStatus={targetStatus}
-                            compact
-                        />
+                        {showStatusChange ? (
+                            <StatusChangeStrip
+                                sourceStatus={sourceStatus}
+                                targetStatus={targetStatus}
+                                compact
+                            />
+                        ) : null}
                     </div>
                 ) : (
                     header

@@ -124,10 +124,15 @@ export function PaymentRequestsPage({
     const [createOpen, setCreateOpen] = useState(create)
     const [search, setSearch] = useState("")
     const [preview, setPreview] = useState<PaymentRequest | null>(null)
-    const canCreate = hasPermission(
-        profile.data?.permissions,
-        "purchase_payment_request:create",
-    )
+    const canCreate =
+        hasPermission(
+            profile.data?.permissions,
+            "purchase_payment_request:create",
+        ) &&
+        hasPermission(
+            profile.data?.permissions,
+            "purchase_payment_request:submit",
+        )
     const rows = (query.data ?? []).filter((request) =>
         [
             request.request_no,
@@ -172,7 +177,7 @@ export function PaymentRequestsPage({
                     disabled={!canCreate}
                     title={
                         !canCreate
-                            ? "当前账号没有采购付款申请创建权限"
+                            ? "当前账号需要采购付款申请的创建和提交权限"
                             : undefined
                     }
                     onClick={() => setCreateOpen(true)}
@@ -311,7 +316,7 @@ export function PaymentRequestsPage({
                 )}
             </QuickPreviewSheet>
             <RequestDraftDialog
-                open={createOpen}
+                open={createOpen && canCreate}
                 onOpenChange={setCreateOpen}
                 purchaseOrderId={purchaseOrderId}
             />

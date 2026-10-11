@@ -124,11 +124,12 @@ export function PurchaseOrderSourceSales({
                 id={`${idPrefix}-open`}
                 ref={triggerRef}
                 type="button"
-                variant="outline"
+                variant="link"
                 size="sm"
+                className="h-auto p-0 text-xs font-normal text-muted-foreground"
                 onClick={() => setOpen(true)}
             >
-                查看销售单及合同
+                关联资料
             </Button>
             <QuickPreviewSheet
                 idPrefix={`${idPrefix}-sheet`}

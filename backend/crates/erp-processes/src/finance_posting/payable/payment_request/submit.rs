@@ -4,7 +4,7 @@ use bpm::ids::ApprovalNodeExecutionId;
 use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_finance::dto::payable::payment_request::SubmitPurchasePaymentRequest;
-use erp_finance::entity::payable::PurchasePaymentRequestSubmissionSnapshot;
+use erp_finance::entity::payable::{PurchasePaymentRequestData, PurchasePaymentRequestSubmissionSnapshot};
 use erp_finance::repository::PurchasePaymentRequestSnapshotExt;
 use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_workflow::entity::approval_integration::{
@@ -28,6 +28,34 @@ use super::*;
 use crate::audit::persist_log;
 use crate::finance_posting::command_recovery::recovered_resource;
 use crate::finance_posting::receivable::start_approval;
+
+/// 在调用方事务内创建并正式提交；回执只在审批启动完成后保存。
+/// # 参数
+/// 数据库、授权与审批端口、申请表单、申请人、批次命令及同一事务执行器。
+/// # 返回
+/// 已冻结来源、占用余额并启动审批的申请。
+/// # 错误
+/// 创建或提交任一步失败时交由调用方回滚整个事务。
+pub(super) async fn create_and_submit(
+    db: &Database,
+    rbac: &SharedRbacService,
+    object_read: &dyn ApprovalObjectReadPort,
+    data: PurchasePaymentRequestData,
+    actor: &AuditActor,
+    command: &CommandReceipt,
+    executor: &mut dyn Executor,
+) -> Result<PurchasePaymentRequest> {
+    let draft = PurchasePaymentRequest::new(id_generator::next_id(), data, actor.id())?;
+    let draft = draft::create_draft(db, rbac, draft, actor, executor).await?;
+    let req = SubmitPurchasePaymentRequest {
+        expected_version: draft.base.version,
+        idempotency_key: command.id().to_owned(),
+    };
+    let id = SubmitWrite { db, rbac, object_read, id: &draft.base.id, req: &req, actor, command }
+        .persist(executor)
+        .await?;
+    load(db, &id, executor).await
+}
 
 impl PurchasePaymentRequestProcess {
     /// 原子提交申请并冻结逐采购付款额度。

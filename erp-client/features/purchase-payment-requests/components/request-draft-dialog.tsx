@@ -157,9 +157,15 @@ function RequestDraftForm({
         return (
             <>
                 <DialogHeader className="border-b p-6">
-                    <DialogTitle>已保存 {saved.length} 份申请草稿</DialogTitle>
+                    <DialogTitle>
+                        {request
+                            ? "已保存申请修改"
+                            : `已提交 ${saved.length} 份付款申请`}
+                    </DialogTitle>
                     <DialogDescription>
-                        草稿尚未提交审核，也未占用采购余额。请分别打开申请，核对后提交财务审核。
+                        {request
+                            ? "修改已保存，请打开申请核对后提交财务审核。"
+                            : "付款申请已提交财务审核，并占用相应采购余额。可打开申请查看审核及付款进度。"}
                     </DialogDescription>
                 </DialogHeader>
                 <div
@@ -176,14 +182,7 @@ function RequestDraftForm({
                                     {row.request_no}
                                 </p>
                                 <p className="mt-1 text-sm text-muted-foreground">
-                                    {
-                                        candidates.find(
-                                            (item) =>
-                                                item.supplier_id ===
-                                                row.supplier_id,
-                                        )?.supplier_name
-                                    }{" "}
-                                    · {row.our_company_name}
+                                    {row.supplier_name} · {row.our_company_name}
                                 </p>
                                 <p className="mt-2 text-sm">
                                     {row.lines.length} 张采购单 ·{" "}
@@ -251,7 +250,9 @@ function RequestDraftForm({
                 <DialogDescription>
                     {step === 1
                         ? "支持跨供应商选择采购单，下一步按付款关系分别生成申请。"
-                        : "逐份填写金额与付款安排，完成后统一保存草稿。"}
+                        : request
+                          ? "修改金额与付款安排，保存后可在申请详情提交审核。"
+                          : "逐份填写金额与付款安排，提交后直接生成正式申请单并进入财务审核。"}
                 </DialogDescription>
                 <div
                     className="mt-3 flex items-center gap-3 text-xs"
@@ -365,13 +366,15 @@ function RequestDraftForm({
                                 >
                                     {getErrorMessage(
                                         error,
-                                        "保存失败，请核对后重试",
+                                        request
+                                            ? "保存失败，请核对后重试"
+                                            : "提交失败，请核对后重试",
                                     )}
                                 </p>
                             )}
                             {unknown && (
                                 <p role="alert" className="text-sm">
-                                    保存结果暂无法确认。请点击“查询本次保存结果”，系统将恢复原次结果，不会重复创建草稿。
+                                    提交结果暂无法确认。请点击“查询本次提交结果”，系统将恢复原次结果，不会重复生成申请或占用余额。
                                 </p>
                             )}
                             <div className="flex flex-wrap items-center justify-between gap-4">
@@ -383,7 +386,9 @@ function RequestDraftForm({
                                             <p className="text-xs text-muted-foreground">
                                                 {step === 1
                                                     ? `已选 ${values.selectedIds.length} 张采购单`
-                                                    : `将保存 ${values.groups.length} 份申请草稿`}
+                                                    : request
+                                                      ? "将保存申请修改"
+                                                      : `将提交 ${values.groups.length} 份付款申请`}
                                             </p>
                                             {step === 2 && (
                                                 <>
@@ -404,7 +409,9 @@ function RequestDraftForm({
                                                         size="section"
                                                     />
                                                     <p className="mt-1 text-xs text-muted-foreground">
-                                                        各份申请分别提交审核、分别跟踪付款
+                                                        {request
+                                                            ? "保存后需提交财务审核"
+                                                            : "提交后占用申请余额，各份申请独立审核、跟踪付款"}
                                                     </p>
                                                 </>
                                             )}
@@ -458,12 +465,14 @@ function RequestDraftForm({
                                             disabled={busy || !groups.length}
                                         >
                                             {busy
-                                                ? "正在保存…"
+                                                ? request
+                                                    ? "正在保存…"
+                                                    : "正在提交…"
                                                 : unknown
-                                                  ? "查询本次保存结果"
+                                                  ? "查询本次提交结果"
                                                   : request
                                                     ? "保存申请草稿"
-                                                    : `保存 ${groups.length} 份申请草稿`}
+                                                    : `提交 ${groups.length} 份付款申请`}
                                         </Button>
                                     )}
                                 </div>

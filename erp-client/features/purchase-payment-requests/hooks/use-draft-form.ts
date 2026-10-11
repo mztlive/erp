@@ -3,14 +3,17 @@ import { useMutation } from "@tanstack/react-query"
 import { useAppForm } from "@/components/form"
 import { uploadEvidenceFileAsset } from "@/features/file-assets/api/file-assets"
 import { classifyFormalCommandError } from "@/lib/formal-command"
-import type { BatchDraftCommand } from "../api"
+import type { BatchSubmitCommand } from "../api"
 import { draftDefaults, draftSchema } from "../lib/draft"
 import type {
     PaymentCandidate,
     PaymentRequest,
     RequestDraftInput,
 } from "../types"
-import { useSaveRequestBatchMutation, useSaveRequestMutation } from "./queries"
+import {
+    useSubmitRequestBatchMutation,
+    useSaveRequestMutation,
+} from "./queries"
 
 export function useDraftForm(
     candidates: PaymentCandidate[],
@@ -18,13 +21,13 @@ export function useDraftForm(
     request: PaymentRequest | undefined,
     onSaved: (rows: PaymentRequest[]) => void,
 ) {
-    const batch = useSaveRequestBatchMutation()
+    const batch = useSubmitRequestBatchMutation()
     const edit = useSaveRequestMutation()
     const upload = useMutation({
         mutationFn: (files: File[]) =>
             Promise.all(files.map(uploadEvidenceFileAsset)),
     })
-    const command = useRef<BatchDraftCommand | null>(null)
+    const command = useRef<BatchSubmitCommand | null>(null)
     const uploaded = useRef(new Map<File, string>())
     const [unknown, setUnknown] = useState(false)
     const form = useAppForm({
