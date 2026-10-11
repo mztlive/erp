@@ -433,12 +433,14 @@ interface QuantityValueProps extends Omit<
 > {
     value: string
     unit: React.ReactNode
+    tone?: "neutral" | "warning"
 }
 
 /** 精确展示数量十进制字符串及其单位，不进行单位换算。 */
 function QuantityValue({
     value,
     unit,
+    tone = "neutral",
     className,
     ...props
 }: QuantityValueProps) {
@@ -448,7 +450,16 @@ function QuantityValue({
             className={cn("inline-flex items-baseline gap-1", className)}
             {...props}
         >
-            <span className="num text-foreground">{formatDecimal(value)}</span>
+            <span
+                className={cn(
+                    "num",
+                    tone === "warning"
+                        ? "text-warning-soft-foreground"
+                        : "text-foreground",
+                )}
+            >
+                {formatDecimal(value)}
+            </span>
             <span className="text-xs text-muted-foreground">{unit}</span>
         </span>
     )

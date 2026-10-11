@@ -118,6 +118,16 @@ export function mapProcurementProgress(
     const remainingQuantity = coverage?.remaining_quantity ?? "0"
     const progress = coverage?.progress ?? "0"
     const quantities = {
+        lines: coverage?.lines?.map((line) => ({
+            id: line.sales_order_line_id,
+            lineNo: line.line_no,
+            name: line.item_name,
+            specification: line.specification ?? undefined,
+            unit: line.unit ?? undefined,
+            quantity: line.total_quantity,
+            coveredQuantity: line.covered_quantity,
+            remainingQuantity: line.remaining_quantity,
+        })),
         salesQuantity,
         coveredQuantity,
         remainingQuantity,

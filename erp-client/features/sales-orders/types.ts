@@ -126,7 +126,19 @@ export type ProcurementProgressStatus =
     | "covered"
     | "source_changed"
 
+export type SalesOrderProcurementCoverageLine = {
+    id: string
+    lineNo: number
+    name: string
+    specification?: string
+    unit?: string
+    quantity: string
+    coveredQuantity: string
+    remainingQuantity: string
+}
+
 export type SalesOrderProcurementProgress = {
+    lines?: SalesOrderProcurementCoverageLine[]
     salesQuantity: string
     coveredQuantity: string
     remainingQuantity: string

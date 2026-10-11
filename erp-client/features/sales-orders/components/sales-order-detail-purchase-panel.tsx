@@ -12,30 +12,13 @@ import { Button } from "@/components/ui/button"
 import { PurchaseOrderPaperDialog } from "@/features/purchase-orders/components/purchase-order-paper-dialog"
 import { usePurchaseOrdersQuery } from "@/features/purchase-orders/hooks/queries"
 import { displayPurchaseOrderNo } from "@/features/purchase-orders/lib/purchase-orders-list-helpers"
-import type {
-    PurchaseOrderListItem,
-    PurchaseOrderStatus,
-} from "@/features/purchase-orders/types"
+import type { PurchaseOrderListItem } from "@/features/purchase-orders/types"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
-import {
-    DetailSummary,
-    DetailSummaryItem,
-} from "@/components/business/detail-presentation"
 import { useSalesOrderDetailPermissions } from "@/features/sales-orders/hooks/use-sales-order-detail-permissions"
-import { SalesOrderProcurementSourceNotice } from "@/features/sales-orders/components/sales-order-procurement-source-notice"
+import { SalesOrderProcurementProgress } from "@/features/sales-orders/components/sales-order-procurement-progress"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
 const RELATED_PURCHASE_PAGE_SIZE = 100
-
-/** 销售扫采购单时，阻塞态优先：审批中/草稿先于已生效。 */
-const PURCHASE_STATUS_SUMMARY_ORDER: readonly PurchaseOrderStatus[] = [
-    "PENDING_REVIEW",
-    "DRAFT",
-    "EFFECTIVE",
-    "PARTIAL",
-    "COMPLETED",
-    "VOID",
-]
 
 function PreviewButton({
     id,
@@ -74,7 +57,6 @@ export function PurchasePanel({ order }: { order: SalesOrderDetailView }) {
     const canList = permissions.openPurchase.enabled
     const canPreview = permissions.previewPurchase.enabled
     const purchaseCount = order.related.purchaseOrders
-    const progress = order.related.procurementProgress
 
     const listQuery = usePurchaseOrdersQuery(
         {
@@ -86,51 +68,9 @@ export function PurchasePanel({ order }: { order: SalesOrderDetailView }) {
     )
 
     const [previewId, setPreviewId] = React.useState<string | null>(null)
-    const listedRows = canList ? (listQuery.data?.rows ?? []) : []
-    const statusSummary = purchaseOrderStatusSummary(listedRows)
-
     return (
         <div className="space-y-6">
-            <DetailSummary label="采购进度摘要">
-                <DetailSummaryItem
-                    title="供给覆盖"
-                    label="待覆盖数量"
-                    value={progress.remainingQuantity}
-                    detail={
-                        <span data-testid="sales-order-purchase-progress">
-                            供给目标 {progress.salesQuantity} ·{" "}
-                            {progress.sourceChanged
-                                ? "当前版本已覆盖"
-                                : "已覆盖"}{" "}
-                            {progress.coveredQuantity}
-                        </span>
-                    }
-                />
-                <DetailSummaryItem
-                    title="采购"
-                    label="已创建采购单"
-                    value={
-                        <>
-                            {purchaseCount}{" "}
-                            <span className="text-sm font-normal text-muted-foreground">
-                                笔
-                            </span>
-                        </>
-                    }
-                    detail={
-                        <span data-testid="sales-order-purchase-status">
-                            {progress.sourceChanged
-                                ? progress.label
-                                : statusSummary || progress.label}
-                        </span>
-                    }
-                />
-            </DetailSummary>
-
-            <SalesOrderProcurementSourceNotice
-                id="sales-order-purchase-source-changed-notice"
-                progress={progress}
-            />
+            <SalesOrderProcurementProgress order={order} surface="purchase" />
 
             {permissions.accountQuery.isPending ? (
                 <div
@@ -210,28 +150,6 @@ function PurchaseCountOnlyNotice({ count }: { count: number }) {
                 : "本单还没有采购单。"}
         </div>
     )
-}
-
-function purchaseOrderStatusSummary(
-    rows: readonly PurchaseOrderListItem[],
-): string {
-    if (rows.length === 0) return ""
-    const counts = new Map<
-        PurchaseOrderStatus,
-        { label: string; count: number }
-    >()
-    for (const row of rows) {
-        const current = counts.get(row.status)
-        if (current) {
-            current.count += 1
-        } else {
-            counts.set(row.status, { label: row.statusLabel, count: 1 })
-        }
-    }
-    return PURCHASE_STATUS_SUMMARY_ORDER.flatMap((status) => {
-        const item = counts.get(status)
-        return item ? [`${item.count} 张${item.label}`] : []
-    }).join(" · ")
 }
 
 function purchaseProgressTracks(row: PurchaseOrderListItem) {

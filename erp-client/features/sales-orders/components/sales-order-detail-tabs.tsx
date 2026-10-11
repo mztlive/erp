@@ -17,7 +17,8 @@ import {
     ReceivablePanel,
     VersionsPanel,
 } from "@/features/sales-orders/components/sales-order-detail-panels"
-import { RelatedLanes } from "@/features/sales-orders/components/sales-order-detail-related-lanes"
+import { SalesOrderProcurementProgress } from "@/features/sales-orders/components/sales-order-procurement-progress"
+import { compareDecimal } from "@/lib/fixed-decimal"
 import {
     isSalesOrderApprovalInProgress,
     isWorkSection,
@@ -66,6 +67,15 @@ export function SalesOrderDetailTabs({
         const purchaseCount =
             item.id === "fulfillment" ? order.related.purchaseOrders : 0
 
+        const purchaseNeedsAttention =
+            item.id === "fulfillment" &&
+            (compareDecimal(
+                order.related.procurementProgress.remainingQuantity,
+                "0",
+                6,
+            ) > 0 ||
+                order.related.procurementProgress.sourceChanged)
+
         return {
             id: item.id,
             label: item.label,
@@ -82,12 +92,14 @@ export function SalesOrderDetailTabs({
                               ? "进行中"
                               : "待办"}
                     </Badge>
-                ) : purchaseCount > 0 ? (
+                ) : purchaseCount > 0 || purchaseNeedsAttention ? (
                     <Badge
-                        variant="secondary"
+                        variant={
+                            purchaseNeedsAttention ? "warning" : "secondary"
+                        }
                         className="h-5 px-1.5 text-2xs font-normal"
                     >
-                        {purchaseCount}
+                        {purchaseCount > 0 ? purchaseCount : "待覆盖"}
                     </Badge>
                 ) : undefined,
         }
@@ -115,22 +127,10 @@ export function SalesOrderDetailTabs({
                     order={order}
                     related={
                         order.nature === "physical_service" ? (
-                            <section
-                                className="rounded-lg border border-border/70 px-4 py-3 md:px-5"
-                                aria-labelledby="sales-order-procurement-heading"
-                            >
-                                <h2
-                                    id="sales-order-procurement-heading"
-                                    className="mb-1 text-lg font-semibold"
-                                >
-                                    采购进度
-                                </h2>
-                                <RelatedLanes
-                                    order={order}
-
-                                    lanes={["purchase"]}
-                                />
-                            </section>
+                            <SalesOrderProcurementProgress
+                                order={order}
+                                surface="overview"
+                            />
                         ) : undefined
                     }
                 />

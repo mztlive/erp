@@ -154,9 +154,32 @@ pub struct ActiveCardSalesApprovalView {
     pub action_blockers: Vec<ProcessingBlockerView>,
 }
 
+/// 当前销售明细的供给覆盖；仅包含本单商品信息及数量，不暴露采购单内容。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SalesProcurementCoverageLineView {
+    /// 跨版本稳定销售行标识。
+    pub sales_order_line_id: String,
+    /// 当前版本行号。
+    pub line_no: u32,
+    /// 当前销售版本商品名称。
+    pub item_name: String,
+    /// 当前销售版本规格。
+    pub specification: Option<String>,
+    /// 当前销售版本单位。
+    pub unit: Option<String>,
+    /// 本行销售目标数量。
+    pub total_quantity: Quantity,
+    /// 本行已覆盖数量。
+    pub covered_quantity: Quantity,
+    /// 本行尚待覆盖数量。
+    pub remaining_quantity: Quantity,
+}
+
 /// 销售当前版本的统一供给覆盖进度。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct SalesProcurementCoverageView {
+    /// 当前版本逐行覆盖，与汇总使用同一次权威计算。
+    pub lines: Vec<SalesProcurementCoverageLineView>,
     /// 当前销售版本商品/服务目标总数量。
     pub total_quantity: Quantity,
     /// 有效采购与现有库存直接分配的覆盖数量。

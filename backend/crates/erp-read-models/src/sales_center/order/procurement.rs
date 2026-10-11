@@ -18,7 +18,7 @@ use persistence_core::{Executor, NoTransaction};
 use rust_decimal::Decimal;
 
 use super::SalesOrderReadService;
-use super::dto::SalesProcurementCoverageView;
+use super::dto::{SalesProcurementCoverageLineView, SalesProcurementCoverageView};
 use crate::purchase_center::repository::load_procurement_coverage_facts;
 use crate::{Error, Result};
 
@@ -222,6 +222,20 @@ fn display_coverage(
 ) -> Result<SalesProcurementCoverageView> {
     let (coverage, outdated) = current_coverage(facts, sales_id, current_revision, sources)?;
     Ok(SalesProcurementCoverageView {
+        lines: coverage
+            .lines
+            .into_iter()
+            .map(|line| SalesProcurementCoverageLineView {
+                sales_order_line_id: line.revision_line.sales_order_line_id.to_string(),
+                line_no: line.revision_line.line_no,
+                item_name: line.revision_line.item_name_snapshot,
+                specification: line.revision_line.spec_snapshot,
+                unit: line.revision_line.unit_snapshot,
+                total_quantity: line.summary.total_quantity,
+                covered_quantity: line.summary.covered_quantity,
+                remaining_quantity: line.summary.remaining_quantity,
+            })
+            .collect(),
         total_quantity: coverage.summary.total_quantity,
         covered_quantity: coverage.summary.covered_quantity,
         remaining_quantity: coverage.summary.remaining_quantity,
@@ -339,6 +353,7 @@ fn historical_quantity(
 fn empty_coverage() -> Result<SalesProcurementCoverageView> {
     let zero = Quantity::try_from(Decimal::ZERO)?;
     Ok(SalesProcurementCoverageView {
+        lines: Vec::new(),
         total_quantity: zero,
         covered_quantity: zero,
         remaining_quantity: zero,
@@ -548,6 +563,8 @@ mod tests {
         assert_eq!(view.covered_quantity, quantity("0"));
         assert_eq!(view.remaining_quantity, quantity("2"));
         assert!(view.source_changed);
+        assert_eq!(view.lines[0].covered_quantity, quantity("0"));
+        assert_eq!(view.lines[0].remaining_quantity, quantity("2"));
         assert_eq!(view.outdated_purchase_count, 1);
         assert_eq!(view.outdated_purchase_quantity, quantity("2"));
         assert_eq!(
@@ -564,6 +581,47 @@ mod tests {
     }
 
     #[test]
+    fn coverage_lines_distinguish_partial_and_uncovered_sales_items() {
+        let mut input = facts("sales-v2", "current-line");
+        input.goods_lines[0].quantity = quantity("3");
+        let mut second_line = input.revision_lines[0].clone();
+        second_line.base.id = "second-line".into();
+        second_line.sales_order_line_id = SalesOrderLineId::new("second-stable-line");
+        second_line.line_no = 2;
+        second_line.item_name_snapshot = "另一商品".into();
+        second_line.spec_snapshot = Some("盒装".into());
+        let mut second_goods = input.goods_lines[0].clone();
+        second_goods.revision_line_id = SalesOrderRevisionLineId::new("second-line");
+        second_goods.quantity = quantity("4");
+        input.revision_lines.push(second_line);
+        input.goods_lines.push(second_goods);
+        let view = display_coverage(input, "sales", "sales-v2", &HistoricalSources::default()).unwrap();
+        assert_eq!(view.remaining_quantity, quantity("5"));
+        assert_eq!(view.lines.len(), 2);
+        let first = &view.lines[0];
+        assert_eq!(first.sales_order_line_id, "stable-line");
+        assert_eq!(first.total_quantity, quantity("3"));
+        assert_eq!(first.covered_quantity, quantity("2"));
+        assert_eq!(first.remaining_quantity, quantity("1"));
+        let second = &view.lines[1];
+        assert_eq!(second.sales_order_line_id, "second-stable-line");
+        assert_eq!(second.line_no, 2);
+        assert_eq!(second.item_name, "另一商品");
+        assert_eq!(second.specification.as_deref(), Some("盒装"));
+        assert_eq!(second.unit.as_deref(), Some("件"));
+        assert_eq!(second.total_quantity, quantity("4"));
+        assert_eq!(second.covered_quantity, quantity("0"));
+        assert_eq!(second.remaining_quantity, quantity("4"));
+    }
+
+    #[test]
+    fn missing_sales_revision_has_no_coverage_lines() {
+        let view = empty_coverage().unwrap();
+        assert!(view.lines.is_empty());
+        assert_eq!(view.remaining_quantity, quantity("0"));
+    }
+
+    #[test]
     fn current_native_coverage_keeps_original_quantity_and_rejects_tampering() {
         let original = facts("sales-v2", "current-line");
         let native = build_procurement_coverage(original.clone()).unwrap();
@@ -573,6 +631,7 @@ mod tests {
         assert_eq!(view.covered_quantity, native.summary.covered_quantity);
         assert_eq!(view.remaining_quantity, native.summary.remaining_quantity);
         assert_eq!(view.progress, native.summary.progress);
+        assert_eq!(view.lines[0].remaining_quantity, quantity("0"));
         assert!(!view.source_changed);
         assert_eq!(view.outdated_purchase_quantity, quantity("0"));
         assert_eq!(view.outdated_purchase_count, 0);

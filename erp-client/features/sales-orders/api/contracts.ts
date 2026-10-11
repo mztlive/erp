@@ -103,7 +103,19 @@ export type BackendStageSummary = {
 }
 
 /** 销售单当前版本的采购数量覆盖。 */
+export type BackendPurchaseCoverageLine = {
+    sales_order_line_id: string
+    line_no: number
+    item_name: string
+    specification?: string | null
+    unit?: string | null
+    total_quantity: string
+    covered_quantity: string
+    remaining_quantity: string
+}
+
 export type BackendPurchaseCoverage = {
+    lines?: BackendPurchaseCoverageLine[]
     total_quantity: string
     covered_quantity: string
     remaining_quantity: string

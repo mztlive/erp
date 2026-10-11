@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { SearchIcon } from "lucide-react"
-import { MoneyValue } from "@/components/business"
+import { MoneyValue, OptionCombobox } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { NativeCheckbox } from "@/components/ui/checkbox"
 import {
@@ -27,16 +27,20 @@ export function RequestOrderPicker({
     editing: boolean
 }) {
     const [search, setSearch] = useState("")
-    const visible = candidates.filter((item) =>
-        [
-            item.purchase_order_no,
-            item.supplier_name,
-            item.our_company_name,
-            item.purchase_summary,
-        ]
-            .join(" ")
-            .toLowerCase()
-            .includes(search.trim().toLowerCase()),
+    const [supplierId, setSupplierId] = useState<string | null>(null)
+    const suppliers = Array.from(
+        new Map(
+            candidates.map((item) => [item.supplier_id, item.supplier_name]),
+        ),
+        ([value, label]) => ({ value, label }),
+    )
+    const visible = candidates.filter(
+        (item) =>
+            (!supplierId || item.supplier_id === supplierId) &&
+            [item.purchase_order_no, item.purchase_summary]
+                .join(" ")
+                .toLowerCase()
+                .includes(search.trim().toLowerCase()),
     )
     return (
         <form.Subscribe selector={(state) => state.values.selectedIds}>
@@ -53,17 +57,30 @@ export function RequestOrderPicker({
                     )
                 return (
                     <div className="space-y-5">
-                        <div className="relative max-w-xl">
-                            <SearchIcon className="absolute top-2.5 left-3 size-4 text-muted-foreground" />
-                            <Input
-                                id="ppr-create-order-search"
-                                className="pl-9"
-                                value={search}
-                                onChange={(event) =>
-                                    setSearch(event.target.value)
-                                }
-                                placeholder="搜索采购单号、供应商或采购内容"
-                                aria-label="搜索可申请采购单"
+                        <div className="flex flex-wrap gap-3">
+                            <div className="relative min-w-0 flex-1 basis-72 sm:max-w-xl">
+                                <SearchIcon className="absolute top-2.5 left-3 size-4 text-muted-foreground" />
+                                <Input
+                                    id="ppr-create-order-search"
+                                    className="pl-9"
+                                    value={search}
+                                    onChange={(event) =>
+                                        setSearch(event.target.value)
+                                    }
+                                    placeholder="搜索采购单号或采购内容"
+                                    aria-label="搜索可申请采购单"
+                                />
+                            </div>
+                            <OptionCombobox
+                                id="ppr-create-supplier-filter"
+                                options={suppliers}
+                                value={supplierId}
+                                onValueChange={setSupplierId}
+                                filterLabel="供应商"
+                                placeholder="全部供应商"
+                                emptyLabel="没有符合条件的供应商"
+                                aria-label="筛选供应商"
+                                className="w-full sm:w-80"
                             />
                         </div>
                         <p className="text-xs text-muted-foreground">
@@ -78,7 +95,7 @@ export function RequestOrderPicker({
                                         <TableHead className="w-10 p-3">
                                             <NativeCheckbox
                                                 id="ppr-create-select-visible"
-                                                aria-label="选择当前搜索结果"
+                                                aria-label="选择当前筛选结果"
                                                 checked={allChecked}
                                                 indeterminate={
                                                     !allChecked &&

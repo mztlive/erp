@@ -89,55 +89,57 @@ export function SalesOrderCreateLineItemsSection({
                 >
                     {({ nature, lines }) => (
                         <>
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                                <div className="flex flex-wrap items-baseline gap-3">
-                                    <h2
-                                        id="sales-create-lines-title"
-                                        className="font-heading text-base font-semibold"
-                                    >
-                                        销售明细
-                                    </h2>
-                                    <span className="text-sm text-muted-foreground">
-                                        {nature === "card_voucher" ? (
-                                            "卡券 · 仅一条明细"
-                                        ) : (
-                                            <>
-                                                已添加{" "}
-                                                <QuantityValue
-                                                    unit=""
-                                                    value={String(
-                                                        lines.filter((line) =>
-                                                            line.sku.trim(),
-                                                        ).length,
-                                                    )}
-                                                />{" "}
-                                                项商品
-                                            </>
-                                        )}
-                                    </span>
-                                </div>
-                                {nature === "physical_service" ? (
-                                    <div className="flex flex-wrap items-center gap-3">
-                                        {lines.length > 0 ? (
-                                            <SalesOrderCreateDueDateBatchBar
-                                                lineCount={lines.length}
-                                                onApply={handleApplyDueDate}
-                                            />
-                                        ) : null}
-                                        <Button
-                                            id="sales-orders-create-line-items-add"
-                                            type="button"
-                                            variant="outline"
-                                            onClick={() =>
-                                                setPicker({ mode: "add" })
-                                            }
-                                        >
-                                            <PlusIcon aria-hidden="true" />
-                                            添加商品
-                                        </Button>
-                                    </div>
-                                ) : null}
+                            <div className="flex flex-wrap items-baseline gap-3">
+                                <h2
+                                    id="sales-create-lines-title"
+                                    className="font-heading text-base font-semibold"
+                                >
+                                    销售明细
+                                </h2>
+                                <span className="text-sm text-muted-foreground">
+                                    {nature === "card_voucher" ? (
+                                        "卡券 · 仅一条明细"
+                                    ) : (
+                                        <>
+                                            已添加{" "}
+                                            <QuantityValue
+                                                unit=""
+                                                value={String(
+                                                    lines.filter((line) =>
+                                                        line.sku.trim(),
+                                                    ).length,
+                                                )}
+                                            />{" "}
+                                            项商品
+                                        </>
+                                    )}
+                                </span>
                             </div>
+                            {nature === "physical_service" ? (
+                                <div
+                                    role="group"
+                                    aria-label="销售明细操作"
+                                    className="flex flex-wrap items-center gap-3 rounded-lg bg-muted/50 p-3"
+                                >
+                                    <Button
+                                        id="sales-orders-create-line-items-add"
+                                        type="button"
+                                        variant="default"
+                                        onClick={() =>
+                                            setPicker({ mode: "add" })
+                                        }
+                                    >
+                                        <PlusIcon aria-hidden="true" />
+                                        添加商品
+                                    </Button>
+                                    {lines.length > 0 ? (
+                                        <SalesOrderCreateDueDateBatchBar
+                                            lineCount={lines.length}
+                                            onApply={handleApplyDueDate}
+                                        />
+                                    ) : null}
+                                </div>
+                            ) : null}
                             {nature === "physical_service" &&
                             lines.length > 0 ? (
                                 <p className="text-xs text-muted-foreground">
