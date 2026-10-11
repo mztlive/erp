@@ -20,6 +20,7 @@ import {
     SourcingTargetWarehouseField,
 } from "./create-sourcing/sourcing-fields"
 import type { SourcingEditorProps } from "./create-sourcing/types"
+import { SourcingRecommendationHint } from "./sourcing-recommendation-hint"
 
 /** 调整区沿用正式表单字段；当前供给摘要与编辑状态共用同一份值。 */
 export function SourcingAllocationEditor({
@@ -102,6 +103,12 @@ export function SourcingAllocationEditor({
                     index={index}
                     rowKey={line.rowKey}
                     product={product}
+                />
+                <SourcingRecommendationHint
+                    form={form}
+                    order={order}
+                    product={product}
+                    index={index}
                 />
             </div>
             <div

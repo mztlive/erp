@@ -1,242 +1,274 @@
 "use client"
 
 import * as React from "react"
+import { useStore } from "@tanstack/react-form"
 import type { PaginationState } from "@tanstack/react-table"
-
+import { useAppForm } from "@/components/form"
+import type { PriceFilterKind } from "@/lib/price-filter"
+import type { ProductKind } from "@/features/master-data/types"
+import type { SellableFilterKey } from "@/features/master-data/hooks/use-sellable-list-filters"
 import { productSalesPriceRangeError } from "@/features/master-data/lib/list-filters"
-import type {
-    SellableFilterKey,
-    SellableSupplyPresetSelection,
-} from "@/features/master-data/hooks/use-sellable-list-filters"
-import {
-    PRODUCT_KIND_VALUES,
-    type ProductKind,
-    type SellableSupplyPreset,
-} from "@/features/master-data/types"
+import type { SellablePickerAppliedFilters } from "@/features/sales-orders/lib/sellable-sku-picker-query"
 
-const EMPTY_PAGINATION: PaginationState = { pageIndex: 0, pageSize: 20 }
+const EMPTY_FILTERS = { q: "", productPriceKind: "dropship" } as const
 
-/** 销售单选品 Dialog 内筛选：与商品列表条件一致，但不写入 URL。 */
+/** 复用公司商品池的筛选合同，草稿通过表单提交，已生效条件仅保存在弹窗内。 */
 export function useSellableSkuPickerFilters() {
     const searchInputRef = React.useRef<HTMLInputElement | null>(null)
-    const [searchDraft, setSearchDraft] = React.useState("")
-    const [q, setQ] = React.useState("")
-    const [supplyPreset, setSupplyPreset] =
-        React.useState<SellableSupplyPresetSelection>("all")
-    const [productKind, setProductKind] = React.useState<
-        ProductKind | undefined
-    >(undefined)
-    const [productCategoryId, setProductCategoryId] = React.useState<
-        string | undefined
-    >(undefined)
-    const [productBrandId, setProductBrandId] = React.useState<
-        string | undefined
-    >(undefined)
-    const [productSupplierId, setProductSupplierId] = React.useState<
-        string | undefined
-    >(undefined)
-    const [supplyRegion, setSupplyRegion] = React.useState<string | undefined>(
-        undefined,
-    )
-    const [productSalesPriceMin, setProductSalesPriceMin] = React.useState<
-        string | undefined
-    >(undefined)
-    const [productSalesPriceMax, setProductSalesPriceMax] = React.useState<
-        string | undefined
-    >(undefined)
-
-    const [sellableFilterPanelOpen, setSellableFilterPanelOpen] =
-        React.useState(false)
-    const [productKindDraft, setProductKindDraft] = React.useState<
-        ProductKind | "all"
-    >("all")
-    const [productCategoryIdDraft, setProductCategoryIdDraft] = React.useState<
-        string | null
-    >(null)
-    const [productBrandIdDraft, setProductBrandIdDraft] = React.useState<
-        string | null
-    >(null)
-    const [productSupplierIdDraft, setProductSupplierIdDraft] = React.useState<
-        string | null
-    >(null)
-    const [productSalesPriceMinDraft, setProductSalesPriceMinDraft] =
-        React.useState("")
-    const [productSalesPriceMaxDraft, setProductSalesPriceMaxDraft] =
-        React.useState("")
-    const [supplyRegionDraft, setSupplyRegionDraft] = React.useState("")
-    const [productSalesPriceError, setProductSalesPriceError] = React.useState<
-        string | null
-    >(null)
-    const [pagination, setPagination] =
-        React.useState<PaginationState>(EMPTY_PAGINATION)
-
+    const [applied, setApplied] =
+        React.useState<SellablePickerAppliedFilters>(EMPTY_FILTERS)
+    const {
+        q,
+        productKind,
+        productCategoryId,
+        productBrandId,
+        supplyRegion,
+        productPriceKind = "dropship",
+        productSalesPriceMin,
+        productSalesPriceMax,
+    } = applied
+    const [pagination, changePagination] = React.useState<PaginationState>({
+        pageIndex: 0,
+        pageSize: 20,
+    })
     const resetPagination = React.useCallback(() => {
-        setPagination((current) =>
-            current.pageIndex === 0 ? current : { ...current, pageIndex: 0 },
-        )
+        changePagination((current) => ({ ...current, pageIndex: 0 }))
     }, [])
-
-    const hasAdvancedSellableFilters = Boolean(
+    const hasStructuredSellableFilters = Boolean(
+        productKind ||
         productCategoryId ||
         productBrandId ||
-        productSupplierId ||
         supplyRegion ||
         productSalesPriceMin ||
         productSalesPriceMax,
     )
-    const hasStructuredSellableFilters = Boolean(
-        productKind || hasAdvancedSellableFilters,
+    const [sellableFilterPanelOpen, setSellableFilterPanelOpen] =
+        React.useState(false)
+    const [productSalesPriceError, setProductSalesPriceError] = React.useState<
+        string | null
+    >(null)
+    const form = useAppForm({
+        defaultValues: {
+            searchDraft: q,
+            productKindDraft: (productKind ?? "all") as ProductKind | "all",
+            productCategoryIdDraft: productCategoryId ?? null,
+            productBrandIdDraft: productBrandId ?? null,
+            productPriceKindDraft: productPriceKind,
+            productSalesPriceMinDraft: productSalesPriceMin ?? "",
+            productSalesPriceMaxDraft: productSalesPriceMax ?? "",
+            supplyRegionDraft: supplyRegion ?? "",
+        },
+        onSubmit: ({ value }) => {
+            const minimum = value.productSalesPriceMinDraft.trim()
+            const maximum = value.productSalesPriceMaxDraft.trim()
+            const error = productSalesPriceRangeError(minimum, maximum)
+            setProductSalesPriceError(error)
+            if (error) {
+                setSellableFilterPanelOpen(true)
+                return
+            }
+            setApplied({
+                q: value.searchDraft.trim(),
+                productKind:
+                    value.productKindDraft === "all"
+                        ? undefined
+                        : value.productKindDraft,
+                productCategoryId: value.productCategoryIdDraft ?? undefined,
+                productBrandId: value.productBrandIdDraft ?? undefined,
+                supplyRegion: value.supplyRegionDraft.trim() || undefined,
+                productPriceKind:
+                    minimum || maximum
+                        ? value.productPriceKindDraft
+                        : "dropship",
+                productSalesPriceMin: minimum || undefined,
+                productSalesPriceMax: maximum || undefined,
+            })
+            resetPagination()
+            setSellableFilterPanelOpen(false)
+        },
+    })
+    const {
+        searchDraft,
+        productKindDraft,
+        productCategoryIdDraft,
+        productBrandIdDraft,
+        productPriceKindDraft,
+        productSalesPriceMinDraft,
+        productSalesPriceMaxDraft,
+        supplyRegionDraft,
+    } = useStore(form.store, (state) => state.values)
+    const setSearchDraft = React.useCallback(
+        (value: string) => form.setFieldValue("searchDraft", value),
+        [form],
+    )
+    const setProductKindDraft = React.useCallback(
+        (value: ProductKind | "all") =>
+            form.setFieldValue("productKindDraft", value),
+        [form],
+    )
+    const setProductCategoryIdDraft = React.useCallback(
+        (value: string | null) =>
+            form.setFieldValue("productCategoryIdDraft", value),
+        [form],
+    )
+    const setProductBrandIdDraft = React.useCallback(
+        (value: string | null) =>
+            form.setFieldValue("productBrandIdDraft", value),
+        [form],
+    )
+    const setProductPriceKindDraft = React.useCallback(
+        (value: PriceFilterKind) =>
+            form.setFieldValue("productPriceKindDraft", value),
+        [form],
+    )
+    const setProductSalesPriceMinDraft = React.useCallback(
+        (value: string) =>
+            form.setFieldValue("productSalesPriceMinDraft", value),
+        [form],
+    )
+    const setProductSalesPriceMaxDraft = React.useCallback(
+        (value: string) =>
+            form.setFieldValue("productSalesPriceMaxDraft", value),
+        [form],
+    )
+    const setSupplyRegionDraft = React.useCallback(
+        (value: string) => form.setFieldValue("supplyRegionDraft", value),
+        [form],
     )
 
     const applySellableFilters = React.useCallback(() => {
-        const minimum = productSalesPriceMinDraft.trim()
-        const maximum = productSalesPriceMaxDraft.trim()
-        const error = productSalesPriceRangeError(minimum, maximum)
-        setProductSalesPriceError(error)
-        if (error) {
-            setSellableFilterPanelOpen(true)
-            return
-        }
-        const nextKind =
-            productKindDraft === "all"
-                ? undefined
-                : PRODUCT_KIND_VALUES.find(
-                      (value) => value === productKindDraft,
-                  )
-        setQ(searchDraft.trim())
-        setProductKind(nextKind)
-        setProductCategoryId(productCategoryIdDraft ?? undefined)
-        setProductBrandId(productBrandIdDraft ?? undefined)
-        setProductSupplierId(productSupplierIdDraft ?? undefined)
-        setSupplyRegion(supplyRegionDraft.trim() || undefined)
-        setProductSalesPriceMin(minimum || undefined)
-        setProductSalesPriceMax(maximum || undefined)
-        setSellableFilterPanelOpen(false)
-        resetPagination()
-    }, [
-        productBrandIdDraft,
-        productCategoryIdDraft,
-        productKindDraft,
-        productSalesPriceMaxDraft,
-        productSalesPriceMinDraft,
-        productSupplierIdDraft,
-        resetPagination,
-        searchDraft,
-        supplyRegionDraft,
-    ])
+        void form.handleSubmit()
+    }, [form])
 
-    const applySupplyPreset = React.useCallback(
-        (next: SellableSupplyPresetSelection) => {
-            setSupplyPreset(next)
-            resetPagination()
-        },
-        [resetPagination],
-    )
-
+    /** 移除单个已生效条件；价格类型与区间整体移除。 */
     const removeFilter = React.useCallback(
         (key: SellableFilterKey) => {
-            if (key === "q") {
-                setSearchDraft("")
-                setQ("")
-            }
-            if (key === "productKind") {
-                setProductKindDraft("all")
-                setProductKind(undefined)
-            }
-            if (key === "productCategoryId") {
-                setProductCategoryIdDraft(null)
-                setProductCategoryId(undefined)
-            }
-            if (key === "productBrandId") {
-                setProductBrandIdDraft(null)
-                setProductBrandId(undefined)
-            }
-            if (key === "productSupplierId") {
-                setProductSupplierIdDraft(null)
-                setProductSupplierId(undefined)
-            }
-            if (key === "supplyRegion") {
-                setSupplyRegionDraft("")
-                setSupplyRegion(undefined)
-            }
-            if (key === "supplyPreset") {
-                setSupplyPreset("all")
-            }
+            if (key === "q") setSearchDraft("")
+            if (key === "productKind") setProductKindDraft("all")
+            if (key === "productCategoryId") setProductCategoryIdDraft(null)
+            if (key === "productBrandId") setProductBrandIdDraft(null)
+            if (key === "supplyRegion") setSupplyRegionDraft("")
             if (key === "salesPrice") {
+                setProductPriceKindDraft("dropship")
                 setProductSalesPriceMinDraft("")
                 setProductSalesPriceMaxDraft("")
-                setProductSalesPriceMin(undefined)
-                setProductSalesPriceMax(undefined)
                 setProductSalesPriceError(null)
             }
+            setApplied((current) => {
+                if (key === "salesPrice")
+                    return {
+                        ...current,
+                        productPriceKind: "dropship",
+                        productSalesPriceMin: undefined,
+                        productSalesPriceMax: undefined,
+                    }
+                if (key === "q") return { ...current, q: "" }
+                return { ...current, [key]: undefined }
+            })
             resetPagination()
         },
-        [resetPagination],
+        [
+            resetPagination,
+            setSearchDraft,
+            setProductKindDraft,
+            setProductCategoryIdDraft,
+            setProductBrandIdDraft,
+            setProductPriceKindDraft,
+            setProductSalesPriceMinDraft,
+            setProductSalesPriceMaxDraft,
+            setSupplyRegionDraft,
+        ],
     )
 
-    /** 仅重置更多条件草稿；保留关键词、类型、分类及当前查询结果。 */
+    /** 仅重置更多条件的草稿；保留关键词、商品类型、分类及当前结果。 */
     const resetMoreFilters = React.useCallback(() => {
         setProductBrandIdDraft(null)
-        setProductSupplierIdDraft(null)
+        setProductPriceKindDraft("dropship")
         setProductSalesPriceMinDraft("")
         setProductSalesPriceMaxDraft("")
         setSupplyRegionDraft("")
         setProductSalesPriceError(null)
-    }, [])
+    }, [
+        setProductBrandIdDraft,
+        setProductPriceKindDraft,
+        setProductSalesPriceMinDraft,
+        setProductSalesPriceMaxDraft,
+        setSupplyRegionDraft,
+    ])
+
+    /** 取消、外点和 Esc 只恢复低频草稿，保留搜索、商品类型和分类。 */
+    const cancelMoreFilters = React.useCallback(() => {
+        setProductBrandIdDraft(productBrandId ?? null)
+        setSupplyRegionDraft(supplyRegion ?? "")
+        setProductPriceKindDraft(productPriceKind)
+        setProductSalesPriceMinDraft(productSalesPriceMin ?? "")
+        setProductSalesPriceMaxDraft(productSalesPriceMax ?? "")
+        setProductSalesPriceError(null)
+        setSellableFilterPanelOpen(false)
+    }, [
+        productBrandId,
+        productSalesPriceMax,
+        productPriceKind,
+        productSalesPriceMin,
+        setProductBrandIdDraft,
+        setProductSalesPriceMaxDraft,
+        setProductPriceKindDraft,
+        setProductSalesPriceMinDraft,
+        setSupplyRegionDraft,
+        supplyRegion,
+    ])
 
     const hasPendingChanges =
         searchDraft.trim() !== q.trim() ||
         productKindDraft !== (productKind ?? "all") ||
         productCategoryIdDraft !== (productCategoryId ?? null) ||
         productBrandIdDraft !== (productBrandId ?? null) ||
-        productSupplierIdDraft !== (productSupplierId ?? null) ||
         supplyRegionDraft.trim() !== (supplyRegion ?? "") ||
+        (Boolean(
+            productSalesPriceMinDraft.trim() ||
+            productSalesPriceMaxDraft.trim(),
+        ) &&
+            productPriceKindDraft !== productPriceKind) ||
         productSalesPriceMinDraft.trim() !== (productSalesPriceMin ?? "") ||
         productSalesPriceMaxDraft.trim() !== (productSalesPriceMax ?? "")
 
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
-        setQ("")
-        setSupplyPreset("all")
         setProductKindDraft("all")
-        setProductKind(undefined)
         setProductCategoryIdDraft(null)
-        setProductCategoryId(undefined)
         setProductBrandIdDraft(null)
-        setProductBrandId(undefined)
-        setProductSupplierIdDraft(null)
-        setProductSupplierId(undefined)
-        setSupplyRegionDraft("")
-        setSupplyRegion(undefined)
+        setProductPriceKindDraft("dropship")
         setProductSalesPriceMinDraft("")
         setProductSalesPriceMaxDraft("")
-        setProductSalesPriceMin(undefined)
-        setProductSalesPriceMax(undefined)
+        setSupplyRegionDraft("")
         setProductSalesPriceError(null)
         setSellableFilterPanelOpen(false)
+        setApplied(EMPTY_FILTERS)
         resetPagination()
-    }, [resetPagination])
-
-    const changePagination = React.useCallback((next: PaginationState) => {
-        setPagination(next)
-    }, [])
+    }, [
+        resetPagination,
+        setSearchDraft,
+        setProductKindDraft,
+        setProductCategoryIdDraft,
+        setProductBrandIdDraft,
+        setProductPriceKindDraft,
+        setProductSalesPriceMinDraft,
+        setProductSalesPriceMaxDraft,
+        setSupplyRegionDraft,
+    ])
 
     return {
-        searchInputRef,
         q,
-        supplyPreset:
-            supplyPreset === "all"
-                ? undefined
-                : (supplyPreset as SellableSupplyPreset),
+        searchInputRef,
         productKind,
         productCategoryId,
         productBrandId,
-        productSupplierId,
         supplyRegion,
+        productPriceKind,
         productSalesPriceMin,
         productSalesPriceMax,
-        hasStructuredSellableFilters,
         hasPendingChanges,
+        hasStructuredSellableFilters,
         searchDraft,
         setSearchDraft,
         sellableFilterPanelOpen,
@@ -247,9 +279,9 @@ export function useSellableSkuPickerFilters() {
         setProductCategoryIdDraft,
         productBrandIdDraft,
         setProductBrandIdDraft,
-        productSupplierIdDraft,
-        setProductSupplierIdDraft,
+        productPriceKindDraft,
         productSalesPriceMinDraft,
+        setProductPriceKindDraft,
         setProductSalesPriceMinDraft,
         productSalesPriceMaxDraft,
         setProductSalesPriceMaxDraft,
@@ -260,9 +292,9 @@ export function useSellableSkuPickerFilters() {
         pagination,
         changePagination,
         applySellableFilters,
-        applySupplyPreset,
         removeFilter,
         resetMoreFilters,
+        cancelMoreFilters,
         clearAllFilters,
     }
 }

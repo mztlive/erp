@@ -27,7 +27,7 @@ export function SalesOrderCreateLinePriceEditor({
     const automatic = line.pricingMode === "AUTO"
 
     return (
-        <div className="min-w-32 space-y-1">
+        <div className="relative min-w-32">
             <form.AppField name={`lineItems[${rowIndex}].unitPriceGross`}>
                 {(field) => {
                     const invalid =
@@ -46,7 +46,12 @@ export function SalesOrderCreateLinePriceEditor({
                                 className="num min-w-24 text-right"
                                 aria-invalid={invalid || undefined}
                                 aria-describedby={
-                                    invalid ? `${id}-error` : undefined
+                                    [
+                                        isGoods && `${id}-pricing`,
+                                        invalid && `${id}-error`,
+                                    ]
+                                        .filter(Boolean)
+                                        .join(" ") || undefined
                                 }
                                 onBlur={field.handleBlur}
                                 onChange={(event) => {
@@ -70,7 +75,10 @@ export function SalesOrderCreateLinePriceEditor({
                 }}
             </form.AppField>
             {isGoods ? (
-                <div className="flex flex-wrap items-center justify-end gap-x-2 text-xs text-muted-foreground">
+                <div
+                    id={`${id}-pricing`}
+                    className="absolute inset-x-0 top-full mt-1 flex items-center justify-end gap-x-2 whitespace-nowrap text-xs text-muted-foreground"
+                >
                     <span>
                         {automatic
                             ? reference?.tier === "bulk"

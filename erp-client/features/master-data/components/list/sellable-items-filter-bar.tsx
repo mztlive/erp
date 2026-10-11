@@ -22,11 +22,41 @@ import type { useSellableListFilters } from "@/features/master-data/hooks/use-se
 import { PRODUCT_KIND_FILTER_OPTIONS } from "@/features/master-data/lib/list-filters"
 import type { ProductKind } from "@/features/master-data/types"
 
-const prefix = "sellable-items-filter"
-const panelId = `${prefix}-more-panel`
-const priceErrorId = `${prefix}-price-error`
+export type SellableItemsFilterControls = Pick<
+    ReturnType<typeof useSellableListFilters>,
+    | "applySellableFilters"
+    | "cancelMoreFilters"
+    | "clearAllFilters"
+    | "hasPendingChanges"
+    | "productBrandIdDraft"
+    | "productCategoryIdDraft"
+    | "productKindDraft"
+    | "productPriceKindDraft"
+    | "productSalesPriceError"
+    | "productSalesPriceMaxDraft"
+    | "productSalesPriceMinDraft"
+    | "removeFilter"
+    | "resetMoreFilters"
+    | "searchDraft"
+    | "sellableFilterPanelOpen"
+    | "setProductBrandIdDraft"
+    | "setProductCategoryIdDraft"
+    | "setProductKindDraft"
+    | "setProductPriceKindDraft"
+    | "setProductSalesPriceError"
+    | "setProductSalesPriceMaxDraft"
+    | "setProductSalesPriceMinDraft"
+    | "setSearchDraft"
+    | "setSellableFilterPanelOpen"
+    | "setSupplyRegionDraft"
+    | "supplyRegionDraft"
+>
 
 export function SellableItemsFilterBar({
+    idPrefix = "sellable-items-filter",
+    formAriaLabel = "公司商品池查询",
+    pendingHint = "条件已修改，待查询 · 导出仍按已生效条件",
+    hiddenProductKinds,
     searchInputRef,
     filters: f,
     appliedChips,
@@ -36,8 +66,12 @@ export function SellableItemsFilterBar({
     failed,
     statusActions,
 }: {
+    idPrefix?: string
+    formAriaLabel?: string
+    pendingHint?: string
+    hiddenProductKinds?: readonly ProductKind[]
     searchInputRef: React.RefObject<HTMLInputElement | null>
-    filters: ReturnType<typeof useSellableListFilters>
+    filters: SellableItemsFilterControls
     appliedChips: readonly SellableAppliedChip[]
     filterOptions: ProductFilterDirectoryQuery
     resultCount?: number
@@ -45,6 +79,12 @@ export function SellableItemsFilterBar({
     failed: boolean
     statusActions?: React.ReactNode
 }) {
+    const prefix = idPrefix
+    const panelId = `${prefix}-more-panel`
+    const priceErrorId = `${prefix}-price-error`
+    const kindOptions = PRODUCT_KIND_FILTER_OPTIONS.filter(
+        (option) => !hiddenProductKinds?.includes(option.value as ProductKind),
+    )
     const directory = productFilterDirectoryState(filterOptions)
     const priceInputRef = React.useRef<HTMLInputElement>(null)
     const moreCount = appliedChips.filter(({ key }) =>
@@ -61,7 +101,7 @@ export function SellableItemsFilterBar({
             moreSize="wide"
             className="[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
             idPrefix={prefix}
-            formAriaLabel="公司商品池查询"
+            formAriaLabel={formAriaLabel}
             onSubmit={f.applySellableFilters}
             queryButtonId={`${prefix}-query`}
             search={
@@ -99,11 +139,11 @@ export function SellableItemsFilterBar({
                                 ? null
                                 : f.productKindDraft
                         }
-                        options={PRODUCT_KIND_FILTER_OPTIONS}
+                        options={kindOptions}
                         placeholder="全部"
                         onValueChange={(value) =>
                             f.setProductKindDraft(
-                                PRODUCT_KIND_FILTER_OPTIONS.some(
+                                kindOptions.some(
                                     (option) => option.value === value,
                                 )
                                     ? (value as ProductKind)
@@ -310,7 +350,7 @@ export function SellableItemsFilterBar({
             }
             onClearAll={f.clearAllFilters}
             hasPendingChanges={f.hasPendingChanges}
-            pendingHint="条件已修改，待查询 · 导出仍按已生效条件"
+            pendingHint={pendingHint}
             statusActions={statusActions}
         />
     )

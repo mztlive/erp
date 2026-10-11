@@ -226,7 +226,7 @@ export function assignBestSourcingOptions(
     })
 }
 
-function optionCoversRemaining(
+export function optionCoversRemaining(
     option: SourcingSupplierOption,
     remainingQuantity: string | undefined,
 ): boolean {

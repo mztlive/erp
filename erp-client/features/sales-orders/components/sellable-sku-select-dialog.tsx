@@ -18,14 +18,14 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { SellableListToolbar } from "@/features/master-data/components/list/sellable-list-toolbar"
+import { SellableItemsFilterBar } from "@/features/master-data/components/list/sellable-items-filter-bar"
 import type { SellableAppliedChip } from "@/features/master-data/components/list/sellable-list-toolbar"
 import { useProductFilterOptionsQuery } from "@/features/master-data/hooks/queries"
 import {
     directorySelectionLabel,
     productFilterDirectoryState,
 } from "@/features/master-data/lib/product-filter-directory"
-import { SELLABLE_SUPPLY_PRESET_LABELS } from "@/features/master-data/lib/sellable-supply-preset"
+import { PRICE_FILTER_LABELS } from "@/lib/price-filter"
 import { useSellableSkuPickerColumns } from "@/features/sales-orders/components/sellable-sku-picker-columns"
 import { useSellableSkuPickerQuery } from "@/features/sales-orders/hooks/use-sellable-sku-picker-query"
 import {
@@ -52,12 +52,6 @@ export type SellableSkuSelectDialogProps = {
     onConfirm: (picks: readonly SellableSkuPick[]) => void
 }
 
-const EMPTY_SUPPLY_PRESET_COUNTS = {
-    all: 0,
-    "single-supplier": 0,
-    nationwide: 0,
-} as const
-
 function compactSelection(selection: RowSelectionState): RowSelectionState {
     return Object.fromEntries(
         Object.entries(selection).filter(([, selected]) => Boolean(selected)),
@@ -82,12 +76,11 @@ export function SellableSkuSelectDialog({
             toSellablePickerListQuery(
                 {
                     q: filters.q,
-                    supplyPreset: filters.supplyPreset ?? "all",
                     productKind: filters.productKind,
                     productCategoryId: filters.productCategoryId,
                     productBrandId: filters.productBrandId,
-                    productSupplierId: filters.productSupplierId,
                     supplyRegion: filters.supplyRegion,
+                    productPriceKind: filters.productPriceKind,
                     productSalesPriceMin: filters.productSalesPriceMin,
                     productSalesPriceMax: filters.productSalesPriceMax,
                 },
@@ -136,24 +129,10 @@ export function SellableSkuSelectDialog({
         (option) => option.label,
         directory,
     )
-    const selectedSupplierLabel = directorySelectionLabel(
-        filters.productSupplierId,
-        directory.suppliers,
-        (option) => option.value,
-        (option) => option.label,
-        directory,
-    )
-
     const appliedChips = React.useMemo<readonly SellableAppliedChip[]>(() => {
         const chips: SellableAppliedChip[] = []
         if (filters.q.trim()) {
             chips.push({ key: "q", label: `搜索：${filters.q.trim()}` })
-        }
-        if (filters.supplyPreset) {
-            chips.push({
-                key: "supplyPreset",
-                label: SELLABLE_SUPPLY_PRESET_LABELS[filters.supplyPreset],
-            })
         }
         if (filters.productKind) {
             chips.push({
@@ -173,12 +152,6 @@ export function SellableSkuSelectDialog({
                 label: `品牌：${selectedBrandLabel}`,
             })
         }
-        if (filters.productSupplierId) {
-            chips.push({
-                key: "productSupplierId",
-                label: `供应商：${selectedSupplierLabel}`,
-            })
-        }
         if (filters.supplyRegion) {
             chips.push({
                 key: "supplyRegion",
@@ -190,7 +163,7 @@ export function SellableSkuSelectDialog({
             const maximum = filters.productSalesPriceMax ?? "不限"
             chips.push({
                 key: "salesPrice",
-                label: `销售价：${minimum} 至 ${maximum}`,
+                label: `${PRICE_FILTER_LABELS[filters.productPriceKind]}：${minimum} 至 ${maximum}`,
             })
         }
         return chips
@@ -200,19 +173,15 @@ export function SellableSkuSelectDialog({
         filters.productKind,
         filters.productSalesPriceMax,
         filters.productSalesPriceMin,
-        filters.productSupplierId,
         filters.q,
-        filters.supplyPreset,
+        filters.productPriceKind,
         filters.supplyRegion,
         selectedBrandLabel,
         selectedCategoryLabel,
-        selectedSupplierLabel,
     ])
 
     const hasActiveFilters =
-        filters.q.trim() !== "" ||
-        filters.hasStructuredSellableFilters ||
-        filters.supplyPreset != null
+        filters.q.trim() !== "" || filters.hasStructuredSellableFilters
 
     const handleRowSelectionChange = React.useCallback(
         (next: RowSelectionState) => {
@@ -268,74 +237,26 @@ export function SellableSkuSelectDialog({
                 </DialogHeader>
 
                 <div id="sales-orders-sku-picker-toolbar">
-                    <SellableListToolbar
+                    <SellableItemsFilterBar
+                        idPrefix="sales-orders-sku-picker-filter"
+                        formAriaLabel="销售单商品查询"
+                        pendingHint="条件已修改，待查询"
                         searchInputRef={filters.searchInputRef}
-                        searchDraft={filters.searchDraft}
-                        setSearchDraft={filters.setSearchDraft}
-                        hasActiveFilters={hasActiveFilters}
-                        clearAllFilters={filters.clearAllFilters}
+                        filters={filters}
                         appliedChips={appliedChips}
-                        removeFilter={filters.removeFilter}
-                        supplyPreset={filters.supplyPreset ?? "all"}
-                        supplyPresetCounts={EMPTY_SUPPLY_PRESET_COUNTS}
-                        applySupplyPreset={filters.applySupplyPreset}
-                        sellableFilterPanelOpen={
-                            filters.sellableFilterPanelOpen
-                        }
-                        setSellableFilterPanelOpen={
-                            filters.setSellableFilterPanelOpen
-                        }
-                        hasStructuredSellableFilters={
-                            filters.hasStructuredSellableFilters
-                        }
-                        applySellableFilters={filters.applySellableFilters}
-                        resetMoreFilters={filters.resetMoreFilters}
-                        supplyRegionDraft={filters.supplyRegionDraft}
-                        setSupplyRegionDraft={filters.setSupplyRegionDraft}
-                        productKindDraft={filters.productKindDraft}
-                        setProductKindDraft={filters.setProductKindDraft}
-                        productCategoryIdDraft={filters.productCategoryIdDraft}
-                        setProductCategoryIdDraft={
-                            filters.setProductCategoryIdDraft
-                        }
-                        productBrandIdDraft={filters.productBrandIdDraft}
-                        setProductBrandIdDraft={filters.setProductBrandIdDraft}
-                        productSupplierIdDraft={filters.productSupplierIdDraft}
-                        setProductSupplierIdDraft={
-                            filters.setProductSupplierIdDraft
-                        }
-                        productSalesPriceMinDraft={
-                            filters.productSalesPriceMinDraft
-                        }
-                        setProductSalesPriceMinDraft={
-                            filters.setProductSalesPriceMinDraft
-                        }
-                        productSalesPriceMaxDraft={
-                            filters.productSalesPriceMaxDraft
-                        }
-                        setProductSalesPriceMaxDraft={
-                            filters.setProductSalesPriceMaxDraft
-                        }
-                        productSalesPriceError={filters.productSalesPriceError}
-                        setProductSalesPriceError={
-                            filters.setProductSalesPriceError
-                        }
-                        productFilterOptionsQuery={productFilterOptionsQuery}
-                        showSupplyPresetCounts={false}
+                        filterOptions={productFilterOptionsQuery}
                         hiddenProductKinds={
                             excludeProductKind
                                 ? [excludeProductKind]
                                 : undefined
                         }
-                        applyHint="可组合多个条件，点击「查询」后统一生效。"
-                        hasPendingChanges={filters.hasPendingChanges}
                         resultCount={listQuery.data?.total}
                         loading={listQuery.isFetching}
                         failed={listQuery.isError}
                     />
                 </div>
 
-                <div className="min-h-96 flex-1 overflow-hidden">
+                <div className="min-h-0 flex-1 overflow-auto">
                     <DataTable
                         id="sales-orders-sku-picker-table"
                         data={rows}

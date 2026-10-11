@@ -78,7 +78,7 @@ export function SalesOrderCreateLineItemsSection({
             <section
                 id="sales-line-items-section"
                 tabIndex={-1}
-                className="min-w-0 space-y-3 border-t border-grid p-4 sm:p-5"
+                className="min-w-0 space-y-3 border-t border-grid p-4 outline-none sm:p-5"
                 aria-labelledby="sales-create-lines-title"
             >
                 <form.Subscribe

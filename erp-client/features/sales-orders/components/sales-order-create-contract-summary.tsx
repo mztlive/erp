@@ -37,7 +37,10 @@ export function SalesOrderCreateContractSummary({
     // 续编可能引用旧版本，不能用当前合同条款替换原单已经保存的值。
     const payment =
         values.paymentTerms === "CONTRACT"
-            ? "按合同约定"
+            ? values.requestedContractRevisionId ===
+              contract.currentRevision.revisionId
+                ? contract.currentRevision.paymentTermSnapshot.label
+                : "按合同约定"
             : PAYMENT_TERM_OPTIONS.find(
                   (item) => item.value === values.paymentTerms,
               )?.label || values.paymentTerms

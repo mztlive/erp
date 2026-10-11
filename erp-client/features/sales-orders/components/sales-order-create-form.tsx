@@ -40,6 +40,7 @@ import { useSalesOrderCreateSubmission } from "@/features/sales-orders/hooks/use
 import { useSalesLineProcurementResponsibilities } from "@/features/sales-orders/hooks/use-sales-line-procurement-responsibilities"
 import { SalesOrderCreateAlerts } from "@/features/sales-orders/components/sales-order-create-alerts"
 import { SalesOrderCreateContractSection } from "@/features/sales-orders/components/sales-order-create-contract-section"
+import { SalesOrderContractPickerDialog } from "./sales-order-contract-picker-dialog"
 import { SalesOrderCreateEntry } from "@/features/sales-orders/components/sales-order-create-entry"
 import { SalesOrderCreateHeaderFields } from "@/features/sales-orders/components/sales-order-create-header-fields"
 import { SalesOrderCreateLineItemsSection } from "@/features/sales-orders/components/sales-order-create-line-items-section"
@@ -84,7 +85,7 @@ export function SalesOrderCreateForm({
         initialDraft?.contractId || initialContractId,
     )
     const [readyContractId, setReadyContractId] = React.useState("")
-    const [editingContract, setEditingContract] = React.useState(false)
+    const [contractPickerOpen, setContractPickerOpen] = React.useState(false)
     const [importedContractId, setImportedContractId] = React.useState("")
     const focusSalesFieldsRef = React.useRef(false)
     const [uploadOpen, setUploadOpen] = React.useState(false)
@@ -239,7 +240,7 @@ export function SalesOrderCreateForm({
         contractQuery.isError ||
         (contractQuery.isSuccess &&
             (!contractQuery.data || revisionUnavailable))
-    const showContractSummary = contractResolved && !editingContract
+    const showContractSummary = contractResolved
     const selectedCustomerId = useSelector(
         form.store,
         (state) => state.values.customerId,
@@ -363,7 +364,6 @@ export function SalesOrderCreateForm({
             })
         }
         setReadyContractId(selectedContractId)
-        setEditingContract(false)
     }, [
         contractQuery.data,
         form,
@@ -435,6 +435,10 @@ export function SalesOrderCreateForm({
         // 已保存单据的开单依据沿用原单；上传期间不卸载凭证控件。
         if (submission.draftIdentity || form.state.values.evidenceUploadPending)
             return
+        if (basis === "contract") {
+            setContractPickerOpen(true)
+            return
+        }
         form.setFieldValue("orderBasis", basis)
         form.setFieldValue("contractId", "")
         handleContractChange("")
@@ -445,7 +449,6 @@ export function SalesOrderCreateForm({
         (result: UploadContractPdfResult) => {
             setReadyContractId("")
             setImportedContractId(result.contractId)
-            setEditingContract(false)
             focusSalesFieldsRef.current = true
             preferredRevisionRef.current = result.revisionId
             synchronizedContractRef.current = ""
@@ -551,8 +554,12 @@ export function SalesOrderCreateForm({
                             setUploadOpen(true)
                         }}
                         onSelectBasis={(basis) => {
-                            handleOrderBasisChange(basis)
-                            setEntryOpen(false)
+                            if (basis === "contract") {
+                                setContractPickerOpen(true)
+                            } else {
+                                handleOrderBasisChange(basis)
+                                setEntryOpen(false)
+                            }
                         }}
                     />
                 ) : waitingForContract ? (
@@ -563,10 +570,7 @@ export function SalesOrderCreateForm({
                         fetching={contractQuery.isFetching}
                         canChange={!submission.draftIdentity}
                         onRetry={() => void contractQuery.refetch()}
-                        onChange={() => {
-                            form.setFieldValue("contractId", "")
-                            handleContractChange("")
-                        }}
+                        onChange={() => setContractPickerOpen(true)}
                     />
                 ) : (
                     <form
@@ -642,24 +646,11 @@ export function SalesOrderCreateForm({
                                             !submission.isSubmitting
                                         }
                                         onChange={() =>
-                                            setEditingContract(true)
+                                            setContractPickerOpen(true)
                                         }
                                     />
                                 ) : (
                                     <>
-                                        {editingContract && contractResolved ? (
-                                            <Button
-                                                id="sales-orders-create-contract-edit-cancel"
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() =>
-                                                    setEditingContract(false)
-                                                }
-                                            >
-                                                保留当前合同
-                                            </Button>
-                                        ) : null}
                                         <SalesOrderCreateContractSection
                                             form={form}
                                             customerLocked={
@@ -724,6 +715,24 @@ export function SalesOrderCreateForm({
                     </form>
                 )}
             </div>
+            {contractPickerOpen ? (
+                <SalesOrderContractPickerDialog
+                    initialContractId={selectedContractId}
+                    onClose={() => setContractPickerOpen(false)}
+                    onConfirm={(contractId) => {
+                        if (
+                            contractId !== selectedContractId ||
+                            !contractResolved
+                        ) {
+                            handleContractChange(contractId)
+                        }
+                        form.setFieldValue("orderBasis", "contract")
+                        form.setFieldValue("contractId", contractId)
+                        setContractPickerOpen(false)
+                        setEntryOpen(false)
+                    }}
+                />
+            ) : null}
             <div
                 id="sales-orders-create-contract-import"
                 className={uploadOpen ? "min-w-0" : "hidden"}
