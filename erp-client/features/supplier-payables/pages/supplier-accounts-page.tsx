@@ -106,7 +106,6 @@ export function SupplierAccountsPage() {
         listQuery,
         data,
         sortedPayables,
-        openSettlements,
     } = useSupplierAccountsPage()
 
     const filterToolbar = (
@@ -280,24 +279,6 @@ export function SupplierAccountsPage() {
                     )
                     setPickSupplierOpen("purchase_invoice")
                 }}
-                onRegisterPayment={() => {
-                    if (!paymentTaskPayable) return
-                    openSession({
-                        track: "payment",
-                        supplierId: paymentTaskPayable.supplierId,
-                        preselectPayableAccountId:
-                            paymentTaskPayable.payableAccountId,
-                        purchaseOrderId:
-                            paymentTaskPayable.sourceType === "PURCHASE_ORDER"
-                                ? paymentTaskPayable.sourceDocumentId
-                                : undefined,
-                        returnTo,
-                        fromWorkspace,
-                    })
-                }}
-                canRegisterPayment={Boolean(paymentTaskPayable)}
-                paymentBlockedReason="付款必须由当前负责人从工作台的供应商付款任务进入"
-                onSettle={openSettlements}
             />
 
             <SupplierAccountsResultBanner

@@ -34,6 +34,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
 fn material_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
+            "/approval-instances/{id}/invoice-review",
+            with_permission(
+                get(approval_instance::materials::invoice_review),
+                rbac,
+                approval_instance::materials::invoice_review_permission_key(),
+            ),
+        )
+        .route(
             "/approval-instances/{id}/materials",
             with_permission(
                 get(approval_instance::materials::list),

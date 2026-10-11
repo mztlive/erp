@@ -532,6 +532,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "GET",
+                path: "/admin/approval-instances/{id}/invoice-review",
+                description: "读取开票审批当前核对依据",
+                permission: {
+                    resource: "approval_instance",
+                    action: "read",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
                 path: "/admin/approval-instances/{id}/materials",
                 description: "读取本次提交的审批资料",
                 permission: {

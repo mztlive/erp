@@ -10,7 +10,6 @@ export { PurchasePanel } from "@/features/sales-orders/components/sales-order-de
 export { AcceptancePanel } from "@/features/sales-orders/components/sales-order-detail-acceptance-panel"
 export {
     CollaborationPanel,
-    ReceivablePanel,
     VersionsPanel,
 } from "@/features/sales-orders/components/sales-order-detail-finance-panels"
 export { navItemsFor } from "@/features/sales-orders/lib/sales-order-detail-model"

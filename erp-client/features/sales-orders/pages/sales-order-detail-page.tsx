@@ -312,7 +312,11 @@ export function SalesOrderDetailPage({
                 onApprovalResult={handleActionResult}
                 sidebar={
                     <SalesOrderDetailSidebar
-                        hideFinanceSummary={derived.navSection === "receivable"}
+                        hideFinanceSummary={[
+                            "receivable",
+                            "receipt",
+                            "invoice",
+                        ].includes(derived.navSection)}
                         order={order}
                         focusTask={derived.focusTask}
                         action={

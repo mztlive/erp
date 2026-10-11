@@ -144,7 +144,7 @@ export function CustomerReceivablesTable({
                         <span className="ml-2 text-xs font-normal text-muted-foreground">
                             未分配{" "}
                             <MoneyValue
-                                value={metrics?.unallocatedReceiptTotal ?? "0"}
+                                value={metrics?.unallocatedReceiptTotal ?? null}
                                 className="inline"
                             />
                         </span>
@@ -188,7 +188,7 @@ export function CustomerReceivablesTable({
                         <span className="ml-2 text-xs font-normal text-muted-foreground">
                             未分配{" "}
                             <MoneyValue
-                                value={metrics?.unallocatedInvoiceTotal ?? "0"}
+                                value={metrics?.unallocatedInvoiceTotal ?? null}
                                 className="inline"
                             />
                             （独立统计）

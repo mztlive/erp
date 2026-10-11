@@ -6,14 +6,41 @@ use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::http::HeaderValue;
 use axum::http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS};
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
 use erp_processes::approval_materials;
 use erp_read_models::sales_center::approval_materials::{ApprovalDocumentMaterials, materials};
+use erp_read_models::workbench::{InvoiceApprovalReview, invoice_approval_review};
 
 use crate::app_state::AppState;
 use crate::core::errors::{Error, Result};
 use crate::core::handler::file_asset::verify_content;
 use crate::core::response::ApiResponse;
+
+#[permission_macros::permission(
+    group = "审批实例",
+    group_desc = "审批运行、决定、恢复与取消",
+    desc = "读取开票审批当前核对依据",
+    resource = "approval_instance",
+    action = "read"
+)]
+/// 返回实例授权内唯一应收的当前票款核对依据。
+/// # 参数
+/// 应用状态、认证账号和开票审批实例 ID。
+/// # 返回
+/// 当前额度、回款与销售依据；不改写提交快照。
+/// # 错误
+/// 未授权、非开票审批、申请版本或来源不匹配时拒绝。
+pub async fn invoice_review(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+) -> std::result::Result<Response, Error> {
+    let review: InvoiceApprovalReview =
+        invoice_approval_review(&state.db(), &state.approval_runtime_service(), &actor, &id).await?;
+    let mut response = ApiResponse::ok_with_data(review).into_response();
+    response.headers_mut().insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+    Ok(response)
+}
 
 #[permission_macros::permission(
     group = "审批实例",

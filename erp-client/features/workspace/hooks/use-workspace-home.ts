@@ -3,6 +3,7 @@
 import * as React from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { approvalKeys } from "@/features/approval-workflow/queries"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 
 import { useAccountProfileQuery } from "@/features/auth/queries"
@@ -231,6 +232,7 @@ export function useWorkspaceHome() {
             if (!profileResult.isSuccess) return
             for (const queryKey of [
                 workspaceHomeKeys.all,
+                approvalKeys.all,
                 queryKeyRoots.fulfillmentOperations,
                 queryKeyRoots.supplierPayables,
             ]) {

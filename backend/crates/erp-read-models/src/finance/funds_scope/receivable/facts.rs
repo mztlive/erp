@@ -1,13 +1,15 @@
 //! 同一应收快照的核销净额与当前页分录事实。
 
 mod order_guard;
+mod overdue;
 
 use std::collections::{BTreeSet, HashMap};
 
+use erp_core::common::time::BusinessDate;
 use erp_core::ids::{ReceivableAccountId, ReceivableEntryId};
 use erp_core::money::Amount;
 use erp_finance::dto::receivable::ReceivableEntryView;
-use erp_finance::entity::receivable::{ReceiptAllocation, ReceivableEntry};
+use erp_finance::entity::receivable::{EntryDirection, ReceiptAllocation, ReceivableEntry};
 use erp_finance::repository::ReceivableExt;
 use erp_finance::repository::prelude::*;
 use persistence_core::Executor;
@@ -17,16 +19,23 @@ use super::super::receivable_display::entry_view;
 use crate::Result;
 
 /// 每个子账的净核销额；只有当前页保留分录视图以限制内存占用。
-#[derive(Default)]
 pub(super) struct ReceivableFacts {
+    pub(super) overdue_total: Amount,
     shares: HashMap<String, Amount>,
     entries: HashMap<String, Vec<ReceivableEntryView>>,
+}
+
+impl Default for ReceivableFacts {
+    fn default() -> Self {
+        Self { overdue_total: Amount::zero(), shares: HashMap::new(), entries: HashMap::new() }
+    }
 }
 
 impl ReceivableFacts {
     /// 合并当前页之外的子账事实；调用方保证每个子账只装载一批。
     #[cfg(test)]
     pub(super) fn extend(&mut self, other: Self) {
+        self.overdue_total = self.overdue_total.checked_add(other.overdue_total);
         self.shares.extend(other.shares);
         self.entries.extend(other.entries);
     }
@@ -145,6 +154,7 @@ impl FundsAccess {
         executor: &mut dyn Executor,
     ) -> Result<ReceivableFacts> {
         let mut facts = ReceivableFacts::default();
+        let today = BusinessDate::today();
         for chunk in account_ids.chunks(500) {
             let ids = chunk.iter().map(ReceivableAccountId::new).collect::<Vec<_>>();
             let entries = self.db.receivable_entries().find_entries_by_accounts(&ids, executor).await?;
@@ -153,6 +163,15 @@ impl FundsAccess {
                 chunk.iter().filter_map(|account| ids.get(account)).flatten().cloned().collect::<Vec<_>>();
             let allocations =
                 self.db.receipt_allocations().find_allocations_by_entries(&keys, executor).await?;
+            let decreases = entries
+                .iter()
+                .filter(|entry| entry.direction == EntryDirection::Decrease)
+                .map(|entry| ReceivableEntryId::new(&entry.base.id))
+                .collect::<Vec<_>>();
+            let offsets =
+                self.db.receivable_entry_offsets().find_offsets_by_decreases(&decreases, executor).await?;
+            facts.overdue_total =
+                facts.overdue_total.checked_add(overdue::total(&entries, &allocations, &offsets, today));
             let fallback = facts.append_batch_allocations(chunk, &entries, allocations);
             for account in chunk.iter().filter(|account| fallback.contains(*account)) {
                 let keys = ids.get(account).map(Vec::as_slice).unwrap_or_default();
@@ -475,6 +494,66 @@ mod tests {
                 allocation("a-1", AllocationAction::Apply, "1"),
                 allocation("a-1", AllocationAction::Reverse, "1"),
             ],
+        );
+    }
+    #[test]
+    fn overdue_balance_respects_due_day_settlements_reversals_and_offsets() {
+        use erp_finance::entity::receivable::ReceivableEntryOffset;
+        let today: BusinessDate = "2026-10-12".parse().unwrap();
+        let mut old = entry("old", "account", 1);
+        old.due_date = "2026-10-11".parse().unwrap();
+        let mut current = entry("current", "account", 2);
+        current.due_date = today;
+        let mut future = entry("future", "account", 3);
+        future.due_date = "2026-10-13".parse().unwrap();
+        let mut decrease = entry("decrease", "account", 4);
+        decrease.direction = EntryDirection::Decrease;
+        decrease.due_date = old.due_date;
+        let offsets = vec![ReceivableEntryOffset {
+            base: BaseModel::fake(),
+            decrease_entry_id: ReceivableEntryId::new("decrease"),
+            increase_entry_id: ReceivableEntryId::new("old"),
+            offset_sequence: 1,
+            offset_amount: "10.01".parse().unwrap(),
+        }];
+        let allocations = vec![
+            allocation("old", AllocationAction::Apply, "30"),
+            allocation("old", AllocationAction::Reverse, "5"),
+        ];
+        assert_eq!(
+            overdue::total(&[old.clone(), current, future, decrease], &allocations, &offsets, today),
+            "64.99".parse().unwrap()
+        );
+        assert_eq!(old.overdue_balance(today, "100".parse().unwrap(), Amount::zero()), Amount::zero());
+        assert_eq!(old.overdue_balance(today, "100".parse().unwrap(), "10".parse().unwrap()), Amount::zero());
+        assert_eq!(overdue::total(&[], &[], &[], today), Amount::zero());
+    }
+
+    #[test]
+    fn receivable_balances_include_matches_beyond_the_display_page() {
+        let rows = vec![
+            AccountSummaryRow {
+                id: "first".into(),
+                order_id: "order".into(),
+                owner_user_id: None,
+                gross_total: "100.01".parse().unwrap(),
+                settled_total: "20".parse().unwrap(),
+            },
+            AccountSummaryRow {
+                id: "other-page".into(),
+                order_id: "order".into(),
+                owner_user_id: None,
+                gross_total: "65".parse().unwrap(),
+                settled_total: "5".parse().unwrap(),
+            },
+        ];
+        let facts = ReceivableFacts { overdue_total: "60".parse().unwrap(), ..ReceivableFacts::default() };
+        let result = receivable_summary(&rows, &facts, "v").unwrap();
+        assert_eq!(result.balance_total, Some("140.01".parse().unwrap()));
+        assert_eq!(result.overdue_total, Some("60".parse().unwrap()));
+        assert_eq!(
+            receivable_summary(&[], &ReceivableFacts::default(), "v").unwrap().balance_total,
+            Some(Amount::zero())
         );
     }
 }

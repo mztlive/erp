@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { XIcon } from "lucide-react"
+import { LockKeyholeIcon, XIcon } from "lucide-react"
 
 import { DetailPageHeader } from "@/components/business/detail-page-header"
 import { Button } from "@/components/ui/button"
@@ -34,14 +34,14 @@ export function SessionHeader({
             label: submitted ? "已提交" : "草稿",
             tone: submitted ? ("warning" as const) : ("neutral" as const),
         }
-        const description = existing
-            ? "核对原回款记录，关联本次需要核销的应收。"
-            : "填写到账信息，关联销售单应收后提交审批。"
         return (
             <div className="space-y-2">
                 {showClose ? (
                     <DetailPageHeader
                         title={title}
+                        headingProps={{
+                            className: "text-page-title md:text-page-title",
+                        }}
                         documentNumber={session.existingFactNo}
                         primaryStatus={status}
                         back={{
@@ -53,10 +53,14 @@ export function SessionHeader({
                                     : "客户往来",
                             onClick: onRequestClose,
                         }}
-                        meta={
-                            draftSavedAt
-                                ? `草稿已保存 ${formatDateTime(draftSavedAt, "monthDayIntl")}`
-                                : "草稿尚未保存"
+                        titleExtra={
+                            !submitted ? (
+                                <span className="text-xs text-muted-foreground">
+                                    {draftSavedAt
+                                        ? `已保存 ${formatDateTime(draftSavedAt, "monthDayIntl")}`
+                                        : "未保存"}
+                                </span>
+                            ) : null
                         }
                     />
                 ) : (
@@ -65,7 +69,16 @@ export function SessionHeader({
                         <StatusBadge {...status} />
                     </div>
                 )}
-                <p className="text-sm text-muted-foreground">{description}</p>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                    <span className="text-muted-foreground">结算主体</span>
+                    <LockKeyholeIcon
+                        className="size-4 shrink-0 text-muted-foreground"
+                        aria-hidden="true"
+                    />
+                    <span className="min-w-0 break-words font-medium">
+                        {session.counterpartyPartyName}
+                    </span>
+                </div>
             </div>
         )
     }

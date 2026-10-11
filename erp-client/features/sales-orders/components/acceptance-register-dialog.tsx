@@ -27,7 +27,6 @@ import { AcceptanceRegisterBatchRow } from "@/features/sales-orders/components/a
 import { AcceptanceRegisterLineNav } from "@/features/sales-orders/components/acceptance-register-line-nav"
 import {
     isPositiveQty,
-    lineAcceptanceHint,
     pendingFactsOf,
     qtyWithUnit,
     registerableSalesLines,
@@ -86,10 +85,12 @@ export function AcceptanceRegisterDialog({
               isPositiveQty(fact.eligibleQuantity),
           )
         : []
-    const primaryLabel = "核对验收结果"
-    const exceptionHint = selection.hasExceptionResult
-        ? " · 含短少、拒收或不通过"
-        : ""
+    const primaryLabel = "下一步：核对结果"
+    const passCount = [...selection.selected.values()].filter(
+        (draft) => draft.result === "PASS",
+    ).length
+    const exceptionCount = selection.selected.size - passCount
+    const skippedCount = pendingCount - selection.selected.size
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -101,7 +102,8 @@ export function AcceptanceRegisterDialog({
                 <DialogHeader className="shrink-0 border-b border-grid px-6 py-4 text-left">
                     <DialogTitle>登记客户验收</DialogTitle>
                     <DialogDescription>
-                        默认选中全部待验批次并设为通过，请按实际结果调整；未验收的批次选“这次不验”。
+                        默认纳入全部 {pendingCount}{" "}
+                        批，结果预填为全部通过。请逐批核对；未验收的批次取消勾选。
                     </DialogDescription>
                 </DialogHeader>
 
@@ -127,13 +129,13 @@ export function AcceptanceRegisterDialog({
                                         required
                                         disabled={!canPost}
                                         showTimeZone={false}
-                                        className="max-w-sm"
+                                        className="sm:max-w-xl sm:flex-row sm:flex-wrap sm:items-center sm:*:w-auto sm:[&>[data-slot=field-label]]:shrink-0"
                                     />
                                 )}
                             </form.AppField>
                         </div>
 
-                        <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+                        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
                             {lines.length > 1 ? (
                                 <AcceptanceRegisterLineNav
                                     lines={lines}
@@ -147,7 +149,7 @@ export function AcceptanceRegisterDialog({
 
                             <div
                                 id="acceptance-register-list"
-                                className="min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-4"
+                                className="min-w-0 shrink-0 px-6 py-4 md:min-h-0 md:flex-1 md:overflow-y-auto"
                             >
                                 {children}
 
@@ -186,11 +188,6 @@ export function AcceptanceRegisterDialog({
                                                 }{" "}
                                                 批待验
                                             </p>
-                                            <p className="text-xs text-muted-foreground">
-                                                {lineAcceptanceHint(
-                                                    activeLine.fulfillmentFacts,
-                                                )}
-                                            </p>
                                         </header>
                                         <div className="flex flex-col gap-3">
                                             {activeFacts.map((fact) => (
@@ -204,6 +201,80 @@ export function AcceptanceRegisterDialog({
                                         </div>
                                     </section>
                                 ) : null}
+
+                                <div className="mt-5 border-t border-grid pt-4">
+                                    <form.AppField name="evidenceFile">
+                                        {(field) => (
+                                            <Field
+                                                data-invalid={
+                                                    field.state.meta.errors
+                                                        .length > 0 || undefined
+                                                }
+                                            >
+                                                <FieldLabel htmlFor="sales-orders-acceptance-evidence-input">
+                                                    签收单凭证{" "}
+                                                    <span className="text-destructive">
+                                                        *
+                                                    </span>
+                                                </FieldLabel>
+                                                <FileUpload
+                                                    idPrefix="sales-orders-acceptance-evidence"
+                                                    accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp"
+                                                    multiple={false}
+                                                    density="compact"
+                                                    disabled={
+                                                        !canPost || postPending
+                                                    }
+                                                    label={
+                                                        field.state.value
+                                                            ?.name ??
+                                                        "上传签收单凭证"
+                                                    }
+                                                    description="点击选择图片或 PDF"
+                                                    onFilesSelected={(
+                                                        files,
+                                                    ) => {
+                                                        field.handleChange(
+                                                            files[0] ?? null,
+                                                        )
+                                                        field.handleBlur()
+                                                    }}
+                                                />
+                                                <FieldDescription>
+                                                    支持
+                                                    PDF、JPG、PNG、WebP，文件不超过
+                                                    5 MB。
+                                                </FieldDescription>
+                                                <FieldError
+                                                    errors={toFieldErrors(
+                                                        field.state.meta.errors,
+                                                    )}
+                                                />
+                                            </Field>
+                                        )}
+                                    </form.AppField>
+                                </div>
+
+                                <details className="mt-4 border-t border-grid pt-3">
+                                    <summary
+                                        id="sales-orders-acceptance-comment-toggle"
+                                        className="w-fit cursor-pointer rounded-sm text-sm text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                    >
+                                        添加内部备注（选填）
+                                    </summary>
+                                    <form.AppField name="comment">
+                                        {(field) => (
+                                            <field.TextareaField
+                                                id="sales-orders-acceptance-comment"
+                                                label="内部备注"
+                                                className="mt-3"
+                                                placeholder="可不填"
+                                                rows={2}
+                                                disabled={!canPost}
+                                            />
+                                        )}
+                                    </form.AppField>
+                                </details>
 
                                 {clientIssues.length > 0 ? (
                                     <div className="mt-4">
@@ -224,75 +295,23 @@ export function AcceptanceRegisterDialog({
                                 ) : null}
                             </div>
                         </div>
-
-                        <div className="shrink-0 border-t border-grid px-6 py-3">
-                            <form.AppField name="evidenceFile">
-                                {(field) => (
-                                    <Field
-                                        data-invalid={
-                                            field.state.meta.errors.length >
-                                                0 || undefined
-                                        }
-                                    >
-                                        <FieldLabel htmlFor="sales-orders-acceptance-evidence-input">
-                                            签收单凭证{" "}
-                                            <span className="text-destructive">
-                                                *
-                                            </span>
-                                        </FieldLabel>
-                                        <FileUpload
-                                            idPrefix="sales-orders-acceptance-evidence"
-                                            accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp"
-                                            multiple={false}
-                                            density="compact"
-                                            disabled={!canPost || postPending}
-                                            label={
-                                                field.state.value?.name ??
-                                                "上传签收单凭证"
-                                            }
-                                            description="点击选择图片或 PDF"
-                                            onFilesSelected={(files) => {
-                                                field.handleChange(
-                                                    files[0] ?? null,
-                                                )
-                                                field.handleBlur()
-                                            }}
-                                        />
-                                        <FieldDescription>
-                                            支持 PDF、JPG、PNG、WebP，文件不超过
-                                            5 MB。
-                                        </FieldDescription>
-                                        <FieldError
-                                            errors={toFieldErrors(
-                                                field.state.meta.errors,
-                                            )}
-                                        />
-                                    </Field>
-                                )}
-                            </form.AppField>
-                        </div>
-
-                        <div className="shrink-0 border-t border-grid px-6 py-3">
-                            <form.AppField name="comment">
-                                {(field) => (
-                                    <field.TextareaField
-                                        id="sales-orders-acceptance-comment"
-                                        label="内部备注"
-                                        placeholder="可不填"
-                                        rows={2}
-                                        disabled={!canPost}
-                                    />
-                                )}
-                            </form.AppField>
-                        </div>
                     </form>
                 )}
 
                 <DialogFooter className="shrink-0 border-t border-grid px-6 py-4 sm:justify-between">
-                    <p className="text-sm text-muted-foreground">
-                        已选 {selection.selected.size} / {pendingCount} 批
-                        {exceptionHint}
-                    </p>
+                    <div
+                        className="text-xs text-muted-foreground"
+                        role="status"
+                        aria-live="polite"
+                    >
+                        <p className="text-sm font-medium text-foreground">
+                            本次登记 {selection.selected.size} 批
+                        </p>
+                        <p className="mt-1">
+                            全部通过 {passCount} 批 · 有异常 {exceptionCount} 批
+                            · 暂不登记 {skippedCount} 批
+                        </p>
+                    </div>
                     <div className="flex flex-wrap justify-end gap-2">
                         <Button
                             id="sales-orders-acceptance-register-cancel"

@@ -119,5 +119,11 @@ pub(super) fn receivable_summary(
             owner_of.insert(row.order_id.clone(), owner.clone());
         }
     }
-    build_summary(&triples, &owner_of, Some(whole_sum), version, false)
+    let mut summary = build_summary(&triples, &owner_of, Some(whole_sum), version, false)?;
+    summary.balance_total = Some(
+        rows.iter()
+            .fold(zero_amount(), |sum, row| sum.checked_add(row.gross_total.checked_sub(row.settled_total))),
+    );
+    summary.overdue_total = Some(facts.overdue_total);
+    Ok(summary)
 }

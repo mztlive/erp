@@ -219,10 +219,10 @@ export type SalesInvoiceRow = Readonly<{
 }>
 
 type CustomerAccountsMetrics = Readonly<{
-    openReceivableTotal: string
-    overdueReceivableTotal: string
-    unallocatedReceiptTotal: string
-    unallocatedInvoiceTotal: string
+    openReceivableTotal: string | null
+    overdueReceivableTotal: string | null
+    unallocatedReceiptTotal: string | null
+    unallocatedInvoiceTotal: string | null
 }>
 
 type UnallocatedSections = Readonly<{
@@ -285,6 +285,9 @@ export type AllocationTarget = Readonly<{
     salesOrderId: string
     salesOrderNo: string
     openAmount: string
+    /** 应收对应的销售修订及经营客户，供选择时核对来源。 */
+    salesOrderRevisionId?: string
+    customerName?: string
     dueDate?: string
     counterpartyPartyId: string
     baselineVersion: number

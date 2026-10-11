@@ -35,7 +35,7 @@ use serde::Serialize;
 use storage::S3Storage;
 use tokio::sync::{RwLock, watch};
 use tokio::task::JoinHandle;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 /// worker 轮询间隔。
 const OUTBOX_POLL_INTERVAL: Duration = Duration::from_secs(1);
@@ -410,7 +410,7 @@ impl AppState {
 
     /// 启动审批通知 outbox worker。
     ///
-    /// 领取租约后在事务外调用失败关闭发送口；进程停止时不再领取新租约。
+    /// 提供方未接入时仅记录一次暂停提示，不领取消息；进程停止时不再领取新租约。
     ///
     /// # 返回
     /// 返回可用于显式停止的 worker 句柄。
@@ -658,6 +658,10 @@ async fn run_approval_outbox_worker(
     worker_id: String,
     mut stop_rx: watch::Receiver<bool>,
 ) {
+    if !port.is_ready() {
+        warn!("审批通知提供方未接入，投递 worker 已暂停；待投递记录保留，不消耗重试次数");
+        return;
+    }
     info!(worker_id = %worker_id, "审批通知 outbox worker 已启动");
     loop {
         if *stop_rx.borrow() {

@@ -29,6 +29,12 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
     const value = (label: string) =>
         fields.find((field) => field.label === label)?.value
     const lines = item.deliveryLines ?? []
+    const trackingLines = lines.filter((line) => line.tracking.length > 0)
+    const shippedAt = value("发货时间")
+    const hasDeliveryRecords =
+        trackingLines.length > 0 ||
+        Boolean(shippedAt) ||
+        lines.some((line) => compareDecimal(line.shipped_quantity, "0", 4) > 0)
     const pending = lines.filter(
         (line) => compareDecimal(line.pending_quantity, "0", 4) > 0,
     ).length
@@ -154,13 +160,12 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
                     </p>
                 ) : null}
             </section>
-            <section className={sectionClass} aria-label="物流与发货记录">
-                <h4 className="text-sm font-semibold">物流与发货记录</h4>
-                {lines.some((line) => line.tracking.length) ? (
-                    <ul className="mt-3 space-y-3">
-                        {lines
-                            .filter((line) => line.tracking.length)
-                            .map((line) => (
+            {hasDeliveryRecords ? (
+                <section className={sectionClass} aria-label="物流与发货记录">
+                    <h4 className="text-sm font-semibold">物流与发货记录</h4>
+                    {trackingLines.length > 0 ? (
+                        <ul className="mt-3 space-y-3">
+                            {trackingLines.map((line) => (
                                 <li key={line.id} className="text-sm">
                                     <p className="font-medium">{line.title}</p>
                                     {line.tracking.map((tracking) => (
@@ -173,16 +178,17 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
                                     ))}
                                 </li>
                             ))}
-                    </ul>
-                ) : (
-                    <p className="mt-2 text-sm text-muted-foreground">
-                        尚未登记物流
+                        </ul>
+                    ) : (
+                        <p className="mt-2 text-sm text-muted-foreground">
+                            尚未登记物流
+                        </p>
+                    )}
+                    <p className="mt-2 text-xs text-muted-foreground">
+                        发货时间：{shippedAt ?? "未登记"}
                     </p>
-                )}
-                <p className="mt-2 text-xs text-muted-foreground">
-                    发货时间：{value("发货时间") ?? "未登记"}
-                </p>
-            </section>
+                </section>
+            ) : null}
             <section className={sectionClass} aria-label="关联单据">
                 <h4 className="text-sm font-semibold">关联单据</h4>
                 <dl className="mt-3 grid grid-cols-1 gap-3 @min-[640px]/delivery-brief:grid-cols-2">

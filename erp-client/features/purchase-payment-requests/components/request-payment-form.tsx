@@ -3,69 +3,35 @@
 import { useRef, useState } from "react"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
-import { MoneyValue, SensitiveValue } from "@/components/business"
+import {
+    MoneyValue,
+    SensitiveValue,
+    WorkspaceTaskFooter,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { Field, FieldLabel } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
+import { Field, FieldError, FieldLabel } from "@/components/ui/field"
+import { FileUpload } from "@/components/ui/file-upload"
 import { SupplierPaymentSubmitConfirmDialog } from "@/features/supplier-payables/components/supplier-payment-submit-confirm-dialog"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { getErrorMessage } from "@/lib/api"
-import { toAutomationIdSegment } from "@/lib/automation-id"
+import { compareDecimal } from "@/lib/fixed-decimal"
 import {
-    compareDecimal,
-    minFixed,
-    subtractFixed,
-    sumFixed,
-} from "@/lib/fixed-decimal"
+    allocateRequestPayment,
+    paymentBlockReason,
+    positivePaymentAmount,
+} from "../lib/payment"
 import { classifyFormalCommandError } from "@/lib/formal-command"
 import {
     useAccountRevealMutation,
     useRequestPaymentMutation,
 } from "../hooks/queries"
-import type { PaymentInput, PaymentRequest, PaymentTaskContext } from "../types"
-
-function validPositive(value: string) {
-    try {
-        return compareDecimal(value, "0", 2) > 0
-    } catch {
-        return false
-    }
-}
-function total(values: Record<string, string>) {
-    return sumFixed(Object.values(values).filter(validPositive), {
-        maxScale: 2,
-        outputScale: 2,
-    })
-}
-function allocationsFor(
-    request: PaymentRequest,
-    values: Record<string, string>,
-): PaymentInput["allocations"] {
-    return request.lines.flatMap((line) => {
-        let remaining = values[line.payable_account_id] || "0"
-        if (!validPositive(remaining)) return []
-        const allocations: PaymentInput["allocations"] = []
-        for (const entry of line.payable_entries) {
-            const amount = minFixed(remaining, entry.open_total, {
-                maxScale: 2,
-                outputScale: 2,
-            })
-            if (!validPositive(amount)) continue
-            allocations.push({
-                payable_entry_id: entry.id,
-                allocated_amount: amount,
-            })
-            remaining = subtractFixed(remaining, amount, {
-                maxScale: 2,
-                outputScale: 2,
-            })
-        }
-        if (compareDecimal(remaining, "0", 2) > 0)
-            throw new Error("采购当前可付款金额不足，请刷新后重新核对。")
-        return allocations
-    })
-}
+import type {
+    PaymentInput,
+    PaymentRecipient,
+    PaymentRequest,
+    PaymentTaskContext,
+} from "../types"
 
 /** 每笔付款保持独立命令身份；响应未知时重试原金额、回单及分配。 */
 export function RequestPaymentForm({
@@ -84,11 +50,14 @@ export function RequestPaymentForm({
     const [unknown, setUnknown] = useState(false)
     const [result, setResult] = useState<string>()
     const pending = useRef<PaymentInput | null>(null)
+    const pendingRecipient = useRef<PaymentRecipient | null>(null)
     const pendingCompletesRequest = useRef(false)
     const account = request.payment_recipient
+    const blocked = paymentBlockReason(request)
+    const locked = unknown || payment.isPending || Boolean(blocked)
     const schema = z
         .object({
-            amounts: z.record(z.string(), z.string()),
+            amount: z.string().trim(),
             paidAt: z.string().min(1, "请填写实际付款时间"),
             reference: z.string(),
             receipt: z
@@ -99,54 +68,19 @@ export function RequestPaymentForm({
                 ),
         })
         .superRefine((value, context) => {
-            let count = 0
-            for (const line of request.lines) {
-                const amount = value.amounts[line.payable_account_id]?.trim()
-                if (!amount) continue
-                count += 1
-                if (!validPositive(amount))
-                    context.addIssue({
-                        code: "custom",
-                        path: ["amounts", line.payable_account_id],
-                        message: "请填写大于零且最多两位小数的金额",
-                    })
-                else if (compareDecimal(amount, line.unpaid_amount, 2) > 0)
-                    context.addIssue({
-                        code: "custom",
-                        path: ["amounts", line.payable_account_id],
-                        message: "不能超过本行未付批准金额",
-                    })
-                else if (
-                    line.source_changed ||
-                    compareDecimal(
-                        amount,
-                        sumFixed(
-                            line.payable_entries
-                                .map((entry) => entry.open_total)
-                                .filter(validPositive),
-                            { maxScale: 2, outputScale: 2 },
-                        ),
-                        2,
-                    ) > 0
-                )
-                    context.addIssue({
-                        code: "custom",
-                        path: ["amounts", line.payable_account_id],
-                        message: "当前采购来源或可付款金额已变化，请刷新后核对",
-                    })
-            }
-            if (count === 0)
+            try {
+                allocateRequestPayment(request, value.amount)
+            } catch (error) {
                 context.addIssue({
                     code: "custom",
-                    path: ["amounts"],
-                    message: "请填写至少一张采购单的实际付款金额",
+                    path: ["amount"],
+                    message: getErrorMessage(error, "请核对实际付款金额"),
                 })
+            }
         })
     const form = useAppForm({
         defaultValues: {
-            amounts: Object.fromEntries(
-                request.lines.map((line) => [line.payable_account_id, ""]),
-            ) as Record<string, string>,
+            amount: blocked ? "" : request.unpaid_amount,
             paidAt: new Date(
                 Date.now() - new Date().getTimezoneOffset() * 60000,
             )
@@ -157,48 +91,36 @@ export function RequestPaymentForm({
         },
         validators: { onSubmit: schema },
         onSubmit: ({ value }) => {
-            if (!value.receipt || unknown) return
+            if (!value.receipt || locked) return
             pendingCompletesRequest.current =
-                compareDecimal(
-                    total(value.amounts),
-                    request.unpaid_amount,
-                    2,
-                ) === 0
+                compareDecimal(value.amount, request.unpaid_amount, 2) === 0
             pending.current = {
                 requestId: request.id,
                 expectedVersion: request.version,
                 supplierId: request.supplier_id,
                 workItemId: task.workItemId,
                 expectedTaskVersion: task.taskVersion,
-                amount: total(value.amounts),
+                amount: value.amount,
                 paidAt: value.paidAt,
                 bankReference: value.reference.trim(),
                 receipt: value.receipt,
-                lines: request.lines
-                    .filter((line) =>
-                        validPositive(
-                            value.amounts[line.payable_account_id] ?? "",
-                        ),
-                    )
-                    .map((line) => ({
-                        payable_account_id: line.payable_account_id,
-                        amount: value.amounts[line.payable_account_id],
-                    })),
-                allocations: allocationsFor(request, value.amounts),
+                ...allocateRequestPayment(request, value.amount),
                 idempotencyKey: `ppr-pay:${crypto.randomUUID()}`,
             }
+            pendingRecipient.current = { ...account }
             setConfirmOpen(true)
         },
     })
     async function confirmPayment() {
-        if (!pending.current) return
+        if (!pending.current || !pendingRecipient.current) return
         try {
             const completesRequest = pendingCompletesRequest.current
             const applied = await payment.mutateAsync({
                 payment: pending.current,
-                recipient: account,
+                recipient: pendingRecipient.current,
             })
             pending.current = null
+            pendingRecipient.current = null
             setUnknown(false)
             setResult(`付款 ${applied.payment_no} 已登记并核销。`)
             form.reset()
@@ -212,23 +134,34 @@ export function RequestPaymentForm({
         }
     }
     return (
-        <section aria-label="当前付款任务" className="space-y-5 border-t pt-5">
-            <div>
-                <h3 className="text-lg font-semibold">
-                    向{request.supplier_name}付款
-                </h3>
-                <p className="mt-1 text-xs text-muted-foreground">
-                    仅在本申请逐单批准额度内登记实际付款。分次付款后保留剩余待付金额。
+        <section aria-label="当前付款任务" className="space-y-4">
+            {blocked && !unknown && (
+                <p
+                    role="alert"
+                    className="rounded-md bg-destructive/10 p-3 text-sm text-destructive"
+                >
+                    {blocked}
                 </p>
-            </div>
-            <dl className="grid gap-4 text-sm sm:grid-cols-3">
+            )}
+            <h3 className="text-sm font-semibold">付款与收款信息</h3>
+            <dl className="grid gap-x-8 gap-y-4 text-sm lg:grid-cols-2">
+                <div>
+                    <dt className="text-xs text-muted-foreground">
+                        我方付款主体
+                    </dt>
+                    <dd className="mt-1 break-words font-medium">
+                        {request.our_company_name}
+                    </dd>
+                </div>
                 <div>
                     <dt className="text-xs text-muted-foreground">收款户名</dt>
-                    <dd className="mt-1 font-medium">{account.account_name}</dd>
+                    <dd className="mt-1 break-words font-medium">
+                        {account.account_name}
+                    </dd>
                 </div>
                 <div>
                     <dt className="text-xs text-muted-foreground">开户行</dt>
-                    <dd className="mt-1">{account.bank_name}</dd>
+                    <dd className="mt-1 break-words">{account.bank_name}</dd>
                 </div>
                 <div>
                     <dt className="text-xs text-muted-foreground">收款账号</dt>
@@ -252,65 +185,40 @@ export function RequestPaymentForm({
             </dl>
             <form
                 id="ppr-pay-form"
-                className="space-y-5"
+                className="space-y-4"
                 onSubmit={(event) => {
                     event.preventDefault()
                     void form.handleSubmit()
                 }}
             >
-                {request.lines.map((line) => (
-                    <div
-                        key={line.payable_account_id}
-                        className="grid min-w-0 gap-3 border-b pb-4 sm:grid-cols-[minmax(0,1fr)_12rem]"
-                    >
-                        <div>
-                            <p className="num font-medium">
-                                {line.purchase_order_no}
-                            </p>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                                本申请未付批准金额{" "}
-                                <MoneyValue value={line.unpaid_amount} /> ·
-                                当前采购剩余应付{" "}
-                                <MoneyValue
-                                    value={
-                                        line.current_open_amount ??
-                                        line.open_amount
-                                    }
-                                />
-                            </p>
-                        </div>
-                        <form.AppField
-                            name={`amounts.${line.payable_account_id}`}
-                        >
-                            {(field) => (
-                                <field.TextField
-                                    id={`ppr-pay-line-${toAutomationIdSegment(line.payable_account_id)}`}
-                                    label="本次实际付款"
-                                    inputMode="decimal"
-                                    placeholder="填写付款金额"
-                                    disabled={
-                                        unknown ||
-                                        payment.isPending ||
-                                        compareDecimal(
-                                            line.unpaid_amount,
-                                            "0",
-                                            2,
-                                        ) <= 0
-                                    }
-                                />
-                            )}
-                        </form.AppField>
-                    </div>
-                ))}
+                <div className="space-y-4 border-t pt-5">
+                    <h3 className="text-sm font-semibold">登记实际付款</h3>
+                    <form.AppField name="amount">
+                        {(field) => (
+                            <field.TextField
+                                id="ppr-pay-amount"
+                                label="本次实际付款金额"
+                                inputMode="decimal"
+                                placeholder="按银行回单填写金额"
+                                required
+                                disabled={locked}
+                            />
+                        )}
+                    </form.AppField>
+                </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                     <form.AppField name="paidAt">
                         {(field) => (
-                            <field.TextField
+                            <field.DateTimeField
                                 id="ppr-pay-paid-at"
-                                type="datetime-local"
                                 label="实际付款时间"
                                 required
-                                disabled={unknown || payment.isPending}
+                                clearable={false}
+                                timeZone={
+                                    Intl.DateTimeFormat().resolvedOptions()
+                                        .timeZone
+                                }
+                                disabled={locked}
                             />
                         )}
                     </form.AppField>
@@ -319,7 +227,7 @@ export function RequestPaymentForm({
                             <field.TextField
                                 id="ppr-pay-bank-reference"
                                 label="银行流水号"
-                                disabled={unknown || payment.isPending}
+                                disabled={locked}
                             />
                         )}
                     </form.AppField>
@@ -327,42 +235,73 @@ export function RequestPaymentForm({
                 <form.Field name="receipt">
                     {(field) => (
                         <Field>
-                            <FieldLabel htmlFor="ppr-pay-bank-receipt">
+                            <FieldLabel htmlFor="ppr-pay-bank-receipt-input">
                                 银行回单
+                                <span
+                                    aria-hidden="true"
+                                    className="text-destructive"
+                                >
+                                    *
+                                </span>
                             </FieldLabel>
-                            <Input
-                                id="ppr-pay-bank-receipt"
-                                type="file"
-                                accept="image/jpeg,image/png,image/webp"
-                                disabled={unknown || payment.isPending}
-                                onChange={(event) =>
-                                    field.handleChange(
-                                        event.target.files?.[0] ?? null,
-                                    )
+                            <FileUpload
+                                idPrefix="ppr-pay-bank-receipt"
+                                label="上传银行回单"
+                                description="点击选择或拖入 JPG、PNG、WebP 图片"
+                                density="compact"
+                                multiple={false}
+                                previewSelectedImage
+                                selectedImageFile={field.state.value}
+                                aria-invalid={
+                                    field.state.meta.errors.length > 0
                                 }
+                                aria-describedby="ppr-pay-receipt-help ppr-pay-receipt-error"
+                                accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                                disabled={locked}
+                                onFilesSelected={(files) => {
+                                    field.handleChange(files[0] ?? null)
+                                    field.handleBlur()
+                                }}
+                                onPreviewRemove={() => {
+                                    field.handleChange(null)
+                                    field.handleBlur()
+                                }}
                             />
-                            <p className="text-xs text-muted-foreground">
-                                请核对实际打款金额与回单，支持 JPG、PNG 或 WebP
-                                图片。
+                            <p
+                                id="ppr-pay-receipt-help"
+                                className="text-xs text-muted-foreground"
+                            >
+                                请核对实际打款金额与回单，提交时一并上传。
                             </p>
+                            <FieldError
+                                id="ppr-pay-receipt-error"
+                                errors={field.state.meta.errors}
+                            />
                         </Field>
                     )}
                 </form.Field>
-                <form.Subscribe selector={(state) => state.values.amounts}>
-                    {(amounts) => (
-                        <div className="flex flex-wrap items-center justify-between gap-4">
-                            <p className="text-sm">
-                                本次付款合计{" "}
-                                <MoneyValue value={total(amounts)} />
-                            </p>
+                <form.Subscribe selector={(state) => state.values.amount}>
+                    {(amount) => (
+                        <WorkspaceTaskFooter>
+                            <div className="mr-auto text-sm">
+                                本次登记{" "}
+                                <MoneyValue
+                                    value={
+                                        positivePaymentAmount(amount)
+                                            ? amount
+                                            : "0"
+                                    }
+                                />
+                            </div>
                             <Button
                                 id="ppr-pay-submit"
                                 type="submit"
-                                disabled={unknown || payment.isPending}
+                                form="ppr-pay-form"
+                                disabled={locked}
                             >
                                 登记付款
                             </Button>
-                        </div>
+                        </WorkspaceTaskFooter>
                     )}
                 </form.Subscribe>
                 <form.Subscribe selector={(state) => state.errors}>
@@ -372,7 +311,7 @@ export function RequestPaymentForm({
                                 role="alert"
                                 className="text-sm text-destructive"
                             >
-                                请核对逐单付款金额、付款时间及银行回单。
+                                请核对实际付款金额、付款时间及银行回单。
                             </p>
                         ) : null
                     }
@@ -416,11 +355,14 @@ export function RequestPaymentForm({
                 pending={payment.isPending}
                 paymentAmount={pending.current?.amount ?? "0"}
                 recipient={{
-                    bankAccountId: account.bank_account_id,
-                    version: account.version,
-                    accountName: account.account_name,
-                    bankName: account.bank_name,
-                    accountNumberMasked: account.account_number_masked,
+                    bankAccountId: (pendingRecipient.current ?? account)
+                        .bank_account_id,
+                    version: (pendingRecipient.current ?? account).version,
+                    accountName: (pendingRecipient.current ?? account)
+                        .account_name,
+                    bankName: (pendingRecipient.current ?? account).bank_name,
+                    accountNumberMasked: (pendingRecipient.current ?? account)
+                        .account_number_masked,
                 }}
                 onConfirm={confirmPayment}
             />

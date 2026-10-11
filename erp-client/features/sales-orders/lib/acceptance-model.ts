@@ -350,7 +350,7 @@ export function collectValidationIssues(
             issues.push({
                 id: `line-pass-${line.salesOrderLineId}`,
                 label: name,
-                message: `${name}整件短少或拒收不能记入验收。请点「本次不验」后另开退货处理，或多件时减少短少数量并保留通过。`,
+                message: `${name}没有通过数量，暂不能登记验收。请核对本明细各批数量，或取消勾选「纳入本次验收」后单独处理异常。`,
                 targetId: "acceptance-register-list",
             })
         }
@@ -537,13 +537,13 @@ export function summarizeLineDecisions(
         else if (draft.result === "PASS") pass += 1
         else exception += 1
     }
-    if (skip === pending.length) return "本次不验"
-    if (pass === pending.length) return "全部通过"
-    if (exception === pending.length) return "含异常"
+    if (skip === pending.length) return "暂不登记"
+    if (pass === pending.length) return "拟全部通过"
+    if (exception === pending.length) return "拟登记异常"
     const parts: string[] = []
-    if (pass > 0) parts.push(`通过 ${pass}`)
-    if (exception > 0) parts.push(`异常 ${exception}`)
-    if (skip > 0) parts.push(`不验 ${skip}`)
+    if (pass > 0) parts.push(`拟通过 ${pass}`)
+    if (exception > 0) parts.push(`拟异常 ${exception}`)
+    if (skip > 0) parts.push(`暂不登记 ${skip}`)
     return parts.join(" · ")
 }
 

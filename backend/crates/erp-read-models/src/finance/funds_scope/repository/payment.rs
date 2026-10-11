@@ -333,6 +333,7 @@ mod tests {
 
     fn header(id: &str, source: &str, owner: Option<&str>, amount: &str, whole: bool) -> FlowHeader {
         FlowHeader {
+            status: "posted".into(),
             version: FlowVersion {
                 id: id.into(),
                 version: 1,

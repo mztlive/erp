@@ -78,7 +78,7 @@ pub(super) async fn capture(
 ///
 /// # 错误
 /// 其余错误原样返回。
-pub(super) fn material_unavailable(error: Error) -> Result<()> {
+pub(in crate::workbench) fn material_unavailable(error: Error) -> Result<()> {
     match error {
         Error::NotFound(_)
         | Error::ConflictError(_)

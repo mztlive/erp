@@ -10,6 +10,7 @@ import { ApprovalActionBar } from "@/features/approval-workflow/components/appro
 import { WorkspacePurchasePayment } from "./workspace-purchase-payment"
 import { workspaceFulfillmentDescriptor } from "../lib/workspace-fulfillment"
 import { WorkspaceDeliveryBrief } from "./workspace-delivery-brief"
+import { WorkspaceInvoiceApproval } from "./workspace-invoice-approval"
 import { WorkspacePurchaseApproval } from "./workspace-purchase-approval"
 import { WorkspaceApprovalProgress } from "./workspace-approval-progress"
 import { useRecoveryOptionsQuery } from "@/features/approval-workflow/queries"
@@ -132,7 +133,24 @@ function WorkspaceTaskSurface({
     ) {
         return (
             <WorkspaceTaskPane
-                header={<WorkspaceTaskIdentityHeader item={item} />}
+                header={
+                    <WorkspaceTaskIdentityHeader
+                        item={item}
+                        title={
+                            item.workItemType === "SUPPLIER_PAYMENT_EXECUTION"
+                                ? item.counterpartyName || "供应商付款"
+                                : undefined
+                        }
+                        subtitle={
+                            item.workItemType ===
+                            "SUPPLIER_PAYMENT_EXECUTION" ? (
+                                <span className="num break-all">
+                                    {item.stableNumber}
+                                </span>
+                            ) : undefined
+                        }
+                    />
+                }
                 aria-label="采购付款申请任务"
             >
                 <PurchasePaymentRequestTask
@@ -701,7 +719,16 @@ function WorkspaceDocumentTaskDetail({
                         {!deliveryBrief && documentFields.length > 0 ? (
                             <DetailBlock>
                                 <FieldGrid
-                                    sections={documentFields}
+                                    sections={
+                                        item.businessObjectType ===
+                                        "sales_invoice_request"
+                                            ? documentFields.filter(
+                                                  (field) =>
+                                                      field.label !==
+                                                      "申请金额",
+                                              )
+                                            : documentFields
+                                    }
                                     returnTo={returnTo}
                                     onPreview={(section) => {
                                         const kind = linkedDocumentPaperKind(
@@ -719,6 +746,17 @@ function WorkspaceDocumentTaskDetail({
                         ) : null}
                     </>
                 )}
+
+                {approvalDocument &&
+                instanceId &&
+                canReadSensitive &&
+                item.businessObjectType === "sales_invoice_request" ? (
+                    <WorkspaceInvoiceApproval
+                        key={instanceId}
+                        instanceId={instanceId}
+                        onPreview={setPaper}
+                    />
+                ) : null}
 
                 {!deliveryBrief &&
                 !purchaseApproval &&

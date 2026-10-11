@@ -14,9 +14,9 @@ import {
     CollaborationPanel,
     OverviewPanel,
     PurchasePanel,
-    ReceivablePanel,
     VersionsPanel,
 } from "@/features/sales-orders/components/sales-order-detail-panels"
+import { SalesOrderCustomerFinancePanel } from "./sales-order-detail-receivable-panel"
 import { SalesOrderProcurementProgress } from "@/features/sales-orders/components/sales-order-procurement-progress"
 import { compareDecimal } from "@/lib/fixed-decimal"
 import {
@@ -149,7 +149,26 @@ export function SalesOrderDetailTabs({
             </ObjectSectionTabsPanel>
 
             <ObjectSectionTabsPanel value="receivable">
-                <ReceivablePanel key={order.id} order={order} />
+                <SalesOrderCustomerFinancePanel
+                    key={order.id}
+                    order={order}
+                    section="receivable"
+                />
+            </ObjectSectionTabsPanel>
+
+            <ObjectSectionTabsPanel value="receipt">
+                <SalesOrderCustomerFinancePanel
+                    key={order.id}
+                    order={order}
+                    section="receipt"
+                />
+            </ObjectSectionTabsPanel>
+            <ObjectSectionTabsPanel value="invoice">
+                <SalesOrderCustomerFinancePanel
+                    key={order.id}
+                    order={order}
+                    section="invoice"
+                />
             </ObjectSectionTabsPanel>
 
             <ObjectSectionTabsPanel value="collaboration">

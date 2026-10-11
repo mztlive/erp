@@ -329,6 +329,24 @@ impl ApprovalNotificationOutbox {
         self.next_attempt_at = next_attempt_at(self.attempt_count, failed_at)?;
         Ok(())
     }
+
+    /// 记录不可重试的投递失败并立即转入死信。
+    ///
+    /// # 参数
+    /// * `error_class` - 失败分类。
+    /// * `failed_at` - 实际失败时间。
+    ///
+    /// # 返回
+    /// 尝试次数加一，清除租约并记录死信时间。
+    ///
+    /// # 错误
+    /// 消息未持有租约、失败分类非法或尝试次数溢出时返回错误。
+    pub fn mark_fatal_failure(&mut self, error_class: impl Into<String>, failed_at: Instant) -> Result<()> {
+        self.mark_failure(error_class, failed_at)?;
+        self.delivery_status = ApprovalNotificationDeliveryStatus::DeadLetter;
+        self.dead_lettered_at = Some(failed_at);
+        Ok(())
+    }
 }
 
 /// 规范化收件人列表。

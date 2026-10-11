@@ -1,8 +1,16 @@
 "use client"
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+    useMutation,
+    useQueries,
+    useQuery,
+    useQueryClient,
+} from "@tanstack/react-query"
 import type { QueryClient } from "@tanstack/react-query"
 
+import { useAccountProfileQuery } from "@/features/auth/hooks/queries"
+import { hasPermission } from "@/lib/permissions"
+import { fetchAllocationSource } from "../api/allocation-source"
 import { approvalKeys } from "@/features/approval-workflow/queries"
 import {
     createAllocationSession,
@@ -22,6 +30,7 @@ import { CUSTOMER_REFUND_DOCUMENT_TYPE } from "@/features/customer-receivables/l
 import { RECEIPT_REVERSAL_DOCUMENT_TYPE } from "@/features/customer-receivables/lib/receipt-reversal-approval"
 import type {
     AllocationSessionView,
+    AllocationTarget,
     CustomerAccountsDetailKind,
     CustomerAccountsQuery,
     PostAllocationInput,
@@ -30,6 +39,13 @@ import type {
 
 export const customerReceivableKeys = {
     all: ["customer-receivables"] as const,
+    allocationSource: (target: AllocationTarget) =>
+        [
+            ...customerReceivableKeys.all,
+            "allocation-source",
+            target.salesOrderId,
+            target.salesOrderRevisionId ?? "current",
+        ] as const,
     list: (query: CustomerAccountsQuery) =>
         [...customerReceivableKeys.all, "list", query] as const,
     detail: (kind: string, id: string) =>
@@ -260,4 +276,45 @@ export function useReverseFactMutation() {
             }
         },
     })
+}
+
+/** 同一销售单的多笔应收共享来源查询；来源失败不阻断回款表单。 */
+export function useAllocationSources(pool: readonly AllocationTarget[]) {
+    const profile = useAccountProfileQuery()
+    const canRead =
+        !profile.isError &&
+        hasPermission(profile.data?.permissions, "sales_order:detail")
+    const targets = [
+        ...new Map(
+            pool.map((target) => [allocationSourceKey(target), target]),
+        ).values(),
+    ]
+    const queries = useQueries({
+        queries: targets.map((target) => ({
+            queryKey: customerReceivableKeys.allocationSource(target),
+            queryFn: () =>
+                fetchAllocationSource(
+                    target.salesOrderId,
+                    target.salesOrderRevisionId,
+                ),
+            enabled: canRead,
+            retry: false,
+        })),
+    })
+    return {
+        canRead,
+        sources: new Map(
+            targets.map((target, index) => [
+                allocationSourceKey(target),
+                queries[index],
+            ]),
+        ),
+    }
+}
+
+export function allocationSourceKey(target: AllocationTarget): string {
+    return JSON.stringify([
+        target.salesOrderId,
+        target.salesOrderRevisionId ?? "current",
+    ])
 }

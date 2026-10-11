@@ -81,6 +81,9 @@ async function buildPool(
                             label: `${salesOrderNo} · ${receivableEntryLabel(e.entry_type)}`,
                             salesOrderId: r.sales_order_id,
                             salesOrderNo,
+                            salesOrderRevisionId:
+                                r.current_sales_order_revision_id,
+                            customerName: r.customer_name || undefined,
                             // open amount is server field on account; entry-level open is not exposed — use amount as display open
                             openAmount: e.amount,
                             dueDate: e.due_date,

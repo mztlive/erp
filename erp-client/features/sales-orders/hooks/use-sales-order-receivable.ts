@@ -17,7 +17,10 @@ import {
 import { hasPermission } from "@/lib/permissions"
 
 /** 本单只读票款查询；每类数据分别授权、分页、失败，不挂载登记命令。 */
-export function useSalesOrderReceivable(order: SalesOrderDetailView) {
+export function useSalesOrderReceivable(
+    order: SalesOrderDetailView,
+    section: "receivable" | "receipt" | "invoice",
+) {
     const profile = useAccountProfileQuery()
     const granted = profile.data?.permissions
     const ready = Boolean(profile.data) && !profile.isError
@@ -51,7 +54,7 @@ export function useSalesOrderReceivable(order: SalesOrderDetailView) {
             receiptPage,
         ],
         queryFn: () => fetchOrderReceipts(order, receiptPage),
-        enabled: canRead("customer_receipt:list"),
+        enabled: section === "receipt" && canRead("customer_receipt:list"),
     })
     const invoices = useQuery({
         staleTime: 0,
@@ -63,7 +66,7 @@ export function useSalesOrderReceivable(order: SalesOrderDetailView) {
             invoicePage,
         ],
         queryFn: () => fetchOrderInvoices(order, invoicePage),
-        enabled: canRead("invoice:list"),
+        enabled: section === "invoice" && canRead("invoice:list"),
     })
     const detail = useCustomerAccountsDetailQuery(
         preview?.kind ?? null,

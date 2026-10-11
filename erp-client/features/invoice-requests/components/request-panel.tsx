@@ -94,191 +94,213 @@ export function InvoiceRequestPanel({
                 当前账号没有查看开票申请的权限。
             </p>
         )
-    if ((creating || editing) && permissions.canSubmit)
+    const requestForm =
+        (creating || editing) && permissions.canSubmit ? (
+            <InvoiceRequestForm
+                salesOrderId={salesOrderId}
+                accountId={accountId}
+                existing={editing}
+                presentation={salesOrderId ? "dialog" : "inline"}
+                onCancel={() => {
+                    setCreating(false)
+                    setEditing(undefined)
+                }}
+                onDone={(request) => {
+                    const id = request.id || pendingInvoiceRequestDetailId()
+                    setCreating(false)
+                    setEditing(undefined)
+                    if (id) setDetailId(id)
+                }}
+            />
+        ) : null
+    if (requestForm && !salesOrderId)
         return (
             <section className="space-y-4">
                 <h2 className="font-semibold">
                     {editing ? "修改开票申请" : "申请开票"}
                 </h2>
-                <InvoiceRequestForm
-                    salesOrderId={salesOrderId}
-                    accountId={accountId}
-                    existing={editing}
-                    onCancel={() => {
-                        setCreating(false)
-                        setEditing(undefined)
-                    }}
-                    onDone={(request) => {
-                        const id = request.id || pendingInvoiceRequestDetailId()
-                        setCreating(false)
-                        setEditing(undefined)
-                        if (id) setDetailId(id)
-                    }}
-                />
+                {requestForm}
             </section>
         )
-    if (detailId)
-        return (
-            <InvoiceRequestDetail
-                id={detailId}
-                onBack={() => {
-                    dismissPendingInvoiceRequestDetail()
-                    setDetailId(undefined)
-                }}
-                onEdit={(request) => setEditing(request)}
-            />
-        )
+    const requestDetail = detailId ? (
+        <InvoiceRequestDetail
+            key={detailId}
+            id={detailId}
+            presentation={salesOrderId ? "dialog" : "inline"}
+            onBack={() => {
+                dismissPendingInvoiceRequestDetail()
+                setDetailId(undefined)
+            }}
+            onEdit={(request) => setEditing(request)}
+        />
+    ) : null
     return (
-        <section className="space-y-4" aria-label="开票申请">
-            {toolbar}
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                    <h2 className="font-semibold">开票申请</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        提交申请，审批通过后由财务开票。
-                    </p>
-                </div>
-                {canCreate ? (
-                    <Button
-                        id="invoice-request-create"
-                        onClick={() => {
-                            dismissPendingInvoiceRequestDetail()
-                            setCreating(true)
-                        }}
-                    >
-                        {salesOrderId ? "申请开票" : "新建开票申请"}
-                    </Button>
-                ) : null}
-            </div>
-            {amounts.data ? (
-                <MetricStrip columns={3} aria-label="开票申请金额摘要">
-                    {[
-                        ["可申请金额", amounts.data.available_amount],
-                        ["审批中金额", amounts.data.pending_amount],
-                        [
-                            "已批准待开票",
-                            amounts.data.approved_remaining_amount,
-                        ],
-                    ].map(([label, amount]) => (
-                        <MetricItem
-                            key={label}
-                            label={label}
-                            value={<MoneyValue value={amount!} />}
-                        />
-                    ))}
-                </MetricStrip>
-            ) : null}
-            {list.isPending ? (
-                <p>正在读取申请记录…</p>
-            ) : list.isError ? (
-                <div role="alert">
-                    {getErrorMessage(list.error, "申请记录读取失败")}
-                    <Button
-                        id="invoice-request-list-retry"
-                        onClick={() => void list.refetch()}
-                    >
-                        重试
-                    </Button>
-                </div>
-            ) : list.data?.items.length ? (
-                <div className="overflow-x-auto">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                {[
-                                    "申请单号",
-                                    "销售单",
-                                    "开票抬头",
-                                    "申请金额",
-                                    "已开票",
-                                    "状态",
-                                    "申请人",
-                                    "申请时间",
-                                ].map((label) => (
-                                    <TableHead key={label}>{label}</TableHead>
-                                ))}
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {list.data.items.map((request) => (
-                                <TableRow key={request.id}>
-                                    <TableCell>
-                                        <Button
-                                            id={`invoice-request-view-${toAutomationIdSegment(request.id)}`}
-                                            variant="link"
-                                            className="h-auto p-0"
-                                            onClick={() =>
-                                                setDetailId(request.id)
-                                            }
-                                        >
-                                            {request.request_no}
-                                        </Button>
-                                    </TableCell>
-                                    <TableCell>
-                                        {request.sales_order_no}
-                                    </TableCell>
-                                    <TableCell>
-                                        {request.data?.invoice_title || "—"}
-                                    </TableCell>
-                                    <TableCell>
-                                        <MoneyValue
-                                            value={
-                                                request.data?.amount || "0.00"
-                                            }
-                                        />
-                                    </TableCell>
-                                    <TableCell>
-                                        <MoneyValue
-                                            value={
-                                                request.invoiced_amount ||
-                                                "0.00"
-                                            }
-                                        />
-                                    </TableCell>
-                                    <TableCell>
-                                        {requestStatusLabels[request.status]}
-                                    </TableCell>
-                                    <TableCell>
-                                        {request.created_by_name ?? "—"}
-                                    </TableCell>
-                                    <TableCell className="whitespace-nowrap">
-                                        {new Date(
-                                            request.created_at * 1000,
-                                        ).toLocaleDateString("zh-CN")}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
+        <>
+            {detailId && !salesOrderId ? (
+                requestDetail
             ) : (
-                <p className="py-6 text-center text-sm text-muted-foreground">
-                    暂无开票申请。有开票需求时，可在此发起申请。
-                </p>
+                <section className="space-y-4" aria-label="开票申请">
+                    {toolbar}
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <h2 className="font-semibold">开票申请</h2>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                                提交申请，审批通过后由财务开票。
+                            </p>
+                        </div>
+                        {canCreate ? (
+                            <Button
+                                id="invoice-request-create"
+                                onClick={() => {
+                                    dismissPendingInvoiceRequestDetail()
+                                    setCreating(true)
+                                }}
+                            >
+                                {salesOrderId ? "申请开票" : "新建开票申请"}
+                            </Button>
+                        ) : null}
+                    </div>
+                    {amounts.data ? (
+                        <MetricStrip columns={3} aria-label="开票申请金额摘要">
+                            {[
+                                ["可申请金额", amounts.data.available_amount],
+                                ["审批中金额", amounts.data.pending_amount],
+                                [
+                                    "已批准待开票",
+                                    amounts.data.approved_remaining_amount,
+                                ],
+                            ].map(([label, amount]) => (
+                                <MetricItem
+                                    key={label}
+                                    label={label}
+                                    value={<MoneyValue value={amount!} />}
+                                />
+                            ))}
+                        </MetricStrip>
+                    ) : null}
+                    {list.isPending ? (
+                        <p>正在读取申请记录…</p>
+                    ) : list.isError ? (
+                        <div role="alert">
+                            {getErrorMessage(list.error, "申请记录读取失败")}
+                            <Button
+                                id="invoice-request-list-retry"
+                                onClick={() => void list.refetch()}
+                            >
+                                重试
+                            </Button>
+                        </div>
+                    ) : list.data?.items.length ? (
+                        <div className="overflow-x-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        {[
+                                            "申请单号",
+                                            "销售单",
+                                            "开票抬头",
+                                            "申请金额",
+                                            "已开票",
+                                            "状态",
+                                            "申请人",
+                                            "申请时间",
+                                        ].map((label) => (
+                                            <TableHead key={label}>
+                                                {label}
+                                            </TableHead>
+                                        ))}
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {list.data.items.map((request) => (
+                                        <TableRow key={request.id}>
+                                            <TableCell>
+                                                <Button
+                                                    id={`invoice-request-view-${toAutomationIdSegment(request.id)}`}
+                                                    variant="link"
+                                                    className="h-auto p-0"
+                                                    onClick={() =>
+                                                        setDetailId(request.id)
+                                                    }
+                                                >
+                                                    {request.request_no}
+                                                </Button>
+                                            </TableCell>
+                                            <TableCell>
+                                                {request.sales_order_no}
+                                            </TableCell>
+                                            <TableCell>
+                                                {request.data?.invoice_title ||
+                                                    "—"}
+                                            </TableCell>
+                                            <TableCell>
+                                                <MoneyValue
+                                                    value={
+                                                        request.data?.amount ||
+                                                        "0.00"
+                                                    }
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <MoneyValue
+                                                    value={
+                                                        request.invoiced_amount ||
+                                                        "0.00"
+                                                    }
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                {
+                                                    requestStatusLabels[
+                                                        request.status
+                                                    ]
+                                                }
+                                            </TableCell>
+                                            <TableCell>
+                                                {request.created_by_name ?? "—"}
+                                            </TableCell>
+                                            <TableCell className="whitespace-nowrap">
+                                                {new Date(
+                                                    request.created_at * 1000,
+                                                ).toLocaleDateString("zh-CN")}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    ) : (
+                        <p className="py-6 text-center text-sm text-muted-foreground">
+                            暂无开票申请。有开票需求时，可在此发起申请。
+                        </p>
+                    )}
+                    {(list.data?.total ?? 0) > 10 ? (
+                        <div className="flex items-center justify-end gap-3 text-sm">
+                            <span>
+                                第 {page} 页 · 共 {list.data?.total} 条
+                            </span>
+                            <Button
+                                id="invoice-request-page-prev"
+                                variant="outline"
+                                disabled={page === 1}
+                                onClick={() => setPage(page - 1)}
+                            >
+                                上一页
+                            </Button>
+                            <Button
+                                id="invoice-request-page-next"
+                                variant="outline"
+                                disabled={page * 10 >= (list.data?.total ?? 0)}
+                                onClick={() => setPage(page + 1)}
+                            >
+                                下一页
+                            </Button>
+                        </div>
+                    ) : null}
+                </section>
             )}
-            {(list.data?.total ?? 0) > 10 ? (
-                <div className="flex items-center justify-end gap-3 text-sm">
-                    <span>
-                        第 {page} 页 · 共 {list.data?.total} 条
-                    </span>
-                    <Button
-                        id="invoice-request-page-prev"
-                        variant="outline"
-                        disabled={page === 1}
-                        onClick={() => setPage(page - 1)}
-                    >
-                        上一页
-                    </Button>
-                    <Button
-                        id="invoice-request-page-next"
-                        variant="outline"
-                        disabled={page * 10 >= (list.data?.total ?? 0)}
-                        onClick={() => setPage(page + 1)}
-                    >
-                        下一页
-                    </Button>
-                </div>
-            ) : null}
-        </section>
+            {salesOrderId ? requestForm : null}
+            {salesOrderId && !requestForm ? requestDetail : null}
+        </>
     )
 }

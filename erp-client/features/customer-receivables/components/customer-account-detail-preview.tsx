@@ -122,7 +122,7 @@ export function CustomerAccountDetailPreview({
             onOpenChangeComplete={(nextOpen) => {
                 if (!nextOpen) onClosed?.()
             }}
-            size="detail"
+            size="preview"
             title={
                 data?.receivable?.counterpartyPartyName ??
                 data?.receipt?.counterpartyPartyName ??
@@ -426,12 +426,12 @@ export function CustomerAccountDetailPreview({
             }
         >
             {isPending ? (
-                <div className="space-y-3 px-7 py-6">
+                <div className="space-y-3">
                     <div className="h-24 animate-pulse rounded-xl bg-muted" />
                     <div className="h-40 animate-pulse rounded-xl bg-muted" />
                 </div>
             ) : isError ? (
-                <div className="space-y-3 px-7 py-6">
+                <div className="space-y-3">
                     <p className="text-sm text-muted-foreground">
                         {getErrorMessage(error, "详情加载失败，请重试。")}
                     </p>
@@ -446,9 +446,13 @@ export function CustomerAccountDetailPreview({
                     </Button>
                 </div>
             ) : data?.receivable ? (
-                <ReceivableDetailBody row={data.receivable} />
+                <ReceivableDetailBody
+                    row={data.receivable}
+                    className="space-y-6 text-sm"
+                />
             ) : data?.receipt ? (
                 <ReceiptDetailBody
+                    className="space-y-6 text-sm"
                     row={data.receipt}
                     workItemId={workItemId}
                     expectedTaskVersion={expectedTaskVersion}
@@ -457,6 +461,7 @@ export function CustomerAccountDetailPreview({
                 />
             ) : data?.refund ? (
                 <CustomerRefundDetailBody
+                    className="space-y-6 text-sm"
                     row={data.refund}
                     workItemId={workItemId}
                     expectedTaskVersion={expectedTaskVersion}
@@ -465,6 +470,7 @@ export function CustomerAccountDetailPreview({
                 />
             ) : data?.reversal ? (
                 <ReceiptReversalDetailBody
+                    className="space-y-6 text-sm"
                     row={data.reversal}
                     workItemId={workItemId}
                     expectedTaskVersion={expectedTaskVersion}
@@ -472,9 +478,12 @@ export function CustomerAccountDetailPreview({
                     onDecisionApplied={onDecisionApplied}
                 />
             ) : data?.invoice ? (
-                <InvoiceDetailBody row={data.invoice} />
+                <InvoiceDetailBody
+                    row={data.invoice}
+                    className="space-y-6 text-sm"
+                />
             ) : (
-                <div className="px-7 py-6 text-sm text-muted-foreground">
+                <div className="text-sm text-muted-foreground">
                     未找到该笔记录，可能已超出当前数据范围。
                 </div>
             )}

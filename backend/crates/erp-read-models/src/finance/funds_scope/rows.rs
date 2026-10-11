@@ -278,10 +278,33 @@ pub struct FundsSummaryView {
     pub unassigned: Amount,
     /// 整单合计；部分授权为 null，禁止差额推导。
     pub whole_total: Option<Amount>,
+    /// 全范围开放应收或待分配余额；未提供或无完整读取资格时为 null。
+    pub balance_total: Option<Amount>,
+    /// 全范围已逾期未收金额；仅应收摘要提供。
+    pub overdue_total: Option<Amount>,
     /// 部分受限时为 true。
     pub permission_limited: bool,
     /// 跨页与导出必须原样回传的范围版本。
     pub scope_version: String,
+}
+
+impl FundsSummaryView {
+    /// 未具备整账职责时隐藏款票余额，包括空匹配结果。
+    ///
+    /// # 参数
+    /// * `allowed` - 本次授权快照的整账读取资格。
+    ///
+    /// # 返回
+    /// 原份额摘要；无资格时余额为 null，不能把不可见未分配记录表示为零。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    pub(super) fn with_balance_access(mut self, allowed: bool) -> Self {
+        if !allowed {
+            self.balance_total = None;
+        }
+        self
+    }
 }
 
 /// 候选行：可区分离线授权候选与无资格对象；不可见对象不返回。
@@ -718,6 +741,8 @@ pub(super) fn build_summary(
         grouped,
         unassigned,
         whole_total,
+        balance_total: None,
+        overdue_total: None,
         permission_limited,
         scope_version: scope_version.to_string(),
     })
@@ -744,6 +769,8 @@ mod tests {
             grouped: vec![FundsPersonShare { owner_user_id: "owner-1".into(), visible_share: zero_amount() }],
             unassigned: zero_amount(),
             whole_total: whole.then(zero_amount),
+            balance_total: None,
+            overdue_total: None,
             permission_limited: !whole,
             scope_version: "scope-v1".into(),
         }

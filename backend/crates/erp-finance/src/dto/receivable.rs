@@ -12,6 +12,7 @@ mod command;
 mod draft_update;
 mod facts;
 mod invoice;
+pub mod invoice_review;
 mod query;
 
 /// 契约目标形状的分页响应（api-contract §3）：`items` + `total` + `page` + `page_size`。

@@ -33,7 +33,9 @@ pub(super) async fn source_sales_orders(
     materials: &ApprovalMaterialsView,
 ) -> Result<Vec<ApprovalSourceSalesOrder>> {
     let allowed = &materials.display.source_sales;
-    if materials.document_type != "purchase_order" || allowed.is_empty() {
+    if !matches!(materials.document_type.as_str(), "purchase_order" | "sales_invoice_request")
+        || allowed.is_empty()
+    {
         return Ok(vec![]);
     }
     let ids = allowed.iter().map(|source| source.revision_id.clone()).collect::<Vec<_>>();

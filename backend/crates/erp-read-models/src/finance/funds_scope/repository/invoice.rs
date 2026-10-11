@@ -398,6 +398,7 @@ fn version_projection(materialize: bool) -> Document {
         projection.insert(
             "summary",
             doc! { "whole": "$_whole", "gross_amount": "$gross_amount",
+            "status": "$status", "invoice_kind": "$invoice_kind",
             "sales_sources": "$_sales_sources", "purchase_sources": "$_purchase_sources",
             "all_sales_sources": all_sources("$_sales"), "all_purchase_sources": all_sources("$_purchase") },
         );

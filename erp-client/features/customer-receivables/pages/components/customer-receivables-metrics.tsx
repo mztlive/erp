@@ -60,8 +60,17 @@ export function CustomerReceivablesMetrics({
                     key={item.id}
                     id={`customer-receivables-metrics-${item.id}`}
                     label={item.label}
-                    value={<MoneyValue value={item.value} />}
-                    detail={item.detail}
+                    value={
+                        <MoneyValue
+                            value={item.value}
+                            unavailableReason={
+                                item.value === null
+                                    ? "未取得完整统计，请刷新或检查数据范围"
+                                    : undefined
+                            }
+                        />
+                    }
+                    detail={item.value === null ? "统计暂不可用" : item.detail}
                 />
             ))}
         </MetricStrip>

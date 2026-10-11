@@ -40,7 +40,7 @@ import type {
     RequestCommand,
 } from "../types"
 import { RequestDraftDialog } from "./request-draft-dialog"
-import { RequestPaymentForm } from "./request-payment-form"
+import { RequestPaymentExecution } from "./request-payment-execution"
 import { RequestDetailContent } from "./request-detail-content"
 
 export function RequestDetail({
@@ -82,6 +82,16 @@ export function RequestDetail({
     const submitUnsettled = command.isPending || submitUnknown
     const closeLabel =
         request.status === "paid" ? "终止付款授权" : "关闭未付部分"
+    if (isPaymentTask && task) {
+        return (
+            <RequestPaymentExecution
+                key={request.id}
+                request={request}
+                task={task}
+                onTaskCompleted={onTaskCompleted}
+            />
+        )
+    }
     return (
         <div className="space-y-6">
             <RequestDetailContent
@@ -199,13 +209,6 @@ export function RequestDetail({
                         </Button>
                     )}
                 </div>
-            )}
-            {isPaymentTask && task && (
-                <RequestPaymentForm
-                    request={request}
-                    task={task}
-                    onTaskCompleted={onTaskCompleted}
-                />
             )}
             <RequestDraftDialog
                 open={editOpen}

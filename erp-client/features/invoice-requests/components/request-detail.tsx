@@ -1,10 +1,17 @@
 "use client"
 import Link from "next/link"
-import { useState, useRef } from "react"
+import { useEffect, useState, useRef } from "react"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
 import { MetricItem, MetricStrip, MoneyValue } from "@/components/business"
 import { ApprovalReadonly } from "@/features/approval-workflow/components/approval-readonly"
 import {
@@ -79,10 +86,59 @@ export function InvoiceRequestDetail({
     id,
     onBack,
     onEdit,
+    presentation = "inline",
 }: {
     id: string
     onBack: () => void
     onEdit: (request: InvoiceRequest) => void
+    presentation?: "inline" | "dialog"
+}) {
+    const [closeBlocked, setCloseBlocked] = useState(false)
+    const content = (
+        <InvoiceRequestDetailBody
+            id={id}
+            onBack={onBack}
+            onEdit={onEdit}
+            showBack={presentation === "inline"}
+            onCloseBlockedChange={setCloseBlocked}
+        />
+    )
+    if (presentation === "inline") return content
+    return (
+        <Dialog
+            open
+            onOpenChange={(open) => !open && !closeBlocked && onBack()}
+        >
+            <DialogContent
+                id="invoice-request-detail-dialog"
+                closeButtonId="invoice-request-detail-dialog-close"
+                showCloseButton={!closeBlocked}
+                className="flex max-h-[calc(100dvh-2rem)] flex-col sm:max-w-4xl"
+            >
+                <DialogHeader>
+                    <DialogTitle>开票申请详情</DialogTitle>
+                    <DialogDescription>
+                        查看申请金额、开票资料与审批进度。
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="min-h-0 overflow-y-auto">{content}</div>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+function InvoiceRequestDetailBody({
+    id,
+    onBack,
+    onEdit,
+    showBack,
+    onCloseBlockedChange,
+}: {
+    id: string
+    onBack: () => void
+    onEdit: (request: InvoiceRequest) => void
+    showBack: boolean
+    onCloseBlockedChange: (blocked: boolean) => void
 }) {
     const query = useInvoiceRequest(id)
     const permissions = useInvoiceRequestPermissions()
@@ -106,6 +162,7 @@ export function InvoiceRequestDetail({
         return (
             <CancelRequestForm
                 request={request}
+                onCloseBlockedChange={onCloseBlockedChange}
                 reviseRejected={reviseRejected}
                 onDone={async () => {
                     setCancelling(false)
@@ -121,7 +178,7 @@ export function InvoiceRequestDetail({
         <section className="space-y-5" aria-label="开票申请详情">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <h2 className="text-lg font-semibold">
+                    <h2 className="break-all text-lg font-semibold">
                         {request.request_no || "开票申请"}
                     </h2>
                     <p className="text-sm text-muted-foreground">
@@ -129,13 +186,15 @@ export function InvoiceRequestDetail({
                         {requestStatusLabels[request.status] ?? "审批中"}
                     </p>
                 </div>
-                <Button
-                    id="invoice-request-detail-back"
-                    variant="outline"
-                    onClick={onBack}
-                >
-                    返回申请列表
-                </Button>
+                {showBack ? (
+                    <Button
+                        id="invoice-request-detail-back"
+                        variant="outline"
+                        onClick={onBack}
+                    >
+                        返回申请列表
+                    </Button>
+                ) : null}
             </div>
             <MetricStrip columns={3} aria-label="开票申请详情金额摘要">
                 {[
@@ -175,7 +234,7 @@ export function InvoiceRequestDetail({
                     variant="outline"
                     render={
                         <Link
-                            href={`/sales/orders/${encodeURIComponent(request.sales_order_id)}?section=receivable`}
+                            href={`/sales/orders/${encodeURIComponent(request.sales_order_id)}?section=invoice`}
                         />
                     }
                 >
@@ -235,15 +294,21 @@ function CancelRequestForm({
     onDone,
     onBack,
     reviseRejected = false,
+    onCloseBlockedChange,
 }: {
     request: InvoiceRequest
     onDone: () => void | Promise<void>
     onBack: () => void
     reviseRejected?: boolean
+    onCloseBlockedChange: (blocked: boolean) => void
 }) {
     const { cancel } = useInvoiceRequestCommands()
     const pending = useRef<Parameters<typeof cancelRequest>[0] | null>(null)
     const [uncertain, setUncertain] = useState(false)
+    useEffect(() => {
+        onCloseBlockedChange(cancel.isPending || uncertain)
+        return () => onCloseBlockedChange(false)
+    }, [cancel.isPending, uncertain, onCloseBlockedChange])
     const form = useAppForm({
         defaultValues: {
             reason: reviseRejected ? "按驳回意见修改原单后重新提交" : "",

@@ -9,6 +9,10 @@ export type FundsSummaryWire = Readonly<{
     grouped: readonly FundsPersonShareWire[]
     unassigned: string
     whole_total: string | null
+    /** 全部匹配记录的开放应收或待分配余额，权限受限时为空。 */
+    balance_total?: string | null
+    /** 应收分录按业务日期、正反核销及冲减计算的逾期余额。 */
+    overdue_total?: string | null
     permission_limited: boolean
     scope_version: string
 }>

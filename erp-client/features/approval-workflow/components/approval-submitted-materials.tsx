@@ -295,7 +295,7 @@ export function ApprovalSubmittedMaterials({
             <section className="space-y-3 border-t pt-5">
                 <h3 className="font-medium">
                     {display.source_sales?.length
-                        ? "采购附件及关联销售合同、凭证"
+                        ? "提交附件及关联销售合同、凭证"
                         : "提交合同、凭证及附件"}
                 </h3>
                 {attachments.length ? (

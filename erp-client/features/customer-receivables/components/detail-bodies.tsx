@@ -36,9 +36,15 @@ const receivableEntryLabels: Record<string, string> = {
     reversal: "冲正",
 }
 
-export function ReceivableDetailBody({ row }: { row: ReceivableAccountRow }) {
+export function ReceivableDetailBody({
+    row,
+    className = bodyClassName,
+}: {
+    row: ReceivableAccountRow
+    className?: string
+}) {
     return (
-        <div className={bodyClassName}>
+        <div className={className}>
             <PreviewAmount label="待收金额（含税）" value={row.openTotal}>
                 <span>
                     应收总额 <MoneyValue value={row.grossTotal} />
@@ -119,6 +125,7 @@ export function ReceivableDetailBody({ row }: { row: ReceivableAccountRow }) {
  */
 export function ReceiptDetailBody({
     row,
+    className = bodyClassName,
     readOnly = false,
     workItemId,
     expectedTaskVersion,
@@ -126,6 +133,7 @@ export function ReceiptDetailBody({
     onDecisionApplied,
 }: {
     row: ReceiptRow
+    className?: string
     readOnly?: boolean
     workItemId?: string
     expectedTaskVersion?: string
@@ -134,7 +142,7 @@ export function ReceiptDetailBody({
 }) {
     const posted = row.status === "posted" || row.status === "reversed"
     return (
-        <div className={bodyClassName}>
+        <div className={className}>
             <PreviewAmount label="待核销回款" value={row.unallocatedAmount}>
                 <span>
                     到账金额 <MoneyValue value={row.amount} />
@@ -213,12 +221,14 @@ export function ReceiptDetailBody({
  */
 export function CustomerRefundDetailBody({
     row,
+    className = bodyClassName,
     workItemId,
     expectedTaskVersion,
     workItemAllowedActions,
     onDecisionApplied,
 }: {
     row: CustomerRefundRow
+    className?: string
     workItemId?: string
     expectedTaskVersion?: string
     workItemAllowedActions?: readonly string[]
@@ -226,7 +236,7 @@ export function CustomerRefundDetailBody({
 }) {
     const posted = row.status === "posted" || row.status === "reversed"
     return (
-        <div className={bodyClassName}>
+        <div className={className}>
             <PreviewAmount label="退款金额" value={row.amount} />
             <PreviewSection title="原因说明">
                 <p className="leading-6">{row.reasonText || "未填写原因"}</p>
@@ -276,12 +286,14 @@ export function CustomerRefundDetailBody({
  */
 export function ReceiptReversalDetailBody({
     row,
+    className = bodyClassName,
     workItemId,
     expectedTaskVersion,
     workItemAllowedActions,
     onDecisionApplied,
 }: {
     row: ReceiptReversalRow
+    className?: string
     workItemId?: string
     expectedTaskVersion?: string
     workItemAllowedActions?: readonly string[]
@@ -289,7 +301,7 @@ export function ReceiptReversalDetailBody({
 }) {
     const posted = row.status === "posted" || row.status === "reversed"
     return (
-        <div className={bodyClassName}>
+        <div className={className}>
             <PreviewAmount label="冲正金额" value={row.amount} />
             <PreviewSection title="原因说明">
                 <p className="leading-6">{row.reasonText || "未填写原因"}</p>
@@ -328,9 +340,15 @@ export function ReceiptReversalDetailBody({
  * 发票详情。Invoice 为 NO_APPROVAL，只展示发票事实与分配明细，
  * 不嵌入绑定卡、决定弹窗、撤回或改派入口。
  */
-export function InvoiceDetailBody({ row }: { row: SalesInvoiceRow }) {
+export function InvoiceDetailBody({
+    row,
+    className = bodyClassName,
+}: {
+    row: SalesInvoiceRow
+    className?: string
+}) {
     return (
-        <div className={bodyClassName}>
+        <div className={className}>
             <PreviewAmount
                 label="待分配金额（含税）"
                 value={row.unallocatedAmount}

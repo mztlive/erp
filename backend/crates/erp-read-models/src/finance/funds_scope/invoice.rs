@@ -205,7 +205,7 @@ impl FundsAccess {
         }
         let version = invoice_scope_version(&authorization, &snapshot.versions);
         ensure_version(params.scope_version.as_deref(), &version).map_err(|_| changed())?;
-        let summary = snapshot.summary(&version)?;
+        let summary = snapshot.summary(&version)?.with_balance_access(authorization.ledger_read);
         let items = snapshot
             .items
             .iter()

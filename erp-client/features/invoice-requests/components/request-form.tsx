@@ -8,6 +8,13 @@ import { Input } from "@/components/ui/input"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
 import { MoneyValue } from "@/components/business"
 import { SalesOrderSearchCombobox } from "@/features/entity-selectors/components/sales-order-search-combobox"
 import { loadReceivables } from "@/features/customer-receivables/api/loaders"
@@ -34,12 +41,14 @@ export function InvoiceRequestForm({
     salesOrderId,
     accountId,
     existing,
+    presentation = "inline",
     onDone,
     onCancel,
 }: {
     salesOrderId?: string
     accountId?: string
     existing?: InvoiceRequest
+    presentation?: "inline" | "dialog"
     onDone: (request: InvoiceRequest) => void
     onCancel: () => void
 }) {
@@ -123,7 +132,7 @@ export function InvoiceRequestForm({
             if (!unknown) pending.current = null
         }
     }
-    return (
+    const content = (
         <form
             id="invoice-request-form"
             className="space-y-4"
@@ -304,5 +313,26 @@ export function InvoiceRequestForm({
                 )}
             </div>
         </form>
+    )
+    if (presentation === "inline") return content
+    return (
+        <Dialog open onOpenChange={(open) => !open && !locked && onCancel()}>
+            <DialogContent
+                id="invoice-request-dialog"
+                closeButtonId="invoice-request-dialog-close"
+                showCloseButton={!locked}
+                className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl"
+            >
+                <DialogHeader>
+                    <DialogTitle>
+                        {existing ? "修改开票申请" : "申请开票"}
+                    </DialogTitle>
+                    <DialogDescription>
+                        提交申请，审批通过后由财务开票。
+                    </DialogDescription>
+                </DialogHeader>
+                {content}
+            </DialogContent>
+        </Dialog>
     )
 }

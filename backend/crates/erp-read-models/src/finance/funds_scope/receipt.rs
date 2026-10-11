@@ -342,7 +342,8 @@ impl FundsAccess {
         let total = snapshot.count()?;
         let version = flow::version(&authorization.context.scope_version, &snapshot.versions);
         ensure_version(params.scope_version.as_deref(), &version).map_err(|_| changed())?;
-        let summary = flow::summary(&snapshot.summary, &version)?;
+        let summary =
+            flow::summary(&snapshot.summary, &version)?.with_balance_access(authorization.ledger_read);
         let items = self
             .receipt_page(snapshot.items, &snapshot.versions, authorization.ledger_read, executor)
             .await?;

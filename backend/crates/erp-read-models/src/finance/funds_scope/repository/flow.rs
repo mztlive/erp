@@ -55,6 +55,8 @@ pub(in crate::finance::funds_scope) struct FlowHeader {
     #[serde(flatten)]
     pub version: FlowVersion,
     pub amount: Amount,
+    #[serde(default)]
+    pub status: String,
     pub whole: bool,
     pub owners: Vec<SourceOwner>,
 }
@@ -72,6 +74,8 @@ pub(in crate::finance::funds_scope) struct FlowSummary {
     pub amount: Amount,
     pub whole: bool,
     pub links: Vec<SummaryLink>,
+    #[serde(default)]
+    pub balance: Option<Amount>,
 }
 
 /// 份额流保留原动作与读取次序，不按正反动作重组金额。
@@ -163,7 +167,11 @@ pub(in crate::finance::funds_scope) fn summary(
             }
         }
     }
-    build_summary(&triples, &owners, whole_amount(whole, total), version, !whole)
+    let mut summary = build_summary(&triples, &owners, whole_amount(whole, total), version, !whole)?;
+    summary.balance_total = rows.iter().try_fold(zero_amount(), |sum, row| {
+        row.balance.filter(|_| row.whole).map(|balance| sum.checked_add(balance))
+    });
+    Ok(summary)
 }
 
 /// 固定动作转换复用原正负方向；持久化非法动作整体拒绝。
@@ -220,6 +228,7 @@ pub(super) fn version_projection() -> Document {
 pub(super) fn header_stages(sort: Document) -> Vec<Document> {
     let mut projection = version_projection();
     projection.insert("amount", 1);
+    projection.insert("status", 1);
     projection.insert("whole", "$scope_whole");
     projection.insert(
         "owners",
@@ -272,13 +281,17 @@ pub(in crate::finance::funds_scope) fn summaries(
     for header in headers {
         let owners =
             header.owners.into_iter().map(|source| (source.id, source.owner)).collect::<HashMap<_, _>>();
-        let links = grouped
-            .remove(&header.version.id)
-            .unwrap_or_default()
-            .into_iter()
-            .filter_map(|link| summary_link(link, &owners))
-            .collect();
-        summary.push(FlowSummary { amount: header.amount, whole: header.whole, links });
+        let all_links = grouped.remove(&header.version.id).unwrap_or_default();
+        let balance = header.whole.then(|| {
+            if header.status != "posted" {
+                return zero_amount();
+            }
+            let allocated =
+                all_links.iter().fold(zero_amount(), |sum, link| link.action.apply_to_net(sum, link.amount));
+            header.amount.checked_sub(allocated)
+        });
+        let links = all_links.into_iter().filter_map(|link| summary_link(link, &owners)).collect();
+        summary.push(FlowSummary { amount: header.amount, whole: header.whole, links, balance });
         versions.push(header.version);
     }
     (versions, summary)
@@ -428,6 +441,7 @@ mod tests {
                     .collect(),
             },
             amount: "1".parse().unwrap(),
+            status: "posted".into(),
             whole: false,
             owners: sources
                 .iter()
@@ -513,6 +527,7 @@ mod tests {
     #[test]
     fn partial_summary_excludes_hidden_and_whole_amounts_and_keeps_reverse() {
         let rows = vec![FlowSummary {
+            balance: None,
             amount: "100".parse().unwrap(),
             whole: false,
             links: vec![
@@ -568,5 +583,29 @@ mod tests {
             summary: vec![],
         };
         assert!(matches!(page.count(), Err(Error::ValidationError(_))));
+    }
+    #[test]
+    fn receipt_balance_uses_all_allocations_and_excludes_unposted_or_restricted() {
+        let mut posted = header("receipt", &[("matched", Some("seller"))]);
+        posted.whole = true;
+        posted.amount = "100.01".parse().unwrap();
+        let links = vec![
+            amount_link("one", "receipt", "matched", None, "20", AllocationAction::Apply),
+            amount_link("two", "receipt", "other", None, "30", AllocationAction::Apply),
+            amount_link("reverse", "receipt", "other", None, "5", AllocationAction::Reverse),
+        ];
+        let (_, rows) = summaries(vec![posted], links);
+        let result = summary(&rows, "v").unwrap();
+        assert_eq!(result.balance_total, Some("55.01".parse().unwrap()));
+        assert_eq!(result.grouped[0].visible_share, "20".parse().unwrap());
+        assert_eq!(summary(&[], "v").unwrap().balance_total, Some(Amount::zero()));
+        assert_eq!(summary(&[], "v").unwrap().with_balance_access(false).balance_total, None);
+        let mut draft = header("draft", &[]);
+        draft.whole = true;
+        draft.status = "draft".into();
+        let (_, rows) = summaries(vec![draft], vec![]);
+        assert_eq!(summary(&rows, "v").unwrap().balance_total, Some(Amount::zero()));
+        let (_, rows) = summaries(vec![header("partial", &[])], vec![]);
+        assert_eq!(summary(&rows, "v").unwrap().balance_total, None);
     }
 }

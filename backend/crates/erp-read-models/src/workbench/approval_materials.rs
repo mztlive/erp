@@ -25,7 +25,7 @@ use crate::sales_center::materials::{
 use crate::{Error, Result};
 
 mod payment_request;
-mod related_sales;
+pub(super) mod related_sales;
 
 /// 在原提交事务内冻结显示与附件版本，历史快照不补取当前材料。
 ///
@@ -72,6 +72,18 @@ pub async fn freeze_approval_materials(
         let (sources, files) = payment_request::capture(db, &snapshot, executor).await?;
         if let Some(display) = &mut snapshot.display {
             display.source_sales = sources;
+            display.validate()?;
+        }
+        materials.extend(files);
+    }
+    if snapshot.document_type == DocumentType::SalesInvoiceRequest {
+        let (source, files) = super::invoice_review::capture(db, &snapshot, executor).await?;
+        if let Some(display) = &mut snapshot.display {
+            display.source_sales = vec![source];
+            display.source.extra_sections.push(ApprovalBriefSection::new(
+                "申请时间".into(),
+                super::brief::format_instant_datetime(snapshot.payload.submitted_at),
+            ));
             display.validate()?;
         }
         materials.extend(files);

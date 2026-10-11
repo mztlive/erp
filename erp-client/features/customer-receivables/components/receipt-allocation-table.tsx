@@ -13,7 +13,7 @@ import {
     TableToolbarScope,
 } from "@/components/business/table-toolbar"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
+import { NativeCheckbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import {
     Table,
@@ -29,6 +29,8 @@ import type {
     AllocationTarget,
 } from "@/features/customer-receivables/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { allocationSourceKey, useAllocationSources } from "../hooks/queries"
+import { ReceiptAllocationSource } from "./receipt-allocation-source"
 
 /** 回款应收勾选与金额编辑共用一张表，搜索不移除已选分配。 */
 export function ReceiptAllocationTable({
@@ -55,11 +57,27 @@ export function ReceiptAllocationTable({
     const [search, setSearch] = useState("")
     const keyword = search.trim().toLocaleLowerCase()
     const lines = new Map(allocations.map((line) => [line.targetId, line]))
-    const visibleTargets = session.pool.filter((target) =>
-        `${target.salesOrderNo} ${target.label} ${target.dueDate ?? ""}`
+    const { canRead, sources } = useAllocationSources(session.pool)
+    const visibleTargets = session.pool.filter((target) => {
+        const source = canRead
+            ? sources.get(allocationSourceKey(target))?.data
+            : undefined
+        return [
+            target.salesOrderNo,
+            target.label,
+            target.dueDate,
+            target.customerName,
+            source?.customerName,
+            source?.projectName,
+            source?.contractNo,
+            source?.ownerName,
+            ...(source?.products ?? []),
+        ]
+            .filter(Boolean)
+            .join(" ")
             .toLocaleLowerCase()
-            .includes(keyword),
-    )
+            .includes(keyword)
+    })
 
     return (
         <section
@@ -73,29 +91,31 @@ export function ReceiptAllocationTable({
             >
                 关联销售单应收
             </h2>
-            <div className="max-w-lg">
-                <ListSearchField
-                    id="customer-receivables-session-allocation-search"
-                    value={search}
-                    onChange={setSearch}
-                    placeholder="搜索销售单号或应收项目"
-                    aria-label="搜索可关联的销售单应收"
-                />
-            </div>
             <TableToolbarScope>
-                <div className="min-w-0">
-                    <TableToolbar>
-                        <div
-                            className="flex flex-wrap items-center gap-x-4 gap-y-1 text-muted-foreground"
-                            role="status"
-                        >
-                            <span>显示 {visibleTargets.length} 条应收</span>
-                            <span>
-                                已选 {allocations.length} 笔
-                                {keyword ? "（含搜索结果外）" : ""}
-                            </span>
+                <div className="min-w-0 space-y-4">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                        <div className="min-w-0 max-w-lg flex-1 basis-64">
+                            <ListSearchField
+                                id="customer-receivables-session-allocation-search"
+                                value={search}
+                                onChange={setSearch}
+                                placeholder="搜索单号、客户、商品或销售"
+                                aria-label="搜索可关联的销售单应收"
+                            />
                         </div>
-                    </TableToolbar>
+                        <TableToolbar className="py-0">
+                            <div
+                                className="flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground"
+                                role="status"
+                            >
+                                <span>共 {visibleTargets.length} 条</span>
+                                <span>
+                                    已选 {allocations.length} 笔
+                                    {keyword ? "（含搜索结果外）" : ""}
+                                </span>
+                            </div>
+                        </TableToolbar>
+                    </div>
                     <Table data-density="comfortable">
                         <caption className="sr-only">
                             选择销售单应收并填写本次核销金额
@@ -131,6 +151,9 @@ export function ReceiptAllocationTable({
                                 </TableRow>
                             ) : (
                                 visibleTargets.map((target) => {
+                                    const source = sources.get(
+                                        allocationSourceKey(target),
+                                    )
                                     const line = lines.get(target.targetId)
                                     const segment = toAutomationIdSegment(
                                         target.targetId,
@@ -151,7 +174,8 @@ export function ReceiptAllocationTable({
                                             }
                                         >
                                             <TableCell>
-                                                <Checkbox
+                                                <NativeCheckbox
+                                                    className="rounded-sm border-input bg-surface-control"
                                                     id={`customer-receivables-session-allocation-${segment}-select`}
                                                     aria-label={`关联 ${target.label}`}
                                                     checked={Boolean(line)}
@@ -173,14 +197,25 @@ export function ReceiptAllocationTable({
                                                 />
                                             </TableCell>
                                             <TableCell>
-                                                <div className="min-w-48 whitespace-normal">
-                                                    <div className="num font-medium">
-                                                        {target.salesOrderNo}
-                                                    </div>
-                                                    <div className="mt-1 text-xs text-muted-foreground">
-                                                        {target.label}
-                                                    </div>
-                                                </div>
+                                                <ReceiptAllocationSource
+                                                    target={target}
+                                                    source={
+                                                        canRead
+                                                            ? source?.data
+                                                            : undefined
+                                                    }
+                                                    canRead={canRead}
+                                                    pending={
+                                                        source?.isPending ??
+                                                        false
+                                                    }
+                                                    failed={
+                                                        source?.isError ?? false
+                                                    }
+                                                    onRetry={() =>
+                                                        void source?.refetch()
+                                                    }
+                                                />
                                             </TableCell>
                                             <TableCell data-align="end">
                                                 <MoneyValue
@@ -192,8 +227,8 @@ export function ReceiptAllocationTable({
                                             </TableCell>
                                             <TableCell data-align="end">
                                                 {line ? (
-                                                    <div className="ml-auto min-w-44 max-w-60 whitespace-normal">
-                                                        <div className="flex items-center justify-end gap-1">
+                                                    <div className="ml-auto min-w-36 max-w-52 whitespace-normal">
+                                                        <div className="flex flex-wrap items-center justify-end gap-1">
                                                             <Input
                                                                 id={amountId}
                                                                 className="num text-right"
@@ -273,11 +308,11 @@ export function ReceiptAllocationTable({
                 </div>
             </TableToolbarScope>
             <p className="text-xs text-muted-foreground">
-                应收项目金额用于核对来源；实际可核销余额由系统在提交时校验。允许保留未核销回款余额。
+                实际可核销金额以系统校验为准；允许保留未核销回款余额。
             </p>
             <ValidationSummary
                 id="customer-receivables-session-validation"
-                issues={issues}
+                issues={issues.filter((issue) => issue.id !== "need-alloc")}
                 title="提交前请处理"
                 onLocate={(issue) => {
                     const targetId = issue.targetId

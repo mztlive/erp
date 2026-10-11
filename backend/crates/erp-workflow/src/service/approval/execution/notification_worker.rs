@@ -76,8 +76,9 @@ pub fn apply_delivery_attempt(
 ) -> Result<()> {
     match attempt {
         DeliveryAttempt::Delivered => item.mark_delivered().map_err(Error::from),
-        DeliveryAttempt::Retryable | DeliveryAttempt::Fatal => {
-            item.mark_failure(error_class(attempt), failed_at).map_err(Error::from)
+        DeliveryAttempt::Retryable => item.mark_failure(error_class(attempt), failed_at).map_err(Error::from),
+        DeliveryAttempt::Fatal => {
+            item.mark_fatal_failure(error_class(attempt), failed_at).map_err(Error::from)
         },
     }
 }
@@ -107,6 +108,18 @@ pub fn lease_until(now: Instant) -> Instant {
 
 /// 幂等发送接口。必须按去重键调用。
 pub trait NotificationSender {
+    /// 判断实际发送提供方是否已接入。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 未接入时返回 `false`，worker 不得领取消息或消耗重试次数。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    fn is_ready(&self) -> bool;
+
     /// 以 outbox 去重键发送。
     ///
     /// # 参数
@@ -206,6 +219,9 @@ where
     S: OutboxLeaseStore,
     N: NotificationSender,
 {
+    if !sender.is_ready() {
+        return Ok(WorkerBatchOutcome::default());
+    }
     let until = lease_until(now);
     let leased = store.lease_batch(worker_id, now, until, limit)?;
     let mut outcome = WorkerBatchOutcome::default();
@@ -237,13 +253,17 @@ where
 pub struct FailClosedNotificationSender;
 
 impl NotificationSender for FailClosedNotificationSender {
+    fn is_ready(&self) -> bool {
+        false
+    }
+
     /// 以去重键调用发送口；提供方未接线时返回致命失败。
     ///
     /// # 参数
     /// * `dedup_key` - outbox 业务去重键
     ///
     /// # 返回
-    /// 始终返回 `Fatal`，由 worker 按退避或死信落库。
+    /// 始终返回 `Fatal`；正常 worker 必须在领取前检查就绪状态。
     ///
     /// # 错误
     /// 不返回错误。
@@ -274,7 +294,21 @@ impl ApprovalNotificationOutboxPort {
         Self { db, sender: FailClosedNotificationSender }
     }
 
-    /// 领取并处理一批到期消息。
+    /// 判断实际通知提供方是否已接入。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 未接入时返回 `false`，调用方应暂停 worker。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    pub fn is_ready(&self) -> bool {
+        self.sender.is_ready()
+    }
+
+    /// 领取并处理一批到期消息；未接入提供方时直接返回，不读写队列。
     ///
     /// # 参数
     /// * `worker_id` - 本进程租约持有者
@@ -285,6 +319,9 @@ impl ApprovalNotificationOutboxPort {
     /// # 错误
     /// 租约或 CAS 落库失败时返回服务错误。
     pub async fn process_tick(&self, worker_id: &str) -> Result<()> {
+        if !self.is_ready() {
+            return Ok(());
+        }
         let now = Instant::now();
         let until = lease_until(now);
         let leased = self
@@ -293,7 +330,7 @@ impl ApprovalNotificationOutboxPort {
             .lease_outbox_batch(worker_id, now, until, OUTBOX_BATCH_LIMIT, &mut NoTransaction)
             .await?;
         for item in leased {
-            self.persist_attempt(worker_id, item, now).await?;
+            self.persist_attempt(worker_id, item).await?;
         }
         Ok(())
     }
@@ -303,23 +340,18 @@ impl ApprovalNotificationOutboxPort {
     /// # 参数
     /// * `worker_id` - 租约持有者
     /// * `item` - 已领取消息
-    /// * `now` - 当前时间
     ///
     /// # 错误
     /// 实体状态或仓储 CAS 失败时返回错误。
-    async fn persist_attempt(
-        &self,
-        worker_id: &str,
-        mut item: ApprovalNotificationOutbox,
-        now: Instant,
-    ) -> Result<()> {
+    async fn persist_attempt(&self, worker_id: &str, mut item: ApprovalNotificationOutbox) -> Result<()> {
         let attempt = self.sender.send_idempotent(&item.dedup_key);
+        let now = Instant::now();
         if attempt == DeliveryAttempt::Delivered {
             self.mark_delivered(&item.base.id, worker_id, now).await?;
             return Ok(());
         }
         apply_delivery_attempt(&mut item, attempt, now)?;
-        self.save_failure(worker_id, item, attempt).await
+        self.save_failure(worker_id, item, attempt, now).await
     }
 
     /// 按租约 owner CAS 标记投递成功。
@@ -343,17 +375,25 @@ impl ApprovalNotificationOutboxPort {
         worker_id: &str,
         item: ApprovalNotificationOutbox,
         attempt: DeliveryAttempt,
+        failed_at: Instant,
     ) -> Result<()> {
         let repo = self.db.approval_notification_outbox();
         if item.delivery_status == ApprovalNotificationDeliveryStatus::DeadLetter {
-            repo.dead_letter_outbox(&item.base.id, worker_id, error_class(attempt), &mut NoTransaction)
-                .await?;
+            repo.dead_letter_outbox(
+                &item.base.id,
+                worker_id,
+                failed_at,
+                error_class(attempt),
+                &mut NoTransaction,
+            )
+            .await?;
             return Ok(());
         }
         repo.reschedule_outbox(
             &item.base.id,
             worker_id,
             item.next_attempt_at,
+            failed_at,
             error_class(attempt),
             &mut NoTransaction,
         )
@@ -380,6 +420,7 @@ mod tests {
     #[test]
     fn unconfigured_sender_fails_closed() {
         let sender = super::FailClosedNotificationSender;
+        assert!(!super::NotificationSender::is_ready(&sender));
         assert_eq!(
             super::NotificationSender::send_idempotent(&sender, "started:inst-1"),
             DeliveryAttempt::Fatal
@@ -415,6 +456,25 @@ mod tests {
         assert_eq!(item.delivery_status, ApprovalNotificationDeliveryStatus::Delivered);
     }
 
+    /// 致命失败立即死信；没有租约时必须拒绝状态变更。
+    #[test]
+    fn execution_worker_fatal_failure_stops_retrying() {
+        let now = Instant::from_unix_secs(1_700_000_000);
+        let mut item = enqueue(now);
+        let original = item.clone();
+        assert!(apply_delivery_attempt(&mut item, DeliveryAttempt::Fatal, now).is_err());
+        assert_eq!(item, original);
+        item.acquire_lease("worker-1", now, super::lease_until(now)).unwrap();
+        apply_delivery_attempt(&mut item, DeliveryAttempt::Fatal, now).unwrap();
+        assert_eq!(item.delivery_status, ApprovalNotificationDeliveryStatus::DeadLetter);
+        assert_eq!(item.attempt_count, 1);
+        assert_eq!(item.dead_lettered_at, Some(now));
+        assert_eq!(item.last_error_class.as_deref(), Some("fatal"));
+        assert!(item.lease_owner.is_none());
+        assert!(item.lease_until.is_none());
+        assert!(item.acquire_lease("worker-2", now, super::lease_until(now)).is_err());
+    }
+
     /// 超过最大次数进入死信。
     #[test]
     fn execution_worker_dead_letters_after_max_attempts() {
@@ -436,6 +496,9 @@ mod tests {
 
         struct AlwaysOk;
         impl super::NotificationSender for AlwaysOk {
+            fn is_ready(&self) -> bool {
+                true
+            }
             fn send_idempotent(&self, _dedup_key: &str) -> DeliveryAttempt {
                 DeliveryAttempt::Delivered
             }
@@ -443,6 +506,7 @@ mod tests {
 
         struct MemoryOutbox {
             items: Vec<ApprovalNotificationOutbox>,
+            lease_calls: u32,
         }
 
         impl OutboxLeaseStore for MemoryOutbox {
@@ -453,6 +517,7 @@ mod tests {
                 until: Instant,
                 limit: u32,
             ) -> crate::error::Result<Vec<ApprovalNotificationOutbox>> {
+                self.lease_calls += 1;
                 let mut leased = Vec::new();
                 for item in self.items.iter_mut() {
                     if leased.len() as u32 >= limit {
@@ -493,10 +558,18 @@ mod tests {
         }
 
         let now = Instant::from_unix_secs(1_700_000_000);
-        let mut store = MemoryOutbox { items: vec![enqueue(now)] };
+        let mut store = MemoryOutbox { items: vec![enqueue(now)], lease_calls: 0 };
+        let original = store.items.clone();
+        let paused =
+            process_outbox_batch(&mut store, &super::FailClosedNotificationSender, "worker-1", now, 10)
+                .unwrap();
+        assert_eq!(paused, WorkerBatchOutcome::default());
+        assert_eq!(store.items, original);
+        assert_eq!(store.lease_calls, 0);
         let outcome = process_outbox_batch(&mut store, &AlwaysOk, "worker-1", now, 10).unwrap();
         assert_eq!(outcome, WorkerBatchOutcome { delivered: 1, retried: 0, dead_lettered: 0 });
         assert_eq!(store.items[0].delivery_status, ApprovalNotificationDeliveryStatus::Delivered);
+        assert_eq!(store.lease_calls, 1);
     }
 
     fn enqueue(at: Instant) -> ApprovalNotificationOutbox {

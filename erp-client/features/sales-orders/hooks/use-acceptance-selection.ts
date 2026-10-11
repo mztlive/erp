@@ -22,11 +22,27 @@ export function useAcceptanceSelection() {
     const [selected, setSelected] = React.useState<AcceptanceBatchSelection>(
         () => new Map(),
     )
+    const skippedDrafts = React.useRef<AcceptanceBatchSelection>(new Map())
 
     const skipFact = React.useCallback((fulfillmentLineId: string) => {
         setSelected((prev) => {
             const next = new Map(prev)
+            const draft = next.get(fulfillmentLineId)
+            if (draft) skippedDrafts.current.set(fulfillmentLineId, draft)
             next.delete(fulfillmentLineId)
+            return next
+        })
+    }, [])
+
+    const includeFact = React.useCallback((fact: AcceptanceEligibleFact) => {
+        setSelected((prev) => {
+            const next = new Map(prev)
+            next.set(
+                fact.fulfillmentLineId,
+                prev.get(fact.fulfillmentLineId) ??
+                    skippedDrafts.current.get(fact.fulfillmentLineId) ??
+                    defaultBatchDraft(fact),
+            )
             return next
         })
     }, [])
@@ -76,10 +92,12 @@ export function useAcceptanceSelection() {
     )
 
     const replace = React.useCallback((next: AcceptanceBatchSelection) => {
+        skippedDrafts.current.clear()
         setSelected(next)
     }, [])
 
     const reset = React.useCallback(() => {
+        skippedDrafts.current.clear()
         setSelected(new Map())
     }, [])
 
@@ -101,6 +119,7 @@ export function useAcceptanceSelection() {
         hasExceptionResult,
         selectResult,
         skipFact,
+        includeFact,
         updateDraft,
         replace,
         reset,

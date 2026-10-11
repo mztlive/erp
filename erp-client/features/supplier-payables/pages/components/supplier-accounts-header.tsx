@@ -1,7 +1,6 @@
 "use client"
 
-import { FilePlus2Icon, RefreshCwIcon, WalletCardsIcon } from "lucide-react"
-import Link from "next/link"
+import { FilePlus2Icon, RefreshCwIcon } from "lucide-react"
 
 import { PageActions } from "@/components/business"
 import { ListWorkspaceHeader } from "@/components/business/list-workspace"
@@ -13,10 +12,6 @@ export interface SupplierAccountsHeaderProps {
     isFetching: boolean
     onRefresh: () => void
     onRegisterInvoice: () => void
-    onRegisterPayment: () => void
-    canRegisterPayment: boolean
-    paymentBlockedReason?: string
-    onSettle: () => void
 }
 
 export function SupplierAccountsHeader({
@@ -25,7 +20,6 @@ export function SupplierAccountsHeader({
     isFetching,
     onRefresh,
     onRegisterInvoice,
-    onSettle,
 }: SupplierAccountsHeaderProps) {
     const queriedAt = data?.queriedAt
 
@@ -75,20 +69,6 @@ export function SupplierAccountsHeader({
                             ? undefined
                             : "当前无进项发票登记权限",
                         onClick: onRegisterInvoice,
-                    },
-                    {
-                        actionKey: "register-payment",
-                        id: "supplier-payables-header-register-payment",
-                        label: "采购付款申请",
-                        icon: WalletCardsIcon,
-                        render: <Link href="/procurement/payment-requests" />,
-                    },
-                    {
-                        actionKey: "settle",
-                        id: "supplier-payables-header-settle",
-                        label: "去对账结算",
-                        variant: "outline",
-                        onClick: onSettle,
                     },
                 ]}
             />

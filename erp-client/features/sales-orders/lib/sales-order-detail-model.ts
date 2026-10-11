@@ -21,6 +21,8 @@ export type NavSectionId =
     | "fulfillment"
     | "acceptance"
     | "receivable"
+    | "receipt"
+    | "invoice"
     | "collaboration"
     | "versions"
 
@@ -105,7 +107,9 @@ export function resolveNavSection(
         case "change-review":
             return "overview"
         case "receivable":
-            return "receivable"
+        case "receipt":
+        case "invoice":
+            return section
         case "collaboration":
             return isCard ? "collaboration" : "overview"
         case "versions":
@@ -328,8 +332,20 @@ export function navItemsFor(order: SalesOrderDetailView): Array<{
         },
         {
             id: "receivable",
-            label: "票款",
-            hint: "本单回款和开票",
+            label: "应收",
+            hint: "本单应收与待收余额",
+            show: true,
+        },
+        {
+            id: "receipt",
+            label: "回款",
+            hint: "核销到本单的回款记录",
+            show: true,
+        },
+        {
+            id: "invoice",
+            label: "发票",
+            hint: "本单开票申请、发票文件与记录",
             show: true,
         },
         {

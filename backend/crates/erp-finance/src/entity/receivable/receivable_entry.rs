@@ -178,6 +178,25 @@ pub struct ReceivableEntry {
 }
 
 impl ReceivableEntry {
+    /// 计算当前增加分录已逾期且尚未收回的余额。
+    ///
+    /// # 参数
+    /// * `today` - 中国业务时区的当前日期；到期当日不算逾期。
+    /// * `settled` - 本分录已过账正反核销净额。
+    /// * `offset` - 本分录被冲减的累计金额。
+    ///
+    /// # 返回
+    /// 已过期增加分录扣除核销与冲减后的非负余额，其余分录返回零。
+    ///
+    /// # 错误
+    /// 不返回错误；金额溢出沿用 Amount 的运算约定。
+    pub fn overdue_balance(&self, today: BusinessDate, settled: Amount, offset: Amount) -> Amount {
+        if self.direction != EntryDirection::Increase || self.due_date >= today {
+            return Amount::zero();
+        }
+        self.amount.checked_sub(settled).checked_sub(offset).max(Amount::zero())
+    }
+
     /// 创建应收分录。
     ///
     /// 完成来源文本的 trim/非空/长度校验、金额正数校验与「类型 ↔ 方向」一致性校验

@@ -36,7 +36,7 @@ type Props = Readonly<{
     onClosed?: () => void
 }>
 
-const bodyClassName = "min-h-0 flex-1 space-y-6 overflow-auto px-7 py-6 text-sm"
+const bodyClassName = "space-y-6 text-sm"
 
 /** 范围详情抽屉：获授权份额常显，整单与未分配受限时为空并注明。 */
 export function ReceivableScopeDetailPreview({
@@ -89,7 +89,7 @@ export function ReceivableScopeDetailPreview({
             onOpenChangeComplete={(nextOpen) => {
                 if (!nextOpen) onClosed?.()
             }}
-            size="detail"
+            size="preview"
             title={title}
             identity={identity}
             summary={
@@ -140,12 +140,12 @@ export function ReceivableScopeDetailPreview({
             }
         >
             {isPending ? (
-                <div className="space-y-3 px-7 py-6">
+                <div className="space-y-3">
                     <div className="h-24 animate-pulse rounded-xl bg-muted" />
                     <div className="h-40 animate-pulse rounded-xl bg-muted" />
                 </div>
             ) : isError ? (
-                <div className="space-y-3 px-7 py-6">
+                <div className="space-y-3">
                     <p className="text-sm text-muted-foreground">
                         {getErrorMessage(error, "详情加载失败，请重试。")}
                     </p>
@@ -304,7 +304,7 @@ export function ReceivableScopeDetailPreview({
                     ) : null}
                 </div>
             ) : (
-                <div className="px-7 py-6 text-sm text-muted-foreground">
+                <div className="text-sm text-muted-foreground">
                     未找到该笔记录，可能已超出当前数据范围。
                 </div>
             )}

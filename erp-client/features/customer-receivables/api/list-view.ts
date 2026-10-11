@@ -15,7 +15,12 @@ import {
     projectReceiptReversal,
     projectReceivable,
 } from "./mappers"
-import { loadReceipts, loadReceivables, loadSalesInvoices } from "./loaders"
+import {
+    loadAccountPage,
+    loadReceipts,
+    loadReceivables,
+    loadSalesInvoices,
+} from "./loaders"
 import type {
     BackendCustomerReceipt,
     BackendCustomerRefund,
@@ -24,54 +29,6 @@ import type {
     BackendReceivableAccount,
 } from "./dto"
 import type { CustomerAccountsDetailKind } from "@/features/customer-receivables/types"
-
-function emptyView(
-    query: CustomerAccountsQuery,
-    reason: CustomerAccountsListView["emptyReason"],
-    moduleAllowed: boolean,
-    hasDataScope: boolean,
-): CustomerAccountsListView {
-    return {
-        view: query.view,
-        metrics: {
-            openReceivableTotal: "0.00",
-            overdueReceivableTotal: "0.00",
-            unallocatedReceiptTotal: "0.00",
-            unallocatedInvoiceTotal: "0.00",
-        },
-        receivables: [],
-        receipts: [],
-        invoices: [],
-        unallocated: {
-            receipts: [],
-            invoices: [],
-            note: "待核销视图中回款与销项发票分区展示；两类未分配余额不得相加。",
-        },
-        counterparties: [],
-        total: 0,
-        filterSummary:
-            reason === "NO_DATA_SCOPE"
-                ? "当前角色未配置客户往来范围"
-                : reason === "PERMISSION_REVOKED"
-                  ? "权限已收回"
-                  : "空",
-        permissionVersion: "pv-w11-http-1",
-        dataWatermark: "",
-        queriedAt: new Date().toISOString(),
-        hasDataScope,
-        moduleAllowed,
-        canRegister: moduleAllowed,
-        canExport: moduleAllowed,
-        emptyReason: reason,
-        submitPolicy: {
-            allowUnallocatedRemainder: true,
-            label: "允许保留未分配余额（系统统一判定）",
-        },
-    }
-}
-
-// silence unused emptyView for future permission paths
-void emptyView
 
 export async function fetchCustomerAccountsList(
     query: CustomerAccountsQuery,
@@ -82,17 +39,42 @@ export async function fetchCustomerAccountsList(
         page: query.page,
         page_size: query.pageSize,
     }
-    const [recvPage, rcptPage, invPage] = await Promise.all([
-        query.view === "receivable"
-            ? loadReceivables(query)
-            : Promise.resolve(emptyPage as Page<BackendReceivableAccount>),
+    const receivableActive = query.view === "receivable"
+    const receiptActive =
         query.view === "receipt" || query.view === "unallocated"
-            ? loadReceipts(query)
-            : Promise.resolve(emptyPage as Page<BackendCustomerReceipt>),
+    const invoiceActive =
         query.view === "sales_invoice" || query.view === "unallocated"
-            ? loadSalesInvoices(query)
-            : Promise.resolve(emptyPage as Page<BackendInvoice>),
+    const [recvResult, rcptResult, invResult] = await Promise.allSettled([
+        loadAccountPage(query, receivableActive, loadReceivables),
+        loadAccountPage(query, receiptActive, loadReceipts),
+        loadAccountPage(query, invoiceActive, loadSalesInvoices),
     ])
+    // 当前列表失败正常报错；其他卡片无法读取时显示未知，不阻断已有列表。
+    for (const [active, result] of [
+        [receivableActive, recvResult],
+        [receiptActive, rcptResult],
+        [invoiceActive, invResult],
+    ] as const) {
+        if (active && result.status === "rejected") throw result.reason
+    }
+    const recvPage =
+        receivableActive && recvResult.status === "fulfilled"
+            ? recvResult.value
+            : (emptyPage as Page<BackendReceivableAccount>)
+    const rcptPage =
+        receiptActive && rcptResult.status === "fulfilled"
+            ? rcptResult.value
+            : (emptyPage as Page<BackendCustomerReceipt>)
+    const invPage =
+        invoiceActive && invResult.status === "fulfilled"
+            ? invResult.value
+            : (emptyPage as Page<BackendInvoice>)
+    const receivableSummary =
+        recvResult.status === "fulfilled" ? recvResult.value.summary : undefined
+    const receiptSummary =
+        rcptResult.status === "fulfilled" ? rcptResult.value.summary : undefined
+    const invoiceSummary =
+        invResult.status === "fulfilled" ? invResult.value.summary : undefined
 
     const receivables = (recvPage.items ?? []).map(projectReceivable)
     const partyDisplay = new Map(
@@ -173,14 +155,14 @@ export async function fetchCustomerAccountsList(
         }
     }
 
-    // 金额汇总待后端端点；待复核数量使用服务端筛选总数。
+    // 汇总来自服务端同一授权条件下的全部匹配记录，不合计当前页。
     return {
         view: query.view,
         metrics: {
-            openReceivableTotal: "0.00",
-            overdueReceivableTotal: "0.00",
-            unallocatedReceiptTotal: "0.00",
-            unallocatedInvoiceTotal: "0.00",
+            openReceivableTotal: receivableSummary?.balance_total ?? null,
+            overdueReceivableTotal: receivableSummary?.overdue_total ?? null,
+            unallocatedReceiptTotal: receiptSummary?.balance_total ?? null,
+            unallocatedInvoiceTotal: invoiceSummary?.balance_total ?? null,
         },
         receivables,
         receipts,

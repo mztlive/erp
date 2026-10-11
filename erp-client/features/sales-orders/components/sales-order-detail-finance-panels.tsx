@@ -9,8 +9,6 @@ import {
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import type { SalesOrderDetailActionResult } from "@/features/sales-orders/lib/sales-order-detail-model"
 
-export { ReceivablePanel } from "@/features/sales-orders/components/sales-order-detail-receivable-panel"
-
 export function VersionsPanel({
     order,
     onApprovalResult,
