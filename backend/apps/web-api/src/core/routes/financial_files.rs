@@ -17,6 +17,14 @@ use crate::core::middleware::with_permission;
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
+            "/work-items/{id}/purchase-payment",
+            with_permission(
+                get(financial_files::fulfillment_payment::purchase_payment_summary),
+                rbac,
+                financial_files::fulfillment_payment::purchase_payment_summary_permission_key(),
+            ),
+        )
+        .route(
             "/sales-orders/{id}/invoice-files",
             with_permission(
                 get(financial_files::sales_invoice_files),

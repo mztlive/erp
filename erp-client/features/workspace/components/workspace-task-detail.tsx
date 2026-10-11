@@ -7,7 +7,7 @@ import { usePathname, useSearchParams } from "next/navigation"
 import { ArrowUpRightIcon, FileTextIcon } from "lucide-react"
 
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
-import { PurchasePaymentReceipts } from "@/features/fulfillment-operations/components/purchase-payment-receipts"
+import { WorkspacePurchasePayment } from "./workspace-purchase-payment"
 import { workspaceFulfillmentDescriptor } from "../lib/workspace-fulfillment"
 import { WorkspaceDeliveryBrief } from "./workspace-delivery-brief"
 import { WorkspacePurchaseApproval } from "./workspace-purchase-approval"
@@ -789,10 +789,10 @@ function WorkspaceDocumentTaskDetail({
 
                 {workspaceFulfillmentDescriptor(item)?.role ===
                 "procurement" ? (
-                    <DetailBlock>
-                        <PurchasePaymentReceipts
+                    <DetailBlock compact>
+                        <WorkspacePurchasePayment
+                            key={item.workItemId}
                             workItemId={item.workItemId}
-                            embedded
                         />
                     </DetailBlock>
                 ) : null}

@@ -1,6 +1,7 @@
 "use client"
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { queryKeyRoots } from "@/lib/query-key-roots"
 
 import {
     fetchFulfillmentQueue,
@@ -11,7 +12,7 @@ import {
 } from "@/features/fulfillment-operations/api"
 
 export const fulfillmentKeys = {
-    all: ["fulfillment-operations"] as const,
+    all: queryKeyRoots.fulfillmentOperations,
     queue: (filters: FulfillmentQueueFilters) =>
         [...fulfillmentKeys.all, "queue", filters] as const,
 }

@@ -7,6 +7,7 @@ import {
     FormalActionConfirmDialog,
     MoneyValue,
     SensitiveValue,
+    WorkspaceTaskFooter,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
@@ -86,6 +87,7 @@ export function RequestDetail({
             <RequestDetailContent
                 request={request}
                 embedded={Boolean(task)}
+                showHistory={task?.workItemType !== "DOCUMENT_APPROVAL"}
                 workItemId={scopedWorkItemId}
                 account={
                     isApprovalTask &&
@@ -121,36 +123,38 @@ export function RequestDetail({
                                 approval={approval}
                                 id="ppr-approval-readonly"
                             />
-                            {isApprovalTask && task && (
-                                <ApprovalActionBar
-                                    id="ppr-approval-actions"
-                                    documentType="purchase_payment_request"
-                                    documentId={request.id}
-                                    allowedActions={task.allowedActions}
-                                    workItemId={task.workItemId}
-                                    expectedTaskVersion={task.taskVersion}
-                                    instance={approval.instance}
-                                    definition={approval.definition}
-                                    hiddenActions={[
-                                        "CANCEL",
-                                        "CANCEL_APPROVAL",
-                                        "OPEN_DOCUMENT",
-                                        "VIEW",
-                                    ]}
-                                    decisionContext={{
-                                        documentLabel: request.request_no,
-                                        amountLabel: request.total_amount,
-                                        impactSummary:
-                                            "批准后交由指定出纳按本申请逐单金额付款；驳回结束本次审核并释放未付金额。",
-                                    }}
-                                    onDecisionApplied={onDecisionApplied}
-                                    presentation="workspace"
-                                />
-                            )}
                         </section>
                     ) : null
                 }
             />
+            {isApprovalTask && task && approval && (
+                <WorkspaceTaskFooter>
+                    <ApprovalActionBar
+                        id="ppr-approval-actions"
+                        documentType="purchase_payment_request"
+                        documentId={request.id}
+                        allowedActions={task.allowedActions}
+                        workItemId={task.workItemId}
+                        expectedTaskVersion={task.taskVersion}
+                        instance={approval.instance}
+                        definition={approval.definition}
+                        hiddenActions={[
+                            "CANCEL",
+                            "CANCEL_APPROVAL",
+                            "OPEN_DOCUMENT",
+                            "VIEW",
+                        ]}
+                        decisionContext={{
+                            documentLabel: request.request_no,
+                            amountLabel: request.total_amount,
+                            impactSummary:
+                                "批准后交由指定出纳按本申请逐单金额付款；驳回结束本次审核并释放未付金额。",
+                        }}
+                        onDecisionApplied={onDecisionApplied}
+                        presentation="workspace"
+                    />
+                </WorkspaceTaskFooter>
+            )}
             {!isPaymentTask && (
                 <div className="flex flex-wrap justify-end gap-2">
                     {actions.has("EDIT") && (

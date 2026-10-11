@@ -30,11 +30,13 @@ export function RequestDraftDialog({
     open,
     onOpenChange,
     purchaseOrderId,
+    initialPayableAccountIds,
     request,
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
     purchaseOrderId?: string
+    initialPayableAccountIds?: readonly string[]
     request?: PaymentRequest
 }) {
     const query = usePaymentCandidatesQuery(open)
@@ -87,6 +89,7 @@ export function RequestDraftDialog({
                             candidates={query.data}
                             request={request}
                             purchaseOrderId={purchaseOrderId}
+                            initialPayableAccountIds={initialPayableAccountIds}
                             onClose={() => onOpenChange(false)}
                             onLockChange={setLocked}
                         />
@@ -100,12 +103,14 @@ export function RequestDraftDialog({
 function RequestDraftForm({
     candidates: allCandidates,
     purchaseOrderId,
+    initialPayableAccountIds,
     request,
     onClose,
     onLockChange,
 }: {
     candidates: PaymentCandidate[]
     purchaseOrderId?: string
+    initialPayableAccountIds?: readonly string[]
     request?: PaymentRequest
     onClose: () => void
     onLockChange: (value: boolean) => void
@@ -117,7 +122,9 @@ function RequestDraftForm({
                   item.our_company_id === request.our_company_id,
           )
         : allCandidates
-    const [step, setStep] = useState(purchaseOrderId || request ? 2 : 1)
+    const [step, setStep] = useState(
+        purchaseOrderId || request || initialPayableAccountIds?.length ? 2 : 1,
+    )
     const [saved, setSaved] = useState<PaymentRequest[] | null>(null)
     const { form, unknown, error, recover, pending } = useDraftForm(
         candidates,
@@ -127,6 +134,7 @@ function RequestDraftForm({
             setSaved(rows)
             onLockChange(false)
         },
+        initialPayableAccountIds,
     )
     const [openGroup, setOpenGroup] = useState<string | null>(
         form.state.values.groups[0]?.key ?? null,

@@ -1,5 +1,6 @@
 //! 业务单据关联的财务文件；仅返回文件展示字段，存储位置不进入业务响应。
 
+mod fulfillment_payment;
 use std::collections::{BTreeMap, BTreeSet};
 
 use application_core::AuditActor;
@@ -13,6 +14,7 @@ use erp_fulfillment::repository::FulfillmentExt;
 use erp_identity::SharedRbacService;
 use erp_support::repository::prelude::*;
 use erp_support::{FileAsset, FileAssetExt, SecurityScanStatus};
+pub use fulfillment_payment::{FulfillmentPaymentView, FulfillmentRequestView};
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 use serde::Serialize;

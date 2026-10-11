@@ -1,6 +1,8 @@
 "use client"
 
 import Link from "next/link"
+import { CircleAlertIcon } from "lucide-react"
+import { MoneyValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import {
@@ -12,13 +14,15 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import { useFulfillmentQueueQuery } from "@/features/fulfillment-operations/hooks/queries"
-import { compareDecimal } from "@/lib/fixed-decimal"
+import { compareDecimal, subtractFixed } from "@/lib/fixed-decimal"
+import { cn } from "@/lib/utils"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { workspaceFulfillmentDescriptor } from "../lib/workspace-fulfillment"
 import type { WorkspaceWorkItem } from "../types"
+import { WorkspacePurchasePaymentSummary } from "./workspace-purchase-payment"
 
 const sectionClass =
-    "border-b border-grid px-5 py-5 in-data-[slot=sheet-content]:px-7"
+    "border-b border-grid px-5 py-3 in-data-[slot=sheet-content]:px-7"
 
 export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
     const fields = item.summarySections ?? []
@@ -45,6 +49,12 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
                     <span className="text-sm text-muted-foreground">
                         {lines.length} 项商品 · {pending} 项待发
                     </span>
+                    {workspaceFulfillmentDescriptor(item)?.role ===
+                    "procurement" ? (
+                        <WorkspacePurchasePaymentSummary
+                            workItemId={item.workItemId}
+                        />
+                    ) : null}
                 </div>
                 <p className="num mt-2 text-xs text-muted-foreground">
                     发货批次：{value("履约批次") ?? "未提供"}
@@ -231,18 +241,50 @@ export function WorkspaceDeliveryGate({ item }: { item: WorkspaceWorkItem }) {
         (entry) => entry.action === "POST",
     )
     const blocked = operation?.gate.state === "BLOCKED"
-    const message = query.isPending
-        ? "正在核对发货条件…"
-        : query.isError || !operation
-          ? "发货条件暂不可用，请刷新后核对"
-          : blocked
-            ? "先款条件未满足，暂不能确认发货"
-            : (blocker?.message ?? "可登记发货，提交时将再次核对发货条件")
+    const required = operation?.gate.requiredAmount
+    const paid = operation?.gate.effectivePaidAmount
+    const gap =
+        blocked &&
+        required != null &&
+        paid != null &&
+        compareDecimal(required, paid, 2) > 0
+            ? subtractFixed(required, paid, { maxScale: 2, outputScale: 2 })
+            : null
+    const message = query.isPending ? (
+        "正在核对发货条件…"
+    ) : query.isError || !operation ? (
+        "发货条件暂不可用，请刷新后核对"
+    ) : blocked && gap ? (
+        <span>
+            尚需预付 <MoneyValue value={gap} />
+            ，暂不能确认发货
+        </span>
+    ) : blocked ? (
+        "先款条件未满足，暂不能确认发货"
+    ) : (
+        (blocker?.message ??
+        (operation.gate.state === "NOT_APPLICABLE"
+            ? "按约定可先发货，当前无需预付；提交时将再次核对发货条件"
+            : descriptor?.role === "procurement"
+              ? "预付条件已满足，可登记发货；提交时将再次核对发货条件"
+              : "可登记发货，提交时将再次核对发货条件"))
+    )
     return (
         <div
-            className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-xs text-muted-foreground"
+            className={cn(
+                "flex min-w-0 flex-1 flex-wrap items-center gap-2 text-xs text-muted-foreground",
+                blocked &&
+                    !query.isError &&
+                    "rounded-md bg-warning-soft px-3 py-2 text-warning-soft-foreground",
+            )}
             role="status"
         >
+            {blocked && !query.isError ? (
+                <CircleAlertIcon
+                    className="size-4 shrink-0"
+                    aria-hidden="true"
+                />
+            ) : null}
             <span>{message}</span>
             {query.isError ? (
                 <Button

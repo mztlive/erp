@@ -1,4 +1,5 @@
 //! 财务文件沿业务单据或正式任务绑定读取。
+pub mod fulfillment_payment;
 use application_core::AuditActor;
 use axum::Extension;
 use axum::extract::{Path, State};

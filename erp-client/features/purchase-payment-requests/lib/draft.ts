@@ -123,7 +123,7 @@ export function regroup(
                 ids: [id],
                 account: candidate.payment_recipient?.bank_account_id ?? "",
                 date: defaultRequestDate(),
-                description: "",
+                description: "申请支付采购款",
                 files: [],
             })
     }
@@ -133,11 +133,18 @@ export function draftDefaults(
     candidates: PaymentCandidate[],
     purchaseId?: string,
     request?: PaymentRequest,
+    initialPayableAccountIds?: readonly string[],
 ): DraftValues {
     const ids = request
         ? request.lines.map((line) => line.payable_account_id)
         : candidates
-              .filter((item) => item.purchase_order_id === purchaseId)
+              .filter((item) =>
+                  initialPayableAccountIds?.length
+                      ? initialPayableAccountIds.includes(
+                            item.payable_account_id,
+                        )
+                      : item.purchase_order_id === purchaseId,
+              )
               .map((item) => item.payable_account_id)
     const groups = regroup(ids, candidates, [])
     if (request && groups[0])

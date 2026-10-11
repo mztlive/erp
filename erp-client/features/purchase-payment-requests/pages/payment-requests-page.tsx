@@ -1,8 +1,8 @@
 "use client"
 
 import { useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
-import type { ColumnDef } from "@tanstack/react-table"
 import { ArrowUpRightIcon, PlusIcon, RefreshCwIcon } from "lucide-react"
 import {
     BusinessStatusBadge,
@@ -14,6 +14,7 @@ import {
 import {
     ListWorkSurface,
     ListWorkspaceHeader,
+    ListWorkspaceViews,
     listWorkspaceStyles,
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
@@ -21,96 +22,12 @@ import { Input } from "@/components/ui/input"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { getErrorMessage } from "@/lib/api"
 import { hasPermission } from "@/lib/permissions"
-import { usePaymentRequestsQuery } from "../hooks/queries"
+import { paymentRequestKeys, usePaymentRequestsQuery } from "../hooks/queries"
 import { requestStatusLabel, requestStatusTone } from "../lib/display"
 import type { PaymentRequest } from "../types"
+import { PaymentCandidatesList } from "../components/payment-candidates-list"
+import { requestColumns } from "../components/request-list-columns"
 import { RequestDraftDialog } from "../components/request-draft-dialog"
-
-const columns: ColumnDef<PaymentRequest>[] = [
-    {
-        id: "number",
-        accessorKey: "request_no",
-        header: "申请单号",
-        meta: { label: "申请单号", width: "reference" },
-        cell: ({ row }) => (
-            <span className="num">{row.original.request_no}</span>
-        ),
-    },
-    {
-        id: "supplier",
-        accessorKey: "supplier_name",
-        header: "供应商 / 我方主体",
-        meta: { label: "供应商 / 我方主体", width: "flex" },
-        cell: ({ row }) => (
-            <div>
-                <p className="font-medium">{row.original.supplier_name}</p>
-                <p className="text-xs text-muted-foreground">
-                    {row.original.our_company_name}
-                </p>
-            </div>
-        ),
-    },
-    {
-        id: "applicant",
-        accessorKey: "applicant_name",
-        header: "申请人",
-        meta: { label: "申请人", width: "default" },
-    },
-    {
-        id: "amount",
-        accessorKey: "total_amount",
-        header: "申请金额",
-        meta: {
-            label: "申请金额",
-            width: "amount",
-            align: "end",
-            numeric: true,
-        },
-        cell: ({ row }) => <MoneyValue value={row.original.total_amount} />,
-    },
-    {
-        id: "paid",
-        accessorKey: "paid_amount",
-        header: "有效已付",
-        meta: {
-            label: "有效已付",
-            width: "amount",
-            align: "end",
-            numeric: true,
-        },
-        cell: ({ row }) => <MoneyValue value={row.original.paid_amount} />,
-    },
-    {
-        id: "unpaid",
-        accessorKey: "unpaid_amount",
-        header: "剩余待付",
-        meta: {
-            label: "剩余待付",
-            width: "amount",
-            align: "end",
-            numeric: true,
-        },
-        cell: ({ row }) => <MoneyValue value={row.original.unpaid_amount} />,
-    },
-    {
-        id: "date",
-        accessorKey: "desired_payment_date",
-        header: "希望付款日",
-        meta: { label: "希望付款日", width: "reference", numeric: true },
-    },
-    {
-        id: "status",
-        accessorKey: "status",
-        header: "状态",
-        meta: { label: "状态", width: "status" },
-        cell: ({ row }) => (
-            <BusinessStatusBadge
-                label={requestStatusLabel[row.original.status]}
-                tone={requestStatusTone[row.original.status]}
-            />
-        ),
-    },
-]
 
 export function PaymentRequestsPage({
     purchaseOrderId,
@@ -120,9 +37,17 @@ export function PaymentRequestsPage({
     create?: boolean
 }) {
     const query = usePaymentRequestsQuery()
+    const queryClient = useQueryClient()
     const profile = useAccountProfileQuery()
     const [createOpen, setCreateOpen] = useState(create)
+    const [view, setView] = useState<"effective" | "available" | "draft">(
+        "effective",
+    )
+    const [initialPayableAccountIds, setInitialPayableAccountIds] = useState<
+        string[]
+    >([])
     const [search, setSearch] = useState("")
+    const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 50 })
     const [preview, setPreview] = useState<PaymentRequest | null>(null)
     const canCreate =
         hasPermission(
@@ -133,17 +58,43 @@ export function PaymentRequestsPage({
             profile.data?.permissions,
             "purchase_payment_request:submit",
         )
-    const rows = (query.data ?? []).filter((request) =>
-        [
-            request.request_no,
-            request.supplier_name,
-            request.our_company_name,
-            request.applicant_name,
-            ...request.lines.map((line) => line.purchase_order_no),
-        ]
-            .join(" ")
-            .toLowerCase()
-            .includes(search.trim().toLowerCase()),
+    const isDraft = (request: PaymentRequest) =>
+        ["draft", "rejected", "withdrawn"].includes(request.status)
+    const rows = (query.data ?? []).filter(
+        (request) =>
+            (view === "draft" ? isDraft(request) : !isDraft(request)) &&
+            [
+                request.request_no,
+                request.supplier_name,
+                request.our_company_name,
+                request.applicant_name,
+                ...request.lines.map((line) => line.purchase_order_no),
+            ]
+                .join(" ")
+                .toLowerCase()
+                .includes(search.trim().toLowerCase()),
+    )
+    const views = (
+        <ListWorkspaceViews
+            ariaLabel="付款申请分类"
+            items={(
+                [
+                    ["effective", "有效"],
+                    ["available", "可申请"],
+                    ["draft", "草稿"],
+                ] as const
+            ).map(([value, label]) => ({
+                id: `purchase-payment-requests-view-${value}`,
+                label,
+                active: view === value,
+                onClick: () => {
+                    setView(value)
+                    setSearch("")
+                    setPagination((current) => ({ ...current, pageIndex: 0 }))
+                    setPreview(null)
+                },
+            }))}
+        />
     )
     function closePreview() {
         const id = preview?.id
@@ -167,7 +118,11 @@ export function PaymentRequestsPage({
                 <Button
                     id="purchase-payment-requests-refresh"
                     variant="ghost"
-                    onClick={() => void query.refetch()}
+                    onClick={() =>
+                        void queryClient.invalidateQueries({
+                            queryKey: paymentRequestKeys.all,
+                        })
+                    }
                 >
                     <RefreshCwIcon />
                     刷新
@@ -180,56 +135,100 @@ export function PaymentRequestsPage({
                             ? "当前账号需要采购付款申请的创建和提交权限"
                             : undefined
                     }
-                    onClick={() => setCreateOpen(true)}
+                    onClick={() => {
+                        setInitialPayableAccountIds([])
+                        setCreateOpen(true)
+                    }}
                 >
                     <PlusIcon />
                     新建付款申请
                 </Button>
             </ListWorkspaceHeader>
-            <ListWorkSurface
-                ariaLabel="付款申请列表"
-                toolbar={
-                    <div className="space-y-2 py-3">
-                        <Input
-                            id="purchase-payment-requests-search"
-                            className="max-w-md"
-                            value={search}
-                            placeholder="搜索申请单、供应商、采购单或申请人"
-                            aria-label="搜索付款申请"
-                            onChange={(event) => setSearch(event.target.value)}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                            共 {rows.length} 份申请
-                        </p>
-                    </div>
-                }
-                table={
-                    <>
-                        {query.isError && (
-                            <div
-                                role="alert"
-                                className="py-6 text-sm text-destructive"
-                            >
-                                {getErrorMessage(
-                                    query.error,
-                                    "付款申请查询失败，请刷新后重试",
-                                )}
-                            </div>
-                        )}
-                        <DataTable
-                            idPrefix="purchase-payment-requests-table"
-                            data={rows}
-                            rowCount={rows.length}
-                            columns={columns}
-                            getRowId={(row) => row.id}
-                            onRowPreview={setPreview}
-                            highlightedRowId={preview?.id}
-                            loading={query.isPending}
-                            caption="采购付款申请"
-                        />
-                    </>
-                }
-            />
+            {view === "available" ? (
+                <PaymentCandidatesList
+                    views={views}
+                    canRead={hasPermission(
+                        profile.data?.permissions,
+                        "purchase_payment_request:create",
+                    )}
+                    canCreate={canCreate}
+                    onApply={(ids) => {
+                        setInitialPayableAccountIds(ids)
+                        setCreateOpen(true)
+                    }}
+                />
+            ) : (
+                <ListWorkSurface
+                    key={view}
+                    views={views}
+                    ariaLabel="付款申请列表"
+                    toolbar={
+                        <div className="space-y-2 py-3">
+                            <Input
+                                id="purchase-payment-requests-search"
+                                className="max-w-md"
+                                value={search}
+                                placeholder="搜索申请单、供应商、采购单或申请人"
+                                aria-label="搜索付款申请"
+                                onChange={(event) => {
+                                    setSearch(event.target.value)
+                                    setPagination((current) => ({
+                                        ...current,
+                                        pageIndex: 0,
+                                    }))
+                                }}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                {view === "draft"
+                                    ? "未提交、已驳回和已撤回的申请，可修改后提交。"
+                                    : "已提交的申请及付款记录，包含已关闭申请。"}
+                            </p>
+                        </div>
+                    }
+                    table={
+                        <>
+                            {query.isError && (
+                                <div
+                                    role="alert"
+                                    className="py-6 text-sm text-destructive"
+                                >
+                                    {getErrorMessage(
+                                        query.error,
+                                        "付款申请查询失败，请刷新后重试",
+                                    )}
+                                </div>
+                            )}
+                            <DataTable
+                                idPrefix="purchase-payment-requests-table"
+                                data={rows}
+                                rowCount={rows.length}
+                                columns={requestColumns}
+                                manualPagination={false}
+                                manualSorting={false}
+                                pagination={{
+                                    ...pagination,
+                                    pageIndex: Math.min(
+                                        pagination.pageIndex,
+                                        Math.max(
+                                            0,
+                                            Math.ceil(
+                                                rows.length /
+                                                    pagination.pageSize,
+                                            ) - 1,
+                                        ),
+                                    ),
+                                }}
+                                onPaginationChange={setPagination}
+                                getRowId={(row) => row.id}
+                                onRowPreview={setPreview}
+                                highlightedRowId={preview?.id}
+                                loading={query.isPending}
+                                caption="采购付款申请"
+                            />
+                        </>
+                    }
+                />
+            )}
             <QuickPreviewSheet
                 idPrefix="ppr-list-preview"
                 open={Boolean(preview)}
@@ -318,7 +317,12 @@ export function PaymentRequestsPage({
             <RequestDraftDialog
                 open={createOpen && canCreate}
                 onOpenChange={setCreateOpen}
-                purchaseOrderId={purchaseOrderId}
+                purchaseOrderId={
+                    initialPayableAccountIds.length
+                        ? undefined
+                        : purchaseOrderId
+                }
+                initialPayableAccountIds={initialPayableAccountIds}
             />
         </PageScaffold>
     )

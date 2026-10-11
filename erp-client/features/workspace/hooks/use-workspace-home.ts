@@ -3,6 +3,7 @@
 import * as React from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { queryKeyRoots } from "@/lib/query-key-roots"
 
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
@@ -227,9 +228,16 @@ export function useWorkspaceHome() {
 
     const refresh = React.useCallback(() => {
         void accountProfileQuery.refetch().then((profileResult) => {
-            if (profileResult.isSuccess) void dashboardQuery.refetch()
+            if (!profileResult.isSuccess) return
+            for (const queryKey of [
+                workspaceHomeKeys.all,
+                queryKeyRoots.fulfillmentOperations,
+                queryKeyRoots.supplierPayables,
+            ]) {
+                void queryClient.invalidateQueries({ queryKey })
+            }
         })
-    }, [accountProfileQuery, dashboardQuery])
+    }, [accountProfileQuery, queryClient])
 
     const selected =
         view?.items.find(

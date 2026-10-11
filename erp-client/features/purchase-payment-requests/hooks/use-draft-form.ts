@@ -20,6 +20,7 @@ export function useDraftForm(
     purchaseId: string | undefined,
     request: PaymentRequest | undefined,
     onSaved: (rows: PaymentRequest[]) => void,
+    initialPayableAccountIds?: readonly string[],
 ) {
     const batch = useSubmitRequestBatchMutation()
     const edit = useSaveRequestMutation()
@@ -31,7 +32,12 @@ export function useDraftForm(
     const uploaded = useRef(new Map<File, string>())
     const [unknown, setUnknown] = useState(false)
     const form = useAppForm({
-        defaultValues: draftDefaults(candidates, purchaseId, request),
+        defaultValues: draftDefaults(
+            candidates,
+            purchaseId,
+            request,
+            initialPayableAccountIds,
+        ),
         validators: { onSubmit: draftSchema(candidates) },
         onSubmit: async ({ value }) => {
             if (!command.current) {

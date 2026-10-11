@@ -8,8 +8,6 @@ import {
     ObjectSectionTabsPanel,
 } from "@/components/business/object-section-tabs"
 import { Button } from "@/components/ui/button"
-import { StatusBadge } from "@/components/ui/status-badge"
-import { requestStatusLabel, requestStatusTone } from "../lib/display"
 import type { PaymentRequest } from "../types"
 import { RequestOrderDetails } from "./request-order-details"
 import { RequestMaterials } from "./request-materials"
@@ -58,12 +56,14 @@ export function RequestDetailContent({
     account,
     approval,
     embedded,
+    showHistory = true,
     workItemId,
 }: {
     request: PaymentRequest
     account: ReactNode
     approval: ReactNode
     embedded: boolean
+    showHistory?: boolean
     workItemId?: string
 }) {
     const [section, setSection] = useState("details")
@@ -76,22 +76,6 @@ export function RequestDetailContent({
     return (
         <>
             <section className="space-y-5" aria-label="付款申请摘要">
-                {embedded && (
-                    <div className="flex flex-wrap items-center gap-3">
-                        <h2 className="min-w-0 break-words text-xl font-semibold">
-                            {request.supplier_name}
-                        </h2>
-                        <StatusBadge
-                            label={requestStatusLabel[request.status]}
-                            tone={requestStatusTone[request.status]}
-                        />
-                    </div>
-                )}
-                {embedded && (
-                    <p className="num break-all text-xs text-muted-foreground">
-                        {request.request_no}
-                    </p>
-                )}
                 <dl className="grid grid-cols-2 items-center gap-x-6 gap-y-5 rounded-lg bg-muted/45 px-6 py-6 sm:grid-cols-3 xl:grid-cols-[1.2fr_1fr_1fr_1fr_1.1fr] xl:gap-x-0">
                     <div className="col-span-2 space-y-2 sm:col-span-1 xl:pr-6">
                         <dt className="text-sm text-muted-foreground">
@@ -146,11 +130,15 @@ export function RequestDetailContent({
                         request={request}
                         workItemId={workItemId}
                     />
-                    <RequestPaymentHistory
-                        request={request}
-                        workItemId={workItemId}
-                    />
-                    {approval}
+                    {showHistory && (
+                        <>
+                            <RequestPaymentHistory
+                                request={request}
+                                workItemId={workItemId}
+                            />
+                            {approval}
+                        </>
+                    )}
                 </div>
             ) : (
                 <ObjectSectionTabs

@@ -9,4 +9,5 @@ export const queryKeyRoots = {
     entitySelectors: ["entity-selectors"] as const,
     customerReceivables: ["customer-receivables"] as const,
     supplierPayables: ["supplier-payables"] as const,
+    fulfillmentOperations: ["fulfillment-operations"] as const,
 }

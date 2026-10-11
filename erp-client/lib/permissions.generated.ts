@@ -440,6 +440,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "GET",
+                path: "/admin/work-items/{id}/purchase-payment",
+                description: "查看采购履约付款进度",
+                permission: {
+                    resource: "work_item",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
                 path: "/admin/work-items/{id}/payment-receipts",
                 description: "下载采购履约付款回单",
                 permission: {
