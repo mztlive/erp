@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Spinner } from "@/components/ui/spinner"
+import { ApprovalMaterialFiles } from "@/features/approval-workflow/components/approval-material-files"
 import { useApprovalMaterials } from "@/features/approval-workflow/hooks/use-approval-materials"
 import type { ApprovalMaterials } from "@/features/approval-workflow/api/materials"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -38,8 +39,16 @@ export function WorkspaceInvoiceApproval({
     const review = useInvoiceApprovalReview(instanceId)
     const materials = useApprovalMaterials(instanceId, true)
     const prefix = `workspace-invoice-approval-${toAutomationIdSegment(instanceId)}`
+    const currentBasis = materials.data?.current_sales_basis
+    const showCurrent =
+        currentBasis &&
+        (!materials.data?.display.source_sales?.length ||
+            materials.data.display.source_sales.some(
+                (source) =>
+                    source.revision_id !== currentBasis.source.revision_id,
+            ))
     const preview = (
-        view: "source-sales" | "attachments",
+        view: "source-sales" | "attachments" | "current-source-sales",
         revisionId?: string,
     ) =>
         onPreview({
@@ -65,7 +74,10 @@ export function WorkspaceInvoiceApproval({
                         size="sm"
                         variant="ghost"
                         disabled={review.isFetching}
-                        onClick={() => void review.refetch()}
+                        onClick={() => {
+                            void review.refetch()
+                            void materials.refetch()
+                        }}
                     >
                         <RefreshCwIcon aria-hidden="true" />
                         刷新票款
@@ -84,8 +96,17 @@ export function WorkspaceInvoiceApproval({
                     <CurrentReview data={review.data} />
                 )}
             </section>
-            <section className={sectionClass} aria-label="销售来源与开票依据">
-                <h3 className="text-sm font-semibold">销售来源与开票依据</h3>
+            <details
+                key={instanceId}
+                id={`${prefix}-sales-basis`}
+                className={sectionClass}
+            >
+                <summary
+                    id={`${prefix}-sales-basis-toggle`}
+                    className="cursor-pointer text-sm font-semibold"
+                >
+                    销售来源与开票依据
+                </summary>
                 {materials.isPending ? (
                     <Loading>正在读取提交时销售依据…</Loading>
                 ) : materials.isError ? (
@@ -104,48 +125,60 @@ export function WorkspaceInvoiceApproval({
                                         key={source.revision_id}
                                         source={source}
                                         frozen
-                                    >
-                                        <Button
-                                            id={`${prefix}-sales-${toAutomationIdSegment(source.revision_id)}`}
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() =>
-                                                preview(
-                                                    "source-sales",
-                                                    source.revision_id,
-                                                )
-                                            }
-                                        >
-                                            <FileTextIcon aria-hidden="true" />
-                                            预览提交时销售单
-                                        </Button>
-                                    </Source>
+                                        id={`${prefix}-sales-${toAutomationIdSegment(source.revision_id)}`}
+                                        onOpen={() =>
+                                            preview(
+                                                "source-sales",
+                                                source.revision_id,
+                                            )
+                                        }
+                                    />
                                 ),
                             )
                         ) : (
                             <p className="text-sm text-muted-foreground">
-                                此申请未保存提交时销售来源快照，无法还原当时合同与明细。
+                                本次申请的销售依据按当前生效版本展示。
                             </p>
                         )}
-                        {review.data &&
-                            (!materials.data.display.source_sales?.length ||
-                                materials.data.display.source_sales.some(
-                                    (source) =>
-                                        source.revision_id !==
-                                        review.data.source.revision_id,
-                                )) && (
-                                <Source
-                                    source={review.data.source}
-                                    frozen={false}
-                                />
+                        {showCurrent && (
+                            <Source
+                                source={currentBasis.source}
+                                frozen={false}
+                                id={`${prefix}-current-sales`}
+                                onOpen={() =>
+                                    preview(
+                                        "current-source-sales",
+                                        currentBasis.source.revision_id,
+                                    )
+                                }
+                            />
+                        )}
+                        {!materials.data.display.source_sales?.length &&
+                            !currentBasis && (
+                                <p
+                                    role="alert"
+                                    className="text-sm text-muted-foreground"
+                                >
+                                    {materials.data.current_sales_basis_error ??
+                                        "销售依据暂不可读取，请刷新后重试。"}
+                                </p>
                             )}
                     </>
                 )}
-            </section>
-            <section className={sectionClass} aria-label="合同与提交凭证">
-                <header className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="text-sm font-semibold">合同与提交凭证</h3>
-                    {materials.data?.attachments.length ? (
+            </details>
+            <details
+                key={`${instanceId}-materials`}
+                id={`${prefix}-materials`}
+                className={sectionClass}
+            >
+                <summary
+                    id={`${prefix}-materials-toggle`}
+                    className="cursor-pointer text-sm font-semibold"
+                >
+                    合同与提交凭证
+                </summary>
+                {materials.data?.attachments.length ? (
+                    <div className="flex justify-end">
                         <Button
                             id={`${prefix}-attachments`}
                             size="sm"
@@ -155,36 +188,44 @@ export function WorkspaceInvoiceApproval({
                             <FileTextIcon aria-hidden="true" />
                             预览材料（{materials.data.attachments.length}）
                         </Button>
-                    ) : null}
-                </header>
-                {materials.data ? (
-                    materials.data.attachments.length ? (
-                        <ul className="space-y-1 text-sm text-muted-foreground">
-                            {materials.data.attachments.map((file) => (
-                                <li
-                                    key={file.file_asset_id}
-                                    className="break-words"
-                                >
-                                    {file.file_name}
-                                </li>
-                            ))}
-                        </ul>
-                    ) : (
-                        <p className="text-sm text-muted-foreground">
-                            本次提交未保存可预览的合同或凭证，请联系申请人补充核对依据。
+                    </div>
+                ) : null}
+                {materials.data?.attachments.length ? (
+                    <ApprovalMaterialFiles
+                        instanceId={instanceId}
+                        attachments={materials.data.attachments}
+                        idPrefix={`${prefix}-submitted-file`}
+                    />
+                ) : null}
+                {currentBasis &&
+                (showCurrent || !materials.data?.attachments.length) ? (
+                    <div className="space-y-2">
+                        <p className="text-xs text-muted-foreground">
+                            来源销售单 · V{currentBasis.source.revision_no} ·
+                            当前生效版本
                         </p>
-                    )
-                ) : (
+                        <ApprovalMaterialFiles
+                            instanceId={instanceId}
+                            attachments={currentBasis.attachments}
+                            sourceRevisionId={currentBasis.source.revision_id}
+                            idPrefix={`${prefix}-current-file`}
+                            emptyMessage={
+                                currentBasis.unavailable_reason ??
+                                "此销售版本未关联可读取的合同或凭证，请联系销售核对归档资料。"
+                            }
+                        />
+                    </div>
+                ) : !materials.data?.attachments.length ? (
                     <p className="text-sm text-muted-foreground">
-                        {materials.isError
-                            ? "材料读取失败，请在上方重试。"
-                            : "正在读取材料…"}
+                        {materials.isPending
+                            ? "正在读取销售合同与凭证…"
+                            : "销售合同与凭证读取失败，请刷新后重试。"}
                     </p>
-                )}
+                ) : null}
                 <p className="text-xs text-muted-foreground">
                     付款条件不等同于开票时点；请结合合同约定核对。审批通过后生成开票任务，实际登记发票后才计入已开票金额。
                 </p>
-            </section>
+            </details>
         </>
     )
 }
@@ -313,28 +354,36 @@ function CurrentReview({ data }: { data: InvoiceApprovalReview }) {
 function Source({
     source,
     frozen,
-    children,
+    id,
+    onOpen,
 }: {
     source: NonNullable<ApprovalMaterials["display"]["source_sales"]>[number]
     frozen: boolean
-    children?: ReactNode
+    id: string
+    onOpen: () => void
 }) {
     return (
         <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-medium">
+                <Button
+                    id={id}
+                    variant="link"
+                    className="h-auto max-w-full whitespace-normal p-0 text-left text-sm font-medium"
+                    onClick={onOpen}
+                >
+                    <FileTextIcon aria-hidden="true" />
                     {displayBusinessText(
                         source.document_no,
                         source.document_id,
                     ) || "销售单号未记录"}{" "}
                     · V{source.revision_no}
-                </p>
-                {children}
+                    <span className="text-xs font-normal">查看销售单</span>
+                </Button>
             </div>
             <p className="text-xs text-muted-foreground">
                 {frozen
                     ? "申请提交时锁定的销售版本"
-                    : "当前生效销售版本，仅供当前核对，不代表提交时资料"}
+                    : "当前生效销售版本，点击单号查看完整明细与合同凭证"}
             </p>
             <dl className="grid gap-x-6 gap-y-3 @min-[640px]/document:grid-cols-2">
                 <Fact label="销售客户">
@@ -367,7 +416,7 @@ function Source({
             {source.source.more_count > 0 && (
                 <p className="text-xs text-muted-foreground">
                     另有 {source.source.more_count} 行未在摘要中展开
-                    {frozen ? "，请预览完整销售单核对" : ""}。
+                    ，请查看完整销售单核对。
                 </p>
             )}
         </div>

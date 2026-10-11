@@ -6,6 +6,7 @@ use persistence_core::{Executor, NoTransaction};
 use super::{IdempotencyStoreInput, SalesSelectionService};
 use crate::dto::sales_selection::{
     CreateSalesSelectionBookletRequest, PrepareSalesSelectionRequest, SalesSelectionBookletView,
+    SelectionBookletCreator,
 };
 use crate::entity::sales_selection::{
     IdempotencyOperation, PoolSource, SalesSelectionBooklet, SalesSelectionBookletData,
@@ -24,7 +25,7 @@ impl SalesSelectionService {
     ///
     /// # 参数
     /// * `req` - 创建请求
-    /// * `actor_id` - 创建人
+    /// * `creator` - 已认证创建人及其有效主属组织
     /// * `password_hash` - 事务外生成的慢哈希
     /// * `fingerprint` - 组合层对完整原请求生成的带密钥指纹
     /// * `customer_port` - 客户事实
@@ -38,12 +39,13 @@ impl SalesSelectionService {
     pub async fn create(
         &self,
         req: CreateSalesSelectionBookletRequest,
-        actor_id: &str,
+        creator: &SelectionBookletCreator,
         password_hash: String,
         fingerprint: SelectionRequestFingerprint,
         customer_port: &dyn SelectionCustomerPort,
         executor: &mut dyn Executor,
     ) -> Result<SalesSelectionBookletView> {
+        let actor_id = creator.user_id.as_str();
         let key = normalize_idempotency_key(&req.idempotency_key)?;
         let hash = fingerprint.as_str();
         if let Some(replay) =
@@ -56,7 +58,7 @@ impl SalesSelectionService {
             return Err(Error::ValidationError("客户已停用，不能创建选品册".into()));
         }
         let booklet_id = SalesSelectionBookletId::new(id_generator::next_id());
-        let booklet = create_booklet(booklet_id.clone(), req, customer, actor_id, password_hash)?;
+        let booklet = create_booklet(booklet_id.clone(), req, customer, creator, password_hash)?;
         self.db.sales_selection_booklets().create(&booklet, executor).await?;
         let view = self
             .enqueue_prepare(
@@ -226,7 +228,7 @@ fn create_booklet(
     id: SalesSelectionBookletId,
     req: CreateSalesSelectionBookletRequest,
     customer: SelectionCustomerFact,
-    actor_id: &str,
+    creator: &SelectionBookletCreator,
     password_hash: String,
 ) -> Result<SalesSelectionBooklet> {
     let pool_source = PoolSource::new(
@@ -254,8 +256,8 @@ fn create_booklet(
             customer_id: CustomerAccountId::new(customer.id),
             customer_no: customer.customer_no,
             customer_name: customer.display_name,
-            sales_owner_user_id: req.sales_owner_user_id,
-            business_org_unit_id: req.business_org_unit_id,
+            sales_owner_user_id: creator.user_id.clone(),
+            business_org_unit_id: creator.business_org_unit_id.clone(),
             form: req.form,
             submit_mode: req.submit_mode,
             access_password_hash: Some(password_hash),
@@ -263,7 +265,7 @@ fn create_booklet(
             voucher_count: req.voucher_count,
             pool_source,
             tiers,
-            created_by: actor_id.to_string(),
+            created_by: creator.user_id.clone(),
         },
     )
     .map_err(|error| Error::ValidationError(error.to_string()))
@@ -272,11 +274,80 @@ fn create_booklet(
 #[cfg(test)]
 mod tests {
     use serde::Serialize;
-    use serde_json::json;
+    use serde_json::{Value, json};
 
     use super::*;
     use crate::dto::sales_selection::SalesSelectionPasswordRequest;
     use crate::entity::sales_selection::{LinkTokenCrypto, SelectionForm, SubmitMode, request_hash};
+
+    fn creation_request() -> Value {
+        json!({
+            "idempotency_key": "create-current-actor",
+            "customer_id": "customer",
+            "selection_form": "SINGLE_SKU",
+            "submit_mode": "BY_QUANTITY",
+            "access_password": "selection-password",
+            "source_kind": "FILTER",
+            "filter": {}
+        })
+    }
+
+    fn booklet_from_request(
+        request: Value,
+        creator: &SelectionBookletCreator,
+    ) -> Result<SalesSelectionBooklet> {
+        create_booklet(
+            SalesSelectionBookletId::new("book"),
+            serde_json::from_value(request).unwrap(),
+            SelectionCustomerFact {
+                id: "customer".into(),
+                customer_no: "C001".into(),
+                display_name: "测试客户".into(),
+                active: true,
+            },
+            creator,
+            "password-hash".into(),
+        )
+    }
+
+    #[test]
+    fn create_binds_authenticated_creator_without_client_ownership() {
+        let creator = SelectionBookletCreator {
+            user_id: "current-operator".into(),
+            business_org_unit_id: "current-org".into(),
+        };
+        let request = creation_request();
+        let book = booklet_from_request(request.clone(), &creator).unwrap();
+        assert_eq!(book.sales_owner_user_id, creator.user_id);
+        assert_eq!(book.created_by, creator.user_id);
+        assert_eq!(book.business_org_unit_id, creator.business_org_unit_id);
+
+        let mut forged = request.clone();
+        forged["sales_owner_user_id"] = json!("another-person");
+        forged["business_org_unit_id"] = json!("another-org");
+        let book = booklet_from_request(forged.clone(), &creator).unwrap();
+        assert_eq!(book.sales_owner_user_id, creator.user_id);
+        assert_eq!(book.created_by, creator.user_id);
+        assert_eq!(book.business_org_unit_id, creator.business_org_unit_id);
+
+        let crypto = LinkTokenCrypto::from_secret(b"test-secret");
+        let clean: CreateSalesSelectionBookletRequest = serde_json::from_value(request).unwrap();
+        let forged: CreateSalesSelectionBookletRequest = serde_json::from_value(forged).unwrap();
+        assert_eq!(
+            crypto.request_fingerprint(IdempotencyOperation::Create, &clean).unwrap().as_str(),
+            crypto.request_fingerprint(IdempotencyOperation::Create, &forged).unwrap().as_str()
+        );
+    }
+
+    #[test]
+    fn create_rejects_missing_server_ownership() {
+        for (user, org, message) in [("", "org", "创建人不能为空"), ("operator", "", "业务组织不能为空")]
+        {
+            let creator = SelectionBookletCreator { user_id: user.into(), business_org_unit_id: org.into() };
+            let error = booklet_from_request(creation_request(), &creator).unwrap_err();
+            assert!(error.to_string().contains(message), "{error}");
+        }
+    }
 
     fn assert_sensitive_record<T: Serialize>(
         operation: IdempotencyOperation,
@@ -314,8 +385,6 @@ mod tests {
         let req = CreateSalesSelectionBookletRequest {
             idempotency_key: "same-key".into(),
             customer_id: "customer".into(),
-            sales_owner_user_id: "sales".into(),
-            business_org_unit_id: "department".into(),
             form: SelectionForm::SingleSku,
             submit_mode: SubmitMode::ByQuantity,
             access_password: "original-create-password".into(),

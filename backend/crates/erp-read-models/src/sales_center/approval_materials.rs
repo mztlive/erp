@@ -1,4 +1,4 @@
-//! 审批实例授权后读取同一销售提交的完整单据，不读取当前草稿或最新版本。
+//! 审批实例授权后读取冻结提交；开票申请另列唯一来源的当前生效销售依据。
 
 use application_core::AuditActor;
 use erp_core::ids::{SalesOrderId, SalesOrderSubmissionId};
@@ -16,6 +16,7 @@ use serde::Serialize;
 
 use super::approval_source_sales::{ApprovalSourceSalesOrder, source_sales_orders};
 use crate::purchase_center::approval_materials::{ApprovalPurchaseLine, purchase_lines};
+use crate::workbench::{InvoiceSalesBasis, optional_sales_basis};
 use crate::{Error, Result};
 
 /// 审批资料及可选的完整销售提交；保留原资料接口字段。
@@ -26,13 +27,15 @@ pub struct ApprovalDocumentMaterials {
     pub sales_order: Option<SubmissionView>,
     pub purchase_lines: Option<Vec<ApprovalPurchaseLine>>,
     pub source_sales_orders: Vec<ApprovalSourceSalesOrder>,
+    pub current_sales_basis: Option<InvoiceSalesBasis>,
+    pub current_sales_basis_error: Option<String>,
 }
 
 /// 在实例读取授权后装载精确销售提交，不授予普通销售单读取资格。
 /// # 参数
 /// 数据库、审批运行服务、当前账号与精确审批实例 ID。
 /// # 返回
-/// 原冻结资料及销售审批对应的全部提交明细；其他类型不附加销售单。
+/// 原冻结资料及完整提交明细；开票审批另列当前销售资料，不覆盖提交内容。
 /// # 错误
 /// 实例未授权、原资料缺失、销售提交缺失或身份及明细不匹配时拒绝。
 pub async fn materials<A: WorkflowAuthorizationPort>(
@@ -53,7 +56,16 @@ pub async fn materials<A: WorkflowAuthorizationPort>(
         None
     };
     let source_sales_orders = source_sales_orders(db, &materials).await?;
-    Ok(ApprovalDocumentMaterials { materials, sales_order, purchase_lines, source_sales_orders })
+    let (current_sales_basis, current_sales_basis_error) = optional_sales_basis(db, &materials).await?;
+    runtime.materials(actor, instance_id).await?;
+    Ok(ApprovalDocumentMaterials {
+        materials,
+        sales_order,
+        purchase_lines,
+        source_sales_orders,
+        current_sales_basis,
+        current_sales_basis_error,
+    })
 }
 
 async fn sales_submission(db: &Database, materials: &ApprovalMaterialsView) -> Result<SubmissionView> {

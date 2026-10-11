@@ -12,7 +12,13 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { MetricItem, MetricStrip, MoneyValue } from "@/components/business"
+import {
+    BusinessStatusBadge,
+    MetricItem,
+    MetricStrip,
+    MoneyValue,
+} from "@/components/business"
+import type { StatusTone } from "@/components/ui/status-badge"
 import { ApprovalReadonly } from "@/features/approval-workflow/components/approval-readonly"
 import {
     mapDocumentApprovalViewDto,
@@ -27,6 +33,13 @@ import {
     useInvoiceRequestPermissions,
 } from "../hooks/queries"
 import { cancelRequest, requestStatusLabels, type InvoiceRequest } from "../api"
+
+const requestStatusTones: Record<InvoiceRequest["status"], StatusTone> = {
+    draft: "neutral",
+    in_approval: "warning",
+    approved: "info",
+    completed: "success",
+}
 
 function textOrDash(value?: string | null): string {
     const text = value?.trim()
@@ -87,11 +100,13 @@ export function InvoiceRequestDetail({
     onBack,
     onEdit,
     presentation = "inline",
+    currentSalesOrderId,
 }: {
     id: string
     onBack: () => void
     onEdit: (request: InvoiceRequest) => void
     presentation?: "inline" | "dialog"
+    currentSalesOrderId?: string
 }) {
     const [closeBlocked, setCloseBlocked] = useState(false)
     const content = (
@@ -100,6 +115,7 @@ export function InvoiceRequestDetail({
             onBack={onBack}
             onEdit={onEdit}
             showBack={presentation === "inline"}
+            currentSalesOrderId={currentSalesOrderId}
             onCloseBlockedChange={setCloseBlocked}
         />
     )
@@ -132,12 +148,14 @@ function InvoiceRequestDetailBody({
     onBack,
     onEdit,
     showBack,
+    currentSalesOrderId,
     onCloseBlockedChange,
 }: {
     id: string
     onBack: () => void
     onEdit: (request: InvoiceRequest) => void
     showBack: boolean
+    currentSalesOrderId?: string
     onCloseBlockedChange: (blocked: boolean) => void
 }) {
     const query = useInvoiceRequest(id)
@@ -181,10 +199,20 @@ function InvoiceRequestDetailBody({
                     <h2 className="break-all text-lg font-semibold">
                         {request.request_no || "开票申请"}
                     </h2>
-                    <p className="text-sm text-muted-foreground">
-                        {request.sales_order_no || "—"} · {facts.title} ·{" "}
-                        {requestStatusLabels[request.status] ?? "审批中"}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                        <span>
+                            {request.sales_order_no || "—"} · {facts.title}
+                        </span>
+                        <BusinessStatusBadge
+                            context="detail"
+                            label={
+                                requestStatusLabels[request.status] ?? "审批中"
+                            }
+                            tone={
+                                requestStatusTones[request.status] ?? "warning"
+                            }
+                        />
+                    </div>
                 </div>
                 {showBack ? (
                     <Button
@@ -229,17 +257,20 @@ function InvoiceRequestDetailBody({
                 />
             ) : null}
             <div className="flex flex-wrap gap-2">
-                <Button
-                    id="invoice-request-source"
-                    variant="outline"
-                    render={
-                        <Link
-                            href={`/sales/orders/${encodeURIComponent(request.sales_order_id)}?section=invoice`}
-                        />
-                    }
-                >
-                    查看销售单
-                </Button>
+                {request.sales_order_id &&
+                request.sales_order_id !== currentSalesOrderId ? (
+                    <Button
+                        id="invoice-request-source"
+                        variant="outline"
+                        render={
+                            <Link
+                                href={`/sales/orders/${encodeURIComponent(request.sales_order_id)}?section=invoice`}
+                            />
+                        }
+                    >
+                        查看销售单
+                    </Button>
+                ) : null}
                 {request.work_item_id && request.status === "approved" ? (
                     <Button
                         id="invoice-request-open-task"

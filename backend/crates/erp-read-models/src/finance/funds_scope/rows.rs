@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 use erp_core::money::Amount;
+use erp_finance::entity::receivable::InvoiceRequestData;
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, ReceivableExt};
 use erp_procurement::repository::PurchaseOrderExt;
@@ -199,6 +200,10 @@ pub struct ScopedInvoiceRequestRow {
     pub handler_user_id: Option<String>,
     /// 申请金额；部分授权仍返回本行申请金额（行级事实），整单汇总为 null 由汇总视图承担。
     pub amount: Amount,
+    /// 申请保存的开票资料；列表与详情均返回原申请快照，不使用当前主体档案替换。
+    pub data: InvoiceRequestData,
+    /// 已使用的申请额度；实际开票后增加，批准申请本身不增加。
+    pub invoiced_amount: Amount,
     /// 部分受限时为 true。
     pub permission_limited: bool,
     /// 关联销售单当前负责人。
@@ -891,6 +896,14 @@ mod tests {
                 applicant_user_id: "applicant-1".into(),
                 handler_user_id: Some("handler-1".into()),
                 amount: zero_amount(),
+                data: InvoiceRequestData {
+                    amount: zero_amount(),
+                    invoice_title: "申请抬头".into(),
+                    tax_number: "申请税号".into(),
+                    invoice_content: "办公用品".into(),
+                    reason: "按合同申请开票".into(),
+                },
+                invoiced_amount: zero_amount(),
                 permission_limited: false,
                 sales_owner_user_id: Some("sales-1".into()),
                 business_org_unit_id: Some("org-1".into()),

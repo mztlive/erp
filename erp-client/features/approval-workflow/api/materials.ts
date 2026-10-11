@@ -9,6 +9,15 @@ export type ApprovalMaterials = {
         document_no: string
         revision: ApprovalSalesRevision
     }[]
+    current_sales_basis_error?: string | null
+    current_sales_basis?: {
+        source: NonNullable<
+            ApprovalMaterials["display"]["source_sales"]
+        >[number]
+        sales_order: { document_no: string; revision: ApprovalSalesRevision }
+        attachments: ApprovalMaterials["attachments"]
+        unavailable_reason: string | null
+    } | null
     subject_version: number
     document_type: string
     document_id: string
@@ -115,14 +124,15 @@ const materialsPath = (instanceId: string) =>
     `/admin/approval-instances/${encodeURIComponent(instanceId)}/materials`
 
 export const fetchApprovalMaterials = (instanceId: string) =>
-    apiGet<ApprovalMaterials>(materialsPath(instanceId))
+    apiGet<ApprovalMaterials>(materialsPath(instanceId), { cache: "no-store" })
 
 export const fetchApprovalMaterialPreview = (
     instanceId: string,
     assetId: string,
+    sourceRevisionId?: string,
 ) =>
     apiGetBlob(
-        `${materialsPath(instanceId)}/${encodeURIComponent(assetId)}/preview`,
+        materialContentPath(instanceId, assetId, "preview", sourceRevisionId),
         { timeoutMs: 30_000, cache: "no-store" },
     )
 
@@ -131,9 +141,10 @@ export async function downloadApprovalMaterial(
     instanceId: string,
     assetId: string,
     fileName: string,
+    sourceRevisionId?: string,
 ): Promise<void> {
     const blob = await apiGetBlob(
-        `${materialsPath(instanceId)}/${encodeURIComponent(assetId)}/download`,
+        materialContentPath(instanceId, assetId, "download", sourceRevisionId),
         { timeoutMs: 30_000, cache: "no-store" },
     )
     const url = URL.createObjectURL(blob)
@@ -161,4 +172,16 @@ export type ApprovalSalesRevision = Omit<
     effective_at: number
     voucher_category_sku_id: string | null
     commercial_lines: ApprovalSalesSubmission["lines"]
+}
+
+function materialContentPath(
+    instanceId: string,
+    assetId: string,
+    action: "preview" | "download",
+    sourceRevisionId?: string,
+) {
+    const query = sourceRevisionId
+        ? `?${new URLSearchParams({ source_revision_id: sourceRevisionId })}`
+        : ""
+    return `${materialsPath(instanceId)}/${encodeURIComponent(assetId)}/${action}${query}`
 }

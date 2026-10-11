@@ -16,6 +16,7 @@ import { usePurchaseOrderCenterQuery } from "@/features/purchase-orders/hooks/qu
 import { SalesOrderPaperDocument } from "@/features/sales-orders/components/sales-order-paper-dialog"
 import { useSalesOrderDetailQuery } from "@/features/sales-orders/hooks/queries"
 import { type WorkspacePaperKind } from "@/features/workspace/lib/paper-kind"
+import { ApprovalCurrentSalesMaterials } from "@/features/approval-workflow/components/approval-current-sales-materials"
 import { ApprovalSubmittedMaterials } from "@/features/approval-workflow/components/approval-submitted-materials"
 import { XIcon } from "lucide-react"
 
@@ -23,7 +24,11 @@ export type WorkspacePaperTarget = Readonly<{
     kind: WorkspacePaperKind | "approval_snapshot"
     objectId: string
     title?: string
-    materialsView?: "all" | "source-sales" | "attachments"
+    materialsView?:
+        | "all"
+        | "source-sales"
+        | "attachments"
+        | "current-source-sales"
     sourceRevisionId?: string
 }>
 
@@ -49,22 +54,26 @@ export function WorkspaceDocumentPaperDialog({
                 className="flex max-h-[min(96vh,56rem)] w-full max-w-[calc(100%-1.5rem)] flex-col gap-0 overflow-hidden border-0 bg-transparent p-0 shadow-none ring-0 sm:max-w-5xl dark:ring-0"
             >
                 <DialogTitle className="sr-only">
-                    {target?.materialsView === "source-sales"
-                        ? "销售单预览"
-                        : target?.materialsView === "attachments"
-                          ? "合同、凭证及附件"
-                          : target?.title
-                            ? `${target.title} ${target.kind === "approval_snapshot" ? "提交资料" : "纸质预览"}`
-                            : "单据纸质预览"}
+                    {target?.materialsView === "current-source-sales"
+                        ? "当前生效销售单预览"
+                        : target?.materialsView === "source-sales"
+                          ? "销售单预览"
+                          : target?.materialsView === "attachments"
+                            ? "合同、凭证及附件"
+                            : target?.title
+                              ? `${target.title} ${target.kind === "approval_snapshot" ? "提交资料" : "纸质预览"}`
+                              : "单据纸质预览"}
                 </DialogTitle>
                 <DialogDescription className="sr-only">
-                    {target?.materialsView === "source-sales"
-                        ? "本次审批锁定的完整来源销售单及允许读取的附件。"
-                        : target?.materialsView === "attachments"
-                          ? "本次审批允许读取的合同、业务凭证及附件。"
-                          : target?.kind === "approval_snapshot"
-                            ? "此次审批提交时保留的单据及附件，销售单包含全部提交明细，按当前审批访问资格读取。"
-                            : "系统业务数据的打印件；金额与状态以系统记录为准。版本、附件和关联单据仍在对应工作面查看。"}
+                    {target?.materialsView === "current-source-sales"
+                        ? "当前生效销售版本的完整明细与合同凭证。"
+                        : target?.materialsView === "source-sales"
+                          ? "本次审批锁定的完整来源销售单及允许读取的附件。"
+                          : target?.materialsView === "attachments"
+                            ? "本次审批允许读取的合同、业务凭证及附件。"
+                            : target?.kind === "approval_snapshot"
+                              ? "此次审批提交时保留的单据及附件，销售单包含全部提交明细，按当前审批访问资格读取。"
+                              : "系统业务数据的打印件；金额与状态以系统记录为准。版本、附件和关联单据仍在对应工作面查看。"}
                     按 Esc 或点击遮罩关闭。
                 </DialogDescription>
 
@@ -86,11 +95,23 @@ export function WorkspaceDocumentPaperDialog({
                     </DialogClose>
 
                     <div className="max-h-[min(96vh,56rem)] overflow-y-auto overscroll-contain">
-                        {target?.kind === "approval_snapshot" ? (
+                        {target?.kind === "approval_snapshot" &&
+                        target.materialsView === "current-source-sales" ? (
+                            <ApprovalCurrentSalesMaterials
+                                instanceId={target.objectId}
+                                revisionId={target.sourceRevisionId}
+                                enabled={open}
+                            />
+                        ) : target?.kind === "approval_snapshot" ? (
                             <ApprovalSubmittedMaterials
                                 instanceId={target.objectId}
                                 enabled={open}
-                                view={target.materialsView}
+                                view={
+                                    target.materialsView ===
+                                    "current-source-sales"
+                                        ? "source-sales"
+                                        : target.materialsView
+                                }
                                 sourceRevisionId={target.sourceRevisionId}
                             />
                         ) : target ? (

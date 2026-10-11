@@ -14,7 +14,6 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Textarea } from "@/components/ui/textarea"
 import { fetchCustomerAcceptanceWorkspace } from "@/features/sales-orders/api/acceptance"
@@ -47,7 +46,6 @@ export function SalesOrderHandoverButton({
 }) {
     const [open, setOpen] = React.useState(false)
     const [targetUserId, setTargetUserId] = React.useState("")
-    const [orgUnitId, setOrgUnitId] = React.useState("")
     const [reason, setReason] = React.useState("")
     const [idempotencyKey, setIdempotencyKey] = React.useState("")
     const [confirmError, setConfirmError] = React.useState<string | null>(null)
@@ -90,7 +88,6 @@ export function SalesOrderHandoverButton({
                 variant="outline"
                 onClick={() => {
                     setTargetUserId("")
-                    setOrgUnitId("")
                     setReason("")
                     setConfirmError(null)
                     setIdempotencyKey(
@@ -187,23 +184,6 @@ export function SalesOrderHandoverButton({
                         </div>
                         <div className="space-y-2">
                             <label
-                                htmlFor={`sales-orders-detail-handover-org-${orderSegment}`}
-                                className="text-sm font-medium"
-                            >
-                                目标业务组织（留空保留原组织）
-                            </label>
-                            <Input
-                                id={`sales-orders-detail-handover-org-${orderSegment}`}
-                                value={orgUnitId}
-                                onChange={(event) =>
-                                    setOrgUnitId(event.target.value)
-                                }
-                                placeholder="组织 ID，留空保留原组织"
-                                disabled={handoverMutation.isPending}
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <label
                                 htmlFor={`sales-orders-detail-handover-reason-${orderSegment}`}
                                 className="text-sm font-medium"
                             >
@@ -252,8 +232,6 @@ export function SalesOrderHandoverButton({
                                         expectedVersion:
                                             order.lockVersion || order.version,
                                         targetOwnerUserId: targetUserId.trim(),
-                                        targetBusinessOrgUnitId:
-                                            orgUnitId.trim() || undefined,
                                         reason: reason.trim(),
                                         idempotencyKey,
                                     })

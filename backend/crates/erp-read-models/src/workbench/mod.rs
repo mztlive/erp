@@ -24,6 +24,8 @@ mod operational_brief;
 mod owner_qualification;
 mod party_names;
 mod payment_request;
+pub use invoice_review::materials::invoice_sales_reference;
+pub(crate) use invoice_review::materials::{InvoiceSalesBasis, optional_sales_basis};
 pub use invoice_review::{InvoiceApprovalReview, invoice_approval_review};
 mod presentation;
 mod purchase_review_brief;

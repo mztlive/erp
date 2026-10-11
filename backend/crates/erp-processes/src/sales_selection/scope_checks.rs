@@ -22,7 +22,7 @@ use super::adapters::{CatalogAdapter, ImageAdapter};
 use super::{SelectionBookletListView, SelectionProposalListView};
 use crate::{Error, Result};
 
-/// 校验创建责任在创建动作范围内；提交人不成为负责人。
+/// 校验认证创建人及其主属组织在创建动作范围内。
 ///
 /// # 参数
 /// * `access` - 选品范围访问器

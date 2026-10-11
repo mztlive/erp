@@ -280,10 +280,6 @@ export type CreateBookInput = {
     per_person_budget?: string
     voucher_count?: number
     customer_id: string
-    /** 显式销售负责人；必填，客户提交人不成为负责人。 */
-    sales_owner_user_id: string
-    /** 业务组织；必填，取负责人有效主属组织。 */
-    business_org_unit_id: string
     selection_form: SelectionForm
     submit_mode: SubmitMode
     source_kind: PoolSourceKind

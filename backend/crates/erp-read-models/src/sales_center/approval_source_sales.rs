@@ -9,7 +9,7 @@ use erp_sales::service::sales_order::mapper::revision_view;
 use erp_workflow::entity::approval_integration::display_snapshot::ApprovalRelatedSalesSnapshot;
 use erp_workflow::service::approval::execution::runtime_service::ApprovalMaterialsView;
 use mongodb::Database;
-use persistence_core::NoTransaction;
+use persistence_core::{Executor, NoTransaction};
 use serde::Serialize;
 
 use crate::{Error, Result};
@@ -38,16 +38,28 @@ pub(super) async fn source_sales_orders(
     {
         return Ok(vec![]);
     }
+    sources(db, allowed, &mut NoTransaction).await
+}
+
+/// 读取已由调用方证明来源关系的精确销售版本。
+/// # 参数
+/// 数据库、允许的版本及同一读取事务。
+/// # 返回
+/// 按来源顺序返回完整版本。
+/// # 错误
+/// 版本、单据或明细不匹配时拒绝。
+pub(crate) async fn sources(
+    db: &Database,
+    allowed: &[ApprovalRelatedSalesSnapshot],
+    executor: &mut dyn Executor,
+) -> Result<Vec<ApprovalSourceSalesOrder>> {
     let ids = allowed.iter().map(|source| source.revision_id.clone()).collect::<Vec<_>>();
-    let revisions = db.sales_order_revisions().find_revisions_by_ids(&ids, &mut NoTransaction).await?;
+    let revisions = db.sales_order_revisions().find_revisions_by_ids(&ids, executor).await?;
     let lines = db
         .sales_order_revision_lines()
-        .list_lines_by_revisions(
-            &ids.iter().map(SalesOrderRevisionId::new).collect::<Vec<_>>(),
-            &mut NoTransaction,
-        )
+        .list_lines_by_revisions(&ids.iter().map(SalesOrderRevisionId::new).collect::<Vec<_>>(), executor)
         .await?;
-    let commercial = commercial_lines(db, &lines).await?;
+    let commercial = commercial_lines(db, &lines, executor).await?;
     allowed
         .iter()
         .map(|source| {
@@ -92,14 +104,12 @@ fn source_view(
 async fn commercial_lines(
     db: &Database,
     lines: &[SalesOrderRevisionLine],
+    executor: &mut dyn Executor,
 ) -> Result<Vec<SalesOrderWorkingCopyLineView>> {
     let ids = lines.iter().map(|line| SalesOrderRevisionLineId::new(&line.base.id)).collect::<Vec<_>>();
-    let goods = db
-        .sales_order_goods_service_line_revisions()
-        .list_by_revision_line_ids(&ids, &mut NoTransaction)
-        .await?;
-    let vouchers =
-        db.sales_order_voucher_line_revisions().list_by_revision_line_ids(&ids, &mut NoTransaction).await?;
+    let goods =
+        db.sales_order_goods_service_line_revisions().list_by_revision_line_ids(&ids, executor).await?;
+    let vouchers = db.sales_order_voucher_line_revisions().list_by_revision_line_ids(&ids, executor).await?;
     lines
         .iter()
         .map(|line| {

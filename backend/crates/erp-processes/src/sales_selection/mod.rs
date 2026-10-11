@@ -15,7 +15,7 @@ use erp_sales::dto::sales_selection::{
     CopyLinkView, CreateSalesSelectionBookletRequest, DeleteDisplayItemRequest, PrepareSalesSelectionRequest,
     PublishSalesSelectionRequest, SalesSelectionBookletListParams, SalesSelectionBookletView,
     SalesSelectionCommandRequest, SalesSelectionProposalListParams, SalesSelectionProposalView,
-    SalesSelectionSessionView,
+    SalesSelectionSessionView, SelectionBookletCreator,
 };
 use erp_sales::entity::sales_selection::{IdempotencyOperation, LinkTokenCrypto};
 use erp_sales::ports::sales_selection::SelectionImagePort;
@@ -30,6 +30,7 @@ use self::scope_checks::{
     booklet_list_snapshot, copy_link_checked, delete_item_checked, image_key_checked, owner_display_names,
     proposal_list_snapshot, publish_checked, rotate_link_checked, session_checked, start_prepare_checked,
 };
+use crate::business_ownership::required_business_org;
 use crate::{Error, Result};
 
 /// 销售选品组合根。
@@ -136,16 +137,20 @@ impl SalesSelectionProcess {
                 let fingerprint = fingerprint.clone();
                 Box::pin(async move {
                     let access = crate::adapters::selection_access(db.clone(), rbac);
+                    let creator = SelectionBookletCreator {
+                        user_id: actor.id().to_owned(),
+                        business_org_unit_id: required_business_org(&db, actor.id(), executor).await?,
+                    };
                     check_create_scope(
                         &access,
                         &actor,
-                        &req.sales_owner_user_id,
-                        &req.business_org_unit_id,
+                        &creator.user_id,
+                        &creator.business_org_unit_id,
                         executor,
                     )
                     .await?;
                     SalesSelectionService::new(db)
-                        .create(req, actor.id(), password_hash, fingerprint, &customer, executor)
+                        .create(req, &creator, password_hash, fingerprint, &customer, executor)
                         .await
                         .map_err(Error::from)
                 })
@@ -683,7 +688,7 @@ impl CommandKind {
 /// 无动作权限或责任不在范围内时拒绝。
 ///
 /// # 关键业务约束
-/// 不得把创建人或客户提交人当作负责人。
+/// 归属必须来自认证创建人及其有效主属组织，客户公开提交人不成为负责人。
 async fn check_create_scope(
     access: &erp_sales::service::sales_selection::SelectionAccess,
     actor: &AuditActor,

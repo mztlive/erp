@@ -7,10 +7,6 @@
 
 import * as React from "react"
 import { useAppForm } from "@/components/form"
-import { OwnerCombobox } from "@/components/business"
-import { Input } from "@/components/ui/input"
-import { usePersonDirectoryList } from "@/features/entity-selectors/hooks/person-directory"
-import { SelectorQueryFeedback } from "@/components/business/selector-query-feedback"
 import { CustomerSearchCombobox } from "@/features/entity-selectors/components/customer-search-combobox"
 import { Button } from "@/components/ui/button"
 import {
@@ -73,31 +69,9 @@ export const BookCreateDialog = ({
     onLaunched?: (result: BookLaunchResult) => void
 }) => {
     const operations = useBookOperations()
-    const [ownerSearch, setOwnerSearch] = React.useState("")
-    const [orgName, setOrgName] = React.useState("")
-    const ownerOptionsQuery = usePersonDirectoryList({
-        category: "sales",
-        q: ownerSearch,
-        orgUnitIds: [],
-        includeDescendants: false,
-        pageCount: 1,
-    })
-    const ownerOptions = (ownerOptionsQuery.data?.pages ?? [])
-        .flatMap((page) => page.items)
-        .filter((person) => person.status === "active")
-        .map((person) => ({
-            userId: person.id,
-            displayName: person.name,
-            userCode: person.account,
-            orgId: person.primary_org_unit_id ?? "",
-            orgName: person.org_label ?? "",
-        }))
-
     const form = useAppForm({
         defaultValues: {
             customer_id: "",
-            sales_owner_user_id: "",
-            business_org_unit_id: "",
             selection_form: "SINGLE_SKU",
             submit_mode: "BY_QUANTITY",
             access_password: "",
@@ -119,8 +93,6 @@ export const BookCreateDialog = ({
             })
             const created = await operations.create.mutateAsync({
                 customer_id: parsed.customer_id.trim(),
-                sales_owner_user_id: parsed.sales_owner_user_id.trim(),
-                business_org_unit_id: parsed.business_org_unit_id.trim(),
                 selection_form: parsed.selection_form,
                 submit_mode: parsed.submit_mode,
                 access_password: parsed.access_password,
@@ -160,11 +132,8 @@ export const BookCreateDialog = ({
     const wasOpen = React.useRef(false)
     React.useEffect(() => {
         if (open && !wasOpen.current) {
-            setOrgName("")
             form.reset({
                 customer_id: "",
-                sales_owner_user_id: "",
-                business_org_unit_id: "",
                 selection_form: "SINGLE_SKU",
                 submit_mode: "BY_QUANTITY",
                 access_password: "",
@@ -239,101 +208,6 @@ export const BookCreateDialog = ({
                             />
                         )}
                     />
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <form.AppField
-                            name="sales_owner_user_id"
-                            children={(field) => (
-                                <div className="grid gap-1.5">
-                                    <Label htmlFor="sales-selection-create-owner">
-                                        负责销售 *
-                                    </Label>
-                                    <OwnerCombobox
-                                        id="sales-selection-create-owner"
-                                        owners={ownerOptions}
-                                        loading={ownerOptionsQuery.isFetching}
-                                        value={field.state.value || undefined}
-                                        onValueChange={(next) => {
-                                            field.handleChange(next ?? "")
-                                            const owner = ownerOptions.find(
-                                                (item) => item.userId === next,
-                                            )
-                                            form.setFieldValue(
-                                                "business_org_unit_id",
-                                                owner?.orgId ?? "",
-                                            )
-                                            setOrgName(owner?.orgName ?? "")
-                                        }}
-                                        placeholder="搜索负责人或工号"
-                                        onSearchChange={setOwnerSearch}
-                                        filterMode="remote"
-                                    />
-                                    <SelectorQueryFeedback
-                                        id="sales-selection-create-owner"
-                                        failed={ownerOptionsQuery.isError}
-                                        error={ownerOptionsQuery.error}
-                                        noScope={
-                                            ownerOptionsQuery.data?.pages[0]
-                                                ?.empty_reason === "no_scope"
-                                        }
-                                        onRetry={() =>
-                                            void ownerOptionsQuery.refetch()
-                                        }
-                                    />
-                                    {field.state.meta.isTouched &&
-                                    !field.state.meta.isValid ? (
-                                        <p
-                                            className="text-xs text-destructive"
-                                            role="alert"
-                                        >
-                                            请选择负责销售
-                                        </p>
-                                    ) : null}
-                                </div>
-                            )}
-                        />
-                        <form.AppField
-                            name="business_org_unit_id"
-                            children={(field) => (
-                                <div className="grid gap-1.5">
-                                    <Label htmlFor="sales-selection-create-org">
-                                        业务组织 *
-                                    </Label>
-                                    <Input
-                                        id="sales-selection-create-org"
-                                        value={orgName}
-                                        readOnly
-                                        placeholder="选择负责销售后自动带入"
-                                        aria-label="业务组织"
-                                    />
-                                    <form.Subscribe
-                                        selector={(state) =>
-                                            state.values.sales_owner_user_id
-                                        }
-                                    >
-                                        {(ownerId) =>
-                                            ownerId && !field.state.value ? (
-                                                <p
-                                                    className="text-xs text-destructive"
-                                                    role="alert"
-                                                >
-                                                    该销售尚未配置有效主属组织，请联系管理员在“组织与人员”中设置后重新选择。
-                                                </p>
-                                            ) : null
-                                        }
-                                    </form.Subscribe>
-                                    {field.state.meta.isTouched &&
-                                    !field.state.meta.isValid ? (
-                                        <p
-                                            className="text-xs text-destructive"
-                                            role="alert"
-                                        >
-                                            请为负责销售配置有效主属组织
-                                        </p>
-                                    ) : null}
-                                </div>
-                            )}
-                        />
-                    </div>
                     <div className="grid gap-1.5 rounded-lg border bg-muted/40 px-3 py-2">
                         <p className="text-xs text-muted-foreground">
                             商品来源

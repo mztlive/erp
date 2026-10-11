@@ -25,10 +25,6 @@ pub struct CreateSalesSelectionBookletRequest {
     pub idempotency_key: String,
     /// 客户身份。
     pub customer_id: String,
-    /// 显式销售负责人；必填，客户提交人不成为负责人。
-    pub sales_owner_user_id: String,
-    /// 业务组织；必填，取负责人有效主属组织。
-    pub business_org_unit_id: String,
     /// 选品形态。
     #[serde(alias = "selection_form")]
     pub form: SelectionForm,
@@ -52,6 +48,15 @@ pub struct CreateSalesSelectionBookletRequest {
     /// 套餐档位；单品可省略。
     #[serde(default)]
     pub tiers: Vec<CreateTierRequest>,
+}
+
+/// 服务端从认证操作人及其有效主属组织解析的创建归属，不接受 HTTP 反序列化。
+#[derive(Debug, Clone)]
+pub struct SelectionBookletCreator {
+    /// 已认证操作人，同时为创建人与销售负责人。
+    pub user_id: String,
+    /// 创建事务内读取的有效主属组织。
+    pub business_org_unit_id: String,
 }
 
 /// 创建档位。

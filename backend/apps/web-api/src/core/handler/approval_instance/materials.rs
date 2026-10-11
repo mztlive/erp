@@ -3,18 +3,25 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::body::Body;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::HeaderValue;
 use axum::http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS};
 use axum::response::{IntoResponse, Response};
-use erp_processes::approval_materials;
+use erp_processes::approval_materials::{self, ApprovalMaterialTarget};
 use erp_read_models::sales_center::approval_materials::{ApprovalDocumentMaterials, materials};
 use erp_read_models::workbench::{InvoiceApprovalReview, invoice_approval_review};
+use serde::Deserialize;
 
 use crate::app_state::AppState;
-use crate::core::errors::{Error, Result};
+use crate::core::errors::Error;
 use crate::core::handler::file_asset::verify_content;
 use crate::core::response::ApiResponse;
+
+/// 当前销售来源资料必须携带页面读取的精确版本，缺省仍只读取提交附件。
+#[derive(Default, Deserialize)]
+pub struct MaterialQuery {
+    source_revision_id: Option<String>,
+}
 
 #[permission_macros::permission(
     group = "审批实例",
@@ -49,21 +56,23 @@ pub async fn invoice_review(
     resource = "approval_instance",
     action = "read"
 )]
-/// 返回授权实例的冻结资料与附件安全目录。
+/// 返回授权实例的冻结资料；开票审批另列当前销售来源资料。
 /// # 参数
 /// 应用状态、认证账号和审批实例 ID。
 /// # 返回
-/// 不含当前草稿、存储键或内容指纹的提交资料。
+/// 提交资料与独立的当前销售依据；不含草稿、存储键或内容指纹。
 /// # 错误
 /// 无权或冻结资料缺失时拒绝。
 pub async fn list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Path(id): Path<String>,
-) -> Result<ApprovalDocumentMaterials> {
-    Ok(ApiResponse::ok_with_data(
-        materials(&state.db(), &state.approval_runtime_service(), &actor, &id).await?,
-    ))
+) -> std::result::Result<Response, Error> {
+    let result: ApprovalDocumentMaterials =
+        materials(&state.db(), &state.approval_runtime_service(), &actor, &id).await?;
+    let mut response = ApiResponse::ok_with_data(result).into_response();
+    response.headers_mut().insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+    Ok(response)
 }
 
 #[permission_macros::permission(
@@ -84,8 +93,19 @@ pub async fn preview(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Path((id, file_id)): Path<(String, String)>,
+    Query(query): Query<MaterialQuery>,
 ) -> std::result::Result<Response, Error> {
-    content(&state, &actor, &id, &file_id, false).await
+    content(
+        &state,
+        &actor,
+        ApprovalMaterialTarget {
+            instance_id: &id,
+            file_id: &file_id,
+            source_revision_id: query.source_revision_id.as_deref(),
+        },
+        false,
+    )
+    .await
 }
 
 #[permission_macros::permission(
@@ -106,21 +126,32 @@ pub async fn download(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     Path((id, file_id)): Path<(String, String)>,
+    Query(query): Query<MaterialQuery>,
 ) -> std::result::Result<Response, Error> {
-    content(&state, &actor, &id, &file_id, true).await
+    content(
+        &state,
+        &actor,
+        ApprovalMaterialTarget {
+            instance_id: &id,
+            file_id: &file_id,
+            source_revision_id: query.source_revision_id.as_deref(),
+        },
+        true,
+    )
+    .await
 }
 
 /// 文件授权由组合层执行；对象存储读取在事务之外完成。
 async fn content(
     state: &AppState,
     actor: &AuditActor,
-    id: &str,
-    file_id: &str,
+    target: ApprovalMaterialTarget<'_>,
     download: bool,
 ) -> std::result::Result<Response, Error> {
     let runtime = state.approval_runtime_service();
     let file =
-        approval_materials::readable(&runtime, &state.file_asset_service(), actor, id, file_id).await?;
+        approval_materials::readable(&state.db(), &runtime, &state.file_asset_service(), actor, target)
+            .await?;
     if !download && !previewable(&file.content_type) {
         return Err(Error::Unprocessable("当前文件类型不支持在线预览，请下载查看".into()));
     }
@@ -130,7 +161,8 @@ async fn content(
         .await
         .map_err(|_| Error::Internal("附件读取失败，请稍后重试".into()))?;
     verify_content(&file, &bytes, state.config_snapshot().app.secret.as_bytes())?;
-    approval_materials::revalidate(&runtime, &state.file_asset_service(), actor, id, file_id).await?;
+    approval_materials::revalidate(&state.db(), &runtime, &state.file_asset_service(), actor, target, &file)
+        .await?;
     let content_type = if download { "application/octet-stream" } else { &file.content_type };
     let mut response = Response::new(Body::from(bytes));
     let headers = response.headers_mut();
@@ -154,6 +186,15 @@ fn previewable(content_type: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn source_query_is_explicit_and_legacy_requests_stay_frozen() {
+        let frozen: super::MaterialQuery = serde_json::from_str("{}").unwrap();
+        assert!(frozen.source_revision_id.is_none());
+        let source: super::MaterialQuery =
+            serde_json::from_str(r#"{"source_revision_id":"revision-1"}"#).unwrap();
+        assert_eq!(source.source_revision_id.as_deref(), Some("revision-1"));
+    }
+
     #[test]
     fn active_content_is_download_only() {
         assert!(super::previewable("application/pdf"));

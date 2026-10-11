@@ -470,6 +470,8 @@ fn request_row(
         applicant_user_id: row.created_by.clone(),
         handler_user_id: handler,
         amount: row.data.amount,
+        data: row.data.clone(),
+        invoiced_amount: row.invoiced_amount,
         permission_limited: false,
         sales_owner_user_id: fact.map(|order| order.owner_user_id.clone()),
         business_org_unit_id: fact.map(|order| order.business_org_unit_id.clone()),
@@ -587,6 +589,27 @@ mod tests {
         let linked = request_linked_facts(&decided[0].0, &facts["so-a"], decided[0].1.as_deref());
         assert_eq!(linked.linked_document_version, 10);
         assert_eq!(linked.linked_document_id, "so-a");
+    }
+
+    /// 范围列表及详情必须保留原申请开票资料和实际已开票额，不依赖提交页面缓存。
+    #[test]
+    fn scoped_request_keeps_saved_invoice_data_and_actual_invoiced_amount() {
+        let mut request = request("invoice", "so-a", None);
+        request.data.invoice_title = "提交时开票抬头".into();
+        request.data.tax_number = "91440101MA00000000".into();
+        request.data.invoice_content = "福利用品".into();
+        request.data.reason = "按合同开票".into();
+        request.invoiced_amount = "3.25".parse().unwrap();
+        let row = request_row(&request, None, &HashMap::new(), &HashMap::new());
+        assert_eq!(row.data, request.data);
+        assert_eq!(row.amount, request.data.amount);
+        assert_eq!(row.invoiced_amount, request.invoiced_amount);
+        let json = serde_json::to_value(row).unwrap();
+        assert_eq!(json["data"]["invoice_title"], "提交时开票抬头");
+        assert_eq!(json["data"]["tax_number"], "91440101MA00000000");
+        assert_eq!(json["data"]["invoice_content"], "福利用品");
+        assert_eq!(json["data"]["reason"], "按合同开票");
+        assert_eq!(json["invoiced_amount"], "3.25");
     }
 
     /// 来源授权与所有业务条件取交集；权限政策不因共享事实变宽。

@@ -22,6 +22,7 @@ use crate::finance::receivable::invoice_request_source;
 use crate::sales_center::materials::revision_materials;
 use crate::{Error, Result};
 
+pub(crate) mod materials;
 mod records;
 mod source;
 use records::InvoiceReviewRecords;

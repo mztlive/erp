@@ -108,8 +108,6 @@ export const createBook = async (
         per_person_budget: input.per_person_budget,
         voucher_count: input.voucher_count,
         customer_id: input.customer_id,
-        sales_owner_user_id: input.sales_owner_user_id,
-        business_org_unit_id: input.business_org_unit_id,
         form: input.selection_form,
         submit_mode: input.submit_mode,
         pool_source_kind: input.source_kind,

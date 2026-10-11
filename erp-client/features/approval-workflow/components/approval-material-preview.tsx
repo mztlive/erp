@@ -10,12 +10,18 @@ export function ApprovalMaterialPreview({
     instanceId,
     assetId,
     fileName,
+    sourceRevisionId,
 }: {
     instanceId: string
     assetId: string
     fileName: string
+    sourceRevisionId?: string
 }) {
-    const query = useApprovalMaterialPreview(instanceId, assetId)
+    const query = useApprovalMaterialPreview(
+        instanceId,
+        assetId,
+        sourceRevisionId,
+    )
     const [url, setUrl] = useState<string | null>(null)
     useEffect(() => {
         if (!query.data) return

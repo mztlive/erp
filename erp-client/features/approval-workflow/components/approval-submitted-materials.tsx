@@ -1,17 +1,11 @@
 "use client"
 
+import { ApprovalMaterialFiles } from "./approval-material-files"
 import { ApprovalSalesOrderPaper } from "./approval-sales-order-paper"
 import { BusinessFailureState } from "@/components/business"
-import { Button } from "@/components/ui/button"
-import { LoadingButton } from "@/components/ui/loading-button"
 import { Spinner } from "@/components/ui/spinner"
-import { toAutomationIdSegment } from "@/lib/automation-id"
-import { getErrorMessage } from "@/lib/api"
 import { displayBusinessText } from "@/lib/display-name"
-import {
-    useApprovalMaterials,
-    useDownloadApprovalMaterial,
-} from "../hooks/use-approval-materials"
+import { useApprovalMaterials } from "../hooks/use-approval-materials"
 import { displayActorName, displayReadableName } from "../display"
 
 const sectionValue = (section: {
@@ -22,13 +16,6 @@ const sectionValue = (section: {
     !section.numeric && section.object_id?.trim() === section.value.trim()
         ? "未记录名称"
         : section.value
-
-const READABLE_MATERIAL_TYPES = new Set([
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-    "application/pdf",
-])
 
 /** 审批专用资料预览；不加载普通业务详情，不把冻结摘要当作完整单据。 */
 export function ApprovalSubmittedMaterials({
@@ -43,7 +30,6 @@ export function ApprovalSubmittedMaterials({
     sourceRevisionId?: string
 }) {
     const query = useApprovalMaterials(instanceId, enabled)
-    const download = useDownloadApprovalMaterial(instanceId)
     if (query.isPending || query.isFetching)
         return (
             <div className="flex min-h-64 items-center justify-center gap-2 rounded-lg bg-card p-8">
@@ -67,6 +53,7 @@ export function ApprovalSubmittedMaterials({
         attachments,
         sales_order: submittedSalesOrder,
         subject_version: version,
+        current_sales_basis: currentBasis,
     } = query.data
     const sourceOrder =
         view === "source-sales"
@@ -106,7 +93,7 @@ export function ApprovalSubmittedMaterials({
                     {view === "source-sales"
                         ? `销售版本 V${sourceSnapshot?.revision_no ?? "—"}`
                         : `提交版本 ${version}`}{" "}
-                    · 以下内容保留自此次提交，审批完成后单据的变化不在此处更新。
+                    · 提交资料保留自此次提交，后续变化不改写原资料。
                 </p>
                 {view === "all" && !salesOrder && counterpartyName && (
                     <p className="font-medium">{counterpartyName}</p>
@@ -292,80 +279,57 @@ export function ApprovalSubmittedMaterials({
                         ))}
                 </section>
             )}
-            <section className="space-y-3 border-t pt-5">
-                <h3 className="font-medium">
-                    {display.source_sales?.length
-                        ? "提交附件及关联销售合同、凭证"
-                        : "提交合同、凭证及附件"}
-                </h3>
-                {attachments.length ? (
-                    <ul className="space-y-2">
-                        {attachments.map((file) => (
-                            <li
-                                key={file.file_asset_id}
-                                className="flex flex-wrap items-center justify-between gap-2 text-sm"
-                            >
-                                <span className="min-w-0 break-all">
-                                    {file.file_name}
-                                </span>
-                                <div className="flex gap-2">
-                                    {READABLE_MATERIAL_TYPES.has(
-                                        file.content_type,
-                                    ) && (
-                                        <Button
-                                            id={`approval-submitted-material-${toAutomationIdSegment(file.file_asset_id)}-preview`}
-                                            variant="ghost"
-                                            size="sm"
-                                            render={
-                                                <a
-                                                    href={`/approval-materials?${new URLSearchParams({ instance: instanceId, file: file.file_asset_id, name: file.file_name })}`}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    aria-label={`查看 ${file.file_name}（新标签页）`}
-                                                />
-                                            }
-                                        >
-                                            查看
-                                        </Button>
-                                    )}
-                                    <LoadingButton
-                                        loading={
-                                            download.isPending &&
-                                            download.variables
-                                                ?.file_asset_id ===
-                                                file.file_asset_id
-                                        }
-                                        id={`approval-submitted-material-${toAutomationIdSegment(file.file_asset_id)}-download`}
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        disabled={download.isPending}
-                                        onClick={() => download.mutate(file)}
-                                    >
-                                        {download.isPending &&
-                                        download.variables?.file_asset_id ===
-                                            file.file_asset_id
-                                            ? "读取中…"
-                                            : "下载"}
-                                    </LoadingButton>
-                                </div>
-                            </li>
-                        ))}
-                    </ul>
-                ) : (
-                    <p className="text-sm text-muted-foreground">
-                        此次提交未保留可读取的附件。
-                    </p>
+            {view === "all" &&
+                currentBasis &&
+                (!attachments.length ||
+                    !display.source_sales?.length ||
+                    display.source_sales.some(
+                        (source) =>
+                            source.revision_id !==
+                            currentBasis.source.revision_id,
+                    )) && (
+                    <section className="space-y-4 border-t pt-5">
+                        <h3 className="font-medium">
+                            当前销售依据 · V{currentBasis.source.revision_no}
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                            以下为当前生效销售版本及该版本关联的合同与凭证。
+                        </p>
+                        <ApprovalSalesOrderPaper
+                            submission={currentBasis.sales_order.revision}
+                            documentNo={currentBasis.sales_order.document_no}
+                            submitterName={null}
+                        />
+                        <ApprovalMaterialFiles
+                            instanceId={instanceId}
+                            attachments={currentBasis.attachments}
+                            sourceRevisionId={currentBasis.source.revision_id}
+                            idPrefix="approval-submitted-current-file"
+                            emptyMessage={
+                                currentBasis.unavailable_reason ??
+                                "此销售版本未关联可读取的合同或凭证，请联系销售核对归档资料。"
+                            }
+                        />
+                    </section>
                 )}
-                {download.isError && (
-                    <p role="alert" className="text-sm text-destructive">
-                        {getErrorMessage(
-                            download.error,
-                            "附件读取失败，请重试",
-                        )}
-                    </p>
-                )}
-            </section>
+            {view === "all" && query.data.current_sales_basis_error && (
+                <p role="alert" className="text-sm text-muted-foreground">
+                    {query.data.current_sales_basis_error}
+                </p>
+            )}
+            {(attachments.length > 0 || !currentBasis || view !== "all") && (
+                <section className="space-y-3 border-t pt-5">
+                    <h3 className="font-medium">
+                        {display.source_sales?.length
+                            ? "提交附件及关联销售合同、凭证"
+                            : "提交合同、凭证及附件"}
+                    </h3>
+                    <ApprovalMaterialFiles
+                        instanceId={instanceId}
+                        attachments={attachments}
+                    />
+                </section>
+            )}
         </article>
     )
 }

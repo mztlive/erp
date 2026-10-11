@@ -3,7 +3,7 @@
 use application_core::AuditActor;
 use erp_core::ids::FileAssetId;
 use erp_identity::SharedRbacService;
-use erp_read_models::workbench::authorize_material_transfer;
+use erp_read_models::workbench::{authorize_material_transfer, invoice_sales_reference};
 use erp_support::repository::FileAssetExt;
 use erp_support::{FileAssetService, FileAssetView, SecurityScanStatus};
 use erp_workflow::WorkflowAuthorizationPort;
@@ -14,6 +14,31 @@ use persistence_core::NoTransaction;
 
 use crate::adapters::workflow::workflow_auth;
 use crate::{Error, Result};
+
+/// 精确审批文件目标；销售版本只用于独立的当前来源资料入口。
+#[derive(Clone, Copy)]
+pub struct ApprovalMaterialTarget<'a> {
+    pub instance_id: &'a str,
+    pub file_id: &'a str,
+    pub source_revision_id: Option<&'a str>,
+}
+
+impl ApprovalMaterialTarget<'_> {
+    async fn reference<A: WorkflowAuthorizationPort>(
+        self,
+        db: &Database,
+        runtime: &ApprovalRuntimeService<A>,
+        actor: &AuditActor,
+    ) -> Result<ApprovalMaterialFile> {
+        match self.source_revision_id {
+            Some(revision) => {
+                Ok(invoice_sales_reference(db, runtime, actor, self.instance_id, revision, self.file_id)
+                    .await?)
+            },
+            None => Ok(runtime.material_reference(actor, self.instance_id, self.file_id).await?),
+        }
+    }
+}
 
 /// 首次读取记录敏感审计；对象存储返回后的重验只重新读取元数据。
 enum ReadPhase {
@@ -64,50 +89,57 @@ pub async fn authorize_attachment(
 /// # 参数
 /// * `runtime` / `files` - 审批授权与文件领域服务。
 /// * `actor` - 当前认证账号。
-/// * `instance_id` / `file_id` - 精确审批实例及请求文件。
+/// * `db` / `target` - 业务来源数据库及精确实例、文件和可选销售版本。
 /// # 返回
 /// 返回服务器内部文件视图；存储键不得序列化到 HTTP 响应。
 /// # 错误
 /// 未指派、来源不匹配、文件改变、销毁、隔离或审计失败时拒绝。
 pub async fn readable<A: WorkflowAuthorizationPort>(
+    db: &Database,
     runtime: &ApprovalRuntimeService<A>,
     files: &FileAssetService,
     actor: &AuditActor,
-    instance_id: &str,
-    file_id: &str,
+    target: ApprovalMaterialTarget<'_>,
 ) -> Result<FileAssetView> {
-    checked(runtime, files, actor, instance_id, file_id, ReadPhase::Initial).await
+    checked(db, runtime, files, actor, target, ReadPhase::Initial).await
 }
 
 /// 存储读取后重验当前文件治理状态和实例资格，不重复写入读取审计。
 /// # 参数
-/// 审批与文件服务、认证账号及同一实例和文件 ID。
+/// 数据库、审批与文件服务、认证账号、同一文件目标及读取前的文件版本。
 /// # 返回
 /// 仍允许发送文件内容时成功。
 /// # 错误
 /// 文件被撤回、版本变化或读者资格失效时拒绝。
 pub async fn revalidate<A: WorkflowAuthorizationPort>(
+    db: &Database,
     runtime: &ApprovalRuntimeService<A>,
     files: &FileAssetService,
     actor: &AuditActor,
-    instance_id: &str,
-    file_id: &str,
+    target: ApprovalMaterialTarget<'_>,
+    expected: &FileAssetView,
 ) -> Result<()> {
-    checked(runtime, files, actor, instance_id, file_id, ReadPhase::Revalidate).await?;
+    let latest = checked(db, runtime, files, actor, target, ReadPhase::Revalidate).await?;
+    if expected.version != latest.version
+        || expected.content_hmac != latest.content_hmac
+        || expected.storage_object_key != latest.storage_object_key
+    {
+        return Err(Error::ConflictError("审批附件在读取期间已变化，请重新打开".into()));
+    }
     Ok(())
 }
 
 /// 文件读取前后复用相同冻结内容与当前治理状态检查。
 async fn checked<A: WorkflowAuthorizationPort>(
+    db: &Database,
     runtime: &ApprovalRuntimeService<A>,
     files: &FileAssetService,
     actor: &AuditActor,
-    instance_id: &str,
-    file_id: &str,
+    target: ApprovalMaterialTarget<'_>,
     phase: ReadPhase,
 ) -> Result<FileAssetView> {
-    let frozen = runtime.material_reference(actor, instance_id, file_id).await?;
-    let view = phase.read_asset(files, actor, file_id).await?;
+    let frozen = target.reference(db, runtime, actor).await?;
+    let view = phase.read_asset(files, actor, target.file_id).await?;
     let current = ApprovalMaterialFile {
         file_asset_id: FileAssetId::new(&view.id),
         file_name: view.file_name.clone(),
@@ -125,7 +157,7 @@ async fn checked<A: WorkflowAuthorizationPort>(
         return Err(Error::Forbidden("审批附件当前不可读取".into()));
     }
     // 读取文件和写审计后重验任务资格，撤权不能借第一次检查继续读取。
-    let latest = runtime.material_reference(actor, instance_id, file_id).await?;
+    let latest = target.reference(db, runtime, actor).await?;
     if latest != frozen {
         return Err(Error::ConflictError("审批资料已变化，请重新读取".into()));
     }
