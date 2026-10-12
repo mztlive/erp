@@ -6,22 +6,40 @@ import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { findSourcingOption } from "../lib/purchase-order-create-model"
 import { canSplitSourcingProduct } from "../lib/sourcing-quantity"
+import { supplierDeliveryRequired } from "../lib/sourcing/delivery"
 import type { SourcingEditorRow } from "../lib/sourcing/editor-rows"
 import { SourcingParticipationControl } from "./sourcing-participation-control"
 import type {
     SourcingParticipationProps,
     SourcingEditorProps,
 } from "./create-sourcing/types"
-import { SalesDeliveryRequirements } from "./sourcing-delivery-plan"
+import { SourcingDeliveryRequirementSection } from "./sourcing-delivery-plan"
 import { SourcingAllocationEditor } from "./sourcing-allocation-editor"
 
+/** 参与开关可由外层标题区承载；地址要求仅在没有来源需要供应商送达时只读展示。 */
 export function SourcingProductEditor({
     row,
     onSetParticipation,
+    showParticipation = true,
     ...props
 }: SourcingEditorProps &
-    SourcingParticipationProps & { row: SourcingEditorRow }) {
+    SourcingParticipationProps & {
+        row: SourcingEditorRow
+        showParticipation?: boolean
+    }) {
     const { form, order } = props
+    const included = row.selected || row.partiallySelected
+    const selectedLines = row.allocations
+        .filter(({ line }) => line.selected)
+        .map(({ line }) => line)
+    const showRequirements =
+        row.product.deliveryAllocations.length === 0 ||
+        !selectedLines.some((line) =>
+            supplierDeliveryRequired(row.product, line),
+        )
+    const routed = selectedLines.some((line) =>
+        findSourcingOption(row.product, line.basisId),
+    )
     const warehouseSources = row.allocations.filter(({ line }) => {
         const option = findSourcingOption(row.product, line.basisId)
         return (
@@ -55,22 +73,27 @@ export function SourcingProductEditor({
     const [notice, setNotice] = useState("")
     return (
         <div className="@container/sourcing">
-            <SalesDeliveryRequirements product={row.product} />
-            <div className="px-4 pt-4">
-                <SourcingParticipationControl
-                    idPrefix={`sourcing-editor-${toAutomationIdSegment(row.product.salesOrderLineId)}`}
-                    itemName={row.product.itemName}
-                    included={row.selected || row.partiallySelected}
-                    onChange={(included) =>
-                        onSetParticipation(
-                            [row.product.salesOrderLineId],
-                            included,
-                        )
-                    }
-                />
-            </div>
+            {showParticipation ? (
+                <div className="px-4 pt-4">
+                    <SourcingParticipationControl
+                        idPrefix={`sourcing-editor-${toAutomationIdSegment(row.product.salesOrderLineId)}`}
+                        itemName={row.product.itemName}
+                        included={included}
+                        onChange={(next) =>
+                            onSetParticipation(
+                                [row.product.salesOrderLineId],
+                                next,
+                            )
+                        }
+                    />
+                </div>
+            ) : !included ? (
+                <p className="px-4 pt-4 text-xs text-muted-foreground">
+                    暂不分配：本次不提交，方案已保留。
+                </p>
+            ) : null}
             <fieldset
-                disabled={!row.selected && !row.partiallySelected}
+                disabled={!included}
                 className="min-w-0 disabled:opacity-60"
             >
                 <div className="divide-y divide-border/60">
@@ -88,7 +111,7 @@ export function SourcingProductEditor({
                         />
                     ))}
                 </div>
-                <div className="space-y-3 px-4 pb-4">
+                <div className="space-y-3 px-4 pb-4 empty:hidden">
                     {canSplitSourcingProduct(
                         row.product,
                         row.allocations.length,
@@ -151,6 +174,12 @@ export function SourcingProductEditor({
                         </p>
                     ) : null}
                 </div>
+                {showRequirements ? (
+                    <SourcingDeliveryRequirementSection
+                        product={row.product}
+                        note={routed ? "客户地址由仓库发货时安排。" : undefined}
+                    />
+                ) : null}
             </fieldset>
         </div>
     )

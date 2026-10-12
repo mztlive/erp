@@ -23,7 +23,7 @@ import type { SourcingEditorProps } from "./create-sourcing/types"
 import { SourcingDeliveryEditor } from "./sourcing-delivery-plan"
 import { SourcingRecommendationHint } from "./sourcing-recommendation-hint"
 
-/** 调整区沿用正式表单字段；当前供给摘要与编辑状态共用同一份值。 */
+/** 调整区沿用正式表单字段；按来源、数量与交期、交付地址的顺序填写。 */
 export function SourcingAllocationEditor({
     form,
     order,
@@ -58,59 +58,62 @@ export function SourcingAllocationEditor({
                 !line.selected && "bg-muted/20",
             )}
         >
-            <div className="flex items-center justify-between gap-2">
-                {showParticipation ? (
-                    <form.AppField name={`lines[${index}].selected`}>
-                        {(field) => (
-                            <label
-                                htmlFor={`${id}-select`}
-                                className="flex min-h-8 cursor-pointer items-center gap-2 text-xs font-medium"
-                            >
-                                <Checkbox
-                                    id={`${id}-select`}
-                                    checked={field.state.value === true}
-                                    onCheckedChange={(checked) =>
-                                        field.handleChange(checked === true)
-                                    }
-                                    aria-label={`本次供给分配 ${product.itemName}`}
-                                    data-testid={`purchase-sourcing-selected-${line.rowKey}`}
-                                />
-                                {participationLabel}
-                            </label>
-                        )}
-                    </form.AppField>
-                ) : (
-                    <span className="text-xs font-medium">供给方案</span>
-                )}
-                {canRemove ? (
-                    <Button
-                        id={`${id}-split-remove`}
-                        type="button"
-                        size="icon-sm"
-                        variant="ghost"
-                        aria-label={`删除 ${product.itemName} 的拆分行`}
-                        onClick={() => onRemoveSplit(line.rowKey)}
-                    >
-                        <Trash2Icon aria-hidden="true" />
-                    </Button>
-                ) : null}
-            </div>
+            {showParticipation || canRemove ? (
+                <div className="flex items-center justify-between gap-2">
+                    {showParticipation ? (
+                        <form.AppField name={`lines[${index}].selected`}>
+                            {(field) => (
+                                <label
+                                    htmlFor={`${id}-select`}
+                                    className="flex min-h-8 cursor-pointer items-center gap-2 text-xs font-medium"
+                                >
+                                    <Checkbox
+                                        id={`${id}-select`}
+                                        checked={field.state.value === true}
+                                        onCheckedChange={(checked) =>
+                                            field.handleChange(checked === true)
+                                        }
+                                        aria-label={`本次供给分配 ${product.itemName}`}
+                                        data-testid={`purchase-sourcing-selected-${line.rowKey}`}
+                                    />
+                                    {participationLabel}
+                                </label>
+                            )}
+                        </form.AppField>
+                    ) : null}
+                    {canRemove ? (
+                        <Button
+                            id={`${id}-split-remove`}
+                            type="button"
+                            size="icon-sm"
+                            variant="ghost"
+                            className="ml-auto"
+                            aria-label={`删除 ${product.itemName} 的拆分行`}
+                            onClick={() => onRemoveSplit(line.rowKey)}
+                        >
+                            <Trash2Icon aria-hidden="true" />
+                        </Button>
+                    ) : null}
+                </div>
+            ) : null}
             <div className="min-w-0 space-y-1.5">
-                <p className="text-xs text-muted-foreground">
-                    供给来源 / 履约方式
-                </p>
+                <p className="text-xs text-muted-foreground">供给来源</p>
                 <SourcingOptionField
                     form={form}
                     index={index}
                     rowKey={line.rowKey}
                     product={product}
                 />
-                <SourcingRecommendationHint
-                    form={form}
-                    order={order}
-                    product={product}
-                    index={index}
-                />
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                    <SourcingRecommendationHint
+                        id={`${id}-recommendation`}
+                        form={form}
+                        order={order}
+                        product={product}
+                        index={index}
+                    />
+                    <SourcingOptionFacts option={option} />
+                </div>
             </div>
             <div
                 className={cn(
@@ -179,43 +182,46 @@ export function SourcingAllocationEditor({
                 product={product}
                 line={line}
                 index={index}
+                showNotApplicable={false}
             />
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                {isStock ? (
-                    <>
-                        <span>
-                            现有库存 ·{" "}
-                            {option.warehouseName || option.supplierName}
-                        </span>
-                        <span>成本按库存核算</span>
-                    </>
-                ) : option ? (
-                    <>
-                        <span>
-                            含税单价 <MoneyValue value={option.unitCostGross} />
-                        </span>
-                        <span>
-                            进项税率{" "}
-                            <RateValue
-                                value={multiplyFixed(
-                                    option.inputTaxRate,
-                                    "100",
-                                    {
-                                        leftMaxScale: 6,
-                                        rightMaxScale: 0,
-                                        outputScale: 2,
-                                    },
-                                )}
-                                precision={2}
-                            />
-                        </span>
-                        <span>{PURCHASE_TYPE_LABEL[option.purchaseType]}</span>
-                        <span>付款条件 {option.paymentTermLabel || "—"}</span>
-                    </>
-                ) : (
-                    <span>请选择供给方案</span>
-                )}
-            </div>
         </div>
+    )
+}
+
+/** 方案属性紧随来源选择；每项独立成段，便于逐项核对。 */
+function SourcingOptionFacts({
+    option,
+}: {
+    option: ReturnType<typeof findSourcingOption>
+}) {
+    if (!option) return <span>请选择供给来源</span>
+    if (option.sourceType === "EXISTING_STOCK")
+        return (
+            <>
+                <span>
+                    现有库存 · {option.warehouseName || option.supplierName}
+                </span>
+                <span>成本按库存核算</span>
+            </>
+        )
+    return (
+        <>
+            <span>
+                含税单价 <MoneyValue value={option.unitCostGross} />
+            </span>
+            <span>
+                进项税率{" "}
+                <RateValue
+                    value={multiplyFixed(option.inputTaxRate, "100", {
+                        leftMaxScale: 6,
+                        rightMaxScale: 0,
+                        outputScale: 2,
+                    })}
+                    precision={2}
+                />
+            </span>
+            <span>{PURCHASE_TYPE_LABEL[option.purchaseType]}</span>
+            <span>付款条件 {option.paymentTermLabel || "—"}</span>
+        </>
     )
 }

@@ -94,7 +94,8 @@ pub struct SalesOrderWorkingCopyLine {
     #[serde(default)]
     pub pricing_mode: SalesPricingMode,
     /// 按地址分配的交付数量；历史未指定时为空。
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    /// 空列表也须写出：草稿行按 `$set` 更新，省略字段会留下已清空的旧地址。
+    #[serde(default)]
     pub delivery_allocations: Vec<SalesDeliveryAllocation>,
     /// 单卡面额。
     pub face_value: Option<Amount>,
@@ -371,6 +372,37 @@ mod tests {
         let mut voucher = goods;
         voucher.line_type = LineType::Voucher;
         assert!(voucher.sellable_sku_ref().unwrap().is_none());
+    }
+
+    #[test]
+    fn cleared_delivery_allocations_are_persisted_as_empty_list() {
+        let mut data = line_data(1);
+        let goods = data.goods.as_mut().unwrap();
+        goods.delivery_allocations = vec![SalesDeliveryAllocation {
+            recipient: "张三".into(),
+            phone: "13800000000".into(),
+            address: "上海市测试路 1 号".into(),
+            quantity: goods.quantity,
+        }];
+        let id = || SalesOrderWorkingCopyLineId::new("wcl-1");
+        let copy = || SalesOrderWorkingCopyId::new("wc-1");
+        let allocated = SalesOrderWorkingCopyLine::new(id(), copy(), data.clone()).unwrap();
+        let document = bson::serialize_to_document(&allocated).unwrap();
+        assert_eq!(document.get_array("delivery_allocations").unwrap().len(), 1);
+
+        let goods = data.goods.as_mut().unwrap();
+        goods.quantity = "0".parse().unwrap();
+        goods.delivery_allocations.clear();
+        let removed = SalesOrderWorkingCopyLine::new(id(), copy(), data).unwrap();
+        let mut document = bson::serialize_to_document(&removed).unwrap();
+        assert!(
+            document.get_array("delivery_allocations").unwrap().is_empty(),
+            "归零商品清空地址后，更新文档必须覆盖旧地址"
+        );
+
+        document.remove("delivery_allocations");
+        let historical: SalesOrderWorkingCopyLine = bson::deserialize_from_document(document).unwrap();
+        assert!(historical.delivery_allocations.is_empty(), "历史文档缺字段仍读为未指定");
     }
 
     #[test]

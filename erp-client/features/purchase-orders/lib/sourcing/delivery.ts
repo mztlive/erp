@@ -17,12 +17,11 @@ export function deliveryKey(row: PurchaseDeliveryAllocation): string {
     return JSON.stringify([row.recipient, row.phone, row.address])
 }
 
-/** 同一收件资料合并展示；当前采购已承担数量从销售需求中扣减。 */
-export function remainingDeliveryAllocations(
-    product: SourcingProductLine,
-): PurchaseDeliveryAllocation[] {
+function groupDeliveryAllocations(
+    rows: readonly PurchaseDeliveryAllocation[],
+): Map<string, PurchaseDeliveryAllocation> {
     const groups = new Map<string, PurchaseDeliveryAllocation>()
-    for (const row of product.deliveryAllocations) {
+    for (const row of rows) {
         const key = deliveryKey(row)
         const existing = groups.get(key)
         groups.set(key, {
@@ -33,6 +32,14 @@ export function remainingDeliveryAllocations(
             }),
         })
     }
+    return groups
+}
+
+/** 同一收件资料合并展示；当前采购已承担数量从销售需求中扣减。 */
+export function remainingDeliveryAllocations(
+    product: SourcingProductLine,
+): PurchaseDeliveryAllocation[] {
+    const groups = groupDeliveryAllocations(product.deliveryAllocations)
     for (const row of product.assignedDeliveryAllocations) {
         const existing = groups.get(deliveryKey(row))
         if (existing)
@@ -48,6 +55,36 @@ export function remainingDeliveryAllocations(
                 ? "0"
                 : compactFixed(row.quantity),
     }))
+}
+
+/** 销售要求按收件资料合并，同时给出扣除已有采购承担后的剩余数量。 */
+export function deliveryRequirementRows(
+    product: SourcingProductLine,
+): (PurchaseDeliveryAllocation & { remaining: string })[] {
+    const remaining = remainingDeliveryAllocations(product)
+    return [
+        ...groupDeliveryAllocations(product.deliveryAllocations).values(),
+    ].map((row, index) => ({
+        ...row,
+        quantity: compactFixed(row.quantity),
+        remaining: remaining[index]?.quantity ?? "0",
+    }))
+}
+
+/** 本次数量恰好承担全部剩余地址需求时，地址数量可按销售要求默认带入。 */
+export function deliveryDefaultsCoverQuantity(
+    product: SourcingProductLine,
+    quantity: string,
+): boolean {
+    const total = sumFixed(
+        remainingDeliveryAllocations(product).map((row) => row.quantity),
+        { maxScale: 6, outputScale: 6 },
+    )
+    try {
+        return compareDecimal(total, quantity, 6) === 0
+    } catch {
+        return false
+    }
 }
 
 export function supplierDeliveryRequired(
@@ -67,18 +104,9 @@ export function editableDeliveryAllocations(
     input: SourcingLineInput,
 ): PurchaseDeliveryAllocation[] {
     if (input.deliveryAllocations) return input.deliveryAllocations
-    const remaining = remainingDeliveryAllocations(product)
-    const total = sumFixed(
-        remaining.map((row) => row.quantity),
-        { maxScale: 6, outputScale: 6 },
-    )
-    let all = false
-    try {
-        all = compareDecimal(total, input.quantity, 6) === 0
-    } catch {
-        /* 数量校验单独显示 */
-    }
-    return remaining.map((row) => ({
+    // 数量格式错误时按部分承担处理，数量校验单独显示。
+    const all = deliveryDefaultsCoverQuantity(product, input.quantity)
+    return remainingDeliveryAllocations(product).map((row) => ({
         ...row,
         quantity: all ? row.quantity : "0",
     }))

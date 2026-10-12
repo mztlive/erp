@@ -13,6 +13,7 @@ import type {
     SourcingBatchSelectionProps,
     SourcingParticipationProps,
 } from "./create-sourcing/types"
+import { SourcingParticipationControl } from "./sourcing-participation-control"
 import { SourcingProductEditor } from "./sourcing-product-editor"
 import { SourcingProductSummaryList } from "./sourcing-product-summary-list"
 import { SourcingProductList } from "./sourcing-product-list"
@@ -160,14 +161,13 @@ export function PurchaseOrderCreateSourcingWorkspace({
                     >
                         {active ? (
                             <>
-                                <header className="flex shrink-0 flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3">
+                                <header className="flex shrink-0 flex-wrap items-start justify-between gap-x-4 gap-y-2 border-b border-border px-4 py-3">
                                     <div className="min-w-0 space-y-1">
                                         <h3 className="text-base font-semibold">
                                             {active.product.itemName}
                                         </h3>
                                         <p className="text-xs text-muted-foreground">
-                                            第 {index + 1} 行 / 共 {rows.length}{" "}
-                                            行 · 需供给{" "}
+                                            需供给{" "}
                                             <QuantityValue
                                                 value={
                                                     active.product
@@ -175,50 +175,71 @@ export function PurchaseOrderCreateSourcingWorkspace({
                                                 }
                                                 unit={active.product.unit}
                                             />
+                                            {active.product.deliveryDeadline
+                                                ? ` · 最晚交付 ${active.product.deliveryDeadline}`
+                                                : ""}
                                         </p>
-                                        {active.product.deliveryDeadline ? (
-                                            <p className="text-xs text-muted-foreground">
-                                                最晚交付{" "}
-                                                {
-                                                    active.product
-                                                        .deliveryDeadline
-                                                }
-                                            </p>
-                                        ) : null}
                                     </div>
-                                    <div className="flex gap-1">
-                                        <Button
-                                            id="sourcing-product-previous"
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            disabled={index <= 0}
-                                            onClick={() =>
-                                                select(
-                                                    rows[index - 1]!.product
-                                                        .salesOrderLineId,
+                                    <div className="flex items-center gap-3">
+                                        <SourcingParticipationControl
+                                            idPrefix={`sourcing-editor-${toAutomationIdSegment(active.product.salesOrderLineId)}`}
+                                            itemName={active.product.itemName}
+                                            included={
+                                                active.selected ||
+                                                active.partiallySelected
+                                            }
+                                            onChange={(included) =>
+                                                onSetParticipation(
+                                                    [
+                                                        active.product
+                                                            .salesOrderLineId,
+                                                    ],
+                                                    included,
                                                 )
                                             }
-                                        >
-                                            <ArrowLeftIcon />
-                                            上一行
-                                        </Button>
-                                        <Button
-                                            id="sourcing-product-next"
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            disabled={index >= rows.length - 1}
-                                            onClick={() =>
-                                                select(
-                                                    rows[index + 1]!.product
-                                                        .salesOrderLineId,
-                                                )
-                                            }
-                                        >
-                                            下一行
-                                            <ArrowRightIcon />
-                                        </Button>
+                                            showHint={false}
+                                        />
+                                        <div className="flex items-center gap-1">
+                                            <Button
+                                                id="sourcing-product-previous"
+                                                type="button"
+                                                variant="outline"
+                                                size="icon-sm"
+                                                aria-label="上一行"
+                                                title="上一行"
+                                                disabled={index <= 0}
+                                                onClick={() =>
+                                                    select(
+                                                        rows[index - 1]!.product
+                                                            .salesOrderLineId,
+                                                    )
+                                                }
+                                            >
+                                                <ArrowLeftIcon />
+                                            </Button>
+                                            <span className="num min-w-10 text-center text-xs text-muted-foreground">
+                                                {index + 1} / {rows.length}
+                                            </span>
+                                            <Button
+                                                id="sourcing-product-next"
+                                                type="button"
+                                                variant="outline"
+                                                size="icon-sm"
+                                                aria-label="下一行"
+                                                title="下一行"
+                                                disabled={
+                                                    index >= rows.length - 1
+                                                }
+                                                onClick={() =>
+                                                    select(
+                                                        rows[index + 1]!.product
+                                                            .salesOrderLineId,
+                                                    )
+                                                }
+                                            >
+                                                <ArrowRightIcon />
+                                            </Button>
+                                        </div>
                                     </div>
                                 </header>
                                 <div
@@ -236,33 +257,31 @@ export function PurchaseOrderCreateSourcingWorkspace({
                                                 onSetParticipation={
                                                     onSetParticipation
                                                 }
+                                                showParticipation={false}
                                                 row={row}
                                             />
                                         </div>
                                     ))}
                                 </div>
-                                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-3">
-                                    <p className="text-xs text-muted-foreground">
-                                        修改暂存于本次分配，预览后统一确认。
-                                    </p>
-                                    <Button
-                                        id="sourcing-product-next-pending"
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        disabled={!nextPending}
-                                        onClick={() => {
-                                            if (nextPending)
+                                {nextPending ? (
+                                    <div className="flex shrink-0 justify-end border-t border-border px-4 py-3">
+                                        <Button
+                                            id="sourcing-product-next-pending"
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() =>
                                                 select(
                                                     nextPending.product
                                                         .salesOrderLineId,
                                                 )
-                                        }}
-                                    >
-                                        下一条待调整
-                                        <ArrowRightIcon />
-                                    </Button>
-                                </div>
+                                            }
+                                        >
+                                            下一条待调整
+                                            <ArrowRightIcon />
+                                        </Button>
+                                    </div>
+                                ) : null}
                             </>
                         ) : (
                             <p className="p-4 text-sm text-muted-foreground">

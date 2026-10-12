@@ -2,7 +2,11 @@
 
 import * as React from "react"
 import { XIcon } from "lucide-react"
-import { SalesChangeDraftFields } from "./sales-change-draft-fields"
+import {
+    SalesChangeBlockers,
+    SalesChangeDraftFields,
+    SalesChangeTotalSummary,
+} from "./sales-change-draft-fields"
 import { salesChangeDraftSchema } from "../lib/sales-change-draft-schema"
 import {
     useSalesChangeDraftQuery,
@@ -88,7 +92,7 @@ export function SalesChangeOrderEditDialog({
                     </Button>
                     <DialogTitle>销售改单</DialogTitle>
                     <DialogDescription>
-                        调整商品与交付信息，填写原因后提交审批。审批通过前仍按当前销售版本执行。
+                        修改后填写变更原因并提交审批。审批通过前仍按当前销售版本执行，已有回款、开票和交付记录保留。
                     </DialogDescription>
                 </DialogHeader>
                 {query.isPending ? (
@@ -298,7 +302,7 @@ function SalesChangeDraftForm({
     const disabled = pending || uncertain
     return (
         <form
-            className="space-y-4"
+            className="space-y-6"
             onSubmit={(event) => {
                 event.preventDefault()
                 void form.handleSubmit()
@@ -318,39 +322,50 @@ function SalesChangeDraftForm({
                     {error}
                 </p>
             ) : null}
-            <DialogFooter className="sticky -bottom-6 z-10 -mx-6 border-t bg-background px-6 py-4">
-                <Button
-                    id={`${id}-cancel`}
-                    type="button"
-                    variant="outline"
-                    disabled={disabled}
-                    onClick={onClose}
-                >
-                    取消
-                </Button>
-                {uncertain ? (
-                    <LoadingButton
-                        id={`${id}-recover`}
-                        type="button"
-                        loading={pending}
-                        disabled={pending}
-                        onClick={() => {
-                            if (intent.current)
-                                void execute(intent.current, true)
-                        }}
-                    >
-                        核对并重试本次操作
-                    </LoadingButton>
-                ) : (
-                    <form.AppForm>
-                        <form.SubmitButton
-                            id={`${id}-submit`}
-                            label="提交改单"
-                            loading={pending}
-                            disabled={pending}
-                        />
-                    </form.AppForm>
-                )}
+            <DialogFooter className="sticky -bottom-6 z-10 -mx-6 flex-col border-t bg-popover px-6 py-4 sm:items-center sm:justify-between">
+                <SalesChangeTotalSummary
+                    form={form}
+                    baseAmount={draft.base_gross_amount}
+                />
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                    {uncertain ? null : (
+                        <SalesChangeBlockers form={form} id={id} />
+                    )}
+                    <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                        <Button
+                            id={`${id}-cancel`}
+                            type="button"
+                            variant="outline"
+                            disabled={disabled}
+                            onClick={onClose}
+                        >
+                            取消
+                        </Button>
+                        {uncertain ? (
+                            <LoadingButton
+                                id={`${id}-recover`}
+                                type="button"
+                                loading={pending}
+                                disabled={pending}
+                                onClick={() => {
+                                    if (intent.current)
+                                        void execute(intent.current, true)
+                                }}
+                            >
+                                核对并重试本次操作
+                            </LoadingButton>
+                        ) : (
+                            <form.AppForm>
+                                <form.SubmitButton
+                                    id={`${id}-submit`}
+                                    label="提交改单"
+                                    loading={pending}
+                                    disabled={pending}
+                                />
+                            </form.AppForm>
+                        )}
+                    </div>
+                </div>
             </DialogFooter>
         </form>
     )

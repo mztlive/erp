@@ -1,6 +1,11 @@
 "use client"
 
 import { SparklesIcon } from "lucide-react"
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { sourcingRecommendationReason } from "../lib/sourcing/recommendation-reason"
 import type {
     SourcingProductLine,
@@ -8,13 +13,15 @@ import type {
 } from "../lib/sourcing/types"
 import type { PurchaseOrderCreateFormApi } from "../lib/purchase-order-create-form-types"
 
-/** 推荐依据紧随供应商选择器，切换到其他方案后不再标记为系统推荐。 */
+/** 推荐标记紧随方案摘要，依据放在提示里；切换到其他方案后不再标记为系统推荐。 */
 export function SourcingRecommendationHint({
+    id,
     form,
     order,
     product,
     index,
 }: {
+    id: string
     form: PurchaseOrderCreateFormApi
     order: SourcingSalesOrder
     product: SourcingProductLine
@@ -28,21 +35,29 @@ export function SourcingRecommendationHint({
                     ? sourcingRecommendationReason(order, product, line, lines)
                     : undefined
                 if (!reason) return null
+                const text = `${reason.title}。${reason.detail}`
                 return (
-                    <div className="flex items-start gap-2 rounded-md bg-muted/40 px-3 py-2.5 text-xs">
-                        <SparklesIcon
-                            aria-hidden="true"
-                            className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
-                        />
-                        <div className="min-w-0 space-y-1">
-                            <p className="font-medium">
-                                系统推荐 · {reason.title}
-                            </p>
-                            <p className="leading-relaxed text-muted-foreground">
-                                {reason.detail}
-                            </p>
-                        </div>
-                    </div>
+                    <Tooltip>
+                        <TooltipTrigger
+                            render={
+                                <button
+                                    id={id}
+                                    type="button"
+                                    aria-label={`系统推荐：${text}`}
+                                    className="inline-flex items-center gap-1 rounded-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                                />
+                            }
+                        >
+                            <SparklesIcon
+                                aria-hidden="true"
+                                className="size-3.5 text-muted-foreground"
+                            />
+                            系统推荐
+                        </TooltipTrigger>
+                        <TooltipContent className="block">
+                            {text}
+                        </TooltipContent>
+                    </Tooltip>
                 )
             }}
         </form.Subscribe>

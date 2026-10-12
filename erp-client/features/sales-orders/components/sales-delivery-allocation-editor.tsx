@@ -18,7 +18,17 @@ import type { CreateSalesOrderFormValues } from "../lib/sales-order-create-model
 
 type DeliveryLine = CreateSalesOrderFormValues["lineItems"][number]
 
-function allocationSummary(line: DeliveryLine) {
+/** 开单与改单共用的分地址进度：数量合计与收货资料是否齐全。 */
+export function allocationSummary(line: {
+    deliveryAllocations?: {
+        recipient: string
+        phone: string
+        address: string
+        quantity: string
+    }[]
+    quantity: string
+    unit: string
+}) {
     const rows = line.deliveryAllocations ?? []
     if (!rows.length)
         return {

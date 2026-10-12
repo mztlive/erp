@@ -7,6 +7,7 @@ import type {
     SalesChangeTerms,
 } from "../api/sales-change-draft"
 import {
+    compactFixed,
     compareDecimal,
     multiplyFixed,
     normalizeFixed,
@@ -51,7 +52,7 @@ export function salesChangeDraftValues(
                 line.goods?.unit_price_gross ??
                 line.voucher?.unit_price_gross ??
                 "0",
-            taxRate: line.sales_tax_rate,
+            taxRate: compactFixed(line.sales_tax_rate),
             faceValue: line.voucher?.face_value ?? "1",
             cardCount: String(line.voucher?.card_count ?? 1),
         })),
@@ -83,6 +84,98 @@ export function validSalesTaxRate(value: string) {
         )
     } catch {
         return false
+    }
+}
+
+type SalesChangeLineValues = SalesChangeDraftValues["lines"][number]
+
+/** 实物及服务行数量归零即视为移除，原明细身份继续保留。 */
+export function salesChangeLineRemoved(value: SalesChangeLineValues) {
+    if (!value.source.goods) return false
+    try {
+        return compareDecimal(value.quantity, "0", 6) === 0
+    } catch {
+        return false
+    }
+}
+
+/** 本行含税小计；卡券按单卡成交价乘张数。输入不完整时抛错。 */
+export function salesChangeLineAmount(value: SalesChangeLineValues) {
+    return value.source.goods
+        ? multiplyFixed(value.quantity, value.unitPrice, {
+              leftMaxScale: 6,
+              rightMaxScale: 4,
+              outputScale: 2,
+          })
+        : multiplyFixed(value.unitPrice, value.cardCount, {
+              leftMaxScale: 4,
+              rightMaxScale: 0,
+              outputScale: 2,
+          })
+}
+
+export type SalesChangeLineDiff = {
+    status: "added" | "removed" | "changed" | "unchanged"
+    /** 与当前生效版本不同的字段，值为生效版本原值。 */
+    previous: Partial<
+        Record<
+            "quantity" | "unitPrice" | "taxRate" | "faceValue" | "cardCount",
+            string
+        >
+    >
+}
+
+/** 对照当前生效版本，标出本行新增、移除或改动了哪些字段。 */
+export function salesChangeLineDiff(
+    value: SalesChangeLineValues,
+    base: SalesChangeDraftLine | undefined,
+): SalesChangeLineDiff {
+    if (!base) return { status: "added", previous: {} }
+    if (salesChangeLineRemoved(value))
+        return { status: "removed", previous: {} }
+    const differs = (next: string, previous: string, scale: number) => {
+        try {
+            return compareDecimal(next, previous, scale) !== 0
+        } catch {
+            return true
+        }
+    }
+    const pairs: [
+        keyof SalesChangeLineDiff["previous"],
+        string,
+        string,
+        number,
+    ][] = base.goods
+        ? [
+              ["quantity", value.quantity, base.goods.quantity, 6],
+              ["unitPrice", value.unitPrice, base.goods.unit_price_gross, 4],
+          ]
+        : base.voucher
+          ? [
+                ["faceValue", value.faceValue, base.voucher.face_value, 2],
+                [
+                    "cardCount",
+                    value.cardCount,
+                    String(base.voucher.card_count),
+                    0,
+                ],
+                [
+                    "unitPrice",
+                    value.unitPrice,
+                    base.voucher.unit_price_gross,
+                    4,
+                ],
+            ]
+          : []
+    pairs.push(["taxRate", value.taxRate, base.sales_tax_rate, 6])
+    const previous = Object.fromEntries(
+        pairs
+            .filter(([, next, old, scale]) => differs(next, old, scale))
+            .map(([key, , old]) => [key, compactFixed(old)]),
+    )
+    return {
+        status: Object.keys(previous).length ? "changed" : "unchanged",
+        previous,
     }
 }
 

@@ -9,13 +9,16 @@ export function SourcingParticipationControl({
     itemName,
     included,
     onChange,
+    showHint = true,
 }: {
     idPrefix: string
     itemName: string
     included: boolean
     onChange: (included: boolean) => void
+    showHint?: boolean
 }) {
     const id = `${idPrefix}-participation`
+    const hint = showHint && !included
     return (
         <div className="space-y-1">
             <label
@@ -27,7 +30,7 @@ export function SourcingParticipationControl({
                     checked={included}
                     onCheckedChange={onChange}
                     aria-label={`本次分配 ${itemName}`}
-                    aria-describedby={!included ? `${id}-hint` : undefined}
+                    aria-describedby={hint ? `${id}-hint` : undefined}
                 />
                 <span
                     className={cn(
@@ -38,7 +41,7 @@ export function SourcingParticipationControl({
                     {included ? "本次分配" : "暂不分配"}
                 </span>
             </label>
-            {!included ? (
+            {hint ? (
                 <p id={`${id}-hint`} className="text-xs text-muted-foreground">
                     本次不提交，方案已保留
                 </p>
