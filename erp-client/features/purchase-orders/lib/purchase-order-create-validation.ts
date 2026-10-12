@@ -2,6 +2,7 @@ import { z } from "zod"
 import { sourcingUnitQuantityError } from "./sourcing-quantity"
 
 import { findSourcingOption } from "./sourcing/options"
+import { deliveryValidationErrors } from "./sourcing/delivery"
 import { sourcingQuantityError } from "./sourcing/quantity"
 import type { SourcingLineInput, SourcingSalesOrder } from "./sourcing/types"
 import { compareDecimal, sumFixed } from "@/lib/fixed-decimal"
@@ -52,6 +53,16 @@ export function buildSourcingFormSchema(order?: SourcingSalesOrder) {
                     targetWarehouseId: textField.optional().default(""),
                     targetWarehouseName: textField.optional().default(""),
                     expectedDeliveryDate: textField,
+                    deliveryAllocations: z
+                        .array(
+                            z.object({
+                                recipient: z.string(),
+                                phone: z.string(),
+                                address: z.string(),
+                                quantity: z.string(),
+                            }),
+                        )
+                        .optional(),
                 }),
             ),
         })
@@ -65,6 +76,16 @@ export function buildSourcingFormSchema(order?: SourcingSalesOrder) {
                     message: "请至少选择一条本次供给分配明细",
                 })
                 return
+            }
+            for (const [index, message] of deliveryValidationErrors(
+                order,
+                value.lines,
+            )) {
+                context.addIssue({
+                    code: "custom",
+                    path: ["lines", index, "deliveryAllocations"],
+                    message,
+                })
             }
             const seenAllocations = new Set<string>()
             value.lines.forEach((line, index) => {

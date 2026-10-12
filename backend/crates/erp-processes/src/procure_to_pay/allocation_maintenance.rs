@@ -3,6 +3,7 @@ use erp_procurement::entity::purchase_order::{PurchaseOrder, PurchaseOrderRevisi
 use erp_procurement::service::purchase_order::allocation_maintenance::PreparedSalesAllocations;
 use persistence_core::Executor;
 
+use super::delivery_plan::validate_delivery;
 use crate::Result;
 /// 以来源销售单当前版本事实构造采购分配，事实读取和后续写入复用根执行器。
 ///
@@ -23,6 +24,17 @@ pub(super) async fn prepare_current_sales_allocations(
     revision_lines: &mut [PurchaseOrderRevisionLine],
     executor: &mut dyn Executor,
 ) -> Result<PreparedSalesAllocations> {
+    let delivery_lines = revision_lines
+        .iter()
+        .filter_map(|line| {
+            Some((
+                line.sales_order_line_id.as_ref()?.to_string(),
+                line.quantity?,
+                line.delivery_allocations.clone(),
+            ))
+        })
+        .collect::<Vec<_>>();
+    validate_delivery(db, order, &delivery_lines, executor).await?;
     Ok(erp_procurement::service::purchase_order::allocation_maintenance::prepare_current_sales_allocations(
         &super::adapters::SalesAllocationAdapter(db.clone(), order.sales_order_revision_id.clone()),
         order,

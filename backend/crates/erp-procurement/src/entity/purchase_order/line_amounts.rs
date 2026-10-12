@@ -20,7 +20,7 @@ use erp_core::money::{Amount, Quantity, Rate, UnitPrice, line_amounts, round_to_
 use super::change_order::PurchaseChangeSubmissionLineData;
 use super::purchase_submission::PurchaseOrderSubmissionLineData;
 use super::types::PurchaseLineType;
-use crate::entity::purchase_order::PurchaseOfferingSource;
+use crate::entity::purchase_order::{PurchaseDeliveryAllocation, PurchaseOfferingSource};
 
 /// 一行采购明细的类型化输入（`SavePurchaseOrderLine` 的转换目标）。
 ///
@@ -39,6 +39,8 @@ pub struct PurchaseLineInput {
     pub sku_revision_id: Option<SkuRevisionId>,
     /// 服务端冻结的正式供给选源；旧资料或物流费用行为空。
     pub supplier_offering_source: Option<PurchaseOfferingSource>,
+    /// 本采购行承担的客户交付安排。
+    pub delivery_allocations: Vec<PurchaseDeliveryAllocation>,
     /// 商品名称快照；物流费用行为空。
     pub product_name_snapshot: Option<String>,
     /// 规格快照；物流费用行为空。
@@ -147,6 +149,7 @@ impl PurchaseLineInput {
             sku_id: self.sku_id,
             sku_revision_id: self.sku_revision_id,
             supplier_offering_source: self.supplier_offering_source,
+            delivery_allocations: self.delivery_allocations,
             product_name_snapshot: self.product_name_snapshot,
             specification_snapshot: self.specification_snapshot,
             quantity: self.quantity,
@@ -193,6 +196,7 @@ impl PurchaseLineInput {
             sku_id: self.sku_id,
             sku_revision_id: self.sku_revision_id,
             supplier_offering_source: self.supplier_offering_source,
+            delivery_allocations: self.delivery_allocations,
             product_name_snapshot: self.product_name_snapshot,
             specification_snapshot: self.specification_snapshot,
             quantity: self.quantity,
@@ -296,6 +300,7 @@ mod tests {
             sku_id: Some(SkuId::new("sku-1")),
             sku_revision_id: Some(SkuRevisionId::new("skur-1")),
             supplier_offering_source: None,
+            delivery_allocations: Vec::new(),
             product_name_snapshot: Some("慰问礼包".to_string()),
             specification_snapshot: Some("500g×2".to_string()),
             quantity: Some(Quantity::from_str("3.000000").unwrap()),
@@ -318,6 +323,7 @@ mod tests {
             sku_id: None,
             sku_revision_id: None,
             supplier_offering_source: None,
+            delivery_allocations: Vec::new(),
             product_name_snapshot: None,
             specification_snapshot: None,
             quantity: None,

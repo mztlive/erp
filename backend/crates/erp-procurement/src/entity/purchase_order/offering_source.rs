@@ -154,6 +154,7 @@ pub fn inherit_submission_sources(
             sku: line.sku_id.as_ref(),
             revision: line.sku_revision_id.as_ref(),
             source: line.supplier_offering_source.as_ref(),
+            delivery: &line.delivery_allocations,
             kind: line.line_type,
         }),
     )
@@ -172,6 +173,7 @@ pub fn inherit_revision_sources(
     inputs: &mut [PurchaseLineInput],
     existing: &[PurchaseOrderRevisionLine],
 ) -> Result<()> {
+    let requested = inputs.iter().map(|line| line.delivery_allocations.clone()).collect::<Vec<_>>();
     inherit_sources(
         inputs,
         existing.iter().map(|line| SourceBinding {
@@ -179,9 +181,16 @@ pub fn inherit_revision_sources(
             sku: line.sku_id.as_ref(),
             revision: line.sku_revision_id.as_ref(),
             source: line.supplier_offering_source.as_ref(),
+            delivery: &line.delivery_allocations,
             kind: line.line_type,
         }),
-    )
+    )?;
+    for (input, delivery) in inputs.iter_mut().zip(requested) {
+        if !delivery.is_empty() {
+            input.delivery_allocations = delivery;
+        }
+    }
+    Ok(())
 }
 
 /// 来源按已冻结的销售稳定行、SKU和SKU版本匹配。
@@ -190,6 +199,7 @@ struct SourceBinding<'a> {
     sku: Option<&'a SkuId>,
     revision: Option<&'a SkuRevisionId>,
     source: Option<&'a PurchaseOfferingSource>,
+    delivery: &'a [super::PurchaseDeliveryAllocation],
     kind: PurchaseLineType,
 }
 
@@ -201,24 +211,25 @@ fn inherit_sources<'a>(
     let mut sources = HashMap::new();
     for line in existing.filter(|line| line.kind == PurchaseLineType::ItemService) {
         let key = source_key(line.stable_line, line.sku, line.revision)?;
-        if sources.insert(key, line.source.cloned()).is_some() {
+        if sources.insert(key, (line.source.cloned(), line.delivery.to_vec())).is_some() {
             return Err(Error::from("采购原行身份歧义，不能继承正式选源"));
         }
     }
     for input in inputs {
-        input.supplier_offering_source = if input.line_type == PurchaseLineType::LogisticsFee {
-            None
-        } else {
-            let key = source_key(
-                input.sales_order_line_id.as_ref().map(|id| id.as_ref()),
-                input.sku_id.as_ref(),
-                input.sku_revision_id.as_ref(),
-            )?;
-            sources
-                .get(&key)
-                .ok_or_else(|| Error::from("采购来源行或SKU版本已变化，不能继承正式选源"))?
-                .clone()
-        };
+        (input.supplier_offering_source, input.delivery_allocations) =
+            if input.line_type == PurchaseLineType::LogisticsFee {
+                (None, Vec::new())
+            } else {
+                let key = source_key(
+                    input.sales_order_line_id.as_ref().map(|id| id.as_ref()),
+                    input.sku_id.as_ref(),
+                    input.sku_revision_id.as_ref(),
+                )?;
+                sources
+                    .get(&key)
+                    .ok_or_else(|| Error::from("采购来源行或SKU版本已变化，不能继承正式选源"))?
+                    .clone()
+            };
     }
     Ok(())
 }

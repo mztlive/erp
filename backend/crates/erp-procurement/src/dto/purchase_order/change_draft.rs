@@ -92,6 +92,8 @@ impl From<&PurchaseOrderRevisionLine> for SavePurchaseOrderLine {
     fn from(line: &PurchaseOrderRevisionLine) -> Self {
         Self {
             line_type: line.line_type,
+            delivery_allocations: (!line.delivery_allocations.is_empty())
+                .then(|| line.delivery_allocations.clone()),
             procurement_confirmation_line_id: line
                 .procurement_confirmation_line_id
                 .as_ref()
@@ -131,6 +133,8 @@ impl From<&PurchaseChangeSubmissionLine> for SavePurchaseOrderLine {
     fn from(line: &PurchaseChangeSubmissionLine) -> Self {
         Self {
             line_type: line.line_type,
+            delivery_allocations: (!line.delivery_allocations.is_empty())
+                .then(|| line.delivery_allocations.clone()),
             procurement_confirmation_line_id: line
                 .procurement_confirmation_line_id
                 .as_ref()

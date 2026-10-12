@@ -599,6 +599,7 @@ mod posting_contract_tests {
             sku_id: Some(SkuId::new("sku")),
             sku_revision_id: Some(SkuRevisionId::new("sku-revision")),
             supplier_offering_source: None,
+            delivery_allocations: Vec::new(),
             product_name_snapshot: Some("商品".into()),
             specification_snapshot: None,
             quantity: Some(quantity.parse().unwrap()),

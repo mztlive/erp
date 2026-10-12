@@ -453,6 +453,7 @@ mod tests {
                 sku_id: Some(SkuId::new("sku-1")),
                 sku_revision_id: Some(SkuRevisionId::new("skurev-1")),
                 supplier_offering_source: None,
+                delivery_allocations: Vec::new(),
                 product_name_snapshot: Some("商品".into()),
                 specification_snapshot: Some("规格".into()),
                 quantity: Some(Quantity::from_str("2").expect("数量合法")),

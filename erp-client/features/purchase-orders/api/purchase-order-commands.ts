@@ -276,6 +276,7 @@ export async function createPurchaseOrdersFromSourcing(
                     target_warehouse_id: line.targetWarehouseId,
                     quantity: line.quantity,
                     expected_delivery_date: line.expectedDeliveryDate,
+                    delivery_allocations: line.deliveryAllocations ?? [],
                 })),
                 idempotency_key: input.idempotencyKey,
             },

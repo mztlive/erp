@@ -24,6 +24,7 @@ use crate::entity::facts::{
     SalesRevisionFact as SalesOrderRevision, SupplierCommercialFact as SupplierCommercialProfileRevision,
     SupplierRoleFact as SupplierAccount,
 };
+use crate::entity::purchase_order::PurchaseDeliveryAllocation;
 
 /// 单条销售当前版本明细的合格供应商供给。
 #[derive(Debug, Clone)]
@@ -82,6 +83,8 @@ pub struct RequestedLine {
     pub quantity: Quantity,
     /// 采购确认的预计交付日。
     pub expected_delivery_date: BusinessDate,
+    /// 本次承担的地址与数量。
+    pub delivery_allocations: Vec<PurchaseDeliveryAllocation>,
 }
 
 /// 采购创建依据计算所需的最小持久化事实集合。
@@ -130,7 +133,7 @@ impl RequestedLine {
         if quantity <= zero_quantity() {
             return Err(Error::from("本次数量必须大于 0"));
         }
-        Ok(Self { sales_order_line_id, quantity, expected_delivery_date })
+        Ok(Self { sales_order_line_id, quantity, expected_delivery_date, delivery_allocations: Vec::new() })
     }
 }
 
@@ -457,6 +460,9 @@ mod tests {
     /// 构造销售当前版本商品/服务子类型行。
     fn goods_line(revision_line_id: &str) -> SalesOrderGoodsServiceLineRevision {
         SalesOrderGoodsServiceLineRevision {
+            assigned_delivery_allocations: Vec::new(),
+            delivery_allocations: Vec::new(),
+
             revision_line_id: SalesOrderRevisionLineId::new(revision_line_id),
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: erp_core::ids::SkuRevisionId::new("skur-1"),

@@ -1,5 +1,6 @@
 "use client"
 
+import { SalesDeliveryRequirements } from "./sourcing-delivery-plan"
 import { useEffect, useState } from "react"
 import { ChevronDownIcon, ChevronUpIcon, PlusIcon } from "lucide-react"
 import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
@@ -128,6 +129,7 @@ function SourcingProductCard({
                     )}
                 </Button>
             </header>
+            <SalesDeliveryRequirements product={product} />
             {/* 保持字段挂载，收起时隐藏，避免丢失 TanStack Form 的校验注册。 */}
             <div id={`${id}-editor`} hidden={!expanded} className="bg-muted/15">
                 {issues.length > 0 ? (

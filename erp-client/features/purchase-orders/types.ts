@@ -50,7 +50,15 @@ type ActionBlocker = {
     message: string
 }
 
+export type PurchaseDeliveryAllocation = {
+    recipient: string
+    phone: string
+    address: string
+    quantity: string
+}
+
 type PurchaseOrderLineView = Readonly<{
+    deliveryAllocations?: PurchaseDeliveryAllocation[]
     lineId: string
     lineType: "ITEM_SERVICE" | "LOGISTICS_FEE"
     procurementConfirmationLineId?: string
@@ -248,6 +256,7 @@ export type PurchaseOrderCenterView = Readonly<{
         ownerUserId: string
         ownerName: string
         targetWarehouseId?: string
+        targetWarehouseName?: string
         submittedBy?: string
         submittedAt?: string
         expectedDate?: string
@@ -331,6 +340,8 @@ export type PurchaseCreationBasis = Readonly<{
         expectedDeliveryDate: string
         /** 销售对客户承诺的最晚交付日。 */
         salesDeliveryDeadline: string
+        deliveryAllocations: PurchaseDeliveryAllocation[]
+        assignedDeliveryAllocations: PurchaseDeliveryAllocation[]
         salesAllocationLabel: string
     }[]
     estimatedGross: string
@@ -383,8 +394,10 @@ export type CreatePurchaseOrdersFromSourcingInput = {
         basisId: string
         sourceType: SupplySourceType
         targetWarehouseId?: string
+        targetWarehouseName?: string
         quantity: string
         expectedDeliveryDate: string
+        deliveryAllocations?: PurchaseDeliveryAllocation[]
     }>
     idempotencyKey: string
 }

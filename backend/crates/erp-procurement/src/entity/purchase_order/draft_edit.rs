@@ -267,6 +267,7 @@ mod tests {
                 sku_id: Some(SkuId::new(sku_id)),
                 sku_revision_id: Some(SkuRevisionId::new(format!("skur-{sku_id}"))),
                 supplier_offering_source: None,
+                delivery_allocations: Vec::new(),
                 product_name_snapshot: Some("商品".to_string()),
                 specification_snapshot: Some("规格".to_string()),
                 quantity: Some(quantity),
@@ -321,6 +322,9 @@ mod tests {
                 unit_snapshot: Some("件".to_string()),
             },
             goods_line: SalesOrderGoodsServiceLineRevision {
+                assigned_delivery_allocations: Vec::new(),
+                delivery_allocations: Vec::new(),
+
                 revision_line_id: SalesOrderRevisionLineId::new(format!("sorl-{stable_line_id}")),
                 sku_id: SkuId::new("sku-1"),
                 sku_revision_id: SkuRevisionId::new("skur-1"),

@@ -123,6 +123,9 @@ fn revision_line(id: &str, stable_line_id: &str) -> SalesOrderRevisionLine {
 /// 构造销售当前版本商品/服务子类型行。
 fn goods_line(revision_line_id: &str) -> SalesOrderGoodsServiceLineRevision {
     SalesOrderGoodsServiceLineRevision {
+        assigned_delivery_allocations: Vec::new(),
+        delivery_allocations: Vec::new(),
+
         revision_line_id: SalesOrderRevisionLineId::new(revision_line_id),
         sku_id: SkuId::new("sku-1"),
         sku_revision_id: erp_core::ids::SkuRevisionId::new("skur-1"),
@@ -276,6 +279,8 @@ fn assignment(
     quantity: &str,
 ) -> SourcingAssignment {
     SourcingAssignment {
+        delivery_allocations: Vec::new(),
+
         sales_order_line_id: line_id.to_string(),
         basis_id: basis_id.to_string(),
         source_type,
@@ -978,4 +983,61 @@ fn sourcing_plan_enforces_unit_precision_for_purchase_and_stock() {
         plan.validate_against_latest_stock(&[stock]),
         Err(SourcingPlanError::QuantityContract(_))
     ));
+}
+
+#[test]
+fn split_suppliers_cannot_double_allocate_an_address() {
+    use crate::entity::purchase_order::PurchaseDeliveryAllocation;
+    let delivery = |address: &str, qty: &str| PurchaseDeliveryAllocation {
+        recipient: "张三".into(),
+        phone: "13800000000".into(),
+        address: address.into(),
+        quantity: Quantity::from_str(qty).unwrap(),
+    };
+    let order = sales_order("so-delivery");
+    let mut groups = vec![
+        basis_group("s1", "NET-30", FulfillmentResponsibility::SupplierDirect, "10", &[("sol-1", "10", "0")]),
+        basis_group("s2", "NET-30", FulfillmentResponsibility::SupplierDirect, "10", &[("sol-1", "10", "0")]),
+    ];
+    for group in &mut groups {
+        group.lines[0].coverage.goods_line.delivery_allocations =
+            vec![delivery("A", "6"), delivery("B", "4")];
+    }
+    let mut assignments = groups
+        .iter()
+        .map(|group| {
+            let mut row = assignment(
+                "sol-1",
+                &basis_id_for(&order, group, "wi-1", None),
+                SupplySourceType::Purchase,
+                None,
+                "4",
+            );
+            row.delivery_allocations = vec![delivery("A", "4")];
+            row
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        SourcingPlan::plan(
+            &order,
+            &groups,
+            &[],
+            "wi-1",
+            &SourcingAssignmentSet::normalize(&assignments).unwrap()
+        )
+        .is_err()
+    );
+    assignments[1].delivery_allocations = vec![delivery("B", "4")];
+    let result = SourcingPlan::plan(
+        &order,
+        &groups,
+        &[],
+        "wi-1",
+        &SourcingAssignmentSet::normalize(&assignments).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(result.purchase_plans().len(), 2);
+    assert!(
+        result.purchase_plans().iter().all(|plan| plan.requested_lines[0].delivery_allocations.len() == 1)
+    );
 }

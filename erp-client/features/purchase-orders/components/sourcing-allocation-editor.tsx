@@ -20,6 +20,7 @@ import {
     SourcingTargetWarehouseField,
 } from "./create-sourcing/sourcing-fields"
 import type { SourcingEditorProps } from "./create-sourcing/types"
+import { SourcingDeliveryEditor } from "./sourcing-delivery-plan"
 import { SourcingRecommendationHint } from "./sourcing-recommendation-hint"
 
 /** 调整区沿用正式表单字段；当前供给摘要与编辑状态共用同一份值。 */
@@ -173,6 +174,12 @@ export function SourcingAllocationEditor({
                     </div>
                 ) : null}
             </div>
+            <SourcingDeliveryEditor
+                form={form}
+                product={product}
+                line={line}
+                index={index}
+            />
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                 {isStock ? (
                     <>

@@ -8,9 +8,9 @@ use super::{business_date_of, zero_amount};
 use crate::dto::purchase_order::CreatePurchaseOrderFromBasisRequest;
 use crate::entity::facts::SalesOrderBasisFact;
 use crate::entity::purchase_order::{
-    BasisGroup, BasisLine, BasisScope, FulfillmentResponsibility, PurchaseLineType, PurchaseOfferingSource,
-    PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData, RequestedLine, basis_id_for,
-    stable_line_id, supply_cost,
+    BasisGroup, BasisLine, BasisScope, FulfillmentResponsibility, PurchaseDeliveryAllocation,
+    PurchaseLineType, PurchaseOfferingSource, PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData,
+    RequestedLine, basis_id_for, stable_line_id, supply_cost,
 };
 use crate::{Error, Result};
 
@@ -23,6 +23,7 @@ pub struct SelectedLine {
     quantity: Quantity,
     /// 采购确认的预计交付日。
     expected_delivery_date: BusinessDate,
+    delivery_allocations: Vec<PurchaseDeliveryAllocation>,
 }
 
 /// 一组已计算金额的本次采购行。
@@ -116,6 +117,7 @@ pub fn build_submission_line(
             sku_id: Some(basis.coverage.goods_line.sku_id.clone()),
             sku_revision_id: Some(basis.coverage.goods_line.sku_revision_id.clone()),
             supplier_offering_source: Some(PurchaseOfferingSource::from_supply(&basis.supply)?),
+            delivery_allocations: line.selected.delivery_allocations.clone(),
             product_name_snapshot: Some(basis.coverage.revision_line.item_name_snapshot.clone()),
             specification_snapshot: basis.coverage.revision_line.spec_snapshot.clone(),
             quantity: Some(line.selected.quantity),
@@ -227,10 +229,21 @@ pub fn validate_requested_quantities(
         }
         let sales_due = business_date_of(basis.coverage.goods_line.fulfillment_due_at)?;
         ensure_expected_delivery_within_sales_due(requested_line.expected_delivery_date, sales_due)?;
+        let goods = &basis.coverage.goods_line;
+        PurchaseDeliveryAllocation::validate_source(
+            &requested_line.delivery_allocations,
+            &goods.delivery_allocations,
+            &goods.assigned_delivery_allocations,
+            requested_line.quantity,
+            group.scope.fulfillment_responsibility,
+            basis.coverage.quantity_scale,
+            &goods.base_unit_code,
+        )?;
         selected.push(SelectedLine {
             basis: basis.clone(),
             quantity: requested_line.quantity,
             expected_delivery_date: requested_line.expected_delivery_date,
+            delivery_allocations: requested_line.delivery_allocations.clone(),
         });
     }
     Ok(selected)

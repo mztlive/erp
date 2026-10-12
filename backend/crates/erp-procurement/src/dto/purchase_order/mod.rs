@@ -106,6 +106,7 @@ mod tests {
             .with_expected_lock_version(3)
             .with_payment_term_code(" NET-30 ")
             .with_lines(vec![SavePurchaseOrderLine {
+                delivery_allocations: None,
                 line_type: PurchaseLineType::ItemService,
                 procurement_confirmation_line_id: None,
                 sku_id: Some("sku-1".to_string()),
@@ -148,6 +149,8 @@ mod tests {
             payment_term_code: "NET-30".to_string(),
             target_warehouse_id: Some("wh-1".to_string()),
             lines: vec![CreatePurchaseOrderLineRequest {
+                delivery_allocations: Vec::new(),
+
                 sales_order_line_id: "sol-1".to_string(),
                 quantity: "10".to_string(),
                 expected_delivery_date: "2026-08-25".to_string(),
@@ -155,6 +158,8 @@ mod tests {
             idempotency_key: "create-key-1".to_string(),
         };
         let lines = vec![RequestedLine {
+            delivery_allocations: Vec::new(),
+
             sales_order_line_id: "sol-1".to_string(),
             quantity: Quantity::from_str("10").unwrap(),
             expected_delivery_date: BusinessDate::from_str("2026-08-25").unwrap(),
@@ -190,6 +195,8 @@ mod tests {
         };
         let assignments = vec![
             SourcingAssignment {
+                delivery_allocations: Vec::new(),
+
                 sales_order_line_id: "sol-1".to_string(),
                 basis_id: "basis-1".to_string(),
                 source_type: SupplySourceType::Purchase,
@@ -198,6 +205,8 @@ mod tests {
                 expected_delivery_date: BusinessDate::from_str("2026-08-25").unwrap(),
             },
             SourcingAssignment {
+                delivery_allocations: Vec::new(),
+
                 sales_order_line_id: "sol-2".to_string(),
                 basis_id: "basis-2".to_string(),
                 source_type: SupplySourceType::ExistingStock,
@@ -444,6 +453,7 @@ mod tests {
                 sku_id: Some(SkuId::new("sku-1")),
                 sku_revision_id: Some(SkuRevisionId::new("skur-1")),
                 supplier_offering_source: None,
+                delivery_allocations: Vec::new(),
                 product_name_snapshot: Some("商品".to_string()),
                 specification_snapshot: Some("规格".to_string()),
                 quantity: Some(quantity),
@@ -478,6 +488,7 @@ mod tests {
 
         let mut both = empty.clone();
         both.lines = vec![SavePurchaseOrderLine {
+            delivery_allocations: None,
             line_type: PurchaseLineType::ItemService,
             procurement_confirmation_line_id: None,
             sku_id: None,
@@ -543,6 +554,7 @@ mod tests {
 
         request.line_patches[0].line_id = "subl-1".to_string();
         request.lines = vec![SavePurchaseOrderLine {
+            delivery_allocations: None,
             line_type: PurchaseLineType::ItemService,
             procurement_confirmation_line_id: None,
             sku_id: Some("sku-9".to_string()),
@@ -597,6 +609,7 @@ mod tests {
     #[test]
     fn to_draft_edit_carries_all_line_fields() {
         let line = SavePurchaseOrderLine {
+            delivery_allocations: None,
             line_type: PurchaseLineType::ItemService,
             procurement_confirmation_line_id: Some("pcl-1".to_string()),
             sku_id: Some("sku-1".to_string()),

@@ -1,5 +1,10 @@
 "use client"
 
+import { Fragment } from "react"
+import {
+    SalesDeliveryRequirements,
+    SourcingDeliveryEditor,
+} from "./sourcing-delivery-plan"
 import { PlusIcon, Trash2Icon } from "lucide-react"
 
 import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
@@ -82,168 +87,196 @@ export function PurchaseOrderCreateSourcingTable({
                                 input.salesOrderLineId,
                         ).length
                         return (
-                            <TableRow key={input.rowKey}>
-                                <TableCell>
-                                    <form.AppField
-                                        name={`lines[${index}].selected`}
-                                    >
-                                        {(field) => (
-                                            <label
-                                                className="inline-flex min-h-10 cursor-pointer items-center justify-center"
-                                                htmlFor={`procurement-orders-create-row-${toAutomationIdSegment(input.rowKey)}-select`}
-                                            >
-                                                <Checkbox
-                                                    id={`procurement-orders-create-row-${toAutomationIdSegment(input.rowKey)}-select`}
-                                                    checked={
-                                                        field.state.value ===
-                                                        true
+                            <Fragment key={input.rowKey}>
+                                <TableRow>
+                                    <TableCell>
+                                        <form.AppField
+                                            name={`lines[${index}].selected`}
+                                        >
+                                            {(field) => (
+                                                <label
+                                                    className="inline-flex min-h-10 cursor-pointer items-center justify-center"
+                                                    htmlFor={`procurement-orders-create-row-${toAutomationIdSegment(input.rowKey)}-select`}
+                                                >
+                                                    <Checkbox
+                                                        id={`procurement-orders-create-row-${toAutomationIdSegment(input.rowKey)}-select`}
+                                                        checked={
+                                                            field.state
+                                                                .value === true
+                                                        }
+                                                        onCheckedChange={(
+                                                            checked,
+                                                        ) =>
+                                                            field.handleChange(
+                                                                checked ===
+                                                                    true,
+                                                            )
+                                                        }
+                                                        aria-label={`本次供给分配 ${product.itemName}`}
+                                                        data-testid={`purchase-sourcing-selected-${input.rowKey}`}
+                                                    />
+                                                </label>
+                                            )}
+                                        </form.AppField>
+                                    </TableCell>
+                                    <TableCell className="min-w-56 max-w-72 whitespace-normal">
+                                        <div className="font-medium text-foreground">
+                                            {product.itemName}
+                                        </div>
+                                        <div className="mt-0.5 text-xs text-muted-foreground">
+                                            {[
+                                                product.salesAllocationLabel,
+                                                product.deliveryDeadline
+                                                    ? `承诺最晚 ${product.deliveryDeadline}`
+                                                    : undefined,
+                                            ]
+                                                .filter(Boolean)
+                                                .join(" · ")}
+                                        </div>
+                                    </TableCell>
+                                    <TableCell data-align="end">
+                                        <QuantityValue
+                                            value={product.salesQuantity}
+                                            unit={product.unit}
+                                        />
+                                    </TableCell>
+                                    <TableCell data-align="end">
+                                        <QuantityValue
+                                            value={product.coveredQuantity}
+                                            unit={product.unit}
+                                        />
+                                    </TableCell>
+                                    <TableCell data-align="end">
+                                        <QuantityValue
+                                            value={product.remainingQuantity}
+                                            unit={product.unit}
+                                        />
+                                    </TableCell>
+                                    <TableCell className="min-w-64">
+                                        <SourcingOptionField
+                                            form={form}
+                                            index={index}
+                                            rowKey={input.rowKey}
+                                            product={product}
+                                        />
+                                    </TableCell>
+                                    <TableCell className="min-w-52">
+                                        <SourcingTargetWarehouseField
+                                            form={form}
+                                            index={index}
+                                            rowKey={input.rowKey}
+                                            order={order}
+                                            salesOrderLineId={
+                                                input.salesOrderLineId
+                                            }
+                                        />
+                                    </TableCell>
+                                    <TableCell className="min-w-36">
+                                        <form.AppField
+                                            name={`lines[${index}].quantity`}
+                                        >
+                                            {(field) => (
+                                                <field.TextField
+                                                    id={`procurement-orders-create-row-${toAutomationIdSegment(input.rowKey)}-quantity`}
+                                                    label="本次分配数量"
+                                                    hideLabel
+                                                    type="number"
+                                                    inputMode="decimal"
+                                                    min="0"
+                                                    step={
+                                                        sourcingQuantityStep(
+                                                            product.quantityScale,
+                                                        ) ?? "1"
                                                     }
-                                                    onCheckedChange={(
-                                                        checked,
-                                                    ) =>
-                                                        field.handleChange(
-                                                            checked === true,
-                                                        )
-                                                    }
-                                                    aria-label={`本次供给分配 ${product.itemName}`}
-                                                    data-testid={`purchase-sourcing-selected-${input.rowKey}`}
+                                                    inputClassName="num text-right"
+                                                    testId={`purchase-sourcing-quantity-${input.rowKey}`}
                                                 />
-                                            </label>
-                                        )}
-                                    </form.AppField>
-                                </TableCell>
-                                <TableCell className="min-w-56 max-w-72 whitespace-normal">
-                                    <div className="font-medium text-foreground">
-                                        {product.itemName}
-                                    </div>
-                                    <div className="mt-0.5 text-xs text-muted-foreground">
-                                        {[
-                                            product.salesAllocationLabel,
-                                            product.deliveryDeadline
-                                                ? `承诺最晚 ${product.deliveryDeadline}`
-                                                : undefined,
-                                        ]
-                                            .filter(Boolean)
-                                            .join(" · ")}
-                                    </div>
-                                </TableCell>
-                                <TableCell data-align="end">
-                                    <QuantityValue
-                                        value={product.salesQuantity}
-                                        unit={product.unit}
-                                    />
-                                </TableCell>
-                                <TableCell data-align="end">
-                                    <QuantityValue
-                                        value={product.coveredQuantity}
-                                        unit={product.unit}
-                                    />
-                                </TableCell>
-                                <TableCell data-align="end">
-                                    <QuantityValue
-                                        value={product.remainingQuantity}
-                                        unit={product.unit}
-                                    />
-                                </TableCell>
-                                <TableCell className="min-w-64">
-                                    <SourcingOptionField
+                                            )}
+                                        </form.AppField>
+                                    </TableCell>
+                                    <SourcingOptionFacts
                                         form={form}
                                         index={index}
-                                        rowKey={input.rowKey}
-                                        product={product}
-                                    />
-                                </TableCell>
-                                <TableCell className="min-w-52">
-                                    <SourcingTargetWarehouseField
-                                        form={form}
-                                        index={index}
-                                        rowKey={input.rowKey}
                                         order={order}
                                         salesOrderLineId={
                                             input.salesOrderLineId
                                         }
                                     />
-                                </TableCell>
-                                <TableCell className="min-w-36">
-                                    <form.AppField
-                                        name={`lines[${index}].quantity`}
-                                    >
-                                        {(field) => (
-                                            <field.TextField
-                                                id={`procurement-orders-create-row-${toAutomationIdSegment(input.rowKey)}-quantity`}
-                                                label="本次分配数量"
-                                                hideLabel
-                                                type="number"
-                                                inputMode="decimal"
-                                                min="0"
-                                                step={
-                                                    sourcingQuantityStep(
-                                                        product.quantityScale,
-                                                    ) ?? "1"
+                                    <TableCell className="min-w-36">
+                                        <SourcingExpectedDeliveryField
+                                            form={form}
+                                            index={index}
+                                            rowKey={input.rowKey}
+                                            order={order}
+                                            salesOrderLineId={
+                                                input.salesOrderLineId
+                                            }
+                                        />
+                                    </TableCell>
+                                    <TableCell>
+                                        <div className="flex items-center gap-1">
+                                            <Button
+                                                id={`procurement-orders-create-row-${toAutomationIdSegment(input.rowKey)}-split-add`}
+                                                type="button"
+                                                size="icon-sm"
+                                                variant="ghost"
+                                                aria-label={`拆分 ${product.itemName}`}
+                                                title="拆分履约"
+                                                disabled={
+                                                    !canSplitSourcingProduct(
+                                                        product,
+                                                        siblingCount,
+                                                    )
                                                 }
-                                                inputClassName="num text-right"
-                                                testId={`purchase-sourcing-quantity-${input.rowKey}`}
+                                                onClick={() =>
+                                                    onAddSplit(
+                                                        input.salesOrderLineId,
+                                                    )
+                                                }
+                                            >
+                                                <PlusIcon />
+                                            </Button>
+                                            <Button
+                                                id={`procurement-orders-create-row-${toAutomationIdSegment(input.rowKey)}-split-remove`}
+                                                type="button"
+                                                size="icon-sm"
+                                                variant="ghost"
+                                                aria-label={`删除 ${product.itemName} 的拆分行`}
+                                                title="删除拆分"
+                                                disabled={siblingCount <= 1}
+                                                onClick={() =>
+                                                    onRemoveSplit(input.rowKey)
+                                                }
+                                            >
+                                                <Trash2Icon />
+                                            </Button>
+                                        </div>
+                                    </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                    <TableCell
+                                        colSpan={12}
+                                        className="whitespace-normal"
+                                    >
+                                        <div className="grid max-w-5xl gap-4 py-3 lg:grid-cols-2">
+                                            <SalesDeliveryRequirements
+                                                product={product}
                                             />
-                                        )}
-                                    </form.AppField>
-                                </TableCell>
-                                <SourcingOptionFacts
-                                    form={form}
-                                    index={index}
-                                    order={order}
-                                    salesOrderLineId={input.salesOrderLineId}
-                                />
-                                <TableCell className="min-w-36">
-                                    <SourcingExpectedDeliveryField
-                                        form={form}
-                                        index={index}
-                                        rowKey={input.rowKey}
-                                        order={order}
-                                        salesOrderLineId={
-                                            input.salesOrderLineId
-                                        }
-                                    />
-                                </TableCell>
-                                <TableCell>
-                                    <div className="flex items-center gap-1">
-                                        <Button
-                                            id={`procurement-orders-create-row-${toAutomationIdSegment(input.rowKey)}-split-add`}
-                                            type="button"
-                                            size="icon-sm"
-                                            variant="ghost"
-                                            aria-label={`拆分 ${product.itemName}`}
-                                            title="拆分履约"
-                                            disabled={
-                                                !canSplitSourcingProduct(
-                                                    product,
-                                                    siblingCount,
-                                                )
-                                            }
-                                            onClick={() =>
-                                                onAddSplit(
-                                                    input.salesOrderLineId,
-                                                )
-                                            }
-                                        >
-                                            <PlusIcon />
-                                        </Button>
-                                        <Button
-                                            id={`procurement-orders-create-row-${toAutomationIdSegment(input.rowKey)}-split-remove`}
-                                            type="button"
-                                            size="icon-sm"
-                                            variant="ghost"
-                                            aria-label={`删除 ${product.itemName} 的拆分行`}
-                                            title="删除拆分"
-                                            disabled={siblingCount <= 1}
-                                            onClick={() =>
-                                                onRemoveSplit(input.rowKey)
-                                            }
-                                        >
-                                            <Trash2Icon />
-                                        </Button>
-                                    </div>
-                                </TableCell>
-                            </TableRow>
+                                            <fieldset
+                                                disabled={!input.selected}
+                                                className="min-w-0 px-4 disabled:opacity-60"
+                                            >
+                                                <SourcingDeliveryEditor
+                                                    form={form}
+                                                    product={product}
+                                                    line={input}
+                                                    index={index}
+                                                />
+                                            </fieldset>
+                                        </div>
+                                    </TableCell>
+                                </TableRow>
+                            </Fragment>
                         )
                     })}
                 </TableBody>

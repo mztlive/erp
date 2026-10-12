@@ -4,7 +4,9 @@ use validator::Validate;
 
 use super::{SortDir, normalize_sort};
 use crate::Result;
-use crate::entity::purchase_order::{PurchaseLineType, PurchaseOrderStatus, PurchaseReviewStatus};
+use crate::entity::purchase_order::{
+    PurchaseDeliveryAllocation, PurchaseLineType, PurchaseOrderStatus, PurchaseReviewStatus,
+};
 
 /// 采购单列表允许的排序字段白名单（api-contract §4：Service 层校验）。
 pub const PURCHASE_ORDER_SORT_FIELDS: &[&str] = &["created_at", "purchase_no"];
@@ -107,6 +109,8 @@ impl PurchaseOrderListParams {
 /// 采购单明细行视图（草稿/提交/版本三类内容共用形状）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct PurchaseOrderLineView {
+    /// 本采购行冻结的交付安排。
+    pub delivery_allocations: Vec<PurchaseDeliveryAllocation>,
     /// 行实体主键。
     pub line_id: String,
     /// 行号（从 1 递增）。

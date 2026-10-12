@@ -208,6 +208,7 @@ mod tests {
 
     fn item() -> SavePurchaseOrderLine {
         SavePurchaseOrderLine {
+            delivery_allocations: None,
             line_type: PurchaseLineType::ItemService,
             procurement_confirmation_line_id: Some("stable-fallback".into()),
             sku_id: Some("sku-1".into()),

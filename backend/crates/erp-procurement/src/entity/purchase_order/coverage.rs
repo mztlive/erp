@@ -130,7 +130,22 @@ pub fn ensure_creation_sources_current(
 /// 预占由 Repository 过滤；覆盖超过目标不得截断，必须显式失败。
 pub fn build_procurement_coverage(facts: ProcurementCoverageFacts) -> Result<SalesProcurementCoverage> {
     let revision = facts.revision.ok_or_else(|| Error::from("销售单当前版本不存在，无法计算采购剩余量"))?;
-    let targets = join_target_lines(facts.revision_lines, facts.goods_lines)?;
+    let mut targets = join_target_lines(facts.revision_lines, facts.goods_lines)?;
+    for (line, goods) in &mut targets {
+        goods.assigned_delivery_allocations = facts
+            .submission_lines
+            .iter()
+            .filter(|row| row.sales_order_line_id.as_ref() == Some(&line.sales_order_line_id))
+            .flat_map(|row| row.delivery_allocations.clone())
+            .chain(
+                facts
+                    .purchase_revision_lines
+                    .iter()
+                    .filter(|row| row.sales_order_line_id.as_ref() == Some(&line.sales_order_line_id))
+                    .flat_map(|row| row.delivery_allocations.clone()),
+            )
+            .collect();
+    }
     let product_kinds = resolve_product_kinds(&targets, &facts.skus, &facts.products)?;
     let mut covered = HashMap::new();
     accumulate_submission_coverage(&targets, &facts.purchase_orders, &facts.submission_lines, &mut covered)?;
@@ -688,6 +703,9 @@ mod tests {
     /// 构造销售当前版本商品/服务子类型行。
     fn goods_line(revision_line_id: &str, sku_id: &str, quantity: &str) -> SalesGoodsLineFact {
         SalesGoodsLineFact {
+            assigned_delivery_allocations: Vec::new(),
+            delivery_allocations: Vec::new(),
+
             revision_line_id: SalesOrderRevisionLineId::new(revision_line_id),
             sku_id: SkuId::new(sku_id),
             sku_revision_id: erp_core::ids::SkuRevisionId::new(format!("skur-{sku_id}")),
@@ -733,6 +751,7 @@ mod tests {
                 sku_id: Some(SkuId::new("sku-1")),
                 sku_revision_id: Some(erp_core::ids::SkuRevisionId::new("skur-1")),
                 supplier_offering_source: None,
+                delivery_allocations: Vec::new(),
                 product_name_snapshot: Some("商品".to_string()),
                 specification_snapshot: Some("规格".to_string()),
                 quantity: Some(Quantity::from_str("2").unwrap()),
@@ -771,6 +790,7 @@ mod tests {
                 sku_id: Some(SkuId::new("sku-1")),
                 sku_revision_id: Some(erp_core::ids::SkuRevisionId::new("skur-1")),
                 supplier_offering_source: None,
+                delivery_allocations: Vec::new(),
                 product_name_snapshot: Some("商品".to_string()),
                 specification_snapshot: Some("规格".to_string()),
                 quantity: Some(Quantity::from_str("2").unwrap()),

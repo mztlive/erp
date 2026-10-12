@@ -103,6 +103,18 @@ export function SourcingProductSummaryList({
                                 <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-4">
                                     <span className="text-base font-semibold">
                                         {row.product.itemName}
+                                        {row.product.deliveryAllocations
+                                            .length > 0 ? (
+                                            <span className="ml-2 text-xs font-normal text-muted-foreground">
+                                                分送{" "}
+                                                {
+                                                    row.product
+                                                        .deliveryAllocations
+                                                        .length
+                                                }{" "}
+                                                个地址
+                                            </span>
+                                        ) : null}
                                     </span>
                                     <SourcingParticipationControl
                                         idPrefix={id}

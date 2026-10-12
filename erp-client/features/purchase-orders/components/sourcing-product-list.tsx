@@ -171,6 +171,18 @@ export function SourcingProductList({
                                             }
                                         >
                                             {row.product.itemName}
+                                            {row.product.deliveryAllocations
+                                                .length > 0 ? (
+                                                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                                                    分送{" "}
+                                                    {
+                                                        row.product
+                                                            .deliveryAllocations
+                                                            .length
+                                                    }{" "}
+                                                    个地址
+                                                </span>
+                                            ) : null}
                                         </button>
                                         <p className="mt-0.5 text-xs text-muted-foreground">
                                             {row.status === "暂不分配"

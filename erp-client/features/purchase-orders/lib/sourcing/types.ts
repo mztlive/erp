@@ -1,6 +1,7 @@
 import type {
     FulfillmentResponsibility,
     PurchaseType,
+    PurchaseDeliveryAllocation,
     SupplySourceType,
 } from "@/features/purchase-orders/types"
 
@@ -39,6 +40,8 @@ export type SourcingProductLine = Readonly<{
     /** 销售承诺的最晚交付日，采购预计交付日不得晚于此日。 */
     deliveryDeadline: string
     salesAllocationLabel: string
+    deliveryAllocations: PurchaseDeliveryAllocation[]
+    assignedDeliveryAllocations: PurchaseDeliveryAllocation[]
     options: readonly SourcingSupplierOption[]
 }>
 
@@ -55,6 +58,7 @@ export type SourcingSalesOrder = Readonly<{
 
 /** 建单表单中一条可编辑选源行。 */
 export type SourcingLineInput = {
+    deliveryAllocations?: PurchaseDeliveryAllocation[]
     rowKey: string
     salesOrderLineId: string
     selected: boolean
@@ -84,6 +88,7 @@ export type PurchaseOrderPreview = Readonly<{
 
 /** 预览采购单中的一行。 */
 export type PurchaseOrderPreviewLine = Readonly<{
+    deliveryAllocations: PurchaseDeliveryAllocation[]
     salesOrderLineId: string
     itemName: string
     itemSku?: string

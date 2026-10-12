@@ -6,6 +6,7 @@ use erp_procurement::entity::facts::{
     SalesOrderBasisFact, SalesRevisionFact, SalesRevisionLineFact, SkuFact, StockBalanceFact,
     SupplierCommercialFact, SupplierRoleFact, VersionedFactIdentity,
 };
+use erp_procurement::entity::purchase_order::PurchaseDeliveryAllocation;
 use erp_sales::entity::sales_order::{
     CommercialStatus, LineType, SalesOrder, SalesOrderGoodsServiceLineRevision, SalesOrderRevision,
     SalesOrderRevisionLine,
@@ -97,6 +98,17 @@ pub(crate) fn sales_goods_fact(value: SalesOrderGoodsServiceLineRevision) -> Sal
         quantity: value.quantity,
         base_unit_code: value.base_unit_code.clone(),
         fulfillment_due_at: value.fulfillment_due_at,
+        delivery_allocations: value
+            .delivery_allocations
+            .into_iter()
+            .map(|row| PurchaseDeliveryAllocation {
+                recipient: row.recipient,
+                phone: row.phone,
+                address: row.address,
+                quantity: row.quantity,
+            })
+            .collect(),
+        assigned_delivery_allocations: Vec::new(),
     }
 }
 /// SKU缺失由稀疏映射保留，现存值只保留商品引用。

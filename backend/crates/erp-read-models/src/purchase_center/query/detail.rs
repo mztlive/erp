@@ -6,7 +6,9 @@ use erp_procurement::dto::purchase_order::{
 use erp_procurement::entity::purchase_order::{
     ProgressStatus, PurchaseChangeOrder, PurchaseLineSalesAllocation, PurchaseOrder,
 };
+use erp_warehouse::repository::WarehouseExt;
 use erp_workflow::service::document_registry::find_approval_binding;
+use mongodb::Database;
 use persistence_core::NoTransaction;
 
 use super::{center_content_source, owner_display, payment_progress, sales_no_for, supplier_display};
@@ -77,7 +79,9 @@ impl PurchaseOrderReadService {
         };
         let approval =
             load_document_approval(&self.db, &order.base.id, binding.as_ref(), order.stable.status).await?;
-        Ok(center_view(&order, identity, content, source, relations, approval))
+        let mut view = center_view(&order, identity, content, source, relations, approval);
+        view.target_warehouse_name = target_warehouse_name(&self.db, &order).await?;
+        Ok(view)
     }
 }
 
@@ -195,6 +199,7 @@ fn center_view(
         owner_user_id: identity.owner_user_id,
         owner_name: identity.owner_name,
         target_warehouse_id: order.target_warehouse_id.as_ref().map(ToString::to_string),
+        target_warehouse_name: None,
         payment_progress: relations.payment_progress,
         invoice_progress: order.invoice_progress,
         fulfillment_progress: order.fulfillment_progress,
@@ -211,6 +216,24 @@ fn center_view(
         approval,
         created_at: order.base.created_at,
     }
+}
+
+/// 已授权采购详情只解析其关联目标仓的名称。
+async fn target_warehouse_name(db: &Database, order: &PurchaseOrder) -> Result<Option<String>> {
+    let Some(id) = &order.target_warehouse_id else {
+        return Ok(None);
+    };
+    let Some(warehouse) = db.warehouses().find_by_id(id.as_ref(), &mut NoTransaction).await? else {
+        return Ok(None);
+    };
+    let Some(revision_id) = warehouse.stable.current_revision_id else {
+        return Ok(None);
+    };
+    Ok(db
+        .warehouse_revisions()
+        .find_by_id(&revision_id, &mut NoTransaction)
+        .await?
+        .map(|revision| revision.name))
 }
 
 #[cfg(test)]

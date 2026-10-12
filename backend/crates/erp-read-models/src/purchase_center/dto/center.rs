@@ -37,6 +37,8 @@ pub struct PurchaseOrderCenterView {
     pub owner_name: String,
     /// 仓库履约冻结的目标收货仓。
     pub target_warehouse_id: Option<String>,
+    /// 当前入库目标仓展示名。
+    pub target_warehouse_name: Option<String>,
     /// 付款进度。
     pub payment_progress: ProgressStatus,
     /// 收票进度。

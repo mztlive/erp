@@ -11,10 +11,10 @@ use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::entity::purchase_order::PurchaseOfferingSource;
 use crate::entity::purchase_order::line_common::{PurchaseLineDataRef, normalize_and_validate_line};
 use crate::entity::purchase_order::offering_source::ensure_offering_source;
 use crate::entity::purchase_order::types::PurchaseLineType;
+use crate::entity::purchase_order::{PurchaseDeliveryAllocation, PurchaseOfferingSource};
 
 /// 采购变更提交行创建数据（不含系统字段）。
 ///
@@ -37,6 +37,9 @@ pub struct PurchaseChangeSubmissionLineData {
     /// 服务端冻结的正式供给选源；旧资料或物流费用行为空。
     #[serde(default)]
     pub supplier_offering_source: Option<PurchaseOfferingSource>,
+    /// 本采购行承担的客户交付安排。
+    #[serde(default)]
+    pub delivery_allocations: Vec<PurchaseDeliveryAllocation>,
     /// 商品名称快照；物流费用行为空。
     pub product_name_snapshot: Option<String>,
     /// 规格快照；物流费用行为空。
@@ -87,6 +90,9 @@ pub struct PurchaseChangeSubmissionLine {
     /// 服务端冻结的正式供给选源；旧资料或物流费用行为空。
     #[serde(default)]
     pub supplier_offering_source: Option<PurchaseOfferingSource>,
+    /// 本采购行承担的客户交付安排。
+    #[serde(default)]
+    pub delivery_allocations: Vec<PurchaseDeliveryAllocation>,
     /// 商品名称快照。
     pub product_name_snapshot: Option<String>,
     /// 规格快照。
@@ -221,6 +227,7 @@ impl PurchaseChangeSubmissionLine {
         ensure_line_no(data.line_no)?;
         let (product_name, specification, base_unit_code) = normalize_and_validate_line(&data)?;
         ensure_offering_source(data.line_type, data.supplier_offering_source.as_ref())?;
+        PurchaseDeliveryAllocation::validate(&data.delivery_allocations, data.line_type, data.quantity)?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             purchase_change_submission_id: data.purchase_change_submission_id,
@@ -230,6 +237,7 @@ impl PurchaseChangeSubmissionLine {
             sku_id: data.sku_id,
             sku_revision_id: data.sku_revision_id,
             supplier_offering_source: data.supplier_offering_source,
+            delivery_allocations: data.delivery_allocations,
             product_name_snapshot: product_name,
             specification_snapshot: specification,
             quantity: data.quantity,
@@ -290,6 +298,7 @@ mod tests {
             sku_id: Some(SkuId::new("sku-1")),
             sku_revision_id: Some(erp_core::ids::SkuRevisionId::new("skur-1")),
             supplier_offering_source: None,
+            delivery_allocations: Vec::new(),
             product_name_snapshot: Some("慰问礼包".to_string()),
             specification_snapshot: Some("500g×2".to_string()),
             quantity: Some(Quantity::from_str("3.000000").unwrap()),

@@ -4,7 +4,7 @@ use erp_core::money::{Amount, UnitPrice, line_amounts};
 use erp_procurement::entity::facts::SalesOrderBasisFact;
 use erp_procurement::entity::purchase_order::{
     BasisGroup, BasisLine, CreationBasisFacts, FulfillmentResponsibility, PurchaseType, StockBasisGroup,
-    basis_id_for, stable_line_id, stock_basis_id_for, supply_cost,
+    StockBasisLine, basis_id_for, stable_line_id, stock_basis_id_for, supply_cost,
 };
 use erp_procurement::service::purchase_order::creation_basis::business_date_of;
 use erp_procurement::service::purchase_order::shared::zero_amount;
@@ -84,33 +84,7 @@ pub(super) fn build_stock_basis_view(
     sales_owner_name: Option<String>,
     work_item_id: &str,
 ) -> Result<CreationBasisView> {
-    let mut lines = Vec::with_capacity(group.lines.len());
-    for line in &group.lines {
-        let sales_delivery_deadline =
-            business_date_of(line.coverage.goods_line.fulfillment_due_at)?.to_string();
-        lines.push(
-            CreationBasisLineView::new(
-                line.coverage.revision_line.sales_order_line_id.to_string(),
-                line.coverage.revision_line.base.id.clone(),
-                String::new(),
-                line.coverage.summary.total_quantity.to_string(),
-                line.coverage.summary.covered_quantity.to_string(),
-                line.coverage.summary.remaining_quantity.to_string(),
-                line.max_create_quantity.to_string(),
-                line.max_create_quantity.to_string(),
-                "0".to_string(),
-                "0".to_string(),
-                sales_delivery_deadline.clone(),
-                sales_delivery_deadline,
-                "0".to_string(),
-            )
-            .with_quantity_scale(line.coverage.quantity_scale)
-            .with_sales_line_no(line.coverage.revision_line.line_no)
-            .with_product_name(Some(line.coverage.revision_line.item_name_snapshot.clone()))
-            .with_specification(line.coverage.revision_line.spec_snapshot.clone())
-            .with_unit(line.coverage.revision_line.unit_snapshot.clone()),
-        );
-    }
+    let lines = group.lines.iter().map(stock_basis_line_view).collect::<Result<Vec<_>>>()?;
     Ok(CreationBasisView::new(
         work_item_id.to_string(),
         stock_basis_id_for(order, group, work_item_id),
@@ -158,6 +132,38 @@ fn basis_line_view(
         sales_delivery_deadline.clone(),
         sales_delivery_deadline,
         gross.to_string(),
+    )
+    .with_delivery(
+        line.coverage.goods_line.delivery_allocations.clone(),
+        line.coverage.goods_line.assigned_delivery_allocations.clone(),
+    )
+    .with_quantity_scale(line.coverage.quantity_scale)
+    .with_sales_line_no(line.coverage.revision_line.line_no)
+    .with_product_name(Some(line.coverage.revision_line.item_name_snapshot.clone()))
+    .with_specification(line.coverage.revision_line.spec_snapshot.clone())
+    .with_unit(line.coverage.revision_line.unit_snapshot.clone()))
+}
+
+fn stock_basis_line_view(line: &StockBasisLine) -> Result<CreationBasisLineView> {
+    let sales_delivery_deadline = business_date_of(line.coverage.goods_line.fulfillment_due_at)?.to_string();
+    Ok(CreationBasisLineView::new(
+        line.coverage.revision_line.sales_order_line_id.to_string(),
+        line.coverage.revision_line.base.id.clone(),
+        String::new(),
+        line.coverage.summary.total_quantity.to_string(),
+        line.coverage.summary.covered_quantity.to_string(),
+        line.coverage.summary.remaining_quantity.to_string(),
+        line.max_create_quantity.to_string(),
+        line.max_create_quantity.to_string(),
+        "0".to_string(),
+        "0".to_string(),
+        sales_delivery_deadline.clone(),
+        sales_delivery_deadline,
+        "0".to_string(),
+    )
+    .with_delivery(
+        line.coverage.goods_line.delivery_allocations.clone(),
+        line.coverage.goods_line.assigned_delivery_allocations.clone(),
     )
     .with_quantity_scale(line.coverage.quantity_scale)
     .with_sales_line_no(line.coverage.revision_line.line_no)

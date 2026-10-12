@@ -75,6 +75,7 @@ interface PaperDocumentProps<Row> extends Omit<
     getRowId: (row: Row, rowIndex: number) => React.Key
     emptyContent?: React.ReactNode
     totals: readonly PaperDocumentTotal[]
+    afterLineItems?: React.ReactNode
     remarks?: React.ReactNode
     signature?: React.ReactNode
     seal?: React.ReactNode
@@ -113,6 +114,7 @@ function PaperDocument<Row>({
     getRowId,
     emptyContent = "暂无明细",
     totals,
+    afterLineItems,
     remarks,
     signature,
     seal,
@@ -327,6 +329,7 @@ function PaperDocument<Row>({
                     </div>
                 </section>
 
+                {afterLineItems}
                 <section
                     aria-label="金额汇总"
                     className="mt-6 flex break-inside-avoid justify-end"

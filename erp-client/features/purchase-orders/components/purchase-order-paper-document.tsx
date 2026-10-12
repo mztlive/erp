@@ -11,6 +11,7 @@ import {
     PURCHASE_TYPE_LABEL,
     type PurchaseOrderCenterView,
 } from "@/features/purchase-orders/types"
+import { PurchaseDeliveryPlan } from "./purchase-delivery-plan"
 import { multiplyFixed } from "@/lib/fixed-decimal"
 
 type PurchaseOrderPaperLine =
@@ -240,6 +241,13 @@ export function PurchaseOrderPaperDocument({
                     emphasized: true,
                 },
             ]}
+            afterLineItems={
+                <PurchaseDeliveryPlan
+                    lines={currentContent.lines}
+                    warehouseName={header.targetWarehouseName}
+                    warehouse={header.fulfillmentResponsibility === "WAREHOUSE"}
+                />
+            }
             remarks={
                 costMasked
                     ? "当前角色无成本字段权限：金额已隐藏。状态以系统记录为准。"

@@ -1,7 +1,9 @@
+import type { PurchaseDeliveryAllocation } from "../types"
 import { apiGet } from "@/lib/api"
 
 /** 与采购变更提交接口一致的完整行，关联与名称快照保持原值。 */
 export type PurchaseChangeDraftLine = {
+    delivery_allocations?: PurchaseDeliveryAllocation[] | null
     line_type: "ITEM_SERVICE" | "LOGISTICS_FEE"
     procurement_confirmation_line_id: string | null
     sku_id: string | null

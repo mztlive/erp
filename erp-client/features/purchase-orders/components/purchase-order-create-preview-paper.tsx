@@ -18,6 +18,7 @@ import {
     PO_STATUS_TONE,
     PURCHASE_TYPE_LABEL,
 } from "@/features/purchase-orders/types"
+import { PurchaseDeliveryPlan } from "./purchase-delivery-plan"
 import { multiplyFixed } from "@/lib/fixed-decimal"
 
 /**
@@ -211,6 +212,15 @@ export function PurchaseOrderPreviewPaper({
                         emphasized: true,
                     },
                 ]}
+                afterLineItems={
+                    <PurchaseDeliveryPlan
+                        lines={preview.lines}
+                        warehouse={
+                            preview.fulfillmentResponsibility === "WAREHOUSE"
+                        }
+                        warehouseName={preview.targetWarehouseName}
+                    />
+                }
                 remarks="本预览按当前选源结果拆单，确认后创建采购单并提交审批，金额以系统计算为准。"
             />
         </div>

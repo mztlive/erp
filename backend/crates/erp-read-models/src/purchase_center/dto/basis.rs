@@ -1,5 +1,7 @@
 //! 采购创建依据查询参数与行视图。
 
+use erp_procurement::entity::purchase_order::PurchaseDeliveryAllocation;
+
 use super::*;
 
 /// 采购创建依据查询参数。
@@ -14,6 +16,10 @@ pub struct CreationBasisListParams {
 /// 采购创建依据行视图（销售当前版本行 + 当前采购剩余量）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CreationBasisLineView {
+    /// 当前销售冻结的客户交付要求。
+    pub delivery_allocations: Vec<PurchaseDeliveryAllocation>,
+    /// 当前采购已承担的地址数量。
+    pub assigned_delivery_allocations: Vec<PurchaseDeliveryAllocation>,
     /// 基础单位允许数量小数位；缺失时客户端不得推断可拆分精度。
     pub quantity_scale: Option<u8>,
     /// 销售稳定行身份。
@@ -53,6 +59,22 @@ pub struct CreationBasisLineView {
 }
 
 impl CreationBasisLineView {
+    /// 设置本行授权销售交付要求及已承担数量。
+    /// # 参数
+    /// `source` 为销售安排，`assigned` 为当前有效采购安排。
+    /// # 返回
+    /// 返回补齐地址资料的依据行。
+    /// # 错误
+    /// 无。
+    pub fn with_delivery(
+        mut self,
+        source: Vec<PurchaseDeliveryAllocation>,
+        assigned: Vec<PurchaseDeliveryAllocation>,
+    ) -> Self {
+        self.delivery_allocations = source;
+        self.assigned_delivery_allocations = assigned;
+        self
+    }
     /// 构造采购创建依据行视图。
     ///
     /// # 参数
@@ -93,6 +115,8 @@ impl CreationBasisLineView {
     ) -> Self {
         Self {
             quantity_scale: None,
+            delivery_allocations: Vec::new(),
+            assigned_delivery_allocations: Vec::new(),
             sales_order_line_id,
             sales_order_revision_line_id,
             sales_line_no: 0,
@@ -408,6 +432,7 @@ impl CreationBasisView {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
 
     fn bare_basis(supplier_name: &str) -> CreationBasisView {

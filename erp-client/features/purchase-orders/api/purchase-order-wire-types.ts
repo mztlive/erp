@@ -7,6 +7,7 @@ import type { DocumentApprovalViewDto } from "@/features/approval-workflow/types
 import type {
     FulfillmentResponsibility,
     PurchaseType,
+    PurchaseDeliveryAllocation,
 } from "@/features/purchase-orders/types"
 
 export type BackendPage<T> = {
@@ -43,6 +44,7 @@ export type BackendListItem = {
 }
 
 export type BackendLine = {
+    delivery_allocations?: PurchaseDeliveryAllocation[]
     line_id: string
     line_no: number
     line_type: "ITEM_SERVICE" | "LOGISTICS_FEE" | string
@@ -81,6 +83,7 @@ export type BackendCenter = {
     owner_user_id: string
     owner_name: string
     target_warehouse_id?: string | null
+    target_warehouse_name?: string | null
     payment_progress: string
     invoice_progress: string
     fulfillment_progress: string
@@ -154,6 +157,8 @@ export type BackendPurchaseSourceSalesOrder = {
 }
 
 export type BackendBasisLine = {
+    delivery_allocations?: PurchaseDeliveryAllocation[]
+    assigned_delivery_allocations?: PurchaseDeliveryAllocation[]
     sales_order_line_id: string
     sales_order_revision_line_id: string
     sales_line_no: number

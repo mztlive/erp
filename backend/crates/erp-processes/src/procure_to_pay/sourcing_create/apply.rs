@@ -198,6 +198,7 @@ fn item_request(
                 sales_order_line_id: line.sales_order_line_id.clone(),
                 quantity: line.quantity.to_string(),
                 expected_delivery_date: line.expected_delivery_date.to_string(),
+                delivery_allocations: line.delivery_allocations.clone(),
             })
             .collect(),
         idempotency_key: input.req.idempotency_key.clone(),

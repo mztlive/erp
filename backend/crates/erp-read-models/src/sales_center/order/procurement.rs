@@ -433,6 +433,7 @@ mod tests {
                 sku_id: Some(SkuId::new("sku")),
                 sku_revision_id: Some(SkuRevisionId::new("sku-version")),
                 supplier_offering_source: None,
+                delivery_allocations: Vec::new(),
                 product_name_snapshot: Some("商品".into()),
                 specification_snapshot: Some("规格".into()),
                 quantity: Some(quantity("2")),
@@ -468,6 +469,9 @@ mod tests {
                 unit_snapshot: Some("件".into()),
             }],
             goods_lines: vec![SalesGoodsLineFact {
+                assigned_delivery_allocations: Vec::new(),
+                delivery_allocations: Vec::new(),
+
                 revision_line_id: SalesOrderRevisionLineId::new("current-line"),
                 sku_id: SkuId::new("sku"),
                 sku_revision_id: SkuRevisionId::new("sku-version"),

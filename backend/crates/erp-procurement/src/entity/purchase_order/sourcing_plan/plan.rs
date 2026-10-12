@@ -4,6 +4,7 @@ use std::str::FromStr;
 use erp_core::ids::WarehouseId;
 use erp_core::money::Quantity;
 
+use super::super::PurchaseDeliveryAllocation;
 use super::super::creation_basis::{
     BasisGroup, RequestedLine, basis_id_for, basis_scope_key, stable_line_id,
 };
@@ -77,6 +78,7 @@ impl SourcingPlan {
         let purchase_plans = plan_sourcing_drafts(order, purchase_groups, work_item_id, assignments)?;
         let stock_plans = plan_stock_allocations(order, stock_groups, work_item_id, assignments)?;
         validate_combined_line_totals(&purchase_plans, &stock_plans)?;
+        validate_delivery_plans(&purchase_plans)?;
         Ok(Self { purchase_plans, stock_plans })
     }
 
@@ -258,6 +260,7 @@ fn plan_sourcing_drafts(
             sales_order_line_id: assignment.sales_order_line_id.clone(),
             quantity: assignment.quantity,
             expected_delivery_date: assignment.expected_delivery_date,
+            delivery_allocations: assignment.delivery_allocations.clone(),
         };
         if let Some(plan) = plans.get_mut(&key) {
             plan.requested_lines.push(requested);
@@ -545,4 +548,35 @@ fn validate_quantity(
         &coverage.goods_line.base_unit_code,
     )
     .map_err(|error| SourcingPlanError::QuantityContract(error.to_string()))
+}
+
+/// 按销售稳定行累计本批拆单，地址上限只扣一次历史已承担数量。
+fn validate_delivery_plans(plans: &[SourcingDraftPlan]) -> Result<(), SourcingPlanError> {
+    let mut assigned = HashMap::new();
+    for plan in plans {
+        for requested in &plan.requested_lines {
+            let basis = plan
+                .group
+                .lines
+                .iter()
+                .find(|line| stable_line_id(line) == requested.sales_order_line_id)
+                .ok_or(SourcingPlanError::StaleFacts)?;
+            let goods = &basis.coverage.goods_line;
+            let prior = assigned
+                .entry(requested.sales_order_line_id.clone())
+                .or_insert_with(|| goods.assigned_delivery_allocations.clone());
+            PurchaseDeliveryAllocation::validate_source(
+                &requested.delivery_allocations,
+                &goods.delivery_allocations,
+                prior,
+                requested.quantity,
+                plan.group.scope.fulfillment_responsibility,
+                basis.coverage.quantity_scale,
+                &goods.base_unit_code,
+            )
+            .map_err(|error| SourcingPlanError::QuantityContract(error.to_string()))?;
+            prior.extend(requested.delivery_allocations.clone());
+        }
+    }
+    Ok(())
 }

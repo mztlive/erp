@@ -53,6 +53,7 @@ import {
 } from "@/features/purchase-orders/lib/purchase-order-create-validation"
 import { cn } from "@/lib/utils"
 import { buildSourcingEditorRows } from "../lib/sourcing/editor-rows"
+import { sourcingDeliveryAllocations } from "../lib/sourcing/delivery"
 import { useSourcingParticipation } from "../hooks/use-sourcing-participation"
 import { canSplitSourcingProduct } from "../lib/sourcing-quantity"
 
@@ -148,18 +149,22 @@ export function PurchaseOrderCreatePage({
                 )
                 const option = findSourcingOption(product, line.basisId)
                 if (!option) return []
-                return [{ line, option }]
+                return [{ line, option, product }]
             })
             const fingerprint = JSON.stringify({
                 salesOrderId: order.salesOrderId,
                 workItemId: order.workItemId,
-                lines: selected.map(({ line, option }) => ({
+                lines: selected.map(({ line, option, product }) => ({
                     salesOrderLineId: line.salesOrderLineId,
                     basisId: line.basisId,
                     sourceType: option.sourceType,
                     targetWarehouseId: line.targetWarehouseId || undefined,
                     quantity: line.quantity.trim(),
                     expectedDeliveryDate: line.expectedDeliveryDate,
+                    deliveryAllocations: sourcingDeliveryAllocations(
+                        product,
+                        line,
+                    ),
                 })),
             })
             if (createIntentRef.current?.fingerprint !== fingerprint) {
@@ -171,13 +176,17 @@ export function PurchaseOrderCreatePage({
             const input = {
                 workItemId: order.workItemId,
                 salesOrderId: order.salesOrderId,
-                lines: selected.map(({ line, option }) => ({
+                lines: selected.map(({ line, option, product }) => ({
                     salesOrderLineId: line.salesOrderLineId,
                     basisId: line.basisId,
                     sourceType: option.sourceType,
                     targetWarehouseId: line.targetWarehouseId || undefined,
                     quantity: line.quantity.trim(),
                     expectedDeliveryDate: line.expectedDeliveryDate,
+                    deliveryAllocations: sourcingDeliveryAllocations(
+                        product,
+                        line,
+                    ),
                 })),
                 idempotencyKey: createIntentRef.current.idempotencyKey,
             }

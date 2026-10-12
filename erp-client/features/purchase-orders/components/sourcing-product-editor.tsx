@@ -12,6 +12,7 @@ import type {
     SourcingParticipationProps,
     SourcingEditorProps,
 } from "./create-sourcing/types"
+import { SalesDeliveryRequirements } from "./sourcing-delivery-plan"
 import { SourcingAllocationEditor } from "./sourcing-allocation-editor"
 
 export function SourcingProductEditor({
@@ -54,6 +55,7 @@ export function SourcingProductEditor({
     const [notice, setNotice] = useState("")
     return (
         <div className="@container/sourcing">
+            <SalesDeliveryRequirements product={row.product} />
             <div className="px-4 pt-4">
                 <SourcingParticipationControl
                     idPrefix={`sourcing-editor-${toAutomationIdSegment(row.product.salesOrderLineId)}`}

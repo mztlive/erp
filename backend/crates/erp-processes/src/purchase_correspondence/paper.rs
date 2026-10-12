@@ -2,6 +2,7 @@
 use std::str::FromStr;
 
 use erp_procurement::dto::purchase_order::PurchaseOrderLineView;
+use erp_procurement::entity::purchase_order::FulfillmentResponsibility;
 use erp_read_models::purchase_center::dto::PurchaseOrderCenterView;
 use erp_supplier::entity::supplier::SupplierPaymentTerm;
 use rust_decimal::Decimal;
@@ -32,9 +33,45 @@ pub(super) fn render(order: &PurchaseOrderCenterView) -> PurchasePaper {
     for line in &order.lines {
         html.push_str(&render_line(line));
     }
-    html.push_str(&format!("</tbody></table><p>不含税金额：{}　税额：{}　<strong>含税合计：{}</strong></p><p>供应商确认：________________　日期：________________</p></body></html>", escape(&order.totals.net), escape(&order.totals.tax), escape(&order.totals.gross)));
+    html.push_str("</tbody></table>");
+    html.push_str(&render_delivery(order));
+    html.push_str(&format!("<p>不含税金额：{}　税额：{}　<strong>含税合计：{}</strong></p><p>供应商确认：________________　日期：________________</p></body></html>", escape(&order.totals.net), escape(&order.totals.tax), escape(&order.totals.gross)));
     let number: String = order.purchase_no.chars().filter(|c| c.is_alphanumeric() || *c == '-').collect();
     PurchasePaper { filename: format!("采购单-{number}.html"), html }
+}
+fn render_delivery(order: &PurchaseOrderCenterView) -> String {
+    if order.fulfillment_responsibility == FulfillmentResponsibility::Warehouse {
+        return format!(
+            "<h2>交付安排</h2><p>采购入库目标仓：{}。客户配送由仓库另行安排。</p>",
+            escape(order.target_warehouse_name.as_deref().unwrap_or("仓库名称未提供"))
+        );
+    }
+    render_delivery_lines(&order.lines)
+}
+fn render_delivery_lines(lines: &[PurchaseOrderLineView]) -> String {
+    let mut html = "<h2>交付安排</h2><table><thead><tr><th>商品 / 规格</th><th>收货人 / 电话</th><th>完整地址</th><th>数量</th></tr></thead><tbody>".to_string();
+    for line in lines.iter().filter(|line| line.quantity.is_some()) {
+        if line.delivery_allocations.is_empty() {
+            html.push_str(&format!(
+                "<tr><td>{}</td><td colspan=3>未指定交付地址，履约前补齐</td></tr>",
+                escape(line.product_name.as_deref().unwrap_or("—"))
+            ));
+        }
+        for row in &line.delivery_allocations {
+            html.push_str(&format!(
+                "<tr><td>{}<br>{}</td><td>{}<br>{}</td><td>{}</td><td>{} {}</td></tr>",
+                escape(line.product_name.as_deref().unwrap_or("—")),
+                escape(line.specification.as_deref().unwrap_or("")),
+                escape(&row.recipient),
+                escape(&row.phone),
+                escape(&row.address),
+                row.quantity,
+                escape(line.base_unit_code.as_deref().unwrap_or(""))
+            ));
+        }
+    }
+    html.push_str("</tbody></table>");
+    html
 }
 fn render_line(line: &PurchaseOrderLineView) -> String {
     format!(
@@ -67,7 +104,7 @@ fn escape(value: &str) -> String {
 }
 #[cfg(test)]
 mod tests {
-    use erp_procurement::entity::purchase_order::PurchaseLineType;
+    use erp_procurement::entity::purchase_order::{PurchaseDeliveryAllocation, PurchaseLineType};
 
     use super::*;
     #[test]
@@ -76,7 +113,9 @@ mod tests {
     }
     #[test]
     fn printed_line_uses_purchase_amounts_and_excludes_internal_references() {
-        let line = PurchaseOrderLineView {
+        let mut line = PurchaseOrderLineView {
+            delivery_allocations: Vec::new(),
+
             line_id: "internal-line".into(),
             line_no: 1,
             line_type: PurchaseLineType::ItemService,
@@ -106,5 +145,17 @@ mod tests {
         assert!(!html.contains("<限定>"));
         assert_eq!(tax_percent(Some("0.095")), "9.5%");
         assert_eq!(tax_percent(None), "—");
+        let empty = render_delivery_lines(std::slice::from_ref(&line));
+        assert!(empty.contains("未指定交付地址"));
+        line.delivery_allocations = vec![PurchaseDeliveryAllocation {
+            recipient: "张三".into(),
+            phone: "13800000000".into(),
+            address: "A区<1号>".into(),
+            quantity: "2".parse().unwrap(),
+        }];
+        let delivery = render_delivery_lines(&[line]);
+        assert!(delivery.contains("A区&lt;1号&gt;"));
+        assert!(delivery.contains("13800000000"));
+        assert!(!delivery.contains("internal-"));
     }
 }

@@ -162,6 +162,7 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
             netAmount: line.net_amount ?? "0",
             taxAmount: line.tax_amount ?? "0",
             expectedDeliveryDate: line.expected_delivery_date ?? undefined,
+            deliveryAllocations: line.delivery_allocations ?? [],
             logisticsFeeReason: undefined,
             salesAllocationLabel: salesLine
                 ? `销售明细 ${salesLine.lineNo}`
@@ -228,6 +229,7 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
                 "负责人名称未提供",
             ),
             targetWarehouseId: center.target_warehouse_id ?? undefined,
+            targetWarehouseName: center.target_warehouse_name ?? undefined,
             submittedBy: undefined,
             submittedAt: undefined,
             expectedDate: lines.find((l) => l.expectedDeliveryDate)
@@ -414,6 +416,9 @@ export function mapBasis(basis: BackendBasis): PurchaseCreationBasis {
                 unitCostGross: String(line.latest_cost_gross ?? "0"),
                 inputTaxRate: String(line.input_tax_rate ?? "0"),
                 expectedDeliveryDate: line.expected_delivery_date ?? "",
+                deliveryAllocations: line.delivery_allocations ?? [],
+                assignedDeliveryAllocations:
+                    line.assigned_delivery_allocations ?? [],
                 salesDeliveryDeadline:
                     line.sales_delivery_deadline ??
                     line.expected_delivery_date ??

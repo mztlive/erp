@@ -423,6 +423,7 @@ mod tests {
             expected_lock_version: 3,
             payment_term_code: Some(" NET-30 ".to_string()),
             lines: vec![SavePurchaseOrderLine {
+                delivery_allocations: None,
                 line_type: PurchaseLineType::ItemService,
                 procurement_confirmation_line_id: None,
                 sku_id: Some("sku-1".to_string()),

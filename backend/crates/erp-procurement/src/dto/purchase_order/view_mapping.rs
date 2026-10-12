@@ -2,7 +2,8 @@
 
 use super::{PurchaseOrderLineView, TotalsView};
 use crate::entity::purchase_order::{
-    PurchaseLineType, PurchaseOrderRevision, PurchaseOrderRevisionLine, PurchaseOrderSubmissionLine,
+    PurchaseDeliveryAllocation, PurchaseLineType, PurchaseOrderRevision, PurchaseOrderRevisionLine,
+    PurchaseOrderSubmissionLine,
 };
 
 /// 采购行视图的统一数据源（版本行与提交行共用字段）。
@@ -10,6 +11,7 @@ use crate::entity::purchase_order::{
 /// 两类行实体除提交行多 `sales_order_submission_line_id` 外字段同形；
 /// 本 trait 收敛公共字段读取，单个泛型函数承载视图组装。
 trait PurchaseLineViewSource {
+    fn view_delivery_allocations(&self) -> Vec<PurchaseDeliveryAllocation>;
     /// 行实体主键。
     fn view_line_id(&self) -> String;
     /// 版本内行号。
@@ -57,6 +59,9 @@ trait PurchaseLineViewSource {
 /// 为同形行实体生成视图字段读取。
 macro_rules! common_view_methods {
     () => {
+        fn view_delivery_allocations(&self) -> Vec<PurchaseDeliveryAllocation> {
+            self.delivery_allocations.clone()
+        }
         fn view_line_id(&self) -> String {
             self.base.id.clone()
         }
@@ -150,6 +155,7 @@ impl PurchaseLineViewSource for PurchaseOrderSubmissionLine {
 /// 由统一行数据源组装采购行视图。
 fn line_to_view(line: &impl PurchaseLineViewSource) -> PurchaseOrderLineView {
     PurchaseOrderLineView {
+        delivery_allocations: line.view_delivery_allocations(),
         line_id: line.view_line_id(),
         line_no: line.view_line_no(),
         line_type: line.view_line_type(),
@@ -248,6 +254,7 @@ mod tests {
         let is_item = line_type == PurchaseLineType::ItemService;
         let item = |value: &str| is_item.then(|| value.to_string());
         let request = SavePurchaseOrderLine {
+            delivery_allocations: None,
             line_type,
             procurement_confirmation_line_id: item("pcl-1"),
             sku_id: item("sku-1"),
@@ -284,7 +291,7 @@ mod tests {
         assert_eq!(
             serde_json::to_value(&view).unwrap(),
             json!({
-                "line_id": "subl-1", "line_no": 2, "line_type": "ITEM_SERVICE",
+                "line_id": "subl-1", "delivery_allocations": [], "line_no": 2, "line_type": "ITEM_SERVICE",
                 "procurement_confirmation_line_id": "pcl-1", "sku_id": "sku-1",
                 "sku_revision_id": "skur-1", "product_name": "慰问礼包", "specification": "500g×2",
                 "quantity": "3.000000", "base_unit_code": "箱", "unit_cost_gross": "9.9900",

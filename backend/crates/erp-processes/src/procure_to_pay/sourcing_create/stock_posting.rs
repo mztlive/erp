@@ -443,6 +443,9 @@ mod tests {
                     unit_snapshot: Some("盒".to_string()),
                 },
                 goods_line: SalesGoodsLineFact {
+                    assigned_delivery_allocations: Vec::new(),
+                    delivery_allocations: Vec::new(),
+
                     revision_line_id: SalesOrderRevisionLineId::new(format!("revision-{id}")),
                     sku_id: SkuId::new("sku-1"),
                     sku_revision_id: SkuRevisionId::new("sku-revision-1"),

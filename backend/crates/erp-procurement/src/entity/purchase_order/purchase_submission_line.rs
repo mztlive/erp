@@ -11,10 +11,10 @@ use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::entity::purchase_order::PurchaseOfferingSource;
 use crate::entity::purchase_order::line_common::{PurchaseLineDataRef, normalize_and_validate_line};
 use crate::entity::purchase_order::offering_source::ensure_offering_source;
 use crate::entity::purchase_order::types::PurchaseLineType;
+use crate::entity::purchase_order::{PurchaseDeliveryAllocation, PurchaseOfferingSource};
 
 /// 采购提交行创建数据（不含系统字段）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -34,6 +34,9 @@ pub struct PurchaseOrderSubmissionLineData {
     /// 服务端冻结的正式供给选源；旧资料或物流费用行为空。
     #[serde(default)]
     pub supplier_offering_source: Option<PurchaseOfferingSource>,
+    /// 本采购行承担的客户交付安排。
+    #[serde(default)]
+    pub delivery_allocations: Vec<PurchaseDeliveryAllocation>,
     /// 商品名称快照；物流费用行为空。
     pub product_name_snapshot: Option<String>,
     /// 规格快照；物流费用行为空。
@@ -168,6 +171,9 @@ pub struct PurchaseOrderSubmissionLine {
     /// 服务端冻结的正式供给选源；旧资料或物流费用行为空。
     #[serde(default)]
     pub supplier_offering_source: Option<PurchaseOfferingSource>,
+    /// 本采购行承担的客户交付安排。
+    #[serde(default)]
+    pub delivery_allocations: Vec<PurchaseDeliveryAllocation>,
     /// 商品名称快照。
     pub product_name_snapshot: Option<String>,
     /// 规格快照。
@@ -218,6 +224,7 @@ impl PurchaseOrderSubmissionLine {
         ensure_line_no(data.line_no)?;
         let (product_name, specification, base_unit_code) = normalize_and_validate_line(&data)?;
         ensure_offering_source(data.line_type, data.supplier_offering_source.as_ref())?;
+        PurchaseDeliveryAllocation::validate(&data.delivery_allocations, data.line_type, data.quantity)?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             purchase_order_submission_id: data.purchase_order_submission_id,
@@ -227,6 +234,7 @@ impl PurchaseOrderSubmissionLine {
             sku_id: data.sku_id,
             sku_revision_id: data.sku_revision_id,
             supplier_offering_source: data.supplier_offering_source,
+            delivery_allocations: data.delivery_allocations,
             product_name_snapshot: product_name,
             specification_snapshot: specification,
             quantity: data.quantity,
@@ -271,6 +279,7 @@ impl PurchaseOrderSubmissionLine {
                 sku_id: draft_line.sku_id.clone(),
                 sku_revision_id: draft_line.sku_revision_id.clone(),
                 supplier_offering_source: draft_line.supplier_offering_source.clone(),
+                delivery_allocations: draft_line.delivery_allocations.clone(),
                 product_name_snapshot: draft_line.product_name_snapshot.clone(),
                 specification_snapshot: draft_line.specification_snapshot.clone(),
                 quantity: draft_line.quantity,
@@ -359,6 +368,7 @@ mod tests {
     use erp_core::money::{Amount, Quantity, Rate, UnitPrice, line_amounts};
 
     use super::{PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData};
+    use crate::entity::purchase_order::PurchaseDeliveryAllocation;
     use crate::entity::purchase_order::types::PurchaseLineType;
 
     fn goods_line_data() -> PurchaseOrderSubmissionLineData {
@@ -375,6 +385,7 @@ mod tests {
             sku_id: Some(SkuId::new("sku-1")),
             sku_revision_id: Some(erp_core::ids::SkuRevisionId::new("skur-1")),
             supplier_offering_source: None,
+            delivery_allocations: Vec::new(),
             product_name_snapshot: Some(" 慰问礼包 ".to_string()),
             specification_snapshot: Some(" 500g×2 ".to_string()),
             quantity: Some(Quantity::from_str("3.000000").unwrap()),
@@ -417,6 +428,12 @@ mod tests {
 
         let mut data = goods_line_data();
         data.supplier_offering_source = Some(offering_source());
+        data.delivery_allocations = vec![PurchaseDeliveryAllocation {
+            recipient: "张三".into(),
+            phone: "13800000000".into(),
+            address: "客户地址".into(),
+            quantity: data.quantity.unwrap(),
+        }];
         let draft = PurchaseOrderSubmissionLine::new("draft-line".to_string().into(), data).unwrap();
         let formal = PurchaseOrderSubmissionLine::freeze_from_draft(
             "formal-line".to_string().into(),
@@ -438,6 +455,8 @@ mod tests {
         .unwrap();
         assert_eq!(draft.supplier_offering_source, restored.supplier_offering_source);
         assert_eq!(draft.supplier_offering_source, revision.supplier_offering_source);
+        assert_eq!(draft.delivery_allocations, restored.delivery_allocations);
+        assert_eq!(draft.delivery_allocations, revision.delivery_allocations);
 
         let patch = SavePurchaseOrderLinePatch {
             line_id: draft.base.id.clone(),
@@ -455,6 +474,8 @@ mod tests {
         assert!(inputs[0].supplier_offering_source.is_none());
         inherit_submission_sources(&mut inputs, std::slice::from_ref(&draft)).unwrap();
         assert_eq!(inputs[0].supplier_offering_source, Some(offering_source()));
+        assert_eq!(inputs[0].delivery_allocations, draft.delivery_allocations);
+        inputs[0].delivery_allocations[0].quantity = Quantity::from_str("2").unwrap();
         inherit_revision_sources(&mut inputs, std::slice::from_ref(&revision)).unwrap();
         let mut wrong_revision = inputs.clone();
         wrong_revision[0].sku_revision_id = Some(erp_core::ids::SkuRevisionId::new("foreign-version"));
@@ -476,6 +497,8 @@ mod tests {
         .unwrap();
         assert_eq!(changed_revision.supplier_offering_source, Some(offering_source()));
         assert_eq!(changed_revision.quantity, Some(Quantity::from_str("2").unwrap()));
+        assert_eq!(changed_revision.delivery_allocations[0].quantity, Quantity::from_str("2").unwrap());
+        assert_eq!(changed_revision.delivery_allocations[0].address, "客户地址");
     }
 
     #[test]
@@ -483,8 +506,10 @@ mod tests {
         let old = PurchaseOrderSubmissionLine::new("old".to_string().into(), goods_line_data()).unwrap();
         let mut json = serde_json::to_value(old).unwrap();
         json.as_object_mut().unwrap().remove("supplier_offering_source");
+        json.as_object_mut().unwrap().remove("delivery_allocations");
         let restored: PurchaseOrderSubmissionLine = serde_json::from_value(json).unwrap();
         assert!(restored.supplier_offering_source.is_none());
+        assert!(restored.delivery_allocations.is_empty());
         let mut data = goods_line_data();
         let mut invalid = offering_source();
         invalid.revision_version = 0;
@@ -533,6 +558,7 @@ mod tests {
             sku_id: None,
             sku_revision_id: None,
             supplier_offering_source: None,
+            delivery_allocations: Vec::new(),
             product_name_snapshot: None,
             specification_snapshot: None,
             quantity: None,

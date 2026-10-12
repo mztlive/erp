@@ -31,7 +31,7 @@ import {
     paymentTermLabel,
     SUPPLIER_PAYMENT_TERM_OPTIONS,
 } from "@/lib/business-options"
-import { compareDecimal } from "@/lib/fixed-decimal"
+import { sumFixed, compareDecimal } from "@/lib/fixed-decimal"
 import {
     FormalCommandKeyLedger,
     classifyFormalCommandError,
@@ -62,6 +62,7 @@ const lineSchema = z
     .object({
         lineKey: z.string().min(1),
         lineType: z.enum(["ITEM_SERVICE", "LOGISTICS_FEE"]),
+        deliveryQuantities: z.array(z.string()),
         quantity: z.string(),
         unitCostGross: z.string(),
         inputTaxRate: z
@@ -73,6 +74,27 @@ const lineSchema = z
         grossAmount: z.string(),
     })
     .superRefine((line, context) => {
+        if (line.deliveryQuantities.length > 0) {
+            try {
+                const total = sumFixed(line.deliveryQuantities, {
+                    maxScale: 6,
+                    outputScale: 6,
+                })
+                if (
+                    line.deliveryQuantities.some(
+                        (value) => !decimalWithin(value, "zero"),
+                    ) ||
+                    compareDecimal(total, line.quantity, 6) !== 0
+                )
+                    throw new Error()
+            } catch {
+                context.addIssue({
+                    code: "custom",
+                    path: ["quantity"],
+                    message: "各地址交付数量合计必须等于采购数量",
+                })
+            }
+        }
         if (line.lineType === "ITEM_SERVICE") {
             if (!decimalWithin(line.quantity, "positive"))
                 context.addIssue({
@@ -108,6 +130,9 @@ function draftFormValues(draft: PurchaseChangeDraft) {
             lineType: line.line_type,
             quantity: line.quantity ?? "",
             unitCostGross: line.unit_cost_gross ?? "",
+            deliveryQuantities: (line.delivery_allocations ?? []).map(
+                (row) => row.quantity,
+            ),
             inputTaxRate: line.input_tax_rate ?? "0",
             grossAmount: line.gross_amount ?? "",
         })),
@@ -363,6 +388,15 @@ function PurchaseChangeEditForm({
                     : {
                           ...line,
                           quantity: edit.quantity.trim(),
+                          delivery_allocations: line.delivery_allocations
+                              ?.map((row, index) => ({
+                                  ...row,
+                                  quantity: edit.deliveryQuantities[index],
+                              }))
+                              .filter(
+                                  (row) =>
+                                      compareDecimal(row.quantity, "0", 6) > 0,
+                              ),
                           allocated_quantity: edit.quantity.trim(),
                           unit_cost_gross: edit.unitCostGross.trim(),
                           input_tax_rate: edit.inputTaxRate.trim(),
@@ -445,6 +479,39 @@ function PurchaseChangeEditForm({
                                     <p className="text-xs text-muted-foreground">
                                         {original.specification}
                                     </p>
+                                ) : null}
+                                {original.delivery_allocations?.length ? (
+                                    <div className="space-y-3">
+                                        <h4 className="text-sm font-medium">
+                                            交付安排
+                                        </h4>
+                                        {original.delivery_allocations.map(
+                                            (row, addressIndex) => (
+                                                <form.AppField
+                                                    key={addressIndex}
+                                                    name={`lines[${index}].deliveryQuantities[${addressIndex}]`}
+                                                >
+                                                    {(field) => (
+                                                        <div className="space-y-1 text-xs">
+                                                            <p>
+                                                                {row.recipient}{" "}
+                                                                · {row.phone} ·{" "}
+                                                                {row.address}
+                                                            </p>
+                                                            <field.TextField
+                                                                id={`${prefix}-delivery-${addressIndex}`}
+                                                                label={`交付数量（${original.base_unit_code ?? ""}）`}
+                                                                inputMode="decimal"
+                                                                disabled={
+                                                                    disabled
+                                                                }
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </form.AppField>
+                                            ),
+                                        )}
+                                    </div>
                                 ) : null}
                                 <FieldGroup className="grid gap-4 sm:grid-cols-3">
                                     {line.lineType === "ITEM_SERVICE" ? (

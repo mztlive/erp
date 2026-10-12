@@ -6,7 +6,8 @@ use validator::Validate;
 
 use super::super::query::TotalsView;
 use crate::entity::purchase_order::{
-    DraftLineEdit, PurchaseLineType, PurchaseOrderSubmissionLine, payload_fingerprint,
+    DraftLineEdit, PurchaseDeliveryAllocation, PurchaseLineType, PurchaseOrderSubmissionLine,
+    payload_fingerprint,
 };
 use crate::{Error, Result};
 
@@ -246,65 +247,59 @@ impl SavePurchaseOrderLinePatch {
                 if patch.line_type != line.line_type {
                     return Err(Error::ValidationError("采购草稿行类型不可修改".to_string()));
                 }
-                let is_item = line.line_type == PurchaseLineType::ItemService;
-                let quantity = if is_item {
-                    patch.quantity.clone().or_else(|| line.quantity.map(|value| value.to_string()))
+                let mut result = saved_line(line);
+                if line.line_type == PurchaseLineType::ItemService {
+                    result.quantity = patch.quantity.clone().or(result.quantity);
+                    result.allocated_quantity = result.quantity.clone();
+                    result.unit_cost_gross = patch.unit_cost_gross.clone().or(result.unit_cost_gross);
                 } else {
-                    None
-                };
-                Ok(SavePurchaseOrderLine {
-                    line_type: line.line_type,
-                    procurement_confirmation_line_id: line
-                        .procurement_confirmation_line_id
-                        .as_ref()
-                        .map(ToString::to_string),
-                    sku_id: line.sku_id.as_ref().map(ToString::to_string),
-                    sku_revision_id: line.sku_revision_id.as_ref().map(ToString::to_string),
-                    product_name: line.product_name_snapshot.clone(),
-                    specification: line.specification_snapshot.clone(),
-                    quantity: quantity.clone(),
-                    base_unit_code: if is_item { line.base_unit_code.clone() } else { None },
-                    unit_cost_gross: if is_item {
-                        patch
-                            .unit_cost_gross
-                            .clone()
-                            .or_else(|| line.unit_cost_gross.map(|value| value.to_string()))
-                    } else {
-                        None
-                    },
-                    input_tax_rate: patch
-                        .input_tax_rate
-                        .clone()
-                        .or_else(|| line.input_tax_rate.map(|value| value.to_string())),
-                    expected_delivery_date: if is_item {
-                        line.expected_delivery_date.map(|value| value.to_string())
-                    } else {
-                        None
-                    },
-                    sales_order_line_id: line.sales_order_line_id.as_ref().map(ToString::to_string),
-                    sales_order_revision_line_id: line
-                        .sales_order_revision_line_id
-                        .as_ref()
-                        .map(ToString::to_string),
-                    sales_order_submission_line_id: line
-                        .sales_order_submission_line_id
-                        .as_ref()
-                        .map(ToString::to_string),
-                    allocated_quantity: if is_item { quantity } else { None },
-                    gross_amount: if is_item {
-                        None
-                    } else {
-                        patch.unit_cost_gross.clone().or_else(|| Some(line.gross_amount.to_string()))
-                    },
-                })
+                    result.gross_amount = patch.unit_cost_gross.clone().or(result.gross_amount);
+                }
+                result.input_tax_rate = patch.input_tax_rate.clone().or(result.input_tax_rate);
+                Ok(result)
             })
             .collect()
+    }
+}
+
+/// 以服务端当前提交行恢复补丁不能改写的来源，交付安排由继承步骤保留。
+fn saved_line(line: &PurchaseOrderSubmissionLine) -> SavePurchaseOrderLine {
+    let is_item = line.line_type == PurchaseLineType::ItemService;
+    let quantity = is_item.then(|| line.quantity.map(|value| value.to_string())).flatten();
+    SavePurchaseOrderLine {
+        delivery_allocations: None,
+        line_type: line.line_type,
+        procurement_confirmation_line_id: line
+            .procurement_confirmation_line_id
+            .as_ref()
+            .map(ToString::to_string),
+        sku_id: line.sku_id.as_ref().map(ToString::to_string),
+        sku_revision_id: line.sku_revision_id.as_ref().map(ToString::to_string),
+        product_name: line.product_name_snapshot.clone(),
+        specification: line.specification_snapshot.clone(),
+        quantity: quantity.clone(),
+        base_unit_code: if is_item { line.base_unit_code.clone() } else { None },
+        unit_cost_gross: if is_item { line.unit_cost_gross.map(|value| value.to_string()) } else { None },
+        input_tax_rate: line.input_tax_rate.map(|value| value.to_string()),
+        expected_delivery_date: if is_item {
+            line.expected_delivery_date.map(|value| value.to_string())
+        } else {
+            None
+        },
+        sales_order_line_id: line.sales_order_line_id.as_ref().map(ToString::to_string),
+        sales_order_revision_line_id: line.sales_order_revision_line_id.as_ref().map(ToString::to_string),
+        sales_order_submission_line_id: line.sales_order_submission_line_id.as_ref().map(ToString::to_string),
+        allocated_quantity: quantity,
+        gross_amount: (!is_item).then(|| line.gross_amount.to_string()),
     }
 }
 
 /// 草稿行写入项。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SavePurchaseOrderLine {
+    /// 采购变更时显式调整的交付安排；缺省沿用已冻结内容。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivery_allocations: Option<Vec<PurchaseDeliveryAllocation>>,
     /// 行类型。
     pub line_type: PurchaseLineType,
     /// 商品/服务行对应的采购二次确认分行；物流费用行为空。

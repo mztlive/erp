@@ -3,6 +3,7 @@ import {
     splitGrossByPercentRate,
     sumFixed,
 } from "@/lib/fixed-decimal"
+import { sourcingDeliveryAllocations } from "./delivery"
 import { findSourcingOption } from "./options"
 import type {
     PurchaseOrderPreview,
@@ -75,6 +76,7 @@ function purchasePreviewLine(
     )
     return {
         salesOrderLineId: product.salesOrderLineId,
+        deliveryAllocations: sourcingDeliveryAllocations(product, input),
         itemName: product.itemName,
         itemSku: product.itemSku,
         unit: product.unit,
@@ -135,6 +137,10 @@ export function buildStockAllocationPreviews(
         return [
             {
                 salesOrderLineId: product.salesOrderLineId,
+                deliveryAllocations: sourcingDeliveryAllocations(
+                    product,
+                    input,
+                ),
                 itemName: product.itemName,
                 warehouseName:
                     option.warehouseName ?? option.supplierName ?? "公司仓库",

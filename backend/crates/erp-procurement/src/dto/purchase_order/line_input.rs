@@ -81,6 +81,7 @@ impl SavePurchaseOrderLine {
             sku_id: self.sku_id.as_ref().map(|value| SkuId::new(value.clone())),
             sku_revision_id: self.sku_revision_id.as_ref().map(|value| SkuRevisionId::new(value.clone())),
             supplier_offering_source: None,
+            delivery_allocations: self.delivery_allocations.clone().unwrap_or_default(),
             product_name_snapshot: self.product_name.clone(),
             specification_snapshot: self.specification.clone(),
             quantity: parsed.quantity,
@@ -151,6 +152,7 @@ mod tests {
     /// 构造完整商品行请求。
     fn goods_line() -> SavePurchaseOrderLine {
         SavePurchaseOrderLine {
+            delivery_allocations: None,
             line_type: PurchaseLineType::ItemService,
             procurement_confirmation_line_id: Some("pcl-1".to_string()),
             sku_id: Some("sku-1".to_string()),
@@ -173,6 +175,7 @@ mod tests {
     /// 构造完整物流费用行请求。
     fn logistics_line() -> SavePurchaseOrderLine {
         SavePurchaseOrderLine {
+            delivery_allocations: None,
             line_type: PurchaseLineType::LogisticsFee,
             procurement_confirmation_line_id: None,
             sku_id: None,

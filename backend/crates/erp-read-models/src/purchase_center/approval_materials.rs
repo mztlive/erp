@@ -240,6 +240,7 @@ mod tests {
                 sku_id: Some(SkuId::new("sku")),
                 sku_revision_id: Some(SkuRevisionId::new("sku-revision")),
                 supplier_offering_source: None,
+                delivery_allocations: Vec::new(),
                 product_name_snapshot: Some("礼盒".into()),
                 specification_snapshot: Some("标准装".into()),
                 quantity: Some("2".parse().unwrap()),

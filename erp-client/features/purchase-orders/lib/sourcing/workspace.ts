@@ -132,6 +132,8 @@ function productFromBasisLine(
         coveredQuantity: line.coveredQuantity,
         remainingQuantity: line.remainingQuantity,
         deliveryDeadline: line.salesDeliveryDeadline,
+        deliveryAllocations: line.deliveryAllocations,
+        assignedDeliveryAllocations: line.assignedDeliveryAllocations,
         salesAllocationLabel: line.salesAllocationLabel,
         options: [option],
     }

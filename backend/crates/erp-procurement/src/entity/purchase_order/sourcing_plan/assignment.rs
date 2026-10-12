@@ -7,6 +7,7 @@ use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use super::plan::zero_quantity;
+use crate::entity::purchase_order::PurchaseDeliveryAllocation;
 
 /// 销售供给来源。
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -34,6 +35,8 @@ pub struct SourcingAssignment {
     pub quantity: Quantity,
     /// 采购确认的预计交付日。
     pub expected_delivery_date: BusinessDate,
+    /// 本次承担的地址与数量。
+    pub delivery_allocations: Vec<PurchaseDeliveryAllocation>,
 }
 
 impl SourcingAssignment {
@@ -92,6 +95,7 @@ impl SourcingAssignment {
             target_warehouse_id,
             quantity,
             expected_delivery_date,
+            delivery_allocations: Vec::new(),
         })
     }
 }
@@ -125,6 +129,11 @@ impl SourcingAssignmentSet {
         for assignment in assignments {
             if !seen.insert((assignment.sales_order_line_id.as_str(), assignment.basis_id.as_str())) {
                 return Err(Error::from("同一销售行不能重复使用同一履约方案"));
+            }
+            if assignment.source_type == SupplySourceType::ExistingStock
+                && !assignment.delivery_allocations.is_empty()
+            {
+                return Err(Error::from("现有库存的客户地址在仓库发货时安排"));
             }
             normalized.push(assignment.clone());
         }

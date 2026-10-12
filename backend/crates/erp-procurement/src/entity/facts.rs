@@ -11,6 +11,8 @@ use erp_core::ids::{
 use erp_core::money::{Quantity, Rate, UnitPrice};
 use serde::{Deserialize, Serialize};
 
+use crate::entity::purchase_order::PurchaseDeliveryAllocation;
+
 /// 消费事实的稳定主键。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FactIdentity {
@@ -115,6 +117,10 @@ pub struct SalesGoodsLineFact {
     pub base_unit_code: String,
     /// 销售履约期限。
     pub fulfillment_due_at: Instant,
+    /// 当前销售版本的交付要求。
+    pub delivery_allocations: Vec<PurchaseDeliveryAllocation>,
+    /// 当前有效采购已经承担的地址数量。
+    pub assigned_delivery_allocations: Vec<PurchaseDeliveryAllocation>,
 }
 
 /// 采购使用的商品业务类型，wire 与提供方一致。

@@ -4,8 +4,8 @@ use validator::Validate;
 
 use super::super::SupplySourceType;
 use crate::entity::purchase_order::{
-    PurchaseType, RequestedLine, SourcingAssignment, SourcingAssignmentSet, digest_parts,
-    normalize_requested_lines, payload_fingerprint,
+    PurchaseDeliveryAllocation, PurchaseType, RequestedLine, SourcingAssignment, SourcingAssignmentSet,
+    digest_parts, normalize_requested_lines, payload_fingerprint,
 };
 use crate::{Error, Result};
 
@@ -27,6 +27,9 @@ pub struct CreatePurchaseOrderLineRequest {
     /// 采购确认的预计交付日，不得晚于销售承诺期限。
     #[validate(custom(function = "non_blank", message = "预计交付日不能为空"))]
     pub expected_delivery_date: String,
+    /// 本次采购承担的销售地址安排。
+    #[serde(default)]
+    pub delivery_allocations: Vec<PurchaseDeliveryAllocation>,
 }
 
 /// 依据创建采购单请求（精确拆单维度 + 逐行本次数量）。
@@ -76,6 +79,10 @@ impl CreatePurchaseOrderFromBasisRequest {
         for line in &self.lines {
             parsed.push(
                 RequestedLine::parse(&line.sales_order_line_id, &line.quantity, &line.expected_delivery_date)
+                    .map(|mut parsed| {
+                        parsed.delivery_allocations = line.delivery_allocations.clone();
+                        parsed
+                    })
                     .map_err(|error| Error::ValidationError(error.to_string()))?,
             );
         }
@@ -107,6 +114,12 @@ impl CreatePurchaseOrderFromBasisRequest {
         parts.extend(lines.iter().map(|line| {
             format!("{}|{}|{}", line.sales_order_line_id, line.quantity, line.expected_delivery_date)
         }));
+        for line in lines.iter().filter(|line| !line.delivery_allocations.is_empty()) {
+            parts.push(
+                serde_json::to_string(&("delivery", &line.sales_order_line_id, &line.delivery_allocations))
+                    .expect("交付安排可序列化"),
+            );
+        }
         digest_parts(parts)
     }
 }
@@ -207,6 +220,9 @@ pub struct SourcingLineAssignment {
     /// 预计交付日；采购来源不得晚于销售承诺期限，库存来源保留同一请求形状。
     #[validate(custom(function = "non_blank", message = "预计交付日不能为空"))]
     pub expected_delivery_date: String,
+    /// 本次采购承担的销售地址安排。
+    #[serde(default)]
+    pub delivery_allocations: Vec<PurchaseDeliveryAllocation>,
 }
 
 impl SourcingLineAssignment {
@@ -236,6 +252,7 @@ impl SourcingLineAssignment {
             target_warehouse_id: None,
             quantity: quantity.into(),
             expected_delivery_date: expected_delivery_date.into(),
+            delivery_allocations: Vec::new(),
         }
     }
 
@@ -316,6 +333,10 @@ impl CreatePurchaseOrdersFromSourcingRequest {
                     &line.quantity,
                     &line.expected_delivery_date,
                 )
+                .map(|mut parsed| {
+                    parsed.delivery_allocations = line.delivery_allocations.clone();
+                    parsed
+                })
                 .map_err(|error| Error::ValidationError(error.to_string()))?,
             );
         }
@@ -350,6 +371,19 @@ impl CreatePurchaseOrdersFromSourcingRequest {
                 )
             })
             .collect::<Vec<_>>();
+        let delivery = assignments
+            .iter()
+            .filter(|line| !line.delivery_allocations.is_empty())
+            .map(|line| (&line.sales_order_line_id, &line.basis_id, &line.delivery_allocations))
+            .collect::<Vec<_>>();
+        if !delivery.is_empty() {
+            return payload_fingerprint(
+                CREATE_SOURCING_ACTION,
+                self.sales_order_id.trim(),
+                &(self.work_item_id.trim(), payload, delivery),
+            )
+            .map_err(Into::into);
+        }
         payload_fingerprint(
             CREATE_SOURCING_ACTION,
             self.sales_order_id.trim(),
@@ -440,4 +474,28 @@ pub struct ExistingStockReservationResult {
     pub warehouse_id: String,
     /// 本次预占数量。
     pub quantity: String,
+}
+
+#[cfg(test)]
+mod delivery_tests {
+    use super::*;
+    #[test]
+    fn idempotency_binds_the_delivery_plan_without_changing_empty_plan_contract() {
+        let mut request: CreatePurchaseOrdersFromSourcingRequest = serde_json::from_value(serde_json::json!({
+            "work_item_id":"wi", "sales_order_id":"so", "idempotency_key":"retry", "lines":[{
+                "sales_order_line_id":"sol", "basis_id":"basis", "quantity":"2", "expected_delivery_date":"2026-10-30",
+                "delivery_allocations":[{"recipient":"张三", "phone":"13800000000", "address":"A", "quantity":"2"}]
+            }]
+        })).unwrap();
+        let first =
+            request.request_fingerprint(request.sourcing_assignments().unwrap().assignments()).unwrap();
+        request.lines[0].delivery_allocations[0].address = "B".into();
+        let changed =
+            request.request_fingerprint(request.sourcing_assignments().unwrap().assignments()).unwrap();
+        assert_ne!(first, changed);
+        assert_eq!(
+            changed,
+            request.request_fingerprint(request.sourcing_assignments().unwrap().assignments()).unwrap()
+        );
+    }
 }
