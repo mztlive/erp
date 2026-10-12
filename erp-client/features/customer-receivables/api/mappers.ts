@@ -251,6 +251,7 @@ export function projectReceipt(
         receivedAt: instantToIso(r.received_at),
         amount: r.amount,
         bankReferenceMasked: maskBank(r.bank_reference),
+        bankReferenceRestricted: r.permission_limited === true,
         allocatedTotal: r.allocated_total,
         unallocatedAmount: r.unallocated_amount,
         status,

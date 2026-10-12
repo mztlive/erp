@@ -131,6 +131,7 @@ export type ReceiptRow = Readonly<{
     receivedAt: string
     amount: string
     bankReferenceMasked: string
+    bankReferenceRestricted?: boolean
     allocatedTotal: string
     unallocatedAmount: string
     status: "draft" | "in_approval" | "posted" | "reversed"

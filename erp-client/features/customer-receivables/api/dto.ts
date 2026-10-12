@@ -61,6 +61,7 @@ export type BackendCustomerReceipt = {
     received_at: number
     amount: string
     bank_reference?: string | null
+    permission_limited?: boolean
     version: number
     created_at: number
     allocated_total: string

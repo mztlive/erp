@@ -167,7 +167,9 @@ export function ReceiptDetailBody({
                     </PreviewFact>
                     <PreviewFact label="银行引用">
                         <span className="num">
-                            {row.bankReferenceMasked || "未填写"}
+                            {row.bankReferenceRestricted
+                                ? "当前不可查看"
+                                : row.bankReferenceMasked || "未填写"}
                         </span>
                     </PreviewFact>
                     {row.customerName !== row.counterpartyPartyName ? (
