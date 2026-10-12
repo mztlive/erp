@@ -68,6 +68,7 @@ const HEADER_VALIDATION_FIELDS = [
 
 export type SalesOrderCreateTotalBarProps = {
     form: SalesOrderCreateFormApi
+    compact?: boolean
     isSubmitting: boolean
     onSaveDraftClick: () => void
     onSubmitClick: () => void
@@ -75,6 +76,7 @@ export type SalesOrderCreateTotalBarProps = {
 
 export function SalesOrderCreateTotalBar({
     form,
+    compact = false,
     isSubmitting,
     onSaveDraftClick,
     onSubmitClick,
@@ -114,7 +116,11 @@ export function SalesOrderCreateTotalBar({
                     return (
                         <StickyTotalBar
                             layout="inline"
-                            className="mt-auto rounded-b-xl border-grid px-4 py-3 sm:px-5"
+                            className={
+                                compact
+                                    ? "mt-auto shrink-0 rounded-b-xl border-grid px-4 py-3 sm:px-5"
+                                    : "mt-auto rounded-b-xl border-grid px-4 py-3 sm:px-5"
+                            }
                             items={[
                                 {
                                     id: "gross",
@@ -122,7 +128,14 @@ export function SalesOrderCreateTotalBar({
                                     value: (
                                         <MoneyValue
                                             value={totals.gross}
-                                            size="summary"
+                                            size={
+                                                compact ? undefined : "summary"
+                                            }
+                                            className={
+                                                compact
+                                                    ? "text-2xl font-semibold"
+                                                    : undefined
+                                            }
                                         />
                                     ),
                                     description: (

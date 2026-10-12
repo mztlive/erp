@@ -11,6 +11,12 @@ export type SalesChangeDraftLine = {
     spec_snapshot: string | null
     unit_snapshot: string | null
     goods: null | {
+        sku_id: string
+        sku_revision_id: string
+        base_unit_code: string
+        fulfillment_due_at: number
+        service_region: string | null
+        welfare_scenario: string | null
         quantity: string
         unit_price_gross: string
         delivery_allocations?: SalesDeliveryAllocation[]
@@ -29,7 +35,19 @@ export type SalesChangeDraftLine = {
     }
 }
 
+export type SalesChangeTerms = {
+    project_name: string
+    payment_term_code: string
+    payment_term_name: string
+    invoice_type: string
+    tax_point: string
+}
+
 export type SalesChangeDraft = {
+    base_gross_amount: string
+    base_lines: SalesChangeDraftLine[]
+    terms: SalesChangeTerms
+    next_line_no: number
     version: number
     working_copy_version: number
     content_hash: string
@@ -39,6 +57,7 @@ export type SalesChangeDraft = {
 }
 
 export type SaveSalesChangeDraft = {
+    terms: SalesChangeTerms
     expected_version: number
     expected_working_copy_version: number
     reason: string
@@ -47,8 +66,21 @@ export type SaveSalesChangeDraft = {
 }
 
 /** 读取同一销售变更单可编辑目标，不创建新的变更单。 */
-export function fetchSalesChangeDraft(id: string): Promise<SalesChangeDraft> {
-    return apiGet(`/admin/sales-change-orders/${encodeURIComponent(id)}/draft`)
+export async function fetchSalesChangeDraft(
+    id: string,
+): Promise<SalesChangeDraft> {
+    const draft = await apiGet<SalesChangeDraft>(
+        `/admin/sales-change-orders/${encodeURIComponent(id)}/draft`,
+    )
+    if (
+        !draft.terms ||
+        !Array.isArray(draft.base_lines) ||
+        !Number.isSafeInteger(draft.next_line_no) ||
+        !draft.base_gross_amount
+    ) {
+        throw new Error("改单服务尚未更新，请更新后端服务后重新打开。")
+    }
+    return draft
 }
 
 /** 保存完整目标并返回供再次提交使用的两个新版本。 */

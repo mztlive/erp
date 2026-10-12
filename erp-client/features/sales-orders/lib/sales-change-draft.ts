@@ -1,7 +1,10 @@
+import { dateToUnixSecs, formatEpochDate } from "../api/mappers"
+import type { SellableSkuPick } from "./sellable-sku-pick"
 import type { SalesDeliveryAllocation } from "../types"
 import type {
     SalesChangeDraft,
     SalesChangeDraftLine,
+    SalesChangeTerms,
 } from "../api/sales-change-draft"
 import {
     compareDecimal,
@@ -11,10 +14,14 @@ import {
 } from "@/lib/fixed-decimal"
 
 export type SalesChangeDraftValues = {
+    terms: SalesChangeTerms
     reason: string
     remark: string
     lines: {
-        deliveryAllocations: SalesDeliveryAllocation[]
+        source: SalesChangeDraftLine
+        dueDate: string
+        serviceRegion: string
+        deliveryAllocations: (SalesDeliveryAllocation & { rowKey: string })[]
         quantity: string
         unitPrice: string
         taxRate: string
@@ -27,10 +34,18 @@ export function salesChangeDraftValues(
     draft: SalesChangeDraft,
 ): SalesChangeDraftValues {
     return {
-        reason: draft.reason,
+        terms: { ...draft.terms },
+        reason: draft.reason === "销售发起变更" ? "" : draft.reason,
         remark: draft.business_remark ?? "",
         lines: draft.lines.map((line) => ({
-            deliveryAllocations: line.goods?.delivery_allocations ?? [],
+            source: line,
+            dueDate: line.goods
+                ? formatEpochDate(line.goods.fulfillment_due_at)
+                : "",
+            serviceRegion: line.goods?.service_region ?? "",
+            deliveryAllocations: (line.goods?.delivery_allocations ?? []).map(
+                (row) => ({ ...row, rowKey: crypto.randomUUID() }),
+            ),
             quantity: line.goods?.quantity ?? "1",
             unitPrice:
                 line.goods?.unit_price_gross ??
@@ -76,17 +91,29 @@ export function salesChangeTargetLines(
     draft: SalesChangeDraft,
     values: SalesChangeDraftValues,
 ): SalesChangeDraftLine[] {
-    if (draft.lines.length !== values.lines.length)
-        throw new Error("明细已变化，请重新读取原单")
-    return draft.lines.map((line, index) => {
-        const value = values.lines[index]
+    const ids = new Set(
+        values.lines.map((value) => value.source.sales_order_line_id),
+    )
+    if (draft.lines.some((line) => !ids.has(line.sales_order_line_id)))
+        throw new Error("原商品须保留记录，请使用移除商品操作")
+    return values.lines.map((value) => {
+        const line = value.source
         if (line.goods)
             return {
                 ...line,
                 sales_tax_rate: value.taxRate,
                 goods: {
                     ...line.goods,
-                    delivery_allocations: value.deliveryAllocations,
+                    delivery_allocations: value.deliveryAllocations.map(
+                        ({ recipient, phone, address, quantity }) => ({
+                            recipient,
+                            phone,
+                            address,
+                            quantity,
+                        }),
+                    ),
+                    fulfillment_due_at: dateToUnixSecs(value.dueDate),
+                    service_region: value.serviceRegion.trim() || null,
                     quantity: value.quantity,
                     unit_price_gross: value.unitPrice,
                     pricing_mode: "MANUAL",
@@ -137,7 +164,7 @@ export function salesChangeSavedMatches(
 ): boolean {
     if (
         current.version <= original.version ||
-        current.lines.length !== original.lines.length
+        current.lines.length !== target.lines.length
     )
         return false
     const amount = (value: string) =>
@@ -208,12 +235,62 @@ export function salesChangeSavedMatches(
                       )
                     : value,
         )
-    return (
-        canonical(current.reason, current.business_remark, current.lines) ===
-        canonical(
-            target.reason,
-            target.remark,
-            salesChangeTargetLines(original, target),
+    const normalizedTerms = (terms: SalesChangeTerms) =>
+        JSON.stringify(
+            Object.entries(terms)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([key, value]) => [key, value.trim()]),
         )
+    return (
+        normalizedTerms(current.terms) === normalizedTerms(target.terms) &&
+        canonical(current.reason, current.business_remark, current.lines) ===
+            canonical(
+                target.reason,
+                target.remark,
+                salesChangeTargetLines(original, target),
+            )
     )
+}
+
+/** 新商品使用本改单独立行身份；换品通过旧行归零与新行追加完成。 */
+export function salesChangePickedLine(
+    pick: SellableSkuPick,
+    changeOrderId: string,
+    lineNo: number,
+    template?: SalesChangeDraftValues["lines"][number],
+    preserveQuantity = false,
+): SalesChangeDraftValues["lines"][number] {
+    const source: SalesChangeDraftLine = {
+        sales_order_line_id: `${changeOrderId}:line:${crypto.randomUUID()}`,
+        line_no: lineNo,
+        line_type: "GOODS_SERVICE",
+        item_name_snapshot: pick.name,
+        spec_snapshot: pick.specificationLabel || null,
+        unit_snapshot: pick.baseUnit,
+        sales_tax_rate: template?.taxRate ?? "0.13",
+        voucher: null,
+        goods: {
+            sku_id: pick.skuId,
+            sku_revision_id: pick.skuRevisionId,
+            base_unit_code: pick.baseUnit,
+            fulfillment_due_at: 0,
+            welfare_scenario: template?.source.goods?.welfare_scenario ?? null,
+            service_region: template?.serviceRegion || null,
+            quantity: preserveQuantity ? (template?.quantity ?? "1") : "1",
+            unit_price_gross: "0",
+            pricing_mode: "MANUAL",
+            delivery_allocations: [],
+        },
+    }
+    return {
+        source,
+        dueDate: template?.dueDate ?? "",
+        serviceRegion: template?.serviceRegion ?? "",
+        quantity: preserveQuantity ? (template?.quantity ?? "1") : "1",
+        unitPrice: "",
+        taxRate: source.sales_tax_rate,
+        deliveryAllocations: [],
+        faceValue: "1",
+        cardCount: "1",
+    }
 }

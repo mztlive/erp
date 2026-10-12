@@ -4,6 +4,8 @@
 //! 销售变更走统一审批；选源由采购单创建路径承担。
 
 mod draft_edit;
+mod terms;
+pub use terms::SalesChangeTerms;
 mod formal_revision;
 pub mod sales_change_order;
 pub mod sales_change_submission;

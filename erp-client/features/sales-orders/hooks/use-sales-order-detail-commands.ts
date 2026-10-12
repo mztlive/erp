@@ -47,13 +47,14 @@ export function useSalesOrderDetailStartChange() {
             commandLedger.settle("start-change", "succeeded")
             onResult({
                 status: "succeeded",
-                title: "改单已创建",
+                title: "请编辑销售变更",
                 description: `已进入「${change.statusLabel}」。当前版本对客户仍然有效。`,
                 reference: change.id,
                 nextResponsible:
                     change.approval?.instance?.currentAssigneeName ??
                     change.approval?.instance?.currentAssignee,
             })
+            return change
         } catch (error) {
             const settlement = command
                 ? classifyFormalCommandError(error)

@@ -11,8 +11,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import { SalesChangeOrderApprovalArea } from "@/features/sales-orders/components/sales-change-order-approval-area"
-import { SalesChangeOrderSubmitConfirmDialog } from "@/features/sales-orders/components/sales-change-order-submit-confirm-dialog"
-import { useSubmitSalesChangeOrderMutation } from "@/features/sales-orders/hooks/queries"
 import {
     mergeSalesChangeOrderAllowedActions,
     SALES_CHANGE_ORDER_DOCUMENT_TYPE,
@@ -23,11 +21,6 @@ import type {
     SalesChangeOrderSummary,
     SalesOrderNature,
 } from "@/features/sales-orders/types"
-import { getErrorPresentation } from "@/lib/api/errors"
-import {
-    classifyFormalCommandError,
-    FormalCommandKeyLedger,
-} from "@/lib/formal-command"
 
 /**
  * 销售变更单在详情页上的审批区入口。
@@ -53,16 +46,8 @@ export function SalesChangeOrderApprovalSection({
     workItemAllowedActions?: readonly string[]
     onResult?: (result: SalesOrderDetailActionResult) => void
 }) {
-    const submitMutation = useSubmitSalesChangeOrderMutation()
-    const [submitOpen, setSubmitOpen] = React.useState(false)
     const [editOpen, setEditOpen] = React.useState(false)
     const searchParams = useSearchParams()
-    const ledgerRef = React.useRef<FormalCommandKeyLedger | null>(null)
-    if (ledgerRef.current == null) {
-        ledgerRef.current = new FormalCommandKeyLedger()
-    }
-    const commandLedger = ledgerRef.current
-
     const consumedEditRequest = React.useRef<string | null>(null)
     const editRequested = searchParams.get("editChange") === changeOrder?.id
     React.useEffect(() => {
@@ -105,64 +90,6 @@ export function SalesChangeOrderApprovalSection({
         (changeOrder.version ?? 0) > 0
 
     const editDocumentHref = `/sales/orders/${encodeURIComponent(salesOrderId)}?section=change-review&changeOrderId=${encodeURIComponent(changeOrder.id)}&editChange=${encodeURIComponent(changeOrder.id)}`
-
-    const submitChange = async () => {
-        const slot = `submit-change:${changeOrder.id}`
-        let command = commandLedger.peek<{
-            salesChangeOrderId: string
-            salesOrderId: string
-            version: number
-            nature: SalesOrderNature
-        }>(slot)
-        if (!command) {
-            command = commandLedger.acquire(
-                slot,
-                `sales-change:${changeOrder.id}:submit`,
-                {
-                    salesChangeOrderId: changeOrder.id,
-                    salesOrderId,
-                    version: changeOrder.version ?? 0,
-                    nature,
-                },
-            )
-        }
-        if (!command) return
-        try {
-            const submitted = await submitMutation.mutateAsync({
-                ...command.payload,
-                idempotencyKey: command.idempotencyKey,
-            })
-            commandLedger.settle(slot, "succeeded")
-            setSubmitOpen(false)
-            onResult?.({
-                status: "succeeded",
-                title: "改单已提交审批",
-                description: `已进入「${submitted.statusLabel}」。当前销售版本对客户仍然有效。`,
-                reference: submitted.id,
-                nextResponsible:
-                    submitted.approval?.instance?.currentAssigneeName ??
-                    submitted.approval?.instance?.currentAssignee,
-            })
-        } catch (error) {
-            const settlement = classifyFormalCommandError(error)
-            commandLedger.settle(slot, settlement)
-            const failure = getErrorPresentation(
-                error,
-                "改单未提交，请刷新后重试。",
-            )
-            onResult?.({
-                status: settlement === "unknown" ? "unknown" : "blocked",
-                title:
-                    settlement === "unknown" ? "处理结果待确认" : failure.title,
-                description:
-                    settlement === "unknown"
-                        ? "请使用本次操作重试；确认前不要重复提交改单。"
-                        : failure.description,
-                reference: changeOrder.id,
-            })
-            throw error
-        }
-    }
 
     return (
         <div className="space-y-3">
@@ -226,7 +153,7 @@ export function SalesChangeOrderApprovalSection({
                     variant="outline"
                     onClick={() => setEditOpen(true)}
                 >
-                    修改并提交原单
+                    编辑改单
                 </Button>
             ) : null}
             {canSubmit && editOpen ? (
@@ -240,7 +167,7 @@ export function SalesChangeOrderApprovalSection({
                     onApplied={() =>
                         onResult?.({
                             status: "succeeded",
-                            title: "原改单已修改并提交",
+                            title: "改单已提交审批",
                             description:
                                 "修改内容已保存，并以原变更单重新发起审批。",
                             reference: changeOrder.id,
@@ -248,24 +175,6 @@ export function SalesChangeOrderApprovalSection({
                     }
                 />
             ) : null}
-            {canSubmit ? (
-                <Button
-                    id="sales-orders-change-submit"
-                    type="button"
-                    onClick={() => setSubmitOpen(true)}
-                >
-                    提交改单
-                </Button>
-            ) : null}
-            <SalesChangeOrderSubmitConfirmDialog
-                open={submitOpen}
-                pending={submitMutation.isPending}
-                approval={changeOrder.approval}
-                onOpenChange={setSubmitOpen}
-                onConfirm={() => {
-                    void submitChange()
-                }}
-            />
         </div>
     )
 }

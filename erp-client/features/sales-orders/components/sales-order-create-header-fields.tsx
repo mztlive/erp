@@ -20,6 +20,7 @@ import type { SalesOrderNature } from "@/features/sales-orders/types"
 
 export type SalesOrderCreateHeaderFieldsProps = {
     form: SalesOrderCreateFormApi
+    compact?: boolean
     /** 继续编辑 / 驳回改单：业务性质锁定，不可再改。 */
     natureLocked: boolean
     contractResolved: boolean
@@ -31,6 +32,7 @@ export type SalesOrderCreateHeaderFieldsProps = {
 
 export function SalesOrderCreateHeaderFields({
     form,
+    compact = false,
     natureLocked,
     contractResolved,
     settlementSnapshot,
@@ -42,7 +44,13 @@ export function SalesOrderCreateHeaderFields({
         (state) => state.values.orderBasis === "contract",
     )
     return (
-        <div className="grid min-w-0 grid-cols-1 items-start gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div
+            className={
+                compact
+                    ? "grid min-w-0 grid-cols-1 items-start gap-4 sm:grid-cols-2"
+                    : "grid min-w-0 grid-cols-1 items-start gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-3"
+            }
+        >
             <form.AppField name="nature">
                 {(field) => {
                     const previousNature = field.state.value
@@ -99,11 +107,13 @@ export function SalesOrderCreateHeaderFields({
                     />
                 )}
             </form.AppField>
-            <SalesOrderCreateSettlementField
-                form={form}
-                settlementSnapshot={settlementSnapshot}
-                hasContract={hasContract}
-            />
+            <div className={compact ? "min-w-0 sm:col-span-2" : "contents"}>
+                <SalesOrderCreateSettlementField
+                    form={form}
+                    settlementSnapshot={settlementSnapshot}
+                    hasContract={hasContract}
+                />
+            </div>
             {!contractResolved ? (
                 <>
                     <form.AppField
@@ -172,7 +182,13 @@ export function SalesOrderCreateHeaderFields({
             <form.Subscribe selector={(state) => state.values.nature}>
                 {(nature) =>
                     nature === "card_voucher" ? (
-                        <div className="grid grid-cols-1 gap-4 border-t border-grid pt-3 sm:col-span-2 sm:grid-cols-2 lg:col-span-3">
+                        <div
+                            className={
+                                compact
+                                    ? "grid grid-cols-1 gap-4 border-t border-grid pt-3 sm:col-span-2 sm:grid-cols-2"
+                                    : "grid grid-cols-1 gap-4 border-t border-grid pt-3 sm:col-span-2 sm:grid-cols-2 lg:col-span-3"
+                            }
+                        >
                             <form.AppField
                                 name="fulfillmentDeadline"
                                 validators={{

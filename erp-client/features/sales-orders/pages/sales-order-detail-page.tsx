@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { SalesChangeOrderEditDialog } from "../components/sales-change-order-edit-dialog"
+import type { SalesChangeOrderSummary } from "../types"
 import Link from "next/link"
 import { useQueryClient } from "@tanstack/react-query"
 
@@ -13,10 +15,7 @@ import {
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { SalesChangeOrderApprovalSection } from "@/features/sales-orders/components/sales-change-order-approval-section"
-import {
-    SalesOrderDetailCommandDialogs,
-    SalesOrderDetailSecondaryActions,
-} from "@/features/sales-orders/components/sales-order-detail-command-dialogs"
+import { SalesOrderDetailSecondaryActions } from "@/features/sales-orders/components/sales-order-detail-command-dialogs"
 import { SalesOrderEditableCenter } from "@/features/sales-orders/components/sales-order-detail-editable-center"
 import { SalesOrderIdentityHeader } from "@/features/sales-orders/components/sales-order-detail-panels"
 import { SalesOrderDetailSidebar } from "@/features/sales-orders/components/sales-order-detail-sidebar"
@@ -98,7 +97,8 @@ export function SalesOrderDetailPage({
         [focusedWorkItem?.workItemType, selectUrlSection],
     )
 
-    const [changeConfirmOpen, setChangeConfirmOpen] = React.useState(false)
+    const [editingChange, setEditingChange] =
+        React.useState<SalesChangeOrderSummary | null>(null)
     const [result, setResult] =
         React.useState<SalesOrderDetailActionResult | null>(null)
 
@@ -225,9 +225,25 @@ export function SalesOrderDetailPage({
                             canStartChange={derived.canStartChange}
                             changeBlocker={derived.changeBlocker}
                             changePending={startChangeCommand.isPending}
-                            onOpenChangeConfirm={() =>
-                                setChangeConfirmOpen(true)
-                            }
+                            onOpenChangeConfirm={() => {
+                                if (
+                                    order.activeChangeOrder?.statusCode ===
+                                    "DRAFT"
+                                ) {
+                                    setEditingChange(order.activeChangeOrder)
+                                    return
+                                }
+                                void startChangeCommand
+                                    .startChange({
+                                        order,
+                                        commandLedger,
+                                        onResult: handleActionResult,
+                                    })
+                                    .then((change) => {
+                                        if (change) setEditingChange(change)
+                                    })
+                                    .catch(() => undefined)
+                            }}
                             onApprovalResult={handleActionResult}
                         />
                     }
@@ -342,18 +358,28 @@ export function SalesOrderDetailPage({
                 }
             />
 
-            <SalesOrderDetailCommandDialogs
-                order={order}
-                changeConfirmOpen={changeConfirmOpen}
-                onChangeConfirmOpenChange={setChangeConfirmOpen}
-                onChangeConfirm={() =>
-                    startChangeCommand.startChange({
-                        order,
-                        commandLedger,
-                        onResult: handleActionResult,
-                    })
-                }
-            />
+            {editingChange ? (
+                <SalesChangeOrderEditDialog
+                    open
+                    onOpenChange={(open) => {
+                        if (!open) setEditingChange(null)
+                    }}
+                    salesOrderId={order.id}
+                    changeOrderId={editingChange.id}
+                    nature={order.nature}
+                    approval={editingChange.approval}
+                    onApplied={() => {
+                        handleActionResult({
+                            status: "succeeded",
+                            title: "改单已提交审批",
+                            reference: order.documentNumber,
+                            description:
+                                "审批通过后生效，当前销售版本继续执行。",
+                        })
+                        selectSection("versions")
+                    }}
+                />
+            ) : null}
         </PageScaffold>
     )
 }

@@ -31,24 +31,27 @@ export function SalesOrderEditableCenter({
     const resumeQuery = useSalesOrderDraftResumeQuery(order.id)
 
     return (
-        <PageScaffold density="compact" className="pb-8">
-            <SalesOrderIdentityHeader
-                order={order}
-                back={{
-                    id: "sales-orders-detail-editable-back",
-                    label: backLabel,
-                    href: backHref,
-                }}
-                navigationMeta={
-                    fromQueue
-                        ? fromWorkspace === "W01" || fromWorkspace === "W09"
-                            ? "从履约处理打开 · 处理完可点返回，回到列表原位"
-                            : fromWorkspace === "W08"
-                              ? "从采购单打开 · 处理完可点返回，回到列表原位"
-                              : "从工作台打开 · 处理完可点返回，回到列表原位"
-                        : undefined
-                }
-            />
+        <PageScaffold density="compact" className="min-h-0 overflow-hidden">
+            <div className="shrink-0">
+                <SalesOrderIdentityHeader
+                    identityOnly
+                    order={order}
+                    back={{
+                        id: "sales-orders-detail-editable-back",
+                        label: backLabel,
+                        href: backHref,
+                    }}
+                    navigationMeta={
+                        fromQueue
+                            ? fromWorkspace === "W01" || fromWorkspace === "W09"
+                                ? "从履约处理打开 · 处理完可点返回，回到列表原位"
+                                : fromWorkspace === "W08"
+                                  ? "从采购单打开 · 处理完可点返回，回到列表原位"
+                                  : "从工作台打开 · 处理完可点返回，回到列表原位"
+                            : undefined
+                    }
+                />
+            </div>
 
             {resumeQuery.isPending ? (
                 <div

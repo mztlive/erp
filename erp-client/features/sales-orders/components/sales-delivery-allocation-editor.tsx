@@ -1,11 +1,256 @@
 "use client"
 
+import { useRef } from "react"
+import { PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { toFieldErrors } from "@/components/form"
 import { FieldError } from "@/components/ui/field"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { compareDecimal, sumFixed } from "@/lib/fixed-decimal"
+import {
+    compactFixed,
+    compareDecimal,
+    subtractFixed,
+    sumFixed,
+} from "@/lib/fixed-decimal"
 import type { SalesOrderCreateFormApi } from "../lib/sales-order-create-form-types"
+import type { CreateSalesOrderFormValues } from "../lib/sales-order-create-model"
+
+type DeliveryLine = CreateSalesOrderFormValues["lineItems"][number]
+
+function allocationSummary(line: DeliveryLine) {
+    const rows = line.deliveryAllocations ?? []
+    if (!rows.length)
+        return {
+            summary: "未指定，可在履约时填写",
+            status: "",
+            complete: false,
+        }
+    const detailsComplete = rows.every(
+        (row) =>
+            row.recipient.trim() &&
+            row.recipient.trim().length <= 64 &&
+            row.phone.trim() &&
+            row.phone.trim().length <= 32 &&
+            row.address.trim() &&
+            row.address.trim().length <= 512,
+    )
+    try {
+        const options = { maxScale: 6, outputScale: 6 }
+        const total = sumFixed(
+            rows.map((row) => row.quantity || "0"),
+            options,
+        )
+        const comparison = compareDecimal(total, line.quantity, 6)
+        const summary = `已分配 ${compactFixed(total)} / ${compactFixed(line.quantity)} ${line.unit}`
+        if (
+            rows.some((row) => compareDecimal(row.quantity || "0", "0", 6) <= 0)
+        ) {
+            return {
+                summary,
+                status: "请填写大于 0 的分配数量",
+                complete: false,
+            }
+        }
+        if (comparison !== 0) {
+            const difference =
+                comparison < 0
+                    ? subtractFixed(line.quantity, total, options)
+                    : subtractFixed(total, line.quantity, options)
+            return {
+                summary,
+                status: `${comparison < 0 ? "还差" : "超出"} ${compactFixed(difference)} ${line.unit}`,
+                complete: false,
+            }
+        }
+        return {
+            summary,
+            status: detailsComplete ? "已填写完整" : "待填写收货资料",
+            complete: detailsComplete,
+        }
+    } catch {
+        return {
+            summary: "数量待核对",
+            status: "请填写有效数量（最多 6 位小数）",
+            complete: false,
+        }
+    }
+}
+
+const addressGrid =
+    "grid gap-3 sm:grid-cols-2 @3xl/delivery:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,2.6fr)_7rem_3.5rem]"
+
+function DeliveryAllocationGroup({
+    form,
+    line,
+    rowIndex,
+}: {
+    form: SalesOrderCreateFormApi
+    line: DeliveryLine
+    rowIndex: number
+}) {
+    const prefix = `sales-delivery-${toAutomationIdSegment(line.rowKey)}`
+    const allocations = line.deliveryAllocations ?? []
+    // 地址没有服务端 ID；用组内单调递增的编辑键，删除前行后其余输入 ID 不变。
+    const identity = useRef({ sequence: 0, keys: [] as string[] })
+    while (identity.current.keys.length < allocations.length) {
+        identity.current.keys.push(`address-${++identity.current.sequence}`)
+    }
+    identity.current.keys.length = allocations.length
+    const summary = allocationSummary(line)
+    const labels = [
+        ["recipient", "收货人"],
+        ["phone", "联系电话"],
+        ["address", "完整收货地址"],
+        ["quantity", `数量（${line.unit || "基础单位"}）`],
+    ] as const
+
+    return (
+        <div className="min-w-0 space-y-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1.5">
+                    <h3 className="break-words text-sm font-medium">
+                        {line.name || `商品 ${rowIndex + 1}`}
+                    </h3>
+                    <div
+                        className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground"
+                        aria-live="polite"
+                    >
+                        <span className="num">{summary.summary}</span>
+                        {summary.status ? (
+                            <Badge
+                                variant={
+                                    summary.complete ? "success" : "warning"
+                                }
+                            >
+                                {summary.status}
+                            </Badge>
+                        ) : null}
+                    </div>
+                </div>
+                <Button
+                    id={`${prefix}-add`}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={allocations.length >= 100}
+                    onClick={() =>
+                        form.setFieldValue(
+                            `lineItems[${rowIndex}].deliveryAllocations`,
+                            [
+                                ...allocations,
+                                {
+                                    recipient: "",
+                                    phone: "",
+                                    address: "",
+                                    quantity: allocations.length
+                                        ? ""
+                                        : line.quantity,
+                                },
+                            ],
+                        )
+                    }
+                >
+                    <PlusIcon aria-hidden="true" />
+                    添加收货地址
+                </Button>
+            </div>
+            {allocations.length ? (
+                <div>
+                    <div
+                        aria-hidden="true"
+                        className={`${addressGrid} hidden border-b border-grid bg-muted/30 px-3 py-2 text-xs text-muted-foreground @3xl/delivery:grid`}
+                    >
+                        {labels.map(([name, label]) => (
+                            <span key={name}>{label}</span>
+                        ))}
+                        <span className="text-center">操作</span>
+                    </div>
+                    <div className="divide-y divide-grid">
+                        {allocations.map((_, allocationIndex) => {
+                            const addressKey =
+                                identity.current.keys[allocationIndex]
+                            return (
+                                <div
+                                    key={addressKey}
+                                    className={`${addressGrid} items-start px-0 py-3 @3xl/delivery:px-3`}
+                                >
+                                    {labels.map(([name, label]) => (
+                                        <form.AppField
+                                            key={name}
+                                            name={`lineItems[${rowIndex}].deliveryAllocations[${allocationIndex}].${name}`}
+                                        >
+                                            {(field) => (
+                                                <field.TextField
+                                                    id={`${prefix}-${addressKey}-${name}`}
+                                                    label={label}
+                                                    className={`min-w-0 gap-2 @3xl/delivery:[&>[data-slot=field-label]]:sr-only ${name === "address" ? "sm:col-span-2 @3xl/delivery:col-span-1" : ""}`}
+                                                    inputClassName={
+                                                        name === "quantity"
+                                                            ? "num"
+                                                            : undefined
+                                                    }
+                                                    placeholder={
+                                                        name === "address"
+                                                            ? "省、市、区及详细地址"
+                                                            : undefined
+                                                    }
+                                                    step={
+                                                        name === "quantity"
+                                                            ? "any"
+                                                            : undefined
+                                                    }
+                                                    type={
+                                                        name === "quantity"
+                                                            ? "number"
+                                                            : name === "phone"
+                                                              ? "tel"
+                                                              : "text"
+                                                    }
+                                                />
+                                            )}
+                                        </form.AppField>
+                                    ))}
+                                    <Button
+                                        id={`${prefix}-${addressKey}-remove`}
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        aria-label={`移除${line.name || "商品"}的第 ${allocationIndex + 1} 个收货地址`}
+                                        className="self-end justify-self-end text-muted-foreground @3xl/delivery:mt-0.5 @3xl/delivery:self-start"
+                                        onClick={() => {
+                                            identity.current.keys.splice(
+                                                allocationIndex,
+                                                1,
+                                            )
+                                            form.setFieldValue(
+                                                `lineItems[${rowIndex}].deliveryAllocations`,
+                                                allocations.filter(
+                                                    (_, index) =>
+                                                        index !==
+                                                        allocationIndex,
+                                                ),
+                                            )
+                                        }}
+                                    >
+                                        移除
+                                    </Button>
+                                </div>
+                            )
+                        })}
+                    </div>
+                </div>
+            ) : null}
+            <form.AppField name={`lineItems[${rowIndex}].deliveryAllocations`}>
+                {(field) => (
+                    <FieldError
+                        errors={toFieldErrors(field.state.meta.errors)}
+                    />
+                )}
+            </form.AppField>
+        </div>
+    )
+}
 
 /** 每条商品独立分配地址，选品册按份展开的商品使用相同数量规则。 */
 export function SalesDeliveryAllocationEditor({
@@ -23,148 +268,35 @@ export function SalesDeliveryAllocationEditor({
             {({ nature, lines }) =>
                 nature !== "physical_service" || !lines.length ? null : (
                     <section
-                        className="space-y-4 rounded-lg border border-border p-4"
-                        aria-label="分地址交付"
+                        className="@container/delivery min-w-0 space-y-5 border-t border-grid p-4 sm:p-5"
+                        aria-labelledby="sales-delivery-title"
                     >
-                        <div>
-                            <h3 className="font-medium">分地址交付</h3>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                                按商品填写每个地址的数量，合计须等于该商品数量。选品册按份采购的商品同样可分配；未指定时可在履约环节登记。
+                        <div className="space-y-1">
+                            <div className="flex flex-wrap items-baseline gap-2">
+                                <h2
+                                    id="sales-delivery-title"
+                                    className="font-heading text-base font-semibold"
+                                >
+                                    分地址交付
+                                </h2>
+                                <span className="text-sm text-muted-foreground">
+                                    选填
+                                </span>
+                            </div>
+                            <p className="text-xs leading-relaxed text-muted-foreground">
+                                填写后，各地址数量合计须等于商品数量；也可在履约时补充。
                             </p>
                         </div>
-                        {lines.map((line, rowIndex) => {
-                            const prefix = `sales-delivery-${toAutomationIdSegment(line.rowKey)}`
-                            const allocations = line.deliveryAllocations ?? []
-                            let summary = "尚未指定地址"
-                            try {
-                                const total = sumFixed(
-                                    allocations.map(
-                                        (row) => row.quantity || "0",
-                                    ),
-                                    { maxScale: 6, outputScale: 6 },
-                                )
-                                summary = `已分配 ${total} / ${line.quantity} ${line.unit}`
-                                if (
-                                    allocations.length &&
-                                    compareDecimal(total, line.quantity, 6) !==
-                                        0
-                                )
-                                    summary += "，请核对合计"
-                            } catch {
-                                summary = "请填写有效分配数量"
-                            }
-                            return (
-                                <div
+                        <div className="divide-y divide-grid space-y-5 [&>div:not(:first-child)]:pt-5">
+                            {lines.map((line, rowIndex) => (
+                                <DeliveryAllocationGroup
                                     key={line.rowKey}
-                                    className="space-y-3 border-t border-border pt-3"
-                                >
-                                    <div className="flex flex-wrap items-center justify-between gap-2">
-                                        <div className="text-sm">
-                                            <span className="font-medium">
-                                                {line.name ||
-                                                    `商品 ${rowIndex + 1}`}
-                                            </span>
-                                            <span className="ml-3 text-muted-foreground">
-                                                {summary}
-                                            </span>
-                                        </div>
-                                        <Button
-                                            id={`${prefix}-add`}
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            disabled={allocations.length >= 100}
-                                            onClick={() =>
-                                                form.setFieldValue(
-                                                    `lineItems[${rowIndex}].deliveryAllocations`,
-                                                    [
-                                                        ...allocations,
-                                                        {
-                                                            recipient: "",
-                                                            phone: "",
-                                                            address: "",
-                                                            quantity:
-                                                                allocations.length
-                                                                    ? ""
-                                                                    : line.quantity,
-                                                        },
-                                                    ],
-                                                )
-                                            }
-                                        >
-                                            添加收货地址
-                                        </Button>
-                                    </div>
-                                    {allocations.map((_, allocationIndex) => (
-                                        <div
-                                            key={allocationIndex}
-                                            className="grid gap-3 rounded-md bg-muted/30 p-3 sm:grid-cols-2 lg:grid-cols-[1fr_1.2fr_2fr_1fr_auto]"
-                                        >
-                                            {(
-                                                [
-                                                    ["recipient", "收货人"],
-                                                    ["phone", "联系电话"],
-                                                    ["address", "完整收货地址"],
-                                                    [
-                                                        "quantity",
-                                                        `数量（${line.unit || "基础单位"}）`,
-                                                    ],
-                                                ] as const
-                                            ).map(([name, label]) => (
-                                                <form.AppField
-                                                    key={name}
-                                                    name={`lineItems[${rowIndex}].deliveryAllocations[${allocationIndex}].${name}`}
-                                                >
-                                                    {(field) => (
-                                                        <field.TextField
-                                                            id={`${prefix}-${allocationIndex}-${name}`}
-                                                            label={label}
-                                                            step="any"
-                                                            type={
-                                                                name ===
-                                                                "quantity"
-                                                                    ? "number"
-                                                                    : "text"
-                                                            }
-                                                        />
-                                                    )}
-                                                </form.AppField>
-                                            ))}
-                                            <Button
-                                                id={`${prefix}-${allocationIndex}-remove`}
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                className="self-end"
-                                                onClick={() =>
-                                                    form.setFieldValue(
-                                                        `lineItems[${rowIndex}].deliveryAllocations`,
-                                                        allocations.filter(
-                                                            (_, index) =>
-                                                                index !==
-                                                                allocationIndex,
-                                                        ),
-                                                    )
-                                                }
-                                            >
-                                                移除
-                                            </Button>
-                                        </div>
-                                    ))}
-                                    <form.AppField
-                                        name={`lineItems[${rowIndex}].deliveryAllocations`}
-                                    >
-                                        {(field) => (
-                                            <FieldError
-                                                errors={toFieldErrors(
-                                                    field.state.meta.errors,
-                                                )}
-                                            />
-                                        )}
-                                    </form.AppField>
-                                </div>
-                            )
-                        })}
+                                    form={form}
+                                    line={line}
+                                    rowIndex={rowIndex}
+                                />
+                            ))}
+                        </div>
                     </section>
                 )
             }

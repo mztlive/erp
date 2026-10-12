@@ -1,13 +1,17 @@
 //! 销售变更原单的草稿编辑协议。
 
+use erp_core::money::Amount;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::entity::sales_order::SalesOrderWorkingCopyLineData;
+use crate::entity::sales_review::SalesChangeTerms;
 
 /// 可重新编辑的销售变更工作副本。
 #[derive(Debug, Clone, Serialize)]
 pub struct SalesChangeDraftView {
+    /// 当前变更基准版本含税金额。
+    pub base_gross_amount: Amount,
     /// 销售变更单版本。
     pub version: u64,
     /// 工作副本版本。
@@ -16,8 +20,14 @@ pub struct SalesChangeDraftView {
     pub content_hash: String,
     /// 变更原因。
     pub reason: String,
+    /// 可编辑商业条款。
+    pub terms: SalesChangeTerms,
     /// 业务备注。
     pub business_remark: Option<String>,
+    /// 新增商品可使用的起始行号，包含历史已占用行号。
+    pub next_line_no: u32,
+    /// 基准生效版本明细，供展示真实变更前后差异。
+    pub base_lines: Vec<SalesOrderWorkingCopyLineData>,
     /// 完整目标明细；稳定行身份保留。
     pub lines: Vec<SalesOrderWorkingCopyLineData>,
 }
@@ -35,6 +45,8 @@ pub struct SaveSalesChangeDraftRequest {
     /// 本次变更原因。
     #[validate(length(min = 1, max = 512))]
     pub reason: String,
+    /// 可编辑条款；旧客户端省略时保留当前值。
+    pub terms: Option<SalesChangeTerms>,
     /// 业务备注。
     pub business_remark: Option<String>,
     /// 完整目标明细。

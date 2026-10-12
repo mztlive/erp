@@ -200,7 +200,7 @@ impl SalesOrderWorkingCopyLine {
     /// 无。
     ///
     /// # 返回
-    /// 卡券行返回 `None`；实物及服务行返回 `(SKU, SKU 修订)`。
+    /// 卡券及数量归零的历史商品行返回 `None`；有效实物及服务行返回 `(SKU, SKU 修订)`。
     ///
     /// # 错误
     /// 实物及服务行缺少 SKU 或 SKU 修订时返回错误。
@@ -214,6 +214,9 @@ impl SalesOrderWorkingCopyLine {
             .sku_revision_id
             .as_ref()
             .ok_or_else(|| Error::from(format!("第 {} 行缺少 SKU 修订", self.line_no)))?;
+        if self.quantity.is_some_and(|quantity| quantity.to_decimal().is_zero()) {
+            return Ok(None);
+        }
         Ok(Some((sku_id, revision_id)))
     }
 

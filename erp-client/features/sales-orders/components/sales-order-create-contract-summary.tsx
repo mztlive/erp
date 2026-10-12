@@ -17,12 +17,14 @@ export function SalesOrderCreateContractSummary({
     imported,
     canChange,
     onChange,
+    compact = false,
 }: {
     form: SalesOrderCreateFormApi
     contract: ContractCenterView
     imported: boolean
     canChange: boolean
     onChange: () => void
+    compact?: boolean
 }) {
     const values = useSelector(form.store, (state) => state.values)
     const [previewOpen, setPreviewOpen] = useState(false)
@@ -47,7 +49,7 @@ export function SalesOrderCreateContractSummary({
     return (
         <div className="space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="space-y-2">
+                <div className={compact ? "min-w-0 space-y-1.5" : "space-y-2"}>
                     <p className="flex items-center gap-2 text-sm text-muted-foreground">
                         <CheckCircle2Icon
                             className="size-4 text-success"
@@ -62,7 +64,13 @@ export function SalesOrderCreateContractSummary({
                                 tabIndex={-1}
                                 className="outline-none"
                             >
-                                <p className="text-lg font-semibold">
+                                <p
+                                    className={
+                                        compact
+                                            ? "break-words text-base font-semibold"
+                                            : "text-lg font-semibold"
+                                    }
+                                >
                                     {values.customerName}
                                 </p>
                                 <FieldError
@@ -78,7 +86,7 @@ export function SalesOrderCreateContractSummary({
                             <div
                                 id="contractId"
                                 tabIndex={-1}
-                                className="text-xs text-muted-foreground outline-none"
+                                className="text-xs break-words text-muted-foreground outline-none"
                             >
                                 合同编号：{contract.contractNo} · v
                                 {revision?.revisionNo ??

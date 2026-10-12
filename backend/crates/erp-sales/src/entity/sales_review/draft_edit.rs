@@ -8,12 +8,55 @@ use erp_core::ids::{SalesOrderWorkingCopyId, SalesOrderWorkingCopyLineId};
 
 use super::{SalesChangeOrder, SalesChangeOrderUpdate, SalesChangeSubmission};
 use crate::entity::sales_order::{
-    SalesContentHash, SalesOrderWorkingCopy, SalesOrderWorkingCopyLine, SalesOrderWorkingCopyLineData,
-    SalesOrderWorkingCopyUpdate, WorkingCopyStatus, WorkingPurpose,
+    SalesContentHash, SalesOrderLine, SalesOrderLineData, SalesOrderWorkingCopy, SalesOrderWorkingCopyLine,
+    SalesOrderWorkingCopyLineData, SalesOrderWorkingCopyUpdate, WorkingCopyStatus, WorkingPurpose,
 };
 use crate::{Error, Result};
 
 impl SalesChangeOrder {
+    /// 构造新增商品的稳定行，禁止复用其他单据或历史行身份。
+    ///
+    /// # 参数
+    /// * `original` - 当前草稿已保存明细。
+    /// * `target` - 完整变更目标。
+    /// * `stable` - 原销售单全部历史稳定行。
+    ///
+    /// # 返回
+    /// 返回待在同一事务创建的稳定明细。
+    ///
+    /// # 错误
+    /// 新行身份不属于本变更、行号复用或不是实物服务时拒绝。
+    pub fn new_lines(
+        &self,
+        original: &[SalesOrderWorkingCopyLine],
+        target: &[SalesOrderWorkingCopyLineData],
+        stable: &[SalesOrderLine],
+    ) -> Result<Vec<SalesOrderLine>> {
+        let prefix = format!("{}:line:", self.base.id);
+        let max_no = stable.iter().map(|line| line.line_no).max().unwrap_or(0);
+        target
+            .iter()
+            .filter(|data| !original.iter().any(|old| old.sales_order_line_id == data.sales_order_line_id))
+            .map(|data| {
+                let id: &str = data.sales_order_line_id.as_ref();
+                if !id.starts_with(&prefix)
+                    || id.len() <= prefix.len()
+                    || id.len() > prefix.len() + 64
+                    || data.line_no <= max_no
+                    || data.goods.is_none()
+                    || data.voucher.is_some()
+                {
+                    return Err(Error::ValidationError("新增商品身份或行号无效，请重新打开改单".into()));
+                }
+                Ok(SalesOrderLine::new(
+                    data.sales_order_line_id.clone(),
+                    self.sales_order_id.clone(),
+                    SalesOrderLineData { line_no: data.line_no },
+                )?)
+            })
+            .collect()
+    }
+
     /// 在原单版本与草稿状态成立时修改原因。
     ///
     /// # 参数
@@ -98,7 +141,7 @@ impl SalesOrderWorkingCopy {
         Ok(())
     }
 
-    /// 完整保存目标明细并重算金额，禁止丢失或替换稳定明细身份。
+    /// 完整保存目标明细并重算金额；保留原行身份，允许追加新商品。
     ///
     /// # 参数
     /// * `change_id` - 原销售变更单身份
@@ -174,9 +217,27 @@ fn validate_target_lines(
     if target.is_empty()
         || target.len() > 100
         || target_ids.len() != target.len()
-        || original_ids != target_ids
+        || !original_ids.is_subset(&target_ids)
     {
         return Err(Error::ValidationError("变更目标必须保留全部原明细，且不得重复".into()));
+    }
+    for old in original {
+        let data = &target
+            .iter()
+            .find(|(_, data)| data.sales_order_line_id == old.sales_order_line_id)
+            .ok_or_else(|| Error::ValidationError("变更目标缺少原明细".into()))?
+            .1;
+        let previous = old.draft_data()?;
+        if data.line_no != old.line_no
+            || data.line_type != old.line_type
+            || data.goods.as_ref().map(|g| (&g.sku_id, &g.sku_revision_id, &g.base_unit_code))
+                != previous.goods.as_ref().map(|g| (&g.sku_id, &g.sku_revision_id, &g.base_unit_code))
+            || data.item_name_snapshot != previous.item_name_snapshot
+            || data.spec_snapshot != previous.spec_snapshot
+            || data.unit_snapshot != previous.unit_snapshot
+        {
+            return Err(Error::ValidationError("原商品身份不可替换，请将原行数量归零并新增商品".into()));
+        }
     }
     let summaries = target
         .iter()
@@ -292,7 +353,14 @@ mod tests {
             voucher: None,
         }
     }
-    use crate::entity::sales_review::{SalesChangeOrderData, SalesChangeType};
+    use crate::entity::sales_order::{
+        FormalRevisionContext, FormalRevisionIdentities, FormalRevisionLineIdentity,
+        FormalRevisionSubtypeIdentity, RevisionSource, SalesOrderRevisionAggregate,
+    };
+    use crate::entity::sales_review::{
+        SalesChangeOrderData, SalesChangeSubmissionData, SalesChangeSubmissionLine, SalesChangeTerms,
+        SalesChangeType,
+    };
 
     fn fixture() -> (SalesChangeOrder, SalesOrderWorkingCopy, Vec<SalesOrderWorkingCopyLine>) {
         let change = SalesChangeOrder::new(
@@ -351,6 +419,158 @@ mod tests {
         )
         .unwrap();
         (change, copy, vec![line])
+    }
+
+    #[test]
+    fn changed_terms_preserve_parties_and_reject_invalid_snapshot() {
+        let (_, mut copy, _) = fixture();
+        let original = copy.clone();
+        let mut terms = SalesChangeTerms::from_copy(&copy);
+        terms.payment_term_code = "PREPAY_100".into();
+        terms.payment_term_name = "先款100%".into();
+        terms.project_name = "节日福利".into();
+        terms.clone().apply(&mut copy, "sales-1").unwrap();
+        assert_eq!(copy.customer_id, original.customer_id);
+        assert_eq!(copy.settlement_party_id, original.settlement_party_id);
+        assert_eq!(copy.contract_id, original.contract_id);
+        assert_eq!(copy.payment_term_snapshot.payment_term_code, "PREPAY_100");
+        assert_eq!(copy.project_name.as_deref(), Some("节日福利"));
+        for invalid in ["-1", "100.000001", "13%"] {
+            let before = copy.clone();
+            terms.tax_point = invalid.into();
+            assert!(terms.clone().apply(&mut copy, "sales-1").is_err());
+            assert_eq!(copy, before);
+        }
+        terms.tax_point = "100".into();
+        terms.clone().apply(&mut copy, "sales-1").unwrap();
+        terms.invoice_type.clear();
+        assert!(terms.apply(&mut copy, "sales-1").is_err());
+    }
+
+    #[test]
+    fn change_appends_goods_and_keeps_original_identity_and_amounts() {
+        let (change, mut copy, original) = fixture();
+        let mut removed = original[0].draft_data().unwrap();
+        removed.goods.as_mut().unwrap().quantity = "0".parse().unwrap();
+        let mut added = line_data(2);
+        added.sales_order_line_id = SalesOrderLineId::new("change-1:line:new-sku");
+        added.goods.as_mut().unwrap().sku_id = SkuId::new("sku-2");
+        let stable = vec![
+            SalesOrderLine::new(
+                original[0].sales_order_line_id.clone(),
+                change.sales_order_id.clone(),
+                SalesOrderLineData { line_no: 1 },
+            )
+            .unwrap(),
+        ];
+        let created = change.new_lines(&original, &[removed.clone(), added.clone()], &stable).unwrap();
+        assert_eq!(created.len(), 1);
+        assert_eq!(created[0].sales_order_id, change.sales_order_id);
+        let saved = copy
+            .edit_change_lines(
+                "change-1",
+                &original,
+                vec![
+                    (SalesOrderWorkingCopyLineId::new("old-copy"), removed),
+                    (SalesOrderWorkingCopyLineId::new("new-copy"), added),
+                ],
+                None,
+                "sales-1",
+            )
+            .unwrap();
+        assert_eq!(saved.len(), 2);
+        assert!(saved[0].sellable_sku_ref().unwrap().is_none());
+        assert!(saved[1].sellable_sku_ref().unwrap().is_some());
+        let mut terms = SalesChangeTerms::from_copy(&copy);
+        terms.payment_term_code = "PREPAY_100".into();
+        terms.payment_term_name = "先款100%".into();
+        terms.apply(&mut copy, "sales-1").unwrap();
+        let data = SalesChangeSubmissionData::from_sales_working_copy(
+            &change,
+            &copy,
+            &saved,
+            1,
+            Instant::now(),
+            "sales-1",
+        )
+        .unwrap();
+        let submitted_lines = data.lines.clone();
+        let submission =
+            SalesChangeSubmission::new(SalesChangeSubmissionId::new("submission-new"), data).unwrap();
+        let submitted_lines = submitted_lines
+            .into_iter()
+            .enumerate()
+            .map(|(index, data)| {
+                SalesChangeSubmissionLine::new(
+                    format!("submitted-{index}").into(),
+                    submission.base.id.clone().into(),
+                    data,
+                )
+                .unwrap()
+            })
+            .collect::<Vec<_>>();
+        let identities = FormalRevisionIdentities::new(
+            SalesOrderRevisionId::new("revision-new"),
+            (0..saved.len())
+                .map(|index| {
+                    FormalRevisionLineIdentity::new(
+                        format!("rev-line-{index}").into(),
+                        FormalRevisionSubtypeIdentity::goods(format!("goods-{index}").into()),
+                    )
+                })
+                .collect(),
+        );
+        let revision = SalesOrderRevisionAggregate::from_sales_change_submission(
+            identities,
+            FormalRevisionContext::new(
+                2,
+                RevisionSource::SalesChange,
+                Some(SalesOrderRevisionId::new("revision-1")),
+                BusinessType::GoodsService,
+                Instant::now(),
+            ),
+            &submission,
+            &submitted_lines,
+        )
+        .unwrap();
+        assert_eq!(revision.goods_lines[0].quantity, "0".parse().unwrap());
+        assert_eq!(revision.goods_lines[1].sku_id, SkuId::new("sku-2"));
+        assert_eq!(revision.revision.gross_amount, copy.gross_amount);
+        assert_eq!(revision.revision.payment_term_snapshot.payment_term_code, "PREPAY_100");
+        assert_eq!(copy.gross_amount, amt("29.97"));
+        assert_eq!(saved[0].sales_order_line_id, original[0].sales_order_line_id);
+    }
+
+    #[test]
+    fn change_rejects_reused_line_number_foreign_identity_and_in_place_product_swap() {
+        let (change, mut copy, original) = fixture();
+        let stable = vec![
+            SalesOrderLine::new(
+                original[0].sales_order_line_id.clone(),
+                change.sales_order_id.clone(),
+                SalesOrderLineData { line_no: 1 },
+            )
+            .unwrap(),
+        ];
+        let mut added = line_data(2);
+        assert!(change.new_lines(&original, &[added.clone()], &stable).is_err());
+        added.sales_order_line_id = SalesOrderLineId::new("change-1:line:new");
+        added.line_no = 1;
+        assert!(change.new_lines(&original, &[added], &stable).is_err());
+        let mut swapped = original[0].draft_data().unwrap();
+        swapped.goods.as_mut().unwrap().sku_id = SkuId::new("sku-other");
+        let before = copy.clone();
+        assert!(
+            copy.edit_change_lines(
+                "change-1",
+                &original,
+                vec![(SalesOrderWorkingCopyLineId::new("copy"), swapped)],
+                None,
+                "sales-1"
+            )
+            .is_err()
+        );
+        assert_eq!(copy, before);
     }
 
     #[test]
