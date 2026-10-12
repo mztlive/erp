@@ -1,5 +1,6 @@
 "use client"
 
+import { BusinessFailureState } from "@/components/business"
 import { financialDraftEditHref } from "@/features/financial-draft-edit/types"
 import { FinancialDraftEditButton } from "@/features/financial-draft-edit/components/financial-draft-edit-button"
 import { useFinancialDraftQuery } from "@/features/financial-draft-edit/hooks/queries"
@@ -41,8 +42,10 @@ export function CustomerReceiptApprovalArea({
     expectedTaskVersion,
     workItemAllowedActions,
     onDecisionApplied,
+    presentation = "default",
 }: {
     phase: CustomerReceiptApprovalPhase
+    presentation?: "default" | "timeline" | "actions"
     approval?: DocumentApprovalView
     documentId?: string
     documentVersion?: number
@@ -79,11 +82,15 @@ export function CustomerReceiptApprovalArea({
     const instanceId = approval?.instance?.id
     const recoveryQuery = useRecoveryOptionsQuery(
         instanceId,
-        phase === "runtime" && Boolean(instanceId),
+        presentation !== "timeline" &&
+            phase === "runtime" &&
+            Boolean(instanceId),
     )
     const historyQuery = useApprovalHistoryInfiniteQuery(
         { instanceId: instanceId ?? "" },
-        phase === "runtime" && Boolean(instanceId),
+        presentation !== "actions" &&
+            phase === "runtime" &&
+            Boolean(instanceId),
     )
     const historyItems = historyQuery.data
         ? historyQuery.data.pages.flatMap((page) => page.items)
@@ -93,7 +100,34 @@ export function CustomerReceiptApprovalArea({
         workItemAllowedActions,
     )
 
-    if (phase === "draft") {
+    if (presentation === "timeline") {
+        return (
+            <div className="space-y-3">
+                {historyQuery.isError ? (
+                    <BusinessFailureState
+                        id="customer-receivables-receipt-history-retry"
+                        title="审批历史加载失败"
+                        error={historyQuery.error}
+                        onRetry={() => void historyQuery.refetch()}
+                    />
+                ) : null}
+                <ExecutionHistory
+                    id="customer-receivables-receipt-approval-history"
+                    presentation="timeline"
+                    items={historyItems}
+                    hasMore={historyQuery.hasNextPage}
+                    loadingMore={historyQuery.isFetchingNextPage}
+                    onLoadMore={
+                        historyQuery.hasNextPage
+                            ? () => void historyQuery.fetchNextPage()
+                            : undefined
+                    }
+                />
+            </div>
+        )
+    }
+
+    if (phase === "draft" && presentation === "default") {
         return (
             <div className="space-y-3">
                 <DefinitionBindingCard definition={approval?.definition} />
@@ -130,27 +164,37 @@ export function CustomerReceiptApprovalArea({
     }
 
     return (
-        <div className="space-y-3">
-            <RuntimeSummary instance={approval?.instance} />
+        <div
+            className={
+                presentation === "actions"
+                    ? "flex flex-wrap items-center gap-2"
+                    : "space-y-3"
+            }
+        >
+            {presentation === "default" ? (
+                <RuntimeSummary instance={approval?.instance} />
+            ) : null}
             {documentId ? (
                 <FinancialDraftEditButton
                     kind="customer_receipt"
                     documentId={documentId}
                 />
             ) : null}
-            <ExecutionHistory
-                id="customer-receivables-receipt-approval-history"
-                items={historyItems}
-                hasMore={historyQuery.hasNextPage}
-                loadingMore={historyQuery.isFetchingNextPage}
-                onLoadMore={
-                    historyQuery.hasNextPage
-                        ? () => {
-                              void historyQuery.fetchNextPage()
-                          }
-                        : undefined
-                }
-            />
+            {presentation === "default" ? (
+                <ExecutionHistory
+                    id="customer-receivables-receipt-approval-history"
+                    items={historyItems}
+                    hasMore={historyQuery.hasNextPage}
+                    loadingMore={historyQuery.isFetchingNextPage}
+                    onLoadMore={
+                        historyQuery.hasNextPage
+                            ? () => {
+                                  void historyQuery.fetchNextPage()
+                              }
+                            : undefined
+                    }
+                />
+            ) : null}
             <ApprovalActionBar
                 id="customer-receivables-receipt-approval-action-bar"
                 allowedActions={allowedActions}

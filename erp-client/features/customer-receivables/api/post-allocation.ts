@@ -1,5 +1,11 @@
 /** Post allocation (draft session → formal receipt/invoice allocations). */
 
+import {
+    prepareReceiptCommand,
+    readReceiptSession,
+    writeReceiptSession,
+} from "../lib/receipt-session-storage"
+
 import { apiPost } from "@/lib/api"
 import { getErrorCode, getErrorMessage, isApiError } from "@/lib/api/errors"
 import { classifyFormalCommandError } from "@/lib/formal-command"
@@ -35,7 +41,7 @@ function failedResult(
     return { status: "failed", code, message }
 }
 
-export async function postAllocation(
+async function executeAllocation(
     input: PostAllocationInput,
     session: AllocationSessionView | null,
 ): Promise<PostAllocationResult> {
@@ -239,6 +245,53 @@ export async function postAllocation(
         }
         return failed
     }
+}
+
+/** 回款命令发送前保存原载荷；核对结果始终重放同一操作。 */
+export async function postAllocation(
+    input: PostAllocationInput,
+    session: AllocationSessionView | null,
+): Promise<PostAllocationResult> {
+    if (!session || session.mode !== "receipt")
+        return executeAllocation(input, session)
+    const recovering = Boolean(
+        session.ownerId &&
+        readReceiptSession(session.ownerId, session.draftSessionId)?.pending,
+    )
+    const receivedAt = new Date(input.fact.receivedAt ?? "")
+    if (!Number.isFinite(receivedAt.getTime()))
+        throw new Error("请填写有效的到账时间。")
+    const command = prepareReceiptCommand(session, "post", {
+        ...input,
+        fact: { ...input.fact, receivedAt: receivedAt.toISOString() },
+    })
+    const result = await executeAllocation(command.input, command.session)
+    if (result.status === "succeeded") {
+        writeReceiptSession(
+            {
+                ...session,
+                status: "posted",
+                existingFactId: result.factId,
+                existingFactNo: result.factNo,
+                serverStatus: result.subjectStatus,
+                recoveryPending: undefined,
+                fact: {},
+                allocations: [],
+                pool: [],
+            },
+            null,
+        )
+    } else if (result.status === "failed" && !recovering) {
+        writeReceiptSession(session, null)
+    } else if (result.status === "failed") {
+        return {
+            status: "unknown",
+            message: `尚未确认原操作结果：${result.message}`,
+            idempotencyKey: command.input.idempotencyKey,
+            operationId: command.input.idempotencyKey,
+        }
+    }
+    return result
 }
 
 export async function resolvePostUnknown(

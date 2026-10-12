@@ -12,6 +12,7 @@ use crate::entity::receivable::{CustomerReceipt, ReceivableAccount, ReceivableEn
 use crate::repository::ReceivableExt;
 use crate::repository::prelude::*;
 use crate::service::receivable::mapping::map_ledger_error;
+use crate::service::receivable::receipt_capacity::reserve_receipt;
 use crate::{Error, Result};
 
 /// 在调用方当前事务中核销已通过审批校验的回款。
@@ -37,6 +38,7 @@ pub async fn settle_customer_receipt(
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<Vec<String>> {
+    reserve_receipt(db, receipt, executor).await?;
     let existing = db
         .receipt_allocations()
         .find_allocations_by_receipts(&[receipt.base.id.clone().into()], executor)
@@ -83,6 +85,18 @@ pub async fn settle_customer_receipt(
         }
         ledger.apply(line, entry, allocation_id, allocated_at).map_err(map_ledger_error)?;
     }
+    persist_settlement(db, receipt, &ledger, actor_id, executor).await?;
+    Ok(sales_order_ids)
+}
+
+/// 将已验证账本、已收余额及回款状态原子写入调用方事务。
+async fn persist_settlement(
+    db: &Database,
+    receipt: &mut CustomerReceipt,
+    ledger: &ReceivableFundsLedger,
+    actor_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<()> {
     let settlement_deltas = ledger.account_settlement_deltas();
     let settlement =
         db.receivable_accounts().apply_settlements_many(&settlement_deltas, actor_id, executor).await?;
@@ -92,5 +106,5 @@ pub async fn settle_customer_receipt(
     receipt.mark_posted()?;
     db.customer_receipts().update(receipt, executor).await?;
     db.receivable().create_receipt_allocations_many(ledger.new_allocations(), executor).await?;
-    Ok(sales_order_ids)
+    Ok(())
 }

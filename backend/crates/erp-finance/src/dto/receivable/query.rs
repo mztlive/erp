@@ -60,6 +60,10 @@ pub struct ReceivableEntryView {
     pub posted_at: Instant,
     /// 累计被冲减金额（抵销合计）。
     pub offset_total: Amount,
+    /// 扣除实际核销、冲减及审批中占用后的可核销额；未装载时为 null。
+    pub receipt_available: Option<Amount>,
+    /// 审批中回款对此项目的拟核销占用；未装载时为 null。
+    pub receipt_reserved: Option<Amount>,
 }
 
 /// 应收往来子账列表摘要。

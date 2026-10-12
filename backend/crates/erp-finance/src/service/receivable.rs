@@ -7,6 +7,7 @@ pub mod mapping;
 
 pub mod customer_receipt_posting;
 pub mod invoice_posting;
+pub mod receipt_capacity;
 pub mod red_invoice_plan;
 
 mod invoice_query;

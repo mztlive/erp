@@ -437,7 +437,9 @@ impl FundsAccess {
             return Err(Error::Internal("回款来源聚合与正式裁剪规则不一致".into()));
         }
         let links = self.receipt_decided_links(&ids, &links, executor).await?;
-        Ok(self.receipt_page_items(&decided, &links, ledger_read))
+        let mut items = self.receipt_page_items(&decided, &links, ledger_read);
+        self.finish_receipt_names(&mut items, executor).await?;
+        Ok(items)
     }
 }
 
@@ -595,7 +597,9 @@ impl FundsAccess {
             received_at: row.received_at,
             created_at: row.created_at,
             counterparty_party_id: whole.then(|| row.counterparty_party_id.clone()),
+            counterparty_party_name: None,
             customer_id: whole.then(|| row.customer_id.clone()).flatten(),
+            customer_name: None,
             bank_reference: whole.then(|| row.bank_reference.clone()).flatten(),
             version: whole.then_some(row.version),
             visible_allocated_share: sum_signed(links, matched),
@@ -660,7 +664,8 @@ impl FundsAccess {
         if !whole && matched.is_empty() {
             return Err(Error::NotFound("客户回款单不存在".into()));
         }
-        let data = Self::cut_receipt_row(&row, row_links, &matched, whole);
+        let mut data = Self::cut_receipt_row(&row, row_links, &matched, whole);
+        self.finish_receipt_names(std::slice::from_mut(&mut data), executor).await?;
         let mut parts = vec![format!("{}:{}", row.id, row.version)];
         for order in matched.iter().filter_map(|id| facts.get(id)) {
             parts.push(format!("{}:{}", order.owner_user_id, order.version));
@@ -707,6 +712,7 @@ mod tests {
     use erp_finance::dto::receivable::ReceiptAllocationView;
     use erp_finance::entity::receivable::{AllocationAction, CustomerReceiptStatus, ReceiptAllocationData};
 
+    use super::super::receipt_display::apply_receipt_names;
     use super::*;
 
     /// 构造已有核销链事实，供真实筛选与金额投影使用。
@@ -752,7 +758,14 @@ mod tests {
         row.status = CustomerReceiptStatus::Draft;
         row.customer_id = Some("customer".into());
         row.bank_reference = Some("BANK-DRAFT".into());
-        let view = FundsAccess::cut_receipt_row(&row, &[], &[], true);
+        let mut view = FundsAccess::cut_receipt_row(&row, &[], &[], true);
+        apply_receipt_names(
+            std::slice::from_mut(&mut view),
+            &HashMap::from([("party".into(), "结算主体".into())]),
+            &HashMap::from([("customer".into(), "经营客户".into())]),
+        );
+        assert_eq!(view.counterparty_party_name.as_deref(), Some("结算主体"));
+        assert_eq!(view.customer_name.as_deref(), Some("经营客户"));
         assert_eq!(view.counterparty_party_id.as_deref(), Some("party"));
         assert_eq!(view.customer_id.as_deref(), Some("customer"));
         assert_eq!(view.bank_reference.as_deref(), Some("BANK-DRAFT"));
@@ -769,7 +782,12 @@ mod tests {
         row.customer_id = Some("customer".into());
         row.bank_reference = Some("BANK-PRIVATE".into());
         let links = [link("a", Some("so-a"), "60"), link("b", Some("so-b"), "40")];
-        let view = FundsAccess::cut_receipt_row(&row, &links, &["so-a".into()], false);
+        let mut view = FundsAccess::cut_receipt_row(&row, &links, &["so-a".into()], false);
+        apply_receipt_names(
+            std::slice::from_mut(&mut view),
+            &HashMap::from([("party".into(), "不可见结算主体".into())]),
+            &HashMap::from([("customer".into(), "不可见经营客户".into())]),
+        );
         assert!(view.permission_limited);
         assert_eq!(view.visible_allocated_share, "60".parse().unwrap());
         assert_eq!(view.amount, None);
@@ -778,9 +796,30 @@ mod tests {
         assert_eq!(view.allocations.as_ref().unwrap().len(), 1);
         assert_eq!(view.allocations.as_ref().unwrap()[0].id, "a");
         let json = serde_json::to_value(view).unwrap();
-        for field in ["counterparty_party_id", "customer_id", "bank_reference", "version"] {
+        for field in [
+            "counterparty_party_id",
+            "counterparty_party_name",
+            "customer_id",
+            "customer_name",
+            "bank_reference",
+            "version",
+        ] {
             assert!(json.get(field).is_none(), "部分授权不应返回 {field}");
         }
+    }
+
+    #[test]
+    fn receipt_missing_customer_name_does_not_use_settlement_name() {
+        let mut row = receipt("draft");
+        row.customer_id = Some("missing".into());
+        let mut view = FundsAccess::cut_receipt_row(&row, &[], &[], true);
+        apply_receipt_names(
+            std::slice::from_mut(&mut view),
+            &HashMap::from([("party".into(), "结算主体".into())]),
+            &HashMap::new(),
+        );
+        assert_eq!(view.counterparty_party_name.as_deref(), Some("结算主体"));
+        assert_eq!(view.customer_name, None);
     }
 
     /// 构造不附加业务条件的筛选口径。

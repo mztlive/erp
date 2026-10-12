@@ -138,6 +138,8 @@ impl ReceivableReadService {
                 .unwrap_or_default()
                 .into_iter()
                 .map(|entry| erp_finance::dto::receivable::ReceivableEntryView {
+                    receipt_available: None,
+                    receipt_reserved: None,
                     offset_total: offset_by_increase.get(&entry.base.id).copied().unwrap_or_else(zero_amount),
                     id: entry.base.id,
                     entry_type: entry.entry_type,
@@ -227,6 +229,8 @@ impl ReceivableReadService {
             .map(|entry| {
                 let offset_total = offset_map.get(&entry.base.id).copied().unwrap_or_else(zero_amount);
                 erp_finance::dto::receivable::ReceivableEntryView {
+                    receipt_available: None,
+                    receipt_reserved: None,
                     id: entry.base.id.clone(),
                     entry_type: entry.entry_type,
                     direction: entry.direction,

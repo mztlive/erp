@@ -4208,6 +4208,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
+                path: "/admin/customer-receipts/drafts",
+                description: "保存回款登记草稿",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
                 path: "/admin/customer-receipts/commit",
                 description: "原子创建或提交客户回款审批",
                 permission: {

@@ -43,7 +43,7 @@ export function ReceiptSessionFooter({
                 </h2>
                 <div className="space-y-2">
                     <p className="text-sm text-muted-foreground">
-                        {existing ? "可核销余额" : "到账金额"}
+                        {existing ? "原单到账金额" : "到账金额"}
                     </p>
                     <div className="min-w-0 break-all">
                         <MoneyValue value={amount || "0"} size="hero" />

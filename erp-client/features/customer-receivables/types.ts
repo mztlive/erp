@@ -306,6 +306,9 @@ export type AllocationDraftLine = {
 }
 
 export type AllocationSessionView = Readonly<{
+    ownerId?: string
+    serverStatus?: string
+    recoveryPending?: "save" | "post"
     draftSessionId: string
     mode: AllocationMode
     counterpartyPartyId: string
@@ -318,6 +321,8 @@ export type AllocationSessionView = Readonly<{
     existingFactNo?: string
     /** 已创建回款草稿的乐观锁版本。 */
     existingFactVersion?: number
+    /** 原回款的可选客户身份，保留 null，禁止用展示归属补写原单。 */
+    receiptCustomerId?: string | null
     /** 回款创建后的只读审批绑定；发票不展示。 */
     approval?: DocumentApprovalView
     /** 记录表单草稿 */

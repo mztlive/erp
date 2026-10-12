@@ -1,5 +1,7 @@
 "use client"
 import { useEffect, useState, type ReactNode } from "react"
+import { SalesInvoiceOverview } from "./sales-invoice-overview"
+import { SalesInvoiceRequestRecords } from "./sales-invoice-request-records"
 import { Button } from "@/components/ui/button"
 import {
     Table,
@@ -38,6 +40,8 @@ export function InvoiceRequestPanel({
     initialCreate = false,
     query: filters = {},
     toolbar,
+    salesSummary,
+    invoiceRecords,
 }: {
     salesOrderId?: string
     accountId?: string
@@ -46,6 +50,8 @@ export function InvoiceRequestPanel({
     initialCreate?: boolean
     query?: RequestQuery
     toolbar?: ReactNode
+    salesSummary?: { invoiced: ReactNode; uninvoiced: ReactNode }
+    invoiceRecords?: ReactNode
 }) {
     const permissions = useInvoiceRequestPermissions()
     const [page, setPage] = useState(1)
@@ -88,11 +94,30 @@ export function InvoiceRequestPanel({
                     !query.isFetching &&
                     query.data.can_submit,
             ))
+    const overview = salesSummary ? (
+        <SalesInvoiceOverview
+            summary={salesSummary}
+            availability={availability}
+            canRead={permissions.canRead}
+            onCreate={
+                canCreate
+                    ? () => {
+                          dismissPendingInvoiceRequestDetail()
+                          setCreating(true)
+                      }
+                    : undefined
+            }
+        />
+    ) : null
     if (!permissions.canRead)
         return (
-            <p className="text-sm text-muted-foreground">
-                当前账号没有查看开票申请的权限。
-            </p>
+            <>
+                {overview}
+                {invoiceRecords}
+                <p className="text-sm text-muted-foreground">
+                    当前账号没有查看开票申请的权限。
+                </p>
+            </>
         )
     const requestForm =
         (creating || editing) && permissions.canSubmit ? (
@@ -137,7 +162,17 @@ export function InvoiceRequestPanel({
     ) : null
     return (
         <>
-            {detailId && !salesOrderId ? (
+            {overview}
+            {invoiceRecords}
+            {salesSummary ? (
+                <SalesInvoiceRequestRecords
+                    list={list}
+                    page={page}
+                    onPage={setPage}
+                    onView={setDetailId}
+                    multipleParties={accountIds.length > 1}
+                />
+            ) : detailId && !salesOrderId ? (
                 requestDetail
             ) : (
                 <section className="space-y-4" aria-label="开票申请">

@@ -73,6 +73,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/customer-receipts/drafts",
+            with_permission(
+                post(receivable::draft_update::customer_receipt_save_draft),
+                rbac,
+                receivable::draft_update::customer_receipt_save_draft_permission_key(),
+            ),
+        )
+        .route(
             "/customer-receipts/commit",
             with_permission(
                 post(receivable::customer_receipt_commit),

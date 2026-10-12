@@ -20,6 +20,8 @@ mod command;
 mod entry;
 mod invoice;
 mod receipt;
+mod receipt_capacity;
+pub use receipt_capacity::ReceiptCapacityRepositoryExt;
 
 pub mod customer_center;
 

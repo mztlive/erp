@@ -339,6 +339,31 @@ mod tests {
         assert_eq!(summary.unassigned, Amount::zero());
     }
 
+    /// 未开票、全额开票与红票冲减后的净额均沿用子账事实，不从应收余额推算。
+    #[test]
+    fn receivable_page_preserves_invoice_totals_in_response() {
+        for (invoiced, remaining) in [("0.00", "165.00"), ("165.00", "0.00"), ("125.00", "40.00")] {
+            let mut row = account("a", "so-a", "200.00");
+            row.invoiceable_total = "165.00".parse().unwrap();
+            row.invoiced_total = invoiced.parse().unwrap();
+            row.open_invoiceable_total = remaining.parse().unwrap();
+            let source = AccountSource {
+                id: "so-a".into(),
+                owner_user_id: Some("owner".into()),
+                business_org_unit_id: "org".into(),
+                version: 1,
+                document_no: "SO-A".into(),
+            };
+            let page =
+                receivable_page_rows(&[AccountPageRow { row, source }], &mut ReceivableFacts::default());
+            let response = serde_json::to_value(&page[0]).unwrap();
+            assert_eq!(response["invoiceable_total"], "165.00");
+            assert_eq!(response["invoiced_total"], invoiced);
+            assert_eq!(response["open_invoiceable_total"], remaining);
+            assert_eq!(response["open_total"], "200.00");
+        }
+    }
+
     /// 单子账核销查询输入只含其完整分录，批量分录读取不合并核销边界。
     #[test]
     fn batched_receivable_facts_keep_complete_single_account_allocation_query_keys() {

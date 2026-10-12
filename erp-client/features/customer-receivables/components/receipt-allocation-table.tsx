@@ -30,6 +30,7 @@ import type {
 } from "@/features/customer-receivables/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { allocationSourceKey, useAllocationSources } from "../hooks/queries"
+import { compareAmounts } from "../lib/allocation-math"
 import { ReceiptAllocationSource } from "./receipt-allocation-source"
 
 /** 回款应收勾选与金额编辑共用一张表，搜索不移除已选分配。 */
@@ -129,7 +130,7 @@ export function ReceiptAllocationTable({
                                     销售单 / 应收项目
                                 </TableHead>
                                 <TableHead scope="col" data-align="end">
-                                    应收项目金额
+                                    当前可核销金额
                                 </TableHead>
                                 <TableHead scope="col">到期日</TableHead>
                                 <TableHead scope="col" data-align="end">
@@ -181,6 +182,11 @@ export function ReceiptAllocationTable({
                                                     checked={Boolean(line)}
                                                     disabled={
                                                         disabled ||
+                                                        (!line &&
+                                                            compareAmounts(
+                                                                target.openAmount,
+                                                                "0",
+                                                            ) <= 0) ||
                                                         (Boolean(line) &&
                                                             removalDisabled)
                                                     }
@@ -221,6 +227,14 @@ export function ReceiptAllocationTable({
                                                 <MoneyValue
                                                     value={target.openAmount}
                                                 />
+                                                {compareAmounts(
+                                                    target.openAmount,
+                                                    "0",
+                                                ) <= 0 ? (
+                                                    <div className="text-xs text-muted-foreground">
+                                                        暂无可核销余额
+                                                    </div>
+                                                ) : null}
                                             </TableCell>
                                             <TableCell className="num">
                                                 {target.dueDate || "—"}
@@ -308,7 +322,7 @@ export function ReceiptAllocationTable({
                 </div>
             </TableToolbarScope>
             <p className="text-xs text-muted-foreground">
-                实际可核销金额以系统校验为准；允许保留未核销回款余额。
+                当前可核销金额已扣除已核销、应收冲减及待审批回款占用；允许保留未核销回款余额。
             </p>
             <ValidationSummary
                 id="customer-receivables-session-validation"

@@ -87,10 +87,7 @@ export async function fetchCustomerAccountsList(
         ]),
     )
     const receipts = (rcptPage.items ?? []).map((receipt) =>
-        projectReceipt(
-            receipt,
-            partyDisplay.get(receipt.counterparty_party_id),
-        ),
+        projectReceipt(receipt),
     )
     const invoices = (invPage.items ?? [])
         .filter((i) => i.invoice_direction === "sales" || !i.invoice_direction)

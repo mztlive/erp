@@ -396,7 +396,7 @@ pub(super) fn prepare_customer_receipt_commit_candidate(
 ///
 /// # 错误
 /// 回款单号重复、绑定失败或写入失败时返回错误。
-async fn create_new_commit_records(
+pub(super) async fn create_new_commit_records(
     db: &Database,
     rbac: &SharedRbacService,
     object_read: &dyn erp_workflow::ApprovalObjectReadPort,

@@ -1,6 +1,11 @@
 "use client"
 
 import * as React from "react"
+import {
+    readReceiptSession,
+    writeReceiptSession,
+    removeReceiptSession,
+} from "../lib/receipt-session-storage"
 
 import { useStore } from "@tanstack/react-form"
 
@@ -34,7 +39,6 @@ import {
     useSaveAllocationDraftMutation,
 } from "@/features/customer-receivables/hooks/queries"
 import type { DocumentApprovalView } from "@/features/approval-workflow/types"
-import { readCustomerReceiptApprovalResponsibility } from "@/features/customer-receivables/lib/customer-receipt-approval"
 import type {
     AllocationDraftLine,
     AllocationSessionView,
@@ -78,7 +82,20 @@ export function useAllocationSession({
     )
     const [editVersion, setEditVersion] = React.useState(session.editVersion)
     const [confirmOpen, setConfirmOpen] = React.useState(false)
-    const [result, setResult] = React.useState<ResultState>(null)
+    const [result, setResult] = React.useState<ResultState>(() =>
+        session.recoveryPending
+            ? {
+                  status: "unknown",
+                  title:
+                      session.recoveryPending === "save"
+                          ? "草稿保存结果待确认"
+                          : resultText.unknown,
+                  description: "上次操作尚未确认，请核对结果后继续。",
+                  pendingKey: session.draftSessionId,
+              }
+            : null,
+    )
+    const [temporarySaved, setTemporarySaved] = React.useState(false)
     const [actionError, setActionError] = React.useState<string | null>(null)
     const [draftSavedAt, setDraftSavedAt] = React.useState(session.savedAt)
     const [postedLocally, setPostedLocally] = React.useState(false)
@@ -95,6 +112,7 @@ export function useAllocationSession({
     const idempotencyRef = React.useRef<string | null>(null)
     const lastPostInputRef = React.useRef<PostAllocationInput | null>(null)
     const baselineRef = React.useRef("")
+    const discardedRef = React.useRef(false)
     const [receiptApproval, setReceiptApproval] = React.useState<
         DocumentApprovalView | undefined
     >(() => (session.mode === "receipt" ? session.approval : undefined))
@@ -132,9 +150,41 @@ export function useAllocationSession({
         setReceiptApproval(
             session.mode === "receipt" ? session.approval : undefined,
         )
+        form.reset(factDefaultValues(session.fact, isReceipt))
         baselineRef.current = snapshot()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [session.draftSessionId, session.editVersion, session.savedAt])
+
+    React.useEffect(() => {
+        if (!isReceipt || session.status === "posted" || postedLocally) return
+        const persist = () => {
+            if (discardedRef.current) return
+            try {
+                if (
+                    session.ownerId &&
+                    readReceiptSession(session.ownerId, session.draftSessionId)
+                        ?.pending
+                )
+                    return
+                writeReceiptSession({
+                    ...session,
+                    fact: factFromValues(form.state.values, true),
+                    allocations,
+                })
+                setTemporarySaved(true)
+            } catch (error) {
+                setTemporarySaved(false)
+                setActionError(getErrorMessage(error, "本页暂存失败"))
+            }
+        }
+        persist()
+        window.addEventListener("pagehide", persist)
+        window.addEventListener("beforeunload", persist)
+        return () => {
+            window.removeEventListener("pagehide", persist)
+            window.removeEventListener("beforeunload", persist)
+        }
+    }, [isReceipt, session, form, formValues, allocations, postedLocally])
 
     React.useEffect(() => {
         const onBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -148,6 +198,10 @@ export function useAllocationSession({
     })
 
     function requestClose() {
+        if (result?.status === "unknown") {
+            onClose()
+            return
+        }
         if (session.status === "posted" || postedLocally) {
             onClose()
             return
@@ -156,6 +210,12 @@ export function useAllocationSession({
             setLeaveConfirmOpen(true)
             return
         }
+        discardAndClose()
+    }
+
+    function discardAndClose() {
+        discardedRef.current = true
+        removeReceiptSession(session)
         onClose()
     }
 
@@ -223,6 +283,18 @@ export function useAllocationSession({
             message: "销项开票必须由当前负责人从工作台开票任务进入。",
         })
     }
+    if (
+        isReceipt &&
+        (!formValues.receivedAt ||
+            !Number.isFinite(new Date(formValues.receivedAt).getTime()))
+    ) {
+        issues.push({
+            id: "receipt-date",
+            label: "到账时间",
+            message: "请填写有效的到账时间。",
+            targetId: "customer-receivables-session-received-at",
+        })
+    }
     if (isReceipt && factAmountStr.trim()) {
         try {
             normalizeFixed(factAmountStr, {
@@ -233,7 +305,7 @@ export function useAllocationSession({
         } catch {
             issues.push({
                 id: "receipt-amount",
-                label: existing ? "可核销余额" : "到账金额",
+                label: existing ? "原单到账金额" : "到账金额",
                 message: "请填写有效的非负金额，最多保留两位小数。",
                 targetId: "customer-receivables-session-amount",
             })
@@ -262,11 +334,16 @@ export function useAllocationSession({
                 continue
             }
         }
-        if (compareAmounts(line.amount, "0") < 0) {
+        if (
+            compareAmounts(line.amount, "0") < 0 ||
+            (isReceipt && compareAmounts(line.amount, "0") === 0)
+        ) {
             issues.push({
                 id: `neg-${issueKey}`,
                 label: line.label,
-                message: isReceipt ? "核销金额不能为负" : "分配金额不能为负",
+                message: isReceipt
+                    ? "核销金额必须大于零；无需核销时请取消关联"
+                    : "分配金额不能为负",
                 targetId,
             })
         }
@@ -275,7 +352,7 @@ export function useAllocationSession({
                 id: `over-${issueKey}`,
                 label: line.label,
                 message: isReceipt
-                    ? `核销金额不可超过应收项目金额 ${line.openAmount}`
+                    ? `核销金额不可超过当前可核销余额 ${line.openAmount}（已扣除待审批占用）`
                     : `拟分配不可超过开放余额 ${line.openAmount}`,
                 targetId,
             })
@@ -316,7 +393,10 @@ export function useAllocationSession({
         session.leaseValid &&
         issues.length === 0 &&
         compareAmounts(factAmountStr, "0") > 0 &&
-        session.status === "draft"
+        session.status === "draft" &&
+        result?.status !== "unknown" &&
+        !saveMutation.isPending &&
+        !postMutation.isPending
 
     function addFromPool(target: AllocationTarget) {
         if (allocations.some((a) => a.targetId === target.targetId)) return
@@ -435,9 +515,29 @@ export function useAllocationSession({
             setDraftSavedAt(next.savedAt)
             if (isReceipt && next.approval) setReceiptApproval(next.approval)
             baselineRef.current = snapshot()
+            setResult(null)
         } catch (err) {
             setActionError(getErrorMessage(err, "保存草稿失败"))
+            showPendingResult()
         }
+    }
+
+    function showPendingResult() {
+        const pending = session.ownerId
+            ? readReceiptSession(session.ownerId, session.draftSessionId)
+                  ?.pending
+            : undefined
+        if (!pending) return
+        setResult({
+            status: "unknown",
+            title:
+                pending.kind === "save"
+                    ? "草稿保存结果待确认"
+                    : resultText.unknown,
+            description: "上次操作尚未确认，请核对结果后继续。",
+            pendingKey: pending.input.idempotencyKey,
+        })
+        setConfirmOpen(false)
     }
 
     async function doPost() {
@@ -456,18 +556,26 @@ export function useAllocationSession({
             return
         }
         setActionError(null)
-        if (!idempotencyRef.current) {
-            idempotencyRef.current = `w11-submit-${session.draftSessionId}-${Date.now()}`
-        }
+        idempotencyRef.current = crypto.randomUUID()
         try {
             const fact = factFromValues(form.state.values, isReceipt)
+            let submittedVersion = editVersion
+            if (isReceipt && existing) {
+                const saved = await saveMutation.mutateAsync({
+                    draftSessionId: session.draftSessionId,
+                    fact,
+                    allocations,
+                    editVersion,
+                })
+                submittedVersion = saved.editVersion
+            }
             const command: PostAllocationInput = {
                 workItemId: isReceipt ? undefined : workItemId,
                 expectedTaskVersion: isReceipt
                     ? undefined
                     : expectedTaskVersion,
                 draftSessionId: session.draftSessionId,
-                editVersion,
+                editVersion: submittedVersion,
                 idempotencyKey: idempotencyRef.current,
                 fact: { ...fact },
                 allocations: allocations.map((line) => ({ ...line })),
@@ -477,6 +585,7 @@ export function useAllocationSession({
             applyPostResult(res)
         } catch (err) {
             setActionError(getErrorMessage(err, "提交失败"))
+            showPendingResult()
             setConfirmOpen(false)
         }
     }
@@ -484,37 +593,28 @@ export function useAllocationSession({
     function applyPostResult(res: PostAllocationResult) {
         if (res.status === "succeeded") {
             setPostedLocally(true)
-            if (isReceipt && res.approval) setReceiptApproval(res.approval)
-            const responsibility = readCustomerReceiptApprovalResponsibility(
-                isReceipt ? res.approval : undefined,
-            )
+            setConfirmOpen(false)
+            if (res.mode === "receipt") {
+                setResult(null)
+                onPosted(res)
+                return
+            }
             setResult({
                 status: "succeeded",
-                title: isReceipt ? "回款已提交审批" : "销项发票已登记并分配",
-                description: isReceipt
-                    ? `已进入审批。单号 ${res.factNo}。全部节点通过后过账核销。`
-                    : `已生效单号 ${res.factNo}。未分配余额 ${res.unallocatedAmount}。`,
+                title: "销项发票已登记并分配",
+                description: `已生效单号 ${res.factNo}。未分配余额 ${res.unallocatedAmount}。`,
                 reference: res.factNo,
                 facts: [
                     {
-                        label: isReceipt ? "回款单号" : "发票号码",
+                        label: "发票号码",
                         value: res.factNo,
                     },
                     { label: "净已分配", value: res.allocatedTotal },
                     { label: "未分配余额", value: res.unallocatedAmount },
                     { label: "往来主体", value: session.counterpartyPartyName },
-                    ...(isReceipt && responsibility.nextResponsible
-                        ? [
-                              {
-                                  label: "当前审批人",
-                                  value: responsibility.nextResponsible,
-                              },
-                          ]
-                        : []),
                 ],
                 returnTo: res.returnTo,
             })
-            setConfirmOpen(false)
             onPosted(res)
             return
         }
@@ -568,12 +668,34 @@ export function useAllocationSession({
     }
 
     async function resolveUnknown() {
-        if (!result?.pendingKey || !lastPostInputRef.current) return
-        const res = await resolveMutation.mutateAsync(lastPostInputRef.current)
-        if (res) applyPostResult(res)
+        if (!result?.pendingKey) return
+        try {
+            const pending = session.ownerId
+                ? readReceiptSession(session.ownerId, session.draftSessionId)
+                      ?.pending
+                : undefined
+            if (pending?.kind === "save") {
+                await saveMutation.mutateAsync(pending.input)
+                setResult(null)
+                setActionError(null)
+                return
+            }
+            const input = pending?.input ?? lastPostInputRef.current
+            if (!input) return
+            const res = await resolveMutation.mutateAsync(input)
+            if (res) applyPostResult(res)
+        } catch (error) {
+            setActionError(
+                getErrorMessage(error, "暂时无法核对结果，请稍后重试。"),
+            )
+        }
     }
 
-    const locked = existing || session.status === "posted" || postedLocally
+    const locked =
+        (!isReceipt && existing) ||
+        session.status === "posted" ||
+        postedLocally ||
+        result?.status === "unknown"
 
     return {
         form,
@@ -584,6 +706,7 @@ export function useAllocationSession({
         allocations,
         editVersion,
         draftSavedAt,
+        temporarySaved,
         postedLocally,
         result,
         actionError,
@@ -603,6 +726,7 @@ export function useAllocationSession({
         removeLine,
         fillLineAmount,
         requestClose,
+        discardAndClose,
         doSaveDraft,
         doPost,
         resolveUnknown,

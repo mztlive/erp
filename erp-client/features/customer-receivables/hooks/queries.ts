@@ -8,6 +8,9 @@ import {
 } from "@tanstack/react-query"
 import type { QueryClient } from "@tanstack/react-query"
 
+import { restoreReceiptSession } from "../api/receipt-draft"
+import { writeReceiptSession } from "../lib/receipt-session-storage"
+
 import { useAccountProfileQuery } from "@/features/auth/hooks/queries"
 import { hasPermission } from "@/lib/permissions"
 import { fetchAllocationSource } from "../api/allocation-source"
@@ -50,8 +53,13 @@ export const customerReceivableKeys = {
         [...customerReceivableKeys.all, "list", query] as const,
     detail: (kind: string, id: string) =>
         [...customerReceivableKeys.all, "detail", kind, id] as const,
-    session: (draftSessionId: string) =>
-        [...customerReceivableKeys.all, "session", draftSessionId] as const,
+    session: (draftSessionId: string, ownerId?: string) =>
+        [
+            ...customerReceivableKeys.all,
+            "session",
+            ownerId ?? "",
+            draftSessionId,
+        ] as const,
 }
 
 /** 首次提交与结果核对成功使用相同的草稿状态和相关业务缓存更新。 */
@@ -59,12 +67,13 @@ async function refreshPostedAllocation(
     queryClient: QueryClient,
     result: Extract<PostAllocationResult, { status: "succeeded" }>,
     input: PostAllocationInput,
+    ownerId?: string,
 ) {
     await queryClient.invalidateQueries({
         queryKey: queryKeyRoots.invoiceRequests,
     })
     queryClient.setQueryData<AllocationSessionView>(
-        customerReceivableKeys.session(input.draftSessionId),
+        customerReceivableKeys.session(input.draftSessionId, ownerId),
         (current) =>
             current
                 ? {
@@ -73,11 +82,14 @@ async function refreshPostedAllocation(
                       existingFactId: result.factId,
                       existingFactNo: result.factNo,
                       approval: result.approval,
+                      serverStatus: result.subjectStatus,
+                      recoveryPending: undefined,
                   }
                 : current,
     )
     await queryClient.invalidateQueries({
         queryKey: customerReceivableKeys.all,
+        predicate: (query) => query.queryKey[1] !== "session",
     })
     if (result.mode === "invoice") {
         await queryClient.invalidateQueries({
@@ -121,22 +133,48 @@ export function useCustomerAccountsDetailQuery(
 }
 
 export function useAllocationSessionQuery(draftSessionId: string | null) {
-    return useQuery({
-        queryKey: customerReceivableKeys.session(draftSessionId ?? ""),
-        queryFn: async () => null,
-        enabled: false,
-        initialData: null as AllocationSessionView | null,
+    const queryClient = useQueryClient()
+    const profile = useAccountProfileQuery()
+    const ownerId = profile.data?.userid
+    const query = useQuery({
+        queryKey: customerReceivableKeys.session(draftSessionId ?? "", ownerId),
+        queryFn: () => {
+            const cached = queryClient.getQueryData<AllocationSessionView>(
+                customerReceivableKeys.session(draftSessionId!, ownerId),
+            )
+            if (cached?.mode === "invoice") return cached
+            return restoreReceiptSession(ownerId!, draftSessionId!)
+        },
+        enabled: Boolean(ownerId && draftSessionId),
         staleTime: Number.POSITIVE_INFINITY,
+        retry: false,
     })
+    return {
+        ...query,
+        error: profile.error ?? query.error,
+        isPending: !profile.isError && query.isPending,
+    }
 }
 
 export function useCreateAllocationSessionMutation() {
+    const profile = useAccountProfileQuery()
+    const ownerId = profile.data?.userid
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: createAllocationSession,
+        mutationFn: async (
+            input: Parameters<typeof createAllocationSession>[0],
+        ) => {
+            if (!ownerId) throw new Error("当前账号尚未加载，请稍后重试。")
+            const session = {
+                ...(await createAllocationSession(input)),
+                ownerId,
+            }
+            if (session.mode === "receipt") writeReceiptSession(session, null)
+            return session
+        },
         onSuccess: (session) => {
             queryClient.setQueryData(
-                customerReceivableKeys.session(session.draftSessionId),
+                customerReceivableKeys.session(session.draftSessionId, ownerId),
                 session,
             )
         },
@@ -144,20 +182,31 @@ export function useCreateAllocationSessionMutation() {
 }
 
 export function useSaveAllocationDraftMutation() {
+    const profile = useAccountProfileQuery()
+    const ownerId = profile.data?.userid
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: (input: Parameters<typeof saveAllocationDraft>[1]) =>
             saveAllocationDraft(
                 queryClient.getQueryData<AllocationSessionView>(
-                    customerReceivableKeys.session(input.draftSessionId),
+                    customerReceivableKeys.session(
+                        input.draftSessionId,
+                        ownerId,
+                    ),
                 ) ?? null,
                 input,
             ),
-        onSuccess: (session) => {
+        onSuccess: async (session) => {
             queryClient.setQueryData(
-                customerReceivableKeys.session(session.draftSessionId),
+                customerReceivableKeys.session(session.draftSessionId, ownerId),
                 session,
             )
+            if (session.mode === "receipt") {
+                await queryClient.invalidateQueries({
+                    queryKey: customerReceivableKeys.all,
+                    predicate: (query) => query.queryKey[1] !== "session",
+                })
+            }
         },
     })
 }
@@ -166,36 +215,56 @@ export function useSaveAllocationDraftMutation() {
  * 提交核销。回款成功后刷新审批单据缓存；发票为 NO_APPROVAL，不触达审批键。
  */
 export function usePostAllocationMutation() {
+    const profile = useAccountProfileQuery()
+    const ownerId = profile.data?.userid
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: (input: PostAllocationInput) =>
             postAllocation(
                 input,
                 queryClient.getQueryData<AllocationSessionView>(
-                    customerReceivableKeys.session(input.draftSessionId),
+                    customerReceivableKeys.session(
+                        input.draftSessionId,
+                        ownerId,
+                    ),
                 ) ?? null,
             ),
         onSuccess: async (result, input) => {
             if (result.status === "succeeded") {
-                await refreshPostedAllocation(queryClient, result, input)
+                await refreshPostedAllocation(
+                    queryClient,
+                    result,
+                    input,
+                    ownerId,
+                )
             }
         },
     })
 }
 
 export function useResolvePostUnknownMutation() {
+    const profile = useAccountProfileQuery()
+    const ownerId = profile.data?.userid
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: (input: PostAllocationInput) =>
             resolvePostUnknown(
                 input,
                 queryClient.getQueryData<AllocationSessionView>(
-                    customerReceivableKeys.session(input.draftSessionId),
+                    customerReceivableKeys.session(
+                        input.draftSessionId,
+                        ownerId,
+                    ),
                 ) ?? null,
             ),
         onSuccess: async (result, input) => {
             if (result?.status === "succeeded") {
-                await refreshPostedAllocation(queryClient, result, input)
+                await refreshPostedAllocation(
+                    queryClient,
+                    result,
+                    input,
+                    ownerId,
+                )
             }
         },
     })

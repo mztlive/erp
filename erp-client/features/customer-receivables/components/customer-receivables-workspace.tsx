@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { writeReceiptSession } from "../lib/receipt-session-storage"
 import { useRouter } from "next/navigation"
 
 import { FormalActionResult, PageScaffold } from "@/components/business"
@@ -88,6 +89,9 @@ export function CustomerReceivablesWorkspace({
     })
 
     const [lastResult, setLastResult] = React.useState<ResultState>(null)
+    const [submittedReceiptNo, setSubmittedReceiptNo] = React.useState<
+        string | null
+    >(null)
     const [actionError, setActionError] = React.useState<string | null>(null)
     const [partyPickerOpen, setPartyPickerOpen] = React.useState(false)
     const [partyPickerMode, setPartyPickerMode] =
@@ -161,6 +165,34 @@ export function CustomerReceivablesWorkspace({
     const listQuery = useCustomerAccountsListQuery(urlState.query)
     const detailQuery = useCustomerAccountsDetailQuery(previewKind, previewId)
     const sessionQuery = useAllocationSessionQuery(urlState.sessionId ?? null)
+    const migratedSession = React.useRef<string | null>(null)
+    React.useEffect(() => {
+        const current = sessionQuery.data
+        if (
+            current?.mode !== "receipt" ||
+            !current.existingFactId ||
+            current.recoveryPending ||
+            current.status !== "draft" ||
+            current.draftSessionId === current.existingFactId ||
+            migratedSession.current === current.draftSessionId
+        )
+            return
+        try {
+            writeReceiptSession(
+                { ...current, draftSessionId: current.existingFactId },
+                null,
+            )
+        } catch (error) {
+            setActionError(getErrorMessage(error, "无法保存本页恢复信息"))
+            return
+        }
+        migratedSession.current = current.draftSessionId
+        urlState.patchUrl(
+            { sessionId: current.existingFactId },
+            { replace: true },
+        )
+    }, [sessionQuery.data, urlState])
+
     const createSession = useCreateAllocationSessionMutation()
     const startSessionPending = createSession.isPending
     const invoiceSessionMatchesTask =
@@ -236,6 +268,7 @@ export function CustomerReceivablesWorkspace({
         }
         setActionError(null)
         setLastResult(null)
+        setSubmittedReceiptNo(null)
         try {
             const party = data?.counterparties.find(
                 (item) => item.counterpartyPartyId === partyId,
@@ -329,8 +362,14 @@ export function CustomerReceivablesWorkspace({
         return (
             <AllocationSessionScreen
                 isPending={sessionQuery.isPending}
+                error={sessionQuery.error}
+                onRetry={() => {
+                    void sessionQuery.refetch()
+                }}
                 session={sessionQuery.data}
-                onBackToList={() => urlState.patchUrl({ sessionId: null })}
+                onBackToList={() =>
+                    urlState.patchUrl({ sessionId: null, register: null })
+                }
                 onClose={() => {
                     const ret = sessionQuery.data?.returnContext
                     if (!embedded && ret?.returnTo && ret.from === "W05") {
@@ -339,9 +378,26 @@ export function CustomerReceivablesWorkspace({
                     }
                     urlState.patchUrl({ sessionId: null })
                 }}
-                onPosted={() => {
+                onPosted={(result) => {
                     void listQuery.refetch()
                     onSalesOrderChanged?.()
+                    if (result.mode !== "receipt") return
+                    const ret = sessionQuery.data?.returnContext
+                    if (!embedded && ret?.returnTo && ret.from === "W05") {
+                        router.replace(ret.returnTo)
+                        return
+                    }
+                    setSubmittedReceiptNo(result.factNo)
+                    urlState.patchUrl(
+                        {
+                            sessionId: null,
+                            register: null,
+                            previewKind: null,
+                            previewId: null,
+                            focusId: null,
+                        },
+                        { replace: true },
+                    )
                 }}
                 canOperate={sessionCanOperate}
                 permissionReason={sessionPermissionReason}
@@ -393,6 +449,17 @@ export function CustomerReceivablesWorkspace({
                     }
                     returnTo={urlState.returnTo}
                 />
+            ) : null}
+
+            {submittedReceiptNo ? (
+                <Alert>
+                    <AlertTitle>回款已提交审批</AlertTitle>
+                    <AlertDescription>
+                        回款单 {submittedReceiptNo}{" "}
+                        已提交，全部审批通过后过账核销。
+                        可在回款详情中查看审批进度。
+                    </AlertDescription>
+                </Alert>
             ) : null}
 
             {lastResult ? (

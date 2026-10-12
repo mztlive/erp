@@ -312,6 +312,7 @@ export function SalesOrderDetailPage({
                 onApprovalResult={handleActionResult}
                 sidebar={
                     <SalesOrderDetailSidebar
+                        compact={derived.navSection === "invoice"}
                         hideFinanceSummary={[
                             "receivable",
                             "receipt",

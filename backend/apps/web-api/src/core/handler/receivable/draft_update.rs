@@ -3,7 +3,7 @@
 use application_core::AuditActor;
 use axum::extract::{Path, State};
 use axum::{Extension, Json};
-use erp_finance::dto::receivable::UpdateCustomerReceiptRequest;
+use erp_finance::dto::receivable::{SaveCustomerReceiptDraftRequest, UpdateCustomerReceiptRequest};
 use erp_processes::finance_posting::receivable::ReceivableProcess;
 use erp_read_models::finance::dto::CustomerReceiptView;
 
@@ -40,6 +40,34 @@ pub async fn customer_receipt_update(
     let view = ReceivableProcess::new(state.db())
         .with_object_read(state.approval_object_read())
         .update_customer_receipt(&id, req, &actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "客户往来",
+    group_desc = "应收台账、回款与销项发票管理",
+    desc = "保存回款登记草稿",
+    resource = "customer_receipt",
+    action = "submit"
+)]
+/// 保存到账字段与拟核销分配，不启动审批。
+/// # 参数
+/// * `state` - 应用状态。
+/// * `actor` - 当前操作人。
+/// * `req` - 草稿与保存操作号。
+/// # 返回
+/// 返回已保存原单的完整视图。
+/// # 错误
+/// 无权限、来源不合法、状态或版本冲突时拒绝。
+pub async fn customer_receipt_save_draft(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(req): Json<SaveCustomerReceiptDraftRequest>,
+) -> Result<CustomerReceiptView> {
+    let view = ReceivableProcess::new(state.db())
+        .with_object_read(state.approval_object_read())
+        .save_customer_receipt_draft(req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
 }

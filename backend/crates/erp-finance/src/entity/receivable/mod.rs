@@ -22,6 +22,7 @@ pub mod invoice_request;
 pub mod invoice_request_source;
 pub use invoice_request::*;
 pub mod receipt_allocation;
+pub mod receipt_capacity;
 pub mod receivable_account;
 pub mod receivable_entry;
 pub mod receivable_entry_offset;

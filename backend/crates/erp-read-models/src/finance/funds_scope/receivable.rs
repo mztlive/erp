@@ -111,6 +111,8 @@ impl FundsAccess {
                         gross_total: whole_amount(whole, account.gross_total),
                         settled_total: whole_amount(whole, account.settled_total),
                         open_total: whole_amount(whole, account.open_total),
+                        invoiceable_total: whole_amount(whole, account.invoiceable_total),
+                        invoiced_total: whole_amount(whole, account.invoiced_total),
                         open_invoiceable_total: whole_amount(whole, account.open_invoiceable_total),
                         permission_limited: !whole,
                         sales_owner_user_id: Some(order.sales_owner_user_id.clone()),
@@ -230,6 +232,7 @@ impl FundsAccess {
         let mut facts = self.receivable_facts(&ids, &display_ids, executor).await?;
         let mut items = receivable_page_rows(&snapshot.items, &mut facts);
         self.finish_receivable_names(&mut items, executor).await?;
+        self.attach_receipt_capacity(&mut items, executor).await?;
         let summary = receivable_summary(&snapshot.summary, &facts, &version)?;
         Ok(FundsScopedPage {
             items,

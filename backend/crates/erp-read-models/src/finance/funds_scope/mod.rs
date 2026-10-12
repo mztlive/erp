@@ -11,6 +11,7 @@ mod payable_source;
 mod payment;
 mod payment_guidance;
 mod receipt;
+mod receipt_display;
 mod receivable;
 mod receivable_display;
 mod repository;

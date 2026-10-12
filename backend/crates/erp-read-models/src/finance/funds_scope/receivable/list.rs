@@ -82,6 +82,8 @@ pub(super) fn receivable_page_rows(
                 gross_total: Some(row.gross_total),
                 settled_total: Some(row.settled_total),
                 open_total: Some(row.open_total),
+                invoiceable_total: Some(row.invoiceable_total),
+                invoiced_total: Some(row.invoiced_total),
                 open_invoiceable_total: Some(row.open_invoiceable_total),
                 permission_limited: false,
                 sales_owner_user_id: source.owner_user_id.clone(),

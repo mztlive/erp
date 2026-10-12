@@ -142,6 +142,7 @@ export function ExecutionHistory({
     loadingMore = false,
     onLoadMore,
     compact = false,
+    presentation = "card",
     id = "governance-approval-execution-history",
 }: {
     items: readonly ApprovalHistoryItem[]
@@ -150,54 +151,58 @@ export function ExecutionHistory({
     onLoadMore?: () => void
     /** 对象中心 tab 内使用：标题与概览 text-sm 对齐。 */
     compact?: boolean
+    /** 侧栏已提供分区标题时直接渲染时间轴。 */
+    presentation?: "card" | "timeline"
     id?: string
 }) {
     const rounds = groupByRound(items)
 
+    const content = (
+        <div className="flex flex-col gap-5">
+            {rounds.length === 0 ? (
+                <p className="text-sm text-muted-foreground">暂无审批记录</p>
+            ) : (
+                rounds.map((round) => (
+                    <section
+                        key={round.roundNo}
+                        className="flex flex-col gap-3"
+                    >
+                        <h3 className="text-xs font-medium tracking-wide text-muted-foreground">
+                            {displayRound(round.roundNo)}
+                        </h3>
+                        <Timeline>
+                            {round.items.map((item) => (
+                                <HistoryEntry
+                                    key={item.executionId}
+                                    item={item}
+                                />
+                            ))}
+                        </Timeline>
+                    </section>
+                ))
+            )}
+            {hasMore && onLoadMore ? (
+                <LoadingButton
+                    loading={loadingMore}
+                    id={`${id}-load-more`}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={loadingMore}
+                    onClick={onLoadMore}
+                >
+                    {loadingMore ? "加载中" : "加载更多"}
+                </LoadingButton>
+            ) : null}
+        </div>
+    )
+    if (presentation === "timeline") return content
     return (
         <Card size="sm" className="border border-border shadow-sm">
             <CardHeader className="border-b">
                 <HistoryHeading compact={compact}>审批历史</HistoryHeading>
             </CardHeader>
-            <CardContent className="flex flex-col gap-5">
-                {rounds.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                        暂无审批记录
-                    </p>
-                ) : (
-                    rounds.map((round) => (
-                        <section
-                            key={round.roundNo}
-                            className="flex flex-col gap-3"
-                        >
-                            <h3 className="text-xs font-medium tracking-wide text-muted-foreground">
-                                {displayRound(round.roundNo)}
-                            </h3>
-                            <Timeline>
-                                {round.items.map((item) => (
-                                    <HistoryEntry
-                                        key={item.executionId}
-                                        item={item}
-                                    />
-                                ))}
-                            </Timeline>
-                        </section>
-                    ))
-                )}
-                {hasMore && onLoadMore ? (
-                    <LoadingButton
-                        loading={loadingMore}
-                        id={`${id}-load-more`}
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={loadingMore}
-                        onClick={onLoadMore}
-                    >
-                        {loadingMore ? "加载中" : "加载更多"}
-                    </LoadingButton>
-                ) : null}
-            </CardContent>
+            <CardContent>{content}</CardContent>
         </Card>
     )
 }

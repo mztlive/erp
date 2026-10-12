@@ -29,7 +29,7 @@ export function SessionHeader({
     submitted?: boolean
 }) {
     if (isReceipt) {
-        const title = existing ? "继续核销回款" : "登记回款"
+        const title = existing ? "编辑回款草稿" : "登记回款"
         const status = {
             label: submitted ? "已提交" : "草稿",
             tone: submitted ? ("warning" as const) : ("neutral" as const),
@@ -58,7 +58,9 @@ export function SessionHeader({
                                 <span className="text-xs text-muted-foreground">
                                     {draftSavedAt
                                         ? `已保存 ${formatDateTime(draftSavedAt, "monthDayIntl")}`
-                                        : "未保存"}
+                                        : existing
+                                          ? "已保存"
+                                          : "未保存"}
                                 </span>
                             ) : null
                         }

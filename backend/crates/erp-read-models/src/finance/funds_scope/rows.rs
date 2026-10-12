@@ -100,6 +100,10 @@ pub struct ScopedReceivableAccountRow {
     /// 子账乐观锁版本。
     #[serde(default)]
     pub version: u64,
+    /// 子账可开票总额（含税）；部分授权为 null。
+    pub invoiceable_total: Option<Amount>,
+    /// 子账净已开票金额（含税），已计入红票冲减；部分授权为 null。
+    pub invoiced_total: Option<Amount>,
     /// 剩余可开票额度。部分授权为 null。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub open_invoiceable_total: Option<Amount>,
@@ -124,9 +128,15 @@ pub struct ScopedCustomerReceiptRow {
     /// 结算主体；仅整单读取资格返回，供已有回款继续核销。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub counterparty_party_id: Option<String>,
+    /// 结算主体当前法定名称；仅整单读取资格返回。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub counterparty_party_name: Option<String>,
     /// 经营客户；仅整单读取资格返回。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub customer_id: Option<String>,
+    /// 经营客户当前法定名称；按客户身份独立解析，仅整单读取资格返回。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub customer_name: Option<String>,
     /// 原银行引用；仅整单读取资格返回。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bank_reference: Option<String>,
@@ -769,6 +779,8 @@ mod tests {
                 counterparty_party_id: "party-1".into(),
                 counterparty_party_name: Some("结算客户".into()),
                 version: 1,
+                invoiceable_total: Some(zero_amount()),
+                invoiced_total: Some(zero_amount()),
                 open_invoiceable_total: Some(zero_amount()),
                 entries: Vec::new(),
             }],

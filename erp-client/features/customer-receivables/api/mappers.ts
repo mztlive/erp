@@ -222,10 +222,7 @@ function projectReceiptAllocation(a: BackendReceiptAllocation): AllocationLine {
 
 export function projectReceipt(
     r: BackendCustomerReceipt,
-    display?: {
-        counterpartyPartyName?: string
-        customerName?: string
-    },
+    display?: { counterpartyPartyName?: string; customerName?: string },
 ): ReceiptRow {
     const status = mapReceiptStatus(r.status)
     const isPosted = status === "posted" || status === "reversed"
@@ -241,13 +238,13 @@ export function projectReceipt(
         receiptNo: r.receipt_no,
         counterpartyPartyId: r.counterparty_party_id,
         counterpartyPartyName: businessLabelOrPlaceholder(
-            display?.counterpartyPartyName,
+            r.counterparty_party_name ?? display?.counterpartyPartyName,
             r.counterparty_party_id,
             MISSING_COUNTERPARTY_NAME,
         ),
         customerId: r.customer_id ?? "",
         customerName: businessLabelOrPlaceholder(
-            display?.customerName,
+            r.customer_name ?? display?.customerName,
             r.customer_id,
             MISSING_CUSTOMER_NAME,
         ),

@@ -31,7 +31,7 @@ export function ReceiptSessionFields({
                             id="customer-receivables-session-amount"
                             label={
                                 existing
-                                    ? "可核销余额（含税）"
+                                    ? "原单到账金额（含税）"
                                     : "到账金额（含税）"
                             }
                             required

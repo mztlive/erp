@@ -10,6 +10,7 @@ use erp_core::common::time::Instant;
 use erp_core::ids::{ApprovalSubjectSnapshotId, WorkItemId};
 use erp_finance::entity::receivable::CustomerReceipt;
 use erp_finance::repository::ReceivableExt;
+use erp_finance::service::receivable::receipt_capacity::reserve_receipt;
 use erp_workflow::entity::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
@@ -385,6 +386,7 @@ pub(crate) async fn persist_customer_receipt_start_apply(
     if guarded.is_none() {
         return Err(Error::ConflictError("客户回款单审批启动守卫冲突，请刷新后重试".to_string()));
     }
+    reserve_receipt(db, &receipt, executor).await?;
     // 先在同一事务写入提交字段，快照读取才能包含本次核销安排。
     let mut receipt = receipt;
     db.customer_receipts().update(&mut receipt, executor).await?;

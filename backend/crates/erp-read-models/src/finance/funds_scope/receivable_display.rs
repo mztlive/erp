@@ -6,6 +6,7 @@ use erp_core::ids::ReceivableAccountId;
 use erp_finance::dto::receivable::ReceivableEntryView;
 use erp_finance::repository::ReceivableExt;
 use erp_finance::repository::prelude::*;
+use erp_finance::service::receivable::receipt_capacity::receipt_capacity;
 use persistence_core::Executor;
 
 use super::authorization::FundsAccess;
@@ -33,7 +34,42 @@ impl FundsAccess {
             return Ok(());
         }
         self.finish_receivable_names(rows, executor).await?;
-        self.attach_receivable_entries(rows, executor).await
+        self.attach_receivable_entries(rows, executor).await?;
+        self.attach_receipt_capacity(rows, executor).await
+    }
+
+    /// 为已授权完整子账附加同事务核销额度，部分授权不返回金额。
+    ///
+    /// # 参数
+    /// * `rows` - 已授权并已装载分录的当前页。
+    /// * `executor` - 调用方快照事务。
+    ///
+    /// # 返回
+    /// 各分录带回真实可用额与审批占用。
+    ///
+    /// # 错误
+    /// 读取或金额计算失败时返回错误，不以原始金额降级。
+    pub(super) async fn attach_receipt_capacity(
+        &self,
+        rows: &mut [ScopedReceivableAccountRow],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let ids =
+            rows.iter().filter(|row| !row.permission_limited).map(|row| row.id.clone()).collect::<Vec<_>>();
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let capacity = receipt_capacity(&self.db, &ids, executor).await?;
+        for row in rows.iter_mut().filter(|row| !row.permission_limited) {
+            for entry in &mut row.entries {
+                if let Some(value) = capacity.entry(&entry.id) {
+                    entry.receipt_available = Some(value.available);
+                    entry.receipt_reserved = Some(value.reserved);
+                    entry.offset_total = value.offset;
+                }
+            }
+        }
+        Ok(())
     }
 
     /// 补齐已授权行的主体名称，分录由调用方本次快照装载。
@@ -97,7 +133,7 @@ impl FundsAccess {
     }
 }
 
-/// 把分录实体收成范围响应。冲减合计不在这条读取里重算，核销池使用分录金额。
+/// 把分录实体收成范围响应；额度由同事务附加步骤装载，未装载时不可作为候选。
 ///
 /// # 参数
 /// * `entry` - 应收分录实体。
@@ -109,6 +145,8 @@ impl FundsAccess {
 /// 不返回错误。
 pub(super) fn entry_view(entry: erp_finance::entity::receivable::ReceivableEntry) -> ReceivableEntryView {
     ReceivableEntryView {
+        receipt_available: None,
+        receipt_reserved: None,
         id: entry.base.id,
         entry_type: entry.entry_type,
         direction: entry.direction,

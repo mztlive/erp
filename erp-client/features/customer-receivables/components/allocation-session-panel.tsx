@@ -68,6 +68,7 @@ export function AllocationSessionPanel({
         locked,
         allocations,
         draftSavedAt,
+        temporarySaved,
         postedLocally,
         result,
         actionError,
@@ -87,6 +88,7 @@ export function AllocationSessionPanel({
         removeLine,
         fillLineAmount,
         requestClose,
+        discardAndClose,
         doSaveDraft,
         doPost,
         resolveUnknown,
@@ -111,6 +113,7 @@ export function AllocationSessionPanel({
     const submitted = session.status === "posted" || postedLocally
     const editingDisabled =
         !canOperate ||
+        result?.status === "unknown" ||
         submitted ||
         saveMutation.isPending ||
         postMutation.isPending
@@ -188,6 +191,14 @@ export function AllocationSessionPanel({
                         submitted={submitted}
                     />
 
+                    {isReceipt && temporarySaved && !result && !submitted ? (
+                        <p
+                            role="status"
+                            className="text-xs text-muted-foreground"
+                        >
+                            已暂存本页，刷新可恢复；保存草稿后可稍后重新打开。
+                        </p>
+                    ) : null}
                     {result ? (
                         <FormalActionResult
                             status={
@@ -205,7 +216,10 @@ export function AllocationSessionPanel({
                                         <LoadingButton
                                             id="customer-receivables-session-result-resolve"
                                             type="button"
-                                            loading={resolveMutation.isPending}
+                                            loading={
+                                                resolveMutation.isPending ||
+                                                saveMutation.isPending
+                                            }
                                             size="sm"
                                             onClick={() =>
                                                 void resolveUnknown()
@@ -250,7 +264,7 @@ export function AllocationSessionPanel({
                         </Alert>
                     ) : null}
 
-                    {isReceipt && receiptApproval ? (
+                    {isReceipt && !submitted && receiptApproval ? (
                         <CustomerReceiptApprovalArea
                             phase={receiptPhase}
                             approval={receiptApproval}
@@ -486,7 +500,7 @@ export function AllocationSessionPanel({
                 cancelLabel="继续编辑"
                 onConfirm={() => {
                     setLeaveConfirmOpen(false)
-                    onClose()
+                    discardAndClose()
                 }}
             />
 
@@ -494,23 +508,14 @@ export function AllocationSessionPanel({
                 <CustomerReceiptSubmitConfirmDialog
                     id="customer-receivables-session-receipt-confirm-dialog"
                     open={confirmOpen}
-                    pending={postMutation.isPending}
+                    pending={postMutation.isPending || saveMutation.isPending}
                     approval={receiptApproval}
-                    summary={[
-                        `结算主体：${session.counterpartyPartyName}`,
-                        <span key="amount">
-                            {existing ? "可核销余额" : "回款金额"}：
-                            <MoneyValue value={factAmountStr} />
-                        </span>,
-                        <span key="allocated">
-                            拟核销 {allocations.length} 笔：
-                            <MoneyValue value={proposedAllocated} />
-                        </span>,
-                        <span key="remaining">
-                            剩余待核销：
-                            <MoneyValue value={proposedUnallocated} />
-                        </span>,
-                    ]}
+                    counterpartyName={session.counterpartyPartyName}
+                    amountLabel="回款金额"
+                    amount={factAmountStr}
+                    allocationCount={allocations.length}
+                    allocatedAmount={proposedAllocated}
+                    unallocatedAmount={proposedUnallocated}
                     onOpenChange={setConfirmOpen}
                     onConfirm={() => void doPost()}
                 />
@@ -545,7 +550,7 @@ export function AllocationSessionPanel({
                         </span>,
                     ]}
                     nextDepartment="财务"
-                    pending={postMutation.isPending}
+                    pending={postMutation.isPending || saveMutation.isPending}
                     onConfirm={() => void doPost()}
                 />
             )}

@@ -127,6 +127,7 @@ export function ReceiptDetailBody({
     row,
     className = bodyClassName,
     readOnly = false,
+    approvalActionsInFooter = false,
     workItemId,
     expectedTaskVersion,
     workItemAllowedActions,
@@ -135,6 +136,7 @@ export function ReceiptDetailBody({
     row: ReceiptRow
     className?: string
     readOnly?: boolean
+    approvalActionsInFooter?: boolean
     workItemId?: string
     expectedTaskVersion?: string
     workItemAllowedActions?: readonly string[]
@@ -191,6 +193,9 @@ export function ReceiptDetailBody({
                     />
                 ) : (
                     <CustomerReceiptApprovalArea
+                        presentation={
+                            approvalActionsInFooter ? "timeline" : "default"
+                        }
                         phase={customerReceiptApprovalPhase(
                             row.approval,
                             row.status === "in_approval"

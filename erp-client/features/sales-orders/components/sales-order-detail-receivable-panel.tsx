@@ -1,6 +1,6 @@
 "use client"
 
-import { SalesOrderInvoiceFiles } from "./sales-order-invoice-files"
+import { SalesOrderInvoiceRecords } from "./sales-order-invoice-records"
 import { InvoiceRequestPanel } from "@/features/invoice-requests/components/request-panel"
 import type { ReactNode } from "react"
 import {
@@ -47,7 +47,7 @@ export function SalesOrderCustomerFinancePanel({
     section: "receivable" | "receipt" | "invoice"
 }) {
     const state = useSalesOrderReceivable(order, section)
-    const { accounts, receipts, invoices, canRead, detail } = state
+    const { accounts, receipts, canRead, detail } = state
     const isReceivablePreview = state.preview?.kind === "receivable"
     const readableAccounts =
         canRead("receivable_account:list") && accounts.isSuccess
@@ -90,11 +90,6 @@ export function SalesOrderCustomerFinancePanel({
         !receipts.isLoading &&
         !receipts.error &&
         receipts.data?.total === 0
-    const invoicesEmpty =
-        canRead("invoice:list") &&
-        !invoices.isLoading &&
-        !invoices.error &&
-        invoices.data?.total === 0
     const previewButton = (
         kind: "receivable" | "receipt" | "invoice",
         id: string,
@@ -139,11 +134,8 @@ export function SalesOrderCustomerFinancePanel({
         : undefined
     return (
         <div className="space-y-6">
-            <DetailSummary
-                className="sm:grid-cols-1"
-                label={section === "invoice" ? "本单开票摘要" : "本单收款摘要"}
-            >
-                {section !== "invoice" && (
+            {section !== "invoice" && (
+                <DetailSummary className="sm:grid-cols-1" label="本单收款摘要">
                     <DetailSummaryItem
                         title={section === "receivable" ? "应收" : "回款"}
                         label="待收金额"
@@ -168,34 +160,8 @@ export function SalesOrderCustomerFinancePanel({
                             </DetailHint>
                         }
                     />
-                )}
-                {section === "invoice" && (
-                    <DetailSummaryItem
-                        title="开票"
-                        label="未开票余额"
-                        value={summaryAmount(total("openInvoiceableTotal"))}
-                        detail={
-                            <>
-                                已开票净额{" "}
-                                <span className="font-medium text-foreground">
-                                    {summaryAmount(
-                                        total("invoicedTotal") ??
-                                            order.invoicedAmount,
-                                    )}
-                                </span>
-                            </>
-                        }
-                        hint={
-                            <DetailHint
-                                id="sales-order-invoice-summary-hint"
-                                label="开票金额"
-                            >
-                                只统计分配到本单的含税净额，已扣除冲减金额。开票与回款分别统计。
-                            </DetailHint>
-                        }
-                    />
-                )}
-            </DetailSummary>
+                </DetailSummary>
+            )}
             {state.profile.isError ? (
                 <BusinessFailureState
                     title="票款权限读取失败"
@@ -205,8 +171,25 @@ export function SalesOrderCustomerFinancePanel({
             ) : null}
             {section === "invoice" && (
                 <>
-                    <SalesOrderInvoiceFiles salesOrderId={order.id} />
                     <InvoiceRequestPanel
+                        salesSummary={{
+                            invoiced: summaryAmount(
+                                total("invoicedTotal") ?? order.invoicedAmount,
+                            ),
+                            uninvoiced: summaryAmount(
+                                total("openInvoiceableTotal"),
+                            ),
+                        }}
+                        invoiceRecords={
+                            <SalesOrderInvoiceRecords
+                                salesOrderId={order.id}
+                                state={state}
+                                rowAmount={rowAmount}
+                                previewButton={(id, label) =>
+                                    previewButton("invoice", id, label)
+                                }
+                            />
+                        }
                         salesOrderId={order.id}
                         accountId={
                             readableAccounts?.length === 1
@@ -431,89 +414,6 @@ export function SalesOrderCustomerFinancePanel({
                                     page={state.receiptPage}
                                     total={receipts.data.total}
                                     onPage={state.setReceiptPage}
-                                />
-                            ) : null}
-                        </ReadState>
-                    </DetailRecordSection>
-                )}
-                {section === "invoice" && (
-                    <DetailRecordSection
-                        title="发票记录"
-                        count={
-                            canRead("invoice:list") && !invoices.error
-                                ? invoices.data?.total
-                                : undefined
-                        }
-                        compact={invoicesEmpty}
-                    >
-                        <ReadState
-                            allowed={canRead("invoice:list")}
-                            pending={
-                                state.profile.isPending || invoices.isLoading
-                            }
-                            error={invoices.error}
-                            retry={() => void invoices.refetch()}
-                        >
-                            {!invoices.data?.items.length ? (
-                                <p className="text-sm text-muted-foreground">
-                                    暂无发票记录
-                                </p>
-                            ) : (
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>
-                                                发票号码／开票日期
-                                            </TableHead>
-                                            <TableHead>类型</TableHead>
-                                            <TableHead>状态</TableHead>
-                                            <TableHead data-align="end">
-                                                核到本单
-                                            </TableHead>
-                                            <TableHead>操作</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {invoices.data.items.map((row) => (
-                                            <TableRow key={row.invoiceId}>
-                                                <TableCell>
-                                                    {row.invoiceNo}
-                                                    <div className="text-xs text-muted-foreground">
-                                                        {row.invoiceDate}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    {row.invoiceKindLabel}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <StatusBadge
-                                                        label={row.statusLabel}
-                                                        tone={row.statusTone}
-                                                    />
-                                                </TableCell>
-                                                <TableCell data-align="end">
-                                                    {rowAmount(row.allocations)}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {previewButton(
-                                                        "invoice",
-                                                        row.invoiceId,
-                                                        row.invoiceNo,
-                                                    )}
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            )}
-                            {invoices.data &&
-                            (invoices.data.total > 20 ||
-                                state.invoicePage > 1) ? (
-                                <RecordPages
-                                    id="sales-order-invoices"
-                                    page={state.invoicePage}
-                                    total={invoices.data.total}
-                                    onPage={state.setInvoicePage}
                                 />
                             ) : null}
                         </ReadState>

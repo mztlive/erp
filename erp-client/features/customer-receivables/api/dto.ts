@@ -12,6 +12,8 @@ export type BackendReceivableEntry = {
     source_sequence: number
     posted_at: number
     offset_total: string
+    receipt_available?: string | null
+    receipt_reserved?: string | null
 }
 
 export type BackendReceivableAccount = {
@@ -53,7 +55,9 @@ export type BackendCustomerReceipt = {
     receipt_no: string
     status: string
     counterparty_party_id: string
+    counterparty_party_name?: string | null
     customer_id?: string | null
+    customer_name?: string | null
     received_at: number
     amount: string
     bank_reference?: string | null

@@ -9,7 +9,9 @@
 //! 见 P3 PR「契约变更」一节（后端统一 snake_case + 秒级时间戳）。
 
 mod command;
+mod draft_save;
 mod draft_update;
+pub use draft_save::SaveCustomerReceiptDraftRequest;
 mod facts;
 mod invoice;
 pub mod invoice_review;

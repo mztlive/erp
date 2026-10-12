@@ -1,5 +1,7 @@
 //! `customer_receipt` 客户回款单（数据模型 §6.8、§7.5 资金单据状态机）。
 
+use std::collections::HashSet;
+
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use erp_core::common::state::{DocumentState, ensure_transition};
@@ -368,6 +370,32 @@ impl CustomerReceipt {
         Ok(())
     }
 
+    /// 保存草稿拟核销分配，不启动审批或占用应收余额。
+    /// # 参数
+    /// * `allocations` - 合法正金额分配，可为空。
+    /// # 返回
+    /// 保存后的分配仅用于草稿回显。
+    /// # 错误
+    /// 非草稿、重复来源、超额或改变已提交原单来源时拒绝。
+    pub fn save_allocations(&mut self, allocations: Vec<PendingReceiptAllocation>) -> Result<()> {
+        self.ensure_editable()?;
+        if !allocations.is_empty() {
+            ensure_pending_allocations(&self.amount, &allocations)?;
+        }
+        let mut ids = HashSet::new();
+        for line in &allocations {
+            ensure_positive_amount(&line.allocated_amount)?;
+            if !ids.insert(&line.receivable_entry_id) {
+                return Err(Error::from("核销来源不能重复"));
+            }
+        }
+        if self.approval_subject_version > 0 {
+            ensure_resubmit_sources(&self.pending_allocations, &allocations)?;
+        }
+        self.pending_allocations = allocations;
+        Ok(())
+    }
+
     /// 迁移回款单状态。
     ///
     /// 按 §7.5 固定邻接矩阵校验并应用状态迁移。
@@ -403,7 +431,9 @@ impl CustomerReceipt {
             return Err(Error::from("只有草稿状态的客户回款单可以提交审批"));
         }
         ensure_pending_allocations(&self.amount, &allocations)?;
-        ensure_resubmit_sources(&self.pending_allocations, &allocations)?;
+        if self.approval_subject_version > 0 {
+            ensure_resubmit_sources(&self.pending_allocations, &allocations)?;
+        }
         let next =
             self.approval_subject_version.checked_add(1).ok_or_else(|| Error::from("审批提交版本溢出"))?;
         self.approval_subject_version = next;
@@ -779,5 +809,24 @@ mod tests {
         assert_eq!(receipt.pending_allocations[0].receivable_entry_id.as_ref(), "original");
         assert_eq!(receipt.start_approval(vec![allocation("original", "80")]).unwrap(), 2);
         assert_eq!(receipt.pending_allocations[0].allocated_amount.to_string(), "80");
+    }
+    #[test]
+    fn saving_draft_preserves_state_and_allows_initial_source_changes() {
+        let mut receipt = CustomerReceipt::new(CustomerReceiptId::new("draft"), data(), "creator").unwrap();
+        let line = |id: &str, amount: &str| {
+            PendingReceiptAllocation::new(ReceivableEntryId::new(id), amount.parse().unwrap()).unwrap()
+        };
+        receipt.save_allocations(vec![line("one", "10")]).unwrap();
+        assert_eq!(receipt.status, CustomerReceiptStatus::Draft);
+        assert_eq!(receipt.approval_subject_version, 0);
+        assert!(receipt.save_allocations(vec![line("one", "10"), line("one", "10")]).is_err());
+        assert!(receipt.save_allocations(vec![line("one", "999999")]).is_err());
+        assert_eq!(receipt.pending_allocations.len(), 1);
+        receipt.save_allocations(vec![line("two", "20")]).unwrap();
+        receipt.start_approval(vec![line("three", "20")]).unwrap();
+        assert!(receipt.save_allocations(vec![]).is_err());
+        receipt.cancel_approval().unwrap();
+        assert!(receipt.save_allocations(vec![line("two", "10")]).is_err());
+        receipt.save_allocations(vec![line("three", "10")]).unwrap();
     }
 }

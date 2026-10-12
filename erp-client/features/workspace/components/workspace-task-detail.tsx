@@ -11,6 +11,7 @@ import { WorkspacePurchasePayment } from "./workspace-purchase-payment"
 import { workspaceFulfillmentDescriptor } from "../lib/workspace-fulfillment"
 import { WorkspaceDeliveryBrief } from "./workspace-delivery-brief"
 import { WorkspaceInvoiceApproval } from "./workspace-invoice-approval"
+import { WorkspaceReceiptApproval } from "./workspace-receipt-approval"
 import { WorkspacePurchaseApproval } from "./workspace-purchase-approval"
 import { WorkspaceApprovalProgress } from "./workspace-approval-progress"
 import { useRecoveryOptionsQuery } from "@/features/approval-workflow/queries"
@@ -402,6 +403,11 @@ function WorkspaceDocumentTaskDetail({
         approvalDocument &&
         item.businessObjectType === "purchase_order" &&
         Boolean(instanceId)
+    const receiptApproval =
+        approvalDocument &&
+        item.businessObjectType === "customer_receipt" &&
+        Boolean(instanceId) &&
+        canReadSensitive
     const readActionLabel = approvalDocument
         ? salesApproval
             ? "预览完整销售单"
@@ -525,6 +531,10 @@ function WorkspaceDocumentTaskDetail({
                             />
                         ) : null}
                         {canReadPaper &&
+                        !(
+                            approvalDocument &&
+                            item.businessObjectType === "customer_receipt"
+                        ) &&
                         !purchaseApproval &&
                         !salesApproval &&
                         (approvalDocument || currentPaperKind) ? (
@@ -638,8 +648,15 @@ function WorkspaceDocumentTaskDetail({
                     </div>
                 ) : null}
 
+                {receiptApproval && instanceId ? (
+                    <WorkspaceReceiptApproval
+                        key={instanceId}
+                        item={item}
+                        instanceId={instanceId}
+                    />
+                ) : null}
                 {deliveryBrief ? <WorkspaceDeliveryBrief item={item} /> : null}
-                {!deliveryBrief && primaryAmount ? (
+                {!receiptApproval && !deliveryBrief && primaryAmount ? (
                     <DetailBlock>
                         <div className="flex flex-wrap items-end gap-x-8 gap-y-2">
                             <div className="flex flex-col gap-1">
@@ -675,7 +692,9 @@ function WorkspaceDocumentTaskDetail({
                             ))}
                         </div>
                     </DetailBlock>
-                ) : !deliveryBrief && documentFacts.isPending ? (
+                ) : !receiptApproval &&
+                  !deliveryBrief &&
+                  documentFacts.isPending ? (
                     <DetailBlock title="金额">
                         <p className="text-sm text-muted-foreground">
                             正在读取单据事实…
@@ -716,7 +735,9 @@ function WorkspaceDocumentTaskDetail({
                     </WorkspacePurchaseApproval>
                 ) : (
                     <>
-                        {!deliveryBrief && documentFields.length > 0 ? (
+                        {!receiptApproval &&
+                        !deliveryBrief &&
+                        documentFields.length > 0 ? (
                             <DetailBlock>
                                 <FieldGrid
                                     sections={
@@ -759,6 +780,7 @@ function WorkspaceDocumentTaskDetail({
                 ) : null}
 
                 {!deliveryBrief &&
+                !receiptApproval &&
                 !purchaseApproval &&
                 briefLines &&
                 briefLines.length > 0 ? (
@@ -847,10 +869,10 @@ function WorkspaceDocumentTaskDetail({
                 ) : null}
 
                 {approvalTask && instance ? (
-                    <DetailBlock compact={purchaseApproval}>
+                    <DetailBlock compact={purchaseApproval || receiptApproval}>
                         <WorkspaceApprovalProgress
                             instance={instance}
-                            compact={purchaseApproval}
+                            compact={purchaseApproval || receiptApproval}
                         />
                     </DetailBlock>
                 ) : null}

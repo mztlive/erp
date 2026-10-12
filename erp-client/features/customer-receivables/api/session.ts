@@ -2,6 +2,8 @@
  * Draft allocation session (client-held UI state; pool from HTTP).
  */
 
+import { saveReceiptDraft } from "./receipt-draft"
+
 import { apiGet, type Page } from "@/lib/api"
 
 import type {
@@ -19,6 +21,7 @@ import { instantToIso } from "./mappers"
 import { mapCustomerReceiptApproval } from "@/features/customer-receivables/lib/customer-receipt-approval"
 import { stripInvoiceApprovalField } from "@/features/customer-receivables/lib/invoice-no-approval"
 import {
+    compareAmounts,
     subtractAmounts,
     sumAmounts,
 } from "@/features/customer-receivables/lib/allocation-math"
@@ -35,7 +38,7 @@ type AllocationPoolScope = {
     receivableAccountId?: string
 }
 
-async function buildPool(
+export async function buildPool(
     mode: "receipt" | "invoice",
     counterpartyPartyId: string,
     scope: AllocationPoolScope = {},
@@ -84,8 +87,8 @@ async function buildPool(
                             salesOrderRevisionId:
                                 r.current_sales_order_revision_id,
                             customerName: r.customer_name || undefined,
-                            // open amount is server field on account; entry-level open is not exposed — use amount as display open
-                            openAmount: e.amount,
+                            // 缺少服务端额度时不可选，不以原始金额降级。
+                            openAmount: e.receipt_available ?? "0",
                             dueDate: e.due_date,
                             counterpartyPartyId: r.counterparty_party_id,
                             baselineVersion: r.version,
@@ -137,7 +140,7 @@ function recomputeProposed(
 }
 
 /** 已登记到账时刻按日期控件的上海时区回显，保留秒精度。 */
-function receiptReceivedAtInput(secs: number): string {
+export function receiptReceivedAtInput(secs: number): string {
     const parts = new Intl.DateTimeFormat("en-CA", {
         timeZone: "Asia/Shanghai",
         year: "numeric",
@@ -166,6 +169,8 @@ export async function createAllocationSession(
     )
     let existingFactNo: string | undefined
     let existingFactVersion: number | undefined
+    let receiptCustomerId: string | null | undefined
+    let serverStatus: string | undefined
     let approval: AllocationSessionView["approval"]
     let fact: AllocationSessionView["fact"] = {}
     let prefillAllocations: AllocationDraftLine[] = []
@@ -180,7 +185,7 @@ export async function createAllocationSession(
 
     if (input.mode === "receipt" && input.existingFactId) {
         const r = await apiGet<BackendCustomerReceipt>(
-            `/admin/customer-receipts/${encodeURIComponent(input.existingFactId)}`,
+            `/admin/customer-receipts/${encodeURIComponent(input.existingFactId)}/draft`,
         )
         if (
             !r.counterparty_party_id ||
@@ -199,6 +204,8 @@ export async function createAllocationSession(
                 message: "该回款不属于本次往来主体，请重新选择回款与核销范围。",
             }
         }
+        receiptCustomerId = r.customer_id ?? null
+        serverStatus = r.status
         existingFactNo = r.receipt_no
         existingFactVersion = r.version
         approval = mapCustomerReceiptApproval(r.approval)
@@ -206,9 +213,24 @@ export async function createAllocationSession(
         customerName = input.customerName ?? ""
         fact = {
             receivedAt: receiptReceivedAtInput(r.received_at),
-            amount: r.unallocated_amount,
+            amount: r.amount,
             bankReference: r.bank_reference ?? undefined,
         }
+        prefillAllocations = (r.pending_allocations ?? []).map((line) => {
+            const target = pool.find(
+                (item) => item.targetId === line.receivable_entry_id,
+            )
+            return {
+                lineKey: `line_${line.receivable_entry_id}`,
+                targetId: line.receivable_entry_id,
+                targetKind: "receivable_entry" as const,
+                label: target?.label ?? "原应收项目（当前不可选）",
+                salesOrderNo: target?.salesOrderNo ?? "",
+                openAmount: target?.openAmount ?? "0",
+                amount: line.allocated_amount,
+                baselineVersion: target?.baselineVersion ?? 0,
+            }
+        })
     } else if (input.mode === "invoice" && input.existingFactId) {
         const inv = stripInvoiceApprovalField(
             await apiGet<BackendInvoice>(
@@ -255,8 +277,13 @@ export async function createAllocationSession(
         }
     }
 
-    if (input.receivableAccountId || input.salesOrderId) {
+    if (
+        !prefillAllocations.length &&
+        !input.existingFactId &&
+        (input.receivableAccountId || input.salesOrderId)
+    ) {
         const match = pool.find((target) => {
+            if (compareAmounts(target.openAmount, "0") <= 0) return false
             if (input.receivableAccountId) {
                 return (
                     target.targetKind === "receivable_entry" ||
@@ -328,10 +355,12 @@ export async function createAllocationSession(
             customerId,
             MISSING_CUSTOMER_NAME,
         ),
-        status: "draft",
+        status: serverStatus && serverStatus !== "draft" ? "posted" : "draft",
+        serverStatus,
         existingFactId: input.existingFactId,
         existingFactNo,
         existingFactVersion,
+        receiptCustomerId,
         // Invoice 为 NO_APPROVAL，会话不得携带审批绑定。
         approval: input.mode === "receipt" ? approval : undefined,
         fact,
@@ -379,6 +408,8 @@ export async function saveAllocationDraft(
             status: 409,
         })
     }
+
+    if (session.mode === "receipt") return saveReceiptDraft(session, input)
 
     const { pool } = await buildPool(
         session.mode,

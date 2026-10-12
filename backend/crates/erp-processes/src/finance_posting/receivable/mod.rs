@@ -27,6 +27,7 @@ mod customer_receipt_command;
 mod customer_receipt_posting;
 mod customer_receipt_submit;
 mod draft_read;
+mod draft_save;
 mod draft_update;
 
 mod dto;

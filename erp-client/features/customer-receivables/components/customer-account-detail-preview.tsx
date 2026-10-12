@@ -21,6 +21,8 @@ import type {
     AllocationMode,
     CustomerAccountsDetailView,
 } from "@/features/customer-receivables/types"
+import { CustomerReceiptApprovalArea } from "./customer-receipt-approval-area"
+import { customerReceiptApprovalPhase } from "../lib/customer-receipt-approval"
 import { getErrorMessage } from "@/lib/api/errors"
 
 export type ReverseRequest = Readonly<{
@@ -187,14 +189,6 @@ export function CustomerAccountDetailPreview({
             footer={
                 data ? (
                     <>
-                        <Button
-                            id="customer-receivables-preview-close"
-                            type="button"
-                            variant="outline"
-                            onClick={onClose}
-                        >
-                            关闭
-                        </Button>
                         {originalHref ? (
                             <Button
                                 id="customer-receivables-preview-open-original"
@@ -421,6 +415,32 @@ export function CustomerAccountDetailPreview({
                                 红票
                             </Button>
                         ) : null}
+                        {data.receipt ? (
+                            <CustomerReceiptApprovalArea
+                                presentation="actions"
+                                phase={customerReceiptApprovalPhase(
+                                    data.receipt.approval,
+                                    data.receipt.status === "in_approval"
+                                        ? "IN_APPROVAL"
+                                        : data.receipt.status,
+                                )}
+                                approval={data.receipt.approval}
+                                documentId={data.receipt.receiptId}
+                                documentVersion={data.receipt.baselineVersion}
+                                workItemId={workItemId}
+                                expectedTaskVersion={expectedTaskVersion}
+                                workItemAllowedActions={workItemAllowedActions}
+                                onDecisionApplied={onDecisionApplied}
+                            />
+                        ) : null}
+                        <Button
+                            id="customer-receivables-preview-close"
+                            type="button"
+                            variant={data.receipt ? "default" : "outline"}
+                            onClick={onClose}
+                        >
+                            关闭
+                        </Button>
                     </>
                 ) : null
             }
@@ -452,6 +472,7 @@ export function CustomerAccountDetailPreview({
                 />
             ) : data?.receipt ? (
                 <ReceiptDetailBody
+                    approvalActionsInFooter
                     className="space-y-6 text-sm"
                     row={data.receipt}
                     workItemId={workItemId}

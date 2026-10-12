@@ -9,6 +9,7 @@ import { LifecycleRail } from "@/features/sales-orders/components/sales-order-de
 import { stageDueDisplay } from "@/features/sales-orders/lib/labels"
 import {
     nextStepOwner,
+    lifecycleSteps,
     type FocusTask,
 } from "@/features/sales-orders/lib/sales-order-detail-model"
 import { remainingReceivableAmount } from "@/features/sales-orders/lib/sales-order-receivable"
@@ -19,13 +20,18 @@ export function SalesOrderDetailSidebar({
     focusTask,
     action,
     hideFinanceSummary = false,
+    compact = false,
 }: {
     order: SalesOrderDetailView
     focusTask?: FocusTask | null
+    compact?: boolean
     hideFinanceSummary?: boolean
     action?: ReactNode
 }) {
     const due = stageDueDisplay(order)
+    const currentStage = lifecycleSteps(order).steps.find(
+        (step) => step.state === "current",
+    )
     const amounts = [
         { label: "已回款", value: order.receivedAmount },
         {
@@ -55,8 +61,12 @@ export function SalesOrderDetailSidebar({
                 </p>
                 <MoneyValue
                     value={order.amountGross}
-                    size="hero"
-                    className="mt-1 block wrap-anywhere"
+                    size={compact ? "inherit" : "hero"}
+                    className={
+                        compact
+                            ? "mt-1 block text-2xl wrap-anywhere"
+                            : "mt-1 block wrap-anywhere"
+                    }
                 />
                 {!hideFinanceSummary ? (
                     <>
@@ -121,9 +131,28 @@ export function SalesOrderDetailSidebar({
                         时限 {due.label}
                     </p>
                 ) : null}
-                <div className="mt-5">
-                    <LifecycleRail order={order} />
-                </div>
+                {compact && currentStage ? (
+                    <p className="mt-3 text-sm font-medium">
+                        当前阶段 · {currentStage.label}
+                    </p>
+                ) : null}
+                {compact ? (
+                    <details className="mt-3">
+                        <summary
+                            id="sales-order-lifecycle-toggle"
+                            className="cursor-pointer rounded-sm text-xs text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                            查看完整办理进度
+                        </summary>
+                        <div className="mt-4">
+                            <LifecycleRail order={order} />
+                        </div>
+                    </details>
+                ) : (
+                    <div className="mt-5">
+                        <LifecycleRail order={order} />
+                    </div>
+                )}
                 {action ? (
                     <div className="mt-4 [&>button]:w-full">{action}</div>
                 ) : null}

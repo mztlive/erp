@@ -9,10 +9,12 @@ export function FinancialFileList({
     idPrefix,
     onDownload,
     pendingAssetId,
+    showDocumentNumber = true,
 }: {
     files: FinancialFile[]
     idPrefix: string
     onDownload: (file: FinancialFile) => void
+    showDocumentNumber?: boolean
     pendingAssetId?: string
 }) {
     return (
@@ -23,10 +25,20 @@ export function FinancialFileList({
                     className="flex items-center justify-between gap-3 py-3"
                 >
                     <div className="min-w-0">
-                        <p className="truncate text-sm">{file.file_name}</p>
-                        <p className="text-xs text-muted-foreground">
-                            {file.document_no}
+                        <p
+                            className={
+                                showDocumentNumber
+                                    ? "truncate text-sm"
+                                    : "text-sm wrap-anywhere"
+                            }
+                        >
+                            {file.file_name}
                         </p>
+                        {showDocumentNumber ? (
+                            <p className="text-xs text-muted-foreground">
+                                {file.document_no}
+                            </p>
+                        ) : null}
                     </div>
                     <LoadingButton
                         id={`${idPrefix}-${toAutomationIdSegment(`${file.document_id}-${file.file_asset_id}`)}-download`}
