@@ -247,7 +247,7 @@ function WorkspaceInvoiceSession({
                 "@container/invoice space-y-6 py-5",
             )}
         >
-            <dl className="grid grid-cols-1 gap-3 rounded-lg border border-grid p-4 @min-[540px]/invoice:grid-cols-3">
+            <dl className="grid grid-cols-1 gap-4 rounded-lg border border-grid p-5 @min-[420px]/invoice:grid-cols-3 @min-[420px]/invoice:gap-0">
                 {[
                     ["批准金额", request.data.amount],
                     ["已登记", request.invoiced_amount],
@@ -255,15 +255,15 @@ function WorkspaceInvoiceSession({
                 ].map(([label, value]) => (
                     <div
                         key={label}
-                        className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 @min-[540px]/invoice:border-l @min-[540px]/invoice:pl-4 @min-[540px]/invoice:first:border-l-0 @min-[540px]/invoice:first:pl-0"
+                        className="min-w-0 space-y-2 border-grid @min-[420px]/invoice:border-l @min-[420px]/invoice:px-5 @min-[420px]/invoice:first:border-l-0 @min-[420px]/invoice:first:pl-0 @min-[420px]/invoice:last:pr-0"
                     >
                         <dt className="text-sm text-muted-foreground">
                             {label}
                         </dt>
-                        <dd>
+                        <dd className="overflow-x-auto">
                             <MoneyValue
                                 value={value}
-                                className="font-semibold"
+                                className="text-xl font-semibold leading-tight"
                             />
                         </dd>
                     </div>

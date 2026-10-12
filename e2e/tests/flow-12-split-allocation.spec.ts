@@ -174,16 +174,15 @@ async function createSalesOrderWithContract(
     contractNo: string,
 ): Promise<{ salesOrderId: string; salesOrderNo: string }> {
     await page.goto(`${FRONTEND_BASE}/sales/orders?mode=create`)
-    await expect(page.getByText("销售明细")).toBeVisible({ timeout: TIMEOUT })
-    await page.locator("#sales-orders-create-contract-upload").click()
     await archiveContractViaUi(page, { contractNo, customerName, pdf: pdfUpload() })
-    await expect(page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(customerName))
+    await expect(page.getByText("销售明细")).toBeVisible({ timeout: TIMEOUT })
+    await expect(page.locator("#sales-orders-create-customer")).toContainText(new RegExp(customerName))
 
     await chooseOption(page, page.getByLabel("福利场景"), "年节礼包")
     await page.locator("#sales-orders-create-line-items-add").click()
     const skuDialog = page.getByRole("dialog", { name: "添加商品" })
     await expect(skuDialog).toBeVisible({ timeout: TIMEOUT })
-    await searchAndSubmit(skuDialog.getByPlaceholder("搜索 SKU、商品名称、编号或规格"), SKU_NO)
+    await searchAndSubmit(skuDialog.locator("#sales-orders-sku-picker-filter-search"), SKU_NO)
     await expect(skuDialog.getByText(SKU_NO, { exact: true })).toBeVisible({ timeout: TIMEOUT })
     await skuDialog.getByRole("checkbox", { name: new RegExp(SKU_NAME) }).check()
     await skuDialog.getByRole("button", { name: /加入所选/ }).click()

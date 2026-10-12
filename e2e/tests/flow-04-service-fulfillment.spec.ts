@@ -12,6 +12,7 @@
  * - ServiceFulfillment / CustomerAcceptance 为 NO_APPROVAL，工作台原地确认，不出现审批决定栏
  */
 import { archiveContractViaUi } from "../helpers/contracts"
+import { selectExistingContractForSalesOrder } from "../helpers/sales-orders"
 import { existsSync } from "node:fs"
 import path from "node:path"
 import { expect, test, type Page } from "../helpers/test"
@@ -263,21 +264,13 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
                 .getByRole("heading", { name: "新建销售单" })
                 .or(sales.page.getByRole("heading", { name: "业务信息" })),
         ).toBeVisible({ timeout: TIMEOUT })
-        await expect(
-            sales.page.locator("#sales-orders-create-contract"),
-        ).toBeVisible({ timeout: TIMEOUT })
+        await selectExistingContractForSalesOrder(sales.page, contractNo)
         await expect(sales.page.getByLabel("业务性质")).toBeVisible({
             timeout: TIMEOUT,
         })
-        await chooseOption(
-            sales.page,
-            sales.page.locator("#sales-orders-create-contract"),
-            new RegExp(contractNo),
-            contractNo,
-        )
         await expect(
             sales.page.locator("#sales-orders-create-customer"),
-        ).toHaveValue(new RegExp(legalName))
+        ).toContainText(new RegExp(legalName))
         await expectLoggedInSalesOwner(sales.page, TIMEOUT)
         await chooseOption(
             sales.page,
@@ -287,10 +280,8 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
         // 付款条件必填缺一不可，否则提交按钮保持禁用（与 flow-03 同款）。
         await expect(
             sales.page.locator("#sales-orders-create-header-payment-terms"),
-        ).toHaveValue("货到 30 天")
-        await expect(
-            sales.page.locator("#sales-orders-create-header-payment-terms"),
-        ).toBeDisabled()
+        ).toContainText("货到 30 天")
+        await expect(sales.page.locator("#sales-orders-create-header-payment-terms").locator("input, button, [role=combobox]")).toHaveCount(0)
 
         await sales.page
             .getByRole("button", { name: "添加商品" })
@@ -299,8 +290,8 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
         await expect(
             sales.page.getByRole("heading", { name: "添加商品" }),
         ).toBeVisible({ timeout: TIMEOUT })
-        const skuSearch = sales.page.getByPlaceholder(
-            "搜索 SKU、商品名称、编号或规格",
+        const skuSearch = sales.page.locator(
+            "#sales-orders-sku-picker-filter-search",
         )
         await skuSearch.fill(SERVICE_SKU_NO)
         await skuSearch.press("Enter")

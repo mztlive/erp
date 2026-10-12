@@ -10,7 +10,8 @@
  * - 完整目标编辑后提交；驳回后修改同一变更单，重提形成新提交并重新经过仓储与财务
  */
 import { archiveContractViaUi } from "../helpers/contracts"
-import { authorizePurchasePaymentRequest } from "../helpers/payments"
+import { selectExistingContractForSalesOrder } from "../helpers/sales-orders"
+import { openAuthorizedSupplierPaymentTask } from "../helpers/payments"
 import path from "node:path"
 
 import { test, expect, type Page } from "../helpers/test"
@@ -229,13 +230,8 @@ test("[flow-09] 采购变更实改后驳回，修改原单重提并生效", asyn
                 .getByRole("heading", { name: "新建销售单" })
                 .or(sales.page.getByRole("heading", { name: "业务信息" })),
         ).toBeVisible(VISIBLE)
-        await chooseOption(
-            sales.page,
-            sales.page.locator("#sales-orders-create-contract"),
-            new RegExp(contractNo),
-            contractNo,
-        )
-        await expect(sales.page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(legalName))
+        await selectExistingContractForSalesOrder(sales.page, contractNo)
+        await expect(sales.page.locator("#sales-orders-create-customer")).toContainText(new RegExp(legalName))
         await chooseOption(
             sales.page,
             sales.page.locator("#sales-orders-create-header-welfare-scene"),
@@ -245,10 +241,10 @@ test("[flow-09] 采购变更实改后驳回，修改原单重提并生效", asyn
         const skuDialog = sales.page.getByRole("dialog", { name: "添加商品" })
         await expect(skuDialog).toBeVisible(VISIBLE)
         await skuDialog
-            .getByPlaceholder("搜索 SKU、商品名称、编号或规格")
+            .locator("#sales-orders-sku-picker-filter-search")
             .fill(SKU_NAME)
         await skuDialog
-            .getByPlaceholder("搜索 SKU、商品名称、编号或规格")
+            .locator("#sales-orders-sku-picker-filter-search")
             .press("Enter")
         const skuRow = skuDialog.getByRole("row", {
             name: new RegExp(SKU_NAME),
@@ -513,7 +509,7 @@ test("[flow-09] 采购变更实改后驳回，修改原单重提并生效", asyn
                     ),
         )
         await procurement.page
-            .getByRole("button", { name: "创建工作副本" })
+            .locator("#procurement-orders-detail-change-confirm-confirm")
             .click()
         const started = (await (await startedResponse).json()).data as {
             change_id: string
@@ -522,7 +518,7 @@ test("[flow-09] 采购变更实改后驳回，修改原单重提并生效", asyn
         expect(changeOrderId).toBeTruthy()
         await expect(
             procurement.page.getByRole("heading", {
-                name: "已创建采购变更工作副本",
+                name: "采购变更草稿已创建",
             }),
         ).toBeVisible(VISIBLE)
         await expect(procurement.page).toHaveURL(/section=changes/, VISIBLE)
@@ -879,20 +875,16 @@ test("[flow-09] 采购变更实改后驳回，修改原单重提并生效", asyn
     {
         const cashier = await openLoggedInWorkspace(browser, "fukuan")
         try {
-            const paymentRequest = await authorizePurchasePaymentRequest(cashier.page, purchaseNo)
-            await openWorkspaceTask(
-                cashier.page,
-                /供应商付款处理|待付款申请/,
-                paymentRequest.request_no,
-                "finance",
-            )
+            const paymentRequest = await openAuthorizedSupplierPaymentTask(cashier.page, purchaseNo)
+            expect(paymentRequest.lines).toHaveLength(1)
+            expect(paymentRequest.lines[0]?.source_snapshot?.purchase_preview.purchase_no).toBe(purchaseNo)
+            expect(paymentRequest.total_amount).toBe(effectiveGross)
+            expect(paymentRequest.lines[0]?.requested_amount).toBe(effectiveGross)
             const paymentTask = cashier.page.getByLabel("当前付款任务")
             await expect(paymentTask).toBeVisible(VISIBLE)
+            const paymentSummary = cashier.page.getByRole("region", { name: "付款任务摘要", exact: true })
             await expect(
-                paymentTask.getByText(purchaseNo, { exact: true }).first(),
-            ).toBeVisible(VISIBLE)
-            await expect(
-                paymentTask.getByText(/^本申请未付批准金额/).first(),
+                paymentSummary.getByText("本申请剩余待付", { exact: true }).locator(".."),
             ).toContainText(EFFECTIVE_GROSS_DISPLAY, VISIBLE)
             await cashier.page.goto(`/procurement/orders/${purchaseOrderId}`)
             await expect(cashier.page).toHaveURL(

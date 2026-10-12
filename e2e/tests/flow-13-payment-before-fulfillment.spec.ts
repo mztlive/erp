@@ -24,6 +24,7 @@
  *   本流程用狮峰茶叶实物拆「入仓 + 供应商直发」覆盖入库与代发；电子交付/服务与入库/直发共用 ensure_prepay_gate。
  */
 import { archiveContractViaUi } from "../helpers/contracts";
+import { selectExistingContractForSalesOrder } from "../helpers/sales-orders"
 import fs from "node:fs";
 import path from "node:path";
 import { test, expect, type Browser, type BrowserContext, type Page } from "../helpers/test";
@@ -149,7 +150,7 @@ async function pickSku(page: Page, keyword: string, name: string) {
     await page.getByRole("button", { name: "添加商品" }).first().click();
     const skuDialog = page.getByRole("dialog", { name: /添加商品|更换销售商品/ });
     await expect(skuDialog).toBeVisible({ timeout: UI_TIMEOUT });
-    const skuSearch = skuDialog.locator("#master-data-list-sellable-list-toolbar-search-input");
+    const skuSearch = skuDialog.locator("#sales-orders-sku-picker-filter-search");
     await skuSearch.fill(keyword);
     await skuSearch.press("Enter");
     const checkbox = skuDialog.getByRole("checkbox", { name: new RegExp(`选择.*${name}`) });
@@ -646,18 +647,18 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await expect(page.getByRole("heading", { name: /新建销售单|业务信息/ })).toBeVisible({
             timeout: UI_TIMEOUT,
         });
+        await selectExistingContractForSalesOrder(page, contractNo);
         await expect(page.getByLabel("供应商")).toHaveCount(0);
         await expect(page.getByLabel("履约责任")).toHaveCount(0);
-        await chooseOption(page, page.locator("#sales-orders-create-contract"), contractNo, contractNo);
-        await expect(page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(customerName))
+        await expect(page.locator("#sales-orders-create-customer")).toContainText(new RegExp(customerName))
         await chooseOption(
             page,
             page.locator("#sales-orders-create-header-welfare-scene"),
             "年节礼包",
             "年节",
         );
-        await expect(page.locator("#sales-orders-create-header-payment-terms")).toHaveValue(PAYMENT_TERM_CUSTOMER)
-    await expect(page.locator("#sales-orders-create-header-payment-terms")).toBeDisabled()
+        await expect(page.locator("#sales-orders-create-header-payment-terms")).toContainText(PAYMENT_TERM_CUSTOMER)
+        await expect(page.locator("#sales-orders-create-header-payment-terms").locator("input, button, [role=combobox]")).toHaveCount(0)
         await pickSku(page, "龙井", SKU_INBOUND);
         await pickSku(page, "普洱", SKU_DIRECT);
         await fillAllLineQuantities(page, SALES_QTY);
@@ -745,7 +746,7 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await page.goto(`/sales/orders/${salesOrderId}`);
         await expect(page.getByText("已生效").first()).toBeVisible({ timeout: UI_TIMEOUT });
         await page.getByRole("tab", { name: /采购/ }).click();
-        await expect(page.getByTestId("sales-order-purchase-status")).toContainText("采购已覆盖", {
+        await expect(page.getByTestId("sales-order-purchase-status")).toContainText("供给已覆盖", {
             timeout: UI_TIMEOUT,
         });
         await expect(page.getByRole("table").getByText("草稿", { exact: true })).toHaveCount(0);
@@ -848,9 +849,10 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await closeFulfillmentDialog(page);
         expect(new URL(page.url()).searchParams.get("currentWorkItemId")).toBe(workItemId);
         const receiptSection = page.getByRole("region", { name: "当前工作台任务", exact: true })
-            .getByRole("region", { name: "财务付款回单", exact: true });
+            .getByRole("region", { name: "采购付款", exact: true })
+            .getByRole("region", { name: "付款回单", exact: true });
         await expect(receiptSection).toHaveCount(1);
-        await expect(receiptSection.getByRole("heading", { name: "财务付款回单", exact: true }))
+        await expect(receiptSection.getByRole("heading", { name: "付款回单", exact: true }))
             .toBeVisible({ timeout: UI_TIMEOUT });
         const token = await apiToken("caigou");
         const receiptPath = `/admin/work-items/${workItemId}/payment-receipts`;

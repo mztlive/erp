@@ -3,7 +3,6 @@
 use std::collections::HashMap;
 
 use erp_core::money::Amount;
-use erp_finance::entity::receivable::InvoiceRequestData;
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, ReceivableExt};
 use erp_procurement::repository::PurchaseOrderExt;
@@ -22,6 +21,8 @@ use crate::Result;
 
 mod payable;
 pub use payable::ScopedPayableAccountRow;
+
+pub use super::invoice_rows::{ScopedInvoiceRequestRow, ScopedInvoiceRow};
 
 /// M07/M08/M09 列表共用的范围分页视图；跨页必须原样回传 `scope_version`。
 ///
@@ -144,72 +145,6 @@ pub struct ScopedCustomerReceiptRow {
     pub allocations: Option<Vec<erp_finance::dto::receivable::ReceiptAllocationView>>,
     /// 部分受限时为 true。
     pub permission_limited: bool,
-}
-
-/// M08 销项发票范围行：整单金额与完整凭证部分授权为 null。
-#[derive(Debug, Clone, Serialize)]
-pub struct ScopedInvoiceRow {
-    /// 发票主键。
-    pub id: String,
-    /// 发票号码。
-    pub invoice_no: Option<String>,
-    /// 发票方向。
-    pub invoice_direction: erp_finance::entity::receivable::InvoiceDirection,
-    /// 蓝红类型。
-    pub invoice_kind: erp_finance::entity::receivable::InvoiceKind,
-    /// 发票状态。
-    pub status: erp_finance::entity::receivable::InvoiceStatus,
-    /// 开票日期。
-    pub invoice_date: Option<erp_core::common::time::BusinessDate>,
-    /// 创建时间（秒级时间戳）。
-    pub created_at: u64,
-    /// 获授权分配份额合计。
-    pub visible_allocated_share: Amount,
-    /// 整单含税金额；部分授权为 null。
-    pub gross_amount: Option<Amount>,
-    /// 整单已分配合计；部分授权为 null。
-    pub allocated_total: Option<Amount>,
-    /// 未分配余额；部分授权为 null。
-    pub unallocated_amount: Option<Amount>,
-    /// 获授权分配行；部分授权仅含获授权份额行。
-    pub allocations: Option<Vec<erp_finance::dto::receivable::SalesInvoiceAllocationView>>,
-    /// 进项方向获授权分配行；销项发票为空，部分授权仅含获授权份额行。
-    pub purchase_allocations: Option<Vec<erp_finance::dto::payable::PurchaseInvoiceAllocationView>>,
-    /// 部分受限时为 true。
-    pub permission_limited: bool,
-}
-
-/// M08 开票申请范围行：负责销售/申请人/当前开票处理人分别查询，不改变正式开票准入。
-#[derive(Debug, Clone, Serialize)]
-pub struct ScopedInvoiceRequestRow {
-    /// 申请主键。
-    pub id: String,
-    /// 申请单号。
-    pub request_no: String,
-    /// 关联销售单。
-    pub sales_order_id: String,
-    /// 关联销售单业务单号。
-    pub sales_order_no: String,
-    /// 申请状态。
-    pub status: erp_finance::entity::receivable::InvoiceRequestStatus,
-    /// 创建时间（秒级时间戳）。
-    pub created_at: u64,
-    /// 申请人（创建人）。
-    pub applicant_user_id: String,
-    /// 当前开票处理人（关联工作项当前负责人）；无工作项为空。
-    pub handler_user_id: Option<String>,
-    /// 申请金额；部分授权仍返回本行申请金额（行级事实），整单汇总为 null 由汇总视图承担。
-    pub amount: Amount,
-    /// 申请保存的开票资料；列表与详情均返回原申请快照，不使用当前主体档案替换。
-    pub data: InvoiceRequestData,
-    /// 已使用的申请额度；实际开票后增加，批准申请本身不增加。
-    pub invoiced_amount: Amount,
-    /// 部分受限时为 true。
-    pub permission_limited: bool,
-    /// 关联销售单当前负责人。
-    pub sales_owner_user_id: Option<String>,
-    /// 关联销售单当前业务组织。
-    pub business_org_unit_id: Option<String>,
 }
 
 /// M09 供应商付款范围行：采购负责人与付款经办人分别查询。
@@ -764,7 +699,8 @@ mod tests {
     use erp_core::common::time::BusinessDate;
     use erp_finance::entity::payable::{PayableAccountStatus, PayableSourceType};
     use erp_finance::entity::receivable::{
-        InvoiceDirection, InvoiceKind, InvoiceRequestStatus, InvoiceStatus, ReceivableAccountStatus,
+        InvoiceDirection, InvoiceKind, InvoiceRequestData, InvoiceRequestStatus, InvoiceStatus,
+        ReceivableAccountStatus,
     };
 
     use super::*;
@@ -888,13 +824,16 @@ mod tests {
         let request = page(
             vec![ScopedInvoiceRequestRow {
                 id: "irq-1".into(),
+                version: 4,
                 request_no: "IRQ-1".into(),
+                receivable_account_id: "receivable-1".into(),
                 sales_order_id: "so-1".into(),
                 sales_order_no: "SO-1".into(),
                 status: InvoiceRequestStatus::Draft,
                 created_at: 1,
                 applicant_user_id: "applicant-1".into(),
                 handler_user_id: Some("handler-1".into()),
+                work_item_id: Some("work-1".into()),
                 amount: zero_amount(),
                 data: InvoiceRequestData {
                     amount: zero_amount(),
@@ -920,11 +859,17 @@ mod tests {
         assert_eq!(request_json["items"][0]["sales_owner_user_id"], "sales-1");
         assert_eq!(request_json["items"][0]["applicant_user_id"], "applicant-1");
         assert_eq!(request_json["items"][0]["handler_user_id"], "handler-1");
+        assert_eq!(request_json["items"][0]["version"], 4);
+        assert_eq!(request_json["items"][0]["receivable_account_id"], "receivable-1");
+        assert_eq!(request_json["items"][0]["work_item_id"], "work-1");
 
         for direction in [InvoiceDirection::Sales, InvoiceDirection::Purchase] {
             let invoice = page(
                 vec![ScopedInvoiceRow {
                     id: "inv-1".into(),
+                    version: Some(4),
+                    party_id: Some("party-1".into()),
+                    invoice_code: Some("CODE-1".into()),
                     invoice_no: Some("FP-1".into()),
                     invoice_direction: direction,
                     invoice_kind: InvoiceKind::Blue,
@@ -933,6 +878,9 @@ mod tests {
                     created_at: 1,
                     visible_allocated_share: zero_amount(),
                     gross_amount: Some(zero_amount()),
+                    net_amount: Some(zero_amount()),
+                    tax_amount: Some(zero_amount()),
+                    original_invoice_id: None,
                     allocated_total: Some(zero_amount()),
                     unallocated_amount: Some(zero_amount()),
                     allocations: Some(Vec::new()),

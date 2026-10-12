@@ -7,6 +7,7 @@
  * 仓发任务必须继续可用，但本用例不得确认发货或消耗库存预占。
  */
 import { archiveContractViaUi } from "../helpers/contracts";
+import { selectExistingContractForSalesOrder } from "../helpers/sales-orders";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -413,28 +414,28 @@ test("flow-19 已生效销售单禁止直接作废：预占和仓发草稿保持
             timeout: UI_TIMEOUT,
         });
         await page.locator("#sales-orders-list-header-create").click();
+        await selectExistingContractForSalesOrder(page, contractNo);
         await expect(page.getByRole("heading", { name: "销售明细" })).toBeVisible({
             timeout: UI_TIMEOUT,
         });
         await expect(page.getByLabel("供应商")).toHaveCount(0);
         await expect(page.getByLabel("履约责任")).toHaveCount(0);
-        await chooseOption(page, page.locator("#sales-orders-create-contract"), contractNo);
-        await expect(page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(customerName))
+        await expect(page.locator("#sales-orders-create-customer")).toContainText(new RegExp(customerName))
         await chooseOption(
             page,
             page.locator("#sales-orders-create-header-welfare-scene"),
             "年节礼包",
         );
-        await expect(page.locator("#sales-orders-create-header-payment-terms")).toHaveValue("货到 15 天")
-    await expect(page.locator("#sales-orders-create-header-payment-terms")).toBeDisabled()
+        await expect(page.locator("#sales-orders-create-header-payment-terms")).toContainText("货到 15 天")
+        await expect(page.locator("#sales-orders-create-header-payment-terms").locator("input, button, [role=combobox]")).toHaveCount(0)
         await page.locator("#sales-orders-create-line-items-add").click();
         const skuDialog = page.getByRole("dialog", { name: "添加商品" });
         await expect(skuDialog).toBeVisible({ timeout: UI_TIMEOUT });
         await skuDialog
-            .locator("#master-data-list-sellable-list-toolbar-search-input")
+            .locator("#sales-orders-sku-picker-filter-search")
             .fill(SKU_CODE);
         await skuDialog
-            .locator("#master-data-list-sellable-list-toolbar-search-input")
+            .locator("#sales-orders-sku-picker-filter-search")
             .press("Enter");
         const skuRow = skuDialog.getByRole("checkbox", {
             name: new RegExp(`选择.*${SKU_NAME}`),
@@ -517,7 +518,7 @@ test("flow-19 已生效销售单禁止直接作废：预占和仓发草稿保持
         page = await switchTo("xiaoshou");
         await page.goto(`/sales/orders/${salesOrderId}`);
         await page.getByRole("tab", { name: /采购/ }).click();
-        await expect(page.getByTestId("sales-order-purchase-status")).toContainText("采购已覆盖", {
+        await expect(page.getByTestId("sales-order-purchase-status")).toContainText("供给已覆盖", {
             timeout: UI_TIMEOUT,
         });
         await expect(page.getByText("本单还没有采购单。")).toBeVisible({
@@ -589,7 +590,7 @@ test("flow-19 已生效销售单禁止直接作废：预占和仓发草稿保持
         await expect(page.getByText("改单中")).toHaveCount(0);
         await expect(page.getByRole("button", { name: /作废/ })).toHaveCount(0);
         await page.getByRole("tab", { name: /采购/ }).click();
-        await expect(page.getByTestId("sales-order-purchase-status")).toContainText("采购已覆盖", {
+        await expect(page.getByTestId("sales-order-purchase-status")).toContainText("供给已覆盖", {
             timeout: UI_TIMEOUT,
         });
         const unchanged = await fetchSalesOrder(page, salesOrderId);

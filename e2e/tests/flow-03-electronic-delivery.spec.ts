@@ -338,9 +338,8 @@ async function ensureVirtualOfferingAndListing(page: Page) {
 }
 
 async function uploadContractOnSalesOrder(page: Page, legalName: string, contractNo: string) {
-    await page.locator("#sales-orders-create-contract-upload").click()
     await archiveContractViaUi(page, { contractNo, customerName: legalName, pdf: contractPdfPath(), paymentTerms: "货到 30 天" })
-    await expect(page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(legalName))
+    await expect(page.locator("#sales-orders-create-customer")).toContainText(new RegExp(legalName))
 }
 
 const ELECTRONIC_SUPPLIER = '上海通卡'
@@ -385,8 +384,8 @@ async function pickVirtualSku(page: Page) {
     await page.locator("#sales-orders-create-line-items-add").click()
     const dialog = page.getByRole('dialog', { name: '添加商品' })
     await expect(dialog).toBeVisible({ timeout: 20000 })
-    await chooseComboboxById(page, 'master-data-list-sellable-list-toolbar-kind', '虚拟')
-    await dialog.locator('#master-data-list-sellable-list-toolbar-button-5').click()
+    await chooseComboboxById(page, 'sales-orders-sku-picker-filter-kind', '虚拟')
+    await dialog.locator('#sales-orders-sku-picker-filter-query').click()
     const empty = dialog.getByText('当前筛选无结果')
     if (await empty.isVisible().catch(() => false)) {
         throw new Error('公司商品池没有可销售的虚拟 SKU，目录补齐未生效')
@@ -436,13 +435,13 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
             // 列表行链接展示客户简称，非法定全称。
             await expect(page.getByRole('link', { name: 'E2E虚拟客户' })).toBeVisible({ timeout: 20000 })
             await page.goto('/sales/orders?mode=create')
+            await uploadContractOnSalesOrder(page, customerName, contractNo)
             await expect(page.locator('#sales-orders-create-header-nature')).toBeVisible({
                 timeout: 20000,
             })
-            await uploadContractOnSalesOrder(page, customerName, contractNo)
             await chooseComboboxById(page, 'sales-orders-create-header-welfare-scene', '年节礼包')
-            await expect(page.locator("#sales-orders-create-header-payment-terms")).toHaveValue("货到 30 天")
-            await expect(page.locator("#sales-orders-create-header-payment-terms")).toBeDisabled()
+            await expect(page.locator("#sales-orders-create-header-payment-terms")).toContainText("货到 30 天")
+            await expect(page.locator("#sales-orders-create-header-payment-terms").locator("input, button, [role=combobox]")).toHaveCount(0)
             await pickVirtualSku(page)
             await page.locator('[id^="sales-orders-create-line-"][id$="-quantity"]').first().fill('10')
             await page.locator("#sales-orders-create-batch-due-date-open").click()
@@ -509,7 +508,7 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
             await page.goto(`/sales/orders/${salesOrderId}`)
             await expect(page.getByText(/已生效/).first()).toBeVisible({ timeout: 20000 })
             await page.getByRole('tab', { name: '采购' }).click()
-            await expect(page.getByTestId('sales-order-purchase-status')).toContainText('采购已覆盖', {
+            await expect(page.getByTestId('sales-order-purchase-status')).toContainText('供给已覆盖', {
                 timeout: 20000,
             })
             // 销售账号无采购单明细查看权限，面板仅显示计数提示。
@@ -664,7 +663,7 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
             await expect(page.getByText(/已通过.*已交付/)).toBeVisible({ timeout: 20000 })
             await expect(page.locator('#sales-orders-acceptance-register-open')).toHaveCount(0)
             await page.getByRole('tab', { name: '采购' }).click()
-            await expect(page.getByTestId('sales-order-purchase-status')).toContainText('采购已覆盖')
+            await expect(page.getByTestId('sales-order-purchase-status')).toContainText('供给已覆盖')
             await expect(page.getByTestId('sales-order-purchase-status')).not.toContainText(/现有库存/)
         } finally {
             await context.close()

@@ -278,6 +278,11 @@ export async function pickCalendarDay(
     const calendar = popover.locator('[data-slot="calendar"]').first()
     await expect(calendar).toBeVisible({ timeout: UI_TIMEOUT })
 
+    const selectDay = async (button: Locator): Promise<void> => {
+        await button.click()
+        await expect(trigger).toHaveAttribute("aria-expanded", "false")
+        await expect(popover).toBeHidden()
+    }
     const dayButtonsById = fieldId
         ? popover.locator(`[id^="${fieldId}-calendar"][id$="-day-${isoDate}"]`)
         : popover.locator(`[id$="-day-${isoDate}"]`)
@@ -292,11 +297,11 @@ export async function pickCalendarDay(
                 outsideFallback ??= button
                 continue
             }
-            await button.click()
+            await selectDay(button)
             return true
         }
         if (!outsideFallback) return false
-        await outsideFallback.click()
+        await selectDay(outsideFallback)
         return true
     }
 
@@ -343,13 +348,13 @@ export async function pickCalendarDay(
         const disabled = await button.getAttribute("aria-disabled")
         const outside = await button.getAttribute("data-outside")
         if (disabled === "true" || outside === "true") continue
-        await button.click()
+        await selectDay(button)
         return
     }
     if (total === 0) {
         throw new Error(`日历未找到日期 ${isoDate}`)
     }
-    await dayButtons.first().click()
+    await selectDay(dayButtons.first())
 }
 
 function escapeRe(value: string): string {

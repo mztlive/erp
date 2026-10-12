@@ -93,8 +93,8 @@ async function submitApproved(page: Page, finance: Page, row: PaymentRequestCand
 async function pay(page: Page, request: Detail, amount: string) {
     await openWorkspaceTask(page, /供应商付款处理|待付款申请/, request.request_no, "finance")
     expect(new URL(page.url()).searchParams.get("currentWorkItemId")).toBe(request.work_item_id)
-    await page.locator('[id^="ppr-pay-line-"]').fill(amount)
-    await page.locator("#ppr-pay-bank-receipt").setInputFiles(BANK_RECEIPT_FILE)
+    await page.locator("#ppr-pay-amount").fill(amount)
+    await page.locator("#ppr-pay-bank-receipt-input").setInputFiles(BANK_RECEIPT_FILE)
     await page.locator("#ppr-pay-submit").click()
     const committed = page.waitForResponse((response) => response.request().method() === "POST" &&
         new URL(response.url()).pathname === `${ROOT}/${request.id}/payments/commit`, { timeout: 60_000 })

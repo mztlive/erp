@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs"
 import { expect, type Page, type Response } from "@playwright/test"
 
-import { API_BASE, apiToken } from "./api"
+import { API_BASE, apiGet, apiToken } from "./api"
+import { openWorkspaceTask } from "./ui"
 
 const TIMEOUT = 20_000
 
@@ -57,13 +58,14 @@ export async function uploadInvoiceEvidence(
 }
 
 /** 对照真实 multipart 请求证明附件引用与文件内容同时提交。 */
-export async function expectInvoiceEvidenceCommit(
+export async function expectInvoiceEvidenceComplete(
     response: Response,
     files: InvoiceEvidenceFile[],
+    amount: string,
 ): Promise<string> {
     expect(response.ok(), await response.text()).toBeTruthy()
     expect(new URL(response.url()).pathname).toBe(
-        "/admin/invoices/commit-with-files",
+        "/admin/invoices/complete-with-files",
     )
     const request = response.request()
     expect(request.headers()["content-type"]).toMatch(
@@ -76,11 +78,17 @@ export async function expectInvoiceEvidenceCommit(
     expect(commandPart, "multipart 应包含 command JSON").not.toBeNull()
     const command = JSON.parse(commandPart![1]) as {
         work_item_id?: string
-        allocations?: unknown[]
+        expected_task_version?: string
+        expected_request_version?: number
         attachment_asset_ids?: string[]
     }
     expect(command.work_item_id).toBeTruthy()
-    expect(command.allocations).toHaveLength(1)
+    expect(command.expected_task_version).toBeTruthy()
+    expect(command.expected_request_version).toBeGreaterThan(0)
+    expect(Object.keys(command).sort()).toEqual([
+        "attachment_asset_ids", "expected_request_version", "expected_task_version",
+        "idempotency_key", "work_item_id",
+    ])
     expect(command.attachment_asset_ids).toEqual(
         files.map(
             (file) =>
@@ -96,11 +104,116 @@ export async function expectInvoiceEvidenceCommit(
     }
     const body = (await response.json()) as {
         success: boolean
-        data: { id: string; invoice_no: string }
+        data: { id: string; unallocated_amount: string; allocations: unknown[] }
     }
     expect(body.success).toBe(true)
     expect(body.data.id).toBeTruthy()
+    expect(body.data).toMatchObject({
+        invoice_no: null, invoice_date: null, net_amount: null, tax_amount: null,
+        gross_amount: amount, allocated_total: amount,
+    })
+    expect(body.data.unallocated_amount).toMatch(/^0(?:\.0+)?$/)
+    expect(body.data.allocations).toHaveLength(1)
+    expect(body.data.allocations[0]).toMatchObject({
+        allocated_gross_amount: amount, allocated_net_amount: null, allocated_tax_amount: null,
+    })
     return body.data.id
+}
+
+/** W01 只上传附件，由服务端按剩余批准额度一次完成开票。 */
+export async function completeSalesInvoiceFromWorkspace(
+    page: Page,
+    input: { orderNo: string; customerName: string; amount: string; evidenceName: string },
+) {
+    await openWorkspaceTask(page, "销项开票", input.customerName, "finance")
+    const task = page.getByLabel("当前开票任务", { exact: true })
+    await expect(task).toBeVisible({ timeout: TIMEOUT })
+    await expect(page.locator("#workspace-invoice-source-sales")).toContainText(input.orderNo)
+    await expect(task.getByRole("heading", { name: "实际发票信息" })).toBeVisible()
+    await expect(page.locator("#customer-receivables-session-invoice-no")).toHaveCount(0)
+    await expect(page.locator("#customer-receivables-session-gross-amount")).toHaveCount(0)
+    const confirm = page.locator("#workspace-invoice-confirm")
+    await expect(confirm).toBeDisabled()
+    const files = invoiceEvidenceFiles(input.evidenceName)
+    await uploadInvoiceEvidence(page, files)
+    await expect(confirm).toBeEnabled()
+    const completed = page.waitForResponse(
+        response => response.request().method() === "POST" &&
+            new URL(response.url()).pathname === "/admin/invoices/complete-with-files",
+        { timeout: 90_000 },
+    )
+    await confirm.click()
+    const invoiceId = await expectInvoiceEvidenceComplete(await completed, files, input.amount)
+    await expect(task).toBeHidden({ timeout: TIMEOUT })
+    return { invoiceId, invoiceNo: null, files }
+}
+
+/** 红冲必须有完整票面事实；使用当前开票员及正式任务登记蓝票，不直接写库。 */
+export async function registerDetailedSalesInvoice(
+    page: Page,
+    input: { orderNo: string; customerName: string; invoiceNo: string; amount: string; netAmount: string; taxAmount: string },
+) {
+    await openWorkspaceTask(page, "销项开票", input.customerName, "finance")
+    await expect(page.getByLabel("当前开票任务", { exact: true })).toBeVisible({ timeout: TIMEOUT })
+    await expect(page.locator("#workspace-invoice-source-sales")).toContainText(input.orderNo)
+    const taskId = new URL(page.url()).searchParams.get("currentWorkItemId")
+    expect(taskId).toBeTruthy()
+    const token = await apiToken("kaipiao")
+    const task = await apiGet<{
+        id: string; task_version: string; business_object_type: string;
+        business_object_id: string; work_item_type: string; status: string;
+    }>(token, `/admin/work-items/${taskId}`)
+    expect(task).toMatchObject({
+        id: taskId, business_object_type: "receivable_account",
+        work_item_type: "SALES_INVOICE_EXECUTION", status: "OPEN",
+    })
+    const account = await apiGet<{ id: string; counterparty_party_id: string }>(
+        token, `/admin/receivable-accounts/${task.business_object_id}`,
+    )
+    expect(account.id).toBe(task.business_object_id)
+    expect(account.counterparty_party_id).toBeTruthy()
+    const files = invoiceEvidenceFiles(input.invoiceNo).slice(0, 1)
+    const references = files.map(file =>
+        `pending-file:invoice:${encodeURIComponent(file.name)}:${file.buffer.length}`,
+    )
+    const command = {
+        work_item_id: task.id,
+        expected_task_version: String(task.task_version),
+        invoice_id: null,
+        expected_version: null,
+        invoice: {
+            invoice_direction: "sales", invoice_kind: "blue",
+            party_id: account.counterparty_party_id,
+            invoice_no: input.invoiceNo,
+            invoice_date: new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" }),
+            gross_amount: input.amount, net_amount: input.netAmount, tax_amount: input.taxAmount,
+        },
+        allocations: [{
+            receivable_account_id: task.business_object_id,
+            allocated_gross_amount: input.amount,
+            allocated_net_amount: input.netAmount,
+            allocated_tax_amount: input.taxAmount,
+        }],
+        attachment_asset_ids: references,
+        idempotency_key: `e2e-detailed-${input.invoiceNo}`,
+    }
+    const response = await page.request.post(`${API_BASE}/admin/invoices/commit-with-files`, {
+        headers: { Authorization: `Bearer ${token}` },
+        multipart: {
+            command: JSON.stringify(command),
+            ...Object.fromEntries(files.map((file, index) => [references[index], file])),
+        },
+        timeout: 90_000,
+    })
+    expect(response.ok(), await response.text()).toBeTruthy()
+    const body = await response.json()
+    expect(body.success).toBe(true)
+    expect(body.data).toMatchObject({
+        invoice_no: input.invoiceNo, gross_amount: input.amount,
+        net_amount: input.netAmount, tax_amount: input.taxAmount, allocated_total: input.amount,
+    })
+    expect(body.data.id).toBeTruthy()
+    return { invoiceId: body.data.id as string, invoiceNo: input.invoiceNo, files }
 }
 
 /** 销售按本单详情资格下载财务附件；同客户其他销售单不获得附件资格。 */
@@ -109,7 +222,7 @@ export async function expectSalesInvoiceEvidence(
     input: {
         salesOrderId: string
         invoiceId: string
-        invoiceNo: string
+        invoiceNo: string | null
         files: InvoiceEvidenceFile[]
         otherSalesOrderId?: string
     },
@@ -125,7 +238,7 @@ export async function expectSalesInvoiceEvidence(
     }
     expect(body.success).toBe(true)
     expect(body.data).toHaveLength(input.files.length)
-    await page.goto(`/sales/orders/${input.salesOrderId}?section=receivable`)
+    await page.goto(`/sales/orders/${input.salesOrderId}?section=invoice`)
     await expect(
         page.getByRole("heading", { name: "发票文件", exact: true }),
     ).toBeVisible({
@@ -135,7 +248,7 @@ export async function expectSalesInvoiceEvidence(
         const file = body.data.find((item) => item.file_name === expected.name)
         expect(file).toMatchObject({
             document_id: input.invoiceId,
-            document_no: input.invoiceNo,
+            document_no: input.invoiceNo ?? "附件登记",
             content_type: expected.mimeType,
             byte_size: expected.buffer.length,
         })
@@ -143,7 +256,7 @@ export async function expectSalesInvoiceEvidence(
         const row = page
             .getByRole("listitem")
             .filter({ hasText: expected.name })
-        await expect(row).toContainText(input.invoiceNo, { timeout: TIMEOUT })
+        await expect(row).toContainText(input.invoiceNo ?? "附件登记", { timeout: TIMEOUT })
         const [download, response] = await Promise.all([
             page.waitForEvent("download"),
             page.waitForResponse(
@@ -178,7 +291,7 @@ export async function expectSalesInvoiceEvidence(
 }
 
 /**
- * 销售在销售单票款页提交开票申请。批准后才生成 W01 销项开票任务。
+ * 销售在销售单发票页提交开票申请。批准后才生成 W01 销项开票任务。
  */
 export async function submitSalesInvoiceRequest(
     page: Page,
@@ -191,7 +304,7 @@ export async function submitSalesInvoiceRequest(
         reason?: string
     },
 ): Promise<void> {
-    await page.goto(`/sales/orders/${input.salesOrderId}?section=receivable`)
+    await page.goto(`/sales/orders/${input.salesOrderId}?section=invoice`)
     const create = page.locator("#invoice-request-create")
     await expect(create).toBeEnabled({ timeout: TIMEOUT })
     await create.click()

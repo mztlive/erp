@@ -35,6 +35,8 @@ type Item = {
 }
 type Book = {
     id: string
+    sales_owner_user_id: string
+    business_org_unit_id: string
     version: number
     status: string
     batch_id: string
@@ -602,12 +604,8 @@ test("[flow-27] 选品册准备、客户提交冻结方案、商城套餐与分�
         )
         await expect(customerInput).toHaveAttribute("aria-busy", "false")
         await chooseOption(salesPage, customerInput, customerName, customerName)
-        await chooseOption(
-            salesPage,
-            dialog.locator("#sales-selection-create-owner"),
-            fixture.sales.name,
-        )
-        await dialog.locator("#sales-selection-create-org").fill(fixture.orgId)
+        await expect(dialog.locator("#sales-selection-create-owner")).toHaveCount(0)
+        await expect(dialog.locator("#sales-selection-create-org")).toHaveCount(0)
         await dialog
             .locator("#sales-selection-create-access-password")
             .fill(accessPassword)
@@ -618,9 +616,13 @@ test("[flow-27] 选品册准备、客户提交冻结方案、商城套餐与分�
         )
         expect(created.body).toMatchObject({
             customer_id: customer.id,
+            access_password: accessPassword,
+        })
+        expect(created.body).not.toHaveProperty("sales_owner_user_id")
+        expect(created.body).not.toHaveProperty("business_org_unit_id")
+        expect(created.data).toMatchObject({
             sales_owner_user_id: fixture.sales.id,
             business_org_unit_id: fixture.orgId,
-            access_password: accessPassword,
         })
         expect(created.data.status).toBe("PREPARING")
         const replay = await write<Book>(
@@ -1105,8 +1107,6 @@ test("[flow-27] 选品册准备、客户提交冻结方案、商城套餐与分�
     await test.step("套餐单档重生成保留冻结商品池，商城兑换只确认款式且无数量金额", async () => {
         const createInput = {
             customer_id: customer.id,
-            sales_owner_user_id: fixture.sales.id,
-            business_org_unit_id: fixture.orgId,
             access_password: accessPassword,
             form: "PACKAGE",
             submit_mode: "MALL_REDEEM",
@@ -1241,8 +1241,6 @@ test("[flow-27] 选品册准备、客户提交冻结方案、商城套餐与分�
     await test.step("未提交册可关闭，待发布册可作废；终止后不得进入客户选品", async () => {
         const base = {
             customer_id: customer.id,
-            sales_owner_user_id: fixture.sales.id,
-            business_org_unit_id: fixture.orgId,
             access_password: accessPassword,
             form: "SINGLE_SKU",
             submit_mode: "BY_QUANTITY",
@@ -1413,12 +1411,8 @@ test("[flow-27] 提货券按个人额度独立选品、冻结收件地址并导�
         ).toContain(customer.id)
         await expect(customerInput).toHaveAttribute("aria-busy", "false")
         await chooseOption(salesPage, customerInput, customerName, customerName)
-        await chooseOption(
-            salesPage,
-            dialog.locator("#sales-selection-create-owner"),
-            fixture.sales.name,
-        )
-        await dialog.locator("#sales-selection-create-org").fill(fixture.orgId)
+        await expect(dialog.locator("#sales-selection-create-owner")).toHaveCount(0)
+        await expect(dialog.locator("#sales-selection-create-org")).toHaveCount(0)
         await chooseOption(
             salesPage,
             dialog.locator("#sales-selection-create-mode"),
@@ -1441,6 +1435,12 @@ test("[flow-27] 提货券按个人额度独立选品、冻结收件地址并导�
             access_password: originalPassword,
             per_person_budget: "60.00",
             voucher_count: 4,
+        })
+        expect(created.body).not.toHaveProperty("sales_owner_user_id")
+        expect(created.body).not.toHaveProperty("business_org_unit_id")
+        expect(created.data).toMatchObject({
+            sales_owner_user_id: fixture.sales.id,
+            business_org_unit_id: fixture.orgId,
         })
         voucherBook = await prepared(salesToken, created.data.id)
         expect(voucherBook.per_person_budget).toBe("60.00")
@@ -2252,8 +2252,6 @@ test("[flow-27] 套餐提货券保留商品来源、同码并发唯一方案及�
         "/admin/sales-selection-books",
         {
             customer_id: customer.id,
-            sales_owner_user_id: fixture.sales.id,
-            business_org_unit_id: fixture.orgId,
             access_password: password,
             form: "PACKAGE",
             submit_mode: "PICKUP_VOUCHER",

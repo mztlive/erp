@@ -87,7 +87,7 @@ type PaymentCommand = {
     payment_request_id: string
     expected_request_version: number
     idempotency_key: string
-    payment: { payment_no: string; bank_receipt_asset_id: string }
+    payment: { payment_no: string; amount: string; bank_receipt_asset_id: string }
     [key: string]: unknown
 }
 
@@ -186,17 +186,27 @@ async function expectTaskMaterials(
     expect(context.sales_previews).toHaveLength(2)
     for (const purchase of context.purchase_previews) {
         await expectDenied(page, token, `/admin/purchase-orders/${purchase.purchase_order_id}`)
-        await page.locator(`#ppr-purchase-preview-${segment(purchase.purchase_order_id)}`).click()
-        const paper = page.getByRole("dialog", { name: "采购单完整预览" })
-        await expect(paper).toContainText(purchase.purchase_no)
-        await expect(paper).toContainText("采购成本")
-        await page.locator("#ppr-paper-close").click()
+        const preview = page.locator(`#ppr-purchase-preview-${segment(purchase.purchase_order_id)}`)
+        if (family === "approval") {
+            await preview.click()
+            const paper = page.getByRole("dialog", { name: "采购单完整预览" })
+            await expect(paper).toContainText(purchase.purchase_no)
+            await expect(paper).toContainText("采购成本")
+            await page.locator("#ppr-paper-close").click()
+        } else {
+            await expect(preview).toHaveCount(0)
+        }
     }
     for (const sales of context.sales_previews) {
         await expectDenied(page, token, `/admin/sales-orders/${sales.sales_order_id}`)
-        await page.locator(`#ppr-sales-preview-${segment(sales.revision_id)}`).click()
-        await expect(page.getByRole("dialog", { name: "销售单完整预览" })).toContainText("客户成交金额")
-        await page.locator("#ppr-paper-close").click()
+        const preview = page.locator(`#ppr-sales-preview-${segment(sales.revision_id)}`)
+        if (family === "approval") {
+            await preview.click()
+            await expect(page.getByRole("dialog", { name: "销售单完整预览" })).toContainText("客户成交金额")
+            await page.locator("#ppr-paper-close").click()
+        } else {
+            await expect(preview).toHaveCount(0)
+        }
     }
     await expectDenied(page, token, `/admin/file-assets/${sourceEvidence}`)
     const materialPath = `${ROOT}/${request.id}/materials/${sourceEvidence}/download?work_item_id=${workItemId}`
@@ -204,14 +214,21 @@ async function expectTaskMaterials(
     expect(read.ok(), await read.text()).toBe(true)
     expect(read.headers()["cache-control"]).toBe("private, no-store")
     expect((await read.body()).length).toBeGreaterThan(0)
-    const [download] = await Promise.all([
-        page.waitForEvent("download"),
-        page.locator(`#ppr-attachment-${segment(sourceEvidence)}-download`).click(),
-    ])
-    expect(await download.failure()).toBeNull()
-    const path = await download.path()
-    expect(path).not.toBeNull()
-    expect(readFileSync(path!)).toEqual(await read.body())
+    const attachment = page.locator(`#ppr-attachment-${segment(sourceEvidence)}-download`)
+    if (family === "approval") {
+        const [download] = await Promise.all([
+            page.waitForEvent("download"),
+            attachment.click(),
+        ])
+        expect(await download.failure()).toBeNull()
+        const path = await download.path()
+        expect(path).not.toBeNull()
+        expect(readFileSync(path!)).toEqual(await read.body())
+    } else {
+        // 出纳执行面只展示付款信息；任务材料读取资格仍由上述专用接口复验。
+        await expect(attachment).toHaveCount(0)
+        await expect(page.locator("#ppr-pay-amount")).toBeVisible(VISIBLE)
+    }
     // 即使当前审批人另有另一申请任务，也不能借本任务展开其来源或附件。
     await expectDenied(page, token, `${ROOT}/${request.id}/materials/${unrelatedEvidence}/download?work_item_id=${workItemId}`)
     await expectDenied(page, token, `${ROOT}/${unrelatedRequest.id}/materials/${unrelatedEvidence}/download?work_item_id=${workItemId}`)
@@ -220,10 +237,8 @@ async function expectTaskMaterials(
 
 /** 浏览器发出正式 multipart 付款命令，返回可用于后续状态准入拒绝的完整命令依据。 */
 async function payOne(page: Page, amount = "1.00", succeeds = true) {
-    const inputs = page.locator('[id^="ppr-pay-line-"]')
-    for (let index = 0; index < await inputs.count(); index += 1) await inputs.nth(index).fill("")
-    await inputs.first().fill(amount)
-    await page.locator("#ppr-pay-bank-receipt").setInputFiles(BANK_RECEIPT_FILE)
+    await page.locator("#ppr-pay-amount").fill(amount)
+    await page.locator("#ppr-pay-bank-receipt-input").setInputFiles(BANK_RECEIPT_FILE)
     await page.locator("#ppr-pay-submit").click()
     const responsePending = page.waitForResponse((response) => response.request().method() === "POST" && /\/payments\/commit$/.test(new URL(response.url()).pathname), { timeout: 60_000 })
     await page.locator("#ppr-pay-confirm-confirm").click()
@@ -235,6 +250,7 @@ async function payOne(page: Page, amount = "1.00", succeeds = true) {
     const encoded = /name="command"\r\n(?:Content-Type:[^\r]+\r\n)?\r\n([^\r]+)/.exec(text)
     expect(encoded, "浏览器付款必须包含完整正式命令").not.toBeNull()
     const command = JSON.parse(encoded![1]!) as PaymentCommand
+    expect(command.payment.amount).toBe(amount)
     if (!succeeds) {
         expect([409, 422], body.errorMessage).toContain(response.status())
         expect(body.errorMessage).toMatch(/账户|账号|版本|变化|停用/)
@@ -425,10 +441,27 @@ test("正式付款主体分组、受限任务材料、账户失效和已关闭�
     }
     await procurement.page.goto("/procurement/payment-requests")
     await procurement.page.locator("#purchase-payment-requests-create").click()
-    await chooseOption(procurement.page, procurement.page.locator("#ppr-create-group"), `${firstRows[0]!.supplier_name} · ${firstRows[0]!.payer_party_name}`, firstRows[0]!.supplier_name)
-    await expect(procurement.page.locator('[id^="ppr-create-line-"]')).toHaveCount(2)
-    await chooseOption(procurement.page, procurement.page.locator("#ppr-create-group"), `${secondRow.supplier_name} · ${secondRow.payer_party_name}`, secondRow.supplier_name)
-    await expect(procurement.page.locator('[id^="ppr-create-line-"]')).toHaveCount(1)
+    const selectedRows = [...firstRows, secondRow, otherSupplier]
+    for (const row of selectedRows) {
+        await procurement.page.locator(`#ppr-select-${segment(row.payable_account_id)}`).check()
+    }
+    await procurement.page.locator("#ppr-create-next").click()
+    await expect(procurement.page.locator('#ppr-create-form [data-slot="collapsible-trigger"][id^="ppr-group-"]')).toHaveCount(3)
+    for (const rows of [firstRows, [secondRow], [otherSupplier]]) {
+        const first = rows[0]!
+        const trigger = procurement.page.locator(`#ppr-group-${segment(`${first.supplier_id}:${first.payer_party_id}`)}-trigger`)
+        await expect(trigger).toContainText(first.supplier_name)
+        await expect(trigger).toContainText(`${rows.length} 张采购单 · ${first.payer_party_name}`)
+        if (await trigger.getAttribute("aria-expanded") !== "true") await trigger.click()
+        const group = procurement.page.locator('[data-slot="collapsible"]').filter({ has: trigger })
+        await expect(group.locator('input[id^="ppr-create-line-"]')).toHaveCount(rows.length)
+        for (const row of rows) {
+            await expect(group.locator(`#ppr-create-line-${segment(row.payable_account_id)}`)).toBeVisible()
+        }
+        for (const excluded of selectedRows.filter((row) => !rows.some((included) => included.payable_account_id === row.payable_account_id))) {
+            await expect(group.locator(`#ppr-create-line-${segment(excluded.payable_account_id)}`)).toHaveCount(0)
+        }
+    }
     await procurement.page.locator("#ppr-create-dialog-close").click()
 
     const linkedEvidence = await uploadAnalyticsEvidence(procurementToken)
@@ -632,7 +665,7 @@ test("正式付款主体分组、受限任务材料、账户失效和已关闭�
     })
     const salesViewer = await openLoggedInWorkspace(browser, "xiaoshou")
     await salesViewer.page.goto(`/sales/orders/${salesBeforeChange.id}?section=overview`)
-    const sourceNotice = salesViewer.page.locator("#sales-order-procurement-source-changed-notice")
+    const sourceNotice = salesViewer.page.locator("#sales-order-overview-source-changed-notice")
     await expect(sourceNotice).toBeVisible(VISIBLE)
     await expect(sourceNotice).toContainText("采购依据待更新")
     await expect(sourceNotice).toContainText("已有 1 张采购单，数量 2")

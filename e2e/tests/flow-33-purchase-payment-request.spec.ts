@@ -11,7 +11,7 @@ import { analyticsDate, createAnalyticsPurchase, prepareAnalyticsOrders, uploadA
 import { rejectFinancialOriginal } from "../helpers/financial-draft-edit"
 import { openLoggedInWorkspace } from "../helpers/login"
 import { BANK_RECEIPT_FILE, purchasePaymentRequestCommand, type PaymentRequestCandidate, type PurchasePaymentRequestResult } from "../helpers/payments"
-import { approveCurrentDocument, chooseOption, openWorkspaceTask } from "../helpers/ui"
+import { approveCurrentDocument, chooseOption, openWorkspaceTask, pickCalendarDay } from "../helpers/ui"
 
 const ROOT = "/admin/purchase-payment-requests"
 const VISIBLE = { timeout: 20_000 }
@@ -269,10 +269,6 @@ async function submit(page: Page, request: PurchasePaymentRequestResult) {
     })
 }
 
-function payableInputId(accountId: string): string {
-    return `ppr-pay-line-${accountId.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`
-}
-
 /** 另一账号审批或 API 冲正后，重新加载并打开该申请绑定的原出纳任务。 */
 async function openPaymentRequestTask(page: Page, token: string, request: Detail) {
     expect(["approved", "partially_paid"]).toContain(request.status)
@@ -317,9 +313,10 @@ async function openPaymentRequestTask(page: Page, token: string, request: Detail
     await expect(task).toHaveAttribute("aria-current", "true", VISIBLE)
     await expect.poll(() => new URL(page.url()).searchParams.get("currentWorkItemId"), VISIBLE).toBe(taskId)
     const surface = page.getByRole("region", { name: "当前工作台任务" })
-    await expect(surface.getByRole("region", { name: "付款申请摘要" }).getByText(request.request_no, { exact: true })).toBeVisible(VISIBLE)
+    await expect(surface.getByRole("region", { name: "付款任务摘要" })).toBeVisible(VISIBLE)
     await expect(surface.locator("#ppr-pay-form")).toBeVisible(VISIBLE)
-    for (const line of context.lines) await expect(surface.locator(`[id="${payableInputId(line.payable_account_id)}"]`)).toBeVisible(VISIBLE)
+    await expect(surface.locator("#ppr-pay-amount")).toHaveValue(money(context.lines.reduce((total, line) =>
+        total + moneyCents(line.requested_amount) - moneyCents(line.paid_amount) - moneyCents(line.closed_amount), 0n)), VISIBLE)
 }
 
 function uiPaymentCommand(response: Response) {
@@ -330,11 +327,9 @@ function uiPaymentCommand(response: Response) {
     }
 }
 
-async function commitUiPayment(page: Page, payableAccountId: string, amount: string, filename: string, loseResponse = false) {
-    const inputs = page.locator('[id^="ppr-pay-line-"]')
-    for (let index = 0; index < await inputs.count(); index += 1) await inputs.nth(index).fill("")
-    await page.locator(`[id="${payableInputId(payableAccountId)}"]`).fill(amount)
-    await page.locator("#ppr-pay-bank-receipt").setInputFiles({ ...BANK_RECEIPT_FILE, name: filename })
+async function commitUiPayment(page: Page, amount: string, filename: string, loseResponse = false) {
+    await page.locator("#ppr-pay-amount").fill(amount)
+    await page.locator("#ppr-pay-bank-receipt-input").setInputFiles({ ...BANK_RECEIPT_FILE, name: filename })
     await page.locator("#ppr-pay-submit").click()
     const dialog = page.getByRole("alertdialog").filter({ hasText: "确认登记付款" })
     await expect(dialog).toBeVisible(VISIBLE)
@@ -529,25 +524,44 @@ test("采购付款申请原子占用、拒绝旧直付、释放重提、冻结�
     await submit(procurement.page, pendingDraft)
     const multiAmounts = new Map(rows.map((row, index) => [row.payable_account_id, index === 0 ? money(moneyCents(row.available_total) / 2n) : row.available_total]))
 
-    // PPR-02：浏览器明确填写两张采购金额，保存草稿、提交后财审全部冻结来源。
+    // PPR-02：浏览器勾选采购、核对预填金额后批量提交，同一付款关系合并为一份正式申请。
+    const availableForBatch = await candidates(procurementToken)
     await procurement.page.goto("/procurement/payment-requests")
     await procurement.page.locator("#purchase-payment-requests-create").click()
-    await chooseOption(procurement.page, procurement.page.locator("#ppr-create-group"), `${rows[0]!.supplier_name} · ${rows[0]!.payer_party_name}`, rows[0]!.supplier_name)
-    const amountInputs = procurement.page.locator('[id^="ppr-create-line-"]')
+    for (const row of rows) {
+        const segment = row.payable_account_id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
+        await procurement.page.locator(`[id="ppr-select-${segment}"]`).check()
+    }
+    await procurement.page.locator("#ppr-create-next").click()
+    await expect(procurement.page.locator("#ppr-create-submit")).toHaveText("提交 1 份付款申请")
+    const amountInputs = procurement.page.locator('input[id^="ppr-create-line-"]')
     await expect(amountInputs).toHaveCount(2, VISIBLE)
     for (const row of rows) {
         const input = procurement.page.locator(`[id="ppr-create-line-${row.payable_account_id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}"]`)
-        await expect(input).toHaveValue("")
+        const current = availableForBatch.find((candidate) => candidate.payable_account_id === row.payable_account_id)!
+        await expect(input, "周期结算按当前可申请余额预填，不得覆盖已存在的申请占用").toHaveValue(money(moneyCents(current.available_total)))
         await input.fill(multiAmounts.get(row.payable_account_id)!)
     }
-    await procurement.page.locator("#ppr-create-desired-payment-date").fill(analyticsDate())
+    await pickCalendarDay(procurement.page, procurement.page.locator("#ppr-create-desired-payment-date"), analyticsDate())
     await procurement.page.locator("#ppr-create-description").fill("采购已完成本期对账，按两张采购分别申请")
     await procurement.page.locator("#ppr-create-attachments").setInputFiles({ ...BANK_RECEIPT_FILE, name: "ppr-own-draft-evidence.png" })
-    const saved = procurement.page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === ROOT)
+    const saved = procurement.page.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === `${ROOT}/batch`)
     await procurement.page.locator("#ppr-create-submit").click()
-    const draftResponse = await saved
-    expect(draftResponse.ok(), await draftResponse.text()).toBe(true)
-    const multi = (await draftResponse.json()).data as Detail
+    const batchResponse = await saved
+    expect(batchResponse.ok(), await batchResponse.text()).toBe(true)
+    const batchRequests = (await batchResponse.json()).data as Detail[]
+    expect(batchRequests).toHaveLength(1)
+    const batchRequest = batchRequests[0]!
+    expect(batchRequest.status, "新建入口须直接完成财审提交").toBe("in_approval")
+    expect(batchRequest.lines.map((line) => line.payable_account_id).sort()).toEqual(rows.map((row) => row.payable_account_id).sort())
+    await procurement.page.locator(`#ppr-result-${batchRequest.id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`).click()
+    // 已提交申请正式撤回后沿原单修改，继续覆盖草稿取消确认、附件归属及重新提交的未知结果恢复。
+    await purchasePaymentRequestCommand(procurement.page, "caigou", "POST", `${ROOT}/${batchRequest.id}/withdraw`, {
+        expected_version: batchRequest.version, reason: "补充本次对账说明后沿原申请重新提交", idempotency_key: randomUUID(),
+    })
+    const multi = await detail(procurementToken, batchRequest.id)
+    expect(multi.status).toBe("withdrawn")
+    await procurement.page.reload()
     const ownDraftAttachmentIds = [...multi.data.attachment_ids]
     expect(ownDraftAttachmentIds, "正常上传必须保存本申请自有附件身份").toHaveLength(1)
     const initialDraftView = await detail(procurementToken, multi.id)
@@ -576,6 +590,7 @@ test("采购付款申请原子占用、拒绝旧直付、释放重提、冻结�
     expect(revisedDraft.data.attachment_ids, "编辑必须完整保留本申请自有附件").toEqual(ownDraftAttachmentIds)
     expect(revisedDraft.data.attachment_ids.some((id) => inheritedAttachmentIds.includes(id)), "来源附件只供完整材料展示，不得混入草稿命令自有附件").toBe(false)
     expect(editedResponse.request().postDataJSON().data.attachment_ids).toEqual(ownDraftAttachmentIds)
+    await procurement.page.locator(`#ppr-result-${multi.id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`).click()
     await expect(procurement.page.locator("#ppr-create-dialog")).toBeHidden(VISIBLE)
     // 服务端先提交成功，再丢失响应；未知结果必须查询原次命令，而不能改草稿或新建审批。
     let firstSubmitCommand: unknown
@@ -648,9 +663,9 @@ test("采购付款申请原子占用、拒绝旧直付、释放重提、冻结�
 
     // PPR-07/09：只付款第一行的一半，第二行批准额度不能被挪用；剩余占用随关闭释放。
     await openPaymentRequestTask(cashier.page, cashierToken, approved)
-    const firstLine = approved.lines.find((line) => line.payable_account_id === rows[0]!.payable_account_id)!
+    const firstLine = approved.lines[0]!
     const half = money(moneyCents(firstLine.requested_amount) / 2n)
-    const payment = await commitUiPayment(cashier.page, firstLine.payable_account_id, half, "ppr-partial-bank-receipt.png", true)
+    const payment = await commitUiPayment(cashier.page, half, "ppr-partial-bank-receipt.png", true)
     expect(payment.status).toBe("posted")
     let partial = await detail(procurementToken, multi.id)
     expect(partial.status).toBe("partially_paid")
@@ -733,7 +748,7 @@ test("采购付款申请原子占用、拒绝旧直付、释放重提、冻结�
     })
     expect(BigInt(taskAfterReversal.task_version)).toBeGreaterThan(BigInt(taskBeforeReversal.task_version))
     await openPaymentRequestTask(cashier.page, cashierToken, restoredApproved)
-    const replacement = await commitUiPayment(cashier.page, firstLine.payable_account_id, half, "ppr-repayment-bank-receipt.png")
+    const replacement = await commitUiPayment(cashier.page, half, "ppr-repayment-bank-receipt.png")
     expect(replacement.status).toBe("posted")
     expect(replacement.id).not.toBe(payment.id)
     const beforeRepayment = partial
@@ -757,10 +772,8 @@ test("采购付款申请原子占用、拒绝旧直付、释放重提、冻结�
         expect(await raceReadback(), "等待准入窗口不得改变付款、逐行净已付、应付或申请占用").toEqual(beforeRaceWindow)
     })
     await openPaymentRequestTask(cashier.page, cashierToken, partial)
-    const nextAmounts = cashier.page.locator('[id^="ppr-pay-line-"]')
-    for (let index = 0; index < await nextAmounts.count(); index += 1) await nextAmounts.nth(index).fill("")
-    await cashier.page.locator(`[id="${payableInputId(firstLine.payable_account_id)}"]`).fill(money(moneyCents(firstLine.requested_amount) - moneyCents(half)))
-    await cashier.page.locator("#ppr-pay-bank-receipt").setInputFiles({ ...BANK_RECEIPT_FILE, name: "ppr-close-payment-race.png" })
+    await cashier.page.locator("#ppr-pay-amount").fill(money(moneyCents(firstLine.requested_amount) - moneyCents(half)))
+    await cashier.page.locator("#ppr-pay-bank-receipt-input").setInputFiles({ ...BANK_RECEIPT_FILE, name: "ppr-close-payment-race.png" })
     await cashier.page.locator("#ppr-pay-submit").click()
     let settled: (responses: boolean[]) => void = () => undefined
     let raceStatuses: { payment: number; closed: number } | undefined

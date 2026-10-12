@@ -137,32 +137,25 @@ async function createPhysicalSalesOrder(
     ).toBeVisible({
         timeout: TIMEOUT,
     })
-    await expect(page.locator("#sales-orders-create-contract")).toBeVisible({
-        timeout: TIMEOUT,
-    })
-
-    await page
-        .locator("#sales-orders-create-contract-upload")
-        .click()
     await archiveContractViaUi(page, { contractNo, customerName, pdf: contractPdfPath(), paymentTerms: "货到 30 天" })
-    await expect(page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(customerName))
+    await expect(page.locator("#sales-orders-create-customer")).toContainText(new RegExp(customerName))
 
     await chooseOption(
         page,
         page.locator("#sales-orders-create-header-welfare-scene"),
         "年节礼包",
     )
-    await expect(page.locator("#sales-orders-create-header-payment-terms")).toHaveValue("货到 30 天")
-    await expect(page.locator("#sales-orders-create-header-payment-terms")).toBeDisabled()
+    await expect(page.locator("#sales-orders-create-header-payment-terms")).toContainText("货到 30 天")
+    await expect(page.locator("#sales-orders-create-header-payment-terms").locator("input, button, [role=combobox]")).toHaveCount(0)
 
     await page.locator("#sales-orders-create-line-items-add").click()
     const skuDialog = page.getByRole("dialog", { name: "添加商品" })
     await expect(skuDialog).toBeVisible({ timeout: TIMEOUT })
     await skuDialog
-        .getByPlaceholder("搜索 SKU、商品名称、编号或规格")
+        .locator("#sales-orders-sku-picker-filter-search")
         .fill(SKU_NO)
     await skuDialog
-        .getByPlaceholder("搜索 SKU、商品名称、编号或规格")
+        .locator("#sales-orders-sku-picker-filter-search")
         .press("Enter")
     const skuRow = skuDialog.getByRole("row").filter({
         has: page.getByText(SKU_NO, { exact: true }),
@@ -338,7 +331,7 @@ test.describe("flow-08 销售变更单（未履约）", () => {
             await sales.page.getByRole("tab", { name: /采购/ }).click()
             await expect(
                 sales.page.getByTestId("sales-order-purchase-status"),
-            ).toContainText("待采购", {
+            ).toContainText("供给未完全覆盖", {
                 timeout: TIMEOUT,
             })
 
@@ -651,9 +644,9 @@ test.describe("flow-08 销售变更单（未履约）", () => {
             await sales.page.getByRole("tab", { name: /采购/ }).click()
             await expect(
                 sales.page.getByTestId("sales-order-purchase-status"),
-            ).toContainText("待采购")
+            ).toContainText("供给未完全覆盖")
 
-            await sales.page.getByRole("tab", { name: /票款/ }).click()
+            await sales.page.getByRole("tab", { name: "应收", exact: true }).click()
             await expect(
                 sales.page.getByText(/待收|未结|未收/).first(),
             ).toBeVisible({

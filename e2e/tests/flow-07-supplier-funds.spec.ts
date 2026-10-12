@@ -15,6 +15,7 @@
  * - 付款详情无提交审批入口；SupplierPayment 不得出现审批实例/审批任务。
  */
 import { archiveContractViaUi } from "../helpers/contracts";
+import { expectSalesOrderContractSummary } from "../helpers/sales-orders";
 import { BANK_RECEIPT_FILE, openAuthorizedSupplierPaymentTask, purchasePaymentRequestCommand, supplierPaymentTaskPattern, type PurchasePaymentRequestResult } from "../helpers/payments";
 import { API_BASE, apiGet, apiToken } from "../helpers/api";
 import { randomUUID } from "node:crypto";
@@ -350,7 +351,7 @@ async function assertNoSupplierPaymentApproval(page: Page): Promise<void> {
 }
 
 async function uploadReceipt(page: Page, label: string): Promise<void> {
-    await page.locator("#ppr-pay-bank-receipt").setInputFiles({
+    await page.locator("#ppr-pay-bank-receipt-input").setInputFiles({
         name: label,
         mimeType: "image/png",
         buffer: RECEIPT_PNG,
@@ -410,26 +411,20 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     await expect(page.getByRole("heading", { name: /新建销售单|业务信息/ })).toBeVisible({
         timeout: 20_000,
     });
-    // 上传合同按钮与占位 div 重复 id：按角色点击避开严格模式。
-    await page.locator("#sales-orders-create-contract-upload").click();
     await archiveContractViaUi(page, { contractNo, customerName: customerLegal, pdf: contractPdfPath() })
-    await expect(page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(customerLegal))
+    await expect(page.locator("#sales-orders-create-customer")).toContainText(new RegExp(customerLegal))
 
     await chooseOption(
         page,
         page.locator("#sales-orders-create-header-welfare-scene"),
         "年节礼包",
     );
-    const paymentTerms = page.locator("#sales-orders-create-header-payment-terms");
-    const paymentTermsValue = await paymentTerms.inputValue().catch(() => "");
-    if (!paymentTermsValue.trim()) {
-        await chooseOption(page, paymentTerms, /货到 30 天|按合同约定/);
-    }
+    await expectSalesOrderContractSummary(page, { paymentTerms: "货到 15 天" });
 
     await page.getByRole("button", { name: "添加商品" }).first().click();
     const skuDialog = page.getByRole("dialog", { name: "添加商品" });
     await expect(skuDialog).toBeVisible({ timeout: 20_000 });
-    const skuSearch = skuDialog.locator("#master-data-list-sellable-list-toolbar-search-input");
+    const skuSearch = skuDialog.locator("#sales-orders-sku-picker-filter-search");
     await skuSearch.fill(SKU_NAME);
     await skuSearch.press("Enter");
     await expect(skuDialog.getByText(SKU_NAME).first()).toBeVisible({ timeout: 20_000 });
@@ -554,13 +549,10 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
         has: caiwuPage.getByRole("heading", { name: "供应商往来", exact: true }),
     });
     await expect(supplierWorkspace).toHaveCount(1);
-    // Base UI 的导航按钮为带 role="button" 的真实 <a>；按业务区域与 href 验证唯一导航入口。
+    // 财审从工作台处理申请；供应商往来页首不再提供申请或付款入口。
     const paymentRequestLink = supplierWorkspace.getByRole("group", { name: "页面操作", exact: true })
         .locator('a[href="/procurement/payment-requests"]');
-    await expect(paymentRequestLink).toHaveCount(1);
-    await expect(paymentRequestLink).toHaveText("采购付款申请");
-    await expect(paymentRequestLink).toBeVisible({ timeout: 20_000 });
-    await expect(paymentRequestLink).toHaveAttribute("href", "/procurement/payment-requests");
+    await expect(paymentRequestLink).toHaveCount(0);
     await expect(caiwuPage.getByRole("button", { name: "登记付款", exact: true })).toHaveCount(0);
     await expect(caiwuPage.locator("#ppr-pay-submit")).toHaveCount(0);
 
@@ -574,7 +566,7 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
 
     const approvedRequest = await openAuthorizedSupplierPaymentTask(fukuanPage, purchaseNo);
     await assertFinanceCannotPayApprovedRequest(caiwuPage, approvedRequest);
-    await expect(fukuanPage.getByRole("heading", { name: /向.+付款/ })).toBeVisible({
+    await expect(fukuanPage.getByLabel("当前付款任务").getByRole("heading", { name: "付款与收款信息" })).toBeVisible({
         timeout: 20_000,
     });
     const paymentTask = fukuanPage.getByLabel("当前付款任务");
@@ -588,14 +580,19 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     await assertNoSupplierPaymentApproval(fukuanPage);
     await expect(fukuanPage.locator("#ppr-pay-submit")).toBeVisible();
 
-    const pendingAmount = fukuanPage.locator('[id^="ppr-pay-line-"]').first();
-    await expect(pendingAmount).toHaveValue("", { timeout: 20_000 });
-    flow.openTotal = approvedRequest.lines[0]!.requested_amount;
+    const pendingAmount = fukuanPage.locator("#ppr-pay-amount");
+    expect(approvedRequest.lines, "本流程付款申请应只包含当前采购来源").toHaveLength(1);
+    const initialUnpaid = approvedRequest.lines.reduce((total, line) =>
+        total + amountCents(line.requested_amount) - amountCents(line.paid_amount) - amountCents(line.closed_amount), 0n);
+    expect(initialUnpaid).toBeGreaterThan(0n);
+    flow.openTotal = `${initialUnpaid / 100n}.${String(initialUnpaid % 100n).padStart(2, "0")}`;
+    // 已批准申请的出纳执行金额按剩余额度预填，采购申请的条款建议不替代这份正式付款授权。
+    await expect(pendingAmount).toHaveValue(flow.openTotal, { timeout: 20_000 });
     const split = splitHalf(flow.openTotal);
     flow.firstAmount = split.first;
     flow.restAmount = split.rest;
 
-    const amountInput = fukuanPage.locator('[id^="ppr-pay-line-"]').first();
+    const amountInput = fukuanPage.locator("#ppr-pay-amount");
     await amountInput.fill(flow.firstAmount);
     await uploadReceipt(fukuanPage, "bank-receipt-1.png");
     await fukuanPage.locator("#ppr-pay-submit").click();
@@ -616,20 +613,26 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
     const firstResponse = await commit1;
     expect(firstResponse.ok()).toBeTruthy();
     expect((await firstResponse.json()).data).toMatchObject({ status: "posted", amount: flow.firstAmount, allocated_total: flow.firstAmount, unallocated_amount: "0.00" });
+    const afterFirst = await apiGet<PaymentRequestDetail>(
+        await apiToken("caigou"), `/admin/purchase-payment-requests/${approvedRequest.id}`,
+    );
+    expect(afterFirst.status).toBe("partially_paid");
+    expect(afterFirst.lines[0]!.paid_amount).toBe(flow.firstAmount);
+    expect(amountCents(afterFirst.lines[0]!.requested_amount) - amountCents(afterFirst.lines[0]!.paid_amount) - amountCents(afterFirst.lines[0]!.closed_amount)).toBe(amountCents(flow.restAmount));
 
-    await expect(fukuanPage.getByRole("heading", { name: /向.+付款/ })).toBeVisible({
+    await expect(fukuanPage.getByLabel("当前付款任务").getByRole("heading", { name: "付款与收款信息" })).toBeVisible({
         timeout: 20_000,
     });
     await expect(fukuanPage.locator("#ppr-pay-submit")).toBeVisible({
         timeout: 20_000,
     });
-    await expect(fukuanPage.locator('[aria-label="当前付款任务"]')).toContainText(
+    await expect(fukuanPage.getByRole("region", { name: "付款任务摘要" })).toContainText(
         flow.restAmount,
         { timeout: 20_000 },
     );
 
-    const amountInput2 = fukuanPage.locator('[id^="ppr-pay-line-"]').first();
-    await expect(amountInput2).toBeVisible({ timeout: 20_000 });
+    const amountInput2 = fukuanPage.locator("#ppr-pay-amount");
+    await expect(amountInput2, "部分付款成功后下一笔须按刷新后的未付批准额度预填").toHaveValue(flow.restAmount, { timeout: 20_000 });
     await amountInput2.fill(flow.restAmount);
     await uploadReceipt(fukuanPage, "bank-receipt-2.png");
     await fukuanPage.locator("#ppr-pay-submit").click();

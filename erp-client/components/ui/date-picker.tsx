@@ -196,6 +196,7 @@ function DatePicker({
                 <Calendar
                     idPrefix={id ? `${id}-calendar` : undefined}
                     mode="single"
+                    required
                     defaultMonth={selected}
                     selected={selected}
                     disabled={disabledDates}

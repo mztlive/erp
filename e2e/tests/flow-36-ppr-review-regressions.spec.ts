@@ -185,9 +185,8 @@ test("同一合格账号付款后返回已缓存的先款履约任务，立即�
     await taskButton(page, approved.work_item_id!).click()
     await expect(page.locator("#ppr-pay-form")).toBeVisible(VISIBLE)
     const line = approved.lines[0]!
-    const lineSegment = line.payable_account_id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
-    await page.locator(`[id="ppr-pay-line-${lineSegment}"]`).fill(line.requested_amount)
-    await page.locator("#ppr-pay-bank-receipt").setInputFiles(BANK_RECEIPT_FILE)
+    await expect(page.locator("#ppr-pay-amount")).toHaveValue(line.requested_amount)
+    await page.locator("#ppr-pay-bank-receipt-input").setInputFiles(BANK_RECEIPT_FILE)
     await page.locator("#ppr-pay-submit").click()
     const posted = page.waitForResponse((response) => response.request().method() === "POST" &&
         new URL(response.url()).pathname === `${ROOT}/${approved.id}/payments/commit`)

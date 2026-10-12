@@ -25,6 +25,7 @@
  */
 
 import { archiveContractViaUi } from "../helpers/contracts"
+import { selectExistingContractForSalesOrder } from "../helpers/sales-orders"
 import { test, expect, type Page } from "../helpers/test"
 import fs from "node:fs"
 import path from "node:path"
@@ -238,26 +239,21 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
         ).toBeVisible({
             timeout: 20000,
         })
-        await chooseOption(
-            page,
-            page.locator("#sales-orders-create-contract"),
-            new RegExp(`${legalName}|${contractNo}`),
-            contractNo,
-        )
-        await expect(page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(legalName))
+        await selectExistingContractForSalesOrder(page, contractNo)
+        await expect(page.locator("#sales-orders-create-customer")).toContainText(new RegExp(legalName))
         await chooseOption(
             page,
             page.locator("#sales-orders-create-header-welfare-scene"),
             "年节礼包",
             "年节",
         )
-        await expect(page.locator("#sales-orders-create-header-payment-terms")).toHaveValue("货到 30 天")
-    await expect(page.locator("#sales-orders-create-header-payment-terms")).toBeDisabled()
+        await expect(page.locator("#sales-orders-create-header-payment-terms")).toContainText("货到 30 天")
+        await expect(page.locator("#sales-orders-create-header-payment-terms").locator("input, button, [role=combobox]")).toHaveCount(0)
 
         await page.locator("#sales-orders-create-line-items-add").click()
         const skuDialog = page.getByRole("dialog", { name: /添加商品|更换销售商品/ })
         await expect(skuDialog).toBeVisible({ timeout: 20000 })
-        const skuSearch = skuDialog.getByPlaceholder("搜索 SKU、商品名称、编号或规格")
+        const skuSearch = skuDialog.locator("#sales-orders-sku-picker-filter-search")
         await skuSearch.fill(SKU_KEYWORD)
         await skuSearch.press("Enter")
         await expect(skuDialog.getByText(SKU_KEYWORD).first()).toBeVisible({ timeout: 20000 })
@@ -572,6 +568,7 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
         await expect(batches.getByText(sharedTrackingNo, { exact: true })).toBeVisible()
         await expect(batches.getByText(trackingNo, { exact: true })).toHaveCount(0)
         await expect(batches.getByText(secondTrackingNo, { exact: true })).toHaveCount(0)
+        await dialog.locator("#sales-orders-acceptance-comment-toggle").click()
         await dialog.locator("#sales-orders-acceptance-comment").fill("按销售明细登记并核验包裹")
         await expect(dialog.locator("#sales-orders-acceptance-register-submit")).toBeDisabled({ timeout: 20000 })
         await expect(dialog.getByText("请上传签收单凭证（图片或 PDF）", { exact: true })).toBeVisible()

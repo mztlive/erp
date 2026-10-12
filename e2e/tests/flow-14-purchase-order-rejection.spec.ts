@@ -23,6 +23,7 @@
  *    已驳回）。驳回后主状态与审核轨都保持「审批中」，不会变成「已驳回」。
  */
 import { archiveContractViaUi } from "../helpers/contracts"
+import { expectSalesOrderContractSummary } from "../helpers/sales-orders"
 import fs from "node:fs"
 import path from "node:path"
 
@@ -354,34 +355,20 @@ test("[flow-14] 采购单审批驳回后修改原单重提，同单号生效并�
                 .getByRole("heading", { name: "新建销售单" })
                 .or(page.getByRole("heading", { name: "业务信息" })),
         ).toBeVisible(VISIBLE)
-        await expect(page.locator("#sales-orders-create-contract")).toBeVisible(
-            VISIBLE,
-        )
-        await page.locator("#sales-orders-create-contract-upload").click()
         await archiveContractViaUi(page, {
             contractNo,
             customerName,
             pdf: contractUpload,
         })
         await expect(
-            page.getByText(`${contractNo}@v1`, { exact: true }).first(),
+            page.getByText(`合同编号：${contractNo} · v1`, { exact: true }).first(),
         ).toBeVisible(VISIBLE)
-        await expect(page.locator("#sales-orders-create-customer")).toHaveValue(
+        await expect(page.locator("#sales-orders-create-customer")).toContainText(
             new RegExp(customerName),
         )
 
         await chooseOption(page, page.getByLabel("福利场景"), "年节礼包")
-        const salesPayment = page.locator(
-            "#sales-orders-create-header-payment-terms",
-        )
-        if (!(await salesPayment.inputValue().catch(() => "")).trim()) {
-            await chooseOption(
-                page,
-                salesPayment,
-                /货到 15 天|按合同约定/,
-                "货到 15 天",
-            )
-        }
+        await expectSalesOrderContractSummary(page, { paymentTerms: "货到 15 天" })
         await expect(page.getByLabel("供应商")).toHaveCount(0)
         await expect(page.getByLabel("履约责任")).toHaveCount(0)
         await expect(page.getByLabel("采购成本")).toHaveCount(0)
@@ -389,8 +376,8 @@ test("[flow-14] 采购单审批驳回后修改原单重提，同单号生效并�
         await page.locator("#sales-orders-create-line-items-add").click()
         const skuDialog = page.getByRole("dialog", { name: "添加商品" })
         await expect(skuDialog).toBeVisible(VISIBLE)
-        const skuSearch = skuDialog.getByPlaceholder(
-            "搜索 SKU、商品名称、编号或规格",
+        const skuSearch = skuDialog.locator(
+            "#sales-orders-sku-picker-filter-search",
         )
         await skuSearch.fill(SKU_KEYWORD)
         await skuSearch.press("Enter")
@@ -633,7 +620,7 @@ test("[flow-14] 采购单审批驳回后修改原单重提，同单号生效并�
         await page.getByRole("tab", { name: /^采购/ }).click()
         await expect(
             page.getByTestId("sales-order-purchase-status"),
-        ).toContainText("采购已覆盖")
+        ).toContainText("供给已覆盖")
         await expect(page.getByText("草稿")).toHaveCount(0)
         // 销售账号无采购单明细查看权限，面板仅显示计数提示，不显示审批中。
         await expect(
@@ -1118,7 +1105,7 @@ test("[flow-14] 采购单审批驳回后修改原单重提，同单号生效并�
         await page.getByRole("tab", { name: /^采购/ }).click()
         await expect(
             page.getByTestId("sales-order-purchase-status"),
-        ).toContainText("采购已覆盖")
+        ).toContainText("供给已覆盖")
         // 销售账号无采购单明细查看权限，面板仅显示计数提示，不显示已生效。
         await expect(
             page.getByTestId("sales-order-purchase-count-only"),

@@ -20,6 +20,7 @@
  *    以同 ID、同单号及原资金来源编辑并重提，新的提交重新从首节点审批。
  */
 import { archiveContractViaUi } from "../helpers/contracts"
+import { selectExistingContractForSalesOrder } from "../helpers/sales-orders"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -125,7 +126,7 @@ test.describe("flow-16 客户退款单", () => {
             await page.getByRole("tab", { name: /^采购/ }).click()
             await expect(
                 page.getByTestId("sales-order-purchase-status"),
-            ).toContainText("待采购", {
+            ).toContainText("供给未完全覆盖", {
                 timeout: TIMEOUT,
             })
             await expect(page.getByText("本单还没有采购单。")).toBeVisible({
@@ -381,7 +382,7 @@ test.describe("flow-16 客户退款单", () => {
             await page.getByRole("tab", { name: /^采购/ }).click()
             await expect(
                 page.getByTestId("sales-order-purchase-status"),
-            ).toContainText("待采购", {
+            ).toContainText("供给未完全覆盖", {
                 timeout: TIMEOUT,
             })
         } finally {
@@ -575,10 +576,8 @@ test.describe("flow-16 客户退款单", () => {
             await expect(supplierWorkspace).toHaveCount(1)
             const paymentRequestLink = supplierWorkspace.getByRole("group", { name: "页面操作", exact: true })
                 .locator('a[href="/procurement/payment-requests"]')
-            await expect(paymentRequestLink).toHaveCount(1)
-            await expect(paymentRequestLink).toHaveText("采购付款申请")
-            await expect(paymentRequestLink).toBeVisible({ timeout: TIMEOUT })
-            await expect(paymentRequestLink).toHaveAttribute("href", "/procurement/payment-requests")
+            // 财审从工作台处理申请；供应商往来页首不再提供申请或付款入口。
+            await expect(paymentRequestLink).toHaveCount(0)
             const financeProfile = await apiGet<{ account: string; permissions: string[] }>(
                 await apiToken("caiwu"), "/account/profile",
             )
@@ -926,13 +925,8 @@ async function createAndSubmitPhysicalSalesOrder(
         timeout: LONG,
     })
 
-    await chooseOption(
-        page,
-        page.locator("#sales-orders-create-contract"),
-        input.contractNo,
-        input.contractNo,
-    )
-    await expect(page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(input.legalName))
+    await selectExistingContractForSalesOrder(page, input.contractNo)
+    await expect(page.locator("#sales-orders-create-customer")).toContainText(new RegExp(input.legalName))
     await expectLoggedInSalesOwner(page, LONG)
 
     await chooseOption(
@@ -941,8 +935,8 @@ async function createAndSubmitPhysicalSalesOrder(
         "年节礼包",
         "年节",
     )
-    await expect(page.locator("#sales-orders-create-header-payment-terms")).toHaveValue("货到 30 天")
-    await expect(page.locator("#sales-orders-create-header-payment-terms")).toBeDisabled()
+    await expect(page.locator("#sales-orders-create-header-payment-terms")).toContainText("货到 30 天")
+    await expect(page.locator("#sales-orders-create-header-payment-terms").locator("input, button, [role=combobox]")).toHaveCount(0)
 
     await page.locator("#sales-orders-create-line-items-add").click()
     await expect(
@@ -951,7 +945,7 @@ async function createAndSubmitPhysicalSalesOrder(
         timeout: TIMEOUT,
     })
     const skuSearch = page.locator(
-        "#master-data-list-sellable-list-toolbar-search-input",
+        "#sales-orders-sku-picker-filter-search",
     )
     await skuSearch.fill(SKU_NAME)
     await skuSearch.press("Enter")

@@ -7,6 +7,7 @@
  * 供应商成本与公司销售参考价使用不同数值，验证改公司价不改供给成本。
  */
 import { archiveContractViaUi } from "../helpers/contracts"
+import { selectExistingContractForSalesOrder } from "../helpers/sales-orders"
 import fs from "node:fs/promises"
 import path from "node:path"
 
@@ -322,13 +323,14 @@ async function maintainPrices(
     await dialog
         .locator("#master-data-product-detail-effective-reason")
         .fill("E2E 维护四档含税销售参考价")
+    const savePath = `/admin/products/${productId}${uploadImage ? "/with-assets" : ""}`
     const [response] = await Promise.all([
         page.waitForResponse(
             (item) =>
                 item.request().method() === "PUT" &&
-                new URL(item.url()).pathname.startsWith(
-                    `/admin/products/${productId}`,
-                ),
+                new URL(item.url()).pathname === savePath,
+            // 带图片的保存包含文件上传，与前端 multipart 请求的 60 秒期限一致。
+            { timeout: uploadImage ? 60_000 : VISIBLE.timeout },
         ),
         dialog.locator("#master-data-product-save-confirm").click(),
     ])
@@ -371,15 +373,15 @@ async function expectContractReady(
         'section[aria-labelledby="sales-create-contract-title"]',
     )
     await expect(
-        section.getByText(`${contractNo}@v1`, { exact: true }),
+        section.getByText(`合同编号：${contractNo} · v1`, { exact: true }),
     ).toBeVisible(VISIBLE)
     await expect(section.getByText("加载中…", { exact: true })).toHaveCount(
         0,
         VISIBLE,
     )
-    await expect(page.locator("#sales-orders-create-contract")).toHaveAttribute(
-        "aria-expanded",
-        "false",
+    await expect(section.getByRole("heading", { name: "合同信息", exact: true })).toBeVisible(VISIBLE)
+    await expect(page.locator("#sales-orders-create-customer").locator("input, button, [role=combobox]")).toHaveCount(
+        0,
         VISIBLE,
     )
 }
@@ -553,11 +555,7 @@ test("[flow-20] 四价与供应商编号、数量自动报价、手动保留及�
     await archiveContractViaUi(page, { contractNo, customerName, pdf: path.resolve(process.cwd(), "fixtures/sample-contract.pdf") })
 
     await page.goto("/sales/orders?mode=create")
-    await chooseOption(
-        page,
-        page.locator("#sales-orders-create-contract"),
-        contractNo,
-    )
+    await selectExistingContractForSalesOrder(page, contractNo)
     await expectContractReady(page, contractNo)
     await chooseOption(
         page,
@@ -568,7 +566,7 @@ test("[flow-20] 四价与供应商编号、数量自动报价、手动保留及�
     const picker = page.getByRole("dialog", { name: "添加商品" })
     await expect(picker).toBeVisible(VISIBLE)
     const search = picker.locator(
-        "#master-data-list-sellable-list-toolbar-search-input",
+        "#sales-orders-sku-picker-filter-search",
     )
     await search.fill(product.skuNo)
     await search.press("Enter")

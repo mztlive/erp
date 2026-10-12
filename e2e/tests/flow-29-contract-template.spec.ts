@@ -237,7 +237,11 @@ test("[flow-29] Word 模板维护、编号申请恢复、历史文件及权限�
             name: "contract.docx", mimeType: DOCX_MIME, buffer: zipParts(parts),
         })
         const [response] = await Promise.all([
-            manager.waitForResponse((candidate) => candidate.request().method() === "POST" && new URL(candidate.url()).pathname === "/admin/contract-templates"),
+            // Word 上传接口允许等待 60 秒；不能被浏览器默认 20 秒响应等待提前终止。
+            manager.waitForResponse(
+                (candidate) => candidate.request().method() === "POST" && new URL(candidate.url()).pathname === "/admin/contract-templates",
+                { timeout: 60_000 },
+            ),
             manager.locator("#template-upload-submit").click(),
         ])
         main = await uiData<Template>(response)

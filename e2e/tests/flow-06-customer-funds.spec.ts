@@ -14,6 +14,7 @@
  * - 财务岗位分别使用财务总监、出纳和开票员角色；caiwu 仅复核，不具备回款创建或提交权限。
  */
 import { archiveContractViaUi } from "../helpers/contracts"
+import { selectExistingContractForSalesOrder, expectSalesOrderContractSummary } from "../helpers/sales-orders"
 import { test, expect, type Browser, type BrowserContext, type Page } from "../helpers/test"
 import fs from "node:fs"
 import path from "node:path"
@@ -22,15 +23,13 @@ import { fileURLToPath } from "node:url"
 import { createCustomerViaUi } from "../helpers/customers"
 import { rejectFinancialOriginal, reviseFinancialOriginal } from "../helpers/financial-draft-edit"
 import {
-    expectInvoiceEvidenceCommit,
+    completeSalesInvoiceFromWorkspace,
     expectSalesInvoiceEvidence,
-    invoiceEvidenceFiles,
     submitSalesInvoiceRequest,
-    uploadInvoiceEvidence,
 } from "../helpers/invoices"
 import { loginViaUi, openLoggedInWorkspace } from "../helpers/login"
 import { expectReceiptPreview, submitReceiptReversalRequest } from "../helpers/receipts"
-import { assertReceiptRegistrationDraft } from "../helpers/receipt-registration"
+import { assertReceiptRegistrationDraft, expectReceiptCounterparty } from "../helpers/receipt-registration"
 import { API_BASE, apiGet, apiToken } from "../helpers/api"
 import {
     approveCurrentDocument,
@@ -179,13 +178,12 @@ test.describe("flow-06 客户票款：分次回款、销项发票、核销与冲
                 await expect(fukuan.page.getByRole("heading", { name: "继续核销回款", exact: true })).toBeVisible()
                 await expect(fukuan.page.locator("#customer-receivables-session-amount")).toHaveValue("100.00")
                 await expect(fukuan.page.locator("#customer-receivables-session-received-at")).toContainText("2026-10-02 00:30:00")
-                await expect(fukuan.page.locator("#customer-receivables-session-counterparty")).toHaveValue(legalName)
+                await expectReceiptCounterparty(fukuan.page, legalName)
                 await expect(fukuan.page.locator("#customer-receivables-session-bank-reference")).toHaveValue(`BANK-DRAFT-F06-${stamp}`)
                 for (const id of ["amount", "received-at", "bank-reference"]) {
                     const field = fukuan.page.locator(`#customer-receivables-session-${id}`)
                     await expect(field).toBeDisabled()
                 }
-                await expect(fukuan.page.locator("#customer-receivables-session-counterparty")).toHaveJSProperty("readOnly", true)
                 await addPoolTarget(fukuan.page, orderA.orderNo)
                 await setAllocationAmount(fukuan.page, orderA.orderNo, "100.00")
                 const screenshot = test.info().outputPath("receipt-registration-existing-draft.png")
@@ -242,7 +240,7 @@ test.describe("flow-06 客户票款：分次回款、销项发票、核销与冲
             await expectFulfillmentNotStarted(page)
             await page.getByRole("tab", { name: /^采购/ }).click()
             await expect(page.getByTestId("sales-order-purchase-status")).toContainText(
-                "待采购",
+                "供给未完全覆盖",
                 { timeout: TIMEOUT },
             )
             await expect(page.getByText("本单还没有采购单。")).toBeVisible({ timeout: TIMEOUT })
@@ -446,17 +444,10 @@ async function createAndSubmitPhysicalSalesOrder(
     input: { customerId: string; contractNo: string; legalName: string },
 ) {
     await page.goto(`/sales/orders?mode=create&customerId=${encodeURIComponent(input.customerId)}`)
-    await expect(
-        page.getByRole("heading", { name: /新建销售单|业务信息/ }),
-    ).toBeVisible({ timeout: LONG })
-
-    await chooseOption(
-        page,
-        page.locator("#sales-orders-create-contract"),
-        input.contractNo,
-        input.contractNo,
-    )
-    await expect(page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(input.legalName))
+    await selectExistingContractForSalesOrder(page, input.contractNo)
+    await expectSalesOrderContractSummary(page, {
+        customerName: input.legalName, paymentTerms: "货到 30 天", contractNo: input.contractNo,
+    })
     await expectLoggedInSalesOwner(page, LONG)
 
     await chooseOption(
@@ -465,14 +456,12 @@ async function createAndSubmitPhysicalSalesOrder(
         "年节礼包",
         "年节",
     )
-    await expect(page.locator("#sales-orders-create-header-payment-terms")).toHaveValue("货到 30 天")
-    await expect(page.locator("#sales-orders-create-header-payment-terms")).toBeDisabled()
 
     await page.locator("#sales-orders-create-line-items-add").click()
     await expect(page.getByRole("dialog").getByRole("heading", { name: "添加商品" })).toBeVisible({
         timeout: TIMEOUT,
     })
-    const skuSearch = page.locator("#master-data-list-sellable-list-toolbar-search-input")
+    const skuSearch = page.locator("#sales-orders-sku-picker-filter-search")
     await skuSearch.fill(SKU_NAME)
     await skuSearch.press("Enter")
     const skuCheckbox = page.getByRole("checkbox", { name: new RegExp(`选择 ${SKU_NAME}`) })
@@ -756,58 +745,17 @@ async function assertCaiwuCannotSubmitReceipt(
 async function registerSalesInvoiceFromWorkspace(
     page: Page,
     orderNo: string,
-    _customerName: string,
+    customerName: string,
 ) {
-    await openWorkspaceTask(page, "销项开票处理", orderNo, "finance")
-    await expect(page.getByLabel("当前开票任务")).toBeVisible({ timeout: LONG })
-    await expect(page.getByRole("heading", { name: /核销 · / })).toBeVisible({ timeout: LONG })
-
-    const invoiceNo = `FP${Date.now()}`
-    const files = invoiceEvidenceFiles(invoiceNo)
-    await page.locator("#customer-receivables-session-invoice-no").fill(invoiceNo)
-    await page.locator("#customer-receivables-session-gross-amount").fill(UNIT_PRICE)
-    await uploadInvoiceEvidence(page, files)
-    const join = page.getByRole("button", { name: "加入" }).first()
-    if (await join.isVisible().catch(() => false)) {
-        await join.click()
-    }
-    const fill = page.getByRole("button", { name: "填满" }).first()
-    await expect(fill).toBeVisible({ timeout: TIMEOUT })
-    await fill.click()
-
-    await page.locator("#customer-receivables-session-submit").click()
-    await expect(page.getByRole("heading", { name: "确认登记销项发票并分配" })).toBeVisible({
-        timeout: TIMEOUT,
+    const result = await completeSalesInvoiceFromWorkspace(page, {
+        orderNo, customerName, amount: UNIT_PRICE, evidenceName: `FP${Date.now()}`,
     })
-    // 提交是慢事务（远端 Mongo 多轮写）：必须等 commit 响应落定后再跳列表，
-    // 否则列表查询先发会命中提交前快照（total 0），而服务端仍会继续提交，
-    // 造成“写成功但客户端无响应”的假失败。先挂 waitForResponse 再点确认。
-    const commitResponse = page.waitForResponse(
-        (res) =>
-            res.request().method() === "POST" &&
-            new URL(res.url()).pathname === "/admin/invoices/commit-with-files",
-        { timeout: 90_000 },
-    )
-    await page.locator("#customer-receivables-session-invoice-confirm-dialog-confirm").click()
-    const committed = await commitResponse
-    const invoiceId = await expectInvoiceEvidenceCommit(committed, files)
-    await expect(page.getByRole("heading", { name: "确认登记销项发票并分配" })).toBeHidden({
-        timeout: LONG,
-    })
-    // 产品缺口：提交成功后任务完成信号会重建开票会话，成功结果区（销项发票已登记并分配）
-    // 从未来得及展示就被卸载（回款结果区可正常展示，仅发票有此问题）。
-    // 此处以 commit 200 + 发票列表作为登记依据，不再断言结果区。
-    // 列表搜索框走表单提交，提交瞬间若遇工作台刷新会吞掉回车（已复现）；
-    // 改用地址栏 q 参数直达（行为与回车提交一致：q 映射为 invoice_no 精确过滤）。
-    await page.goto(
-        `/finance/customer-accounts?view=sales_invoice&q=${encodeURIComponent(invoiceNo)}`,
-    )
-    await waitHeading(page, "客户往来")
-    // 数据表行无障碍名为“第 N 行”（不含单据号），用行内文本过滤定位。
-    await expect(
-        page.getByRole("row").filter({ hasText: invoiceNo }).first(),
-    ).toBeVisible({ timeout: LONG })
-    return { invoiceId, invoiceNo, files }
+    await page.goto(`/finance/customer-accounts?view=sales_invoice&previewKind=invoice&previewId=${result.invoiceId}`)
+    await expect(page.getByText("发票号码：附件登记", { exact: true })).toBeVisible({ timeout: LONG })
+    await expect(page.getByText("未单独采集", { exact: true })).toHaveCount(2)
+    await expect(page.locator("#customer-receivables-preview-invoice-red")).toHaveCount(0)
+    await expect(page.locator("#customer-receivables-preview-invoice-continue-allocate")).toHaveCount(0)
+    return result
 }
 
 // ─── 回款冲正 ──────────────────────────────────────────────────────────────

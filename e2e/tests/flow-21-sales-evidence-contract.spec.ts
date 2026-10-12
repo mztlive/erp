@@ -255,7 +255,7 @@ async function createNoContractDraft(
     evidence: "pdf" | "png",
 ): Promise<{ order: SalesOrder; body: CreateBody }> {
     await page.goto("/sales/orders?mode=create")
-    await page.locator("#sales-orders-create-basis-evidence").click()
+    await page.locator("#sales-orders-create-entry-evidence").click()
     await chooseOption(
         page,
         page.locator("#sales-orders-create-customer"),
@@ -299,7 +299,7 @@ async function createNoContractDraft(
     const picker = page.getByRole("dialog", { name: "添加商品" })
     await expect(picker).toBeVisible(VISIBLE)
     const search = picker.locator(
-        "#master-data-list-sellable-list-toolbar-search-input",
+        "#sales-orders-sku-picker-filter-search",
     )
     await search.fill("龙井")
     await search.press("Enter")

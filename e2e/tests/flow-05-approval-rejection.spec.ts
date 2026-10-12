@@ -11,6 +11,7 @@
  *    subject_version 取详情 GET /admin/sales-orders/{id} 的 submissions[].submission_no。
  */
 import { archiveContractViaUi, SIGNING_COMPANY } from "../helpers/contracts"
+import { selectExistingContractForSalesOrder } from "../helpers/sales-orders"
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -148,24 +149,23 @@ async function startNewSalesOrder(page: Page): Promise<void> {
       .getByRole('heading', { name: '新建销售单' })
       .or(page.getByRole('heading', { name: '业务信息' })),
   ).toBeVisible(VISIBLE)
-  await expect(page.locator('#sales-orders-create-contract')).toBeVisible(VISIBLE)
+  await expect(page.locator('#sales-orders-create-entry-upload')).toBeVisible(VISIBLE)
 }
 
 async function uploadContract(
   page: Page,
   input: { customerName: string; contractNo: string; today: Date },
 ): Promise<void> {
-  await page.locator("#sales-orders-create-contract-upload").click()
   await archiveContractViaUi(page, { contractNo: input.contractNo, customerName: input.customerName, pdf: contractPdfPath(), validTo: isoDate(addDays(input.today, 7)) })
-  await expect(page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(input.customerName))
+  await expect(page.locator("#sales-orders-create-customer")).toContainText(new RegExp(input.customerName))
 }
 
 async function pickSkuAndFillLine(page: Page, due: Date, quantity: string): Promise<void> {
   await page.locator('#sales-orders-create-line-items-add').click()
   const picker = page.getByRole('dialog', { name: '添加商品' })
   await expect(picker).toBeVisible(VISIBLE)
-  await picker.getByPlaceholder('搜索 SKU、商品名称、编号或规格').fill(SKU_NAME)
-  await picker.getByPlaceholder('搜索 SKU、商品名称、编号或规格').press('Enter')
+  await picker.locator("#sales-orders-sku-picker-filter-search").fill(SKU_NAME)
+  await picker.locator("#sales-orders-sku-picker-filter-search").press('Enter')
   const skuRow = picker.getByRole('checkbox', { name: new RegExp(`选择\\s+${SKU_NAME}`) })
   await expect(skuRow).toBeVisible(VISIBLE)
   await skuRow.check()
@@ -233,26 +233,19 @@ async function fillSalesHeader(page: Page): Promise<void> {
 
 async function attachContract(
   page: Page,
-  input: { customerName: string; contractNo: string; today: Date },
+  input: { customerName: string; contractNo: string; today: Date; newContract?: boolean },
 ): Promise<void> {
-  try {
-    await chooseOption(
-      page,
-      page.getByPlaceholder('搜索合同编号或客户'),
-      new RegExp(input.contractNo),
-      input.contractNo,
-    )
-    await expect(page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(input.customerName))
+  if (input.newContract) {
+    await uploadContract(page, input)
     return
-  } catch {
-    await page.keyboard.press('Escape')
   }
-  await uploadContract(page, input)
+  await selectExistingContractForSalesOrder(page, input.contractNo)
+  await expect(page.locator("#sales-orders-create-customer")).toContainText(input.customerName)
 }
 
 async function createAndSubmitOrder(
   page: Page,
-  input: { customerName: string; contractNo: string; today: Date; due: Date; quantity: string },
+  input: { customerName: string; contractNo: string; today: Date; due: Date; quantity: string; newContract?: boolean },
 ): Promise<OrderSnapshot> {
   await startNewSalesOrder(page)
   await attachContract(page, input)
@@ -390,6 +383,7 @@ test('销售单审批驳回后可照原条件承接、修改原单重提或作�
 
     const orderA = await test.step('场景A 建单提交', async () =>
       createAndSubmitOrder(sales.page, {
+        newContract: true,
         customerName,
         contractNo,
         today,
@@ -460,9 +454,9 @@ test('销售单审批驳回后可照原条件承接、修改原单重提或作�
       ).toBe('CANCELLED')
       await expect(sales.page.getByRole('button', { name: '发起改单' })).toHaveCount(0)
       // 继续编辑会异步回填合同修订、客户和结算主体；等表单实际同步后再编辑重提。
-      const revision = sales.page.getByText(`${contractNo}@v1`, { exact: true })
+      const revision = sales.page.getByText(`合同编号：${contractNo} · v1`, { exact: true })
       await expect(revision).toBeVisible(VISIBLE)
-      await expect(sales.page.locator('#sales-orders-create-customer')).toHaveValue(new RegExp(customerName), VISIBLE)
+      await expect(sales.page.locator('#sales-orders-create-customer')).toContainText(new RegExp(customerName), VISIBLE)
       await expect(sales.page.locator('#sales-orders-create-settlement')).toHaveValue(new RegExp(SIGNING_COMPANY), VISIBLE)
       await expect(revision.locator('..').getByText('加载中…', { exact: true })).toBeHidden(VISIBLE)
       await sales.page.getByLabel('数量').first().fill('5')

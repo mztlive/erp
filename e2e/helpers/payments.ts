@@ -180,12 +180,9 @@ export async function openAuthorizedSupplierPaymentTask(
     expect(context).toMatchObject({ id: request.id, work_item_id: taskId, submission_version: request.submission_version })
     expect(["approved", "partially_paid"]).toContain(context.status)
     const surface = page.getByRole("region", { name: "当前工作台任务" })
-    await expect(surface.getByRole("region", { name: "付款申请摘要" }).getByText(request.request_no, { exact: true })).toBeVisible({ timeout: 20_000 })
+    await expect(surface.getByRole("region", { name: "付款任务摘要" })).toBeVisible({ timeout: 20_000 })
     await expect(surface.locator("#ppr-pay-form")).toBeVisible({ timeout: 20_000 })
-    for (const line of context.lines) {
-        const segment = line.payable_account_id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
-        await expect(surface.locator(`[id="ppr-pay-line-${segment}"]`)).toBeVisible({ timeout: 20_000 })
-    }
+    await expect(surface.locator("#ppr-pay-amount")).toBeVisible({ timeout: 20_000 })
     return context
 }
 
@@ -200,10 +197,10 @@ export async function payOnlySupplierTask(
         const remaining = paymentCents(line.requested_amount) - paymentCents(line.paid_amount) - paymentCents(line.closed_amount)
         if (remaining <= 0n) continue
         expectedByAccount.set(line.payable_account_id, remaining)
-        const id = line.payable_account_id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
-        await page.locator(`[id="ppr-pay-line-${id}"]`).fill(`${remaining / 100n}.${String(remaining % 100n).padStart(2, "0")}`)
     }
-    await page.locator("#ppr-pay-bank-receipt").setInputFiles(BANK_RECEIPT_FILE)
+    const total = [...expectedByAccount.values()].reduce((sum, amount) => sum + amount, 0n)
+    await page.locator("#ppr-pay-amount").fill(`${total / 100n}.${String(total % 100n).padStart(2, "0")}`)
+    await page.locator("#ppr-pay-bank-receipt-input").setInputFiles(BANK_RECEIPT_FILE)
     await page.locator("#ppr-pay-submit").click()
     const dialog = page.getByRole("alertdialog").filter({ hasText: "确认登记付款" })
     await expect(dialog).toBeVisible()
@@ -220,7 +217,6 @@ export async function payOnlySupplierTask(
     expect(result).toMatchObject({ status: "posted" })
     expect(result.id).toBeTruthy()
     expect(result.payment_no).toBeTruthy()
-    const total = [...expectedByAccount.values()].reduce((sum, amount) => sum + amount, 0n)
     expect(paymentCents(result.amount)).toBe(total)
     expect(paymentCents(result.effective_amount)).toBe(total)
     expect(paymentCents(result.allocated_total)).toBe(total)
@@ -272,9 +268,11 @@ export async function expectProcurementPaymentReceipt(
     await expect(task).toHaveCount(1)
     await expect(task).toHaveAttribute("aria-current", "true")
     const surface = page.getByRole("region", { name: "当前工作台任务", exact: true })
-    const receipts = surface.getByRole("region", { name: "财务付款回单", exact: true })
+    const procurementPayment = surface.getByRole("region", { name: "采购付款", exact: true })
+    await expect(procurementPayment).toBeVisible({ timeout: 20_000 })
+    const receipts = procurementPayment.getByRole("region", { name: "付款回单", exact: true })
     await expect(receipts).toHaveCount(1)
-    await expect(receipts.getByRole("heading", { name: "财务付款回单", exact: true })).toBeVisible({ timeout: 20_000 })
+    await expect(receipts.getByRole("heading", { name: "付款回单", exact: true })).toBeVisible({ timeout: 20_000 })
     const token = await apiToken("caigou")
     const headers = { Authorization: `Bearer ${token}` }
     const listPath = `/admin/work-items/${workItemId}/payment-receipts`

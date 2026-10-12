@@ -1,5 +1,12 @@
 import { expect, test, type Page, type Request } from "./test"
 
+/** 当前结算主体由会话来源锁定，以静态摘要显示，不提供编辑控件。 */
+export async function expectReceiptCounterparty(page: Page, customerName: string) {
+    const party = page.getByText("结算主体", { exact: true }).locator("..")
+    await expect(party.getByText(customerName, { exact: true })).toBeVisible()
+    await expect(party.locator("input, button, [role=combobox]")).toHaveCount(0)
+}
+
 /** 使用两笔各 644 元的真实应收分配验证 1500 元回款草稿，最终保留 212 元待核销。 */
 export async function assertReceiptRegistrationDraft(
     page: Page,
@@ -19,7 +26,7 @@ export async function assertReceiptRegistrationDraft(
         "#customer-receivables-session-allocation-search",
     )
     const submit = page.locator("#customer-receivables-session-submit")
-    const footer = page.locator('[data-slot="sticky-total-bar"]')
+    const footer = page.getByRole("complementary", { name: "本次回款" })
     const validation = page.locator("#customer-receivables-session-validation")
     const commits: Request[] = []
     const pageErrors: string[] = []
@@ -43,11 +50,7 @@ export async function assertReceiptRegistrationDraft(
 
     try {
         await test.step("主体锁定、搜索保留选择与核销金额", async () => {
-            const party = page.locator(
-                "#customer-receivables-session-counterparty",
-            )
-            await expect(party).toHaveValue(input.customerName)
-            await expect(party).toHaveJSProperty("readOnly", true)
+            await expectReceiptCounterparty(page, input.customerName)
             await search.fill(input.orderNos[1])
             await expect(rowA).toHaveCount(0)
             await expect(rowB.getByRole("checkbox")).toBeChecked()
@@ -82,7 +85,7 @@ export async function assertReceiptRegistrationDraft(
             await amountA.fill("644.00")
             await amountA.fill("0.00")
             await amountB.fill("0.00")
-            await expect(validation).toContainText(
+            await expect(footer.getByRole("status")).toContainText(
                 "提交审批至少需要一条核销分配",
             )
             await expect(submit).toBeDisabled()
@@ -104,7 +107,7 @@ export async function assertReceiptRegistrationDraft(
             await rowB.getByRole("checkbox").uncheck()
             await expect(amountB).toHaveCount(0)
             await expect(
-                footer.getByText("剩余待核销", { exact: true }).locator(".."),
+                footer.getByText("未核销金额", { exact: true }).locator(".."),
             ).toContainText("856.00")
             await expect(submit).toBeEnabled()
             await page
@@ -113,7 +116,7 @@ export async function assertReceiptRegistrationDraft(
             await expect(rowB.getByRole("checkbox")).toBeChecked()
             await expect(amountB).toHaveValue("644.00")
             await expect(
-                footer.getByText("剩余待核销", { exact: true }).locator(".."),
+                footer.getByText("未核销金额", { exact: true }).locator(".."),
             ).toContainText("212.00")
             await expect(submit).toBeEnabled()
         })
@@ -122,7 +125,7 @@ export async function assertReceiptRegistrationDraft(
             await page
                 .locator("#customer-receivables-session-save-draft")
                 .click()
-            await expect(page.getByText(/草稿已保存/)).toBeVisible()
+            await expect(page.getByText(/^已保存 /)).toBeVisible()
             await expect(amountA).toHaveValue("644.00")
             await expect(amountB).toHaveValue("644.00")
             const bankReference = page.locator(
@@ -168,13 +171,14 @@ export async function assertReceiptRegistrationDraft(
             ).toHaveLength(0)
         })
 
-        await test.step("桌面与窄窗口回款表单、底部操作可达", async () => {
+        await test.step("桌面与窄窗口回款表单、核对区操作可达", async () => {
             for (const viewport of [
                 { width: 1440, height: 1024 },
                 { width: 1024, height: 768 },
                 { width: 768, height: 1024 },
             ]) {
                 await page.setViewportSize(viewport)
+                await submit.scrollIntoViewIfNeeded()
                 await expect(submit).toBeInViewport()
                 const dimensions = await page.evaluate(() => ({
                     width: document.documentElement.clientWidth,
@@ -202,7 +206,7 @@ export async function assertReceiptRegistrationDraft(
                     ) {
                         expect(
                             previous.x + previous.width + 8,
-                            "底部金额之间须保留间距，不得重叠",
+                            "核对区金额之间须保留间距，不得重叠",
                         ).toBeLessThanOrEqual(current.x)
                     }
                 }

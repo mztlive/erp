@@ -3,7 +3,7 @@
  * 文档: docs/erp-phase-1.md §6.5.4（红票=Invoice，NO_APPROVAL）；
  *       docs/approval-workflow-contract.md §4.3；docs/workbench-workitem-contract.md §3
  * 账号: xiaoshou 建客户/合同/销售单并提交开票申请；caigou 采购确认销售单并供给分配；
- *       caiwu 审批开票申请与采购单（形成应付）；kaipiao 从批准后的 W01 登记销项发票，
+ *       caiwu 审批开票申请与采购单（形成应付）；kaipiao 按批准后的 W01 任务调用完整票面接口登记销项发票，
  *       在 W11/W12 按 Invoice 强类型命令登记销项/进项红票。禁止把红票送进审批流。
  *
  * 文档-代码差异（以代码为准）:
@@ -15,10 +15,11 @@
  * 4. 销项红票弹窗只填金额+原因，不填红票号码（后端按幂等键生成 HT-…）；
  *    进项红票弹窗红票号码必填，默认 R{原票号}。
  * 5. 销项开票必须先提交 SalesInvoiceRequest 并审批通过，再从 W01 SALES_INVOICE_EXECUTION
- *    原地登记。红冲恢复可申请余额，不恢复旧申请授权，也不自动生成新开票任务。
+ *    授权调用完整票面登记接口。红冲恢复可申请余额，不恢复旧申请授权，也不自动生成新开票任务。
  * 6. 销售单对象中心冲正/红票关闭（canRequestReverse=false），红票只在财务工作台。
  */
 import { archiveContractViaUi } from "../helpers/contracts"
+import { selectExistingContractForSalesOrder, expectSalesOrderContractSummary } from "../helpers/sales-orders"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -36,11 +37,9 @@ import { apiGet, apiToken } from "../helpers/api"
 import { createCustomerViaUi } from "../helpers/customers"
 import { headedAwareViewport } from "../helpers/headed"
 import {
-    expectInvoiceEvidenceCommit,
+    registerDetailedSalesInvoice,
     expectSalesInvoiceEvidence,
-    invoiceEvidenceFiles,
     submitSalesInvoiceRequest,
-    uploadInvoiceEvidence,
 } from "../helpers/invoices"
 import { loginViaUi, openLoggedInWorkspace } from "../helpers/login"
 import { expandSourcingEditor } from "../helpers/sourcing"
@@ -126,7 +125,7 @@ test("销项与进项红票按 Invoice 强类型命令登记，不进审批且�
         await expectNoChangeOrder(page)
         await page.getByRole("tab", { name: /^采购/ }).click()
         await expect(page.getByTestId("sales-order-purchase-status")).toContainText(
-            "待采购",
+            "供给未完全覆盖",
             { timeout: TIMEOUT },
         )
         await expect(page.getByText("本单还没有采购单。")).toBeVisible({ timeout: TIMEOUT })
@@ -169,7 +168,7 @@ test("销项与进项红票按 Invoice 强类型命令登记，不进审批且�
         // 后端工作台搜索不匹配单号，不填搜索框，直接断言无开票任务。
         await expect(
             kaipiao.page.getByRole("button", {
-                name: new RegExp(`销项开票处理[\\s\\S]*${escapeRe(order.orderNo)}`),
+                name: new RegExp(`销项开票[\\s\\S]*${escapeRe(legalName)}`),
             }),
         ).toHaveCount(0, { timeout: LONG })
         await expect(kaipiao.page.getByRole("button", { name: /发票审批|销项发票审批/ })).toHaveCount(0)
@@ -213,7 +212,7 @@ test("销项与进项红票按 Invoice 强类型命令登记，不进审批且�
         await expectNotClosed(page)
         await expectFulfillmentNotStarted(page)
         await expectNoChangeOrder(page)
-        await page.getByRole("tab", { name: /^票款/ }).click()
+        await page.getByRole("tab", { name: "发票", exact: true }).click()
         await expect(page.getByRole("heading", { name: "开票申请" })).toBeVisible({ timeout: LONG })
         await expect(page.locator("#customer-receivables-preview-invoice-red")).toHaveCount(0)
 
@@ -228,7 +227,7 @@ test("销项与进项红票按 Invoice 强类型命令登记，不进审批且�
             /当前没有待处理事项|当前筛选没有待办|范围内没有待办/,
         )
         await expect(reopenList.or(emptyQueue).first()).toBeVisible({ timeout: LONG })
-        await expect(kaipiao.page.getByRole("button", { name: /销项开票处理/ })).toHaveCount(0)
+        await expect(kaipiao.page.getByRole("button", { name: /销项开票/ })).toHaveCount(0)
         await expect(kaipiao.page.getByRole("button", { name: /发票审批|销项发票审批/ })).toHaveCount(0)
         await expect(kaipiao.page.getByRole("button", { name: /^(通过|同意审批)$/ })).toHaveCount(0)
         await expect(kaipiao.page.getByRole("button", { name: "驳回", exact: true })).toHaveCount(0)
@@ -247,7 +246,7 @@ test("销项与进项红票按 Invoice 强类型命令登记，不进审批且�
         await page.goto(`/sales/orders/${order.id}`)
         await page.getByRole("tab", { name: /^采购/ }).click()
         await expect(page.getByTestId("sales-order-purchase-status")).toContainText(
-            "采购已覆盖",
+            "供给已覆盖",
             { timeout: LONG },
         )
         await expectFulfillmentNotStarted(page)
@@ -474,17 +473,10 @@ async function createAndSubmitPhysicalSalesOrder(
     input: { customerId: string; contractNo: string; legalName: string },
 ) {
     await page.goto(`/sales/orders?mode=create&customerId=${encodeURIComponent(input.customerId)}`)
-    await expect(
-        page.getByRole("heading", { name: /新建销售单|业务信息/ }),
-    ).toBeVisible({ timeout: LONG })
-
-    await chooseOption(
-        page,
-        page.locator("#sales-orders-create-contract"),
-        input.contractNo,
-        input.contractNo,
-    )
-    await expect(page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(input.legalName))
+    await selectExistingContractForSalesOrder(page, input.contractNo)
+    await expectSalesOrderContractSummary(page, {
+        customerName: input.legalName, paymentTerms: "货到 30 天", contractNo: input.contractNo,
+    })
     await expectLoggedInSalesOwner(page, LONG)
 
     await chooseOption(
@@ -493,14 +485,12 @@ async function createAndSubmitPhysicalSalesOrder(
         "年节礼包",
         "年节",
     )
-    await expect(page.locator("#sales-orders-create-header-payment-terms")).toHaveValue("货到 30 天")
-    await expect(page.locator("#sales-orders-create-header-payment-terms")).toBeDisabled()
 
     await page.locator("#sales-orders-create-line-items-add").click()
     await expect(page.getByRole("dialog").getByRole("heading", { name: "添加商品" })).toBeVisible({
         timeout: TIMEOUT,
     })
-    const skuSearch = page.locator("#master-data-list-sellable-list-toolbar-search-input")
+    const skuSearch = page.locator("#sales-orders-sku-picker-filter-search")
     await skuSearch.fill(SKU_NAME)
     await skuSearch.press("Enter")
     const skuCheckbox = page.getByRole("checkbox", { name: new RegExp(`选择 ${SKU_NAME}`) })
@@ -618,41 +608,14 @@ async function registerSalesInvoiceFromWorkspace(
     page: Page,
     orderNo: string,
     invoiceNo: string,
-    _customerName: string,
+    customerName: string,
 ) {
-    await openWorkspaceTask(page, "销项开票处理", orderNo, "finance")
-    await expect(page.getByLabel("当前开票任务")).toBeVisible({ timeout: LONG })
-    await expect(page.getByRole("heading", { name: /核销 · / })).toBeVisible({ timeout: LONG })
-    await expect(page.getByRole("heading", { name: "销项发票记录" })).toBeVisible({
-        timeout: TIMEOUT,
+    // 附件登记不采集税额，不能作为红冲依据；完整票面接口仍受当前任务和批准额度约束。
+    const result = await registerDetailedSalesInvoice(page, {
+        orderNo, customerName, invoiceNo, amount: UNIT_PRICE, netAmount: "1139.82", taxAmount: "148.18",
     })
-    await assertNoInvoiceApprovalUi(page)
-
-    await page.locator("#customer-receivables-session-invoice-no").fill(invoiceNo)
-    await page.locator("#customer-receivables-session-gross-amount").fill(UNIT_PRICE)
-    const files = invoiceEvidenceFiles(invoiceNo).slice(0, 1)
-    await uploadInvoiceEvidence(page, files)
-    const join = page.getByRole("button", { name: "加入" }).first()
-    if (await join.isVisible().catch(() => false)) {
-        await join.click()
-    }
-    const fill = page.getByRole("button", { name: "填满" }).first()
-    await expect(fill).toBeVisible({ timeout: TIMEOUT })
-    await fill.click()
-
-    await page.locator("#customer-receivables-session-submit").click()
-    await expect(page.getByRole("heading", { name: "确认登记销项发票并分配" })).toBeVisible({
-        timeout: TIMEOUT,
-    })
-    const confirm = page.getByRole("alertdialog").filter({ hasText: "确认登记销项发票并分配" })
-    await expect(confirm.getByText("提交审批")).toHaveCount(0)
-    const committed = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === "/admin/invoices/commit-with-files", { timeout: LONG })
-    await page.locator("#customer-receivables-session-invoice-confirm-dialog-confirm").click()
-    const invoiceId = await expectInvoiceEvidenceCommit(await committed, files)
-    await expect(confirm).toBeHidden({ timeout: LONG })
-    // 任务完成后处理面板会关闭，以持久化台账验证发票登记结果。
     await assertSalesInvoiceRow(page, invoiceNo, { kind: "蓝票", status: "已登记" })
-    return { invoiceId, invoiceNo, files }
+    return result
 }
 
 async function searchCustomerInvoices(page: Page, query: string) {

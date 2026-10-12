@@ -172,23 +172,38 @@ export function useWorkspaceHome() {
     React.useEffect(() => {
         if (
             !pendingFocusWorkItemId ||
+            urlState.currentWorkItemId !== pendingFocusWorkItemId ||
+            !accountProfileQuery.isSuccess ||
+            accountProfileQuery.isFetching ||
+            !dashboardQuery.isSuccess ||
+            dashboardQuery.isFetching ||
+            dashboardQuery.isPlaceholderData ||
             narrowDetailOpen ||
             narrowDetailSettledOpen
         )
             return
+        // 完成请求会重验权限并刷新队列；两者稳定后才聚焦，避免命中即将被骨架屏替换的旧节点。
         const frame = window.requestAnimationFrame(() => {
             const target = document.getElementById(
                 taskButtonId(pendingFocusWorkItemId),
             )
             if (!(target instanceof HTMLButtonElement)) return
             target.focus()
-            setPendingFocusWorkItemId(undefined)
+            if (document.activeElement === target) {
+                setPendingFocusWorkItemId(undefined)
+            }
         })
         return () => window.cancelAnimationFrame(frame)
     }, [
+        accountProfileQuery.isFetching,
+        accountProfileQuery.isSuccess,
+        dashboardQuery.isFetching,
+        dashboardQuery.isPlaceholderData,
+        dashboardQuery.isSuccess,
         narrowDetailOpen,
         narrowDetailSettledOpen,
         pendingFocusWorkItemId,
+        urlState.currentWorkItemId,
         view?.items,
     ])
 

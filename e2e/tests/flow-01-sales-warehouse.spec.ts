@@ -14,6 +14,7 @@
  * - 销售单票款页只读，回款改在客户往来页登记
  */
 import { archiveContractViaUi } from "../helpers/contracts";
+import { selectExistingContractForSalesOrder, expectSalesOrderContractSummary } from "../helpers/sales-orders"
 import path from "node:path";
 import { test, expect, type Page } from "../helpers/test";
 
@@ -21,7 +22,7 @@ import { createCustomerViaUi } from "../helpers/customers";
 import { apiGet } from "../helpers/api";
 import { toAutomationIdSegment } from "../../erp-client/lib/automation-id";
 import { addDeliveryTrackingEntry, uploadAcceptanceEvidence } from "../helpers/fulfillment";
-import { submitSalesInvoiceRequest } from "../helpers/invoices";
+import { completeSalesInvoiceFromWorkspace, submitSalesInvoiceRequest } from "../helpers/invoices";
 import { openLoggedInWorkspace, type LoggedInSession } from "../helpers/login";
 import { payOnlySupplierTask } from "../helpers/payments";
 import {
@@ -141,28 +142,26 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
             timeout: UI_TIMEOUT,
         });
         await page.locator("#sales-orders-list-header-create").click();
+        await selectExistingContractForSalesOrder(page, contractNo);
         await expect(page.getByRole("heading", { name: "销售明细" })).toBeVisible({
             timeout: UI_TIMEOUT,
         });
         await expect(page.getByLabel("供应商")).toHaveCount(0);
         await expect(page.getByLabel("履约责任")).toHaveCount(0);
         await expect(page.getByLabel("采购成本")).toHaveCount(0);
-        await chooseOption(page, page.locator("#sales-orders-create-contract"), contractNo);
-        await expect(page.locator("#sales-orders-create-customer")).toHaveValue(new RegExp(customerName))
+        await expectSalesOrderContractSummary(page, { customerName, paymentTerms: "货到 15 天", contractNo });
         await chooseOption(
             page,
             page.locator("#sales-orders-create-header-welfare-scene"),
             "年节礼包",
         );
-        await expect(page.locator("#sales-orders-create-header-payment-terms")).toHaveValue("货到 15 天")
-    await expect(page.locator("#sales-orders-create-header-payment-terms")).toBeDisabled()
         await page.locator("#sales-orders-create-line-items-add").click();
         const skuDialog = page.getByRole("dialog", { name: "添加商品" });
         await expect(skuDialog).toBeVisible({ timeout: UI_TIMEOUT });
         await skuDialog
-            .locator("#master-data-list-sellable-list-toolbar-search-input")
+            .locator("#sales-orders-sku-picker-filter-search")
             .fill(SKU_KEYWORD);
-        await skuDialog.locator("#master-data-list-sellable-list-toolbar-search-input").press("Enter");
+        await skuDialog.locator("#sales-orders-sku-picker-filter-search").press("Enter");
         const skuRow = skuDialog.getByRole("checkbox", { name: new RegExp(`选择.*${SKU_NAME}`) });
         await expect(skuRow.first()).toBeVisible({ timeout: UI_TIMEOUT });
         await skuRow.first().check();
@@ -241,7 +240,7 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
             timeout: UI_TIMEOUT,
         });
         await page.getByRole("tab", { name: /采购/ }).click();
-        await expect(page.getByTestId("sales-order-purchase-status")).toContainText("采购已覆盖", {
+        await expect(page.getByTestId("sales-order-purchase-status")).toContainText("供给已覆盖", {
             timeout: UI_TIMEOUT,
         });
         await expect(page.getByText("草稿")).toHaveCount(0);
@@ -428,39 +427,9 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
         await approveCurrentDocument(page);
 
         page = await switchTo("kaipiao");
-        await openWorkspaceTask(page, "销项开票处理", salesOrderNo, "finance");
-        await expect(page.getByRole("heading", { name: `核销 · ${customerName}` })).toBeVisible({
-            timeout: UI_TIMEOUT,
+        await completeSalesInvoiceFromWorkspace(page, {
+            orderNo: salesOrderNo, customerName, amount: "2576.00", evidenceName: `INV${stamp}`,
         });
-        await page.locator("#customer-receivables-session-invoice-no").fill(`INV${stamp}`);
-        const gross = page.locator("#customer-receivables-session-gross-amount");
-        if (!(await gross.inputValue())) {
-            await gross.fill("2576.00");
-        }
-        const addInvoicePool = page.getByRole("button", { name: "加入" }).first();
-        if (await addInvoicePool.count()) {
-            await addInvoicePool.click();
-            await expect(page.getByText("已加入").first()).toBeVisible({ timeout: UI_TIMEOUT });
-        }
-        const fillInvoice = page.getByRole("button", { name: "填满" }).first();
-        await expect(fillInvoice).toBeVisible({ timeout: UI_TIMEOUT });
-        await fillInvoice.click();
-        await page.locator("#customer-receivables-session-submit").click();
-        await expect(
-            page.getByRole("heading", { name: "确认登记销项发票并分配" }),
-        ).toBeVisible({ timeout: UI_TIMEOUT });
-        await page
-            .locator("#customer-receivables-session-invoice-confirm-dialog-confirm")
-            .click({ force: true });
-        // 工作台提交后任务完成、会话面板随之卸载（结果标题不渲染）；任务消失证明提交成功，
-        // 发票登记即时生效，下游已开齐断言覆盖正确性。
-        await expect(
-            page.getByRole("button", {
-                name: new RegExp(
-                    `销项开票处理[\\s\\S]*${salesOrderNo}|${salesOrderNo}[\\s\\S]*销项开票处理`,
-                ),
-            }),
-        ).toHaveCount(0, { timeout: UI_TIMEOUT });
 
         page = await switchTo("xiaoshou");
         await page.goto(`/sales/orders/${salesOrderId}`);

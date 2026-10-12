@@ -211,7 +211,7 @@ impl FundsAccess {
             .iter()
             .map(|projected| {
                 let (sales, purchase) = projected.links();
-                self.cut_invoice_row(
+                Self::cut_invoice_row(
                     &projected.row,
                     &sales,
                     &purchase,
@@ -379,7 +379,6 @@ impl FundsAccess {
     /// # 错误
     /// 不返回错误。
     pub(super) fn cut_invoice_row(
-        &self,
         row: &InvoiceRow,
         sales: &[SalesInvoiceLink],
         purchase: &[PurchaseInvoiceLink],
@@ -414,6 +413,9 @@ impl FundsAccess {
         let allocated = sum_invoice_signed(sales, purchase);
         ScopedInvoiceRow {
             id: row.id.clone(),
+            version: whole.then_some(row.version),
+            party_id: whole.then(|| row.party_id.clone()),
+            invoice_code: row.invoice_code.clone().filter(|_| whole),
             invoice_no: row.invoice_no.clone(),
             invoice_direction: row.invoice_direction,
             invoice_kind: row.invoice_kind,
@@ -422,6 +424,9 @@ impl FundsAccess {
             created_at: row.created_at,
             visible_allocated_share: sum_invoice_matched(sales, purchase, sales_matched, purchase_matched),
             gross_amount: whole_amount(whole, row.gross_amount),
+            net_amount: row.net_amount.filter(|_| whole),
+            tax_amount: row.tax_amount.filter(|_| whole),
+            original_invoice_id: row.original_invoice_id.clone().filter(|_| whole),
             allocated_total: whole_amount(whole, allocated),
             unallocated_amount: whole_amount(whole, invoice_unallocated(row, allocated)),
             allocations: Some(allocations),
@@ -487,7 +492,7 @@ impl FundsAccess {
         if !whole && sales_matched.is_empty() && purchase_matched.is_empty() {
             return Err(Error::NotFound("发票不存在".into()));
         }
-        let data = self.cut_invoice_row(&row, sales, purchase, &sales_matched, &purchase_matched, whole);
+        let data = Self::cut_invoice_row(&row, sales, purchase, &sales_matched, &purchase_matched, whole);
         let mut parts = vec![format!("{}:{}", row.id, row.version)];
         for order in sales_matched.iter().filter_map(|id| sales_facts.get(id)) {
             parts.push(format!("{}:{}", order.owner_user_id, order.version));
@@ -736,7 +741,9 @@ fn invoice_scope_version(authorization: &FundsAuthorization, versions: &[Invoice
 
 #[cfg(test)]
 mod tests {
-    use erp_finance::entity::receivable::AllocationAction;
+    use erp_core::common::stable::StableBase;
+    use erp_core::common::time::BusinessDate;
+    use erp_finance::entity::receivable::{AllocationAction, InvoiceStatus};
 
     use super::*;
 
@@ -755,6 +762,91 @@ mod tests {
                 allocated_tax_amount: Some(zero_amount()),
                 reverses_allocation_id: None,
             },
+        }
+    }
+
+    fn invoice() -> InvoiceRow {
+        InvoiceRow {
+            sales_invoice_request_id: Some("request".into()),
+            id: "invoice".into(),
+            stable: StableBase::new(InvoiceStatus::Registered, "invoicer"),
+            invoice_direction: InvoiceDirection::Sales,
+            invoice_kind: InvoiceKind::Blue,
+            party_id: "party".into(),
+            invoice_code: Some("code".into()),
+            invoice_no: Some("invoice-no".into()),
+            invoice_date: Some(BusinessDate::from_ymd(2026, 10, 12).unwrap()),
+            gross_amount: "1288.00".parse().unwrap(),
+            net_amount: Some("1139.82".parse().unwrap()),
+            tax_amount: Some("148.18".parse().unwrap()),
+            rounding_adjustment_amount: zero_amount(),
+            rounding_reason: None,
+            original_invoice_id: None,
+            version: 4,
+            created_at: 1,
+        }
+    }
+
+    #[test]
+    fn whole_invoice_preserves_recorded_tax_and_execution_identity() {
+        let invoice = invoice();
+        let row = FundsAccess::cut_invoice_row(&invoice, &[], &[], &[], &[], true);
+        assert_eq!(row.version, Some(4));
+        assert_eq!(row.party_id.as_deref(), Some("party"));
+        assert_eq!(row.invoice_code.as_deref(), Some("code"));
+        assert_eq!(row.net_amount, invoice.net_amount);
+        assert_eq!(row.tax_amount, invoice.tax_amount);
+        assert!(!row.permission_limited);
+        let json = serde_json::to_value(row).unwrap();
+        assert_eq!(json["net_amount"], "1139.82");
+        assert_eq!(json["tax_amount"], "148.18");
+        assert_eq!(json["version"], 4);
+        assert_eq!(json["party_id"], "party");
+        assert_eq!(json["invoice_code"], "code");
+    }
+
+    #[test]
+    fn evidence_invoice_preserves_unknown_tax_instead_of_fabricating_zero() {
+        let mut invoice = invoice();
+        invoice.invoice_code = None;
+        invoice.invoice_no = None;
+        invoice.invoice_date = None;
+        invoice.net_amount = None;
+        invoice.tax_amount = None;
+        let row = FundsAccess::cut_invoice_row(&invoice, &[], &[], &[], &[], true);
+        assert_eq!(row.gross_amount, Some(invoice.gross_amount));
+        let json = serde_json::to_value(row).unwrap();
+        for field in ["invoice_code", "invoice_no", "invoice_date", "net_amount", "tax_amount"] {
+            assert!(json[field].is_null(), "{field} must remain unknown");
+        }
+    }
+
+    #[test]
+    fn partial_invoice_hides_whole_ticket_fields_and_original_identity() {
+        let mut invoice = invoice();
+        invoice.invoice_kind = InvoiceKind::Red;
+        invoice.original_invoice_id = Some("original".into());
+        let sales = vec![sales_link("a", Some("so-a"), "60"), sales_link("b", Some("so-b"), "40")];
+        let matched = vec!["so-a".into()];
+        let whole = FundsAccess::cut_invoice_row(&invoice, &sales, &[], &matched, &[], true);
+        assert_eq!(whole.original_invoice_id.as_deref(), Some("original"));
+        let partial = FundsAccess::cut_invoice_row(&invoice, &sales, &[], &matched, &[], false);
+        assert!(partial.permission_limited);
+        assert_eq!(partial.visible_allocated_share, "60".parse().unwrap());
+        assert_eq!(partial.allocations.as_ref().unwrap().len(), 1);
+        let json = serde_json::to_value(partial).unwrap();
+        for field in [
+            "version",
+            "party_id",
+            "invoice_code",
+            "gross_amount",
+            "net_amount",
+            "tax_amount",
+            "original_invoice_id",
+            "allocated_total",
+            "unallocated_amount",
+        ] {
+            assert!(json[field].is_null(), "{field} requires whole-invoice access");
         }
     }
 

@@ -58,6 +58,8 @@ export async function createProductImportDirectUpload(input: {
             byte_size: input.byteSize,
             request_id: input.requestId,
         },
+        // 初始化同步等待对象存储创建分片上传，沿用文件上传的等待时限。
+        { timeoutMs: 60_000 },
     )
 }
 

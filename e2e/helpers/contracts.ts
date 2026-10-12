@@ -14,8 +14,10 @@ export async function archiveContractViaUi(page: Page, input: {
     paymentTerms?: string
     validTo?: string
 }) {
-    const dialog = page.getByRole("dialog", { name: /^导入合同(?:新版本)?$/ })
-    await expect(dialog).toBeVisible()
+    const fromSalesOrder = new URL(page.url()).pathname.startsWith("/sales/orders")
+    const workspace = fromSalesOrder
+        ? page.locator("#sales-orders-create-contract-import")
+        : page.getByRole("dialog", { name: /^导入合同(?:新版本)?$/ })
     const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" })
     const fields = {
         customer_name: input.customerName,
@@ -36,23 +38,27 @@ export async function archiveContractViaUi(page: Page, input: {
         // The real run endpoint observes REVIEW and does not call external vendors.
         await route.continue({ url: `${API_BASE}${url.pathname}` })
     }, { times: 1 })
-    await dialog.locator("#card-contracts-upload-pdf-input").setInputFiles(input.pdf)
-    const customer = dialog.locator("#contract-import-customer")
+    const upload = fromSalesOrder
+        ? page.locator("#sales-orders-create-entry-upload-input")
+        : page.locator("#contracts-list-upload-input")
+    await upload.setInputFiles(input.pdf)
+    await expect(workspace).toBeVisible()
+    const customer = workspace.locator("#contract-import-customer")
     await expect(customer).toBeVisible({ timeout: 60_000 })
     await expect(customer).toHaveValue(new RegExp(input.customerName))
-    await expect(dialog.locator("#contract-import-company")).toHaveValue(new RegExp(SIGNING_COMPANY))
-    await dialog.locator("#contract-import-next").click()
-    await dialog.locator("#contract-import-edit-contract-no").fill(input.contractNo)
-    await dialog.locator("#contract-import-next").click()
+    await expect(workspace.locator("#contract-import-company")).toHaveValue(new RegExp(SIGNING_COMPANY))
+    await workspace.locator("#contract-import-next").click()
+    await workspace.locator("#contract-import-edit-contract-no").fill(input.contractNo)
+    await workspace.locator("#contract-import-next").click()
     const confirmed = page.waitForResponse(response => response.request().method() === "POST" && /\/contract-imports\/[^/]+\/confirm$/.test(new URL(response.url()).pathname))
-    await dialog.locator("#contract-import-confirm").click()
+    await workspace.locator("#contract-import-confirm").click()
     const response = await confirmed
     expect(response.ok(), await response.text()).toBeTruthy()
     const body = await response.json()
     expect(body.data.status).toBe("succeeded")
     if (new URL(page.url()).pathname === "/sales/contracts") {
-        await dialog.locator("#contract-import-use").click()
+        await workspace.locator("#contract-import-use").click()
     }
-    await expect(dialog).toBeHidden()
+    await expect(workspace).toBeHidden()
     return body.data.result as { id: string; contract_no: string; revision_id: string }
 }

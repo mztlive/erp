@@ -462,13 +462,16 @@ fn request_row(
     let fact = facts.get(row.sales_order_id.as_ref());
     ScopedInvoiceRequestRow {
         id: row.base.id.clone(),
+        version: row.base.version,
         request_no: row.request_no.clone(),
+        receivable_account_id: row.receivable_account_id.to_string(),
         sales_order_id: row.sales_order_id.to_string(),
         sales_order_no: order_nos.get(row.sales_order_id.as_ref()).cloned().unwrap_or_default(),
         status: row.status,
         created_at: row.base.created_at,
         applicant_user_id: row.created_by.clone(),
         handler_user_id: handler,
+        work_item_id: row.work_item_id.clone(),
         amount: row.data.amount,
         data: row.data.clone(),
         invoiced_amount: row.invoiced_amount,
@@ -610,6 +613,31 @@ mod tests {
         assert_eq!(json["data"]["invoice_content"], "福利用品");
         assert_eq!(json["data"]["reason"], "按合同开票");
         assert_eq!(json["invoiced_amount"], "3.25");
+    }
+
+    /// 开票使用当前申请版本，来源与任务身份不依赖浏览器提交缓存或任务负责人映射。
+    #[test]
+    fn scoped_request_keeps_command_version_and_bound_identity() {
+        let mut request = request("invoice", "so-a", Some("work"));
+        request.invoiced_amount = "3.25".parse().unwrap();
+        let row = request_row(&request, None, &HashMap::new(), &HashMap::new());
+        assert_eq!(row.version, 4);
+        assert_eq!(row.receivable_account_id, "account");
+        assert_eq!(row.work_item_id.as_deref(), Some("work"));
+        assert_eq!(request.completion_amount(row.version).unwrap(), "6.74".parse().unwrap());
+        let json = serde_json::to_value(&row).unwrap();
+        assert_eq!(json["version"], 4);
+        assert_eq!(json["receivable_account_id"], "account");
+        assert_eq!(json["work_item_id"], "work");
+
+        request.base.version += 1;
+        assert!(request.completion_amount(row.version).is_err());
+        request.work_item_id = None;
+        let refreshed = request_row(&request, None, &HashMap::new(), &HashMap::new());
+        assert_eq!(refreshed.version, 5);
+        assert!(refreshed.work_item_id.is_none());
+        assert_eq!(request.completion_amount(refreshed.version).unwrap(), "6.74".parse().unwrap());
+        assert!(serde_json::to_value(refreshed).unwrap()["work_item_id"].is_null());
     }
 
     /// 来源授权与所有业务条件取交集；权限政策不因共享事实变宽。
