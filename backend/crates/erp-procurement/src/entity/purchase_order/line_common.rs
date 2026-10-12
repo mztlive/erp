@@ -32,7 +32,7 @@ pub(crate) struct PurchaseLineFields {
     pub sku_id: Option<SkuId>,
     /// 商品名称快照；物流费用行为空。
     pub product_name_snapshot: Option<String>,
-    /// 规格快照；物流费用行为空。
+    /// 可选规格快照；来源销售行无规格时及物流费用行为空。
     pub specification_snapshot: Option<String>,
     /// 基础单位数量；物流费用行为空。
     pub quantity: Option<Quantity>,
@@ -54,6 +54,7 @@ pub(crate) struct PurchaseLineFields {
 ///
 /// 按行类型强制字段归属（§6.6）：
 /// - 商品/服务成本行：`sku_id`、商品名称、单位、数量（>0）、含税单价、进项税率必填；
+///   规格沿用来源销售行，允许为空，不补造占位规格；
 /// - 物流费用行：`sku_id`、商品名称、单位、数量、含税单价全部为空，
 ///   与商品成本分开计税（进项税率必填），金额直接入账；
 /// - 两种行都必须满足金额三元组守恒：商品行按 `line_amounts(单价, 数量, 税率)`
@@ -281,7 +282,6 @@ fn validate_item_service_line(fields: &PurchaseLineFields) -> Result<()> {
     }
     let sku_id = fields.sku_id.as_ref().ok_or("商品/服务行必须引用 SKU")?;
     ensure_snapshot_present(fields.product_name_snapshot.as_deref(), "商品名称")?;
-    ensure_snapshot_present(fields.specification_snapshot.as_deref(), "规格")?;
     ensure_snapshot_present(fields.base_unit_code.as_deref(), "单位")?;
     let quantity = fields.quantity.ok_or("商品/服务行数量不能为空")?;
     if quantity.to_decimal() <= rust_decimal::Decimal::ZERO {

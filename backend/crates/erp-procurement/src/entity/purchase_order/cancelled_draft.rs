@@ -610,7 +610,7 @@ mod tests {
         assert_eq!(cancelled, before);
 
         let (previous, mut cancelled, source, mut lines) = fixture();
-        lines[0].specification_snapshot = None;
+        lines[0].product_name_snapshot = None;
         let before = cancelled.clone();
         assert!(reopen(&mut cancelled, &previous, &source, &lines).is_err());
         assert_eq!(cancelled, before);

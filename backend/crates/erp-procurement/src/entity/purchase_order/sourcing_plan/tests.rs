@@ -2,12 +2,13 @@ use std::str::FromStr;
 
 use erp_core::common::time::Instant;
 use erp_core::ids::{SalesOrderRevisionLineId, SkuId, SupplierAccountId, SupplierOfferingId, WarehouseId};
-use erp_core::money::{Quantity, Rate, UnitPrice};
+use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 
 use super::{
     SourcingAssignment, SourcingAssignmentSet, SourcingPlan, SourcingPlanError, StockBasisGroup,
     StockBasisLine, SupplySourceType, stock_basis_id_for,
 };
+use crate::dto::purchase_order::SavePurchaseOrderLine;
 use crate::entity::facts::{
     AvailabilityFact as SupplierOfferingAvailability, AvailabilityStatus, CurrentRevisionFact, FactIdentity,
     OfferingFact as SupplierOffering, OfferingRevisionFact as SupplierOfferingRevision, ProductKind,
@@ -19,7 +20,83 @@ use crate::entity::purchase_order::coverage::SalesProcurementCoverageLine;
 use crate::entity::purchase_order::creation_basis::{
     BasisGroup, BasisLine, BasisScope, LineSupply, basis_id_for,
 };
-use crate::entity::purchase_order::{FulfillmentResponsibility, ProcurementCoverageSummary, PurchaseType};
+use crate::entity::purchase_order::{
+    FulfillmentResponsibility, ProcurementCoverageSummary, PurchaseChangeSubmissionLine,
+    PurchaseOrderRevisionLine, PurchaseOrderSubmissionLine, PurchaseType,
+};
+use crate::service::purchase_order::creation_basis::{
+    build_submission_line, compute_selected_lines, validate_requested_quantities,
+};
+
+/// 选源建单沿用销售规格的可选语义，冻结和生效版本不得补造规格或丢失已有规格。
+#[test]
+fn sourcing_preserves_optional_specification_through_formalization() {
+    for (source, expected) in [(None, None), (Some("  "), None), (Some(" 礼盒装 "), Some("礼盒装"))] {
+        let mut group = basis_group(
+            "supplier-1",
+            "NET-30",
+            FulfillmentResponsibility::SupplierDirect,
+            "10",
+            &[("sol-1", "10", "0")],
+        );
+        group.lines[0].coverage.revision_line.spec_snapshot = source.map(str::to_string);
+        group.lines[0].supply.offering.stable.current_revision_id =
+            Some(group.lines[0].supply.revision.base.id.clone());
+        let order = sales_order("so-1");
+        let basis_id = basis_id_for(&order, &group, "wi-1", None);
+        let assignments = SourcingAssignmentSet::normalize(&[assignment(
+            "sol-1",
+            &basis_id,
+            SupplySourceType::Purchase,
+            None,
+            "3",
+        )])
+        .unwrap();
+        let plan = SourcingPlan::plan(&order, &[group], &[], "wi-1", &assignments).unwrap();
+        let purchase = &plan.purchase_plans()[0];
+        let selected = validate_requested_quantities(&purchase.requested_lines, &purchase.group).unwrap();
+        let computed = compute_selected_lines(&selected, purchase.group.scope.fulfillment_responsibility);
+        let draft = build_submission_line(&"draft".to_string().into(), 1, &computed.lines[0]).unwrap();
+        let frozen = PurchaseOrderSubmissionLine::freeze_from_draft(
+            "frozen-line".to_string().into(),
+            "frozen".to_string().into(),
+            &draft,
+        )
+        .unwrap();
+        let revision = PurchaseOrderRevisionLine::from_submission_line(
+            "revision-line".to_string().into(),
+            "revision".to_string().into(),
+            &frozen,
+        )
+        .unwrap();
+
+        assert_eq!(draft.specification_snapshot.as_deref(), expected);
+        assert_eq!(frozen.specification_snapshot, draft.specification_snapshot);
+        assert_eq!(revision.specification_snapshot, draft.specification_snapshot);
+        assert_eq!(revision.sku_id, Some(SkuId::new("sku-1")));
+        assert_eq!(revision.quantity, Some(Quantity::from_str("3").unwrap()));
+        assert_eq!(revision.allocated_quantity, draft.allocated_quantity);
+        assert_eq!((revision.gross_amount, revision.net_amount, revision.tax_amount), computed.totals);
+        assert_eq!(revision.gross_amount, Amount::from_str("18.00").unwrap());
+        assert_eq!(revision.supplier_offering_source, draft.supplier_offering_source);
+
+        let change_data = SavePurchaseOrderLine::from(&revision)
+            .to_line_input()
+            .unwrap()
+            .into_change_submission_line_data("change".to_string().into(), 1)
+            .unwrap();
+        let change =
+            PurchaseChangeSubmissionLine::new("change-line".to_string().into(), change_data).unwrap();
+        let changed = PurchaseOrderRevisionLine::from_change_submission_line(
+            "changed-line".to_string().into(),
+            "changed-revision".to_string().into(),
+            &change,
+        )
+        .unwrap();
+        assert_eq!(change.specification_snapshot.as_deref(), expected);
+        assert_eq!(changed.specification_snapshot, revision.specification_snapshot);
+    }
+}
 
 /// 构造销售当前版本头。
 fn revision(id: &str) -> SalesOrderRevision {

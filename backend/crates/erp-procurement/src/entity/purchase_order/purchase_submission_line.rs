@@ -502,6 +502,26 @@ mod tests {
         assert_eq!(line.line_type, PurchaseLineType::ItemService);
     }
 
+    /// 规格可空不影响 SKU、商品名称和单位的必填约束。
+    #[test]
+    fn unspecified_goods_still_require_identity_name_and_unit() {
+        let mut missing_sku = goods_line_data();
+        missing_sku.sku_id = None;
+        let mut missing_name = goods_line_data();
+        missing_name.product_name_snapshot = Some("  ".into());
+        let mut missing_unit = goods_line_data();
+        missing_unit.base_unit_code = None;
+        for (mut data, expected) in [
+            (missing_sku, "商品/服务行必须引用 SKU"),
+            (missing_name, "商品/服务行必须保存商品名称快照"),
+            (missing_unit, "商品/服务行必须保存单位快照"),
+        ] {
+            data.specification_snapshot = None;
+            let error = PurchaseOrderSubmissionLine::new("invalid".to_string().into(), data).unwrap_err();
+            assert_eq!(error.to_string(), expected);
+        }
+    }
+
     #[test]
     fn submission_line_logistics_fee_amounts_consistent() {
         let gross = Amount::from_str("50.00").unwrap();
