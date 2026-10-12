@@ -189,9 +189,9 @@ pub struct SalesProcurementCoverageView {
     pub remaining_quantity: Quantity,
     /// 覆盖进度，范围 `0..=1`。
     pub progress: Rate,
-    /// 已有正式采购仍引用销售历史版本，须完成采购正式变更后继续分配。
+    /// 已有采购当前提交或生效版本仍引用销售历史版本，须先处理后继续分配。
     pub source_changed: bool,
-    /// 历史销售版本下已采购的数量；不计入当前版本的合格覆盖。
+    /// 历史销售版本下的采购分配数量（含未生效提交）；不计入当前版本的合格覆盖。
     pub outdated_purchase_quantity: Quantity,
     /// 仍引用历史销售正式版本的采购单数。
     pub outdated_purchase_count: usize,
@@ -206,7 +206,7 @@ impl SalesProcurementCoverageView {
     /// # 错误
     /// 不返回错误；正式采购命令仍重验当前版本和执行资格。
     pub(crate) fn source_change_blocker(&self) -> Option<&'static str> {
-        self.source_changed.then_some("销售正式版本已变化，请先完成相关采购正式变更，再继续供给分配")
+        self.source_changed.then_some("销售版本已变化，请先处理相关采购单，再继续供给分配")
     }
 }
 

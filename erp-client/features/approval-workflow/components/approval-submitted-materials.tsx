@@ -2,20 +2,16 @@
 
 import { ApprovalMaterialFiles } from "./approval-material-files"
 import { ApprovalSalesOrderPaper } from "./approval-sales-order-paper"
+import {
+    ApprovalSubmittedSummary,
+    MaterialSectionHeading,
+    sectionValue,
+} from "./approval-submitted-summary"
 import { BusinessFailureState } from "@/components/business"
 import { Spinner } from "@/components/ui/spinner"
 import { displayBusinessText } from "@/lib/display-name"
 import { useApprovalMaterials } from "../hooks/use-approval-materials"
 import { displayActorName, displayReadableName } from "../display"
-
-const sectionValue = (section: {
-    value: string
-    object_id: string | null
-    numeric: boolean
-}) =>
-    !section.numeric && section.object_id?.trim() === section.value.trim()
-        ? "未记录名称"
-        : section.value
 
 /** 审批专用资料预览；不加载普通业务详情，不把冻结摘要当作完整单据。 */
 export function ApprovalSubmittedMaterials({
@@ -77,29 +73,42 @@ export function ApprovalSubmittedMaterials({
     const counterpartyName =
         displayReadableName(display.counterparty_label) ||
         displayReadableName(source.customer)
+    const isSummary = view === "all" && !salesOrder
     return (
         <article className="space-y-6 rounded-lg bg-card p-6 shadow-lg sm:p-10">
-            <header className="space-y-2 border-b pb-5 pr-8">
-                <h2 className="text-xl font-semibold">
-                    {view === "source-sales"
-                        ? "销售单预览"
-                        : view === "attachments"
-                          ? "合同、凭证及附件"
-                          : salesOrder
-                            ? "销售单提交预览"
-                            : "审批提交资料"}
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                    {view === "source-sales"
-                        ? `销售版本 V${sourceSnapshot?.revision_no ?? "—"}`
-                        : `提交版本 ${version}`}{" "}
-                    · 提交资料保留自此次提交，后续变化不改写原资料。
-                </p>
-                {view === "all" && !salesOrder && counterpartyName && (
-                    <p className="font-medium">{counterpartyName}</p>
-                )}
-                {view === "all" && !salesOrder && source.list_summary && (
-                    <p className="text-sm">{source.list_summary}</p>
+            <header className="space-y-1.5 border-b pb-5 pr-8">
+                {isSummary ? (
+                    <>
+                        <p className="text-xs font-medium text-muted-foreground">
+                            审批提交资料 · 提交版本 {version}
+                        </p>
+                        <h2 className="text-xl font-semibold">
+                            {counterpartyName || "审批提交资料"}
+                        </h2>
+                        {source.extra_sections.length === 0 &&
+                            source.list_summary && (
+                                <p className="text-sm">{source.list_summary}</p>
+                            )}
+                        <p className="text-sm text-muted-foreground">
+                            提交资料保留自此次提交，后续变化不改写原资料。
+                        </p>
+                    </>
+                ) : (
+                    <>
+                        <h2 className="text-xl font-semibold">
+                            {view === "source-sales"
+                                ? "销售单预览"
+                                : view === "attachments"
+                                  ? "合同、凭证及附件"
+                                  : "销售单提交预览"}
+                        </h2>
+                        <p className="text-sm text-muted-foreground">
+                            {view === "source-sales"
+                                ? `销售版本 V${sourceSnapshot?.revision_no ?? "—"}`
+                                : `提交版本 ${version}`}{" "}
+                            · 提交资料保留自此次提交，后续变化不改写原资料。
+                        </p>
+                    </>
                 )}
             </header>
             {view === "attachments" ? null : salesOrder ? (
@@ -119,92 +128,15 @@ export function ApprovalSubmittedMaterials({
                     此次审批的完整来源销售单暂不可读取，请刷新后重试；仍不可用时请联系管理员核对。
                 </p>
             ) : (
-                <>
-                    {(source.amount_label ||
-                        source.submitter_name ||
-                        source.extra_sections.length > 0) && (
-                        <dl className="grid gap-4 text-sm sm:grid-cols-2">
-                            {source.amount_label && (
-                                <div>
-                                    <dt className="text-xs text-muted-foreground">
-                                        提交金额
-                                    </dt>
-                                    <dd className="num mt-1 text-lg font-semibold">
-                                        {source.amount_label}
-                                    </dd>
-                                </div>
-                            )}
-                            {source.submitter_name && (
-                                <div>
-                                    <dt className="text-xs text-muted-foreground">
-                                        申请人
-                                    </dt>
-                                    <dd className="mt-1">
-                                        {submitterName || "未记录姓名"}
-                                    </dd>
-                                </div>
-                            )}
-                            {source.extra_sections.map((section, index) => (
-                                <div key={`${section.label}:${index}`}>
-                                    <dt className="text-xs text-muted-foreground">
-                                        {section.label}
-                                    </dt>
-                                    <dd
-                                        className={`mt-1 break-words ${section.numeric ? "num" : ""}`}
-                                    >
-                                        {sectionValue(section)}
-                                    </dd>
-                                </div>
-                            ))}
-                        </dl>
-                    )}
-                    <section className="space-y-3">
-                        <h3 className="font-medium">提交资料摘要</h3>
-                        {source.lines.length ? (
-                            <ul className="divide-y text-sm">
-                                {source.lines.map((line, index) => (
-                                    <li
-                                        key={`${line.title}:${index}`}
-                                        className="flex flex-wrap justify-between gap-3 py-3"
-                                    >
-                                        <span>
-                                            {displayReadableName(line.title) ||
-                                                "未记录商品名称"}
-                                        </span>
-                                        <span className="text-muted-foreground">
-                                            {[line.quantity, line.due_label]
-                                                .filter(Boolean)
-                                                .join(" · ")}
-                                        </span>
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : (
-                            <p className="text-sm text-muted-foreground">
-                                此次提交未保留明细摘要，请核对其他提交字段及附件。
-                            </p>
-                        )}
-                        {source.more_count > 0 && (
-                            <p
-                                role="status"
-                                className="rounded-md border border-warning-border bg-warning-soft p-3 text-sm text-warning-soft-foreground"
-                            >
-                                当前仅展示 {source.lines.length} 行摘要，另有{" "}
-                                {source.more_count}{" "}
-                                行未包含在摘要中。请核对提交附件；资料不足时请发起人补充后重新提交。
-                            </p>
-                        )}
-                        {display.impact_summary && (
-                            <p className="text-sm text-muted-foreground">
-                                {display.impact_summary}
-                            </p>
-                        )}
-                    </section>
-                </>
+                <ApprovalSubmittedSummary
+                    source={source}
+                    submitterName={submitterName}
+                    impactSummary={display.impact_summary}
+                />
             )}
             {view === "all" && (display.source_sales ?? []).length > 0 && (
                 <section className="space-y-4 border-t pt-5">
-                    <h3 className="font-medium">关联销售单</h3>
+                    <MaterialSectionHeading title="关联销售单" />
                     {display.source_sales
                         ?.filter(
                             (sales) =>
@@ -289,9 +221,9 @@ export function ApprovalSubmittedMaterials({
                             currentBasis.source.revision_id,
                     )) && (
                     <section className="space-y-4 border-t pt-5">
-                        <h3 className="font-medium">
-                            当前销售依据 · V{currentBasis.source.revision_no}
-                        </h3>
+                        <MaterialSectionHeading
+                            title={`当前销售依据 · V${currentBasis.source.revision_no}`}
+                        />
                         <p className="text-sm text-muted-foreground">
                             以下为当前生效销售版本及该版本关联的合同与凭证。
                         </p>
@@ -319,11 +251,18 @@ export function ApprovalSubmittedMaterials({
             )}
             {(attachments.length > 0 || !currentBasis || view !== "all") && (
                 <section className="space-y-3 border-t pt-5">
-                    <h3 className="font-medium">
-                        {display.source_sales?.length
-                            ? "提交附件及关联销售合同、凭证"
-                            : "提交合同、凭证及附件"}
-                    </h3>
+                    <MaterialSectionHeading
+                        title={
+                            display.source_sales?.length
+                                ? "提交附件及关联销售合同、凭证"
+                                : "提交合同、凭证及附件"
+                        }
+                        note={
+                            attachments.length
+                                ? `${attachments.length} 个文件`
+                                : null
+                        }
+                    />
                     <ApprovalMaterialFiles
                         instanceId={instanceId}
                         attachments={attachments}

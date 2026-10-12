@@ -259,24 +259,16 @@ export function SalesOrderDetailPage({
                                 title={result.title}
                                 description={result.description}
                                 reference={result.reference}
-                                facts={[
-                                    {
-                                        label: "销售单",
-                                        value: order.documentNumber,
-                                    },
-                                    {
-                                        label: "客户",
-                                        value: order.customerName,
-                                    },
-                                    ...(result.nextResponsible
+                                facts={
+                                    result.nextResponsible
                                         ? [
                                               {
                                                   label: "下一步",
                                                   value: result.nextResponsible,
                                               },
                                           ]
-                                        : []),
-                                ]}
+                                        : undefined
+                                }
                             />
                         ) : null}
 
@@ -337,7 +329,8 @@ export function SalesOrderDetailPage({
                         order={order}
                         focusTask={derived.focusTask}
                         action={
-                            derived.focusTask ? (
+                            derived.focusTask &&
+                            derived.focusTask.id !== derived.navSection ? (
                                 <Button
                                     id={`sales-orders-detail-banner-${derived.focusTask.id}`}
                                     type="button"
@@ -372,9 +365,8 @@ export function SalesOrderDetailPage({
                         handleActionResult({
                             status: "succeeded",
                             title: "改单已提交审批",
-                            reference: order.documentNumber,
                             description:
-                                "审批通过后生效，当前销售版本继续执行。",
+                                "审批通过后生成新版本，进度见下方「进行中的改单」。",
                         })
                         selectSection("versions")
                     }}

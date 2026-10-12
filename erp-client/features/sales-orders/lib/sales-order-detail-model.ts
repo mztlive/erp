@@ -11,7 +11,8 @@ export type SalesOrderDetailActionResult = {
     status: "succeeded" | "blocked" | "rejected" | "unknown"
     title: string
     description: string
-    reference: string
+    /** 用户认得的结果编号；内部身份或与页头单号相同时不传。 */
+    reference?: string
     nextResponsible?: string
 }
 
@@ -199,10 +200,12 @@ export function resolveFocusTask(
         }
     }
     if (order.activeChangeOrder) {
+        const { statusLabel, baseRevisionNo } = order.activeChangeOrder
+        const base = baseRevisionNo > 0 ? `（基于 v${baseRevisionNo}）` : ""
         return {
             id: "versions",
             title: "有一笔改单还在走",
-            description: `状态：${order.activeChangeOrder.statusLabel}（基于 v${order.activeChangeOrder.baseRevisionNo}）。改单生效前，客户仍按当前版本执行。`,
+            description: `改单${statusLabel}${base}，生效前客户仍按当前版本执行。`,
             actionLabel: "看历史版本",
             tone: "warning",
         }

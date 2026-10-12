@@ -230,7 +230,10 @@ export type SalesChangeOrderSummary = {
     statusCode?: string
     /** 乐观锁版本；提交审批必须携带。 */
     version?: number
+    /** 发起时生效版本号；0 表示尚未按 `baseRevisionId` 解析出版本号。 */
     baseRevisionNo: number
+    /** 发起时生效版本身份，用于在原单修订里解析版本号。 */
+    baseRevisionId?: string
     createdAt: string
     impactPath: "procurement" | "operations"
     /** 统一只读审批结构。缺省表示列表行尚未补详情。 */

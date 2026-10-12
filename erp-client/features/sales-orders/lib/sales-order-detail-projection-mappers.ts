@@ -231,7 +231,10 @@ export function mapDetailToListItem(
                 detail.business_type === "VOUCHER"
                     ? mapVoucherSalesOrderApproval(detail.approval)
                     : mapSalesOrderApproval(detail.approval),
-            activeChangeOrder: extras?.activeChangeOrder,
+            activeChangeOrder: withBaseRevisionNo(
+                extras?.activeChangeOrder,
+                detail.revisions,
+            ),
             settlementEntity:
                 displayName(
                     commercial.settlementPartyName,
@@ -251,6 +254,25 @@ export function mapDetailToListItem(
             },
         },
     )
+}
+
+/**
+ * 按原单修订补齐在途改单的基准版本号；找不到对应修订时保持未解析。
+ *
+ * @param change 在途改单摘要。
+ * @param revisions 原销售单全部不可变修订。
+ */
+function withBaseRevisionNo(
+    change: SalesChangeOrderSummary | null | undefined,
+    revisions: readonly { id: string; revision_no: number }[] | undefined,
+): SalesChangeOrderSummary | null | undefined {
+    if (!change?.baseRevisionId) return change
+    const revisionNo = revisions?.find(
+        (revision) => revision.id === change.baseRevisionId,
+    )?.revision_no
+    return revisionNo == null
+        ? change
+        : { ...change, baseRevisionNo: revisionNo }
 }
 
 /**
@@ -274,6 +296,7 @@ export function mapChangeOrder(
         statusCode: row.status,
         version: row.version,
         baseRevisionNo: 0,
+        baseRevisionId: row.base_revision_id,
         createdAt: new Date(row.created_at * 1000).toISOString(),
         impactPath,
         approval: mapSalesChangeOrderApproval(row.approval),

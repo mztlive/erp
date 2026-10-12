@@ -2,12 +2,12 @@
 
 use std::collections::{HashMap, HashSet};
 
-use erp_core::ids::{PurchaseOrderRevisionId, SalesOrderId, SalesOrderRevisionId};
+use erp_core::ids::{PurchaseOrderRevisionId, PurchaseOrderSubmissionId, SalesOrderId, SalesOrderRevisionId};
 use erp_core::money::{Quantity, Rate};
 use erp_procurement::entity::purchase_order::{
     PaymentSubjectSnapshot, ProcurementCoverageFacts, PurchaseLineSalesAllocation, PurchaseLineType,
     PurchaseOrder, PurchaseOrderRevision, PurchaseOrderRevisionLine, PurchaseOrderStatus,
-    SalesProcurementCoverage, build_procurement_coverage,
+    PurchaseOrderSubmissionLine, SalesProcurementCoverage, build_procurement_coverage,
 };
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_sales::entity::sales_order::{LineType, SalesOrder, SalesOrderRevision, SalesOrderRevisionLine};
@@ -48,6 +48,7 @@ struct HistoricalSources {
     sales_versions: HashMap<String, SalesVersionIdentity>,
     sales_lines: HashMap<String, SalesLineIdentity>,
     purchase_versions: HashMap<String, PurchaseVersionIdentity>,
+    purchase_submissions: HashMap<String, PurchaseVersionIdentity>,
 }
 
 struct OutdatedPurchases {
@@ -138,7 +139,27 @@ async fn historical_sources(
         )
         .await?;
     let purchase_versions = db.purchase_order().find_revisions_by_ids(&purchase_ids, executor).await?;
-    Ok(HistoricalSources::from_records(sales_versions, sales_lines, purchase_versions))
+    let submission_ids = orders
+        .iter()
+        .filter(|order| uses_submission(order))
+        .filter_map(|order| order.current_submission_id.as_ref().map(PurchaseOrderSubmissionId::new))
+        .collect::<Vec<_>>();
+    let submissions = db.purchase_order().find_submissions_by_ids(&submission_ids, executor).await?;
+    let mut sources = HistoricalSources::from_records(sales_versions, sales_lines, purchase_versions);
+    sources.purchase_submissions = submissions
+        .into_iter()
+        .filter(|submission| submission.base.deleted_at == 0)
+        .map(|submission| {
+            (
+                submission.base.id,
+                PurchaseVersionIdentity {
+                    order_id: submission.purchase_order_id.to_string(),
+                    subject: submission.payment_subject,
+                },
+            )
+        })
+        .collect();
+    Ok(sources)
 }
 
 impl HistoricalSources {
@@ -148,6 +169,7 @@ impl HistoricalSources {
         purchase_versions: Vec<PurchaseOrderRevision>,
     ) -> Self {
         Self {
+            purchase_submissions: HashMap::new(),
             sales_versions: sales_versions
                 .into_iter()
                 .filter(|version| version.base.deleted_at == 0)
@@ -206,7 +228,10 @@ fn outdated_orders<'a>(
         .filter(|order| {
             matches!(
                 order.stable.status,
-                PurchaseOrderStatus::Effective
+                PurchaseOrderStatus::Draft
+                    | PurchaseOrderStatus::PendingFinanceReview
+                    | PurchaseOrderStatus::InApproval
+                    | PurchaseOrderStatus::Effective
                     | PurchaseOrderStatus::PartiallyExecuted
                     | PurchaseOrderStatus::Completed
             ) && order.sales_order_revision_id.as_ref() != current_revision
@@ -256,18 +281,34 @@ fn current_coverage(
     let outdated_purchase_count = orders.len();
     let old_order_ids = orders.iter().map(|order| order.base.id.clone()).collect::<HashSet<_>>();
     let mut old_revisions = HashSet::new();
+    let mut old_submissions = HashSet::new();
     for order in orders {
-        old_revisions.insert(verify_historical_order(order, sales_id, current_revision, sources)?.to_owned());
+        let pointer = verify_historical_order(order, sales_id, current_revision, sources)?.to_owned();
+        if uses_submission(order) {
+            old_submissions.insert(pointer);
+        } else {
+            old_revisions.insert(pointer);
+        }
     }
     let old_lines = facts
         .purchase_revision_lines
         .iter()
         .filter(|line| old_revisions.contains(line.purchase_order_revision_id.as_ref()))
         .collect::<Vec<_>>();
-    let outdated_purchase_quantity =
-        historical_quantity(&old_lines, &facts.allocations, &old_revisions, sources)?;
+    let formal_quantity = historical_quantity(&old_lines, &facts.allocations, &old_revisions, sources)?;
+    let submission_quantity =
+        historical_submission_quantity(&facts.submission_lines, &old_submissions, sources)?;
+    let outdated_purchase_quantity = Quantity::try_from(
+        formal_quantity
+            .to_decimal()
+            .checked_add(submission_quantity.to_decimal())
+            .ok_or_else(invalid_history)?,
+    )?;
     let old_line_ids = old_lines.iter().map(|line| line.base.id.clone()).collect::<HashSet<_>>();
     facts.purchase_orders.retain(|order| !old_order_ids.contains(order.base.id.as_str()));
+    facts
+        .submission_lines
+        .retain(|line| !old_submissions.contains(line.purchase_order_submission_id.as_ref()));
     facts
         .purchase_revision_lines
         .retain(|line| !old_revisions.contains(line.purchase_order_revision_id.as_ref()));
@@ -284,8 +325,13 @@ fn verify_historical_order<'a>(
     current_revision: &str,
     sources: &HistoricalSources,
 ) -> Result<&'a str> {
-    let revision_id = order.stable.current_revision_id.as_deref().ok_or_else(invalid_history)?;
-    let purchase = sources.purchase_versions.get(revision_id).ok_or_else(invalid_history)?;
+    let (revision_id, versions) = if uses_submission(order) {
+        (order.current_submission_id.as_deref(), &sources.purchase_submissions)
+    } else {
+        (order.stable.current_revision_id.as_deref(), &sources.purchase_versions)
+    };
+    let revision_id = revision_id.ok_or_else(invalid_history)?;
+    let purchase = versions.get(revision_id).ok_or_else(invalid_history)?;
     let original =
         sources.sales_versions.get(order.sales_order_revision_id.as_ref()).ok_or_else(invalid_history)?;
     let current = sources.sales_versions.get(current_revision).ok_or_else(invalid_history)?;
@@ -306,6 +352,55 @@ fn verify_historical_order<'a>(
         return Err(invalid_history());
     }
     Ok(revision_id)
+}
+
+fn uses_submission(order: &PurchaseOrder) -> bool {
+    matches!(
+        order.stable.status,
+        PurchaseOrderStatus::Draft
+            | PurchaseOrderStatus::PendingFinanceReview
+            | PurchaseOrderStatus::InApproval
+    )
+}
+
+/// 旧依据的当前提交独立计量；只有头、行及稳定销售身份均可证明时才排除。
+fn historical_submission_quantity(
+    lines: &[PurchaseOrderSubmissionLine],
+    submission_ids: &HashSet<String>,
+    sources: &HistoricalSources,
+) -> Result<Quantity> {
+    let mut total = Decimal::ZERO;
+    let mut found = HashSet::new();
+    let mut line_ids = HashSet::new();
+    for line in
+        lines.iter().filter(|line| submission_ids.contains(line.purchase_order_submission_id.as_ref()))
+    {
+        if line.line_type != PurchaseLineType::ItemService {
+            continue;
+        }
+        let submission_id = line.purchase_order_submission_id.as_ref();
+        found.insert(submission_id.to_owned());
+        let purchase = sources.purchase_submissions.get(submission_id).ok_or_else(invalid_history)?;
+        let source_line_id = line.sales_order_revision_line_id.as_ref().ok_or_else(invalid_history)?;
+        let source_line = sources.sales_lines.get(source_line_id.as_ref()).ok_or_else(invalid_history)?;
+        let quantity = line.allocated_quantity.ok_or_else(invalid_history)?;
+        if !line_ids.insert(&line.base.id)
+            || line.base.deleted_at != 0
+            || !source_line.is_goods_service
+            || source_line.revision_id != purchase.subject.sales_order_revision_id.as_ref()
+            || line.sales_order_line_id.as_ref().map(|id| id.as_ref())
+                != Some(source_line.stable_line_id.as_str())
+            || line.quantity != Some(quantity)
+            || quantity.to_decimal() <= Decimal::ZERO
+        {
+            return Err(invalid_history());
+        }
+        total = total.checked_add(quantity.to_decimal()).ok_or_else(invalid_history)?;
+    }
+    if &found != submission_ids {
+        return Err(invalid_history());
+    }
+    Quantity::try_from(total).map_err(Into::into)
 }
 
 fn historical_quantity(
@@ -512,6 +607,7 @@ mod tests {
 
     fn sources() -> HistoricalSources {
         HistoricalSources {
+            purchase_submissions: HashMap::new(),
             sales_versions: HashMap::from([
                 (
                     "sales-v1".into(),
@@ -556,6 +652,124 @@ mod tests {
         }
     }
 
+    fn pending_facts(status: PurchaseOrderStatus) -> (ProcurementCoverageFacts, HistoricalSources) {
+        let mut input = facts("sales-v1", "original-line");
+        input.purchase_orders[0].stable.status = status;
+        input.purchase_orders[0].stable.current_revision_id = None;
+        input.purchase_orders[0].current_submission_id = Some("purchase-submission".into());
+        let mut line = serde_json::to_value(&input.purchase_revision_lines[0]).unwrap();
+        let object = line.as_object_mut().unwrap();
+        object.remove("purchase_order_revision_id");
+        object.insert("purchase_order_submission_id".into(), "purchase-submission".into());
+        input.submission_lines = vec![serde_json::from_value(line).unwrap()];
+        input.purchase_revision_lines.clear();
+        input.allocations.clear();
+        let mut history = sources();
+        history.purchase_submissions.insert(
+            "purchase-submission".into(),
+            history.purchase_versions.remove("purchase-version").unwrap(),
+        );
+        (input, history)
+    }
+
+    #[test]
+    fn sales_reduction_keeps_pending_purchase_history_readable_and_blocks_new_supply() {
+        for status in [
+            PurchaseOrderStatus::Draft,
+            PurchaseOrderStatus::PendingFinanceReview,
+            PurchaseOrderStatus::InApproval,
+        ] {
+            for target in ["0", "1", "2", "3"] {
+                let (mut input, history) = pending_facts(status);
+                input.goods_lines[0].quantity = quantity(target);
+                let view = display_coverage(input.clone(), "sales", "sales-v2", &history).unwrap();
+                assert_eq!(view.total_quantity, quantity(target));
+                assert_eq!(view.covered_quantity, quantity("0"));
+                assert_eq!(view.remaining_quantity, quantity(target));
+                assert_eq!(view.outdated_purchase_quantity, quantity("2"));
+                assert_eq!(view.outdated_purchase_count, 1);
+                assert!(view.source_changed);
+                assert!(view.source_change_blocker().is_some());
+                assert_eq!(input.submission_lines[0].allocated_quantity, Some(quantity("2")));
+                assert_eq!(input.purchase_orders[0].sales_order_revision_id.as_ref(), "sales-v1");
+            }
+        }
+    }
+
+    #[test]
+    fn current_pending_purchase_still_counts_and_overcoverage_still_fails() {
+        let (mut input, _) = pending_facts(PurchaseOrderStatus::InApproval);
+        input.purchase_orders[0].sales_order_revision_id = SalesOrderRevisionId::new("sales-v2");
+        input.submission_lines[0].sales_order_revision_line_id =
+            Some(SalesOrderRevisionLineId::new("current-line"));
+        let view =
+            display_coverage(input.clone(), "sales", "sales-v2", &HistoricalSources::default()).unwrap();
+        assert_eq!(view.covered_quantity, quantity("2"));
+        assert_eq!(view.remaining_quantity, quantity("0"));
+        assert!(!view.source_changed);
+        input.goods_lines[0].quantity = quantity("1");
+        assert!(
+            display_coverage(input, "sales", "sales-v2", &HistoricalSources::default())
+                .unwrap_err()
+                .to_string()
+                .contains("采购数量一致性错误")
+        );
+    }
+
+    #[test]
+    fn historical_submissions_reject_missing_or_cross_bound_sources() {
+        for case in 0..12 {
+            let (mut input, mut history) = pending_facts(PurchaseOrderStatus::InApproval);
+            match case {
+                0 => {
+                    history.purchase_submissions.clear();
+                },
+                1 => {
+                    input.purchase_orders[0].current_submission_id = None;
+                },
+                2 => {
+                    history.purchase_submissions.get_mut("purchase-submission").unwrap().order_id =
+                        "other".into();
+                },
+                3 => {
+                    history.sales_versions.get_mut("sales-v1").unwrap().order_id = "other".into();
+                },
+                4 => {
+                    history.sales_versions.get_mut("sales-v1").unwrap().revision_no = 3;
+                },
+                5 => {
+                    input.submission_lines.clear();
+                },
+                6 => {
+                    input.submission_lines[0].sales_order_line_id = Some(SalesOrderLineId::new("other"));
+                },
+                7 => {
+                    input.submission_lines[0].sales_order_revision_line_id = None;
+                },
+                8 => {
+                    input.submission_lines[0].quantity = Some(quantity("1"));
+                },
+                9 => {
+                    input.submission_lines.push(input.submission_lines[0].clone());
+                },
+                10 => {
+                    history.sales_lines.get_mut("original-line").unwrap().revision_id = "sales-v2".into();
+                },
+                11 => {
+                    input.submission_lines[0].allocated_quantity = None;
+                },
+                _ => unreachable!(),
+            }
+            assert!(
+                matches!(
+                    display_coverage(input, "sales", "sales-v2", &history),
+                    Err(Error::ConflictError(_))
+                ),
+                "case {case}"
+            );
+        }
+    }
+
     #[test]
     fn price_only_sales_revision_preserves_old_allocation_and_marks_purchase_change() {
         // 价格不参与采购数量事实：仅公共版本行身份更新，稳定行、SKU、数量均保持不变。
@@ -571,10 +785,7 @@ mod tests {
         assert_eq!(view.lines[0].remaining_quantity, quantity("2"));
         assert_eq!(view.outdated_purchase_count, 1);
         assert_eq!(view.outdated_purchase_quantity, quantity("2"));
-        assert_eq!(
-            view.source_change_blocker(),
-            Some("销售正式版本已变化，请先完成相关采购正式变更，再继续供给分配")
-        );
+        assert_eq!(view.source_change_blocker(), Some("销售版本已变化，请先处理相关采购单，再继续供给分配"));
         assert_eq!(original.purchase_orders[0].sales_order_revision_id.as_ref(), "sales-v1");
         assert_eq!(
             original.purchase_revision_lines[0].sales_order_revision_line_id.as_ref().unwrap().as_ref(),

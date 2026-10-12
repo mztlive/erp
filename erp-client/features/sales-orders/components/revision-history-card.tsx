@@ -1,10 +1,16 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { HistoryIcon } from "lucide-react"
+import { ChevronDownIcon, HistoryIcon } from "lucide-react"
 
 import { BusinessEmptyState, MoneyValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import {
     Timeline,
     TimelineDescription,
@@ -201,6 +207,50 @@ function VersionRecord({
     )
 }
 
+/** 历史版本默认收起：一行给出当时金额与明细数，需要时再展开整份快照。 */
+function HistoricalVersion({
+    rev,
+    currentContractLabel,
+}: {
+    rev: SalesOrderRevisionSnapshot
+    currentContractLabel: string
+}) {
+    return (
+        <Collapsible>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                <p className="flex flex-wrap items-baseline gap-x-1.5 text-muted-foreground">
+                    <span>当时成交</span>
+                    <MoneyValue
+                        value={rev.amountGross || undefined}
+                        className="text-foreground"
+                    />
+                    {rev.lines.length > 0 ? (
+                        <span className="num">· {rev.lines.length} 项明细</span>
+                    ) : null}
+                </p>
+                <CollapsibleTrigger
+                    id={`sales-order-revision-v${rev.revisionNo}-toggle`}
+                    className="group/revision"
+                    render={<Button type="button" variant="ghost" size="sm" />}
+                >
+                    查看当时内容
+                    <ChevronDownIcon
+                        data-icon="inline-end"
+                        className="transition-transform group-data-[panel-open]/revision:rotate-180"
+                    />
+                </CollapsibleTrigger>
+            </div>
+            <CollapsibleContent className="pt-2">
+                <VersionRecord
+                    rev={rev}
+                    isCurrent={false}
+                    currentContractLabel={currentContractLabel}
+                />
+            </CollapsibleContent>
+        </Collapsible>
+    )
+}
+
 /**
  * 历史销售版本：当时的合同、客户、金额与明细快照，不被后来修改盖掉。
  */
@@ -212,8 +262,23 @@ export function RevisionHistoryCard({
     const ordered = [...revisions].sort((a, b) => b.revisionNo - a.revisionNo)
 
     return (
-        <div className="space-y-4">
-            <h2 className="text-sm font-semibold">版本记录</h2>
+        <section
+            aria-labelledby="sales-order-revisions-title"
+            className="space-y-4"
+        >
+            <div className="flex items-center gap-2">
+                <h2
+                    id="sales-order-revisions-title"
+                    className="text-sm font-semibold"
+                >
+                    版本记录
+                </h2>
+                {ordered.length > 0 ? (
+                    <span className="num rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                        {ordered.length}
+                    </span>
+                ) : null}
+            </div>
             {ordered.length === 0 ? (
                 <BusinessEmptyState
                     kind="no-data"
@@ -268,19 +333,28 @@ export function RevisionHistoryCard({
                                     ) : null}
                                 </TimelineHeader>
                                 <TimelineDescription className="text-foreground">
-                                    <VersionRecord
-                                        rev={rev}
-                                        isCurrent={isCurrent}
-                                        currentContractLabel={
-                                            contractRevisionLabel
-                                        }
-                                    />
+                                    {isCurrent ? (
+                                        <VersionRecord
+                                            rev={rev}
+                                            isCurrent
+                                            currentContractLabel={
+                                                contractRevisionLabel
+                                            }
+                                        />
+                                    ) : (
+                                        <HistoricalVersion
+                                            rev={rev}
+                                            currentContractLabel={
+                                                contractRevisionLabel
+                                            }
+                                        />
+                                    )}
                                 </TimelineDescription>
                             </TimelineItem>
                         )
                     })}
                 </Timeline>
             )}
-        </div>
+        </section>
     )
 }

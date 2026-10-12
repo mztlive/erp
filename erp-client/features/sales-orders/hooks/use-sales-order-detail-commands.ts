@@ -49,7 +49,6 @@ export function useSalesOrderDetailStartChange() {
                 status: "succeeded",
                 title: "请编辑销售变更",
                 description: `已进入「${change.statusLabel}」。当前版本对客户仍然有效。`,
-                reference: change.id,
                 nextResponsible:
                     change.approval?.instance?.currentAssigneeName ??
                     change.approval?.instance?.currentAssignee,

@@ -2,13 +2,10 @@
 
 import { SalesChangeOrderApprovalSection } from "@/features/sales-orders/components/sales-change-order-approval-section"
 import { RevisionHistoryCard } from "@/features/sales-orders/components/revision-history-card"
-import {
-    DetailSummary,
-    DetailSummaryItem,
-} from "@/components/business/detail-presentation"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import type { SalesOrderDetailActionResult } from "@/features/sales-orders/lib/sales-order-detail-model"
 
+/** 版本页：在途改单在上，已生效版本按时间倒序；当前版本由时间线标记。 */
 export function VersionsPanel({
     order,
     onApprovalResult,
@@ -19,50 +16,15 @@ export function VersionsPanel({
     onApprovalResult?: (result: SalesOrderDetailActionResult) => void
 }) {
     return (
-        <div className="space-y-6">
-            <DetailSummary label="销售版本摘要">
-                <DetailSummaryItem
-                    label="当前有效版本"
-                    value={
-                        order.currentRevisionNo == null
-                            ? "尚未生效"
-                            : `v${order.currentRevisionNo}`
-                    }
-                    detail={
-                        order.contractRevisionLabel ? (
-                            <>关联合同 {order.contractRevisionLabel}</>
-                        ) : undefined
-                    }
-                />
-                <DetailSummaryItem
-                    label="已生效版本"
-                    value={
-                        <>
-                            {order.revisions.length}{" "}
-                            <span className="text-sm font-normal text-muted-foreground">
-                                个
-                            </span>
-                        </>
-                    }
-                    detail="历史版本保留当时的合同、金额与明细"
-                />
-            </DetailSummary>
+        <div className="space-y-8">
             {order.activeChangeOrder && showActiveChange ? (
-                <section className="space-y-3 border-b border-border/70 pb-5">
-                    <div>
-                        <h2 className="text-sm font-semibold">进行中的改单</h2>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                            生效前仍按当前版本执行
-                        </p>
-                    </div>
-                    <SalesChangeOrderApprovalSection
-                        readonlyApproval
-                        salesOrderId={order.id}
-                        nature={order.nature}
-                        changeOrder={order.activeChangeOrder}
-                        onResult={onApprovalResult}
-                    />
-                </section>
+                <SalesChangeOrderApprovalSection
+                    readonlyApproval
+                    salesOrderId={order.id}
+                    nature={order.nature}
+                    changeOrder={order.activeChangeOrder}
+                    onResult={onApprovalResult}
+                />
             ) : null}
             <RevisionHistoryCard
                 revisions={order.revisions}
