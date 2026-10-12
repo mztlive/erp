@@ -2651,6 +2651,34 @@
       "reason": "用例或步骤 post_customer_receipt_apply 通过 .resource_log、persist_log 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
     },
     {
+      "path": "crates/erp-processes/src/finance_posting/receivable/draft_save.rs",
+      "function": "draft_audit",
+      "policy": "Audited",
+      "stage": "MetadataFactory",
+      "boundaries": [
+        ".resource_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1
+      },
+      "location_count": 1,
+      "reason": "按草稿是否已有原单构造 customer_receipt.create 或 customer_receipt.update 事件，仅包含操作人和资源标识，不写入表单原文；由 save_draft_command 在原事务中持久化，构造事件不代表已执行写入。"
+    },
+    {
+      "path": "crates/erp-processes/src/finance_posting/receivable/draft_save.rs",
+      "function": "save_draft_command",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        "persist_log"
+      ],
+      "call_counts": {
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "接收 save_customer_receipt_draft 事务传入的同一 Executor，依次保存草稿及拟核销分配、审计事件和命令回执；审计失败向上返回并阻止事务提交。已提交命令重放经授权和归属校验后返回原结果，不再次持久化成功事件；真实回滚与并发行为不由本登记核销。"
+    },
+    {
       "path": "crates/erp-processes/src/finance_posting/receivable/draft_update.rs",
       "function": "update_customer_receipt",
       "policy": "Audited",
