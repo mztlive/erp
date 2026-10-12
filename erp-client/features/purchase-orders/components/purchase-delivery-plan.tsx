@@ -9,6 +9,7 @@ import {
     TableCell,
 } from "@/components/ui/table"
 import { QuantityValue } from "@/components/business"
+import { compactFixed } from "@/lib/fixed-decimal"
 import type { PurchaseDeliveryAllocation } from "../types"
 
 /** 对外单据只使用本采购行已经确认的交付安排。 */
@@ -83,7 +84,9 @@ export function PurchaseDeliveryPlan({
                                                   </TableCell>
                                                   <TableCell className="border border-border p-2 text-right align-top">
                                                       <QuantityValue
-                                                          value={row.quantity}
+                                                          value={compactFixed(
+                                                              row.quantity,
+                                                          )}
                                                           unit={line.unit ?? ""}
                                                       />
                                                   </TableCell>

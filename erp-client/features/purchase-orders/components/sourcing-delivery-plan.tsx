@@ -3,6 +3,7 @@
 import { QuantityValue } from "@/components/business"
 import { Input } from "@/components/ui/input"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { compactFixed } from "@/lib/fixed-decimal"
 import type { PurchaseOrderCreateFormApi } from "../lib/purchase-order-create-form-types"
 import type {
     SourcingLineInput,
@@ -39,7 +40,7 @@ export function SalesDeliveryRequirements({
                                     {row.recipient} · {row.phone}
                                 </span>
                                 <QuantityValue
-                                    value={row.quantity}
+                                    value={compactFixed(row.quantity)}
                                     unit={product.unit}
                                 />
                             </div>
@@ -136,7 +137,17 @@ export function SourcingDeliveryEditor({
                                         className="num"
                                         value={row.quantity}
                                         aria-label={`${row.recipient}，${row.address}，本次交付数量（${product.unit}）`}
-                                        onBlur={field.handleBlur}
+                                        onBlur={() => {
+                                            field.handleChange(
+                                                rows.map((item) => ({
+                                                    ...item,
+                                                    quantity: compactFixed(
+                                                        item.quantity,
+                                                    ),
+                                                })),
+                                            )
+                                            field.handleBlur()
+                                        }}
                                         onChange={(event) =>
                                             field.handleChange(
                                                 rows.map((item, itemIndex) =>

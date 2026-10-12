@@ -1,4 +1,9 @@
-import { compareDecimal, subtractFixed, sumFixed } from "@/lib/fixed-decimal"
+import {
+    compactFixed,
+    compareDecimal,
+    subtractFixed,
+    sumFixed,
+} from "@/lib/fixed-decimal"
 import type { PurchaseDeliveryAllocation } from "../../types"
 import { sourcingUnitQuantityError } from "../sourcing-quantity"
 import { findSourcingOption } from "./options"
@@ -38,7 +43,10 @@ export function remainingDeliveryAllocations(
     }
     return [...groups.values()].map((row) => ({
         ...row,
-        quantity: compareDecimal(row.quantity, "0", 6) < 0 ? "0" : row.quantity,
+        quantity:
+            compareDecimal(row.quantity, "0", 6) < 0
+                ? "0"
+                : compactFixed(row.quantity),
     }))
 }
 
