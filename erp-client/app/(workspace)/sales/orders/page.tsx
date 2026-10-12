@@ -38,6 +38,7 @@ export default async function SalesOrdersPage({
         customerId?: string
         contractId?: string
         contractRevisionId?: string
+        selectionProposalId?: string
         salesOrderId?: string
     }>
 }) {
@@ -64,6 +65,7 @@ export default async function SalesOrdersPage({
                         : "physical_service"
                 }
                 initialSalesOrderId={params.salesOrderId}
+                initialSelectionProposalId={params.selectionProposalId}
             />
         )
     }

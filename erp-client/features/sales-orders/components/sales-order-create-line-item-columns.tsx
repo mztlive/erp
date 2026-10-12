@@ -32,7 +32,7 @@ function ProcurementOwnerPreview({
 }) {
     return (
         <div
-            className="w-28 text-sm"
+            className="flex min-h-control w-28 items-center text-sm"
             data-testid={`sales-line-procurement-owner-${line.rowKey}`}
         >
             {!line.sku.trim() ? (
@@ -281,6 +281,7 @@ export function buildSalesOrderCreateLineItemColumns(
                                           <field.DateField
                                               id={`sales-orders-create-line-${toAutomationIdSegment(lineKey)}-due-date`}
                                               label="承诺交付日"
+                                              size="default"
                                               hideLabel
                                           />
                                       )}
@@ -347,10 +348,14 @@ export function buildSalesOrderCreateLineItemColumns(
             numeric: true,
             align: "end",
             renderValue: ({ item }) => (
-                <MoneyValue
-                    value={calculateTotals([item], values.taxRatePercent).gross}
-                    className={taxAmountToneClass("含税小计")}
-                />
+                <div className="flex min-h-control items-center justify-end">
+                    <MoneyValue
+                        value={
+                            calculateTotals([item], values.taxRatePercent).gross
+                        }
+                        className={taxAmountToneClass("含税小计")}
+                    />
+                </div>
             ),
         },
     ]

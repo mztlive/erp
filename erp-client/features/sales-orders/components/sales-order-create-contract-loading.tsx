@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 
 export function SalesOrderCreateContractLoading({
+    customerMismatch = false,
     failed,
     imported,
     revisionUnavailable,
@@ -12,6 +13,7 @@ export function SalesOrderCreateContractLoading({
     onRetry,
     onChange,
 }: {
+    customerMismatch?: boolean
     failed: boolean
     imported: boolean
     revisionUnavailable: boolean
@@ -46,7 +48,9 @@ export function SalesOrderCreateContractLoading({
             </p>
             {revisionUnavailable ? (
                 <p role="alert" className="text-sm text-destructive">
-                    所选合同版本不存在或已更新，请重新加载或更换有效合同。
+                    {customerMismatch
+                        ? "所选合同的客户与销售方案不一致，请更换同客户的有效合同。"
+                        : "所选合同版本不存在或已更新，请重新加载或更换有效合同。"}
                 </p>
             ) : null}
             {failed ? (

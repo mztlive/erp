@@ -1,6 +1,7 @@
 "use client"
 
 import { CustomerSourceDocuments } from "./customer-source-documents"
+import { ReceiptPendingAllocations } from "./receipt-pending-allocations"
 import { MoneyValue } from "@/components/business"
 import {
     PreviewAmount,
@@ -166,7 +167,7 @@ export function ReceiptDetailBody({
                     </PreviewFact>
                     <PreviewFact label="银行引用">
                         <span className="num">
-                            {row.bankReferenceMasked || "—"}
+                            {row.bankReferenceMasked || "未填写"}
                         </span>
                     </PreviewFact>
                     {row.customerName !== row.counterpartyPartyName ? (
@@ -176,15 +177,21 @@ export function ReceiptDetailBody({
                     ) : null}
                 </dl>
             </PreviewSection>
-            <AllocationSection rows={row.allocations} />
-            <CustomerSourceDocuments
-                scope={{
-                    entryIds: row.allocations.map(
-                        (allocation) => allocation.targetId,
-                    ),
-                    counterpartyPartyId: row.counterpartyPartyId,
-                }}
-            />
+            {posted ? (
+                <>
+                    <AllocationSection rows={row.allocations} />
+                    <CustomerSourceDocuments
+                        scope={{
+                            entryIds: row.allocations.map(
+                                (allocation) => allocation.targetId,
+                            ),
+                            counterpartyPartyId: row.counterpartyPartyId,
+                        }}
+                    />
+                </>
+            ) : (
+                <ReceiptPendingAllocations row={row} />
+            )}
             <PreviewSection title="审批记录">
                 {readOnly ? (
                     <ApprovalReadonly

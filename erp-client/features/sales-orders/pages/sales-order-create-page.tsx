@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useSelectionOrderBasis } from "@/features/sales-orders/hooks/use-selection-order-basis"
 
 import {
     BusinessFailureState,
@@ -18,12 +19,14 @@ import type { SalesOrderNature } from "@/features/sales-orders/types"
  * 挂载时生效一次）。
  */
 export function SalesOrderCreatePage({
+    initialSelectionProposalId = "",
     initialCustomerId = "",
     initialContractId = "",
     initialContractRevisionId = "",
     initialNature = "physical_service",
     initialSalesOrderId = "",
 }: {
+    initialSelectionProposalId?: string
     initialCustomerId?: string
     initialContractId?: string
     initialContractRevisionId?: string
@@ -31,6 +34,9 @@ export function SalesOrderCreatePage({
     /** 从草稿详情页"继续编辑"进入时携带；为空则是全新建单。 */
     initialSalesOrderId?: string
 }) {
+    const basisQuery = useSelectionOrderBasis(
+        initialSalesOrderId ? "" : initialSelectionProposalId,
+    )
     const resumeQuery = useSalesOrderDraftResumeQuery(initialSalesOrderId)
 
     if (initialSalesOrderId) {
@@ -110,6 +116,48 @@ export function SalesOrderCreatePage({
                 initialContractRevisionId={initialContractRevisionId}
                 initialNature={initialNature}
                 initialDraft={resumeQuery.data}
+            />
+        )
+    }
+
+    if (initialSelectionProposalId) {
+        if (basisQuery.isPending)
+            return (
+                <PageScaffold>
+                    <PageHeader
+                        title="从销售方案创建销售单"
+                        description="正在读取客户和商品明细…"
+                    />
+                </PageScaffold>
+            )
+        if (basisQuery.isError || !basisQuery.data)
+            return (
+                <PageScaffold>
+                    <PageHeader title="销售方案暂不可用于开单" />
+                    <BusinessFailureState
+                        error={basisQuery.error}
+                        onRetry={() => void basisQuery.refetch()}
+                        retryLabel="重新加载"
+                        details={
+                            <Button
+                                id="sales-create-proposal-back"
+                                variant="outline"
+                                render={
+                                    <Link
+                                        href={`/sales/selection/proposals/${encodeURIComponent(initialSelectionProposalId)}`}
+                                    />
+                                }
+                            >
+                                返回销售方案
+                            </Button>
+                        }
+                    />
+                </PageScaffold>
+            )
+        return (
+            <SalesOrderCreateForm
+                key={initialSelectionProposalId}
+                initialSelectionBasis={basisQuery.data}
             />
         )
     }

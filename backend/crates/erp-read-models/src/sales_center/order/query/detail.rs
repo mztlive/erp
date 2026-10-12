@@ -217,6 +217,7 @@ impl SalesOrderDetailView {
             facts.receivable_summary.gross_total,
         ));
         Self {
+            selection_source: order.selection_source,
             id: order.base.id,
             order_no: order.order_no,
             business_type: order.business_type,

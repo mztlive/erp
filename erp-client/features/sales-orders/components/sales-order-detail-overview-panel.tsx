@@ -2,6 +2,7 @@
 
 import * as React from "react"
 
+import { SalesOrderSelectionSource } from "./sales-order-selection-source"
 import { MoneyValue } from "@/components/business"
 import {
     Table,
@@ -154,6 +155,9 @@ export function OverviewPanel({
                     />
                 </div>
             </section>
+            {order.selectionSource && (
+                <SalesOrderSelectionSource source={order.selectionSource} />
+            )}
             {related}
             <SalesOrderEvidenceAttachments
                 salesOrderId={order.id}

@@ -39,6 +39,7 @@ type FormalFailure = {
 }
 
 export type UseSalesOrderCreateSubmissionOptions = {
+    selectionProposalId?: string
     initialDraft: SalesOrderDraftResumeData | null
     commandLedger: FormalCommandKeyLedger
     onSubmitted?: (salesOrderId: string) => void
@@ -50,6 +51,7 @@ export type UseSalesOrderCreateSubmissionOptions = {
  */
 export function useSalesOrderCreateSubmission({
     initialDraft,
+    selectionProposalId,
     commandLedger,
     onSubmitted,
 }: UseSalesOrderCreateSubmissionOptions) {
@@ -190,6 +192,7 @@ export function useSalesOrderCreateSubmission({
         if (!command) {
             command = commandLedger.acquire("create", "sales:create", {
                 orderNo: localOrderNo(),
+                selectionProposalId,
                 contract: {
                     contractId: value.contractId,
                     requestedContractRevisionId:

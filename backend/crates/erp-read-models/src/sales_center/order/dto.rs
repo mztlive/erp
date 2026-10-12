@@ -1,6 +1,7 @@
 //! Cross-domain sales order list, procurement and approval response views.
 use erp_core::money::{Amount, Quantity, Rate};
 use erp_sales::dto::sales_order::{RevisionView, SalesOrderLineView, SubmissionView, WorkingCopyView};
+use erp_sales::entity::sales_order::selection_source::SalesSelectionSource;
 use erp_sales::entity::sales_order::{BusinessType, CommercialStatus, OriginSystem};
 use erp_workflow::service::work_item::{ProcessingBlockerView, ProcessingState, WorkItemPartyView};
 use serde::Serialize;
@@ -236,6 +237,8 @@ pub struct SalesOrderEvidenceFileView {
 /// 销售单详情视图（订单 + 稳定明细 + 草稿 + 提交历史 + 版本历史）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct SalesOrderDetailView {
+    /// 创建时冻结的销售方案来源。
+    pub selection_source: Option<SalesSelectionSource>,
     /// 实体主键。
     pub id: String,
     /// 销售单号。

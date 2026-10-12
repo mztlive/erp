@@ -55,7 +55,7 @@ export function instantToIso(secs: number | undefined | null): string {
 
 function maskBank(raw?: string | null): string {
     const v = (raw ?? "").trim()
-    if (!v) return "****"
+    if (!v) return ""
     if (v.includes("*")) return v
     if (v.length <= 4) return `****${v}`
     return `****${v.slice(-4)}`

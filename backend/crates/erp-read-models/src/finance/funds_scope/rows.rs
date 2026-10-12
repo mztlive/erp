@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 use erp_core::money::Amount;
+use erp_finance::entity::receivable::PendingReceiptAllocation;
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, ReceivableExt};
 use erp_procurement::repository::PurchaseOrderExt;
@@ -153,6 +154,9 @@ pub struct ScopedCustomerReceiptRow {
     pub unallocated_amount: Option<Amount>,
     /// 获授权分配行；部分授权仅含获授权份额行，其他分配不返回。
     pub allocations: Option<Vec<erp_finance::dto::receivable::ReceiptAllocationView>>,
+    /// 拟核销安排；仅整单及全部拟核销来源可读时返回，未装载或受限时省略。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pending_allocations: Option<Vec<PendingReceiptAllocation>>,
     /// 部分受限时为 true。
     pub permission_limited: bool,
 }

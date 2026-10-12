@@ -10,10 +10,13 @@
 
 mod no_contract;
 mod revision_lines;
+pub mod selection_basis;
 
 use application_core::{normalized_text, page_or_default, page_size_or_default};
 use erp_core::common::time::BusinessDate;
-use erp_core::ids::{ContractId, ContractRevisionId, CustomerAccountId, FileAssetId, PartyId, SkuId};
+use erp_core::ids::{
+    ContractId, ContractRevisionId, CustomerAccountId, FileAssetId, PartyId, SalesSelectionProposalId, SkuId,
+};
 use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -198,6 +201,9 @@ pub struct BindSalesOrderContractRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct CreateSalesOrderRequest {
+    /// 可选按份采购方案来源；服务端重验访问、模式及客户，禁止客户端指定来源编号。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selection_proposal_id: Option<SalesSelectionProposalId>,
     /// 销售单号（唯一，创建后不可修改）。
     #[validate(custom(function = "non_blank", message = "销售单号不能为空"))]
     pub order_no: String,

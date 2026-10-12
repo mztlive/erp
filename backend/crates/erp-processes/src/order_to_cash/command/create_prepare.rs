@@ -51,8 +51,20 @@ impl SalesOrderCommandProcess {
             .await?;
         self.sales().ensure_sellable_draft_lines(&draft.lines, &self.catalog()).await?;
         let organization = required_business_org(&self.db, actor.id(), &mut NoTransaction).await?;
-        let order =
+        let mut order =
             SalesOrderService::prepare_order(req, customer_id, settlement_party_id, actor, organization)?;
+        if let Some(id) = &req.selection_proposal_id {
+            order.selection_source = Some(
+                self.selection_source(
+                    id.as_ref(),
+                    actor,
+                    &order.customer_id,
+                    order.business_type,
+                    &mut NoTransaction,
+                )
+                .await?,
+            );
+        }
         let order_id = SalesOrderId::new(order.base.id.clone());
         let document = BusinessDocument::new(
             BusinessDocumentId::new(order.base.id.clone()),

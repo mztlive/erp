@@ -1,6 +1,7 @@
 "use client"
 
 import type { Matcher } from "react-day-picker"
+import type { ComponentProps } from "react"
 
 import { useFieldContext } from "@/components/form/form-context"
 import { toFieldErrors } from "@/components/form/utils"
@@ -25,6 +26,7 @@ type DateFieldProps = {
     disabledDates?: Matcher | Matcher[]
     className?: string
     inputClassName?: string
+    size?: ComponentProps<typeof DatePicker>["size"]
     id?: string
 }
 
@@ -44,6 +46,7 @@ export function DateField({
     disabledDates,
     className,
     inputClassName,
+    size,
     id,
 }: DateFieldProps) {
     const field = useFieldContext<string>()
@@ -70,6 +73,7 @@ export function DateField({
             </FieldLabel>
             <DatePicker
                 id={resolvedId}
+                size={size}
                 value={field.state.value || undefined}
                 onValueChange={(next) => {
                     field.handleChange(next ?? "")

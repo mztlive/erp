@@ -27,7 +27,7 @@ export function SalesOrderCreateLinePriceEditor({
     const automatic = line.pricingMode === "AUTO"
 
     return (
-        <div className="relative min-w-32">
+        <div className="min-w-32 space-y-1">
             <form.AppField name={`lineItems[${rowIndex}].unitPriceGross`}>
                 {(field) => {
                     const invalid =
@@ -59,6 +59,10 @@ export function SalesOrderCreateLinePriceEditor({
                                         `lineItems[${rowIndex}].pricingMode`,
                                         "MANUAL",
                                     )
+                                    form.setFieldValue(
+                                        `lineItems[${rowIndex}].priceSource`,
+                                        undefined,
+                                    )
                                     field.handleChange(event.target.value)
                                 }}
                             />
@@ -77,7 +81,7 @@ export function SalesOrderCreateLinePriceEditor({
             {isGoods ? (
                 <div
                     id={`${id}-pricing`}
-                    className="absolute inset-x-0 top-full mt-1 flex items-center justify-end gap-x-2 whitespace-nowrap text-xs text-muted-foreground"
+                    className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-xs whitespace-normal text-muted-foreground"
                 >
                     <span>
                         {automatic
@@ -86,9 +90,11 @@ export function SalesOrderCreateLinePriceEditor({
                                 : reference?.tier === "dropship"
                                   ? "按一件代发价"
                                   : "自动按数量"
-                            : "手动成交价"}
+                            : line.priceSource === "selection"
+                              ? "方案报价（可修改）"
+                              : "手动成交价"}
                     </span>
-                    {!automatic ? (
+                    {!automatic && line.priceSource !== "selection" ? (
                         <Button
                             id={`${id}-restore-auto`}
                             type="button"
@@ -118,7 +124,10 @@ export function SalesOrderCreateLinePriceEditor({
                     ) : null}
                 </div>
             ) : null}
-            {isGoods && line.sku.trim() && !line.referencePrices ? (
+            {isGoods &&
+            line.sku.trim() &&
+            !line.referencePrices &&
+            automatic ? (
                 <p className="text-xs text-destructive" role="status">
                     参考价暂缺，请重新选择商品。
                 </p>

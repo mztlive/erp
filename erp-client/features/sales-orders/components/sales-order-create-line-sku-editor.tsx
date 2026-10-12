@@ -110,7 +110,7 @@ export function SalesOrderCreateLineSkuEditor({
                                 variant="outline"
                                 // 商品名与规格可换行，避免标准按钮的固定高度覆盖内容高度。
                                 size={null}
-                                className="h-auto min-h-control w-full justify-start gap-3 px-3 py-2 text-left"
+                                className="h-auto min-h-control w-full justify-start gap-3 px-3 py-1.5 text-left"
                                 aria-label={
                                     selectedLabel
                                         ? `更换销售项目 ${selectedLabel}`

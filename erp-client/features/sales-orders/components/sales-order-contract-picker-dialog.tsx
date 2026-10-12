@@ -18,10 +18,12 @@ import { useContractCenterQuery } from "@/features/contracts/queries"
 
 /** 候选合同只在确认后写入销售单，取消选择不改变当前开单信息。 */
 export function SalesOrderContractPickerDialog({
+    customerId,
     initialContractId,
     onClose,
     onConfirm,
 }: {
+    customerId?: string
     initialContractId: string
     onClose: () => void
     onConfirm: (contractId: string) => void
@@ -38,6 +40,7 @@ export function SalesOrderContractPickerDialog({
         query.data?.contractId === contractId ? query.data : undefined
     const canConfirm = Boolean(
         contract?.selectableForNewSalesOrder &&
+        (!customerId || contract.customer.id === customerId) &&
         !query.isFetching &&
         !query.isError,
     )
@@ -66,6 +69,7 @@ export function SalesOrderContractPickerDialog({
                                 onValueChange={(id) =>
                                     field.handleChange(id ?? "")
                                 }
+                                customerId={customerId}
                                 selectableOnly
                                 placeholder="搜索合同编号或客户"
                                 emptyLabel="暂无可用合同，请返回上传并导入合同"

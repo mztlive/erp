@@ -215,6 +215,9 @@ export async function createSalesOrder(
     )
 
     const body = {
+        ...(input.selectionProposalId
+            ? { selection_proposal_id: input.selectionProposalId }
+            : {}),
         order_no: input.orderNo,
         business_type: businessType,
         contract_id: input.contract.contractId || null,
@@ -309,6 +312,7 @@ export async function submitSalesOrder(
 }
 
 export type SalesOrderDraftResumeData = {
+    selectionSource?: import("./selection-basis").SalesSelectionSource | null
     salesOrderId: string
     documentNumber: string
     version: number
@@ -426,6 +430,7 @@ export async function fetchSalesOrderDraftForResume(
         "CONTRACT"
 
     return {
+        selectionSource: detail.selection_source,
         salesOrderId: detail.id,
         documentNumber: detail.order_no,
         version: wc?.version ?? detail.version,

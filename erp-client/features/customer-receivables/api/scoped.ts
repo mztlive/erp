@@ -47,6 +47,11 @@ export type ScopedCustomerReceiptWire = Readonly<{
     allocated_total: string | null
     unallocated_amount: string | null
     allocations: readonly FundsAllocationLineWire[] | null
+    /** 仅整单及全部拟核销来源可读时返回；省略不等于没有安排。 */
+    pending_allocations?: readonly {
+        receivable_entry_id: string
+        allocated_amount: string
+    }[]
     permission_limited: boolean
 }>
 

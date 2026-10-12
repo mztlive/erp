@@ -39,6 +39,8 @@ export type SalesOrderDraftLineInput = {
     unit: string
     unitPriceGross: string
     /** 未标注模式的历史明细按手动成交价保留。 */
+    /** 方案首次预填的报价提示；更换商品或手改成交价后清除。 */
+    priceSource?: "selection"
     pricingMode?: SalesLinePricingMode
     /** 编辑时按锁定 SKU 修订取价，不作为客户端可修改的销售单请求事实。 */
     referencePrices?: SalesSkuReferencePrices
@@ -56,6 +58,7 @@ export type SalesOrderContractInput = {
 
 /** 销售建单输入；无合同时必须提供客户和开单凭证。 */
 export type CreateSalesOrderInput = {
+    selectionProposalId?: string
     /** 页面生命周期内冻结；结果未知时与原幂等键一起重用。 */
     orderNo: string
     contract: SalesOrderContractInput

@@ -17,8 +17,10 @@ import {
 /** 关联单据局部加载，不阻塞金额和审批区；无来源时明确显示未关联。 */
 export function CustomerSourceDocuments({
     scope,
+    emptyNote = "尚未关联销售单",
 }: {
     scope: CustomerSourceScope
+    emptyNote?: string
 }) {
     const hasTargets = Boolean(
         scope.accountIds?.length || scope.entryIds?.length,
@@ -31,7 +33,7 @@ export function CustomerSourceDocuments({
     return (
         <PreviewSection title="原始单据">
             {!hasTargets ? (
-                <PreviewNote>尚未关联销售单</PreviewNote>
+                <PreviewNote>{emptyNote}</PreviewNote>
             ) : query.isPending ? (
                 <PreviewNote>正在读取原单…</PreviewNote>
             ) : query.isError ? (

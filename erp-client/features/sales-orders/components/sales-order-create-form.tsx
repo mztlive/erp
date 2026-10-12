@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import type { SalesOrderSelectionBasis } from "@/features/sales-orders/api/selection-basis"
+import { SalesOrderSelectionSource } from "./sales-order-selection-source"
 import { useRouter } from "next/navigation"
 
 import { revalidateLogic, useSelector } from "@tanstack/react-form"
@@ -55,6 +57,7 @@ import type { SalesOrderEditorPurpose } from "@/features/sales-orders/lib/sales-
 export type { SalesOrderEditorPurpose } from "@/features/sales-orders/lib/sales-order-create-form-types"
 
 export function SalesOrderCreateForm({
+    initialSelectionBasis,
     initialCustomerId = "",
     initialContractId = "",
     initialContractRevisionId = "",
@@ -65,6 +68,7 @@ export function SalesOrderCreateForm({
     onSubmitted,
     commandLedger: commandLedgerProp,
 }: {
+    initialSelectionBasis?: SalesOrderSelectionBasis
     initialCustomerId?: string
     initialContractId?: string
     initialContractRevisionId?: string
@@ -77,6 +81,11 @@ export function SalesOrderCreateForm({
     onSubmitted?: (salesOrderId: string) => void
     commandLedger?: FormalCommandKeyLedger
 }) {
+    const source =
+        initialDraft?.selectionSource ?? initialSelectionBasis?.source
+    const sourceCustomerId =
+        initialSelectionBasis?.customerId ??
+        (source ? initialDraft?.customerId : undefined)
     const router = useRouter()
     const [leaveConfirmOpen, setLeaveConfirmOpen] = React.useState(false)
     const queryClient = useQueryClient()
@@ -95,7 +104,10 @@ export function SalesOrderCreateForm({
         setUploadOpen(true)
     })
     const [entryOpen, setEntryOpen] = React.useState(
-        purpose === "create" && !initialDraft && !initialContractId,
+        purpose === "create" &&
+            !initialDraft &&
+            !initialContractId &&
+            !initialSelectionBasis,
     )
     const wasImportOpen = React.useRef(false)
     React.useEffect(() => {
@@ -107,7 +119,10 @@ export function SalesOrderCreateForm({
                 : entryOpen
                   ? "sales-orders-create-entry-resume-import"
                   : "sales-create-contract-title"
-            document.getElementById(target)?.focus({ preventScroll: true })
+            const focusTarget =
+                document.getElementById(target) ??
+                document.getElementById("sales-orders-create-customer")
+            focusTarget?.focus({ preventScroll: true })
         })
         return () => cancelAnimationFrame(frame)
     }, [uploadOpen, entryOpen])
@@ -120,23 +135,26 @@ export function SalesOrderCreateForm({
     const contractQuery = useContractCenterQuery(selectedContractId)
 
     const commandLedger = useSalesOrderCreateCommandLedger(
-        initialDraft?.salesOrderId ?? "new-sales-order",
+        initialDraft?.salesOrderId ??
+            (source ? `selection-${source.proposal_id}` : "new-sales-order"),
         commandLedgerProp,
     )
     const submission = useSalesOrderCreateSubmission({
+        selectionProposalId: source?.proposal_id,
         initialDraft,
         commandLedger,
         onSubmitted,
     })
     const { setDraftSaved } = submission
     const defaultValues = useSalesOrderCreateDefaults({
+        initialSelectionBasis,
         initialCustomerId,
         initialContractId,
         initialContractRevisionId,
         initialNature,
         initialDraft,
     })
-    const natureLocked = purpose !== "create"
+    const natureLocked = purpose !== "create" || Boolean(source)
     const [pendingNature, setPendingNature] =
         React.useState<SalesOrderNature | null>(null)
     const procurementResponsibilityRef = React.useRef<{
@@ -226,16 +244,24 @@ export function SalesOrderCreateForm({
         orderBasis === "contract" &&
         Boolean(selectedContractId) &&
         !contractResolved
-    const revisionUnavailable = Boolean(
+    const sourceCustomerMismatch = Boolean(
+        sourceCustomerId &&
         contractQuery.data &&
-        preferredRevisionRef.current &&
-        (!contractQuery.data.revisionTimeline.some(
-            (revision) => revision.revisionId === preferredRevisionRef.current,
-        ) ||
-            (!initialDraft &&
-                preferredRevisionRef.current !==
-                    contractQuery.data.currentRevision.revisionId)),
+        contractQuery.data.customer.id !== sourceCustomerId,
     )
+    const revisionUnavailable =
+        sourceCustomerMismatch ||
+        Boolean(
+            contractQuery.data &&
+            preferredRevisionRef.current &&
+            (!contractQuery.data.revisionTimeline.some(
+                (revision) =>
+                    revision.revisionId === preferredRevisionRef.current,
+            ) ||
+                (!initialDraft &&
+                    preferredRevisionRef.current !==
+                        contractQuery.data.currentRevision.revisionId)),
+        )
     const contractLoadFailed =
         contractQuery.isError ||
         (contractQuery.isSuccess &&
@@ -521,6 +547,7 @@ export function SalesOrderCreateForm({
 
     const editor = (
         <>
+            {source && <SalesOrderSelectionSource source={source} />}
             <SalesOrderCreateAlerts
                 profileError={profileQuery.error ?? null}
                 formalFailure={submission.formalFailure}
@@ -564,6 +591,7 @@ export function SalesOrderCreateForm({
                     />
                 ) : waitingForContract ? (
                     <SalesOrderCreateContractLoading
+                        customerMismatch={sourceCustomerMismatch}
                         failed={contractLoadFailed}
                         imported={importedContractId === selectedContractId}
                         revisionUnavailable={revisionUnavailable}
@@ -591,48 +619,61 @@ export function SalesOrderCreateForm({
                         >
                             <section
                                 className="min-w-0 space-y-5 p-4 sm:p-5"
-                                aria-labelledby="sales-create-contract-title"
+                                aria-labelledby={
+                                    orderBasis === "contract"
+                                        ? "sales-create-contract-title"
+                                        : undefined
+                                }
+                                aria-label={
+                                    orderBasis === "evidence"
+                                        ? "客户与开单材料"
+                                        : undefined
+                                }
                             >
-                                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-                                    <h2
-                                        id="sales-create-contract-title"
-                                        tabIndex={-1}
-                                        className="font-heading text-base font-semibold outline-none"
-                                    >
-                                        {showContractSummary
-                                            ? "合同信息"
-                                            : "客户与合同"}
-                                    </h2>
-                                    {!showContractSummary &&
-                                    !submission.draftIdentity &&
-                                    purpose === "create" ? (
-                                        <form.Subscribe
-                                            selector={(state) =>
-                                                state.values
-                                                    .evidenceUploadPending
-                                            }
+                                {orderBasis === "contract" ? (
+                                    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                                        <h2
+                                            id="sales-create-contract-title"
+                                            tabIndex={-1}
+                                            className="font-heading text-base font-semibold outline-none"
                                         >
-                                            {(uploading) => (
-                                                <Button
-                                                    id="sales-orders-create-change-entry"
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    disabled={
-                                                        uploading ||
-                                                        submission.isSubmitting
-                                                    }
-                                                    onClick={() =>
-                                                        setEntryOpen(true)
-                                                    }
-                                                >
-                                                    更换开单方式
-                                                </Button>
-                                            )}
-                                        </form.Subscribe>
-                                    ) : null}
-                                    {chrome === "none" ? owner : null}
-                                </div>
+                                            {showContractSummary
+                                                ? "合同信息"
+                                                : "客户与合同"}
+                                        </h2>
+                                        {!showContractSummary &&
+                                        !submission.draftIdentity &&
+                                        purpose === "create" ? (
+                                            <form.Subscribe
+                                                selector={(state) =>
+                                                    state.values
+                                                        .evidenceUploadPending
+                                                }
+                                            >
+                                                {(uploading) => (
+                                                    <Button
+                                                        id="sales-orders-create-change-entry"
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        disabled={
+                                                            uploading ||
+                                                            submission.isSubmitting
+                                                        }
+                                                        onClick={() =>
+                                                            setEntryOpen(true)
+                                                        }
+                                                    >
+                                                        更换开单方式
+                                                    </Button>
+                                                )}
+                                            </form.Subscribe>
+                                        ) : null}
+                                        {chrome === "none" ? owner : null}
+                                    </div>
+                                ) : chrome === "none" ? (
+                                    owner
+                                ) : null}
                                 {showContractSummary && contractQuery.data ? (
                                     <SalesOrderCreateContractSummary
                                         form={form}
@@ -653,6 +694,9 @@ export function SalesOrderCreateForm({
                                     <>
                                         <SalesOrderCreateContractSection
                                             form={form}
+                                            sourceCustomerLocked={Boolean(
+                                                source,
+                                            )}
                                             customerLocked={
                                                 submission.draftIdentity != null
                                             }
@@ -717,6 +761,7 @@ export function SalesOrderCreateForm({
             </div>
             {contractPickerOpen ? (
                 <SalesOrderContractPickerDialog
+                    customerId={sourceCustomerId}
                     initialContractId={selectedContractId}
                     onClose={() => setContractPickerOpen(false)}
                     onConfirm={(contractId) => {

@@ -29,6 +29,7 @@ mod entity;
 pub(crate) mod formal_revision;
 mod pricing_mode;
 mod procurement;
+pub mod selection_source;
 pub use pricing_mode::SalesPricingMode;
 pub mod revision;
 pub mod snapshot;

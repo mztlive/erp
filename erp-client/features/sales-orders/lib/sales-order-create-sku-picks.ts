@@ -30,6 +30,7 @@ function lineFromPick(
             selectSalesReferencePrice(base.quantity, referencePrices)
                 ?.unitPriceGross || base.unitPriceGross,
         pricingMode: "AUTO",
+        priceSource: undefined,
         referencePrices,
     }
 }

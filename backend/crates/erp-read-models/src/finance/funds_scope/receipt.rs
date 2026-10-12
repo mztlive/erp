@@ -344,9 +344,7 @@ impl FundsAccess {
         ensure_version(params.scope_version.as_deref(), &version).map_err(|_| changed())?;
         let summary =
             flow::summary(&snapshot.summary, &version)?.with_balance_access(authorization.ledger_read);
-        let items = self
-            .receipt_page(snapshot.items, &snapshot.versions, authorization.ledger_read, executor)
-            .await?;
+        let items = self.receipt_page(snapshot.items, &snapshot.versions, &authorization, executor).await?;
         Ok(FundsScopedPage {
             items,
             total,
@@ -409,9 +407,10 @@ impl FundsAccess {
         &self,
         rows: Vec<CustomerReceiptRow>,
         versions: &[flow::FlowVersion],
-        ledger_read: bool,
+        authorization: &FundsAuthorization,
         executor: &mut dyn Executor,
     ) -> Result<Vec<ScopedCustomerReceiptRow>> {
+        let ledger_read = authorization.ledger_read;
         let ids = rows.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
         let links = self.receipt_matched_links(&ids, executor).await?;
         let facts = self
@@ -438,6 +437,8 @@ impl FundsAccess {
         }
         let links = self.receipt_decided_links(&ids, &links, executor).await?;
         let mut items = self.receipt_page_items(&decided, &links, ledger_read);
+        self.attach_receipt_pending(&mut items, decided.iter().map(|(row, _)| row), authorization, executor)
+            .await?;
         self.finish_receipt_names(&mut items, executor).await?;
         Ok(items)
     }
@@ -607,6 +608,7 @@ impl FundsAccess {
             allocated_total: whole_amount(whole, net),
             unallocated_amount: whole_amount(whole, row.amount.checked_sub(net)),
             allocations: Some(views),
+            pending_allocations: None,
             permission_limited: !whole,
         }
     }
@@ -629,19 +631,11 @@ impl FundsAccess {
         actor: &AuditActor,
         executor: &mut dyn Executor,
     ) -> Result<FundsScopedResult<ScopedCustomerReceiptRow>> {
-        use erp_finance::repository::CustomerReceiptFilter;
         let (_access, authorization) = self.resolve(actor, "customer_receipt", "detail", executor).await?;
         let filter = CustomerReceiptFilter {
-            keyword_ids: None,
             receipt_ids: Some(vec![id.to_string()]),
-            pending_entry_ids: Vec::new(),
-            receipt_no: None,
-            counterparty_party_id: None,
-            status: None,
-            page: 1,
             page_size: 1,
-            sort_by: None,
-            sort_ascending: false,
+            ..Default::default()
         };
         let page = self.db.customer_receipts().search_customer_receipts(&filter, executor).await?;
         let row = page.items.into_iter().next().ok_or_else(|| Error::NotFound("客户回款单不存在".into()))?;
@@ -665,6 +659,13 @@ impl FundsAccess {
             return Err(Error::NotFound("客户回款单不存在".into()));
         }
         let mut data = Self::cut_receipt_row(&row, row_links, &matched, whole);
+        self.attach_receipt_pending(
+            std::slice::from_mut(&mut data),
+            std::iter::once(&row),
+            &authorization,
+            executor,
+        )
+        .await?;
         self.finish_receipt_names(std::slice::from_mut(&mut data), executor).await?;
         let mut parts = vec![format!("{}:{}", row.id, row.version)];
         for order in matched.iter().filter_map(|id| facts.get(id)) {

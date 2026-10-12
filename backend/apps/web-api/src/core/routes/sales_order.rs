@@ -21,6 +21,21 @@ use crate::core::middleware::with_permission;
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .merge(evidence_contract_routes(rbac))
+        .merge(read_create_routes(rbac))
+        .merge(lifecycle_routes(rbac))
+}
+
+/// 查询、方案预填与创建入口，各自保留资源动作权限。
+fn read_create_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/sales-orders/selection-proposals/{id}/basis",
+            with_permission(
+                get(sales_order::selection::selection_basis),
+                rbac,
+                sales_order::selection::selection_basis_permission_key(),
+            ),
+        )
         .route(
             "/sales-orders",
             with_permission(
@@ -45,6 +60,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 sales_order::sales_order_detail_permission_key(),
             ),
         )
+}
+
+/// 已有销售单的编辑、提交、撤回、作废和交接入口。
+fn lifecycle_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/sales-orders/{id}/working-copy",
             with_permission(

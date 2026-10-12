@@ -16,6 +16,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 
 export type SalesOrderCreateContractSectionProps = {
     form: SalesOrderCreateFormApi
+    sourceCustomerLocked?: boolean
     customerLocked?: boolean
     onContractChange: (contractId: string) => void
     onOrderBasisChange: (basis: "contract" | "evidence") => void
@@ -24,6 +25,7 @@ export type SalesOrderCreateContractSectionProps = {
 
 export function SalesOrderCreateContractSection({
     form,
+    sourceCustomerLocked = false,
     customerLocked = false,
     onContractChange,
     onOrderBasisChange,
@@ -45,7 +47,7 @@ export function SalesOrderCreateContractSection({
     const customerFromContract = basis === "contract" && Boolean(contractId)
     return (
         <div className="space-y-5">
-            {!customerLocked ? (
+            {basis === "contract" && !customerLocked ? (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-4">
                     <div>
                         <p className="text-sm font-medium">导入合同并开单</p>
@@ -65,73 +67,76 @@ export function SalesOrderCreateContractSection({
                     </Button>
                 </div>
             ) : null}
-            <form.AppField name="orderBasis">
-                {(field) => (
-                    <Field className="gap-2 sm:grid sm:grid-cols-[auto_1fr] sm:gap-x-6">
-                        <div
-                            id="sales-orders-create-basis-label"
-                            className="flex items-center text-sm font-medium"
-                        >
-                            开单方式
-                            <span className="ml-1 text-destructive">*</span>
-                        </div>
-                        <RadioGroup
-                            id="sales-orders-create-basis"
-                            aria-labelledby="sales-orders-create-basis-label"
-                            aria-describedby="sales-orders-create-basis-description"
-                            value={field.state.value}
-                            disabled={customerLocked || uploading}
-                            onValueChange={(value) => {
-                                if (
-                                    value === "contract" ||
-                                    value === "evidence"
-                                ) {
-                                    onOrderBasisChange(value)
-                                    field.handleBlur()
-                                }
-                            }}
-                            className="flex w-fit gap-0"
-                        >
-                            {[
-                                { value: "contract", label: "关联合同开单" },
-                                {
-                                    value: "evidence",
-                                    label: "先开单，后补合同",
-                                },
-                            ].map((option) => (
-                                <RadioGroupItem
-                                    key={option.value}
-                                    id={`sales-orders-create-basis-${option.value}`}
-                                    value={option.value}
-                                    variant="segment"
-                                    nativeButton
-                                    render={
-                                        <button
-                                            type="button"
-                                            aria-label={option.label}
-                                        />
+            {basis === "contract" ? (
+                <form.AppField name="orderBasis">
+                    {(field) => (
+                        <Field className="gap-2 sm:grid sm:grid-cols-[auto_1fr] sm:gap-x-6">
+                            <div
+                                id="sales-orders-create-basis-label"
+                                className="flex items-center text-sm font-medium"
+                            >
+                                开单方式
+                                <span className="ml-1 text-destructive">*</span>
+                            </div>
+                            <RadioGroup
+                                id="sales-orders-create-basis"
+                                aria-labelledby="sales-orders-create-basis-label"
+                                aria-describedby="sales-orders-create-basis-description"
+                                value={field.state.value}
+                                disabled={customerLocked || uploading}
+                                onValueChange={(value) => {
+                                    if (
+                                        value === "contract" ||
+                                        value === "evidence"
+                                    ) {
+                                        onOrderBasisChange(value)
+                                        field.handleBlur()
                                     }
-                                >
-                                    {option.label}
-                                </RadioGroupItem>
-                            ))}
-                        </RadioGroup>
-                        <p
-                            id="sales-orders-create-basis-description"
-                            className="text-xs text-muted-foreground sm:col-start-2"
-                            aria-live="polite"
-                        >
-                            {customerLocked
-                                ? "开单依据沿用原单据；补录合同请到销售单详情操作。"
-                                : uploading
-                                  ? "凭证上传中，请完成后再切换开单依据。"
-                                  : basis === "contract"
-                                    ? "选择已归档合同，或在本页导入签署合同后自动带入开单信息。"
-                                    : "客户已确定、合同尚未完成盖章时，可凭业务材料先开单，签署完成后补录同一客户的合同。"}
-                        </p>
-                    </Field>
-                )}
-            </form.AppField>
+                                }}
+                                className="flex w-fit gap-0"
+                            >
+                                {[
+                                    {
+                                        value: "contract",
+                                        label: "关联合同开单",
+                                    },
+                                    {
+                                        value: "evidence",
+                                        label: "先开单，后补合同",
+                                    },
+                                ].map((option) => (
+                                    <RadioGroupItem
+                                        key={option.value}
+                                        id={`sales-orders-create-basis-${option.value}`}
+                                        value={option.value}
+                                        variant="segment"
+                                        nativeButton
+                                        render={
+                                            <button
+                                                type="button"
+                                                aria-label={option.label}
+                                            />
+                                        }
+                                    >
+                                        {option.label}
+                                    </RadioGroupItem>
+                                ))}
+                            </RadioGroup>
+                            <p
+                                id="sales-orders-create-basis-description"
+                                className="text-xs text-muted-foreground sm:col-start-2"
+                                aria-live="polite"
+                            >
+                                {customerLocked
+                                    ? "开单依据沿用原单据；补录合同请到销售单详情操作。"
+                                    : uploading
+                                      ? "凭证上传中，请完成后再切换开单依据。"
+                                      : "选择已归档合同，或在本页导入签署合同后自动带入开单信息。"}
+                            </p>
+                        </Field>
+                    )}
+                </form.AppField>
+            ) : null}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <form.AppField name="customerId">
                     {(field) => {
@@ -146,7 +151,9 @@ export function SalesOrderCreateContractSection({
                                 </FieldLabel>
                                 <CustomerSearchCombobox
                                     disabled={
-                                        customerLocked || customerFromContract
+                                        customerLocked ||
+                                        sourceCustomerLocked ||
+                                        customerFromContract
                                     }
                                     id="sales-orders-create-customer"
                                     value={field.state.value || undefined}

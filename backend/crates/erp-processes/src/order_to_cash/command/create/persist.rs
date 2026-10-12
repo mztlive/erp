@@ -5,6 +5,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use erp_identity::SharedRbacService;
 use erp_sales::entity::sales_order::SalesOrder;
+use erp_sales::entity::sales_order::selection_source::SalesSelectionSource;
 use erp_sales::service::sales_order::SalesOrderService;
 use erp_workflow::entity::document_registry::BusinessDocument;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
@@ -17,6 +18,7 @@ use persistence_core::Executor;
 use super::replay_creation_event;
 use super::submission::{CreationDraft, CreationPlan, CreationSubmit};
 use crate::Result;
+use crate::adapters::selection_access;
 use crate::business_ownership::ensure_creation_org as ensure_order_creation_org;
 use crate::order_to_cash::SalesOrderCommandProcess;
 use crate::order_to_cash::adapters::catalog::CatalogQualificationAdapter;
@@ -252,6 +254,11 @@ async fn ensure_creation_ready(
 ) -> Result<()> {
     context.access.related_order(order, executor).await?;
     context.access.creation(order, executor).await?;
+    if let Some(source) = &order.selection_source {
+        let access = selection_access(context.db.clone(), context.rbac.clone());
+        let proposal = access.require_proposal(&context.actor, "get", &source.proposal_id, executor).await?;
+        SalesSelectionSource::from_proposal(&proposal, &order.customer_id, order.business_type)?;
+    }
     SalesOrderService::new(context.db.clone())
         .ensure_sellable_refs(
             &context.sellable_refs,

@@ -11,6 +11,7 @@ use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+use super::super::selection_source::SalesSelectionSource;
 use super::super::types::{BusinessType, OriginSystem};
 use super::{
     CloseStatus, CollectionProgress, CommercialStatus, FulfillmentProgress, InvoiceProgress, ReviewStatus,
@@ -115,6 +116,9 @@ pub struct SalesOrder {
     /// 首次 ERP 建单时的凭证资产，历史单据缺省为空。
     #[serde(default)]
     pub evidence_file_asset_ids: Vec<FileAssetId>,
+    /// 创建时冻结的销售方案来源；历史销售单为空。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selection_source: Option<SalesSelectionSource>,
 }
 
 impl PartialEq for SalesOrder {
@@ -146,6 +150,7 @@ impl PartialEq for SalesOrder {
             && self.closed_at == other.closed_at
             && self.procurement_guard_version == other.procurement_guard_version
             && self.evidence_file_asset_ids == other.evidence_file_asset_ids
+            && self.selection_source == other.selection_source
     }
 }
 
@@ -207,6 +212,7 @@ impl SalesOrder {
             closed_at: None,
             procurement_guard_version: 0,
             evidence_file_asset_ids: Vec::new(),
+            selection_source: None,
         })
     }
 

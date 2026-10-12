@@ -12,6 +12,7 @@ mod payment;
 mod payment_guidance;
 mod receipt;
 mod receipt_display;
+mod receipt_pending;
 mod receivable;
 mod receivable_display;
 mod repository;

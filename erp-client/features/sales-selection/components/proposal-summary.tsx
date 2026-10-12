@@ -1,6 +1,8 @@
 "use client"
 
 import Link from "next/link"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 
 import { MetricItem, MoneyValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -11,6 +13,12 @@ import {
 } from "@/features/sales-selection/types"
 
 export function ProposalSummary({ proposal }: { proposal: ProposalView }) {
+    const account = useAccountProfileQuery()
+    const canCreate = hasPermission(
+        account.data?.permissions,
+        "sales_order:create",
+    )
+    const showCreate = proposal.submit_mode === "BY_QUANTITY" && canCreate
     const isPackage = proposal.form === "PACKAGE"
     const isRange = proposal.submit_mode === "MALL_REDEEM"
     const count = proposal.display_lines.length
@@ -74,9 +82,27 @@ export function ProposalSummary({ proposal }: { proposal: ProposalView }) {
                     </p>
                 </section>
             )}
+            {showCreate && (
+                <Button
+                    id="selection-proposal-create-order"
+                    className="mt-8 w-full sm:col-span-2"
+                    render={
+                        <Link
+                            href={`/sales/orders?mode=create&selectionProposalId=${encodeURIComponent(proposal.id)}`}
+                        />
+                    }
+                >
+                    创建销售单
+                </Button>
+            )}
             <Button
+                variant={showCreate ? "outline" : "default"}
                 id="selection-proposal-open-book"
-                className="mt-8 w-full sm:col-span-2"
+                className={
+                    showCreate
+                        ? "mt-3 w-full sm:col-span-2"
+                        : "mt-8 w-full sm:col-span-2"
+                }
                 render={
                     <Link
                         href={`/sales/selection/${encodeURIComponent(proposal.booklet_id)}`}

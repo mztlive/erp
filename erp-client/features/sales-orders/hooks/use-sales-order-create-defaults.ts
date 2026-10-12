@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import type { SalesOrderSelectionBasis } from "@/features/sales-orders/api/selection-basis"
 
 import type { SalesOrderDraftResumeData } from "@/features/sales-orders/api/sales-orders"
 import type { SalesOrderNature } from "@/features/sales-orders/types"
@@ -10,6 +11,7 @@ import {
 } from "@/features/sales-orders/lib/sales-order-create-model"
 
 export type SalesOrderCreateDefaultsInput = {
+    initialSelectionBasis?: SalesOrderSelectionBasis
     initialCustomerId: string
     initialContractId: string
     initialContractRevisionId: string
@@ -25,6 +27,7 @@ export type SalesOrderCreateDefaultsInput = {
  *（Maximum update depth exceeded @ Field）。
  */
 export function useSalesOrderCreateDefaults({
+    initialSelectionBasis,
     initialCustomerId,
     initialContractId,
     initialContractRevisionId,
@@ -35,13 +38,19 @@ export function useSalesOrderCreateDefaults({
         const nature = initialDraft?.nature ?? initialNature
         const contractId = initialDraft?.contractId || initialContractId
         return {
-            orderBasis: initialDraft && !contractId ? "evidence" : "contract",
+            orderBasis:
+                (initialDraft || initialSelectionBasis) && !contractId
+                    ? "evidence"
+                    : "contract",
             contractId,
             requestedContractRevisionId:
                 initialDraft?.requestedContractRevisionId ||
                 initialContractRevisionId,
             contractRevisionLabel: "",
-            customerId: initialDraft?.customerId || initialCustomerId,
+            customerId:
+                initialDraft?.customerId ||
+                initialSelectionBasis?.customerId ||
+                initialCustomerId,
             evidenceUploadPending: false,
             evidenceAttachments: initialDraft?.evidenceFiles?.length
                 ? initialDraft.evidenceFiles
@@ -49,7 +58,10 @@ export function useSalesOrderCreateDefaults({
                       id,
                       fileName: "已上传开单凭证",
                   })) ?? []),
-            customerName: initialDraft?.customerName ?? "",
+            customerName:
+                initialDraft?.customerName ??
+                initialSelectionBasis?.customerName ??
+                "",
             settlementPartyId: initialDraft?.settlementPartyId ?? "",
             settlementEntity: initialDraft?.settlementEntity ?? "",
             nature,
@@ -67,9 +79,11 @@ export function useSalesOrderCreateDefaults({
             lineItems:
                 initialDraft && initialDraft.lineItems.length > 0
                     ? initialDraft.lineItems
-                    : nature === "card_voucher"
-                      ? [createEmptyLine(nature)]
-                      : [],
+                    : initialSelectionBasis
+                      ? initialSelectionBasis.lineItems
+                      : nature === "card_voucher"
+                        ? [createEmptyLine(nature)]
+                        : [],
         } satisfies CreateSalesOrderFormValues
         // initialDraft 由外层等查询完成后才挂载本组件，渲染期间引用稳定，可以放心入依赖数组。
     }, [
@@ -77,6 +91,7 @@ export function useSalesOrderCreateDefaults({
         initialContractRevisionId,
         initialCustomerId,
         initialNature,
+        initialSelectionBasis,
         initialDraft,
     ])
 }

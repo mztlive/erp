@@ -986,6 +986,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "GET",
+                path: "/admin/sales-orders/selection-proposals/{id}/basis",
+                description: "读取销售方案开单内容",
+                permission: {
+                    resource: "sales_order",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
                 path: "/admin/sales-orders",
                 description: "查询销售单列表",
                 permission: {

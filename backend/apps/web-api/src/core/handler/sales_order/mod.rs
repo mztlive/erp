@@ -5,6 +5,7 @@
 
 pub mod contract_check;
 pub mod evidence;
+pub mod selection;
 
 use application_core::AuditActor;
 use axum::extract::{Path, Query, State};

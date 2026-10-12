@@ -57,6 +57,7 @@ export function SalesOrderCreateLineItemTable({
                             {values.lineItems.length > 0 ? (
                                 <EditableLineItemTable
                                     id="sales-orders-create-line-items"
+                                    className="[&_tbody_td]:align-top [&_tbody_td:last-child>div]:min-h-control [&_tbody_td:last-child>div]:items-center"
                                     items={values.lineItems}
                                     columns={columns}
                                     getRowId={(item) => item.rowKey}
