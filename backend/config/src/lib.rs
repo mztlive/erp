@@ -58,6 +58,8 @@ use url::Url;
 
 mod aliyun_ocr;
 pub use aliyun_ocr::AliyunOcrConfig;
+mod purchase_mail;
+pub use purchase_mail::PurchaseMailConfig;
 mod contract_ai;
 pub use contract_ai::ContractAiConfig;
 mod dangaoshushu;
@@ -100,6 +102,9 @@ pub struct Config {
     /// 可选 OpenAI 兼容合同提取服务。
     #[serde(default)]
     pub contract_ai: Option<ContractAiConfig>,
+    /// 可选 Resend 兼容采购邮件发送服务。
+    #[serde(default)]
+    pub purchase_mail: Option<PurchaseMailConfig>,
     /// 可选蛋糕叔叔连接；凭据由 SafeConfig 提供，不存入业务表。
     #[serde(default)]
     pub dangaoshushu: Option<DangaoshushuConfig>,
@@ -350,6 +355,9 @@ impl Config {
         }
         if let Some(supplier) = &self.dangaoshushu {
             supplier.validate()?;
+        }
+        if let Some(mail) = &self.purchase_mail {
+            mail.validate()?;
         }
         validate_s3_config(&self.s3)?;
         validate_bootstrap_password(self.bootstrap.initial_admin_password())?;

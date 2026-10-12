@@ -25,6 +25,7 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
         .merge(purchase_change_routes(rbac))
         .merge(purchase_change_draft_routes(rbac))
         .merge(purchase_sales_material_routes(rbac))
+        .merge(purchase_correspondence_routes(rbac))
 }
 
 /// 采购关联销售材料下载始终使用采购对象详情资格及其准确销售版本。
@@ -200,4 +201,32 @@ fn purchase_change_draft_routes(rbac: &SharedRbacService) -> Router<AppState> {
             purchase_order::change_draft::purchase_change_draft_permission_key(),
         ),
     )
+}
+
+fn purchase_correspondence_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/purchase-orders/{id}/emails",
+            with_permission(
+                get(purchase_order::correspondence::purchase_email_history),
+                rbac,
+                purchase_order::correspondence::purchase_email_history_permission_key(),
+            ),
+        )
+        .route(
+            "/purchase-orders/{id}/paper",
+            with_permission(
+                get(purchase_order::correspondence::purchase_paper),
+                rbac,
+                purchase_order::correspondence::purchase_paper_permission_key(),
+            ),
+        )
+        .route(
+            "/purchase-orders/{id}/email",
+            with_permission(
+                post(purchase_order::correspondence::send_purchase_email),
+                rbac,
+                purchase_order::correspondence::send_purchase_email_permission_key(),
+            ),
+        )
 }

@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { SalesDeliveryAllocationEditor } from "./sales-delivery-allocation-editor"
 
 import { PlusIcon, PackageSearchIcon, ChevronDownIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -143,7 +144,7 @@ export function SalesOrderCreateLineItemsSection({
                             {nature === "physical_service" &&
                             lines.length > 0 ? (
                                 <p className="text-xs text-muted-foreground">
-                                    数量达到商品集采起订量时取集采参考价，其余取一件代发参考价。手动修改成交价后，数量变化保留该价格；可点击“按数量取价”恢复自动匹配。
+                                    成交单价由销售填写。选择商品、修改数量或从选品册开单均不自动带入价格。
                                 </p>
                             ) : null}
                             {nature === "physical_service" &&
@@ -158,7 +159,7 @@ export function SalesOrderCreateLineItemsSection({
                                             尚未添加商品
                                         </p>
                                         <p className="text-sm text-muted-foreground">
-                                            点击“添加商品”，选择后设置数量和交付日，成交单价可手动调整。
+                                            点击“添加商品”，选择后设置数量和交付日，成交单价由销售填写。
                                         </p>
                                     </div>
                                 </div>
@@ -188,6 +189,7 @@ export function SalesOrderCreateLineItemsSection({
                     onConfirm={handleConfirmPicks}
                 />
             </section>
+            <SalesDeliveryAllocationEditor form={form} />
             <form.AppField name="remark">
                 {(field) => (
                     <Collapsible

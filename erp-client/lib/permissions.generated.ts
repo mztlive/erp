@@ -3621,6 +3621,36 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                     action: "submit",
                 },
             },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-orders/{id}/emails",
+                description: "查看采购邮件发送记录",
+                permission: {
+                    resource: "purchase_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-orders/{id}/paper",
+                description: "下载供应商采购单",
+                permission: {
+                    resource: "purchase_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/email",
+                description: "发送采购单邮件给供应商",
+                permission: {
+                    resource: "purchase_order",
+                    action: "send_email",
+                },
+            },
         ],
     },
     {

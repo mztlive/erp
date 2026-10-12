@@ -107,6 +107,12 @@ export type ApprovalSalesSubmission = {
         spec_snapshot: string | null
         unit_snapshot: string | null
         quantity: string | null
+        delivery_allocations?: {
+            recipient: string
+            phone: string
+            address: string
+            quantity: string
+        }[]
         unit_price_gross: string | null
         gross_amount: string
         net_amount: string

@@ -1,6 +1,7 @@
 "use client"
 
 import type * as React from "react"
+import { PurchaseOrderCorrespondence } from "./purchase-order-correspondence"
 import { useRouter } from "next/navigation"
 import { FilePenLineIcon, SendIcon, Trash2Icon } from "lucide-react"
 
@@ -88,6 +89,9 @@ export function PurchaseOrderDetailHeader({
                 }
                 primaryAction={
                     <div className="flex flex-wrap items-center gap-2">
+                        {mode !== "edit" ? (
+                            <PurchaseOrderCorrespondence order={order} />
+                        ) : null}
                         <PageActions
                             id="procurement-orders-detail-actions"
                             actions={[

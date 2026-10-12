@@ -2,6 +2,7 @@
 
 pub mod command_receipt;
 mod procurement_responsibility;
+mod purchase_email;
 mod purchase_order;
 
 /// 按责任规则、采购单、命令回执的顺序注册索引。
@@ -17,5 +18,6 @@ mod purchase_order;
 pub async fn ensure(db: &mongodb::Database) -> persistence_core::Result<()> {
     procurement_responsibility::ensure(db).await?;
     purchase_order::ensure(db).await?;
-    command_receipt::ensure(db).await
+    command_receipt::ensure(db).await?;
+    purchase_email::ensure(db).await
 }

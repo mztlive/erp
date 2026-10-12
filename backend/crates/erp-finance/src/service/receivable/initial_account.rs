@@ -117,6 +117,7 @@ mod tests {
 
     use super::*;
     use crate::entity::receivable::ReceivableAccountStatus;
+    use crate::entity::receivable::invoice_request_source::InvoiceRequestSource;
 
     fn input(business_type: SalesBusinessTypeFact, gross: &str) -> InitialReceivableInput {
         InitialReceivableInput {
@@ -194,6 +195,27 @@ mod tests {
             assert_eq!(account.settled_total, Amount::from_str("0.00").unwrap());
             assert_eq!(account.invoiced_total, Amount::from_str("0.00").unwrap());
         }
+    }
+
+    #[test]
+    fn invoice_application_capacity_does_not_require_receipts() {
+        let (mut account, _) = build_initial_receivable(
+            input(SalesBusinessTypeFact::GoodsService, "100"),
+            ReceivableAccountId::new("account-1"),
+            ReceivableEntryId::new("entry-1"),
+            business_date,
+        )
+        .unwrap();
+        let source = InvoiceRequestSource {
+            effective: true,
+            invoice_title: "客户公司".into(),
+            tax_number: "91310000123456789A".into(),
+        };
+        assert_eq!(account.settled_total, Amount::zero());
+        assert!(source.unavailable_reason(account.open_invoiceable_total).is_none());
+        account.sync_totals(Amount::from_str("100").unwrap(), Amount::zero(), "finance").unwrap();
+        assert_eq!(account.open_invoiceable_total, Amount::from_str("100").unwrap());
+        assert!(source.unavailable_reason(account.open_invoiceable_total).is_none());
     }
 
     #[test]

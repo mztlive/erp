@@ -24,7 +24,7 @@ use validator::Validate;
 use crate::Result;
 use crate::entity::sales_order::{
     BusinessType, CardForm, CommercialStatus, GoodsLineFields, LineStatus, LineType, OriginSystem,
-    SalesPricingMode, VoucherLineDraft, WelfareScenario,
+    SalesDeliveryAllocation, SalesPricingMode, VoucherLineDraft, WelfareScenario,
 };
 
 /// 销售单列表允许的排序字段白名单（api-contract §4：Service 层校验）。
@@ -630,6 +630,9 @@ pub struct SalesOrderWorkingCopyLineView {
     pub unit_price_gross: Option<UnitPrice>,
     /// 成交价编辑方式；历史缺省保留为手工价。
     pub pricing_mode: SalesPricingMode,
+    /// 按地址分配的交付数量；历史未指定时为空。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub delivery_allocations: Vec<SalesDeliveryAllocation>,
     /// 精确 SKU 修订的只读参考价；单域映射不补齐此字段。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reference_prices: Option<SalesReferencePricesView>,

@@ -72,6 +72,20 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
                         <TableRow key={line.id}>
                             <TableCell className="min-w-44 whitespace-normal">
                                 <div>{line.name}</div>
+                                {line.deliveryAllocations?.map(
+                                    (allocation, index) => (
+                                        <div
+                                            key={index}
+                                            className="mt-2 text-xs text-muted-foreground"
+                                        >
+                                            {allocation.quantity} {line.unit} →{" "}
+                                            {allocation.recipient} ·{" "}
+                                            {allocation.phone}
+                                            <br />
+                                            {allocation.address}
+                                        </div>
+                                    ),
+                                )}
                                 {line.sku ? (
                                     <div className="num text-xs text-muted-foreground">
                                         {line.sku}

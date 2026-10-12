@@ -18,7 +18,6 @@ import type {
 } from "@/features/sales-orders/types"
 import { SalesOrderCreateLineSkuEditor } from "@/features/sales-orders/components/sales-order-create-line-sku-editor"
 import { SalesOrderCreateLinePriceEditor } from "@/features/sales-orders/components/sales-order-create-line-price-editor"
-import { selectSalesReferencePrice } from "@/features/sales-orders/lib/sales-line-pricing"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
 function ProcurementOwnerPreview({
@@ -97,28 +96,6 @@ export function buildSalesOrderCreateLineItemColumns(
                         <div className="w-20 shrink-0">
                             <form.AppField
                                 name={`lineItems[${rowIndex}].quantity`}
-                                listeners={{
-                                    onChange: ({ value }) => {
-                                        if (nature !== "physical_service")
-                                            return
-                                        const current =
-                                            form.getFieldValue("lineItems")[
-                                                rowIndex
-                                            ]
-                                        if (current?.pricingMode !== "AUTO")
-                                            return
-                                        const price = selectSalesReferencePrice(
-                                            value,
-                                            current.referencePrices,
-                                        )
-                                        if (price) {
-                                            form.setFieldValue(
-                                                `lineItems[${rowIndex}].unitPriceGross`,
-                                                price.unitPriceGross,
-                                            )
-                                        }
-                                    },
-                                }}
                             >
                                 {(field) => (
                                     <field.TextField

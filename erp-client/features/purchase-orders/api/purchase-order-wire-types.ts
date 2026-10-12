@@ -132,6 +132,12 @@ export type BackendPurchaseSourceSalesOrder = {
         line_no: number
         item_name: string
         specification?: string | null
+        delivery_allocations?: {
+            recipient: string
+            phone: string
+            address: string
+            quantity: string
+        }[]
         quantity: string
         unit: string
         unit_price_gross: string

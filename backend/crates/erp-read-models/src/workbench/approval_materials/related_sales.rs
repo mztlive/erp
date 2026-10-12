@@ -471,6 +471,7 @@ mod tests {
                 base_unit_code: "盒".into(),
                 unit_price_gross: "20".parse().unwrap(),
                 pricing_mode: Default::default(),
+                delivery_allocations: Vec::new(),
             },
         )
         .unwrap();

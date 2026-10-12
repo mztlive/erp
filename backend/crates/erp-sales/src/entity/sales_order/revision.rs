@@ -24,7 +24,7 @@ use super::amount_validation::validate_amount_triple;
 use super::snapshot::HeaderSnapshots;
 use super::types::{CardForm, GoodsLineFields, LineType, WelfareScenario};
 use super::working_copy::SalesOrderWorkingCopyLineData;
-use crate::entity::sales_order::SalesPricingMode;
+use crate::entity::sales_order::{SalesDeliveryAllocation, SalesPricingMode};
 
 /// 内容指纹最大长度。
 const CONTENT_HASH_MAX_LEN: usize = 128;
@@ -447,6 +447,7 @@ impl SalesOrderRevisionLine {
             unit_snapshot: self.unit_snapshot.clone(),
             goods: Some(GoodsLineFields {
                 pricing_mode: goods.pricing_mode,
+                delivery_allocations: goods.delivery_allocations.clone(),
                 sku_id: goods.sku_id.clone(),
                 sku_revision_id: goods.sku_revision_id.clone(),
                 welfare_scenario: goods.welfare_scenario,
@@ -485,6 +486,9 @@ pub struct SalesOrderGoodsServiceLineRevisionData {
     /// 成交价编辑方式；历史缺省保留为手工价。
     #[serde(default, skip_serializing_if = "SalesPricingMode::is_manual")]
     pub pricing_mode: SalesPricingMode,
+    /// 按地址分配的交付数量；历史未指定时为空。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub delivery_allocations: Vec<SalesDeliveryAllocation>,
 }
 
 /// 实物及服务行版本实体（数据模型 §6.4，与公共行一对一）。
@@ -513,6 +517,9 @@ pub struct SalesOrderGoodsServiceLineRevision {
     /// 成交价编辑方式；历史缺省保留为手工价。
     #[serde(default, skip_serializing_if = "SalesPricingMode::is_manual")]
     pub pricing_mode: SalesPricingMode,
+    /// 按地址分配的交付数量；历史未指定时为空。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub delivery_allocations: Vec<SalesDeliveryAllocation>,
 }
 
 impl SalesOrderGoodsServiceLineRevision {
@@ -551,6 +558,7 @@ impl SalesOrderGoodsServiceLineRevision {
             base_unit_code,
             unit_price_gross: data.unit_price_gross,
             pricing_mode: data.pricing_mode,
+            delivery_allocations: data.delivery_allocations.clone(),
         })
     }
 }
@@ -853,6 +861,7 @@ mod tests {
             SalesOrderGoodsServiceLineRevisionId::new("gs-1"),
             SalesOrderGoodsServiceLineRevisionData {
                 pricing_mode: Default::default(),
+                delivery_allocations: Vec::new(),
                 revision_line_id: SalesOrderRevisionLineId::new("rl-1"),
                 sku_id: SkuId::new("sku-1"),
                 sku_revision_id: SkuRevisionId::new("skurev-1"),
@@ -883,6 +892,7 @@ mod tests {
     fn data() -> SalesOrderGoodsServiceLineRevisionData {
         SalesOrderGoodsServiceLineRevisionData {
             pricing_mode: Default::default(),
+            delivery_allocations: Vec::new(),
             revision_line_id: SalesOrderRevisionLineId::new("rl-1"),
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: SkuRevisionId::new("skurev-1"),

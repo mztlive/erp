@@ -2,7 +2,7 @@ import { z } from "zod"
 import type { StandardSchemaV1Issue } from "@tanstack/react-form"
 
 import { WELFARE_SCENARIO_OPTIONS } from "@/lib/business-options"
-import { compareDecimal } from "@/lib/fixed-decimal"
+import { compareDecimal, sumFixed } from "@/lib/fixed-decimal"
 import type { SalesOrderCreateIntent } from "@/features/sales-orders/types"
 
 export const decimalInput = (
@@ -42,6 +42,18 @@ const salesReferencePriceSchema = z.object({
     marketPrice: z.string().optional(),
 })
 
+const deliveryAllocationsSchema = z
+    .array(
+        z.object({
+            recipient: z.string().trim().min(1, "请填写收货人").max(64),
+            phone: z.string().trim().min(1, "请填写联系电话").max(32),
+            address: z.string().trim().min(1, "请填写完整收货地址").max(512),
+            quantity: decimalInput("分配数量", 6, { positive: true }),
+        }),
+    )
+    .max(100, "每条商品最多分配 100 个地址")
+    .optional()
+
 const draftLineSchema = z.object({
     rowKey: z.string().min(1),
     name: z.string().trim().min(1, "请输入销售项目"),
@@ -52,6 +64,7 @@ const draftLineSchema = z.object({
     quantity: decimalInput("数量", 6, { positive: true }),
     unit: z.string().trim().min(1, "请输入单位"),
     unitPriceGross: decimalInput("含税单价", 4, { positive: true }),
+    deliveryAllocations: deliveryAllocationsSchema,
     pricingMode: z.enum(["AUTO", "MANUAL"]).optional(),
     priceSource: z.literal("selection").optional(),
     referencePrices: salesReferencePriceSchema.optional(),
@@ -71,6 +84,7 @@ const draftRowSchema = z.object({
     quantity: z.string(),
     unit: z.string(),
     unitPriceGross: z.string(),
+    deliveryAllocations: deliveryAllocationsSchema,
     pricingMode: z.enum(["AUTO", "MANUAL"]).optional(),
     priceSource: z.literal("selection").optional(),
     referencePrices: salesReferencePriceSchema.optional(),
@@ -118,6 +132,24 @@ const createSalesOrderSchema = z
         lineItems: z.array(draftLineSchema).min(1, "至少需要一条销售明细"),
     })
     .superRefine((value, context) => {
+        value.lineItems.forEach((line, index) => {
+            if (!line.deliveryAllocations?.length) return
+            try {
+                const total = sumFixed(
+                    line.deliveryAllocations.map((row) => row.quantity),
+                    { maxScale: 6, outputScale: 6 },
+                )
+                if (compareDecimal(total, line.quantity, 6) !== 0) {
+                    context.addIssue({
+                        code: "custom",
+                        path: ["lineItems", index, "deliveryAllocations"],
+                        message: "各地址分配数量合计必须等于商品数量",
+                    })
+                }
+            } catch {
+                /* 字段校验报告非法数量。 */
+            }
+        })
         if (value.evidenceUploadPending) {
             context.addIssue({
                 code: "custom",

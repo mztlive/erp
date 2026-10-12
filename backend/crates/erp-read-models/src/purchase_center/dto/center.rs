@@ -1,5 +1,7 @@
 //! 采购单对象中心与应付汇总视图。
 
+use erp_sales::entity::sales_order::SalesDeliveryAllocation;
+
 use super::*;
 
 /// 采购单对象中心视图。
@@ -127,6 +129,8 @@ pub struct PurchaseSourceSalesLineView {
     pub specification: Option<String>,
     /// 销售数量。
     pub quantity: String,
+    /// 本销售行的完整交付分配；不表示该采购单自动承担全部数量。
+    pub delivery_allocations: Vec<SalesDeliveryAllocation>,
     /// 销售单位。
     pub unit: String,
     /// 已成交含税销售单价。

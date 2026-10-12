@@ -25,6 +25,13 @@ export type SalesLineProcurementResponsibility = {
     matchedRuleType?: string
 }
 
+export type SalesDeliveryAllocation = {
+    recipient: string
+    phone: string
+    address: string
+    quantity: string
+}
+
 export type SalesOrderDraftLineInput = {
     rowKey: string
     name: string
@@ -37,6 +44,7 @@ export type SalesOrderDraftLineInput = {
     serviceRegion?: string
     quantity: string
     unit: string
+    deliveryAllocations?: SalesDeliveryAllocation[]
     unitPriceGross: string
     /** 未标注模式的历史明细按手动成交价保留。 */
     /** 方案首次预填的报价提示；更换商品或手改成交价后清除。 */
@@ -108,6 +116,7 @@ export type SalesOrderLineItem = {
     quantity: string
     unit: string
     /** 含税单价 */
+    deliveryAllocations?: SalesDeliveryAllocation[]
     unitPriceGross: string
     /** 含税小计 */
     amountGross: string

@@ -5,6 +5,7 @@ edition = "2024"
 autotests = false
 
 [dependencies]
+base64 = { workspace = true }
 rig-agent = { workspace = true }
 aliyun-ocr = { workspace = true }
 rig-core = { workspace = true }

@@ -79,3 +79,5 @@ mod test_indexes;
 
 pub mod connectors;
 pub mod contract_import;
+
+pub mod purchase_correspondence;

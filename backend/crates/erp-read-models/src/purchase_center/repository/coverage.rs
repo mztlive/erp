@@ -221,6 +221,7 @@ mod isolation_tests {
             erp_core::ids::SalesOrderGoodsServiceLineRevisionId::new(format!("goods-{revision_line_id}")),
             SalesOrderGoodsServiceLineRevisionData {
                 pricing_mode: Default::default(),
+                delivery_allocations: Vec::new(),
                 revision_line_id: SalesOrderRevisionLineId::new(revision_line_id),
                 sku_id: SkuId::new("sku-1"),
                 sku_revision_id: erp_core::ids::SkuRevisionId::new("skur-1"),

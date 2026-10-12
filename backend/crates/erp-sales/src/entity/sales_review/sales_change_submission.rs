@@ -5,6 +5,8 @@
 //! 保存仍使用 `sales_order_working_copy`；发起影响确认时才形成不可变变更提交。
 //! `(sales_change_order_id, submission_no)` 唯一，提交头行形成后不可更新。
 
+mod fields;
+
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use erp_core::common::stable::StableBase;
@@ -26,7 +28,7 @@ use super::types::{
     build_line_groups, validate_line_list,
 };
 use crate::entity::sales_order::amount_validation::validate_amount_triple;
-use crate::entity::sales_order::{SalesOrderWorkingCopyLine, SalesPricingMode};
+use crate::entity::sales_order::{SalesDeliveryAllocation, SalesOrderWorkingCopyLine, SalesPricingMode};
 
 /// 提交人标识最大长度。
 const SUBMITTER_MAX_LEN: usize = 128;
@@ -629,6 +631,9 @@ pub struct SalesChangeSubmissionLine {
     /// 成交价编辑方式；历史缺省保留为手工价。
     #[serde(default, skip_serializing_if = "SalesPricingMode::is_manual")]
     pub pricing_mode: SalesPricingMode,
+    /// 按地址分配的交付数量；历史未指定时为空。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub delivery_allocations: Vec<SalesDeliveryAllocation>,
     /// 单卡面额。
     pub face_value: Option<Amount>,
     /// 卡张数。
@@ -701,11 +706,8 @@ impl SalesChangeSubmissionLine {
             quantity: built.goods.as_ref().map(|g| g.quantity),
             base_unit_code: built.goods.as_ref().map(|g| g.base_unit_code.clone()),
             pricing_mode: built.goods.as_ref().map(|goods| goods.pricing_mode).unwrap_or_default(),
-            unit_price_gross: built
-                .goods
-                .as_ref()
-                .map(|g| g.unit_price_gross)
-                .or_else(|| built.voucher.as_ref().map(|v| v.unit_price_gross)),
+            delivery_allocations: built.delivery_allocations(),
+            unit_price_gross: built.unit_price_gross(),
             face_value: built.voucher.as_ref().map(|v| v.face_value),
             card_count: built.voucher.as_ref().map(|v| v.card_count),
             face_value_total: built.voucher.as_ref().map(|v| v.face_value_total),
@@ -713,92 +715,6 @@ impl SalesChangeSubmissionLine {
             gift_amount: built.voucher.as_ref().map(|v| v.gift_amount),
             gift_rate: built.voucher.as_ref().map(|v| v.gift_rate),
             card_form: built.voucher.as_ref().map(|v| v.card_form),
-        })
-    }
-
-    /// 还原实物及服务字段组。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于正式版本行构造的完整实物及服务字段组。
-    ///
-    /// # 错误
-    /// 行类型不是实物及服务，或任一必填字段缺失时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 可选的福利场景和服务区域缺失时必须保留为 `None`，不得填默认值。
-    pub fn goods_fields(&self) -> Result<GoodsLineFields> {
-        if self.line_type != LineType::GoodsService {
-            return Err(Error::from(format!("第 {} 行不是实物及服务行", self.line_no)));
-        }
-        Ok(GoodsLineFields {
-            pricing_mode: self.pricing_mode,
-            sku_id: self
-                .sku_id
-                .clone()
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少商品字段组", self.line_no)))?,
-            sku_revision_id: self
-                .sku_revision_id
-                .clone()
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少 SKU 修订", self.line_no)))?,
-            welfare_scenario: self.welfare_scenario,
-            service_region: self.service_region.clone(),
-            fulfillment_due_at: self
-                .fulfillment_due_at
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少履约期限", self.line_no)))?,
-            quantity: self.quantity.ok_or_else(|| Error::from(format!("第 {} 行缺少数量", self.line_no)))?,
-            base_unit_code: self
-                .base_unit_code
-                .clone()
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少单位", self.line_no)))?,
-            unit_price_gross: self
-                .unit_price_gross
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少含税单价", self.line_no)))?,
-        })
-    }
-
-    /// 还原卡券字段组。
-    ///
-    /// # 参数
-    /// 无。
-    ///
-    /// # 返回
-    /// 返回用于正式版本行构造的完整卡券字段组。
-    ///
-    /// # 错误
-    /// 行类型不是卡券，或任一必填字段缺失时返回错误。
-    ///
-    /// # 关键业务约束
-    /// 可选配赠率缺失时必须保留为 `None`，由卡券行实体按公式推导。
-    pub fn voucher_fields(&self) -> Result<VoucherLineDraft> {
-        if self.line_type != LineType::Voucher {
-            return Err(Error::from(format!("第 {} 行不是卡券行", self.line_no)));
-        }
-        Ok(VoucherLineDraft {
-            face_value: self
-                .face_value
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少卡券字段组", self.line_no)))?,
-            card_count: self
-                .card_count
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少卡张数", self.line_no)))?,
-            unit_price_gross: self
-                .unit_price_gross
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少卡券成交单价", self.line_no)))?,
-            face_value_total: self
-                .face_value_total
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少面额小计", self.line_no)))?,
-            transaction_amount: self
-                .transaction_amount
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少成交金额", self.line_no)))?,
-            gift_amount: self
-                .gift_amount
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少配赠金额", self.line_no)))?,
-            gift_rate: self.gift_rate,
-            card_form: self
-                .card_form
-                .ok_or_else(|| Error::from(format!("第 {} 行缺少卡形态", self.line_no)))?,
         })
     }
 }
@@ -831,6 +747,7 @@ mod tests {
     fn goods_line() -> GoodsLineFields {
         GoodsLineFields {
             pricing_mode: Default::default(),
+            delivery_allocations: Vec::new(),
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: Some(WelfareScenario::AnnualGiftBag),
@@ -933,6 +850,7 @@ mod tests {
 
         let line = crate::entity::sales_order::SalesOrderWorkingCopyLine {
             pricing_mode: Default::default(),
+            delivery_allocations: Vec::new(),
             base: BaseModel::new("wcl-1".to_string()),
             working_copy_id: erp_core::ids::SalesOrderWorkingCopyId::new("wc-1"),
             sales_order_line_id: SalesOrderLineId::new("line-1"),

@@ -3,7 +3,10 @@
 import { multiplyFixed } from "@/lib/fixed-decimal"
 import { calculateTotals } from "@/features/sales-orders/lib/sales-order-create-model"
 import type { CreateSalesOrderFormValues } from "@/features/sales-orders/lib/sales-order-create-validation"
-import type { SalesOrderNature } from "@/features/sales-orders/types"
+import type {
+    SalesOrderNature,
+    SalesDeliveryAllocation,
+} from "@/features/sales-orders/types"
 
 export type SalesOrderSubmitLineSnapshot = {
     rowKey: string
@@ -11,6 +14,7 @@ export type SalesOrderSubmitLineSnapshot = {
     sku: string
     quantity: string
     unit: string
+    deliveryAllocations?: SalesDeliveryAllocation[]
     unitPriceGross: string
     amountGross: string
     dueDate: string
@@ -63,6 +67,7 @@ export function buildSalesOrderSubmitSnapshot(
             quantity: line.quantity,
             unit: line.unit,
             unitPriceGross: line.unitPriceGross,
+            deliveryAllocations: line.deliveryAllocations,
             amountGross: lineGross(line.quantity, line.unitPriceGross),
             dueDate: line.dueDate,
             faceValue: line.faceValue,

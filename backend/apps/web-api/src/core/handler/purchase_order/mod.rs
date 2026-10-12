@@ -4,6 +4,7 @@
 //! DTO 使用采购领域与读模型的唯一定义，禁止重复定义同构类型、禁止直连数据库。
 
 pub mod change_draft;
+pub mod correspondence;
 pub mod payments;
 pub mod sales_material;
 

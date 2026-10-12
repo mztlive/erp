@@ -1,3 +1,4 @@
+import type { SalesDeliveryAllocation } from "../types"
 import { apiGet, apiPost } from "@/lib/api/client"
 
 /** 原销售变更目标行的完整字段组，冻结关联随原单保留。 */
@@ -12,6 +13,7 @@ export type SalesChangeDraftLine = {
     goods: null | {
         quantity: string
         unit_price_gross: string
+        delivery_allocations?: SalesDeliveryAllocation[]
         pricing_mode?: "AUTO" | "MANUAL"
         [field: string]: unknown
     }

@@ -25,7 +25,7 @@ use super::types::{
     BusinessType, GoodsLineFields, LineSummary, LineType, VoucherLineDraft, WelfareScenario,
     build_line_groups, validate_line_list,
 };
-use crate::entity::sales_order::SalesPricingMode;
+use crate::entity::sales_order::{SalesDeliveryAllocation, SalesPricingMode};
 
 /// 提交人标识最大长度。
 const SUBMITTER_MAX_LEN: usize = 128;
@@ -612,6 +612,9 @@ pub struct SalesOrderSubmissionLine {
     /// 成交价编辑方式；历史缺省保留为手工价。
     #[serde(default, skip_serializing_if = "SalesPricingMode::is_manual")]
     pub pricing_mode: SalesPricingMode,
+    /// 按地址分配的交付数量；历史未指定时为空。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub delivery_allocations: Vec<SalesDeliveryAllocation>,
     /// 单卡面额。
     pub face_value: Option<Amount>,
     /// 卡张数。
@@ -684,11 +687,8 @@ impl SalesOrderSubmissionLine {
             quantity: built.goods.as_ref().map(|g| g.quantity),
             base_unit_code: built.goods.as_ref().map(|g| g.base_unit_code.clone()),
             pricing_mode: built.goods.as_ref().map(|goods| goods.pricing_mode).unwrap_or_default(),
-            unit_price_gross: built
-                .goods
-                .as_ref()
-                .map(|g| g.unit_price_gross)
-                .or_else(|| built.voucher.as_ref().map(|v| v.unit_price_gross)),
+            delivery_allocations: built.delivery_allocations(),
+            unit_price_gross: built.unit_price_gross(),
             face_value: built.voucher.as_ref().map(|v| v.face_value),
             card_count: built.voucher.as_ref().map(|v| v.card_count),
             face_value_total: built.voucher.as_ref().map(|v| v.face_value_total),
@@ -715,6 +715,7 @@ impl SalesOrderSubmissionLine {
         }
         Ok(GoodsLineFields {
             pricing_mode: self.pricing_mode,
+            delivery_allocations: self.delivery_allocations.clone(),
             sku_id: self
                 .sku_id
                 .clone()
@@ -822,6 +823,7 @@ mod tests {
     fn goods_line() -> GoodsLineFields {
         GoodsLineFields {
             pricing_mode: Default::default(),
+            delivery_allocations: Vec::new(),
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: Some(WelfareScenario::AnnualGiftBag),

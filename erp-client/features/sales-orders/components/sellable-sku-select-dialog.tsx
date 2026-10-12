@@ -64,7 +64,7 @@ export function SellableSkuSelectDialog({
     multiple = true,
     excludeProductKind,
     title = "选择商品",
-    description = "从公司商品池筛选，四档含税销售参考价随商品展示。销售单按数量默认取一件代发价或集采价，成交价可手动修改。",
+    description = "从公司商品池筛选，四档含税销售参考价随商品展示。参考价仅供议价参考，销售单成交价由销售自行填写。",
     confirmLabel,
     onConfirm,
 }: SellableSkuSelectDialogProps) {

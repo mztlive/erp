@@ -1,5 +1,7 @@
 "use client"
 
+import { SalesDeliveryPlan } from "./sales-delivery-plan"
+
 import { MoneyValue, PaperDocument, QuantityValue } from "@/components/business"
 import { paymentTermLabel, welfareScenarioLabel } from "@/lib/business-options"
 import { NATURE_LABEL } from "@/features/sales-orders/lib/labels"
@@ -112,6 +114,10 @@ export function SalesOrderSubmitPaper({
                               cell: (row) => (
                                   <div>
                                       <div>{row.name || "—"}</div>
+                                      <SalesDeliveryPlan
+                                          rows={row.deliveryAllocations}
+                                          unit={row.unit}
+                                      />
                                       {row.sku ? (
                                           <div className="num mt-1 text-xs text-muted-foreground">
                                               {row.sku}
@@ -173,6 +179,10 @@ export function SalesOrderSubmitPaper({
                               cell: (row) => (
                                   <div>
                                       <div>{row.name || "—"}</div>
+                                      <SalesDeliveryPlan
+                                          rows={row.deliveryAllocations}
+                                          unit={row.unit}
+                                      />
                                       {row.sku ? (
                                           <div className="num mt-1 text-xs text-muted-foreground">
                                               {row.sku}

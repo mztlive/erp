@@ -118,9 +118,23 @@ export function SalesInvoiceOverview({
                             </Button>
                         </div>
                     ) : null}
+                    {complete && !onCreate ? (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                            {Array.from(
+                                new Set(
+                                    availability
+                                        .map(
+                                            (query) =>
+                                                query.data?.unavailable_reason,
+                                        )
+                                        .filter(Boolean),
+                                ),
+                            ).join("；") || "当前账号没有申请开票的权限。"}
+                        </p>
+                    ) : null}
                     {onCreate ? (
                         <p className="mt-2 text-xs text-muted-foreground">
-                            申请审批通过后，由财务开票。
+                            销售单生效后即可申请，无需等待回款或发货。审批通过后由财务开票。
                         </p>
                     ) : null}
                 </div>

@@ -18,7 +18,7 @@ use rust_decimal::Decimal;
 use serde::de::Error as SerdeError;
 use serde::{Deserialize, Serialize};
 
-use crate::entity::sales_order::SalesPricingMode;
+use crate::entity::sales_order::{SalesDeliveryAllocation, SalesPricingMode};
 
 /// 基础单位代码最大长度。
 const BASE_UNIT_CODE_MAX_LEN: usize = 32;
@@ -369,6 +369,9 @@ pub struct GoodsLineFields {
     /// 成交价编辑方式；历史缺省保留为手工价。
     #[serde(default, skip_serializing_if = "SalesPricingMode::is_manual")]
     pub pricing_mode: SalesPricingMode,
+    /// 按地址分配的交付数量；历史未指定时为空。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub delivery_allocations: Vec<SalesDeliveryAllocation>,
 }
 
 /// 卡券行字段组创建入参（数据模型 §6.4：来源同时提供面额、单价与合计，逐项核对；
@@ -446,6 +449,32 @@ pub(crate) struct BuiltLineGroups {
     pub tax_amount: Amount,
 }
 
+impl BuiltLineGroups {
+    /// 读取商品行的交付分配；卡券行返回空列表。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 独立的分配快照。
+    /// # 错误
+    /// 不返回错误。
+    pub(crate) fn delivery_allocations(&self) -> Vec<SalesDeliveryAllocation> {
+        self.goods.as_ref().map(|goods| goods.delivery_allocations.clone()).unwrap_or_default()
+    }
+    /// 读取已校验字段组的成交单价。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 商品或卡券含税单价。
+    /// # 错误
+    /// 不返回错误。
+    pub(crate) fn unit_price_gross(&self) -> Option<UnitPrice> {
+        self.goods
+            .as_ref()
+            .map(|goods| goods.unit_price_gross)
+            .or_else(|| self.voucher.as_ref().map(|voucher| voucher.unit_price_gross))
+    }
+}
+
 /// 构建行字段组并计算行金额三元组。
 ///
 /// 行类型与字段组必须一一对应：实物及服务行只允许 `goods`，卡券行只允许 `voucher`。
@@ -506,26 +535,27 @@ pub(crate) fn build_line_groups(
         None => None,
     };
 
-    let goods = match goods {
-        Some(mut fields) => {
-            fields.base_unit_code = normalize_required_text(
-                fields.base_unit_code,
-                "基础单位不能为空",
-                BASE_UNIT_CODE_MAX_LEN,
-                "基础单位过长",
-            )?;
-            fields.service_region = erp_core::validation::normalize_optional_text(
-                fields.service_region,
-                "服务区域",
-                SERVICE_REGION_MAX_LEN,
-            )?
-            .map(|region| region.to_ascii_uppercase());
-            Some(fields)
-        },
-        None => None,
-    };
+    let goods = goods.map(normalize_goods).transpose()?;
 
     Ok(BuiltLineGroups { goods, voucher, gross_amount, net_amount, tax_amount })
+}
+
+fn normalize_goods(mut fields: GoodsLineFields) -> Result<GoodsLineFields> {
+    fields.delivery_allocations =
+        SalesDeliveryAllocation::validate_all(fields.delivery_allocations, fields.quantity)?;
+    fields.base_unit_code = normalize_required_text(
+        fields.base_unit_code,
+        "基础单位不能为空",
+        BASE_UNIT_CODE_MAX_LEN,
+        "基础单位过长",
+    )?;
+    fields.service_region = erp_core::validation::normalize_optional_text(
+        fields.service_region,
+        "服务区域",
+        SERVICE_REGION_MAX_LEN,
+    )?
+    .map(|region| region.to_ascii_uppercase());
+    Ok(fields)
 }
 
 /// 校验草稿卡券字段组与推导金额的一致性（数据模型 §6.4）。
@@ -878,6 +908,7 @@ mod tests {
             LineType::GoodsService,
             Some(GoodsLineFields {
                 pricing_mode: Default::default(),
+                delivery_allocations: Vec::new(),
                 sku_id: SkuId::new("sku-1"),
                 sku_revision_id: SkuRevisionId::new("skurev-1"),
                 welfare_scenario: None,
@@ -903,6 +934,7 @@ mod tests {
     fn build_groups_rejects_mismatched_line_type_and_fields() {
         let goods = GoodsLineFields {
             pricing_mode: Default::default(),
+            delivery_allocations: Vec::new(),
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: None,

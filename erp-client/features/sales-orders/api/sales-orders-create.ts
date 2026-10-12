@@ -146,7 +146,8 @@ function buildDraftPayload(
                 quantity: line.quantity || "0",
                 base_unit_code: line.unit.trim() || "EA",
                 unit_price_gross: line.unitPriceGross || "0.0000",
-                pricing_mode: line.pricingMode ?? "MANUAL",
+                pricing_mode: "MANUAL",
+                delivery_allocations: line.deliveryAllocations ?? [],
             }
         }
         return base
@@ -361,7 +362,8 @@ function mapDraftLines(
                 ? "张"
                 : (line.unit_snapshot ?? line.base_unit_code ?? ""),
             unitPriceGross: line.unit_price_gross ?? "0.00",
-            pricingMode: isVoucher ? "MANUAL" : (line.pricing_mode ?? "MANUAL"),
+            pricingMode: "MANUAL",
+            deliveryAllocations: line.delivery_allocations ?? [],
             referencePrices: line.reference_prices
                 ? {
                       factoryPriceGross:

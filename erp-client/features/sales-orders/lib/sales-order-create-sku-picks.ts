@@ -1,6 +1,5 @@
 import type { SellableSkuPick } from "@/features/sales-orders/lib/sellable-sku-pick"
 import { createEmptyLine } from "@/features/sales-orders/lib/sales-order-create-model"
-import { selectSalesReferencePrice } from "@/features/sales-orders/lib/sales-line-pricing"
 import type {
     SalesOrderDraftLineInput,
     SalesOrderNature,
@@ -26,10 +25,8 @@ function lineFromPick(
         skuRevisionId: pick.skuRevisionId,
         specification: pick.specificationLabel,
         unit: pick.baseUnit || base.unit,
-        unitPriceGross:
-            selectSalesReferencePrice(base.quantity, referencePrices)
-                ?.unitPriceGross || base.unitPriceGross,
-        pricingMode: "AUTO",
+        unitPriceGross: base.unitPriceGross,
+        pricingMode: "MANUAL",
         priceSource: undefined,
         referencePrices,
     }

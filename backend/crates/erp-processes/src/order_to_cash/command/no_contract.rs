@@ -99,8 +99,7 @@ impl SalesOrderCommandProcess {
             .and_then(|terms| terms.settlement_party_id.clone())
             .ok_or_else(|| Error::ValidationError("无合同销售单必须选择我方结算主体".into()))?;
         let settlement_name = access.settlement_name(&customer.party_id, &settlement_id, executor).await?;
-        let mut draft = editable.into_no_contract_draft(customer_name, settlement_name)?;
-        self.sales().resolve_draft_reference_prices(&mut draft.lines, &self.catalog(), executor).await?;
+        let draft = editable.into_no_contract_draft(customer_name, settlement_name)?;
         Ok((CustomerAccountId::new(customer.base.id), settlement_id, draft))
     }
 

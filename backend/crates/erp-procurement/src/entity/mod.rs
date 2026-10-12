@@ -6,3 +6,5 @@ pub mod purchase_order;
 
 #[cfg(test)]
 pub(crate) mod test_support;
+
+pub mod purchase_email;

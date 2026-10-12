@@ -1,14 +1,12 @@
 "use client"
 
 import { toFieldErrors } from "@/components/form"
-import { Button } from "@/components/ui/button"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
-import { selectSalesReferencePrice } from "@/features/sales-orders/lib/sales-line-pricing"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
-/** 成交单价可手动修改；恢复按数量取价后才随数量切换销售参考档位。 */
+/** 成交单价完全由销售填写。 */
 export function SalesOrderCreateLinePriceEditor({
     form,
     rowIndex,
@@ -19,12 +17,6 @@ export function SalesOrderCreateLinePriceEditor({
     const line = form.getFieldValue("lineItems")[rowIndex]
     if (!line) return null
     const id = `sales-orders-create-line-${toAutomationIdSegment(line.rowKey)}-unit-price`
-    const isGoods = form.getFieldValue("nature") === "physical_service"
-    const reference = selectSalesReferencePrice(
-        line.quantity,
-        line.referencePrices,
-    )
-    const automatic = line.pricingMode === "AUTO"
 
     return (
         <div className="min-w-32 space-y-1">
@@ -45,13 +37,9 @@ export function SalesOrderCreateLinePriceEditor({
                                 value={field.state.value}
                                 className="num min-w-24 text-right"
                                 aria-invalid={invalid || undefined}
+                                placeholder="请填写"
                                 aria-describedby={
-                                    [
-                                        isGoods && `${id}-pricing`,
-                                        invalid && `${id}-error`,
-                                    ]
-                                        .filter(Boolean)
-                                        .join(" ") || undefined
+                                    invalid ? `${id}-error` : undefined
                                 }
                                 onBlur={field.handleBlur}
                                 onChange={(event) => {
@@ -78,60 +66,6 @@ export function SalesOrderCreateLinePriceEditor({
                     )
                 }}
             </form.AppField>
-            {isGoods ? (
-                <div
-                    id={`${id}-pricing`}
-                    className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-xs whitespace-normal text-muted-foreground"
-                >
-                    <span>
-                        {automatic
-                            ? reference?.tier === "bulk"
-                                ? "按集采价"
-                                : reference?.tier === "dropship"
-                                  ? "按一件代发价"
-                                  : "自动按数量"
-                            : line.priceSource === "selection"
-                              ? "方案报价（可修改）"
-                              : "手动成交价"}
-                    </span>
-                    {!automatic && line.priceSource !== "selection" ? (
-                        <Button
-                            id={`${id}-restore-auto`}
-                            type="button"
-                            variant="link"
-                            size="sm"
-                            className="h-auto px-0 py-0 text-xs"
-                            disabled={!reference}
-                            title={
-                                !reference
-                                    ? "数量有效且已选商品后可按数量取价"
-                                    : undefined
-                            }
-                            onClick={() => {
-                                if (!reference) return
-                                form.setFieldValue(
-                                    `lineItems[${rowIndex}].pricingMode`,
-                                    "AUTO",
-                                )
-                                form.setFieldValue(
-                                    `lineItems[${rowIndex}].unitPriceGross`,
-                                    reference.unitPriceGross,
-                                )
-                            }}
-                        >
-                            按数量取价
-                        </Button>
-                    ) : null}
-                </div>
-            ) : null}
-            {isGoods &&
-            line.sku.trim() &&
-            !line.referencePrices &&
-            automatic ? (
-                <p className="text-xs text-destructive" role="status">
-                    参考价暂缺，请重新选择商品。
-                </p>
-            ) : null}
         </div>
     )
 }

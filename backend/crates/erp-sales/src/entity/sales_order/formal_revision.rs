@@ -538,6 +538,7 @@ fn build_goods_line(
         id.clone(),
         SalesOrderGoodsServiceLineRevisionData {
             pricing_mode: goods.pricing_mode,
+            delivery_allocations: goods.delivery_allocations.clone(),
             revision_line_id: revision_line_id.clone(),
             sku_id: goods.sku_id,
             sku_revision_id: goods.sku_revision_id,
@@ -606,6 +607,7 @@ mod tests {
     fn goods_fields() -> GoodsLineFields {
         GoodsLineFields {
             pricing_mode: Default::default(),
+            delivery_allocations: Vec::new(),
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: Some(WelfareScenario::AnnualGiftBag),
@@ -771,6 +773,13 @@ mod tests {
     fn goods_service_multi_line_revision_copies_snapshots_and_hashes() {
         let mut first = goods_line_data(1);
         first.goods.as_mut().unwrap().pricing_mode = SalesPricingMode::Auto;
+        let allocations = serde_json::from_value(serde_json::json!([
+            {"recipient":"收货人甲", "phone":"13800000001", "address":"上海市甲路1号", "quantity":"1"},
+            {"recipient":"收货人乙", "phone":"13800000002", "address":"上海市乙路2号", "quantity":"2"}
+        ]))
+        .unwrap();
+        first.goods.as_mut().unwrap().delivery_allocations = allocations;
+
         let (submission, lines) = submission_and_lines(goods_header(vec![first, goods_line_data(2)]));
         let aggregate = SalesOrderRevisionAggregate::from_sales_order_submission(
             identities_for(&[LineType::GoodsService, LineType::GoodsService]),
@@ -803,6 +812,10 @@ mod tests {
         assert_eq!(aggregate.goods_lines[0].service_region.as_deref(), Some("EAST"));
         assert_eq!(aggregate.goods_lines[0].pricing_mode, SalesPricingMode::Auto);
         assert_eq!(aggregate.goods_lines[1].pricing_mode, SalesPricingMode::Manual);
+        assert_eq!(aggregate.goods_lines[0].delivery_allocations.len(), 2);
+        assert_eq!(aggregate.goods_lines[0].delivery_allocations[1].recipient, "收货人乙");
+        let fields = lines[0].goods_fields().unwrap();
+        assert_eq!(fields.delivery_allocations, aggregate.goods_lines[0].delivery_allocations);
     }
 
     #[test]

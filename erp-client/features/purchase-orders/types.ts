@@ -97,6 +97,12 @@ export type PurchaseSourceSalesOrderView = Readonly<{
         lineNo: number
         itemName: string
         specification?: string
+        deliveryAllocations?: {
+            recipient: string
+            phone: string
+            address: string
+            quantity: string
+        }[]
         quantity: string
         unit: string
         unitPriceGross: string

@@ -67,6 +67,7 @@ impl SalesOrderWorkingCopyLineView {
             base_unit_code: None,
             unit_price_gross: None,
             pricing_mode: Default::default(),
+            delivery_allocations: Vec::new(),
             reference_prices: None,
             face_value: None,
             card_count: None,
@@ -86,6 +87,7 @@ impl SalesOrderWorkingCopyLineView {
         self.base_unit_code = Some(goods.base_unit_code.clone());
         self.unit_price_gross = Some(goods.unit_price_gross);
         self.pricing_mode = goods.pricing_mode;
+        self.delivery_allocations = goods.delivery_allocations.clone();
     }
 
     /// 将同一公共行的卡券冻结字段写入视图。
@@ -146,6 +148,7 @@ mod tests {
             base_unit_code: "BOX".into(),
             unit_price_gross: UnitPrice::from_str("1300").unwrap(),
             pricing_mode: SalesPricingMode::Manual,
+            delivery_allocations: Vec::new(),
         }
     }
 

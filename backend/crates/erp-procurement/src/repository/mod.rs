@@ -15,3 +15,5 @@ pub use prelude::{
     PurchaseOrderRepositoryExt, PurchaseOrderRepositoryScopeExt, PurchaseOrderRevisionLineRepositoryExt,
     PurchaseOrderSubmissionLineRepositoryExt, PurchaseOrderSubmissionRepositoryExt,
 };
+
+pub mod purchase_email;

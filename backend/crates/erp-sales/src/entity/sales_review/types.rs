@@ -297,6 +297,7 @@ mod tests {
             LineType::GoodsService,
             Some(GoodsLineFields {
                 pricing_mode: Default::default(),
+                delivery_allocations: Vec::new(),
                 sku_id: SkuId::new("sku-1"),
                 sku_revision_id: SkuRevisionId::new("skurev-1"),
                 welfare_scenario: None,
@@ -322,6 +323,7 @@ mod tests {
     fn build_groups_rejects_mismatched_line_type_and_fields() {
         let goods = GoodsLineFields {
             pricing_mode: Default::default(),
+            delivery_allocations: Vec::new(),
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: None,

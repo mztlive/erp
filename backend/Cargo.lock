@@ -2007,6 +2007,7 @@ dependencies = [
  "aliyun-ocr",
  "application-core",
  "async-trait",
+ "base64 0.23.1",
  "bpm",
  "bytes",
  "chrono",

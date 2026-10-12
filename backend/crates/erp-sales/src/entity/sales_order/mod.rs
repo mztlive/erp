@@ -83,3 +83,6 @@ pub use working_copy::{
     SalesOrderWorkingCopy, SalesOrderWorkingCopyData, SalesOrderWorkingCopyLine,
     SalesOrderWorkingCopyLineData, SalesOrderWorkingCopyUpdate, WorkingCopyStatus, WorkingPurpose,
 };
+
+mod delivery_allocation;
+pub use delivery_allocation::SalesDeliveryAllocation;

@@ -1,3 +1,4 @@
+import type { SalesDeliveryAllocation } from "../types"
 // 本文件是销售单域共享的 API 契约类型表：除 PERMISSION_VERSION 外全部为类型声明，
 // 无任何逻辑，按声明式数据表保留单文件，避免拆分出零散的纯类型模块。
 import type { DocumentApprovalViewDto } from "@/features/approval-workflow/types"
@@ -179,6 +180,7 @@ export type BackendWorkingCopyLine = {
     quantity?: string | null
     base_unit_code?: string | null
     unit_price_gross?: string | null
+    delivery_allocations?: SalesDeliveryAllocation[]
     pricing_mode?: "AUTO" | "MANUAL" | null
     reference_prices?: {
         factory_price_gross?: string | null

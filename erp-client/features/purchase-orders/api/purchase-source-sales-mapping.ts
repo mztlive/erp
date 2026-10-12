@@ -33,6 +33,7 @@ export function mapPurchaseSourceSalesOrder(
             itemName: line.item_name,
             specification: line.specification ?? undefined,
             quantity: line.quantity,
+            deliveryAllocations: line.delivery_allocations ?? [],
             unit: line.unit,
             unitPriceGross: line.unit_price_gross,
             grossAmount: line.gross_amount,

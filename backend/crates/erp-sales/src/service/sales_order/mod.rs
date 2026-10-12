@@ -7,7 +7,6 @@ pub mod formalize;
 pub mod lifecycle;
 mod list;
 pub mod mapper;
-mod pricing;
 pub mod procurement;
 pub mod progress;
 mod query;

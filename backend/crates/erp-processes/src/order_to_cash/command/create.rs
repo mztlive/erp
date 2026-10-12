@@ -113,7 +113,7 @@ impl SalesOrderCommandProcess {
             editable.settlement_party_id.clone().unwrap_or_else(|| contract.settlement_party_id.clone());
         let settlement_name =
             access.settlement_name(&contract.settlement_party_id, &settlement_id, executor).await?;
-        let mut draft = SalesOrderDraftRequest {
+        let draft = SalesOrderDraftRequest {
             editor_user_id: editable.editor_user_id,
             customer_name: revision.customer_snapshot.customer_name,
             contract_no: Some(revision.contract_no),
@@ -131,7 +131,6 @@ impl SalesOrderCommandProcess {
             lines: editable.lines,
         };
         draft.validate()?;
-        self.sales().resolve_draft_reference_prices(&mut draft.lines, &self.catalog(), executor).await?;
         Ok((contract.customer_id, settlement_id, draft))
     }
 

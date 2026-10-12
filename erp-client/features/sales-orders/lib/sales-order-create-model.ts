@@ -97,8 +97,8 @@ export function createEmptyLine(
         quantity: "1",
         /** 非卡券单位随 SKU 基础单位带出；卡券固定为张。建单页不可改。 */
         unit: nature === "card_voucher" ? "张" : "",
-        unitPriceGross: "0.00",
-        pricingMode: nature === "physical_service" ? "AUTO" : "MANUAL",
+        unitPriceGross: "",
+        pricingMode: "MANUAL",
         dueDate: "",
         faceValue: "",
         /** 配赠只读推导，不作为输入；保留字段供兼容提交快照。 */
@@ -116,7 +116,7 @@ export function hasMeaningfulLines(
             line.name.trim() !== "" ||
             line.sku.trim() !== "" ||
             line.quantity !== "1" ||
-            line.unitPriceGross !== "0.00" ||
+            line.unitPriceGross !== "" ||
             line.faceValue !== "" ||
             line.dueDate !== "",
     )

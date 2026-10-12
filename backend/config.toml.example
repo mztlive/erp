@@ -77,3 +77,11 @@ clearing_price_is_tax_inclusive_cny = false # 核实结算价为人民币含税�
 [dangaoshushu.city_regions]
 # 供应商 city_id -> 公司标准地区编码；值必须唯一，不直接混用两套地区 ID。
 # "<supplier-city-id>" = "<company-region-code>"
+
+# 可选采购邮件服务（Resend 或遵守同一发送协议的 HTTPS 网关）。
+# 未配置时采购单仍可下载，邮件发送返回明确的配置缺失提示。
+# [purchase_mail]
+# endpoint = "https://api.resend.com/emails"
+# api_key = "REPLACE_WITH_SECRET"
+# from = "采购部 <orders@example.com>"
+# timeout_seconds = 20

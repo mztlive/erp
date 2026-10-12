@@ -1,3 +1,4 @@
+import type { SalesDeliveryAllocation } from "../types"
 import type {
     SalesChangeDraft,
     SalesChangeDraftLine,
@@ -13,6 +14,7 @@ export type SalesChangeDraftValues = {
     reason: string
     remark: string
     lines: {
+        deliveryAllocations: SalesDeliveryAllocation[]
         quantity: string
         unitPrice: string
         taxRate: string
@@ -28,6 +30,7 @@ export function salesChangeDraftValues(
         reason: draft.reason,
         remark: draft.business_remark ?? "",
         lines: draft.lines.map((line) => ({
+            deliveryAllocations: line.goods?.delivery_allocations ?? [],
             quantity: line.goods?.quantity ?? "1",
             unitPrice:
                 line.goods?.unit_price_gross ??
@@ -83,16 +86,10 @@ export function salesChangeTargetLines(
                 sales_tax_rate: value.taxRate,
                 goods: {
                     ...line.goods,
+                    delivery_allocations: value.deliveryAllocations,
                     quantity: value.quantity,
                     unit_price_gross: value.unitPrice,
-                    pricing_mode:
-                        compareDecimal(
-                            value.unitPrice,
-                            line.goods.unit_price_gross,
-                            4,
-                        ) === 0
-                            ? line.goods.pricing_mode
-                            : "MANUAL",
+                    pricing_mode: "MANUAL",
                 },
             }
         if (!line.voucher) throw new Error("原明细缺少业务字段")
@@ -165,6 +162,17 @@ export function salesChangeSavedMatches(
                   }),
                   unit_price_gross: price(line.goods.unit_price_gross),
                   pricing_mode: line.goods.pricing_mode ?? "MANUAL",
+                  delivery_allocations: (
+                      line.goods.delivery_allocations ?? []
+                  ).map((row) => ({
+                      recipient: row.recipient.trim(),
+                      phone: row.phone.trim(),
+                      address: row.address.trim(),
+                      quantity: normalizeFixed(row.quantity, {
+                          maxScale: 6,
+                          outputScale: 6,
+                      }),
+                  })),
               }
             : null,
         voucher: line.voucher

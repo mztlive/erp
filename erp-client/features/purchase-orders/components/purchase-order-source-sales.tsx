@@ -33,6 +33,17 @@ const SALES_COLUMNS: ColumnDef<SalesLine>[] = [
         cell: ({ row }) => (
             <div className="whitespace-normal">
                 <div className="font-medium">{row.original.itemName}</div>
+                {row.original.deliveryAllocations?.map((allocation, index) => (
+                    <p
+                        key={index}
+                        className="mt-2 text-xs text-muted-foreground"
+                    >
+                        {allocation.quantity} {row.original.unit} →{" "}
+                        {allocation.recipient} · {allocation.phone}
+                        <br />
+                        {allocation.address}
+                    </p>
+                ))}
                 <div className="text-xs text-muted-foreground">
                     销售明细 {row.original.lineNo}
                     {row.original.specification

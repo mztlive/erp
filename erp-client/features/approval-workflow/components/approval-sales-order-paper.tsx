@@ -156,6 +156,21 @@ export function ApprovalSalesOrderPaper({
                                     )}
                                 </div>
                             )}
+                            {row.delivery_allocations?.map(
+                                (allocation, index) => (
+                                    <div
+                                        key={index}
+                                        className="mt-2 text-xs text-muted-foreground"
+                                    >
+                                        {allocation.quantity}{" "}
+                                        {row.unit_snapshot} →{" "}
+                                        {allocation.recipient} ·{" "}
+                                        {allocation.phone}
+                                        <br />
+                                        {allocation.address}
+                                    </div>
+                                ),
+                            )}
                             {row.service_region && (
                                 <div className="mt-1 text-xs text-muted-foreground">
                                     服务区域：{row.service_region}

@@ -149,7 +149,10 @@ fn build_working_copy_line_datas(
             item_name_snapshot: line.item_name_snapshot.clone(),
             spec_snapshot: line.spec_snapshot.clone(),
             unit_snapshot: line.unit_snapshot.clone(),
-            goods: line.goods.clone(),
+            goods: line.goods.clone().map(|mut goods| {
+                goods.pricing_mode = Default::default();
+                goods
+            }),
             voucher: line.voucher.clone(),
         });
     }
@@ -345,6 +348,7 @@ pub fn submission_view(
 pub fn working_copy_line_view(line: SalesOrderWorkingCopyLine) -> SalesOrderWorkingCopyLineView {
     SalesOrderWorkingCopyLineView {
         pricing_mode: line.pricing_mode,
+        delivery_allocations: line.delivery_allocations.clone(),
         reference_prices: None,
         id: line.base.id,
         sales_order_line_id: line.sales_order_line_id.to_string(),
@@ -483,6 +487,7 @@ fn revision_line_summary(lines: &[SalesOrderRevisionLine]) -> String {
 fn submission_line_view(line: SalesOrderSubmissionLine) -> SalesOrderWorkingCopyLineView {
     SalesOrderWorkingCopyLineView {
         pricing_mode: line.pricing_mode,
+        delivery_allocations: line.delivery_allocations.clone(),
         reference_prices: None,
         id: line.base.id,
         sales_order_line_id: line.sales_order_line_id.to_string(),
@@ -639,6 +644,24 @@ mod tests {
     }
 
     /// 缺失身份按请求顺序报告首个错误，错误文本保持原合同。
+    #[test]
+    fn entered_price_is_preserved_and_legacy_auto_mode_becomes_manual() {
+        let mut line = draft_line(1);
+        line.goods = Some(
+            serde_json::from_value(serde_json::json!({
+                "sku_id":"sku-1", "sku_revision_id":"sku-rev-1", "welfare_scenario":null,
+                "service_region":null, "fulfillment_due_at":1800000000, "quantity":"3",
+                "base_unit_code":"件", "unit_price_gross":"37.12", "pricing_mode":"AUTO"
+            }))
+            .unwrap(),
+        );
+        let stable = build_stable_lines(&SalesOrderId::new("order-1"), std::slice::from_ref(&line)).unwrap();
+        let rows = build_working_copy_line_datas(&stable, &[line]).unwrap();
+        let goods = rows[0].goods.as_ref().unwrap();
+        assert_eq!(goods.unit_price_gross.to_string(), "37.12");
+        assert!(goods.pricing_mode.is_manual());
+    }
+
     #[test]
     fn draft_mapping_reports_first_missing_requested_number() {
         let error = build_working_copy_line_datas(&[], &[draft_line(9), draft_line(3)]).unwrap_err();

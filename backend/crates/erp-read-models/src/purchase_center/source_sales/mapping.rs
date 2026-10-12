@@ -78,6 +78,7 @@ pub(super) fn sales_line_views(
                 item_name: line.item_name_snapshot.clone(),
                 specification: line.spec_snapshot.clone(),
                 quantity: goods.quantity.to_string(),
+                delivery_allocations: goods.delivery_allocations.clone(),
                 unit: line.unit_snapshot.clone().unwrap_or_else(|| goods.base_unit_code.clone()),
                 unit_price_gross: goods.unit_price_gross.to_string(),
                 gross_amount: line.gross_amount.to_string(),
@@ -225,6 +226,7 @@ mod tests {
             base_unit_code: "piece".into(),
             unit_price_gross: "123.4567".parse().unwrap(),
             pricing_mode: SalesPricingMode::Manual,
+            delivery_allocations: Vec::new(),
         };
         let views = sales_line_views(std::slice::from_ref(&line), std::slice::from_ref(&goods)).unwrap();
         assert_eq!(views[0].unit_price_gross, "123.4567");

@@ -279,6 +279,7 @@ mod tests {
             unit_snapshot: Some("箱".into()),
             goods: Some(GoodsLineFields {
                 pricing_mode: Default::default(),
+                delivery_allocations: Vec::new(),
                 sku_id: SkuId::new("sku-1"),
                 sku_revision_id: SkuRevisionId::new("sku-rev-1"),
                 welfare_scenario: None,

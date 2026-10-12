@@ -229,6 +229,7 @@ export function mapWorkingCopyLines(
                 line.unit_snapshot ||
                 line.base_unit_code ||
                 (isVoucher ? "张" : ""),
+            deliveryAllocations: line.delivery_allocations ?? [],
             unitPriceGross: line.unit_price_gross ?? "0.00",
             amountGross: line.gross_amount ?? line.transaction_amount ?? "0.00",
         }
