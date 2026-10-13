@@ -9,6 +9,7 @@ import type {
     PurchaseCreationBasis,
     PurchaseOrderCenterView,
     PurchaseOrderListItem,
+    PurchaseSourceUpdateView,
 } from "@/features/purchase-orders/types"
 import {
     PO_STATUS_LABEL,
@@ -21,6 +22,7 @@ import {
     purchaseChangeOrderStatusTone,
 } from "@/features/purchase-orders/lib/purchase-change-order-approval"
 import { mapPurchaseOrderApproval } from "@/features/purchase-orders/lib/purchase-order-approval"
+import { mapSourceImpactReasons } from "@/features/purchase-orders/lib/source-impact"
 import { mapPurchaseSourceSalesOrder } from "./purchase-source-sales-mapping"
 import {
     deriveAllowedActions,
@@ -38,6 +40,7 @@ import type {
     BackendCenter,
     BackendListItem,
     BackendPurchaseChangeOrder,
+    BackendPurchaseSourceUpdate,
 } from "./purchase-order-wire-types"
 
 /** 展示名称缺失或误填为关联主键时，保留明确的可读占位。 */
@@ -163,6 +166,7 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
             taxAmount: line.tax_amount ?? "0",
             expectedDeliveryDate: line.expected_delivery_date ?? undefined,
             deliveryAllocations: line.delivery_allocations ?? [],
+            salesOrderLineId: line.sales_order_line_id ?? undefined,
             logisticsFeeReason: undefined,
             salesAllocationLabel: salesLine
                 ? `销售明细 ${salesLine.lineNo}`
@@ -269,6 +273,7 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
             allocatedQuantity: a.allocated_quantity,
         })),
         sourceSalesOrder,
+        sourceUpdate: mapPurchaseSourceUpdate(center.source_update),
         payableSummary: center.payable_summary
             ? {
                   payableOpenAmount: center.payable_summary.payable_open_amount,
@@ -428,5 +433,24 @@ export function mapBasis(basis: BackendBasis): PurchaseCreationBasis {
         }),
         estimatedGross: basis.estimated_gross ?? "0",
         consumed: false,
+    }
+}
+
+/** 映射来源依据提示；服务端未返回时保持缺省。 */
+function mapPurchaseSourceUpdate(
+    update: BackendPurchaseSourceUpdate | null | undefined,
+): PurchaseSourceUpdateView | undefined {
+    if (!update) return undefined
+    return {
+        affected: update.affected,
+        awaitingSubmission: update.awaiting_submission ?? false,
+        recordVersion: update.record_version ?? undefined,
+        blocksPayment: update.blocks_payment,
+        reasons: mapSourceImpactReasons(update.reasons),
+        purchaseSalesRevisionNo: update.purchase_sales_revision_no ?? undefined,
+        currentSalesRevisionNo: update.current_sales_revision_no ?? undefined,
+        salesRevisionOutdated: update.sales_revision_outdated,
+        lastResolutionLabel: update.last_resolution_label ?? undefined,
+        lastMaintainNote: update.last_maintain_note ?? undefined,
     }
 }

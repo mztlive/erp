@@ -11,6 +11,23 @@ export const positiveDecimal = (value: string | undefined) => {
     }
 }
 
+/**
+ * 采购数量校验。采购依据待更新时商品行允许填 0，表示按新销售版本移除该行。
+ */
+export const purchaseQuantityValid = (
+    value: string | undefined,
+    allowZero: boolean,
+) => {
+    if (!allowZero) return positiveDecimal(value)
+    if (value === undefined || value === "") return true
+    if (!/^\d+(?:\.\d+)?$/.test(value)) return false
+    try {
+        return compareDecimal(value, "0", 18) >= 0
+    } catch {
+        return false
+    }
+}
+
 export const taxRateValid = (value: string) => {
     if (value === "") return true
     if (!/^\d+(?:\.\d+)?$/.test(value)) return false

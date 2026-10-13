@@ -421,6 +421,13 @@ impl NormalizedWorkItemData {
         {
             return Err(Error::from("供应商申请确认任务必须冻结申请身份和责任键"));
         }
+        if self.work_item_type == WorkItemType::PurchaseSourceUpdate
+            && (self.business_object_type != "purchase_order"
+                || responsibility_key
+                    != Some(format!("purchase_source_update:{}", self.business_object_id).as_str()))
+        {
+            return Err(Error::from("采购依据更新任务必须冻结采购单身份和责任键"));
+        }
         if self.work_item_type == WorkItemType::ProcurementOrderCreation
             && (responsibility_key.is_none() || scope_ids.is_empty())
         {
@@ -572,6 +579,58 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    /// 采购依据更新任务只接受采购单对象和按采购单冻结的责任键。
+    #[test]
+    fn purchase_source_update_requires_purchase_identity_key() {
+        let data = WorkItemData {
+            work_item_type: WorkItemType::PurchaseSourceUpdate,
+            business_object_type: "purchase_order".to_string(),
+            business_object_id: "po-1".to_string(),
+            ..direct_data()
+        };
+        assert!(
+            WorkItem::new_at(WorkItemId::new("wi-1"), data.clone(), Instant::from_unix_secs(100)).is_err()
+        );
+        assert!(
+            WorkItem::new_with_responsibility_key(
+                WorkItemId::new("wi-2"),
+                data.clone(),
+                "purchase_source_update:po-2"
+            )
+            .is_err()
+        );
+        let wrong_object = WorkItemData { business_object_type: "sales_order".to_string(), ..data.clone() };
+        assert!(
+            WorkItem::new_with_responsibility_key(
+                WorkItemId::new("wi-3"),
+                wrong_object,
+                "purchase_source_update:po-1"
+            )
+            .is_err()
+        );
+
+        let mut item = WorkItem::new_with_responsibility_key(
+            WorkItemId::new("wi-4"),
+            data,
+            "purchase_source_update:po-1",
+        )
+        .unwrap();
+        assert!(item.complete_when_requirement_satisfied(Instant::from_unix_secs(110)).is_err());
+        item.complete_when_source_updated(Instant::from_unix_secs(120)).unwrap();
+        assert_eq!(item.status, WorkItemStatus::Completed);
+        assert_eq!(item.completed_by.as_deref(), Some("__system__"));
+        assert!(item.complete_when_source_updated(Instant::from_unix_secs(130)).is_err());
+    }
+
+    /// 其他任务类型不能按采购依据处理完成自动完成。
+    #[test]
+    fn source_update_completion_rejects_other_types() {
+        let mut item =
+            WorkItem::new_at(WorkItemId::new("wi-1"), direct_data(), Instant::from_unix_secs(100)).unwrap();
+
+        assert!(item.complete_when_source_updated(Instant::from_unix_secs(120)).is_err());
     }
 
     #[test]

@@ -13,6 +13,7 @@ use persistence_core::Executor;
 
 use super::PurchasePaymentRequestReadService;
 use crate::Result;
+use crate::purchase_center::source_impact::payment_paused_by_source_update;
 
 impl PurchasePaymentRequestReadService {
     pub(super) async fn bank_account_changed(
@@ -68,9 +69,12 @@ impl PurchasePaymentRequestReadService {
         }
         for source in &line.source_snapshot.sales_sources {
             let current = self.db.sales_orders().find_by_id(&source.sales_order_id, executor).await?;
-            if current.is_none_or(|current| {
-                current.stable.current_revision_id.as_deref() != Some(source.sales_revision_id.as_str())
-            }) {
+            let Some(current) = current else {
+                return Ok(true);
+            };
+            if current.stable.current_revision_id.as_deref() != Some(source.sales_revision_id.as_str())
+                && payment_paused_by_source_update(&self.db, &order.base.id, executor).await?
+            {
                 return Ok(true);
             }
         }

@@ -21,6 +21,7 @@ use crate::core::middleware::with_permission;
 /// 返回挂载了权限校验层的路由集合。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     purchase_document_routes(rbac)
+        .merge(purchase_detail_routes(rbac))
         .merge(purchase_workflow_routes(rbac))
         .merge(purchase_change_routes(rbac))
         .merge(purchase_change_draft_routes(rbac))
@@ -40,7 +41,7 @@ fn purchase_sales_material_routes(rbac: &SharedRbacService) -> Router<AppState> 
     )
 }
 
-/// 采购单列表、创建、详情和原单草稿保存入口。
+/// 采购单列表、创建与详情入口。
 fn purchase_document_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
@@ -75,6 +76,11 @@ fn purchase_document_routes(rbac: &SharedRbacService) -> Router<AppState> {
                 purchase_order::purchase_order_detail_permission_key(),
             ),
         )
+}
+
+/// 采购单详情下的付款记录、交付安排范围和原单草稿保存入口。
+fn purchase_detail_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
         .route(
             "/purchase-orders/{id}/payments",
             with_permission(
@@ -89,6 +95,14 @@ fn purchase_document_routes(rbac: &SharedRbacService) -> Router<AppState> {
                 get(purchase_order::payments::purchase_payment_receipt),
                 rbac,
                 purchase_order::payments::purchase_payment_receipt_permission_key(),
+            ),
+        )
+        .route(
+            "/purchase-orders/{id}/delivery-options",
+            with_permission(
+                get(purchase_order::delivery_options::purchase_delivery_options),
+                rbac,
+                purchase_order::delivery_options::purchase_delivery_options_permission_key(),
             ),
         )
         .route(
@@ -118,6 +132,14 @@ fn purchase_workflow_routes(rbac: &SharedRbacService) -> Router<AppState> {
                 post(purchase_order::purchase_order_submit),
                 rbac,
                 purchase_order::purchase_order_submit_permission_key(),
+            ),
+        )
+        .route(
+            "/purchase-orders/{id}/source-update/maintain",
+            with_permission(
+                post(purchase_order::purchase_order_maintain_source),
+                rbac,
+                purchase_order::purchase_order_maintain_source_permission_key(),
             ),
         )
         .route(

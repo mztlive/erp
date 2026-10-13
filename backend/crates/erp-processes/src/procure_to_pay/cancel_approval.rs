@@ -77,21 +77,7 @@ impl PurchaseOrderProcess {
         }
         self.domain().ensure_version(&order, req.expected_lock_version)?;
         let adapter = purchase_order_adapter()?;
-        let binding =
-            find_approval_binding(&self.db, id, &mut NoTransaction).await.map_err(crate::Error::from)?;
-        let binding = require_frozen_binding(binding.as_ref())?.clone();
-        let runtime =
-            load_cancel_runtime(&self.db, &binding, &subject, order.approval_subject_version).await?;
-        let now = Instant::now();
-        let input = build_purchase_order_cancel_input(
-            &runtime,
-            command.reason(),
-            actor.id(),
-            command.idempotency_key(),
-            None,
-            now,
-        )?;
-        let prepared = prepare_document_cancel(input, command.expected_document_version())?;
+        let (prepared, open_tasks, now) = self.prepare_user_cancel(&order, &subject, &command, actor).await?;
         let submission_id = order.current_submission_id.clone().unwrap_or_default();
         execute_purchase_order_domain_action(
             &mut order,
@@ -102,27 +88,70 @@ impl PurchaseOrderProcess {
         let _ = ApprovalDomainAction::PurchaseOrderCancelApproval;
         let audit =
             actor.clone().resource_log("purchase_order.cancel_approval", "purchase_order", id.to_string())?;
-        let result = persist_purchase_order_cancel(
-            &self.db,
-            PurchaseOrderCancelPersistInput {
-                order,
-                prepared,
-                open_tasks: runtime.open_tasks,
-                actor_id: actor.id().to_string(),
-                reason: command.reason().to_string(),
-                now,
-                audit,
-                object_scope: Some(self.command_access(actor, "cancel_approval")?),
-            },
-        )
-        .await;
-        match result {
+        let input = PurchaseOrderCancelPersistInput {
+            order,
+            prepared,
+            open_tasks,
+            actor_id: actor.id().to_string(),
+            reason: command.reason().to_string(),
+            now,
+            audit,
+            object_scope: Some(self.command_access(actor, "cancel_approval")?),
+        };
+        match persist_purchase_order_cancel(&self.db, input).await {
             Ok(()) => Ok(()),
             Err(error) if error.command_may_have_committed() => {
                 recover_purchase_order_cancel(&self.db, &command, error).await
             },
             Err(error) => Err(error),
         }
+    }
+}
+
+impl PurchaseOrderProcess {
+    /// 加载冻结绑定与审批运行事实，准备用户撤回的取消计划。
+    ///
+    /// # 参数
+    /// * `order` - 已按当前对象范围读取的采购单
+    /// * `subject` - 采购单审批主体
+    /// * `command` - 已规范化的撤回命令
+    /// * `actor` - 撤回人
+    ///
+    /// # 返回
+    /// 返回取消计划、待关闭的开放任务与计划时间。
+    ///
+    /// # 错误
+    /// 绑定未冻结、没有可撤回的审批实例或引擎拒绝取消时返回错误。
+    async fn prepare_user_cancel(
+        &self,
+        order: &PurchaseOrder,
+        subject: &bpm::SubjectRef,
+        command: &DocumentCancelCommand,
+        actor: &AuditActor,
+    ) -> Result<(PreparedExecution, Vec<WorkItem>, Instant)> {
+        let binding = find_approval_binding(&self.db, &order.base.id, &mut NoTransaction)
+            .await
+            .map_err(crate::Error::from)?;
+        let binding = require_frozen_binding(binding.as_ref())?.clone();
+        let runtime = load_cancel_runtime(
+            &self.db,
+            &binding,
+            subject,
+            order.approval_subject_version,
+            &mut NoTransaction,
+        )
+        .await?;
+        let now = Instant::now();
+        let input = build_purchase_order_cancel_input(
+            &runtime,
+            command.reason(),
+            actor.id(),
+            command.idempotency_key(),
+            None,
+            now,
+        )?;
+        let prepared = prepare_document_cancel(input, command.expected_document_version())?;
+        Ok((prepared, runtime.open_tasks, now))
     }
 }
 
@@ -199,26 +228,24 @@ pub(super) async fn load_cancel_runtime(
     binding: &ApprovalDefinitionBinding,
     subject: &bpm::SubjectRef,
     subject_version: u32,
+    executor: &mut dyn Executor,
 ) -> Result<LoadedCancelRuntime> {
     let instance = db
         .bpm_workflow()
-        .cancellation_instance_by_subject(subject, subject_version, &mut NoTransaction)
+        .cancellation_instance_by_subject(subject, subject_version, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("没有可撤回的审批实例".to_string()))?;
     let current = db
         .bpm_workflow()
         .current_execution_for_cancellation(
             &ApprovalProcessInstanceId::new(instance.base.id.clone()),
-            &mut NoTransaction,
+            executor,
         )
         .await?
         .ok_or_else(|| Error::ConflictError("审批实例缺少当前执行".to_string()))?;
     let open_tasks = db
         .work_items()
-        .open_approval_tasks_for_execution(
-            &ApprovalNodeExecutionId::new(current.base.id.clone()),
-            &mut NoTransaction,
-        )
+        .open_approval_tasks_for_execution(&ApprovalNodeExecutionId::new(current.base.id.clone()), executor)
         .await?;
     let plan = plan_cancel(CancelPlanInput {
         instance: &instance,
@@ -419,6 +446,21 @@ trait CancelSteps: Send {
     async fn apply(&mut self, step: CancelStep, executor: &mut dyn Executor) -> Result<()>;
 }
 
+/// 在调用方事务内按既有写序写入撤回事实。
+///
+/// # 参数
+/// * `posting` - 撤回写入所需事实
+/// * `executor` - 调用方事务执行器
+///
+/// # 返回
+/// 全部步骤写入成功时返回 `Ok(())`。
+///
+/// # 错误
+/// 任一步失败时返回该错误并停止后续写入。
+pub(super) async fn post_cancel(posting: &mut CancelPosting<'_>, executor: &mut dyn Executor) -> Result<()> {
+    execute_cancel_steps(posting, executor).await
+}
+
 /// 生产撤回持久化顺序，供真实写入和失败注入测试共同使用。
 async fn execute_cancel_steps(steps: &mut impl CancelSteps, executor: &mut dyn Executor) -> Result<()> {
     for step in [CancelStep::Runtime, CancelStep::Order, CancelStep::Audit] {
@@ -427,12 +469,18 @@ async fn execute_cancel_steps(steps: &mut impl CancelSteps, executor: &mut dyn E
     Ok(())
 }
 
-struct CancelPosting<'a> {
-    db: &'a Database,
-    writes: &'a erp_workflow::service::approval::execution::apply_plan::PlannedWrites,
-    closed_tasks: &'a [WorkItem],
-    order: &'a mut PurchaseOrder,
-    audit: &'a erp_audit::AuditLog,
+/// 撤回写入步骤所需的同一组事实。
+pub(super) struct CancelPosting<'a> {
+    /// 业务数据库。
+    pub(super) db: &'a Database,
+    /// 已准备的审批运行写入。
+    pub(super) writes: &'a erp_workflow::service::approval::execution::apply_plan::PlannedWrites,
+    /// 已关闭的开放审批任务。
+    pub(super) closed_tasks: &'a [WorkItem],
+    /// 已回到草稿的采购单。
+    pub(super) order: &'a mut PurchaseOrder,
+    /// 撤回审计。
+    pub(super) audit: &'a erp_audit::AuditLog,
 }
 
 #[async_trait]

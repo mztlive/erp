@@ -5,13 +5,18 @@ use erp_finance::entity::payable::{PaymentRequestSalesSource, PaymentRequestSour
 use erp_procurement::dto::purchase_order::{PurchaseOrderLineView, TotalsView};
 use erp_procurement::entity::purchase_order::{PurchaseOrder, PurchaseOrderRevision};
 use erp_procurement::repository::PurchaseOrderExt;
+use erp_sales::entity::sales_order::SalesOrderRevision;
 use erp_sales::repository::SalesOrderExt;
 use mongodb::Database;
 use persistence_core::Executor;
 use serde_json::{Value, json};
 
+use crate::purchase_center::source_impact::payment_paused_by_source_update;
 use crate::purchase_center::source_sales::source_sales;
 use crate::{Error, Result};
+
+/// 销售减量或移除商品导致采购暂停付款时的提示。
+const SOURCE_PAUSED: &str = "来源销售已减量或移除本采购的商品，采购依据处理完成前暂停付款申请";
 
 /// 冻结已证明的采购生效版本；后续草稿和当前合同不会覆盖审批材料。
 ///
@@ -45,22 +50,16 @@ pub async fn freeze_payment_request_source(
         .find_by_id(&sales_preview.revision_id, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("付款申请来源销售版本不存在".into()))?;
-    if sales.base.id != revision.payment_subject.sales_order_revision_id.as_ref()
-        || sales.settlement_party_id != revision.payment_subject.settlement_party_id
-        || sales.sales_order_id != order.sales_order_id
-        || sales.settlement_party_snapshot.as_ref().is_none_or(|snapshot| {
-            snapshot.settlement_party_name != revision.payment_subject.settlement_party_name
-        })
-    {
-        return Err(Error::ConflictError("付款申请采购主体与精确销售来源不一致".into()));
-    }
+    ensure_sales_subject(&sales, order, revision)?;
     let sales_order = db
         .sales_orders()
         .find_by_id(order.sales_order_id.as_ref(), executor)
         .await?
         .ok_or_else(|| Error::ConflictError("付款申请来源销售单不存在".into()))?;
-    if sales_order.stable.current_revision_id.as_deref() != Some(sales.base.id.as_str()) {
-        return Err(Error::ConflictError("付款申请来源销售版本已变化，请先完成正式采购变更".into()));
+    if sales_order.stable.current_revision_id.as_deref() != Some(sales.base.id.as_str())
+        && payment_paused_by_source_update(db, &order.base.id, executor).await?
+    {
+        return Err(Error::ConflictError(SOURCE_PAUSED.into()));
     }
     let allowed_attachment_ids =
         sales_preview.materials.iter().map(|file| file.file_asset_id.clone()).collect();
@@ -77,6 +76,36 @@ pub async fn freeze_payment_request_source(
         sales_sources: vec![sales_source],
         allowed_attachment_ids,
     })
+}
+
+/// 采购付款主体须与其冻结的精确销售版本一致。
+///
+/// # 参数
+/// * `sales` - 采购付款主体引用的销售版本
+/// * `order` / `revision` - 采购单及其生效版本
+///
+/// # 返回
+/// 销售版本、结算主体与名称均一致时返回 `Ok(())`。
+///
+/// # 错误
+/// 任一不一致时返回冲突。
+fn ensure_sales_subject(
+    sales: &SalesOrderRevision,
+    order: &PurchaseOrder,
+    revision: &PurchaseOrderRevision,
+) -> Result<()> {
+    let subject = &revision.payment_subject;
+    if sales.base.id != subject.sales_order_revision_id.as_ref()
+        || sales.settlement_party_id != subject.settlement_party_id
+        || sales.sales_order_id != order.sales_order_id
+        || sales
+            .settlement_party_snapshot
+            .as_ref()
+            .is_none_or(|snapshot| snapshot.settlement_party_name != subject.settlement_party_name)
+    {
+        return Err(Error::ConflictError("付款申请采购主体与精确销售来源不一致".into()));
+    }
+    Ok(())
 }
 
 fn purchase_preview(

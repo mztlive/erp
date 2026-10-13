@@ -10,6 +10,7 @@ import {
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { DatePicker } from "@/components/ui/date-picker"
 import { Input } from "@/components/ui/input"
 import { LoadingButton } from "@/components/ui/loading-button"
 import {
@@ -20,10 +21,28 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
+import type { PurchaseDeliveryLineOption } from "@/features/purchase-orders/api/purchase-delivery-options"
+import { PurchaseDeliveryAllocationEditor } from "@/features/purchase-orders/components/purchase-delivery-allocation-editor"
 import type { PurchaseOrderLineRow } from "@/features/purchase-orders/components/purchase-order-surfaces-lines-table"
-import { usePurchaseOrderCenterQuery } from "@/features/purchase-orders/hooks/queries"
+import {
+    usePurchaseDeliveryOptionsQuery,
+    usePurchaseOrderCenterQuery,
+} from "@/features/purchase-orders/hooks/queries"
+import {
+    afterDueDates,
+    deliveryAddressKey,
+    editableDeliveryRows,
+    expectedDateAfterDue,
+    positiveDeliveryRows,
+    removedDeliveryRows,
+} from "@/features/purchase-orders/lib/delivery-adjustment"
+import type {
+    DraftLineEdit,
+    DraftLineEdits,
+} from "@/features/purchase-orders/lib/draft-line-payload"
 import {
     positiveDecimal,
+    purchaseQuantityValid,
     taxRateValid,
 } from "@/features/purchase-orders/lib/purchase-order-validation"
 import {
@@ -34,13 +53,11 @@ import { compactFixed, divideFixed, multiplyFixed } from "@/lib/fixed-decimal"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
-export type LineEditDraft = {
-    quantity?: string
-    unitCostGross?: string
-    inputTaxRate: string
-}
+export type LineEditDraft = DraftLineEdit
 
-export type LineEdits = Record<string, LineEditDraft>
+export type LineEdits = DraftLineEdits
+
+type DeliveryOptions = ReadonlyMap<string, PurchaseDeliveryLineOption>
 
 type LineEditSetter = React.Dispatch<React.SetStateAction<LineEdits>>
 
@@ -58,6 +75,55 @@ function patchLineEdit(
             ...patch,
         },
     }))
+}
+
+/** 行可调整的交付安排范围；仍在销售当前版本中的商品行才有。 */
+function lineOption(line: PurchaseOrderLineRow, options: DeliveryOptions) {
+    if (line.lineType !== "ITEM_SERVICE" || !line.salesOrderLineId)
+        return undefined
+    return options.get(line.salesOrderLineId)
+}
+
+/** 本行在编辑器中显示的收件分配。 */
+function lineDeliveryRows(
+    line: PurchaseOrderLineRow,
+    option: PurchaseDeliveryLineOption,
+    draft: LineEditDraft | undefined,
+) {
+    return (
+        draft?.deliveryAllocations ??
+        editableDeliveryRows(option, line.deliveryAllocations ?? [])
+    )
+}
+
+/** 只使用一个收件地址时，数量变化同步到该地址；已分到多个地址时由采购手动调整。 */
+function followSingleAddress(
+    line: PurchaseOrderLineRow,
+    option: PurchaseDeliveryLineOption | undefined,
+    draft: LineEditDraft | undefined,
+    quantity: string,
+): Partial<LineEditDraft> {
+    if (!option?.requiresAddresses) return {}
+    const rows = lineDeliveryRows(line, option, draft)
+    const original = positiveDeliveryRows(line.deliveryAllocations ?? [])
+    const target =
+        original.length === 1
+            ? rows.findIndex(
+                  (row) =>
+                      deliveryAddressKey(row) ===
+                      deliveryAddressKey(original[0]),
+              )
+            : rows.length === 1
+              ? 0
+              : -1
+    if (target < 0) return {}
+    const others = rows.filter((_, index) => index !== target)
+    if (positiveDeliveryRows(others).length > 0) return {}
+    return {
+        deliveryAllocations: rows.map((row, index) =>
+            index === target ? { ...row, quantity } : row,
+        ),
+    }
 }
 
 function lineSubtitle(line: PurchaseOrderLineRow) {
@@ -144,6 +210,8 @@ function LineNumberInput({
 function buildPurchaseOrderEditLineColumns(
     lineEdits: LineEdits,
     setLineEdits: LineEditSetter,
+    allowZeroQuantity: boolean,
+    options: DeliveryOptions,
 ): ColumnDef<PurchaseOrderLineRow>[] {
     return [
         {
@@ -184,15 +252,28 @@ function buildPurchaseOrderEditLineColumns(
                         ariaLabel={`${line.itemName} 数量`}
                         widthClass="w-20"
                         invalid={
-                            !positiveDecimal(draft?.quantity ?? line.quantity)
+                            !purchaseQuantityValid(
+                                draft?.quantity ?? line.quantity,
+                                allowZeroQuantity,
+                            )
                         }
-                        invalidMessage="须为正数"
+                        invalidMessage={
+                            allowZeroQuantity ? "须为 0 或正数" : "须为正数"
+                        }
                         onValueChange={(value) =>
                             patchLineEdit(
                                 setLineEdits,
                                 line.lineId,
                                 line.inputTaxRate,
-                                { quantity: value },
+                                {
+                                    quantity: value,
+                                    ...followSingleAddress(
+                                        line,
+                                        lineOption(line, options),
+                                        draft,
+                                        value,
+                                    ),
+                                },
                             )
                         }
                     />
@@ -274,15 +355,107 @@ function buildPurchaseOrderEditLineColumns(
         {
             id: "delivery",
             accessorKey: "expectedDeliveryDate",
-            header: "交期（只读）",
-            meta: { label: "交期", width: "default" },
-            cell: ({ row }) => (
-                <span className="text-xs text-muted-foreground">
-                    {row.original.expectedDeliveryDate ?? "—"}
-                </span>
-            ),
+            header: "预计交付日",
+            meta: { label: "预计交付日", width: "default" },
+            cell: ({ row }) => {
+                const line = row.original
+                const option = lineOption(line, options)
+                if (!option) {
+                    return (
+                        <span className="text-xs text-muted-foreground">
+                            {line.expectedDeliveryDate ?? "—"}
+                        </span>
+                    )
+                }
+                const value =
+                    lineEdits[line.lineId]?.expectedDeliveryDate ??
+                    line.expectedDeliveryDate ??
+                    ""
+                const late =
+                    value !== line.expectedDeliveryDate &&
+                    expectedDateAfterDue(value, option.salesDueDate)
+                return (
+                    <>
+                        <DatePicker
+                            id={`procurement-orders-detail-edit-row-${toAutomationIdSegment(line.lineId)}-expected-date`}
+                            size="sm"
+                            className="w-40"
+                            value={value}
+                            clearable={false}
+                            disabledDates={afterDueDates(option.salesDueDate)}
+                            aria-invalid={late || undefined}
+                            onValueChange={(next) =>
+                                patchLineEdit(
+                                    setLineEdits,
+                                    line.lineId,
+                                    line.inputTaxRate,
+                                    { expectedDeliveryDate: next ?? "" },
+                                )
+                            }
+                        />
+                        <span
+                            className={cn(
+                                "block text-tiny",
+                                late
+                                    ? "text-destructive"
+                                    : "text-muted-foreground",
+                            )}
+                        >
+                            销售履约期限 {option.salesDueDate}
+                        </span>
+                    </>
+                )
+            },
         },
     ]
+}
+
+/** 须按收件地址分配的行逐行给出分配编辑。 */
+function DeliveryAllocationEditors({
+    lines,
+    lineEdits,
+    setLineEdits,
+    options,
+}: {
+    lines: readonly PurchaseOrderLineRow[]
+    lineEdits: LineEdits
+    setLineEdits: LineEditSetter
+    options: DeliveryOptions
+}) {
+    const editable = lines.flatMap((line) => {
+        const option = lineOption(line, options)
+        return option?.requiresAddresses ? [{ line, option }] : []
+    })
+    if (!editable.length) return null
+    return (
+        <div className="space-y-3">
+            {editable.map(({ line, option }) => {
+                const draft = lineEdits[line.lineId]
+                return (
+                    <PurchaseDeliveryAllocationEditor
+                        key={line.lineId}
+                        id={`procurement-orders-detail-edit-row-${toAutomationIdSegment(line.lineId)}-delivery`}
+                        option={option}
+                        rows={lineDeliveryRows(line, option, draft)}
+                        removed={removedDeliveryRows(
+                            option,
+                            line.deliveryAllocations ?? [],
+                        )}
+                        quantity={draft?.quantity ?? line.quantity ?? ""}
+                        unit={line.unit}
+                        onChange={(rows) =>
+                            patchLineEdit(
+                                setLineEdits,
+                                line.lineId,
+                                line.inputTaxRate,
+                                { deliveryAllocations: rows },
+                            )
+                        }
+                    />
+                )
+            })}
+        </div>
+    )
 }
 
 export function EditSurface({
@@ -305,9 +478,30 @@ export function EditSurface({
     onSubmitOpen: () => void
 }) {
     const lines = order.currentContent.lines
+    const allowZeroQuantity = order.sourceUpdate?.affected === true
+    const optionsQuery = usePurchaseDeliveryOptionsQuery(
+        order.identity.purchaseOrderId,
+        true,
+    )
+    const options = React.useMemo<DeliveryOptions>(
+        () =>
+            new Map(
+                (optionsQuery.data ?? []).map((option) => [
+                    option.salesOrderLineId,
+                    option,
+                ]),
+            ),
+        [optionsQuery.data],
+    )
     const columns = React.useMemo(
-        () => buildPurchaseOrderEditLineColumns(lineEdits, setLineEdits),
-        [lineEdits, setLineEdits],
+        () =>
+            buildPurchaseOrderEditLineColumns(
+                lineEdits,
+                setLineEdits,
+                allowZeroQuantity,
+                options,
+            ),
+        [lineEdits, setLineEdits, allowZeroQuantity, options],
     )
 
     return (
@@ -321,7 +515,7 @@ export function EditSurface({
                     </CardTitle>
                     <CardDescription>
                         来源销售 {order.header.salesOrderNo}
-                        。供应商、类型、履约责任、付款条件和交期来自创建依据，本卡只读。
+                        。供应商、类型、履约责任和付款条件来自创建依据，本卡只读。
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4 pt-4">
@@ -386,7 +580,8 @@ export function EditSurface({
                 <CardHeader className="border-b border-grid">
                     <CardTitle>本单可调</CardTitle>
                     <CardDescription>
-                        可改数量、含税单价和税率。⌘S 保存 · ⌘↵ 打开提交确认。
+                        可改数量、含税单价、税率、预计交付日和收件分配；预计交付日不晚于销售履约期限，收件地址取自销售当前收件资料。⌘S
+                        保存 · ⌘↵ 打开提交确认。
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4 pt-4">
@@ -404,6 +599,17 @@ export function EditSurface({
                         showColumnVisibility={false}
                         defaultColumnPinning={{ left: ["item"] }}
                         emptyTitle="暂无采购明细"
+                    />
+                    {optionsQuery.isError ? (
+                        <p className="text-xs text-muted-foreground">
+                            暂时读取不到销售当前的履约期限和收件资料，预计交付日与收件分配本次不可调整。
+                        </p>
+                    ) : null}
+                    <DeliveryAllocationEditors
+                        lines={lines}
+                        lineEdits={lineEdits}
+                        setLineEdits={setLineEdits}
+                        options={options}
                     />
 
                     <div className="flex flex-wrap gap-2">

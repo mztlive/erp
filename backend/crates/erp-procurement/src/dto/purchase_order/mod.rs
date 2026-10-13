@@ -33,9 +33,9 @@ pub use self::command::{
     CREATE_ACTION, CREATE_SOURCING_ACTION, CancelPurchaseOrderApprovalRequest,
     CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderLineRequest, CreatePurchaseOrderResult,
     CreatePurchaseOrdersFromSourcingRequest, CreatePurchaseOrdersFromSourcingResult,
-    ExistingStockReservationResult, PURCHASE_SUBMIT_ACTION, PurchaseReviewResult, SAVE_ACTION,
-    SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult, SavePurchaseOrderLine,
-    SavePurchaseOrderLinePatch, SourcingLineAssignment, SubmitPurchaseOrderRequest,
+    ExistingStockReservationResult, MaintainPurchaseSourceRequest, PURCHASE_SUBMIT_ACTION,
+    PurchaseReviewResult, SAVE_ACTION, SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult,
+    SavePurchaseOrderLine, SavePurchaseOrderLinePatch, SourcingLineAssignment, SubmitPurchaseOrderRequest,
     SubmitPurchaseOrderResult, VOID_ACTION, VoidPurchaseOrderRequest, VoidPurchaseOrderResult,
 };
 pub use self::query::{
@@ -242,6 +242,8 @@ mod tests {
                 quantity: Some("10".to_string()),
                 unit_cost_gross: Some("100.00".to_string()),
                 input_tax_rate: Some("0.13".to_string()),
+                expected_delivery_date: None,
+                delivery_allocations: None,
             }],
             idempotency_key: "submit-key-1".to_string(),
         };
@@ -270,25 +272,96 @@ mod tests {
             quantity: Some("10".to_string()),
             unit_cost_gross: Some("100.00".to_string()),
             input_tax_rate: Some("0.13".to_string()),
+            expected_delivery_date: None,
+            delivery_allocations: None,
         }];
         assert_eq!(
             submit_request_shape(&payment_term_code, &line_patches),
-            format!("{:?}|{:?}", payment_term_code, line_patches)
+            r#"Some("NET-30")|[SavePurchaseOrderLinePatch { line_id: "line-1", line_type: ItemService, quantity: Some("10"), unit_cost_gross: Some("100.00"), input_tax_rate: Some("0.13") }]"#
         );
         let empty_term = None;
         let empty_patches = vec![];
-        assert_eq!(
-            submit_request_shape(&empty_term, &empty_patches),
-            format!("{:?}|{:?}", empty_term, empty_patches)
-        );
+        assert_eq!(submit_request_shape(&empty_term, &empty_patches), "None|[]");
         let logistics = vec![SavePurchaseOrderLinePatch {
             line_id: "line-2".to_string(),
             line_type: PurchaseLineType::LogisticsFee,
             quantity: None,
             unit_cost_gross: Some("50".to_string()),
             input_tax_rate: None,
+            expected_delivery_date: None,
+            delivery_allocations: None,
         }];
-        assert_eq!(submit_request_shape(&None, &logistics), format!("{:?}|{:?}", None::<String>, logistics));
+        assert_eq!(
+            submit_request_shape(&None, &logistics),
+            r#"None|[SavePurchaseOrderLinePatch { line_id: "line-2", line_type: LogisticsFee, quantity: None, unit_cost_gross: Some("50"), input_tax_rate: None }]"#
+        );
+    }
+
+    /// 调整交付安排的补丁进入提交指纹，不同地址分配不得复用同一幂等结果。
+    #[test]
+    fn submit_shape_includes_delivery_adjustments() {
+        let mut patch = SavePurchaseOrderLinePatch {
+            line_id: "line-1".to_string(),
+            line_type: PurchaseLineType::ItemService,
+            quantity: Some("2".to_string()),
+            unit_cost_gross: None,
+            input_tax_rate: None,
+            expected_delivery_date: Some("2026-10-19".to_string()),
+            delivery_allocations: Some(vec![delivery_row("地址A", "2")]),
+        };
+        let first = submit_request_shape(&None, std::slice::from_ref(&patch));
+        patch.delivery_allocations = Some(vec![delivery_row("地址B", "2")]);
+        let second = submit_request_shape(&None, std::slice::from_ref(&patch));
+
+        assert!(first.contains(r#"expected_delivery_date: Some("2026-10-19")"#));
+        assert!(first.contains("地址A"));
+        assert_ne!(first, second);
+    }
+
+    fn delivery_row(
+        address: &str,
+        quantity: &str,
+    ) -> crate::entity::purchase_order::PurchaseDeliveryAllocation {
+        crate::entity::purchase_order::PurchaseDeliveryAllocation {
+            recipient: "张三".to_string(),
+            phone: "13800000000".to_string(),
+            address: address.to_string(),
+            quantity: Quantity::from_str(quantity).unwrap(),
+        }
+    }
+
+    /// 补丁提供的预计交付日与交付安排覆盖草稿原值；未提供时沿用原值。
+    #[test]
+    fn resolve_line_patches_applies_delivery_adjustments() {
+        let mut existing = draft_line("subl-1", "sol-1", "2");
+        existing.expected_delivery_date =
+            Some(erp_core::common::time::BusinessDate::from_ymd(2026, 10, 25).unwrap());
+        let patch = |date: Option<&str>, rows: Option<Vec<_>>| SavePurchaseOrderLinePatch {
+            line_id: "subl-1".to_string(),
+            line_type: PurchaseLineType::ItemService,
+            quantity: Some("1".to_string()),
+            unit_cost_gross: None,
+            input_tax_rate: None,
+            expected_delivery_date: date.map(str::to_string),
+            delivery_allocations: rows,
+        };
+
+        let kept =
+            SavePurchaseOrderLinePatch::resolve_all(&[patch(None, None)], std::slice::from_ref(&existing))
+                .unwrap();
+        let adjusted = SavePurchaseOrderLinePatch::resolve_all(
+            &[patch(Some("2026-10-19"), Some(vec![delivery_row("地址B", "1")]))],
+            std::slice::from_ref(&existing),
+        )
+        .unwrap();
+
+        assert_eq!(kept[0].expected_delivery_date.as_deref(), Some("2026-10-25"));
+        assert!(kept[0].delivery_allocations.is_none());
+        assert_eq!(adjusted[0].expected_delivery_date.as_deref(), Some("2026-10-19"));
+        assert_eq!(
+            adjusted[0].delivery_allocations.as_ref().map(|rows| rows[0].address.as_str()),
+            Some("地址B")
+        );
     }
 
     #[test]
@@ -512,6 +585,8 @@ mod tests {
             quantity: None,
             unit_cost_gross: None,
             input_tax_rate: None,
+            expected_delivery_date: None,
+            delivery_allocations: None,
         }];
         assert!(both.ensure_shape().is_err());
 
@@ -538,6 +613,8 @@ mod tests {
             quantity: Some(" 5 ".to_string()),
             unit_cost_gross: Some("8".to_string()),
             input_tax_rate: Some("0.13".to_string()),
+            expected_delivery_date: None,
+            delivery_allocations: None,
         }]);
         let merged = request.resolve_lines(&existing).unwrap();
         assert_eq!(merged.len(), 1);
@@ -587,6 +664,8 @@ mod tests {
             quantity: None,
             unit_cost_gross: None,
             input_tax_rate: None,
+            expected_delivery_date: None,
+            delivery_allocations: None,
         };
         let partial = draft_request(vec![patch("subl-1")]);
         assert!(SavePurchaseOrderLinePatch::resolve_all(&partial.line_patches, &existing).is_err());

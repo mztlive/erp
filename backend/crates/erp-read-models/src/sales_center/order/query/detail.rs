@@ -123,7 +123,7 @@ impl SalesOrderReadService {
         facts: &DetailFacts,
         actor: Option<&AuditActor>,
     ) -> Result<DetailPresentation> {
-        let purchase_coverage = self.sales_procurement_coverage(order).await?;
+        let purchase_coverage = self.sales_procurement_coverage(order, actor).await?;
         let purchase_creation_access =
             self.purchase_creation_access(order, &purchase_coverage, actor).await?;
         let active_card_sales_approval = match (actor, facts.submissions.first()) {

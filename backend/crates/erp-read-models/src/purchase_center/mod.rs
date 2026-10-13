@@ -5,6 +5,7 @@ pub(crate) mod approval_materials;
 mod approval_query;
 mod change;
 mod creation_basis;
+mod delivery_options;
 pub mod dto;
 mod payments;
 pub mod procurement_responsibility;
@@ -12,6 +13,7 @@ mod query;
 pub use crate::finance::purchase_payments::PurchasePaymentView;
 pub mod repository;
 mod scope;
+pub mod source_impact;
 pub(crate) mod source_sales;
 use std::sync::Arc;
 

@@ -320,7 +320,7 @@ impl PurchaseOrderProcess {
             .list_revision_lines(&change.base_revision_id, &mut NoTransaction)
             .await?;
         inherit_revision_sources(&mut inputs, &source_lines)?;
-        validate_input_delivery(&self.db, order, &inputs, &mut NoTransaction).await?;
+        validate_input_delivery(&self.db, order, &inputs, &source_lines, &mut NoTransaction).await?;
         let lines = build_change_submission_lines(&submission.base.id.clone(), &inputs)?;
         let mut submission_mut = submission.clone();
         submission_mut.submit(Instant::now(), actor.id())?;

@@ -1,5 +1,6 @@
 //! Cross-domain sales order list, procurement and approval response views.
 use erp_core::money::{Amount, Quantity, Rate};
+use erp_procurement::entity::purchase_order::SourceImpactReason;
 use erp_sales::dto::sales_order::{RevisionView, SalesOrderLineView, SubmissionView, WorkingCopyView};
 use erp_sales::entity::sales_order::selection_source::SalesSelectionSource;
 use erp_sales::entity::sales_order::{BusinessType, CommercialStatus, OriginSystem};
@@ -174,6 +175,31 @@ pub struct SalesProcurementCoverageLineView {
     pub covered_quantity: Quantity,
     /// 本行尚待覆盖数量。
     pub remaining_quantity: Quantity,
+    /// 销售减量后本行覆盖超出目标的数量，等待采购调减。
+    pub excess_quantity: Quantity,
+}
+
+/// 一张受销售变更影响、尚未处理完成的采购单。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SalesProcurementSourceUpdateView {
+    /// 采购单 ID。
+    pub purchase_order_id: String,
+    /// 采购单号。
+    pub purchase_no: String,
+    /// 采购单状态代码。
+    pub status: String,
+    /// 采购单状态中文名。
+    pub status_label: String,
+    /// 供应商当前法定名称；缺失时为空。
+    pub supplier_name: Option<String>,
+    /// 采购负责人姓名；缺失时为空。
+    pub owner_name: Option<String>,
+    /// 是否因数量归零或减少暂停付款。
+    pub blocks_payment: bool,
+    /// 草稿已按新销售版本修改，等待重新提交审批。
+    pub awaiting_submission: bool,
+    /// 按销售行号排序的影响原因；等待提交时为最近一次原因。
+    pub reasons: Vec<SourceImpactReason>,
 }
 
 /// 销售当前版本的统一供给覆盖进度。
@@ -183,31 +209,22 @@ pub struct SalesProcurementCoverageView {
     pub lines: Vec<SalesProcurementCoverageLineView>,
     /// 当前销售版本商品/服务目标总数量。
     pub total_quantity: Quantity,
-    /// 有效采购与现有库存直接分配的覆盖数量。
+    /// 有效采购与现有库存直接分配的覆盖数量，含引用历史销售版本的采购。
     pub covered_quantity: Quantity,
     /// 当前仍待分配供给的数量。
     pub remaining_quantity: Quantity,
+    /// 逐行累计的超出数量。
+    pub excess_quantity: Quantity,
     /// 覆盖进度，范围 `0..=1`。
     pub progress: Rate,
-    /// 已有采购当前提交或生效版本仍引用销售历史版本，须先处理后继续分配。
+    /// 存在受销售变更影响、采购依据待更新的采购。
     pub source_changed: bool,
-    /// 历史销售版本下的采购分配数量（含未生效提交）；不计入当前版本的合格覆盖。
-    pub outdated_purchase_quantity: Quantity,
-    /// 仍引用历史销售正式版本的采购单数。
-    pub outdated_purchase_count: usize,
-}
-
-impl SalesProcurementCoverageView {
-    /// 历史采购未完成正式更新时提供供给分配的展示阻断原因。
-    /// # 参数
-    /// 使用已验证的当前销售采购覆盖投影。
-    /// # 返回
-    /// 存在历史采购依据时返回稳定说明；否则不增加阻断。
-    /// # 错误
-    /// 不返回错误；正式采购命令仍重验当前版本和执行资格。
-    pub(crate) fn source_change_blocker(&self) -> Option<&'static str> {
-        self.source_changed.then_some("销售版本已变化，请先处理相关采购单，再继续供给分配")
-    }
+    /// 受影响采购张数；无采购查看权限时也返回。
+    pub affected_purchase_count: usize,
+    /// 已按新销售版本修改、等待重新提交审批的采购张数；无采购查看权限时也返回。
+    pub awaiting_submission_count: usize,
+    /// 受影响及等待重新提交的采购明细；无采购列表权限时为空。
+    pub source_updates: Vec<SalesProcurementSourceUpdateView>,
 }
 
 /// 当前账号从销售单继续执行供给分配的访问投影。

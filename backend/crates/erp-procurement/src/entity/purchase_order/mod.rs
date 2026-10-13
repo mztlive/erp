@@ -17,6 +17,7 @@
 //! 跨聚合校验（超行量分配、逐行引用采购确认、表头行汇总守恒）留给 P3，条目见各文件注释。
 
 mod allocation;
+mod business_date;
 mod cancelled_draft;
 mod change_order;
 mod command_receipt;
@@ -25,10 +26,14 @@ mod coverage;
 mod coverage_summary;
 mod creation_basis;
 mod delivery_allocation;
+mod delivery_capacity;
 mod draft_edit;
 mod line_amounts;
 mod line_common;
 pub use delivery_allocation::PurchaseDeliveryAllocation;
+pub use delivery_capacity::{
+    DeliveryEdit, DeliveryFields, RowCheck, delivery_edits, remaining_delivery_capacity,
+};
 mod offering_source;
 mod order;
 mod payment_subject;
@@ -36,6 +41,8 @@ mod purchase_revision;
 mod purchase_submission;
 mod purchase_submission_line;
 mod snapshot;
+mod source_impact;
+mod source_update;
 mod sourcing_plan;
 mod types;
 
@@ -43,6 +50,7 @@ pub use allocation::{
     CurrentSalesAllocationLine, CurrentSalesAllocationPlan, CurrentSalesAllocationPlanError,
     PurchaseLineSalesAllocation, PurchaseLineSalesAllocationData,
 };
+pub use business_date::business_date_of;
 pub use change_order::{
     PurchaseChangeOrder, PurchaseChangeOrderData, PurchaseChangeOrderStatus, PurchaseChangeOrderUpdate,
     PurchaseChangeSubmission, PurchaseChangeSubmissionData, PurchaseChangeSubmissionLine,
@@ -53,8 +61,8 @@ pub use command_receipt::{
     PurchaseCommandReceiptIdentity, PurchaseReceiptResult, digest_parts, payload_fingerprint,
 };
 pub use coverage::{
-    ProcurementCoverageFacts, SalesProcurementCoverage, SalesProcurementCoverageLine,
-    build_procurement_coverage, ensure_creation_sources_current,
+    HistoricalSalesLineFact, ProcurementCoverageFacts, SalesProcurementCoverage,
+    SalesProcurementCoverageLine, build_procurement_coverage,
 };
 pub use coverage_summary::ProcurementCoverageSummary;
 pub use creation_basis::{
@@ -62,7 +70,9 @@ pub use creation_basis::{
     basis_scope_key, compose_basis_id, fulfillment_options, maximum_create_quantity,
     normalize_requested_lines, purchase_type_from_product_kind, stable_line_id, supply_cost,
 };
-pub use draft_edit::{DraftLineEdit, DraftLineEditViolation, validate_draft_line_edits};
+pub use draft_edit::{
+    DraftLineEdit, DraftLineEditViolation, validate_draft_line_edits, validate_rebased_draft_line_edits,
+};
 pub use line_amounts::{LineAmountViolation, PurchaseLineInput, compute_header_totals};
 pub(crate) use line_amounts::{zero_amount, zero_rate};
 pub use offering_source::{PurchaseOfferingSource, inherit_revision_sources, inherit_submission_sources};
@@ -81,6 +91,14 @@ pub use purchase_submission::{
     SubmissionStatus,
 };
 pub use snapshot::{PaymentTermSnapshot, SupplierSnapshot};
+pub use source_impact::{
+    PurchaseSourceImpact, SourceImpactKind, SourceImpactKindCode, SourceImpactReason, SourceImpactReasonWire,
+    evaluate_source_impacts, predict_source_impacts,
+};
+pub use source_update::{
+    PurchaseSourceResolution, PurchaseSourceUpdate, PurchaseSourceUpdateStatus, SourceUpdateOpening,
+    describe_reason, maintained_baselines,
+};
 pub use sourcing_plan::{
     RequestedStockLine, SourcingAssignment, SourcingAssignmentSet, SourcingDraftPlan, SourcingPlan,
     SourcingPlanError, StockAllocationPlan, StockBasisGroup, StockBasisLine, SupplySourceType,

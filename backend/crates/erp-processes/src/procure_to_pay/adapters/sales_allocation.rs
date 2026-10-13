@@ -1,4 +1,6 @@
-//! 销售当前版本行提供方；保持原销售单、版本指针、版本行读取顺序。
+//! 采购引用的销售版本行提供方；保持原销售单、版本指针、版本行读取顺序。
+//!
+//! 采购可引用历史销售版本；是否受销售变更影响由来源复验按第一期 §6.3 判定。
 use std::collections::HashMap;
 
 use async_trait::async_trait;
@@ -25,14 +27,11 @@ impl SalesAllocationPort for SalesAllocationAdapter {
             .find_by_id(id, executor)
             .await?
             .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
-        let revision_id = sales_order
+        sales_order
             .stable
             .current_revision_id
             .as_ref()
             .ok_or_else(|| Error::BusinessLogicError("来源销售单缺少当前版本".to_string()))?;
-        if revision_id != self.1.as_ref() {
-            return Err(Error::ConflictError("来源销售版本已变化，须先正式变更采购来源后再生效".into()));
-        }
         current_revision_lines(&self.0, &self.1, executor).await
     }
 }

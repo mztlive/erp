@@ -13,6 +13,7 @@ import {
 } from "@/features/purchase-orders/types"
 import {
     positiveDecimal,
+    purchaseQuantityValid,
     taxRateValid,
 } from "@/features/purchase-orders/lib/purchase-order-validation"
 import {
@@ -24,11 +25,13 @@ import {
 } from "@/features/purchase-orders/hooks/queries"
 import type { PurchaseOrderDetailMode } from "@/features/purchase-orders/pages/purchase-order-detail-helpers"
 import type { PurchaseOrderDetailResult } from "@/features/purchase-orders/hooks/use-purchase-order-detail-command-state"
+import {
+    draftDeliveryProblem,
+    draftLinePayload,
+    type DraftLineEdits,
+} from "@/features/purchase-orders/lib/draft-line-payload"
 
-export type PurchaseOrderDetailLineEdits = Record<
-    string,
-    { quantity?: string; unitCostGross?: string; inputTaxRate: string }
->
+export type PurchaseOrderDetailLineEdits = DraftLineEdits
 
 type UsePurchaseOrderDetailEditActionsInput = {
     purchaseOrderId: string
@@ -120,12 +123,16 @@ export function usePurchaseOrderDetailEditActions({
             })
             return false
         }
-        // 行内即时校验：数量/单价为正数，税率为 0-1 小数
+        // 行内即时校验：数量/单价为正数，税率为 0-1 小数；依据待更新时商品行数量可填 0
+        const allowZero = order.sourceUpdate?.affected === true
         const invalidLine = order.currentContent.lines.find((line) => {
             const edit = lineEdits[line.lineId]
             if (!edit) return false
             return (
-                !positiveDecimal(edit.quantity ?? line.quantity) ||
+                !purchaseQuantityValid(
+                    edit.quantity ?? line.quantity,
+                    allowZero && line.lineType === "ITEM_SERVICE",
+                ) ||
                 !positiveDecimal(edit.unitCostGross ?? line.unitCostGross) ||
                 !taxRateValid(edit.inputTaxRate)
             )
@@ -134,7 +141,18 @@ export function usePurchaseOrderDetailEditActions({
             setResult({
                 status: "rejected",
                 title: "保存失败",
-                description: `「${invalidLine.itemName}」数量与含税单价须为正数，税率须为 0 到 1 的十进制数（如 0.13 表示 13%）。`,
+                description: allowZero
+                    ? `「${invalidLine.itemName}」数量须为 0 或正数（填 0 表示移除该行），含税单价须为正数，税率须为 0 到 1 的十进制数（如 0.13 表示 13%）。`
+                    : `「${invalidLine.itemName}」数量与含税单价须为正数，税率须为 0 到 1 的十进制数（如 0.13 表示 13%）。`,
+            })
+            return false
+        }
+        const deliveryProblem = draftDeliveryProblem(order, lineEdits)
+        if (deliveryProblem) {
+            setResult({
+                status: "rejected",
+                title: "保存失败",
+                description: deliveryProblem,
             })
             return false
         }
@@ -150,16 +168,7 @@ export function usePurchaseOrderDetailEditActions({
             draftEditToken,
             paymentTermCode,
             paymentTermLabel,
-            lines: order.currentContent.lines.map((line) => ({
-                lineId: line.lineId,
-                lineType: line.lineType,
-                quantity: lineEdits[line.lineId]?.quantity ?? line.quantity,
-                unitCostGross:
-                    lineEdits[line.lineId]?.unitCostGross ?? line.unitCostGross,
-                inputTaxRate:
-                    lineEdits[line.lineId]?.inputTaxRate ?? line.inputTaxRate,
-                logisticsFeeReason: line.logisticsFeeReason,
-            })),
+            lines: draftLinePayload(order, lineEdits),
         }
         const command = commandLedger.acquire(
             "save-draft",
@@ -208,6 +217,18 @@ export function usePurchaseOrderDetailEditActions({
         if (mode === "edit" && !draftEditToken) return
         let submitCommand =
             commandLedger.peek<SubmitPurchaseOrderPayload>("submit")
+        const deliveryProblem = submitCommand
+            ? undefined
+            : draftDeliveryProblem(order, lineEdits)
+        if (deliveryProblem) {
+            setSubmitConfirmOpen(false)
+            setResult({
+                status: "rejected",
+                title: "提交失败",
+                description: deliveryProblem,
+            })
+            return
+        }
         if (!submitCommand) {
             submitCommand = commandLedger.acquire(
                 "submit",
@@ -223,18 +244,7 @@ export function usePurchaseOrderDetailEditActions({
                         mode === "edit"
                             ? getPaymentTermCode()
                             : order.header.paymentTermCode,
-                    lines: order.currentContent.lines.map((line) => ({
-                        lineId: line.lineId,
-                        lineType: line.lineType,
-                        quantity:
-                            lineEdits[line.lineId]?.quantity ?? line.quantity,
-                        unitCostGross:
-                            lineEdits[line.lineId]?.unitCostGross ??
-                            line.unitCostGross,
-                        inputTaxRate:
-                            lineEdits[line.lineId]?.inputTaxRate ??
-                            line.inputTaxRate,
-                    })),
+                    lines: draftLinePayload(order, lineEdits),
                 },
             )
         }

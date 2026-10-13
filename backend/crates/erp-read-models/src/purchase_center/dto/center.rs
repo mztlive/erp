@@ -1,5 +1,6 @@
 //! 采购单对象中心与应付汇总视图。
 
+use erp_procurement::entity::purchase_order::{PurchaseSourceResolution, SourceImpactReason};
 use erp_sales::entity::sales_order::SalesDeliveryAllocation;
 
 use super::*;
@@ -57,6 +58,8 @@ pub struct PurchaseOrderCenterView {
     pub lines: Vec<PurchaseOrderLineView>,
     /// 从本采购内容精确关联的销售版本读取；不授予普通销售单或合同详情资格。
     pub source_sales_order: Option<PurchaseSourceSalesOrderView>,
+    /// 来源销售变更对本采购的影响；采购引用当前销售版本且无待处理记录时为空。
+    pub source_update: Option<PurchaseSourceUpdateView>,
     /// 当前内容表头汇总。
     pub totals: TotalsView,
     /// 生效版本的销售分配。
@@ -69,6 +72,35 @@ pub struct PurchaseOrderCenterView {
     pub approval: DocumentApprovalView,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
+}
+
+/// 来源销售变更对本采购的影响（第一期 §6.3“销售变更对采购的影响”第 10 条）。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct PurchaseSourceUpdateView {
+    /// 采购依据待更新：存在未处理且仍受影响的依据更新记录。
+    pub affected: bool,
+    /// 草稿已按新销售版本修改，重新提交审批后处理完成。
+    pub awaiting_submission: bool,
+    /// 未处理记录主键；不受影响时为空。
+    pub record_id: Option<String>,
+    /// 未处理记录版本，登记维持原采购时回传。
+    pub record_version: Option<u64>,
+    /// 是否因数量归零或减少暂停付款。
+    pub blocks_payment: bool,
+    /// 未处理记录的影响原因。
+    pub reasons: Vec<SourceImpactReason>,
+    /// 采购引用的销售版本号。
+    pub purchase_sales_revision_no: Option<u32>,
+    /// 销售当前版本号。
+    pub current_sales_revision_no: Option<u32>,
+    /// 采购引用的销售版本已不是当前版本。
+    pub sales_revision_outdated: bool,
+    /// 最近一次处理方式代码；尚无已处理记录时为空。
+    pub last_resolution: Option<PurchaseSourceResolution>,
+    /// 最近一次处理方式中文名。
+    pub last_resolution_label: Option<String>,
+    /// 最近一次维持原采购的原因。
+    pub last_maintain_note: Option<String>,
 }
 
 /// 采购上下文限定读取的来源销售版本。

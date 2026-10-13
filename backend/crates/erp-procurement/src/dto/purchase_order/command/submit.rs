@@ -72,17 +72,36 @@ pub(crate) fn submit_request_shape(
         .iter()
         .map(|patch| {
             format!(
-                "SavePurchaseOrderLinePatch {{ line_id: {:?}, line_type: {}, quantity: {:?}, unit_cost_gross: {:?}, input_tax_rate: {:?} }}",
+                "SavePurchaseOrderLinePatch {{ line_id: {:?}, line_type: {}, quantity: {:?}, unit_cost_gross: {:?}, input_tax_rate: {:?}{} }}",
                 patch.line_id,
                 submit_line_type_shape(patch.line_type),
                 patch.quantity,
                 patch.unit_cost_gross,
                 patch.input_tax_rate,
+                delivery_patch_shape(patch),
             )
         })
         .collect::<Vec<_>>()
         .join(", ");
     format!("{:?}|[{}]", payment_term_code, patches)
+}
+
+/// 返回交付调整字段的形态文本；未调整时为空，保持存量指纹不变。
+///
+/// # 参数
+/// * `patch` - 草稿行补丁
+///
+/// # 返回
+/// 有预计交付日或交付安排时返回追加片段；否则返回空串。
+///
+/// # 错误
+/// 无。
+fn delivery_patch_shape(patch: &SavePurchaseOrderLinePatch) -> String {
+    if patch.expected_delivery_date.is_none() && patch.delivery_allocations.is_none() {
+        return String::new();
+    }
+    let rows = serde_json::to_string(&patch.delivery_allocations).unwrap_or_default();
+    format!(", expected_delivery_date: {:?}, delivery_allocations: {rows}", patch.expected_delivery_date)
 }
 
 /// 返回行类型的历史 Debug 派生字节形态。

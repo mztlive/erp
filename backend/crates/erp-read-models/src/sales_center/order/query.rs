@@ -137,9 +137,6 @@ impl SalesOrderReadService {
         coverage: &SalesProcurementCoverageView,
         actor: Option<&AuditActor>,
     ) -> Result<PurchaseCreationAccessView> {
-        if let Some(message) = coverage.source_change_blocker() {
-            return Ok(blocked_purchase_creation_access(message));
-        }
         if let Some(message) = order.procurement_creation_blocker(coverage.remaining_quantity) {
             return Ok(blocked_purchase_creation_access(message));
         }

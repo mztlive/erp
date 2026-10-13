@@ -4,6 +4,7 @@ import * as React from "react"
 import { useSearchParams } from "next/navigation"
 import { SalesChangeOrderEditDialog } from "./sales-change-order-edit-dialog"
 import { SalesChangeOrderPendingCard } from "./sales-change-order-pending-card"
+import { SalesChangeProcurementProgressCard } from "./sales-change-procurement-progress"
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -20,6 +21,7 @@ import type {
     SalesChangeOrderSummary,
     SalesOrderNature,
 } from "@/features/sales-orders/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 
 /**
  * 销售变更单在详情页上的审批区入口。
@@ -103,6 +105,12 @@ export function SalesChangeOrderApprovalSection({
 
     return (
         <div className="space-y-3">
+            {changeOrder.procurement ? (
+                <SalesChangeProcurementProgressCard
+                    id={`sales-change-${toAutomationIdSegment(changeOrder.id)}-procurement`}
+                    procurement={changeOrder.procurement}
+                />
+            ) : null}
             {readonlyApproval ? (
                 <SalesChangeOrderPendingCard
                     id={`sales-change-${changeOrder.id}`}

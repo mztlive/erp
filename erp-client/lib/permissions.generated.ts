@@ -3503,6 +3503,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "GET",
+                path: "/admin/purchase-orders/{id}/delivery-options",
+                description: "保存采购草稿",
+                permission: {
+                    resource: "purchase_order",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
                 method: "POST",
                 path: "/admin/purchase-orders/{id}/draft",
                 description: "保存采购草稿",
@@ -3529,6 +3539,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "purchase_order",
                     action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/source-update/maintain",
+                description: "登记维持原采购依据",
+                permission: {
+                    resource: "purchase_order",
+                    action: "maintain_source",
                 },
             },
             {

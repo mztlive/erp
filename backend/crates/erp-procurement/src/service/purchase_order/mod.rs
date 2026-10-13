@@ -8,6 +8,7 @@ pub mod coverage;
 pub mod create_submit;
 pub mod creation_basis;
 pub mod draft_edit;
+pub mod draft_rebase;
 pub mod formalization;
 pub mod lifecycle;
 pub mod line_input;

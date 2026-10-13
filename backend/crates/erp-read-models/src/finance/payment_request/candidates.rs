@@ -20,6 +20,7 @@ use erp_supplier::SupplierExt;
 use persistence_core::{Executor, Transactional};
 
 use super::{PurchasePaymentRequestCandidate, PurchasePaymentRequestReadService};
+use crate::purchase_center::source_impact::payment_paused_by_source_update;
 use crate::{Error, Result};
 
 impl PurchasePaymentRequestReadService {
@@ -118,9 +119,12 @@ impl PurchasePaymentRequestReadService {
             .find_by_id(subject.sales_order_revision_id.as_ref(), executor)
             .await?;
         let current = self.db.sales_orders().find_by_id(subject.sales_order_id.as_ref(), executor).await?;
-        if current.is_none_or(|current| {
-            current.stable.current_revision_id.as_deref() != Some(subject.sales_order_revision_id.as_ref())
-        }) {
+        let Some(current) = current else {
+            return Ok(false);
+        };
+        if current.stable.current_revision_id.as_deref() != Some(subject.sales_order_revision_id.as_ref())
+            && payment_paused_by_source_update(&self.db, &order.base.id, executor).await?
+        {
             return Ok(false);
         }
         Ok(sales.is_some_and(|sales| {

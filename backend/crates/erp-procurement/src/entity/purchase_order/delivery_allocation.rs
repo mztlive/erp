@@ -26,7 +26,8 @@ impl fmt::Debug for PurchaseDeliveryAllocation {
 }
 
 impl PurchaseDeliveryAllocation {
-    fn key(&self) -> (&str, &str, &str) {
+    /// 返回收件资料身份：收货人、电话与地址。
+    pub(super) fn key(&self) -> (&str, &str, &str) {
         (&self.recipient, &self.phone, &self.address)
     }
 

@@ -12,7 +12,7 @@ use serde::Serialize;
 use validator::Validate;
 
 use super::projection::document_approval_view;
-use super::{SalesChangeOrderDetailView, SalesChangeReadService};
+use super::{SalesChangeOrderDetailView, SalesChangeProcurementView, SalesChangeReadService};
 use crate::sales_center::access::SalesAccess;
 use crate::{Error, Result};
 
@@ -103,7 +103,9 @@ impl SalesChangeReadService {
         if first.1 != current.1 {
             return Err(crate::support::data_scope_changed("数据范围或销售变更单已变化，请刷新"));
         }
-        Ok(first.0)
+        let mut view = first.0;
+        view.procurement = self.change_procurement(&view, actor).await?;
+        Ok(view)
     }
 }
 
@@ -268,5 +270,6 @@ fn detail_view(
         version: change_order.base.version,
         created_at: change_order.base.created_at,
         approval: document_approval_view(binding.as_ref(), None, change_order.stable.status()),
+        procurement: SalesChangeProcurementView::default(),
     }
 }

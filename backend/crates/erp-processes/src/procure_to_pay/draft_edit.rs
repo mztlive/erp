@@ -2,17 +2,22 @@
 
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
+use erp_core::ids::SalesOrderRevisionId;
 use erp_procurement::dto::purchase_order::{
     SAVE_ACTION, SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult, SavePurchaseOrderLine,
 };
 use erp_procurement::entity::purchase_order::{
-    PurchaseCommandReceipt, PurchaseCommandReceiptError, PurchaseCommandReceiptIdentity, PurchaseOrder,
-    PurchaseOrderSubmission, SalesProcurementCoverage, SaveDraftReceipt, validate_draft_line_edits,
+    PaymentSubjectSnapshot, PurchaseCommandReceipt, PurchaseCommandReceiptError,
+    PurchaseCommandReceiptIdentity, PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
+    SalesProcurementCoverage, SaveDraftReceipt, validate_draft_line_edits, validate_rebased_draft_line_edits,
 };
 use erp_procurement::repository::PurchaseCommandExt;
 use erp_procurement::service::purchase_order::draft_edit::{
     DraftReplacement, build_draft_replacement, ensure_save_target, load_current_draft, load_purchase_order,
     map_draft_edit_violation, persist_replacement,
+};
+use erp_procurement::service::purchase_order::draft_rebase::{
+    drop_cleared_item_lines, rebased_payment_subject, rebind_draft_lines,
 };
 use erp_read_models::purchase_center::repository::load_sales_procurement_coverage;
 use erp_sales::repository::SalesOrderExt;
@@ -22,6 +27,7 @@ use validator::Validate;
 
 use super::PurchaseOrderProcess;
 use super::authorization::{PurchaseOrderAuthorization, ensure_purchase_order_actor_account};
+use super::delivery_plan::validate_submission_delivery;
 use super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 use crate::audit::{persist_log, recover_command};
 use crate::{Error, Result};
@@ -204,10 +210,11 @@ async fn save_draft_apply(
 /// 返回事务内持久化后的保存结果。
 ///
 /// # 错误
-/// 草稿、销售来源、覆盖、金额计算、实体更新或仓储写入失败时返回错误。
+/// 草稿、销售来源、覆盖、预计交付日、交付地址、金额计算、实体更新或仓储写入失败时返回错误。
 ///
 /// # 关键业务约束
-/// 销售 procurement guard 推进后必须重算覆盖，再校验本次完整行替换。
+/// 销售 procurement guard 推进后必须重算覆盖，再校验本次完整行替换；预计交付日与
+/// 收件分配按销售当前版本校验。
 async fn replace_current_draft(
     db: &mongodb::Database,
     order: &mut PurchaseOrder,
@@ -217,15 +224,56 @@ async fn replace_current_draft(
     let (mut old_draft, old_lines) = load_current_draft(db, order, executor).await?;
     let coverage = advance_guard_and_load_coverage(db, order, command.actor.id(), executor).await?;
     let requested_lines = command.request.resolve_lines(&old_lines)?;
-    let requested_edits =
-        requested_lines.iter().map(SavePurchaseOrderLine::to_draft_edit).collect::<Vec<_>>();
-    validate_draft_line_edits(&requested_edits, &old_lines, &coverage.lines)
-        .map_err(map_draft_edit_violation)?;
-    let replacement = build_draft_replacement(order, &old_draft, &old_lines, &requested_lines)?;
+    let (requested_lines, payment_subject) =
+        prepare_draft_lines(order, &old_draft, &old_lines, requested_lines, &coverage)?;
+    let replacement =
+        build_draft_replacement(order, &old_draft, &old_lines, &requested_lines, payment_subject)?;
+    validate_submission_delivery(db, order, &replacement.lines, &old_lines, executor).await?;
     order.update(Default::default(), command.actor.id(), super::adapters::payment_term::parse)?;
     old_draft.mark_superseded()?;
     order.current_submission_id = Some(replacement.submission.base.id.clone());
     persist_draft_replacement(db, order, &mut old_draft, &replacement, command, executor).await
+}
+
+/// 校验草稿行；草稿引用旧销售版本时按当前版本刷新来源。
+///
+/// # 参数
+/// * `order` - 当前采购单；刷新时改写其销售来源版本
+/// * `old_draft` - 当前草稿提交
+/// * `old_lines` - 当前草稿行
+/// * `requested` - 已合并补丁的请求行
+/// * `coverage` - 推进 guard 后的当前覆盖
+///
+/// # 返回
+/// 返回待写入的请求行与付款主体。
+///
+/// # 错误
+/// 行编辑违反草稿或刷新规则时返回错误。
+///
+/// # 关键业务约束
+/// 第一期 §6.3“销售变更对采购的影响”第 5 条：修改原单时刷新到当前销售版本，
+/// 保留单号与未受影响行，不要求作废重建。
+fn prepare_draft_lines(
+    order: &mut PurchaseOrder,
+    old_draft: &PurchaseOrderSubmission,
+    old_lines: &[PurchaseOrderSubmissionLine],
+    requested: Vec<SavePurchaseOrderLine>,
+    coverage: &SalesProcurementCoverage,
+) -> Result<(Vec<SavePurchaseOrderLine>, PaymentSubjectSnapshot)> {
+    let current = coverage.revision.base.id.as_str();
+    if order.sales_order_revision_id.as_ref() == current {
+        let edits = requested.iter().map(SavePurchaseOrderLine::to_draft_edit).collect::<Vec<_>>();
+        validate_draft_line_edits(&edits, old_lines, &coverage.lines).map_err(map_draft_edit_violation)?;
+        return Ok((requested, old_draft.payment_subject.clone()));
+    }
+    let mut requested = drop_cleared_item_lines(requested);
+    let edits = requested.iter().map(SavePurchaseOrderLine::to_draft_edit).collect::<Vec<_>>();
+    validate_rebased_draft_line_edits(&edits, old_lines, &coverage.lines)
+        .map_err(map_draft_edit_violation)?;
+    rebind_draft_lines(&mut requested, coverage)?;
+    let subject = rebased_payment_subject(&old_draft.payment_subject, current)?;
+    order.sales_order_revision_id = SalesOrderRevisionId::new(current);
+    Ok((requested, subject))
 }
 
 /// 推进销售采购 guard 并加载最新采购覆盖。

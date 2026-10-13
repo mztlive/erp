@@ -39,6 +39,29 @@ impl WorkItem {
         Ok(())
     }
 
+    /// 在采购不再受销售变更影响时自动完成采购依据更新任务。
+    ///
+    /// # 参数
+    /// * `at` - 系统确认采购依据已处理的时间
+    ///
+    /// # 返回
+    /// 自动完成成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 单据审批或带审批节点执行引用、不是采购依据更新任务，或任务不是开放状态时返回错误。
+    pub fn complete_when_source_updated(&mut self, at: Instant) -> Result<()> {
+        self.ensure_generic_mutation()?;
+        if self.work_item_type != WorkItemType::PurchaseSourceUpdate {
+            return Err(Error::from("只有采购依据更新任务可以按采购处理完成自动完成"));
+        }
+        self.ensure_open()?;
+        self.status = WorkItemStatus::Completed;
+        self.completed_at = Some(at);
+        self.completed_by = Some("__system__".to_string());
+        self.last_activity_at = Some(at);
+        Ok(())
+    }
+
     /// 在应付开放余额归零时自动完成付款执行任务。
     ///
     /// # 参数

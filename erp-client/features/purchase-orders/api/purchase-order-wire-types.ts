@@ -1,3 +1,4 @@
+import type { SourceImpactReasonWire } from "@/features/purchase-orders/lib/source-impact"
 /**
  * W08 采购单 · 后端 wire 类型（真实 HTTP API 响应形状）。
  * 本文件为纯类型声明表，仅描述后端契约，不承载逻辑。
@@ -93,6 +94,7 @@ export type BackendCenter = {
     content_source: string
     lines: BackendLine[]
     source_sales_order?: BackendPurchaseSourceSalesOrder | null
+    source_update?: BackendPurchaseSourceUpdate | null
     totals: { gross: string; net: string; tax: string }
     allocations: Array<{
         id: string
@@ -270,4 +272,20 @@ export type BackendPurchaseChangeOrder = {
     version: number
     created_at: number
     approval?: DocumentApprovalViewDto | null
+}
+
+/** 来源销售变更对采购的影响；采购引用当前销售版本且无待处理记录时为空。 */
+export type BackendPurchaseSourceUpdate = {
+    affected: boolean
+    awaiting_submission?: boolean
+    record_id?: string | null
+    record_version?: number | null
+    blocks_payment: boolean
+    reasons: SourceImpactReasonWire[]
+    purchase_sales_revision_no?: number | null
+    current_sales_revision_no?: number | null
+    sales_revision_outdated: boolean
+    last_resolution?: string | null
+    last_resolution_label?: string | null
+    last_maintain_note?: string | null
 }

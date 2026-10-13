@@ -22,6 +22,7 @@ export {
 export {
     cancelPurchaseOrderApproval,
     createPurchaseOrdersFromSourcing,
+    maintainPurchaseSource,
     savePurchaseOrderDraft,
     startPurchaseChange,
     submitPurchaseChange,

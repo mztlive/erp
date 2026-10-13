@@ -24,6 +24,23 @@ import type {
 import { mapPurchaseChangeOrder } from "./purchase-order-mapping"
 import type { PurchaseChangeDraftLine } from "./purchase-change-draft"
 
+/** 草稿行补丁；预计交付日与收件分配只在调整时携带。 */
+function toLinePatch(line: SavePurchaseOrderDraftInput["lines"][number]) {
+    return {
+        line_id: line.lineId,
+        line_type: line.lineType,
+        quantity: line.quantity,
+        unit_cost_gross: line.unitCostGross,
+        input_tax_rate: line.inputTaxRate,
+        ...(line.expectedDeliveryDate
+            ? { expected_delivery_date: line.expectedDeliveryDate }
+            : {}),
+        ...(line.deliveryAllocations
+            ? { delivery_allocations: line.deliveryAllocations }
+            : {}),
+    }
+}
+
 export async function savePurchaseOrderDraft(
     input: SavePurchaseOrderDraftInput & { paymentTermLabel: string },
 ): Promise<
@@ -39,13 +56,7 @@ export async function savePurchaseOrderDraft(
             {
                 expected_lock_version: input.expectedLockVersion,
                 payment_term_code: input.paymentTermCode,
-                line_patches: input.lines.map((line) => ({
-                    line_id: line.lineId,
-                    line_type: line.lineType,
-                    quantity: line.quantity,
-                    unit_cost_gross: line.unitCostGross,
-                    input_tax_rate: line.inputTaxRate,
-                })),
+                line_patches: input.lines.map(toLinePatch),
                 idempotency_key: input.idempotencyKey,
             },
         )
@@ -81,6 +92,24 @@ export async function cancelPurchaseOrderApproval(input: {
             expected_lock_version: input.expectedLockVersion,
             reason: input.reason.trim(),
             idempotency_key: input.idempotencyKey,
+        },
+    )
+}
+
+/**
+ * 登记维持原采购（`POST .../source-update/maintain`）。
+ * 销售变更影响本采购但无法调整时由采购负责人登记原因；服务端按记录版本防并发。
+ */
+export async function maintainPurchaseSource(input: {
+    purchaseOrderId: string
+    expectedVersion: number
+    reason: string
+}): Promise<void> {
+    await apiPost(
+        `/admin/purchase-orders/${encodeURIComponent(input.purchaseOrderId)}/source-update/maintain`,
+        {
+            expected_version: input.expectedVersion,
+            reason: input.reason.trim(),
         },
     )
 }
@@ -137,13 +166,7 @@ export async function submitPurchaseOrderForReview(
             {
                 expected_lock_version: input.expectedLockVersion,
                 payment_term_code: input.paymentTermCode,
-                line_patches: input.lines.map((line) => ({
-                    line_id: line.lineId,
-                    line_type: line.lineType,
-                    quantity: line.quantity,
-                    unit_cost_gross: line.unitCostGross,
-                    input_tax_rate: line.inputTaxRate,
-                })),
+                line_patches: input.lines.map(toLinePatch),
                 idempotency_key: input.idempotencyKey,
             },
         )

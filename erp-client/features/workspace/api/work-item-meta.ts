@@ -54,6 +54,13 @@ export const TYPE_META: Record<string, TypeMeta> = {
         badgeVariant: "lime",
         openActionLabel: "去分配供给",
     },
+    PURCHASE_SOURCE_UPDATE: {
+        label: "采购依据更新",
+        family: "procurement",
+        badgeLabel: "依据待更新",
+        badgeVariant: "orange",
+        openActionLabel: "去处理采购单",
+    },
     FULFILLMENT_OPERATION: {
         label: "履约处理",
         family: "fulfillment",

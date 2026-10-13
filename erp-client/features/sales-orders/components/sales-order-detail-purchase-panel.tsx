@@ -81,6 +81,11 @@ export function PurchasePanel({ order }: { order: SalesOrderDetailView }) {
     )
 
     const [previewId, setPreviewId] = React.useState<string | null>(null)
+    const affectedIds = new Set(
+        order.related.procurementProgress.sourceUpdates.map(
+            (update) => update.purchaseOrderId,
+        ),
+    )
     const statusSummary = purchaseOrderStatusSummary(
         canList ? (listQuery.data?.rows ?? []) : [],
     )
@@ -132,6 +137,9 @@ export function PurchasePanel({ order }: { order: SalesOrderDetailView }) {
                         measureLabel="含税金额"
                         documents={(listQuery.data?.rows ?? []).map((row) =>
                             toRelatedPurchaseDocument(row, {
+                                sourceOutdated: affectedIds.has(
+                                    row.purchaseOrderId,
+                                ),
                                 canPreview,
                                 previewReason:
                                     permissions.previewPurchase.reason,
@@ -194,8 +202,21 @@ function purchaseOrderStatusSummary(
     }).join(" · ")
 }
 
-function purchaseProgressTracks(row: PurchaseOrderListItem) {
+function purchaseProgressTracks(
+    row: PurchaseOrderListItem,
+    sourceOutdated: boolean,
+) {
+    const sourceTrack = sourceOutdated
+        ? [
+              {
+                  id: "source",
+                  label: "依据",
+                  status: { label: "待更新", tone: "warning" as const },
+              },
+          ]
+        : []
     return [
+        ...sourceTrack,
         {
             id: "fulfillment",
             label: "履约",
@@ -230,6 +251,7 @@ function purchaseProgressTracks(row: PurchaseOrderListItem) {
 function toRelatedPurchaseDocument(
     row: PurchaseOrderListItem,
     options: {
+        sourceOutdated: boolean
         canPreview: boolean
         previewReason?: string
         onPreview: () => void
@@ -244,7 +266,7 @@ function toRelatedPurchaseDocument(
             label: row.statusLabel,
             tone: row.statusTone,
         },
-        tracks: purchaseProgressTracks(row),
+        tracks: purchaseProgressTracks(row, options.sourceOutdated),
         measure: {
             kind: "amount" as const,
             value: row.costMasked ? (

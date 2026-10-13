@@ -19,6 +19,7 @@ import { PurchaseChangeOrderApprovalSection } from "@/features/purchase-orders/c
 import { EditSurface } from "@/features/purchase-orders/components/purchase-order-surfaces"
 import { PurchaseOrderDetailDialogs } from "@/features/purchase-orders/components/purchase-order-detail-dialogs"
 import { PurchaseOrderDetailHeader } from "@/features/purchase-orders/components/purchase-order-detail-header"
+import { PurchaseOrderSourceUpdateNotice } from "@/features/purchase-orders/components/purchase-order-source-update-notice"
 import { PurchaseOrderDetailSidebar } from "@/features/purchase-orders/components/purchase-order-detail-sidebar"
 import { PurchaseOrderDetailSections } from "@/features/purchase-orders/components/purchase-order-detail-sections"
 import {
@@ -277,6 +278,17 @@ export function PurchaseOrderDetailPage({
                 onCancelResult={handleResult}
                 result={result}
                 onDismissResult={() => handleResult(null)}
+            />
+
+            <PurchaseOrderSourceUpdateNotice
+                order={order}
+                showActions={mode !== "edit"}
+                canEdit={permissions.canEdit}
+                canVoid={permissions.canVoid}
+                canChange={permissions.canChange}
+                onEdit={() => router.push(`${baseHref}?mode=edit`)}
+                onRequestVoid={() => editActions.setVoidConfirmOpen(true)}
+                onRequestChange={() => editActions.setChangeConfirmOpen(true)}
             />
 
             {isChangeOrderTask && activeSection !== "changes" ? (

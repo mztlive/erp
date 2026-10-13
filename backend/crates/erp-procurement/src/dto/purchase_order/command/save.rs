@@ -209,10 +209,17 @@ pub struct SavePurchaseOrderLinePatch {
     pub unit_cost_gross: Option<String>,
     /// 进项税率。
     pub input_tax_rate: Option<String>,
+    /// 商品/服务行预计交付日；缺省沿用当前草稿。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_delivery_date: Option<String>,
+    /// 商品/服务行按收件地址的交付安排；缺省沿用当前草稿。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivery_allocations: Option<Vec<PurchaseDeliveryAllocation>>,
 }
 
 impl SavePurchaseOrderLinePatch {
-    /// 将草稿行补丁合并为完整采购行，冻结字段只从服务端当前草稿取得。
+    /// 将草稿行补丁合并为完整采购行，冻结字段只从服务端当前草稿取得；未提供的
+    /// 预计交付日与交付安排沿用当前草稿。
     ///
     /// # 参数
     /// * `patches` - 客户端可编辑字段快照
@@ -252,6 +259,9 @@ impl SavePurchaseOrderLinePatch {
                     result.quantity = patch.quantity.clone().or(result.quantity);
                     result.allocated_quantity = result.quantity.clone();
                     result.unit_cost_gross = patch.unit_cost_gross.clone().or(result.unit_cost_gross);
+                    result.expected_delivery_date =
+                        patch.expected_delivery_date.clone().or(result.expected_delivery_date);
+                    result.delivery_allocations = patch.delivery_allocations.clone();
                 } else {
                     result.gross_amount = patch.unit_cost_gross.clone().or(result.gross_amount);
                 }

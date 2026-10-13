@@ -3,6 +3,7 @@
 mod approval_query;
 mod dto;
 mod list;
+mod procurement;
 mod projection;
 mod query;
 mod submitted_target;

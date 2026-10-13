@@ -404,6 +404,8 @@ mod tests {
                 quantity: Some("2".into()),
                 unit_cost_gross: Some("99".into()),
                 input_tax_rate: None,
+                expected_delivery_date: None,
+                delivery_allocations: None,
             },
             SavePurchaseOrderLinePatch {
                 line_id: "draft-logistics".into(),
@@ -411,11 +413,19 @@ mod tests {
                 quantity: None,
                 unit_cost_gross: None,
                 input_tax_rate: None,
+                expected_delivery_date: None,
+                delivery_allocations: None,
             },
         ];
         let requested = SavePurchaseOrderLinePatch::resolve_all(&patches, &draft.lines).unwrap();
-        let replacement =
-            build_draft_replacement(&cancelled, &draft.submission, &draft.lines, &requested).unwrap();
+        let replacement = build_draft_replacement(
+            &cancelled,
+            &draft.submission,
+            &draft.lines,
+            &requested,
+            draft.submission.payment_subject.clone(),
+        )
+        .unwrap();
         replacement.submission.ensure_draft().unwrap();
         replacement.submission.ensure_line_totals(&replacement.lines).unwrap();
         assert_eq!(replacement.submission.gross_amount, Amount::from_str("208").unwrap());

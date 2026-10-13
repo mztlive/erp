@@ -34,12 +34,18 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use super::super::creation_basis::supplier::CreationBasisSupplierAdapter;
+use super::super::delivery_plan::validate_submission_delivery;
 use super::super::draft_edit::advance_guard_and_load_coverage;
 use super::super::payment_subject::revalidate_payment_subject;
+use super::super::procurement_task_sync::sync_purchase_source_updates;
+use super::super::source_recheck::ensure_source_unaffected;
 use super::supply_selection::revalidate_selected_supply;
 use crate::adapters::freeze_approval_materials;
 use crate::audit::persist_log;
 use crate::{Error, Result};
+
+/// 来源销售已变更并影响本采购时的提交提示。
+const SUBMIT_SOURCE_AFFECTED: &str = "来源销售已变更并影响本采购，请先修改草稿按新销售版本保存后再提交";
 
 /// 采购单提交事务内需要一并写入的冻结提交。
 ///
@@ -127,6 +133,7 @@ pub(crate) async fn persist_purchase_order_start(
     if let Some(scope) = &input.object_scope {
         scope.current(&input.order.base.id, executor).await?;
     }
+    ensure_source_unaffected(db, &input.order, SUBMIT_SOURCE_AFFECTED, executor).await?;
     let mut posting = StartPosting { db, input, first_task: None };
     execute_start_steps(&mut posting, executor).await?;
     Ok(posting.first_task)
@@ -142,6 +149,7 @@ pub(super) enum StartStep {
     SupplySelection,
     Submission,
     SupersededDraft,
+    SourceUpdates,
     Runtime,
     CommandReceipt,
     Audit,
@@ -170,7 +178,7 @@ pub(super) trait StartSteps: Send {
 /// * `executor` - 全程复用的执行器。
 ///
 /// # 返回
-/// 收据、守卫、资格、提交、运行事实、命令收据与审计均已写入。
+/// 收据、守卫、资格、提交、采购依据更新、运行事实、命令收据与审计均已写入。
 ///
 /// # 错误
 /// 任一步失败时返回原错误，后续步骤不再执行。
@@ -187,6 +195,7 @@ pub(super) async fn execute_start_steps(
         SupplySelection,
         Submission,
         SupersededDraft,
+        SourceUpdates,
         Runtime,
         CommandReceipt,
         Audit,
@@ -216,6 +225,9 @@ impl StartSteps for StartPosting<'_> {
             StartStep::SupplySelection => self.supply_selection(executor).await,
             StartStep::Submission => self.submission(executor).await,
             StartStep::SupersededDraft => self.superseded_draft(executor).await,
+            StartStep::SourceUpdates => {
+                sync_purchase_source_updates(self.db, &self.input.order.sales_order_id, executor).await
+            },
             StartStep::Runtime => self.runtime(executor).await,
             StartStep::CommandReceipt => self.command_receipt(executor).await,
             StartStep::Audit => persist_log(self.db, &self.input.audit, executor).await.map_err(Error::from),
@@ -257,7 +269,7 @@ impl StartPosting<'_> {
         Ok(())
     }
 
-    /// 草稿补丁在销售采购 guard 后重算覆盖，不变更供给选源。
+    /// 草稿补丁在销售采购 guard 后重算覆盖并复验交付日与收件分配，不变更供给选源。
     async fn procurement_guard(&mut self, executor: &mut dyn Executor) -> Result<()> {
         let input = &mut self.input;
         if let Some(guard) = input.procurement_guard.take() {
@@ -267,6 +279,14 @@ impl StartPosting<'_> {
                 guard.requested_lines.iter().map(SavePurchaseOrderLine::to_draft_edit).collect::<Vec<_>>();
             validate_draft_line_edits(&requested_edits, &guard.existing_lines, &coverage.lines)
                 .map_err(map_draft_edit_violation)?;
+            validate_submission_delivery(
+                self.db,
+                &input.order,
+                &input.submission_lines,
+                &guard.existing_lines,
+                executor,
+            )
+            .await?;
         }
         Ok(())
     }

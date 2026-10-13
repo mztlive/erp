@@ -5,6 +5,7 @@
 
 pub mod change_draft;
 pub mod correspondence;
+pub mod delivery_options;
 pub mod payments;
 pub mod sales_material;
 
@@ -16,11 +17,11 @@ use erp_processes::procure_to_pay::PurchaseOrderProcess;
 use erp_procurement::dto::purchase_order::{
     CancelPurchaseChangeApprovalRequest, CancelPurchaseOrderApprovalRequest,
     CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult, CreatePurchaseOrdersFromSourcingRequest,
-    CreatePurchaseOrdersFromSourcingResult, EffectPurchaseChangeRequest, PurchaseChangeEffectResult,
-    PurchaseChangeOrderListParams, PurchaseOrderListParams, SavePurchaseOrderDraftRequest,
-    SavePurchaseOrderDraftResult, StartPurchaseChangeRequest, StartPurchaseChangeResult,
-    SubmitPurchaseChangeRequest, SubmitPurchaseOrderRequest, SubmitPurchaseOrderResult,
-    VoidPurchaseOrderRequest, VoidPurchaseOrderResult,
+    CreatePurchaseOrdersFromSourcingResult, EffectPurchaseChangeRequest, MaintainPurchaseSourceRequest,
+    PurchaseChangeEffectResult, PurchaseChangeOrderListParams, PurchaseOrderListParams,
+    SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult, StartPurchaseChangeRequest,
+    StartPurchaseChangeResult, SubmitPurchaseChangeRequest, SubmitPurchaseOrderRequest,
+    SubmitPurchaseOrderResult, VoidPurchaseOrderRequest, VoidPurchaseOrderResult,
 };
 use erp_procurement::service::purchase_order::PurchaseOrderService;
 use erp_read_models::purchase_center::dto::{
@@ -263,6 +264,33 @@ pub async fn purchase_order_submit(
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "采购单",
+    group_desc = "采购单、采购提交与采购变更管理",
+    desc = "登记维持原采购依据",
+    resource = "purchase_order",
+    action = "maintain_source"
+)]
+/// 销售变更影响采购但无法调整时，登记维持原采购。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 采购单 ID
+/// * `req` - 记录期望版本与原因
+///
+/// # 返回
+/// 登记成功返回空数据。
+pub async fn purchase_order_maintain_source(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<MaintainPurchaseSourceRequest>,
+) -> Result<()> {
+    PurchaseOrderProcess::with_rbac(state.db(), state.rbac()).maintain_source(&id, req, &actor).await?;
+    Ok(ApiResponse::ok())
 }
 
 #[permission_macros::permission(

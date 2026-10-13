@@ -49,7 +49,7 @@ type Detail = PurchasePaymentRequestResult & {
 type SalesHead = {
     id: string; order_no: string; commercial_status: string; current_revision_id: string; settlement_party_id: string
     revisions: Array<{ id: string; revision_no: number; net_amount: string }>
-    purchase_coverage: { source_changed: boolean; outdated_purchase_quantity: string; outdated_purchase_count: number }
+    purchase_coverage: { source_changed: boolean; affected_purchase_count: number }
 }
 type SalesChangeDraft = {
     version: number; working_copy_version: number; business_remark: string | null
@@ -618,7 +618,7 @@ test("正式付款主体分组、受限任务材料、账户失效和已关闭�
     expect(changedReleased.reserved_total).toMatch(/^0(?:\.0+)?$/)
     expect(changedReleased.available_total).toBe("2.00")
 
-    // PPR-04：销售正式 head 推进后，旧采购来源和原批准快照仍是 v1，不能继续付款。
+    // PPR-04：销售只改成交价不影响采购（第一期 §6.3），旧采购来源和原批准快照仍是 v1，照常付款。
     const untouchedPurchase = purchases.find((purchase) => purchase.purchaseId !== sourcePurchase.id)!
     const salesHeadCandidate = (await candidates(procurementToken)).find((item) => item.purchase_order_id === untouchedPurchase.purchaseId)!
     const salesHeadRequest = await createSubmitted(procurement.page, [salesHeadCandidate], [], "1.00")
@@ -660,51 +660,26 @@ test("正式付款主体分组、受限任务材料、账户失效和已关闭�
     expect(salesAfterChange.revisions.find((revision) => revision.id === salesAfterChange.current_revision_id)?.revision_no).toBe(2)
     expect(salesAfterChange.settlement_party_id).toBe(salesBeforeChange.settlement_party_id)
     expect(salesAfterChange.revisions.find((revision) => revision.id === salesBeforeChange.current_revision_id)).toEqual(oldSalesRevision)
-    expect(salesAfterChange.purchase_coverage).toMatchObject({
-        source_changed: true, outdated_purchase_quantity: "2", outdated_purchase_count: 1,
-    })
+    expect(salesAfterChange.purchase_coverage).toMatchObject({ source_changed: false, affected_purchase_count: 0 })
     const salesViewer = await openLoggedInWorkspace(browser, "xiaoshou")
     await salesViewer.page.goto(`/sales/orders/${salesBeforeChange.id}?section=overview`)
-    const sourceNotice = salesViewer.page.locator("#sales-order-overview-source-changed-notice")
-    await expect(sourceNotice).toBeVisible(VISIBLE)
-    await expect(sourceNotice).toContainText("采购依据待更新")
-    await expect(sourceNotice).toContainText("已有 1 张采购单，数量 2")
-    await expect(sourceNotice).toContainText("引用变更前的销售版本。请先完成相关采购变更，再继续供给分配。")
-    await salesViewer.page.getByRole("tab", { name: /采购/ }).click()
-    const purchaseSourceNotice = salesViewer.page.locator("#sales-order-purchase-source-changed-notice")
-    await expect(purchaseSourceNotice).toBeVisible(VISIBLE)
-    await expect(purchaseSourceNotice).toContainText("采购依据待更新")
-    await expect(purchaseSourceNotice).toContainText("已有 1 张采购单，数量 2")
-    await expect(purchaseSourceNotice).toContainText("引用变更前的销售版本。请先完成相关采购变更，再继续供给分配。")
+    await expect(salesViewer.page.getByTestId("sales-order-procurement-progress").first()).toBeVisible(VISIBLE)
+    await expect(salesViewer.page.locator("#sales-order-overview-source-changed-notice")).toHaveCount(0)
     const purchaseAfterSalesChange = await apiGet<PurchaseSource>(procurementToken, `/admin/purchase-orders/${untouchedPurchase.purchaseId}`)
     expect(purchaseAfterSalesChange.current_revision_id).toBe(purchaseBeforeSalesChange.current_revision_id)
     expect(purchaseAfterSalesChange.source_sales_order.revision_id).toBe(salesBeforeChange.current_revision_id)
     expect(purchaseAfterSalesChange.source_sales_order.revision_no).toBe(1)
-    const salesSourceChanged = await detail(procurementToken, salesHeadApproved.id)
-    expect(salesSourceChanged.sales_previews).toEqual(salesHeadApproved.sales_previews)
-    expect(salesSourceChanged.purchase_previews).toEqual(salesHeadApproved.purchase_previews)
-    expect(salesSourceChanged.version).toBe(salesHeadApproved.version)
-    expect(salesSourceChanged.payee_account).toEqual(salesHeadApproved.payee_account)
-    expect(salesSourceChanged.current_lines[0]!.source_changed).toBe(true)
-    expect(salesSourceChanged.current_lines[0]!.current_reserved_total).toBe("1.00")
-    const salesHeadPayment = await payOne(cashier.page, "1.00", false)
+    const salesSourceUnchanged = await detail(procurementToken, salesHeadApproved.id)
+    expect(salesSourceUnchanged.sales_previews).toEqual(salesHeadApproved.sales_previews)
+    expect(salesSourceUnchanged.purchase_previews).toEqual(salesHeadApproved.purchase_previews)
+    expect(salesSourceUnchanged.version).toBe(salesHeadApproved.version)
+    expect(salesSourceUnchanged.current_lines[0]!.source_changed).toBe(false)
+    expect(salesSourceUnchanged.current_lines[0]!.current_reserved_total).toBe("1.00")
+    const salesHeadPayment = await payOne(cashier.page, "1.00", true)
     expect(salesHeadPayment.command.payment_request_id).toBe(salesHeadApproved.id)
-    expect(salesHeadPayment.command.expected_request_version).toBe(salesHeadApproved.version)
     expect(salesHeadPayment.command.work_item_id).toBe(originalSalesHeadTask)
-    expect(salesHeadPayment.command.expected_payee_bank_account_id).toBe(salesHeadApproved.payee_account.account_id)
-    expect(salesHeadPayment.command.expected_payee_bank_account_version).toBe(salesHeadApproved.payee_account.version)
-    const salesPaymentBlocked = await detail(procurementToken, salesHeadApproved.id)
-    expect(salesPaymentBlocked.status).toBe("approved")
-    expect(salesPaymentBlocked.version).toBe(salesHeadApproved.version)
-    expect(salesPaymentBlocked.lines).toEqual(salesHeadApproved.lines)
-    expect(salesPaymentBlocked.payments).toEqual(salesHeadApproved.payments)
-    expect(salesPaymentBlocked.current_lines).toEqual(salesSourceChanged.current_lines)
-    await purchasePaymentRequestCommand(procurement.page, "caigou", "POST", `${ROOT}/${salesHeadApproved.id}/close`, {
-        expected_version: salesPaymentBlocked.version, reason: "销售正式版本变化，关闭旧来源批准的未付额度", idempotency_key: randomUUID(),
-    })
-    const closedSalesHeadRequest = await detail(procurementToken, salesHeadApproved.id)
-    expect(closedSalesHeadRequest.status).toBe("closed")
-    expect(closedSalesHeadRequest.current_lines[0]!.current_reserved_total).toMatch(/^0(?:\.0+)?$/)
-    expect(closedSalesHeadRequest.current_lines[0]!.current_available_total).toBe(closedSalesHeadRequest.current_lines[0]!.current_open_total)
-    expect(closedSalesHeadRequest.payments).toHaveLength(0)
+    expect(salesHeadPayment.result.status).toBe("posted")
+    const salesHeadPaid = await detail(procurementToken, salesHeadApproved.id)
+    expect(salesHeadPaid.status).toBe("paid")
+    expect(salesHeadPaid.payments).toHaveLength(1)
 })

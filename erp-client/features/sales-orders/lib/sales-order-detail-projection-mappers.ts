@@ -1,3 +1,4 @@
+import { mapSourceImpactReasons } from "@/features/purchase-orders/lib/source-impact"
 import type {
     BackendSalesChangeOrder,
     BackendSalesOrderDetail,
@@ -300,5 +301,24 @@ export function mapChangeOrder(
         createdAt: new Date(row.created_at * 1000).toISOString(),
         impactPath,
         approval: mapSalesChangeOrderApproval(row.approval),
+        procurement: row.procurement
+            ? {
+                  total: row.procurement.total,
+                  open: row.procurement.open,
+                  completed: row.procurement.completed,
+                  predicted: row.procurement.predicted ?? false,
+                  items: row.procurement.items.map((item) => ({
+                      purchaseOrderId: item.purchase_order_id,
+                      purchaseNo: item.purchase_no ?? undefined,
+                      supplierName: item.supplier_name ?? undefined,
+                      ownerName: item.owner_name ?? undefined,
+                      open: item.open,
+                      awaitingSubmission: item.awaiting_submission ?? false,
+                      resolutionLabel: item.resolution_label ?? undefined,
+                      maintainNote: item.maintain_note ?? undefined,
+                      reasons: mapSourceImpactReasons(item.reasons),
+                  })),
+              }
+            : undefined,
     }
 }

@@ -7,8 +7,9 @@ use persistence_core::Executor;
 use super::line_input::{build_submission_lines, compute_request_totals};
 use crate::dto::purchase_order::SavePurchaseOrderLine;
 use crate::entity::purchase_order::{
-    DraftLineEditViolation, PurchaseOrder, PurchaseOrderStatus, PurchaseOrderSubmission,
-    PurchaseOrderSubmissionData, PurchaseOrderSubmissionLine, SubmissionStatus, inherit_submission_sources,
+    DraftLineEditViolation, PaymentSubjectSnapshot, PurchaseOrder, PurchaseOrderStatus,
+    PurchaseOrderSubmission, PurchaseOrderSubmissionData, PurchaseOrderSubmissionLine, SubmissionStatus,
+    inherit_submission_sources,
 };
 use crate::repository::PurchaseOrderExt;
 use crate::repository::prelude::*;
@@ -130,6 +131,7 @@ pub async fn load_current_draft(
 /// * `old_draft` - 当前草稿提交
 /// * `old_lines` - 当前服务端完整来源行
 /// * `lines` - 已通过草稿编辑校验的完整请求行
+/// * `payment_subject` - 新草稿的付款主体；按新销售版本刷新时替换销售来源
 ///
 /// # 返回
 /// 返回已通过实体校验的新提交、完整行和服务端金额。
@@ -144,6 +146,7 @@ pub fn build_draft_replacement(
     old_draft: &PurchaseOrderSubmission,
     old_lines: &[PurchaseOrderSubmissionLine],
     lines: &[SavePurchaseOrderLine],
+    payment_subject: PaymentSubjectSnapshot,
 ) -> Result<DraftReplacement> {
     let mut inputs = SavePurchaseOrderLine::to_line_inputs(lines)?;
     inherit_submission_sources(&mut inputs, old_lines)?;
@@ -158,7 +161,7 @@ pub fn build_draft_replacement(
             fulfillment_responsibility: old_draft.fulfillment_responsibility,
             supplier_revision_id: old_draft.supplier_revision_id.clone(),
             supplier_snapshot: old_draft.supplier_snapshot.clone(),
-            payment_subject: old_draft.payment_subject.clone(),
+            payment_subject,
             payment_term_snapshot: old_draft.payment_term_snapshot.clone(),
             gross_amount: gross,
             net_amount: net,
@@ -190,9 +193,10 @@ pub fn map_draft_edit_violation(violation: DraftLineEditViolation) -> Error {
         | DraftLineEditViolation::InvalidQuantity(_)
         | DraftLineEditViolation::QuantityAllocationMismatch
         | DraftLineEditViolation::PaymentTermChanged => Error::ValidationError(violation.to_string()),
-        DraftLineEditViolation::SourceLineRemoved | DraftLineEditViolation::ExceedsAvailableQuantity => {
-            Error::ConflictError(violation.to_string())
-        },
+        DraftLineEditViolation::SourceLineRemoved
+        | DraftLineEditViolation::ExceedsAvailableQuantity
+        | DraftLineEditViolation::RemovedLineStillPurchasable
+        | DraftLineEditViolation::NoPurchasableLine => Error::ConflictError(violation.to_string()),
         DraftLineEditViolation::MissingSalesStableLine
         | DraftLineEditViolation::MissingOriginalAllocatedQuantity => {
             Error::BusinessLogicError(violation.to_string())

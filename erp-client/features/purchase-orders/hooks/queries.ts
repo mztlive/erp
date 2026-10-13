@@ -11,6 +11,7 @@ import {
     fetchPurchaseOrderCenter,
     fetchPurchaseOrderExportData,
     fetchPurchaseOrders,
+    maintainPurchaseSource,
     savePurchaseOrderDraft,
     startPurchaseChange,
     submitPurchaseChange,
@@ -21,6 +22,7 @@ import type {
     CreationBasesQuery,
     PurchaseOrderListQuery,
 } from "@/features/purchase-orders/api/purchase-orders"
+import { fetchPurchaseDeliveryOptions } from "@/features/purchase-orders/api/purchase-delivery-options"
 import { workItemKeys } from "@/features/work-items/queries"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 
@@ -46,6 +48,8 @@ export const purchaseOrderKeys = {
         [...purchaseOrderKeys.creationBases(), query] as const,
     exportData: (query: PurchaseOrderListQuery) =>
         [...purchaseOrderKeys.all, "export", query] as const,
+    deliveryOptions: (id: string) =>
+        [...purchaseOrderKeys.detail(id), "delivery-options"] as const,
 }
 
 /**
@@ -94,6 +98,24 @@ export function usePurchaseOrdersQuery(
             })
         },
         enabled: options?.enabled ?? true,
+    })
+}
+
+/**
+ * 读取采购修改原单或办理变更时可选的预计交付日上限与收件地址剩余量。
+ *
+ * @param purchaseOrderId 采购单 ID。
+ * @param enabled 仅在编辑或变更对话框打开时读取。
+ */
+export function usePurchaseDeliveryOptionsQuery(
+    purchaseOrderId: string,
+    enabled: boolean,
+) {
+    return useQuery({
+        queryKey: purchaseOrderKeys.deliveryOptions(purchaseOrderId),
+        queryFn: () => fetchPurchaseDeliveryOptions(purchaseOrderId),
+        enabled: enabled && Boolean(purchaseOrderId),
+        staleTime: 0,
     })
 }
 
@@ -174,6 +196,19 @@ export function useCancelPurchaseOrderApprovalMutation() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: cancelPurchaseOrderApproval,
+        onSuccess: async () => {
+            await invalidatePurchaseOrderApprovalCaches(queryClient)
+        },
+    })
+}
+
+/**
+ * 登记维持原采购。成功后刷新采购、任务、工作台与销售单缓存。
+ */
+export function useMaintainPurchaseSourceMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: maintainPurchaseSource,
         onSuccess: async () => {
             await invalidatePurchaseOrderApprovalCaches(queryClient)
         },

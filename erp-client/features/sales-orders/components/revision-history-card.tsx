@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import type { ReactNode } from "react"
 import { ChevronDownIcon, HistoryIcon } from "lucide-react"
 
@@ -319,9 +320,13 @@ export function RevisionHistoryCard({
                                             </Badge>
                                         ) : null}
                                         {rev.changeOrderId ? (
-                                            <span className="num text-xs font-normal text-muted-foreground">
-                                                改单 {rev.changeOrderId}
-                                            </span>
+                                            <Link
+                                                id={`sales-orders-revision-${rev.revisionNo}-change-link`}
+                                                href={`?${new URLSearchParams({ section: "change-review", changeOrderId: rev.changeOrderId })}`}
+                                                className="text-xs font-normal text-muted-foreground underline underline-offset-2"
+                                            >
+                                                查看改单
+                                            </Link>
                                         ) : null}
                                     </TimelineTitle>
                                     {rev.effectiveAt ? (

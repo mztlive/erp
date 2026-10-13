@@ -465,6 +465,7 @@ pub(crate) mod tests {
                 SupplySelection,
                 Submission,
                 SupersededDraft,
+                SourceUpdates,
                 Runtime,
                 CommandReceipt,
                 Audit
@@ -484,6 +485,7 @@ pub(crate) mod tests {
             SupplySelection,
             Submission,
             SupersededDraft,
+            SourceUpdates,
             Runtime,
             CommandReceipt,
             Audit,

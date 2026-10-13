@@ -19,6 +19,7 @@ import type {
     SalesOrderOrigin,
     SalesOrderRevisionSnapshot,
 } from "@/features/sales-orders/types"
+import { mapSourceImpactReasons } from "@/features/purchase-orders/lib/source-impact"
 import { compareDecimal } from "@/lib/fixed-decimal"
 import { displayName } from "@/lib/display-name"
 import { deriveVoucherGiftPreview } from "@/features/sales-orders/lib/sales-order-create-model"
@@ -127,13 +128,25 @@ export function mapProcurementProgress(
             quantity: line.total_quantity,
             coveredQuantity: line.covered_quantity,
             remainingQuantity: line.remaining_quantity,
+            excessQuantity: line.excess_quantity ?? "0",
         })),
         salesQuantity,
         coveredQuantity,
         remainingQuantity,
+        excessQuantity: coverage?.excess_quantity ?? "0",
         sourceChanged: coverage?.source_changed ?? false,
-        outdatedPurchaseQuantity: coverage?.outdated_purchase_quantity ?? "0",
-        outdatedPurchaseCount: coverage?.outdated_purchase_count ?? 0,
+        affectedPurchaseCount: coverage?.affected_purchase_count ?? 0,
+        awaitingSubmissionCount: coverage?.awaiting_submission_count ?? 0,
+        sourceUpdates: (coverage?.source_updates ?? []).map((update) => ({
+            purchaseOrderId: update.purchase_order_id,
+            purchaseNo: update.purchase_no,
+            statusLabel: update.status_label,
+            supplierName: update.supplier_name ?? undefined,
+            ownerName: update.owner_name ?? undefined,
+            blocksPayment: update.blocks_payment,
+            awaitingSubmission: update.awaiting_submission ?? false,
+            reasons: mapSourceImpactReasons(update.reasons),
+        })),
     }
     if (quantities.sourceChanged) {
         return {

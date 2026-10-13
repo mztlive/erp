@@ -2,6 +2,7 @@
 mod basis_sources;
 mod center_facts;
 mod coverage;
+mod coverage_history;
 mod coverage_service;
 mod creation_basis;
 pub(super) mod list_facts;
@@ -14,6 +15,7 @@ pub use basis_sources::{
 };
 pub use center_facts::{PurchaseOrderCenterFacts, PurchasePayableFact, load_purchase_order_center_facts};
 pub use coverage::load_procurement_coverage_facts;
+pub use coverage_history::{load_historical_sales_lines, load_source_baselines};
 pub use coverage_service::load_sales_procurement_coverage;
 pub use creation_basis::load_creation_basis_facts;
 pub use list_facts::{PurchaseOrderListFacts, load_purchase_order_list_page};

@@ -1,3 +1,4 @@
+import type { SourceImpactReasonView } from "@/features/purchase-orders/lib/source-impact"
 /** W08 采购单 · 客户端契约类型（对齐工作面文档 §5/§8）。 */
 
 import type { StatusTone } from "@/components/ui/status-badge"
@@ -73,6 +74,8 @@ type PurchaseOrderLineView = Readonly<{
     netAmount: string
     taxAmount: string
     expectedDeliveryDate?: string
+    /** 销售稳定行；用于对应可调整的交付安排范围。 */
+    salesOrderLineId?: string
     logisticsFeeReason?: string
     salesAllocationLabel?: string
     /** 精确关联销售版本行的客户成交含税单价；未关联时缺省。 */
@@ -282,6 +285,8 @@ export type PurchaseOrderCenterView = Readonly<{
         allocatedQuantity: string
     }[]
     sourceSalesOrder?: PurchaseSourceSalesOrderView
+    /** 来源销售变更对本采购的影响；无需提示时缺省。 */
+    sourceUpdate?: PurchaseSourceUpdateView
     payableSummary?: PayableSummaryView
     fulfillmentSummary: FulfillmentSummaryView
     changes: readonly RelatedChangeView[]
@@ -360,6 +365,10 @@ export type SavePurchaseOrderDraftInput = {
         unitCostGross?: string
         inputTaxRate: string
         logisticsFeeReason?: string
+        /** 调整后的预计交付日；未调整时缺省。 */
+        expectedDeliveryDate?: string
+        /** 调整后的收件分配；未调整时缺省。 */
+        deliveryAllocations?: PurchaseDeliveryAllocation[]
     }>
     idempotencyKey: string
 }
@@ -464,3 +473,21 @@ export const REVIEW_STATUS_LABEL: Record<PurchaseReviewStatus, string> = {
 
 /** 采购付款条件只暴露可形成计划付款日的受控代码。 */
 export { SUPPLIER_PAYMENT_TERM_OPTIONS as PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
+
+/** 来源销售变更对采购的影响（第一期 §6.3 第 10 条）。 */
+export type PurchaseSourceUpdateView = {
+    /** 采购依据待更新：存在未处理且仍受影响的依据更新记录。 */
+    affected: boolean
+    /** 草稿已按新销售版本修改，重新提交审批后处理完成。 */
+    awaitingSubmission: boolean
+    /** 未处理记录版本，登记维持原采购时回传。 */
+    recordVersion?: number
+    blocksPayment: boolean
+    reasons: SourceImpactReasonView[]
+    purchaseSalesRevisionNo?: number
+    currentSalesRevisionNo?: number
+    /** 采购引用的销售版本已不是当前版本。 */
+    salesRevisionOutdated: boolean
+    lastResolutionLabel?: string
+    lastMaintainNote?: string
+}

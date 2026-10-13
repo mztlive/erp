@@ -1,3 +1,4 @@
+import type { SourceImpactReasonView } from "@/features/purchase-orders/lib/source-impact"
 import type { StatusTone } from "@/components/ui/status-badge"
 import type { DocumentApprovalView } from "@/features/approval-workflow/types"
 
@@ -147,6 +148,21 @@ export type SalesOrderProcurementCoverageLine = {
     quantity: string
     coveredQuantity: string
     remainingQuantity: string
+    /** 销售减量后覆盖超出目标的数量，等待采购调减。 */
+    excessQuantity: string
+}
+
+/** 受销售变更影响、尚未处理完成的采购单。 */
+export type SalesOrderSourceUpdate = {
+    purchaseOrderId: string
+    purchaseNo: string
+    statusLabel: string
+    supplierName?: string
+    ownerName?: string
+    blocksPayment: boolean
+    /** 草稿已按新销售版本修改，等待重新提交审批。 */
+    awaitingSubmission: boolean
+    reasons: SourceImpactReasonView[]
 }
 
 export type SalesOrderProcurementProgress = {
@@ -154,9 +170,14 @@ export type SalesOrderProcurementProgress = {
     salesQuantity: string
     coveredQuantity: string
     remainingQuantity: string
+    excessQuantity: string
     sourceChanged: boolean
-    outdatedPurchaseQuantity: string
-    outdatedPurchaseCount: number
+    /** 受影响采购张数；无采购查看权限时也有值。 */
+    affectedPurchaseCount: number
+    /** 已修改待提交审批的采购张数；无采购查看权限时也有值。 */
+    awaitingSubmissionCount: number
+    /** 受影响及待提交采购明细；无采购列表权限时为空。 */
+    sourceUpdates: SalesOrderSourceUpdate[]
     status: ProcurementProgressStatus
     label: string
     tone: StatusTone
@@ -238,6 +259,30 @@ export type SalesChangeOrderSummary = {
     impactPath: "procurement" | "operations"
     /** 统一只读审批结构。缺省表示列表行尚未补详情。 */
     approval?: DocumentApprovalView
+    /** 生效后受影响采购的处理进度；列表行或未影响采购时缺省。 */
+    procurement?: SalesChangeProcurementProgress
+}
+
+/** 销售变更触发的采购依据更新进度。 */
+export type SalesChangeProcurementProgress = {
+    total: number
+    open: number
+    completed: boolean
+    /** 变更尚在审批中，按提交内容预判；生效时按当时事实重算。 */
+    predicted: boolean
+    /** 逐张处理情况；无采购查看权限时为空。 */
+    items: readonly {
+        purchaseOrderId: string
+        purchaseNo?: string
+        supplierName?: string
+        ownerName?: string
+        open: boolean
+        /** 草稿已按新销售版本修改，等待重新提交审批。 */
+        awaitingSubmission: boolean
+        resolutionLabel?: string
+        maintainNote?: string
+        reasons: readonly SourceImpactReasonView[]
+    }[]
 }
 
 export type FormalAllowedAction =

@@ -14,6 +14,11 @@ use persistence_core::Executor;
 use super::super::allocation_maintenance::prepare_current_sales_allocations;
 use super::super::payment_subject::revalidate_payment_subject;
 use super::super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
+use super::super::source_recheck::ensure_source_unaffected;
+
+/// 采购变更审批期间来源销售再次变更且影响本采购时的提示。
+const CHANGE_SOURCE_AFFECTED: &str =
+    "采购变更审批期间来源销售再次变更并影响本采购，请撤回后按新销售版本重新提交";
 use super::effect::EffectiveChangePosting;
 use crate::audit::persist_log;
 use crate::{Error, Result};
@@ -116,7 +121,8 @@ impl EffectSteps for MongoEffect<'_> {
             },
             ProcurementTasks => {
                 sync_procurement_tasks_for_sales_order(self.db, &purchase.order.sales_order_id, executor)
-                    .await?
+                    .await?;
+                ensure_source_unaffected(self.db, &purchase.order, CHANGE_SOURCE_AFFECTED, executor).await?
             },
             Payable => {
                 if let Some(payable) = self.write.payable.as_ref() {
@@ -200,9 +206,6 @@ async fn advance_source_sales_procurement_guard(
         .find_by_id(&order.sales_order_id, session)
         .await?
         .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
-    if sales_order.stable.current_revision_id.as_deref() != Some(order.sales_order_revision_id.as_ref()) {
-        return Err(Error::ConflictError("销售来源版本在采购变更审批期间已变化，请重新提交采购变更".into()));
-    }
     sales_order.advance_procurement_guard(actor_id)?;
     db.sales_orders().update(&mut sales_order, session).await?;
     Ok(())

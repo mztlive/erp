@@ -130,6 +130,7 @@ fn goods_line(revision_line_id: &str) -> SalesOrderGoodsServiceLineRevision {
         sku_id: SkuId::new("sku-1"),
         sku_revision_id: erp_core::ids::SkuRevisionId::new("skur-1"),
         fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
+        service_region: None,
         quantity: Quantity::from_str("10").unwrap(),
         base_unit_code: "件".to_string(),
     }

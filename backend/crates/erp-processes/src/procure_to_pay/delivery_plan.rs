@@ -1,8 +1,8 @@
-//! 采购变更在冻结和生效时复验地址，沿用销售 guard 与调用方执行器。
+//! 采购草稿保存、提交与采购变更冻结和生效时复验交付安排，沿用销售 guard 与调用方执行器。
 use erp_core::ids::SalesOrderRevisionId;
-use erp_core::money::Quantity;
 use erp_procurement::entity::purchase_order::{
-    ProcurementCoverageFacts, PurchaseDeliveryAllocation, PurchaseLineInput, PurchaseOrder,
+    DeliveryEdit, DeliveryFields, ProcurementCoverageFacts, PurchaseLineInput, PurchaseOrder,
+    PurchaseOrderRevisionLine, PurchaseOrderSubmissionLine, RowCheck, delivery_edits,
 };
 use erp_read_models::purchase_center::repository::load_procurement_coverage_facts;
 use erp_sales::repository::SalesOrderExt;
@@ -11,22 +11,20 @@ use persistence_core::Executor;
 
 use crate::{Error, Result};
 
-pub(super) type DeliveryLine = (String, Quantity, Vec<PurchaseDeliveryAllocation>);
-
-/// 用销售当前版本和其他有效采购安排复验本单交付。
+/// 用销售当前版本和其他有效采购安排复验本单交付调整。
 /// # 参数
-/// `db`、`executor` 沿用调用方读取边界；`order` 为采购单，`lines` 为目标行。
+/// `db`、`executor` 沿用调用方读取边界；`order` 为采购单，`edits` 为待复验的交付调整。
 /// # 返回
-/// 当前地址、单位精度和地址剩余量均合法时成功。
+/// 预计交付日、当前地址、单位精度和地址剩余量均合法时成功。
 /// # 错误
-/// 来源失效、地址被修改或其他采购已占用目标数量时拒绝。
+/// 来源失效、交付日晚于履约期限、地址被修改或其他采购已占用目标数量时拒绝。
 pub(super) async fn validate_delivery(
     db: &Database,
     order: &PurchaseOrder,
-    lines: &[DeliveryLine],
+    edits: &[DeliveryEdit<'_>],
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    if lines.iter().all(|(_, _, rows)| rows.is_empty()) {
+    if edits.is_empty() {
         return Ok(());
     }
     let sales = db
@@ -43,88 +41,77 @@ pub(super) async fn validate_delivery(
         executor,
     )
     .await?;
-    validate_lines(order, lines, &facts)
+    validate_edits(order, edits, &facts)
 }
 
-fn validate_lines(
+/// 收件分配引用的销售行必须仍在当前版本，再按领域规则复验。
+fn validate_edits(
     order: &PurchaseOrder,
-    lines: &[DeliveryLine],
+    edits: &[DeliveryEdit<'_>],
     facts: &ProcurementCoverageFacts,
 ) -> Result<()> {
-    for (stable, quantity, rows) in lines.iter().filter(|(_, _, rows)| !rows.is_empty()) {
-        let source = facts
-            .revision_lines
-            .iter()
-            .find(|line| line.sales_order_line_id.as_ref() == stable)
-            .ok_or_else(|| Error::ConflictError("销售商品行已变化，请重新核对交付安排".into()))?;
-        let goods = facts
-            .goods_lines
-            .iter()
-            .find(|line| line.revision_line_id.as_ref() == source.base.id)
-            .ok_or_else(|| Error::ConflictError("销售交付要求暂不可用".into()))?;
-        let assigned = other_deliveries(order, facts, stable);
-        PurchaseDeliveryAllocation::validate_source(
-            rows,
-            &goods.delivery_allocations,
-            &assigned,
-            *quantity,
-            order.fulfillment_responsibility,
-            facts.quantity_scales.get(goods.sku_id.as_ref()).copied(),
-            &goods.base_unit_code,
-        )?;
+    let removed = edits.iter().any(|edit| {
+        edit.delivery_allocations.is_some_and(|rows| !rows.is_empty())
+            && facts.current_goods_line(edit.sales_order_line_id).is_none()
+    });
+    if removed {
+        return Err(Error::ConflictError("销售商品行已变化，请重新核对交付安排".into()));
     }
-    Ok(())
+    Ok(facts.validate_delivery_edits(order, edits)?)
 }
 
-fn other_deliveries(
-    order: &PurchaseOrder,
-    facts: &ProcurementCoverageFacts,
-    stable: &str,
-) -> Vec<PurchaseDeliveryAllocation> {
-    facts
-        .submission_lines
-        .iter()
-        .filter(|line| {
-            line.sales_order_line_id.as_ref().is_some_and(|id| id.as_ref() == stable)
-                && order.current_submission_id.as_deref() != Some(line.purchase_order_submission_id.as_ref())
-        })
-        .flat_map(|line| line.delivery_allocations.clone())
-        .chain(
-            facts
-                .purchase_revision_lines
-                .iter()
-                .filter(|line| {
-                    line.sales_order_line_id.as_ref().is_some_and(|id| id.as_ref() == stable)
-                        && order.stable.current_revision_id.as_deref()
-                            != Some(line.purchase_order_revision_id.as_ref())
-                })
-                .flat_map(|line| line.delivery_allocations.clone()),
-        )
-        .collect::<Vec<_>>()
-}
-
-/// 采购变更输入转为待复验交付行。
+/// 复验采购版本行的全部收件分配，用于采购变更生效前的分配重建。
 /// # 参数
-/// `db`、`executor` 为调用方执行器；`order`、`inputs` 为本次变更内容。
+/// `db`、`executor` 为调用方执行器；`order` 为采购单；`lines` 为待生效的版本行。
+/// # 返回
+/// 全部收件分配通过复验时成功。
+/// # 错误
+/// 地址、数量、来源或数据读取失败时拒绝。
+pub(super) async fn validate_revision_delivery(
+    db: &Database,
+    order: &PurchaseOrder,
+    lines: &[PurchaseOrderRevisionLine],
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let fields = lines.iter().filter_map(DeliveryFields::of_revision).collect::<Vec<_>>();
+    validate_delivery(db, order, &delivery_edits(&fields, &[], RowCheck::All), executor).await
+}
+
+/// 采购变更输入转为待复验交付调整：收件分配全部复验，预计交付日只复验改动部分。
+/// # 参数
+/// `db`、`executor` 为调用方执行器；`order`、`inputs` 为本次变更内容；`base` 为变更基准版本行。
 /// # 返回
 /// 完整通过交付来源校验时成功。
 /// # 错误
-/// 地址、数量、来源或数据读取失败时拒绝。
+/// 交付日、地址、数量、来源或数据读取失败时拒绝。
 pub(super) async fn validate_input_delivery(
     db: &Database,
     order: &PurchaseOrder,
     inputs: &[PurchaseLineInput],
+    base: &[PurchaseOrderRevisionLine],
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let lines = inputs
-        .iter()
-        .filter_map(|line| {
-            Some((
-                line.sales_order_line_id.as_ref()?.to_string(),
-                line.quantity?,
-                line.delivery_allocations.clone(),
-            ))
-        })
-        .collect::<Vec<_>>();
-    validate_delivery(db, order, &lines, executor).await
+    let fields = inputs.iter().filter_map(DeliveryFields::of_input).collect::<Vec<_>>();
+    let previous = base.iter().filter_map(DeliveryFields::of_revision).collect::<Vec<_>>();
+    validate_delivery(db, order, &delivery_edits(&fields, &previous, RowCheck::All), executor).await
+}
+
+/// 采购草稿或提交行相对原草稿的交付调整复验。
+/// # 参数
+/// `db`、`executor` 为调用方执行器；`order` 为采购单，其当前提交仍指向被替换的原草稿；
+/// `lines` 为待写入的完整行；`previous` 为原草稿行。
+/// # 返回
+/// 改动的预计交付日与收件分配通过复验时成功；未改动的部分不复验。
+/// # 错误
+/// 交付日晚于履约期限、地址不在销售当前收件资料中、超过地址剩余量、精度非法或数据读取失败时拒绝。
+pub(super) async fn validate_submission_delivery(
+    db: &Database,
+    order: &PurchaseOrder,
+    lines: &[PurchaseOrderSubmissionLine],
+    previous: &[PurchaseOrderSubmissionLine],
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let fields = lines.iter().filter_map(DeliveryFields::of_submission).collect::<Vec<_>>();
+    let before = previous.iter().filter_map(DeliveryFields::of_submission).collect::<Vec<_>>();
+    validate_delivery(db, order, &delivery_edits(&fields, &before, RowCheck::Changed), executor).await
 }

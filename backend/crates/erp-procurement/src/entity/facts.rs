@@ -117,6 +117,8 @@ pub struct SalesGoodsLineFact {
     pub base_unit_code: String,
     /// 销售履约期限。
     pub fulfillment_due_at: Instant,
+    /// 服务地区；未填写时为空。
+    pub service_region: Option<String>,
     /// 当前销售版本的交付要求。
     pub delivery_allocations: Vec<PurchaseDeliveryAllocation>,
     /// 当前有效采购已经承担的地址数量。

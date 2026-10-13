@@ -4,6 +4,7 @@ import { CircleCheckIcon, PackageIcon, TriangleAlertIcon } from "lucide-react"
 import { QuantityValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
+import type { SalesOrderProcurementCoverageLine } from "@/features/sales-orders/types"
 import { SalesOrderProcurementSourceNotice } from "@/features/sales-orders/components/sales-order-procurement-source-notice"
 import { compareDecimal } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
@@ -25,9 +26,13 @@ export function SalesOrderProcurementProgress({
 }) {
     const progress = order.related.procurementProgress
     const hasGap = compareDecimal(progress.remainingQuantity, "0", 6) > 0
-    const needsAttention = hasGap || progress.sourceChanged
+    const hasExcess = compareDecimal(progress.excessQuantity, "0", 6) > 0
+    const needsAttention = hasGap || hasExcess || progress.sourceChanged
     const uncoveredLines = progress.lines?.filter(
         (line) => compareDecimal(line.remainingQuantity, "0", 6) > 0,
+    )
+    const excessLines = progress.lines?.filter(
+        (line) => compareDecimal(line.excessQuantity, "0", 6) > 0,
     )
     const label = progress.sourceChanged
         ? "采购依据待更新"
@@ -129,10 +134,7 @@ export function SalesOrderProcurementProgress({
                                     value={progress.salesQuantity}
                                     unit={null}
                                 />{" "}
-                                ·{" "}
-                                {progress.sourceChanged
-                                    ? "当前版本已覆盖"
-                                    : "已覆盖"}{" "}
+                                · 已覆盖{" "}
                                 <QuantityValue
                                     value={progress.coveredQuantity}
                                     unit={null}
@@ -205,10 +207,58 @@ export function SalesOrderProcurementProgress({
                     </div>
                 ) : null}
             </div>
+            {hasExcess && excessLines?.length ? (
+                <SalesOrderProcurementExcessLines
+                    id={`sales-order-${surface}-procurement-excess`}
+                    lines={excessLines}
+                />
+            ) : null}
             <SalesOrderProcurementSourceNotice
                 id={`sales-order-${surface}-source-changed-notice`}
                 progress={progress}
             />
         </section>
+    )
+}
+
+/** 销售减量后覆盖超出目标的明细，等待采购调减或登记维持。 */
+function SalesOrderProcurementExcessLines({
+    id,
+    lines,
+}: {
+    id: string
+    lines: readonly SalesOrderProcurementCoverageLine[]
+}) {
+    return (
+        <div
+            id={id}
+            className="rounded-xl border border-warning-border px-4 py-3 md:px-5"
+        >
+            <h3 className="text-sm font-medium">超出明细</h3>
+            <ul className="mt-2 divide-y divide-border/60">
+                {lines.map((line) => (
+                    <li
+                        key={line.id}
+                        className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 py-2 last:pb-0"
+                    >
+                        <div className="min-w-0 flex-1 basis-40 text-sm">
+                            {line.name}
+                            <span className="ml-2 text-xs text-muted-foreground">
+                                第 {line.lineNo} 行
+                            </span>
+                        </div>
+                        <p className="shrink-0 text-sm text-warning-soft-foreground">
+                            已采购超出{" "}
+                            <QuantityValue
+                                value={line.excessQuantity}
+                                tone="warning"
+                                unit={line.unit}
+                            />
+                            ，待采购调减
+                        </p>
+                    </li>
+                ))}
+            </ul>
+        </div>
     )
 }

@@ -339,7 +339,7 @@ impl WorkItemType {
     /// 无。
     ///
     /// # 返回
-    /// 单据审批、供应商申请确认、导入确认、供给分配、履约、客户验收、付款执行、销项开票或供应商结算复核返回 `true`，其余返回 `false`。
+    /// 单据审批、供应商申请确认、导入确认、供给分配、采购依据更新、履约、客户验收、付款执行、销项开票或供应商结算复核返回 `true`，其余返回 `false`。
     ///
     /// # 错误
     /// 不返回错误。
@@ -350,6 +350,7 @@ impl WorkItemType {
                 | Self::SupplierPortalReview
                 | Self::ImportBusinessConfirmation
                 | Self::ProcurementOrderCreation
+                | Self::PurchaseSourceUpdate
                 | Self::FulfillmentOperation
                 | Self::CustomerAcceptanceRegistration
                 | Self::SupplierPaymentExecution

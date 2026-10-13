@@ -2,15 +2,15 @@
 //!
 //! 一次批量返回销售当前目标行与全部当前覆盖来源：销售当前版本头与公共/子类型
 //! 行、SKU 与商品类型、未作废且参与覆盖的采购单、草稿类当前提交行、正式类
-//! 当前版本行、正式销售分配与现有库存预占。指针选择、完整性校验、覆盖累计与
+//! 当前版本行、正式销售分配、采购引用或维持登记的历史销售版本行与现有库存预占。指针选择、完整性校验、覆盖累计与
 //! 超覆盖拒绝由 `erp_procurement::entity::purchase_order::coverage` 领域值对象负责；本模块只
 //! 做持久化读取，查询次数与输入规模无关，不得出现逐行 N+1。
 
 use std::collections::HashMap;
 
-use erp_catalog::CatalogExt;
 use erp_catalog::repository::prelude::*;
-use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderRevisionLineId};
+use erp_catalog::{CatalogExt, Product, Sku};
+use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderRevisionLineId, SkuId};
 use erp_inventory::InventoryExt;
 use erp_procurement::entity::purchase_order::ProcurementCoverageFacts;
 use erp_procurement::repository::PurchaseOrderExt;
@@ -21,6 +21,7 @@ use mongodb::Database;
 use mongodb::bson::doc;
 use persistence_core::{Executor, Result};
 
+use super::coverage_history::load_source_baselines;
 use super::mapping::{
     product_fact, reservation_fact, sales_goods_fact, sales_line_fact, sales_revision_fact, sku_fact,
 };
@@ -67,9 +68,65 @@ pub async fn load_procurement_coverage_facts(
     let goods_lines =
         db.sales_order_goods_service_line_revisions().list_by_revision_line_ids(&goods_ids, executor).await?;
     let sku_ids = goods_lines.iter().map(|line| line.sku_id.clone()).collect::<Vec<_>>();
+    let catalog = load_catalog_facts(db, &sku_ids, executor).await?;
+    let sources = db.purchase_order().coverage_sources(sales_order_id, executor).await?;
+    let target_sales_line_ids = revision_lines
+        .iter()
+        .filter(|line| line.line_type == LineType::GoodsService)
+        .map(|line| line.sales_order_line_id.clone())
+        .collect::<Vec<_>>();
+    let reservations =
+        db.inventory().existing_stock_reservations_for_sales_lines(&target_sales_line_ids, executor).await?;
+    let (historical_sales_lines, maintained_sales_revisions) =
+        load_source_baselines(db, revision_id.as_ref(), sales_order_id, &sources.purchase_orders, executor)
+            .await?;
+    Ok(ProcurementCoverageFacts {
+        quantity_scales: catalog.quantity_scales,
+        revision: Some(sales_revision_fact(revision)),
+        revision_lines: revision_lines.into_iter().map(sales_line_fact).collect(),
+        goods_lines: goods_lines.into_iter().map(sales_goods_fact).collect(),
+        skus: catalog.skus.into_iter().map(|(id, value)| (id, sku_fact(value))).collect(),
+        products: catalog.products.into_iter().map(|(id, value)| (id, product_fact(value))).collect(),
+        purchase_orders: sources.purchase_orders,
+        submission_lines: sources.submission_lines,
+        purchase_revision_lines: sources.purchase_revision_lines,
+        allocations: sources.allocations,
+        historical_sales_lines,
+        maintained_sales_revisions,
+        reservations: reservations.into_iter().map(reservation_fact).collect(),
+    })
+}
+
+/// 商品行引用的 SKU、商品与基础单位数量精度。
+struct CatalogFacts {
+    /// SKU 主键到 SKU。
+    skus: HashMap<String, Sku>,
+    /// 商品主键到商品。
+    products: HashMap<String, Product>,
+    /// SKU 主键到基础单位数量精度。
+    quantity_scales: HashMap<String, u8>,
+}
+
+/// 批量读取 SKU、基础单位与商品，各一次查询。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库句柄
+/// * `sku_ids` - 销售商品行引用的 SKU
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 返回 SKU、商品与单位精度；缺失的 SKU、商品或单位不写入结果。
+///
+/// # 错误
+/// MongoDB 查询或反序列化失败时返回错误。
+async fn load_catalog_facts(
+    db: &Database,
+    sku_ids: &[SkuId],
+    executor: &mut dyn Executor,
+) -> Result<CatalogFacts> {
     let skus = db
         .skus()
-        .find_by_ids(&sku_ids, executor)
+        .find_by_ids(sku_ids, executor)
         .await?
         .into_iter()
         .map(|sku| (sku.base.id.clone(), sku))
@@ -96,27 +153,7 @@ pub async fn load_procurement_coverage_facts(
         .into_iter()
         .map(|product| (product.base.id.clone(), product))
         .collect::<HashMap<_, _>>();
-    let sources = db.purchase_order().coverage_sources(sales_order_id, executor).await?;
-    let target_sales_line_ids = revision_lines
-        .iter()
-        .filter(|line| line.line_type == LineType::GoodsService)
-        .map(|line| line.sales_order_line_id.clone())
-        .collect::<Vec<_>>();
-    let reservations =
-        db.inventory().existing_stock_reservations_for_sales_lines(&target_sales_line_ids, executor).await?;
-    Ok(ProcurementCoverageFacts {
-        quantity_scales,
-        revision: Some(sales_revision_fact(revision)),
-        revision_lines: revision_lines.into_iter().map(sales_line_fact).collect(),
-        goods_lines: goods_lines.into_iter().map(sales_goods_fact).collect(),
-        skus: skus.into_iter().map(|(id, value)| (id, sku_fact(value))).collect(),
-        products: products.into_iter().map(|(id, value)| (id, product_fact(value))).collect(),
-        purchase_orders: sources.purchase_orders,
-        submission_lines: sources.submission_lines,
-        purchase_revision_lines: sources.purchase_revision_lines,
-        allocations: sources.allocations,
-        reservations: reservations.into_iter().map(reservation_fact).collect(),
-    })
+    Ok(CatalogFacts { skus, products, quantity_scales })
 }
 
 #[cfg(test)]

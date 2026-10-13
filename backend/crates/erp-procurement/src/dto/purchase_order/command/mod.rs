@@ -11,7 +11,7 @@ pub use create::{
     CreatePurchaseOrderLineRequest, CreatePurchaseOrderResult, CreatePurchaseOrdersFromSourcingRequest,
     CreatePurchaseOrdersFromSourcingResult, ExistingStockReservationResult, SourcingLineAssignment,
 };
-pub use review::{CancelPurchaseOrderApprovalRequest, PurchaseReviewResult};
+pub use review::{CancelPurchaseOrderApprovalRequest, MaintainPurchaseSourceRequest, PurchaseReviewResult};
 pub use save::{
     SAVE_ACTION, SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult, SavePurchaseOrderLine,
     SavePurchaseOrderLinePatch,

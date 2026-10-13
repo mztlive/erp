@@ -17,3 +17,4 @@ pub use prelude::{
 };
 
 pub mod purchase_email;
+pub mod purchase_source_update;

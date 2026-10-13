@@ -2,16 +2,15 @@
 use std::collections::HashSet;
 use std::str::FromStr;
 
-use chrono::{Datelike, FixedOffset};
 use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::SupplierAccountId;
 use erp_core::money::Quantity;
 
 use crate::entity::facts::{AvailabilityStatus, OfferingFact, SalesOrderBasisFact, SalesRevisionFact};
 use crate::entity::purchase_order::{
-    BasisGroup, BasisLine, BasisScope, CreationBasisFacts, LineSupply, SalesProcurementCoverage,
-    SalesProcurementCoverageLine, basis_scope_key, fulfillment_options, maximum_create_quantity,
-    purchase_type_from_product_kind, stable_line_id,
+    self as purchase_order, BasisGroup, BasisLine, BasisScope, CreationBasisFacts, LineSupply,
+    SalesProcurementCoverage, SalesProcurementCoverageLine, basis_scope_key, fulfillment_options,
+    maximum_create_quantity, purchase_type_from_product_kind, stable_line_id,
 };
 use crate::{Error, Result};
 
@@ -273,13 +272,9 @@ fn qualified_supply(facts: &CreationBasisFacts, offering: &OfferingFact) -> Resu
 /// 时区或日期构造失败时返回内部错误。
 ///
 /// # 关键业务约束
-/// 不按 UTC 日期截断。
+/// 不按 UTC 日期截断；规则由实体层统一提供。
 pub fn business_date_of(instant: Instant) -> Result<BusinessDate> {
-    let business_tz = FixedOffset::east_opt(8 * 60 * 60)
-        .ok_or_else(|| Error::Internal("无法形成 Asia/Shanghai 时区".to_string()))?;
-    let naive = instant.as_utc().with_timezone(&business_tz).date_naive();
-    BusinessDate::from_ymd(naive.year(), naive.month(), naive.day())
-        .ok_or_else(|| Error::Internal("履约期限日期非法".to_string()))
+    purchase_order::business_date_of(instant).map_err(|error| Error::Internal(error.to_string()))
 }
 
 /// 返回合法采购数量零值。

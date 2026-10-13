@@ -452,6 +452,7 @@ mod tests {
                     quantity: q("5"),
                     base_unit_code: "BOX".to_string(),
                     fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
+                    service_region: None,
                 },
                 product_kind: ProductKind::Physical,
                 summary: ProcurementCoverageSummary::new(q("5"), q("0")).unwrap(),

@@ -16,6 +16,18 @@ pub struct CancelPurchaseOrderApprovalRequest {
     pub idempotency_key: String,
 }
 
+/// 登记维持原采购请求（第一期 §6.3“销售变更对采购的影响”第 5 条）。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct MaintainPurchaseSourceRequest {
+    /// 采购依据更新记录的期望版本。
+    #[validate(range(min = 1, message = "记录版本必须大于 0"))]
+    pub expected_version: u64,
+    /// 无法调整的原因，如供应商不接受减量或撤单。
+    #[validate(length(min = 1, max = 500, message = "请填写维持原采购的原因"))]
+    pub reason: String,
+}
+
 /// 财务审核结果（通过/驳回共用形状）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct PurchaseReviewResult {

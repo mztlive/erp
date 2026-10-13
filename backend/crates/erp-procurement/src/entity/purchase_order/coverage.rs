@@ -4,14 +4,16 @@
 //! `current_submission_id`，生效、部分执行与已完成采购只读取
 //! `current_revision_id` 及其销售分配；现有库存直接分配形成的预占按
 //! `reserved + consumed` 计入。历史提交、历史采购版本与作废采购单均不进入覆盖量。
+//! 引用历史销售版本的采购按稳定销售行计入当前覆盖；销售减量后覆盖可超过目标，
+//! 超出数量单独表达。
 //!
 //! Repository 只负责批量返回当前销售目标与全部当前覆盖来源的原始持久化事实
-//! （[`ProcurementCoverageFacts`]）；本模块负责当前行关联、指针选择、覆盖累计、
-//! 超覆盖拒绝、剩余量与进度派生的纯业务规则，不依赖任何 I/O、时钟或 ID 生成器。
+//! （[`ProcurementCoverageFacts`]）；本模块负责行关联、指针选择、覆盖累计、
+//! 剩余量、超出量与进度派生的纯业务规则，不依赖任何 I/O、时钟或 ID 生成器。
 
 use std::collections::{HashMap, HashSet};
 
-use erp_core::ids::{PurchaseOrderRevisionId, PurchaseOrderSubmissionId, SalesOrderRevisionId};
+use erp_core::ids::{PurchaseOrderRevisionId, PurchaseOrderSubmissionId};
 use erp_core::money::Quantity;
 use erp_core::{Error, Result};
 use rust_decimal::Decimal;
@@ -79,39 +81,23 @@ pub struct ProcurementCoverageFacts {
     pub purchase_revision_lines: Vec<PurchaseOrderRevisionLine>,
     /// 正式采购版本行的销售分配。
     pub allocations: Vec<PurchaseLineSalesAllocation>,
+    /// 采购行引用的历史销售版本行，键为历史版本行 ID；当前版本行不在其中。
+    pub historical_sales_lines: HashMap<String, HistoricalSalesLineFact>,
+    /// 维持登记形成的判定基准：采购单 ID 到维持时的销售版本 ID。
+    pub maintained_sales_revisions: HashMap<String, String>,
     /// 现有库存直接分配形成的预占（Repository 已排除采购入库预占）。
     pub reservations: Vec<ExistingStockReservationFact>,
 }
 
-/// 新增供给前要求所有参与覆盖的采购已经采用销售当前正式版本。
-///
-/// # 参数
-/// * `current_sales_revision_id` - 来源销售单当前正式版本身份。
-/// * `orders` - 同一销售单全部未作废采购；不得按当前销售行过滤。
-/// # 返回
-/// 所有参与覆盖的采购来源均已更新时返回 `Ok(())`。
-/// # 错误
-/// 仍有采购引用旧销售版本时拒绝，须先处理未生效采购或完成采购变更。
-pub fn ensure_creation_sources_current(
-    current_sales_revision_id: &SalesOrderRevisionId,
-    orders: &[PurchaseOrder],
-) -> Result<()> {
-    if orders.iter().any(|order| {
-        order.base.deleted_at == 0
-            && matches!(
-                order.stable.status,
-                PurchaseOrderStatus::Draft
-                    | PurchaseOrderStatus::PendingFinanceReview
-                    | PurchaseOrderStatus::InApproval
-                    | PurchaseOrderStatus::Effective
-                    | PurchaseOrderStatus::PartiallyExecuted
-                    | PurchaseOrderStatus::Completed
-            )
-            && &order.sales_order_revision_id != current_sales_revision_id
-    }) {
-        return Err(Error::from("仍有采购引用变更前的销售版本，请先处理相关采购单，再继续供给分配"));
-    }
-    Ok(())
+/// 采购行引用的历史销售版本行（公共行与商品子行已连接）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HistoricalSalesLineFact {
+    /// 该行所属销售版本。
+    pub sales_order_revision_id: String,
+    /// 历史版本公共行。
+    pub revision_line: SalesRevisionLineFact,
+    /// 历史版本商品/服务子行。
+    pub goods_line: SalesGoodsLineFact,
 }
 
 /// 由采购覆盖事实构造逐行与总体采购覆盖结果。
@@ -124,13 +110,13 @@ pub fn ensure_creation_sources_current(
 ///
 /// # 错误
 /// 销售当前版本文档缺失、商品公共行缺少子类型行、SKU/商品/商品类型缺失、
-/// 草稿类或正式状态缺少当前指针、正式行缺少唯一销售分配、分配未绑定销售当前
-/// 版本行、覆盖超过目标或数量精度非法时返回领域错误。
+/// 草稿类或正式状态缺少当前指针、正式行缺少唯一销售分配、分配既未绑定销售
+/// 当前版本行也未绑定同一稳定行的历史版本行，或数量精度非法时返回领域错误。
 ///
 /// # 关键业务约束
-/// 只沿销售与采购的当前指针计算，稳定关联键为 `sales_order_line_id`；作废与
-/// 历史采购不参与；现有库存预占只按 `reserved + consumed` 计入一次，采购入库
-/// 预占由 Repository 过滤；覆盖超过目标不得截断，必须显式失败。
+/// 沿采购当前指针计算，稳定关联键为 `sales_order_line_id`；作废采购不参与；
+/// 现有库存预占只按 `reserved + consumed` 计入一次，采购入库预占由 Repository
+/// 过滤；覆盖超过目标时剩余为零并单独计量超出数量，不截断覆盖。
 pub fn build_procurement_coverage(facts: ProcurementCoverageFacts) -> Result<SalesProcurementCoverage> {
     let revision = facts.revision.ok_or_else(|| Error::from("销售单当前版本不存在，无法计算采购剩余量"))?;
     let mut targets = join_target_lines(facts.revision_lines, facts.goods_lines)?;
@@ -154,9 +140,12 @@ pub fn build_procurement_coverage(facts: ProcurementCoverageFacts) -> Result<Sal
     accumulate_submission_coverage(&targets, &facts.purchase_orders, &facts.submission_lines, &mut covered)?;
     accumulate_revision_coverage(
         &targets,
-        &facts.purchase_orders,
-        &facts.purchase_revision_lines,
-        &facts.allocations,
+        &facts.historical_sales_lines,
+        RevisionCoverageSources {
+            orders: &facts.purchase_orders,
+            purchase_lines: &facts.purchase_revision_lines,
+            allocations: &facts.allocations,
+        },
         &mut covered,
     )?;
     accumulate_stock_coverage(&facts.reservations, &mut covered)?;
@@ -275,40 +264,42 @@ fn accumulate_submission_coverage(
 ///
 /// # 参数
 /// * `targets` - 当前销售版本商品目标行
-/// * `orders` - 参与覆盖的采购单
-/// * `purchase_lines` - 正式采购单当前版本行
-/// * `allocations` - 正式采购版本行的销售分配
+/// * `historical` - 采购行引用的历史销售版本行
+/// * `sources` - 参与覆盖的采购单、正式采购当前版本行及其销售分配
 /// * `covered` - 待累加的稳定销售行覆盖映射
 ///
 /// # 返回
 /// 汇总成功返回 `Ok(())`。
 ///
 /// # 错误
-/// 正式状态缺少当前版本指针、正式行或分配未绑定销售当前版本行、正式行缺少
-/// 唯一销售分配时返回一致性错误。
+/// 正式状态缺少当前版本指针、分配与采购行未绑定同一销售版本行、销售版本行与
+/// 采购行稳定行不符、正式行缺少唯一销售分配时返回一致性错误。
 ///
 /// # 关键业务约束
-/// 禁止累计历史采购版本或脱离 allocation 直接使用采购行数量；正式覆盖必须同时
-/// 由采购当前版本行和 allocation 指向同一销售当前版本行。
+/// 禁止累计历史采购版本或脱离 allocation 直接使用采购行数量；引用历史销售版本
+/// 的分配按稳定行计入当前覆盖。
 fn accumulate_revision_coverage(
     targets: &[(SalesRevisionLineFact, SalesGoodsLineFact)],
-    orders: &[PurchaseOrder],
-    purchase_lines: &[PurchaseOrderRevisionLine],
-    allocations: &[PurchaseLineSalesAllocation],
+    historical: &HashMap<String, HistoricalSalesLineFact>,
+    sources: RevisionCoverageSources<'_>,
     covered: &mut HashMap<String, Quantity>,
 ) -> Result<()> {
     let targets = target_stable_ids(targets);
-    current_revision_ids(orders)?;
-    let lines = purchase_lines.iter().map(|line| (line.base.id.as_str(), line)).collect::<HashMap<_, _>>();
+    current_revision_ids(sources.orders)?;
+    let lines =
+        sources.purchase_lines.iter().map(|line| (line.base.id.as_str(), line)).collect::<HashMap<_, _>>();
     let expected = lines
         .iter()
         .filter(|(_, line)| line.line_type == PurchaseLineType::ItemService)
         .map(|(id, _)| *id)
         .collect::<HashSet<_>>();
     let mut allocated = HashSet::new();
-    for allocation in allocations {
+    for allocation in sources.allocations {
         allocated.insert(allocation.purchase_order_revision_line_id.as_ref());
-        add_current_allocation(&targets, &lines, allocation, covered)?;
+        let stable_id = allocation_stable_line(&targets, historical, &lines, allocation)?;
+        if targets.contains_key(&stable_id) {
+            add_covered(covered, &stable_id, allocation.allocated_quantity)?;
+        }
     }
     if allocated != expected {
         return Err(Error::from("采购当前版本商品行缺少唯一销售分配"));
@@ -316,25 +307,36 @@ fn accumulate_revision_coverage(
     Ok(())
 }
 
-/// 校验并累加一条正式采购分配。
+/// 正式采购覆盖来源。
+struct RevisionCoverageSources<'a> {
+    /// 参与覆盖的采购单。
+    orders: &'a [PurchaseOrder],
+    /// 正式采购单当前版本行。
+    purchase_lines: &'a [PurchaseOrderRevisionLine],
+    /// 正式采购版本行的销售分配。
+    allocations: &'a [PurchaseLineSalesAllocation],
+}
+
+/// 校验一条正式采购分配的销售来源并返回其稳定销售行。
 ///
 /// # 参数
 /// * `targets` - 稳定销售行到当前销售版本行的映射
+/// * `historical` - 采购行引用的历史销售版本行
 /// * `purchase_lines` - 当前采购版本行映射
 /// * `allocation` - 待汇总的正式采购分配
-/// * `covered` - 待累加覆盖映射
 ///
 /// # 返回
-/// 分配属于当前目标并完成累加时返回 `Ok(())`；目标行已从销售当前版本移除时忽略。
+/// 返回分配所属的稳定销售行；该行已不在当前目标中时不校验来源并由调用方忽略。
 ///
 /// # 错误
-/// 分配对应采购行缺失，或采购行/分配未绑定销售当前版本行时返回一致性错误。
-fn add_current_allocation(
+/// 分配对应采购行缺失、采购行缺少销售行引用、分配与采购行引用不同的销售版本行，
+/// 或引用行既非当前版本行也非同一稳定行的历史版本行时返回一致性错误。
+fn allocation_stable_line(
     targets: &HashMap<String, String>,
+    historical: &HashMap<String, HistoricalSalesLineFact>,
     purchase_lines: &HashMap<&str, &PurchaseOrderRevisionLine>,
     allocation: &PurchaseLineSalesAllocation,
-    covered: &mut HashMap<String, Quantity>,
-) -> Result<()> {
+) -> Result<String> {
     let purchase_line = purchase_lines
         .get(allocation.purchase_order_revision_line_id.as_ref())
         .ok_or_else(|| Error::from("采购正式分配缺少当前采购版本行"))?;
@@ -343,19 +345,21 @@ fn add_current_allocation(
         .as_ref()
         .ok_or_else(|| Error::from("采购当前版本行缺少销售稳定行"))?
         .to_string();
-    let Some(current_sales_line_id) = targets.get(&stable_id) else {
-        return Ok(());
-    };
-    let recorded_sales_line_id = purchase_line
+    let recorded = purchase_line
         .sales_order_revision_line_id
         .as_ref()
         .ok_or_else(|| Error::from("采购当前版本行缺少销售当前版本行"))?;
-    if recorded_sales_line_id.to_string() != *current_sales_line_id
-        || allocation.sales_order_revision_line_id.to_string() != *current_sales_line_id
-    {
-        return Err(Error::from("采购正式分配未绑定销售当前版本行"));
+    let Some(current) = targets.get(&stable_id) else {
+        return Ok(stable_id);
+    };
+    let bound_to_current = current == recorded.as_ref();
+    let bound_to_history = historical
+        .get(recorded.as_ref())
+        .is_some_and(|line| line.revision_line.sales_order_line_id.as_ref() == stable_id);
+    if allocation.sales_order_revision_line_id != *recorded || !(bound_to_current || bound_to_history) {
+        return Err(Error::from("采购正式分配未绑定来源销售版本行"));
     }
-    add_covered(covered, &stable_id, allocation.allocated_quantity)
+    Ok(stable_id)
 }
 
 /// 将现有库存直接分配形成的预占计入供给覆盖。
@@ -518,10 +522,10 @@ fn add_covered(
 /// 返回逐行剩余量与总体汇总。
 ///
 /// # 错误
-/// 任一行或总体覆盖超过目标时返回一致性错误。
+/// 数量精度非法或进度无法构造时返回一致性错误。
 ///
 /// # 关键业务约束
-/// `remaining = current sales quantity - covered`，不得截断负数。
+/// 逐行派生剩余与超出数量；整单汇总逐行累计，一行超出不冲抵另一行缺口。
 fn build_coverage(
     revision: SalesRevisionFact,
     targets: Vec<(SalesRevisionLineFact, SalesGoodsLineFact)>,
@@ -529,8 +533,6 @@ fn build_coverage(
     product_kinds: HashMap<String, ProductKind>,
     quantity_scales: HashMap<String, u8>,
 ) -> Result<SalesProcurementCoverage> {
-    let mut total = Decimal::ZERO;
-    let mut total_covered = Decimal::ZERO;
     let mut lines = Vec::with_capacity(targets.len());
     for (revision_line, goods_line) in targets {
         let product_kind = product_kinds
@@ -542,8 +544,6 @@ fn build_coverage(
             .copied()
             .unwrap_or_else(zero_quantity);
         let summary = coverage_summary(goods_line.quantity, covered_quantity)?;
-        total += summary.total_quantity.to_decimal();
-        total_covered += summary.covered_quantity.to_decimal();
         lines.push(SalesProcurementCoverageLine {
             quantity_scale: quantity_scales.get(goods_line.sku_id.as_ref()).copied(),
             revision_line,
@@ -552,7 +552,8 @@ fn build_coverage(
             summary,
         });
     }
-    let summary = coverage_summary(quantity_of(total)?, quantity_of(total_covered)?)?;
+    let summary = ProcurementCoverageSummary::aggregate(lines.iter().map(|line| &line.summary))
+        .map_err(|error| Error::from(format!("采购数量一致性错误: {error}")))?;
     Ok(SalesProcurementCoverage { revision, lines, summary })
 }
 
@@ -566,7 +567,7 @@ fn build_coverage(
 /// 返回采购覆盖值对象。
 ///
 /// # 错误
-/// 目标或覆盖数量为负、覆盖超过目标，或剩余数量与进度无法构造时返回领域错误。
+/// 目标或覆盖数量为负，或剩余数量、超出数量与进度无法构造时返回领域错误。
 ///
 /// # 关键业务约束
 /// 所有查询入口共享同一错误语义。
@@ -626,9 +627,9 @@ mod tests {
     use erp_core::money::{Amount, Quantity, Rate};
 
     use super::{
-        ProcurementCoverageFacts, add_covered, build_procurement_coverage, coverage_summary,
-        current_revision_ids, current_submission_ids, ensure_creation_sources_current,
-        reservation_covered_quantity, zero_quantity,
+        HistoricalSalesLineFact, ProcurementCoverageFacts, add_covered, build_procurement_coverage,
+        coverage_summary, current_revision_ids, current_submission_ids, reservation_covered_quantity,
+        zero_quantity,
     };
     use crate::entity::facts::{
         CurrentRevisionFact, ExistingStockReservationFact, FactIdentity, ProductFact, ProductKind,
@@ -713,6 +714,7 @@ mod tests {
             sku_id: SkuId::new(sku_id),
             sku_revision_id: erp_core::ids::SkuRevisionId::new(format!("skur-{sku_id}")),
             fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
+            service_region: None,
             quantity: Quantity::from_str(quantity).unwrap(),
             base_unit_code: "件".to_string(),
         }
@@ -867,84 +869,9 @@ mod tests {
                 Some("sorl-1"),
             )],
             allocations: vec![allocation("alloc-1", "porl-1", "sorl-1", "3")],
+            historical_sales_lines: Default::default(),
+            maintained_sales_revisions: Default::default(),
             reservations: vec![reservation("rsv-1", "sol-1", "1", "1")],
-        }
-    }
-
-    /// 价格变更保持稳定行，删行及换稳定行均不能避开整个销售来源的旧采购检查。
-    #[test]
-    fn changed_formal_source_blocks_creation_regardless_of_current_target_lines() {
-        let current = SalesOrderRevisionId::new("sor-2");
-        for status in [
-            PurchaseOrderStatus::Effective,
-            PurchaseOrderStatus::PartiallyExecuted,
-            PurchaseOrderStatus::Completed,
-        ] {
-            for target in [Some("sol-1"), None, Some("sol-replacement")] {
-                let mut facts = facts_with_two_coverage_sources();
-                facts.revision.as_mut().unwrap().base.id = current.to_string();
-                facts.purchase_orders[0].sales_order_revision_id = current.clone();
-                facts.purchase_orders[1].stable.status = status;
-                facts.revision_lines =
-                    target.map(|stable| vec![revision_line("sorl-2", stable, 1)]).unwrap_or_default();
-                facts.goods_lines =
-                    target.map(|_| vec![goods_line("sorl-2", "sku-1", "10")]).unwrap_or_default();
-                let error = ensure_creation_sources_current(&current, &facts.purchase_orders).unwrap_err();
-                assert_eq!(
-                    error.to_string(),
-                    "仍有采购引用变更前的销售版本，请先处理相关采购单，再继续供给分配"
-                );
-                assert_eq!(facts.purchase_orders[1].sales_order_revision_id.as_ref(), "sor-1");
-                assert_eq!(facts.allocations[0].sales_order_revision_line_id.as_ref(), "sorl-1");
-            }
-        }
-    }
-
-    /// 逐单正式变更允许进行，但全部旧有效采购更新前不得新增供给。
-    #[test]
-    fn all_formal_purchase_sources_must_be_updated_before_new_creation() {
-        let current = SalesOrderRevisionId::new("sor-2");
-        let mut orders = vec![
-            purchase_order("po-1", PurchaseOrderStatus::Effective, None, Some("por-1")),
-            purchase_order("po-2", PurchaseOrderStatus::PartiallyExecuted, None, Some("por-2")),
-        ];
-        orders[0].sales_order_revision_id = current.clone();
-        assert!(ensure_creation_sources_current(&current, &orders).is_err());
-        orders[1].sales_order_revision_id = current.clone();
-        ensure_creation_sources_current(&current, &orders).unwrap();
-        ensure_creation_sources_current(&current, &[]).unwrap();
-    }
-
-    /// 采购依据均为当前版本时可创建，作废和删除事实不阻断。
-    #[test]
-    fn current_or_retired_purchases_do_not_block_current_source_creation() {
-        let current = SalesOrderRevisionId::new("sor-2");
-        let mut orders = vec![
-            purchase_order("po-draft", PurchaseOrderStatus::Draft, Some("sub-1"), None),
-            purchase_order("po-approval", PurchaseOrderStatus::InApproval, Some("sub-2"), None),
-            purchase_order("po-void", PurchaseOrderStatus::Voided, None, Some("por-3")),
-            purchase_order("po-deleted", PurchaseOrderStatus::Effective, None, Some("por-4")),
-        ];
-        orders[0].sales_order_revision_id = current.clone();
-        orders[1].sales_order_revision_id = current.clone();
-        orders[3].base.deleted_at = 1;
-        ensure_creation_sources_current(&current, &orders).unwrap();
-    }
-
-    /// 旧依据草稿及审批中采购也会占用供给，未处理前必须阻断新增。
-    #[test]
-    fn outdated_pending_purchases_block_new_supply() {
-        let current = SalesOrderRevisionId::new("sor-2");
-        for status in [
-            PurchaseOrderStatus::Draft,
-            PurchaseOrderStatus::PendingFinanceReview,
-            PurchaseOrderStatus::InApproval,
-        ] {
-            let mut order = purchase_order("po-pending", status, Some("sub-1"), None);
-            let error = ensure_creation_sources_current(&current, &[order.clone()]).unwrap_err();
-            assert_eq!(error.to_string(), "仍有采购引用变更前的销售版本，请先处理相关采购单，再继续供给分配");
-            order.sales_order_revision_id = current.clone();
-            ensure_creation_sources_current(&current, &[order]).unwrap();
         }
     }
 
@@ -967,13 +894,15 @@ mod tests {
         assert_eq!(reservation_covered_quantity(&reservation).unwrap(), Quantity::from_str("10").unwrap());
     }
 
-    /// 覆盖超过销售当前版本数量时统一返回一致性错误。
+    /// 覆盖超过销售当前版本数量时剩余为零并单独计量超出。
     #[test]
-    fn over_coverage_is_consistency_error() {
-        let result =
-            coverage_summary(Quantity::from_str("1").unwrap(), Quantity::from_str("1.000001").unwrap());
+    fn over_coverage_reports_excess() {
+        let summary =
+            coverage_summary(Quantity::from_str("1").unwrap(), Quantity::from_str("1.000001").unwrap())
+                .unwrap();
 
-        assert!(result.unwrap_err().to_string().contains("采购数量一致性错误"));
+        assert_eq!(summary.remaining_quantity, Quantity::from_str("0").unwrap());
+        assert_eq!(summary.excess_quantity, Quantity::from_str("0.000001").unwrap());
     }
 
     /// 状态分流只提取草稿类当前提交和正式类当前版本指针。
@@ -1072,16 +1001,64 @@ mod tests {
         assert_eq!(zero.lines[0].summary.progress, Rate::from_str("0").unwrap());
     }
 
-    /// 覆盖超过销售当前版本数量时构造失败且不截断为负剩余。
+    /// 销售减量后覆盖超过目标：保留全部覆盖、剩余为零并计量超出。
     #[test]
-    fn coverage_build_rejects_over_coverage() {
+    fn coverage_build_reports_excess_after_sales_reduction() {
         let mut facts = facts_with_two_coverage_sources();
         facts.submission_lines = vec![submission_line("subl-1", "sub-1", Some("sol-1"), Some("11"))];
         facts.purchase_revision_lines.clear();
         facts.allocations.clear();
         facts.reservations.clear();
+
+        let coverage = build_procurement_coverage(facts).unwrap();
+
+        assert_eq!(coverage.lines[0].summary.covered_quantity, Quantity::from_str("11").unwrap());
+        assert_eq!(coverage.lines[0].summary.remaining_quantity, Quantity::from_str("0").unwrap());
+        assert_eq!(coverage.summary.excess_quantity, Quantity::from_str("1").unwrap());
+    }
+
+    /// 引用历史销售版本的正式分配按稳定行计入当前覆盖。
+    #[test]
+    fn historical_source_allocation_counts_by_stable_line() {
+        let mut facts = facts_with_two_coverage_sources();
+        facts.purchase_revision_lines =
+            vec![purchase_revision_line("porl-1", "rev-1", Some("sol-1"), Some("sorl-old"))];
+        facts.allocations = vec![allocation("alloc-1", "porl-1", "sorl-old", "3")];
+        facts.historical_sales_lines = std::iter::once((
+            "sorl-old".to_string(),
+            HistoricalSalesLineFact {
+                sales_order_revision_id: "sor-1".to_string(),
+                revision_line: revision_line("sorl-old", "sol-1", 1),
+                goods_line: goods_line("sorl-old", "sku-1", "12"),
+            },
+        ))
+        .collect();
+
+        let coverage = build_procurement_coverage(facts).unwrap();
+
+        assert_eq!(coverage.lines[0].summary.covered_quantity, Quantity::from_str("7").unwrap());
+    }
+
+    /// 历史版本行属于其他稳定行时拒绝，不得借用历史行跨行计入。
+    #[test]
+    fn historical_line_of_another_stable_line_is_rejected() {
+        let mut facts = facts_with_two_coverage_sources();
+        facts.purchase_revision_lines =
+            vec![purchase_revision_line("porl-1", "rev-1", Some("sol-1"), Some("sorl-old"))];
+        facts.allocations = vec![allocation("alloc-1", "porl-1", "sorl-old", "3")];
+        facts.historical_sales_lines = std::iter::once((
+            "sorl-old".to_string(),
+            HistoricalSalesLineFact {
+                sales_order_revision_id: "sor-1".to_string(),
+                revision_line: revision_line("sorl-old", "sol-other", 1),
+                goods_line: goods_line("sorl-old", "sku-1", "12"),
+            },
+        ))
+        .collect();
+
         let error = build_procurement_coverage(facts).unwrap_err().to_string();
-        assert!(error.contains("采购数量一致性错误"));
+
+        assert_eq!(error, "采购正式分配未绑定来源销售版本行");
     }
 
     /// 已从销售当前版本移除的稳定行：提交行与分配不再累计且不报错。
@@ -1106,7 +1083,7 @@ mod tests {
         let mut facts = facts_with_two_coverage_sources();
         facts.allocations = vec![allocation("alloc-1", "porl-1", "sorl-stale", "3")];
         let error = build_procurement_coverage(facts).unwrap_err().to_string();
-        assert_eq!(error, "采购正式分配未绑定销售当前版本行");
+        assert_eq!(error, "采购正式分配未绑定来源销售版本行");
     }
 
     /// 正式商品行缺少唯一销售分配时按一致性错误失败。

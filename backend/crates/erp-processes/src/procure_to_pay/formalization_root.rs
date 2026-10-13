@@ -4,12 +4,17 @@ use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_identity::SharedRbacService;
 use erp_procurement::dto::purchase_order::PurchaseReviewResult;
+use erp_procurement::repository::PurchaseOrderExt;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
 
 use super::PurchaseOrderProcess;
 use super::review::FormalizedOrderPersist;
-use crate::Result;
+use super::source_recheck::ensure_source_unaffected;
+use crate::{Error, Result};
+
+/// 来源销售已变更并影响本采购时的最终审批提示。
+const FORMALIZE_SOURCE_AFFECTED: &str = "来源销售已变更并影响本采购，请撤回后修改原单再提交";
 
 /// 采购最终通过流程，财务与履约步骤严格复用原 Executor 和写入顺序。
 pub struct PurchaseOrderFormalizationProcess {
@@ -94,6 +99,12 @@ async fn persist_formalized_order_write(
     actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
+    let order = db
+        .purchase_orders()
+        .find_by_id(persist.order_id(), executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("采购单不存在".to_string()))?;
+    ensure_source_unaffected(db, &order, FORMALIZE_SOURCE_AFFECTED, executor).await?;
     let audit = actor.clone().resource_log(
         "purchase_order.formalize",
         "purchase_order",

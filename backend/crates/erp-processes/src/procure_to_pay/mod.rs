@@ -46,7 +46,10 @@ mod procurement_task_sync;
 pub mod responsibility;
 mod review;
 mod shared;
-mod source_guard;
+mod source_maintain;
+mod source_recheck;
+mod source_update_sync;
+mod source_withdraw;
 mod sourcing_create;
 mod start_approval;
 mod submission;
@@ -54,7 +57,10 @@ mod void_order;
 pub use adapter::purchase_order_object_readable;
 pub use change_adapter::purchase_change_order_object_readable;
 pub use formalization_root::PurchaseOrderFormalizationProcess;
-pub use procurement_task_sync::sync_procurement_tasks_for_sales_order;
+pub use procurement_task_sync::{
+    sync_procurement_after_sales_change, sync_procurement_tasks_for_sales_order,
+};
+pub use source_withdraw::SalesChangeWithdrawal;
 /// 采购单服务。
 ///
 /// 提供采购单从依据创建绑定、草稿保存、提交启动审批、最终通过生效与撤回编排。

@@ -1,5 +1,6 @@
 //! 销售变更同事务写入合同；生产与纯替身共同执行相同编排函数。
 
+use application_core::AuditActor;
 use async_trait::async_trait;
 use erp_core::ids::ReceivableAccountId;
 use erp_finance::service::receivable::sales_change::{
@@ -9,6 +10,7 @@ use erp_sales::service::sales_review::EffectiveChangeWrite;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use super::procurement::EffectiveChangeIdentity;
 use crate::Result;
 use crate::audit::persist_log;
 
@@ -21,15 +23,18 @@ trait SalesChangePostingPort: Send {
     async fn receivable_and_tasks(&mut self, executor: &mut dyn Executor) -> Result<()>;
     /// 在财务和任务成功之后推进变更状态。
     async fn change(&mut self, executor: &mut dyn Executor) -> Result<()>;
+    /// 新版本生效后撤回受影响的审批中采购，并同步采购依据更新与供给分配任务。
+    async fn procurement(&mut self, executor: &mut dyn Executor) -> Result<()>;
     /// 最后写入成功审计。
     async fn audit(&mut self, executor: &mut dyn Executor) -> Result<()>;
 }
 
-/// 依次写入销售修订、应收差额及工作项、变更状态与审计；任何失败原样传播。
+/// 依次写入销售修订、应收差额及工作项、变更状态、采购联动与审计；任何失败原样传播。
 async fn post(port: &mut impl SalesChangePostingPort, executor: &mut dyn Executor) -> Result<()> {
     port.revision(executor).await?;
     port.receivable_and_tasks(executor).await?;
     port.change(executor).await?;
+    port.procurement(executor).await?;
     port.audit(executor).await
 }
 
@@ -39,6 +44,7 @@ struct DatabasePosting<'a> {
     write: EffectiveChangeWrite,
     delta: Option<SalesChangeReceivableWrite>,
     audit: &'a erp_audit::AuditLog,
+    actor: &'a AuditActor,
 }
 
 #[async_trait]
@@ -55,6 +61,9 @@ impl SalesChangePostingPort for DatabasePosting<'_> {
     async fn change(&mut self, executor: &mut dyn Executor) -> Result<()> {
         Ok(self.write.persist_change(self.db, executor).await?)
     }
+    async fn procurement(&mut self, executor: &mut dyn Executor) -> Result<()> {
+        EffectiveChangeIdentity::of(&self.write).sync_procurement(self.db, self.actor, executor).await
+    }
     async fn audit(&mut self, executor: &mut dyn Executor) -> Result<()> {
         persist_log(self.db, self.audit, executor).await?;
         Ok(())
@@ -68,10 +77,11 @@ impl SalesChangePostingPort for DatabasePosting<'_> {
 /// * `write` - 已准备的生效写入。
 /// * `delta` - 非零应收差额；没有差额时为 `None`。
 /// * `audit` - 同一执行器中最后写入的审计日志。
+/// * `actor` - 触发生效的审批人，记为受影响采购的撤回人。
 /// * `executor` - 调用方事务执行器。
 ///
 /// # 返回
-/// 无返回值。顺序为销售修订、应收差额及任务、变更状态、审计。
+/// 无返回值。顺序为销售修订、应收差额及任务、变更状态、采购联动、审计。
 ///
 /// # 错误
 /// 任一步失败时返回该错误并停止后续写入。
@@ -80,9 +90,10 @@ pub(super) async fn persist_effective_writes(
     write: EffectiveChangeWrite,
     delta: Option<SalesChangeReceivableWrite>,
     audit: &erp_audit::AuditLog,
+    actor: &AuditActor,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    post(&mut DatabasePosting { db, write, delta, audit }, executor).await
+    post(&mut DatabasePosting { db, write, delta, audit, actor }, executor).await
 }
 
 /// 写入应收差额分录。
@@ -194,24 +205,29 @@ mod tests {
         async fn change(&mut self, executor: &mut dyn Executor) -> Result<()> {
             self.record("change", executor)
         }
+        async fn procurement(&mut self, executor: &mut dyn Executor) -> Result<()> {
+            self.record("procurement", executor)
+        }
         async fn audit(&mut self, executor: &mut dyn Executor) -> Result<()> {
             self.record("audit", executor)
         }
     }
 
+    /// 采购联动在新版本与变更状态写入之后、审计之前，与其他写入共用同一执行器。
     #[tokio::test]
-    async fn formal_revision_finance_tasks_change_and_audit_share_executor_in_original_order() {
+    async fn formal_revision_finance_tasks_change_procurement_and_audit_share_executor_in_order() {
         let mut port = RecordingPosting::default();
         let mut executor = TestExecutor { _identity: 1 };
         let expected = &mut executor as *mut TestExecutor as usize;
         post(&mut port, &mut executor).await.unwrap();
-        assert_eq!(port.events, ["revision", "receivable_and_tasks", "change", "audit"]);
-        assert_eq!(port.executors, vec![expected; 4]);
+        assert_eq!(port.events, ["revision", "receivable_and_tasks", "change", "procurement", "audit"]);
+        assert_eq!(port.executors, vec![expected; 5]);
     }
 
+    /// 任一步失败（含采购撤回 CAS 冲突）即停止后续写入，销售变更不生效。
     #[tokio::test]
     async fn every_failure_keeps_error_category_and_stops_later_writes() {
-        let steps = ["revision", "receivable_and_tasks", "change", "audit"];
+        let steps = ["revision", "receivable_and_tasks", "change", "procurement", "audit"];
         for (index, failed_step) in steps.iter().enumerate() {
             let mut port = RecordingPosting { fail: Some(*failed_step), ..Default::default() };
             let error = post(&mut port, &mut TestExecutor { _identity: 1 }).await.unwrap_err();

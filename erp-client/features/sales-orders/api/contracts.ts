@@ -1,3 +1,4 @@
+import type { SourceImpactReasonWire } from "@/features/purchase-orders/lib/source-impact"
 import type { SalesDeliveryAllocation } from "../types"
 // 本文件是销售单域共享的 API 契约类型表：除 PERMISSION_VERSION 外全部为类型声明，
 // 无任何逻辑，按声明式数据表保留单文件，避免拆分出零散的纯类型模块。
@@ -114,6 +115,20 @@ export type BackendPurchaseCoverageLine = {
     total_quantity: string
     covered_quantity: string
     remaining_quantity: string
+    excess_quantity?: string
+}
+
+/** 受销售变更影响、尚未处理完成的采购单。 */
+export type BackendProcurementSourceUpdate = {
+    purchase_order_id: string
+    purchase_no: string
+    status: string
+    status_label: string
+    supplier_name?: string | null
+    owner_name?: string | null
+    blocks_payment: boolean
+    awaiting_submission?: boolean
+    reasons: SourceImpactReasonWire[]
 }
 
 export type BackendPurchaseCoverage = {
@@ -121,10 +136,12 @@ export type BackendPurchaseCoverage = {
     total_quantity: string
     covered_quantity: string
     remaining_quantity: string
+    excess_quantity?: string
     progress: string
     source_changed: boolean
-    outdated_purchase_quantity: string
-    outdated_purchase_count: number
+    affected_purchase_count?: number
+    awaiting_submission_count?: number
+    source_updates?: BackendProcurementSourceUpdate[]
 }
 
 /** 服务端权威计算的结案资格。 */
@@ -398,4 +415,25 @@ export type BackendSalesChangeOrder = {
     created_at: number
     reason?: string
     approval?: DocumentApprovalViewDto | null
+    procurement?: BackendSalesChangeProcurement | null
+}
+
+/** 销售变更触发的采购依据更新进度。 */
+export type BackendSalesChangeProcurement = {
+    total: number
+    open: number
+    completed: boolean
+    predicted?: boolean
+    items: Array<{
+        purchase_order_id: string
+        purchase_no?: string | null
+        supplier_name?: string | null
+        owner_name?: string | null
+        open: boolean
+        awaiting_submission?: boolean
+        resolution?: string | null
+        resolution_label?: string | null
+        maintain_note?: string | null
+        reasons: SourceImpactReasonWire[]
+    }>
 }

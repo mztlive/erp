@@ -11,6 +11,7 @@ use erp_workflow::service::document_registry::find_approval_binding;
 use mongodb::Database;
 use persistence_core::NoTransaction;
 
+use super::source_update::purchase_source_update_view;
 use super::{center_content_source, owner_display, payment_progress, sales_no_for, supplier_display};
 use crate::purchase_center::PurchaseOrderReadService;
 use crate::purchase_center::approval_query::load_document_approval;
@@ -81,6 +82,7 @@ impl PurchaseOrderReadService {
             load_document_approval(&self.db, &order.base.id, binding.as_ref(), order.stable.status).await?;
         let mut view = center_view(&order, identity, content, source, relations, approval);
         view.target_warehouse_name = target_warehouse_name(&self.db, &order).await?;
+        view.source_update = purchase_source_update_view(&self.db, &order, &mut NoTransaction).await?;
         Ok(view)
     }
 }
@@ -209,6 +211,7 @@ fn center_view(
         content_source: content.source,
         lines: content.lines,
         source_sales_order,
+        source_update: None,
         totals: content.totals,
         allocations: relations.allocations,
         changes: relations.changes,

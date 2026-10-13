@@ -17,6 +17,7 @@ mod cancel_approval;
 mod commands;
 mod draft;
 mod posting;
+mod procurement;
 mod start_approval;
 pub use adapter::sales_change_order_object_readable;
 use posting::persist_effective_writes;
@@ -108,10 +109,13 @@ impl SalesChangeProcess {
             write.change_id().to_string(),
         )?;
         let db = self.db.clone();
+        let procurement_actor = actor.clone();
         self.db
             .client()
             .with_transaction(move |executor| {
-                Box::pin(async move { persist_effective_writes(&db, write, delta, &audit, executor).await })
+                Box::pin(async move {
+                    persist_effective_writes(&db, write, delta, &audit, &procurement_actor, executor).await
+                })
             })
             .await?;
         SalesChangeReadService::with_rbac(self.db.clone(), self.require_rbac()?)
@@ -131,7 +135,7 @@ impl SalesChangeProcess {
     /// 无返回值。生效写入在该执行器内完成。
     ///
     /// # 错误
-    /// 状态、基准版本、应收差额、审计构造或持久化不变量失败时返回错误。
+    /// 状态、基准版本、应收差额、审计构造、采购撤回或持久化不变量失败时返回错误。
     pub async fn apply_effective_change_apply(
         &self,
         id: &str,
@@ -146,7 +150,7 @@ impl SalesChangeProcess {
             "sales_change_order",
             write.change_id().to_string(),
         )?;
-        persist_effective_writes(&self.db, write, delta, &audit, executor).await
+        persist_effective_writes(&self.db, write, delta, &audit, actor, executor).await
     }
 }
 

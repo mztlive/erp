@@ -68,6 +68,9 @@ pub(crate) fn usable_impact_summary(stored: Option<&str>, work_item_type: WorkIt
 pub(crate) fn next_action_hint(work_item_type: WorkItemType) -> String {
     match work_item_type {
         WorkItemType::ProcurementOrderCreation => "进入采购单创建页，按冻结销售行建立采购单并提交。",
+        WorkItemType::PurchaseSourceUpdate => {
+            "进入采购单后，按提示修改原单、发起采购变更、作废或登记维持原采购。"
+        },
         WorkItemType::FulfillmentOperation => "核对来源、数量和履约信息后，提交本次确认。",
         WorkItemType::CustomerAcceptanceRegistration => {
             "核对客户签收、短少或拒收结果后，登记并提交客户验收。"
@@ -168,6 +171,8 @@ fn mapped_reason_label(code: &str) -> Option<&'static str> {
         "procurement_rejection_low_margin_requested" => "采购驳回后，需要上级确认是否按原条件承接",
         "change_impact_dispatched" => "销售变更已提交，需要核对履约影响",
         "change_finance_dispatched" => "销售变更已提交，需要核对财务影响",
+        "sales_change_effective" => "销售变更已生效，采购依据需要更新",
+        "sales_source_changed" => "来源销售已变化，采购依据需要更新",
         "supplier_settlement_review_dispatched" => "供应商结算单待复核",
         "supplier_portal_review_required" => "供应商已提交申请，需要采购确认本次报价、商品资料或合作条款",
         "import_trial_confirmation" => "导入试算已完成，需要业务确认范围",
@@ -190,6 +195,7 @@ fn mapped_reason_label(code: &str) -> Option<&'static str> {
 fn default_reason_label(work_item_type: WorkItemType) -> &'static str {
     match work_item_type {
         WorkItemType::ProcurementOrderCreation => "销售单已生效，需要分配供给",
+        WorkItemType::PurchaseSourceUpdate => "销售单已变更，需要更新采购依据",
         WorkItemType::FulfillmentOperation => "当前履约单据等待确认",
         WorkItemType::CustomerAcceptanceRegistration => "发货或交付已完成，需要登记客户验收",
         WorkItemType::SupplierPaymentExecution => "采购应付已确认，需要安排付款",
@@ -215,6 +221,7 @@ fn default_reason_label(work_item_type: WorkItemType) -> &'static str {
 fn default_impact_summary(work_item_type: WorkItemType) -> &'static str {
     match work_item_type {
         WorkItemType::ProcurementOrderCreation => "不建单则对应销售行无法进入采购执行",
+        WorkItemType::PurchaseSourceUpdate => "不处理则采购仍按变更前的销售数量或交付要求执行",
         WorkItemType::FulfillmentOperation => "不确认则本次收货、发货或交付不能形成正式事实",
         WorkItemType::CustomerAcceptanceRegistration => "不登记则销售明细不能完成履约",
         WorkItemType::SupplierPaymentExecution => "不登记则应付无法完成付款核销",

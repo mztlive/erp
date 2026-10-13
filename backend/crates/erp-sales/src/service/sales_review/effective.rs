@@ -138,6 +138,34 @@ impl EffectiveChangeWrite {
     pub fn change_id(&self) -> &str {
         &self.change.base.id
     }
+
+    /// 变更所属销售单标识。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回销售单稳定身份。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    pub fn sales_order_id(&self) -> &str {
+        self.change.sales_order_id.as_ref()
+    }
+
+    /// 变更所属销售单号。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回销售业务单号。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    pub fn sales_order_no(&self) -> &str {
+        &self.order.order_no
+    }
     /// 写入正式销售版本；外层流程随后写入差额，再推进变更单。
     ///
     /// # 参数

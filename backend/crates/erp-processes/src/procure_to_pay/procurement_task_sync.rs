@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use erp_core::common::time::Instant;
 use erp_core::ids::{SalesOrderId, WorkItemId};
 use erp_core::money::Quantity;
-use erp_read_models::sales_center::order::load_current_procurement_coverage_for_sync;
+use erp_read_models::purchase_center::source_impact::load_purchase_source_state;
 use erp_sales::entity::sales_order::SalesOrder;
 use erp_sales::repository::SalesOrderExt;
 use erp_workflow::WorkItemExt;
@@ -15,6 +15,7 @@ use id_generator::next_id;
 use persistence_core::Executor;
 use rust_decimal::Decimal;
 
+use super::source_update_sync::SourceUpdateSync;
 use crate::{Error, Result};
 
 /// 加载当前账号可执行的开放供给分配任务。
@@ -86,7 +87,7 @@ fn validate_procurement_task_access(
     Ok(())
 }
 
-/// 按销售单当前统一供给覆盖同步全部供给分配任务。
+/// 按销售单当前统一供给覆盖同步全部供给分配任务与采购依据更新。
 ///
 /// # 参数
 /// * `db` - MongoDB 数据库
@@ -97,7 +98,7 @@ fn validate_procurement_task_access(
 /// 开放任务摘要、自动完成和释放后新任务均同步成功时返回 `Ok(())`。
 ///
 /// # 错误
-/// 销售单、采购覆盖、任务范围或仓储写入不一致时返回错误。
+/// 销售单、采购覆盖、任务范围、依据更新记录或仓储写入不一致时返回错误。
 ///
 /// # 关键业务约束
 /// 开放任务归零后进入不可逆终态；历史终态范围重新出现剩余量时创建新任务，不重开旧任务。
@@ -106,22 +107,92 @@ pub async fn sync_procurement_tasks_for_sales_order(
     sales_order_id: &SalesOrderId,
     executor: &mut dyn Executor,
 ) -> Result<()> {
-    let order = db
-        .sales_orders()
+    sync_sales_order_supply(db, sales_order_id, None, executor).await
+}
+
+/// 销售变更生效后同步供给分配任务与采购依据更新，新受影响采购记录触发的变更单。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `sales_order_id` - 已生效变更的来源销售单
+/// * `sales_change_order_id` - 生效的销售变更单
+/// * `executor` - 销售变更生效事务执行器
+///
+/// # 返回
+/// 同步成功时返回 `Ok(())`。
+///
+/// # 错误
+/// 销售单、采购覆盖、任务、依据更新记录或仓储写入不一致时返回错误。
+pub async fn sync_procurement_after_sales_change(
+    db: &mongodb::Database,
+    sales_order_id: &SalesOrderId,
+    sales_change_order_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    sync_sales_order_supply(db, sales_order_id, Some(sales_change_order_id), executor).await
+}
+
+/// 采购状态变化但供给覆盖不变时，只对账采购依据更新记录与待办。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库
+/// * `sales_order_id` - 采购的来源销售单
+/// * `executor` - 与采购写入共用的数据访问执行器
+///
+/// # 返回
+/// 对账成功时返回 `Ok(())`。
+///
+/// # 错误
+/// 销售单、采购覆盖、依据更新记录或仓储写入不一致时返回错误。
+///
+/// # 关键业务约束
+/// 草稿重新提交审批后，等待提交的依据更新记录才处理完成并关闭待办。
+pub(crate) async fn sync_purchase_source_updates(
+    db: &mongodb::Database,
+    sales_order_id: &SalesOrderId,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let order = load_sales_order(db, sales_order_id, executor).await?;
+    let state = load_purchase_source_state(db, &order, executor).await?;
+    SourceUpdateSync { db, order: &order, state: &state, trigger: None, now: Instant::now() }
+        .run(executor)
+        .await
+}
+
+/// 读取来源销售单。
+async fn load_sales_order(
+    db: &mongodb::Database,
+    sales_order_id: &SalesOrderId,
+    executor: &mut dyn Executor,
+) -> Result<SalesOrder> {
+    db.sales_orders()
         .find_by_id(sales_order_id, executor)
         .await?
-        .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
-    let coverage = load_current_procurement_coverage_for_sync(db, &order, executor).await?;
-    let remaining_by_line = coverage
+        .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))
+}
+
+/// 以同一批事实同步供给分配任务和采购依据更新记录。
+async fn sync_sales_order_supply(
+    db: &mongodb::Database,
+    sales_order_id: &SalesOrderId,
+    trigger: Option<&str>,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let order = load_sales_order(db, sales_order_id, executor).await?;
+    let state = load_purchase_source_state(db, &order, executor).await?;
+    let remaining_by_line = state
+        .coverage
         .lines
-        .into_iter()
+        .iter()
         .map(|line| (line.revision_line.sales_order_line_id.to_string(), line.summary.remaining_quantity))
         .collect::<HashMap<_, _>>();
     let tasks = db
         .work_items()
         .list_procurement_by_sales_order_newest_first(sales_order_id.as_ref(), executor)
         .await?;
-    synchronize_tasks(db, &order, &coverage.revision.base.id, &remaining_by_line, tasks, executor).await
+    synchronize_tasks(db, &order, &state.coverage.revision.base.id, &remaining_by_line, tasks, executor)
+        .await?;
+    SourceUpdateSync { db, order: &order, state: &state, trigger, now: Instant::now() }.run(executor).await
 }
 
 /// 根据同一销售单的当前剩余量更新任务并补建释放任务。

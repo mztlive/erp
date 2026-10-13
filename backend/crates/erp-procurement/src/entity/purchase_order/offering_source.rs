@@ -140,13 +140,15 @@ pub(super) fn ensure_offering_source(
 /// * `inputs` - 已验证原销售、SKU来源不变的请求行。
 /// * `existing` - 当前服务端草稿或冻结提交的完整行。
 /// # 返回
-/// 原地补齐对应原行的选源；旧行未知仍为None。
+/// 原地补齐对应原行的选源；旧行未知仍为None。请求显式调整交付安排时保留请求值，
+/// 由调用方按销售当前收件资料复验；未调整时沿用原行。
 /// # 错误
 /// 来源行缺失、SKU版本变化或原行身份歧义时拒绝。
 pub fn inherit_submission_sources(
     inputs: &mut [PurchaseLineInput],
     existing: &[PurchaseOrderSubmissionLine],
 ) -> Result<()> {
+    let requested = inputs.iter().map(|line| line.delivery_allocations.clone()).collect::<Vec<_>>();
     inherit_sources(
         inputs,
         existing.iter().map(|line| SourceBinding {
@@ -157,7 +159,21 @@ pub fn inherit_submission_sources(
             delivery: &line.delivery_allocations,
             kind: line.line_type,
         }),
-    )
+    )?;
+    keep_requested_delivery(inputs, requested);
+    Ok(())
+}
+
+/// 请求显式提供交付安排时覆盖继承值。
+fn keep_requested_delivery(
+    inputs: &mut [PurchaseLineInput],
+    requested: Vec<Vec<super::PurchaseDeliveryAllocation>>,
+) {
+    for (input, delivery) in inputs.iter_mut().zip(requested) {
+        if !delivery.is_empty() {
+            input.delivery_allocations = delivery;
+        }
+    }
 }
 
 /// 采购变更从明确基准行复制原选源，不重新猜测或切换供给。
@@ -185,11 +201,7 @@ pub fn inherit_revision_sources(
             kind: line.line_type,
         }),
     )?;
-    for (input, delivery) in inputs.iter_mut().zip(requested) {
-        if !delivery.is_empty() {
-            input.delivery_allocations = delivery;
-        }
-    }
+    keep_requested_delivery(inputs, requested);
     Ok(())
 }
 

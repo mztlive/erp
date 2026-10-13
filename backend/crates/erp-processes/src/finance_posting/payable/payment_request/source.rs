@@ -228,7 +228,7 @@ pub(super) async fn revalidate(
                 "采购正式版本或付款主体已变化，请处理未付部分并重新申请".into(),
             ));
         }
-        current_sales::revalidate(db, &revision.payment_subject, request, executor).await?;
+        current_sales::revalidate(db, &order.base.id, &revision.payment_subject, request, executor).await?;
         let account = db
             .payable_accounts()
             .find_by_id(&line.payable_account_id, executor)

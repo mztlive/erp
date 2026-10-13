@@ -1,4 +1,5 @@
 //! 提供方公开实体到采购消费事实的逐字段映射；不做筛选、默认值或资格判断。
+use erp_core::ids::SalesOrderRevisionLineId;
 use erp_procurement::entity::facts::{
     AvailabilityFact, AvailabilityStatus, CurrentRevisionFact, ExistingStockReservationFact, FactIdentity,
     OfferingFact, OfferingRevisionFact, ProductCategoryFact, ProductFact, ProductKind, ProductRevisionFact,
@@ -11,6 +12,7 @@ use erp_sales::entity::sales_order::{
     CommercialStatus, LineType, SalesOrder, SalesOrderGoodsServiceLineRevision, SalesOrderRevision,
     SalesOrderRevisionLine,
 };
+use erp_sales::entity::sales_review::SalesChangeSubmissionLine;
 use erp_supply::entity::supplier_offering::{
     AvailabilityStatus as SupplyAvailabilityStatus, SupplierOffering, SupplierOfferingAvailability,
     SupplierOfferingRevision,
@@ -98,6 +100,7 @@ pub(crate) fn sales_goods_fact(value: SalesOrderGoodsServiceLineRevision) -> Sal
         quantity: value.quantity,
         base_unit_code: value.base_unit_code.clone(),
         fulfillment_due_at: value.fulfillment_due_at,
+        service_region: value.service_region.clone(),
         delivery_allocations: value
             .delivery_allocations
             .into_iter()
@@ -302,6 +305,54 @@ pub(crate) fn supplier_commercial_fact(
         payment_term_code: value.effective_payment_term_code(),
         business_category: value.effective_business_category(),
     }
+}
+
+/// 投影销售变更提交的商品/服务行，作为预判时的拟生效销售行。
+///
+/// # 参数
+/// * `value` - 销售变更提交行
+///
+/// # 返回
+/// 商品/服务行且字段完整时返回公共行与商品子行；卡券行或缺字段时返回 `None`。
+///
+/// # 错误
+/// 无。
+pub(crate) fn proposed_line_fact(
+    value: SalesChangeSubmissionLine,
+) -> Option<(SalesRevisionLineFact, SalesGoodsLineFact)> {
+    if value.line_type != LineType::GoodsService {
+        return None;
+    }
+    let goods = SalesGoodsLineFact {
+        revision_line_id: SalesOrderRevisionLineId::new(&value.base.id),
+        sku_id: value.sku_id.clone()?,
+        sku_revision_id: value.sku_revision_id.clone()?,
+        quantity: value.quantity?,
+        base_unit_code: value.base_unit_code.clone()?,
+        fulfillment_due_at: value.fulfillment_due_at?,
+        service_region: value.service_region.clone(),
+        delivery_allocations: value
+            .delivery_allocations
+            .iter()
+            .map(|row| PurchaseDeliveryAllocation {
+                recipient: row.recipient.clone(),
+                phone: row.phone.clone(),
+                address: row.address.clone(),
+                quantity: row.quantity,
+            })
+            .collect(),
+        assigned_delivery_allocations: Vec::new(),
+    };
+    let line = SalesRevisionLineFact {
+        base: FactIdentity { id: value.base.id.clone() },
+        sales_order_line_id: value.sales_order_line_id.clone(),
+        line_no: value.line_no,
+        line_type: SalesLineType::GoodsService,
+        item_name_snapshot: value.item_name_snapshot.clone(),
+        spec_snapshot: value.spec_snapshot.clone(),
+        unit_snapshot: value.unit_snapshot.clone(),
+    };
+    Some((line, goods))
 }
 
 #[cfg(test)]

@@ -88,6 +88,12 @@ pub enum DraftLineEditViolation {
     /// 创建依据冻结的付款条件被改写。
     #[error("采购草稿创建后的付款条件不可修改")]
     PaymentTermChanged,
+    /// 按新销售版本刷新时删除了仍可采购的行。
+    #[error("仍有可采购数量的销售行不能从采购草稿中删除")]
+    RemovedLineStillPurchasable,
+    /// 按新销售版本刷新后没有可采购的行。
+    #[error("新销售版本下已没有可采购数量，请作废该采购单")]
+    NoPurchasableLine,
 }
 
 /// 校验采购草稿只调整原销售来源行数量且不会造成超采。
@@ -102,7 +108,7 @@ pub enum DraftLineEditViolation {
 ///
 /// # 错误
 /// 来源行增删或改写、数量与分配不一致、销售来源行缺失、当前销售行已移除、
-/// 新数量超过 `当前剩余 + 本采购单原占用` 或草稿行缺少稳定身份时返回对应
+/// 新数量超过 `当前目标 - 其他来源覆盖` 或草稿行缺少稳定身份时返回对应
 /// [`DraftLineEditViolation`]。
 ///
 /// # 关键业务约束
@@ -114,57 +120,142 @@ pub fn validate_draft_line_edits(
     existing: &[PurchaseOrderSubmissionLine],
     coverage_lines: &[SalesProcurementCoverageLine],
 ) -> Result<(), DraftLineEditViolation> {
-    let existing = existing
-        .iter()
-        .filter(|line| line.line_type == PurchaseLineType::ItemService)
-        .map(|line| {
-            let line_id = line
-                .sales_order_line_id
-                .as_ref()
-                .map(ToString::to_string)
-                .ok_or(DraftLineEditViolation::MissingSalesStableLine)?;
-            Ok((line_id, line))
-        })
-        .collect::<Result<HashMap<_, _>, _>>()?;
-    let coverage = coverage_lines
-        .iter()
-        .map(|line| (line.revision_line.sales_order_line_id.to_string(), line))
-        .collect::<HashMap<_, _>>();
-    let requested_items =
-        requested.iter().filter(|line| line.line_type == PurchaseLineType::ItemService).collect::<Vec<_>>();
-    if requested_items.len() != existing.len() {
+    let context = DraftEditContext::new(existing, coverage_lines)?;
+    let requested_items = item_edits(requested);
+    if requested_items.len() != context.existing.len() {
         return Err(DraftLineEditViolation::SourceLineCountChanged);
     }
+    context.check_requested(&requested_items).map(|_| ())
+}
 
-    let mut seen = HashSet::new();
-    for requested_line in requested_items {
-        let stable_id = normalized_line_id(requested_line.sales_order_line_id.as_deref())?;
-        if !seen.insert(stable_id.clone()) {
-            return Err(DraftLineEditViolation::DuplicateSalesLine);
-        }
-        let old_line = existing.get(&stable_id).ok_or(DraftLineEditViolation::RewrittenSalesLine)?;
-        old_line.ensure_source_references_unchanged(requested_line)?;
-
-        let quantity = parse_required_quantity(
-            requested_line.quantity.as_deref(),
-            DraftLineEditViolation::MissingQuantity,
-        )?;
-        let allocated = parse_required_quantity(
-            requested_line.allocated_quantity.as_deref(),
-            DraftLineEditViolation::MissingAllocatedQuantity,
-        )?;
-        if quantity != allocated {
-            return Err(DraftLineEditViolation::QuantityAllocationMismatch);
-        }
-        let old_allocated =
-            old_line.allocated_quantity.ok_or(DraftLineEditViolation::MissingOriginalAllocatedQuantity)?;
-        let current = coverage.get(&stable_id).ok_or(DraftLineEditViolation::SourceLineRemoved)?;
-        let allowed = current.summary.remaining_quantity.to_decimal() + old_allocated.to_decimal();
-        if quantity.to_decimal() > allowed {
-            return Err(DraftLineEditViolation::ExceedsAvailableQuantity);
+/// 校验引用旧销售版本的草稿按当前销售版本刷新时的行编辑。
+///
+/// # 参数
+/// * `requested` - 客户端编辑后的草稿行，仍携带原销售版本行引用
+/// * `existing` - 当前草稿不可变来源行
+/// * `coverage_lines` - 推进销售 guard 后按当前销售版本计算的覆盖行
+///
+/// # 返回
+/// 保留行与删除行均合法时返回 `Ok(())`。
+///
+/// # 错误
+/// 新增或改写来源行、数量超出可采购上限、删除仍可采购的行，或所有行都已无
+/// 可采购数量时返回对应 [`DraftLineEditViolation`]。
+///
+/// # 关键业务约束
+/// 第一期 §6.3“销售变更对采购的影响”第 5 条：只能删除在新版本下已无可采购
+/// 数量的行（归零或已被其他来源覆盖满），至少保留一行，否则应作废采购单。
+pub fn validate_rebased_draft_line_edits(
+    requested: &[DraftLineEdit],
+    existing: &[PurchaseOrderSubmissionLine],
+    coverage_lines: &[SalesProcurementCoverageLine],
+) -> Result<(), DraftLineEditViolation> {
+    let context = DraftEditContext::new(existing, coverage_lines)?;
+    let requested_items = item_edits(requested);
+    if requested_items.is_empty() {
+        return Err(DraftLineEditViolation::NoPurchasableLine);
+    }
+    let kept = context.check_requested(&requested_items)?;
+    for (stable_id, old_line) in &context.existing {
+        if !kept.contains(stable_id) && !context.capacity(stable_id, old_line)?.is_zero() {
+            return Err(DraftLineEditViolation::RemovedLineStillPurchasable);
         }
     }
     Ok(())
+}
+
+/// 草稿编辑校验所需的当前草稿行与覆盖行索引。
+struct DraftEditContext<'a> {
+    /// 稳定销售行到当前草稿商品行。
+    existing: HashMap<String, &'a PurchaseOrderSubmissionLine>,
+    /// 稳定销售行到当前覆盖行。
+    coverage: HashMap<String, &'a SalesProcurementCoverageLine>,
+}
+
+impl<'a> DraftEditContext<'a> {
+    /// 建立索引。
+    ///
+    /// # 错误
+    /// 草稿商品行缺少销售稳定行时返回错误。
+    fn new(
+        existing: &'a [PurchaseOrderSubmissionLine],
+        coverage_lines: &'a [SalesProcurementCoverageLine],
+    ) -> Result<Self, DraftLineEditViolation> {
+        let existing = existing
+            .iter()
+            .filter(|line| line.line_type == PurchaseLineType::ItemService)
+            .map(|line| {
+                let line_id = line
+                    .sales_order_line_id
+                    .as_ref()
+                    .map(ToString::to_string)
+                    .ok_or(DraftLineEditViolation::MissingSalesStableLine)?;
+                Ok((line_id, line))
+            })
+            .collect::<Result<HashMap<_, _>, _>>()?;
+        let coverage = coverage_lines
+            .iter()
+            .map(|line| (line.revision_line.sales_order_line_id.to_string(), line))
+            .collect::<HashMap<_, _>>();
+        Ok(Self { existing, coverage })
+    }
+
+    /// 逐行校验请求行，返回保留的稳定销售行。
+    ///
+    /// # 错误
+    /// 重复、改写、数量非法或超出可采购上限时返回错误。
+    fn check_requested(
+        &self,
+        requested: &[&DraftLineEdit],
+    ) -> Result<HashSet<String>, DraftLineEditViolation> {
+        let mut seen = HashSet::new();
+        for requested_line in requested {
+            let stable_id = normalized_line_id(requested_line.sales_order_line_id.as_deref())?;
+            if !seen.insert(stable_id.clone()) {
+                return Err(DraftLineEditViolation::DuplicateSalesLine);
+            }
+            let old_line = self.existing.get(&stable_id).ok_or(DraftLineEditViolation::RewrittenSalesLine)?;
+            old_line.ensure_source_references_unchanged(requested_line)?;
+            let quantity = parse_required_quantity(
+                requested_line.quantity.as_deref(),
+                DraftLineEditViolation::MissingQuantity,
+            )?;
+            let allocated = parse_required_quantity(
+                requested_line.allocated_quantity.as_deref(),
+                DraftLineEditViolation::MissingAllocatedQuantity,
+            )?;
+            if quantity != allocated {
+                return Err(DraftLineEditViolation::QuantityAllocationMismatch);
+            }
+            if quantity.to_decimal() > self.capacity(&stable_id, old_line)? {
+                return Err(DraftLineEditViolation::ExceedsAvailableQuantity);
+            }
+        }
+        Ok(seen)
+    }
+
+    /// 本行可采购上限：当前目标减去其他来源覆盖，不小于零。
+    ///
+    /// # 错误
+    /// 当前销售行已移除或草稿行缺少原分配数量时返回错误。
+    fn capacity(
+        &self,
+        stable_id: &str,
+        old_line: &PurchaseOrderSubmissionLine,
+    ) -> Result<Decimal, DraftLineEditViolation> {
+        let old_allocated =
+            old_line.allocated_quantity.ok_or(DraftLineEditViolation::MissingOriginalAllocatedQuantity)?;
+        let current = self.coverage.get(stable_id).ok_or(DraftLineEditViolation::SourceLineRemoved)?;
+        let summary = current.summary;
+        let capacity = summary.total_quantity.to_decimal() - summary.covered_quantity.to_decimal()
+            + old_allocated.to_decimal();
+        Ok(capacity.max(Decimal::ZERO))
+    }
+}
+
+/// 只保留商品/服务行编辑。
+fn item_edits(requested: &[DraftLineEdit]) -> Vec<&DraftLineEdit> {
+    requested.iter().filter(|line| line.line_type == PurchaseLineType::ItemService).collect()
 }
 
 /// 规范化必填销售稳定行 ID。
@@ -230,7 +321,9 @@ mod tests {
     };
     use erp_core::money::{Quantity, Rate, UnitPrice};
 
-    use super::{DraftLineEdit, DraftLineEditViolation, validate_draft_line_edits};
+    use super::{
+        DraftLineEdit, DraftLineEditViolation, validate_draft_line_edits, validate_rebased_draft_line_edits,
+    };
     use crate::entity::facts::{
         FactIdentity, ProductKind, SalesGoodsLineFact as SalesOrderGoodsServiceLineRevision,
         SalesLineType as LineType, SalesRevisionLineFact as SalesOrderRevisionLine,
@@ -329,6 +422,7 @@ mod tests {
                 sku_id: SkuId::new("sku-1"),
                 sku_revision_id: SkuRevisionId::new("skur-1"),
                 fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
+                service_region: None,
                 quantity: total,
                 base_unit_code: "件".to_string(),
             },
@@ -571,5 +665,72 @@ mod tests {
             edit("sol-2", Some("1"), Some("1"), "sku-2", "sorl-2", None),
         ];
         assert!(validate_draft_line_edits(&requested, &existing, &coverage).is_ok());
+    }
+
+    /// 构造目标与覆盖任意的覆盖行，用于销售减量后的超出场景。
+    fn coverage_with(stable_line_id: &str, total: &str, covered: &str) -> SalesProcurementCoverageLine {
+        let mut line = coverage_line(stable_line_id, "0");
+        line.goods_line.quantity = Quantity::from_str(total).unwrap();
+        line.summary = ProcurementCoverageSummary::new(
+            Quantity::from_str(total).unwrap(),
+            Quantity::from_str(covered).unwrap(),
+        )
+        .unwrap();
+        line
+    }
+
+    /// 销售减量后草稿上限为目标减去其他来源覆盖，保持原量会被拒绝。
+    #[test]
+    fn rebased_draft_must_absorb_excess() {
+        let existing = vec![draft_line("sol-1", "6", "sku-1", "old-1", None)];
+        let coverage = vec![coverage_with("sol-1", "8", "10")];
+
+        let keep = validate_rebased_draft_line_edits(
+            &[edit("sol-1", Some("6"), Some("6"), "sku-1", "old-1", None)],
+            &existing,
+            &coverage,
+        );
+        let reduce = validate_rebased_draft_line_edits(
+            &[edit("sol-1", Some("4"), Some("4"), "sku-1", "old-1", None)],
+            &existing,
+            &coverage,
+        );
+
+        assert_eq!(keep, Err(DraftLineEditViolation::ExceedsAvailableQuantity));
+        assert_eq!(reduce, Ok(()));
+    }
+
+    /// 刷新时可删除新版本下已无可采购数量的行，不能删除仍可采购的行。
+    #[test]
+    fn rebased_draft_removes_only_exhausted_lines() {
+        let existing = vec![
+            draft_line("sol-1", "5", "sku-1", "old-1", None),
+            draft_line("sol-2", "5", "sku-2", "old-2", None),
+        ];
+        let zeroed = vec![coverage_with("sol-1", "0", "5"), coverage_with("sol-2", "10", "5")];
+        let purchasable = vec![coverage_with("sol-1", "10", "5"), coverage_with("sol-2", "10", "5")];
+        let keep_second = [edit("sol-2", Some("5"), Some("5"), "sku-2", "old-2", None)];
+
+        assert_eq!(validate_rebased_draft_line_edits(&keep_second, &existing, &zeroed), Ok(()));
+        assert_eq!(
+            validate_rebased_draft_line_edits(&keep_second, &existing, &purchasable),
+            Err(DraftLineEditViolation::RemovedLineStillPurchasable)
+        );
+        assert_eq!(
+            validate_draft_line_edits(&keep_second, &existing, &zeroed),
+            Err(DraftLineEditViolation::SourceLineCountChanged)
+        );
+    }
+
+    /// 全部行都已无可采购数量时提示作废。
+    #[test]
+    fn rebased_draft_without_lines_must_be_voided() {
+        let existing = vec![draft_line("sol-1", "5", "sku-1", "old-1", None)];
+        let coverage = vec![coverage_with("sol-1", "0", "5")];
+
+        assert_eq!(
+            validate_rebased_draft_line_edits(&[], &existing, &coverage),
+            Err(DraftLineEditViolation::NoPurchasableLine)
+        );
     }
 }

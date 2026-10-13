@@ -18,8 +18,19 @@ import { FieldGroup } from "@/components/ui/field"
 import { SubmissionRouteConfirmation } from "@/features/approval-workflow/components/submission-route-confirmation"
 import type { DocumentApprovalView } from "@/features/approval-workflow/types"
 import type { PurchaseChangeDraft } from "../api/purchase-change-draft"
+import type { PurchaseDeliveryLineOption } from "../api/purchase-delivery-options"
 import type { SubmitPurchaseChangeInput } from "../api/purchase-order-commands"
-import { useSubmitPurchaseChangeMutation } from "../hooks/queries"
+import { PurchaseDeliveryAllocationEditor } from "./purchase-delivery-allocation-editor"
+import {
+    usePurchaseDeliveryOptionsQuery,
+    useSubmitPurchaseChangeMutation,
+} from "../hooks/queries"
+import {
+    afterDueDates,
+    editableDeliveryRows,
+    positiveDeliveryRows,
+    removedDeliveryRows,
+} from "../lib/delivery-adjustment"
 import {
     usePurchaseChangeDraftQuery,
     usePurchaseChangeSubmissionQuery,
@@ -58,11 +69,21 @@ function decimalWithin(
     }
 }
 
+type DeliveryOptions = ReadonlyMap<string, PurchaseDeliveryLineOption>
+
+const deliveryRowSchema = z.object({
+    recipient: z.string(),
+    phone: z.string(),
+    address: z.string(),
+    quantity: z.string(),
+})
+
 const lineSchema = z
     .object({
         lineKey: z.string().min(1),
         lineType: z.enum(["ITEM_SERVICE", "LOGISTICS_FEE"]),
-        deliveryQuantities: z.array(z.string()),
+        deliveryRows: z.array(deliveryRowSchema),
+        expectedDeliveryDate: z.string(),
         quantity: z.string(),
         unitCostGross: z.string(),
         inputTaxRate: z
@@ -74,16 +95,17 @@ const lineSchema = z
         grossAmount: z.string(),
     })
     .superRefine((line, context) => {
-        if (line.deliveryQuantities.length > 0) {
+        if (line.deliveryRows.length > 0) {
+            const quantities = line.deliveryRows.map(
+                (row) => row.quantity.trim() || "0",
+            )
             try {
-                const total = sumFixed(line.deliveryQuantities, {
+                const total = sumFixed(quantities, {
                     maxScale: 6,
                     outputScale: 6,
                 })
                 if (
-                    line.deliveryQuantities.some(
-                        (value) => !decimalWithin(value, "zero"),
-                    ) ||
+                    quantities.some((value) => !decimalWithin(value, "zero")) ||
                     compareDecimal(total, line.quantity, 6) !== 0
                 )
                     throw new Error()
@@ -122,20 +144,35 @@ const schema = z.object({
     lines: z.array(lineSchema).min(1, "采购明细不能为空"),
 })
 
-function draftFormValues(draft: PurchaseChangeDraft) {
+/** 行可调整的交付安排范围；仍在销售当前版本中的商品行才有。 */
+function lineOption(
+    line: PurchaseChangeDraft["lines"][number],
+    options: DeliveryOptions,
+) {
+    if (line.line_type !== "ITEM_SERVICE" || !line.sales_order_line_id)
+        return undefined
+    return options.get(line.sales_order_line_id)
+}
+
+function draftFormValues(draft: PurchaseChangeDraft, options: DeliveryOptions) {
     return {
         paymentTermCode: draft.payment_term_code,
-        lines: draft.lines.map((line, index) => ({
-            lineKey: draft.line_keys[index],
-            lineType: line.line_type,
-            quantity: line.quantity ?? "",
-            unitCostGross: line.unit_cost_gross ?? "",
-            deliveryQuantities: (line.delivery_allocations ?? []).map(
-                (row) => row.quantity,
-            ),
-            inputTaxRate: line.input_tax_rate ?? "0",
-            grossAmount: line.gross_amount ?? "",
-        })),
+        lines: draft.lines.map((line, index) => {
+            const option = lineOption(line, options)
+            const current = line.delivery_allocations ?? []
+            return {
+                lineKey: draft.line_keys[index],
+                lineType: line.line_type,
+                quantity: line.quantity ?? "",
+                unitCostGross: line.unit_cost_gross ?? "",
+                deliveryRows: option?.requiresAddresses
+                    ? editableDeliveryRows(option, current)
+                    : current,
+                expectedDeliveryDate: line.expected_delivery_date ?? "",
+                inputTaxRate: line.input_tax_rate ?? "0",
+                grossAmount: line.gross_amount ?? "",
+            }
+        }),
     }
 }
 
@@ -156,6 +193,17 @@ export function PurchaseChangeOrderEditDialog({
     onResult?: (result: PurchaseOrderDetailResult) => void
 }) {
     const query = usePurchaseChangeDraftQuery(changeOrderId, open)
+    const optionsQuery = usePurchaseDeliveryOptionsQuery(purchaseOrderId, open)
+    const options = React.useMemo<DeliveryOptions>(
+        () =>
+            new Map(
+                (optionsQuery.data ?? []).map((option) => [
+                    option.salesOrderLineId,
+                    option,
+                ]),
+            ),
+        [optionsQuery.data],
+    )
     const [busy, setBusy] = React.useState(false)
     const busyRef = React.useRef(false)
     const changeBusy = React.useCallback((next: boolean) => {
@@ -190,7 +238,7 @@ export function PurchaseChangeOrderEditDialog({
                         保留原变更单与销售关联，修改目标内容后重新提交审批。
                     </DialogDescription>
                 </DialogHeader>
-                {query.isPending ? (
+                {query.isPending || optionsQuery.isPending ? (
                     <p role="status" className="text-sm text-muted-foreground">
                         正在读取原变更内容…
                     </p>
@@ -216,6 +264,8 @@ export function PurchaseChangeOrderEditDialog({
                     <PurchaseChangeEditForm
                         key={changeOrderId}
                         draft={draft}
+                        options={options}
+                        optionsUnavailable={optionsQuery.isError}
                         id={id}
                         purchaseOrderId={purchaseOrderId}
                         changeOrderId={changeOrderId}
@@ -232,6 +282,8 @@ export function PurchaseChangeOrderEditDialog({
 
 function PurchaseChangeEditForm({
     draft,
+    options,
+    optionsUnavailable,
     id,
     purchaseOrderId,
     changeOrderId,
@@ -241,6 +293,8 @@ function PurchaseChangeEditForm({
     onResult,
 }: {
     draft: PurchaseChangeDraft
+    options: DeliveryOptions
+    optionsUnavailable: boolean
     id: string
     purchaseOrderId: string
     changeOrderId: string
@@ -256,7 +310,10 @@ function PurchaseChangeEditForm({
     const inFlight = React.useRef(false)
     const ledger = React.useMemo(() => new FormalCommandKeyLedger(), [])
     const slot = `edit-purchase-change:${changeOrderId}`
-    const defaults = React.useMemo(() => draftFormValues(draft), [draft])
+    const defaults = React.useMemo(
+        () => draftFormValues(draft, options),
+        [draft, options],
+    )
     const appliedDefaults = React.useRef(defaults)
     const paymentOptions = React.useMemo(
         () =>
@@ -388,15 +445,12 @@ function PurchaseChangeEditForm({
                     : {
                           ...line,
                           quantity: edit.quantity.trim(),
-                          delivery_allocations: line.delivery_allocations
-                              ?.map((row, index) => ({
-                                  ...row,
-                                  quantity: edit.deliveryQuantities[index],
-                              }))
-                              .filter(
-                                  (row) =>
-                                      compareDecimal(row.quantity, "0", 6) > 0,
-                              ),
+                          expected_delivery_date:
+                              edit.expectedDeliveryDate.trim() ||
+                              line.expected_delivery_date,
+                          delivery_allocations: edit.deliveryRows.length
+                              ? positiveDeliveryRows(edit.deliveryRows)
+                              : line.delivery_allocations,
                           allocated_quantity: edit.quantity.trim(),
                           unit_cost_gross: edit.unitCostGross.trim(),
                           input_tax_rate: edit.inputTaxRate.trim(),
@@ -433,6 +487,86 @@ function PurchaseChangeEditForm({
         }
     }, [defaults, form, mutation.isPending, unknown])
     const disabled = mutation.isPending || unknown
+    /** 商品行的预计交付日与收件分配；销售当前版本已移除的行只读展示。 */
+    const renderLineDelivery = (index: number, prefix: string) => {
+        const original = draft.lines[index]
+        if (original.line_type !== "ITEM_SERVICE") return null
+        const option = lineOption(original, options)
+        const current = original.delivery_allocations ?? []
+        return (
+            <div className="space-y-3">
+                {option ? (
+                    <form.AppField
+                        name={`lines[${index}].expectedDeliveryDate`}
+                    >
+                        {(field) => (
+                            <field.DateField
+                                id={`${prefix}-expected-date`}
+                                label="预计交付日"
+                                description={`不晚于销售履约期限 ${option.salesDueDate}`}
+                                clearable={false}
+                                disabledDates={afterDueDates(
+                                    option.salesDueDate,
+                                )}
+                                disabled={disabled}
+                            />
+                        )}
+                    </form.AppField>
+                ) : (
+                    <p className="text-xs text-muted-foreground">
+                        预计交付日：{original.expected_delivery_date ?? "—"}
+                    </p>
+                )}
+                {option?.requiresAddresses ? (
+                    <form.Subscribe
+                        selector={(state) =>
+                            state.values.lines[index]?.quantity
+                        }
+                    >
+                        {(quantity) => (
+                            <form.AppField
+                                name={`lines[${index}].deliveryRows`}
+                            >
+                                {(field) => (
+                                    <PurchaseDeliveryAllocationEditor
+                                        id={`${prefix}-delivery`}
+                                        option={option}
+                                        rows={field.state.value}
+                                        removed={removedDeliveryRows(
+                                            option,
+                                            current,
+                                        )}
+                                        quantity={quantity ?? ""}
+                                        unit={
+                                            original.base_unit_code ?? undefined
+                                        }
+                                        disabled={disabled}
+                                        onChange={field.handleChange}
+                                    />
+                                )}
+                            </form.AppField>
+                        )}
+                    </form.Subscribe>
+                ) : current.length ? (
+                    <div className="space-y-1 text-xs text-muted-foreground">
+                        <p>
+                            {optionsUnavailable
+                                ? "暂时读取不到销售当前收件资料，本次不可调整收件分配："
+                                : "收件分配："}
+                        </p>
+                        {current.map((row) => (
+                            <p
+                                key={`${row.recipient}-${row.phone}-${row.address}`}
+                            >
+                                {row.recipient} · {row.phone} · {row.address} ·{" "}
+                                {row.quantity}
+                            </p>
+                        ))}
+                    </div>
+                ) : null}
+            </div>
+        )
+    }
 
     return (
         <form.AppForm>
@@ -480,39 +614,7 @@ function PurchaseChangeEditForm({
                                         {original.specification}
                                     </p>
                                 ) : null}
-                                {original.delivery_allocations?.length ? (
-                                    <div className="space-y-3">
-                                        <h4 className="text-sm font-medium">
-                                            交付安排
-                                        </h4>
-                                        {original.delivery_allocations.map(
-                                            (row, addressIndex) => (
-                                                <form.AppField
-                                                    key={addressIndex}
-                                                    name={`lines[${index}].deliveryQuantities[${addressIndex}]`}
-                                                >
-                                                    {(field) => (
-                                                        <div className="space-y-1 text-xs">
-                                                            <p>
-                                                                {row.recipient}{" "}
-                                                                · {row.phone} ·{" "}
-                                                                {row.address}
-                                                            </p>
-                                                            <field.TextField
-                                                                id={`${prefix}-delivery-${addressIndex}`}
-                                                                label={`交付数量（${original.base_unit_code ?? ""}）`}
-                                                                inputMode="decimal"
-                                                                disabled={
-                                                                    disabled
-                                                                }
-                                                            />
-                                                        </div>
-                                                    )}
-                                                </form.AppField>
-                                            ),
-                                        )}
-                                    </div>
-                                ) : null}
+                                {renderLineDelivery(index, prefix)}
                                 <FieldGroup className="grid gap-4 sm:grid-cols-3">
                                     {line.lineType === "ITEM_SERVICE" ? (
                                         <>

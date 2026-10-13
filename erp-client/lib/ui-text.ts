@@ -180,3 +180,17 @@ export const documentText = {
     printFooter: "此单据为系统数据的打印件",
     effectiveVersionNote: "请以系统当前有效版本为准",
 } as const
+
+// ─── 销售变更对采购的影响（第一期 §6.3） ─────────────────────────────────────
+
+export const purchaseSourceUpdateText = {
+    title: "采购依据待更新",
+    maintain: "登记维持原采购",
+    paymentPaused: "暂停付款",
+    noPurchasePermission: "当前账号没有采购单查看权限，看不到具体采购单。",
+    completed: "采购处理完成",
+    awaitingSubmission: "已修改，待提交审批",
+    awaitingSubmissionTitle: "已按新销售版本修改，待提交审批",
+    awaitingSubmissionDescription:
+        "本采购已按来源销售的新版本修改。提交审批后，采购依据更新才算处理完成。",
+} as const

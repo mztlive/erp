@@ -420,6 +420,13 @@ const FIXED_TASK_ROUTES: &[FixedRoute] = &[
         "供给分配任务业务对象未注册",
     ),
     (
+        WorkItemType::PurchaseSourceUpdate,
+        &["purchase_order"],
+        "purchase_source_update",
+        "W08",
+        "采购依据更新任务业务对象未注册",
+    ),
+    (
         WorkItemType::FulfillmentOperation,
         &["purchase_receipt", "delivery", "electronic_delivery", "service_fulfillment"],
         "fulfillment_operation",

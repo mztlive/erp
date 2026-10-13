@@ -464,6 +464,8 @@ mod tests {
             quantity: Some("2".into()),
             unit_cost_gross: None,
             input_tax_rate: None,
+            expected_delivery_date: None,
+            delivery_allocations: None,
         };
         let requested =
             SavePurchaseOrderLinePatch::resolve_all(&[patch], std::slice::from_ref(&draft)).unwrap();
@@ -476,6 +478,9 @@ mod tests {
         assert_eq!(inputs[0].supplier_offering_source, Some(offering_source()));
         assert_eq!(inputs[0].delivery_allocations, draft.delivery_allocations);
         inputs[0].delivery_allocations[0].quantity = Quantity::from_str("2").unwrap();
+        let requested = inputs[0].delivery_allocations.clone();
+        inherit_submission_sources(&mut inputs, std::slice::from_ref(&draft)).unwrap();
+        assert_eq!(inputs[0].delivery_allocations, requested);
         inherit_revision_sources(&mut inputs, std::slice::from_ref(&revision)).unwrap();
         let mut wrong_revision = inputs.clone();
         wrong_revision[0].sku_revision_id = Some(erp_core::ids::SkuRevisionId::new("foreign-version"));

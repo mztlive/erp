@@ -41,7 +41,6 @@ use super::super::payment_subject::load_payment_subject;
 use super::super::procurement_task_sync::{
     load_owned_open_procurement_task, sync_procurement_tasks_for_sales_order,
 };
-use super::super::source_guard::ensure_sources_current;
 use super::super::sourcing_create::sequence::PurchaseCreationEventSequence;
 use super::supplier::CreationBasisSupplierAdapter;
 use super::{procurement_quantity_changed, validate_requested_quantities};
@@ -251,7 +250,6 @@ async fn create_from_basis_apply(
     )
     .await?;
     let mut order = load_effective_sales_order(db, command.sales_order_id, executor).await?;
-    ensure_sources_current(db, &order, executor).await?;
     let groups = basis_groups_for_order(db, &order, task.responsibility_scope_ids(), executor).await?;
     let selected = find_requested_group(
         &sales_order_basis_fact(&order),

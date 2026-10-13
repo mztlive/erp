@@ -76,11 +76,7 @@ export function RelatedLanes({
                 lane="purchase"
                 count={order.related.purchaseOrders}
                 status={progress.label}
-                progressDetail={
-                    progress.sourceChanged
-                        ? `销售总数量 ${progress.salesQuantity} · 当前版本已覆盖 ${progress.coveredQuantity} · 待覆盖 ${progress.remainingQuantity}`
-                        : `销售总数量 ${progress.salesQuantity} · 已覆盖 ${progress.coveredQuantity} · 剩余 ${progress.remainingQuantity}`
-                }
+                progressDetail={`销售总数量 ${progress.salesQuantity} · 已覆盖 ${progress.coveredQuantity} · 剩余 ${progress.remainingQuantity}`}
                 progressTestId="sales-order-procurement-progress"
             />,
         )

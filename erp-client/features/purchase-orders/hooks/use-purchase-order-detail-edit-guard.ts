@@ -5,6 +5,7 @@ import * as React from "react"
 import type { PurchaseOrderCenterView } from "@/features/purchase-orders/types"
 import type { PurchaseOrderDetailMode } from "@/features/purchase-orders/pages/purchase-order-detail-helpers"
 import type { PurchaseOrderDetailLineEdits } from "@/features/purchase-orders/hooks/use-purchase-order-detail-edit-actions"
+import { draftLinesDirty } from "@/features/purchase-orders/lib/draft-line-payload"
 
 type UsePurchaseOrderDetailEditGuardInput = {
     mode: PurchaseOrderDetailMode
@@ -27,21 +28,12 @@ export function usePurchaseOrderDetailEditGuard({
     lineEdits,
     onSave,
 }: UsePurchaseOrderDetailEditGuardInput) {
-    // 编辑态脏检测：行级数量/单价/税率或付款条件与当前内容不一致
+    // 编辑态脏检测：行级数量/单价/税率/交付安排或付款条件与当前内容不一致
     const editDirty = React.useMemo(() => {
         if (mode !== "edit" || !order) return false
         if (paymentTermCode !== order.header.paymentTermCode) return true
         if (note.trim()) return true
-        return order.currentContent.lines.some((line) => {
-            const edit = lineEdits[line.lineId]
-            if (!edit) return false
-            return (
-                (edit.quantity ?? line.quantity) !== line.quantity ||
-                (edit.unitCostGross ?? line.unitCostGross) !==
-                    line.unitCostGross ||
-                edit.inputTaxRate !== line.inputTaxRate
-            )
-        })
+        return draftLinesDirty(order, lineEdits)
     }, [paymentTermCode, note, lineEdits, mode, order])
 
     // 编辑态刷新/关页守卫

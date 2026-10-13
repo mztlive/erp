@@ -4,7 +4,6 @@ mod approval_query;
 pub mod dto;
 mod evidence;
 mod procurement;
-pub use procurement::load_current_procurement_coverage_for_sync;
 mod query;
 mod scope;
 pub use scope::{SalesListParams, SalesListView};
