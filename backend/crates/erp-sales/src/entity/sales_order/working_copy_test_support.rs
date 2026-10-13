@@ -45,7 +45,7 @@ fn goods_line() -> GoodsLineFields {
     }
 }
 
-pub(super) fn line_data(line_no: u32) -> SalesOrderWorkingCopyLineData {
+pub(crate) fn line_data(line_no: u32) -> SalesOrderWorkingCopyLineData {
     SalesOrderWorkingCopyLineData {
         sales_order_line_id: SalesOrderLineId::new(format!("line-{line_no}")),
         line_no,

@@ -39,7 +39,7 @@ pub mod types;
 pub mod working_copy;
 mod working_copy_line;
 #[cfg(test)]
-mod working_copy_test_support;
+pub(crate) mod working_copy_test_support;
 mod working_copy_types;
 
 pub use closure::{
