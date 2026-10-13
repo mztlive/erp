@@ -4,8 +4,6 @@ import type { ProductFields } from "@/features/master-data/api/types-product"
 
 export type SellableItemFields = Readonly<{
     sku: string
-    /** 公司含税销售参考价；供应商成本独立维护。 */
-    factoryPriceGross?: string
     salesVisiblePriceGross: string
     bulkPriceGross?: string
     bulkMinQuantity?: string
@@ -42,7 +40,6 @@ export type VoucherCategoryFields = Readonly<{
     baseUnitCode?: string
     baseUnit?: string
     barcode?: string
-    factoryPriceGross?: string
     salesVisiblePriceGross?: string
     bulkPriceGross?: string
     bulkMinQuantity?: string

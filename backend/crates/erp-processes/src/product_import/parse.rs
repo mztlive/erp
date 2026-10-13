@@ -7,7 +7,6 @@ use erp_catalog::{PRODUCT_IMPORT_HEADERS, PRODUCT_IMPORT_SHEET_NAME, ensure_prod
 use regex::Regex;
 use zip::ZipArchive;
 
-use super::identity::FACTORY_PRICE_HEADER;
 use crate::{Error, Result};
 
 /// 解析后的报价表。
@@ -47,13 +46,12 @@ pub fn parse_product_quote_xlsx(bytes: &[u8]) -> Result<ParsedProductSheet> {
     let shared = read_shared_strings(&mut archive)?;
     let sheet_path = locate_internal_sheet(&mut archive)?;
     let sheet_xml = read_zip_text(&mut archive, &sheet_path)?;
-    let mut rows = parse_sheet_rows(&sheet_xml, &shared)?;
+    let rows = parse_sheet_rows(&sheet_xml, &shared)?;
     if rows.is_empty() {
         return Err(Error::ValidationError("模板没有可导入的数据行".into()));
     }
     let headers = &rows[0].cells;
     ensure_product_import_headers(headers).map_err(Error::from)?;
-    retain_optional_factory_price(&mut rows);
     let data_rows = rows.into_iter().skip(1).filter(|row| row_has_content(&row.cells)).collect::<Vec<_>>();
     if data_rows.is_empty() {
         return Err(Error::ValidationError("模板没有可导入的数据行".into()));
@@ -67,18 +65,6 @@ pub fn parse_product_quote_xlsx(bytes: &[u8]) -> Result<ParsedProductSheet> {
         rows: data_rows,
         image_targets,
     })
-}
-
-/// 只有第 25 列标题明确匹配出厂价时保留该列；未知附加列沿用旧模板忽略规则。
-fn retain_optional_factory_price(rows: &mut [ParsedProductRow]) {
-    let has_factory_price = rows
-        .first()
-        .and_then(|row| row.cells.get(PRODUCT_IMPORT_HEADERS.len()))
-        .is_some_and(|header| header.trim() == FACTORY_PRICE_HEADER);
-    let width = PRODUCT_IMPORT_HEADERS.len() + usize::from(has_factory_price);
-    for row in rows {
-        row.cells.truncate(width);
-    }
 }
 
 fn row_has_content(cells: &[String]) -> bool {
@@ -130,7 +116,7 @@ fn read_shared_strings(archive: &mut ZipArchive<Cursor<&[u8]>>) -> Result<Vec<St
     Ok(shared)
 }
 
-/// 读取原 24 列及可选第 25 列；附加价格标题由调用方确认后再保留到数据行。
+/// 只读取模板 24 列；模板之后的附加列（含旧版出厂价列）一律忽略。
 fn parse_sheet_rows(xml: &str, shared: &[String]) -> Result<Vec<ParsedProductRow>> {
     let cell_re = Regex::new(r#"<c r="([A-Z]+)(\d+)"([^>]*)>([\s\S]*?)</c>"#).expect("cell regex");
     let mut by_row: HashMap<u32, HashMap<u32, String>> = HashMap::new();
@@ -150,7 +136,7 @@ fn parse_sheet_rows(xml: &str, shared: &[String]) -> Result<Vec<ParsedProductRow
     Ok(rows
         .into_iter()
         .map(|(row_number, cols)| {
-            let column_count = PRODUCT_IMPORT_HEADERS.len() + 1;
+            let column_count = PRODUCT_IMPORT_HEADERS.len();
             let width = u32::try_from(column_count).expect("固定报价模板列数不超过 u32");
             let mut cells = Vec::with_capacity(column_count);
             for col in 1..=width {
@@ -303,11 +289,10 @@ fn unescape_xml(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use erp_catalog::PRODUCT_IMPORT_HEADERS;
     use erp_catalog::entity::catalog::product_import::dispimg_id;
 
-    use super::{
-        FACTORY_PRICE_HEADER, cell_text, column_index, parse_sheet_rows, retain_optional_factory_price,
-    };
+    use super::{cell_text, column_index, parse_sheet_rows};
     use crate::product_import::identity::normalize_import_row;
 
     #[test]
@@ -376,24 +361,24 @@ mod tests {
         assert_eq!(row3.cells[8], "名称B");
     }
 
-    /// 第 25 列只有指定含税出厂价标题才生效，未知附加列与原 24 列都不会填出厂价。
+    /// 旧版报价表第 25 列（含出厂价列）只被忽略，不影响原 24 列取价。
     #[test]
-    fn factory_price_requires_the_named_optional_column() {
-        for (header, expected_price) in [("", None), ("备注", None), (FACTORY_PRICE_HEADER, Some("32.00"))]
-        {
+    fn columns_after_the_template_are_ignored() {
+        for header in ["备注", "出厂价（含税）"] {
             let xml = format!(
                 r#"<sheetData>
                 <c r="A1" t="inlineStr"><is><t>产品编码</t></is></c>
                 <c r="Y1" t="inlineStr"><is><t>{header}</t></is></c>
                 <c r="G2" t="inlineStr"><is><t>米</t></is></c>
                 <c r="I2" t="inlineStr"><is><t>东北大米</t></is></c>
+                <c r="M2"><v>40.00</v></c>
                 <c r="Y2"><v>32.00</v></c>
                 </sheetData>"#
             );
-            let mut rows = parse_sheet_rows(&xml, &[]).unwrap();
-            retain_optional_factory_price(&mut rows);
+            let rows = parse_sheet_rows(&xml, &[]).unwrap();
+            assert!(rows.iter().all(|row| row.cells.len() == PRODUCT_IMPORT_HEADERS.len()));
             let row = normalize_import_row(2, &rows[1].cells).unwrap();
-            assert_eq!(row.factory_price.map(|price| price.to_string()).as_deref(), expected_price);
+            assert_eq!(row.sales_price.unwrap().to_string(), "40.00");
         }
     }
 }

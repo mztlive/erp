@@ -1,9 +1,9 @@
 /**
- * 流程: [flow-20] 公司 SKU 四价、数量取价与销售成交快照。
+ * 流程: [flow-20] 公司 SKU 三价、数量取价与销售成交快照。
  * 合同: docs/erp-phase-1.md §4.4.2。
  * 账号: caigou（维护公司 SKU）→ xiaoshou（商品池、草稿、提交）→ caigou（审批）。
  * 独立商品通过真实 API 建档，复用固定分类、品牌、单位和有效供应商；
- * 四价维护、商品池查询、销售数量/手动价格/恢复自动及审批均通过页面办理。
+ * 三价维护、商品池查询、销售数量/手动价格/恢复自动及审批均通过页面办理。
  * 供应商成本与公司销售参考价使用不同数值，验证改公司价不改供给成本。
  */
 import { archiveContractViaUi } from "../helpers/contracts"
@@ -36,7 +36,6 @@ import {
 
 const VISIBLE = { timeout: 20_000 }
 const PRICES = {
-    factory_price_gross: "77.00",
     sales_visible_price_gross: "129.00",
     bulk_price_gross: "119.00",
     bulk_min_quantity: "10",
@@ -308,7 +307,6 @@ async function maintainPrices(
         })
     }
     for (const [label, value] of [
-        ["出厂价", prices.factory_price_gross],
         ["一件代发价", prices.sales_visible_price_gross],
         ["集采价", prices.bulk_price_gross],
         ["集采起订量", prices.bulk_min_quantity],
@@ -322,7 +320,7 @@ async function maintainPrices(
     await expect(dialog).toBeVisible(VISIBLE)
     await dialog
         .locator("#master-data-product-detail-effective-reason")
-        .fill("E2E 维护四档含税销售参考价")
+        .fill("E2E 维护三档含税销售参考价")
     const savePath = `/admin/products/${productId}${uploadImage ? "/with-assets" : ""}`
     const [response] = await Promise.all([
         page.waitForResponse(
@@ -449,7 +447,7 @@ function expectWorkingPrice(
     expect(order.working_copy?.gross_amount).toBe(gross)
 }
 
-test("[flow-20] 四价与供应商编号、数量自动报价、手动保留及销售快照冻结", async ({
+test("[flow-20] 三价与供应商编号、数量自动报价、手动保留及销售快照冻结", async ({
     browser,
 }, testInfo) => {
     test.setTimeout(10 * 60 * 1000)
@@ -470,7 +468,7 @@ test("[flow-20] 四价与供应商编号、数量自动报价、手动保留及�
     expect(selected.supplier_codes.sort()).toEqual(["SUP-DEV-WEEK", "SUP-HZSF"])
     expect(selected.supplier_count).toBe(2)
 
-    await test.step("公司商品池表格、预览和筛选导出展示四价与供应商业务编号", async () => {
+    await test.step("公司商品池表格、预览和筛选导出展示三价与供应商业务编号", async () => {
         await page.goto(
             `/master-data/sellable-items?q=${encodeURIComponent(product.skuNo)}&layout=table`,
         )
@@ -481,7 +479,6 @@ test("[flow-20] 四价与供应商编号、数量自动报价、手动保留及�
         const row = table.getByRole("row").filter({ hasText: product.skuNo })
         await expect(row).toHaveCount(1)
         for (const [label, value] of [
-            ["出厂价（含税）", "77.00"],
             ["一件代发价（含税）", "129.00"],
             ["集采价（含税）", "119.00"],
             ["市场价（含税）", "159.00"],
@@ -497,7 +494,6 @@ test("[flow-20] 四价与供应商编号、数量自动报价、手动保留及�
         })
         await expect(preview).toBeVisible(VISIBLE)
         for (const [label, value] of [
-            ["出厂价", "77.00"],
             ["一件代发价", "129.00"],
             ["集采价", "119.00"],
             ["市场价", "159.00"],
@@ -524,8 +520,6 @@ test("[flow-20] 四价与供应商编号、数量自动报价、手动保留及�
         const csv = await fs.readFile(output, "utf8")
         for (const value of [
             product.skuNo,
-            "出厂价",
-            "77.00",
             "一件代发价",
             "129.00",
             "集采价",
@@ -538,6 +532,7 @@ test("[flow-20] 四价与供应商编号、数量自动报价、手动保留及�
         ]) {
             expect(csv).toContain(value)
         }
+        expect(csv).not.toContain("出厂价")
     })
 
     const customerName = `E2E 四价客户 ${suffix}`
@@ -778,7 +773,6 @@ test("[flow-20] 四价与供应商编号、数量自动报价、手动保留及�
             open_invoiceable_total: "1190.00",
         })
         await maintainPrices(procurementPage, product.productId, {
-            factory_price_gross: "98.00",
             sales_visible_price_gross: "149.00",
             bulk_price_gross: "99.00",
             bulk_min_quantity: "3",

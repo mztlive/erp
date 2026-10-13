@@ -10,7 +10,6 @@ import { SkuThumbnail } from "@/features/sales-orders/components/sku-thumbnail"
 import type { MasterDataListItem } from "@/features/master-data/types"
 
 const REFERENCE_PRICE_COLUMNS = [
-    { id: "factoryPriceGross", label: "出厂价（含税）" },
     { id: "salesVisiblePriceGross", label: "一件代发价（含税）" },
     { id: "bulkPriceGross", label: "集采价（含税）" },
     { id: "marketPrice", label: "市场价（含税）" },

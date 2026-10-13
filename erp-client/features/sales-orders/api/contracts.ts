@@ -200,7 +200,6 @@ export type BackendWorkingCopyLine = {
     delivery_allocations?: SalesDeliveryAllocation[]
     pricing_mode?: "AUTO" | "MANUAL" | null
     reference_prices?: {
-        factory_price_gross?: string | null
         sales_visible_price_gross?: string | null
         bulk_price_gross?: string | null
         bulk_min_quantity?: string | null

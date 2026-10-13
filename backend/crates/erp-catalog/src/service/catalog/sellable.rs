@@ -87,9 +87,6 @@ pub struct SellableSkuView {
     pub base_unit_code: Option<String>,
     /// 基础单位名称。
     pub base_unit_name: Option<String>,
-    /// 公司出厂含税销售参考价（独立维护，非负）。
-    #[serde(default)]
-    pub factory_price_gross: Option<Amount>,
     /// 公司一件代发含税参考价。
     pub sales_visible_price_gross: Amount,
     /// 公司集采含税销售参考价（独立维护，非负）。
@@ -240,7 +237,6 @@ pub fn sellable_sku_page_view(
             base_unit_id: row.base_unit_id,
             base_unit_code: row.base_unit_code,
             base_unit_name: row.base_unit_name,
-            factory_price_gross: row.factory_price_gross,
             sales_visible_price_gross: row.sales_visible_price_gross,
             bulk_price_gross: row.bulk_price_gross,
             bulk_min_quantity: row.bulk_min_quantity,
@@ -270,7 +266,7 @@ mod tests {
     use super::{SellableSkuListParams, sellable_sku_page_view, specification_attribute_views};
     use crate::repository::{SellableSkuFilter, SellableSkuRow};
 
-    /// 商品池投影保留四种独立参考价与起订量，供应商内部身份不对外序列化。
+    /// 商品池投影保留三种独立参考价与起订量，供应商内部身份不对外序列化。
     #[test]
     fn sellable_view_preserves_reference_prices_without_internal_supplier_ids() {
         let row: SellableSkuRow = serde_json::from_value(json!({
@@ -278,7 +274,7 @@ mod tests {
             "sku_revision_id": "rev-1", "sku_revision_no": 1, "sku_no": "SKU-01",
             "product_id": "product-1", "product_no": "P-01", "product_kind": "PHYSICAL",
             "name": "礼盒", "specification_signature": "", "base_unit_id": "unit-1",
-            "factory_price_gross": "70.00", "sales_visible_price_gross": "99.90",
+            "sales_visible_price_gross": "99.90",
             "bulk_price_gross": "80.00", "bulk_min_quantity": "10.000000", "market_price": "129.00",
             "effective_from": "2026-01-01", "supplier_count": 1, "supplier_ids": ["supplier-1"]
         }))
@@ -286,7 +282,6 @@ mod tests {
         let filter = SellableSkuFilter::as_of(BusinessDate::from_ymd(2026, 1, 1).unwrap());
         let page = sellable_sku_page_view(PageResult { items: vec![row], total: 1 }, &filter).unwrap();
         let item = &page.items[0];
-        assert_eq!(item.factory_price_gross, Some(Amount::from_str("70.00").unwrap()));
         assert_eq!(item.sales_visible_price_gross, Amount::from_str("99.90").unwrap());
         assert_eq!(item.bulk_price_gross, Some(Amount::from_str("80.00").unwrap()));
         assert_eq!(item.bulk_min_quantity, Some(Quantity::from_str("10.000000").unwrap()));

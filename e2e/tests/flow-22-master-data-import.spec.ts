@@ -38,7 +38,6 @@ const PRODUCT_HEADERS = [
     "是否自营产品",
     "自营产品库存",
     "商品税率",
-    "出厂价（含税）",
 ]
 const SUPPLIER_HEADERS = [
     "供应商编号",
@@ -96,7 +95,6 @@ type Sku = {
 type SkuRevision = {
     id: string
     sku_id: string
-    factory_price_gross: string | null
     sales_visible_price_gross: string | null
     bulk_price_gross: string | null
     bulk_min_quantity: string | null
@@ -205,7 +203,6 @@ function productRow(input: {
         [16, "59.00"],
         [17, "导入文件内的供应商不会自动建供给"],
         [18, "0000123"],
-        [24, "31.00"],
     ] as const)
         row[index] = value
     return row
@@ -342,7 +339,6 @@ test("[flow-22] 商品报价表分片直传：同 SPU 多 SKU、失败行与重�
     )
     for (const revision of currentRevisions) {
         expect(revision).toMatchObject({
-            factory_price_gross: "31.00",
             sales_visible_price_gross: "49.00",
             bulk_price_gross: "45.00",
             bulk_min_quantity: "10",

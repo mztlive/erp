@@ -103,7 +103,6 @@ export type MasterDataListItem = Readonly<{
         barcode?: string
         baseUnit: string
         productKindLabel: string
-        factoryPriceGross?: string
         salesVisiblePriceGross: string
         bulkPriceGross?: string
         bulkMinQuantity?: string
@@ -179,7 +178,6 @@ export type ProductListSkuSummary = Readonly<{
     skuName: string
     specification: string
     baseUnit: string
-    factoryPriceGross?: string
     salesVisiblePriceGross?: string
     bulkPriceGross?: string
     bulkMinQuantity?: string

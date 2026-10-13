@@ -105,9 +105,6 @@ pub struct SellableSkuRow {
     pub base_unit_code: Option<String>,
     /// 基础单位名称。
     pub base_unit_name: Option<String>,
-    /// 公司出厂含税销售参考价（独立维护，非负）。
-    #[serde(default)]
-    pub factory_price_gross: Option<Amount>,
     /// 公司一件代发含税参考价。
     pub sales_visible_price_gross: Amount,
     /// 公司集采含税销售参考价（独立维护，非负）。

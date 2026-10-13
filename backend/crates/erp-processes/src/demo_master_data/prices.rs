@@ -10,12 +10,11 @@ use crate::{Error, Result};
 /// # 参数
 /// `sku` 为 JSON 中的公司 SKU 输入，不读取供应商成本或起订量。
 /// # 返回
-/// 四价及集采门槛完整、有效时返回空结果。
+/// 三价及集采门槛完整、有效时返回空结果。
 /// # 错误
 /// 任一字段缺失或不大于零时返回包含 SKU 编号的校验错误。
 pub(super) fn validate(sku: &ProductSkuInput) -> Result<()> {
     for (label, value) in [
-        ("出厂价", sku.factory_price_gross.map(|value| value.to_decimal())),
         ("一件代发价", sku.sales_visible_price_gross.map(|value| value.to_decimal())),
         ("集采价", sku.bulk_price_gross.map(|value| value.to_decimal())),
         ("市场价", sku.market_price.map(|value| value.to_decimal())),
@@ -48,7 +47,6 @@ pub(super) fn fill_missing(
         let Some(template) = templates.iter().find(|template| template.sku_no == sku.sku_no) else {
             continue;
         };
-        changed |= fill(&mut sku.factory_price_gross, template.factory_price_gross);
         changed |= fill(&mut sku.sales_visible_price_gross, template.sales_visible_price_gross);
         changed |= fill(&mut sku.bulk_price_gross, template.bulk_price_gross);
         changed |= fill(&mut sku.market_price, template.market_price);
@@ -106,12 +104,10 @@ mod tests {
         sku.name = "人工品名".into();
         sku.main_image_asset_id = Some(FileAssetId::new("manual-image"));
         sku.sales_visible_price_gross = Some("123.45".parse().unwrap());
-        sku.factory_price_gross = None;
         sku.bulk_price_gross = None;
         sku.market_price = None;
         sku.bulk_min_quantity = None;
         let mut expected = sku.clone();
-        expected.factory_price_gross = template.factory_price_gross;
         expected.bulk_price_gross = template.bulk_price_gross;
         expected.market_price = template.market_price;
         expected.bulk_min_quantity = template.bulk_min_quantity;
@@ -126,8 +122,7 @@ mod tests {
         let template = template();
         let mut sku = template.clone();
         sku.sku_id = Some(SkuId::new("sku-id"));
-        sku.factory_price_gross = Some("0".parse().unwrap());
-        sku.bulk_price_gross = Some("66.66".parse().unwrap());
+        sku.bulk_price_gross = Some("0".parse().unwrap());
         sku.market_price = Some("222.22".parse().unwrap());
         sku.bulk_min_quantity = Some("250".parse().unwrap());
         sku.sales_visible_price_gross = None;
@@ -142,7 +137,7 @@ mod tests {
     fn unregistered_or_manual_skus_are_not_filled() {
         let template = template();
         let mut sku = template.clone();
-        sku.factory_price_gross = None;
+        sku.bulk_price_gross = None;
         let mut unregistered = sku.clone();
         unregistered.sku_id = Some(SkuId::new("unregistered"));
         let mut manual = sku.clone();
@@ -157,13 +152,7 @@ mod tests {
     #[test]
     fn seed_rejects_missing_zero_negative_and_invalid_prices_before_generation() {
         let original: Value = serde_json::from_str(include_str!("master-data.json")).unwrap();
-        for field in [
-            "factory_price_gross",
-            "sales_visible_price_gross",
-            "bulk_price_gross",
-            "market_price",
-            "bulk_min_quantity",
-        ] {
+        for field in ["sales_visible_price_gross", "bulk_price_gross", "market_price", "bulk_min_quantity"] {
             for value in [Value::Null, json!("0"), json!("-1"), json!("NaN")] {
                 let mut rows = original.clone();
                 let product = rows

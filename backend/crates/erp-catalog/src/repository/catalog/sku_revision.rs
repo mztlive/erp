@@ -43,9 +43,6 @@ pub struct SkuRevisionRow {
     pub volume_m3: Option<Quantity>,
     /// 修订启停状态。
     pub status: EnableStatus,
-    /// 公司出厂含税销售参考价（独立维护，非负）。
-    #[serde(default)]
-    pub factory_price_gross: Option<Amount>,
     /// 公司一件代发含税销售参考价（Decimal128 定点金额）。
     pub sales_visible_price_gross: Option<Amount>,
     /// 公司集采含税销售参考价（独立维护，非负）。
@@ -390,7 +387,6 @@ pub(super) fn sku_revision_projection() -> Document {
         "weight_kg": 1,
         "volume_m3": 1,
         "status": 1,
-        "factory_price_gross": 1,
         "sales_visible_price_gross": 1,
         "bulk_price_gross": 1,
         "bulk_min_quantity": 1,

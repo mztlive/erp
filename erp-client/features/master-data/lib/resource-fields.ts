@@ -120,7 +120,6 @@ export function buildResourceFields(
         case "sellable-items":
             return {
                 sku: pickField(values, "sku") ?? "",
-                factoryPriceGross: pickField(values, "factoryPriceGross"),
                 salesVisiblePriceGross:
                     pickField(values, "salesVisiblePriceGross") ?? "",
                 bulkPriceGross: pickField(values, "bulkPriceGross"),

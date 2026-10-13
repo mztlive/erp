@@ -38,9 +38,6 @@ pub struct SkuRevisionView {
     pub volume_m3: Option<erp_core::money::Quantity>,
     /// 修订启停状态。
     pub status: EnableStatus,
-    /// 公司出厂含税销售参考价（独立维护，非负）。
-    #[serde(default)]
-    pub factory_price_gross: Option<Amount>,
     /// 公司一件代发含税销售参考价（字符串形态）。
     pub sales_visible_price_gross: Option<Amount>,
     /// 公司集采含税销售参考价（独立维护，非负）。
@@ -82,7 +79,6 @@ impl From<SkuRevision> for SkuRevisionView {
             weight_kg: revision.weight_kg,
             volume_m3: revision.volume_m3,
             status: revision.status,
-            factory_price_gross: revision.factory_price_gross,
             sales_visible_price_gross: revision.sales_visible_price_gross,
             bulk_price_gross: revision.bulk_price_gross,
             bulk_min_quantity: revision.bulk_min_quantity,
@@ -116,7 +112,6 @@ impl From<SkuRevisionRow> for SkuRevisionView {
             weight_kg: row.weight_kg,
             volume_m3: row.volume_m3,
             status: row.status,
-            factory_price_gross: row.factory_price_gross,
             sales_visible_price_gross: row.sales_visible_price_gross,
             bulk_price_gross: row.bulk_price_gross,
             bulk_min_quantity: row.bulk_min_quantity,

@@ -15,8 +15,6 @@ use crate::{Error, Result};
 
 /// SKU 规格维度名：同一产品编码下用规格值区分 SKU。
 pub const SKU_SPEC_NAME: &str = "规格";
-/// 原 24 列模板后允许追加的公司出厂含税参考价列。
-pub(super) const FACTORY_PRICE_HEADER: &str = "出厂价（含税）";
 /// 规格值最大字符数，与规格签名分量上限一致。
 const SKU_SPEC_VALUE_MAX_CHARS: usize = 64;
 
@@ -39,8 +37,6 @@ pub struct NormalizedImportRow {
     pub category_name: String,
     /// 条码。
     pub barcode: Option<String>,
-    /// 公司出厂含税参考价；原模板没有此列时为空。
-    pub factory_price: Option<Amount>,
     /// 公司一件代发含税参考价。
     pub sales_price: Option<Amount>,
     /// 公司集采含税参考价。
@@ -59,7 +55,7 @@ pub struct NormalizedImportRow {
 ///
 /// # 参数
 /// * `row_number` - Excel 行号
-/// * `cells` - 已由模板解析校验的单元格；可选出厂价已按列标题确认
+/// * `cells` - 已由模板解析校验的单元格
 ///
 /// # 返回
 /// 返回规范化后的导入行。
@@ -99,7 +95,6 @@ pub fn normalize_import_row(row_number: u32, cells: &[String]) -> Result<Normali
         brand_name: import_brand_name(cell(5)),
         category_name,
         barcode,
-        factory_price: parse_optional_amount(cell(PRODUCT_IMPORT_HEADERS.len()), FACTORY_PRICE_HEADER)?,
         sales_price: parse_optional_amount(cell(12), PRODUCT_IMPORT_HEADERS[12])?,
         bulk_price: parse_optional_amount(cell(13), PRODUCT_IMPORT_HEADERS[13])?,
         bulk_min_quantity: parse_optional_quantity(cell(14), PRODUCT_IMPORT_HEADERS[14])?,
@@ -282,7 +277,7 @@ mod tests {
         assert_eq!(next_sku_no("FSY-1", &taken), "FSY-1-02");
     }
 
-    /// 原模板只导入公司代发/集采底价与市场价，供应商成本不能补成公司出厂价。
+    /// 原模板只导入公司代发/集采底价与市场价，供应商成本不能补成公司参考价。
     #[test]
     fn original_template_prices_are_independent_from_supplier_costs() {
         let mut cells = vec![String::new(); PRODUCT_IMPORT_HEADERS.len()];
@@ -295,7 +290,6 @@ mod tests {
         cells[14] = "12.5".into();
         cells[16] = "50.00".into();
         let row = normalize_import_row(2, &cells).unwrap();
-        assert!(row.factory_price.is_none());
         assert_eq!(row.sales_price.unwrap().to_string(), "40.00");
         assert_eq!(row.bulk_price.unwrap().to_string(), "38.00");
         assert_eq!(row.bulk_min_quantity.unwrap().to_string(), "12.5");

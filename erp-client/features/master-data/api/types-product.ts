@@ -53,8 +53,6 @@ export type ProductSkuFields = Readonly<{
     mainImagePreviewUrl?: string
     /** SKU 主图已登记文件资产（D05）。 */
     mainImageAssetId?: string
-    /** 出厂价：公司含税销售参考价，独立于供应商成本。 */
-    factoryPriceGross?: string
     /** 一件代发价：公司含税销售参考价，保留原字段映射。 */
     salePrice?: string
     /** 集采价：达到集采起订量后适用的公司含税销售参考价。 */

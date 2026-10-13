@@ -224,12 +224,6 @@ export function mapSkuAsSellable(dto: SellableSkuDto): MasterDataListItem {
         keyFacts: [
             { label: "SKU", value: dto.sku_no },
             {
-                label: "出厂价",
-                value: dto.factory_price_gross
-                    ? `¥${dto.factory_price_gross}`
-                    : "—",
-            },
-            {
                 label: "一件代发价",
                 value: `¥${dto.sales_visible_price_gross}`,
             },
@@ -280,7 +274,6 @@ export function mapSkuAsSellable(dto: SellableSkuDto): MasterDataListItem {
             barcode: dto.barcode ?? undefined,
             baseUnit,
             productKindLabel: kindLabel,
-            factoryPriceGross: dto.factory_price_gross ?? undefined,
             salesVisiblePriceGross: dto.sales_visible_price_gross,
             bulkPriceGross: dto.bulk_price_gross ?? undefined,
             bulkMinQuantity: dto.bulk_min_quantity ?? undefined,

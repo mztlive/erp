@@ -88,7 +88,7 @@ mod tests {
             "sku_id": id, "sku_version": 1, "sku_revision_id": format!("{id}-revision"),
             "sku_revision_no": 1, "sku_no": id, "product_id": "product", "product_no": "P-1",
             "product_kind": "PHYSICAL", "name": "礼盒", "specification_signature": "",
-            "base_unit_id": "unit", "factory_price_gross": "6.00",
+            "base_unit_id": "unit",
             "sales_visible_price_gross": "10.00", "bulk_price_gross": "8.00", "bulk_min_quantity": "10",
             "market_price": "12.00", "effective_from": "2026-01-01", "supplier_count": 1
         })).unwrap()
@@ -103,7 +103,6 @@ mod tests {
         assert_eq!(view.items[0].supplier_codes, vec!["0002"]);
         assert_eq!(view.items[1].supplier_codes, vec!["0001"]);
         let value = serde_json::to_value(&view.items[0]).unwrap();
-        assert_eq!(value["factory_price_gross"], "6.00");
         assert_eq!(value["bulk_price_gross"], "8.00");
         assert!(value.get("supplier_ids").is_none());
     }

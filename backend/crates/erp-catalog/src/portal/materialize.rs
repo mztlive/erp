@@ -268,7 +268,6 @@ fn new_sku(
             source_main_image_asset_id: row.image_asset_id.as_ref().map(FileAssetId::new),
             weight_kg: None,
             volume_m3: None,
-            factory_price_gross: None,
             sales_visible_price_gross: None,
             bulk_price_gross: None,
             bulk_min_quantity: None,
@@ -373,7 +372,6 @@ mod tests {
         assert_eq!(sku.listing_status, ListingStatus::Unlisted);
         assert_ne!(sku.sku_no, "SUPPLIER-CODE");
         assert!(revision.sales_visible_price_gross.is_none());
-        assert!(revision.factory_price_gross.is_none());
         assert!(revision.bulk_price_gross.is_none());
         assert!(revision.market_price.is_none());
         assert_eq!(revision.source_main_image_asset_id.as_ref().map(|id| id.as_ref()), Some("image-1"));

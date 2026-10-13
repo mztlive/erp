@@ -6,12 +6,10 @@ import { Label } from "@/components/ui/label"
 
 type SkuBulkPriceBarProps = {
     canRevise: boolean
-    batchFactoryPrice: string
     batchSalePrice: string
     batchBulkPrice: string
     batchBulkMinQuantity: string
     batchMarketPrice: string
-    setBatchFactoryPrice: (next: string) => void
     setBatchSalePrice: (next: string) => void
     setBatchBulkPrice: (next: string) => void
     setBatchBulkMinQuantity: (next: string) => void
@@ -21,12 +19,10 @@ type SkuBulkPriceBarProps = {
 
 function SkuBulkPriceBar({
     canRevise,
-    batchFactoryPrice,
     batchSalePrice,
     batchBulkPrice,
     batchBulkMinQuantity,
     batchMarketPrice,
-    setBatchFactoryPrice,
     setBatchSalePrice,
     setBatchBulkPrice,
     setBatchBulkMinQuantity,
@@ -34,12 +30,6 @@ function SkuBulkPriceBar({
     onApplyBatchReferencePrices,
 }: SkuBulkPriceBarProps) {
     const fields = [
-        {
-            key: "factory-price",
-            label: "批量出厂价",
-            value: batchFactoryPrice,
-            onChange: setBatchFactoryPrice,
-        },
         {
             key: "sale-price",
             label: "批量一件代发价",
@@ -66,7 +56,7 @@ function SkuBulkPriceBar({
         },
     ]
     return (
-        <div className="grid gap-2 rounded-xl border border-border bg-surface-sunken p-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-2 rounded-xl border border-border bg-surface-sunken p-3 sm:grid-cols-2 lg:grid-cols-5">
             {fields.map((field) => (
                 <div key={field.key} className="space-y-1">
                     <Label

@@ -185,7 +185,6 @@ pub(super) fn sku_inputs_with_main_image(
             main_image_asset_id,
             weight_kg: revision.weight_kg,
             volume_m3: revision.volume_m3,
-            factory_price_gross: revision.factory_price_gross,
             sales_visible_price_gross: revision.sales_visible_price_gross,
             bulk_price_gross: revision.bulk_price_gross,
             bulk_min_quantity: revision.bulk_min_quantity,
@@ -209,7 +208,7 @@ mod tests {
 
     use super::*;
 
-    /// 既有商品补图和新增同 SPU 的 SKU 必须保留现存 SKU 的四价与集采门槛。
+    /// 既有商品补图和新增同 SPU 的 SKU 必须保留现存 SKU 的三价与集采门槛。
     #[test]
     fn image_backfill_keeps_existing_company_price_facts() {
         let sku = Sku::new(
@@ -237,7 +236,6 @@ mod tests {
                 source_main_image_asset_id: None,
                 weight_kg: None,
                 volume_m3: None,
-                factory_price_gross: Some("30.00".parse().unwrap()),
                 sales_visible_price_gross: Some("45.00".parse().unwrap()),
                 bulk_price_gross: Some("40.00".parse().unwrap()),
                 bulk_min_quantity: Some("12".parse().unwrap()),
@@ -253,7 +251,6 @@ mod tests {
             sku_inputs_with_main_image(&[sku], &revisions, Some(FileAssetId::new("image-1"))).unwrap();
         let input = &inputs[0];
         assert_eq!(input.main_image_asset_id.as_ref().unwrap().as_ref(), "image-1");
-        assert_eq!(input.factory_price_gross, revision.factory_price_gross);
         assert_eq!(input.sales_visible_price_gross, revision.sales_visible_price_gross);
         assert_eq!(input.bulk_price_gross, revision.bulk_price_gross);
         assert_eq!(input.bulk_min_quantity, revision.bulk_min_quantity);

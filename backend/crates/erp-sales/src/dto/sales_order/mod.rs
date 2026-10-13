@@ -575,8 +575,6 @@ pub struct WorkingCopyView {
 /// 草稿续编所需的精确 SKU 修订参考价；由跨域查询补齐，不参与成交金额。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct SalesReferencePricesView {
-    /// 出厂含税参考价。
-    pub factory_price_gross: Option<Amount>,
     /// 一件代发含税参考价。
     pub sales_visible_price_gross: Option<Amount>,
     /// 集采含税参考价。

@@ -73,7 +73,6 @@ function useConfirmColumns(onRemove: (id: string) => void, pending: boolean) {
             },
             ...(
                 [
-                    { key: "factoryPriceGross", label: "出厂价（含税）" },
                     {
                         key: "salesVisiblePriceGross",
                         label: "一件代发价（含税）",

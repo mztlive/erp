@@ -53,7 +53,6 @@ export function productChangeSummary(
         if (!before) continue
         const label = sku.name || sku.specLabel || sku.skuNo
         for (const [key, title] of [
-            ["factoryPriceGross", "出厂价"],
             ["salePrice", "一件代发价"],
             ["bulkPriceGross", "集采价"],
             ["bulkMinQuantity", "集采起订量"],

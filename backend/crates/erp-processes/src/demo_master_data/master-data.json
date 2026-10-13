@@ -2648,7 +2648,6 @@
           "name": "山野混合坚果礼盒",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "81.00",
-          "factory_price_gross": "61.00",
           "bulk_price_gross": "73.00",
           "market_price": "101.00",
           "bulk_min_quantity": "20"
@@ -2674,7 +2673,6 @@
           "name": "每日坚果分享装",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "82.00",
-          "factory_price_gross": "62.00",
           "bulk_price_gross": "74.00",
           "market_price": "102.00",
           "bulk_min_quantity": "20"
@@ -2700,7 +2698,6 @@
           "name": "黄油曲奇礼盒",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "83.00",
-          "factory_price_gross": "63.00",
           "bulk_price_gross": "75.00",
           "market_price": "103.00",
           "bulk_min_quantity": "20"
@@ -2726,7 +2723,6 @@
           "name": "混合果干罐装",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "84.00",
-          "factory_price_gross": "64.00",
           "bulk_price_gross": "76.00",
           "market_price": "104.00",
           "bulk_min_quantity": "20"
@@ -2752,7 +2748,6 @@
           "name": "洽果香瓜子礼罐",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "85.00",
-          "factory_price_gross": "65.00",
           "bulk_price_gross": "77.00",
           "market_price": "105.00",
           "bulk_min_quantity": "20"
@@ -2778,7 +2773,6 @@
           "name": "福记酥心糖礼盒",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "86.00",
-          "factory_price_gross": "66.00",
           "bulk_price_gross": "78.00",
           "market_price": "106.00",
           "bulk_min_quantity": "20"
@@ -2804,7 +2798,6 @@
           "name": "旺礼仙贝家庭装",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "87.00",
-          "factory_price_gross": "67.00",
           "bulk_price_gross": "79.00",
           "market_price": "107.00",
           "bulk_min_quantity": "20"
@@ -2830,7 +2823,6 @@
           "name": "金穗调和油",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "88.00",
-          "factory_price_gross": "68.00",
           "bulk_price_gross": "80.00",
           "market_price": "108.00",
           "bulk_min_quantity": "10"
@@ -2856,7 +2848,6 @@
           "name": "鲁味压榨花生油",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "89.00",
-          "factory_price_gross": "69.00",
           "bulk_price_gross": "81.00",
           "market_price": "109.00",
           "bulk_min_quantity": "10"
@@ -2882,7 +2873,6 @@
           "name": "五常稻花香大米",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "90.00",
-          "factory_price_gross": "70.00",
           "bulk_price_gross": "82.00",
           "market_price": "110.00",
           "bulk_min_quantity": "10"
@@ -2908,7 +2898,6 @@
           "name": "有机杂粮礼盒",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "91.00",
-          "factory_price_gross": "71.00",
           "bulk_price_gross": "83.00",
           "market_price": "111.00",
           "bulk_min_quantity": "10"
@@ -2934,7 +2923,6 @@
           "name": "西湖龙井",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "92.00",
-          "factory_price_gross": "72.00",
           "bulk_price_gross": "84.00",
           "market_price": "112.00",
           "bulk_min_quantity": "10"
@@ -2960,7 +2948,6 @@
           "name": "安溪铁观音礼盒",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "93.00",
-          "factory_price_gross": "73.00",
           "bulk_price_gross": "85.00",
           "market_price": "113.00",
           "bulk_min_quantity": "10"
@@ -2986,7 +2973,6 @@
           "name": "普洱熟茶饼",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "94.00",
-          "factory_price_gross": "74.00",
           "bulk_price_gross": "86.00",
           "market_price": "114.00",
           "bulk_min_quantity": "10"
@@ -3012,7 +2998,6 @@
           "name": "洗衣液家庭套装",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "95.00",
-          "factory_price_gross": "75.00",
           "bulk_price_gross": "87.00",
           "market_price": "115.00",
           "bulk_min_quantity": "10"
@@ -3038,7 +3023,6 @@
           "name": "抽纸整箱",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "96.00",
-          "factory_price_gross": "76.00",
           "bulk_price_gross": "88.00",
           "market_price": "116.00",
           "bulk_min_quantity": "10"
@@ -3064,7 +3048,6 @@
           "name": "不锈钢保温杯",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "97.00",
-          "factory_price_gross": "77.00",
           "bulk_price_gross": "89.00",
           "market_price": "117.00",
           "bulk_min_quantity": "10"
@@ -3090,7 +3073,6 @@
           "name": "全棉床品四件套",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "98.00",
-          "factory_price_gross": "78.00",
           "bulk_price_gross": "90.00",
           "market_price": "118.00",
           "bulk_min_quantity": "10"
@@ -3116,7 +3098,6 @@
           "name": "无线蓝牙耳机",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "99.00",
-          "factory_price_gross": "79.00",
           "bulk_price_gross": "91.00",
           "market_price": "119.00",
           "bulk_min_quantity": "10"
@@ -3142,7 +3123,6 @@
           "name": "护眼台灯",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "100.00",
-          "factory_price_gross": "80.00",
           "bulk_price_gross": "92.00",
           "market_price": "120.00",
           "bulk_min_quantity": "10"
@@ -3168,7 +3148,6 @@
           "name": "不粘炒锅",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "101.00",
-          "factory_price_gross": "81.00",
           "bulk_price_gross": "93.00",
           "market_price": "121.00",
           "bulk_min_quantity": "10"
@@ -3194,7 +3173,6 @@
           "name": "特级酱油礼盒",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "102.00",
-          "factory_price_gross": "82.00",
           "bulk_price_gross": "94.00",
           "market_price": "122.00",
           "bulk_min_quantity": "20"
@@ -3220,7 +3198,6 @@
           "name": "特级初榨橄榄油",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "103.00",
-          "factory_price_gross": "83.00",
           "bulk_price_gross": "95.00",
           "market_price": "123.00",
           "bulk_min_quantity": "20"
@@ -3246,7 +3223,6 @@
           "name": "纯牛奶礼箱",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "104.00",
-          "factory_price_gross": "84.00",
           "bulk_price_gross": "96.00",
           "market_price": "124.00",
           "bulk_min_quantity": "20"
@@ -3272,7 +3248,6 @@
           "name": "演示电子兑换码",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "100.00",
-          "factory_price_gross": "70.00",
           "bulk_price_gross": "90.00",
           "market_price": "120.00",
           "bulk_min_quantity": "50"
@@ -3298,7 +3273,6 @@
           "name": "演示上门安装服务",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "100.00",
-          "factory_price_gross": "70.00",
           "bulk_price_gross": "90.00",
           "market_price": "120.00",
           "bulk_min_quantity": "10"
@@ -3323,7 +3297,6 @@
           "sku_no": "DEMO-MD-SKU-28-A",
           "name": "演示福利礼包标准装",
           "base_unit_id": "DEMO-MD-U-SET",
-          "factory_price_gross": "77.00",
           "sales_visible_price_gross": "129.00",
           "bulk_price_gross": "119.00",
           "bulk_min_quantity": "10",
@@ -3346,7 +3319,6 @@
               "attribute_value_code": "轻享装"
             }
           ],
-          "factory_price_gross": "69.00",
           "bulk_price_gross": "89.00",
           "market_price": "129.00",
           "bulk_min_quantity": "10"
@@ -3372,7 +3344,6 @@
           "name": "演示员工福利卡",
           "base_unit_id": "DEMO-MD-U-PIECE",
           "sales_visible_price_gross": "100.00",
-          "factory_price_gross": "90.00",
           "bulk_price_gross": "95.00",
           "market_price": "100.00",
           "bulk_min_quantity": "100"

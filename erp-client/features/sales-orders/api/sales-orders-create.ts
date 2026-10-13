@@ -366,9 +366,6 @@ function mapDraftLines(
             deliveryAllocations: line.delivery_allocations ?? [],
             referencePrices: line.reference_prices
                 ? {
-                      factoryPriceGross:
-                          line.reference_prices.factory_price_gross ??
-                          undefined,
                       salesVisiblePriceGross:
                           line.reference_prices.sales_visible_price_gross ??
                           undefined,

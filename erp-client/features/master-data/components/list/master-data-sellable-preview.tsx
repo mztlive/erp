@@ -19,7 +19,6 @@ export function SellableItemPreviewPanel({ row }: { row: MasterDataListItem }) {
                 </h3>
                 <dl className="grid grid-cols-2 gap-x-5 gap-y-4">
                     {[
-                        { label: "出厂价", value: item.factoryPriceGross },
                         {
                             label: "一件代发价",
                             value: item.salesVisiblePriceGross,

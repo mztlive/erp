@@ -12,7 +12,6 @@ function lineFromPick(
 ): SalesOrderDraftLineInput {
     const base = existing ?? createEmptyLine(nature)
     const referencePrices = {
-        factoryPriceGross: pick.factoryPriceGross,
         salesVisiblePriceGross: pick.salesVisiblePriceGross,
         bulkPriceGross: pick.bulkPriceGross,
         bulkMinQuantity: pick.bulkMinQuantity,

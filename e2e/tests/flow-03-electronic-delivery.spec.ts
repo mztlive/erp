@@ -221,14 +221,9 @@ async function ensureVirtualProduct(page: Page) {
     await chooseComboboxById(page, `${basicId}-brand-combobox`, /福尚云/)
     // SKU 与商品资料同页编辑，使用稳定分区定位。
     await page.locator('#product-section-sku').scrollIntoViewIfNeeded()
-    // SKU 编码/名称/主图改到行内「编辑资料」对话框维护，价格仍在表格行内直接填写。
-    await page.getByRole('button', { name: '编辑资料' }).click()
-    const skuDialog = page.getByRole('dialog', { name: 'SKU 资料' })
-    await expect(skuDialog).toBeVisible({ timeout: 20000 })
-    await skuDialog.getByLabel('默认规格 SKU 编码').fill(VIRTUAL_SKU_NO)
-    await skuDialog.getByLabel('默认规格 SKU 名称').fill(VIRTUAL_PRODUCT_NAME)
-    await skuDialog.getByRole('button', { name: '完成编辑' }).click()
-    await expect(skuDialog).toBeHidden({ timeout: 20000 })
+    // SKU 名称、编码、条码与价格都在 SKU 表格行内直接填写。
+    await page.getByLabel('默认规格 SKU 编码').fill(VIRTUAL_SKU_NO)
+    await page.getByLabel('默认规格 SKU 名称').fill(VIRTUAL_PRODUCT_NAME)
     // 主图在表格行内 tile 上传（启用 SKU 必填）：点行内「选择主图」走文件选择器。
     const imageGroup = page.getByRole('group', { name: /主图/ }).first()
     const [chooser] = await Promise.all([

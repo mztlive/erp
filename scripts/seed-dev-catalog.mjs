@@ -476,7 +476,6 @@ export async function createPhysicalOrServiceProduct(token, spec, refs, maintain
           main_image_asset_id: null,
           weight_kg: spec.weightKg ?? null,
           volume_m3: null,
-          factory_price_gross: spec.factoryPrice ?? null,
           sales_visible_price_gross: spec.salesPrice,
           bulk_price_gross: spec.bulkSalesPrice ?? null,
           bulk_min_quantity: spec.bulkMinQuantity ?? null,
@@ -516,7 +515,6 @@ export async function createVoucherProduct(token, spec, refs, request = call) {
       brand_id: refs.brandId,
       sku: {
         base_unit_id: refs.unitId,
-        factory_price_gross: spec.factoryPrice ?? null,
         sales_visible_price_gross: spec.salesPrice,
         bulk_price_gross: spec.bulkSalesPrice ?? null,
         bulk_min_quantity: spec.bulkMinQuantity ?? null,

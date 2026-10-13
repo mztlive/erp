@@ -103,7 +103,6 @@ export function SellableGalleryCard({
                         </span>
                         <div className="grid w-full grid-cols-2 gap-x-3 gap-y-1.5">
                             {[
-                                ["出厂价", item?.factoryPriceGross],
                                 ["一件代发价", item?.salesVisiblePriceGross],
                                 ["集采价", item?.bulkPriceGross],
                                 ["市场价", item?.marketPrice],

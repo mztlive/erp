@@ -267,22 +267,11 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                                             resetSpecDrafts
                                                         }
                                                         updateSku={updateSku}
-                                                        batchFactoryPrice={
-                                                            values.batchFactoryPrice
-                                                        }
                                                         batchBulkPrice={
                                                             values.batchBulkPrice
                                                         }
                                                         batchBulkMinQuantity={
                                                             values.batchBulkMinQuantity
-                                                        }
-                                                        setBatchFactoryPrice={(
-                                                            next,
-                                                        ) =>
-                                                            form.setFieldValue(
-                                                                "batchFactoryPrice",
-                                                                next,
-                                                            )
                                                         }
                                                         setBatchBulkPrice={(
                                                             next,

@@ -2,9 +2,9 @@
 //!
 //! 正式版本按 §4.4 内联结构化快照字段（SKU 名称、规格、条码、物流属性与价格）；
 //! `(sku_id, revision_no)` 唯一（唯一约束跨行，属 P3/索引校验）。
-//! 出厂价、一件代发价、集采价与市场价均为独立维护的含税销售参考价。
+//! 一件代发价、集采价与市场价均为独立维护的含税销售参考价。
 //! `sales_visible_price_gross` 保留历史字段名，业务含义为一件代发价；已维护该价格
-//! 是公司商品池销售资格条件之一。四价不得从供应商成本或彼此自动计算。
+//! 是公司商品池销售资格条件之一。三价不得从供应商成本或彼此自动计算。
 //! 修订一经形成不得修改，本实体不提供 `update()`。
 
 use entity_core::BaseModel;
@@ -51,9 +51,6 @@ pub struct SkuRevisionData {
     pub weight_kg: Option<Quantity>,
     /// 体积（立方米，定点数，非负）。
     pub volume_m3: Option<Quantity>,
-    /// 公司出厂含税销售参考价（独立维护，非负）。
-    #[serde(default)]
-    pub factory_price_gross: Option<Amount>,
     /// 公司一件代发含税销售参考价（与供应商成本独立，非负）。
     pub sales_visible_price_gross: Option<Amount>,
     /// 公司集采含税销售参考价（独立维护，非负）。
@@ -95,9 +92,6 @@ pub struct SkuRevision {
     pub weight_kg: Option<Quantity>,
     /// 体积（立方米，定点数，非负）。
     pub volume_m3: Option<Quantity>,
-    /// 公司出厂含税销售参考价（独立维护，非负）。
-    #[serde(default)]
-    pub factory_price_gross: Option<Amount>,
     /// 公司一件代发含税销售参考价（非负）。
     pub sales_visible_price_gross: Option<Amount>,
     /// 公司集采含税销售参考价（独立维护，非负）。
@@ -121,7 +115,7 @@ impl SkuRevision {
     ///
     /// 完成 name/description/specification/barcode 的校验与规范化（去首尾空白、
     /// 非空、长度上限），校验修订序号从 1 开始、生效区间不倒挂，
-    /// 并要求重量、体积及四种含税销售参考价均为非负定点数。
+    /// 并要求重量、体积及三种含税销售参考价均为非负定点数。
     ///
     /// # 参数
     /// * `id` - 实体主键（`erp_core::ids::SkuRevisionId`）
@@ -142,7 +136,6 @@ impl SkuRevision {
         ensure_effective_window(data.effective_from, data.effective_to)?;
         ensure_non_negative_quantity(data.weight_kg, "重量")?;
         ensure_non_negative_quantity(data.volume_m3, "体积")?;
-        ensure_non_negative_amount(data.factory_price_gross, "出厂价")?;
         ensure_non_negative_amount(data.sales_visible_price_gross, "一件代发价")?;
         ensure_non_negative_amount(data.bulk_price_gross, "集采价")?;
         ensure_non_negative_amount(data.market_price, "市场价")?;
@@ -159,7 +152,6 @@ impl SkuRevision {
             source_main_image_asset_id: data.source_main_image_asset_id,
             weight_kg: data.weight_kg,
             volume_m3: data.volume_m3,
-            factory_price_gross: data.factory_price_gross,
             sales_visible_price_gross: data.sales_visible_price_gross,
             bulk_price_gross: data.bulk_price_gross,
             bulk_min_quantity: data.bulk_min_quantity,
@@ -208,7 +200,6 @@ impl SkuRevision {
                 source_main_image_asset_id: self.source_main_image_asset_id.clone(),
                 weight_kg: self.weight_kg,
                 volume_m3: self.volume_m3,
-                factory_price_gross: self.factory_price_gross,
                 sales_visible_price_gross: self.sales_visible_price_gross,
                 bulk_price_gross: self.bulk_price_gross,
                 bulk_min_quantity: self.bulk_min_quantity,
@@ -292,7 +283,7 @@ fn ensure_non_negative_quantity(value: Option<Quantity>, label: &str) -> Result<
 /// 校验价格为非负定点金额。
 ///
 /// # 参数
-/// * `value` - 四种含税销售参考价中的任意一项
+/// * `value` - 三种含税销售参考价中的任意一项
 /// * `label` - 字段说明
 ///
 /// # 返回
@@ -317,7 +308,7 @@ mod tests {
 
     use super::*;
 
-    /// 构造四种独立含税参考价与集采起订量的有效修订输入。
+    /// 构造三种独立含税参考价与集采起订量的有效修订输入。
     fn data() -> SkuRevisionData {
         SkuRevisionData {
             sku_id: SkuId::new("sku-1"),
@@ -329,7 +320,6 @@ mod tests {
             source_main_image_asset_id: Some(FileAssetId::new("asset-main-1")),
             weight_kg: Some(Quantity::from_str("0.500000").unwrap()),
             volume_m3: None,
-            factory_price_gross: Some(Amount::from_str("75.00").unwrap()),
             sales_visible_price_gross: Some(Amount::from_str("99.90").unwrap()),
             bulk_price_gross: Some(Amount::from_str("80.00").unwrap()),
             bulk_min_quantity: Some(Quantity::from_str("10.000000").unwrap()),
@@ -349,7 +339,6 @@ mod tests {
         assert_eq!(revision.barcode.as_deref(), Some("6901234567890"));
         assert_eq!(revision.source_main_image_asset_id, Some(FileAssetId::new("asset-main-1")));
         assert_eq!(revision.weight_kg, Some(Quantity::from_str("0.500000").unwrap()));
-        assert_eq!(revision.factory_price_gross, Some(Amount::from_str("75.00").unwrap()));
         assert_eq!(revision.sales_visible_price_gross, Some(Amount::from_str("99.90").unwrap()));
         assert_eq!(revision.bulk_price_gross, Some(Amount::from_str("80.00").unwrap()));
         assert_eq!(revision.bulk_min_quantity, Some(Quantity::from_str("10.000000").unwrap()));
@@ -390,16 +379,12 @@ mod tests {
     /// 金额：价格与物流属性为负数时被拒绝（定点类型仍可带负号，需实体校验）。
     #[test]
     fn new_rejects_negative_prices_and_logistics() {
-        let negative_factory =
-            SkuRevisionData { factory_price_gross: Some(Amount::from_str("-1.00").unwrap()), ..data() };
-        assert_eq!(
-            SkuRevision::new(SkuRevisionId::new("rev-1"), negative_factory).unwrap_err().to_string(),
-            "出厂价不能为负数"
-        );
-
         let negative_price =
             SkuRevisionData { sales_visible_price_gross: Some(Amount::from_str("-1.00").unwrap()), ..data() };
-        assert!(SkuRevision::new(SkuRevisionId::new("rev-1"), negative_price).is_err());
+        assert_eq!(
+            SkuRevision::new(SkuRevisionId::new("rev-1"), negative_price).unwrap_err().to_string(),
+            "一件代发价不能为负数"
+        );
 
         let negative_bulk =
             SkuRevisionData { bulk_price_gross: Some(Amount::from_str("-0.01").unwrap()), ..data() };
@@ -439,20 +424,18 @@ mod tests {
         );
     }
 
-    /// 四价可独立缺省，零元价格与已有市场价不改变其他参考价。
+    /// 三价可独立缺省，零元价格与已有市场价不改变其他参考价。
     #[test]
     fn new_keeps_independent_missing_and_zero_reference_prices() {
         let revision = SkuRevision::new(
             SkuRevisionId::new("rev-1"),
             SkuRevisionData {
-                factory_price_gross: None,
                 sales_visible_price_gross: None,
                 bulk_price_gross: Some(Amount::from_str("0.00").unwrap()),
                 ..data()
             },
         )
         .unwrap();
-        assert_eq!(revision.factory_price_gross, None);
         assert_eq!(revision.sales_visible_price_gross, None);
         assert_eq!(revision.bulk_price_gross, Some(Amount::from_str("0.00").unwrap()));
         assert_eq!(revision.market_price, data().market_price);
@@ -477,7 +460,6 @@ mod tests {
         assert_eq!(successor.name, "新 SKU 名称");
         assert_eq!(successor.barcode, current.barcode);
         assert_eq!(successor.weight_kg, current.weight_kg);
-        assert_eq!(successor.factory_price_gross, current.factory_price_gross);
         assert_eq!(successor.sales_visible_price_gross, current.sales_visible_price_gross);
         assert_eq!(successor.bulk_price_gross, current.bulk_price_gross);
         assert_eq!(successor.bulk_min_quantity, current.bulk_min_quantity);
@@ -511,7 +493,7 @@ mod tests {
         let json = serde_json::to_string(&revision).unwrap();
         let value: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert_eq!(value["sales_visible_price_gross"], serde_json::json!("99.90"));
-        assert_eq!(value["factory_price_gross"], serde_json::json!("75.00"));
+        assert!(value.get("factory_price_gross").is_none());
         assert_eq!(value["bulk_price_gross"], serde_json::json!("80.00"));
         assert_eq!(value["bulk_min_quantity"], serde_json::json!("10.000000"));
         assert_eq!(value["weight_kg"], serde_json::json!("0.500000"));
@@ -526,11 +508,9 @@ mod tests {
         let revision = SkuRevision::new(SkuRevisionId::new("rev-1"), data()).unwrap();
         let mut value = serde_json::to_value(&revision).unwrap();
         let object = value.as_object_mut().unwrap();
-        object.remove("factory_price_gross");
         object.remove("bulk_price_gross");
         object.remove("bulk_min_quantity");
         let legacy: SkuRevision = serde_json::from_value(value).unwrap();
-        assert_eq!(legacy.factory_price_gross, None);
         assert_eq!(legacy.bulk_price_gross, None);
         assert_eq!(legacy.bulk_min_quantity, None);
         assert_eq!(legacy.sales_visible_price_gross, revision.sales_visible_price_gross);
@@ -539,6 +519,19 @@ mod tests {
             legacy.sales_prices().reference_price(Quantity::from_str("100.000000").unwrap()),
             revision.sales_visible_price_gross
         );
+    }
+
+    /// 历史修订仍带已停用的出厂价时照常读取，且不再随修订写出。
+    #[test]
+    fn stored_revision_with_retired_factory_price_still_reads() {
+        let revision = SkuRevision::new(SkuRevisionId::new("rev-1"), data()).unwrap();
+        let mut value = serde_json::to_value(&revision).unwrap();
+        value.as_object_mut().unwrap().insert("factory_price_gross".to_string(), serde_json::json!("75.00"));
+
+        let stored: SkuRevision = serde_json::from_value(value).unwrap();
+
+        assert_eq!(stored, revision);
+        assert!(serde_json::to_value(&stored).unwrap().get("factory_price_gross").is_none());
     }
 
     /// 状态机：合法迁移通过，邻接矩阵对称闭合。

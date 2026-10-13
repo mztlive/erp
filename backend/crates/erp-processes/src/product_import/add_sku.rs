@@ -166,7 +166,7 @@ fn sku_signature(row: &NormalizedImportRow) -> Result<String> {
     compute_specification_signature(&entries).map_err(|error| Error::BusinessLogicError(error.to_string()))
 }
 
-/// 继承公司计量单位并维护新 SKU 的独立四价，不读取供应商成本。
+/// 继承公司计量单位并维护新 SKU 的独立三价，不读取供应商成本。
 fn appended_sku_input(
     row: &NormalizedImportRow,
     sku_inputs: &[ProductSkuInput],
@@ -187,7 +187,6 @@ fn appended_sku_input(
         main_image_asset_id,
         weight_kg: None,
         volume_m3: None,
-        factory_price_gross: row.factory_price,
         sales_visible_price_gross: row.sales_price,
         bulk_price_gross: row.bulk_price,
         bulk_min_quantity: row.bulk_min_quantity,

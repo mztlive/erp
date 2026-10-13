@@ -96,11 +96,6 @@ export function useSellableListColumns() {
             ...(
                 [
                     {
-                        id: "factoryPriceGross",
-                        key: "factoryPriceGross",
-                        label: "出厂价（含税）",
-                    },
-                    {
                         id: "price",
                         key: "salesVisiblePriceGross",
                         label: "一件代发价（含税）",

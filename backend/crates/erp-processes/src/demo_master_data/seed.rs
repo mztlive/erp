@@ -206,7 +206,6 @@ mod tests {
             panic!("商品必须最后生成")
         };
         assert_eq!(product.skus[0].sales_visible_price_gross.unwrap().to_string(), "100.00");
-        assert_eq!(product.skus[0].factory_price_gross.unwrap().to_string(), "90.00");
         assert_eq!(product.skus[0].bulk_price_gross.unwrap().to_string(), "95.00");
         assert_eq!(product.skus[0].market_price.unwrap().to_string(), "100.00");
         assert_eq!(product.skus[0].bulk_min_quantity.unwrap(), "100".parse().unwrap());
@@ -229,7 +228,6 @@ mod tests {
             serde_json::to_value(&product.skus[1].spec_entries).unwrap()
         );
         let standard = &product.skus[0];
-        assert_eq!(standard.factory_price_gross.unwrap().to_string(), "77.00");
         assert_eq!(standard.market_price.unwrap().to_string(), "159.00");
         let prices = SkuSalesPrices {
             sales_visible_price_gross: standard.sales_visible_price_gross,
@@ -239,7 +237,6 @@ mod tests {
         assert_eq!(prices.reference_price("9".parse::<Quantity>().unwrap()).unwrap().to_string(), "129.00");
         assert_eq!(prices.reference_price("10".parse::<Quantity>().unwrap()).unwrap().to_string(), "119.00");
         let light = &product.skus[1];
-        assert_eq!(light.factory_price_gross.unwrap().to_string(), "69.00");
         assert_eq!(light.market_price.unwrap().to_string(), "129.00");
         let light_prices = SkuSalesPrices {
             sales_visible_price_gross: light.sales_visible_price_gross,
@@ -257,14 +254,13 @@ mod tests {
     }
 
     #[test]
-    fn every_demo_sku_has_four_prices_and_uses_its_bulk_threshold() {
+    fn every_demo_sku_has_three_prices_and_uses_its_bulk_threshold() {
         let steps = load(include_str!("master-data.json")).unwrap();
         let mut count = 0;
         for step in steps {
             let SeedRequest::Product(product) = step.request else { continue };
             for sku in product.skus {
                 super::super::prices::validate(&sku).unwrap();
-                assert!(sku.factory_price_gross <= sku.bulk_price_gross, "{}", sku.sku_no);
                 assert!(sku.bulk_price_gross < sku.sales_visible_price_gross, "{}", sku.sku_no);
                 assert!(sku.sales_visible_price_gross <= sku.market_price, "{}", sku.sku_no);
                 let prices = SkuSalesPrices {

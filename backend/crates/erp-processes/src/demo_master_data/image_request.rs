@@ -49,7 +49,7 @@ fn media_inputs(media: &[ProductRevisionMedia], role: MediaRole) -> Vec<ProductM
         .collect()
 }
 
-/// 保留稳定身份、精确修订、四价和规格。
+/// 保留稳定身份、精确修订、三价和规格。
 /// # 参数
 /// 当前 SKU 稳定实体及其当前修订。
 /// # 返回
@@ -75,7 +75,6 @@ pub(super) fn sku_input(sku: &Sku, revision: &SkuRevision) -> Result<ProductSkuI
         main_image_asset_id: revision.source_main_image_asset_id.clone(),
         weight_kg: revision.weight_kg,
         volume_m3: revision.volume_m3,
-        factory_price_gross: revision.factory_price_gross,
         sales_visible_price_gross: revision.sales_visible_price_gross,
         bulk_price_gross: revision.bulk_price_gross,
         bulk_min_quantity: revision.bulk_min_quantity,
@@ -118,7 +117,6 @@ mod tests {
             source_main_image_asset_id: Some(FileAssetId::new("manual-image")),
             weight_kg: Some("1.25".parse().unwrap()),
             volume_m3: None,
-            factory_price_gross: Some("70".parse().unwrap()),
             sales_visible_price_gross: Some("129".parse().unwrap()),
             bulk_price_gross: Some("119".parse().unwrap()),
             bulk_min_quantity: Some("10".parse().unwrap()),
@@ -137,14 +135,12 @@ mod tests {
         assert_eq!(input.main_image_asset_id, revision.source_main_image_asset_id);
         assert_eq!(
             (
-                input.factory_price_gross,
                 input.sales_visible_price_gross,
                 input.bulk_price_gross,
                 input.bulk_min_quantity,
                 input.market_price
             ),
             (
-                revision.factory_price_gross,
                 revision.sales_visible_price_gross,
                 revision.bulk_price_gross,
                 revision.bulk_min_quantity,

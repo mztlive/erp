@@ -35,7 +35,6 @@ export function decimalAtMost(
 }
 
 const salesReferencePriceSchema = z.object({
-    factoryPriceGross: z.string().optional(),
     salesVisiblePriceGross: z.string().optional(),
     bulkPriceGross: z.string().optional(),
     bulkMinQuantity: z.string().optional(),

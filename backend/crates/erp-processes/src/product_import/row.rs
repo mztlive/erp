@@ -163,7 +163,7 @@ impl ProductImportProcess {
     }
 }
 
-/// 把已规范化行转换为商品与完整四价 SKU 输入，媒体上传及字典解析由调用方完成。
+/// 把已规范化行转换为商品与完整三价 SKU 输入，媒体上传及字典解析由调用方完成。
 fn imported_product_request(
     row: NormalizedImportRow,
     unit_id: UnitOfMeasureId,
@@ -198,7 +198,6 @@ fn imported_product_request(
             main_image_asset_id,
             weight_kg: None,
             volume_m3: None,
-            factory_price_gross: row.factory_price,
             sales_visible_price_gross: row.sales_price,
             bulk_price_gross: row.bulk_price,
             bulk_min_quantity: row.bulk_min_quantity,

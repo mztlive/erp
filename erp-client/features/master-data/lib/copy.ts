@@ -87,7 +87,7 @@ export const masterDataCopy = {
         "点击任一行查看价格、可供区域和供应保障。",
     searchAria: "搜索基础资料",
     sellableItemsHint:
-        "仅展示已上架、资料有效且存在有效供给的 SKU。出厂价、一件代发价、集采价和市场价均为公司含税销售参考价，供应商成本独立维护。",
+        "仅展示已上架、资料有效且存在有效供给的 SKU。一件代发价、集采价和市场价均为公司含税销售参考价，供应商成本独立维护。",
     sellableLayoutAria: "商品展示方式",
     sellableLayoutTable: "表格",
     sellableLayoutGallery: "卡片",

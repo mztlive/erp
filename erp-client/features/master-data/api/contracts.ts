@@ -116,7 +116,6 @@ export type SkuRevisionDto = {
     barcode: string | null
     source_main_image_asset_id?: string | null
     status: EnableStatus
-    factory_price_gross?: string | null
     sales_visible_price_gross: string | null
     bulk_price_gross?: string | null
     bulk_min_quantity?: string | null
@@ -148,7 +147,6 @@ export type SellableSkuDto = {
     base_unit_id: string
     base_unit_code: string | null
     base_unit_name: string | null
-    factory_price_gross?: string | null
     sales_visible_price_gross: string
     bulk_price_gross?: string | null
     bulk_min_quantity?: string | null

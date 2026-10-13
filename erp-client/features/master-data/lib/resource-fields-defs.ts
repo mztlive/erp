@@ -90,12 +90,6 @@ export const RESOURCE_FIELDS: Readonly<
             listFact: true,
         },
         {
-            key: "factoryPriceGross",
-            label: "出厂价",
-            kind: "text",
-            listFact: true,
-        },
-        {
             key: "salesVisiblePriceGross",
             label: masterDataCopy.fSalesVisiblePrice,
             kind: "text",

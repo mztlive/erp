@@ -51,10 +51,9 @@ fn reference_prices_for(
     revisions.get(id.as_ref()).filter(|revision| &revision.sku_id == sku).map(prices_from_revision)
 }
 
-/// 从不可变公司 SKU 修订选择四个参考价与公司集采门槛。
+/// 从不可变公司 SKU 修订选择三个参考价与公司集采门槛。
 fn prices_from_revision(revision: &SkuRevision) -> SalesReferencePricesView {
     SalesReferencePricesView {
-        factory_price_gross: revision.factory_price_gross,
         sales_visible_price_gross: revision.sales_visible_price_gross,
         bulk_price_gross: revision.bulk_price_gross,
         bulk_min_quantity: revision.bulk_min_quantity,
@@ -87,7 +86,6 @@ mod tests {
             source_main_image_asset_id: None,
             weight_kg: None,
             volume_m3: None,
-            factory_price_gross: Some(Amount::from_str("6.00").unwrap()),
             sales_visible_price_gross: Some(Amount::from_str("10.00").unwrap()),
             bulk_price_gross: Some(Amount::from_str("8.00").unwrap()),
             bulk_min_quantity: Some(Quantity::from_str("10.000001").unwrap()),

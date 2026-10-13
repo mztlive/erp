@@ -553,7 +553,6 @@ mod tests {
                 source_main_image_asset_id: Some(FileAssetId::new("asset-main-1")),
                 weight_kg: Some(Quantity::from_str("0.500000").unwrap()),
                 volume_m3: None,
-                factory_price_gross: None,
                 sales_visible_price_gross: Some(Amount::from_str("99.90").unwrap()),
                 bulk_price_gross: None,
                 bulk_min_quantity: None,

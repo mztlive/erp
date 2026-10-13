@@ -36,9 +36,6 @@ pub struct VoucherSkuInput {
     pub weight_kg: Option<Quantity>,
     /// 体积（立方米，非负定点数）。
     pub volume_m3: Option<Quantity>,
-    /// 公司出厂含税销售参考价（独立维护，非负）。
-    #[serde(default)]
-    pub factory_price_gross: Option<Amount>,
     /// 公司一件代发含税销售参考价（非负定点金额）。
     pub sales_visible_price_gross: Option<Amount>,
     /// 公司集采含税销售参考价（独立维护，非负）。
@@ -70,7 +67,6 @@ impl VoucherSkuInput {
             barcode: None,
             weight_kg: None,
             volume_m3: None,
-            factory_price_gross: None,
             sales_visible_price_gross: None,
             bulk_price_gross: None,
             bulk_min_quantity: None,
@@ -103,7 +99,6 @@ impl VoucherSkuInput {
             main_image_asset_id: None,
             weight_kg: self.weight_kg,
             volume_m3: self.volume_m3,
-            factory_price_gross: self.factory_price_gross,
             sales_visible_price_gross: self.sales_visible_price_gross,
             bulk_price_gross: self.bulk_price_gross,
             bulk_min_quantity: self.bulk_min_quantity,
@@ -374,7 +369,6 @@ mod tests {
         assert!(sku.barcode.is_none());
         assert!(sku.weight_kg.is_none());
         assert!(sku.volume_m3.is_none());
-        assert!(sku.factory_price_gross.is_none());
         assert!(sku.sales_visible_price_gross.is_none());
         assert!(sku.bulk_price_gross.is_none());
         assert!(sku.bulk_min_quantity.is_none());
@@ -396,7 +390,6 @@ mod tests {
             barcode: Some("6901234567890".to_string()),
             weight_kg: Some(Quantity::from_str("0.010000").unwrap()),
             volume_m3: Some(Quantity::from_str("0.000100").unwrap()),
-            factory_price_gross: Some(Amount::from_str("70.00").unwrap()),
             sales_visible_price_gross: Some(Amount::from_str("99.00").unwrap()),
             bulk_price_gross: Some(Amount::from_str("80.00").unwrap()),
             bulk_min_quantity: Some(Quantity::from_str("10.000000").unwrap()),
@@ -408,7 +401,6 @@ mod tests {
         assert_eq!(sku.base_unit_id.as_ref(), "unit-sheet");
         assert_eq!(sku.weight_kg, Some(Quantity::from_str("0.010000").unwrap()));
         assert_eq!(sku.volume_m3, Some(Quantity::from_str("0.000100").unwrap()));
-        assert_eq!(sku.factory_price_gross, Some(Amount::from_str("70.00").unwrap()));
         assert_eq!(sku.sales_visible_price_gross, Some(Amount::from_str("99.00").unwrap()));
         assert_eq!(sku.bulk_price_gross, Some(Amount::from_str("80.00").unwrap()));
         assert_eq!(sku.bulk_min_quantity, Some(Quantity::from_str("10.000000").unwrap()));

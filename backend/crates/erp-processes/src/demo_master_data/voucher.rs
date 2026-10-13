@@ -58,7 +58,6 @@ pub(super) fn voucher_request(request: &CreateProductRequest) -> Result<CreateVo
             barcode: sku.barcode.clone(),
             weight_kg: sku.weight_kg,
             volume_m3: sku.volume_m3,
-            factory_price_gross: sku.factory_price_gross,
             sales_visible_price_gross: sku.sales_visible_price_gross,
             bulk_price_gross: sku.bulk_price_gross,
             bulk_min_quantity: sku.bulk_min_quantity,
@@ -94,17 +93,15 @@ mod tests {
         assert!(voucher_request(&invalid).is_err());
     }
 
-    /// 卡券原子创建保留完整公司四价和集采门槛，不用面额或供给成本覆盖参考价。
+    /// 卡券原子创建保留完整公司三价和集采门槛，不用面额或供给成本覆盖参考价。
     #[test]
     fn voucher_preserves_company_prices_and_bulk_minimum() {
         let steps = plan::demo_steps().unwrap();
         let SeedRequest::Product(product) = &steps.last().unwrap().request else { panic!("卡券种子") };
         let mut product = product.clone();
-        product.skus[0].factory_price_gross = Some("70.00".parse::<Amount>().unwrap());
         product.skus[0].bulk_price_gross = Some("90.00".parse::<Amount>().unwrap());
         product.skus[0].bulk_min_quantity = Some("100".parse::<Quantity>().unwrap());
         let sku = voucher_request(&product).unwrap().sku.unwrap();
-        assert_eq!(sku.factory_price_gross, product.skus[0].factory_price_gross);
         assert_eq!(sku.sales_visible_price_gross, product.skus[0].sales_visible_price_gross);
         assert_eq!(sku.bulk_price_gross, product.skus[0].bulk_price_gross);
         assert_eq!(sku.bulk_min_quantity, product.skus[0].bulk_min_quantity);

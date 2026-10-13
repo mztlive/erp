@@ -11,7 +11,6 @@ export type SalesLinePricingMode = "AUTO" | "MANUAL"
 
 /** 精确 SKU 修订的含税销售参考价；供应商采购成本另行保存。 */
 export type SalesSkuReferencePrices = {
-    factoryPriceGross?: string
     salesVisiblePriceGross?: string
     bulkPriceGross?: string
     bulkMinQuantity?: string

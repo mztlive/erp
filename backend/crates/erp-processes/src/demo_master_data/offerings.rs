@@ -310,7 +310,7 @@ mod tests {
         assert_eq!(first.supplier_id, "supplier-one");
     }
 
-    /// 专用样本的所有付款条件必须形成可选择供给，成本与公司四价保持独立。
+    /// 专用样本的所有付款条件必须形成可选择供给，成本与公司三价保持独立。
     #[test]
     fn dedicated_demo_offers_every_declared_payment_term_and_separate_costs() {
         let steps = demo_steps().unwrap();

@@ -130,7 +130,6 @@ export function rebuildSkusFromSpecs(input: {
             mainImage: matched?.mainImage ?? "",
             mainImagePreviewUrl: matched?.mainImagePreviewUrl,
             mainImageAssetId: matched?.mainImageAssetId,
-            factoryPriceGross: matched?.factoryPriceGross,
             salePrice: matched?.salePrice,
             bulkPriceGross: matched?.bulkPriceGross,
             bulkMinQuantity: matched?.bulkMinQuantity,
@@ -205,7 +204,6 @@ export function validateProductFields(fields: ProductFields): string | null {
             return `启用中的 SKU「${sku.skuNo}」必须上传主图`
         }
         const moneyFields: Array<[string, string | undefined]> = [
-            ["出厂价", sku.factoryPriceGross],
             ["一件代发价", sku.salePrice],
             ["集采价", sku.bulkPriceGross],
             ["市场价", sku.marketPrice],

@@ -137,7 +137,6 @@ export function createProductFormBindings(
     const applyBatchReferencePrices = () => {
         const entries: Array<{
             key:
-                | "factoryPriceGross"
                 | "salePrice"
                 | "bulkPriceGross"
                 | "bulkMinQuantity"
@@ -145,11 +144,6 @@ export function createProductFormBindings(
             label: string
             value: string
         }> = [
-            {
-                key: "factoryPriceGross",
-                label: "出厂价",
-                value: values.batchFactoryPrice.trim(),
-            },
             {
                 key: "salePrice",
                 label: "一件代发价",

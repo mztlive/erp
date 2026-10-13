@@ -85,7 +85,6 @@ type ProductEditorFormValues = Readonly<{
     changeReason: string
     fields: ProductFields
     specDrafts: readonly ProductSpecDraft[]
-    batchFactoryPrice: string
     batchSalePrice: string
     batchBulkPrice: string
     batchBulkMinQuantity: string
@@ -167,7 +166,6 @@ function productSectionForValidationError(
         message.includes("SKU") ||
         message.includes("规格") ||
         message.includes("主图") ||
-        message.includes("出厂价") ||
         message.includes("一件代发价") ||
         message.includes("集采") ||
         message.includes("市场价")
@@ -224,7 +222,6 @@ function productDetailToFields(detail: ProductDetailView): ProductFields {
 }
 
 const EMPTY_BATCH_REFERENCE_PRICE_FIELDS = {
-    batchFactoryPrice: "",
     batchSalePrice: "",
     batchBulkPrice: "",
     batchBulkMinQuantity: "",

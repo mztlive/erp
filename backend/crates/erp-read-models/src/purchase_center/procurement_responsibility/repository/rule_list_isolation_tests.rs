@@ -149,7 +149,6 @@ fn test_sku_revision(id: &str, sku_id: &str, name: &str) -> SkuRevision {
             source_main_image_asset_id: None,
             weight_kg: None,
             volume_m3: None,
-            factory_price_gross: None,
             sales_visible_price_gross: None,
             bulk_price_gross: None,
             bulk_min_quantity: None,

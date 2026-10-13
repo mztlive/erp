@@ -190,7 +190,6 @@ export async function fetchProductListSkus(
                     sku.specification_signature ??
                     "默认规格",
                 baseUnit: unit?.name ?? unit?.symbol ?? unit?.unit_code ?? "—",
-                factoryPriceGross: revision?.factory_price_gross ?? undefined,
                 salesVisiblePriceGross:
                     revision?.sales_visible_price_gross ?? undefined,
                 bulkPriceGross: revision?.bulk_price_gross ?? undefined,

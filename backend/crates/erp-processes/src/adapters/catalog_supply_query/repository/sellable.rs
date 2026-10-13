@@ -332,7 +332,7 @@ fn sellable_sku_pipeline(
     pipeline
 }
 
-/// 构造商品池 facet 当前页的稳定排序、分页与四价投影阶段。
+/// 构造商品池 facet 当前页的稳定排序、分页与三价投影阶段。
 ///
 /// # 参数
 /// * `paging` - 页码与每页条数；缺省只保留原零偏移，不限制条数
@@ -354,7 +354,7 @@ fn sellable_sku_item_stages(paging: Option<(u64, u32)>) -> Vec<Document> {
     stages
 }
 
-/// 投影公司 SKU 的四种含税参考价、集采起订量与内部供应商身份。
+/// 投影公司 SKU 的三种含税参考价、集采起订量与内部供应商身份。
 ///
 /// # 参数
 /// 无。
@@ -383,7 +383,6 @@ fn sellable_sku_projection() -> Document {
             "base_unit_id": 1,
             "base_unit_code": "$unit.unit_code",
             "base_unit_name": "$unit.name",
-            "factory_price_gross": "$sku_revision.factory_price_gross",
             "sales_visible_price_gross": "$sku_revision.sales_visible_price_gross",
             "bulk_price_gross": "$sku_revision.bulk_price_gross",
             "bulk_min_quantity": "$sku_revision.bulk_min_quantity",

@@ -80,10 +80,7 @@ function ProductHistorySection({ data }: ProductHistorySectionProps) {
                                                             {sku.specLabel}
                                                         </div>
                                                         <div className="mt-1 text-muted-foreground">
-                                                            出厂价{" "}
-                                                            {sku.factoryPriceGross ??
-                                                                "—"}
-                                                            {" · "}一件代发价{" "}
+                                                            一件代发价{" "}
                                                             {sku.salePrice ??
                                                                 "—"}
                                                             {" · "}集采价{" "}
