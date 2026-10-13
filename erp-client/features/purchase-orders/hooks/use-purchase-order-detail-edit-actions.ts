@@ -74,7 +74,6 @@ export function usePurchaseOrderDetailEditActions({
         React.useState<PurchaseOrderDetailLineEdits>({})
     const [submitConfirmOpen, setSubmitConfirmOpen] = React.useState(false)
     const [voidConfirmOpen, setVoidConfirmOpen] = React.useState(false)
-    const [changeConfirmOpen, setChangeConfirmOpen] = React.useState(false)
 
     const documentReference =
         order?.identity.purchaseNo ?? order?.identity.draftLabel
@@ -342,49 +341,52 @@ export function usePurchaseOrderDetailEditActions({
         }
     }
 
-    async function handleStartChange() {
-        if (!order) return
-        const payload = {
-            purchaseOrderId,
-            expectedLockVersion: order.identity.lockVersion,
-        }
-        const command = commandLedger.acquire(
-            "start-change",
-            `purchase:${purchaseOrderId}:change`,
-            payload,
-        )
+    /** 发起改单并返回新改单 ID，由页面直接打开编辑弹窗（与销售改单一致）。 */
+    async function handleStartChange(): Promise<string | undefined> {
+        if (!order) return undefined
+        const command =
+            commandLedger.peek<{
+                purchaseOrderId: string
+                expectedLockVersion: number
+            }>("start-change") ??
+            commandLedger.acquire(
+                "start-change",
+                `purchase:${purchaseOrderId}:change`,
+                {
+                    purchaseOrderId,
+                    expectedLockVersion: order.identity.lockVersion,
+                },
+            )
         const response = await changeMutation.mutateAsync({
             ...command.payload,
             idempotencyKey: command.idempotencyKey,
         })
         commandLedger.settle("start-change", response.status)
-        setChangeConfirmOpen(false)
         if (response.status === "succeeded") {
             setResult({
                 status: "succeeded",
-                title: "采购变更草稿已创建",
+                title: "请编辑采购改单",
                 description:
-                    "请在「变更」页填写调整内容和原因，再提交审批。变更生效前，采购单仍按原内容执行。",
+                    "改单已创建。填写调整内容和变更原因后提交审批；生效前采购单仍按当前版本执行。",
                 reference: response.reference,
             })
             await refetch()
-            router.replace(
-                `/procurement/orders/${purchaseOrderId}?section=changes`,
-            )
-        } else if (response.status === "unknown") {
-            setResult({
-                status: "unknown",
-                title: "变更结果待确认",
-                description: response.message,
-                reference: documentReference,
-            })
-        } else {
-            setResult({
-                status: "blocked",
-                title: "无法发起变更",
-                description: response.message,
-            })
+            return response.data.changeId
         }
+        setResult({
+            status: response.status === "unknown" ? "unknown" : "blocked",
+            title:
+                response.status === "unknown"
+                    ? "处理结果待确认"
+                    : "无法发起改单",
+            description:
+                response.status === "unknown"
+                    ? "请使用本次操作重试；确认前不要重复发起改单。"
+                    : response.message,
+            reference:
+                response.status === "unknown" ? documentReference : undefined,
+        })
+        return undefined
     }
 
     return {
@@ -395,8 +397,6 @@ export function usePurchaseOrderDetailEditActions({
         setSubmitConfirmOpen,
         voidConfirmOpen,
         setVoidConfirmOpen,
-        changeConfirmOpen,
-        setChangeConfirmOpen,
         savePending: saveMutation.isPending,
         submitPending: submitMutation.isPending,
         voidPending: voidMutation.isPending,

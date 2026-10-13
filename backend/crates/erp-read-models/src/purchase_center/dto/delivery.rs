@@ -25,6 +25,27 @@ pub struct PurchaseDeliveryLineOptionView {
     pub requires_addresses: bool,
     /// 扣除其他采购后的收件地址剩余量；仓库履约时为空，不暴露客户地址。
     pub addresses: Vec<PurchaseDeliveryAddressOptionView>,
+    /// 采购改单可填数量范围；采购尚未生效时为空。
+    pub quantity_bound: Option<PurchaseQuantityBoundView>,
+}
+
+/// 采购改单一行的可填数量范围（第一期 §6.3 采购改单执行规则）。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct PurchaseQuantityBoundView {
+    /// 采购当前生效数量。
+    pub base_quantity: Quantity,
+    /// 销售当前版本目标数量。
+    pub sales_quantity: Quantity,
+    /// 本采购之外其他采购与库存的覆盖数量。
+    pub other_covered_quantity: Quantity,
+    /// 本采购已入库、发货或交付的数量。
+    pub fulfilled_quantity: Quantity,
+    /// 可填最小数量。
+    pub min_quantity: Quantity,
+    /// 可填最大数量。
+    pub max_quantity: Quantity,
+    /// 是否因销售归零或减量必须调减。
+    pub quantity_affected: bool,
 }
 
 /// 一个可分配的收件地址。

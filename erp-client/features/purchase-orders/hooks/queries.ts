@@ -15,6 +15,7 @@ import {
     savePurchaseOrderDraft,
     startPurchaseChange,
     submitPurchaseChange,
+    voidPurchaseChange,
     submitPurchaseOrderForReview,
     voidPurchaseOrderDraft,
 } from "@/features/purchase-orders/api/purchase-orders"
@@ -266,6 +267,19 @@ export function useSubmitPurchaseChangeMutation() {
         mutationFn: submitPurchaseChange,
         onSuccess: async (result) => {
             if (result.status !== "succeeded") return
+            await invalidatePurchaseOrderApprovalCaches(queryClient)
+        },
+    })
+}
+
+/**
+ * 作废采购改单草稿。成功后失效单据、审批与任务缓存。
+ */
+export function useVoidPurchaseChangeMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: voidPurchaseChange,
+        onSuccess: async () => {
             await invalidatePurchaseOrderApprovalCaches(queryClient)
         },
     })

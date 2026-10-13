@@ -1,7 +1,7 @@
 import type { ReactNode } from "react"
 
-/** 改单弹窗的一块内容：标题说明这块管什么，右侧放本块操作。 */
-export function SalesChangeSection({
+/** 改单弹窗的一块内容：标题说明这块管什么，右侧放本块操作。销售与采购改单共用。 */
+export function ChangeOrderSection({
     id,
     title,
     description,

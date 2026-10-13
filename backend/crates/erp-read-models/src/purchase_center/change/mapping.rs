@@ -31,5 +31,6 @@ pub(super) fn change_list_view(
         version: change.base.version,
         created_at: change.base.created_at,
         approval: document_approval_view(binding.as_ref(), None, change.stable.status),
+        coverage_effects: Vec::new(),
     }
 }

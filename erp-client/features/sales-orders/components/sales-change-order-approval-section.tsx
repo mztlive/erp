@@ -3,13 +3,16 @@
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
 import { SalesChangeOrderEditDialog } from "./sales-change-order-edit-dialog"
-import { SalesChangeOrderPendingCard } from "./sales-change-order-pending-card"
 import { SalesChangeProcurementProgressCard } from "./sales-change-procurement-progress"
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
+import { ChangeOrderPendingCard } from "@/features/approval-workflow/components/change-order-pending-card"
 
+import { ChangeOrderVoidButton } from "@/components/business/change-order-void-button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
+import { useVoidSalesChangeOrderMutation } from "@/features/sales-orders/hooks/queries"
+import { getErrorPresentation } from "@/lib/api/errors"
 import { SalesChangeOrderApprovalArea } from "@/features/sales-orders/components/sales-change-order-approval-area"
 import {
     mergeSalesChangeOrderAllowedActions,
@@ -48,6 +51,7 @@ export function SalesChangeOrderApprovalSection({
     onResult?: (result: SalesOrderDetailActionResult) => void
 }) {
     const [editOpen, setEditOpen] = React.useState(false)
+    const voidMutation = useVoidSalesChangeOrderMutation()
     const searchParams = useSearchParams()
     const consumedEditRequest = React.useRef<string | null>(null)
     const editRequested = searchParams.get("editChange") === changeOrder?.id
@@ -92,15 +96,50 @@ export function SalesChangeOrderApprovalSection({
 
     const editDocumentHref = `/sales/orders/${encodeURIComponent(salesOrderId)}?section=change-review&changeOrderId=${encodeURIComponent(changeOrder.id)}&editChange=${encodeURIComponent(changeOrder.id)}`
 
+    const voidChange = async () => {
+        try {
+            await voidMutation.mutateAsync({
+                salesChangeOrderId: changeOrder.id,
+                salesOrderId,
+                version: changeOrder.version ?? 0,
+                nature,
+            })
+            onResult?.({
+                status: "succeeded",
+                title: "改单已作废",
+                description:
+                    "销售单仍按当前生效版本执行，需要时可重新发起改单。",
+            })
+        } catch (error) {
+            const failure = getErrorPresentation(
+                error,
+                "改单未作废，请刷新后重试。",
+            )
+            onResult?.({
+                status: "blocked",
+                title: failure.title,
+                description: failure.description,
+            })
+        }
+    }
+
     const editButton = canSubmit ? (
-        <Button
-            id="sales-orders-change-edit-original"
-            type="button"
-            variant="outline"
-            onClick={() => setEditOpen(true)}
-        >
-            编辑改单
-        </Button>
+        <>
+            <Button
+                id="sales-orders-change-edit-original"
+                type="button"
+                variant="outline"
+                onClick={() => setEditOpen(true)}
+            >
+                编辑改单
+            </Button>
+            <ChangeOrderVoidButton
+                id="sales-orders-change-void"
+                sourceLabel="销售单"
+                pending={voidMutation.isPending}
+                onConfirm={voidChange}
+            />
+        </>
     ) : null
 
     return (
@@ -112,9 +151,10 @@ export function SalesChangeOrderApprovalSection({
                 />
             ) : null}
             {readonlyApproval ? (
-                <SalesChangeOrderPendingCard
+                <ChangeOrderPendingCard
                     id={`sales-change-${changeOrder.id}`}
                     changeOrder={changeOrder}
+                    counterparty="客户"
                     running={phase === "runtime"}
                     actions={
                         <>

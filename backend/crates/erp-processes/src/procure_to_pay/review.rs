@@ -26,6 +26,7 @@ use persistence_core::{Executor, NoTransaction};
 
 use super::PurchaseOrderProcess;
 use super::allocation_maintenance::prepare_current_sales_allocations;
+use super::delivery_plan::validate_revision_delivery;
 use super::payment_subject::revalidate_payment_subject;
 use crate::{Error, Result};
 
@@ -508,6 +509,7 @@ impl FormalizedOrderPersist {
             &submission,
             &submission_lines,
         )?;
+        validate_revision_delivery(db, &order, &revision_lines, session).await?;
         let allocations = prepare_current_sales_allocations(db, &order, &mut revision_lines, session).await?;
         let order_mut = erp_procurement::service::purchase_order::formalization::persist_formalized_order(
             db,

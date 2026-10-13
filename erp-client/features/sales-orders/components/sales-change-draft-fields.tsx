@@ -4,7 +4,7 @@ import { PAYMENT_TERM_OPTIONS, paymentTermLabel } from "@/lib/business-options"
 import { compareDecimal, subtractFixed, sumFixed } from "@/lib/fixed-decimal"
 import { SalesChangeDeliverySection } from "./sales-change-delivery-section"
 import { SalesChangeLineItems } from "./sales-change-line-items"
-import { SalesChangeSection } from "./sales-change-section"
+import { ChangeOrderSection } from "@/components/business/change-order-section"
 import { salesChangeLineAmount } from "../lib/sales-change-draft"
 import type { SalesChangeDraftFormApi } from "../lib/sales-change-draft-form-types"
 import type { SalesChangeDraft } from "../api/sales-change-draft"
@@ -40,7 +40,7 @@ export function SalesChangeDraftFields({
                 id={id}
                 disabled={disabled}
             />
-            <SalesChangeSection
+            <ChangeOrderSection
                 id={`${id}-terms`}
                 title="商业条款"
                 description="随本次改单一并审批；不需要调整时保持原值。"
@@ -122,8 +122,8 @@ export function SalesChangeDraftFields({
                         )}
                     </form.AppField>
                 </div>
-            </SalesChangeSection>
-            <SalesChangeSection
+            </ChangeOrderSection>
+            <ChangeOrderSection
                 id={`${id}-explain`}
                 title="变更说明"
                 description="变更原因会随审批流转，审批人据此判断。"
@@ -151,7 +151,7 @@ export function SalesChangeDraftFields({
                         )}
                     </form.AppField>
                 </div>
-            </SalesChangeSection>
+            </ChangeOrderSection>
         </div>
     )
 }

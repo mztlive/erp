@@ -33,6 +33,8 @@ export function PurchaseOrderDetailHeader({
     canSubmit,
     canVoid,
     canChange,
+    continueChange,
+    changePending,
     requestLeave,
     onRequestVoid,
     onRequestChange,
@@ -52,6 +54,9 @@ export function PurchaseOrderDetailHeader({
     canSubmit: boolean
     canVoid: boolean
     canChange: boolean
+    /** 已有可编辑的改单草稿，入口显示「继续改单」。 */
+    continueChange: boolean
+    changePending: boolean
     requestLeave: (go: () => void) => void
     onRequestVoid: () => void
     onRequestChange: () => void
@@ -133,12 +138,18 @@ export function PurchaseOrderDetailHeader({
                                           },
                                       ]
                                     : []),
-                                ...(canChange
+                                ...(canChange || continueChange
                                     ? [
                                           {
                                               actionKey: "change",
-                                              label: "发起采购变更",
+                                              label: changePending
+                                                  ? "正在打开改单…"
+                                                  : continueChange
+                                                    ? "继续改单"
+                                                    : "发起改单",
+                                              icon: FilePenLineIcon,
                                               variant: "outline" as const,
+                                              disabled: changePending,
                                               onClick: () => onRequestChange(),
                                               id: "procurement-orders-detail-change",
                                           },

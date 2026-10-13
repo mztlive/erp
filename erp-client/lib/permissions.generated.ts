@@ -3643,6 +3643,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/purchase-change-orders/{id}/void",
+                description: "作废采购变更单",
+                permission: {
+                    resource: "purchase_change_order",
+                    action: "delete",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/purchase-orders/{id}/emails",
                 description: "查看采购邮件发送记录",

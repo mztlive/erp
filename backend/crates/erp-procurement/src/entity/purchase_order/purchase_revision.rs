@@ -366,10 +366,10 @@ impl PurchaseLineDataRef for PurchaseOrderRevisionLineData {
     /// 无。
     ///
     /// # 返回
-    /// 商品行已引用销售稳定行与当前版本行且分配数量为正，或物流费用行不携带销售稳定行、版本行和分配数量时返回 `Ok(())`。
+    /// 商品行已引用销售稳定行与当前版本行且分配数量不为负（零数量表示已移除），或物流费用行不携带销售稳定行、版本行和分配数量时返回 `Ok(())`。
     ///
     /// # 错误
-    /// 商品行缺少销售行引用、分配数量缺失或非正，或物流费用行携带销售行或分配数量时返回领域错误。
+    /// 商品行缺少销售行引用、分配数量缺失或为负，或物流费用行携带销售行或分配数量时返回领域错误。
     fn ensure_allocation(&self) -> Result<()> {
         match self.line_type {
             PurchaseLineType::ItemService => {
@@ -377,8 +377,8 @@ impl PurchaseLineDataRef for PurchaseOrderRevisionLineData {
                     return Err(Error::from("商品/服务版本行必须引用销售稳定行与当前版本行"));
                 }
                 let quantity = self.allocated_quantity.ok_or("商品/服务版本行必须填写分配数量")?;
-                if quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
-                    return Err(Error::from("商品/服务版本行分配数量必须为正"));
+                if quantity.to_decimal() < rust_decimal::Decimal::ZERO {
+                    return Err(Error::from("商品/服务版本行分配数量不能为负"));
                 }
             },
             PurchaseLineType::LogisticsFee => {
@@ -391,6 +391,20 @@ impl PurchaseLineDataRef for PurchaseOrderRevisionLineData {
             },
         }
         Ok(())
+    }
+
+    /// 变更提交行与版本行允许零数量，表示该行已移除但保留原行身份。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 恒返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    fn allows_zero_quantity(&self) -> bool {
+        true
     }
 }
 
@@ -851,5 +865,24 @@ mod tests {
         let line = PurchaseOrderRevisionLine::new(PurchaseOrderRevisionLineId::new("porl-5"), data).unwrap();
         assert_eq!(line.gross_amount, gross);
         assert_eq!(line.quantity, None);
+    }
+
+    /// 改单生效的移除行以零数量和零金额保留原行身份。
+    #[test]
+    fn revision_line_allows_zero_quantity_for_removed_item() {
+        let zero = Quantity::from_str("0").unwrap();
+        let (gross, net, tax) =
+            line_amounts(UnitPrice::from_str("9.9900").unwrap(), zero, Rate::from_str("0.130000").unwrap());
+        let removed = PurchaseOrderRevisionLineData {
+            quantity: Some(zero),
+            allocated_quantity: Some(zero),
+            gross_amount: gross,
+            net_amount: net,
+            tax_amount: tax,
+            ..line_data()
+        };
+        let line =
+            PurchaseOrderRevisionLine::new(PurchaseOrderRevisionLineId::new("porl-6"), removed).unwrap();
+        assert_eq!(line.allocated_quantity, Some(zero));
     }
 }

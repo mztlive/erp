@@ -236,6 +236,7 @@ pub fn delivery_edits<'a>(
 ) -> Vec<DeliveryEdit<'a>> {
     lines
         .iter()
+        .filter(|line| !line.quantity.to_decimal().is_zero())
         .filter_map(|line| {
             let before = previous.iter().find(|old| old.sales_order_line_id == line.sales_order_line_id);
             let date_changed =
@@ -437,6 +438,14 @@ mod tests {
         assert_eq!(changed[0].delivery_allocations, Some(&new_rows[..]));
         assert_eq!(all[0].expected_delivery_date, None);
         assert_eq!(all[0].delivery_allocations, Some(&old_rows[..]));
+    }
+
+    /// 改单移除的零数量行不再复验交付日与收件分配。
+    #[test]
+    fn zero_quantity_lines_are_not_checked() {
+        let edits = delivery_edits(&[fields("0", Some("2099-01-01"), &[])], &[], RowCheck::All);
+
+        assert!(edits.is_empty());
     }
 
     /// 改动的交付日不得晚于履约期限；收件分配须属于销售要求且不超过剩余量。

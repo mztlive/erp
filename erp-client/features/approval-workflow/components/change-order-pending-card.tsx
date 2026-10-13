@@ -20,7 +20,8 @@ import {
     isBlockedStatus,
 } from "@/features/approval-workflow/display"
 import { useApprovalHistoryInfiniteQuery } from "@/features/approval-workflow/queries"
-import type { SalesChangeOrderSummary } from "@/features/sales-orders/types"
+import type { StatusTone } from "@/components/ui/status-badge"
+import type { DocumentApprovalView } from "@/features/approval-workflow/types"
 import { formatDateTime } from "@/lib/datetime"
 
 function PendingFact({ label, value }: { label: string; value: string }) {
@@ -32,22 +33,38 @@ function PendingFact({ label, value }: { label: string; value: string }) {
     )
 }
 
+/** 进行中改单卡片需要的摘要；销售与采购改单共用。 */
+export type ChangeOrderPendingSummary = {
+    statusLabel: string
+    statusTone: StatusTone
+    /** 发起时的生效版本号；未知时为 0。 */
+    baseRevisionNo: number
+    createdAt: string
+    approval?: DocumentApprovalView
+}
+
 /**
  * 详情查阅里的进行中改单：基于哪个版本、现在在谁手上、能做什么放在一张卡里。
  *
  * 审批记录默认收起；当前节点只在摘要里出现一次，不再和记录重复铺开。
  */
-export function SalesChangeOrderPendingCard({
+export function ChangeOrderPendingCard({
     id,
     changeOrder,
+    counterparty,
     running,
     actions,
+    children,
 }: {
     id: string
-    changeOrder: SalesChangeOrderSummary
+    changeOrder: ChangeOrderPendingSummary
+    /** 生效前仍按原版本执行的一方，例如「客户」「供应商」。 */
+    counterparty: string
     /** 审批已提交且在途；草稿或已撤回时不展示当前节点。 */
     running: boolean
     actions?: ReactNode
+    /** 卡片正文附加内容，例如原因或对其他单据的影响。 */
+    children?: ReactNode
 }) {
     const approval = changeOrder.approval
     const instance = approval?.instance
@@ -92,7 +109,7 @@ export function SalesChangeOrderPendingCard({
                     </div>
                     <p className="text-xs leading-5 text-muted-foreground">
                         {base ? `基于 ${base} · ` : ""}
-                        {createdAt} 发起。生效前客户仍按
+                        {createdAt} 发起。生效前{counterparty}仍按
                         {base ? ` ${base} ` : "当前版本"}执行。
                     </p>
                 </div>
@@ -102,6 +119,8 @@ export function SalesChangeOrderPendingCard({
                     </div>
                 ) : null}
             </header>
+
+            {children}
 
             {running && instance ? (
                 <dl className="grid grid-cols-1 gap-3 rounded-lg bg-background/70 px-3 py-2.5 sm:grid-cols-3">

@@ -38,6 +38,7 @@ export function PurchaseOrderSourceUpdateNotice({
     canEdit,
     canVoid,
     canChange,
+    continueChange = false,
     onEdit,
     onRequestVoid,
     onRequestChange,
@@ -48,6 +49,8 @@ export function PurchaseOrderSourceUpdateNotice({
     canEdit: boolean
     canVoid: boolean
     canChange: boolean
+    /** 已有可编辑的改单草稿，入口显示「继续改单」。 */
+    continueChange?: boolean
     onEdit: () => void
     onRequestVoid: () => void
     onRequestChange: () => void
@@ -115,7 +118,7 @@ export function PurchaseOrderSourceUpdateNotice({
                     {draft
                         ? "请修改原单：按新销售版本调整数量、预计交付日或收件分配后保存，再提交审批；无可采购数量的行填 0 即可移除。提交审批后才算处理完成。不再需要时可作废。"
                         : effective
-                          ? "请发起采购变更，按新销售版本调整数量、预计交付日或收件分配；已发生的入库、发货和付款按对应纠正单处理。"
+                          ? "请发起改单，按新销售版本调整数量、预计交付日或收件分配；不再需要的商品点「移除」。改后数量不能少于已入库、发货的数量，多出的货物按采购退货处理。"
                           : "请撤回审批后修改原单。"}
                     供应商无法调整时，可登记维持原采购。
                     {update.blocksPayment
@@ -141,7 +144,7 @@ export function PurchaseOrderSourceUpdateNotice({
                                 size="sm"
                                 onClick={onRequestChange}
                             >
-                                发起采购变更
+                                {continueChange ? "继续改单" : "发起改单"}
                             </Button>
                         ) : null}
                         {draft && canVoid ? (

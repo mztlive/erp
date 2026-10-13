@@ -20,12 +20,14 @@ use super::super::source_recheck::ensure_source_unaffected;
 const CHANGE_SOURCE_AFFECTED: &str =
     "采购变更审批期间来源销售再次变更并影响本采购，请撤回后按新销售版本重新提交";
 use super::effect::EffectiveChangePosting;
+use super::guard::check_effective_lines;
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
 /// 原事务中的真实跨域操作；没有成本构造或成本写入步骤，因为原差额成本恒空。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum EffectStep {
+    QuantityGuard,
     SalesGuard,
     PrepareAllocations,
     Revision,
@@ -52,6 +54,7 @@ trait EffectSteps: Send {
 async fn execute(steps: &mut impl EffectSteps, executor: &mut dyn Executor) -> Result<()> {
     use EffectStep::*;
     for step in [
+        QuantityGuard,
         SalesGuard,
         PrepareAllocations,
         Revision,
@@ -90,6 +93,7 @@ impl EffectSteps for MongoEffect<'_> {
         use EffectStep::*;
         let purchase = &mut self.write.purchase;
         match step {
+            QuantityGuard => guard_quantities(self.db, purchase, self.actor_id, executor).await?,
             SalesGuard => {
                 revalidate_payment_subject(self.db, &purchase.revision.payment_subject, executor).await?;
                 purchase.order.sales_order_revision_id =
@@ -139,6 +143,21 @@ impl EffectSteps for MongoEffect<'_> {
     }
 }
 
+/// 按当时事实复核改后数量与交付安排，仓库履约采购同步重算入库进度。
+async fn guard_quantities(
+    db: &Database,
+    purchase: &mut EffectiveChangeWrite,
+    actor_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    if let Some(progress) =
+        check_effective_lines(db, &purchase.order, &purchase.revision_lines, executor).await?
+    {
+        purchase.order.set_fulfillment_progress(progress, actor_id.to_string());
+    }
+    Ok(())
+}
+
 /// 正式采购版本切换与应付主体同步共用调用方执行器，零金额变更也必须推进依据。
 async fn persist_current_purchase(
     db: &Database,
@@ -161,8 +180,8 @@ async fn persist_current_purchase(
 
 /// 事务内写入生效修订、指针、差额与变更单。
 ///
-/// 先推进来源销售 guard，再按当前销售版本重建 allocation，最后切换采购
-/// 当前版本并同步任务。
+/// 先按当时事实复核改后数量与交付安排，再推进来源销售 guard，按当前销售版本
+/// 重建 allocation，最后切换采购当前版本并同步任务。
 ///
 /// # 参数
 /// * `db` - 采购、销售与财务所在数据库。
@@ -246,6 +265,7 @@ mod tests {
     fn expected() -> Vec<EffectStep> {
         use EffectStep::*;
         vec![
+            QuantityGuard,
             SalesGuard,
             PrepareAllocations,
             Revision,

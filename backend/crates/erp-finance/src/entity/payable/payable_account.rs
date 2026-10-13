@@ -329,6 +329,32 @@ impl PayableAccount {
     ///
     /// # 错误
     /// 来源或供应商不一致、基准金额漂移，或目标金额低于已核销/已收票时拒绝。
+    /// 采购改单提交前预检改后含税总额不低于已付款和已收票金额。
+    ///
+    /// # 参数
+    /// * `new_gross` - 改后含税总额
+    ///
+    /// # 返回
+    /// 改后金额覆盖已付款与已收票时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 低于已付款或已收票金额时返回领域错误，文案指明下一步。
+    pub fn ensure_purchase_change_amount(&self, new_gross: Amount) -> Result<()> {
+        if new_gross < self.settled_total {
+            return Err(Error::from(format!(
+                "改后含税总额 {new_gross} 低于已付款 {}，多付金额请办理供应商退款后再改单",
+                self.settled_total
+            )));
+        }
+        if new_gross < self.invoiced_total {
+            return Err(Error::from(format!(
+                "改后含税总额 {new_gross} 低于已收票 {}，请先办理进项红票后再改单",
+                self.invoiced_total
+            )));
+        }
+        Ok(())
+    }
+
     pub(crate) fn apply_purchase_change(
         &mut self,
         purchase_order_id: &PurchaseOrderId,
@@ -468,6 +494,28 @@ mod tests {
 
         let negative = PayableAccountData { invoiced_total: Amount::from_str("-1.00").unwrap(), ..data() };
         assert!(PayableAccount::new(PayableAccountId::new("pa-5"), negative, "admin").is_err());
+    }
+
+    /// 改后金额不得低于已付款和已收票金额，等于时允许。
+    #[test]
+    fn purchase_change_amount_must_cover_paid_and_invoiced() {
+        let account = PayableAccount::new(
+            PayableAccountId::new("pa-6"),
+            PayableAccountData {
+                settled_total: Amount::from_str("300.00").unwrap(),
+                invoiced_total: Amount::from_str("500.00").unwrap(),
+                ..data()
+            },
+            "admin",
+        )
+        .unwrap();
+
+        account.ensure_purchase_change_amount(Amount::from_str("500.00").unwrap()).unwrap();
+        let paid = account.ensure_purchase_change_amount(Amount::from_str("299.99").unwrap()).unwrap_err();
+        assert!(paid.to_string().contains("供应商退款"));
+        let invoiced =
+            account.ensure_purchase_change_amount(Amount::from_str("499.99").unwrap()).unwrap_err();
+        assert!(invoiced.to_string().contains("红票"));
     }
 
     #[test]

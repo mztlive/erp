@@ -170,6 +170,22 @@ export type PurchaseChangeOrderSummary = Readonly<{
     createdAt: string
     /** 统一只读审批结构。缺省表示列表行尚未补详情。 */
     approval?: DocumentApprovalView
+    /** 在途改单按当前提交预判的销售覆盖变化；未提交或终态为空。 */
+    coverageEffects: readonly PurchaseChangeCoverageEffect[]
+}>
+
+/** 采购改单一行数量变化对销售覆盖的影响。 */
+export type PurchaseChangeCoverageEffect = Readonly<{
+    salesOrderLineId: string
+    lineNo: number
+    itemName: string
+    baseQuantity: string
+    targetQuantity: string
+    salesQuantity: string
+    otherCoveredQuantity: string
+    /** 改后该销售行仍待覆盖数量，生效后回到供给分配。 */
+    gapQuantity: string
+    excessQuantity: string
 }>
 
 /** PurchaseReturnOrder 为 NO_APPROVAL：行投影不得携带审批区。 */

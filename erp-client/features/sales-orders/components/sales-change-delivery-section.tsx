@@ -7,7 +7,7 @@ import { FieldError } from "@/components/ui/field"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { compactFixed } from "@/lib/fixed-decimal"
 import { allocationSummary } from "./sales-delivery-allocation-editor"
-import { SalesChangeSection } from "./sales-change-section"
+import { ChangeOrderSection } from "@/components/business/change-order-section"
 import {
     salesChangeLineRemoved,
     type SalesChangeDraftValues,
@@ -41,7 +41,7 @@ export function SalesChangeDeliverySection({
                 )
                 if (!rows.length) return null
                 return (
-                    <SalesChangeSection
+                    <ChangeOrderSection
                         id={`${id}-delivery`}
                         title="交付安排"
                         description="每项商品须有交付期限。分地址选填，填写后各地址数量合计须等于商品数量；也可在履约时补充。"
@@ -58,7 +58,7 @@ export function SalesChangeDeliverySection({
                                 />
                             ))}
                         </div>
-                    </SalesChangeSection>
+                    </ChangeOrderSection>
                 )
             }}
         </form.Subscribe>

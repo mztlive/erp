@@ -344,6 +344,17 @@ export function mapPurchaseChangeOrder(
         baseRevisionId: row.base_revision_id,
         createdAt: secsToIso(row.created_at),
         approval: mapPurchaseChangeOrderApproval(row.approval),
+        coverageEffects: (row.coverage_effects ?? []).map((effect) => ({
+            salesOrderLineId: effect.sales_order_line_id,
+            lineNo: effect.line_no,
+            itemName: effect.item_name,
+            baseQuantity: effect.base_quantity,
+            targetQuantity: effect.target_quantity,
+            salesQuantity: effect.sales_quantity,
+            otherCoveredQuantity: effect.other_covered_quantity,
+            gapQuantity: effect.gap_quantity,
+            excessQuantity: effect.excess_quantity,
+        })),
     }
 }
 

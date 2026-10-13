@@ -40,6 +40,7 @@ mod payment_subject;
 mod purchase_revision;
 mod purchase_submission;
 mod purchase_submission_line;
+mod revision_rollup;
 mod snapshot;
 mod source_impact;
 mod source_update;
@@ -52,9 +53,10 @@ pub use allocation::{
 };
 pub use business_date::business_date_of;
 pub use change_order::{
-    PurchaseChangeOrder, PurchaseChangeOrderData, PurchaseChangeOrderStatus, PurchaseChangeOrderUpdate,
-    PurchaseChangeSubmission, PurchaseChangeSubmissionData, PurchaseChangeSubmissionLine,
-    PurchaseChangeSubmissionLineData,
+    ChangeQuantityBound, PurchaseChangeOrder, PurchaseChangeOrderData, PurchaseChangeOrderStatus,
+    PurchaseChangeOrderUpdate, PurchaseChangeSubmission, PurchaseChangeSubmissionData,
+    PurchaseChangeSubmissionLine, PurchaseChangeSubmissionLineData, build_change_quantity_bounds,
+    validate_change_quantities,
 };
 pub use command_receipt::{
     PurchaseCommandFingerprint, PurchaseCommandReceipt, PurchaseCommandReceiptError,
@@ -89,6 +91,9 @@ pub use purchase_submission::{
     PurchaseOrderReviewDecision, PurchaseOrderSubmission, PurchaseOrderSubmissionData,
     PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData, PurchaseOrderSubmissionUpdate,
     SubmissionStatus,
+};
+pub use revision_rollup::{
+    purchase_line_stable_key, receipt_progress_after_change, rekey_to_current_lines, rollup_by_stable_key,
 };
 pub use snapshot::{PaymentTermSnapshot, SupplierSnapshot};
 pub use source_impact::{

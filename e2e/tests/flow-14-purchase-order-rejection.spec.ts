@@ -17,7 +17,7 @@
  *    approval_subject_version。本流程用提交身份 current_submission_id、
  *    明细数量/含税合计与审批实例 id 断言内容与版本冻结。
  * 3. 文档禁止对尚未生效的驳回单开采购变更单；代码 START_CHANGE 仅 EFFECTIVE/
- *    PARTIAL。审批中页头不渲染「发起采购变更」，变更分区渲染 disabled 按钮，
+ *    PARTIAL。审批中页头不渲染「发起改单」，变更分区渲染 disabled 按钮，
  *    actionBlockers 映射为空，回落文案「当前状态下不能发起变更，可先完成前置条件。」
  * 4. 合同 4.4.2 删除 PurchaseReviewStatus；前端仍并列「审批」轨（审批中/已通过/
  *    已驳回）。驳回后主状态与审核轨都保持「审批中」，不会变成「已驳回」。
@@ -393,9 +393,6 @@ test("[flow-14] 采购单审批驳回后修改原单重提，同单号生效并�
         await page
             .getByLabel("含税成交单价", { exact: true })
             .fill(SALES_UNIT_PRICE)
-        await expect(page.getByText("手动成交价", { exact: true })).toBeVisible(
-            VISIBLE,
-        )
         await page.locator("#sales-orders-create-batch-due-date-open").click()
         await pickCalendarDay(
             page,
@@ -874,7 +871,7 @@ test("[flow-14] 采购单审批驳回后修改原单重提，同单号生效并�
         await page.getByRole("tab", { name: /^变更/ }).click()
         await expect(page.getByText("暂无采购变更")).toBeVisible(VISIBLE)
         await expect(
-            page.getByRole("button", { name: "发起采购变更" }),
+            page.getByRole("button", { name: "发起改单" }),
         ).toHaveCount(0)
         await expect(
             page.locator("#procurement-orders-detail-change"),

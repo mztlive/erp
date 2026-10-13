@@ -26,6 +26,7 @@ export {
     savePurchaseOrderDraft,
     startPurchaseChange,
     submitPurchaseChange,
+    voidPurchaseChange,
     submitPurchaseOrderForReview,
     voidPurchaseOrderDraft,
 } from "./purchase-order-commands"

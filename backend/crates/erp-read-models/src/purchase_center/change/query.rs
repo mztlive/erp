@@ -13,6 +13,7 @@ use validator::Validate;
 
 use super::super::PurchaseOrderReadService;
 use super::super::dto::PurchaseChangeOrderView;
+use super::coverage_effects::load_coverage_effects;
 use super::mapping::change_list_view;
 use crate::{Error, Result};
 
@@ -252,8 +253,10 @@ async fn load_authorized_change(
                     change.stable.status,
                 )
                 .await?;
+                let coverage_effects = load_coverage_effects(&db, &change, &order, executor).await?;
                 let mut view = change_list_view(change, binding);
                 view.approval = approval;
+                view.coverage_effects = coverage_effects;
                 let version = format!("{}:{}:{}", context.scope_version, order.base.id, order.base.version);
                 Ok((view, version))
             })

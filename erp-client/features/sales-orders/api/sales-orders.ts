@@ -36,4 +36,6 @@ export {
     type StartSalesChangeOrderIntent,
     type StartSalesChangeOrderPayload,
     type SubmitSalesChangeOrderInput,
+    voidSalesChangeOrder,
+    type VoidSalesChangeOrderInput,
 } from "@/features/sales-orders/api/sales-orders-change"

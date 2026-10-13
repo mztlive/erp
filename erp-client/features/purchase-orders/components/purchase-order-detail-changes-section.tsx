@@ -44,13 +44,14 @@ export function PurchaseOrderDetailChangesSection({
             <div className="divide-y divide-border/70">
                 {order.activeChangeOrder ? (
                     <DetailRecordSection title="当前变更">
-                        <p className="text-sm">
-                            {order.activeChangeOrder.reason}
-                        </p>
                         <PurchaseChangeOrderApprovalSection
                             readonlyApproval
                             purchaseOrderId={order.identity.purchaseOrderId}
                             changeOrder={order.activeChangeOrder}
+                            baseRevisionNo={order.identity.revisionNo}
+                            paidAmount={
+                                order.payableSummary?.paidAllocatedAmount
+                            }
                             workItemId={workItemId}
                             expectedTaskVersion={expectedTaskVersion}
                             workItemAllowedActions={workItemAllowedActions}

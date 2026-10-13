@@ -21,6 +21,7 @@ import {
     startSalesChangeOrder,
     submitSalesChangeOrder,
     submitSalesOrder,
+    voidSalesChangeOrder,
     type SalesOrdersListQuery,
 } from "@/features/sales-orders/api/sales-orders"
 
@@ -251,6 +252,32 @@ export function useSubmitSalesChangeOrderMutation() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: submitSalesChangeOrder,
+        onSuccess: async (_data, variables) => {
+            await Promise.all([
+                queryClient.invalidateQueries({
+                    queryKey: salesOrderKeys.detail(variables.salesOrderId),
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: salesOrderKeys.all,
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: approvalKeys.all,
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: workItemKeys.all,
+                }),
+            ])
+        },
+    })
+}
+
+/**
+ * 作废销售改单草稿。成功后刷新销售单、审批实例与任务。
+ */
+export function useVoidSalesChangeOrderMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: voidSalesChangeOrder,
         onSuccess: async (_data, variables) => {
             await Promise.all([
                 queryClient.invalidateQueries({

@@ -19,6 +19,24 @@ export type PurchaseDeliveryLineOption = {
     /** 须按收件地址分配数量。 */
     requiresAddresses: boolean
     addresses: PurchaseDeliveryAddressOption[]
+    /** 采购改单可填数量范围；采购尚未生效时缺省。 */
+    quantityBound?: PurchaseQuantityBound
+}
+
+/** 采购改单一行的可填数量范围。 */
+export type PurchaseQuantityBound = {
+    /** 采购当前生效数量。 */
+    baseQuantity: string
+    /** 销售当前需要数量。 */
+    salesQuantity: string
+    /** 其他采购与库存已覆盖数量。 */
+    otherCoveredQuantity: string
+    /** 本采购已入库、发货或交付数量。 */
+    fulfilledQuantity: string
+    minQuantity: string
+    maxQuantity: string
+    /** 销售已调减或移除，本行必须调减。 */
+    quantityAffected: boolean
 }
 
 type BackendPurchaseDeliveryOptions = {
@@ -34,6 +52,15 @@ type BackendPurchaseDeliveryOptions = {
             address: string
             available_quantity: string
         }>
+        quantity_bound?: {
+            base_quantity: string
+            sales_quantity: string
+            other_covered_quantity: string
+            fulfilled_quantity: string
+            min_quantity: string
+            max_quantity: string
+            quantity_affected: boolean
+        } | null
     }>
 }
 
@@ -56,5 +83,17 @@ export async function fetchPurchaseDeliveryOptions(
             address: row.address,
             availableQuantity: row.available_quantity,
         })),
+        quantityBound: line.quantity_bound
+            ? {
+                  baseQuantity: line.quantity_bound.base_quantity,
+                  salesQuantity: line.quantity_bound.sales_quantity,
+                  otherCoveredQuantity:
+                      line.quantity_bound.other_covered_quantity,
+                  fulfilledQuantity: line.quantity_bound.fulfilled_quantity,
+                  minQuantity: line.quantity_bound.min_quantity,
+                  maxQuantity: line.quantity_bound.max_quantity,
+                  quantityAffected: line.quantity_bound.quantity_affected,
+              }
+            : undefined,
     }))
 }

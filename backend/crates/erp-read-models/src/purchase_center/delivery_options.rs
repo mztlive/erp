@@ -8,15 +8,17 @@ use std::collections::BTreeSet;
 use application_core::AuditActor;
 use erp_core::ids::SalesOrderRevisionId;
 use erp_procurement::entity::purchase_order::{
-    FulfillmentResponsibility, ProcurementCoverageFacts, PurchaseOrder, business_date_of,
-    remaining_delivery_capacity,
+    ChangeQuantityBound, FulfillmentResponsibility, ProcurementCoverageFacts, PurchaseOrder,
+    business_date_of, remaining_delivery_capacity,
 };
 use erp_sales::repository::SalesOrderExt;
 use persistence_core::NoTransaction;
 
 use super::PurchaseOrderReadService;
+use super::change_bounds::load_change_quantity_facts;
 use super::dto::{
     PurchaseDeliveryAddressOptionView, PurchaseDeliveryLineOptionView, PurchaseDeliveryOptionsView,
+    PurchaseQuantityBoundView,
 };
 use super::repository::load_procurement_coverage_facts;
 use crate::support::data_scope_changed;
@@ -48,8 +50,22 @@ impl PurchaseOrderReadService {
         Ok(view)
     }
 
-    /// 按销售当前版本装配交付安排范围。
+    /// 按销售当前版本装配交付安排范围；已生效采购附带改单数量范围。
     async fn delivery_options_view(&self, order: &PurchaseOrder) -> Result<PurchaseDeliveryOptionsView> {
+        if !order.stable.status.allows_change() {
+            return self.draft_delivery_options_view(order).await;
+        }
+        let facts = load_change_quantity_facts(&self.db, order, &mut NoTransaction).await?;
+        let mut view = delivery_options(order, &facts.state.facts)?;
+        attach_quantity_bounds(&mut view, &facts.bounds)?;
+        Ok(view)
+    }
+
+    /// 采购草稿只需交付安排范围。
+    async fn draft_delivery_options_view(
+        &self,
+        order: &PurchaseOrder,
+    ) -> Result<PurchaseDeliveryOptionsView> {
         let sales = self
             .db
             .sales_orders()
@@ -116,10 +132,44 @@ fn delivery_options(
             sales_due_date: business_date_of(goods.fulfillment_due_at).map_err(Error::Logic)?.to_string(),
             requires_addresses,
             addresses,
+            quantity_bound: None,
         });
     }
     lines.sort_by_key(|line| line.line_no);
     Ok(PurchaseDeliveryOptionsView { lines })
+}
+
+/// 按稳定销售行附上改单数量范围。
+///
+/// # 参数
+/// * `view` - 交付安排范围
+/// * `bounds` - 采购当前生效版本商品行的数量范围
+///
+/// # 返回
+/// 成功时原地写入各行的数量范围。
+///
+/// # 错误
+/// 数量越界时返回错误。
+fn attach_quantity_bounds(
+    view: &mut PurchaseDeliveryOptionsView,
+    bounds: &[ChangeQuantityBound],
+) -> Result<()> {
+    for line in &mut view.lines {
+        let Some(bound) = bounds.iter().find(|bound| bound.sales_order_line_id == line.sales_order_line_id)
+        else {
+            continue;
+        };
+        line.quantity_bound = Some(PurchaseQuantityBoundView {
+            base_quantity: bound.base_quantity,
+            sales_quantity: bound.sales_quantity,
+            other_covered_quantity: bound.other_covered_quantity,
+            fulfilled_quantity: bound.fulfilled_quantity,
+            min_quantity: bound.min_quantity(),
+            max_quantity: bound.max_quantity().map_err(Error::Logic)?,
+            quantity_affected: bound.quantity_affected,
+        });
+    }
+    Ok(())
 }
 
 /// 采购当前提交与当前版本引用的销售稳定行。

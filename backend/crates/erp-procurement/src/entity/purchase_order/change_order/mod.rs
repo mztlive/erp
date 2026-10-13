@@ -7,10 +7,12 @@
 mod draft;
 mod line;
 mod order;
+mod quantity_bounds;
 mod submission;
 
 pub use line::{PurchaseChangeSubmissionLine, PurchaseChangeSubmissionLineData};
 pub use order::{
     PurchaseChangeOrder, PurchaseChangeOrderData, PurchaseChangeOrderStatus, PurchaseChangeOrderUpdate,
 };
+pub use quantity_bounds::{ChangeQuantityBound, build_change_quantity_bounds, validate_change_quantities};
 pub use submission::{PurchaseChangeSubmission, PurchaseChangeSubmissionData};

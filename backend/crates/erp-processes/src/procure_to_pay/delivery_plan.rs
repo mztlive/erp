@@ -1,4 +1,6 @@
 //! 采购草稿保存、提交与采购变更冻结和生效时复验交付安排，沿用销售 guard 与调用方执行器。
+use std::collections::HashSet;
+
 use erp_core::ids::SalesOrderRevisionId;
 use erp_procurement::entity::purchase_order::{
     DeliveryEdit, DeliveryFields, ProcurementCoverageFacts, PurchaseLineInput, PurchaseOrder,
@@ -77,23 +79,74 @@ pub(super) async fn validate_revision_delivery(
     validate_delivery(db, order, &delivery_edits(&fields, &[], RowCheck::All), executor).await
 }
 
-/// 采购变更输入转为待复验交付调整：收件分配全部复验，预计交付日只复验改动部分。
+/// 采购改单目标转为待复验交付调整：收件分配全部复验，预计交付日复验改动行和因
+/// 履约期限提前受影响的行；已登记维持的旧交期不阻断其他调整。
+///
 /// # 参数
-/// `db`、`executor` 为调用方执行器；`order`、`inputs` 为本次变更内容；`base` 为变更基准版本行。
+/// * `db`、`executor` - 调用方执行器
+/// * `order` - 来源采购单
+/// * `inputs` - 本次改单目标行
+/// * `base` - 采购当前生效版本行
+/// * `recheck` - 须复验预计交付日的稳定销售行
+///
 /// # 返回
 /// 完整通过交付来源校验时成功。
+///
 /// # 错误
 /// 交付日、地址、数量、来源或数据读取失败时拒绝。
-pub(super) async fn validate_input_delivery(
+pub(super) async fn validate_change_input_delivery(
     db: &Database,
     order: &PurchaseOrder,
     inputs: &[PurchaseLineInput],
     base: &[PurchaseOrderRevisionLine],
+    recheck: &HashSet<String>,
     executor: &mut dyn Executor,
 ) -> Result<()> {
     let fields = inputs.iter().filter_map(DeliveryFields::of_input).collect::<Vec<_>>();
-    let previous = base.iter().filter_map(DeliveryFields::of_revision).collect::<Vec<_>>();
-    validate_delivery(db, order, &delivery_edits(&fields, &previous, RowCheck::All), executor).await
+    validate_change_fields(db, order, &fields, base, recheck, executor).await
+}
+
+/// 采购改单生效时按新版本行复验交付调整，规则同 [`validate_change_input_delivery`]。
+///
+/// # 参数
+/// * `db`、`executor` - 生效事务执行器
+/// * `order` - 尚未切换版本的来源采购单
+/// * `lines` - 即将写入的新版本行
+/// * `base` - 采购当前生效版本行
+/// * `recheck` - 须复验预计交付日的稳定销售行
+///
+/// # 返回
+/// 完整通过交付来源校验时成功。
+///
+/// # 错误
+/// 交付日、地址、数量、来源或数据读取失败时拒绝。
+pub(super) async fn validate_change_revision_delivery(
+    db: &Database,
+    order: &PurchaseOrder,
+    lines: &[PurchaseOrderRevisionLine],
+    base: &[PurchaseOrderRevisionLine],
+    recheck: &HashSet<String>,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let fields = lines.iter().filter_map(DeliveryFields::of_revision).collect::<Vec<_>>();
+    validate_change_fields(db, order, &fields, base, recheck, executor).await
+}
+
+/// 以基准版本为对照复验改单交付调整；须复验的行不进入对照，视为改动。
+async fn validate_change_fields(
+    db: &Database,
+    order: &PurchaseOrder,
+    fields: &[DeliveryFields<'_>],
+    base: &[PurchaseOrderRevisionLine],
+    recheck: &HashSet<String>,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let previous = base
+        .iter()
+        .filter_map(DeliveryFields::of_revision)
+        .filter(|line| !recheck.contains(line.sales_order_line_id))
+        .collect::<Vec<_>>();
+    validate_delivery(db, order, &delivery_edits(fields, &previous, RowCheck::All), executor).await
 }
 
 /// 采购草稿或提交行相对原草稿的交付调整复验。

@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { SellableSkuSelectDialog } from "./sellable-sku-select-dialog"
-import { SalesChangeSection } from "./sales-change-section"
+import { ChangeOrderSection } from "@/components/business/change-order-section"
 import {
     salesChangeLineAmount,
     salesChangeLineDiff,
@@ -93,7 +93,7 @@ export function SalesChangeLineItems({
                       ]
                     : ["商品", "数量", "含税成交单价", "销项税率", "小计", ""]
                 return (
-                    <SalesChangeSection
+                    <ChangeOrderSection
                         id={`${id}-lines`}
                         title="商品明细"
                         description={
@@ -226,7 +226,7 @@ export function SalesChangeLineItems({
                                 setPicker(null)
                             }}
                         />
-                    </SalesChangeSection>
+                    </ChangeOrderSection>
                 )
             }}
         </form.Subscribe>

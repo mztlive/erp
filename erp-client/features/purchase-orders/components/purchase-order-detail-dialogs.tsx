@@ -25,17 +25,13 @@ export function PurchaseOrderDetailDialogs({
     onSubmitConfirmOpenChange,
     voidConfirmOpen,
     onVoidConfirmOpenChange,
-    changeConfirmOpen,
-    onChangeConfirmOpenChange,
     leaveGuardOpen,
     onLeaveGuardOpenChange,
     submitPending,
     savePending,
     voidPending,
-    changePending,
     onConfirmSubmit,
     onConfirmVoid,
-    onConfirmChange,
     onSaveAndLeave,
     onDiscardAndLeave,
 }: {
@@ -44,17 +40,13 @@ export function PurchaseOrderDetailDialogs({
     onSubmitConfirmOpenChange: (open: boolean) => void
     voidConfirmOpen: boolean
     onVoidConfirmOpenChange: (open: boolean) => void
-    changeConfirmOpen: boolean
-    onChangeConfirmOpenChange: (open: boolean) => void
     leaveGuardOpen: boolean
     onLeaveGuardOpenChange: (open: boolean) => void
     submitPending: boolean
     savePending: boolean
     voidPending: boolean
-    changePending: boolean
     onConfirmSubmit: () => void
     onConfirmVoid: () => void
-    onConfirmChange: () => void
     onSaveAndLeave: () => void
     onDiscardAndLeave: () => void
 }) {
@@ -90,32 +82,6 @@ export function PurchaseOrderDetailDialogs({
                 irreversibleEffects={["作废后的采购草稿不能恢复或再次提交"]}
                 pending={voidPending}
                 onConfirm={onConfirmVoid}
-            />
-
-            <FormalActionConfirmDialog
-                actionVariant="default"
-                idPrefix="procurement-orders-detail-change-confirm"
-                open={changeConfirmOpen}
-                onOpenChange={onChangeConfirmOpenChange}
-                title="发起采购变更"
-                description="将根据当前采购单创建变更草稿，填写调整内容和原因后再提交审批。"
-                actionLabel="创建变更草稿"
-                confirmLabel="创建变更草稿"
-                cancelLabel="暂不变更"
-                layout="compact"
-                showStatusChange={false}
-                fromStatus={{
-                    label: order.identity.statusLabel,
-                    tone: order.identity.statusTone,
-                }}
-                toStatus={{ label: "变更草稿", tone: "warning" }}
-                summaryTitle="变更须知"
-                summary={[
-                    "变更审批通过并生效后，才会更新采购单。",
-                    "已记录的入库、发货、付款和发票不会因发起变更而撤销。",
-                ]}
-                pending={changePending}
-                onConfirm={onConfirmChange}
             />
 
             <Dialog open={leaveGuardOpen} onOpenChange={onLeaveGuardOpenChange}>

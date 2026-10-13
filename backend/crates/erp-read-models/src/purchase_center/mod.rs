@@ -4,6 +4,7 @@ mod approval;
 pub(crate) mod approval_materials;
 mod approval_query;
 mod change;
+pub mod change_bounds;
 mod creation_basis;
 mod delivery_options;
 pub mod dto;

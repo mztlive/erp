@@ -178,10 +178,10 @@ impl PurchaseLineDataRef for PurchaseChangeSubmissionLineData {
     /// 无。
     ///
     /// # 返回
-    /// 商品行已引用销售稳定行与当前版本行且分配数量为正，或物流费用行不携带销售分配时返回 `Ok(())`。
+    /// 商品行已引用销售稳定行与当前版本行且分配数量不为负（零数量表示已移除），或物流费用行不携带销售分配时返回 `Ok(())`。
     ///
     /// # 错误
-    /// 商品行缺少销售行引用、分配数量缺失或非正，或物流费用行携带销售行、历史提交行或分配数量时返回领域错误。
+    /// 商品行缺少销售行引用、分配数量缺失或为负，或物流费用行携带销售行、历史提交行或分配数量时返回领域错误。
     fn ensure_allocation(&self) -> Result<()> {
         match self.line_type {
             PurchaseLineType::ItemService => {
@@ -189,8 +189,8 @@ impl PurchaseLineDataRef for PurchaseChangeSubmissionLineData {
                     return Err(Error::from("商品/服务行必须引用销售稳定行与当前版本行"));
                 }
                 let quantity = self.allocated_quantity.ok_or("商品/服务行必须填写分配数量")?;
-                if quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
-                    return Err(Error::from("商品/服务行分配数量必须为正"));
+                if quantity.to_decimal() < rust_decimal::Decimal::ZERO {
+                    return Err(Error::from("商品/服务行分配数量不能为负"));
                 }
             },
             PurchaseLineType::LogisticsFee => {
@@ -204,6 +204,20 @@ impl PurchaseLineDataRef for PurchaseChangeSubmissionLineData {
             },
         }
         Ok(())
+    }
+
+    /// 变更提交行与版本行允许零数量，表示该行已移除但保留原行身份。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 恒返回 `true`。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    fn allows_zero_quantity(&self) -> bool {
+        true
     }
 }
 
@@ -346,5 +360,27 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    /// 改单移除的商品行以零数量和零金额保留原行身份；负数量仍被拒绝。
+    #[test]
+    fn change_line_keeps_removed_item_with_zero_quantity() {
+        let zero = Quantity::from_str("0").unwrap();
+        let rate = Rate::from_str("0.130000").unwrap();
+        let (gross, net, tax) = line_amounts(UnitPrice::from_str("9.9900").unwrap(), zero, rate);
+        let removed = PurchaseChangeSubmissionLineData {
+            quantity: Some(zero),
+            allocated_quantity: Some(zero),
+            gross_amount: gross,
+            net_amount: net,
+            tax_amount: tax,
+            ..change_line_data()
+        };
+
+        let line = PurchaseChangeSubmissionLine::new(PurchaseChangeSubmissionLineId::new("pcsl-4"), removed)
+            .unwrap();
+
+        assert_eq!(line.quantity, Some(zero));
+        assert!(line.gross_amount.to_decimal().is_zero());
     }
 }

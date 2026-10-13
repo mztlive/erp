@@ -14,7 +14,7 @@ use crate::entity::purchase_order::{
 pub struct PurchaseChangeDraftView {
     /// 原变更单当前乐观锁版本；提交时传为 `expected_lock_version`。
     pub version: u64,
-    /// 原变更原因；提交不会变更该事实。
+    /// 原变更原因；提交时可一并修改。
     pub reason: String,
     /// 当前冻结目标或初始基准的付款条件。
     pub payment_term_code: String,
@@ -22,6 +22,12 @@ pub struct PurchaseChangeDraftView {
     pub line_keys: Vec<String>,
     /// 原目标全部行及冻结来源关联；金额、数量和税率均为字符串。
     pub lines: Vec<SavePurchaseOrderLine>,
+    /// 当前生效版本的全部行，用于对照改动；撤回后恢复的目标与此不同。
+    #[serde(default)]
+    pub base_lines: Vec<SavePurchaseOrderLine>,
+    /// 当前生效版本含税总额。
+    #[serde(default)]
+    pub base_gross_amount: String,
 }
 
 impl PurchaseChangeDraftView {
@@ -47,6 +53,8 @@ impl PurchaseChangeDraftView {
             payment_term_code: revision.payment_term_snapshot.payment_term_code.clone(),
             line_keys: lines.iter().map(|line| line.base.id.clone()).collect(),
             lines: lines.iter().map(SavePurchaseOrderLine::from).collect(),
+            base_lines: Vec::new(),
+            base_gross_amount: String::new(),
         })
     }
 
@@ -72,7 +80,32 @@ impl PurchaseChangeDraftView {
             payment_term_code: submission.payment_term_snapshot.payment_term_code.clone(),
             line_keys: lines.iter().map(|line| line.base.id.clone()).collect(),
             lines: lines.iter().map(SavePurchaseOrderLine::from).collect(),
+            base_lines: Vec::new(),
+            base_gross_amount: String::new(),
         })
+    }
+}
+
+impl PurchaseChangeDraftView {
+    /// 附上当前生效版本行与含税总额，供界面对照改动。
+    ///
+    /// # 参数
+    /// * `revision` - 变更基准版本，即当前生效版本
+    /// * `lines` - 基准版本全部行
+    ///
+    /// # 返回
+    /// 返回带对照基准的快照。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    pub fn with_base(
+        mut self,
+        revision: &PurchaseOrderRevision,
+        lines: &[PurchaseOrderRevisionLine],
+    ) -> Self {
+        self.base_lines = lines.iter().map(SavePurchaseOrderLine::from).collect();
+        self.base_gross_amount = revision.gross_amount.to_string();
+        self
     }
 }
 

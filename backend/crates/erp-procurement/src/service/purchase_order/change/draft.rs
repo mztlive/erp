@@ -3,7 +3,9 @@
 use persistence_core::Executor;
 
 use crate::dto::purchase_order::PurchaseChangeDraftView;
-use crate::entity::purchase_order::{PurchaseChangeOrder, PurchaseOrder};
+use crate::entity::purchase_order::{
+    PurchaseChangeOrder, PurchaseOrder, PurchaseOrderRevision, PurchaseOrderRevisionLine,
+};
 use crate::repository::PurchaseOrderExt;
 use crate::service::purchase_order::PurchaseOrderService;
 use crate::{Error, Result};
@@ -26,6 +28,26 @@ impl PurchaseOrderService {
         executor: &mut dyn Executor,
     ) -> Result<PurchaseChangeDraftView> {
         change.ensure_draft_origin(order).map_err(|error| Error::ConflictError(error.to_string()))?;
+        let revision = self
+            .db
+            .purchase_order_revisions()
+            .find_by_id(change.base_revision_id.as_ref(), executor)
+            .await?
+            .ok_or_else(|| Error::ConflictError("采购变更基准版本不存在".into()))?;
+        let base_lines =
+            self.db.purchase_order().list_revision_lines(&change.base_revision_id, executor).await?;
+        let view = self.change_target_view(change, &revision, &base_lines, executor).await?;
+        Ok(view.with_base(&revision, &base_lines))
+    }
+
+    /// 恢复当前冻结目标；尚未提交时恢复基准版本。
+    async fn change_target_view(
+        &self,
+        change: &PurchaseChangeOrder,
+        revision: &PurchaseOrderRevision,
+        base_lines: &[PurchaseOrderRevisionLine],
+        executor: &mut dyn Executor,
+    ) -> Result<PurchaseChangeDraftView> {
         if let Some(submission_id) = &change.current_submission_id {
             let submission = self
                 .db
@@ -38,14 +60,7 @@ impl PurchaseOrderService {
             return PurchaseChangeDraftView::from_submission(change, &submission, &lines)
                 .map_err(|error| Error::ConflictError(error.to_string()));
         }
-        let revision = self
-            .db
-            .purchase_order_revisions()
-            .find_by_id(change.base_revision_id.as_ref(), executor)
-            .await?
-            .ok_or_else(|| Error::ConflictError("采购变更基准版本不存在".into()))?;
-        let lines = self.db.purchase_order().list_revision_lines(&change.base_revision_id, executor).await?;
-        PurchaseChangeDraftView::from_base(change, &revision, &lines)
+        PurchaseChangeDraftView::from_base(change, revision, base_lines)
             .map_err(|error| Error::ConflictError(error.to_string()))
     }
 }

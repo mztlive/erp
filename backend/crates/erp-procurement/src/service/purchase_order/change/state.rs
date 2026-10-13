@@ -3,7 +3,9 @@
 //! 本层保留原因：三个入口的调用方在组合层 `erp-processes`（跨组 crate，
 //! 本域不得改动），直接删除会跨组破坏调用；实体方法返回 `erp_core` 错误，
 //! 本层将其映射为本域 [`Error`]，并锁定对外冲突文案，故保留为薄守卫层。
-use crate::entity::purchase_order::{PurchaseChangeOrder, PurchaseChangeOrderStatus};
+use crate::entity::purchase_order::{
+    PurchaseChangeOrder, PurchaseChangeOrderStatus, PurchaseChangeOrderUpdate,
+};
 use crate::{Error, Result};
 
 /// 提交并启动：进入 `IN_APPROVAL`，递增 `approval_subject_version`。
@@ -58,4 +60,49 @@ pub fn ensure_final_approve_effective(order: &PurchaseChangeOrder) -> Result<()>
         return Err(Error::ConflictError("只有审批中的采购变更单可以由最终通过动作生效".to_string()));
     }
     Ok(())
+}
+
+/// 提交时一并更新变更原因；空白表示沿用原因。
+///
+/// # 参数
+/// * `order` - 草稿变更单
+/// * `reason` - 提交携带的变更原因
+/// * `updated_by` - 提交人
+///
+/// # 返回
+/// 原因未提供、与原值相同或更新成功时返回 `Ok(())`。
+///
+/// # 错误
+/// 变更单不是草稿或原因超长时返回错误。
+pub fn apply_change_reason(
+    order: &mut PurchaseChangeOrder,
+    reason: Option<&str>,
+    updated_by: &str,
+) -> Result<()> {
+    let Some(reason) = reason.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(());
+    };
+    if reason == order.reason {
+        return Ok(());
+    }
+    let update = PurchaseChangeOrderUpdate {
+        reason: Some(reason.to_string()),
+        ..PurchaseChangeOrderUpdate::default()
+    };
+    Ok(order.update(update, updated_by)?)
+}
+
+/// 作废草稿变更单。
+///
+/// # 参数
+/// * `order` - 变更单
+/// * `updated_by` - 作废人
+///
+/// # 返回
+/// 草稿作废成功返回 `Ok(())`。
+///
+/// # 错误
+/// 非草稿时返回冲突。
+pub fn void_purchase_change(order: &mut PurchaseChangeOrder, updated_by: &str) -> Result<()> {
+    order.void(updated_by).map_err(|error| Error::ConflictError(error.to_string()))
 }

@@ -33,7 +33,11 @@ import {
 import { usePurchaseOrderDetailEditActions } from "@/features/purchase-orders/hooks/use-purchase-order-detail-edit-actions"
 import { usePurchaseOrderDetailEditGuard } from "@/features/purchase-orders/hooks/use-purchase-order-detail-edit-guard"
 import { usePurchaseOrderDetailPermissions } from "@/features/purchase-orders/hooks/use-purchase-order-detail-permissions"
-import { isPurchaseChangeOrderWorkItem } from "@/features/purchase-orders/lib/purchase-change-order-approval"
+import { PurchaseChangeOrderEditDialog } from "@/features/purchase-orders/components/purchase-change-order-edit-dialog"
+import {
+    isPurchaseChangeOrderWorkItem,
+    purchaseChangeOrderApprovalPhase,
+} from "@/features/purchase-orders/lib/purchase-change-order-approval"
 import { mapWorkItemDto } from "@/features/work-items/types"
 import { useWorkItemDetailQuery } from "@/features/work-items/queries"
 import {
@@ -136,6 +140,9 @@ export function PurchaseOrderDetailPage({
     })
 
     const titleRef = React.useRef<HTMLHeadingElement>(null)
+    const [editingChangeId, setEditingChangeId] = React.useState<string | null>(
+        null,
+    )
 
     React.useEffect(() => {
         titleRef.current?.focus()
@@ -257,6 +264,26 @@ export function PurchaseOrderDetailPage({
                 : "采购草稿编辑"
             : "详情"
 
+    const activeChange = order.activeChangeOrder
+    const continueChange = Boolean(
+        activeChange &&
+        purchaseChangeOrderApprovalPhase(
+            activeChange.approval,
+            activeChange.statusCode,
+        ) === "draft" &&
+        activeChange.approval?.allowedActions.includes("SUBMIT"),
+    )
+    /** 发起或继续改单都直接打开改单弹窗（与销售改单一致）。 */
+    const openChange = () => {
+        if (continueChange && activeChange) {
+            setEditingChangeId(activeChange.id)
+            return
+        }
+        void editActions.handleStartChange().then((changeId) => {
+            if (changeId) setEditingChangeId(changeId)
+        })
+    }
+
     return (
         <PageScaffold density="compact">
             <PurchaseOrderDetailHeader
@@ -271,9 +298,11 @@ export function PurchaseOrderDetailPage({
                 canSubmit={permissions.canSubmit}
                 canVoid={permissions.canVoid}
                 canChange={permissions.canChange}
+                continueChange={continueChange}
+                changePending={editActions.changePending}
                 requestLeave={guard.requestLeave}
                 onRequestVoid={() => editActions.setVoidConfirmOpen(true)}
-                onRequestChange={() => editActions.setChangeConfirmOpen(true)}
+                onRequestChange={openChange}
                 onRequestSubmit={() => editActions.setSubmitConfirmOpen(true)}
                 onCancelResult={handleResult}
                 result={result}
@@ -285,10 +314,11 @@ export function PurchaseOrderDetailPage({
                 showActions={mode !== "edit"}
                 canEdit={permissions.canEdit}
                 canVoid={permissions.canVoid}
-                canChange={permissions.canChange}
+                canChange={permissions.canChange || continueChange}
+                continueChange={continueChange}
                 onEdit={() => router.push(`${baseHref}?mode=edit`)}
                 onRequestVoid={() => editActions.setVoidConfirmOpen(true)}
-                onRequestChange={() => editActions.setChangeConfirmOpen(true)}
+                onRequestChange={openChange}
             />
 
             {isChangeOrderTask && activeSection !== "changes" ? (
@@ -296,6 +326,8 @@ export function PurchaseOrderDetailPage({
                     readonlyApproval
                     purchaseOrderId={order.identity.purchaseOrderId}
                     changeOrder={order.activeChangeOrder ?? null}
+                    baseRevisionNo={order.identity.revisionNo}
+                    paidAmount={order.payableSummary?.paidAllocatedAmount}
                     workItemId={focusedWorkItem?.workItemId}
                     expectedTaskVersion={focusedWorkItem?.taskVersion}
                     workItemAllowedActions={focusedWorkItem?.allowedActions}
@@ -358,20 +390,38 @@ export function PurchaseOrderDetailPage({
                 onSubmitConfirmOpenChange={editActions.setSubmitConfirmOpen}
                 voidConfirmOpen={editActions.voidConfirmOpen}
                 onVoidConfirmOpenChange={editActions.setVoidConfirmOpen}
-                changeConfirmOpen={editActions.changeConfirmOpen}
-                onChangeConfirmOpenChange={editActions.setChangeConfirmOpen}
                 leaveGuardOpen={guard.leaveGuardOpen}
                 onLeaveGuardOpenChange={guard.setLeaveGuardOpen}
                 submitPending={editActions.submitPending}
                 savePending={editActions.savePending}
                 voidPending={editActions.voidPending}
-                changePending={editActions.changePending}
                 onConfirmSubmit={() => void editActions.handleSubmit()}
                 onConfirmVoid={() => void editActions.handleVoid()}
-                onConfirmChange={() => void editActions.handleStartChange()}
                 onSaveAndLeave={() => void guard.saveAndLeave()}
                 onDiscardAndLeave={guard.discardAndLeave}
             />
+
+            {editingChangeId ? (
+                <PurchaseChangeOrderEditDialog
+                    open
+                    purchaseOrderId={order.identity.purchaseOrderId}
+                    changeOrderId={editingChangeId}
+                    approval={
+                        activeChange?.id === editingChangeId
+                            ? activeChange.approval
+                            : undefined
+                    }
+                    paidAmount={order.payableSummary?.paidAllocatedAmount}
+                    onOpenChange={(open) => {
+                        if (!open) setEditingChangeId(null)
+                    }}
+                    onResult={(next) => {
+                        handleResult(next)
+                        if (next.status === "succeeded")
+                            router.replace(`${baseHref}?section=changes`)
+                    }}
+                />
+            ) : null}
         </PageScaffold>
     )
 }

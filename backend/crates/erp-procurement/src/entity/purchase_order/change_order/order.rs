@@ -355,6 +355,25 @@ impl PurchaseChangeOrder {
         Ok(())
     }
 
+    /// 作废草稿变更单：仅 `DRAFT` 可进入 `VOIDED`，原采购单当前版本保持不变。
+    ///
+    /// # 参数
+    /// * `updated_by` - 作废人
+    ///
+    /// # 返回
+    /// 草稿进入作废时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 审批中、已生效或已作废时返回冲突；审批中须先撤回。
+    pub fn void(&mut self, updated_by: impl Into<String>) -> Result<()> {
+        if self.stable.status != PurchaseChangeOrderStatus::Draft {
+            return Err(Error::from("只有草稿状态的采购变更单可以作废，审批中请先撤回"));
+        }
+        self.stable.status = PurchaseChangeOrderStatus::Voided;
+        self.stable.touch(updated_by);
+        Ok(())
+    }
+
     /// 最终通过并生效：仅 `IN_APPROVAL` 可进入 `EFFECTIVE`。
     ///
     /// # 参数
@@ -421,6 +440,22 @@ mod tests {
         assert_eq!(order.stable.status(), PurchaseChangeOrderStatus::Draft);
         assert_eq!(order.approval_subject_version, 0);
         assert!(order.current_submission_id.is_none());
+    }
+
+    /// 只有草稿可作废；审批中须先撤回，终态不得再次作废。
+    #[test]
+    fn void_only_from_draft() {
+        let mut order =
+            PurchaseChangeOrder::new(PurchaseChangeOrderId::new("pco-1"), change_data(), "admin-1").unwrap();
+        order.start_approval(PurchaseChangeSubmissionId::new("pcs-1"), "hash-1", "admin-1").unwrap();
+        assert!(order.void("buyer").is_err());
+        assert_eq!(order.stable.status(), PurchaseChangeOrderStatus::InApproval);
+
+        order.cancel_approval("buyer").unwrap();
+        order.void("buyer").unwrap();
+        assert_eq!(order.stable.status(), PurchaseChangeOrderStatus::Voided);
+        assert!(!order.stable.status().is_in_progress());
+        assert!(order.void("buyer").is_err());
     }
 
     #[test]

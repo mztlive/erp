@@ -27,7 +27,7 @@ pub use change_draft::PurchaseChangeDraftView;
 pub use self::change_order::{
     CancelPurchaseChangeApprovalRequest, EffectPurchaseChangeRequest, PurchaseChangeEffectResult,
     PurchaseChangeOrderListParams, PurchaseChangeSubmitResult, StartPurchaseChangeRequest,
-    StartPurchaseChangeResult, SubmitPurchaseChangeRequest,
+    StartPurchaseChangeResult, SubmitPurchaseChangeRequest, VoidPurchaseChangeRequest,
 };
 pub use self::command::{
     CREATE_ACTION, CREATE_SOURCING_ACTION, CancelPurchaseOrderApprovalRequest,

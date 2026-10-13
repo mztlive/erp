@@ -53,7 +53,8 @@ pub(crate) struct PurchaseLineFields {
 /// 校验一行采购明细（提交行/版本行/变更提交行共用）。
 ///
 /// 按行类型强制字段归属（§6.6）：
-/// - 商品/服务成本行：`sku_id`、商品名称、单位、数量（>0）、含税单价、进项税率必填；
+/// - 商品/服务成本行：`sku_id`、商品名称、单位、数量（>0；变更与版本行允许 0 表示已移除）、
+///   含税单价、进项税率必填；
 ///   规格沿用来源销售行，允许为空，不补造占位规格；
 /// - 物流费用行：`sku_id`、商品名称、单位、数量、含税单价全部为空，
 ///   与商品成本分开计税（进项税率必填），金额直接入账；
@@ -62,15 +63,16 @@ pub(crate) struct PurchaseLineFields {
 ///
 /// # 参数
 /// * `fields` - 一行采购明细的共享字段组
+/// * `allow_zero_quantity` - 商品/服务行是否允许零数量（仅变更提交行与版本行）
 ///
 /// # 返回
 /// 校验通过返回 `Ok(())`。
 ///
 /// # 错误
 /// 字段归属与行类型不符、数量/单价/税率越界或金额三元组不守恒时返回错误。
-pub(crate) fn validate_purchase_line(fields: &PurchaseLineFields) -> Result<()> {
+pub(crate) fn validate_purchase_line(fields: &PurchaseLineFields, allow_zero_quantity: bool) -> Result<()> {
     match fields.line_type {
-        PurchaseLineType::ItemService => validate_item_service_line(fields),
+        PurchaseLineType::ItemService => validate_item_service_line(fields, allow_zero_quantity),
         PurchaseLineType::LogisticsFee => validate_logistics_fee_line(fields),
     }
 }
@@ -226,6 +228,23 @@ pub(crate) trait PurchaseLineDataRef {
     fn ensure_allocation(&self) -> Result<()> {
         Ok(())
     }
+
+    /// 商品/服务行是否允许数量为零。
+    ///
+    /// 只有采购变更提交行与生效版本行允许零数量，表示该行已移除但保留原行身份；
+    /// 采购草稿与审批提交行删除不再需要的行，不得以零数量保留。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 允许零数量时返回 `true`，默认返回 `false`。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    fn allows_zero_quantity(&self) -> bool {
+        false
+    }
 }
 
 /// 规范化并校验一行采购明细。
@@ -264,7 +283,7 @@ pub(crate) fn normalize_and_validate_line<D: PurchaseLineDataRef>(
         tax_amount: data.tax_amount(),
         input_tax_rate: data.input_tax_rate(),
     };
-    validate_purchase_line(&fields)?;
+    validate_purchase_line(&fields, data.allows_zero_quantity())?;
     data.ensure_allocation()?;
     Ok((fields.product_name_snapshot, fields.specification_snapshot, fields.base_unit_code))
 }
@@ -273,10 +292,11 @@ pub(crate) fn normalize_and_validate_line<D: PurchaseLineDataRef>(
 ///
 /// # 参数
 /// * `fields` - 一行采购明细的共享字段组
+/// * `allow_zero_quantity` - 是否允许零数量
 ///
 /// # 错误
-/// 必填字段缺失、数量非正、含税单价或进项税率为负，或金额三元组不守恒时返回错误。
-fn validate_item_service_line(fields: &PurchaseLineFields) -> Result<()> {
+/// 必填字段缺失、数量为负或（不允许零时）为零、含税单价或进项税率为负，或金额三元组不守恒时返回错误。
+fn validate_item_service_line(fields: &PurchaseLineFields, allow_zero_quantity: bool) -> Result<()> {
     if fields.procurement_confirmation_line_id.is_none() {
         return Err(Error::from("商品/服务行必须引用采购二次确认分行"));
     }
@@ -284,7 +304,9 @@ fn validate_item_service_line(fields: &PurchaseLineFields) -> Result<()> {
     ensure_snapshot_present(fields.product_name_snapshot.as_deref(), "商品名称")?;
     ensure_snapshot_present(fields.base_unit_code.as_deref(), "单位")?;
     let quantity = fields.quantity.ok_or("商品/服务行数量不能为空")?;
-    if quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
+    if quantity.to_decimal() < rust_decimal::Decimal::ZERO
+        || (!allow_zero_quantity && quantity.to_decimal().is_zero())
+    {
         return Err(Error::from("商品/服务行数量必须为正"));
     }
     let unit_cost = fields.unit_cost_gross.ok_or("商品/服务行含税单价不能为空")?;

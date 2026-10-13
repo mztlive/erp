@@ -213,16 +213,25 @@ fn purchase_change_routes(rbac: &SharedRbacService) -> Router<AppState> {
         )
 }
 
-/// 复用采购变更提交权限读取完整原单编辑目标。
+/// 采购改单草稿读取（复用提交权限）与作废入口。
 fn purchase_change_draft_routes(rbac: &SharedRbacService) -> Router<AppState> {
-    Router::new().route(
-        "/purchase-change-orders/{id}/draft",
-        with_permission(
-            get(purchase_order::change_draft::purchase_change_draft),
-            rbac,
-            purchase_order::change_draft::purchase_change_draft_permission_key(),
-        ),
-    )
+    Router::new()
+        .route(
+            "/purchase-change-orders/{id}/draft",
+            with_permission(
+                get(purchase_order::change_draft::purchase_change_draft),
+                rbac,
+                purchase_order::change_draft::purchase_change_draft_permission_key(),
+            ),
+        )
+        .route(
+            "/purchase-change-orders/{id}/void",
+            with_permission(
+                post(purchase_order::change_void::purchase_change_void),
+                rbac,
+                purchase_order::change_void::purchase_change_void_permission_key(),
+            ),
+        )
 }
 
 fn purchase_correspondence_routes(rbac: &SharedRbacService) -> Router<AppState> {

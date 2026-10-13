@@ -272,6 +272,18 @@ export type BackendPurchaseChangeOrder = {
     version: number
     created_at: number
     approval?: DocumentApprovalViewDto | null
+    /** 在途改单按当前提交预判的销售覆盖变化；列表行为空。 */
+    coverage_effects?: Array<{
+        sales_order_line_id: string
+        line_no: number
+        item_name: string
+        base_quantity: string
+        target_quantity: string
+        sales_quantity: string
+        other_covered_quantity: string
+        gap_quantity: string
+        excess_quantity: string
+    }>
 }
 
 /** 来源销售变更对采购的影响；采购引用当前销售版本且无待处理记录时为空。 */

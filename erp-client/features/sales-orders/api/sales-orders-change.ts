@@ -184,3 +184,25 @@ export async function submitSalesChangeOrder(
     )
     return mapChangeOrder(submitted, input.nature)
 }
+
+export type VoidSalesChangeOrderInput = Readonly<{
+    salesChangeOrderId: string
+    salesOrderId: string
+    version: number
+    nature: SalesOrderNature
+}>
+
+/**
+ * 作废销售改单草稿；审批中须先撤回。生效版本保持不变，之后可重新发起改单。
+ *
+ * @param input 变更单、期望版本与业务性质。
+ */
+export async function voidSalesChangeOrder(
+    input: VoidSalesChangeOrderInput,
+): Promise<SalesChangeOrderSummary> {
+    const voided = await apiPost<BackendSalesChangeOrder>(
+        `/admin/sales-change-orders/${encodeURIComponent(input.salesChangeOrderId)}/void`,
+        { version: input.version },
+    )
+    return mapChangeOrder(voided, input.nature)
+}

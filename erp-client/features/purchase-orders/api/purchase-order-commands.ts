@@ -189,6 +189,9 @@ export async function submitPurchaseOrderForReview(
     }
 }
 
+/** 发起改单时的占位原因；弹窗中展示为空，要求重新填写。 */
+export const PURCHASE_CHANGE_PLACEHOLDER_REASON = "采购变更"
+
 export async function startPurchaseChange(input: {
     purchaseOrderId: string
     expectedLockVersion: number
@@ -201,8 +204,8 @@ export async function startPurchaseChange(input: {
             `/admin/purchase-orders/${encodeURIComponent(input.purchaseOrderId)}/changes`,
             {
                 expected_lock_version: input.expectedLockVersion,
-                // 前端契约未传 reason；后端必填
-                reason: "采购变更",
+                // 原因在改单弹窗填写，随提交更新；此处为占位。
+                reason: PURCHASE_CHANGE_PLACEHOLDER_REASON,
                 idempotency_key: input.idempotencyKey,
             },
         )
@@ -230,6 +233,8 @@ export type SubmitPurchaseChangeInput = {
     expectedLockVersion: number
     idempotencyKey: string
     paymentTermCode?: string
+    /** 变更原因；缺省沿用原因。 */
+    reason?: string
     lines?: PurchaseChangeDraftLine[]
 }
 
@@ -242,6 +247,7 @@ export async function submitPurchaseChange(
             {
                 expected_lock_version: input.expectedLockVersion,
                 payment_term_code: input.paymentTermCode,
+                reason: input.reason,
                 // 已编辑的完整目标行原样提交；无编辑目标时沿用服务端基准。
                 lines: input.lines ?? [],
                 idempotency_key: input.idempotencyKey,
@@ -334,4 +340,21 @@ export async function createPurchaseOrdersFromSourcing(
         }
         return formalActionFailure(error, input.idempotencyKey)
     }
+}
+
+/**
+ * 作废采购改单草稿；审批中须先撤回。采购单保持当前生效版本，之后可重新发起改单。
+ *
+ * @param input 变更单与期望版本。
+ */
+export async function voidPurchaseChange(input: {
+    purchaseChangeOrderId: string
+    purchaseOrderId: string
+    expectedLockVersion: number
+}): Promise<PurchaseChangeOrderSummary> {
+    const voided = await apiPost<BackendPurchaseChangeOrder>(
+        `/admin/purchase-change-orders/${encodeURIComponent(input.purchaseChangeOrderId)}/void`,
+        { expected_lock_version: input.expectedLockVersion },
+    )
+    return mapPurchaseChangeOrder(voided)
 }

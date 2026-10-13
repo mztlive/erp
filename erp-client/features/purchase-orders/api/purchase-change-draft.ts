@@ -29,6 +29,10 @@ export type PurchaseChangeDraft = {
     lines: PurchaseChangeDraftLine[]
     /** 冻结行或基准版本行主键，与 lines 同序，仅用于表单身份。 */
     line_keys: string[]
+    /** 当前生效版本全部行，用于对照改动。 */
+    base_lines?: PurchaseChangeDraftLine[]
+    /** 当前生效版本含税总额。 */
+    base_gross_amount?: string
 }
 
 /** 按原变更单读取上次提交的完整目标，首次草稿由服务端恢复基准行。 */

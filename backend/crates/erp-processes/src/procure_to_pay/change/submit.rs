@@ -12,7 +12,9 @@ use erp_procurement::entity::purchase_order::{
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::service::purchase_order::change::lock_draft_change;
 use erp_procurement::service::purchase_order::change::mapping::content_fingerprint;
-use erp_procurement::service::purchase_order::change::state::start_purchase_change_approval;
+use erp_procurement::service::purchase_order::change::state::{
+    apply_change_reason, start_purchase_change_approval,
+};
 use erp_procurement::service::purchase_order::line_input::build_change_submission_lines;
 use erp_read_models::purchase_center::dto::PurchaseChangeOrderView;
 use erp_sales::repository::SalesOrderExt;
@@ -42,7 +44,7 @@ use super::super::change_start::{
     load_bound_definition_graph, load_start_receipt, persist_purchase_change_start,
     replay_purchase_change_start_with_executor,
 };
-use super::super::delivery_plan::validate_input_delivery;
+use super::guard::check_change_inputs;
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
@@ -149,6 +151,25 @@ impl PurchaseOrderProcess {
         actor: &AuditActor,
     ) -> Result<PurchaseChangeOrderView> {
         self.submit_change(change_id, req, actor).await?;
+        self.change_view(change_id, actor).await
+    }
+
+    /// 写事务完成后按来源采购单 detail 动作重读完整变更单视图。
+    ///
+    /// # 参数
+    /// * `change_id` - 变更单 ID
+    /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 返回完整变更单视图。
+    ///
+    /// # 错误
+    /// 不可见、不存在或读取失败时返回错误。
+    pub(super) async fn change_view(
+        &self,
+        change_id: &str,
+        actor: &AuditActor,
+    ) -> Result<PurchaseChangeOrderView> {
         erp_read_models::purchase_center::PurchaseOrderReadService::with_scope(
             self.db.clone(),
             crate::adapters::MongoPurchaseDataScope::shared(self.db.clone(), self.require_rbac()?.clone()),
@@ -264,6 +285,7 @@ impl PurchaseOrderProcess {
             .find_by_id(&order.sales_order_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("来源销售单不存在".to_string()))?;
+        apply_change_reason(&mut change, req.reason.as_deref(), actor.id())?;
         let prepared = self.freeze_change_submission(&change, &order, &req, actor).await?;
         start_purchase_change_approval(
             &mut change,
@@ -320,7 +342,7 @@ impl PurchaseOrderProcess {
             .list_revision_lines(&change.base_revision_id, &mut NoTransaction)
             .await?;
         inherit_revision_sources(&mut inputs, &source_lines)?;
-        validate_input_delivery(&self.db, order, &inputs, &source_lines, &mut NoTransaction).await?;
+        check_change_inputs(&self.db, order, &inputs, submission.gross_amount, &mut NoTransaction).await?;
         let lines = build_change_submission_lines(&submission.base.id.clone(), &inputs)?;
         let mut submission_mut = submission.clone();
         submission_mut.submit(Instant::now(), actor.id())?;

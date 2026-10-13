@@ -11,6 +11,11 @@
  * 2. 采购按“修改原单”把数量改为 2 次并保存后，依据换到新销售版本、标记待提交审批，
  *    待办保持开放；重新提交审批后待办关闭，变更单显示“采购处理完成”。
  * 3. 再把销售加到 3 次只形成 1 次新缺口，不影响已有采购。
+ *
+ * 第二个用例（已生效采购，第一期 §6.3「实物与服务采购改单执行规则」）：
+ * 1. 采购已生效时销售减到 2 次：采购不退回，标记待更新；改单保持 4 次被拒绝并提示登记维持。
+ * 2. 从详情「继续改单」改为 2 次并填写原因，经仓储与财务审批生效后，待更新关闭、销售处理完成。
+ * 3. 供应商无法供应：改单「移除」商品（数量 0），审批材料预判缺口 2 次，生效后缺口回到供给分配。
  */
 import { randomUUID } from "node:crypto"
 
@@ -330,4 +335,145 @@ test("销售减量后审批中采购退回草稿并派待办，修改原单后�
     expect(increased.purchase_coverage.remaining_quantity).toMatch(/^1(?:\.0+)?$/)
     const untouched = await apiGet<PurchaseCenter>(procurementToken, `/admin/purchase-orders/${purchase.purchase_order_id}`)
     expect(untouched.source_update).toMatchObject({ affected: false, sales_revision_outdated: true })
+})
+
+/** 原样提交，返回统一响应信封，供断言业务拒绝。 */
+async function post(page: Page, token: string, path: string, data: unknown) {
+    const response = await page.request.post(`${API_BASE}${path}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        data,
+        timeout: 60_000,
+    })
+    return (await response.json()) as { success: boolean; errorMessage?: string }
+}
+
+/** 在详情打开改单弹窗，改数量、填原因并提交审批，再经仓储与财务审批生效。 */
+async function changePurchaseInDialog(
+    pages: { procurement: Page; warehouse: Page; finance: Page },
+    purchase: { purchase_order_id: string; purchase_no: string },
+    edit: { remove: boolean; quantity?: string; reason: string },
+    onSubmitted?: (changeId: string) => Promise<void>,
+) {
+    const page = pages.procurement
+    await page.goto(`/procurement/orders/${purchase.purchase_order_id}`)
+    await page.locator("#procurement-orders-detail-change").click()
+    const dialog = page.getByRole("dialog", { name: "采购改单", exact: true })
+    await expect(dialog).toBeVisible(VISIBLE)
+    if (edit.remove) await dialog.locator('button[id$="-remove"]').click()
+    else await dialog.locator('input[id^="purchase-change-edit-"][id$="-quantity"]').fill(edit.quantity!)
+    await dialog.locator('textarea[id^="purchase-change-edit-"][id$="-reason"]').fill(edit.reason)
+    const submitted = page.waitForResponse(
+        (response) =>
+            response.request().method() === "POST" &&
+            /\/admin\/purchase-change-orders\/[^/]+\/submit$/.test(new URL(response.url()).pathname),
+    )
+    await dialog.getByRole("button", { name: "提交改单", exact: true }).click()
+    const response = await submitted
+    expect(response.ok(), await response.text()).toBe(true)
+    await expect(dialog).toBeHidden(VISIBLE)
+    const changeId = new URL(response.url()).pathname.split("/").at(-2)!
+    if (onSubmitted) await onSubmitted(changeId)
+    await openWorkspaceTask(pages.warehouse, /采购变更单审批/, purchase.purchase_no, "approval")
+    await approveCurrentDocument(pages.warehouse)
+    await openWorkspaceTask(pages.finance, /采购变更单审批/, purchase.purchase_no, "approval")
+    await approveCurrentDocument(pages.finance)
+    return changeId
+}
+
+test("已生效采购遇销售减量：改单调减到位才能生效，移除商品的缺口回到供给分配", async ({ browser }) => {
+    test.setTimeout(15 * 60 * 1000)
+    const suffix = Date.now().toString(36)
+    const procurement = await openLoggedInWorkspace(browser, "caigou")
+    const approver = await openLoggedInWorkspace(browser, "caigoushenpi")
+    const warehouse = await openLoggedInWorkspace(browser, "cangchu")
+    const finance = await openLoggedInWorkspace(browser, "caiwu")
+    const adminToken = await apiToken("admin")
+    const salesToken = await apiToken("xiaoshou")
+    const procurementToken = await apiToken("caigou")
+    const pages = { procurement: procurement.page, warehouse: warehouse.page, finance: finance.page }
+
+    const order = await createServiceSale(salesToken, adminToken, procurement.page, `${suffix}e`)
+    const purchase = await allocateWithoutApproval(procurement.page, order)
+    await openWorkspaceTask(approver.page, /采购单审批/, purchase.purchase_no, "approval")
+    await approveCurrentDocument(approver.page)
+    const effective = await apiGet<PurchaseCenter & { version: number }>(
+        procurementToken,
+        `/admin/purchase-orders/${purchase.purchase_order_id}`,
+    )
+    expect(effective.status).toBe("EFFECTIVE")
+
+    // 1. 销售减到 2 次：已生效采购不退回，标记待更新；改单保持 4 次被拒绝。
+    const salesChangeId = await changeQuantity(
+        procurement.page,
+        salesToken,
+        { procurement: procurement.page, finance: finance.page },
+        order,
+        1,
+        "2",
+    )
+    const affected = await apiGet<PurchaseCenter & { version: number }>(
+        procurementToken,
+        `/admin/purchase-orders/${purchase.purchase_order_id}`,
+    )
+    expect(affected.status).toBe("EFFECTIVE")
+    expect(affected.source_update).toMatchObject({ affected: true })
+    const started = await write<{ change_id: string }>(
+        procurement.page,
+        procurementToken,
+        `/admin/purchase-orders/${purchase.purchase_order_id}/changes`,
+        { expected_lock_version: affected.version, reason: "采购变更", idempotency_key: randomUUID() },
+    )
+    const draft = await apiGet<{ version: number; payment_term_code: string; lines: unknown[] }>(
+        procurementToken,
+        `/admin/purchase-change-orders/${started.change_id}/draft`,
+    )
+    const kept = await post(procurement.page, procurementToken, `/admin/purchase-change-orders/${started.change_id}/submit`, {
+        expected_lock_version: draft.version,
+        payment_term_code: draft.payment_term_code,
+        reason: "E2E 保持原数量",
+        lines: draft.lines,
+        idempotency_key: randomUUID(),
+    })
+    expect(kept.success).toBe(false)
+    expect(kept.errorMessage ?? "").toContain("登记维持")
+
+    // 2. 继续改单：改为 2 次，审批生效后待更新关闭，销售变更显示采购处理完成。
+    await procurement.page.goto(`/procurement/orders/${purchase.purchase_order_id}`)
+    await expect(procurement.page.locator("#procurement-orders-detail-change")).toContainText("继续改单", VISIBLE)
+    await changePurchaseInDialog(pages, purchase, {
+        remove: false,
+        quantity: "2",
+        reason: "销售调减到 2 次，供应商同意同步调减",
+    })
+    const reduced = await apiGet<PurchaseCenter>(procurementToken, `/admin/purchase-orders/${purchase.purchase_order_id}`)
+    expect(reduced.lines.find((line) => line.line_type === "ITEM_SERVICE")!.quantity).toMatch(/^2(?:\.0+)?$/)
+    expect(reduced.source_update).toBeNull()
+    await expect
+        .poll(
+            async () =>
+                (await apiGet<SalesChangeDetail>(procurementToken, `/admin/sales-change-orders/${salesChangeId}`)).procurement
+                    .completed,
+            VISIBLE,
+        )
+        .toBe(true)
+
+    // 3. 供应商无法供应：移除商品，审批材料预判缺口 2 次；生效后缺口回到供给分配。
+    await changePurchaseInDialog(
+        pages,
+        purchase,
+        { remove: true, reason: "供应商无法供应，本单移除，缺口改由其他供应商供应" },
+        async (changeId) => {
+            const pendingChange = await apiGet<{ coverage_effects: Array<{ gap_quantity: string }> }>(
+                procurementToken,
+                `/admin/purchase-change-orders/${changeId}`,
+            )
+            expect(pendingChange.coverage_effects).toHaveLength(1)
+            expect(pendingChange.coverage_effects[0]!.gap_quantity).toMatch(/^2(?:\.0+)?$/)
+        },
+    )
+    const removed = await apiGet<PurchaseCenter>(procurementToken, `/admin/purchase-orders/${purchase.purchase_order_id}`)
+    expect(removed.lines.find((line) => line.line_type === "ITEM_SERVICE")!.quantity).toMatch(/^0(?:\.0+)?$/)
+    const reopened = await apiGet<SalesCoverage>(procurementToken, `/admin/sales-orders/${order.id}`)
+    expect(reopened.purchase_coverage.remaining_quantity).toMatch(/^2(?:\.0+)?$/)
+    await openWorkspaceTask(procurement.page, "待供给分配", order.order_no, "procurement")
 })

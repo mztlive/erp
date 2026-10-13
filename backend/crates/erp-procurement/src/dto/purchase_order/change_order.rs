@@ -56,11 +56,24 @@ pub struct SubmitPurchaseChangeRequest {
     pub expected_lock_version: u64,
     /// 目标付款条件；缺省沿用基准版本快照。
     pub payment_term_code: Option<String>,
+    /// 变更原因；缺省沿用变更单已有原因。
+    #[serde(default)]
+    #[validate(length(max = 500, message = "变更原因最多500个字符"))]
+    pub reason: Option<String>,
     /// 目标完整行集合。
     pub lines: Vec<SavePurchaseOrderLine>,
     /// 幂等键。
     #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
     pub idempotency_key: String,
+}
+
+/// 作废采购变更草稿请求。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct VoidPurchaseChangeRequest {
+    /// 期望的变更单乐观锁版本。
+    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    pub expected_lock_version: u64,
 }
 
 /// 采购变更提交结果。

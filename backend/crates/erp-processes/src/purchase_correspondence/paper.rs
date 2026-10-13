@@ -2,7 +2,7 @@
 use std::str::FromStr;
 
 use erp_procurement::dto::purchase_order::PurchaseOrderLineView;
-use erp_procurement::entity::purchase_order::FulfillmentResponsibility;
+use erp_procurement::entity::purchase_order::{FulfillmentResponsibility, PurchaseLineType};
 use erp_read_models::purchase_center::dto::PurchaseOrderCenterView;
 use erp_supplier::entity::supplier::SupplierPaymentTerm;
 use rust_decimal::Decimal;
@@ -50,7 +50,7 @@ fn render_delivery(order: &PurchaseOrderCenterView) -> String {
 }
 fn render_delivery_lines(lines: &[PurchaseOrderLineView]) -> String {
     let mut html = "<h2>交付安排</h2><table><thead><tr><th>商品 / 规格</th><th>收货人 / 电话</th><th>完整地址</th><th>数量</th></tr></thead><tbody>".to_string();
-    for line in lines.iter().filter(|line| line.quantity.is_some()) {
+    for line in lines.iter().filter(|line| line.quantity.is_some() && !is_removed(line)) {
         if line.delivery_allocations.is_empty() {
             html.push_str(&format!(
                 "<tr><td>{}</td><td colspan=3>未指定交付地址，履约前补齐</td></tr>",
@@ -73,10 +73,21 @@ fn render_delivery_lines(lines: &[PurchaseOrderLineView]) -> String {
     html.push_str("</tbody></table>");
     html
 }
+/// 采购改单移除的商品行数量为零，保留在采购单上并标注已取消。
+fn is_removed(line: &PurchaseOrderLineView) -> bool {
+    line.line_type == PurchaseLineType::ItemService
+        && line
+            .quantity
+            .as_deref()
+            .and_then(|value| Decimal::from_str(value).ok())
+            .is_some_and(|value| value.is_zero())
+}
 fn render_line(line: &PurchaseOrderLineView) -> String {
+    let name = escape(line.product_name.as_deref().unwrap_or("物流费用"));
+    let name = if is_removed(line) { format!("{name}（已取消）") } else { name };
     format!(
         "<tr><td>{}<br>{}</td><td class=\"num\">{}</td><td>{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td>{}</td></tr>",
-        escape(line.product_name.as_deref().unwrap_or("物流费用")),
+        name,
         escape(line.specification.as_deref().unwrap_or("")),
         escape(line.quantity.as_deref().unwrap_or("—")),
         escape(line.base_unit_code.as_deref().unwrap_or("—")),
@@ -104,7 +115,7 @@ fn escape(value: &str) -> String {
 }
 #[cfg(test)]
 mod tests {
-    use erp_procurement::entity::purchase_order::{PurchaseDeliveryAllocation, PurchaseLineType};
+    use erp_procurement::entity::purchase_order::PurchaseDeliveryAllocation;
 
     use super::*;
     #[test]
@@ -153,9 +164,14 @@ mod tests {
             address: "A区<1号>".into(),
             quantity: "2".parse().unwrap(),
         }];
-        let delivery = render_delivery_lines(&[line]);
+        let delivery = render_delivery_lines(std::slice::from_ref(&line));
         assert!(delivery.contains("A区&lt;1号&gt;"));
         assert!(delivery.contains("13800000000"));
         assert!(!delivery.contains("internal-"));
+
+        line.quantity = Some("0.000000".into());
+        line.delivery_allocations = Vec::new();
+        assert!(render_line(&line).contains("（已取消）"));
+        assert!(!render_delivery_lines(&[line]).contains("未指定交付地址"));
     }
 }

@@ -39,6 +39,7 @@ const WAREHOUSE_NAME = "北京通州仓"
 const WAREHOUSE_CODE = "BJ-TZ-01"
 const VISIBLE = { timeout: 20_000 } as const
 const CHANGE_REJECTION = "采购成本需重新确认，请修改原采购变更单"
+const CHANGE_REASON = "供应商报价调整，采购单价改为 900"
 const EFFECTIVE_GROSS = /^1900(?:\.0+)?$/
 const EFFECTIVE_GROSS_DISPLAY = /(?<![\d,])(?:1,900\.00|1900\.00)(?![\d.])/
 
@@ -261,6 +262,10 @@ test("[flow-09] 采购变更实改后驳回，修改原单重提并生效", asyn
         await sales.page
             .locator('input[id^="sales-orders-create-line-"][id$="-quantity"]')
             .fill("2")
+        // 成交单价由销售填写，参考价不自动成为成交价（第一期 §4.4.2）。
+        await sales.page
+            .getByLabel("含税成交单价", { exact: true })
+            .fill("1000.00")
         await sales.page
             .locator("#sales-orders-create-batch-due-date-open")
             .click()
@@ -431,7 +436,11 @@ test("[flow-09] 采购变更实改后驳回，修改原单重提并生效", asyn
     let purchaseHref = ""
     let changeOrderId = ""
     let firstSubmission: ChangeDetail
-    let firstTarget: { payment_term_code: string; lines: PurchaseLine[] }
+    let firstTarget: {
+        payment_term_code: string
+        reason?: string
+        lines: PurchaseLine[]
+    }
     let original: PurchaseCenter
     let purchaseOrderId = ""
     let effectiveGross = ""
@@ -492,13 +501,7 @@ test("[flow-09] 采购变更实改后驳回，修改原单重提并生效", asyn
             }),
         ).toHaveCount(0)
 
-        // 6. 发起采购变更（未入库未付款，走变更单而非纠正单）
-        await procurement.page
-            .locator("#procurement-orders-detail-change")
-            .click()
-        await expect(
-            procurement.page.getByRole("heading", { name: "发起采购变更" }),
-        ).toBeVisible(VISIBLE)
+        // 6. 发起改单（未入库未付款，走变更单而非纠正单）：直接打开改单弹窗，与销售改单一致。
         const startedResponse = procurement.page.waitForResponse(
             (response) =>
                 response.request().method() === "POST" &&
@@ -509,49 +512,26 @@ test("[flow-09] 采购变更实改后驳回，修改原单重提并生效", asyn
                     ),
         )
         await procurement.page
-            .locator("#procurement-orders-detail-change-confirm-confirm")
+            .locator("#procurement-orders-detail-change")
             .click()
         const started = (await (await startedResponse).json()).data as {
             change_id: string
         }
         changeOrderId = started.change_id
         expect(changeOrderId).toBeTruthy()
-        await expect(
-            procurement.page.getByRole("heading", {
-                name: "采购变更草稿已创建",
-            }),
-        ).toBeVisible(VISIBLE)
-        await expect(procurement.page).toHaveURL(/section=changes/, VISIBLE)
-        await expect(
-            procurement.page
-                .getByRole("listitem")
-                .filter({ hasText: "采购变更" })
-                .getByText("草稿", { exact: true }),
-        ).toBeVisible(VISIBLE)
 
-        // 进行中改单时不得再开第二张变更单
-        await expect(
-            procurement.page.locator("#procurement-orders-detail-change"),
-        ).toHaveCount(0)
-        const disabledChange = procurement.page.locator(
-            `[id^="procurement-orders-detail-changes-disabled-"]`,
-        )
-        if ((await disabledChange.count()) > 0) {
-            await expect(disabledChange).toBeDisabled()
-        }
-
-        // 7. 编辑完整目标：保留销售分配和数量，实际将采购单价改为 900 后提交。
-        await procurement.page
-            .getByRole("button", { name: "修改并提交", exact: true })
-            .click()
+        // 7. 编辑完整目标：保留销售分配和数量，实际将采购单价改为 900 并填写原因后提交。
         const edit = procurement.page.getByRole("dialog", {
-            name: "修改采购变更单",
+            name: "采购改单",
             exact: true,
         })
         await expect(edit).toBeVisible(VISIBLE)
         await edit
             .locator('input[id^="purchase-change-edit-"][id$="-unit-cost"]')
             .fill("900")
+        await edit
+            .locator('textarea[id^="purchase-change-edit-"][id$="-reason"]')
+            .fill(CHANGE_REASON)
         const submittedResponse = procurement.page.waitForResponse(
             (response) =>
                 response.request().method() === "POST" &&
@@ -562,15 +542,22 @@ test("[flow-09] 采购变更实改后驳回，修改原单重提并生效", asyn
                     ),
         )
         await edit
-            .getByRole("button", { name: "确认修改并提交审批", exact: true })
+            .getByRole("button", { name: "提交改单", exact: true })
             .click()
         const submitted = await submittedResponse
         expect(submitted.ok()).toBeTruthy()
         firstTarget = submitted.request().postDataJSON() as {
             payment_term_code: string
+            reason?: string
             lines: PurchaseLine[]
         }
+        expect(firstTarget.reason).toBe(CHANGE_REASON)
         await expect(edit).toBeHidden(VISIBLE)
+        await expect(procurement.page).toHaveURL(/section=changes/, VISIBLE)
+        // 审批中的改单只能撤回，不得再开第二张改单。
+        await expect(
+            procurement.page.locator("#procurement-orders-detail-change"),
+        ).toHaveCount(0)
         firstSubmission = await apiGet<ChangeDetail>(
             procurementToken,
             `/admin/purchase-change-orders/${changeOrderId}`,
@@ -657,7 +644,7 @@ test("[flow-09] 采购变更实改后驳回，修改原单重提并生效", asyn
                 .click()
             await expect(revise).toBeHidden(VISIBLE)
             const edit = procurement.page.getByRole("dialog", {
-                name: "修改采购变更单",
+                name: "采购改单",
                 exact: true,
             })
             await expect(edit).toBeVisible(VISIBLE)
@@ -716,9 +703,14 @@ test("[flow-09] 采购变更实改后驳回，修改原单重提并生效", asyn
                     new URL(response.url()).pathname ===
                         `/admin/purchase-change-orders/${changeOrderId}/submit`,
             )
+            await expect(
+                edit.locator(
+                    'textarea[id^="purchase-change-edit-"][id$="-reason"]',
+                ),
+            ).toHaveValue(CHANGE_REASON)
             await edit
                 .getByRole("button", {
-                    name: "确认修改并提交审批",
+                    name: "提交改单",
                     exact: true,
                 })
                 .click()
@@ -832,12 +824,12 @@ test("[flow-09] 采购变更实改后驳回，修改原单重提并生效", asyn
             await expect(
                 procurement.page
                     .getByRole("listitem")
-                    .filter({ hasText: "采购变更" })
+                    .filter({ hasText: CHANGE_REASON })
                     .getByText("已生效", { exact: true }),
             ).toBeVisible(VISIBLE)
             await expect(
                 procurement.page.getByRole("button", {
-                    name: "修改并提交",
+                    name: "编辑改单",
                     exact: true,
                 }),
             ).toHaveCount(0)

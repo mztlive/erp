@@ -6,8 +6,8 @@ use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_core::ids::{
-    PurchaseOrderRevisionLineId, PurchaseReceiptId, PurchaseReceiptLineId, SalesOrderId, SalesOrderLineId,
-    SalesOrderRevisionLineId, SkuId, WarehouseId,
+    PurchaseOrderId, PurchaseOrderRevisionId, PurchaseOrderRevisionLineId, PurchaseReceiptId,
+    PurchaseReceiptLineId, SalesOrderId, SalesOrderLineId, SalesOrderRevisionLineId, SkuId, WarehouseId,
 };
 use erp_core::money::Quantity;
 use erp_fulfillment::dto::{PostPurchaseReceiptRequest, PurchaseReceiptView};
@@ -20,7 +20,9 @@ use erp_inventory::service::fulfillment::{
     ReceiptReservationFact, ReceiptStockFact, establish_receipt_reservation, post_receipt_stock,
 };
 use erp_inventory::{InventoryExt, StockReservation};
-use erp_procurement::entity::purchase_order::{ProgressStatus, PurchaseOrder, PurchaseOrderRevisionLine};
+use erp_procurement::entity::purchase_order::{
+    ProgressStatus, PurchaseOrder, PurchaseOrderRevisionLine, rekey_to_current_lines,
+};
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::repository::prelude::*;
 use erp_sales::entity::sales_order::SalesOrderRevisionLine;
@@ -143,7 +145,41 @@ async fn load_purchase_posting_facts(
         .fulfillment()
         .qualified_received_totals_by_purchase_revision_line(&receipt.purchase_order_id, executor)
         .await?;
+    let received =
+        received_on_current_lines(db, &receipt.purchase_order_id, &revision_lines, received, executor)
+            .await?;
     Ok(PurchasePostingFacts { po, revision_lines, received })
+}
+
+/// 把各版本行上的累计合格收货归到当前版本行：采购改单形成新版本后，原版本行的
+/// 收货仍计入同一稳定销售行，不得因版本行主键变化而清零。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `purchase_order_id` - 采购单
+/// * `current` - 当前生效版本行
+/// * `received` - 按版本行记录的累计合格收货
+/// * `executor` - 调用方事务执行器
+///
+/// # 返回
+/// 返回当前版本行主键到跨版本累计合格收货。
+///
+/// # 错误
+/// 版本读取失败或累计越界时返回错误。
+async fn received_on_current_lines(
+    db: &Database,
+    purchase_order_id: &PurchaseOrderId,
+    current: &[PurchaseOrderRevisionLine],
+    received: HashMap<PurchaseOrderRevisionLineId, Quantity>,
+    executor: &mut dyn Executor,
+) -> Result<HashMap<PurchaseOrderRevisionLineId, Quantity>> {
+    if received.is_empty() {
+        return Ok(received);
+    }
+    let revisions = db.purchase_order().list_revisions_by_order(purchase_order_id, executor).await?;
+    let ids = revisions.into_iter().map(|row| PurchaseOrderRevisionId::new(row.base.id)).collect::<Vec<_>>();
+    let all_lines = db.purchase_order_revision_lines().find_lines_by_revision_ids(&ids, executor).await?;
+    Ok(rekey_to_current_lines(current, &all_lines, &received)?)
 }
 
 /// 建立借用 ID 索引；重复 ID 保留原线性查找的首个命中，不改变输入顺序。

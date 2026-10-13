@@ -173,11 +173,13 @@ async function createPhysicalSalesOrder(
         }),
     })
     await expect(selectedLine).toHaveCount(1, { timeout: TIMEOUT })
-    await expect(
-        selectedLine.locator(
-            'input[id^="sales-orders-create-line-"][id$="-unit-price"]',
-        ),
-    ).toHaveValue(UNIT_PRICE_RE)
+    // 成交单价由销售填写，参考价不自动成为成交价（第一期 §4.4.2）。
+    const unitPrice = selectedLine.locator(
+        'input[id^="sales-orders-create-line-"][id$="-unit-price"]',
+    )
+    await expect(unitPrice).toHaveValue("")
+    await unitPrice.fill("1288.00")
+    await expect(unitPrice).toHaveValue(UNIT_PRICE_RE)
 
     await page.getByLabel("数量").fill(LINE_QTY)
     await page.locator("#sales-orders-create-batch-due-date-open").click()
@@ -355,35 +357,15 @@ test.describe("flow-08 销售变更单（未履约）", () => {
             await sales.page
                 .locator("#sales-orders-detail-start-change")
                 .click()
-            const startDialog = sales.page.getByRole("alertdialog", {
-                name: "发起改单",
-            })
-            await expect(startDialog).toBeVisible({ timeout: TIMEOUT })
-            await startDialog
-                .locator("#sales-orders-detail-change-confirm")
-                .click()
-            await expect(sales.page.getByText("改单已创建")).toBeVisible({
-                timeout: TIMEOUT,
-            })
-            await expect(startDialog).toHaveCount(0, { timeout: TIMEOUT })
-            await expectChangeBlocked(sales.page)
-            await expect(
-                sales.page.getByRole("tab", { name: /版本/ }),
-            ).toContainText("改单中", {
-                timeout: TIMEOUT,
-            })
-
-            await sales.page.getByRole("tab", { name: /版本/ }).click()
             const created = (await (await createdResponse).json()).data as {
                 id: string
             }
             expect(created.id).toBeTruthy()
             const changeOrderId = created.id
-            await sales.page
-                .locator("#sales-orders-change-edit-original")
-                .click()
+            // 发起改单直接进入编辑弹窗，无单独确认层。
             const edit = sales.page.getByRole("dialog", {
-                name: "修改销售变更原单",
+                name: "销售改单",
+                exact: true,
             })
             await expect(edit).toBeVisible({ timeout: TIMEOUT })
             await edit
@@ -411,7 +393,7 @@ test.describe("flow-08 销售变更单（未履约）", () => {
                         `/admin/sales-change-orders/${changeOrderId}/submit-impact`,
             )
             await edit
-                .getByRole("button", { name: "保存并提交审批", exact: true })
+                .getByRole("button", { name: "提交改单", exact: true })
                 .click()
             const firstTarget = (await (await savedResponse).json())
                 .data as ChangeDraft
@@ -420,6 +402,12 @@ test.describe("flow-08 销售变更单（未履约）", () => {
             expect(submittedHttp.ok(), submittedBody).toBe(true)
             expect(JSON.parse(submittedBody).success, submittedBody).toBe(true)
             await expect(edit).toBeHidden({ timeout: TIMEOUT })
+            await expectChangeBlocked(sales.page)
+            await expect(
+                sales.page.getByRole("tab", { name: /版本/ }),
+            ).toContainText("改单中", {
+                timeout: TIMEOUT,
+            })
             const firstSubmission = await apiGet<ChangeDetail>(
                 salesToken,
                 `/admin/sales-change-orders/${changeOrderId}`,
@@ -521,7 +509,7 @@ test.describe("flow-08 销售变更单（未履约）", () => {
                         `/admin/sales-change-orders/${changeOrderId}/submit-impact`,
             )
             await edit
-                .getByRole("button", { name: "保存并提交审批", exact: true })
+                .getByRole("button", { name: "提交改单", exact: true })
                 .click()
             const resubmittedHttp = await resubmittedResponse
             const resubmittedBody = await resubmittedHttp.text()
@@ -655,6 +643,60 @@ test.describe("flow-08 销售变更单（未履约）", () => {
             await expect(
                 sales.page.getByText(CHANGED_GROSS_RE).first(),
             ).toBeVisible()
+
+            // 7. 新改单草稿可作废：作废后 v2 不变，可重新发起改单。
+            await openSalesOrder(sales.page, salesOrderId)
+            const draftResponse = sales.page.waitForResponse(
+                (response) =>
+                    response.request().method() === "POST" &&
+                    response.url().endsWith("/admin/sales-change-orders"),
+            )
+            await sales.page
+                .locator("#sales-orders-detail-start-change")
+                .click()
+            const voidTarget = (await (await draftResponse).json()).data as {
+                id: string
+            }
+            const draftEdit = sales.page.getByRole("dialog", {
+                name: "销售改单",
+                exact: true,
+            })
+            await expect(draftEdit).toBeVisible({ timeout: TIMEOUT })
+            await draftEdit.getByRole("button", { name: "取消" }).click()
+            await expect(
+                sales.page.locator("#sales-orders-detail-start-change"),
+            ).toContainText("继续改单", { timeout: TIMEOUT })
+            await sales.page.getByRole("tab", { name: /版本/ }).click()
+            await sales.page.locator("#sales-orders-change-void-trigger").click()
+            const voidResponse = sales.page.waitForResponse(
+                (response) =>
+                    response.request().method() === "POST" &&
+                    response
+                        .url()
+                        .endsWith(
+                            `/admin/sales-change-orders/${voidTarget.id}/void`,
+                        ),
+            )
+            await sales.page
+                .getByRole("alertdialog")
+                .getByRole("button", { name: "确认作废" })
+                .click()
+            expect((await voidResponse).ok()).toBe(true)
+            const voided = await apiGet<ChangeDetail>(
+                salesToken,
+                `/admin/sales-change-orders/${voidTarget.id}`,
+            )
+            expect(voided.status).toBe("VOIDED")
+            await expect(
+                sales.page.locator("#sales-orders-detail-start-change"),
+            ).toContainText("发起改单", { timeout: TIMEOUT })
+            const afterVoid = await apiGet<SalesCenter>(
+                salesToken,
+                `/admin/sales-orders/${salesOrderId}`,
+            )
+            expect(afterVoid.current_revision_id).toBe(
+                effective.current_revision_id,
+            )
         } finally {
             await Promise.all(sessions.map((context) => context.close()))
         }
