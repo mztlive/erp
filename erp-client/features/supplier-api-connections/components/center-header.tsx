@@ -1,6 +1,6 @@
 "use client"
 
-import { RefreshCwIcon } from "lucide-react"
+import { BanIcon, RefreshCwIcon } from "lucide-react"
 
 import { DetailPageHeader } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -118,10 +118,27 @@ export function CenterHeader({
                                 onClick={onRunHealth}
                             >
                                 <RefreshCwIcon
-                                    className="size-4"
+                                    data-icon="inline-start"
                                     aria-hidden="true"
                                 />
                                 健康检查
+                            </Button>
+                        ) : null}
+                        {canDisable || disableBlocker ? (
+                            <Button
+                                id="supplier-api-connections-center-disable"
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={!canDisable || disablePending}
+                                title={disableBlocker?.message}
+                                onClick={onDisable}
+                            >
+                                <BanIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                />
+                                停用连接
                             </Button>
                         ) : null}
                         {canEnable || enableBlocker ? (
@@ -134,19 +151,6 @@ export function CenterHeader({
                                 onClick={onEnable}
                             >
                                 启用连接
-                            </Button>
-                        ) : null}
-                        {canDisable || disableBlocker ? (
-                            <Button
-                                id="supplier-api-connections-center-disable"
-                                type="button"
-                                size="sm"
-                                variant="destructive"
-                                disabled={!canDisable || disablePending}
-                                title={disableBlocker?.message}
-                                onClick={onDisable}
-                            >
-                                停用连接
                             </Button>
                         ) : null}
                     </div>

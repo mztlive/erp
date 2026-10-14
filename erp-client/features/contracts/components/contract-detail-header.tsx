@@ -107,6 +107,7 @@ export function ContractDetailHeader({
                         <Button
                             id="contract-detail-import-revision"
                             type="button"
+                            size="sm"
                             variant="outline"
                             onClick={onImportRevision}
                         >

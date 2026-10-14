@@ -126,7 +126,10 @@ function SettlementCenterHeaderActions({
                     disabled={refreshPending}
                     onClick={() => void onRefresh()}
                 >
-                    <RefreshCwIcon className="size-3.5" />
+                    <RefreshCwIcon
+                        data-icon="inline-start"
+                        aria-hidden="true"
+                    />
                     {refreshPending ? "刷新中…" : "刷新试算"}
                 </LoadingButton>
             ) : null}
@@ -137,7 +140,7 @@ function SettlementCenterHeaderActions({
                     size="sm"
                     onClick={onSubmitReview}
                 >
-                    <SendIcon className="size-3.5" />
+                    <SendIcon data-icon="inline-start" aria-hidden="true" />
                     提交复核
                 </Button>
             ) : submitBlocker ? (

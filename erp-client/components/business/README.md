@@ -184,6 +184,9 @@ showHeader` 下分页贴成结果卡页脚（顶部分割线），禁止再额�
       统计项只展示数据，不绑定点击、选中态或跳转；筛选放入页签或筛选控件。
     - 可选 sticky 分区锚点 + `DocumentSection` 内容。
       **禁止** `PageHeader(title=…)` 与 `DocumentHeader` 双标题叠放。
+    - 二级详情页用 `DetailPageHeader`：返回行只放导航，操作全部在标题行右侧排成一组。
+      次要和破坏性操作（停用、作废、删除、退役）用描边按钮放 `secondaryActions`，主按钮放
+      `primaryAction`、排在最右；按钮统一 `size="sm"`，不收进「更多」菜单，不用 `destructive` 实心按钮。
 3. 正式详情页的摘要、版本和关联单据分别使用 `DocumentSummary`、`RevisionTimeline`、
    `RelatedDocumentList`。履约、付款等并行状态必须分别展示，不合并成单一“状态”。
    关联采购单等需要履约/付款并行进度时，给 `RelatedDocumentList` 传 `tracks`，

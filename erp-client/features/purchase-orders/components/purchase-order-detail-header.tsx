@@ -97,6 +97,10 @@ export function PurchaseOrderDetailHeader({
                         {mode !== "edit" ? (
                             <PurchaseOrderCorrespondence order={order} />
                         ) : null}
+                        <PurchaseOrderCancelApprovalButton
+                            order={order}
+                            onResult={onCancelResult}
+                        />
                         <PageActions
                             id="procurement-orders-detail-actions"
                             actions={[
@@ -112,29 +116,6 @@ export function PurchaseOrderDetailHeader({
                                                       `${baseHref}?mode=edit`,
                                                   ),
                                               id: "procurement-orders-detail-edit",
-                                          },
-                                      ]
-                                    : []),
-                                ...(canSubmit
-                                    ? [
-                                          {
-                                              actionKey: "submit",
-                                              label: "提交审批",
-                                              icon: SendIcon,
-                                              onClick: () => onRequestSubmit(),
-                                              id: "procurement-orders-detail-submit",
-                                          },
-                                      ]
-                                    : []),
-                                ...(canVoid && mode !== "edit"
-                                    ? [
-                                          {
-                                              actionKey: "void",
-                                              label: "作废草稿",
-                                              icon: Trash2Icon,
-                                              variant: "destructive" as const,
-                                              onClick: () => onRequestVoid(),
-                                              id: "procurement-orders-detail-void",
                                           },
                                       ]
                                     : []),
@@ -155,11 +136,30 @@ export function PurchaseOrderDetailHeader({
                                           },
                                       ]
                                     : []),
+                                ...(canVoid && mode !== "edit"
+                                    ? [
+                                          {
+                                              actionKey: "void",
+                                              label: "作废草稿",
+                                              icon: Trash2Icon,
+                                              variant: "outline" as const,
+                                              onClick: () => onRequestVoid(),
+                                              id: "procurement-orders-detail-void",
+                                          },
+                                      ]
+                                    : []),
+                                ...(canSubmit
+                                    ? [
+                                          {
+                                              actionKey: "submit",
+                                              label: "提交审批",
+                                              icon: SendIcon,
+                                              onClick: () => onRequestSubmit(),
+                                              id: "procurement-orders-detail-submit",
+                                          },
+                                      ]
+                                    : []),
                             ]}
-                        />
-                        <PurchaseOrderCancelApprovalButton
-                            order={order}
-                            onResult={onCancelResult}
                         />
                     </div>
                 }

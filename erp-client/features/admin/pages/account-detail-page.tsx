@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { KeyRoundIcon, PencilIcon } from "lucide-react"
+import { KeyRoundIcon, PencilIcon, Trash2Icon } from "lucide-react"
 import {
     AccountProfileEditor,
     type AccountProfileSnapshot,
@@ -9,16 +9,11 @@ import {
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import {
-    DropdownMenu,
-    DropdownMenuTrigger,
-    DropdownMenuContent,
-    DropdownMenuItem,
-} from "@/components/ui/dropdown-menu"
 import { DeleteAdminDialog } from "../components/accounts/delete-admin-dialog"
 import {
     BusinessFailureState,
     DetailPageHeader,
+    GuardedBusinessAction,
     PageScaffold,
     surfacePanelClassName,
 } from "@/components/business"
@@ -101,6 +96,9 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
               : person.own_org_unit_id
                 ? unitLabel(org.data.units, person.own_org_unit_id)
                 : "未分配部门"
+    const hasSystemRole = account.role_ids.some((id) =>
+        roles.data?.some((role) => role.id === id && role.system),
+    )
     return (
         <PageScaffold density="compact">
             <DetailPageHeader
@@ -120,43 +118,27 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                 }
                 secondaryActions={
                     can("admin:delete") && (
-                        <DropdownMenu>
-                            <DropdownMenuTrigger
-                                id="account-detail-more"
-                                render={<Button variant="outline" size="sm" />}
-                            >
-                                更多
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                {can("admin:delete") && (
-                                    <DropdownMenuItem
-                                        id="account-detail-delete"
-                                        variant="destructive"
-                                        disabled={
-                                            !roles.isSuccess ||
-                                            account.role_ids.some((id) =>
-                                                roles.data.some(
-                                                    (role) =>
-                                                        role.id === id &&
-                                                        role.system,
-                                                ),
-                                            )
-                                        }
-                                        onClick={() => setDeleting(true)}
-                                    >
-                                        {account.role_ids.some((id) =>
-                                            roles.data?.some(
-                                                (role) =>
-                                                    role.id === id &&
-                                                    role.system,
-                                            ),
-                                        )
-                                            ? "系统角色账号不可删除"
-                                            : "删除账号"}
-                                    </DropdownMenuItem>
-                                )}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                        <GuardedBusinessAction
+                            id="account-detail-delete"
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={!roles.isSuccess || hasSystemRole}
+                            reason={
+                                hasSystemRole
+                                    ? "系统角色账号不可删除"
+                                    : !roles.isSuccess
+                                      ? "角色尚未读取，暂不能删除"
+                                      : undefined
+                            }
+                            onClick={() => setDeleting(true)}
+                        >
+                            <Trash2Icon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                            删除账号
+                        </GuardedBusinessAction>
                     )
                 }
             />

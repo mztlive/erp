@@ -125,44 +125,44 @@ export function CustomerDetailPage({
                 version={`v${customer.currentRevision.revisionNo}`}
                 primaryStatus={customer.statusLabel}
                 meta={<CustomerDetailIdentityMeta customer={customer} />}
+                secondaryActions={
+                    <GuardedBusinessAction
+                        id="customers-detail-create-sales-order"
+                        size="sm"
+                        variant="outline"
+                        disabled={salesBlocked}
+                        reason={blocker(customer, "CREATE_SALES_ORDER")}
+                        render={
+                            salesBlocked ? undefined : (
+                                <Link href={createSalesOrderHref} />
+                            )
+                        }
+                    >
+                        <ShoppingCartIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                        新建销售单
+                    </GuardedBusinessAction>
+                }
                 primaryAction={
-                    <div className="flex flex-wrap items-center gap-2">
-                        <GuardedBusinessAction
-                            id="customers-detail-upload-contract"
-                            size="sm"
-                            disabled={contractBlocked}
-                            reason={blocker(customer, "UPLOAD_CONTRACT_PDF")}
-                            render={
-                                contractBlocked ? undefined : (
-                                    <Link href={uploadContractHref} />
-                                )
-                            }
-                        >
-                            <FilePlus2Icon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            上传合同 PDF
-                        </GuardedBusinessAction>
-                        <GuardedBusinessAction
-                            id="customers-detail-create-sales-order"
-                            size="sm"
-                            variant="secondary"
-                            disabled={salesBlocked}
-                            reason={blocker(customer, "CREATE_SALES_ORDER")}
-                            render={
-                                salesBlocked ? undefined : (
-                                    <Link href={createSalesOrderHref} />
-                                )
-                            }
-                        >
-                            <ShoppingCartIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            新建销售单
-                        </GuardedBusinessAction>
-                    </div>
+                    <GuardedBusinessAction
+                        id="customers-detail-upload-contract"
+                        size="sm"
+                        disabled={contractBlocked}
+                        reason={blocker(customer, "UPLOAD_CONTRACT_PDF")}
+                        render={
+                            contractBlocked ? undefined : (
+                                <Link href={uploadContractHref} />
+                            )
+                        }
+                    >
+                        <FilePlus2Icon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                        />
+                        上传合同 PDF
+                    </GuardedBusinessAction>
                 }
             />
 

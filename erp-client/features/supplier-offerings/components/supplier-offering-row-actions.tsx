@@ -8,6 +8,7 @@ import {
     PlayIcon,
 } from "lucide-react"
 
+import { GuardedBusinessAction } from "@/components/business"
 import { TableRowActions } from "@/components/business/table-row-actions"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
@@ -95,5 +96,83 @@ export function SupplierOfferingRowActions({
                 ),
             ]}
         />
+    )
+}
+
+/** 详情页头操作：状态动作与更新可供用描边按钮，修订条款为主按钮放最右。 */
+export function SupplierOfferingDetailActions({
+    offering,
+    onUpdateAvailability,
+    onReviseOffering,
+    onChangeStatus,
+    canRevise,
+    canAvailability,
+    idPrefix,
+}: {
+    offering: SupplierOfferingView
+    canRevise: boolean
+    canAvailability: boolean
+    idPrefix: string
+    onUpdateAvailability: () => void
+    onReviseOffering: () => void
+    onChangeStatus: (intent: OfferingStatusIntent) => void
+}) {
+    const rowId = toAutomationIdSegment(offering.id)
+    const blocker = statusRevisionBlocker(offering)
+    return (
+        <>
+            {canAvailability ? (
+                <GuardedBusinessAction
+                    id={`${idPrefix}-${rowId}-update-availability`}
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={onUpdateAvailability}
+                >
+                    <PackageCheckIcon
+                        data-icon="inline-start"
+                        aria-hidden="true"
+                    />
+                    更新可供
+                </GuardedBusinessAction>
+            ) : null}
+            {canRevise
+                ? statusIntentsFor(offering.status).map((intent) => {
+                      const Icon = statusIntentIcon(intent.nextStatus)
+                      return (
+                          <GuardedBusinessAction
+                              key={intent.actionId}
+                              id={`${idPrefix}-${rowId}-${intent.actionId}`}
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={blocker != null}
+                              reason={blocker ?? undefined}
+                              onClick={() => onChangeStatus(intent)}
+                          >
+                              <Icon
+                                  data-icon="inline-start"
+                                  aria-hidden="true"
+                              />
+                              {intent.label}
+                          </GuardedBusinessAction>
+                      )
+                  })
+                : null}
+            {canRevise ? (
+                <GuardedBusinessAction
+                    id={`${idPrefix}-${rowId}-revise`}
+                    type="button"
+                    size="sm"
+                    onClick={onReviseOffering}
+                >
+                    <FilePenLineIcon
+                        data-icon="inline-start"
+                        aria-hidden="true"
+                    />
+                    修订条款
+                </GuardedBusinessAction>
+            ) : null}
+        </>
     )
 }

@@ -25,7 +25,7 @@ import {
 } from "../components/offering-overview"
 import { OfferingDeliverySection } from "../components/delivery-templates/offering-delivery-section"
 import { OfferingHistory } from "../components/offering-history"
-import { SupplierOfferingRowActions } from "../components/supplier-offering-row-actions"
+import { SupplierOfferingDetailActions } from "../components/supplier-offering-row-actions"
 import { ReviseOfferingDialog } from "../components/dialogs/revise-offering-dialog"
 import { UpdateAvailabilityDialog } from "../components/dialogs/update-availability-dialog"
 import { ChangeOfferingStatusDialog } from "../components/dialogs/change-offering-status-dialog"
@@ -103,7 +103,7 @@ export function SupplierOfferingDetailPage({
                     }
                     primaryAction={
                         taskMode ? undefined : (
-                            <SupplierOfferingRowActions
+                            <SupplierOfferingDetailActions
                                 offering={offering}
                                 canRevise={
                                     canViewCosts &&
@@ -116,13 +116,12 @@ export function SupplierOfferingDetailPage({
                                     account.data?.permissions,
                                     "supplier_offering_availability:update",
                                 )}
-                                maxInline={2}
                                 idPrefix="supplier-offering-detail"
                                 onReviseOffering={() => setDialog("revise")}
                                 onUpdateAvailability={() =>
                                     setDialog("availability")
                                 }
-                                onChangeStatus={(_, next) => setIntent(next)}
+                                onChangeStatus={setIntent}
                             />
                         )
                     }

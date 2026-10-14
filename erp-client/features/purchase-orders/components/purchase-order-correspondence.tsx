@@ -42,6 +42,7 @@ export function PurchaseOrderCorrespondence({
         <>
             <Button
                 id="purchase-order-download-paper"
+                size="sm"
                 variant="outline"
                 disabled={paper.isPending}
                 onClick={async () => {
@@ -78,6 +79,7 @@ export function PurchaseOrderCorrespondence({
             {canSend ? (
                 <Button
                     id="purchase-order-email-open"
+                    size="sm"
                     variant="outline"
                     disabled={!effective}
                     title={!effective ? "审批生效后可发送给供应商" : undefined}

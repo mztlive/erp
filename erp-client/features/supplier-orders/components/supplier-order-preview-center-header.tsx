@@ -86,7 +86,7 @@ export function SupplierOrderCenterHeader({
                     ) : undefined
                 }
                 secondaryActions={
-                    <div className="flex flex-wrap gap-2">
+                    <>
                         {isResultUnknown ? (
                             <GuardedBusinessAction
                                 id="supplier-order-center-header-replay"
@@ -118,13 +118,13 @@ export function SupplierOrderCenterHeader({
                                 }
                             >
                                 转接口错误中心
-                                <ExternalLinkIcon className="size-3.5" />
+                                <ExternalLinkIcon
+                                    data-icon="inline-end"
+                                    aria-hidden="true"
+                                />
                             </Button>
                         ) : null}
-                        <span className="num text-sm text-muted-foreground">
-                            供应商单号 {order.externalOrderNo ?? "尚未返回"}
-                        </span>
-                    </div>
+                    </>
                 }
             />
         </>

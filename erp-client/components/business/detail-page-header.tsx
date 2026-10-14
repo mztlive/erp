@@ -25,7 +25,11 @@ export type DetailPageHeaderProps = Omit<
     headingProps?: React.ComponentProps<"h1">
 }
 
-/** 详情页共用商品页的返回行、对象身份行与主操作布局。 */
+/**
+ * 详情页共用的返回行、对象身份行与操作条。
+ * 返回行只放导航；全部操作在标题行右侧排成一组：
+ * `secondaryActions`（描边，含停用、作废等破坏性操作）在左，`primaryAction` 在最右。
+ */
 export function DetailPageHeader({
     title,
     back,
@@ -52,46 +56,39 @@ export function DetailPageHeader({
             className={cn("min-w-0 space-y-4", className)}
             {...props}
         >
-            {back || navigationMeta || secondaryActions ? (
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex min-w-0 flex-wrap items-center gap-3">
-                        {back?.href != null ? (
-                            <Link
-                                id={back.id}
-                                href={back.href}
-                                className={cn(
-                                    buttonVariants({
-                                        variant: "ghost",
-                                        size: "sm",
-                                    }),
-                                    "-ml-2 text-muted-foreground",
-                                )}
-                            >
-                                <ArrowLeftIcon aria-hidden />
-                                {back.label}
-                            </Link>
-                        ) : back ? (
-                            <Button
-                                id={back.id}
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="-ml-2 text-muted-foreground"
-                                onClick={back.onClick}
-                            >
-                                <ArrowLeftIcon aria-hidden />
-                                {back.label}
-                            </Button>
-                        ) : null}
-                        {navigationMeta ? (
-                            <div className="min-w-0 text-sm text-muted-foreground">
-                                {navigationMeta}
-                            </div>
-                        ) : null}
-                    </div>
-                    {secondaryActions ? (
-                        <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
-                            {secondaryActions}
+            {back || navigationMeta ? (
+                <div className="flex min-w-0 flex-wrap items-center gap-3">
+                    {back?.href != null ? (
+                        <Link
+                            id={back.id}
+                            href={back.href}
+                            className={cn(
+                                buttonVariants({
+                                    variant: "ghost",
+                                    size: "sm",
+                                }),
+                                "-ml-2 text-muted-foreground",
+                            )}
+                        >
+                            <ArrowLeftIcon aria-hidden />
+                            {back.label}
+                        </Link>
+                    ) : back ? (
+                        <Button
+                            id={back.id}
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="-ml-2 text-muted-foreground"
+                            onClick={back.onClick}
+                        >
+                            <ArrowLeftIcon aria-hidden />
+                            {back.label}
+                        </Button>
+                    ) : null}
+                    {navigationMeta ? (
+                        <div className="min-w-0 text-sm text-muted-foreground">
+                            {navigationMeta}
                         </div>
                     ) : null}
                 </div>
@@ -128,8 +125,12 @@ export function DetailPageHeader({
                         </div>
                     ) : null}
                 </div>
-                {primaryAction ? (
-                    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+                {secondaryActions || primaryAction ? (
+                    <div
+                        data-slot="detail-page-header-actions"
+                        className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2"
+                    >
+                        {secondaryActions}
                         {primaryAction}
                     </div>
                 ) : null}

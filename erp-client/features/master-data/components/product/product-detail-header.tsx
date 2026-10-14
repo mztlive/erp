@@ -3,22 +3,12 @@
 import Image from "next/image"
 import { DetailPageHeader } from "@/components/business/detail-page-header"
 
-import {
-    BanIcon,
-    ImagePlusIcon,
-    MoreHorizontalIcon,
-    SaveIcon,
-} from "lucide-react"
+import { BanIcon, ImagePlusIcon, SaveIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { productKindLabel } from "@/features/master-data/api/presentation"
+import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type {
     MasterDataCenterView,
     ProductFields,
@@ -69,33 +59,18 @@ export function ProductDetailHeader({
             }}
             secondaryActions={
                 !isCreate && data ? (
-                    <DropdownMenu>
-                        <DropdownMenuTrigger
-                            id="master-data-product-detail-more"
-                            render={
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                />
-                            }
-                        >
-                            <MoreHorizontalIcon aria-hidden />
-                            更多操作
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                                id="master-data-product-detail-header-disable"
-                                variant="destructive"
-                                disabled={!canDisable || pending}
-                                title={disableBlocker?.message}
-                                onClick={() => setDisableOpen(true)}
-                            >
-                                <BanIcon aria-hidden />
-                                停用商品
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                    <Button
+                        id="master-data-product-detail-header-disable"
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={!canDisable || pending}
+                        title={disableBlocker?.message}
+                        onClick={() => setDisableOpen(true)}
+                    >
+                        <BanIcon data-icon="inline-start" aria-hidden />
+                        {masterDataCopy.actionDisable}
+                    </Button>
                 ) : null
             }
             media={
@@ -150,11 +125,12 @@ export function ProductDetailHeader({
                 </>
             }
             primaryAction={
-                <div className="flex items-center gap-2">
+                <>
                     {onReset && canRevise && !isCreate ? (
                         <Button
                             id="master-data-product-detail-reset"
                             type="button"
+                            size="sm"
                             variant="outline"
                             disabled={pending}
                             onClick={onReset}
@@ -166,17 +142,18 @@ export function ProductDetailHeader({
                         id="master-data-product-detail-header-submit"
                         loading={pending}
                         type="button"
+                        size="sm"
                         disabled={!canRevise || pending}
                         onClick={onSave}
                     >
-                        <SaveIcon aria-hidden />
+                        <SaveIcon data-icon="inline-start" aria-hidden />
                         {pending
                             ? "提交中…"
                             : isCreate
                               ? "创建商品"
                               : "保存更新"}
                     </LoadingButton>
-                </div>
+                </>
             }
         />
     )

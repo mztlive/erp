@@ -306,16 +306,6 @@ export function ApprovalProcessDetailPage({
                                 新建草稿
                             </Button>
                         ) : null}
-                        {canPublish && draft && urlState.view === "draft" ? (
-                            <Button
-                                id="governance-approval-processes-detail-publish"
-                                type="button"
-                                size="sm"
-                                onClick={() => setPublishOpen(true)}
-                            >
-                                发布
-                            </Button>
-                        ) : null}
                         {canRetire && published ? (
                             <Button
                                 id="governance-approval-processes-detail-retire"
@@ -325,6 +315,16 @@ export function ApprovalProcessDetailPage({
                                 onClick={() => setRetireOpen(true)}
                             >
                                 退役
+                            </Button>
+                        ) : null}
+                        {canPublish && draft && urlState.view === "draft" ? (
+                            <Button
+                                id="governance-approval-processes-detail-publish"
+                                type="button"
+                                size="sm"
+                                onClick={() => setPublishOpen(true)}
+                            >
+                                发布
                             </Button>
                         ) : null}
                     </>
