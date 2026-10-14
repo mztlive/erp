@@ -35,10 +35,10 @@
 
 | 功能组 | 对象 | 权威字段 | 创建规则 | 交接 |
 | --- | --- | --- | --- | --- |
-| M13 | `SupplierAccount` | `maintainer_user_id`（整体维护人）、`business_org_unit_id` | 新建必填；缺主属组织阻断；禁止 `created_by` 兜底 | `POST /admin/suppliers/{id}/handover` |
-| M13 | `SupplierCapability` | 既有 `owner_user_id`（供给能力负责人） | 创建必须显式指定合格内部人员，禁止静默写成操作人 | `POST /admin/suppliers/{id}/capabilities/{capability_id}/handover` |
-| M14 | `Product` | `maintainer_user_id`、`business_org_unit_id` | 同上 | `POST /admin/products/{id}/handover` |
-| M14 | `SupplierOffering` | `maintainer_user_id`、`business_org_unit_id` | 同上 | `POST /admin/supplier-offerings/{id}/handover` |
+| M13 | `SupplierAccount` | `maintainer_user_id`（整体维护人）、`business_org_unit_id` | 新建页面默认当前登录用户并随请求提交，不展示输入字段；缺主属组织阻断；禁止 `created_by` 兜底 | `POST /admin/suppliers/{id}/handover` |
+| M13 | `SupplierCapability` | 既有 `owner_user_id`（供给能力负责人） | 新建供应商及首次补录能力默认当前登录用户并随请求提交，不展示输入字段；服务端校验人员资格；已有能力负责人仅通过交接变更 | `POST /admin/suppliers/{id}/capabilities/{capability_id}/handover` |
+| M14 | `Product` | `maintainer_user_id`、`business_org_unit_id` | 创建必须显式指定合格内部人员；缺主属组织阻断；禁止 `created_by` 兜底 | `POST /admin/products/{id}/handover` |
+| M14 | `SupplierOffering` | `maintainer_user_id`、`business_org_unit_id` | 创建必须显式指定合格内部人员；缺主属组织阻断；禁止 `created_by` 兜底 | `POST /admin/supplier-offerings/{id}/handover` |
 | M14 | 商品／供给列表的采购负责人 | **不落主档**；由 `ProcurementResponsibilityRuleSet::resolve` 按 SKU／分类／类型／默认调度人解析 | 缺规则 fail-closed；列表筛选在授权集合内批量解析，超限整体拒绝 | 不因本查询改写采购单或任务 |
 | M15 | `SupplierFulfillmentOrder` | `follow_up_user_id`（内部跟进）、`business_org_unit_id` | 创建取固定供应关系／履约责任规则解析的内部人员；禁止系统账号、派发 actor、供应商联系人 | `POST /admin/supplier-fulfillment-orders/{id}/handover` |
 | M15 | 异常处理人 | 当前开放 W26 `WorkItem.owner_user_id` | 替换 `actor_id`／`owner_organization_id = "company"` 硬编码；须解析唯一合格人员 | 是否随单据交接转交须在命令中显式声明，默认不自动改派审批任务 |
@@ -136,7 +136,8 @@
 
 - 供应商列表／详情展示整体维护人；能力列表／详情展示能力负责人。
 - 两套筛选独立，不得互相顶替。
-- 能力创建请求必须能指定 `owner_user_id`；资料保存不得再把操作人写成能力负责人。
+- 新建供应商页面不展示维护人、能力负责人输入字段，两项默认当前登录用户，提交请求必须携带其 ID。账号信息尚未加载时不得以空责任人提交；加载完成不得重置已填写的资料。
+- 编辑已有供应商保留原维护人和已有能力负责人；无已有能力负责人时首次补录能力默认当前登录用户。责任交接继续使用专用交接命令，服务端保留人员资格和组织校验。
 - 无维护人的存量开发数据：命令在首次维护／交接前阻断正式变更，或提供显式补录命令；禁止用 `created_by` 回填后开放筛选。
 
 ### 4.2 M14

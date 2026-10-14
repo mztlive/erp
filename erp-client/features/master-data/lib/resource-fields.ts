@@ -182,6 +182,11 @@ export function buildResourceFields(
             }
         case "suppliers":
             return {
+                maintainerUserId: pickField(values, "maintainerUserId"),
+                capabilityOwnerUserId: pickField(
+                    values,
+                    "capabilityOwnerUserId",
+                ),
                 company: pickField(values, "company") ?? "",
                 creditCode: pickField(values, "creditCode"),
                 contactName: pickField(values, "contactName"),

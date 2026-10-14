@@ -44,6 +44,7 @@ export function useSupplierEditor(stableId: string) {
     const createMutation = useCreateMasterDataMutation()
     const reviseMutation = useCreateRevisionMutation()
     const accountQuery = useAccountProfileQuery()
+    const currentUserId = accountQuery.data?.userid ?? ""
 
     const data = detailQuery.data
     const lockVersion = data?.lockVersion
@@ -80,13 +81,12 @@ export function useSupplierEditor(stableId: string) {
     const initialFormValues = React.useMemo(() => {
         if (!isCreate && data) return hydrateSupplierEditor(data)
         const defaults = createSupplierEditorDefaults(isCreate)
-        const userId = accountQuery.data?.userid ?? ""
         return {
             ...defaults,
-            maintainerUserId: userId,
-            capabilityOwnerUserId: userId,
+            maintainerUserId: isCreate ? currentUserId : "",
+            capabilityOwnerUserId: isCreate ? currentUserId : "",
         }
-    }, [accountQuery.data?.userid, data, isCreate])
+    }, [currentUserId, data, isCreate])
 
     const form = useAppForm({
         defaultValues: initialFormValues,
@@ -226,6 +226,28 @@ export function useSupplierEditor(stableId: string) {
         editedSensitiveRef.current.clear()
         hydratedKeyRef.current = key
     }, [data, form, isCreate])
+
+    // 账号晚于用户录入加载时，只补内部责任字段，不重置已填写的资料。
+    React.useEffect(() => {
+        if (!currentUserId) return
+        if (isCreate) {
+            form.setFieldValue("maintainerUserId", currentUserId, {
+                dontUpdateMeta: true,
+            })
+        }
+        // 已有能力保持原负责人；首次补录能力默认由当前用户负责。
+        if (isCreate || (data && !initialFormValues.capabilityOwnerUserId)) {
+            form.setFieldValue("capabilityOwnerUserId", currentUserId, {
+                dontUpdateMeta: true,
+            })
+        }
+    }, [
+        currentUserId,
+        data,
+        form,
+        initialFormValues.capabilityOwnerUserId,
+        isCreate,
+    ])
 
     // 离开确认：返回列表 / 侧栏 / 刷新都受未保存保护
     React.useEffect(() => {
