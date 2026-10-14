@@ -100,7 +100,6 @@ pub(crate) fn sales_goods_fact(value: SalesOrderGoodsServiceLineRevision) -> Sal
         quantity: value.quantity,
         base_unit_code: value.base_unit_code.clone(),
         fulfillment_due_at: value.fulfillment_due_at,
-        service_region: value.service_region.clone(),
         delivery_allocations: value
             .delivery_allocations
             .into_iter()
@@ -351,7 +350,6 @@ pub(crate) fn proposed_line_fact(
         quantity: value.quantity?,
         base_unit_code: value.base_unit_code.clone()?,
         fulfillment_due_at: value.fulfillment_due_at?,
-        service_region: value.service_region.clone(),
         delivery_allocations: value
             .delivery_allocations
             .iter()

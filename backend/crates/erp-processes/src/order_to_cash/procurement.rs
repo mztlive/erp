@@ -42,7 +42,7 @@ impl SalesOrderCommandProcess {
 fn resolution_input(
     fact: erp_sales::service::sales_order::procurement::SalesProcurementLineFact,
 ) -> ResolutionInput {
-    ResolutionInput { line_key: fact.line_key, sku_id: fact.sku_id, service_region: fact.service_region }
+    ResolutionInput { line_key: fact.line_key, sku_id: fact.sku_id }
 }
 /// 把已冻结的销售明细事实映射为采购责任解析输入。
 ///

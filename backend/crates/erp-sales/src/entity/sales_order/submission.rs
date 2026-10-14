@@ -599,8 +599,9 @@ pub struct SalesOrderSubmissionLine {
     pub sku_revision_id: Option<erp_core::ids::SkuRevisionId>,
     /// 福利场景。
     pub welfare_scenario: Option<WelfareScenario>,
-    /// 采购责任解析使用的服务区域。
-    pub service_region: Option<String>,
+    /// 销售填写的采购供给价（含税单价）；只供审批参考，不参与任何计算。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub procurement_supply_price_gross: Option<UnitPrice>,
     /// 公司对客户承诺完成本明细交付或服务的最晚时间。
     pub fulfillment_due_at: Option<Instant>,
     /// 基础单位数量。
@@ -682,7 +683,7 @@ impl SalesOrderSubmissionLine {
             sku_id: built.goods.as_ref().map(|g| g.sku_id.clone()),
             sku_revision_id: built.goods.as_ref().map(|g| g.sku_revision_id.clone()),
             welfare_scenario: built.goods.as_ref().and_then(|g| g.welfare_scenario),
-            service_region: built.goods.as_ref().and_then(|g| g.service_region.clone()),
+            procurement_supply_price_gross: built.procurement_supply_price_gross(),
             fulfillment_due_at: built.goods.as_ref().map(|g| g.fulfillment_due_at),
             quantity: built.goods.as_ref().map(|g| g.quantity),
             base_unit_code: built.goods.as_ref().map(|g| g.base_unit_code.clone()),
@@ -725,7 +726,7 @@ impl SalesOrderSubmissionLine {
                 .clone()
                 .ok_or_else(|| Error::from(format!("第 {} 行缺少 SKU 修订", self.line_no)))?,
             welfare_scenario: self.welfare_scenario,
-            service_region: self.service_region.clone(),
+            procurement_supply_price_gross: self.procurement_supply_price_gross,
             fulfillment_due_at: self
                 .fulfillment_due_at
                 .ok_or_else(|| Error::from(format!("第 {} 行缺少履约期限", self.line_no)))?,
@@ -827,7 +828,7 @@ mod tests {
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: Some(WelfareScenario::AnnualGiftBag),
-            service_region: Some("east".to_string()),
+            procurement_supply_price_gross: Some("8.5000".parse().unwrap()),
             fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
             quantity: qty("3.000000"),
             base_unit_code: "箱".to_string(),

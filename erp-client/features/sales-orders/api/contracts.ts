@@ -193,7 +193,7 @@ export type BackendWorkingCopyLine = {
     unit_snapshot?: string | null
     sku_id?: string | null
     sku_revision_id?: string | null
-    service_region?: string | null
+    procurement_supply_price_gross?: string | null
     quantity?: string | null
     base_unit_code?: string | null
     unit_price_gross?: string | null

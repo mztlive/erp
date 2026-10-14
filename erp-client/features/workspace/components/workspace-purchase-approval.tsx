@@ -314,6 +314,21 @@ function PurchaseComparison({
             sales: <MoneyValue value={source?.unit_price_gross} />,
             purchase: <MoneyValue value={line.unit_cost_gross} />,
         },
+        ...(source
+            ? [
+                  {
+                      label: "采购供给价",
+                      sales: source.procurement_supply_price_gross ? (
+                          <MoneyValue
+                              value={source.procurement_supply_price_gross}
+                          />
+                      ) : (
+                          "未填写"
+                      ),
+                      purchase: <MoneyValue value={line.unit_cost_gross} />,
+                  },
+              ]
+            : []),
         {
             label: "交付日期",
             sales: source
@@ -394,7 +409,7 @@ function PurchaseComparison({
             </div>
             <p className="text-xs leading-5 text-muted-foreground">
                 {source
-                    ? "销售数量为该来源明细的需求量；本次采购仅对应其中的采购数量。销售日期为客户承诺交期，采购日期为预计交付日。"
+                    ? "销售数量为该来源明细的需求量；本次采购仅对应其中的采购数量。采购供给价为销售开单时填写的预计采购单价，与本次采购含税单价对照。销售日期为客户承诺交期，采购日期为预计交付日。"
                     : "此费用行不对应销售商品明细，不计算销售价格。"}
             </p>
         </article>

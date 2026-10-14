@@ -191,7 +191,7 @@ mod tests {
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: Some(WelfareScenario::MealSubsidy),
-            service_region: Some("east".to_string()),
+            procurement_supply_price_gross: Some("8.5000".parse().unwrap()),
             fulfillment_due_at: at(),
             quantity: qty("3.000000"),
             base_unit_code: "箱".to_string(),

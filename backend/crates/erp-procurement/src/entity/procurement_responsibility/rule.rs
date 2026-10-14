@@ -3,14 +3,13 @@
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use erp_core::ids::{ProcurementResponsibilityRuleId, ProductCategoryId, SkuId};
-use erp_core::validation::{normalize_optional_text, normalize_required_text};
+use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use super::status::EnableStatus;
 use crate::entity::facts::ProductKind;
 
-const SERVICE_REGION_MAX_LEN: usize = 128;
 const ACTOR_MAX_LEN: usize = 128;
 const OWNER_MAX_LEN: usize = 128;
 
@@ -20,8 +19,6 @@ const OWNER_MAX_LEN: usize = 128;
 pub enum ProcurementResponsibilityRuleType {
     /// 精确 SKU。
     Sku,
-    /// 精确分类与服务区域。
-    CategoryServiceRegion,
     /// 分类；解析时允许沿父分类逐级回退。
     Category,
     /// 商品业务类型。
@@ -44,7 +41,6 @@ impl ProcurementResponsibilityRuleType {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Sku => "SKU",
-            Self::CategoryServiceRegion => "CATEGORY_SERVICE_REGION",
             Self::Category => "CATEGORY",
             Self::ProductKind => "PRODUCT_KIND",
             Self::DefaultDispatcher => "DEFAULT_DISPATCHER",
@@ -57,17 +53,16 @@ impl ProcurementResponsibilityRuleType {
     /// 无。
     ///
     /// # 返回
-    /// 返回 1 至 5，数值越小优先级越高。
+    /// 返回 1 至 4，数值越小优先级越高。
     ///
     /// # 错误
     /// 无。
     pub fn priority(self) -> u8 {
         match self {
             Self::Sku => 1,
-            Self::CategoryServiceRegion => 2,
-            Self::Category => 3,
-            Self::ProductKind => 4,
-            Self::DefaultDispatcher => 5,
+            Self::Category => 2,
+            Self::ProductKind => 3,
+            Self::DefaultDispatcher => 4,
         }
     }
 }
@@ -79,10 +74,8 @@ pub struct ProcurementResponsibilityRuleData {
     pub rule_type: ProcurementResponsibilityRuleType,
     /// SKU 选择器；仅 SKU 规则填写。
     pub sku_id: Option<SkuId>,
-    /// 分类选择器；仅分类相关规则填写。
+    /// 分类选择器；仅分类规则填写。
     pub category_id: Option<ProductCategoryId>,
-    /// 服务区域；仅分类 + 服务区域规则填写。
-    pub service_region: Option<String>,
     /// 商品业务类型；仅 ProductKind 规则填写。
     pub product_kind: Option<ProductKind>,
     /// 具体采购负责人账号 ID。
@@ -112,19 +105,17 @@ impl ProcurementResponsibilityRuleData {
     /// SKU 规则返回 SKU，分类规则返回分类，其余规则返回 `None`。
     ///
     /// # 错误
-    /// 规则类型与选择器字段形状不一致或服务区域过长时返回错误。
+    /// 规则类型与选择器字段形状不一致时返回错误。
     ///
     /// # Panics
     /// 形状校验已通过后对应选择器字段仍缺失时 panic。
     pub fn selector_reference(&self) -> Result<ProcurementResponsibilitySelectorReference<'_>> {
-        let service_region = normalize_service_region(self.service_region.clone())?;
-        ensure_selector_shape(self, service_region.as_deref())?;
+        ensure_selector_shape(self)?;
         Ok(match self.rule_type {
             ProcurementResponsibilityRuleType::Sku => ProcurementResponsibilitySelectorReference::Sku(
                 self.sku_id.as_ref().expect("选择器形状已校验"),
             ),
-            ProcurementResponsibilityRuleType::Category
-            | ProcurementResponsibilityRuleType::CategoryServiceRegion => {
+            ProcurementResponsibilityRuleType::Category => {
                 ProcurementResponsibilitySelectorReference::Category(
                     self.category_id.as_ref().expect("选择器形状已校验"),
                 )
@@ -148,8 +139,6 @@ pub struct ProcurementResponsibilityRule {
     pub sku_id: Option<SkuId>,
     /// 分类选择器。
     pub category_id: Option<ProductCategoryId>,
-    /// 规范化服务区域。
-    pub service_region: Option<String>,
     /// 商品业务类型选择器。
     pub product_kind: Option<ProductKind>,
     /// 具体采购负责人账号 ID。
@@ -176,7 +165,7 @@ impl ProcurementResponsibilityRule {
     /// 返回选择器已规范化且形状合法的新规则。
     ///
     /// # 错误
-    /// 选择器与规则类型不一致、区域或账号为空/过长时返回错误。
+    /// 选择器与规则类型不一致、账号为空或过长时返回错误。
     pub fn new(
         id: ProcurementResponsibilityRuleId,
         data: ProcurementResponsibilityRuleData,
@@ -189,7 +178,6 @@ impl ProcurementResponsibilityRule {
             rule_type: normalized.rule_type,
             sku_id: normalized.sku_id,
             category_id: normalized.category_id,
-            service_region: normalized.service_region,
             product_kind: normalized.product_kind,
             owner_user_id: normalized.owner_user_id,
             status: normalized.status,
@@ -209,7 +197,7 @@ impl ProcurementResponsibilityRule {
     /// 更新成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 选择器形状、区域、负责人或操作人不合法时返回错误。
+    /// 选择器形状、负责人或操作人不合法时返回错误。
     pub fn update(
         &mut self,
         data: ProcurementResponsibilityRuleData,
@@ -220,7 +208,6 @@ impl ProcurementResponsibilityRule {
         self.rule_type = normalized.rule_type;
         self.sku_id = normalized.sku_id;
         self.category_id = normalized.category_id;
-        self.service_region = normalized.service_region;
         self.product_kind = normalized.product_kind;
         self.owner_user_id = normalized.owner_user_id;
         self.status = normalized.status;
@@ -249,7 +236,6 @@ struct NormalizedRuleData {
     rule_type: ProcurementResponsibilityRuleType,
     sku_id: Option<SkuId>,
     category_id: Option<ProductCategoryId>,
-    service_region: Option<String>,
     product_kind: Option<ProductKind>,
     owner_user_id: String,
     status: EnableStatus,
@@ -269,10 +255,9 @@ impl TryFrom<ProcurementResponsibilityRuleData> for NormalizedRuleData {
     ///
     /// # 错误
     /// 选择器字段组合与规则类型不一致时返回错误。
-    fn try_from(mut data: ProcurementResponsibilityRuleData) -> Result<Self> {
-        let service_region = normalize_service_region(data.service_region.take())?;
-        ensure_selector_shape(&data, service_region.as_deref())?;
-        let selector_key = selector_key(&data, service_region.as_deref());
+    fn try_from(data: ProcurementResponsibilityRuleData) -> Result<Self> {
+        ensure_selector_shape(&data)?;
+        let selector_key = selector_key(&data);
         let owner_user_id = normalize_required_text(
             data.owner_user_id,
             "采购负责人不能为空",
@@ -283,7 +268,6 @@ impl TryFrom<ProcurementResponsibilityRuleData> for NormalizedRuleData {
             rule_type: data.rule_type,
             sku_id: data.sku_id,
             category_id: data.category_id,
-            service_region,
             product_kind: data.product_kind,
             owner_user_id,
             status: data.status,
@@ -292,66 +276,29 @@ impl TryFrom<ProcurementResponsibilityRuleData> for NormalizedRuleData {
     }
 }
 
-/// 规范化服务区域代码。
-///
-/// # 参数
-/// * `value` - 可选区域原值
-///
-/// # 返回
-/// 空白转 `None`，其他值 trim 后转 ASCII 大写。
-///
-/// # 错误
-/// 区域超过长度上限时返回错误。
-pub fn normalize_service_region(value: Option<String>) -> Result<Option<String>> {
-    Ok(normalize_optional_text(value, "服务区域", SERVICE_REGION_MAX_LEN)?
-        .map(|region| region.to_ascii_uppercase()))
-}
-
 /// 校验规则类型与选择器字段严格一一对应。
 ///
 /// # 参数
 /// * `data` - 原始规则数据
-/// * `service_region` - 已规范化的可选服务区域
 ///
 /// # 返回
 /// 字段组合与规则类型一致时返回 `Ok(())`。
 ///
 /// # 错误
 /// 任一多余或缺失选择器字段都会返回领域错误。
-fn ensure_selector_shape(
-    data: &ProcurementResponsibilityRuleData,
-    service_region: Option<&str>,
-) -> Result<()> {
+fn ensure_selector_shape(data: &ProcurementResponsibilityRuleData) -> Result<()> {
     let valid = match data.rule_type {
         ProcurementResponsibilityRuleType::Sku => {
-            data.sku_id.is_some()
-                && data.category_id.is_none()
-                && service_region.is_none()
-                && data.product_kind.is_none()
-        },
-        ProcurementResponsibilityRuleType::CategoryServiceRegion => {
-            data.sku_id.is_none()
-                && data.category_id.is_some()
-                && service_region.is_some()
-                && data.product_kind.is_none()
+            data.sku_id.is_some() && data.category_id.is_none() && data.product_kind.is_none()
         },
         ProcurementResponsibilityRuleType::Category => {
-            data.sku_id.is_none()
-                && data.category_id.is_some()
-                && service_region.is_none()
-                && data.product_kind.is_none()
+            data.sku_id.is_none() && data.category_id.is_some() && data.product_kind.is_none()
         },
         ProcurementResponsibilityRuleType::ProductKind => {
-            data.sku_id.is_none()
-                && data.category_id.is_none()
-                && service_region.is_none()
-                && data.product_kind.is_some()
+            data.sku_id.is_none() && data.category_id.is_none() && data.product_kind.is_some()
         },
         ProcurementResponsibilityRuleType::DefaultDispatcher => {
-            data.sku_id.is_none()
-                && data.category_id.is_none()
-                && service_region.is_none()
-                && data.product_kind.is_none()
+            data.sku_id.is_none() && data.category_id.is_none() && data.product_kind.is_none()
         },
     };
     if !valid {
@@ -364,7 +311,6 @@ fn ensure_selector_shape(
 ///
 /// # 参数
 /// * `data` - 已通过形状校验的规则数据
-/// * `service_region` - 已规范化的可选服务区域
 ///
 /// # 返回
 /// 返回不包含负责人且唯一表示规则层与选择器的字符串。
@@ -374,16 +320,11 @@ fn ensure_selector_shape(
 ///
 /// # Panics
 /// 形状未校验却缺少对应选择器字段时 panic。
-fn selector_key(data: &ProcurementResponsibilityRuleData, service_region: Option<&str>) -> String {
+fn selector_key(data: &ProcurementResponsibilityRuleData) -> String {
     match data.rule_type {
         ProcurementResponsibilityRuleType::Sku => {
             format!("sku:{}", data.sku_id.as_ref().expect("形状已校验"))
         },
-        ProcurementResponsibilityRuleType::CategoryServiceRegion => format!(
-            "category_region:{}:{}",
-            data.category_id.as_ref().expect("形状已校验"),
-            service_region.expect("形状已校验")
-        ),
         ProcurementResponsibilityRuleType::Category => {
             format!("category:{}", data.category_id.as_ref().expect("形状已校验"))
         },
@@ -415,13 +356,12 @@ mod tests {
 
     #[test]
     fn entity_normalizes_selector_and_rejects_mixed_shapes() {
-        let region = ProcurementResponsibilityRule::new(
+        let category = ProcurementResponsibilityRule::new(
             ProcurementResponsibilityRuleId::new("r-1"),
             ProcurementResponsibilityRuleData {
-                rule_type: ProcurementResponsibilityRuleType::CategoryServiceRegion,
+                rule_type: ProcurementResponsibilityRuleType::Category,
                 sku_id: None,
                 category_id: Some(ProductCategoryId::new("cat-1")),
-                service_region: Some(" north ".to_string()),
                 product_kind: None,
                 owner_user_id: " buyer-1 ".to_string(),
                 status: EnableStatus::Active,
@@ -429,16 +369,14 @@ mod tests {
             " admin-1 ",
         )
         .unwrap();
-        assert_eq!(region.service_region.as_deref(), Some("NORTH"));
-        assert_eq!(region.selector_key, "category_region:cat-1:NORTH");
-        assert_eq!(region.owner_user_id, "buyer-1");
-        assert_eq!(region.created_by, "admin-1");
+        assert_eq!(category.selector_key, "category:cat-1");
+        assert_eq!(category.owner_user_id, "buyer-1");
+        assert_eq!(category.created_by, "admin-1");
 
         let invalid = ProcurementResponsibilityRuleData {
             rule_type: ProcurementResponsibilityRuleType::Sku,
             sku_id: Some(SkuId::new("sku-1")),
             category_id: Some(ProductCategoryId::new("cat-1")),
-            service_region: None,
             product_kind: None,
             owner_user_id: "buyer-1".to_string(),
             status: EnableStatus::Active,
@@ -459,7 +397,6 @@ mod tests {
             rule_type: ProcurementResponsibilityRuleType::Sku,
             sku_id: Some(SkuId::new("sku-1")),
             category_id: None,
-            service_region: None,
             product_kind: None,
             owner_user_id: "buyer-1".to_string(),
             status: EnableStatus::Active,

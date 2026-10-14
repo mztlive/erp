@@ -84,6 +84,8 @@ export type ApprovalPurchaseLine = {
         quantity: string
         unit: string
         unit_price_gross: string
+        /** 销售填写的采购供给价（含税单价）；未填写为空。 */
+        procurement_supply_price_gross?: string | null
         fulfillment_due_at: number
     } | null
 }
@@ -129,7 +131,8 @@ export type ApprovalSalesSubmission = {
         tax_amount: string
         sales_tax_rate: string
         fulfillment_due_at: number | null
-        service_region: string | null
+        /** 销售填写的采购供给价（含税单价）；未填写时缺省。 */
+        procurement_supply_price_gross?: string | null
         face_value: string | null
         card_count: number | null
         card_form: string | null

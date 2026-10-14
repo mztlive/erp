@@ -17,10 +17,16 @@ import {
 } from "@/lib/fixed-decimal"
 import type { DeliveryCoverageHint as DeliveryCoverageHintCode } from "../api/delivery-coverage"
 import { useDeliveryCoverage } from "../hooks/use-delivery-coverage"
+import { toast } from "@/components/ui/toast"
 import type { SalesOrderCreateFormApi } from "../lib/sales-order-create-form-types"
-import type { CreateSalesOrderFormValues } from "../lib/sales-order-create-model"
+import {
+    applyDeliveryAddressToLines,
+    type CreateSalesOrderFormValues,
+    type UnifiedDeliveryAddress,
+} from "../lib/sales-order-create-model"
 import { DeliveryCoverageHint } from "./delivery-coverage-hint"
 import { DeliveryRegionField } from "./delivery-region-field"
+import { SalesOrderCreateUnifiedAddressDialog } from "./sales-order-create-unified-address-dialog"
 
 type DeliveryLine = CreateSalesOrderFormValues["lineItems"][number]
 
@@ -362,24 +368,63 @@ function DeliveryAllocationSection({
     lines: CreateSalesOrderFormValues["lineItems"]
 }) {
     const coverageHint = useDeliveryCoverage(lines)
+    const firstAddress = lines
+        .flatMap((line) => line.deliveryAllocations ?? [])
+        .find((row) => row.recipient || row.region_code || row.address)
+    const applyUnifiedAddress = (address: UnifiedDeliveryAddress) => {
+        const next = applyDeliveryAddressToLines(
+            form.getFieldValue("lineItems"),
+            address,
+        )
+        form.setFieldValue("lineItems", next)
+        toast.add({
+            title: "已设置统一收货地址",
+            description: `${next.length} 个商品均按全部数量送到该地址。`,
+            type: "success",
+            timeout: 3000,
+        })
+    }
     return (
         <section
             className="@container/delivery min-w-0 space-y-5 border-t border-grid p-4 sm:p-5"
             aria-labelledby="sales-delivery-title"
         >
-            <div className="space-y-1">
-                <div className="flex flex-wrap items-baseline gap-2">
-                    <h2
-                        id="sales-delivery-title"
-                        className="font-heading text-base font-semibold"
-                    >
-                        分地址交付
-                    </h2>
-                    <span className="text-sm text-muted-foreground">选填</span>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                    <div className="flex flex-wrap items-baseline gap-2">
+                        <h2
+                            id="sales-delivery-title"
+                            className="font-heading text-base font-semibold"
+                        >
+                            分地址交付
+                        </h2>
+                        <span className="text-sm text-muted-foreground">
+                            选填
+                        </span>
+                    </div>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                        全部商品送同一地址时，用“设置统一收货地址”一次填好；需要分开送时逐个商品添加地址，各地址数量合计须等于商品数量。也可在履约时补充。
+                    </p>
                 </div>
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                    填写后，各地址数量合计须等于商品数量；也可在履约时补充。
-                </p>
+                <SalesOrderCreateUnifiedAddressDialog
+                    lineCount={lines.length}
+                    allocatedLineCount={
+                        lines.filter(
+                            (line) => (line.deliveryAllocations ?? []).length,
+                        ).length
+                    }
+                    initialAddress={
+                        firstAddress
+                            ? {
+                                  recipient: firstAddress.recipient,
+                                  phone: firstAddress.phone,
+                                  region_code: firstAddress.region_code,
+                                  address: firstAddress.address,
+                              }
+                            : undefined
+                    }
+                    onApply={applyUnifiedAddress}
+                />
             </div>
             <div className="divide-y divide-grid space-y-5 [&>div:not(:first-child)]:pt-5">
                 {lines.map((line, rowIndex) => (

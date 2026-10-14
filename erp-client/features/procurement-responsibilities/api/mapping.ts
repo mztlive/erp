@@ -15,7 +15,6 @@ export function mapProcurementResponsibilityRule(
         skuLabel: skuLabel || undefined,
         categoryId: rule.category_id ?? undefined,
         categoryLabel: rule.category_name ?? undefined,
-        serviceRegion: rule.service_region?.trim() || undefined,
         productKind: rule.product_kind ?? undefined,
         ownerUserId: rule.owner_user_id,
         ownerName: rule.owner_name?.trim() || "负责人待确认",
@@ -31,14 +30,7 @@ export function mapSaveProcurementResponsibilityRule(
         rule_type: input.ruleType,
         sku_id: input.ruleType === "SKU" ? input.skuId : undefined,
         category_id:
-            input.ruleType === "CATEGORY" ||
-            input.ruleType === "CATEGORY_SERVICE_REGION"
-                ? input.categoryId
-                : undefined,
-        service_region:
-            input.ruleType === "CATEGORY_SERVICE_REGION"
-                ? input.serviceRegion?.trim()
-                : undefined,
+            input.ruleType === "CATEGORY" ? input.categoryId : undefined,
         product_kind:
             input.ruleType === "PRODUCT_KIND" ? input.productKind : undefined,
         owner_user_id: input.ownerUserId,

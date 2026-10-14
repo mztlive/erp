@@ -467,7 +467,7 @@ mod tests {
                 sku_id: SkuId::new("sku"),
                 sku_revision_id: SkuRevisionId::new("sku-revision"),
                 welfare_scenario: None,
-                service_region: None,
+                procurement_supply_price_gross: None,
                 fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
                 quantity: "2".parse().unwrap(),
                 base_unit_code: "盒".into(),

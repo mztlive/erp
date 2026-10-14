@@ -35,7 +35,14 @@ export const salesChangeDraftSchema = z.object({
             .object({
                 source: z.custom<SalesChangeDraftLine>(),
                 dueDate: z.string(),
-                serviceRegion: z.string().max(256, "服务地区最多256个字符"),
+                supplyPrice: z
+                    .string()
+                    .trim()
+                    .refine(
+                        (value) =>
+                            value === "" || /^\d+(?:\.\d{1,4})?$/.test(value),
+                        "采购供给价须为不小于 0 的金额，最多保留 4 位小数",
+                    ),
                 deliveryAllocations: z
                     .array(
                         z.object({

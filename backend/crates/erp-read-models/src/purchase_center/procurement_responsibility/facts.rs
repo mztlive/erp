@@ -111,7 +111,6 @@ mod tests {
                 rule_type,
                 sku_id: sku_id.map(SkuId::new),
                 category_id: category_id.map(ProductCategoryId::new),
-                service_region: None,
                 product_kind: None,
                 owner_user_id: owner.to_string(),
                 status: EnableStatus::Active,

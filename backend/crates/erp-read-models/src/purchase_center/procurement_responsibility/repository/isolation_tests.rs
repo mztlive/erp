@@ -192,7 +192,7 @@ async fn missing_facts_are_sparse_and_detected_by_entity() {
         assert!(bundle.skus.is_empty(), "Repository 应返回稀疏映射而非错误");
         // Entity 层应检出缺失
         let inputs =
-            vec![ProcurementResponsibilityResolutionLine::new("line-1".to_string(), sku_id, None).unwrap()];
+            vec![ProcurementResponsibilityResolutionLine::new("line-1".to_string(), sku_id).unwrap()];
         let err = build_catalog_facts(
             &inputs,
             &bundle.skus,
@@ -215,8 +215,7 @@ async fn missing_facts_are_sparse_and_detected_by_entity() {
                 .expect("bundle 加载失败");
         assert!(bundle2.products.is_empty());
         let inputs2 = vec![
-            ProcurementResponsibilityResolutionLine::new("line-2".to_string(), SkuId::new("sku-2"), None)
-                .unwrap(),
+            ProcurementResponsibilityResolutionLine::new("line-2".to_string(), SkuId::new("sku-2")).unwrap(),
         ];
         let err2 = build_catalog_facts(
             &inputs2,
@@ -246,8 +245,7 @@ async fn missing_facts_are_sparse_and_detected_by_entity() {
                 .expect("bundle 加载失败");
         assert!(bundle3.categories.is_empty() || !bundle3.categories.contains_key("cat-missing"));
         let inputs3 = vec![
-            ProcurementResponsibilityResolutionLine::new("line-3".to_string(), SkuId::new("sku-3"), None)
-                .unwrap(),
+            ProcurementResponsibilityResolutionLine::new("line-3".to_string(), SkuId::new("sku-3")).unwrap(),
         ];
         let err3 = build_catalog_facts(
             &inputs3,
@@ -301,8 +299,7 @@ async fn soft_deleted_facts_are_filtered() {
                 .expect("bundle 加载失败");
         assert!(bundle.skus.is_empty(), "软删除 SKU 应被过滤");
         let inputs = vec![
-            ProcurementResponsibilityResolutionLine::new("line-1".to_string(), SkuId::new("sku-1"), None)
-                .unwrap(),
+            ProcurementResponsibilityResolutionLine::new("line-1".to_string(), SkuId::new("sku-1")).unwrap(),
         ];
         let err = build_catalog_facts(
             &inputs,
@@ -437,8 +434,7 @@ async fn transaction_reuses_caller_executor_read_your_writes() {
                     assert!(bundle.skus.contains_key("sku-txn"), "事务内应能 read-your-writes");
                     // Also verify Entity can build facts inside txn
                     let inputs = vec![
-                        ProcurementResponsibilityResolutionLine::new("line-1".to_string(), sku_id, None)
-                            .unwrap(),
+                        ProcurementResponsibilityResolutionLine::new("line-1".to_string(), sku_id).unwrap(),
                     ];
                     let facts = build_catalog_facts(
                         &inputs,
@@ -555,8 +551,7 @@ async fn category_ring_is_detected_by_entity() {
         assert!(bundle.categories.contains_key("cat-a"));
         assert!(bundle.categories.contains_key("cat-b"));
         let inputs = vec![
-            ProcurementResponsibilityResolutionLine::new("line-1".to_string(), SkuId::new("sku-1"), None)
-                .unwrap(),
+            ProcurementResponsibilityResolutionLine::new("line-1".to_string(), SkuId::new("sku-1")).unwrap(),
         ];
         let err = build_catalog_facts(
             &inputs,

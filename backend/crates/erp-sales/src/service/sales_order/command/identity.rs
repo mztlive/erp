@@ -141,8 +141,8 @@ mod compile_probe_equivalence_tests {
         let cases = [
             (
                 "goods",
-                r#"["操作者-🧾","销售单-一",{"version":7,"idempotency_key":"请求－键","contract_id":"合同-1","draft":{"editor_user_id":"编辑人-1","requested_contract_revision_id":"合同版本-1","project_name":"","business_remark":"备注𠮷","voucher_category_sku_id":null,"voucher_expiry_at":null,"receivable_due_date":null,"lines":[{"line_no":1,"line_type":"GOODS_SERVICE","sales_tax_rate":"0.130000","item_name_snapshot":"商品－测试","spec_snapshot":"规格 A","unit_snapshot":"件","goods":{"sku_id":"sku-1","sku_revision_id":"sku-r1","welfare_scenario":"ANNUAL_GIFT_BAG","service_region":"上海","fulfillment_due_at":1800000000,"quantity":"2.000000","base_unit_code":"件","unit_price_gross":"100.0000"},"voucher":null}]}}]"#,
-                "5947b0f9feb013e11f451e34a3297602566a3edc3417eb27ba49f6ea6399b296",
+                r#"["操作者-🧾","销售单-一",{"version":7,"idempotency_key":"请求－键","contract_id":"合同-1","draft":{"editor_user_id":"编辑人-1","requested_contract_revision_id":"合同版本-1","project_name":"","business_remark":"备注𠮷","voucher_category_sku_id":null,"voucher_expiry_at":null,"receivable_due_date":null,"lines":[{"line_no":1,"line_type":"GOODS_SERVICE","sales_tax_rate":"0.130000","item_name_snapshot":"商品－测试","spec_snapshot":"规格 A","unit_snapshot":"件","goods":{"sku_id":"sku-1","sku_revision_id":"sku-r1","welfare_scenario":"ANNUAL_GIFT_BAG","procurement_supply_price_gross":"85.5000","fulfillment_due_at":1800000000,"quantity":"2.000000","base_unit_code":"件","unit_price_gross":"100.0000"},"voucher":null}]}}]"#,
+                "e3114379306b6e1cc01bbe867ddb329fab00d5213522e8bb4fb26d38f1588774",
             ),
             (
                 "voucher",

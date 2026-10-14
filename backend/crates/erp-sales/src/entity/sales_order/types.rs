@@ -22,8 +22,6 @@ use crate::entity::sales_order::{SalesDeliveryAllocation, SalesPricingMode};
 
 /// 基础单位代码最大长度。
 const BASE_UNIT_CODE_MAX_LEN: usize = 32;
-/// 服务区域最大长度。
-const SERVICE_REGION_MAX_LEN: usize = 128;
 
 /// 外部身份匹配的精确基数结果。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -356,8 +354,9 @@ pub struct GoodsLineFields {
     pub sku_revision_id: SkuRevisionId,
     /// 福利场景。
     pub welfare_scenario: Option<WelfareScenario>,
-    /// 采购责任解析使用的服务区域。
-    pub service_region: Option<String>,
+    /// 销售填写的采购供给价（含税单价）；只供审批参考，不参与任何计算。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub procurement_supply_price_gross: Option<UnitPrice>,
     /// 公司对客户承诺完成本明细交付或服务的最晚时间。
     pub fulfillment_due_at: Instant,
     /// 基础单位数量。
@@ -473,6 +472,16 @@ impl BuiltLineGroups {
             .map(|goods| goods.unit_price_gross)
             .or_else(|| self.voucher.as_ref().map(|voucher| voucher.unit_price_gross))
     }
+    /// 读取商品行销售填写的采购供给价。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 商品行未填写或卡券行返回 `None`。
+    /// # 错误
+    /// 不返回错误。
+    pub(crate) fn procurement_supply_price_gross(&self) -> Option<UnitPrice> {
+        self.goods.as_ref().and_then(|goods| goods.procurement_supply_price_gross)
+    }
 }
 
 /// 构建行字段组并计算行金额三元组。
@@ -550,12 +559,9 @@ fn normalize_goods(mut fields: GoodsLineFields) -> Result<GoodsLineFields> {
         BASE_UNIT_CODE_MAX_LEN,
         "基础单位过长",
     )?;
-    fields.service_region = erp_core::validation::normalize_optional_text(
-        fields.service_region,
-        "服务区域",
-        SERVICE_REGION_MAX_LEN,
-    )?
-    .map(|region| region.to_ascii_uppercase());
+    if fields.procurement_supply_price_gross.is_some_and(|price| price.to_decimal().is_sign_negative()) {
+        return Err(Error::from("采购供给价不能为负数"));
+    }
     Ok(fields)
 }
 
@@ -913,7 +919,7 @@ mod tests {
                 sku_id: SkuId::new("sku-1"),
                 sku_revision_id: SkuRevisionId::new("skurev-1"),
                 welfare_scenario: None,
-                service_region: None,
+                procurement_supply_price_gross: None,
                 fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
                 quantity: qty("3.000000"),
                 base_unit_code: " 箱 ".to_string(),
@@ -931,6 +937,50 @@ mod tests {
         assert_eq!(built.tax_amount, amt("3.90"));
     }
 
+    /// 采购供给价只保存：赠品与普通行都可填写且不影响行金额，负数拒绝。
+    #[test]
+    fn procurement_supply_price_is_kept_without_affecting_amounts() {
+        let goods = |mode: SalesPricingMode, unit: &str, supply: Option<&str>| GoodsLineFields {
+            pricing_mode: mode,
+            delivery_allocations: Vec::new(),
+            sku_id: SkuId::new("sku-1"),
+            sku_revision_id: SkuRevisionId::new("skurev-1"),
+            welfare_scenario: None,
+            procurement_supply_price_gross: supply.map(price),
+            fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
+            quantity: qty("3.000000"),
+            base_unit_code: "箱".to_string(),
+            unit_price_gross: price(unit),
+        };
+
+        let built = build_line_groups(
+            LineType::GoodsService,
+            Some(goods(SalesPricingMode::Manual, "9.9900", Some("6.5000"))),
+            None,
+            rate("0.130000"),
+        )
+        .unwrap();
+        assert_eq!(built.goods.unwrap().procurement_supply_price_gross, Some(price("6.5000")));
+        assert_eq!(built.gross_amount, amt("29.97"));
+
+        let gift = build_line_groups(
+            LineType::GoodsService,
+            Some(goods(SalesPricingMode::Gift, "0", Some("0"))),
+            None,
+            rate("0.130000"),
+        )
+        .unwrap();
+        assert_eq!(gift.goods.unwrap().procurement_supply_price_gross, Some(price("0")));
+        assert_eq!(gift.gross_amount, amt("0"));
+
+        let negative = goods(SalesPricingMode::Manual, "9.9900", Some("-0.0100"));
+        let Err(error) = build_line_groups(LineType::GoodsService, Some(negative), None, rate("0.130000"))
+        else {
+            panic!("负数采购供给价必须拒绝");
+        };
+        assert_eq!(error.to_string(), "采购供给价不能为负数");
+    }
+
     #[test]
     fn build_groups_rejects_mismatched_line_type_and_fields() {
         let goods = GoodsLineFields {
@@ -939,7 +989,7 @@ mod tests {
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: None,
-            service_region: None,
+            procurement_supply_price_gross: None,
             fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
             quantity: qty("1.000000"),
             base_unit_code: "箱".to_string(),

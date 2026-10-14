@@ -379,8 +379,7 @@ mod tests {
     #[test]
     fn build_catalog_facts_is_deterministic_and_preserves_leaf_to_root() {
         let inputs = vec![
-            ProcurementResponsibilityResolutionLine::new("line-1".to_string(), SkuId::new("sku-1"), None)
-                .unwrap(),
+            ProcurementResponsibilityResolutionLine::new("line-1".to_string(), SkuId::new("sku-1")).unwrap(),
         ];
         let sku = test_sku();
         let mut skus = HashMap::new();
@@ -406,8 +405,7 @@ mod tests {
     #[test]
     fn build_catalog_facts_propagates_category_ring_error() {
         let inputs = vec![
-            ProcurementResponsibilityResolutionLine::new("line-1".to_string(), SkuId::new("sku-1"), None)
-                .unwrap(),
+            ProcurementResponsibilityResolutionLine::new("line-1".to_string(), SkuId::new("sku-1")).unwrap(),
         ];
         let sku = test_sku();
         let mut skus = HashMap::new();

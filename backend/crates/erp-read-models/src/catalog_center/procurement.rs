@@ -277,8 +277,7 @@ pub(crate) fn matches_procurement_owner(
     rule_set: &ProcurementResponsibilityRuleSet<'_>,
     wanted: &HashSet<&str>,
 ) -> bool {
-    let Ok(context) = ProcurementResponsibilityContext::new(SkuId::new(sku_id), chain, None, map_kind(kind))
-    else {
+    let Ok(context) = ProcurementResponsibilityContext::new(SkuId::new(sku_id), chain, map_kind(kind)) else {
         return false;
     };
     rule_set.resolve(&context).is_ok_and(|rule| wanted.contains(rule.owner_user_id.as_str()))
@@ -319,7 +318,6 @@ mod tests {
                 rule_type,
                 sku_id: sku.map(SkuId::new),
                 category_id: category.map(ProductCategoryId::new),
-                service_region: None,
                 product_kind: kind,
                 owner_user_id: owner.to_string(),
                 status: EnableStatus::Active,

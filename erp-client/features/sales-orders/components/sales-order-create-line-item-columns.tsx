@@ -17,7 +17,10 @@ import type {
     SalesOrderDraftLineInput,
 } from "@/features/sales-orders/types"
 import { SalesOrderCreateLineSkuEditor } from "@/features/sales-orders/components/sales-order-create-line-sku-editor"
-import { SalesOrderCreateLinePriceEditor } from "@/features/sales-orders/components/sales-order-create-line-price-editor"
+import {
+    SalesOrderCreateLineGiftToggle,
+    SalesOrderCreateLinePriceEditor,
+} from "@/features/sales-orders/components/sales-order-create-line-price-editor"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
 function ProcurementOwnerPreview({
@@ -98,6 +101,20 @@ export function buildSalesOrderCreateLineItemColumns(
                         <div className="w-20 shrink-0">
                             <form.AppField
                                 name={`lineItems[${rowIndex}].quantity`}
+                                listeners={{
+                                    // 只有一个收货地址时，该地址承担全部数量。
+                                    onChange: ({ value }) => {
+                                        const allocations =
+                                            form.getFieldValue(
+                                                `lineItems[${rowIndex}].deliveryAllocations`,
+                                            ) ?? []
+                                        if (allocations.length !== 1) return
+                                        form.setFieldValue(
+                                            `lineItems[${rowIndex}].deliveryAllocations[0].quantity`,
+                                            value,
+                                        )
+                                    },
+                                }}
                             >
                                 {(field) => (
                                     <field.TextField
@@ -150,6 +167,55 @@ export function buildSalesOrderCreateLineItemColumns(
                 )
             },
         },
+        ...(nature === "physical_service"
+            ? ([
+                  {
+                      id: "isGift",
+                      header: "赠品",
+                      align: "center",
+                      renderValue: ({ item }) =>
+                          item.pricingMode === "GIFT" ? "是" : "—",
+                      renderEditor: ({ rowIndex }) => (
+                          <SalesOrderCreateLineGiftToggle
+                              form={form}
+                              rowIndex={rowIndex}
+                          />
+                      ),
+                  },
+                  {
+                      id: "procurementSupplyPrice",
+                      header: "采购供给价",
+                      numeric: true,
+                      align: "end",
+                      renderValue: ({ item }) =>
+                          item.procurementSupplyPrice || "—",
+                      renderEditor: ({ rowIndex }) => {
+                          const lineKey = values.lineItems[rowIndex]?.rowKey
+                          if (!lineKey) return null
+                          return (
+                              <div className="w-28">
+                                  <form.AppField
+                                      name={`lineItems[${rowIndex}].procurementSupplyPrice`}
+                                  >
+                                      {(field) => (
+                                          <field.TextField
+                                              id={`sales-orders-create-line-${toAutomationIdSegment(lineKey)}-supply-price`}
+                                              label="采购供给价"
+                                              hideLabel
+                                              type="number"
+                                              step="any"
+                                              placeholder="选填"
+                                              className="gap-0"
+                                              inputClassName="num text-right"
+                                          />
+                                      )}
+                                  </form.AppField>
+                              </div>
+                          )
+                      },
+                  },
+              ] satisfies EditableLineItemColumn<SalesOrderDraftLineInput>[])
+            : []),
         ...(nature === "card_voucher"
             ? ([
                   {
@@ -280,31 +346,6 @@ export function buildSalesOrderCreateLineItemColumns(
               ] satisfies EditableLineItemColumn<SalesOrderDraftLineInput>[])),
         ...(nature === "physical_service"
             ? ([
-                  {
-                      id: "serviceRegion",
-                      header: "服务区域",
-                      renderValue: ({ item }) => item.serviceRegion || "—",
-                      renderEditor: ({ rowIndex }) => {
-                          const lineKey = values.lineItems[rowIndex]?.rowKey
-                          if (!lineKey) return null
-                          return (
-                              <div className="w-28">
-                                  <form.AppField
-                                      name={`lineItems[${rowIndex}].serviceRegion`}
-                                  >
-                                      {(field) => (
-                                          <field.TextField
-                                              id={`sales-orders-create-line-${toAutomationIdSegment(lineKey)}-service-region`}
-                                              label="服务区域"
-                                              hideLabel
-                                              placeholder="选填"
-                                          />
-                                      )}
-                                  </form.AppField>
-                              </div>
-                          )
-                      },
-                  },
                   {
                       id: "procurementOwner",
                       header: "采购负责人",

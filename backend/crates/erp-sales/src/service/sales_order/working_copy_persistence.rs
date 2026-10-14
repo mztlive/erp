@@ -187,7 +187,7 @@ mod tests {
             "line_type": "GOODS_SERVICE", "sales_tax_rate": "0.13", "item_name_snapshot": "茶礼",
             "spec_snapshot": null, "unit_snapshot": "件", "voucher": null,
             "goods": { "sku_id": "sku-1", "sku_revision_id": "rev-1", "welfare_scenario": null,
-                "service_region": "上海", "fulfillment_due_at": 1800000000, "quantity": "3",
+                "fulfillment_due_at": 1800000000, "quantity": "3",
                 "base_unit_code": "件", "unit_price_gross": price, "pricing_mode": mode },
         }))
         .unwrap();

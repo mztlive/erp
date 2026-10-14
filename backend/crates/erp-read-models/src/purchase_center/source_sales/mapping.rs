@@ -224,7 +224,7 @@ mod tests {
             sku_id: SkuId::new("sku"),
             sku_revision_id: SkuRevisionId::new("sku-revision"),
             welfare_scenario: None,
-            service_region: None,
+            procurement_supply_price_gross: None,
             fulfillment_due_at: Instant::now(),
             quantity: "1".parse().unwrap(),
             base_unit_code: "piece".into(),

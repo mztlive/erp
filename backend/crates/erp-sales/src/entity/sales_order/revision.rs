@@ -451,7 +451,7 @@ impl SalesOrderRevisionLine {
                 sku_id: goods.sku_id.clone(),
                 sku_revision_id: goods.sku_revision_id.clone(),
                 welfare_scenario: goods.welfare_scenario,
-                service_region: goods.service_region.clone(),
+                procurement_supply_price_gross: goods.procurement_supply_price_gross,
                 fulfillment_due_at: goods.fulfillment_due_at,
                 quantity: goods.quantity,
                 base_unit_code: goods.base_unit_code.clone(),
@@ -473,8 +473,9 @@ pub struct SalesOrderGoodsServiceLineRevisionData {
     pub sku_revision_id: SkuRevisionId,
     /// 福利场景。
     pub welfare_scenario: Option<WelfareScenario>,
-    /// 采购责任解析使用的服务区域。
-    pub service_region: Option<String>,
+    /// 销售填写的采购供给价（含税单价）；只供审批参考，不参与任何计算。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub procurement_supply_price_gross: Option<UnitPrice>,
     /// 公司对客户承诺完成本明细交付或服务的最晚时间。
     pub fulfillment_due_at: Instant,
     /// 基础单位数量。
@@ -504,8 +505,9 @@ pub struct SalesOrderGoodsServiceLineRevision {
     pub sku_revision_id: SkuRevisionId,
     /// 福利场景。
     pub welfare_scenario: Option<WelfareScenario>,
-    /// 采购责任解析使用的服务区域。
-    pub service_region: Option<String>,
+    /// 销售填写的采购供给价（含税单价）；只供审批参考，不参与任何计算。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub procurement_supply_price_gross: Option<UnitPrice>,
     /// 公司对客户承诺完成本明细交付或服务的最晚时间。
     pub fulfillment_due_at: Instant,
     /// 基础单位数量。
@@ -552,7 +554,7 @@ impl SalesOrderGoodsServiceLineRevision {
             sku_id: data.sku_id,
             sku_revision_id: data.sku_revision_id,
             welfare_scenario: data.welfare_scenario,
-            service_region: data.service_region,
+            procurement_supply_price_gross: data.procurement_supply_price_gross,
             fulfillment_due_at: data.fulfillment_due_at,
             quantity: data.quantity,
             base_unit_code,
@@ -866,7 +868,7 @@ mod tests {
                 sku_id: SkuId::new("sku-1"),
                 sku_revision_id: SkuRevisionId::new("skurev-1"),
                 welfare_scenario: Some(WelfareScenario::AnnualGiftBag),
-                service_region: Some("EAST".to_string()),
+                procurement_supply_price_gross: Some("8.5000".parse().unwrap()),
                 fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
                 quantity: Quantity::from_str("3.000000").unwrap(),
                 base_unit_code: " 箱 ".to_string(),
@@ -897,7 +899,7 @@ mod tests {
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: None,
-            service_region: None,
+            procurement_supply_price_gross: None,
             fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
             quantity: Quantity::from_str("3.000000").unwrap(),
             base_unit_code: "箱".to_string(),

@@ -140,7 +140,8 @@ function buildDraftPayload(
             base.goods = {
                 sku_id: skuId,
                 sku_revision_id: skuRevisionId,
-                service_region: line.serviceRegion?.trim() || null,
+                procurement_supply_price_gross:
+                    line.procurementSupplyPrice?.trim() || null,
                 welfare_scenario: mapWelfareScenarioCode(input.welfareScene),
                 fulfillment_due_at: dateToUnixSecs(line.dueDate),
                 quantity: line.quantity || "0",
@@ -354,7 +355,9 @@ function mapDraftLines(
                 isVoucher ? voucherCategorySkuId : line.sku_id,
                 line.sku_revision_id,
             ),
-            serviceRegion: isVoucher ? "" : (line.service_region ?? ""),
+            procurementSupplyPrice: isVoucher
+                ? ""
+                : (line.procurement_supply_price_gross ?? ""),
             quantity: isVoucher
                 ? String(line.card_count ?? 1)
                 : (line.quantity ?? "1"),

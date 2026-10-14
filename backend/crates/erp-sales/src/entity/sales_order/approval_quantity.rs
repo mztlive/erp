@@ -184,7 +184,7 @@ mod tests {
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: None,
-            service_region: None,
+            procurement_supply_price_gross: None,
             fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
             quantity: qty(quantity),
             base_unit_code: "件".to_string(),

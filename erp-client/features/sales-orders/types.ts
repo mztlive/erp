@@ -45,8 +45,8 @@ export type SalesOrderDraftLineInput = {
     skuRevisionId: string
     /** 商品池提供的可读规格，与 SKU 身份分开保存。 */
     specification?: string
-    /** 采购责任解析使用的服务区域；空值表示不按区域限定。 */
-    serviceRegion?: string
+    /** 销售选填的采购供给价（含税单价），只供审批参考，不参与计算；空串表示未填写。 */
+    procurementSupplyPrice?: string
     quantity: string
     unit: string
     deliveryAllocations?: SalesDeliveryAllocation[]
@@ -131,8 +131,8 @@ export type SalesOrderLineItem = {
     giftRate?: string
     /** 卡券：电子卡 / 实体卡 */
     cardForm?: string
-    /** 采购责任解析使用的服务区域。 */
-    serviceRegion?: string
+    /** 销售选填的采购供给价（含税单价）。 */
+    procurementSupplyPrice?: string
     /** 对客户承诺的明细最晚交付日（实物/服务）。 */
     dueDate?: string
     /** 赠品明细：成交价为 0，不形成应收。 */

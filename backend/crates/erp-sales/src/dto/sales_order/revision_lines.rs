@@ -61,7 +61,7 @@ impl SalesOrderWorkingCopyLineView {
             sku_id: None,
             sku_revision_id: None,
             welfare_scenario: None,
-            service_region: None,
+            procurement_supply_price_gross: None,
             fulfillment_due_at: None,
             quantity: None,
             base_unit_code: None,
@@ -81,7 +81,7 @@ impl SalesOrderWorkingCopyLineView {
         self.sku_id = Some(goods.sku_id.clone());
         self.sku_revision_id = Some(goods.sku_revision_id.clone());
         self.welfare_scenario = goods.welfare_scenario;
-        self.service_region = goods.service_region.clone();
+        self.procurement_supply_price_gross = goods.procurement_supply_price_gross;
         self.fulfillment_due_at = Some(goods.fulfillment_due_at.unix_secs() as u64);
         self.quantity = Some(goods.quantity);
         self.base_unit_code = Some(goods.base_unit_code.clone());
@@ -142,7 +142,7 @@ mod tests {
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: SkuRevisionId::new("sku-revision-locked"),
             welfare_scenario: Some(WelfareScenario::AnnualGiftBag),
-            service_region: Some("EAST".into()),
+            procurement_supply_price_gross: Some("8.5000".parse().unwrap()),
             fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
             quantity: Quantity::from_str("4").unwrap(),
             base_unit_code: "BOX".into(),

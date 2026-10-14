@@ -1,7 +1,6 @@
 export type ResolveProcurementResponsibilityLineWire = {
     line_key: string
     sku_id: string
-    service_region?: string
 }
 
 export type ResolveProcurementResponsibilityRequestWire = {

@@ -44,8 +44,6 @@ pub struct ProcurementResponsibilityRuleView {
     pub category_id: Option<ProductCategoryId>,
     /// 分类名称展示。
     pub category_name: Option<String>,
-    /// 规范化服务区域。
-    pub service_region: Option<String>,
     /// 商品类型选择器。
     pub product_kind: Option<ProductKind>,
     /// 具体负责人账号 ID。
@@ -93,7 +91,6 @@ impl From<ProcurementResponsibilityRule> for ProcurementResponsibilityRuleView {
             sku_name: None,
             category_id: rule.category_id,
             category_name: None,
-            service_region: rule.service_region,
             product_kind: rule.product_kind,
             owner_user_id: rule.owner_user_id,
             owner_name: None,

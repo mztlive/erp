@@ -269,7 +269,6 @@ mod tests {
                 quantity: qty("8"),
                 base_unit_code: "件".into(),
                 fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
-                service_region: None,
                 delivery_allocations: Vec::new(),
                 assigned_delivery_allocations: Vec::new(),
             }],

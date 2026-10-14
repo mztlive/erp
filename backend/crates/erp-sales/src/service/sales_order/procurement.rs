@@ -9,8 +9,6 @@ pub struct SalesProcurementLineFact {
     pub line_key: String,
     /// SKU identity used by responsibility rules.
     pub sku_id: SkuId,
-    /// Optional service region from this draft or frozen submission.
-    pub service_region: Option<String>,
 }
 /// 从工作副本行构造稳定采购责任解析输入。
 ///
@@ -28,7 +26,6 @@ pub fn working_copy_inputs(lines: &[SalesOrderWorkingCopyLine]) -> Result<Vec<Sa
             line_key: line.sales_order_line_id.to_string(),
             line_type: line.line_type,
             sku_id: line.sku_id.clone(),
-            service_region: line.service_region.clone(),
             line_no: line.line_no,
         }),
         "实物及服务销售单包含非实物服务行",
@@ -53,7 +50,6 @@ pub fn submission_procurement_inputs(
             line_key: line.sales_order_line_id.to_string(),
             line_type: line.line_type,
             sku_id: line.sku_id.clone(),
-            service_region: line.service_region.clone(),
             line_no: line.line_no,
         }),
         "实物及服务销售提交包含非实物服务行",
@@ -68,8 +64,6 @@ struct ProcurementLineRef {
     line_type: LineType,
     /// 行 SKU（缺失时拒绝）。
     sku_id: Option<SkuId>,
-    /// 行服务区域。
-    service_region: Option<String>,
     /// 行号（仅用于错误定位）。
     line_no: u32,
 }
@@ -101,11 +95,7 @@ fn collect_procurement_facts(
             let sku_id = line
                 .sku_id
                 .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少 SKU", line.line_no)))?;
-            Ok(SalesProcurementLineFact {
-                line_key: line.line_key,
-                sku_id,
-                service_region: line.service_region,
-            })
+            Ok(SalesProcurementLineFact { line_key: line.line_key, sku_id })
         })
         .collect()
 }
@@ -122,7 +112,6 @@ mod tests {
             line_key: SalesOrderLineId::new("line-1").to_string(),
             line_type,
             sku_id,
-            service_region: None,
             line_no: 1,
         };
 

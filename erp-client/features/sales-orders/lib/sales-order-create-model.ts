@@ -7,6 +7,7 @@ import {
 } from "@/lib/fixed-decimal"
 import { getErrorMessage } from "@/lib/api/errors"
 import type {
+    SalesDeliveryAllocation,
     SalesOrderDraftLineInput,
     SalesOrderNature,
 } from "@/features/sales-orders/types"
@@ -93,7 +94,7 @@ export function createEmptyLine(
         name: "",
         sku: "",
         skuRevisionId: "",
-        serviceRegion: "",
+        procurementSupplyPrice: "",
         quantity: "1",
         /** 非卡券单位随 SKU 基础单位带出；卡券固定为张。建单页不可改。 */
         unit: nature === "card_voucher" ? "张" : "",
@@ -134,6 +135,28 @@ export function applyDueDateToLines(
     return lines.map((line) =>
         line.dueDate === nextDueDate ? line : { ...line, dueDate: nextDueDate },
     )
+}
+
+/** 统一收货地址：除数量外的收货资料，套到每个商品时按商品全部数量分配。 */
+export type UnifiedDeliveryAddress = Omit<SalesDeliveryAllocation, "quantity">
+
+/**
+ * 把同一收货地址写到全部明细，覆盖各明细已有地址；每个商品按全部数量送到该地址。
+ */
+export function applyDeliveryAddressToLines(
+    lines: readonly SalesOrderDraftLineInput[],
+    address: UnifiedDeliveryAddress,
+): SalesOrderDraftLineInput[] {
+    const next = {
+        recipient: address.recipient.trim(),
+        phone: address.phone.trim(),
+        region_code: address.region_code,
+        address: address.address.trim(),
+    }
+    return lines.map((line) => ({
+        ...line,
+        deliveryAllocations: [{ ...next, quantity: line.quantity }],
+    }))
 }
 
 export function calculateTotals(

@@ -233,7 +233,7 @@ const BLOCKER_SECTIONS = [
 function blockerSection(name: string) {
     if (name.startsWith("terms")) return "terms"
     if (name === "reason" || name === "remark") return "explain"
-    if (/^lines\[\d+\]\.(dueDate|serviceRegion|deliveryAllocations)/.test(name))
+    if (/^lines\[\d+\]\.(dueDate|deliveryAllocations)/.test(name))
         return "delivery"
     return "lines"
 }

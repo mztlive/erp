@@ -6,9 +6,7 @@ use erp_core::ids::{ProductCategoryId, SkuId};
 use erp_core::validation::{normalize_required_text, normalize_required_text_ref};
 use erp_core::{Error, Result};
 
-use super::rule::{
-    ProcurementResponsibilityRule, ProcurementResponsibilityRuleType, normalize_service_region,
-};
+use super::rule::{ProcurementResponsibilityRule, ProcurementResponsibilityRuleType};
 use crate::entity::facts::{IdentityOwnerFact, ProductKind};
 
 const LINE_KEY_MAX_LEN: usize = 128;
@@ -21,8 +19,6 @@ pub struct ProcurementResponsibilityResolutionLine {
     pub line_key: String,
     /// 精确 SKU。
     pub sku_id: SkuId,
-    /// 可选服务区域。
-    pub service_region: Option<String>,
 }
 
 impl ProcurementResponsibilityResolutionLine {
@@ -31,14 +27,13 @@ impl ProcurementResponsibilityResolutionLine {
     /// # 参数
     /// * `line_key` - 调用方稳定行键
     /// * `sku_id` - 精确 SKU
-    /// * `service_region` - 可选服务区域
     ///
     /// # 返回
-    /// 返回行键和服务区域已规范化的解析输入。
+    /// 返回行键已规范化的解析输入。
     ///
     /// # 错误
-    /// 行键为空、过长或服务区域过长时返回错误。
-    pub fn new(line_key: String, sku_id: SkuId, service_region: Option<String>) -> Result<Self> {
+    /// 行键为空或过长时返回错误。
+    pub fn new(line_key: String, sku_id: SkuId) -> Result<Self> {
         Ok(Self {
             line_key: normalize_required_text(
                 line_key,
@@ -47,7 +42,6 @@ impl ProcurementResponsibilityResolutionLine {
                 "采购责任解析行键过长",
             )?,
             sku_id,
-            service_region: normalize_service_region(service_region)?,
         })
     }
 }
@@ -219,8 +213,6 @@ pub struct ProcurementResponsibilityContext {
     pub sku_id: SkuId,
     /// 从当前分类开始到根分类的有序链。
     pub category_chain: Vec<ProductCategoryId>,
-    /// 已规范化的可选服务区域。
-    pub service_region: Option<String>,
     /// 商品业务类型。
     pub product_kind: ProductKind,
 }
@@ -231,27 +223,20 @@ impl ProcurementResponsibilityContext {
     /// # 参数
     /// * `sku_id` - 精确 SKU
     /// * `category_chain` - 当前分类到根分类的有序链
-    /// * `service_region` - 可选服务区域
     /// * `product_kind` - 商品业务类型
     ///
     /// # 返回
-    /// 返回服务区域已规范化的解析上下文。
+    /// 返回解析上下文。
     ///
     /// # 错误
-    /// 分类链为空、重复或服务区域过长时返回错误。
+    /// 分类链为空或重复时返回错误。
     pub fn new(
         sku_id: SkuId,
         category_chain: Vec<ProductCategoryId>,
-        service_region: Option<String>,
         product_kind: ProductKind,
     ) -> Result<Self> {
         ensure_category_chain(&category_chain)?;
-        Ok(Self {
-            sku_id,
-            category_chain,
-            service_region: normalize_service_region(service_region)?,
-            product_kind,
-        })
+        Ok(Self { sku_id, category_chain, product_kind })
     }
 }
 
@@ -278,7 +263,7 @@ impl<'a> ProcurementResponsibilityRuleSet<'a> {
     /// 按合同优先级解析唯一具体责任规则。
     ///
     /// # 参数
-    /// * `context` - SKU、分类链、服务区域与 ProductKind 事实
+    /// * `context` - SKU、分类链与 ProductKind 事实
     ///
     /// # 返回
     /// 返回唯一命中的规则引用。
@@ -294,9 +279,6 @@ impl<'a> ProcurementResponsibilityRuleSet<'a> {
         })? {
             return Ok(rule);
         }
-        if let Some(rule) = self.resolve_category_region(context)? {
-            return Ok(rule);
-        }
         if let Some(rule) = self.resolve_category_chain(&context.category_chain)? {
             return Ok(rule);
         }
@@ -307,32 +289,6 @@ impl<'a> ProcurementResponsibilityRuleSet<'a> {
         }
         self.unique_match(ProcurementResponsibilityRuleType::DefaultDispatcher, |_| true)?
             .ok_or_else(|| Error::from("采购责任解析失败：未配置具体默认调度人"))
-    }
-
-    /// 解析当前分类与服务区域的精确规则层。
-    ///
-    /// # 参数
-    /// * `context` - 当前行责任事实
-    ///
-    /// # 返回
-    /// 无服务区域或零命中返回 `None`，唯一命中返回规则。
-    ///
-    /// # 错误
-    /// 同层多命中时返回错误。
-    ///
-    /// # Panics
-    /// 分类链为空时 panic。`new` 会拒绝空链，但字段公开，直接构造空链仍会走到这里。
-    fn resolve_category_region(
-        &self,
-        context: &ProcurementResponsibilityContext,
-    ) -> Result<Option<&'a ProcurementResponsibilityRule>> {
-        let Some(region) = context.service_region.as_deref() else {
-            return Ok(None);
-        };
-        let category_id = context.category_chain.first().expect("构造已保证分类链非空");
-        self.unique_match(ProcurementResponsibilityRuleType::CategoryServiceRegion, |rule| {
-            rule.category_id.as_ref() == Some(category_id) && rule.service_region.as_deref() == Some(region)
-        })
     }
 
     /// 按当前分类到父分类的顺序逐级解析分类规则。
@@ -426,7 +382,6 @@ mod tests {
         rule_type: ProcurementResponsibilityRuleType,
         sku_id: Option<&str>,
         category_id: Option<&str>,
-        region: Option<&str>,
         product_kind: Option<ProductKind>,
         owner: &str,
     ) -> ProcurementResponsibilityRule {
@@ -436,7 +391,6 @@ mod tests {
                 rule_type,
                 sku_id: sku_id.map(SkuId::new),
                 category_id: category_id.map(ProductCategoryId::new),
-                service_region: region.map(ToString::to_string),
                 product_kind,
                 owner_user_id: owner.to_string(),
                 status: EnableStatus::Active,
@@ -450,7 +404,6 @@ mod tests {
         ProcurementResponsibilityContext::new(
             SkuId::new("sku-1"),
             vec![ProductCategoryId::new("cat-child"), ProductCategoryId::new("cat-parent")],
-            Some(" north ".to_string()),
             ProductKind::Physical,
         )
         .unwrap()
@@ -464,13 +417,9 @@ mod tests {
 
     #[test]
     fn resolution_batch_requires_unique_normalized_line_keys() {
-        let first = ProcurementResponsibilityResolutionLine::new(
-            "line-1".to_string(),
-            SkuId::new("sku-1"),
-            Some(" north ".to_string()),
-        )
-        .unwrap();
-        assert_eq!(first.service_region.as_deref(), Some("NORTH"));
+        let first = ProcurementResponsibilityResolutionLine::new(" line-1 ".to_string(), SkuId::new("sku-1"))
+            .unwrap();
+        assert_eq!(first.line_key, "line-1");
         assert!(ProcurementResponsibilityResolutionBatch::new(std::slice::from_ref(&first)).is_ok());
 
         let duplicate = vec![first.clone(), first];
@@ -520,13 +469,11 @@ mod tests {
                 None,
                 None,
                 None,
-                None,
                 "default-owner",
             ),
             rule(
                 "kind",
                 ProcurementResponsibilityRuleType::ProductKind,
-                None,
                 None,
                 None,
                 Some(ProductKind::Physical),
@@ -538,31 +485,15 @@ mod tests {
                 None,
                 Some("cat-parent"),
                 None,
-                None,
                 "parent-owner",
             ),
-            rule(
-                "region",
-                ProcurementResponsibilityRuleType::CategoryServiceRegion,
-                None,
-                Some("cat-child"),
-                Some("NORTH"),
-                None,
-                "region-owner",
-            ),
-            rule("sku", ProcurementResponsibilityRuleType::Sku, Some("sku-1"), None, None, None, "sku-owner"),
+            rule("sku", ProcurementResponsibilityRuleType::Sku, Some("sku-1"), None, None, "sku-owner"),
         ];
         let set = ProcurementResponsibilityRuleSet::new(&rules);
         assert_eq!(set.resolve(&context()).unwrap().owner_user_id, "sku-owner");
 
-        let without_sku = ProcurementResponsibilityRuleSet::new(&rules[..4]);
-        assert_eq!(without_sku.resolve(&context()).unwrap().owner_user_id, "region-owner");
-
-        let parent_only = vec![rules[0].clone(), rules[1].clone(), rules[2].clone()];
-        assert_eq!(
-            ProcurementResponsibilityRuleSet::new(&parent_only).resolve(&context()).unwrap().owner_user_id,
-            "parent-owner"
-        );
+        let without_sku = ProcurementResponsibilityRuleSet::new(&rules[..3]);
+        assert_eq!(without_sku.resolve(&context()).unwrap().owner_user_id, "parent-owner");
 
         let kind_only = vec![rules[0].clone(), rules[1].clone()];
         assert_eq!(
@@ -576,55 +507,10 @@ mod tests {
     }
 
     #[test]
-    fn category_region_does_not_fall_back_to_parent_category() {
-        let rules = vec![
-            rule(
-                "default",
-                ProcurementResponsibilityRuleType::DefaultDispatcher,
-                None,
-                None,
-                None,
-                None,
-                "default-owner",
-            ),
-            rule(
-                "parent-region",
-                ProcurementResponsibilityRuleType::CategoryServiceRegion,
-                None,
-                Some("cat-parent"),
-                Some("NORTH"),
-                None,
-                "parent-region-owner",
-            ),
-        ];
-
-        assert_eq!(
-            ProcurementResponsibilityRuleSet::new(&rules).resolve(&context()).unwrap().owner_user_id,
-            "default-owner"
-        );
-    }
-
-    #[test]
     fn resolver_fails_closed_for_conflicts_invalid_chain_and_missing_default() {
         let duplicate_defaults = vec![
-            rule(
-                "d-1",
-                ProcurementResponsibilityRuleType::DefaultDispatcher,
-                None,
-                None,
-                None,
-                None,
-                "buyer-1",
-            ),
-            rule(
-                "d-2",
-                ProcurementResponsibilityRuleType::DefaultDispatcher,
-                None,
-                None,
-                None,
-                None,
-                "buyer-2",
-            ),
+            rule("d-1", ProcurementResponsibilityRuleType::DefaultDispatcher, None, None, None, "buyer-1"),
+            rule("d-2", ProcurementResponsibilityRuleType::DefaultDispatcher, None, None, None, "buyer-2"),
         ];
         assert!(
             ProcurementResponsibilityRuleSet::new(&duplicate_defaults)
@@ -641,19 +527,13 @@ mod tests {
                 .contains("默认调度人")
         );
         assert!(
-            ProcurementResponsibilityContext::new(
-                SkuId::new("sku-1"),
-                Vec::new(),
-                None,
-                ProductKind::Physical,
-            )
-            .is_err()
+            ProcurementResponsibilityContext::new(SkuId::new("sku-1"), Vec::new(), ProductKind::Physical,)
+                .is_err()
         );
         assert!(
             ProcurementResponsibilityContext::new(
                 SkuId::new("sku-1"),
                 vec![ProductCategoryId::new("cat-1"), ProductCategoryId::new("cat-1")],
-                None,
                 ProductKind::Physical,
             )
             .is_err()

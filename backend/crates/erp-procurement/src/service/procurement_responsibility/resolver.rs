@@ -105,7 +105,6 @@ async fn resolve_candidates(
         let context = ProcurementResponsibilityContext::new(
             input.sku_id.clone(),
             fact.category_chain.clone(),
-            input.service_region.clone(),
             fact.product_kind,
         )
         .map_err(Error::Logic)?;
@@ -272,7 +271,6 @@ mod tests {
                             rule_type: ProcurementResponsibilityRuleType::Sku,
                             sku_id: Some(SkuId::new("sku-1")),
                             category_id: None,
-                            service_region: None,
                             product_kind: None,
                             owner_user_id: "owner-1".into(),
                             status: EnableStatus::Active,
@@ -301,8 +299,8 @@ mod tests {
                 self,
                 self,
                 &[
-                    ResolutionInput::new("line-2".into(), SkuId::new("sku-1"), None).unwrap(),
-                    ResolutionInput::new("line-1".into(), SkuId::new("sku-1"), None).unwrap(),
+                    ResolutionInput::new("line-2".into(), SkuId::new("sku-1")).unwrap(),
+                    ResolutionInput::new("line-1".into(), SkuId::new("sku-1")).unwrap(),
                 ],
                 executor,
             )
@@ -425,7 +423,7 @@ mod tests {
     #[tokio::test]
     async fn duplicate_input_fails_before_any_port_read() {
         let fixture = Fixture::new();
-        let line = ResolutionInput::new("line-1".into(), SkuId::new("sku-1"), None).unwrap();
+        let line = ResolutionInput::new("line-1".into(), SkuId::new("sku-1")).unwrap();
         let error =
             resolve_candidates(&fixture, &fixture, &[line.clone(), line], &mut RecordingExecutor::default())
                 .await

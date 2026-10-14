@@ -364,7 +364,7 @@ pub fn working_copy_line_view(line: SalesOrderWorkingCopyLine) -> SalesOrderWork
         sku_id: line.sku_id,
         sku_revision_id: line.sku_revision_id,
         welfare_scenario: line.welfare_scenario,
-        service_region: line.service_region,
+        procurement_supply_price_gross: line.procurement_supply_price_gross,
         fulfillment_due_at: line.fulfillment_due_at.map(|instant| instant.unix_secs() as u64),
         quantity: line.quantity,
         base_unit_code: line.base_unit_code,
@@ -503,7 +503,7 @@ fn submission_line_view(line: SalesOrderSubmissionLine) -> SalesOrderWorkingCopy
         sku_id: line.sku_id,
         sku_revision_id: line.sku_revision_id,
         welfare_scenario: line.welfare_scenario,
-        service_region: line.service_region,
+        procurement_supply_price_gross: line.procurement_supply_price_gross,
         fulfillment_due_at: line.fulfillment_due_at.map(|instant| instant.unix_secs() as u64),
         quantity: line.quantity,
         base_unit_code: line.base_unit_code,
@@ -650,7 +650,7 @@ mod tests {
         line.goods = Some(
             serde_json::from_value(serde_json::json!({
                 "sku_id":"sku-1", "sku_revision_id":"sku-rev-1", "welfare_scenario":null,
-                "service_region":null, "fulfillment_due_at":1800000000, "quantity":"3",
+                "fulfillment_due_at":1800000000, "quantity":"3",
                 "base_unit_code":"件", "unit_price_gross":"37.12", "pricing_mode":"AUTO"
             }))
             .unwrap(),

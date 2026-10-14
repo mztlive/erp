@@ -61,7 +61,14 @@ const draftLineSchema = z.object({
     sku: z.string(),
     skuRevisionId: z.string(),
     specification: z.string().optional(),
-    serviceRegion: z.string().optional(),
+    procurementSupplyPrice: z
+        .string()
+        .trim()
+        .refine(
+            (value) => value === "" || /^\d+(?:\.\d{1,4})?$/.test(value),
+            "采购供给价须为不小于 0 的金额，最多保留 4 位小数",
+        )
+        .optional(),
     quantity: decimalInput("数量", 6, { positive: true }),
     unit: z.string().trim().min(1, "请输入单位"),
     unitPriceGross: decimalInput("含税单价", 4),

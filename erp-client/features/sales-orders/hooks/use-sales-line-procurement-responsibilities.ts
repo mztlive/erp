@@ -19,7 +19,6 @@ export const salesLineProcurementResponsibilityKeys = {
                 rowKey: line.rowKey,
                 sku: line.sku,
                 skuRevisionId: line.skuRevisionId,
-                serviceRegion: (line.serviceRegion ?? "").trim(),
             })),
         ] as const,
 }

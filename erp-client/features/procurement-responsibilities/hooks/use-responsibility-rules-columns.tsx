@@ -15,8 +15,6 @@ export function ruleScope(rule: ProcurementResponsibilityRule): string {
     switch (rule.ruleType) {
         case "SKU":
             return rule.skuLabel ?? "SKU 待补充"
-        case "CATEGORY_SERVICE_REGION":
-            return `${rule.categoryLabel ?? "分类待补充"} · ${rule.serviceRegion ?? "区域待补充"}`
         case "CATEGORY":
             return rule.categoryLabel ?? "分类待补充"
         case "PRODUCT_KIND":

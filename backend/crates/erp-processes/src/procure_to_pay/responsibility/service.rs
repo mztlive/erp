@@ -191,7 +191,7 @@ impl ProcurementResponsibilityProcess {
         let inputs = request
             .lines
             .into_iter()
-            .map(|line| ResolutionInput::new(line.line_key, line.sku_id, line.service_region))
+            .map(|line| ResolutionInput::new(line.line_key, line.sku_id))
             .collect::<erp_core::Result<Vec<_>>>()
             .map_err(Error::Logic)?;
         ProcurementResponsibilityResolutionBatch::new(&inputs).map_err(Error::Logic)?;

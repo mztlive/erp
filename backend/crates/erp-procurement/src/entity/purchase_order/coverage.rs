@@ -714,7 +714,6 @@ mod tests {
             sku_id: SkuId::new(sku_id),
             sku_revision_id: erp_core::ids::SkuRevisionId::new(format!("skur-{sku_id}")),
             fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
-            service_region: None,
             quantity: Quantity::from_str(quantity).unwrap(),
             base_unit_code: "件".to_string(),
         }

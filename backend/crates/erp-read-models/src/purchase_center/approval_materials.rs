@@ -85,6 +85,8 @@ pub struct ApprovalPurchaseSourceLine {
     pub quantity: String,
     pub unit: String,
     pub unit_price_gross: String,
+    /// 销售填写的采购供给价（含税单价）；未填写为空。
+    pub procurement_supply_price_gross: Option<String>,
     pub fulfillment_due_at: i64,
 }
 
@@ -233,6 +235,9 @@ fn source_line(
         quantity: goods.quantity.to_decimal().to_string(),
         unit: goods.base_unit_code.clone(),
         unit_price_gross: goods.unit_price_gross.to_decimal().to_string(),
+        procurement_supply_price_gross: goods
+            .procurement_supply_price_gross
+            .map(|price| price.to_decimal().to_string()),
         fulfillment_due_at: goods.fulfillment_due_at.unix_secs(),
     }))
 }
@@ -313,7 +318,7 @@ mod tests {
                 sku_id: SkuId::new("sku"),
                 sku_revision_id: SkuRevisionId::new("sku-revision"),
                 welfare_scenario: None,
-                service_region: None,
+                procurement_supply_price_gross: None,
                 fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
                 quantity: "2".parse().unwrap(),
                 base_unit_code: "盒".into(),
@@ -345,7 +350,18 @@ mod tests {
         let source = view.source.unwrap();
         assert_eq!(source.quantity, "10");
         assert_eq!(source.unit_price_gross, "20");
+        assert!(source.procurement_supply_price_gross.is_none());
         assert_eq!(source.fulfillment_due_at, 1_800_000_000);
+    }
+
+    /// 销售填写的采购供给价随来源行进入采购审批对照，不改变采购单价。
+    #[test]
+    fn comparison_exposes_sales_procurement_supply_price() {
+        let mut sales = goods();
+        sales.procurement_supply_price_gross = Some("12.5".parse().unwrap());
+        let view = comparison_line(&purchase_line(), &allowed(), &[sales_line()], &[sales]).unwrap();
+        assert_eq!(view.unit_cost_gross.as_deref(), Some("15"));
+        assert_eq!(view.source.unwrap().procurement_supply_price_gross.as_deref(), Some("12.5"));
     }
 
     #[test]

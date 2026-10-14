@@ -19,6 +19,6 @@ pub use resolution::{
 };
 pub use rule::{
     ProcurementResponsibilityRule, ProcurementResponsibilityRuleData, ProcurementResponsibilityRuleType,
-    ProcurementResponsibilitySelectorReference, normalize_service_region,
+    ProcurementResponsibilitySelectorReference,
 };
 pub use status::EnableStatus;

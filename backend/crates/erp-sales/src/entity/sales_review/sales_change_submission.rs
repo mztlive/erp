@@ -618,8 +618,9 @@ pub struct SalesChangeSubmissionLine {
     pub sku_revision_id: Option<erp_core::ids::SkuRevisionId>,
     /// 福利场景。
     pub welfare_scenario: Option<WelfareScenario>,
-    /// 采购责任解析使用的服务区域。
-    pub service_region: Option<String>,
+    /// 销售填写的采购供给价（含税单价）；只供审批参考，不参与任何计算。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub procurement_supply_price_gross: Option<UnitPrice>,
     /// 公司对客户承诺完成本明细交付或服务的最晚时间。
     pub fulfillment_due_at: Option<Instant>,
     /// 基础单位数量。
@@ -701,7 +702,7 @@ impl SalesChangeSubmissionLine {
             sku_id: built.goods.as_ref().map(|g| g.sku_id.clone()),
             sku_revision_id: built.goods.as_ref().map(|g| g.sku_revision_id.clone()),
             welfare_scenario: built.goods.as_ref().and_then(|g| g.welfare_scenario),
-            service_region: built.goods.as_ref().and_then(|g| g.service_region.clone()),
+            procurement_supply_price_gross: built.procurement_supply_price_gross(),
             fulfillment_due_at: built.goods.as_ref().map(|g| g.fulfillment_due_at),
             quantity: built.goods.as_ref().map(|g| g.quantity),
             base_unit_code: built.goods.as_ref().map(|g| g.base_unit_code.clone()),
@@ -751,7 +752,7 @@ mod tests {
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: Some(WelfareScenario::AnnualGiftBag),
-            service_region: Some("east".to_string()),
+            procurement_supply_price_gross: Some("8.5000".parse().unwrap()),
             fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
             quantity: qty("3.000000"),
             base_unit_code: "箱".to_string(),
@@ -866,7 +867,7 @@ mod tests {
             sku_id: Some(SkuId::new("sku-1")),
             sku_revision_id: Some(erp_core::ids::SkuRevisionId::new("skurev-1")),
             welfare_scenario: Some(crate::entity::sales_order::WelfareScenario::MealSubsidy),
-            service_region: None,
+            procurement_supply_price_gross: None,
             fulfillment_due_at: Some(Instant::from_unix_secs(1_800_000_000)),
             quantity: Some(qty("3.000000")),
             base_unit_code: Some("件".to_string()),
@@ -1036,14 +1037,14 @@ mod tests {
         let goods = line.goods_fields().unwrap();
         assert_eq!(goods.sku_id.as_ref(), "sku-1");
         assert_eq!(goods.welfare_scenario, Some(WelfareScenario::AnnualGiftBag));
-        assert_eq!(goods.service_region.as_deref(), Some("EAST"));
+        assert_eq!(goods.procurement_supply_price_gross, Some("8.5000".parse().unwrap()));
 
         let mut no_optional = line.clone();
         no_optional.welfare_scenario = None;
-        no_optional.service_region = None;
+        no_optional.procurement_supply_price_gross = None;
         let stripped = no_optional.goods_fields().unwrap();
         assert!(stripped.welfare_scenario.is_none());
-        assert!(stripped.service_region.is_none());
+        assert!(stripped.procurement_supply_price_gross.is_none());
 
         let mut wrong_type = line.clone();
         wrong_type.line_type = LineType::Voucher;

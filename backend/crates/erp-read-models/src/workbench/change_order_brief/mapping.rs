@@ -305,6 +305,9 @@ pub(super) fn sales_base_line_states(
             .map(|item| format_unit_price(item.unit_price_gross.to_decimal()))
             .or_else(|| voucher_line.map(|item| format_unit_price(item.unit_price_gross.to_decimal())));
         let due = goods_line.map(|item| format_instant_date(item.fulfillment_due_at));
+        let supply_price = goods_line
+            .and_then(|item| item.procurement_supply_price_gross)
+            .map(|value| format_unit_price(value.to_decimal()));
         grouped.entry(line.sales_order_revision_id.to_string()).or_default().insert(
             line.sales_order_line_id.to_string(),
             DiffLineState::new(
@@ -312,7 +315,8 @@ pub(super) fn sales_base_line_states(
                 format_yuan(&line.gross_amount),
             )
             .with_line_no(line.line_no)
-            .with_details(quantity, unit_price, due),
+            .with_details(quantity, unit_price, due)
+            .with_supply_price(supply_price),
         );
     }
     grouped
@@ -339,6 +343,8 @@ pub(super) fn sales_target_line_states(lines: &[SalesChangeSubmissionLine]) -> H
             })
             .or_else(|| line.card_count.map(|count| format!("{count} 张")));
         let unit_price = line.unit_price_gross.map(|value| format_unit_price(value.to_decimal()));
+        let supply_price =
+            line.procurement_supply_price_gross.map(|value| format_unit_price(value.to_decimal()));
         grouped.entry(line.sales_change_submission_id.to_string()).or_default().insert(
             line.sales_order_line_id.to_string(),
             DiffLineState::new(
@@ -346,7 +352,8 @@ pub(super) fn sales_target_line_states(lines: &[SalesChangeSubmissionLine]) -> H
                 format_yuan(&line.gross_amount),
             )
             .with_line_no(line.line_no)
-            .with_details(quantity, unit_price, line.fulfillment_due_at.map(format_instant_date)),
+            .with_details(quantity, unit_price, line.fulfillment_due_at.map(format_instant_date))
+            .with_supply_price(supply_price),
         );
     }
     grouped
@@ -566,25 +573,10 @@ fn changed_line_brief(before: Option<&DiffLineState>, after: Option<&DiffLineSta
         title = chosen.title.clone();
     }
     let mut quantity_parts = Vec::new();
-    if before.and_then(|item| item.quantity.as_deref()) != after.and_then(|item| item.quantity.as_deref()) {
-        quantity_parts.push(format!(
-            "数量 {}",
-            text_comparison(
-                before.and_then(|item| item.quantity.as_deref()),
-                after.and_then(|item| item.quantity.as_deref()),
-            )?
-        ));
-    }
-    if before.and_then(|item| item.unit_price.as_deref()) != after.and_then(|item| item.unit_price.as_deref())
-    {
-        quantity_parts.push(format!(
-            "单价 {}",
-            text_comparison(
-                before.and_then(|item| item.unit_price.as_deref()),
-                after.and_then(|item| item.unit_price.as_deref()),
-            )?
-        ));
-    }
+    let detail = |field: fn(&DiffLineState) -> Option<&str>| (before.and_then(field), after.and_then(field));
+    push_detail_change(&mut quantity_parts, "数量", detail(|item| item.quantity.as_deref()))?;
+    push_detail_change(&mut quantity_parts, "单价", detail(|item| item.unit_price.as_deref()))?;
+    push_detail_change(&mut quantity_parts, "采购供给价", detail(|item| item.supply_price.as_deref()))?;
     if let (Some(before), Some(after)) = (before, after)
         && before.line_no != after.line_no
     {
@@ -605,6 +597,30 @@ fn changed_line_brief(before: Option<&DiffLineState>, after: Option<&DiffLineSta
         quantity: (!quantity_parts.is_empty()).then(|| quantity_parts.join(" · ")),
         due_label,
     })
+}
+
+/// 字段前后不同时追加一条对照说明。
+///
+/// # 参数
+/// * `parts` - 已收集的对照说明
+/// * `label` - 字段名称
+/// * `values` - 变更前、变更后的展示值
+///
+/// # 返回
+/// 两侧均缺失却不相等时返回 `None`，其余返回 `Some(())`。
+///
+/// # 错误
+/// 无。
+fn push_detail_change(
+    parts: &mut Vec<String>,
+    label: &str,
+    values: (Option<&str>, Option<&str>),
+) -> Option<()> {
+    let (before, after) = values;
+    if before != after {
+        parts.push(format!("{label} {}", text_comparison(before, after)?));
+    }
+    Some(())
 }
 
 #[cfg(test)]
@@ -642,6 +658,22 @@ mod tests {
         assert!(line.quantity.as_deref().unwrap().contains("数量 10 箱 → 12 箱"));
         assert!(line.quantity.as_deref().unwrap().contains("单价 ¥100 → ¥90"));
         assert_eq!(line.due_label.as_deref(), Some("交期 2026-09-01 → 2026-09-03"));
+    }
+
+    /// 采购供给价单独变化也上屏；未填写一侧显示为未记录。
+    #[test]
+    fn changed_line_exposes_procurement_supply_price() {
+        let before = state("办公纸 A4", "¥1,000", Some("10 箱"), Some("¥100"), Some("2026-09-01"));
+        let after = before.clone().with_supply_price(Some("¥80".into()));
+        let line = changed_line_brief(Some(&before), Some(&after)).unwrap();
+        assert_eq!(line.title, "办公纸 A4");
+        assert_eq!(line.quantity.as_deref(), Some("采购供给价 未记录 → ¥80"));
+        assert!(line.due_label.is_none());
+
+        let lowered = after.clone().with_supply_price(Some("¥75".into()));
+        let line = changed_line_brief(Some(&after), Some(&lowered)).unwrap();
+        assert_eq!(line.quantity.as_deref(), Some("采购供给价 ¥80 → ¥75"));
+        assert!(changed_line_brief(Some(&lowered), Some(&lowered)).is_none());
     }
 
     #[test]

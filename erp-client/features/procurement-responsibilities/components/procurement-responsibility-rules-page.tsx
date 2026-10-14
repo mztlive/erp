@@ -61,7 +61,6 @@ import { hasPermission } from "@/lib/permissions"
 
 const RULE_TYPE_VALUES = [
     "SKU",
-    "CATEGORY_SERVICE_REGION",
     "CATEGORY",
     "PRODUCT_KIND",
     "DEFAULT_DISPATCHER",
@@ -72,7 +71,6 @@ const ruleFormSchema = z
         ruleType: z.enum(RULE_TYPE_VALUES),
         skuId: z.string(),
         categoryId: z.string(),
-        serviceRegion: z.string(),
         productKind: z.string(),
         ownerUserId: z.string().min(1, "请选择采购负责人"),
         enabled: z.boolean(),
@@ -85,25 +83,11 @@ const ruleFormSchema = z
                 message: "请选择 SKU",
             })
         }
-        if (
-            (value.ruleType === "CATEGORY" ||
-                value.ruleType === "CATEGORY_SERVICE_REGION") &&
-            !value.categoryId
-        ) {
+        if (value.ruleType === "CATEGORY" && !value.categoryId) {
             context.addIssue({
                 code: "custom",
                 path: ["categoryId"],
                 message: "请选择商品分类",
-            })
-        }
-        if (
-            value.ruleType === "CATEGORY_SERVICE_REGION" &&
-            !value.serviceRegion.trim()
-        ) {
-            context.addIssue({
-                code: "custom",
-                path: ["serviceRegion"],
-                message: "请输入服务区域",
             })
         }
         if (
@@ -125,7 +109,6 @@ function defaultValues(rule?: ProcurementResponsibilityRule): RuleFormValue {
         ruleType: rule?.ruleType ?? "SKU",
         skuId: rule?.skuId ?? "",
         categoryId: rule?.categoryId ?? "",
-        serviceRegion: rule?.serviceRegion ?? "",
         productKind: rule?.productKind ?? "",
         ownerUserId: rule?.ownerUserId ?? "",
         enabled: rule?.enabled ?? true,
@@ -161,7 +144,6 @@ function RuleDialog({
                     ruleType: value.ruleType,
                     skuId: value.skuId || undefined,
                     categoryId: value.categoryId || undefined,
-                    serviceRegion: value.serviceRegion || undefined,
                     productKind: value.productKind
                         ? (value.productKind as ProductKind)
                         : undefined,
@@ -259,8 +241,7 @@ function RuleDialog({
                                             )}
                                         </form.AppField>
                                     ) : null}
-                                    {ruleType === "CATEGORY" ||
-                                    ruleType === "CATEGORY_SERVICE_REGION" ? (
+                                    {ruleType === "CATEGORY" ? (
                                         <form.AppField name="categoryId">
                                             {(field) => (
                                                 <Field>
@@ -286,18 +267,6 @@ function RuleDialog({
                                                         }
                                                     />
                                                 </Field>
-                                            )}
-                                        </form.AppField>
-                                    ) : null}
-                                    {ruleType === "CATEGORY_SERVICE_REGION" ? (
-                                        <form.AppField name="serviceRegion">
-                                            {(field) => (
-                                                <field.TextField
-                                                    id="procurement-responsibility-rules-dialog-service-region"
-                                                    label="服务区域"
-                                                    required
-                                                    placeholder="例如：华东、上海市"
-                                                />
                                             )}
                                         </form.AppField>
                                     ) : null}

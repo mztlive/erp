@@ -49,13 +49,6 @@ pub enum SourceImpactKind {
     },
     /// 直发或服务采购承担的收件资料被移除，或减量到低于各采购累计承担量。
     DeliveryChanged,
-    /// 线下服务采购的服务地区变化。
-    ServiceRegionChanged {
-        /// 基准服务地区。
-        baseline_region: Option<String>,
-        /// 当前服务地区。
-        current_region: Option<String>,
-    },
 }
 
 impl SourceImpactKind {
@@ -103,8 +96,6 @@ pub enum SourceImpactKindCode {
     DueEarlier,
     /// 收件资料变化。
     DeliveryChanged,
-    /// 服务地区变化。
-    ServiceRegionChanged,
 }
 
 /// 影响原因的扁平传输形状。
@@ -133,12 +124,6 @@ pub struct SourceImpactReasonWire {
     /// 采购预计交付日。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expected_delivery_date: Option<BusinessDate>,
-    /// 基准服务地区。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub baseline_region: Option<String>,
-    /// 当前服务地区。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub current_region: Option<String>,
 }
 
 impl From<SourceImpactReason> for SourceImpactReasonWire {
@@ -153,8 +138,6 @@ impl From<SourceImpactReason> for SourceImpactReasonWire {
             excess_quantity: None,
             current_due: None,
             expected_delivery_date: None,
-            baseline_region: None,
-            current_region: None,
         };
         match reason.kind {
             SourceImpactKind::Zeroed { baseline_quantity } => {
@@ -172,10 +155,6 @@ impl From<SourceImpactReason> for SourceImpactReasonWire {
                     (Some(current_due), Some(expected_delivery_date));
             },
             SourceImpactKind::DeliveryChanged => {},
-            SourceImpactKind::ServiceRegionChanged { baseline_region, current_region } => {
-                wire.kind = SourceImpactKindCode::ServiceRegionChanged;
-                (wire.baseline_region, wire.current_region) = (baseline_region, current_region);
-            },
         }
         wire
     }
@@ -200,10 +179,6 @@ impl TryFrom<SourceImpactReasonWire> for SourceImpactReason {
                 expected_delivery_date: wire.expected_delivery_date.ok_or_else(missing)?,
             },
             SourceImpactKindCode::DeliveryChanged => SourceImpactKind::DeliveryChanged,
-            SourceImpactKindCode::ServiceRegionChanged => SourceImpactKind::ServiceRegionChanged {
-                baseline_region: wire.baseline_region,
-                current_region: wire.current_region,
-            },
         };
         Ok(Self {
             sales_order_line_id: wire.sales_order_line_id,
@@ -505,12 +480,6 @@ fn changed_kinds(
     if carries_addresses && delivery_changed(line, before, after, assigned) {
         kinds.push(SourceImpactKind::DeliveryChanged);
     }
-    if responsibility == FulfillmentResponsibility::Service && before.service_region != after.service_region {
-        kinds.push(SourceImpactKind::ServiceRegionChanged {
-            baseline_region: before.service_region.clone(),
-            current_region: after.service_region.clone(),
-        });
-    }
     Ok(kinds)
 }
 
@@ -709,12 +678,11 @@ mod tests {
     struct SalesLine {
         quantity: &'static str,
         due: i64,
-        region: Option<&'static str>,
         addresses: Vec<PurchaseDeliveryAllocation>,
     }
 
     fn sales_line(quantity: &'static str) -> SalesLine {
-        SalesLine { quantity, due: DUE_LATE, region: None, addresses: Vec::new() }
+        SalesLine { quantity, due: DUE_LATE, addresses: Vec::new() }
     }
 
     fn line_pair(line_id: &str, line: &SalesLine) -> (SalesRevisionLineFact, SalesGoodsLineFact) {
@@ -735,7 +703,6 @@ mod tests {
                 quantity: qty(line.quantity),
                 base_unit_code: "件".to_string(),
                 fulfillment_due_at: Instant::from_unix_secs(line.due),
-                service_region: line.region.map(str::to_string),
                 delivery_allocations: line.addresses.clone(),
                 assigned_delivery_allocations: Vec::new(),
             },
@@ -1069,28 +1036,6 @@ mod tests {
             .evaluate();
 
         assert_eq!(kinds(&impacts), vec![("direct".to_string(), SourceImpactKind::DeliveryChanged)]);
-    }
-
-    /// 线下服务采购的服务地区变化时受影响。
-    #[test]
-    fn service_region_change_affects_service_purchase() {
-        let before = SalesLine { region: Some("EAST"), ..sales_line("10") };
-        let after = SalesLine { region: Some("WEST"), ..sales_line("10") };
-        let impacts = Scenario::new(&after)
-            .history("rev-old", "old-1", &before)
-            .effective("svc", FulfillmentResponsibility::Service, "old-1", purchase_line("10"))
-            .evaluate();
-
-        assert_eq!(
-            kinds(&impacts),
-            vec![(
-                "svc".to_string(),
-                SourceImpactKind::ServiceRegionChanged {
-                    baseline_region: Some("EAST".to_string()),
-                    current_region: Some("WEST".to_string()),
-                }
-            )]
-        );
     }
 
     /// 维持登记在当前版本时不再受影响；维持在中间版本时以该版本为基准。

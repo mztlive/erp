@@ -73,7 +73,7 @@ mod tests {
             "no_contract_terms": {"payment_term_code": "NET_30", "payment_term_name": "月结30天", "invoice_type": "增值税专用发票", "tax_point": "13"},
             "project_name": null, "business_remark": null, "voucher_category_sku_id": null,
             "voucher_expiry_at": null, "receivable_due_date": null,
-            "lines": [{"line_no": 1, "line_type": "GOODS_SERVICE", "sales_tax_rate": "0.13", "item_name_snapshot": "测试商品", "spec_snapshot": null, "unit_snapshot": "件", "goods": {"sku_id": "sku-1", "sku_revision_id": "sku-revision-1", "welfare_scenario": null, "service_region": null, "fulfillment_due_at": 1800000000, "quantity": "1", "base_unit_code": "件", "unit_price_gross": "100"}, "voucher": null}]
+            "lines": [{"line_no": 1, "line_type": "GOODS_SERVICE", "sales_tax_rate": "0.13", "item_name_snapshot": "测试商品", "spec_snapshot": null, "unit_snapshot": "件", "goods": {"sku_id": "sku-1", "sku_revision_id": "sku-revision-1", "welfare_scenario": null, "fulfillment_due_at": 1800000000, "quantity": "1", "base_unit_code": "件", "unit_price_gross": "100"}, "voucher": null}]
         })).unwrap()
     }
 

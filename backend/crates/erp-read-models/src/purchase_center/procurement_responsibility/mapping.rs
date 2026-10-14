@@ -86,7 +86,6 @@ mod tests {
                 rule_type,
                 sku_id: if category.is_some() { None } else { Some(SkuId::new(sku)) },
                 category_id,
-                service_region: None,
                 product_kind: None,
                 owner_user_id: owner.to_string(),
                 status: EnableStatus::Active,

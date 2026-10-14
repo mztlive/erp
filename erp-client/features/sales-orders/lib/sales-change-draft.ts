@@ -21,7 +21,8 @@ export type SalesChangeDraftValues = {
     lines: {
         source: SalesChangeDraftLine
         dueDate: string
-        serviceRegion: string
+        /** 采购供给价（含税单价），只供审批参考；空串表示未填写。 */
+        supplyPrice: string
         deliveryAllocations: (SalesDeliveryAllocation & { rowKey: string })[]
         quantity: string
         unitPrice: string
@@ -45,7 +46,7 @@ export function salesChangeDraftValues(
             dueDate: line.goods
                 ? formatEpochDate(line.goods.fulfillment_due_at)
                 : "",
-            serviceRegion: line.goods?.service_region ?? "",
+            supplyPrice: line.goods?.procurement_supply_price_gross ?? "",
             deliveryAllocations: (line.goods?.delivery_allocations ?? []).map(
                 (row) => ({ ...row, rowKey: crypto.randomUUID() }),
             ),
@@ -122,7 +123,12 @@ export type SalesChangeLineDiff = {
     /** 与当前生效版本不同的字段，值为生效版本原值。 */
     previous: Partial<
         Record<
-            "quantity" | "unitPrice" | "taxRate" | "faceValue" | "cardCount",
+            | "quantity"
+            | "unitPrice"
+            | "supplyPrice"
+            | "taxRate"
+            | "faceValue"
+            | "cardCount",
             string
         >
     >
@@ -171,11 +177,19 @@ export function salesChangeLineDiff(
             ]
           : []
     pairs.push(["taxRate", value.taxRate, base.sales_tax_rate, 6])
-    const previous = Object.fromEntries(
+    const previous: SalesChangeLineDiff["previous"] = Object.fromEntries(
         pairs
             .filter(([, next, old, scale]) => differs(next, old, scale))
             .map(([key, , old]) => [key, compactFixed(old)]),
     )
+    if (base.goods) {
+        const before = base.goods.procurement_supply_price_gross?.trim() ?? ""
+        const after = value.supplyPrice.trim()
+        const changed =
+            before && after ? differs(after, before, 4) : before !== after
+        if (changed)
+            previous.supplyPrice = before ? compactFixed(before) : "未填写"
+    }
     return {
         status: Object.keys(previous).length ? "changed" : "unchanged",
         previous,
@@ -216,7 +230,8 @@ export function salesChangeTargetLines(
                         }),
                     ),
                     fulfillment_due_at: dateToUnixSecs(value.dueDate),
-                    service_region: value.serviceRegion.trim() || null,
+                    procurement_supply_price_gross:
+                        value.supplyPrice.trim() || null,
                     quantity: value.quantity,
                     unit_price_gross: value.gift ? "0" : value.unitPrice,
                     pricing_mode: value.gift ? "GIFT" : "MANUAL",
@@ -378,7 +393,7 @@ export function salesChangePickedLine(
             base_unit_code: pick.baseUnit,
             fulfillment_due_at: 0,
             welfare_scenario: template?.source.goods?.welfare_scenario ?? null,
-            service_region: template?.serviceRegion || null,
+            procurement_supply_price_gross: null,
             quantity: preserveQuantity ? (template?.quantity ?? "1") : "1",
             unit_price_gross: "0",
             pricing_mode: "MANUAL",
@@ -388,7 +403,7 @@ export function salesChangePickedLine(
     return {
         source,
         dueDate: template?.dueDate ?? "",
-        serviceRegion: template?.serviceRegion ?? "",
+        supplyPrice: "",
         quantity: preserveQuantity ? (template?.quantity ?? "1") : "1",
         unitPrice: "",
         gift: false,

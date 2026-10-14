@@ -143,7 +143,6 @@ impl DemoMasterDataService {
                     rule_type: ProcurementResponsibilityRuleType::DefaultDispatcher,
                     sku_id: None,
                     category_id: None,
-                    service_region: None,
                     product_kind: None,
                     owner_user_id: owner_user_id.to_string(),
                     status: ProcurementStatus::Active,

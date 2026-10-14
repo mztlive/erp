@@ -39,6 +39,7 @@ pub(super) struct DiffLineState {
     quantity: Option<String>,
     unit_price: Option<String>,
     due: Option<String>,
+    supply_price: Option<String>,
 }
 
 impl DiffLineState {
@@ -54,7 +55,7 @@ impl DiffLineState {
     /// # 错误
     /// 无。
     pub(super) fn new(title: String, amount: String) -> Self {
-        Self { line_no: 1, title, amount, quantity: None, unit_price: None, due: None }
+        Self { line_no: 1, title, amount, quantity: None, unit_price: None, due: None, supply_price: None }
     }
 
     /// 设置业务行号。
@@ -93,6 +94,21 @@ impl DiffLineState {
         self.quantity = quantity;
         self.unit_price = unit_price;
         self.due = due;
+        self
+    }
+
+    /// 设置销售填写的采购供给价，仅供审批对照。
+    ///
+    /// # 参数
+    /// * `supply_price` - 采购供给价展示
+    ///
+    /// # 返回
+    /// 返回更新后的状态。
+    ///
+    /// # 错误
+    /// 无。
+    pub(super) fn with_supply_price(mut self, supply_price: Option<String>) -> Self {
+        self.supply_price = supply_price;
         self
     }
 }

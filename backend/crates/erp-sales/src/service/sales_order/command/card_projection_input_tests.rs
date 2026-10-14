@@ -29,7 +29,6 @@ fn submission_request(version: u64) -> super::SubmitSalesOrderRequest {
                     "sku_id": "sku-1",
                     "sku_revision_id": "sku-revision-1",
                     "welfare_scenario": null,
-                    "service_region": null,
                     "fulfillment_due_at": 1800000000,
                     "quantity": "1",
                     "base_unit_code": "件",

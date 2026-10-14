@@ -616,8 +616,9 @@ pub struct SalesOrderWorkingCopyLineView {
     pub sku_revision_id: Option<erp_core::ids::SkuRevisionId>,
     /// 福利场景。
     pub welfare_scenario: Option<WelfareScenario>,
-    /// 采购责任解析使用的服务区域。
-    pub service_region: Option<String>,
+    /// 销售填写的采购供给价（含税单价）；只供审批参考，不参与任何计算。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub procurement_supply_price_gross: Option<UnitPrice>,
     /// 销售对客户承诺完成明细交付或服务的最晚时间（秒级时间戳）。
     pub fulfillment_due_at: Option<u64>,
     /// 基础单位数量。

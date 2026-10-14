@@ -25,7 +25,7 @@ type LineValues = SalesChangeDraftValues["lines"][number]
 const ADDRESS_GRID =
     "grid gap-3 sm:grid-cols-2 @3xl/delivery:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_minmax(0,2.6fr)_minmax(0,1.8fr)_7rem_3.5rem]"
 
-/** 交付安排：按商品填写交付期限、服务地区和分地址数量。 */
+/** 交付安排：按商品填写交付期限和分地址数量。 */
 export function SalesChangeDeliverySection({
     form,
     id,
@@ -195,7 +195,7 @@ function DeliveryGroup({
                 </Button>
             </div>
             {removed ? null : (
-                <div className="grid gap-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,20rem)]">
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,14rem)]">
                     <form.AppField name={`lines[${index}].dueDate`}>
                         {(field) => (
                             <field.TextField
@@ -203,16 +203,6 @@ function DeliveryGroup({
                                 type="date"
                                 label="交付期限"
                                 required
-                                disabled={disabled}
-                            />
-                        )}
-                    </form.AppField>
-                    <form.AppField name={`lines[${index}].serviceRegion`}>
-                        {(field) => (
-                            <field.TextField
-                                id={`${prefix}-region`}
-                                label="服务地区"
-                                placeholder="选填"
                                 disabled={disabled}
                             />
                         )}

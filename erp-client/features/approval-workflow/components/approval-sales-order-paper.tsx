@@ -172,11 +172,6 @@ export function ApprovalSalesOrderPaper({
                                     </div>
                                 ),
                             )}
-                            {row.service_region && (
-                                <div className="mt-1 text-xs text-muted-foreground">
-                                    服务区域：{row.service_region}
-                                </div>
-                            )}
                         </div>
                     ),
                 },
@@ -233,6 +228,23 @@ export function ApprovalSalesOrderPaper({
                                   row.unit_price_gross ? (
                                       <MoneyValue
                                           value={row.unit_price_gross}
+                                      />
+                                  ) : (
+                                      "—"
+                                  ),
+                          },
+                          {
+                              id: "supply-price",
+                              header: "采购供给价",
+                              align: "end" as const,
+                              cell: (
+                                  row: ApprovalSalesSubmission["lines"][number],
+                              ) =>
+                                  row.procurement_supply_price_gross ? (
+                                      <MoneyValue
+                                          value={
+                                              row.procurement_supply_price_gross
+                                          }
                                       />
                                   ) : (
                                       "—"

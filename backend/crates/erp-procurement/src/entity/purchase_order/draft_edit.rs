@@ -423,7 +423,6 @@ mod tests {
                 sku_id: SkuId::new("sku-1"),
                 sku_revision_id: SkuRevisionId::new("skur-1"),
                 fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
-                service_region: None,
                 quantity: total,
                 base_unit_code: "件".to_string(),
             },

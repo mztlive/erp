@@ -50,7 +50,7 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
         <div className="overflow-hidden rounded-lg border-b border-border">
             <Table
                 data-density="comfortable"
-                className={isCard ? "min-w-[54rem]" : "min-w-[40rem]"}
+                className={isCard ? "min-w-[54rem]" : "min-w-[46rem]"}
             >
                 <TableHeader>
                     <TableRow>
@@ -64,7 +64,12 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
                                 <TableHead>卡形态</TableHead>
                             </>
                         ) : (
-                            <TableHead>承诺交付日</TableHead>
+                            <>
+                                <TableHead data-align="end">
+                                    采购供给价
+                                </TableHead>
+                                <TableHead>承诺交付日</TableHead>
+                            </>
                         )}
                         <TableHead data-align="end">含税小计</TableHead>
                     </TableRow>
@@ -126,9 +131,22 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
                                     </TableCell>
                                 </>
                             ) : (
-                                <TableCell className="text-muted-foreground">
-                                    {line.dueDate || "—"}
-                                </TableCell>
+                                <>
+                                    <TableCell data-align="end">
+                                        {line.procurementSupplyPrice ? (
+                                            <MoneyValue
+                                                value={
+                                                    line.procurementSupplyPrice
+                                                }
+                                            />
+                                        ) : (
+                                            "—"
+                                        )}
+                                    </TableCell>
+                                    <TableCell className="text-muted-foreground">
+                                        {line.dueDate || "—"}
+                                    </TableCell>
+                                </>
                             )}
                             <TableCell data-align="end">
                                 <MoneyValue value={line.amountGross} />

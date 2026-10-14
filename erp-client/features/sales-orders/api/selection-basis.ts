@@ -47,7 +47,7 @@ export async function fetchSelectionOrderBasis(
             quantity: String(line.quantity),
             unitPriceGross: "",
             pricingMode: "MANUAL",
-            serviceRegion: "",
+            procurementSupplyPrice: "",
             dueDate: "",
             faceValue: "",
             giftRate: "",

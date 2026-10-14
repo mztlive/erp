@@ -543,7 +543,7 @@ fn build_goods_line(
             sku_id: goods.sku_id,
             sku_revision_id: goods.sku_revision_id,
             welfare_scenario: goods.welfare_scenario,
-            service_region: goods.service_region,
+            procurement_supply_price_gross: goods.procurement_supply_price_gross,
             fulfillment_due_at: goods.fulfillment_due_at,
             quantity: goods.quantity,
             base_unit_code: goods.base_unit_code,
@@ -611,7 +611,7 @@ mod tests {
             sku_id: SkuId::new("sku-1"),
             sku_revision_id: SkuRevisionId::new("skurev-1"),
             welfare_scenario: Some(WelfareScenario::AnnualGiftBag),
-            service_region: Some("east".to_string()),
+            procurement_supply_price_gross: Some("8.5000".parse().unwrap()),
             fulfillment_due_at: at(),
             quantity: qty("3.000000"),
             base_unit_code: "箱".to_string(),
@@ -809,7 +809,7 @@ mod tests {
         assert_eq!(aggregate.lines[0].line_no, 1);
         assert_eq!(aggregate.lines[1].line_no, 2);
         assert_eq!(aggregate.goods_lines[0].welfare_scenario, Some(WelfareScenario::AnnualGiftBag));
-        assert_eq!(aggregate.goods_lines[0].service_region.as_deref(), Some("EAST"));
+        assert_eq!(aggregate.goods_lines[0].procurement_supply_price_gross, Some("8.5000".parse().unwrap()));
         assert_eq!(aggregate.goods_lines[0].pricing_mode, SalesPricingMode::Auto);
         assert_eq!(aggregate.goods_lines[1].pricing_mode, SalesPricingMode::Manual);
         assert_eq!(aggregate.goods_lines[0].delivery_allocations.len(), 2);

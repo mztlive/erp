@@ -33,7 +33,7 @@ const DIFF_BADGE: Record<
 }
 
 const GOODS_GRID =
-    "@3xl/lines:grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1fr)_7.5rem]"
+    "@3xl/lines:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1fr)_7.5rem]"
 const VOUCHER_GRID =
     "@3xl/lines:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1fr)_7.5rem]"
 const ROW_GRID = "grid items-start gap-3 sm:grid-cols-2"
@@ -95,7 +95,15 @@ export function SalesChangeLineItems({
                           "小计",
                           "",
                       ]
-                    : ["商品", "数量", "含税成交单价", "销项税率", "小计", ""]
+                    : [
+                          "商品",
+                          "数量",
+                          "含税成交单价",
+                          "采购供给价",
+                          "销项税率",
+                          "小计",
+                          "",
+                      ]
                 return (
                     <ChangeOrderSection
                         id={`${id}-lines`}
@@ -306,6 +314,29 @@ function SalesChangeLineRow({
             )}
         </form.AppField>
     )
+    const previousSupplyPrice = diff.previous.supplyPrice
+    const supplyPriceField = (
+        <form.AppField name={`lines[${index}].supplyPrice`}>
+            {(field) => (
+                <field.TextField
+                    id={`${id}-${line.line_no}-supply-price`}
+                    label="采购供给价"
+                    inputMode="decimal"
+                    placeholder="选填"
+                    disabled={disabled}
+                    className={labelClass}
+                    inputClassName="num"
+                    description={
+                        previousSupplyPrice === undefined
+                            ? undefined
+                            : previousSupplyPrice === "未填写"
+                              ? "原 未填写"
+                              : `原 ¥${previousSupplyPrice}`
+                    }
+                />
+            )}
+        </form.AppField>
+    )
     return (
         <div
             className={cn(
@@ -379,6 +410,7 @@ function SalesChangeLineRow({
             {removed ? (
                 <>
                     <RemovedCell label="含税成交单价" />
+                    {line.goods ? <RemovedCell label="采购供给价" /> : null}
                     <RemovedCell label="销项税率" />
                 </>
             ) : (
@@ -390,6 +422,7 @@ function SalesChangeLineRow({
                         "decimal",
                         true,
                     )}
+                    {line.goods ? supplyPriceField : null}
                     {numberField("taxRate", "tax", "销项税率", "decimal")}
                 </>
             )}

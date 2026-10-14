@@ -401,7 +401,6 @@ pub fn describe_reason(reason: &SourceImpactReason) -> String {
             format!("{line} 履约期限提前到 {current_due}，早于预计交付 {expected_delivery_date}")
         },
         SourceImpactKind::DeliveryChanged => format!("{line} 收件地址或数量已变化"),
-        SourceImpactKind::ServiceRegionChanged { .. } => format!("{line} 服务地区已变化"),
     }
 }
 

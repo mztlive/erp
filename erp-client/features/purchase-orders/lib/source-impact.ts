@@ -5,19 +5,12 @@ export type SourceImpactReasonWire = {
     sales_order_line_id: string
     line_no: number
     item_name: string
-    kind:
-        | "ZEROED"
-        | "QUANTITY_REDUCED"
-        | "DUE_EARLIER"
-        | "DELIVERY_CHANGED"
-        | "SERVICE_REGION_CHANGED"
+    kind: "ZEROED" | "QUANTITY_REDUCED" | "DUE_EARLIER" | "DELIVERY_CHANGED"
     baseline_quantity?: string
     current_quantity?: string
     excess_quantity?: string
     current_due?: string
     expected_delivery_date?: string
-    baseline_region?: string | null
-    current_region?: string | null
 }
 
 /** 界面使用的影响原因。 */
@@ -39,8 +32,6 @@ export function describeSourceImpact(reason: SourceImpactReasonWire): string {
             return `履约期限提前到 ${reason.current_due ?? "—"}，早于预计交付 ${reason.expected_delivery_date ?? "—"}`
         case "DELIVERY_CHANGED":
             return "收件地址或数量已变化"
-        case "SERVICE_REGION_CHANGED":
-            return "服务地区已变化"
     }
 }
 

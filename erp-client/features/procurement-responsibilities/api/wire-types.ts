@@ -9,7 +9,6 @@ export type BackendProcurementResponsibilityRule = {
     sku_name?: string | null
     category_id?: string | null
     category_name?: string | null
-    service_region?: string | null
     product_kind?: ProductKind | null
     owner_user_id: string
     owner_name?: string | null

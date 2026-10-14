@@ -18,9 +18,6 @@ pub struct CreateProcurementResponsibilityRuleRequest {
     pub sku_id: Option<SkuId>,
     /// 分类选择器。
     pub category_id: Option<ProductCategoryId>,
-    /// 服务区域选择器。
-    #[validate(length(max = 128, message = "服务区域过长"))]
-    pub service_region: Option<String>,
     /// 商品类型选择器。
     pub product_kind: Option<ProductKind>,
     /// 具体负责人账号 ID。
@@ -46,7 +43,6 @@ impl CreateProcurementResponsibilityRuleRequest {
             rule_type: self.rule_type,
             sku_id: self.sku_id,
             category_id: self.category_id,
-            service_region: self.service_region,
             product_kind: self.product_kind,
             owner_user_id: self.owner_user_id,
             status: self.status,
@@ -66,9 +62,6 @@ pub struct UpdateProcurementResponsibilityRuleRequest {
     pub sku_id: Option<SkuId>,
     /// 分类选择器。
     pub category_id: Option<ProductCategoryId>,
-    /// 服务区域选择器。
-    #[validate(length(max = 128, message = "服务区域过长"))]
-    pub service_region: Option<String>,
     /// 商品类型选择器。
     pub product_kind: Option<ProductKind>,
     /// 具体负责人账号 ID。
@@ -95,7 +88,6 @@ impl UpdateProcurementResponsibilityRuleRequest {
             rule_type: self.rule_type,
             sku_id: self.sku_id,
             category_id: self.category_id,
-            service_region: self.service_region,
             product_kind: self.product_kind,
             owner_user_id: self.owner_user_id,
             status: self.status,
@@ -112,9 +104,6 @@ pub struct ProcurementResponsibilityResolveLineRequest {
     pub line_key: String,
     /// 精确 SKU。
     pub sku_id: SkuId,
-    /// 服务区域。
-    #[validate(length(max = 128, message = "服务区域过长"))]
-    pub service_region: Option<String>,
 }
 
 /// 逐行责任预览请求。

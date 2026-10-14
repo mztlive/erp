@@ -310,7 +310,6 @@ mod tests {
                 quantity: qty("10"),
                 base_unit_code: "件".into(),
                 fulfillment_due_at: Instant::from_unix_secs(1_800_000_000),
-                service_region: None,
                 delivery_allocations: vec![row("地址A", "6"), row("地址B", "4")],
                 assigned_delivery_allocations: Vec::new(),
             }],

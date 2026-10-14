@@ -276,7 +276,7 @@ mod tests {
             "item_name_snapshot": format!("商品-{number}"), "unit_snapshot": "件",
             "goods": {
                 "sku_id": format!("sku-{number}"), "sku_revision_id": format!("revision-{number}"),
-                "welfare_scenario": "ANNUAL_GIFT_BAG", "service_region": "上海",
+                "welfare_scenario": "ANNUAL_GIFT_BAG",
                 "fulfillment_due_at": 1800000000, "quantity": "2", "base_unit_code": "件",
                 "unit_price_gross": "5"
             }

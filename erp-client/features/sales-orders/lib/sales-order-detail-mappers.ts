@@ -263,8 +263,8 @@ export function mapWorkingCopyLines(
                       ? "电子卡"
                       : (line.card_form ?? undefined)
         } else {
-            const serviceRegion = line.service_region?.trim()
-            if (serviceRegion) item.serviceRegion = serviceRegion
+            const supplyPrice = line.procurement_supply_price_gross?.trim()
+            if (supplyPrice) item.procurementSupplyPrice = supplyPrice
             const dueDate = formatEpochDate(line.fulfillment_due_at)
             if (dueDate) item.dueDate = dueDate
         }
