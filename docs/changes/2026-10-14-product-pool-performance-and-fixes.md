@@ -29,7 +29,7 @@
 
 - 资格业务日期不是当天的查询仍按实时聚合，速度不变（日常界面不暴露该参数）。
 - 销售单提交、采购选源与建单仍按实时事实判定，不读取投影。
-- 其余 44 个集合缺少 `id` 索引的问题不在本次范围，见十、实施说明。
+- 以 `_id` 为主键、文档不含 `id` 字段的集合不加 `id` 索引，见九、实施说明。
 
 ## 四、验收标准
 
@@ -80,6 +80,8 @@
 | 后台与追平 | `erp-processes` `sellable_projection_refresh.rs`（每 2 秒一轮，每轮最多 10 批 × 200 个 SKU；首次构建完成前列表走实时聚合）；`adapters/catalog_supply_query/repository/sellable_search.rs` 决定走投影或实时聚合 |
 | 排序与 SKU 限定 | `SellableSkuFilter.sort`、`sku_ids`；实时聚合与投影排序字段一致 |
 | 稳定主键索引 | `skus`、`sku_revisions`、`products`、`product_revisions`、`product_brands`、`unit_of_measures`、`supplier_offerings`、`supplier_offering_revisions`、`supplier_offering_availabilities`、`supplier_delivery_templates` 新增 `id` 唯一索引；`skus`、`sku_revisions`、`products`、`product_revisions` 新增 `updated_at` 索引 |
+| 其余已有数据集合的稳定主键索引 | 合同、客户、文件、待办与财务责任规则、往来方资料、采购责任规则、采购单及提交、应收、销售单全部明细与修订、销售变更、供应商资料与资质、仓库、商品修订媒体与卡券类目资料、供给命令共 44 个集合新增 `uk_<集合>_id` 唯一索引；新增前核对开发库中 `id` 均存在且无重复 |
+| 其余空集合的稳定主键索引 | 发票、应付、付款、库存、采购付款申请及快照、退货退款、收货、交付与验收、供应商履约、结算与接口、选品册、导入、集成、文档关系、权限与用户角色等 95 个集合新增 `uk_<集合>_id` 唯一索引。逐个核对文档类型均为带生成 `id` 的实体；确定性 `id`（付款申请提交快照、健康检查记录、集成错误任务）每个来源只写一次。以 `_id` 为主键、不含 `id` 字段的 `casbin_rules`、`casbin_policy_state`、`demo_master_records`、`sales_selection_rate_windows`、`background_job_inputs` 与两类投影及其进度不加；按全新库启动核对，除这些集合外全部集合均已有 `id` 唯一索引 |
 | 选品册配送地区 | `erp-sales` `PoolFilterSnapshot` 新增 `delivery_region_code`、`delivery_extent`、`include_freight_extra`，冻结时校验地区代码 |
 | 有效期口径 | `BusinessDate::is_within`；采购选源复核、采购创建依据、供应商门户条款校验、配送覆盖改用之 |
 | 前端 | 商品池 `use-sellable-list-data.ts`（表格单页查询、卡片追加查询）、`use-sellable-gallery-selection.ts`（跨页勾选）、`lib/sellable-sort.ts`；选品册条件说明；供给与门户有效期显示 |
@@ -103,5 +105,4 @@
 
 ### 遗留风险
 
-- 另有 44 个集合（如 `sales_orders`、`purchase_orders`、`customer_accounts`、`party_*`、`supplier_*` 资料与资质、`warehouses`、`work_items`）缺少 `id` 索引，按 `id` 查询与乐观锁更新都是集合扫描，数据量增长后会逐步变慢，建议统一补齐。
 - 延迟复扫会对大批量变化再重算一遍，大批量导入的后台总耗时约为单次的两倍。

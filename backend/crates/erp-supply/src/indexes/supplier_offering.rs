@@ -88,7 +88,10 @@ fn availability_indexes() -> Vec<IndexModel> {
 }
 
 fn command_indexes() -> Vec<IndexModel> {
-    vec![unique_index("uk_supplier_offering_commands_idempotency_key", doc! { "idempotency_key": 1 })]
+    vec![
+        unique_index("uk_supplier_offering_commands_id", doc! { "id": 1 }),
+        unique_index("uk_supplier_offering_commands_idempotency_key", doc! { "idempotency_key": 1 }),
+    ]
 }
 
 fn delivery_template_indexes() -> Vec<IndexModel> {
@@ -148,6 +151,16 @@ fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        let indexes = super::command_indexes();
+        assert!(indexes.iter().any(|index| {
+            index.keys == mongodb::bson::doc! { "id": 1 }
+                && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+        }));
+    }
+
     use mongodb::bson::doc;
 
     use super::{availability_indexes, delivery_template_indexes, offering_indexes, revision_indexes};

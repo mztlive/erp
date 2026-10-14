@@ -25,6 +25,7 @@ pub async fn ensure(db: &Database) -> Result<()> {
         .await?;
     db.collection::<Document>(<Database as PortalSupplyExt>::PORTAL_QUOTE_GRANTS)
         .create_indexes(vec![
+            index("uk_supplier_portal_quote_grants_id", doc! {"id":1}, true),
             index("uk_portal_quote_grant_supplier_sku", doc! {"supplier_id":1,"sku_id":1}, true),
             index("idx_portal_quote_grant_supplier_active", doc! {"supplier_id":1,"active":1,"id":1}, false),
         ])

@@ -57,6 +57,7 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 /// 返回 `supplier_api_connection` 的身份约束与查询索引。
 fn supplier_api_connection_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_supplier_api_connections_id", doc! { "id": 1 }),
         unique_index("uk_supplier_api_connections_connection_code", doc! { "connection_code": 1 }),
         named_index("idx_supplier_api_connections_supplier_status", doc! { "supplier_id": 1, "status": 1 }),
         named_index(
@@ -68,6 +69,7 @@ fn supplier_api_connection_indexes() -> Vec<IndexModel> {
 
 fn business_confirmation_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_supplier_api_business_capability_confirmations_id", doc! { "id": 1 }),
         unique_index(
             "uk_supplier_api_business_confirmations_operation",
             doc! { "connection_id": 1, "operation_id": 1 },
@@ -85,6 +87,7 @@ fn business_confirmation_indexes() -> Vec<IndexModel> {
 
 fn health_check_run_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_supplier_api_health_check_runs_id", doc! { "id": 1 }),
         unique_index("uk_supplier_api_health_runs_background_job", doc! { "background_job_id": 1 }),
         unique_index(
             "uk_supplier_api_health_runs_idempotency",
@@ -98,23 +101,29 @@ fn health_check_run_indexes() -> Vec<IndexModel> {
 }
 
 fn command_receipt_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_supplier_api_command_receipts_idempotency",
-        doc! {
-            "connection_id": 1,
-            "action": 1,
-            "actor_id": 1,
-            "idempotency_key_hash": 1,
-        },
-    )]
+    vec![
+        unique_index("uk_supplier_api_connection_command_receipts_id", doc! { "id": 1 }),
+        unique_index(
+            "uk_supplier_api_command_receipts_idempotency",
+            doc! {
+                "connection_id": 1,
+                "action": 1,
+                "actor_id": 1,
+                "idempotency_key_hash": 1,
+            },
+        ),
+    ]
 }
 
 /// 返回 `supplier_api_capability` 的能力声明唯一约束索引。
 fn supplier_api_capability_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_supplier_api_capabilities_connection_capability",
-        doc! { "connection_id": 1, "capability_code": 1 },
-    )]
+    vec![
+        unique_index("uk_supplier_api_capabilities_id", doc! { "id": 1 }),
+        unique_index(
+            "uk_supplier_api_capabilities_connection_capability",
+            doc! { "connection_id": 1, "capability_code": 1 },
+        ),
+    ]
 }
 
 /// 构建命名普通索引。
@@ -132,6 +141,23 @@ fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        for indexes in [
+            super::business_confirmation_indexes(),
+            super::supplier_api_capability_indexes(),
+            super::command_receipt_indexes(),
+            super::supplier_api_connection_indexes(),
+            super::health_check_run_indexes(),
+        ] {
+            assert!(indexes.iter().any(|index| {
+                index.keys == mongodb::bson::doc! { "id": 1 }
+                    && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+            }));
+        }
+    }
+
     use mongodb::bson::doc;
 
     use super::{

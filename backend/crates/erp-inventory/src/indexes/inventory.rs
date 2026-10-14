@@ -105,6 +105,7 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 /// 返回 `stock_movement` 的来源去重与台账查询索引（§6.7）。
 fn stock_movement_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_stock_movements_id", doc! { "id": 1 }),
         unique_index(
             "uk_stock_movements_source",
             doc! { "source_document_id": 1, "source_line_id": 1, "movement_type": 1 },
@@ -122,12 +123,16 @@ fn stock_movement_indexes() -> Vec<IndexModel> {
 
 /// 返回 `stock_balance` 的库存维度唯一约束（§6.7）。
 fn stock_balance_indexes() -> Vec<IndexModel> {
-    vec![unique_index("uk_stock_balances_dimension", doc! { "warehouse_id": 1, "sku_id": 1 })]
+    vec![
+        unique_index("uk_stock_balances_id", doc! { "id": 1 }),
+        unique_index("uk_stock_balances_dimension", doc! { "warehouse_id": 1, "sku_id": 1 }),
+    ]
 }
 
 /// 返回 `stock_reservation` 的建立动作唯一与预占查询索引（§6.7）。
 fn stock_reservation_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_stock_reservations_id", doc! { "id": 1 }),
         unique_partial_index(
             "uk_stock_reservations_purchase_establish",
             doc! { "source_receipt_line_id": 1, "purchase_line_sales_allocation_id": 1 },
@@ -151,15 +156,19 @@ fn stock_reservation_indexes() -> Vec<IndexModel> {
 
 /// 返回 `stock_reservation_entry` 的预占流水查询索引（§6.7）。
 fn stock_reservation_entry_indexes() -> Vec<IndexModel> {
-    vec![named_index(
-        "idx_stock_reservation_entries_reservation",
-        doc! { "reservation_id": 1, "entry_type": 1 },
-    )]
+    vec![
+        unique_index("uk_stock_reservation_entries_id", doc! { "id": 1 }),
+        named_index(
+            "idx_stock_reservation_entries_reservation",
+            doc! { "reservation_id": 1, "entry_type": 1 },
+        ),
+    ]
 }
 
 /// 返回 `stock_adjustment` 的身份约束与列表查询索引（§6.7）。
 fn stock_adjustment_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_stock_adjustments_id", doc! { "id": 1 }),
         unique_index("uk_stock_adjustments_adjustment_no", doc! { "adjustment_no": 1 }),
         named_index("idx_stock_adjustments_warehouse_status", doc! { "warehouse_id": 1, "status": 1 }),
         named_index(
@@ -171,7 +180,10 @@ fn stock_adjustment_indexes() -> Vec<IndexModel> {
 
 /// 返回 `stock_adjustment_line` 的明细查询索引（§6.7）。
 fn stock_adjustment_line_indexes() -> Vec<IndexModel> {
-    vec![named_index("idx_stock_adjustment_lines_adjustment", doc! { "stock_adjustment_id": 1 })]
+    vec![
+        unique_index("uk_stock_adjustment_lines_id", doc! { "id": 1 }),
+        named_index("idx_stock_adjustment_lines_adjustment", doc! { "stock_adjustment_id": 1 }),
+    ]
 }
 
 /// 构建命名普通索引。
@@ -199,6 +211,24 @@ fn unique_partial_index(name: impl Into<String>, keys: Document, filter: Documen
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        for indexes in [
+            super::stock_adjustment_line_indexes(),
+            super::stock_adjustment_indexes(),
+            super::stock_balance_indexes(),
+            super::stock_movement_indexes(),
+            super::stock_reservation_entry_indexes(),
+            super::stock_reservation_indexes(),
+        ] {
+            assert!(indexes.iter().any(|index| {
+                index.keys == mongodb::bson::doc! { "id": 1 }
+                    && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+            }));
+        }
+    }
+
     use mongodb::bson::doc;
 
     use super::{

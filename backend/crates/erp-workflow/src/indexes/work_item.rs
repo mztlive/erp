@@ -105,6 +105,7 @@ fn is_current_open_object_type_index(index: &IndexModel) -> bool {
 
 fn work_item_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_work_items_id", doc! { "id": 1 }),
         unique_open_object_type_index(),
         unique_open_fulfillment_object_index(),
         unique_open_customer_acceptance_object_index(),
@@ -237,6 +238,7 @@ fn unique_open_sales_invoice_execution_object_index() -> IndexModel {
 /// 财务责任规则的启用唯一性与管理查询索引。
 fn finance_responsibility_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_finance_responsibility_rules_id", doc! { "id": 1 }),
         IndexModel::builder()
             .keys(doc! { "selector_key": 1 })
             .options(
@@ -364,8 +366,34 @@ fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
     IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
+/// 构造稳定主键唯一索引。
+///
+/// # 参数
+/// * `name` - 稳定索引名
+/// * `keys` - 索引键
+///
+/// # 返回
+/// 返回唯一索引模型。
+fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
+    IndexModel::builder()
+        .keys(keys)
+        .options(IndexOptions::builder().name(name.into()).unique(true).build())
+        .build()
+}
+
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        for indexes in [super::work_item_indexes(), super::finance_responsibility_indexes()] {
+            assert!(indexes.iter().any(|index| {
+                index.keys == mongodb::bson::doc! { "id": 1 }
+                    && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+            }));
+        }
+    }
+
     use mongodb::bson::doc;
 
     use super::{finance_responsibility_indexes, is_current_open_object_type_index, work_item_indexes};

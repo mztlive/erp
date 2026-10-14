@@ -70,6 +70,7 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 /// 返回 `supplier_fulfillment_order` 的身份约束和查询索引（§6.19）。
 fn supplier_fulfillment_order_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_supplier_fulfillment_orders_id", doc! { "id": 1 }),
         unique_index("uk_supplier_fulfillment_orders_order_no", doc! { "fulfillment_order_no": 1 }),
         // §6.19「非空 (connection_id, external_order_no) 唯一」：部分唯一索引，
         // external_order_no 为空（下单成功回传前）时多条记录不受约束；
@@ -103,12 +104,16 @@ fn supplier_fulfillment_order_indexes() -> Vec<IndexModel> {
 
 /// 返回 `supplier_fulfillment_item` 的身份约束和明细查询索引（§6.19）。
 fn supplier_fulfillment_item_indexes() -> Vec<IndexModel> {
-    vec![named_index("idx_supplier_fulfillment_items_order", doc! { "supplier_fulfillment_order_id": 1 })]
+    vec![
+        unique_index("uk_supplier_fulfillment_items_id", doc! { "id": 1 }),
+        named_index("idx_supplier_fulfillment_items_order", doc! { "supplier_fulfillment_order_id": 1 }),
+    ]
 }
 
 /// 返回 `supplier_order_action` 的身份约束与查询索引（§6.19）。
 fn supplier_order_action_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_supplier_order_actions_id", doc! { "id": 1 }),
         unique_index("uk_supplier_order_actions_idempotency_key", doc! { "idempotency_key": 1 }),
         named_index("idx_supplier_order_actions_order", doc! { "supplier_fulfillment_order_id": 1 }),
     ]
@@ -116,23 +121,30 @@ fn supplier_order_action_indexes() -> Vec<IndexModel> {
 
 /// 返回 `supplier_order_action_line` 的身份约束索引（§6.19）。
 fn supplier_order_action_line_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_supplier_order_action_lines_action_line_no",
-        doc! { "supplier_order_action_id": 1, "line_no": 1 },
-    )]
+    vec![
+        unique_index("uk_supplier_order_action_lines_id", doc! { "id": 1 }),
+        unique_index(
+            "uk_supplier_order_action_lines_action_line_no",
+            doc! { "supplier_order_action_id": 1, "line_no": 1 },
+        ),
+    ]
 }
 
 /// 返回 `supplier_order_status_history` 的回调幂等唯一索引（§6.19）。
 fn supplier_order_status_history_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_supplier_order_status_histories_connection_event",
-        doc! { "connection_id": 1, "external_event_id": 1 },
-    )]
+    vec![
+        unique_index("uk_supplier_order_status_histories_id", doc! { "id": 1 }),
+        unique_index(
+            "uk_supplier_order_status_histories_connection_event",
+            doc! { "connection_id": 1, "external_event_id": 1 },
+        ),
+    ]
 }
 
 /// 返回 `supplier_refund_fact` 的身份约束和订单查询索引（§6.19）。
 fn supplier_refund_fact_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_supplier_refund_facts_id", doc! { "id": 1 }),
         unique_index(
             "uk_supplier_refund_facts_connection_refund",
             doc! {
@@ -156,6 +168,7 @@ fn supplier_refund_fact_indexes() -> Vec<IndexModel> {
 /// 返回 `supplier_refund_allocation` 的身份约束索引（§6.19）。
 fn supplier_refund_allocation_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_supplier_refund_allocations_id", doc! { "id": 1 }),
         unique_index(
             "uk_supplier_refund_allocations_fact_no",
             doc! { "supplier_refund_fact_id": 1, "allocation_no": 1 },
@@ -196,6 +209,25 @@ fn partial_unique_index(name: impl Into<String>, keys: Document, filter: Documen
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        for indexes in [
+            super::supplier_fulfillment_item_indexes(),
+            super::supplier_fulfillment_order_indexes(),
+            super::supplier_order_action_line_indexes(),
+            super::supplier_order_action_indexes(),
+            super::supplier_order_status_history_indexes(),
+            super::supplier_refund_allocation_indexes(),
+            super::supplier_refund_fact_indexes(),
+        ] {
+            assert!(indexes.iter().any(|index| {
+                index.keys == mongodb::bson::doc! { "id": 1 }
+                    && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+            }));
+        }
+    }
+
     use mongodb::bson::doc;
 
     use super::{

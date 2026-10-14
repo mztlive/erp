@@ -11,6 +11,19 @@ pub(super) async fn ensure(db: &Database) -> Result<()> {
     collection
         .create_index(
             IndexModel::builder()
+                .keys(doc! { "id": 1 })
+                .options(
+                    IndexOptions::builder()
+                        .name("uk_purchase_expense_occurrences_id".to_string())
+                        .unique(true)
+                        .build(),
+                )
+                .build(),
+        )
+        .await?;
+    collection
+        .create_index(
+            IndexModel::builder()
                 .keys(doc! { "purchase_order_id": 1, "expense_line_id": 1 })
                 .options(
                     IndexOptions::builder()

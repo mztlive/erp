@@ -50,6 +50,7 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 /// 返回 `sales_change_order` 的进行中唯一约束与列表查询索引。
 fn sales_change_order_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_sales_change_orders_id", doc! { "id": 1 }),
         unique_partial_index(
             "uk_sales_change_orders_active_per_order_base",
             doc! { "sales_order_id": 1, "base_revision_id": 1 },
@@ -69,6 +70,7 @@ fn sales_change_order_indexes() -> Vec<IndexModel> {
 /// 返回 `sales_change_submission` 的身份约束与历史查询索引。
 fn sales_change_submission_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_sales_change_submissions_id", doc! { "id": 1 }),
         unique_index(
             "uk_sales_change_submissions_order_submission_no",
             doc! { "sales_change_order_id": 1, "submission_no": 1 },
@@ -82,10 +84,13 @@ fn sales_change_submission_indexes() -> Vec<IndexModel> {
 
 /// 返回 `sales_change_submission_line` 的明细唯一约束。
 fn sales_change_submission_line_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_sales_change_submission_lines_submission_line",
-        doc! { "sales_change_submission_id": 1, "sales_order_line_id": 1 },
-    )]
+    vec![
+        unique_index("uk_sales_change_submission_lines_id", doc! { "id": 1 }),
+        unique_index(
+            "uk_sales_change_submission_lines_submission_line",
+            doc! { "sales_change_submission_id": 1, "sales_order_line_id": 1 },
+        ),
+    ]
 }
 
 /// 构建命名普通索引。
@@ -113,6 +118,21 @@ fn unique_partial_index(name: impl Into<String>, keys: Document, filter: Documen
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        for indexes in [
+            super::sales_change_order_indexes(),
+            super::sales_change_submission_indexes(),
+            super::sales_change_submission_line_indexes(),
+        ] {
+            assert!(indexes.iter().any(|index| {
+                index.keys == mongodb::bson::doc! { "id": 1 }
+                    && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+            }));
+        }
+    }
+
     use mongodb::bson::doc;
 
     use super::sales_change_order_indexes;

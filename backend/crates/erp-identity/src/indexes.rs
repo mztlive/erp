@@ -195,6 +195,7 @@ fn casbin_indexes() -> Vec<IndexModel> {
 /// 避免复用破坏审计与授权绑定语义。
 fn permission_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_permissions_id", doc! { "id": 1 }),
         unique_index("uk_permissions_resource_action", doc! { "resource": 1, "action": 1 }),
         named_index("idx_permissions_disabled", doc! { "disabled": 1 }),
     ]
@@ -216,6 +217,7 @@ fn permission_indexes() -> Vec<IndexModel> {
 /// 删除本部分唯一索引，改为全局唯一索引 `uk_user_roles_binding`。
 fn user_role_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_user_roles_id", doc! { "id": 1 }),
         IndexModel::builder()
             .keys(doc! { "user_id": 1, "role_id": 1 })
             .options(
@@ -349,6 +351,17 @@ pub async fn ensure_person_scopes(db: &Database) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        for indexes in [super::permission_indexes(), super::user_role_indexes()] {
+            assert!(indexes.iter().any(|index| {
+                index.keys == mongodb::bson::doc! { "id": 1 }
+                    && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+            }));
+        }
+    }
+
     use mongodb::bson::doc;
 
     use super::{

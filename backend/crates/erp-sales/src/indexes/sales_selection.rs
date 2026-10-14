@@ -64,6 +64,7 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 /// 选品册索引：列表筛选、责任范围、令牌查找、一册一方案。
 fn booklet_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_sales_selection_booklets_id", doc! { "id": 1 }),
         named_index(
             "idx_sales_selection_booklets_list",
             doc! { "customer_id": 1, "status": 1, "form": 1, "submit_mode": 1, "created_at": -1 },
@@ -87,23 +88,30 @@ fn booklet_indexes() -> Vec<IndexModel> {
 
 /// 陈列项按册与批次查询。
 fn display_indexes() -> Vec<IndexModel> {
-    vec![named_index(
-        "idx_sales_selection_display_items_booklet_batch",
-        doc! { "booklet_id": 1, "batch_id": 1, "effective": 1, "removed": 1 },
-    )]
+    vec![
+        unique_index("uk_sales_selection_display_items_id", doc! { "id": 1 }),
+        named_index(
+            "idx_sales_selection_display_items_booklet_batch",
+            doc! { "booklet_id": 1, "batch_id": 1, "effective": 1, "removed": 1 },
+        ),
+    ]
 }
 
 /// 商品池成员按批次查询。
 fn pool_indexes() -> Vec<IndexModel> {
-    vec![named_index(
-        "idx_sales_selection_pool_members_batch",
-        doc! { "booklet_id": 1, "batch_id": 1, "sku.sku_id": 1 },
-    )]
+    vec![
+        unique_index("uk_sales_selection_pool_members_id", doc! { "id": 1 }),
+        named_index(
+            "idx_sales_selection_pool_members_batch",
+            doc! { "booklet_id": 1, "batch_id": 1, "sku.sku_id": 1 },
+        ),
+    ]
 }
 
 /// 准备任务领取与幂等。
 fn task_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_sales_selection_prepare_tasks_id", doc! { "id": 1 }),
         named_index(
             "idx_sales_selection_prepare_tasks_status_deadline",
             doc! { "status": 1, "deadline_at": 1 },
@@ -115,6 +123,7 @@ fn task_indexes() -> Vec<IndexModel> {
 /// 一册每人一份会话，提货券代码全局唯一。
 fn session_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_sales_selection_sessions_id", doc! { "id": 1 }),
         unique_index(
             "uk_sales_selection_sessions_participant",
             doc! { "booklet_id": 1, "participant_id": 1 },
@@ -130,6 +139,7 @@ fn session_indexes() -> Vec<IndexModel> {
 /// 方案编号、一册一份方案、责任范围与客户查询。
 fn proposal_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_sales_selection_proposals_id", doc! { "id": 1 }),
         unique_index("uk_sales_selection_proposals_no", doc! { "proposal_no": 1 }),
         unique_index(
             "uk_sales_selection_proposals_participant",
@@ -145,23 +155,32 @@ fn proposal_indexes() -> Vec<IndexModel> {
 
 /// 方案陈列行。
 fn proposal_display_indexes() -> Vec<IndexModel> {
-    vec![named_index("idx_sales_selection_proposal_display_lines_proposal", doc! { "proposal_id": 1 })]
+    vec![
+        unique_index("uk_sales_selection_proposal_display_lines_id", doc! { "id": 1 }),
+        named_index("idx_sales_selection_proposal_display_lines_proposal", doc! { "proposal_id": 1 }),
+    ]
 }
 
 /// 方案 SKU 行。
 fn proposal_sku_indexes() -> Vec<IndexModel> {
-    vec![named_index(
-        "idx_sales_selection_proposal_sku_lines_proposal",
-        doc! { "proposal_id": 1, "display_item_id": 1 },
-    )]
+    vec![
+        unique_index("uk_sales_selection_proposal_sku_lines_id", doc! { "id": 1 }),
+        named_index(
+            "idx_sales_selection_proposal_sku_lines_proposal",
+            doc! { "proposal_id": 1, "display_item_id": 1 },
+        ),
+    ]
 }
 
 /// 幂等唯一约束。
 fn idempotency_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_sales_selection_idempotency_scope_key",
-        doc! { "operation": 1, "scope_id": 1, "idempotency_key": 1 },
-    )]
+    vec![
+        unique_index("uk_sales_selection_idempotency_id", doc! { "id": 1 }),
+        unique_index(
+            "uk_sales_selection_idempotency_scope_key",
+            doc! { "operation": 1, "scope_id": 1, "idempotency_key": 1 },
+        ),
+    ]
 }
 
 /// 公开限流窗口。
@@ -204,6 +223,27 @@ fn unique_partial_index(name: impl Into<String>, keys: Document, filter: Documen
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        for indexes in [
+            super::booklet_indexes(),
+            super::display_indexes(),
+            super::idempotency_indexes(),
+            super::pool_indexes(),
+            super::task_indexes(),
+            super::proposal_display_indexes(),
+            super::proposal_sku_indexes(),
+            super::proposal_indexes(),
+            super::session_indexes(),
+        ] {
+            assert!(indexes.iter().any(|index| {
+                index.keys == mongodb::bson::doc! { "id": 1 }
+                    && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+            }));
+        }
+    }
+
     use super::*;
 
     #[test]

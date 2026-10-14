@@ -111,15 +111,19 @@ fn supplier_account_indexes() -> Vec<IndexModel> {
 
 /// 返回 `supplier_commercial_profile_revision` 的版本唯一约束索引。
 fn commercial_profile_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_supplier_commercial_profile_revisions_supplier_revision",
-        doc! { "supplier_id": 1, "revision_no": 1 },
-    )]
+    vec![
+        unique_index("uk_supplier_commercial_profile_revisions_id", doc! { "id": 1 }),
+        unique_index(
+            "uk_supplier_commercial_profile_revisions_supplier_revision",
+            doc! { "supplier_id": 1, "revision_no": 1 },
+        ),
+    ]
 }
 
 /// 返回 `supplier_capability` 的身份约束与选品/到期预警索引。
 fn capability_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_supplier_capabilities_id", doc! { "id": 1 }),
         unique_index(
             "uk_supplier_capabilities_supplier_code",
             doc! { "supplier_id": 1, "capability_code": 1 },
@@ -135,15 +139,19 @@ fn capability_indexes() -> Vec<IndexModel> {
 
 /// 返回 `supplier_capability_revision` 的版本唯一约束（追加式修订）。
 fn capability_revision_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_supplier_capability_revisions_identity",
-        doc! { "supplier_id": 1, "capability_code": 1, "revision_no": 1 },
-    )]
+    vec![
+        unique_index("uk_supplier_capability_revisions_id", doc! { "id": 1 }),
+        unique_index(
+            "uk_supplier_capability_revisions_identity",
+            doc! { "supplier_id": 1, "capability_code": 1, "revision_no": 1 },
+        ),
+    ]
 }
 
 /// 返回 `supplier_qualification` 的身份约束与到期预警索引。
 fn qualification_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_supplier_qualifications_id", doc! { "id": 1 }),
         unique_index(
             "uk_supplier_qualifications_identity",
             doc! { "supplier_id": 1, "qualification_type": 1, "certificate_no": 1 },
@@ -162,15 +170,18 @@ fn qualification_indexes() -> Vec<IndexModel> {
 
 /// 返回 `supplier_qualification_revision` 的版本唯一约束（追加式修订）。
 fn qualification_revision_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_supplier_qualification_revisions_identity",
-        doc! {
-            "supplier_id": 1,
-            "qualification_type": 1,
-            "certificate_no": 1,
-            "revision_no": 1,
-        },
-    )]
+    vec![
+        unique_index("uk_supplier_qualification_revisions_id", doc! { "id": 1 }),
+        unique_index(
+            "uk_supplier_qualification_revisions_identity",
+            doc! {
+                "supplier_id": 1,
+                "qualification_type": 1,
+                "certificate_no": 1,
+                "revision_no": 1,
+            },
+        ),
+    ]
 }
 
 /// 返回 `supplier_qualification_capability` 的关联唯一约束。
@@ -179,6 +190,7 @@ fn qualification_revision_indexes() -> Vec<IndexModel> {
 /// 事实行重复，由唯一索引兜底拒绝。
 fn qualification_capability_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_supplier_qualification_capabilities_id", doc! { "id": 1 }),
         unique_index(
             "uk_supplier_qualification_capabilities_link",
             doc! { "qualification_id": 1, "capability_id": 1 },
@@ -195,6 +207,7 @@ fn qualification_capability_indexes() -> Vec<IndexModel> {
 /// 返回 `supplier_rating_revision` 的版本唯一约束与历史查询索引。
 fn rating_revision_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_supplier_rating_revisions_id", doc! { "id": 1 }),
         unique_index(
             "uk_supplier_rating_revisions_supplier_revision",
             doc! { "supplier_id": 1, "revision_no": 1 },
@@ -208,7 +221,10 @@ fn rating_revision_indexes() -> Vec<IndexModel> {
 
 /// 返回根级保存命令的幂等唯一约束。
 fn profile_command_indexes() -> Vec<IndexModel> {
-    vec![unique_index("uk_supplier_profile_commands_idempotency_key", doc! { "idempotency_key": 1 })]
+    vec![
+        unique_index("uk_supplier_profile_commands_id", doc! { "id": 1 }),
+        unique_index("uk_supplier_profile_commands_idempotency_key", doc! { "idempotency_key": 1 }),
+    ]
 }
 
 /// 构建命名普通索引。
@@ -226,6 +242,26 @@ fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        for indexes in [
+            super::commercial_profile_indexes(),
+            super::capability_indexes(),
+            super::capability_revision_indexes(),
+            super::qualification_indexes(),
+            super::qualification_revision_indexes(),
+            super::qualification_capability_indexes(),
+            super::rating_revision_indexes(),
+            super::profile_command_indexes(),
+        ] {
+            assert!(indexes.iter().any(|index| {
+                index.keys == mongodb::bson::doc! { "id": 1 }
+                    && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+            }));
+        }
+    }
+
     use mongodb::bson::doc;
 
     use super::{

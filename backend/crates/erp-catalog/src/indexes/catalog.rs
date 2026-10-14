@@ -124,6 +124,7 @@ fn unit_of_measure_indexes() -> Vec<IndexModel> {
 /// 返回 `sku_attribute` 的身份约束与组合查询索引。
 fn sku_attribute_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_sku_attributes_id", doc! { "id": 1 }),
         unique_index("uk_sku_attributes_attribute_code", doc! { "attribute_code": 1 }),
         named_index("idx_sku_attributes_status_type", doc! { "status": 1, "value_type": 1 }),
     ]
@@ -132,6 +133,7 @@ fn sku_attribute_indexes() -> Vec<IndexModel> {
 /// 返回 `sku_attribute_value` 的身份约束与按属性查询索引。
 fn sku_attribute_value_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_sku_attribute_values_id", doc! { "id": 1 }),
         unique_index("uk_sku_attribute_values_attribute_value", doc! { "attribute_id": 1, "value_code": 1 }),
         named_index("idx_sku_attribute_values_attribute_sort", doc! { "attribute_id": 1, "sort_order": 1 }),
     ]
@@ -140,6 +142,7 @@ fn sku_attribute_value_indexes() -> Vec<IndexModel> {
 /// 返回 `product_category_attribute` 的组合唯一约束与分类查询索引。
 fn product_category_attribute_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_product_category_attributes_id", doc! { "id": 1 }),
         unique_index(
             "uk_product_category_attributes_relation",
             doc! {
@@ -178,14 +181,17 @@ fn product_revision_indexes() -> Vec<IndexModel> {
 
 /// 返回 `product_revision_media` 的组合唯一约束与按修订查询索引。
 fn product_revision_media_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_product_revision_medias_media",
-        doc! {
-            "product_revision_id": 1,
-            "media_role": 1,
-            "sort_order": 1,
-        },
-    )]
+    vec![
+        unique_index("uk_product_revision_medias_id", doc! { "id": 1 }),
+        unique_index(
+            "uk_product_revision_medias_media",
+            doc! {
+                "product_revision_id": 1,
+                "media_role": 1,
+                "sort_order": 1,
+            },
+        ),
+    ]
 }
 
 /// 返回 `sku` 的身份约束与全生命周期签名唯一约束。
@@ -217,6 +223,7 @@ fn sku_revision_indexes() -> Vec<IndexModel> {
 /// 返回 `sku_revision_attribute_value` 的关系唯一约束与正反向查询索引。
 fn sku_revision_attribute_value_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_sku_revision_attribute_values_id", doc! { "id": 1 }),
         unique_index(
             "uk_sku_revision_attribute_values_relation",
             doc! { "sku_revision_id": 1, "sku_attribute_id": 1 },
@@ -235,10 +242,13 @@ fn sku_revision_attribute_value_indexes() -> Vec<IndexModel> {
 
 /// 返回 `voucher_category_profile_revision` 的聚合修订唯一约束。
 fn voucher_category_profile_revision_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_voucher_category_profile_revisions_revision",
-        doc! { "sku_id": 1, "revision_no": 1 },
-    )]
+    vec![
+        unique_index("uk_voucher_category_profile_revisions_id", doc! { "id": 1 }),
+        unique_index(
+            "uk_voucher_category_profile_revisions_revision",
+            doc! { "sku_id": 1, "revision_no": 1 },
+        ),
+    ]
 }
 
 /// 构建命名普通索引。
@@ -285,6 +295,24 @@ fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        for indexes in [
+            super::product_revision_media_indexes(),
+            super::voucher_category_profile_revision_indexes(),
+            super::product_category_attribute_indexes(),
+            super::sku_attribute_value_indexes(),
+            super::sku_attribute_indexes(),
+            super::sku_revision_attribute_value_indexes(),
+        ] {
+            assert!(indexes.iter().any(|index| {
+                index.keys == mongodb::bson::doc! { "id": 1 }
+                    && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+            }));
+        }
+    }
+
     use mongodb::bson::doc;
 
     use super::{

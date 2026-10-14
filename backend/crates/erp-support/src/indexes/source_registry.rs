@@ -45,6 +45,7 @@ pub async fn ensure(db: &Database) -> Result<()> {
 /// 返回 `source_system` 的身份约束和列表查询索引。
 fn source_system_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_source_systems_id", doc! { "id": 1 }),
         unique_index("uk_source_systems_code", doc! { "code": 1 }),
         named_index("idx_source_systems_type_status", doc! { "system_type": 1, "status": 1 }),
     ]
@@ -53,6 +54,7 @@ fn source_system_indexes() -> Vec<IndexModel> {
 /// 返回 `external_identity_map` 的身份约束和状态查询索引。
 fn external_identity_map_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_external_identity_maps_id", doc! { "id": 1 }),
         unique_index(
             "uk_external_identity_maps_identity",
             doc! {
@@ -68,6 +70,7 @@ fn external_identity_map_indexes() -> Vec<IndexModel> {
 /// 返回 `external_identity_target` 的谱系唯一约束与查询索引。
 fn external_identity_target_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_external_identity_targets_id", doc! { "id": 1 }),
         unique_index(
             "uk_external_identity_targets_link",
             doc! {
@@ -88,6 +91,21 @@ fn external_identity_target_indexes() -> Vec<IndexModel> {
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        for indexes in [
+            super::external_identity_map_indexes(),
+            super::external_identity_target_indexes(),
+            super::source_system_indexes(),
+        ] {
+            assert!(indexes.iter().any(|index| {
+                index.keys == mongodb::bson::doc! { "id": 1 }
+                    && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+            }));
+        }
+    }
+
     use mongodb::bson::{Bson, doc};
 
     use super::{external_identity_map_indexes, external_identity_target_indexes, source_system_indexes};

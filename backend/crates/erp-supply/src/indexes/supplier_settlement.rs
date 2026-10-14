@@ -58,6 +58,7 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
 
 fn supplier_settlement_source_evidence_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_supplier_settlement_source_evidence_id", doc! { "id": 1 }),
         unique_index("uk_supplier_settlement_source_evidence_request", doc! { "request_id": 1 }),
         unique_index(
             "uk_supplier_settlement_source_evidence_period_version",
@@ -86,6 +87,7 @@ fn supplier_settlement_source_evidence_indexes() -> Vec<IndexModel> {
 
 fn supplier_settlement_difference_evidence_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_supplier_settlement_difference_evidence_id", doc! { "id": 1 }),
         unique_index("uk_supplier_settlement_difference_evidence_request", doc! { "request_id": 1 }),
         named_index(
             "idx_supplier_settlement_difference_evidence_difference",
@@ -103,6 +105,7 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 /// 返回 `supplier_settlement_statement` 的身份约束和查询索引（§6.20）。
 fn supplier_settlement_statement_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_supplier_settlement_statements_id", doc! { "id": 1 }),
         unique_index("uk_supplier_settlement_statements_statement_no", doc! { "statement_no": 1 }),
         // §6.20「有外部账单时 (supplier_id, external_bill_no, external_bill_version) 唯一」：
         // 部分唯一索引，外部账单身份为空（纯 ERP 结算单）时多条记录不受约束；
@@ -150,15 +153,19 @@ fn supplier_settlement_statement_indexes() -> Vec<IndexModel> {
 
 /// 返回 `supplier_settlement_item` 的身份约束索引（§6.20）。
 fn supplier_settlement_item_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_supplier_settlement_items_statement_fulfillment_item",
-        doc! { "statement_id": 1, "supplier_fulfillment_item_id": 1 },
-    )]
+    vec![
+        unique_index("uk_supplier_settlement_items_id", doc! { "id": 1 }),
+        unique_index(
+            "uk_supplier_settlement_items_statement_fulfillment_item",
+            doc! { "statement_id": 1, "supplier_fulfillment_item_id": 1 },
+        ),
+    ]
 }
 
 /// 返回 `supplier_settlement_difference` 的查询索引（§6.20）。
 fn supplier_settlement_difference_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_supplier_settlement_differences_id", doc! { "id": 1 }),
         named_index("idx_supplier_settlement_differences_statement_item", doc! { "statement_item_id": 1 }),
         named_index("idx_supplier_settlement_differences_status", doc! { "status": 1 }),
     ]
@@ -189,6 +196,23 @@ fn partial_unique_index(name: impl Into<String>, keys: Document, filter: Documen
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        for indexes in [
+            super::supplier_settlement_difference_evidence_indexes(),
+            super::supplier_settlement_difference_indexes(),
+            super::supplier_settlement_item_indexes(),
+            super::supplier_settlement_source_evidence_indexes(),
+            super::supplier_settlement_statement_indexes(),
+        ] {
+            assert!(indexes.iter().any(|index| {
+                index.keys == mongodb::bson::doc! { "id": 1 }
+                    && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+            }));
+        }
+    }
+
     use mongodb::bson::doc;
 
     use super::{

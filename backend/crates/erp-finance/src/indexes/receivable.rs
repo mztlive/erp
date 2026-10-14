@@ -51,6 +51,7 @@ pub async fn ensure(db: &Database) -> Result<()> {
         db,
         <Database as ReceivableExt>::SALES_INVOICE_REQUESTS,
         vec![
+            unique_index("uk_sales_invoice_requests_id", doc! { "id": 1 }),
             unique_index("uk_invoice_request_no", doc! {"request_no": 1}),
             named_index("idx_invoice_request_account_status", doc! {"receivable_account_id": 1, "status": 1}),
             named_index("idx_invoice_request_sales", doc! {"sales_order_id": 1, "created_at": -1, "id": 1}),
@@ -87,6 +88,7 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 /// 返回 `receivable_account` 的身份约束与往来列表索引。
 fn receivable_account_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_receivable_accounts_id", doc! { "id": 1 }),
         unique_index("uk_receivable_accounts_sales_order", doc! { "sales_order_id": 1, "account_seq": 1 }),
         named_index("idx_receivable_accounts_aging", doc! { "counterparty_party_id": 1, "status": 1 }),
         named_index("idx_receivable_accounts_customer", doc! { "customer_id": 1, "status": 1 }),
@@ -96,6 +98,7 @@ fn receivable_account_indexes() -> Vec<IndexModel> {
 /// 返回 `receivable_entry` 的业务幂等与账龄索引。
 fn receivable_entry_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_receivable_entries_id", doc! { "id": 1 }),
         unique_index(
             "uk_receivable_entries_identity",
             doc! {
@@ -115,6 +118,7 @@ fn receivable_entry_indexes() -> Vec<IndexModel> {
 /// 返回 `receivable_entry_offset` 的抵销序号与累计冲减索引。
 fn receivable_entry_offset_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_receivable_entry_offsets_id", doc! { "id": 1 }),
         unique_index(
             "uk_receivable_entry_offsets_decrease",
             doc! { "decrease_entry_id": 1, "offset_sequence": 1 },
@@ -126,6 +130,7 @@ fn receivable_entry_offset_indexes() -> Vec<IndexModel> {
 /// 返回 `customer_receipt` 的单号唯一与往来列表索引。
 fn customer_receipt_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_customer_receipts_id", doc! { "id": 1 }),
         unique_index("uk_customer_receipts_no", doc! { "receipt_no": 1 }),
         named_index(
             "idx_customer_receipts_pending_entry",
@@ -142,6 +147,7 @@ fn customer_receipt_indexes() -> Vec<IndexModel> {
 /// 返回 `receipt_allocation` 的分配序号与反向追溯索引。
 fn receipt_allocation_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_receipt_allocations_id", doc! { "id": 1 }),
         unique_index(
             "uk_receipt_allocations_receipt_seq",
             doc! { "customer_receipt_id": 1, "allocation_seq": 1 },
@@ -172,6 +178,7 @@ fn uncoded_index_options() -> IndexOptions {
 /// 返回 `invoice` 的登记唯一与查询索引。
 fn invoice_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_invoices_id", doc! { "id": 1 }),
         unique_index(
             "uk_invoices_coded",
             doc! { "invoice_direction": 1, "normalized_code": 1, "normalized_no": 1 },
@@ -188,6 +195,7 @@ fn invoice_indexes() -> Vec<IndexModel> {
 /// 返回 `sales_invoice_allocation` 的分配序号与账户追溯索引。
 fn sales_invoice_allocation_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_sales_invoice_allocations_id", doc! { "id": 1 }),
         unique_index(
             "uk_sales_invoice_allocations_invoice_seq",
             doc! { "invoice_id": 1, "allocation_seq": 1 },
@@ -212,6 +220,25 @@ fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        for indexes in [
+            super::receivable_account_indexes(),
+            super::receivable_entry_indexes(),
+            super::customer_receipt_indexes(),
+            super::invoice_indexes(),
+            super::receipt_allocation_indexes(),
+            super::receivable_entry_offset_indexes(),
+            super::sales_invoice_allocation_indexes(),
+        ] {
+            assert!(indexes.iter().any(|index| {
+                index.keys == mongodb::bson::doc! { "id": 1 }
+                    && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+            }));
+        }
+    }
+
     use mongodb::IndexModel;
     use mongodb::bson::{Bson, doc};
 

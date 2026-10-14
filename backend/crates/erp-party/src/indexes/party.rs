@@ -111,6 +111,7 @@ fn party_indexes() -> Vec<IndexModel> {
 /// 返回 `party_revision` 的版本唯一约束与名称搜索索引。
 fn party_revision_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_party_revisions_id", doc! { "id": 1 }),
         unique_index("uk_party_revisions_party_revision", doc! { "party_id": 1, "revision_no": 1 }),
         named_index("idx_party_revisions_names", doc! { "legal_name": 1, "short_name": 1 }),
     ]
@@ -119,6 +120,7 @@ fn party_revision_indexes() -> Vec<IndexModel> {
 /// 返回 `party_contact` 的主体/状态列表与手机指纹查询索引。
 fn party_contact_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_party_contacts_id", doc! { "id": 1 }),
         named_index("idx_party_contacts_party_status", doc! { "party_id": 1, "status": 1, "is_default": 1 }),
         named_index("idx_party_contacts_mobile_hmac", doc! { "mobile_query_hmac": 1 }),
     ]
@@ -126,20 +128,24 @@ fn party_contact_indexes() -> Vec<IndexModel> {
 
 /// 返回 `party_address` 的主体/类型列表索引。
 fn party_address_indexes() -> Vec<IndexModel> {
-    vec![named_index(
-        "idx_party_addresses_party_type",
-        doc! { "party_id": 1, "address_type": 1, "status": 1 },
-    )]
+    vec![
+        unique_index("uk_party_addresses_id", doc! { "id": 1 }),
+        named_index("idx_party_addresses_party_type", doc! { "party_id": 1, "address_type": 1, "status": 1 }),
+    ]
 }
 
 /// 返回 `party_tax_profile` 的主体列表索引。
 fn party_tax_profile_indexes() -> Vec<IndexModel> {
-    vec![named_index("idx_party_tax_profiles_party", doc! { "party_id": 1, "status": 1, "is_default": 1 })]
+    vec![
+        unique_index("uk_party_tax_profiles_id", doc! { "id": 1 }),
+        named_index("idx_party_tax_profiles_party", doc! { "party_id": 1, "status": 1, "is_default": 1 }),
+    ]
 }
 
 /// 返回 `party_bank_account` 的身份约束和列表查询索引。
 fn party_bank_account_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_party_bank_accounts_id", doc! { "id": 1 }),
         unique_index("uk_party_bank_accounts_bank_account_no", doc! { "bank_account_no": 1 }),
         unique_index(
             "uk_party_bank_accounts_party_hmac",
@@ -181,6 +187,23 @@ fn partial_unique_index(name: impl Into<String>, keys: Document, partial_filter:
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        for indexes in [
+            super::party_revision_indexes(),
+            super::party_contact_indexes(),
+            super::party_address_indexes(),
+            super::party_tax_profile_indexes(),
+            super::party_bank_account_indexes(),
+        ] {
+            assert!(indexes.iter().any(|index| {
+                index.keys == mongodb::bson::doc! { "id": 1 }
+                    && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+            }));
+        }
+    }
+
     use mongodb::bson::{Bson, doc};
 
     use super::{party_bank_account_indexes, party_indexes, party_revision_indexes};

@@ -66,6 +66,7 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 /// 返回 `sales_return_case` 的编号唯一与处理队列索引。
 fn sales_return_case_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_sales_return_cases_id", doc! { "id": 1 }),
         unique_index("uk_sales_return_cases_no", doc! { "return_no": 1 }),
         named_index("idx_sales_return_cases_order_status", doc! { "sales_order_id": 1, "status": 1 }),
         named_index("idx_sales_return_cases_status", doc! { "status": 1 }),
@@ -75,6 +76,7 @@ fn sales_return_case_indexes() -> Vec<IndexModel> {
 /// 返回 `sales_return_line` 的退货单与原明细追溯索引。
 fn sales_return_line_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_sales_return_lines_id", doc! { "id": 1 }),
         named_index("idx_sales_return_lines_case", doc! { "sales_return_case_id": 1 }),
         named_index("idx_sales_return_lines_order_line", doc! { "sales_order_line_id": 1 }),
     ]
@@ -83,6 +85,7 @@ fn sales_return_line_indexes() -> Vec<IndexModel> {
 /// 返回 `purchase_return_order` 的编号唯一与采购单追溯索引。
 fn purchase_return_order_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_purchase_return_orders_id", doc! { "id": 1 }),
         unique_index("uk_purchase_return_orders_no", doc! { "purchase_return_no": 1 }),
         named_index("idx_purchase_return_orders_po_status", doc! { "purchase_order_id": 1, "status": 1 }),
     ]
@@ -91,6 +94,7 @@ fn purchase_return_order_indexes() -> Vec<IndexModel> {
 /// 返回 `purchase_return_line` 的退货单追溯索引。
 fn purchase_return_line_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_purchase_return_lines_id", doc! { "id": 1 }),
         named_index("idx_purchase_return_lines_order", doc! { "purchase_return_order_id": 1 }),
         named_index("idx_purchase_return_lines_rev_line", doc! { "purchase_order_revision_line_id": 1 }),
     ]
@@ -99,6 +103,7 @@ fn purchase_return_line_indexes() -> Vec<IndexModel> {
 /// 返回 `customer_refund` 的编号唯一、列表与原事实追溯索引。
 fn customer_refund_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_customer_refunds_id", doc! { "id": 1 }),
         unique_index("uk_customer_refunds_no", doc! { "refund_no": 1 }),
         named_index("idx_customer_refunds_customer_status", doc! { "customer_id": 1, "status": 1 }),
         named_index(
@@ -111,6 +116,7 @@ fn customer_refund_indexes() -> Vec<IndexModel> {
 /// 返回 `supplier_refund` 的编号唯一、列表与原事实追溯索引。
 fn supplier_refund_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_supplier_refunds_id", doc! { "id": 1 }),
         unique_index("uk_supplier_refunds_no", doc! { "refund_no": 1 }),
         named_index("idx_supplier_refunds_supplier_status", doc! { "supplier_id": 1, "status": 1 }),
         named_index(
@@ -123,6 +129,7 @@ fn supplier_refund_indexes() -> Vec<IndexModel> {
 /// 返回 `receipt_reversal` 的编号唯一与原回款追溯索引。
 fn receipt_reversal_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_receipt_reversals_id", doc! { "id": 1 }),
         unique_index("uk_receipt_reversals_no", doc! { "reversal_no": 1 }),
         named_index(
             "idx_receipt_reversals_original",
@@ -134,6 +141,7 @@ fn receipt_reversal_indexes() -> Vec<IndexModel> {
 /// 返回 `payment_reversal` 的编号唯一与原付款追溯索引。
 fn payment_reversal_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_payment_reversals_id", doc! { "id": 1 }),
         unique_index("uk_payment_reversals_no", doc! { "reversal_no": 1 }),
         named_index(
             "idx_payment_reversals_original",
@@ -157,6 +165,26 @@ fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        for indexes in [
+            super::customer_refund_indexes(),
+            super::payment_reversal_indexes(),
+            super::purchase_return_line_indexes(),
+            super::purchase_return_order_indexes(),
+            super::receipt_reversal_indexes(),
+            super::sales_return_case_indexes(),
+            super::sales_return_line_indexes(),
+            super::supplier_refund_indexes(),
+        ] {
+            assert!(indexes.iter().any(|index| {
+                index.keys == mongodb::bson::doc! { "id": 1 }
+                    && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+            }));
+        }
+    }
+
     use mongodb::IndexModel;
     use mongodb::bson::doc;
 
@@ -225,17 +253,22 @@ mod tests {
             super::receipt_reversal_indexes(),
             super::payment_reversal_indexes(),
         ];
-        assert_eq!(groups.each_ref().map(Vec::len), [3, 2, 2, 2, 3, 3, 2, 2]);
+        assert_eq!(groups.each_ref().map(Vec::len), [4, 3, 3, 3, 4, 4, 3, 3]);
         let expected = [
+            ("uk_sales_return_cases_id", doc! { "id": 1 }, true),
             ("uk_sales_return_cases_no", doc! { "return_no": 1 }, true),
             ("idx_sales_return_cases_order_status", doc! { "sales_order_id": 1, "status": 1 }, false),
             ("idx_sales_return_cases_status", doc! { "status": 1 }, false),
+            ("uk_sales_return_lines_id", doc! { "id": 1 }, true),
             ("idx_sales_return_lines_case", doc! { "sales_return_case_id": 1 }, false),
             ("idx_sales_return_lines_order_line", doc! { "sales_order_line_id": 1 }, false),
+            ("uk_purchase_return_orders_id", doc! { "id": 1 }, true),
             ("uk_purchase_return_orders_no", doc! { "purchase_return_no": 1 }, true),
             ("idx_purchase_return_orders_po_status", doc! { "purchase_order_id": 1, "status": 1 }, false),
+            ("uk_purchase_return_lines_id", doc! { "id": 1 }, true),
             ("idx_purchase_return_lines_order", doc! { "purchase_return_order_id": 1 }, false),
             ("idx_purchase_return_lines_rev_line", doc! { "purchase_order_revision_line_id": 1 }, false),
+            ("uk_customer_refunds_id", doc! { "id": 1 }, true),
             ("uk_customer_refunds_no", doc! { "refund_no": 1 }, true),
             ("idx_customer_refunds_customer_status", doc! { "customer_id": 1, "status": 1 }, false),
             (
@@ -243,6 +276,7 @@ mod tests {
                 doc! { "original_receipt_id": 1, "original_receivable_entry_id": 1 },
                 false,
             ),
+            ("uk_supplier_refunds_id", doc! { "id": 1 }, true),
             ("uk_supplier_refunds_no", doc! { "refund_no": 1 }, true),
             ("idx_supplier_refunds_supplier_status", doc! { "supplier_id": 1, "status": 1 }, false),
             (
@@ -250,12 +284,14 @@ mod tests {
                 doc! { "original_payment_id": 1, "original_payable_entry_id": 1 },
                 false,
             ),
+            ("uk_receipt_reversals_id", doc! { "id": 1 }, true),
             ("uk_receipt_reversals_no", doc! { "reversal_no": 1 }, true),
             (
                 "idx_receipt_reversals_original",
                 doc! { "original_customer_receipt_id": 1, "status": 1 },
                 false,
             ),
+            ("uk_payment_reversals_id", doc! { "id": 1 }, true),
             ("uk_payment_reversals_no", doc! { "reversal_no": 1 }, true),
             (
                 "idx_payment_reversals_original",

@@ -98,6 +98,7 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 /// 返回 `sales_order` 的身份约束与业务列表查询索引。
 fn sales_order_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_sales_orders_id", doc! { "id": 1 }),
         IndexModel::builder()
             .keys(doc! { "sales_owner_user_id": 1, "deleted_at": 1, "created_at": -1, "id": -1 })
             .options(IndexOptions::builder().name("idx_sales_order_owner_created".to_string()).build())
@@ -130,12 +131,16 @@ fn sales_order_indexes() -> Vec<IndexModel> {
 
 /// 返回 `sales_order_line` 的稳定明细唯一约束。
 fn sales_order_line_indexes() -> Vec<IndexModel> {
-    vec![unique_index("uk_sales_order_lines_order_line", doc! { "sales_order_id": 1, "line_no": 1 })]
+    vec![
+        unique_index("uk_sales_order_lines_id", doc! { "id": 1 }),
+        unique_index("uk_sales_order_lines_order_line", doc! { "sales_order_id": 1, "line_no": 1 }),
+    ]
 }
 
 /// 返回 `sales_order_working_copy` 的有效唯一约束与列表查询索引。
 fn working_copy_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_sales_order_working_copies_id", doc! { "id": 1 }),
         unique_partial_index(
             "uk_sales_order_working_copies_active_per_purpose",
             doc! { "sales_order_id": 1, "working_purpose": 1 },
@@ -156,15 +161,19 @@ fn working_copy_indexes() -> Vec<IndexModel> {
 
 /// 返回 `sales_order_working_copy_line` 的明细唯一约束。
 fn working_copy_line_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_sales_order_working_copy_lines_copy_line",
-        doc! { "working_copy_id": 1, "sales_order_line_id": 1 },
-    )]
+    vec![
+        unique_index("uk_sales_order_working_copy_lines_id", doc! { "id": 1 }),
+        unique_index(
+            "uk_sales_order_working_copy_lines_copy_line",
+            doc! { "working_copy_id": 1, "sales_order_line_id": 1 },
+        ),
+    ]
 }
 
 /// 返回 `sales_order_submission` 的身份约束与历史查询索引。
 fn submission_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_sales_order_submissions_id", doc! { "id": 1 }),
         unique_index(
             "uk_sales_order_submissions_order_submission_no",
             doc! { "sales_order_id": 1, "submission_no": 1 },
@@ -179,15 +188,19 @@ fn submission_indexes() -> Vec<IndexModel> {
 
 /// 返回 `sales_order_submission_line` 的明细唯一约束。
 fn submission_line_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_sales_order_submission_lines_submission_line",
-        doc! { "submission_id": 1, "sales_order_line_id": 1 },
-    )]
+    vec![
+        unique_index("uk_sales_order_submission_lines_id", doc! { "id": 1 }),
+        unique_index(
+            "uk_sales_order_submission_lines_submission_line",
+            doc! { "submission_id": 1, "sales_order_line_id": 1 },
+        ),
+    ]
 }
 
 /// 返回 `sales_order_revision` 的身份约束与历史/幂等查询索引。
 fn revision_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_sales_order_revisions_id", doc! { "id": 1 }),
         unique_index(
             "uk_sales_order_revisions_order_revision_no",
             doc! { "sales_order_id": 1, "revision_no": 1 },
@@ -206,6 +219,7 @@ fn revision_indexes() -> Vec<IndexModel> {
 /// 返回 `sales_order_revision_line` 的公共行唯一约束与履约期限索引。
 fn revision_line_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_sales_order_revision_lines_id", doc! { "id": 1 }),
         unique_index(
             "uk_sales_order_revision_lines_revision_line",
             doc! { "sales_order_revision_id": 1, "sales_order_line_id": 1 },
@@ -219,12 +233,18 @@ fn revision_line_indexes() -> Vec<IndexModel> {
 
 /// 返回 `sales_order_goods_service_line_revision` 的一对一唯一约束。
 fn goods_service_line_revision_indexes() -> Vec<IndexModel> {
-    vec![unique_index("uk_sales_order_goods_service_line_revisions_line", doc! { "revision_line_id": 1 })]
+    vec![
+        unique_index("uk_sales_order_goods_service_line_revisions_id", doc! { "id": 1 }),
+        unique_index("uk_sales_order_goods_service_line_revisions_line", doc! { "revision_line_id": 1 }),
+    ]
 }
 
 /// 返回 `sales_order_voucher_line_revision` 的一对一唯一约束。
 fn voucher_line_revision_indexes() -> Vec<IndexModel> {
-    vec![unique_index("uk_sales_order_voucher_line_revisions_line", doc! { "revision_line_id": 1 })]
+    vec![
+        unique_index("uk_sales_order_voucher_line_revisions_id", doc! { "id": 1 }),
+        unique_index("uk_sales_order_voucher_line_revisions_line", doc! { "revision_line_id": 1 }),
+    ]
 }
 
 /// 构建命名普通索引。
@@ -252,6 +272,28 @@ fn unique_partial_index(name: impl Into<String>, keys: Document, filter: Documen
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        for indexes in [
+            super::sales_order_indexes(),
+            super::sales_order_line_indexes(),
+            super::working_copy_indexes(),
+            super::working_copy_line_indexes(),
+            super::submission_indexes(),
+            super::submission_line_indexes(),
+            super::revision_indexes(),
+            super::revision_line_indexes(),
+            super::goods_service_line_revision_indexes(),
+            super::voucher_line_revision_indexes(),
+        ] {
+            assert!(indexes.iter().any(|index| {
+                index.keys == mongodb::bson::doc! { "id": 1 }
+                    && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+            }));
+        }
+    }
+
     use mongodb::bson::doc;
 
     use super::{

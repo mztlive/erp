@@ -31,6 +31,7 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
 /// 返回启用选择器唯一索引及列表、负责人查询索引。
 fn indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_procurement_responsibility_rules_id", doc! { "id": 1 }),
         IndexModel::builder()
             .keys(doc! { "selector_key": 1 })
             .options(
@@ -67,8 +68,33 @@ fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
     IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
 
+/// 构造稳定主键唯一索引。
+///
+/// # 参数
+/// * `name` - 稳定索引名
+/// * `keys` - 索引键
+///
+/// # 返回
+/// 返回唯一索引模型。
+fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
+    IndexModel::builder()
+        .keys(keys)
+        .options(IndexOptions::builder().name(name.into()).unique(true).build())
+        .build()
+}
+
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        let indexes = super::indexes();
+        assert!(indexes.iter().any(|index| {
+            index.keys == mongodb::bson::doc! { "id": 1 }
+                && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+        }));
+    }
+
     use entity_core::NOT_DELETED_TIMESTAMP_BSON;
     use mongodb::bson::doc;
 

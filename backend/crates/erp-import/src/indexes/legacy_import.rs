@@ -56,6 +56,7 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 /// 返回 `legacy_import_batch` 的身份约束和查询索引。
 fn legacy_import_batch_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_legacy_import_batches_id", doc! { "id": 1 }),
         unique_index("uk_legacy_import_batches_batch_no", doc! { "batch_no": 1 }),
         named_index(
             "idx_legacy_import_batches_reimport_warning",
@@ -77,6 +78,7 @@ fn legacy_import_batch_indexes() -> Vec<IndexModel> {
 ///    时间字段后调整（见 P2 报告偏差）。
 fn legacy_import_row_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_legacy_import_rows_id", doc! { "id": 1 }),
         unique_index(
             "uk_legacy_import_rows_batch_identity",
             doc! {
@@ -101,6 +103,7 @@ fn legacy_import_row_indexes() -> Vec<IndexModel> {
 /// 返回 `legacy_import_confirmation` 的身份约束与矩阵查询索引。
 fn legacy_import_confirmation_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_legacy_import_confirmations_id", doc! { "id": 1 }),
         unique_index(
             "uk_legacy_import_confirmations_scope_trial",
             doc! {
@@ -142,6 +145,21 @@ fn ttl_index(name: impl Into<String>, keys: Document, expire_after_seconds: i64)
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        for indexes in [
+            super::legacy_import_batch_indexes(),
+            super::legacy_import_confirmation_indexes(),
+            super::legacy_import_row_indexes(),
+        ] {
+            assert!(indexes.iter().any(|index| {
+                index.keys == mongodb::bson::doc! { "id": 1 }
+                    && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+            }));
+        }
+    }
+
     use mongodb::bson::doc;
 
     use super::{

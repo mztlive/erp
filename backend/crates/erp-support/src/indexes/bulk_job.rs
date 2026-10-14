@@ -54,6 +54,7 @@ fn bulk_selection_snapshot_indexes() -> Vec<IndexModel> {
 /// 返回 `bulk_selection_item` 的目标唯一约束与结果筛选索引。
 fn bulk_selection_item_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_bulk_selection_items_id", doc! { "id": 1 }),
         unique_index(
             "uk_bulk_selection_items_target",
             doc! {
@@ -72,6 +73,7 @@ fn bulk_selection_item_indexes() -> Vec<IndexModel> {
 /// 返回 `background_job` 的身份约束与任务中心查询索引。
 fn background_job_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_background_jobs_id", doc! { "id": 1 }),
         unique_index("uk_background_jobs_no", doc! { "job_no": 1 }),
         unique_index("uk_background_jobs_request_id", doc! { "request_id": 1 }),
         named_index("idx_background_jobs_status_created", doc! { "status": 1, "created_at": -1 }),
@@ -83,6 +85,7 @@ fn background_job_indexes() -> Vec<IndexModel> {
 /// 返回 `background_job_item` 的逐项唯一约束与结果筛选索引。
 fn background_job_item_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_background_job_items_id", doc! { "id": 1 }),
         unique_index("uk_background_job_items_no", doc! { "background_job_id": 1, "item_no": 1 }),
         named_index("idx_background_job_items_status", doc! { "background_job_id": 1, "status": 1 }),
     ]
@@ -90,6 +93,21 @@ fn background_job_item_indexes() -> Vec<IndexModel> {
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        for indexes in [
+            super::background_job_item_indexes(),
+            super::background_job_indexes(),
+            super::bulk_selection_item_indexes(),
+        ] {
+            assert!(indexes.iter().any(|index| {
+                index.keys == mongodb::bson::doc! { "id": 1 }
+                    && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+            }));
+        }
+    }
+
     use mongodb::bson::doc;
 
     use super::{

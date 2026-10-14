@@ -45,6 +45,7 @@ pub async fn ensure(db: &Database) -> Result<()> {
 /// 返回 `file_asset` 的身份约束、扫描队列与到期查询索引。
 fn file_asset_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_file_assets_id", doc! { "id": 1 }),
         unique_index("uk_file_assets_storage_key", doc! { "storage_object_key": 1 }),
         named_index(
             "idx_file_assets_scan_retention",
@@ -65,6 +66,16 @@ fn document_attachment_indexes() -> Vec<IndexModel> {
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        let indexes = super::file_asset_indexes();
+        assert!(indexes.iter().any(|index| {
+            index.keys == mongodb::bson::doc! { "id": 1 }
+                && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+        }));
+    }
+
     use mongodb::bson::doc;
 
     use super::{document_attachment_indexes, file_asset_indexes};

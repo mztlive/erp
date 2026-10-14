@@ -80,6 +80,7 @@ fn non_empty_document_no_filter() -> Document {
 /// 返回 `document_relation` 的关系唯一约束与反向查询索引。
 fn document_relation_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_document_relations_id", doc! { "id": 1 }),
         unique_index(
             "uk_document_relations_link",
             doc! {
@@ -146,6 +147,16 @@ fn named_partial_index(name: impl Into<String>, keys: Document, filter: Document
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        let indexes = super::document_relation_indexes();
+        assert!(indexes.iter().any(|index| {
+            index.keys == mongodb::bson::doc! { "id": 1 }
+                && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+        }));
+    }
+
     use mongodb::bson::doc;
 
     use super::{

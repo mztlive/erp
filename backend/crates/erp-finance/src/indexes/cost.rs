@@ -45,6 +45,7 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 /// 返回 `cost_entry` 的业务幂等与利润查询索引。
 fn cost_entry_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_cost_entries_id", doc! { "id": 1 }),
         unique_index(
             "uk_cost_entries_identity",
             doc! {
@@ -65,6 +66,7 @@ fn cost_entry_indexes() -> Vec<IndexModel> {
 /// 返回 `cost_allocation` 的经营归属查询索引。
 fn cost_allocation_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_cost_allocations_id", doc! { "id": 1 }),
         named_index("idx_cost_allocations_entry", doc! { "cost_entry_id": 1 }),
         named_index(
             "idx_cost_allocations_sales_order",
@@ -88,6 +90,17 @@ fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        for indexes in [super::cost_allocation_indexes(), super::cost_entry_indexes()] {
+            assert!(indexes.iter().any(|index| {
+                index.keys == mongodb::bson::doc! { "id": 1 }
+                    && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+            }));
+        }
+    }
+
     use mongodb::IndexModel;
     use mongodb::bson::doc;
 

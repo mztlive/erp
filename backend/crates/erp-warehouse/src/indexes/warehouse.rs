@@ -52,6 +52,7 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
 /// 返回 `warehouse` 的身份约束与启停查询索引。
 fn warehouse_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_warehouses_id", doc! { "id": 1 }),
         unique_index("uk_warehouses_warehouse_code", doc! { "warehouse_code": 1 }),
         named_index("idx_warehouses_status", doc! { "status": 1 }),
     ]
@@ -60,6 +61,7 @@ fn warehouse_indexes() -> Vec<IndexModel> {
 /// 返回 `warehouse_revision` 的聚合修订唯一约束与查询索引。
 fn warehouse_revision_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_warehouse_revisions_id", doc! { "id": 1 }),
         unique_index("uk_warehouse_revisions_revision", doc! { "warehouse_id": 1, "revision_no": 1 }),
         // 「同一仓库有效期不得重叠」的保守子集（§6.3）：同一仓库生效开始日
         // 相同必然重叠，直接拒绝；完整区间重叠校验在 P3 Service 事务内完成。
@@ -73,6 +75,7 @@ fn warehouse_revision_indexes() -> Vec<IndexModel> {
 /// 返回 `warehouse_sku_policy` 的启用区间唯一子集与查询索引。
 fn warehouse_sku_policy_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_warehouse_sku_policies_id", doc! { "id": 1 }),
         // 「同一仓库和 SKU 的启用区间不得重叠」的保守子集（§6.3）：同仓库同
         // SKU 生效开始日相同必然重叠，直接拒绝；完整区间重叠校验在 P3
         // Service 事务内以范围查询完成。
@@ -108,6 +111,21 @@ fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        for indexes in [
+            super::warehouse_indexes(),
+            super::warehouse_revision_indexes(),
+            super::warehouse_sku_policy_indexes(),
+        ] {
+            assert!(indexes.iter().any(|index| {
+                index.keys == mongodb::bson::doc! { "id": 1 }
+                    && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+            }));
+        }
+    }
+
     use mongodb::bson::doc;
 
     use super::{warehouse_indexes, warehouse_revision_indexes, warehouse_sku_policy_indexes};

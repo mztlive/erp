@@ -60,6 +60,7 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 /// 返回 `payable_account` 的来源唯一与账龄索引。
 fn payable_account_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_payable_accounts_id", doc! { "id": 1 }),
         unique_index("uk_payable_accounts_source", doc! { "source_type": 1, "source_document_id": 1 }),
         named_index("idx_payable_accounts_aging", doc! { "supplier_id": 1, "status": 1 }),
     ]
@@ -68,6 +69,7 @@ fn payable_account_indexes() -> Vec<IndexModel> {
 /// 返回 `payable_entry` 的业务幂等与账龄索引。
 fn payable_entry_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_payable_entries_id", doc! { "id": 1 }),
         unique_index(
             "uk_payable_entries_identity",
             doc! {
@@ -91,6 +93,7 @@ fn payable_entry_indexes() -> Vec<IndexModel> {
 /// 返回 `payable_entry_offset` 的抵销序号与累计冲减索引。
 fn payable_entry_offset_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_payable_entry_offsets_id", doc! { "id": 1 }),
         unique_index(
             "uk_payable_entry_offsets_decrease",
             doc! { "decrease_entry_id": 1, "offset_sequence": 1 },
@@ -102,6 +105,7 @@ fn payable_entry_offset_indexes() -> Vec<IndexModel> {
 /// 返回 `supplier_payment` 的单号唯一与往来列表索引。
 fn supplier_payment_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_supplier_payments_id", doc! { "id": 1 }),
         unique_index("uk_supplier_payments_no", doc! { "payment_no": 1 }),
         named_index("idx_supplier_payments_supplier_status", doc! { "supplier_id": 1, "status": 1 }),
         named_index(
@@ -118,6 +122,7 @@ fn supplier_payment_indexes() -> Vec<IndexModel> {
 /// 返回 `payment_allocation` 的分配序号与双向追溯索引。
 fn payment_allocation_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_payment_allocations_id", doc! { "id": 1 }),
         unique_index(
             "uk_payment_allocations_payment_seq",
             doc! { "supplier_payment_id": 1, "allocation_seq": 1 },
@@ -136,6 +141,7 @@ fn payment_allocation_indexes() -> Vec<IndexModel> {
 /// `drop_index`（先回滚应用代码再移除索引）。
 fn purchase_invoice_allocation_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_purchase_invoice_allocations_id", doc! { "id": 1 }),
         unique_index(
             "uk_purchase_invoice_allocations_invoice_seq",
             doc! { "invoice_id": 1, "allocation_seq": 1 },
@@ -168,6 +174,24 @@ fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        for indexes in [
+            super::payable_account_indexes(),
+            super::payable_entry_indexes(),
+            super::payable_entry_offset_indexes(),
+            super::payment_allocation_indexes(),
+            super::purchase_invoice_allocation_indexes(),
+            super::supplier_payment_indexes(),
+        ] {
+            assert!(indexes.iter().any(|index| {
+                index.keys == mongodb::bson::doc! { "id": 1 }
+                    && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+            }));
+        }
+    }
+
     use mongodb::IndexModel;
     use mongodb::bson::doc;
 

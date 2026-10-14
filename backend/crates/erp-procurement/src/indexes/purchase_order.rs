@@ -119,6 +119,7 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 /// 服务端汇总派生，无法直接建索引，见 P2 报告）。
 fn purchase_order_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_purchase_orders_id", doc! { "id": 1 }),
         IndexModel::builder()
             .keys(doc! { "owner_user_id": 1, "deleted_at": 1, "created_at": -1, "id": -1 })
             .options(IndexOptions::builder().name("idx_purchase_order_owner_created".to_string()).build())
@@ -168,6 +169,7 @@ fn is_current_purchase_no_index(index: &IndexModel) -> bool {
 /// `submitted_at` 表达，财务审核队列按（采购单, 状态, 提交时间）过滤。
 fn purchase_order_submission_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_purchase_order_submissions_id", doc! { "id": 1 }),
         unique_index(
             "uk_purchase_order_submissions_order_no",
             doc! { "purchase_order_id": 1, "submission_no": 1 },
@@ -182,6 +184,7 @@ fn purchase_order_submission_indexes() -> Vec<IndexModel> {
 /// 返回 `purchase_order_submission_line` 的行号唯一约束。
 fn purchase_order_submission_line_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_purchase_order_submission_lines_id", doc! { "id": 1 }),
         named_index(
             "idx_purchase_submission_offering_source",
             doc! { "supplier_offering_source.supplier_offering_id": 1, "deleted_at": 1, "purchase_order_submission_id": 1 },
@@ -195,15 +198,19 @@ fn purchase_order_submission_line_indexes() -> Vec<IndexModel> {
 
 /// 返回 `purchase_order_revision` 的版本号唯一约束。
 fn purchase_order_revision_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_purchase_order_revisions_order_no",
-        doc! { "purchase_order_id": 1, "revision_no": 1 },
-    )]
+    vec![
+        unique_index("uk_purchase_order_revisions_id", doc! { "id": 1 }),
+        unique_index(
+            "uk_purchase_order_revisions_order_no",
+            doc! { "purchase_order_id": 1, "revision_no": 1 },
+        ),
+    ]
 }
 
 /// 返回 `purchase_order_revision_line` 的版本内行号唯一约束（§6.6）。
 fn purchase_order_revision_line_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_purchase_order_revision_lines_id", doc! { "id": 1 }),
         named_index(
             "idx_purchase_revision_offering_source",
             doc! { "supplier_offering_source.supplier_offering_id": 1, "deleted_at": 1, "purchase_order_revision_id": 1 },
@@ -221,6 +228,7 @@ fn purchase_order_revision_line_indexes() -> Vec<IndexModel> {
 /// 在前，供「被满足的销售明细 → 采购分配」查询与入库预占回源使用。
 fn purchase_line_sales_allocation_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_purchase_line_sales_allocations_id", doc! { "id": 1 }),
         unique_index(
             "uk_purchase_line_sales_allocations_link",
             doc! {
@@ -240,23 +248,32 @@ fn purchase_line_sales_allocation_indexes() -> Vec<IndexModel> {
 
 /// 返回 `purchase_change_order` 的变更历史查询索引。
 fn purchase_change_order_indexes() -> Vec<IndexModel> {
-    vec![named_index("idx_purchase_change_orders_order_status", doc! { "purchase_order_id": 1, "status": 1 })]
+    vec![
+        unique_index("uk_purchase_change_orders_id", doc! { "id": 1 }),
+        named_index("idx_purchase_change_orders_order_status", doc! { "purchase_order_id": 1, "status": 1 }),
+    ]
 }
 
 /// 返回 `purchase_change_submission` 的提交序号唯一约束（§6.6）。
 fn purchase_change_submission_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_purchase_change_submissions_order_no",
-        doc! { "purchase_change_order_id": 1, "submission_no": 1 },
-    )]
+    vec![
+        unique_index("uk_purchase_change_submissions_id", doc! { "id": 1 }),
+        unique_index(
+            "uk_purchase_change_submissions_order_no",
+            doc! { "purchase_change_order_id": 1, "submission_no": 1 },
+        ),
+    ]
 }
 
 /// 返回 `purchase_change_submission_line` 的变更提交内行号唯一约束。
 fn purchase_change_submission_line_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_purchase_change_submission_lines_order_line",
-        doc! { "purchase_change_submission_id": 1, "line_no": 1 },
-    )]
+    vec![
+        unique_index("uk_purchase_change_submission_lines_id", doc! { "id": 1 }),
+        unique_index(
+            "uk_purchase_change_submission_lines_order_line",
+            doc! { "purchase_change_submission_id": 1, "line_no": 1 },
+        ),
+    ]
 }
 
 /// 构建命名普通索引。
@@ -284,6 +301,27 @@ fn unique_partial_index(name: impl Into<String>, keys: Document, filter: Documen
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        for indexes in [
+            super::purchase_order_indexes(),
+            super::purchase_order_submission_indexes(),
+            super::purchase_order_submission_line_indexes(),
+            super::purchase_change_order_indexes(),
+            super::purchase_change_submission_line_indexes(),
+            super::purchase_change_submission_indexes(),
+            super::purchase_line_sales_allocation_indexes(),
+            super::purchase_order_revision_line_indexes(),
+            super::purchase_order_revision_indexes(),
+        ] {
+            assert!(indexes.iter().any(|index| {
+                index.keys == mongodb::bson::doc! { "id": 1 }
+                    && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+            }));
+        }
+    }
+
     use mongodb::bson::doc;
 
     use super::{

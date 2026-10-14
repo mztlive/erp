@@ -55,6 +55,7 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 /// 返回 `customer_account` 的身份约束和列表查询索引。
 fn customer_account_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_customer_accounts_id", doc! { "id": 1 }),
         unique_index("uk_customer_accounts_party", doc! { "party_id": 1 }),
         unique_index("uk_customer_accounts_customer_no", doc! { "customer_no": 1 }),
         named_index("idx_customer_accounts_status", doc! { "status": 1 }),
@@ -64,6 +65,7 @@ fn customer_account_indexes() -> Vec<IndexModel> {
 /// 返回 `customer_assignment` 的重复行约束与「我的客户」查询索引。
 fn customer_assignment_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_customer_assignments_id", doc! { "id": 1 }),
         unique_index(
             "uk_customer_assignments_window",
             doc! {
@@ -83,7 +85,10 @@ fn customer_assignment_indexes() -> Vec<IndexModel> {
 
 /// 返回客户资料根级保存命令的幂等唯一约束。
 fn customer_profile_command_indexes() -> Vec<IndexModel> {
-    vec![unique_index("uk_customer_profile_commands_idempotency_key", doc! { "idempotency_key": 1 })]
+    vec![
+        unique_index("uk_customer_profile_commands_id", doc! { "id": 1 }),
+        unique_index("uk_customer_profile_commands_idempotency_key", doc! { "idempotency_key": 1 }),
+    ]
 }
 
 /// 构建命名普通索引。
@@ -101,6 +106,21 @@ fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        for indexes in [
+            super::customer_account_indexes(),
+            super::customer_assignment_indexes(),
+            super::customer_profile_command_indexes(),
+        ] {
+            assert!(indexes.iter().any(|index| {
+                index.keys == mongodb::bson::doc! { "id": 1 }
+                    && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+            }));
+        }
+    }
+
     use mongodb::bson::doc;
 
     use super::{customer_account_indexes, customer_assignment_indexes, customer_profile_command_indexes};
@@ -152,8 +172,10 @@ mod tests {
     #[test]
     fn customer_profile_command_key_is_unique() {
         let indexes = customer_profile_command_indexes();
-        assert_eq!(indexes.len(), 1);
-        assert_eq!(indexes[0].keys, doc! { "idempotency_key": 1 });
-        assert_eq!(indexes[0].options.as_ref().unwrap().unique, Some(true));
+        assert_eq!(indexes.len(), 2);
+        for keys in [doc! { "id": 1 }, doc! { "idempotency_key": 1 }] {
+            let index = indexes.iter().find(|index| index.keys == keys).unwrap();
+            assert_eq!(index.options.as_ref().unwrap().unique, Some(true));
+        }
     }
 }

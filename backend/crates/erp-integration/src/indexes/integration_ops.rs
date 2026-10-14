@@ -84,6 +84,7 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 /// `(message_type, business_fact_key)` 全局唯一索引，无需部分索引。
 fn inbox_message_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_inbox_messages_id", doc! { "id": 1 }),
         unique_index("uk_inbox_messages_identity", doc! { "source_system_id": 1, "source_event_id": 1 }),
         unique_index("uk_inbox_messages_business_fact", doc! { "message_type": 1, "business_fact_key": 1 }),
         named_index("idx_inbox_messages_backlog", doc! { "status": 1, "received_at": 1 }),
@@ -105,6 +106,7 @@ fn inbox_message_indexes() -> Vec<IndexModel> {
 /// 改为 `unique_index("uk_integration_error_tasks_message_class", ...)` 全量唯一即可。
 fn integration_error_task_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_integration_error_tasks_id", doc! { "id": 1 }),
         partial_unique_index(
             "uk_integration_error_tasks_message_class",
             doc! { "message_id": 1, "error_class": 1 },
@@ -131,6 +133,7 @@ fn integration_error_task_indexes() -> Vec<IndexModel> {
 /// 返回 `reconciliation_difference` 的对象唯一约束与差异查询索引（§6.21）。
 fn reconciliation_difference_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_reconciliation_differences_id", doc! { "id": 1 }),
         unique_index(
             "uk_reconciliation_differences_object",
             doc! {
@@ -160,6 +163,7 @@ fn reconciliation_difference_indexes() -> Vec<IndexModel> {
 /// 支撑「读取某差异全部处理记录」与「取最后一条派生当前状态」的历史查询。
 fn reconciliation_difference_resolution_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_reconciliation_difference_resolutions_id", doc! { "id": 1 }),
         unique_index(
             "uk_reconciliation_difference_resolutions_no",
             doc! { "reconciliation_difference_id": 1, "resolution_no": 1 },
@@ -204,6 +208,22 @@ fn partial_unique_index(name: impl Into<String>, keys: Document, partial_filter:
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        for indexes in [
+            super::inbox_message_indexes(),
+            super::integration_error_task_indexes(),
+            super::reconciliation_difference_resolution_indexes(),
+            super::reconciliation_difference_indexes(),
+        ] {
+            assert!(indexes.iter().any(|index| {
+                index.keys == mongodb::bson::doc! { "id": 1 }
+                    && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+            }));
+        }
+    }
+
     use mongodb::bson::doc;
 
     use super::{

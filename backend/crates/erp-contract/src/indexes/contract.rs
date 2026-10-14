@@ -47,6 +47,7 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 /// 返回 `contract` 的身份约束和列表查询索引。
 fn contract_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_contracts_id", doc! { "id": 1 }),
         unique_index("uk_contracts_contract_no", doc! { "contract_no": 1 }),
         named_index("idx_contracts_customer_status", doc! { "customer_id": 1, "status": 1 }),
     ]
@@ -55,6 +56,7 @@ fn contract_indexes() -> Vec<IndexModel> {
 /// 返回 `contract_revision` 的版本唯一约束与有效期查询索引。
 fn contract_revision_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_contract_revisions_id", doc! { "id": 1 }),
         unique_index("uk_contract_revisions_contract_revision", doc! { "contract_id": 1, "revision_no": 1 }),
         named_index("idx_contract_revisions_validity", doc! { "contract_id": 1, "valid_to": 1 }),
     ]
@@ -75,6 +77,17 @@ fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        for indexes in [super::contract_indexes(), super::contract_revision_indexes()] {
+            assert!(indexes.iter().any(|index| {
+                index.keys == mongodb::bson::doc! { "id": 1 }
+                    && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+            }));
+        }
+    }
+
     use mongodb::bson::doc;
 
     use super::{contract_indexes, contract_revision_indexes};

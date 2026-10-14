@@ -73,6 +73,7 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 /// 返回 `purchase_receipt` 的身份约束和采购维度查询索引（§6.7）。
 fn purchase_receipt_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_purchase_receipts_id", doc! { "id": 1 }),
         unique_index("uk_purchase_receipts_receipt_no", doc! { "receipt_no": 1 }),
         named_index(
             "idx_purchase_receipts_po_status_posted",
@@ -83,15 +84,19 @@ fn purchase_receipt_indexes() -> Vec<IndexModel> {
 
 /// 返回 `purchase_receipt_line` 的行级唯一约束（§6.7）。
 fn purchase_receipt_line_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_purchase_receipt_lines_header_line",
-        doc! { "purchase_receipt_id": 1, "line_no": 1 },
-    )]
+    vec![
+        unique_index("uk_purchase_receipt_lines_id", doc! { "id": 1 }),
+        unique_index(
+            "uk_purchase_receipt_lines_header_line",
+            doc! { "purchase_receipt_id": 1, "line_no": 1 },
+        ),
+    ]
 }
 
 /// 返回 `delivery` 的身份约束和销售维度/物流查询索引（§6.7）。
 fn delivery_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_deliveries_id", doc! { "id": 1 }),
         unique_index("uk_deliveries_delivery_no", doc! { "delivery_no": 1 }),
         named_index("idx_deliveries_sales_order_status", doc! { "sales_order_id": 1, "status": 1 }),
         named_index("idx_deliveries_tracking_no", doc! { "tracking_no": 1 }),
@@ -100,12 +105,16 @@ fn delivery_indexes() -> Vec<IndexModel> {
 
 /// 返回 `delivery_line` 的行级唯一约束（§6.7）。
 fn delivery_line_indexes() -> Vec<IndexModel> {
-    vec![unique_index("uk_delivery_lines_header_line", doc! { "delivery_id": 1, "line_no": 1 })]
+    vec![
+        unique_index("uk_delivery_lines_id", doc! { "id": 1 }),
+        unique_index("uk_delivery_lines_header_line", doc! { "delivery_id": 1, "line_no": 1 }),
+    ]
 }
 
 /// 返回 `electronic_delivery` 的身份约束和明细履约查询索引（§6.7）。
 fn electronic_delivery_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_electronic_deliveries_id", doc! { "id": 1 }),
         unique_index("uk_electronic_deliveries_fulfillment_no", doc! { "fulfillment_no": 1 }),
         named_index(
             "idx_electronic_deliveries_line_occurred",
@@ -117,6 +126,7 @@ fn electronic_delivery_indexes() -> Vec<IndexModel> {
 /// 返回 `service_fulfillment` 的身份约束和明细履约查询索引（§6.7）。
 fn service_fulfillment_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_service_fulfillments_id", doc! { "id": 1 }),
         unique_index("uk_service_fulfillments_fulfillment_no", doc! { "fulfillment_no": 1 }),
         named_index(
             "idx_service_fulfillments_line_occurred",
@@ -128,6 +138,7 @@ fn service_fulfillment_indexes() -> Vec<IndexModel> {
 /// 返回 `customer_acceptance` 的身份约束和销售维度查询索引（§6.7）。
 fn customer_acceptance_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_customer_acceptances_id", doc! { "id": 1 }),
         unique_index("uk_customer_acceptances_acceptance_no", doc! { "acceptance_no": 1 }),
         named_index(
             "idx_customer_acceptances_sales_order_accepted",
@@ -138,10 +149,13 @@ fn customer_acceptance_indexes() -> Vec<IndexModel> {
 
 /// 返回 `customer_acceptance_line` 的行级唯一约束（§6.7）。
 fn customer_acceptance_line_indexes() -> Vec<IndexModel> {
-    vec![unique_index(
-        "uk_customer_acceptance_lines_header_line",
-        doc! { "customer_acceptance_id": 1, "line_no": 1 },
-    )]
+    vec![
+        unique_index("uk_customer_acceptance_lines_id", doc! { "id": 1 }),
+        unique_index(
+            "uk_customer_acceptance_lines_header_line",
+            doc! { "customer_acceptance_id": 1, "line_no": 1 },
+        ),
+    ]
 }
 
 /// 返回 `acceptance_fulfillment_allocation` 的净验收分配查询索引（§6.7）。
@@ -150,6 +164,7 @@ fn customer_acceptance_line_indexes() -> Vec<IndexModel> {
 /// 与按履约事实（类型 + 事实行）双向取数。
 fn allocation_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_acceptance_fulfillment_allocations_id", doc! { "id": 1 }),
         named_index(
             "idx_acceptance_fulfillment_allocations_acceptance_line",
             doc! { "customer_acceptance_line_id": 1 },
@@ -176,6 +191,27 @@ fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
 
 #[cfg(test)]
 mod tests {
+    /// 按稳定主键查询与乐观锁更新依赖 `id` 唯一索引，否则退化为集合扫描。
+    #[test]
+    fn collections_look_up_by_unique_stable_id() {
+        for indexes in [
+            super::allocation_indexes(),
+            super::customer_acceptance_line_indexes(),
+            super::customer_acceptance_indexes(),
+            super::delivery_indexes(),
+            super::delivery_line_indexes(),
+            super::electronic_delivery_indexes(),
+            super::purchase_receipt_line_indexes(),
+            super::purchase_receipt_indexes(),
+            super::service_fulfillment_indexes(),
+        ] {
+            assert!(indexes.iter().any(|index| {
+                index.keys == mongodb::bson::doc! { "id": 1 }
+                    && index.options.as_ref().and_then(|options| options.unique) == Some(true)
+            }));
+        }
+    }
+
     use mongodb::bson::doc;
 
     use super::{
