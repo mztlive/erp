@@ -91,6 +91,21 @@ impl BusinessDate {
         self.0
     }
 
+    /// 判断日期是否在有效期内：生效日当天起有效，失效日当天起失效（左闭右开）。
+    ///
+    /// # 参数
+    /// * `valid_from` - 生效日（含）
+    /// * `valid_to` - 失效日（不含）；空表示长期有效
+    ///
+    /// # 返回
+    /// `valid_from <= self < valid_to` 时为真。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    pub fn is_within(self, valid_from: BusinessDate, valid_to: Option<BusinessDate>) -> bool {
+        valid_from <= self && valid_to.is_none_or(|until| self < until)
+    }
+
     /// 拆分为年/月/日。
     ///
     /// # 参数
@@ -410,5 +425,17 @@ mod tests {
         assert!(earlier < later);
         assert!(later > earlier);
         assert_eq!(earlier, Instant::from_unix_secs(100));
+    }
+
+    #[test]
+    fn validity_window_includes_start_and_excludes_end() {
+        let date = |value: &str| value.parse::<BusinessDate>().unwrap();
+        let start = date("2026-10-01");
+        let end = Some(date("2026-10-16"));
+        assert!(date("2026-10-01").is_within(start, end));
+        assert!(date("2026-10-15").is_within(start, end));
+        assert!(!date("2026-10-16").is_within(start, end));
+        assert!(!date("2026-09-30").is_within(start, end));
+        assert!(date("2099-01-01").is_within(start, None));
     }
 }

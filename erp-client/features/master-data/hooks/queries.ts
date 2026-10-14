@@ -2,6 +2,7 @@
 
 import {
     keepPreviousData,
+    useInfiniteQuery,
     useMutation,
     useQuery,
     useQueryClient,
@@ -17,6 +18,7 @@ import {
     fetchProductFilterOptions,
     fetchProductListSkus,
     fetchSkuSupplierCounts,
+    listSellableItemsPage,
     updateProductListingStatus,
 } from "@/features/master-data/api"
 import { fetchFileAsset } from "@/features/master-data/api/media-assets"
@@ -84,6 +86,45 @@ export function useMasterDataListQuery(query: MasterDataListQuery) {
         queryFn: () => fetchMasterDataList(query),
         // 筛选进 queryKey：换条件时保留上一页，避免 isPending 把整页卸成骨架
         placeholderData: keepPreviousData,
+    })
+}
+
+/** 公司商品池表格：服务端分页与排序，只取当前页。 */
+export function useSellablePageQuery(
+    query: MasterDataListQuery & { page: number; pageSize: number },
+    enabled: boolean,
+) {
+    return useQuery({
+        queryKey: [...masterDataKeys.all, "sellable-page", query] as const,
+        queryFn: () => listSellableItemsPage(query),
+        placeholderData: keepPreviousData,
+        enabled,
+    })
+}
+
+/** 公司商品池卡片：滚动到底时按页追加。 */
+export function useSellableInfiniteQuery(
+    query: MasterDataListQuery,
+    pageSize: number,
+    enabled: boolean,
+) {
+    return useInfiniteQuery({
+        queryKey: [
+            ...masterDataKeys.all,
+            "sellable-infinite",
+            query,
+            pageSize,
+        ] as const,
+        queryFn: ({ pageParam }) =>
+            listSellableItemsPage({ ...query, page: pageParam, pageSize }),
+        initialPageParam: 1,
+        getNextPageParam: (last, pages) =>
+            pages.reduce((count, page) => count + page.rows.length, 0) <
+            last.total
+                ? pages.length + 1
+                : undefined,
+        placeholderData: keepPreviousData,
+        enabled,
     })
 }
 

@@ -239,7 +239,7 @@ fn qualified_supply(facts: &CreationBasisFacts, offering: &OfferingFact) -> Resu
         return Ok(None);
     };
     let today = BusinessDate::today();
-    if revision.valid_from > today || revision.valid_to.is_some_and(|valid_to| valid_to < today) {
+    if !today.is_within(revision.valid_from, revision.valid_to) {
         return Ok(None);
     }
     let Some(availability) = facts.availabilities.get(&offering.base.id.to_string()) else {

@@ -8,6 +8,10 @@ import { useAppForm } from "@/components/form"
 import { useListUrl } from "@/features/master-data/hooks/use-list-url"
 import { productSalesPriceRangeError } from "@/features/master-data/lib/list-filters"
 import {
+    parseSellableDeliveryExtent,
+    type SellableDeliveryExtent,
+} from "@/features/master-data/lib/sellable-delivery-filter"
+import {
     parseSellableListLayout,
     type SellableListLayout,
 } from "@/features/master-data/lib/sellable-list-layout"
@@ -27,10 +31,11 @@ export type SellableFilterKey =
     | "productBrandId"
     | "productSupplierId"
     | "supplyRegion"
+    | "deliveryRegion"
     | "supplyPreset"
     | "salesPrice"
 
-/** 公司商品池：搜索 + 类型 / 分类 / 品牌 / 区域 / 售价。 */
+/** 公司商品池：搜索 + 类型 / 分类 / 品牌 / 区域 / 配送地区 / 售价。 */
 export function useSellableListFilters(
     searchInputRef: React.RefObject<HTMLInputElement | null>,
 ) {
@@ -53,6 +58,12 @@ export function useSellableListFilters(
     const productBrandId =
         searchParams.get("productBrandId")?.trim() || undefined
     const supplyRegion = searchParams.get("supplyRegion")?.trim() || undefined
+    const deliveryRegion =
+        searchParams.get("deliveryRegion")?.trim() || undefined
+    const deliveryExtent = parseSellableDeliveryExtent(
+        searchParams.get("deliveryExtent"),
+    )
+    const includeFreightExtra = searchParams.get("freightExtra") === "1"
     const productPriceKind = parsePriceFilterKind(
         searchParams.get("productPriceKind"),
     )
@@ -64,6 +75,7 @@ export function useSellableListFilters(
         productCategoryId ||
         productBrandId ||
         supplyRegion ||
+        deliveryRegion ||
         productSalesPriceMin ||
         productSalesPriceMax,
     )
@@ -86,6 +98,9 @@ export function useSellableListFilters(
             productSalesPriceMinDraft: productSalesPriceMin ?? "",
             productSalesPriceMaxDraft: productSalesPriceMax ?? "",
             supplyRegionDraft: supplyRegion ?? "",
+            deliveryRegionDraft: deliveryRegion ?? "",
+            deliveryExtentDraft: deliveryExtent as SellableDeliveryExtent,
+            freightExtraDraft: includeFreightExtra,
         },
         onSubmit: ({ value }) => {
             const minimum = value.productSalesPriceMinDraft.trim()
@@ -107,6 +122,11 @@ export function useSellableListFilters(
                 productSupplierId: null,
                 supplyPreset: null,
                 supplyRegion: value.supplyRegionDraft.trim() || null,
+                ...deliveryUrlPatch(
+                    value.deliveryRegionDraft,
+                    value.deliveryExtentDraft,
+                    value.freightExtraDraft,
+                ),
                 productPriceKind:
                     minimum || maximum ? value.productPriceKindDraft : null,
                 productSalesPriceMin: minimum || null,
@@ -127,6 +147,9 @@ export function useSellableListFilters(
         productSalesPriceMinDraft,
         productSalesPriceMaxDraft,
         supplyRegionDraft,
+        deliveryRegionDraft,
+        deliveryExtentDraft,
+        freightExtraDraft,
     } = useStore(form.store, (state) => state.values)
     const setSearchDraft = React.useCallback(
         (value: string) => form.setFieldValue("searchDraft", value),
@@ -166,6 +189,28 @@ export function useSellableListFilters(
         (value: string) => form.setFieldValue("supplyRegionDraft", value),
         [form],
     )
+    const setDeliveryRegionDraft = React.useCallback(
+        (value: string) => form.setFieldValue("deliveryRegionDraft", value),
+        [form],
+    )
+    const setDeliveryExtentDraft = React.useCallback(
+        (value: SellableDeliveryExtent) =>
+            form.setFieldValue("deliveryExtentDraft", value),
+        [form],
+    )
+    const setFreightExtraDraft = React.useCallback(
+        (value: boolean) => form.setFieldValue("freightExtraDraft", value),
+        [form],
+    )
+    /** 配送地区三项一起设置、一起清除。 */
+    const setDeliveryDrafts = React.useCallback(
+        (region: string, extent: SellableDeliveryExtent, freight: boolean) => {
+            setDeliveryRegionDraft(region)
+            setDeliveryExtentDraft(extent)
+            setFreightExtraDraft(freight)
+        },
+        [setDeliveryRegionDraft, setDeliveryExtentDraft, setFreightExtraDraft],
+    )
 
     const commitSearch = React.useCallback(() => {
         const next = searchDraft.trim()
@@ -193,6 +238,7 @@ export function useSellableListFilters(
             if (key === "productCategoryId") setProductCategoryIdDraft(null)
             if (key === "productBrandId") setProductBrandIdDraft(null)
             if (key === "supplyRegion") setSupplyRegionDraft("")
+            if (key === "deliveryRegion") setDeliveryDrafts("", "FULL", false)
             if (key === "salesPrice") {
                 setProductPriceKindDraft("dropship")
                 setProductSalesPriceMinDraft("")
@@ -207,7 +253,9 @@ export function useSellableListFilters(
                           productSalesPriceMax: null,
                           page: null,
                       }
-                    : { [key]: null, page: null },
+                    : key === "deliveryRegion"
+                      ? { ...deliveryUrlPatch("", "FULL", false), page: null }
+                      : { [key]: null, page: null },
             )
             resetPagination()
         },
@@ -222,6 +270,7 @@ export function useSellableListFilters(
             setProductSalesPriceMinDraft,
             setProductSalesPriceMaxDraft,
             setSupplyRegionDraft,
+            setDeliveryDrafts,
         ],
     )
 
@@ -232,6 +281,7 @@ export function useSellableListFilters(
         setProductSalesPriceMinDraft("")
         setProductSalesPriceMaxDraft("")
         setSupplyRegionDraft("")
+        setDeliveryDrafts("", "FULL", false)
         setProductSalesPriceError(null)
     }, [
         setProductBrandIdDraft,
@@ -239,18 +289,28 @@ export function useSellableListFilters(
         setProductSalesPriceMinDraft,
         setProductSalesPriceMaxDraft,
         setSupplyRegionDraft,
+        setDeliveryDrafts,
     ])
 
     /** 取消、外点和 Esc 只恢复低频草稿，保留搜索、商品类型和分类。 */
     const cancelMoreFilters = React.useCallback(() => {
         setProductBrandIdDraft(productBrandId ?? null)
         setSupplyRegionDraft(supplyRegion ?? "")
+        setDeliveryDrafts(
+            deliveryRegion ?? "",
+            deliveryExtent,
+            includeFreightExtra,
+        )
         setProductPriceKindDraft(productPriceKind)
         setProductSalesPriceMinDraft(productSalesPriceMin ?? "")
         setProductSalesPriceMaxDraft(productSalesPriceMax ?? "")
         setProductSalesPriceError(null)
         setSellableFilterPanelOpen(false)
     }, [
+        deliveryExtent,
+        deliveryRegion,
+        includeFreightExtra,
+        setDeliveryDrafts,
         productBrandId,
         productSalesPriceMax,
         productPriceKind,
@@ -269,6 +329,10 @@ export function useSellableListFilters(
         productCategoryIdDraft !== (productCategoryId ?? null) ||
         productBrandIdDraft !== (productBrandId ?? null) ||
         supplyRegionDraft.trim() !== (supplyRegion ?? "") ||
+        deliveryRegionDraft !== (deliveryRegion ?? "") ||
+        (Boolean(deliveryRegionDraft) &&
+            (deliveryExtentDraft !== deliveryExtent ||
+                freightExtraDraft !== includeFreightExtra)) ||
         (Boolean(
             productSalesPriceMinDraft.trim() ||
             productSalesPriceMaxDraft.trim(),
@@ -286,9 +350,11 @@ export function useSellableListFilters(
         setProductSalesPriceMinDraft("")
         setProductSalesPriceMaxDraft("")
         setSupplyRegionDraft("")
+        setDeliveryDrafts("", "FULL", false)
         setProductSalesPriceError(null)
         setSellableFilterPanelOpen(false)
         patchUrl({
+            ...deliveryUrlPatch("", "FULL", false),
             q: null,
             productKind: null,
             eligibilityAsOf: null,
@@ -314,6 +380,7 @@ export function useSellableListFilters(
         setProductSalesPriceMinDraft,
         setProductSalesPriceMaxDraft,
         setSupplyRegionDraft,
+        setDeliveryDrafts,
     ])
 
     React.useEffect(() => {
@@ -337,6 +404,14 @@ export function useSellableListFilters(
     }, [supplyRegion, setSupplyRegionDraft])
 
     React.useEffect(() => {
+        setDeliveryDrafts(
+            deliveryRegion ?? "",
+            deliveryExtent,
+            includeFreightExtra,
+        )
+    }, [deliveryRegion, deliveryExtent, includeFreightExtra, setDeliveryDrafts])
+
+    React.useEffect(() => {
         setProductPriceKindDraft(productPriceKind)
         setProductSalesPriceMinDraft(productSalesPriceMin ?? "")
         setProductSalesPriceMaxDraft(productSalesPriceMax ?? "")
@@ -358,6 +433,9 @@ export function useSellableListFilters(
         productCategoryId,
         productBrandId,
         supplyRegion,
+        deliveryRegion,
+        deliveryExtent,
+        includeFreightExtra,
         productPriceKind,
         productSalesPriceMin,
         productSalesPriceMax,
@@ -382,6 +460,12 @@ export function useSellableListFilters(
         setProductSalesPriceMaxDraft,
         supplyRegionDraft,
         setSupplyRegionDraft,
+        deliveryRegionDraft,
+        setDeliveryRegionDraft,
+        deliveryExtentDraft,
+        setDeliveryExtentDraft,
+        freightExtraDraft,
+        setFreightExtraDraft,
         productSalesPriceError,
         setProductSalesPriceError,
         pagination,
@@ -393,5 +477,18 @@ export function useSellableListFilters(
         resetMoreFilters,
         cancelMoreFilters,
         clearAllFilters,
+    }
+}
+
+/** 未选地区时范围与运费另计不进入地址栏；默认值也不写入。 */
+function deliveryUrlPatch(
+    region: string,
+    extent: SellableDeliveryExtent,
+    includeFreightExtra: boolean,
+) {
+    return {
+        deliveryRegion: region || null,
+        deliveryExtent: region && extent === "PARTIAL" ? "PARTIAL" : null,
+        freightExtra: region && includeFreightExtra ? "1" : null,
     }
 }

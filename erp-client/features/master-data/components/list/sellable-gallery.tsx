@@ -7,7 +7,6 @@ import { listWorkspaceEmptyStateClassName } from "@/components/business/list-wor
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { SellableGalleryCard } from "@/features/master-data/components/list/sellable-gallery-card"
-import { SELLABLE_GALLERY_BATCH_SIZE } from "@/features/master-data/lib/sellable-list-layout"
 import type { MasterDataListItem } from "@/features/master-data/types"
 
 const galleryGridClassName =
@@ -28,6 +27,10 @@ function GallerySkeletons() {
 
 export function SellableItemsGallery({
     rows,
+    total,
+    hasMore,
+    loadingMore,
+    onLoadMore,
     loading,
     failed,
     error,
@@ -41,6 +44,12 @@ export function SellableItemsGallery({
     onPreview,
 }: {
     rows: readonly MasterDataListItem[]
+    /** 符合条件的总件数。 */
+    total: number
+    /** 服务端还有未加载的页。 */
+    hasMore: boolean
+    loadingMore: boolean
+    onLoadMore: () => void
     loading: boolean
     failed: boolean
     error: unknown
@@ -53,22 +62,10 @@ export function SellableItemsGallery({
     onToggle: (id: string, selected: boolean) => void
     onPreview: (row: MasterDataListItem) => void
 }) {
-    const [visibleCount, setVisibleCount] = React.useState(
-        SELLABLE_GALLERY_BATCH_SIZE,
-    )
     const sentinelRef = React.useRef<HTMLDivElement | null>(null)
-
-    React.useEffect(() => {
-        setVisibleCount(SELLABLE_GALLERY_BATCH_SIZE)
-    }, [rows])
-
-    const visibleRows = rows.slice(0, visibleCount)
-    const hasMore = visibleCount < rows.length
     const revealMore = React.useCallback(() => {
-        setVisibleCount((current) =>
-            Math.min(rows.length, current + SELLABLE_GALLERY_BATCH_SIZE),
-        )
-    }, [rows.length])
+        if (!loadingMore) onLoadMore()
+    }, [loadingMore, onLoadMore])
 
     React.useEffect(() => {
         if (!hasMore) return
@@ -82,7 +79,7 @@ export function SellableItemsGallery({
         )
         observer.observe(element)
         return () => observer.disconnect()
-    }, [hasMore, revealMore, visibleRows.length])
+    }, [hasMore, revealMore, rows.length])
 
     if (failed) {
         return (
@@ -144,7 +141,7 @@ export function SellableItemsGallery({
                 id="master-data-sellable-items-gallery"
                 className={galleryGridClassName}
             >
-                {visibleRows.map((row) => (
+                {rows.map((row) => (
                     <SellableGalleryCard
                         key={row.stableId}
                         row={row}
@@ -167,14 +164,15 @@ export function SellableItemsGallery({
                         type="button"
                         variant="outline"
                         size="sm"
+                        disabled={loadingMore}
                         onClick={revealMore}
                     >
-                        加载更多
+                        {loadingMore ? "加载中…" : "加载更多"}
                     </Button>
                 </div>
             ) : rows.length > 0 ? (
                 <p className="pb-4 text-center text-xs text-muted-foreground">
-                    已显示全部 {rows.length} 件
+                    已显示全部 {total} 件
                 </p>
             ) : null}
         </div>

@@ -1,4 +1,5 @@
 import type { PriceFilterKind } from "@/lib/price-filter"
+import type { DeliveryExtent } from "@/lib/delivery-coverage"
 
 export type SelectionForm = "SINGLE_SKU" | "PACKAGE"
 export type SubmitMode = "BY_QUANTITY" | "MALL_REDEEM" | "PICKUP_VOUCHER"
@@ -33,6 +34,12 @@ export type PoolFilterSnapshot = {
     price_kind?: PriceFilterKind
     sales_price_min?: string
     sales_price_max?: string
+    /** 配送地区代码（省、市或区县）。 */
+    delivery_region_code?: string
+    /** 配送地区范围，默认全部可送。 */
+    delivery_extent?: DeliveryExtent
+    /** 把需另付运费的地区算作可送。 */
+    include_freight_extra?: boolean
 }
 
 export type BookletListItem = {

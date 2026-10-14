@@ -1,5 +1,6 @@
 //! 可售查询消费的筛选条件与稳定行合同。
 use erp_core::common::time::BusinessDate;
+use erp_core::delivery_coverage::DeliveryCoverageQuery;
 use erp_core::money::{Amount, Quantity};
 use serde::{Deserialize, Serialize};
 
@@ -33,6 +34,12 @@ pub struct SellableSkuFilter {
     pub sales_price_min: Option<Amount>,
     /// 所选含税参考价上限（含）；`None` 表示无上限。
     pub sales_price_max: Option<Amount>,
+    /// 按配送地区筛选；`None` 表示不筛选。按预算覆盖匹配，允许短暂滞后。
+    pub delivery: Option<DeliveryCoverageQuery>,
+    /// 只在这些 SKU 中查询（勾选导出与复核）；`None` 表示不限。
+    pub sku_ids: Option<Vec<String>>,
+    /// 排序；默认按 SKU 编号升序。
+    pub sort: SellableSort,
     /// 服务端解释的销售资格业务日期。
     pub eligibility_as_of: BusinessDate,
     /// 页码（1 起）。
@@ -65,6 +72,9 @@ impl SellableSkuFilter {
             price_kind: SellablePriceKind::default(),
             sales_price_min: None,
             sales_price_max: None,
+            delivery: None,
+            sku_ids: None,
+            sort: SellableSort::default(),
             eligibility_as_of,
             page: 1,
             page_size: 1,
@@ -132,4 +142,64 @@ pub struct SellableSkuRow {
     /// 当前有效供给的可供区域并集。
     #[serde(default)]
     pub supply_regions: Vec<String>,
+    /// 按地区筛选且含运费另计时，所选地区内是否有需另付运费才能送到的地方。
+    #[serde(default)]
+    pub delivery_freight_extra: bool,
+    /// 当前商品品牌；供预算投影按品牌筛选。
+    #[serde(default)]
+    pub brand_id: Option<String>,
+    /// 当前商品名称；供预算投影按关键字匹配。
+    #[serde(default)]
+    pub product_name: Option<String>,
+}
+
+/// 公司商品池排序字段。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SellableSortField {
+    /// SKU 编号。
+    #[default]
+    SkuNo,
+    /// 一件代发价。
+    DropshipPrice,
+    /// 集采价。
+    BulkPrice,
+    /// 市场价。
+    MarketPrice,
+    /// SKU 集采起订数量。
+    BulkMinQuantity,
+    /// 有效供应商数量。
+    SupplierCount,
+}
+
+impl SellableSortField {
+    /// 返回排序字段在商品池行中的字段名。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回 [`SellableSkuRow`] 的序列化字段名。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn row_field(self) -> &'static str {
+        match self {
+            Self::SkuNo => "sku_no",
+            Self::DropshipPrice => "sales_visible_price_gross",
+            Self::BulkPrice => "bulk_price_gross",
+            Self::MarketPrice => "market_price",
+            Self::BulkMinQuantity => "bulk_min_quantity",
+            Self::SupplierCount => "supplier_count",
+        }
+    }
+}
+
+/// 公司商品池排序；同值按 SKU 编号与 SKU 稳定排序。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SellableSort {
+    /// 排序字段。
+    pub field: SellableSortField,
+    /// 是否降序。
+    pub descending: bool,
 }

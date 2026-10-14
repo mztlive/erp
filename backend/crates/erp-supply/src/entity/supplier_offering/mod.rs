@@ -9,6 +9,7 @@ mod availability;
 mod command;
 mod delivery_template;
 mod offering;
+mod sku_delivery_coverage;
 mod types;
 pub mod write_data;
 
@@ -21,6 +22,10 @@ pub use delivery_template::{
 pub use offering::{
     FromGrossPricesParams, PrefillSourceRefs, SupplierOffering, SupplierOfferingData,
     SupplierOfferingRevision, SupplierOfferingRevisionData,
+};
+pub use sku_delivery_coverage::{
+    SKU_DELIVERY_COVERAGE_VERSION, SkuDeliveryCoverage, SkuDeliveryCoverageMemo, SkuDeliveryCoverageState,
+    SkuDeliveryInput,
 };
 pub use types::{
     AvailabilityInterruptionReason, AvailabilityStatus, OfferingRevisionImpact, OfferingSourceType,

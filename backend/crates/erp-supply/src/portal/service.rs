@@ -49,7 +49,7 @@ pub fn validate_portal_terms(terms: &SupplierOfferingTermsWrite, on_date: Busine
     terms.validate()?;
     let data = terms.try_into_revision_data(SupplierOfferingId::new("validation-only"), 1)?;
     let revision = SupplierOfferingRevision::new(SupplierOfferingRevisionId::new("validation-only"), data)?;
-    if revision.valid_from > on_date || revision.valid_to.is_some_and(|to| to < on_date) {
+    if !on_date.is_within(revision.valid_from, revision.valid_to) {
         return Err(Error::BusinessLogicError("申请条款尚未生效或已经过期".into()));
     }
     Ok(())

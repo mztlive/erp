@@ -11,8 +11,8 @@ use crate::entity::catalog::SkuRevisionAttributeValue;
 use crate::repository::catalog::{
     CatalogRepository, CategoryParentChainFact, ProductBrandFilter, ProductCategoryAttributeFilter,
     ProductCategoryFilter, ProductFilter, ProductListingSummary, ProductRevisionFilter, SellableSkuFilter,
-    SkuAttributeFilter, SkuAttributeValueFilter, SkuFilter, SkuRevisionFilter, UnitOfMeasureFilter,
-    VoucherCategoryProfileRevisionFilter,
+    SellableSkuProjectionStore, SkuAttributeFilter, SkuAttributeValueFilter, SkuFilter, SkuRevisionFilter,
+    UnitOfMeasureFilter, VoucherCategoryProfileRevisionFilter,
 };
 use crate::repository::owned::{
     ProductBrandRepository, ProductCategoryAttributeRepository, ProductCategoryRepository, ProductRepository,
@@ -51,6 +51,10 @@ pub trait CatalogExt {
     const SKU_REVISION_ATTRIBUTE_VALUES: &'static str = "sku_revision_attribute_values";
     /// `voucher_category_profile_revision` 集合名。
     const VOUCHER_CATEGORY_PROFILE_REVISIONS: &'static str = "voucher_category_profile_revisions";
+    /// 公司商品池预算投影集合名。
+    const SELLABLE_SKU_PROJECTIONS: &'static str = "sellable_sku_projections";
+    /// 公司商品池预算投影刷新进度集合名。
+    const SELLABLE_SKU_PROJECTION_STATE: &'static str = "sellable_sku_projection_state";
 
     /// 商品分类列表筛选条件类型（定义见 `repository::catalog`）。
     type ProductCategoryFilter;
@@ -270,6 +274,18 @@ pub trait CatalogExt {
     /// # 错误
     /// 不返回错误。
     fn catalog(&self) -> CatalogRepository<'_>;
+
+    /// 获取公司商品池预算投影访问器。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回投影访问器。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    fn sellable_sku_projections(&self) -> SellableSkuProjectionStore<'_>;
 }
 
 impl CatalogExt for Database {
@@ -514,5 +530,9 @@ impl CatalogExt for Database {
     /// 不返回错误。
     fn catalog(&self) -> CatalogRepository<'_> {
         CatalogRepository::new(self)
+    }
+
+    fn sellable_sku_projections(&self) -> SellableSkuProjectionStore<'_> {
+        SellableSkuProjectionStore::new(self)
     }
 }

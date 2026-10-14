@@ -281,6 +281,7 @@ export function mapSkuAsSellable(dto: SellableSkuDto): MasterDataListItem {
             supplierCodes: dto.supplier_codes ?? [],
             supplierCount: dto.supplier_count,
             supplyRegions: dto.supply_regions,
+            deliveryFreightExtra: dto.delivery_freight_extra ?? false,
             eligibilityAsOf: dto.eligibility_as_of,
             mainImageAssetId: dto.main_image_asset_id?.trim() || undefined,
         },

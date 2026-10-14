@@ -11,8 +11,11 @@ use config::{Config, S3Config, SafeConfig};
 use erp_identity::service::iam::ensure_identity_foundation;
 use erp_identity::{AdminService, InitializeSuperAdminParams};
 use erp_processes::background::{
-    BackgroundRunner, ProductImportTaskAdapter, SalesSelectionTaskAdapter, SupplierImportTaskAdapter,
+    BackgroundRunner, DeliveryCoverageRefreshAdapter, ProductImportTaskAdapter, SalesSelectionTaskAdapter,
+    SellableProjectionRefreshAdapter, SupplierImportTaskAdapter,
 };
+use erp_processes::delivery_coverage_refresh::DeliveryCoverageRefreshProcess;
+use erp_processes::sellable_projection_refresh::SellableProjectionRefresher;
 use storage::{S3Storage, S3StorageConfig};
 use tracing::{info, warn};
 use web_api::app_state::{AppState, ExternalConnectorPorts};
@@ -199,7 +202,9 @@ fn spawn_background_runner(state: AppState) {
                     state.storage().clone(),
                     state.config_snapshot().app.secret.as_bytes(),
                 ),
-            )),
+            ))
+            .register(DeliveryCoverageRefreshAdapter::new(DeliveryCoverageRefreshProcess::new(state.db())))
+            .register(SellableProjectionRefreshAdapter::new(SellableProjectionRefresher::new(state.db()))),
     );
     runner.spawn();
 }

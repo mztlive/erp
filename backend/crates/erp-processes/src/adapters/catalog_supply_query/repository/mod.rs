@@ -2,6 +2,7 @@
 mod product;
 mod product_pipeline;
 mod sellable;
+mod sellable_search;
 mod shared;
 
 pub(super) struct CatalogSupplyRepository<'a> {

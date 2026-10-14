@@ -85,8 +85,7 @@ impl PurchaseOfferingSource {
         {
             return Err(Error::from("采购供给选源或版本已变化，请重新核对"));
         }
-        if supply.revision.valid_from > on_date
-            || supply.revision.valid_to.is_some_and(|until| until < on_date)
+        if !on_date.is_within(supply.revision.valid_from, supply.revision.valid_to)
             || supply.availability.availability_status != AvailabilityStatus::Available
             || quantity.to_decimal() <= Decimal::ZERO
             || supply.availability.available_quantity.is_some_and(|available| available < quantity)
@@ -392,9 +391,11 @@ mod tests {
             value.availability.available_quantity = Some(quantity.parse().unwrap());
             changed.push(value);
         }
-        let mut value = original.clone();
-        value.revision.valid_to = Some("2026-10-03".parse().unwrap());
-        changed.push(value);
+        for expired_on in ["2026-10-03", "2026-10-04"] {
+            let mut value = original.clone();
+            value.revision.valid_to = Some(expired_on.parse().unwrap());
+            changed.push(value);
+        }
         let mut value = original;
         value.revision.valid_from = "2026-10-05".parse().unwrap();
         changed.push(value);

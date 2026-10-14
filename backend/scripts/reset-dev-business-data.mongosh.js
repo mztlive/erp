@@ -311,6 +311,9 @@ const CATALOG_DROP_GROUPS = [
       "supplier_offerings",
       "supplier_offering_commands",
       "supplier_offering_handover_command_receipts",
+      "supplier_delivery_templates",
+      "sku_delivery_coverages",
+      "sku_delivery_coverage_state",
     ],
   },
   {
@@ -324,6 +327,8 @@ const CATALOG_DROP_GROUPS = [
       "products",
       "product_handover_command_receipts",
       "voucher_category_profile_revisions",
+      "sellable_sku_projections",
+      "sellable_sku_projection_state",
     ],
   },
   {

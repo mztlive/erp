@@ -18,6 +18,10 @@ import {
 } from "@/components/business/list-workspace"
 import { Input } from "@/components/ui/input"
 import type { SellableAppliedChip } from "./sellable-list-toolbar"
+import {
+    SellableDeliveryFilterFields,
+    type SellableDeliveryFilterControls,
+} from "./sellable-delivery-filter-fields"
 import type { useSellableListFilters } from "@/features/master-data/hooks/use-sellable-list-filters"
 import { PRODUCT_KIND_FILTER_OPTIONS } from "@/features/master-data/lib/list-filters"
 import type { ProductKind } from "@/features/master-data/types"
@@ -59,6 +63,7 @@ export function SellableItemsFilterBar({
     hiddenProductKinds,
     searchInputRef,
     filters: f,
+    deliveryFilter,
     appliedChips,
     filterOptions,
     resultCount,
@@ -72,6 +77,8 @@ export function SellableItemsFilterBar({
     hiddenProductKinds?: readonly ProductKind[]
     searchInputRef: React.RefObject<HTMLInputElement | null>
     filters: SellableItemsFilterControls
+    /** 公司商品池按配送地区筛选；不传则不显示（销售选品不支持）。 */
+    deliveryFilter?: SellableDeliveryFilterControls
     appliedChips: readonly SellableAppliedChip[]
     filterOptions: ProductFilterDirectoryQuery
     resultCount?: number
@@ -88,7 +95,12 @@ export function SellableItemsFilterBar({
     const directory = productFilterDirectoryState(filterOptions)
     const priceInputRef = React.useRef<HTMLInputElement>(null)
     const moreCount = appliedChips.filter(({ key }) =>
-        ["productBrandId", "supplyRegion", "salesPrice"].includes(key),
+        [
+            "productBrandId",
+            "supplyRegion",
+            "deliveryRegion",
+            "salesPrice",
+        ].includes(key),
     ).length
     React.useEffect(() => {
         if (f.productSalesPriceError && f.sellableFilterPanelOpen)
@@ -243,6 +255,12 @@ export function SellableItemsFilterBar({
                             </ListWorkspaceFilterField>
                         </div>
                     </fieldset>
+                    {deliveryFilter ? (
+                        <SellableDeliveryFilterFields
+                            idPrefix={prefix}
+                            filters={deliveryFilter}
+                        />
+                    ) : null}
                     <fieldset className="min-w-0">
                         <legend className="mb-3 text-xs font-medium">
                             价格筛选

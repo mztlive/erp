@@ -15,6 +15,7 @@ pub mod catalog;
 pub mod contract;
 pub mod customer;
 pub mod customer_profile;
+pub mod delivery_coverage_refresh;
 pub mod demo_master_data;
 pub mod finance_posting;
 pub mod import_apply;
@@ -65,6 +66,7 @@ pub mod procure_to_pay;
 pub mod reverse_flow;
 pub mod sales_change;
 pub mod sales_selection;
+pub mod sellable_projection_refresh;
 
 pub mod fulfillment_execution;
 

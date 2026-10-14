@@ -665,7 +665,7 @@ where
 /// 返回可用于 `$set` 的原生 BSON 文档。
 /// # 错误
 /// 实体无法编码为 BSON 或解码为文档时返回序列化错误。
-fn persisted_document<T: Serialize>(value: &T) -> Result<Document> {
+pub fn persisted_document<T: Serialize>(value: &T) -> Result<Document> {
     Ok(deserialize_from_slice(&serialize_to_vec(value)?)?)
 }
 

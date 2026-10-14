@@ -35,6 +35,8 @@ pub(crate) const PRODUCT_REVISIONS: &str = <mongodb::Database as CatalogExt>::PR
 pub(crate) const PRODUCT_REVISION_MEDIAS: &str = <mongodb::Database as CatalogExt>::PRODUCT_REVISION_MEDIAS;
 /// `sku` 集合名。
 pub(crate) const SKUS: &str = <mongodb::Database as CatalogExt>::SKUS;
+/// `sellable_sku_projection` 集合名。
+pub(crate) const SELLABLE_SKU_PROJECTIONS: &str = <mongodb::Database as CatalogExt>::SELLABLE_SKU_PROJECTIONS;
 /// `sku_revision` 集合名。
 pub(crate) const SKU_REVISIONS: &str = <mongodb::Database as CatalogExt>::SKU_REVISIONS;
 /// `sku_revision_attribute_value` 集合名。
@@ -76,6 +78,7 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, SKU_REVISION_ATTRIBUTE_VALUES, sku_revision_attribute_value_indexes()).await?;
     create_indexes(db, VOUCHER_CATEGORY_PROFILE_REVISIONS, voucher_category_profile_revision_indexes())
         .await?;
+    create_indexes(db, SELLABLE_SKU_PROJECTIONS, sellable_sku_projection_indexes()).await?;
     Ok(())
 }
 
@@ -103,6 +106,7 @@ fn product_category_indexes() -> Vec<IndexModel> {
 /// 返回 `product_brand` 的身份约束与启停查询索引。
 fn product_brand_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_product_brands_id", doc! { "id": 1 }),
         unique_index("uk_product_brands_brand_code", doc! { "brand_code": 1 }),
         named_index("idx_product_brands_status", doc! { "status": 1 }),
     ]
@@ -111,6 +115,7 @@ fn product_brand_indexes() -> Vec<IndexModel> {
 /// 返回 `unit_of_measure` 的身份约束与启停查询索引。
 fn unit_of_measure_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_unit_of_measures_id", doc! { "id": 1 }),
         unique_index("uk_unit_of_measures_unit_code", doc! { "unit_code": 1 }),
         named_index("idx_unit_of_measures_status", doc! { "status": 1 }),
     ]
@@ -151,7 +156,9 @@ fn product_category_attribute_indexes() -> Vec<IndexModel> {
 /// 返回 `product` 的身份约束与组合查询索引。
 fn product_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_products_id", doc! { "id": 1 }),
         unique_index("uk_products_product_no", doc! { "product_no": 1 }),
+        named_index("idx_products_updated_at", doc! { "updated_at": 1 }),
         named_index("idx_products_status_kind", doc! { "status": 1, "product_kind": 1 }),
         named_index(
             "idx_products_maintainer_org",
@@ -162,7 +169,11 @@ fn product_indexes() -> Vec<IndexModel> {
 
 /// 返回 `product_revision` 的聚合修订唯一约束。
 fn product_revision_indexes() -> Vec<IndexModel> {
-    vec![unique_index("uk_product_revisions_revision", doc! { "product_id": 1, "revision_no": 1 })]
+    vec![
+        unique_index("uk_product_revisions_id", doc! { "id": 1 }),
+        unique_index("uk_product_revisions_revision", doc! { "product_id": 1, "revision_no": 1 }),
+        named_index("idx_product_revisions_updated_at", doc! { "updated_at": 1 }),
+    ]
 }
 
 /// 返回 `product_revision_media` 的组合唯一约束与按修订查询索引。
@@ -180,7 +191,9 @@ fn product_revision_media_indexes() -> Vec<IndexModel> {
 /// 返回 `sku` 的身份约束与全生命周期签名唯一约束。
 fn sku_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_skus_id", doc! { "id": 1 }),
         unique_index("uk_skus_sku_no", doc! { "sku_no": 1 }),
+        named_index("idx_skus_updated_at", doc! { "updated_at": 1 }),
         named_index("idx_skus_listing_status", doc! { "listing_status": 1, "status": 1, "product_id": 1 }),
         // (product_id, specification_signature) 在全部生命周期记录上永久唯一：
         // 不得实现为仅约束启用行的 partial unique index（数据模型 §6.3）。
@@ -191,7 +204,9 @@ fn sku_indexes() -> Vec<IndexModel> {
 /// 返回 `sku_revision` 的聚合修订唯一约束、条码精确查询与搜索索引。
 fn sku_revision_indexes() -> Vec<IndexModel> {
     vec![
+        unique_index("uk_sku_revisions_id", doc! { "id": 1 }),
         unique_index("uk_sku_revisions_revision", doc! { "sku_id": 1, "revision_no": 1 }),
+        named_index("idx_sku_revisions_updated_at", doc! { "updated_at": 1 }),
         // 非空条码规范化精确查询索引（§6.3）：非唯一——同一条码允许存在多个
         // 在用 SKU 修订，冲突阻断转人工由 Service 判定。
         named_index("idx_sku_revisions_barcode", doc! { "barcode": 1 }),
@@ -227,6 +242,35 @@ fn voucher_category_profile_revision_indexes() -> Vec<IndexModel> {
 }
 
 /// 构建命名普通索引。
+/// 公司商品池预算投影：可售行按 SKU 编号分页，常用筛选字段单列索引，待重算部分索引。
+///
+/// 可售行索引均以 `row` 为对象作部分过滤，不可售占位不进入索引。
+fn sellable_sku_projection_indexes() -> Vec<IndexModel> {
+    let sellable = doc! { "row": { "$type": "object" } };
+    let mut indexes = [
+        ("idx_sellable_sku_projections_sku_no", doc! { "row.sku_no": 1, "_id": 1 }),
+        ("idx_sellable_sku_projections_kind", doc! { "row.product_kind": 1, "row.sku_no": 1 }),
+        ("idx_sellable_sku_projections_category", doc! { "row.category_id": 1, "row.sku_no": 1 }),
+        ("idx_sellable_sku_projections_brand", doc! { "row.brand_id": 1, "row.sku_no": 1 }),
+        ("idx_sellable_sku_projections_suppliers", doc! { "row.supplier_ids": 1 }),
+        ("idx_sellable_sku_projections_dropship_price", doc! { "row.sales_visible_price_gross": 1 }),
+    ]
+    .into_iter()
+    .map(|(name, keys)| partial_index(name, keys, sellable.clone()))
+    .collect::<Vec<_>>();
+    indexes.push(partial_index(
+        "idx_sellable_sku_projections_dirty",
+        doc! { "dirty": 1 },
+        doc! { "dirty": true },
+    ));
+    indexes
+}
+
+fn partial_index(name: &str, keys: Document, filter: Document) -> IndexModel {
+    let options = IndexOptions::builder().name(name.to_string()).partial_filter_expression(filter).build();
+    IndexModel::builder().keys(keys).options(options).build()
+}
+
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
     IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
@@ -244,12 +288,47 @@ mod tests {
     use mongodb::bson::doc;
 
     use super::{
-        product_category_indexes, product_indexes, product_revision_media_indexes, sku_indexes,
-        sku_revision_attribute_value_indexes, sku_revision_indexes,
+        product_brand_indexes, product_category_indexes, product_indexes, product_revision_indexes,
+        product_revision_media_indexes, sku_indexes, sku_revision_attribute_value_indexes,
+        sku_revision_indexes, unit_of_measure_indexes,
     };
 
     fn names(indexes: &[mongodb::IndexModel]) -> Vec<String> {
         indexes.iter().filter_map(|index| index.options.as_ref()?.name.clone()).collect()
+    }
+
+    /// 商品池资格聚合按稳定主键关联 SKU、修订、商品与单位，缺少主键索引会退化为逐行集合扫描。
+    #[test]
+    fn sellable_projection_indexes_skip_unsellable_placeholders() {
+        let indexes = super::sellable_sku_projection_indexes();
+        let page = indexes.iter().find(|index| index.keys == doc! { "row.sku_no": 1, "_id": 1 }).unwrap();
+        assert_eq!(
+            page.options.as_ref().unwrap().partial_filter_expression,
+            Some(doc! { "row": { "$type": "object" } })
+        );
+        let dirty = indexes.iter().find(|index| index.keys == doc! { "dirty": 1 }).unwrap();
+        assert_eq!(dirty.options.as_ref().unwrap().partial_filter_expression, Some(doc! { "dirty": true }));
+        for indexes in [sku_indexes(), sku_revision_indexes(), product_indexes(), product_revision_indexes()]
+        {
+            assert!(indexes.iter().any(|index| index.keys == doc! { "updated_at": 1 }));
+        }
+    }
+
+    #[test]
+    fn sellable_lookup_collections_have_unique_stable_id() {
+        for indexes in [
+            product_brand_indexes(),
+            unit_of_measure_indexes(),
+            product_indexes(),
+            product_revision_indexes(),
+            sku_indexes(),
+            sku_revision_indexes(),
+        ] {
+            assert!(indexes.iter().any(|index| {
+                index.keys == doc! { "id": 1 }
+                    && index.options.as_ref().and_then(|value| value.unique) == Some(true)
+            }));
+        }
     }
 
     #[test]

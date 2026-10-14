@@ -54,6 +54,8 @@ export function buildSellableFilterSnapshotLabel(input: {
     selectedBrandLabel?: string
     selectedSupplierLabel?: string
     supplyPresetLabel?: string
+    /** 配送地区条件，例：「广东省 · 全部可送」。 */
+    deliveryLabel?: string
 }): string {
     return [
         `分类=${resourceLabel("sellable-items")}`,
@@ -70,6 +72,7 @@ export function buildSellableFilterSnapshotLabel(input: {
             ? [`供应商=${input.selectedSupplierLabel}`]
             : []),
         ...(input.supplyRegion ? [`可供区域=${input.supplyRegion}`] : []),
+        ...(input.deliveryLabel ? [`配送地区=${input.deliveryLabel}`] : []),
         ...(input.supplyPresetLabel
             ? [`快捷视图=${input.supplyPresetLabel}`]
             : []),
@@ -173,6 +176,8 @@ export function buildSellableTableDescription(input: {
     selectedBrandLabel?: string
     selectedSupplierLabel?: string
     supplyPresetLabel?: string
+    /** 配送地区条件，例：「广东省 · 全部可送」。 */
+    deliveryLabel?: string
     rowCount: number
 }): string {
     const active: string[] = []
@@ -190,6 +195,7 @@ export function buildSellableTableDescription(input: {
         active.push(`供应商 ${input.selectedSupplierLabel}`)
     }
     if (input.supplyRegion) active.push(`区域 ${input.supplyRegion}`)
+    if (input.deliveryLabel) active.push(`配送地区 ${input.deliveryLabel}`)
     if (input.supplyPresetLabel) {
         active.push(`快捷视图 ${input.supplyPresetLabel}`)
     }

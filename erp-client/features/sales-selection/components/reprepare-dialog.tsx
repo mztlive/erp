@@ -1,6 +1,8 @@
 "use client"
 
 import { PRICE_FILTER_LABELS, parsePriceFilterKind } from "@/lib/price-filter"
+import { deliveryExtentLabel } from "@/lib/delivery-coverage"
+import { regionFullName, useRegionIndex } from "@/features/regions"
 
 import { useState } from "react"
 import { useAppForm } from "@/components/form"
@@ -29,6 +31,7 @@ export const ReprepareDialog = ({
     onClose: () => void
 }) => {
     const operations = useBookOperations()
+    const { data: regionIndex } = useRegionIndex()
     const [error, setError] = useState("")
     const form = useAppForm({
         defaultValues: {
@@ -110,6 +113,20 @@ export const ReprepareDialog = ({
         sales_price_min: "最低售价",
         sales_price_max: "最高售价",
         nationwide_only: "全国可供",
+        delivery_region_code: "配送地区",
+        delivery_extent: "配送范围",
+        include_freight_extra: "含需另付运费的地区",
+    }
+    const valueText = (key: string, value: unknown) => {
+        if (key === "price_kind")
+            return PRICE_FILTER_LABELS[parsePriceFilterKind(String(value))]
+        if (key === "delivery_region_code")
+            return regionIndex
+                ? regionFullName(regionIndex, String(value))
+                : String(value)
+        if (key === "delivery_extent")
+            return deliveryExtentLabel(value === "PARTIAL" ? "PARTIAL" : "FULL")
+        return value === true ? "是" : String(value)
     }
     return (
         <Dialog
@@ -168,7 +185,7 @@ export const ReprepareDialog = ({
                                         {filters
                                             .map(
                                                 ([key, value]) =>
-                                                    `${labels[key as keyof PoolFilterSnapshot]}：${key === "price_kind" ? PRICE_FILTER_LABELS[parsePriceFilterKind(String(value))] : value === true ? "是" : value}`,
+                                                    `${labels[key as keyof PoolFilterSnapshot]}：${valueText(key, value)}`,
                                             )
                                             .join("；")}
                                     </p>

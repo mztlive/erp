@@ -1,6 +1,8 @@
 /** W14 基础资料 · 列表查询与结果视图类型。 */
 
 import type { PriceFilterKind } from "@/lib/price-filter"
+import type { SellableDeliveryExtent } from "@/features/master-data/lib/sellable-delivery-filter"
+import type { SellableSortField } from "@/features/master-data/lib/sellable-sort"
 import type { StatusTone } from "@/components/ui/status-badge"
 import type {
     ActionBlocker,
@@ -110,6 +112,8 @@ export type MasterDataListItem = Readonly<{
         supplierCodes?: readonly string[]
         supplierCount: number
         supplyRegions: readonly string[]
+        /** 按配送地区筛选且含运费另计时，所选地区内有需另付运费才能送到的地方。 */
+        deliveryFreightExtra: boolean
         eligibilityAsOf: string
         /** SKU 主图文件资产；列表与选品 Dialog 用来回显缩略图。 */
         mainImageAssetId?: string
@@ -130,6 +134,18 @@ export type MasterDataListQuery = Readonly<{
     productSupplierId?: string
     /** 公司商品池：可供区域精确匹配。 */
     supplyRegion?: string
+    /** 公司商品池：配送地区代码（省、市或区县）。 */
+    deliveryRegion?: string
+    /** 公司商品池：配送地区范围，默认全部可送。 */
+    deliveryExtent?: SellableDeliveryExtent
+    /** 公司商品池：把需另付运费的地区算作可送。 */
+    includeFreightExtra?: boolean
+    /** 公司商品池：只查这些 SKU（勾选导出），最多 500 个。 */
+    skuIds?: readonly string[]
+    /** 公司商品池：服务端排序字段；空表示按 SKU 编号。 */
+    sellableSortBy?: SellableSortField
+    /** 公司商品池：是否降序。 */
+    sellableSortDesc?: boolean
     /** 公司商品池：列表派生视图；不改变服务端销售资格口径。 */
     sellableSupplyPreset?: SellableSupplyPreset
     productListingStatus?: ProductListingFilter

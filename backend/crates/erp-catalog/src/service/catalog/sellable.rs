@@ -6,7 +6,9 @@
 
 use application_core::normalized_text;
 use erp_core::common::time::BusinessDate;
+use erp_core::delivery_coverage::{DeliveryCoverageQuery, DeliveryExtent};
 use erp_core::money::{Amount, Quantity};
+use erp_core::region::RegionCode;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -15,6 +17,7 @@ use crate::dto::validate_sales_price_range;
 use crate::entity::catalog::{ProductKind, SellablePriceKind};
 use crate::error::{Error, Result};
 use crate::repository::CatalogExt;
+use crate::repository::catalog::{SellableSort, SellableSortField};
 
 /// 公司商品池列表筛选条件类型。
 type SellableSkuFilter = <mongodb::Database as CatalogExt>::SellableSkuFilter;
@@ -44,6 +47,18 @@ pub struct SellableSkuListParams {
     pub sales_price_min: Option<Amount>,
     /// 所选含税参考价上限（含）。
     pub sales_price_max: Option<Amount>,
+    /// 配送地区代码，省、市或区县；空表示不按地区筛选。
+    pub delivery_region_code: Option<String>,
+    /// 地区筛选范围；默认整片可送。
+    pub delivery_extent: Option<DeliveryExtent>,
+    /// 是否把集采运费另计算作可送；默认否。
+    pub include_freight_extra: Option<bool>,
+    /// 只查这些 SKU，逗号分隔，最多 500 个；用于勾选导出与复核。
+    pub sku_ids: Option<String>,
+    /// 排序字段；默认 SKU 编号。
+    pub sort_by: Option<SellableSortField>,
+    /// 排序方向 `asc` / `desc`；默认升序。
+    pub sort_dir: Option<String>,
     /// 服务端解释的资格业务日期；空表示服务端今天。
     pub eligibility_as_of: Option<BusinessDate>,
     /// 页码（1 起）。
@@ -109,6 +124,8 @@ pub struct SellableSkuView {
     pub supplier_codes: Vec<String>,
     /// 当前有效供给可供区域并集。
     pub supply_regions: Vec<String>,
+    /// 按地区筛选且含运费另计时，所选地区内是否有需另付运费才能送到的地方。
+    pub delivery_freight_extra: bool,
     /// 本次资格判定的服务端业务日期。
     pub eligibility_as_of: BusinessDate,
 }
@@ -195,10 +212,82 @@ pub fn prepare_sellable_sku_list(params: &SellableSkuListParams) -> Result<Sella
         price_kind: params.price_kind,
         sales_price_min: params.sales_price_min,
         sales_price_max: params.sales_price_max,
+        delivery: delivery_query(params)?,
+        sku_ids: requested_sku_ids(params.sku_ids.as_deref())?,
+        sort: SellableSort {
+            field: params.sort_by.unwrap_or_default(),
+            descending: sort_descending(params.sort_dir.as_deref())?,
+        },
         eligibility_as_of,
         page,
         page_size,
     })
+}
+
+/// 一次按 SKU 查询的数量上限，与选品册勾选上限一致。
+const MAX_REQUESTED_SKUS: usize = 500;
+
+/// 解析逗号分隔的 SKU；空白项忽略并去重。
+///
+/// # 参数
+/// * `raw` - 原始参数
+///
+/// # 返回
+/// 未传或全为空白时返回 `None`。
+///
+/// # 错误
+/// 超过 500 个时返回校验错误。
+fn requested_sku_ids(raw: Option<&str>) -> Result<Option<Vec<String>>> {
+    let mut ids: Vec<String> = Vec::new();
+    for id in raw.unwrap_or_default().split(',').map(str::trim).filter(|id| !id.is_empty()) {
+        if !ids.iter().any(|existing| existing == id) {
+            ids.push(id.to_string());
+        }
+    }
+    if ids.len() > MAX_REQUESTED_SKUS {
+        return Err(Error::ValidationError(format!("一次最多查询 {MAX_REQUESTED_SKUS} 个 SKU")));
+    }
+    Ok((!ids.is_empty()).then_some(ids))
+}
+
+/// 解析排序方向；默认升序。
+///
+/// # 参数
+/// * `raw` - `asc` 或 `desc`
+///
+/// # 返回
+/// 降序时为真。
+///
+/// # 错误
+/// 其他取值返回校验错误。
+fn sort_descending(raw: Option<&str>) -> Result<bool> {
+    match raw.map(str::trim).filter(|value| !value.is_empty()) {
+        None | Some("asc") => Ok(false),
+        Some("desc") => Ok(true),
+        Some(other) => Err(Error::ValidationError(format!("非法排序方向: {other}"))),
+    }
+}
+
+/// 解析配送地区筛选；未选地区时范围与运费另计参数不生效。
+///
+/// # 参数
+/// * `params` - 公司商品池查询参数
+///
+/// # 返回
+/// 选了地区时返回筛选条件，范围默认整片可送、默认不含运费另计。
+///
+/// # 错误
+/// 地区代码格式非法或不存在时返回校验错误。
+fn delivery_query(params: &SellableSkuListParams) -> Result<Option<DeliveryCoverageQuery>> {
+    let Some(code) = normalized_text(params.delivery_region_code.as_deref()) else {
+        return Ok(None);
+    };
+    let region = RegionCode::parse(&code).map_err(|error| Error::ValidationError(error.to_string()))?;
+    Ok(Some(DeliveryCoverageQuery {
+        region,
+        extent: params.delivery_extent.unwrap_or_default(),
+        include_freight_extra: params.include_freight_extra.unwrap_or(false),
+    }))
 }
 
 /// 投影可售行，保留历史非法规格签名为空属性的合同。
@@ -247,6 +336,7 @@ pub fn sellable_sku_page_view(
             supplier_count: row.supplier_count,
             supplier_codes: Vec::new(),
             supply_regions: row.supply_regions,
+            delivery_freight_extra: row.delivery_freight_extra,
             eligibility_as_of,
         });
     }
@@ -289,6 +379,85 @@ mod tests {
         assert!(item.supplier_codes.is_empty());
         let wire = serde_json::to_value(item).unwrap();
         assert!(wire.get("supplier_ids").is_none());
+    }
+
+    #[test]
+    fn delivery_filter_defaults_to_full_included_and_rejects_unknown_regions() {
+        use erp_core::delivery_coverage::DeliveryExtent;
+
+        use super::prepare_sellable_sku_list;
+
+        let params: SellableSkuListParams =
+            serde_json::from_value(json!({ "delivery_region_code": " 440300 " })).unwrap();
+        let query = prepare_sellable_sku_list(&params).unwrap().delivery.unwrap();
+        assert_eq!(query.region.as_str(), "440300");
+        assert_eq!(query.extent, DeliveryExtent::Full);
+        assert!(!query.include_freight_extra);
+
+        let params: SellableSkuListParams = serde_json::from_value(json!({
+            "delivery_region_code": "650000", "delivery_extent": "PARTIAL", "include_freight_extra": true
+        }))
+        .unwrap();
+        let query = prepare_sellable_sku_list(&params).unwrap().delivery.unwrap();
+        assert_eq!(query.extent, DeliveryExtent::Partial);
+        assert!(query.include_freight_extra);
+
+        let params: SellableSkuListParams =
+            serde_json::from_value(json!({ "delivery_extent": "PARTIAL", "include_freight_extra": true }))
+                .unwrap();
+        assert!(prepare_sellable_sku_list(&params).unwrap().delivery.is_none());
+
+        for invalid in ["999999", "44030", "abcdef"] {
+            let params: SellableSkuListParams =
+                serde_json::from_value(json!({ "delivery_region_code": invalid })).unwrap();
+            assert!(matches!(
+                prepare_sellable_sku_list(&params),
+                Err(crate::error::Error::ValidationError(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn sort_and_requested_skus_are_parsed_and_bounded() {
+        use super::prepare_sellable_sku_list;
+        use crate::repository::catalog::SellableSortField;
+
+        let params: SellableSkuListParams = serde_json::from_value(json!({
+            "sort_by": "bulk_price", "sort_dir": "desc", "sku_ids": " sku-2, sku-1 ,,sku-2 "
+        }))
+        .unwrap();
+        let filter = prepare_sellable_sku_list(&params).unwrap();
+        assert_eq!(filter.sort.field, SellableSortField::BulkPrice);
+        assert!(filter.sort.descending);
+        assert_eq!(filter.sku_ids, Some(vec!["sku-2".to_string(), "sku-1".to_string()]));
+
+        let defaults = prepare_sellable_sku_list(&SellableSkuListParams::default()).unwrap();
+        assert_eq!(defaults.sort.field, SellableSortField::SkuNo);
+        assert!(!defaults.sort.descending);
+        assert!(defaults.sku_ids.is_none());
+
+        let params: SellableSkuListParams = serde_json::from_value(json!({ "sort_dir": "down" })).unwrap();
+        assert!(prepare_sellable_sku_list(&params).is_err());
+        let many = (0..501).map(|index| format!("sku-{index}")).collect::<Vec<_>>().join(",");
+        let params: SellableSkuListParams = serde_json::from_value(json!({ "sku_ids": many })).unwrap();
+        assert!(prepare_sellable_sku_list(&params).is_err());
+        assert!(serde_json::from_value::<SellableSkuListParams>(json!({ "sort_by": "name" })).is_err());
+    }
+
+    #[test]
+    fn freight_extra_marker_reaches_the_view() {
+        let row: SellableSkuRow = serde_json::from_value(json!({
+            "sku_id": "sku-1", "sku_version": 1,
+            "sku_revision_id": "rev-1", "sku_revision_no": 1, "sku_no": "SKU-01",
+            "product_id": "product-1", "product_no": "P-01", "product_kind": "PHYSICAL",
+            "name": "礼盒", "specification_signature": "", "base_unit_id": "unit-1",
+            "sales_visible_price_gross": "99.90", "market_price": null,
+            "effective_from": "2026-01-01", "supplier_count": 1, "delivery_freight_extra": true
+        }))
+        .unwrap();
+        let filter = SellableSkuFilter::as_of(BusinessDate::from_ymd(2026, 1, 1).unwrap());
+        let page = sellable_sku_page_view(PageResult { items: vec![row], total: 1 }, &filter).unwrap();
+        assert!(page.items[0].delivery_freight_extra);
     }
 
     #[test]

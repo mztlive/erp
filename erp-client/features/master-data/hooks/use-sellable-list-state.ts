@@ -1,13 +1,12 @@
 "use client"
 
 import * as React from "react"
+import type { SortingState } from "@tanstack/react-table"
 import { PRICE_FILTER_LABELS } from "@/lib/price-filter"
 
 import { useSellableListFilters } from "@/features/master-data/hooks/use-sellable-list-filters"
-import {
-    useMasterDataListQuery,
-    useProductFilterOptionsQuery,
-} from "@/features/master-data/hooks/queries"
+import { useProductFilterOptionsQuery } from "@/features/master-data/hooks/queries"
+import { useSellableListData } from "@/features/master-data/hooks/use-sellable-list-data"
 import { useMasterDataListExport } from "@/features/master-data/hooks/use-master-data-list-export"
 import {
     buildSellableFilterSnapshotLabel,
@@ -18,33 +17,75 @@ import {
     directorySelectionLabel,
     productFilterDirectoryState,
 } from "@/features/master-data/lib/product-filter-directory"
+import { sellableDeliveryFilterText } from "@/features/master-data/lib/sellable-delivery-filter"
+import { sellableSortFromTable } from "@/features/master-data/lib/sellable-sort"
 import { PRODUCT_KIND_LABELS } from "@/features/master-data/types"
+import { regionFullName, useRegionIndex } from "@/features/regions"
 import type { SellableAppliedChip } from "@/features/master-data/components/list/sellable-list-toolbar"
 
 export function useSellableListState(
     searchInputRef: React.RefObject<HTMLInputElement | null>,
 ) {
     const filters = useSellableListFilters(searchInputRef)
-    const listQuery = useMasterDataListQuery({
-        resource: "sellable-items",
-        q: filters.q.trim() || undefined,
-        productKind: filters.productKind,
-        productCategoryId: filters.productCategoryId,
-        productBrandId: filters.productBrandId,
-        supplyRegion: filters.supplyRegion,
-        productPriceKind: filters.productPriceKind,
-        productSalesPriceMin: filters.productSalesPriceMin,
-        productSalesPriceMax: filters.productSalesPriceMax,
+    const [sorting, setSorting] = React.useState<SortingState>([])
+    const filterQuery = React.useMemo(
+        () => ({
+            resource: "sellable-items" as const,
+            q: filters.q.trim() || undefined,
+            productKind: filters.productKind,
+            productCategoryId: filters.productCategoryId,
+            productBrandId: filters.productBrandId,
+            supplyRegion: filters.supplyRegion,
+            deliveryRegion: filters.deliveryRegion,
+            deliveryExtent: filters.deliveryExtent,
+            includeFreightExtra: filters.includeFreightExtra,
+            productPriceKind: filters.productPriceKind,
+            productSalesPriceMin: filters.productSalesPriceMin,
+            productSalesPriceMax: filters.productSalesPriceMax,
+        }),
+        [
+            filters.q,
+            filters.productKind,
+            filters.productCategoryId,
+            filters.productBrandId,
+            filters.supplyRegion,
+            filters.deliveryRegion,
+            filters.deliveryExtent,
+            filters.includeFreightExtra,
+            filters.productPriceKind,
+            filters.productSalesPriceMin,
+            filters.productSalesPriceMax,
+        ],
+    )
+    const list = useSellableListData({
+        query: { ...filterQuery, ...sellableSortFromTable(sorting) },
+        layout: filters.layout,
+        pagination: filters.pagination,
     })
+    const { changePagination, pagination } = filters
+    /** 换排序回到第一页。 */
+    const changeSorting = React.useCallback(
+        (next: SortingState) => {
+            setSorting(next)
+            changePagination({ ...pagination, pageIndex: 0 })
+        },
+        [changePagination, pagination],
+    )
+    const { data: regionIndex } = useRegionIndex()
+    const deliveryLabel = filters.deliveryRegion
+        ? sellableDeliveryFilterText(
+              regionIndex
+                  ? regionFullName(regionIndex, filters.deliveryRegion)
+                  : filters.deliveryRegion,
+              filters.deliveryExtent,
+              filters.includeFreightExtra,
+          )
+        : undefined
     const productFilterOptionsQuery = useProductFilterOptionsQuery(true)
     const { exportMeta, handleExport } = useMasterDataListExport()
     const [previewId, setPreviewId] = React.useState<string | null>(null)
 
-    // DataTable 需要可变数组：整份结果直接交给表格做排序与分页
-    const rows = React.useMemo(
-        () => [...(listQuery.data?.rows ?? [])],
-        [listQuery.data?.rows],
-    )
+    const rows = list.rows
     const previewRow = React.useMemo(
         () => rows.find((row) => row.stableId === previewId) ?? null,
         [previewId, rows],
@@ -94,6 +135,12 @@ export function useSellableListState(
                 label: `可供区域：${filters.supplyRegion}`,
             })
         }
+        if (deliveryLabel) {
+            chips.push({
+                key: "deliveryRegion",
+                label: `配送地区：${deliveryLabel}`,
+            })
+        }
         if (filters.productSalesPriceMin || filters.productSalesPriceMax) {
             const minimum = filters.productSalesPriceMin ?? "不限"
             const maximum = filters.productSalesPriceMax ?? "不限"
@@ -104,6 +151,7 @@ export function useSellableListState(
         }
         return chips
     }, [
+        deliveryLabel,
         filters.productBrandId,
         filters.productCategoryId,
         filters.productKind,
@@ -125,10 +173,12 @@ export function useSellableListState(
                 productSalesPriceMin: filters.productSalesPriceMin,
                 productSalesPriceMax: filters.productSalesPriceMax,
                 supplyRegion: filters.supplyRegion,
+                deliveryLabel,
                 selectedCategoryLabel,
                 selectedBrandLabel,
             }),
         [
+            deliveryLabel,
             filters.productKind,
             filters.productSalesPriceMax,
             filters.productPriceKind,
@@ -148,25 +198,27 @@ export function useSellableListState(
                 productSalesPriceMin: filters.productSalesPriceMin,
                 productSalesPriceMax: filters.productSalesPriceMax,
                 supplyRegion: filters.supplyRegion,
+                deliveryLabel,
                 selectedCategoryLabel,
                 selectedBrandLabel,
-                rowCount: rows.length,
+                rowCount: list.total,
             }),
         [
+            deliveryLabel,
             filters.productKind,
             filters.productSalesPriceMax,
             filters.productPriceKind,
             filters.productSalesPriceMin,
             filters.q,
             filters.supplyRegion,
-            rows.length,
+            list.total,
             selectedBrandLabel,
             selectedCategoryLabel,
         ],
     )
 
     const onExport = React.useCallback(() => {
-        if (!listQuery.data || rows.length === 0) return
+        if (!list.loaded || list.total === 0) return
         void handleExport(
             {
                 resource: "sellable-items",
@@ -175,6 +227,9 @@ export function useSellableListState(
                 productCategoryId: filters.productCategoryId,
                 productBrandId: filters.productBrandId,
                 supplyRegion: filters.supplyRegion,
+                deliveryRegion: filters.deliveryRegion,
+                deliveryExtent: filters.deliveryExtent,
+                includeFreightExtra: filters.includeFreightExtra,
                 productPriceKind: filters.productPriceKind,
                 productSalesPriceMin: filters.productSalesPriceMin,
                 productSalesPriceMax: filters.productSalesPriceMax,
@@ -182,17 +237,15 @@ export function useSellableListState(
             filterSnapshotLabel,
             resourceLabel("sellable-items"),
         )
-    }, [
-        filterSnapshotLabel,
-        filters,
-        handleExport,
-        listQuery.data,
-        rows.length,
-    ])
+    }, [filterSnapshotLabel, filters, handleExport, list.loaded, list.total])
 
     return {
         filters,
-        listQuery,
+        /** 筛选条件标识；变化时清空勾选。 */
+        selectionResetKey: JSON.stringify(filterQuery),
+        list,
+        sorting,
+        changeSorting,
         productFilterOptionsQuery,
         exportMeta,
         previewId,

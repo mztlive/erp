@@ -193,8 +193,8 @@ Party 专属链必须在 drop 客户、合同、销售和应收来源集合前�
 
 `ERP_RESET_INCLUDE_CATALOG=1` 时（`scripts/prepare-dev.sh` 使用），工具额外整体 drop：
 
-- 供应商供给与公司商品池资格：`supplier_offerings`、`supplier_offering_revisions`、`supplier_offering_availabilities`、`supplier_offering_commands`
-- 商品与 SKU：`products`、`product_revisions`、`product_revision_medias`、`skus`、`sku_revisions`、`sku_revision_attribute_values`、`voucher_category_profile_revisions`
+- 供应商供给与公司商品池资格：`supplier_offerings`、`supplier_offering_revisions`、`supplier_offering_availabilities`、`supplier_offering_commands`、`supplier_delivery_templates`，以及由后台重建的配送覆盖 `sku_delivery_coverages`、`sku_delivery_coverage_state`
+- 商品与 SKU：`products`、`product_revisions`、`product_revision_medias`、`skus`、`sku_revisions`、`sku_revision_attribute_values`、`voucher_category_profile_revisions`，以及由后台重建的公司商品池投影 `sellable_sku_projections`、`sellable_sku_projection_state`
 - 供应商主数据与接口配置：`supplier_accounts` 及其资料/能力/资质/评级/命令集合，以及 `supplier_api_connections`、`supplier_api_capabilities`、`supplier_api_business_capability_confirmations`
 - 仓库：`warehouses`、`warehouse_revisions`、`warehouse_sku_policies`
 - 商品字典：`product_categories`、`product_brands`、`unit_of_measures`、`sku_attributes`、`sku_attribute_values`、`product_category_attributes`

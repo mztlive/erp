@@ -1,13 +1,18 @@
-//! 销售录入收货地址时的配送提示：按 SKU 全部有效且可供供给的配送模板判定，不暴露供应商。
+//! SKU 配送覆盖读取：销售录入收货地址时的实时提示（不暴露供应商），以及公司商品池
+//! 地区筛选预算所需的事实。两者共用同一有效供给口径与逐地区合并规则。
 
 use std::collections::HashMap;
 
+use erp_catalog::repository::prelude::*;
+use erp_catalog::{CatalogExt, ProductKind};
 use erp_core::common::time::BusinessDate;
-use erp_core::delivery_policy::{DeliveryMode, DeliveryPolicy, DeliveryTerm};
+use erp_core::delivery_coverage::{DeliveryReach, delivery_reach};
+use erp_core::delivery_policy::DeliveryPolicy;
 use erp_core::ids::SkuId;
 use erp_core::region::RegionCode;
-use erp_procurement::entity::facts::AvailabilityStatus;
+use erp_procurement::entity::facts::{AvailabilityStatus, OfferingRevisionFact};
 use erp_procurement::entity::purchase_order::CreationBasisFacts;
+use erp_supply::entity::supplier_offering::SkuDeliveryInput;
 use mongodb::Database;
 use persistence_core::NoTransaction;
 use serde::{Deserialize, Serialize};
@@ -78,18 +83,13 @@ pub struct DeliveryCoverageView {
 /// # 错误
 /// 无。
 pub fn coverage_hint(policies: &[&DeliveryPolicy], region: &RegionCode) -> DeliveryCoverageHint {
-    if policies.is_empty()
-        || policies.iter().any(|policy| policy.judge(DeliveryMode::Dropship, region).is_deliverable())
-    {
+    if policies.is_empty() {
         return DeliveryCoverageHint::None;
     }
-    let bulk = policies.iter().map(|policy| policy.judge(DeliveryMode::Bulk, region)).collect::<Vec<_>>();
-    if bulk.iter().all(|term| *term == DeliveryTerm::NotDeliverable) {
-        DeliveryCoverageHint::NoSupply
-    } else if bulk.contains(&DeliveryTerm::FreightIncluded) {
-        DeliveryCoverageHint::None
-    } else {
-        DeliveryCoverageHint::BulkFreightExtraOnly
+    match delivery_reach(policies, region) {
+        DeliveryReach::FreightIncluded => DeliveryCoverageHint::None,
+        DeliveryReach::FreightExtra => DeliveryCoverageHint::BulkFreightExtraOnly,
+        DeliveryReach::NotDeliverable => DeliveryCoverageHint::NoSupply,
     }
 }
 
@@ -115,11 +115,11 @@ pub async fn sellable_delivery_coverage(
     }
     let sku_ids = req.lines.iter().map(|line| SkuId::new(line.sku_id.trim())).collect::<Vec<_>>();
     let facts = load_creation_basis_facts(db, &sku_ids, &mut NoTransaction).await?;
-    let policies = effective_policies(&facts, BusinessDate::today());
+    let supplies = effective_supply(&facts, BusinessDate::today());
     let mut items = Vec::new();
     for line in &req.lines {
         let sku_id = line.sku_id.trim();
-        let line_policies = policies.get(sku_id).map(Vec::as_slice).unwrap_or_default();
+        let line_policies = supplies.get(sku_id).map(|supply| supply.policies.as_slice()).unwrap_or_default();
         let mut seen = Vec::new();
         for code in &line.region_codes {
             let region =
@@ -138,33 +138,117 @@ pub async fn sellable_delivery_coverage(
     Ok(DeliveryCoverageView { items })
 }
 
-/// 按 SKU 归集有效且当前可供供给的生效配送政策。
-fn effective_policies(
-    facts: &CreationBasisFacts,
+/// 计算一批 SKU 配送覆盖所需的事实。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `sku_ids` - 公司 SKU，不重复
+/// * `today` - 有效期判定日
+///
+/// # 返回
+/// 逐 SKU 返回有效且可供供给的去重政策、供应商、下次按日期变化日与是否受配送范围限制；
+/// 没有供给的 SKU 返回空政策。
+///
+/// # 错误
+/// 供给、模板或商品事实读取失败时返回错误。
+pub async fn sku_delivery_inputs(
+    db: &Database,
+    sku_ids: &[String],
     today: BusinessDate,
-) -> HashMap<String, Vec<&DeliveryPolicy>> {
-    let mut policies: HashMap<String, Vec<&DeliveryPolicy>> = HashMap::new();
+) -> Result<Vec<SkuDeliveryInput>> {
+    let ids = sku_ids.iter().map(|id| SkuId::new(id.as_str())).collect::<Vec<_>>();
+    let facts = load_creation_basis_facts(db, &ids, &mut NoTransaction).await?;
+    let restricted = restricted_skus(db, &ids).await?;
+    let mut supplies = effective_supply(&facts, today);
+    Ok(sku_ids
+        .iter()
+        .map(|sku_id| {
+            let supply = supplies.remove(sku_id).unwrap_or_default();
+            let mut policies: Vec<DeliveryPolicy> = Vec::new();
+            for policy in supply.policies {
+                if !policies.contains(policy) {
+                    policies.push(policy.clone());
+                }
+            }
+            SkuDeliveryInput {
+                sku_id: sku_id.clone(),
+                restricted: restricted.get(sku_id).copied().unwrap_or(true),
+                policies,
+                supplier_ids: supply.supplier_ids,
+                next_change_date: supply.next_change_date,
+            }
+        })
+        .collect())
+}
+
+/// 读取 SKU 是否为实物商品；虚拟商品、线下服务与卡券不受配送范围限制。
+async fn restricted_skus(db: &Database, sku_ids: &[SkuId]) -> Result<HashMap<String, bool>> {
+    let skus = db.skus().find_by_ids(sku_ids, &mut NoTransaction).await?;
+    let product_ids = skus.iter().map(|sku| sku.product_id.clone()).collect::<Vec<_>>();
+    let products = db.products().find_by_ids(&product_ids, &mut NoTransaction).await?;
+    let kinds = products
+        .into_iter()
+        .map(|product| (product.base.id.clone(), product.product_kind))
+        .collect::<HashMap<_, _>>();
+    Ok(skus
+        .into_iter()
+        .map(|sku| {
+            let kind = kinds.get(&sku.product_id.to_string()).copied();
+            (sku.base.id, kind.is_none_or(|kind| kind == ProductKind::Physical))
+        })
+        .collect())
+}
+
+/// 一个 SKU 的有效供给汇总。
+#[derive(Default)]
+struct EffectiveSupply<'a> {
+    policies: Vec<&'a DeliveryPolicy>,
+    supplier_ids: Vec<String>,
+    next_change_date: Option<BusinessDate>,
+}
+
+/// 按 SKU 归集有效且当前可供供给的生效配送政策与供应商，并记录各供给条款最近一次按日期变化。
+fn effective_supply(facts: &CreationBasisFacts, today: BusinessDate) -> HashMap<String, EffectiveSupply<'_>> {
+    let mut supplies: HashMap<String, EffectiveSupply<'_>> = HashMap::new();
     for offering in &facts.offerings {
         let Some(revision) =
             offering.stable.current_revision_id.as_ref().and_then(|id| facts.revisions.get(id))
         else {
             continue;
         };
-        let valid = revision.valid_from <= today && revision.valid_to.is_none_or(|until| until >= today);
+        let supply = supplies.entry(offering.sku_id.to_string()).or_default();
+        supply.next_change_date = earliest(supply.next_change_date, next_validity_change(revision, today));
         let available = facts.availabilities.get(&offering.base.id).is_some_and(|availability| {
             availability.availability_status == AvailabilityStatus::Available
                 && availability
                     .available_quantity
                     .is_none_or(|quantity| quantity.to_decimal() > rust_decimal::Decimal::ZERO)
         });
-        if !valid || !available {
+        let Some(delivery) = facts.deliveries.get(&offering.base.id) else { continue };
+        if !today.is_within(revision.valid_from, revision.valid_to) || !available {
             continue;
         }
-        if let Some(delivery) = facts.deliveries.get(&offering.base.id) {
-            policies.entry(offering.sku_id.to_string()).or_default().push(&delivery.policy);
+        supply.policies.push(&delivery.policy);
+        let supplier_id = offering.supplier_id.to_string();
+        if !supply.supplier_ids.contains(&supplier_id) {
+            supply.supplier_ids.push(supplier_id);
         }
     }
-    policies
+    supplies
+}
+
+/// 条款下一次按日期改变有效性的日期：未来的生效日或失效日。
+fn next_validity_change(revision: &OfferingRevisionFact, today: BusinessDate) -> Option<BusinessDate> {
+    let start = (revision.valid_from > today).then_some(revision.valid_from);
+    let end = revision.valid_to.filter(|until| *until > today);
+    earliest(start, end)
+}
+
+fn earliest(left: Option<BusinessDate>, right: Option<BusinessDate>) -> Option<BusinessDate> {
+    match (left, right) {
+        (Some(left), Some(right)) => Some(left.min(right)),
+        (left, right) => left.or(right),
+    }
 }
 
 #[cfg(test)]
@@ -210,5 +294,122 @@ mod tests {
         let open = policy(DeliveryTerm::FreightIncluded, DeliveryTerm::NotDeliverable);
         assert_eq!(coverage_hint(&[&refuse, &open], &code("650102")), DeliveryCoverageHint::None);
         assert_eq!(coverage_hint(&[], &code("650102")), DeliveryCoverageHint::None);
+    }
+
+    mod supply {
+        use erp_core::common::time::BusinessDate;
+        use erp_core::delivery_policy::{DeliveryPolicy, DeliveryRuleSet, DeliveryTerm};
+        use erp_core::ids::{SkuId, SupplierOfferingId};
+        use erp_procurement::entity::facts::{
+            AvailabilityFact, AvailabilityStatus, CurrentRevisionFact, FactIdentity, OfferingFact,
+            OfferingRevisionFact, VersionedFactIdentity,
+        };
+        use erp_procurement::entity::purchase_order::{CreationBasisFacts, OfferingDeliveryFact};
+
+        use super::super::{effective_supply, next_validity_change};
+
+        fn date(value: &str) -> BusinessDate {
+            value.parse().unwrap()
+        }
+
+        struct Offer {
+            id: &'static str,
+            supplier: &'static str,
+            from: &'static str,
+            to: Option<&'static str>,
+            status: AvailabilityStatus,
+            quantity: Option<&'static str>,
+        }
+
+        fn revision(offer: &Offer) -> OfferingRevisionFact {
+            OfferingRevisionFact {
+                base: FactIdentity { id: format!("{}-terms", offer.id) },
+                version: 1,
+                supplier_offering_id: SupplierOfferingId::new(offer.id),
+                valid_from: date(offer.from),
+                valid_to: offer.to.map(date),
+                bulk_supply_price_gross: "10".parse().unwrap(),
+                dropship_supply_price_gross: "11".parse().unwrap(),
+                input_tax_rate: "0.13".parse().unwrap(),
+                bulk_minimum_order_quantity: "1".parse().unwrap(),
+            }
+        }
+
+        fn facts(offers: &[Offer], policy: &DeliveryPolicy) -> CreationBasisFacts {
+            let mut facts = CreationBasisFacts::default();
+            for offer in offers {
+                facts.offerings.push(OfferingFact {
+                    base: FactIdentity { id: offer.id.into() },
+                    version: 1,
+                    stable: CurrentRevisionFact { current_revision_id: Some(format!("{}-terms", offer.id)) },
+                    sku_id: SkuId::new("sku-1"),
+                    supplier_id: offer.supplier.to_string().into(),
+                });
+                facts.revisions.insert(format!("{}-terms", offer.id), revision(offer));
+                facts.availabilities.insert(
+                    offer.id.into(),
+                    AvailabilityFact {
+                        base: VersionedFactIdentity { id: format!("{}-availability", offer.id), version: 1 },
+                        supplier_offering_id: SupplierOfferingId::new(offer.id),
+                        availability_status: offer.status,
+                        available_quantity: offer.quantity.map(|value| value.parse().unwrap()),
+                        source_revision_token: None,
+                    },
+                );
+                facts.deliveries.insert(
+                    offer.id.into(),
+                    OfferingDeliveryFact { policy: policy.clone(), ..Default::default() },
+                );
+            }
+            facts
+        }
+
+        fn offer(
+            id: &'static str,
+            supplier: &'static str,
+            from: &'static str,
+            to: Option<&'static str>,
+        ) -> Offer {
+            Offer { id, supplier, from, to, status: AvailabilityStatus::Available, quantity: None }
+        }
+
+        #[test]
+        fn only_valid_available_offerings_contribute_and_next_change_is_earliest() {
+            let policy = DeliveryPolicy::new(
+                DeliveryRuleSet::uniform(DeliveryTerm::NotDeliverable),
+                DeliveryRuleSet::uniform(DeliveryTerm::FreightExtra),
+            )
+            .unwrap();
+            let offers = [
+                offer("open", "supplier-a", "2026-10-01", None),
+                offer("future", "supplier-b", "2026-10-20", None),
+                Offer {
+                    quantity: Some("0"),
+                    ..offer("sold-out", "supplier-c", "2026-10-01", Some("2026-10-16"))
+                },
+                Offer {
+                    status: AvailabilityStatus::Unavailable,
+                    ..offer("paused", "supplier-d", "2026-10-01", None)
+                },
+                offer("open-twin", "supplier-a", "2026-09-01", None),
+                offer("expired-today", "supplier-e", "2026-10-01", Some("2026-10-14")),
+            ];
+            let facts = facts(&offers, &policy);
+            let supplies = effective_supply(&facts, date("2026-10-14"));
+            let supply = supplies.get("sku-1").unwrap();
+            assert_eq!(supply.policies.len(), 2);
+            assert_eq!(supply.supplier_ids, vec!["supplier-a".to_string()]);
+            assert_eq!(supply.next_change_date, Some(date("2026-10-16")));
+            assert!(effective_supply(&CreationBasisFacts::default(), date("2026-10-14")).is_empty());
+        }
+
+        #[test]
+        fn expiry_date_is_the_change_date() {
+            let ending = revision(&offer("ending", "supplier-a", "2026-10-01", Some("2026-10-15")));
+            assert_eq!(next_validity_change(&ending, date("2026-10-14")), Some(date("2026-10-15")));
+            assert_eq!(next_validity_change(&ending, date("2026-10-15")), None);
+            let starting = revision(&offer("starting", "supplier-a", "2026-10-20", Some("2026-11-01")));
+            assert_eq!(next_validity_change(&starting, date("2026-10-14")), Some(date("2026-10-20")));
+        }
     }
 }

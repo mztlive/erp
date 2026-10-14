@@ -4,7 +4,6 @@ import * as React from "react"
 import { useRouter } from "next/navigation"
 import { CircleHelpIcon, DownloadIcon, PackageSearchIcon } from "lucide-react"
 import { useIsMutating } from "@tanstack/react-query"
-import type { SortingState } from "@tanstack/react-table"
 
 import {
     BackgroundJobProgress,
@@ -56,7 +55,10 @@ export function SellableItemsListPage() {
     const { searchInputRef, resultsHeadingRef, lastFocusedRowId } =
         useListPageChrome()
     const state = useSellableListState(searchInputRef)
-    const selection = useSellableGallerySelection(state.rows)
+    const selection = useSellableGallerySelection(
+        state.rows,
+        state.selectionResetKey,
+    )
     const excelExport = useSellableExcelExport()
     const csvExportPending =
         useIsMutating({
@@ -75,11 +77,9 @@ export function SellableItemsListPage() {
     const layout = filters.layout
     const isGallery = layout === "gallery"
     const columns = useSellableListColumns()
-    // 排序是视图状态而非筛选：全量结果已在客户端，本地排序不重新请求，也不参与「清除筛选」
-    const [sorting, setSorting] = React.useState<SortingState>([])
     const hasActiveFilters =
         filters.q.trim() !== "" || filters.hasStructuredSellableFilters
-    const listLoadFailed = state.listQuery.isError
+    const listLoadFailed = state.list.isError
     const exportsSelection = isGallery || selection.selectedCount > 0
     const exportPending = excelExport.pending || csvExportPending
     const [lastExportKind, setLastExportKind] = React.useState<
@@ -91,7 +91,7 @@ export function SellableItemsListPage() {
             : state.exportMeta
     const exportDisabled = exportsSelection
         ? exportPending || selection.selectedCount === 0
-        : exportPending || state.rows.length === 0
+        : exportPending || state.list.total === 0
 
     const [exportConfirmOpen, setExportConfirmOpen] = React.useState(false)
     const [selectionLaunchOpen, setSelectionLaunchOpen] = React.useState(false)
@@ -105,14 +105,14 @@ export function SellableItemsListPage() {
         itemCount:
             sourceKind === "SELECTION"
                 ? selection.selectedCount
-                : state.rows.length,
+                : state.list.total,
         filterLabel: state.appliedChips.map((chip) => chip.label).join(" · "),
     })
     const launchDisabled =
         listLoadFailed ||
         (sourceKind === "SELECTION"
             ? selection.selectedCount === 0
-            : state.rows.length === 0)
+            : state.list.total === 0)
 
     const changeLayout = React.useCallback(
         (next: SellableListLayout) => {
@@ -139,19 +139,30 @@ export function SellableItemsListPage() {
                     productCategoryId: filters.productCategoryId,
                     productBrandId: filters.productBrandId,
                     supplyRegion: filters.supplyRegion,
+                    deliveryRegion: filters.deliveryRegion,
+                    deliveryExtent: filters.deliveryExtent,
+                    includeFreightExtra: filters.includeFreightExtra,
                     productPriceKind: filters.productPriceKind,
                     productSalesPriceMin: filters.productSalesPriceMin,
                     productSalesPriceMax: filters.productSalesPriceMax,
+                    // 只按勾选的商品复核，不重新取回全部结果。
+                    skuIds: [...selection.selectedIds],
                 },
                 selectedIds: selection.selectedIds,
-                fallbackRows: state.rows,
+                fallbackRows: selection.selectedRows,
                 filterSnapshotLabel: state.filterSnapshotLabel,
                 fileLabel: resourceLabel("sellable-items"),
             })
             .then((ok) => {
                 if (ok) setExportConfirmOpen(false)
             })
-    }, [excelExport, filters, selection.selectedIds, state])
+    }, [
+        excelExport,
+        filters,
+        selection.selectedIds,
+        selection.selectedRows,
+        state,
+    ])
 
     return (
         <PageScaffold density="compact" className={styles.page}>
@@ -247,7 +258,7 @@ export function SellableItemsListPage() {
                 tabIndex={-1}
                 className="sr-only outline-none"
             >
-                {`公司商品池 · ${state.rows.length} 条结果`}
+                {`公司商品池 · ${state.list.total} 条结果`}
             </h2>
 
             <ListWorkSurface
@@ -256,13 +267,14 @@ export function SellableItemsListPage() {
                     <SellableItemsFilterBar
                         searchInputRef={searchInputRef}
                         filters={filters}
+                        deliveryFilter={filters}
                         appliedChips={state.appliedChips}
                         filterOptions={state.productFilterOptionsQuery}
                         resultCount={
-                            state.listQuery.data ? state.rows.length : undefined
+                            state.list.loaded ? state.list.total : undefined
                         }
-                        loading={state.listQuery.isFetching}
-                        failed={state.listQuery.isError}
+                        loading={state.list.isFetching}
+                        failed={state.list.isError}
                     />
                 }
                 tableActions={
@@ -307,7 +319,7 @@ export function SellableItemsListPage() {
                                 ? "master-data-sellable-items-gallery"
                                 : "master-data-sellable-items-table"
                         }
-                        resultCount={state.rows.length}
+                        resultCount={state.list.total}
                         selectedCount={selection.selectedCount}
                         allSelected={selection.allSelected}
                         someSelected={selection.someSelected}
@@ -320,14 +332,18 @@ export function SellableItemsListPage() {
                     isGallery ? (
                         <SellableItemsGallery
                             rows={state.rows}
-                            loading={state.listQuery.isFetching}
+                            total={state.list.total}
+                            hasMore={state.list.hasMore}
+                            loadingMore={state.list.loadingMore}
+                            onLoadMore={state.list.loadMore}
+                            loading={state.list.isFetching}
                             failed={listLoadFailed}
-                            error={state.listQuery.error}
+                            error={state.list.error}
                             hasActiveFilters={hasActiveFilters}
                             selectedIds={selection.selectedIds}
                             highlightedId={state.previewId ?? undefined}
                             lastFocusedRowId={lastFocusedRowId}
-                            onRetry={() => void state.listQuery.refetch()}
+                            onRetry={state.list.refetch}
                             onClearFilters={filters.clearAllFilters}
                             onToggle={selection.toggle}
                             onPreview={(row) =>
@@ -350,14 +366,14 @@ export function SellableItemsListPage() {
                                     ? `${row.name} · ${row.sellableItem.specificationLabel}`
                                     : row.name
                             }
-                            rowCount={state.rows.length}
+                            rowCount={state.list.total}
                             pagination={filters.pagination}
                             onPaginationChange={filters.changePagination}
-                            sorting={sorting}
-                            onSortingChange={setSorting}
-                            manualSorting={false}
-                            manualPagination={false}
-                            loading={state.listQuery.isFetching}
+                            sorting={state.sorting}
+                            onSortingChange={state.changeSorting}
+                            manualSorting
+                            manualPagination
+                            loading={state.list.isFetching}
                             highlightedRowId={state.previewId ?? undefined}
                             layout="flush"
                             caption="可售商品、销售参考价与供应保障"
@@ -369,16 +385,14 @@ export function SellableItemsListPage() {
                             errorState={
                                 listLoadFailed ? (
                                     <BusinessFailureState
-                                        error={state.listQuery.error}
+                                        error={state.list.error}
                                         action={
                                             <Button
                                                 id="master-data-sellable-items-list-retry"
                                                 type="button"
                                                 variant="outline"
                                                 size="sm"
-                                                onClick={() =>
-                                                    void state.listQuery.refetch()
-                                                }
+                                                onClick={state.list.refetch}
                                             >
                                                 重试
                                             </Button>
@@ -459,6 +473,13 @@ export function SellableItemsListPage() {
                         price_kind: filters.productPriceKind,
                         sales_price_min: filters.productSalesPriceMin,
                         sales_price_max: filters.productSalesPriceMax,
+                        delivery_region_code: filters.deliveryRegion,
+                        delivery_extent: filters.deliveryRegion
+                            ? filters.deliveryExtent
+                            : undefined,
+                        include_freight_extra: filters.deliveryRegion
+                            ? filters.includeFreightExtra
+                            : undefined,
                     }}
                     initialSkuIds={
                         sourceKind === "SELECTION"

@@ -1,7 +1,9 @@
 //! 商品池来源快照：筛选条件或勾选身份，准备时冻结。
 
+use erp_core::delivery_coverage::{DeliveryCoverageQuery, DeliveryExtent};
 use erp_core::ids::SkuId;
 use erp_core::money::Amount;
+use erp_core::region::RegionCode;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
@@ -48,6 +50,15 @@ pub struct PoolFilterSnapshot {
     pub sales_price_min: Option<Amount>,
     /// 售价上限。
     pub sales_price_max: Option<Amount>,
+    /// 配送地区代码（省、市或区县）；空表示不按配送地区筛选。
+    #[serde(default)]
+    pub delivery_region_code: Option<String>,
+    /// 配送地区范围；空表示全部可送。
+    #[serde(default)]
+    pub delivery_extent: Option<DeliveryExtent>,
+    /// 是否把需另付运费的地区算作可送。
+    #[serde(default)]
+    pub include_freight_extra: bool,
 }
 
 impl PoolFilterSnapshot {
@@ -60,7 +71,7 @@ impl PoolFilterSnapshot {
     /// 空白字段变为 `None`；分页参数不得进入本结构。
     ///
     /// # 错误
-    /// 售价为负或下限大于上限时拒绝。
+    /// 售价为负、下限大于上限或配送地区代码不存在时拒绝。
     pub fn normalize(self) -> Result<Self> {
         if self.sales_price_min.is_some_and(|value| value < Amount::zero())
             || self.sales_price_max.is_some_and(|value| value < Amount::zero())
@@ -72,6 +83,10 @@ impl PoolFilterSnapshot {
         {
             return Err(Error::from("销售价下限不能大于上限"));
         }
+        let delivery_region_code = blank_to_none(self.delivery_region_code)
+            .map(|code| RegionCode::parse(&code).map(String::from))
+            .transpose()?;
+        let delivery_selected = delivery_region_code.is_some();
         Ok(Self {
             nationwide_only: self.nationwide_only,
             q: blank_to_none(self.q),
@@ -84,7 +99,31 @@ impl PoolFilterSnapshot {
             price_kind: self.price_kind,
             sales_price_min: self.sales_price_min,
             sales_price_max: self.sales_price_max,
+            delivery_region_code,
+            delivery_extent: self.delivery_extent.filter(|_| delivery_selected),
+            include_freight_extra: delivery_selected && self.include_freight_extra,
         })
+    }
+
+    /// 转为配送地区筛选条件。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 未选配送地区时返回 `None`；范围默认全部可送。
+    ///
+    /// # 错误
+    /// 冻结的地区代码已不在内置区划中时拒绝。
+    pub fn delivery_query(&self) -> Result<Option<DeliveryCoverageQuery>> {
+        let Some(code) = self.delivery_region_code.as_deref() else {
+            return Ok(None);
+        };
+        Ok(Some(DeliveryCoverageQuery {
+            region: RegionCode::parse(code)?,
+            extent: self.delivery_extent.unwrap_or_default(),
+            include_freight_extra: self.include_freight_extra,
+        }))
     }
 }
 
@@ -176,6 +215,38 @@ mod tests {
 
     use super::{PoolSource, normalize_selected_sku_ids};
     use crate::entity::sales_selection::types::PoolSourceKind;
+
+    #[test]
+    fn delivery_filter_is_validated_and_dropped_without_region() {
+        use erp_core::delivery_coverage::DeliveryExtent;
+
+        use super::PoolFilterSnapshot;
+
+        let old: PoolFilterSnapshot = serde_json::from_str("{}").unwrap();
+        assert!(old.delivery_query().unwrap().is_none());
+
+        let snapshot: PoolFilterSnapshot = serde_json::from_value(serde_json::json!({
+            "delivery_region_code": " 440300 ", "delivery_extent": "PARTIAL", "include_freight_extra": true
+        }))
+        .unwrap();
+        let normalized = snapshot.normalize().unwrap();
+        assert_eq!(normalized.delivery_region_code.as_deref(), Some("440300"));
+        let query = normalized.delivery_query().unwrap().unwrap();
+        assert_eq!(query.region.as_str(), "440300");
+        assert_eq!(query.extent, DeliveryExtent::Partial);
+        assert!(query.include_freight_extra);
+
+        let orphan: PoolFilterSnapshot = serde_json::from_value(serde_json::json!({
+            "delivery_region_code": " ", "delivery_extent": "PARTIAL", "include_freight_extra": true
+        }))
+        .unwrap();
+        let orphan = orphan.normalize().unwrap();
+        assert_eq!((orphan.delivery_extent, orphan.include_freight_extra), (None, false));
+
+        let unknown: PoolFilterSnapshot =
+            serde_json::from_value(serde_json::json!({ "delivery_region_code": "999999" })).unwrap();
+        assert!(unknown.normalize().is_err());
+    }
 
     #[test]
     fn price_filter_snapshot_preserves_kind_and_rejects_invalid_ranges() {

@@ -72,8 +72,10 @@ export function PortalTermsContent({
                 <div>
                     <dt className="text-muted-foreground">有效期</dt>
                     <dd>
-                        {terms.valid_from || "未填写"} 至{" "}
-                        {terms.valid_to ?? "长期有效"}
+                        {terms.valid_from || "未填写"} 起
+                        {terms.valid_to
+                            ? `，${terms.valid_to} 失效`
+                            : "长期有效"}
                     </dd>
                 </div>
                 <div>

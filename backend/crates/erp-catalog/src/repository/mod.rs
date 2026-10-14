@@ -9,10 +9,11 @@ pub use catalog::{
     CatalogReadScope, CatalogRepository, CatalogScopeClause, CategoryParentChainFact, ProductBrandFilter,
     ProductBrandRow, ProductCategoryAttributeFilter, ProductCategoryFilter, ProductCategoryRow,
     ProductFilter, ProductListingSummary, ProductRevisionFilter, ProductRevisionRow, ProductRow,
-    SellableSkuFilter, SellableSkuRow, SkuAttributeFilter, SkuAttributeRow, SkuAttributeValueFilter,
-    SkuAttributeValueRow, SkuFilter, SkuRevisionFilter, SkuRevisionRow, SkuRow, UnitOfMeasureFilter,
-    UnitOfMeasureRow, VoucherCategoryProfileRevisionFilter, VoucherCategoryProfileRevisionRow,
-    sku_is_listed_expr,
+    SELLABLE_SKU_PROJECTION_VERSION, SellableSkuFilter, SellableSkuProjectionState,
+    SellableSkuProjectionStore, SellableSkuRow, SellableSort, SellableSortField, SkuAttributeFilter,
+    SkuAttributeRow, SkuAttributeValueFilter, SkuAttributeValueRow, SkuFilter, SkuRevisionFilter,
+    SkuRevisionRow, SkuRow, UnitOfMeasureFilter, UnitOfMeasureRow, VoucherCategoryProfileRevisionFilter,
+    VoucherCategoryProfileRevisionRow, sku_is_listed_expr,
 };
 pub use extensions::CatalogExt;
 pub use owned::{

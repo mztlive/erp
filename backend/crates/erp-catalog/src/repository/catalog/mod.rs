@@ -24,6 +24,7 @@ pub mod procurement_facts;
 mod product;
 mod scope;
 mod sellable;
+pub mod sellable_projection;
 mod shared;
 mod sku;
 mod sku_lookup;
@@ -54,7 +55,10 @@ pub use product::{
     ProductRevisionRepositoryExt, ProductRevisionRow, ProductRow,
 };
 pub use scope::{CatalogReadScope, CatalogScopeClause};
-pub use sellable::{SellableSkuFilter, SellableSkuRow};
+pub use sellable::{SellableSkuFilter, SellableSkuRow, SellableSort, SellableSortField};
+pub use sellable_projection::{
+    SELLABLE_SKU_PROJECTION_VERSION, SellableSkuProjectionState, SellableSkuProjectionStore,
+};
 pub use sku::{SkuFilter, SkuRepositoryExt, SkuRow};
 pub use sku_revision::{SkuRevisionFilter, SkuRevisionRepositoryExt, SkuRevisionRow};
 pub use voucher::{

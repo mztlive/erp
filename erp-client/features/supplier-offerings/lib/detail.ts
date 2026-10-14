@@ -20,12 +20,14 @@ export function offeringDetailHref(id: string, returnTo: string) {
     return `${LIST_PATH}/${encodeURIComponent(id)}?${new URLSearchParams({ returnTo: offeringListHref(returnTo) })}`
 }
 
-/** 日期只用于展示条款期间，不据此推导下单资格。 */
+/** 日期只用于展示条款期间，不据此推导下单资格。失效日当天起不再有效。 */
 export function offeringValidity(
     terms: Pick<SupplierOfferingView, "valid_from" | "valid_to">,
 ) {
     if (!terms.valid_from) return "未维护有效期"
-    return `${terms.valid_from} 至 ${terms.valid_to || "长期有效"}`
+    return terms.valid_to
+        ? `${terms.valid_from} 起，${terms.valid_to} 失效`
+        : `${terms.valid_from} 起长期有效`
 }
 
 export function offeringTime(value?: number | null) {

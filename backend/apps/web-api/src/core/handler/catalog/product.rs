@@ -606,6 +606,7 @@ mod tests {
     use axum::extract::Query;
     use axum::http::Uri;
     use erp_catalog::entity::catalog::SellablePriceKind;
+    use erp_core::delivery_coverage::DeliveryExtent;
 
     use super::SellableSkuListParams;
 
@@ -630,6 +631,22 @@ mod tests {
             "price_kind=bulk&price_kind=market",
             "price_kind=bulk&sales_price_min=oops",
         ] {
+            let uri: Uri = format!("/admin/sellable-skus?{query}").parse().unwrap();
+            assert!(Query::<SellableSkuListParams>::try_from_uri(&uri).is_err());
+        }
+    }
+
+    #[test]
+    fn delivery_filter_query_parses_region_extent_and_freight_flag() {
+        let uri: Uri =
+            "/admin/sellable-skus?delivery_region_code=440300&delivery_extent=PARTIAL&include_freight_extra=true"
+                .parse()
+                .unwrap();
+        let Query(params) = Query::<SellableSkuListParams>::try_from_uri(&uri).unwrap();
+        assert_eq!(params.delivery_region_code.as_deref(), Some("440300"));
+        assert_eq!(params.delivery_extent, Some(DeliveryExtent::Partial));
+        assert_eq!(params.include_freight_extra, Some(true));
+        for query in ["delivery_extent=SOME", "include_freight_extra=maybe"] {
             let uri: Uri = format!("/admin/sellable-skus?{query}").parse().unwrap();
             assert!(Query::<SellableSkuListParams>::try_from_uri(&uri).is_err());
         }

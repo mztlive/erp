@@ -6,6 +6,7 @@ pub mod handover_receipt;
 pub mod organization;
 pub mod owned;
 pub mod prelude;
+pub mod sku_delivery_coverage;
 pub mod supplier_api;
 pub mod supplier_fulfillment;
 pub mod supplier_fulfillment_scope;
@@ -26,6 +27,7 @@ pub use prelude::{
     SupplierSettlementDifferenceRepositoryExt, SupplierSettlementItemRepositoryExt,
     SupplierSettlementSourceEvidenceRepositoryExt, SupplierSettlementStatementRepositoryExt,
 };
+pub use sku_delivery_coverage::SkuDeliveryCoverageStore;
 pub use supplier_fulfillment_scope::{FulfillmentOrderReadScope, FulfillmentOrderScopeClause};
 pub use supplier_offering::{
     OfferingReadScope, OfferingScopeClause, SupplierOfferingFilter, SupplierOfferingRow,

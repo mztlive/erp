@@ -362,9 +362,9 @@ function localErrors(
             errors.validFrom = "生效日期请按有效的YYYY-MM-DD填写"
         if (
             value.validTo &&
-            (!dateValid(value.validTo) || value.validTo < value.validFrom)
+            (!dateValid(value.validTo) || value.validTo <= value.validFrom)
         )
-            errors.validTo = "失效日期须有效且不早于生效日期"
+            errors.validTo = "失效日期须有效且晚于生效日期"
     }
     if (mode === "new_product") {
         for (const field of [

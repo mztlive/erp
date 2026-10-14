@@ -147,6 +147,11 @@ export function SellableGalleryCard({
                         )}
                     </p>
                     <SupplyRegions regions={item?.supplyRegions ?? []} />
+                    {item?.deliveryFreightExtra ? (
+                        <p className="text-warning-soft-foreground">
+                            所选地区部分需另付运费
+                        </p>
+                    ) : null}
                     <p
                         className={cn(
                             "inline-flex items-center gap-1",

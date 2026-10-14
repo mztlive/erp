@@ -20,6 +20,20 @@ function sellableListParams(
         brand_id: query.productBrandId,
         supplier_id: query.productSupplierId,
         supply_region: query.supplyRegion,
+        delivery_region_code: query.deliveryRegion,
+        delivery_extent: query.deliveryRegion
+            ? query.deliveryExtent
+            : undefined,
+        include_freight_extra: query.deliveryRegion
+            ? query.includeFreightExtra || undefined
+            : undefined,
+        sku_ids: query.skuIds?.length ? query.skuIds.join(",") : undefined,
+        sort_by: query.sellableSortBy,
+        sort_dir: query.sellableSortBy
+            ? query.sellableSortDesc
+                ? "desc"
+                : "asc"
+            : undefined,
         price_kind: query.productPriceKind,
         sales_price_min: query.productSalesPriceMin,
         sales_price_max: query.productSalesPriceMax,

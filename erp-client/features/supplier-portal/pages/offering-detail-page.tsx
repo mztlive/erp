@@ -162,7 +162,8 @@ export function PortalOfferingDetailPage({
                     />
                 </p>
                 <p>
-                    有效期：{terms.valid_from} 至 {terms.valid_to ?? "长期有效"}
+                    有效期：{terms.valid_from} 起
+                    {terms.valid_to ? `，${terms.valid_to} 失效` : "长期有效"}
                 </p>
                 <p>
                     税率：

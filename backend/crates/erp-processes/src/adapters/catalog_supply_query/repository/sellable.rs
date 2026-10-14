@@ -1,6 +1,8 @@
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_catalog::entity::catalog::{EnableStatus, ListingStatus, ProductKind, SellablePriceKind, Sku};
-use erp_catalog::repository::{CatalogExt, SellableSkuFilter, SellableSkuRow};
+use erp_catalog::repository::{
+    CatalogExt, SellableSkuFilter, SellableSkuRow, SellableSort, SellableSortField,
+};
 use erp_core::common::time::BusinessDate;
 use erp_core::money::Amount;
 use erp_supply::entity::supplier_offering::{AvailabilityStatus, OfferingStatus};
@@ -37,14 +39,15 @@ struct SellableSkuTotal {
 }
 
 impl CatalogSupplyRepository<'_> {
-    /// 分页查询销售可用的公司 SKU。
+    /// 按实时资格聚合分页查询公司商品池。
     ///
     /// 资格固定为：稳定 SKU 启用、当前 SKU 修订启用且处于生效区间并已配置
     /// 销售可见价、至少一条启用且当前修订可供并处于有效区间的供给。结果不含
     /// 采购成本、进项税率或供给起订量；供应商身份仅用于补齐业务编号。
     ///
     /// # 参数
-    /// * `filter` - 关键字、类型、分类、品牌、供应商、区域、供应保障、销售价与分页
+    /// * `filter` - 业务筛选、排序与分页
+    /// * `restrict` - 只在这些 SKU 中查询；`None` 表示不限
     /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
@@ -52,12 +55,16 @@ impl CatalogSupplyRepository<'_> {
     ///
     /// # 错误
     /// MongoDB 聚合、游标读取或结果反序列化失败时返回错误。
-    pub async fn search_sellable_skus(
+    pub(super) async fn search_live(
         &self,
         filter: &SellableSkuFilter,
+        restrict: Option<&[String]>,
         executor: &mut dyn Executor,
     ) -> Result<PageResult<SellableSkuRow>> {
-        let match_doc = sellable_sku_match(None, None, &[]);
+        let mut match_doc = sellable_sku_match(None, None, &[]);
+        if let Some(sku_ids) = restrict {
+            match_doc.insert("id", doc! { "$in": sku_ids });
+        }
         let pipeline = sellable_sku_pipeline(match_doc, filter, Some((filter.page, filter.page_size)));
         let facet = self.aggregate_sellable_skus(pipeline, executor).await?;
         Ok(PageResult { items: facet.items, total: facet.total.first().map_or(0, |row| row.count) })
@@ -321,11 +328,12 @@ fn sellable_sku_pipeline(
         sellable_offering_lookup(&as_of, not_deleted),
         doc! { "$match": { "offerings.0": { "$exists": true } } },
         sellable_supply_summary(),
+        doc! { "$set": { "supplier_count": { "$size": "$supplier_ids" } } },
     ];
     append_sellable_optional_filters(&mut pipeline, filter);
     pipeline.push(doc! {
         "$facet": {
-            "items": sellable_sku_item_stages(paging),
+            "items": sellable_sku_item_stages(paging, filter.sort),
             "total": [{ "$count": "count" }],
         }
     });
@@ -336,22 +344,41 @@ fn sellable_sku_pipeline(
 ///
 /// # 参数
 /// * `paging` - 页码与每页条数；缺省只保留原零偏移，不限制条数
+/// * `sort` - 排序字段与方向
 ///
 /// # 返回
-/// 返回按原顺序排列的当前页聚合阶段。
+/// 返回按所选排序、同值按 SKU 编号排列的当前页聚合阶段。
 ///
 /// # 错误
 /// 无。
-fn sellable_sku_item_stages(paging: Option<(u64, u32)>) -> Vec<Document> {
+fn sellable_sku_item_stages(paging: Option<(u64, u32)>, sort: SellableSort) -> Vec<Document> {
     let (skip, limit) = paging.map_or((0_i64, i64::MAX), |(page, page_size)| {
         (((page.saturating_sub(1)) * u64::from(page_size)) as i64, i64::from(page_size))
     });
-    let mut stages = vec![doc! { "$sort": { "sku_no": 1, "id": 1 } }, doc! { "$skip": skip }];
+    let mut stages = vec![doc! { "$sort": pipeline_sort(sort) }, doc! { "$skip": skip }];
     if paging.is_some() {
         stages.push(doc! { "$limit": limit });
     }
     stages.push(sellable_sku_projection());
     stages
+}
+
+/// 排序字段在资格聚合中的路径；同值按 SKU 编号与 SKU 稳定排序。
+fn pipeline_sort(sort: SellableSort) -> Document {
+    let path = match sort.field {
+        SellableSortField::SkuNo => "sku_no",
+        SellableSortField::DropshipPrice => "sku_revision.sales_visible_price_gross",
+        SellableSortField::BulkPrice => "sku_revision.bulk_price_gross",
+        SellableSortField::MarketPrice => "sku_revision.market_price",
+        SellableSortField::BulkMinQuantity => "sku_revision.bulk_min_quantity",
+        SellableSortField::SupplierCount => "supplier_count",
+    };
+    let mut keys = doc! { path: if sort.descending { -1 } else { 1 } };
+    if path != "sku_no" {
+        keys.insert("sku_no", 1);
+    }
+    keys.insert("id", 1);
+    keys
 }
 
 /// 投影公司 SKU 的三种含税参考价、集采起订量与内部供应商身份。
@@ -391,9 +418,11 @@ fn sellable_sku_projection() -> Document {
             "category_id": "$product_revision.category_id",
             "effective_from": "$sku_revision.effective_from",
             "effective_to": "$sku_revision.effective_to",
-            "supplier_count": { "$size": "$supplier_ids" },
+            "supplier_count": 1,
             "supplier_ids": 1,
             "supply_regions": 1,
+            "brand_id": "$product_revision.brand_id",
+            "product_name": "$product_revision.name",
         }
     }
 }
@@ -700,6 +729,9 @@ mod tests {
             price_kind: SellablePriceKind::Dropship,
             sales_price_min: Some(Amount::from_str("10.00").unwrap()),
             sales_price_max: Some(Amount::from_str("100.00").unwrap()),
+            delivery: None,
+            sku_ids: None,
+            sort: Default::default(),
             eligibility_as_of: date,
             page: 2,
             page_size: 20,
@@ -728,6 +760,22 @@ mod tests {
         assert!(!json.contains("dropship_supply_price"));
         assert!(!json.contains("bulk_supply_price"));
         assert!(!json.contains("input_tax_rate"));
+    }
+
+    /// 实时聚合与预算投影按相同字段排序，同值按 SKU 编号与 SKU 稳定排序。
+    #[test]
+    fn live_sort_matches_projection_fields() {
+        use erp_catalog::repository::{SellableSort, SellableSortField};
+
+        assert_eq!(pipeline_sort(SellableSort::default()), doc! { "sku_no": 1, "id": 1 });
+        let price = SellableSort { field: SellableSortField::BulkPrice, descending: true };
+        assert_eq!(pipeline_sort(price), doc! { "sku_revision.bulk_price_gross": -1, "sku_no": 1, "id": 1 });
+        let suppliers = SellableSort { field: SellableSortField::SupplierCount, descending: false };
+        assert_eq!(pipeline_sort(suppliers), doc! { "supplier_count": 1, "sku_no": 1, "id": 1 });
+        let projection = sellable_sku_projection();
+        let fields = projection.get_document("$project").unwrap();
+        assert_eq!(fields.get_str("brand_id").unwrap(), "$product_revision.brand_id");
+        assert_eq!(fields.get_str("product_name").unwrap(), "$product_revision.name");
     }
 
     /// 销售单资格复核按稳定 SKU 与当前修订成对匹配，禁止只按 SKU 猜修订。

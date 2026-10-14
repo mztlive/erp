@@ -49,6 +49,11 @@ for collection in \
     supplier_offering_revisions \
     supplier_offering_availabilities \
     supplier_offering_commands \
+    supplier_delivery_templates \
+    sku_delivery_coverages \
+    sku_delivery_coverage_state \
+    sellable_sku_projections \
+    sellable_sku_projection_state \
     products \
     product_revisions \
     skus \

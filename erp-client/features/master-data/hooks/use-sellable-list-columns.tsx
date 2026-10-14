@@ -5,6 +5,7 @@ import { TriangleAlertIcon } from "lucide-react"
 import type { ColumnDef, SortingFn } from "@tanstack/react-table"
 
 import { MoneyValue, QuantityValue } from "@/components/business"
+import { Badge } from "@/components/ui/badge"
 import type { MasterDataListItem } from "@/features/master-data/types"
 import { compareDecimal } from "@/lib/fixed-decimal"
 
@@ -75,6 +76,15 @@ export function useSellableListColumns() {
                                     >
                                         {sellable.specificationLabel}
                                     </span>
+                                ) : null}
+                                {sellable?.deliveryFreightExtra ? (
+                                    <Badge
+                                        variant="warning"
+                                        className="shrink-0"
+                                        title="所选地区内有地方只能集采并另付运费"
+                                    >
+                                        需另付运费
+                                    </Badge>
                                 ) : null}
                             </div>
                         </div>

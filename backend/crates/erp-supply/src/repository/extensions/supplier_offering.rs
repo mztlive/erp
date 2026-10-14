@@ -2,6 +2,7 @@
 
 use mongodb::Database;
 
+use super::super::sku_delivery_coverage::SkuDeliveryCoverageStore;
 use super::super::supplier_offering::{SupplierOfferingDomainRepository, SupplierOfferingFilter};
 use crate::repository::owned::{
     SupplierDeliveryTemplateRepository, SupplierOfferingAvailabilityRepository,
@@ -20,6 +21,10 @@ pub trait SupplierOfferingExt: Sized {
     const SUPPLIER_OFFERING_COMMANDS: &'static str = "supplier_offering_commands";
     /// `supplier_delivery_template` 集合名。
     const SUPPLIER_DELIVERY_TEMPLATES: &'static str = "supplier_delivery_templates";
+    /// SKU 配送覆盖投影集合。
+    const SKU_DELIVERY_COVERAGES: &'static str = "sku_delivery_coverages";
+    /// SKU 配送覆盖刷新进度集合。
+    const SKU_DELIVERY_COVERAGE_STATE: &'static str = "sku_delivery_coverage_state";
 
     /// 供给列表筛选条件类型。
     type SupplierOfferingFilter;
@@ -95,6 +100,18 @@ pub trait SupplierOfferingExt: Sized {
     /// # 错误
     /// 不返回错误。
     fn supplier_delivery_templates(&self) -> SupplierDeliveryTemplateRepository<'_>;
+
+    /// 获取 SKU 配送覆盖投影访问器。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回覆盖访问器。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    fn sku_delivery_coverages(&self) -> SkuDeliveryCoverageStore<'_>;
 }
 
 impl SupplierOfferingExt for Database {
@@ -122,5 +139,9 @@ impl SupplierOfferingExt for Database {
 
     fn supplier_delivery_templates(&self) -> SupplierDeliveryTemplateRepository<'_> {
         SupplierDeliveryTemplateRepository::new(self, Self::SUPPLIER_DELIVERY_TEMPLATES)
+    }
+
+    fn sku_delivery_coverages(&self) -> SkuDeliveryCoverageStore<'_> {
+        SkuDeliveryCoverageStore::new(self)
     }
 }

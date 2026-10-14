@@ -129,6 +129,34 @@ where
     })
 }
 
+/// 按执行器语义更新符合条件的全部文档。
+///
+/// # 参数
+/// * `collection` - 目标集合
+/// * `filter` - 更新条件
+/// * `update` - 更新内容
+/// * `executor` - 数据访问执行器
+///
+/// # 返回
+/// 返回 MongoDB 更新结果。
+///
+/// # 错误
+/// 当 MongoDB 更新失败时返回错误。
+pub fn update_many<'a, T>(
+    collection: &'a Collection<T>,
+    filter: Document,
+    update: Document,
+    executor: &'a mut dyn Executor,
+) -> BoxFuture<'a, Result<UpdateResult>>
+where
+    T: Send + Sync + 'a,
+{
+    Box::pin(async move {
+        let result = exec_with_session!(executor, collection.update_many(filter, update));
+        Ok(result)
+    })
+}
+
 /// 按执行器语义执行单文档更新管道，并返回更新后的文档。
 ///
 /// 该入口用于必须由 MongoDB 原子计算的写入，例如依赖当前字段同时形成历史
