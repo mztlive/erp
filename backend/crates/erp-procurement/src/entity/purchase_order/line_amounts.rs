@@ -20,7 +20,9 @@ use erp_core::money::{Amount, Quantity, Rate, UnitPrice, line_amounts, round_to_
 use super::change_order::PurchaseChangeSubmissionLineData;
 use super::purchase_submission::PurchaseOrderSubmissionLineData;
 use super::types::PurchaseLineType;
-use crate::entity::purchase_order::{PurchaseDeliveryAllocation, PurchaseOfferingSource};
+use crate::entity::purchase_order::{
+    PurchaseDeliveryAllocation, PurchaseExpenseDetail, PurchaseOfferingSource,
+};
 
 /// 一行采购明细的类型化输入（`SavePurchaseOrderLine` 的转换目标）。
 ///
@@ -63,6 +65,8 @@ pub struct PurchaseLineInput {
     pub sales_order_submission_line_id: Option<SalesOrderSubmissionLineId>,
     /// 商品行对应的分配数量。
     pub allocated_quantity: Option<Quantity>,
+    /// 费用行内容（稳定身份、类别、说明、归属）；商品行为空。
+    pub expense: Option<PurchaseExpenseDetail>,
     /// 物流费用行请求的含税金额（商品行为空；与计算后的行金额区分）。
     pub gross_amount: Option<Amount>,
 }
@@ -164,6 +168,7 @@ impl PurchaseLineInput {
             sales_order_revision_line_id: self.sales_order_revision_line_id,
             sales_order_submission_line_id: self.sales_order_submission_line_id,
             allocated_quantity: self.allocated_quantity,
+            expense: self.expense.clone(),
         })
     }
 
@@ -211,6 +216,7 @@ impl PurchaseLineInput {
             sales_order_revision_line_id: self.sales_order_revision_line_id,
             sales_order_submission_line_id: self.sales_order_submission_line_id,
             allocated_quantity: self.allocated_quantity,
+            expense: self.expense.clone(),
         })
     }
 }
@@ -312,6 +318,7 @@ mod tests {
             sales_order_revision_line_id: Some(SalesOrderRevisionLineId::new("sorl-1")),
             sales_order_submission_line_id: Some(SalesOrderSubmissionLineId::new("ssl-1")),
             allocated_quantity: Some(Quantity::from_str("3.000000").unwrap()),
+            expense: None,
             gross_amount: None,
         }
     }
@@ -335,6 +342,7 @@ mod tests {
             sales_order_revision_line_id: None,
             sales_order_submission_line_id: None,
             allocated_quantity: None,
+            expense: None,
             gross_amount: Some(Amount::from_str("100.00").unwrap()),
         }
     }

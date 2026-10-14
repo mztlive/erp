@@ -9,7 +9,7 @@ use erp_core::common::time::Instant;
 use erp_core::ids::SupplierAccountId;
 use erp_core::money::Quantity;
 use erp_procurement::entity::purchase_order::{
-    PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
+    PurchaseLineType, PurchaseOrder, PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
 };
 use erp_procurement::service::purchase_order::lifecycle::{
     cancel_purchase_order_to_draft, ensure_final_approve_formalize, start_purchase_order_approval,
@@ -330,11 +330,15 @@ pub fn build_purchase_order_snapshot(
     })
 }
 
-/// 汇总提交明细数量。
+/// 汇总提交明细数量；只有费用行的费用采购单冻结数量合计为 0。
 ///
 /// # 错误
-/// 无数量或合计超出标度时返回错误。
+/// 含商品行却缺少数量，或合计超出标度时返回错误。
 fn sum_line_quantity(lines: &[PurchaseOrderSubmissionLine]) -> Result<Quantity> {
+    if lines.iter().all(|line| line.line_type == PurchaseLineType::LogisticsFee) {
+        return Quantity::try_from(rust_decimal::Decimal::ZERO)
+            .map_err(|error| Error::ValidationError(error.to_string()));
+    }
     let mut quantities = lines.iter().filter_map(|line| line.quantity);
     let Some(first) = quantities.next() else {
         return Err(Error::ValidationError("采购明细没有数量，无法启动审批".to_string()));
@@ -468,6 +472,7 @@ mod tests {
                 sales_order_revision_line_id: Some(erp_core::ids::SalesOrderRevisionLineId::new("sorl-1")),
                 sales_order_submission_line_id: Some(SalesOrderSubmissionLineId::new("sosl-1")),
                 allocated_quantity: Some(Quantity::from_str("2").expect("数量合法")),
+                expense: None,
             },
         )
         .expect("提交行必须可构造")

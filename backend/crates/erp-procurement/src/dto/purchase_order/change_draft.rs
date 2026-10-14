@@ -146,6 +146,7 @@ impl From<&PurchaseOrderRevisionLine> for SavePurchaseOrderLine {
             allocated_quantity: line.allocated_quantity.map(|value| value.to_string()),
             gross_amount: (line.line_type == PurchaseLineType::LogisticsFee)
                 .then(|| line.gross_amount.to_string()),
+            expense: line.expense.clone(),
         }
     }
 }
@@ -190,6 +191,7 @@ impl From<&PurchaseChangeSubmissionLine> for SavePurchaseOrderLine {
             allocated_quantity: line.allocated_quantity.map(|value| value.to_string()),
             gross_amount: (line.line_type == PurchaseLineType::LogisticsFee)
                 .then(|| line.gross_amount.to_string()),
+            expense: line.expense.clone(),
         }
     }
 }

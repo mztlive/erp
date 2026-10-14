@@ -225,6 +225,7 @@ mod tests {
             sales_order_submission_line_id: Some("historical-submit-line".into()),
             allocated_quantity: Some("1".into()),
             gross_amount: None,
+            expense: None,
         }
     }
 

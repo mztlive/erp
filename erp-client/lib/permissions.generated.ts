@@ -3674,6 +3674,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
+                path: "/admin/sales-orders/{id}/expense-purchases",
+                description: "从销售单追加费用采购单",
+                permission: {
+                    resource: "purchase_order",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/expenses/{expense_line_id}/occurrence",
+                description: "确认采购费用行已发生",
+                permission: {
+                    resource: "purchase_order",
+                    action: "confirm_expense",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
                 path: "/admin/purchase-orders/{id}/email",
                 description: "发送采购单邮件给供应商",
                 permission: {
@@ -4681,6 +4701,36 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "cost_allocation",
                     action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-orders/{id}/extra-costs",
+                description: "查询销售单附加费用",
+                permission: {
+                    resource: "cost_entry",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-orders/{id}/extra-costs",
+                description: "登记销售单附加费用",
+                permission: {
+                    resource: "cost_entry",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-orders/{id}/extra-costs/{cost_entry_id}/reductions",
+                description: "冲减销售单附加费用",
+                permission: {
+                    resource: "cost_entry",
+                    action: "create",
                 },
             },
         ],

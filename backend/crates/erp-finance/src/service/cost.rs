@@ -373,13 +373,13 @@ pub fn validate_create_cost_entry(req: &CreateCostEntryRequest) -> Result<()> {
 ///
 /// # 错误
 /// 分配金额不守恒或成本实体构造失败时返回对应错误。
-pub fn prepare_cost_entry(req: CreateCostEntryRequest) -> Result<PreparedCostEntry> {
+pub fn prepare_cost_entry(mut req: CreateCostEntryRequest) -> Result<PreparedCostEntry> {
     // 金额守恒与尾差归属由计划 VO 一次性验证与解析，失败不产生部分计划；
     // Service 只注入已确认的销售事实并编排事务。
     let plan = CostAllocationSet::new(
         req.gross_amount,
         req.net_amount,
-        req.allocations
+        std::mem::take(&mut req.allocations)
             .into_iter()
             .map(|line| CostAllocationLineInput {
                 sales_order_id: line.sales_order_id,
@@ -392,28 +392,7 @@ pub fn prepare_cost_entry(req: CreateCostEntryRequest) -> Result<PreparedCostEnt
     )?;
 
     let entry_id = CostEntryId::new(next_id());
-    let entry = CostEntry::new(
-        entry_id.clone(),
-        CostEntryData {
-            cost_type: req.cost_type,
-            cost_stage: req.cost_stage,
-            cost_scope: req.cost_scope,
-            cost_basis: req.cost_basis,
-            supplier_id: req.supplier_id,
-            gross_amount: req.gross_amount,
-            net_amount: req.net_amount,
-            tax_amount: req.tax_amount,
-            tax_inclusion: req.tax_inclusion,
-            input_tax_rate: req.input_tax_rate,
-            occurred_at: req.occurred_at,
-            source_fact_type: req.source_fact_type,
-            source_document_id: req.source_document_id,
-            source_line_id: req.source_line_id,
-            source_version: req.source_version,
-            adjusts_cost_entry_id: None,
-            evidence_attachment_id: req.evidence_attachment_id,
-        },
-    )?;
+    let entry = CostEntry::new(entry_id.clone(), entry_data(req))?;
     let mut allocations = Vec::with_capacity(plan.lines().len());
     for line in plan.into_lines() {
         allocations.push(CostAllocation::new(
@@ -430,6 +409,30 @@ pub fn prepare_cost_entry(req: CreateCostEntryRequest) -> Result<PreparedCostEnt
     }
     Ok(PreparedCostEntry { entry, allocations })
 }
+/// 由已消费分配行的创建请求形成成本事实数据。
+fn entry_data(req: CreateCostEntryRequest) -> CostEntryData {
+    CostEntryData {
+        cost_type: req.cost_type,
+        cost_stage: req.cost_stage,
+        cost_scope: req.cost_scope,
+        cost_basis: req.cost_basis,
+        supplier_id: req.supplier_id,
+        gross_amount: req.gross_amount,
+        net_amount: req.net_amount,
+        tax_amount: req.tax_amount,
+        tax_inclusion: req.tax_inclusion,
+        input_tax_rate: req.input_tax_rate,
+        occurred_at: req.occurred_at,
+        source_fact_type: req.source_fact_type,
+        source_document_id: req.source_document_id,
+        source_line_id: req.source_line_id,
+        source_version: req.source_version,
+        adjusts_cost_entry_id: None,
+        evidence_attachment_id: req.evidence_attachment_id,
+        description: req.description,
+    }
+}
+
 /// 用调用方的 Executor 原子写入成本与分配；审计由组合层随后执行。
 ///
 /// # 参数

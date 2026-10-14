@@ -198,7 +198,7 @@ export type BackendWorkingCopyLine = {
     base_unit_code?: string | null
     unit_price_gross?: string | null
     delivery_allocations?: SalesDeliveryAllocation[]
-    pricing_mode?: "AUTO" | "MANUAL" | null
+    pricing_mode?: "AUTO" | "MANUAL" | "GIFT" | null
     reference_prices?: {
         sales_visible_price_gross?: string | null
         bulk_price_gross?: string | null

@@ -402,6 +402,7 @@ mod isolation_tests {
                 sales_order_revision_line_id: Some(SalesOrderRevisionLineId::new("sorl-1")),
                 sales_order_submission_line_id: None,
                 allocated_quantity: Some(Quantity::from_str("2").unwrap()),
+                expense: None,
             },
         )
         .unwrap()
@@ -472,6 +473,7 @@ mod isolation_tests {
                 sales_order_line_id: Some(SalesOrderLineId::new(stable_line_id)),
                 sales_order_revision_line_id: Some(SalesOrderRevisionLineId::new("sorl-1")),
                 allocated_quantity: Some(Quantity::from_str("3").unwrap()),
+                expense: None,
             },
         )
         .unwrap()

@@ -5,7 +5,8 @@ use validator::Validate;
 use super::{SortDir, normalize_sort};
 use crate::Result;
 use crate::entity::purchase_order::{
-    PurchaseDeliveryAllocation, PurchaseLineType, PurchaseOrderStatus, PurchaseReviewStatus,
+    PurchaseDeliveryAllocation, PurchaseExpenseDetail, PurchaseExpenseOccurrence, PurchaseLineType,
+    PurchaseOrderStatus, PurchaseReviewStatus,
 };
 
 /// 采购单列表允许的排序字段白名单（api-contract §4：Service 层校验）。
@@ -151,6 +152,69 @@ pub struct PurchaseOrderLineView {
     pub sales_order_submission_line_id: Option<String>,
     /// 商品行对应的分配数量。
     pub allocated_quantity: Option<String>,
+    /// 费用行内容（稳定身份、类别、说明、归属）；商品行为空。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expense: Option<PurchaseExpenseDetail>,
+    /// 费用行确认发生信息；未确认或商品行为空。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expense_occurrence: Option<ExpenseOccurrenceView>,
+}
+
+/// 费用行确认发生信息。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ExpenseOccurrenceView {
+    /// 发生日期。
+    pub occurred_on: String,
+    /// 确认人。
+    pub confirmed_by: String,
+    /// 凭证文件。
+    pub evidence_attachment_id: String,
+    /// 确认时含税金额。
+    pub gross_amount: String,
+}
+
+impl ExpenseOccurrenceView {
+    /// 由确认发生事实生成展示视图。
+    ///
+    /// # 参数
+    /// * `occurrence` - 确认发生事实
+    ///
+    /// # 返回
+    /// 返回日期、确认人、凭证与金额。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn from_occurrence(occurrence: &PurchaseExpenseOccurrence) -> Self {
+        Self {
+            occurred_on: occurrence.occurred_on.to_string(),
+            confirmed_by: occurrence.confirmed_by.clone(),
+            evidence_attachment_id: occurrence.evidence_attachment_id.to_string(),
+            gross_amount: occurrence.gross_amount.to_string(),
+        }
+    }
+}
+
+impl PurchaseOrderLineView {
+    /// 按费用行身份挂接确认发生信息。
+    ///
+    /// # 参数
+    /// * `lines` - 采购行视图
+    /// * `occurrences` - 本采购单的确认发生事实
+    ///
+    /// # 返回
+    /// 无；就地补齐费用行的确认发生信息。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn attach_occurrences(lines: &mut [Self], occurrences: &[PurchaseExpenseOccurrence]) {
+        for line in lines {
+            let Some(expense) = &line.expense else { continue };
+            line.expense_occurrence = occurrences
+                .iter()
+                .find(|occurrence| occurrence.expense_line_id == expense.expense_line_id)
+                .map(ExpenseOccurrenceView::from_occurrence);
+        }
+    }
 }
 
 /// 采购行→销售行分配视图。

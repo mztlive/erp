@@ -73,15 +73,15 @@ pub struct CreateBasisCommand<'a> {
 }
 
 /// 待一次性持久化的采购草稿聚合。
-struct PreparedDraftWrite<'a> {
+pub(in crate::procure_to_pay) struct PreparedDraftWrite<'a> {
     /// 新采购单。
-    order: &'a PurchaseOrder,
+    pub(in crate::procure_to_pay) order: &'a PurchaseOrder,
     /// 当前草稿提交。
-    submission: &'a PurchaseOrderSubmission,
+    pub(in crate::procure_to_pay) submission: &'a PurchaseOrderSubmission,
     /// 当前草稿提交行。
-    lines: &'a [PurchaseOrderSubmissionLine],
+    pub(in crate::procure_to_pay) lines: &'a [PurchaseOrderSubmissionLine],
     /// 审计操作人。
-    actor: &'a AuditActor,
+    pub(in crate::procure_to_pay) actor: &'a AuditActor,
 }
 
 /// 完成事务内资格和快照构造、尚未登记的采购草稿聚合。
@@ -479,7 +479,7 @@ async fn prepare_basis_submission(
 ///
 /// # 关键业务约束
 /// 本函数只写入草稿聚合；正式号与审批启动由随后的提交步骤完成。
-async fn write_prepared_draft(
+pub(in crate::procure_to_pay) async fn write_prepared_draft(
     db: &Database,
     rbac: &SharedRbacService,
     object_read: &dyn ApprovalObjectReadPort,
@@ -560,7 +560,7 @@ async fn write_creation_receipt(
 }
 
 /// 从首次创建结果投影随后写入的创建事件。
-fn creation_audit(
+pub(in crate::procure_to_pay) fn creation_audit(
     actor: &AuditActor,
     command_id: &str,
     receipt: &CreationReceipt,
@@ -706,7 +706,7 @@ fn contextualize_fulfillment_owner_error(error: Error, message: &str) -> Error {
 ///
 /// # 关键业务约束
 /// 事务前、事务内和事务失败后均复用同一校验逻辑。
-async fn replay_creation(
+pub(in crate::procure_to_pay) async fn replay_creation(
     db: &mongodb::Database,
     receipt_identity: &PurchaseCommandReceiptIdentity,
     expected_fingerprint: &str,

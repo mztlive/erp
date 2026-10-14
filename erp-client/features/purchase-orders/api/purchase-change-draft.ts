@@ -1,4 +1,5 @@
 import type { PurchaseDeliveryAllocation } from "../types"
+import type { BackendExpenseDetail } from "./purchase-order-wire-types"
 import { apiGet } from "@/lib/api"
 
 /** 与采购变更提交接口一致的完整行，关联与名称快照保持原值。 */
@@ -20,6 +21,8 @@ export type PurchaseChangeDraftLine = {
     sales_order_submission_line_id: string | null
     allocated_quantity: string | null
     gross_amount: string | null
+    /** 费用行内容；按费用行身份对照生效版本，不可在改单中新增或改类别。 */
+    expense?: BackendExpenseDetail | null
 }
 
 export type PurchaseChangeDraft = {

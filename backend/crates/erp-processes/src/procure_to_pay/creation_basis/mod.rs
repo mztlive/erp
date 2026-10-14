@@ -11,7 +11,7 @@
 //! 负责当前指针解析、任务归属与 RBAC、合格性筛选（条款有效期、AVAILABLE、
 //! 零库存、每供应商稳定选一条）、事务编排与 View 映射。
 
-mod create;
+pub(super) mod create;
 pub(super) mod supplier;
 pub use create::{CreateBasisCommand, VerifiedBasisInput, persist_basis_draft};
 pub use erp_procurement::service::purchase_order::creation_basis::validate_requested_quantities;

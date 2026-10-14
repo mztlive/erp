@@ -56,12 +56,15 @@ pub enum PurchaseType {
     Virtual,
     /// 线下服务。
     Service,
+    /// 附加费用：只含费用行，不承担履约（§7.5.1）。
+    Expense,
 }
 
 status_display!(PurchaseType, {
     Physical => ("实物", "PHYSICAL"),
     Virtual => ("虚拟", "VIRTUAL"),
     Service => ("线下服务", "SERVICE"),
+    Expense => ("费用", "EXPENSE"),
 });
 
 /// 履约责任（§6.6：入仓、供应商直发、电子交付、线下服务）。
@@ -77,6 +80,9 @@ pub enum FulfillmentResponsibility {
     Electronic,
     /// 线下服务。
     Service,
+    /// 无需履约：费用采购单，不生成入库、发货、交付或服务任务。
+    #[serde(rename = "NONE")]
+    NotApplicable,
 }
 
 status_display!(FulfillmentResponsibility, {
@@ -84,6 +90,7 @@ status_display!(FulfillmentResponsibility, {
     SupplierDirect => ("供应商直发", "SUPPLIER_DIRECT"),
     Electronic => ("电子交付", "ELECTRONIC"),
     Service => ("线下服务", "SERVICE"),
+    NotApplicable => ("无需履约", "NONE"),
 });
 
 impl FulfillmentResponsibility {
@@ -102,7 +109,7 @@ impl FulfillmentResponsibility {
     /// 该映射只描述采购单责任人承担的履约操作，不把仓库入库错误归给采购责任人。
     pub fn owner_fulfillment_object_type(self) -> Option<&'static str> {
         match self {
-            Self::Warehouse => None,
+            Self::Warehouse | Self::NotApplicable => None,
             Self::SupplierDirect => Some("delivery"),
             Self::Electronic => Some("electronic_delivery"),
             Self::Service => Some("service_fulfillment"),
@@ -117,14 +124,14 @@ pub enum PurchaseLineType {
     /// 商品/服务成本行。
     #[serde(rename = "ITEM_SERVICE")]
     ItemService,
-    /// 物流费用行（与商品成本分开计税，数量为空）。
+    /// 费用行（物流等附加费用，与商品成本分开计税，数量为空）；沿用历史存储代码。
     #[serde(rename = "LOGISTICS_FEE")]
     LogisticsFee,
 }
 
 status_display!(PurchaseLineType, {
     ItemService => ("商品/服务成本", "ITEM_SERVICE"),
-    LogisticsFee => ("物流费用", "LOGISTICS_FEE"),
+    LogisticsFee => ("费用", "LOGISTICS_FEE"),
 });
 
 #[cfg(test)]
@@ -139,7 +146,9 @@ mod tests {
         assert_eq!(PurchaseType::Service.label(), "线下服务");
         assert_eq!(FulfillmentResponsibility::SupplierDirect.label(), "供应商直发");
         assert_eq!(FulfillmentResponsibility::Electronic.label(), "电子交付");
-        assert_eq!(PurchaseLineType::LogisticsFee.label(), "物流费用");
+        assert_eq!(PurchaseLineType::LogisticsFee.label(), "费用");
+        assert_eq!(PurchaseType::Expense.as_str(), "EXPENSE");
+        assert_eq!(FulfillmentResponsibility::NotApplicable.as_str(), "NONE");
 
         assert_eq!(PurchaseType::Physical.as_str(), "PHYSICAL");
         assert_eq!(FulfillmentResponsibility::Warehouse.as_str(), "WAREHOUSE");

@@ -230,6 +230,7 @@ export function mapWorkingCopyLines(
         const item: SalesOrderLineItem = {
             id: line.sales_order_line_id || line.id,
             name: line.item_name_snapshot,
+            isGift: line.pricing_mode === "GIFT",
             // 当前建单会把稳定 SKU id 同时写进 spec_snapshot；详情不得回显内部 id。
             sku:
                 specSnapshot && specSnapshot !== skuId

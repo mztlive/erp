@@ -83,7 +83,9 @@ fn is_removed(line: &PurchaseOrderLineView) -> bool {
             .is_some_and(|value| value.is_zero())
 }
 fn render_line(line: &PurchaseOrderLineView) -> String {
-    let name = escape(line.product_name.as_deref().unwrap_or("物流费用"));
+    let fee_name =
+        line.expense.as_ref().map(|expense| format!("{}：{}", expense.category.label(), expense.description));
+    let name = escape(line.product_name.as_deref().or(fee_name.as_deref()).unwrap_or("费用"));
     let name = if is_removed(line) { format!("{name}（已取消）") } else { name };
     format!(
         "<tr><td>{}<br>{}</td><td class=\"num\">{}</td><td>{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td>{}</td></tr>",
@@ -147,6 +149,8 @@ mod tests {
             sales_order_revision_line_id: None,
             sales_order_submission_line_id: None,
             allocated_quantity: Some("2".into()),
+            expense: None,
+            expense_occurrence: None,
         };
         let html = render_line(&line);
         for expected in ["茶礼 &lt;限定&gt;", "A&amp;B", "56.50", "113.00", "13%", "2026-10-20"] {

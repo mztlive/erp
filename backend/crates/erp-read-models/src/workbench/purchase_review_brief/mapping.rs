@@ -919,7 +919,7 @@ mod tests {
         let (visible, more_count) = split_purchase_brief_lines(lines);
         assert_eq!(more_count, 1);
         assert_eq!(visible.len(), 4);
-        assert_eq!(visible[3].title, "物流费用");
+        assert_eq!(visible[3].title, "费用");
     }
 
     #[test]

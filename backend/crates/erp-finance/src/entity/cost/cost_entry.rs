@@ -5,7 +5,7 @@ use entity_macros::Entity;
 use erp_core::common::time::Instant;
 use erp_core::ids::{CostEntryId, FileAssetId, SupplierAccountId};
 use erp_core::money::{Amount, Rate};
-use erp_core::validation::normalize_required_text;
+use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
@@ -17,6 +17,8 @@ const DOCUMENT_ID_MAX_LEN: usize = 128;
 const LINE_ID_MAX_LEN: usize = 128;
 /// 来源版本最大长度。
 const VERSION_MAX_LEN: usize = 64;
+/// 费用说明最大长度。
+pub const DESCRIPTION_MAX_LEN: usize = 200;
 
 /// 成本类型（数据模型 §6.10：商品、物流、印刷、仓储、配送、平台技术、线下服务、
 /// 返点、其他）。
@@ -308,6 +310,9 @@ pub struct CostEntryData {
     pub adjusts_cost_entry_id: Option<CostEntryId>,
     /// 凭证附件。
     pub evidence_attachment_id: Option<FileAssetId>,
+    /// 费用说明；附加费用登记与冲减必填，系统过账成本为空。
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 /// 成本事实实体（正式事实，数据模型 §6.10）。
@@ -355,6 +360,9 @@ pub struct CostEntry {
     pub adjusts_cost_entry_id: Option<CostEntryId>,
     /// 凭证附件。
     pub evidence_attachment_id: Option<FileAssetId>,
+    /// 费用说明。
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 impl CostEntry {
@@ -380,30 +388,13 @@ impl CostEntry {
             return Err(Error::from("进项税率不得为负"));
         }
         validate_basis(data.cost_scope, data.cost_basis)?;
-        let source_fact_type = normalize_required_text(
+        let source = SourceKey::normalize(
             data.source_fact_type,
-            "来源事实类型不能为空",
-            FACT_TYPE_MAX_LEN,
-            "来源事实类型过长",
-        )?;
-        let source_document_id = normalize_required_text(
             data.source_document_id,
-            "来源单据ID不能为空",
-            DOCUMENT_ID_MAX_LEN,
-            "来源单据ID过长",
-        )?;
-        let source_line_id = normalize_required_text(
             data.source_line_id,
-            "来源行ID不能为空",
-            LINE_ID_MAX_LEN,
-            "来源行ID过长",
-        )?;
-        let source_version = normalize_required_text(
             data.source_version,
-            "来源版本不能为空",
-            VERSION_MAX_LEN,
-            "来源版本过长",
         )?;
+        let description = normalize_optional_text(data.description, "费用说明", DESCRIPTION_MAX_LEN)?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -418,12 +409,13 @@ impl CostEntry {
             tax_inclusion: data.tax_inclusion,
             input_tax_rate: data.input_tax_rate,
             occurred_at: data.occurred_at,
-            source_fact_type,
-            source_document_id,
-            source_line_id,
-            source_version,
+            source_fact_type: source.fact_type,
+            source_document_id: source.document_id,
+            source_line_id: source.line_id,
+            source_version: source.version,
             adjusts_cost_entry_id: data.adjusts_cost_entry_id,
             evidence_attachment_id: data.evidence_attachment_id,
+            description,
         })
     }
 
@@ -462,6 +454,36 @@ impl CostEntry {
     /// 不返回错误。
     pub fn is_phase1_profit_relevant(&self) -> bool {
         self.cost_scope == CostScope::NonVoucherFulfillment && self.cost_stage.is_profit_relevant()
+    }
+}
+
+/// 已规范化的成本来源唯一键。
+struct SourceKey {
+    fact_type: String,
+    document_id: String,
+    line_id: String,
+    version: String,
+}
+
+impl SourceKey {
+    /// trim、非空与长度校验来源唯一键。
+    fn normalize(fact_type: String, document_id: String, line_id: String, version: String) -> Result<Self> {
+        Ok(Self {
+            fact_type: normalize_required_text(
+                fact_type,
+                "来源事实类型不能为空",
+                FACT_TYPE_MAX_LEN,
+                "来源事实类型过长",
+            )?,
+            document_id: normalize_required_text(
+                document_id,
+                "来源单据ID不能为空",
+                DOCUMENT_ID_MAX_LEN,
+                "来源单据ID过长",
+            )?,
+            line_id: normalize_required_text(line_id, "来源行ID不能为空", LINE_ID_MAX_LEN, "来源行ID过长")?,
+            version: normalize_required_text(version, "来源版本不能为空", VERSION_MAX_LEN, "来源版本过长")?,
+        })
     }
 }
 
@@ -541,6 +563,7 @@ mod tests {
             source_version: " v1 ".to_string(),
             adjusts_cost_entry_id: None,
             evidence_attachment_id: None,
+            description: None,
         }
     }
 

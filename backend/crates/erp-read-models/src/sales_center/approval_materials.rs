@@ -15,7 +15,9 @@ use persistence_core::NoTransaction;
 use serde::Serialize;
 
 use super::approval_source_sales::{ApprovalSourceSalesOrder, source_sales_orders};
-use crate::purchase_center::approval_materials::{ApprovalPurchaseLine, purchase_lines};
+use crate::purchase_center::approval_materials::{
+    ApprovalExtraCostSummary, ApprovalPurchaseLine, extra_cost_summary, purchase_lines,
+};
 use crate::workbench::{InvoiceSalesBasis, optional_sales_basis};
 use crate::{Error, Result};
 
@@ -26,6 +28,7 @@ pub struct ApprovalDocumentMaterials {
     pub materials: ApprovalMaterialsView,
     pub sales_order: Option<SubmissionView>,
     pub purchase_lines: Option<Vec<ApprovalPurchaseLine>>,
+    pub extra_cost_summary: Option<ApprovalExtraCostSummary>,
     pub source_sales_orders: Vec<ApprovalSourceSalesOrder>,
     pub current_sales_basis: Option<InvoiceSalesBasis>,
     pub current_sales_basis_error: Option<String>,
@@ -50,10 +53,10 @@ pub async fn materials<A: WorkflowAuthorizationPort>(
     } else {
         None
     };
-    let purchase_lines = if materials.document_type == "purchase_order" {
-        purchase_lines(db, &materials).await?
+    let (purchase_lines, extra_cost_summary) = if materials.document_type == "purchase_order" {
+        (purchase_lines(db, &materials).await?, extra_cost_summary(db, &materials).await?)
     } else {
-        None
+        (None, None)
     };
     let source_sales_orders = source_sales_orders(db, &materials).await?;
     let (current_sales_basis, current_sales_basis_error) = optional_sales_basis(db, &materials).await?;
@@ -62,6 +65,7 @@ pub async fn materials<A: WorkflowAuthorizationPort>(
         materials,
         sales_order,
         purchase_lines,
+        extra_cost_summary,
         source_sales_orders,
         current_sales_basis,
         current_sales_basis_error,

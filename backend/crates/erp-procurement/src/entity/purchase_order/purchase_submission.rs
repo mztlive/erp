@@ -623,6 +623,7 @@ mod tests {
             sales_order_revision_line_id: Some(SalesOrderRevisionLineId::new("sorl-1")),
             sales_order_submission_line_id: Some(SalesOrderSubmissionLineId::new("ssl-1")),
             allocated_quantity: Some(Quantity::from_str("3.000000").unwrap()),
+            expense: None,
         }
     }
 

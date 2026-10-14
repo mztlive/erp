@@ -14,7 +14,10 @@ import type {
 import {
     PO_STATUS_LABEL,
     PO_STATUS_TONE,
+    PURCHASE_EXPENSE_CATEGORY_LABEL,
     REVIEW_STATUS_LABEL,
+    type PurchaseExpenseCategory,
+    type PurchaseExpenseDetail,
 } from "@/features/purchase-orders/types"
 import {
     mapPurchaseChangeOrderApproval,
@@ -38,10 +41,36 @@ import {
 import type {
     BackendBasis,
     BackendCenter,
+    BackendExpenseDetail,
     BackendListItem,
     BackendPurchaseChangeOrder,
     BackendPurchaseSourceUpdate,
 } from "./purchase-order-wire-types"
+
+/** 费用行内容映射；类别未知时归为其他。 */
+export function mapExpenseDetail(
+    expense: BackendExpenseDetail | null | undefined,
+): PurchaseExpenseDetail | undefined {
+    if (!expense) return undefined
+    const category = (
+        expense.category in PURCHASE_EXPENSE_CATEGORY_LABEL
+            ? expense.category
+            : "other"
+    ) as PurchaseExpenseCategory
+    return {
+        expenseLineId: expense.expense_line_id,
+        category,
+        description: expense.description,
+        salesOrderLineId: expense.sales_order_line_id ?? undefined,
+    }
+}
+
+/** 费用行展示名：类别与说明；历史费用行缺少内容时显示「费用」。 */
+export function expenseLineName(expense: PurchaseExpenseDetail | undefined) {
+    return expense
+        ? `${PURCHASE_EXPENSE_CATEGORY_LABEL[expense.category]}：${expense.description}`
+        : "费用"
+}
 
 /** 展示名称缺失或误填为关联主键时，保留明确的可读占位。 */
 function readableName(
@@ -145,6 +174,7 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
             line.sales_order_revision_line_id ??
             salesLineIdsByPurchaseLine.get(line.line_id)
         const salesLine = salesLineId ? salesLines.get(salesLineId) : undefined
+        const expense = mapExpenseDetail(line.expense)
         return {
             lineId: line.line_id,
             lineType:
@@ -155,7 +185,9 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
                 line.procurement_confirmation_line_id ?? undefined,
             itemName:
                 line.product_name ??
-                (line.line_type === "LOGISTICS_FEE" ? "物流费用" : "采购明细"),
+                (line.line_type === "LOGISTICS_FEE"
+                    ? expenseLineName(expense)
+                    : "采购明细"),
             itemSku: line.specification ?? undefined,
             quantity: line.quantity ?? undefined,
             unit: line.base_unit_code ?? undefined,
@@ -177,6 +209,16 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
                 line.line_type === "LOGISTICS_FEE"
                     ? undefined
                     : salesLine?.unitPriceGross,
+            expense,
+            expenseOccurrence: line.expense_occurrence
+                ? {
+                      occurredOn: line.expense_occurrence.occurred_on,
+                      confirmedBy: line.expense_occurrence.confirmed_by,
+                      evidenceAttachmentId:
+                          line.expense_occurrence.evidence_attachment_id,
+                      grossAmount: line.expense_occurrence.gross_amount,
+                  }
+                : undefined,
         }
     })
 

@@ -207,6 +207,11 @@ impl SalesOrderWorkingCopy {
 ///
 /// # 错误
 /// 原明细缺失、目标重复、行性质或行号非法时拒绝。
+/// 明细是否为赠品。
+fn is_gift(data: &SalesOrderWorkingCopyLineData) -> bool {
+    data.goods.as_ref().is_some_and(|goods| goods.pricing_mode.is_gift())
+}
+
 fn validate_target_lines(
     business_type: crate::entity::sales_order::BusinessType,
     original: &[SalesOrderWorkingCopyLine],
@@ -237,6 +242,9 @@ fn validate_target_lines(
             || data.unit_snapshot != previous.unit_snapshot
         {
             return Err(Error::ValidationError("原商品身份不可替换，请将原行数量归零并新增商品".into()));
+        }
+        if is_gift(data) != is_gift(&previous) {
+            return Err(Error::ValidationError("赠品标记不可修改，请将原行数量归零并新增明细".into()));
         }
     }
     let summaries = target
@@ -712,6 +720,25 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn draft_edit_rejects_toggling_gift_on_existing_line() {
+        let (_, mut copy, lines) = fixture();
+        let mut target = lines[0].draft_data().unwrap();
+        let goods = target.goods.as_mut().unwrap();
+        goods.pricing_mode = crate::entity::sales_order::SalesPricingMode::Gift;
+        goods.unit_price_gross = "0".parse().unwrap();
+        let error = copy
+            .edit_change_lines(
+                "change-1",
+                &lines,
+                vec![(SalesOrderWorkingCopyLineId::new("line-2"), target)],
+                None,
+                "sales-1",
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("赠品标记不可修改"));
     }
 
     #[test]

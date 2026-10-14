@@ -6,8 +6,8 @@ use validator::Validate;
 
 use super::super::query::TotalsView;
 use crate::entity::purchase_order::{
-    DraftLineEdit, PurchaseDeliveryAllocation, PurchaseLineType, PurchaseOrderSubmissionLine,
-    payload_fingerprint,
+    DraftLineEdit, PurchaseDeliveryAllocation, PurchaseExpenseDetail, PurchaseLineType,
+    PurchaseOrderSubmissionLine, payload_fingerprint,
 };
 use crate::{Error, Result};
 
@@ -301,6 +301,7 @@ fn saved_line(line: &PurchaseOrderSubmissionLine) -> SavePurchaseOrderLine {
         sales_order_submission_line_id: line.sales_order_submission_line_id.as_ref().map(ToString::to_string),
         allocated_quantity: quantity,
         gross_amount: (!is_item).then(|| line.gross_amount.to_string()),
+        expense: line.expense.clone(),
     }
 }
 
@@ -342,6 +343,9 @@ pub struct SavePurchaseOrderLine {
     pub allocated_quantity: Option<String>,
     /// 物流费用行含税金额（物流行为必填；商品行忽略）。
     pub gross_amount: Option<String>,
+    /// 费用行内容；服务端按费用行身份核对，不能新增费用行或改动已确认发生的费用行。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expense: Option<PurchaseExpenseDetail>,
 }
 
 impl SavePurchaseOrderLine {

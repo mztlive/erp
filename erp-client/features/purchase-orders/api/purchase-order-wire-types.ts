@@ -66,6 +66,20 @@ export type BackendLine = {
     sales_order_revision_line_id?: string | null
     sales_order_submission_line_id?: string | null
     allocated_quantity?: string | null
+    expense?: BackendExpenseDetail | null
+    expense_occurrence?: {
+        occurred_on: string
+        confirmed_by: string
+        evidence_attachment_id: string
+        gross_amount: string
+    } | null
+}
+
+export type BackendExpenseDetail = {
+    expense_line_id: string
+    category: string
+    description: string
+    sales_order_line_id?: string | null
 }
 
 export type BackendCenter = {

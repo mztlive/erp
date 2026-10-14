@@ -281,6 +281,7 @@ mod tests {
                 sales_order_revision_line_id: Some(SalesOrderRevisionLineId::new("cur-1")),
                 sales_order_submission_line_id: None,
                 allocated_quantity: Some(qty("2")),
+                expense: None,
             },
         )
         .unwrap()

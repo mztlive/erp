@@ -24,6 +24,12 @@ import type {
     PurchaseOrderListQuery,
 } from "@/features/purchase-orders/api/purchase-orders"
 import { fetchPurchaseDeliveryOptions } from "@/features/purchase-orders/api/purchase-delivery-options"
+import {
+    confirmExpenseOccurrence,
+    createExpensePurchase,
+    type ConfirmExpenseOccurrenceInput,
+    type CreateExpensePurchaseInput,
+} from "@/features/purchase-orders/api/purchase-expenses"
 import { workItemKeys } from "@/features/work-items/queries"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 
@@ -306,6 +312,56 @@ export function useCreateFromSourcingMutation() {
                 queryClient.invalidateQueries({ queryKey: workItemKeys.all }),
                 queryClient.invalidateQueries({
                     queryKey: queryKeyRoots.workspaceHome,
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: queryKeyRoots.salesOrders,
+                }),
+            ])
+        },
+    })
+}
+
+/** 从销售单追加费用采购单并提交审批；成功后刷新采购列表、审批、待办与销售单。 */
+export function useCreateExpensePurchaseMutation(salesOrderId: string) {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (input: CreateExpensePurchaseInput) =>
+            createExpensePurchase(salesOrderId, input),
+        onSuccess: async () => {
+            await Promise.all([
+                queryClient.invalidateQueries({
+                    queryKey: purchaseOrderKeys.lists(),
+                }),
+                queryClient.invalidateQueries({ queryKey: approvalKeys.all }),
+                queryClient.invalidateQueries({ queryKey: workItemKeys.all }),
+                queryClient.invalidateQueries({
+                    queryKey: queryKeyRoots.salesOrders,
+                }),
+            ])
+        },
+    })
+}
+
+/** 确认费用行已发生；成功后刷新采购详情与销售单附加费用。 */
+export function useConfirmExpenseOccurrenceMutation(purchaseOrderId: string) {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (input: {
+            expenseLineId: string
+            value: ConfirmExpenseOccurrenceInput
+        }) =>
+            confirmExpenseOccurrence(
+                purchaseOrderId,
+                input.expenseLineId,
+                input.value,
+            ),
+        onSuccess: async () => {
+            await Promise.all([
+                queryClient.invalidateQueries({
+                    queryKey: purchaseOrderKeys.detail(purchaseOrderId),
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: purchaseOrderKeys.lists(),
                 }),
                 queryClient.invalidateQueries({
                     queryKey: queryKeyRoots.salesOrders,

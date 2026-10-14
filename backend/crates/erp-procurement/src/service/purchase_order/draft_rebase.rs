@@ -145,6 +145,7 @@ mod tests {
             sales_order_submission_line_id: None,
             allocated_quantity: Some(quantity.into()),
             gross_amount: None,
+            expense: None,
         }
     }
 

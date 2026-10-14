@@ -437,6 +437,7 @@ mod tests {
                 sales_order_revision_line_id: Some(SalesOrderRevisionLineId::new("source-line")),
                 sales_order_submission_line_id: None,
                 allocated_quantity: Some("2".parse().unwrap()),
+                expense: None,
             },
         )
         .unwrap()

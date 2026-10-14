@@ -541,6 +541,7 @@ pub(crate) fn build_line_groups(
 }
 
 fn normalize_goods(mut fields: GoodsLineFields) -> Result<GoodsLineFields> {
+    fields.pricing_mode.ensure_price(fields.unit_price_gross)?;
     fields.delivery_allocations =
         SalesDeliveryAllocation::validate_all(fields.delivery_allocations, fields.quantity)?;
     fields.base_unit_code = normalize_required_text(

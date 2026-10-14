@@ -12,6 +12,7 @@ use erp_core::money::{Amount, Quantity, Rate, UnitPrice, line_amounts, round_to_
 use erp_core::validation::normalize_optional_text;
 use erp_core::{Error, Result};
 
+use crate::entity::purchase_order::PurchaseExpenseDetail;
 use crate::entity::purchase_order::types::PurchaseLineType;
 
 /// 商品名称快照最大长度。
@@ -74,6 +75,28 @@ pub(crate) fn validate_purchase_line(fields: &PurchaseLineFields, allow_zero_qua
     match fields.line_type {
         PurchaseLineType::ItemService => validate_item_service_line(fields, allow_zero_quantity),
         PurchaseLineType::LogisticsFee => validate_logistics_fee_line(fields),
+    }
+}
+
+/// 按行类型校验并规范化费用行内容。
+///
+/// # 参数
+/// * `line_type` - 行类型
+/// * `expense` - 行携带的费用内容
+///
+/// # 返回
+/// 费用行返回规范化内容（历史费用行可为空），商品行返回 `None`。
+///
+/// # 错误
+/// 商品行携带费用内容或费用内容非法时返回错误。
+pub(crate) fn normalize_expense(
+    line_type: PurchaseLineType,
+    expense: Option<PurchaseExpenseDetail>,
+) -> Result<Option<PurchaseExpenseDetail>> {
+    match (line_type, expense) {
+        (PurchaseLineType::ItemService, Some(_)) => Err(Error::from("商品/服务行不得携带费用内容")),
+        (_, Some(detail)) => Ok(Some(detail.normalized()?)),
+        (_, None) => Ok(None),
     }
 }
 

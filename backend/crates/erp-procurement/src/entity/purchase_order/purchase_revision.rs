@@ -17,7 +17,9 @@ use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::entity::purchase_order::change_order::{PurchaseChangeSubmission, PurchaseChangeSubmissionLine};
-use crate::entity::purchase_order::line_common::{PurchaseLineDataRef, normalize_and_validate_line};
+use crate::entity::purchase_order::line_common::{
+    PurchaseLineDataRef, normalize_and_validate_line, normalize_expense,
+};
 use crate::entity::purchase_order::offering_source::ensure_offering_source;
 use crate::entity::purchase_order::purchase_submission::{
     PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
@@ -25,7 +27,7 @@ use crate::entity::purchase_order::purchase_submission::{
 use crate::entity::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
 use crate::entity::purchase_order::types::PurchaseLineType;
 use crate::entity::purchase_order::{
-    PaymentSubjectSnapshot, PurchaseDeliveryAllocation, PurchaseOfferingSource,
+    PaymentSubjectSnapshot, PurchaseDeliveryAllocation, PurchaseExpenseDetail, PurchaseOfferingSource,
 };
 
 /// 采购版本创建数据（不含系统字段）。
@@ -258,6 +260,9 @@ pub struct PurchaseOrderRevisionLineData {
     pub sales_order_revision_line_id: Option<SalesOrderRevisionLineId>,
     /// 商品行正式分配数量。
     pub allocated_quantity: Option<Quantity>,
+    /// 费用行内容（稳定身份、类别、说明、归属）；商品行为空。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expense: Option<PurchaseExpenseDetail>,
 }
 
 /// 采购版本行实体（数据模型 §6.6/§4.4 结构化快照）。
@@ -309,6 +314,9 @@ pub struct PurchaseOrderRevisionLine {
     pub sales_order_revision_line_id: Option<SalesOrderRevisionLineId>,
     /// 商品行正式分配数量。
     pub allocated_quantity: Option<Quantity>,
+    /// 费用行内容（稳定身份、类别、说明、归属）；商品行为空。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expense: Option<PurchaseExpenseDetail>,
 }
 
 impl PurchaseLineDataRef for PurchaseOrderRevisionLineData {
@@ -451,6 +459,7 @@ impl PurchaseOrderRevisionLine {
             sales_order_line_id: data.sales_order_line_id,
             sales_order_revision_line_id: data.sales_order_revision_line_id,
             allocated_quantity: data.allocated_quantity,
+            expense: normalize_expense(data.line_type, data.expense)?,
         })
     }
 
@@ -515,6 +524,7 @@ impl PurchaseOrderRevisionLine {
                 sales_order_line_id: submission_line.sales_order_line_id.clone(),
                 sales_order_revision_line_id: submission_line.sales_order_revision_line_id.clone(),
                 allocated_quantity: submission_line.allocated_quantity,
+                expense: submission_line.expense.clone(),
             },
         )
     }
@@ -554,6 +564,7 @@ fn revision_line_data_from_submission(
         sales_order_line_id: line.sales_order_line_id.clone(),
         sales_order_revision_line_id: line.sales_order_revision_line_id.clone(),
         allocated_quantity: line.allocated_quantity,
+        expense: line.expense.clone(),
     }
 }
 
@@ -698,6 +709,7 @@ mod tests {
             sales_order_line_id: Some(SalesOrderLineId::new("sol-1")),
             sales_order_revision_line_id: Some(SalesOrderRevisionLineId::new("sorl-1")),
             allocated_quantity: Some(Quantity::from_str("3.000000").unwrap()),
+            expense: None,
         }
     }
 
@@ -757,6 +769,7 @@ mod tests {
                 sales_order_revision_line_id: line.sales_order_revision_line_id,
                 sales_order_submission_line_id: None,
                 allocated_quantity: line.allocated_quantity,
+                expense: None,
             },
         )
         .unwrap()

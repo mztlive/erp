@@ -170,6 +170,8 @@ mod tests {
             sales_order_revision_line_id: Some(revision_line.into()),
             sales_order_submission_line_id: None,
             allocated_quantity: Some("1".into()),
+            expense: None,
+            expense_occurrence: None,
         }
     }
 

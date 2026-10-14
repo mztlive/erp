@@ -109,6 +109,9 @@ pub struct CreateCostEntryRequest {
     pub source_version: String,
     /// 凭证附件。
     pub evidence_attachment_id: Option<FileAssetId>,
+    /// 费用说明（可空）。
+    #[serde(default)]
+    pub description: Option<String>,
     /// 成本分配行（合计必须等于成本事实金额）。
     #[validate(length(min = 1, message = "至少提供一条成本分配"))]
     pub allocations: Vec<CostAllocationLineRequest>,

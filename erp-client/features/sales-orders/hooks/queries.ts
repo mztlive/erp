@@ -11,6 +11,13 @@ import { workItemKeys } from "@/features/work-items/queries"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 import { fetchHasEligibleAcceptance } from "@/features/sales-orders/api/acceptance"
 import {
+    fetchSalesExtraCosts,
+    reduceSalesExtraCost,
+    registerSalesExtraCost,
+    type ReduceSalesExtraCostInput,
+    type RegisterSalesExtraCostInput,
+} from "@/features/sales-orders/api/sales-order-extra-costs"
+import {
     cancelSalesOrderApproval,
     createSalesOrder,
     fetchSalesOrderDetail,
@@ -43,6 +50,8 @@ export const salesOrderKeys = {
     ) => [...salesOrderKeys.acceptanceRoot(id), filters] as const,
     acceptanceEligibility: (id: string) =>
         [...salesOrderKeys.acceptanceRoot(id), "eligibility"] as const,
+    extraCosts: (id: string) =>
+        [...salesOrderKeys.all, "extra-costs", id] as const,
 }
 
 export function useSalesOrdersQuery(
@@ -310,5 +319,44 @@ export function useSalesOrderContractCheck(
             Boolean(input.contractId && input.requestedContractRevisionId),
         staleTime: 0,
         retry: false,
+    })
+}
+
+/** 销售单附加费用；仅在当前账号可查看成本时请求。 */
+export function useSalesExtraCostsQuery(
+    salesOrderId: string,
+    enabled: boolean,
+) {
+    return useQuery({
+        queryKey: salesOrderKeys.extraCosts(salesOrderId),
+        queryFn: () => fetchSalesExtraCosts(salesOrderId),
+        enabled: enabled && Boolean(salesOrderId),
+    })
+}
+
+export function useRegisterSalesExtraCostMutation(salesOrderId: string) {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (input: RegisterSalesExtraCostInput) =>
+            registerSalesExtraCost(salesOrderId, input),
+        onSuccess: () =>
+            queryClient.invalidateQueries({
+                queryKey: salesOrderKeys.extraCosts(salesOrderId),
+            }),
+    })
+}
+
+export function useReduceSalesExtraCostMutation(salesOrderId: string) {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (input: {
+            costEntryId: string
+            value: ReduceSalesExtraCostInput
+        }) =>
+            reduceSalesExtraCost(salesOrderId, input.costEntryId, input.value),
+        onSuccess: () =>
+            queryClient.invalidateQueries({
+                queryKey: salesOrderKeys.extraCosts(salesOrderId),
+            }),
     })
 }

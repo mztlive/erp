@@ -6,9 +6,11 @@ import { ArrowUpRightIcon } from "lucide-react"
 
 import { MoneyValue } from "@/components/business"
 import { LinesTable } from "@/features/purchase-orders/components/purchase-order-surfaces"
+import { PurchaseOrderExpenseSection } from "@/features/purchase-orders/components/purchase-order-expense-section"
 import { PurchaseOrderSourceSales } from "@/features/purchase-orders/components/purchase-order-source-sales"
 import {
     FULFILLMENT_RESPONSIBILITY_LABEL,
+    PURCHASE_TYPE_LABEL,
     type PurchaseOrderCenterView,
 } from "@/features/purchase-orders/types"
 import { DetailRecordSection } from "@/components/business/detail-presentation"
@@ -59,6 +61,10 @@ export function PurchaseOrderDetailOverviewSection({
                     </span>
                 </div>
             </DetailRecordSection>
+            <PurchaseOrderExpenseSection
+                order={order}
+                costMasked={costMasked}
+            />
             <DetailRecordSection title="交易约定">
                 <dl className="grid gap-x-8 gap-y-4 2xl:grid-cols-2">
                     <OverviewField label="来源销售单">
@@ -89,6 +95,9 @@ export function PurchaseOrderDetailOverviewSection({
                                 order.header.fulfillmentResponsibility
                             ]
                         }
+                    </OverviewField>
+                    <OverviewField label="采购类型">
+                        {PURCHASE_TYPE_LABEL[order.header.purchaseType]}
                     </OverviewField>
                     <OverviewField label="最近预计交期">
                         <span className="num">

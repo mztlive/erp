@@ -1,7 +1,8 @@
 //! 域 D20 `cost` 管理端路由。
 //!
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/cost-entries`、
-//! `/admin/cost-allocations`；每条路由统一走 JWT + RBAC（`with_permission`）。
+//! `/admin/cost-allocations`、`/admin/sales-orders/{id}/extra-costs`；
+//! 每条路由统一走 JWT + RBAC（`with_permission`）。
 
 use axum::Router;
 use axum::routing::{get, post};
@@ -66,6 +67,42 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 get(cost::cost_allocation_list),
                 rbac,
                 cost::cost_allocation_list_permission_key(),
+            ),
+        )
+        .merge(extra_cost_routes(rbac))
+}
+
+/// 销售单附加费用路由：列表、财务登记与冲减。
+///
+/// # 参数
+/// * `rbac` - 共享 Casbin RBAC 服务
+///
+/// # 返回
+/// 返回挂载了权限校验层的附加费用路由集合。
+fn extra_cost_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/sales-orders/{id}/extra-costs",
+            with_permission(
+                get(cost::extra_cost::sales_extra_cost_list),
+                rbac,
+                cost::extra_cost::sales_extra_cost_list_permission_key(),
+            ),
+        )
+        .route(
+            "/sales-orders/{id}/extra-costs",
+            with_permission(
+                post(cost::extra_cost::sales_extra_cost_register),
+                rbac,
+                cost::extra_cost::sales_extra_cost_register_permission_key(),
+            ),
+        )
+        .route(
+            "/sales-orders/{id}/extra-costs/{cost_entry_id}/reductions",
+            with_permission(
+                post(cost::extra_cost::sales_extra_cost_reduce),
+                rbac,
+                cost::extra_cost::sales_extra_cost_reduce_permission_key(),
             ),
         )
 }

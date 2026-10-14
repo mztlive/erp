@@ -324,6 +324,7 @@ mod tests {
                 sales_order_line_id: Some(SalesOrderLineId::new(stable_sales_line_id)),
                 sales_order_revision_line_id: Some(SalesOrderRevisionLineId::new("old-sorl")),
                 allocated_quantity: Some(Quantity::from_str(allocated).unwrap()),
+                expense: None,
             },
         )
         .unwrap()
@@ -367,6 +368,7 @@ mod tests {
                 sales_order_line_id: None,
                 sales_order_revision_line_id: None,
                 allocated_quantity: None,
+                expense: None,
             },
         )
         .unwrap()

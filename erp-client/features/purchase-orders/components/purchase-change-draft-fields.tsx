@@ -23,12 +23,14 @@ export function PurchaseChangeDraftFields({
     draft,
     options,
     disabled,
+    occurredExpenseIds,
 }: {
     form: PurchaseChangeDraftFormApi
     id: string
     draft: PurchaseChangeDraft
     options: PurchaseChangeDeliveryOptions
     disabled: boolean
+    occurredExpenseIds: ReadonlySet<string>
 }) {
     const paymentOptions = SUPPLIER_PAYMENT_TERM_OPTIONS.some(
         (option) => option.value === draft.payment_term_code,
@@ -53,6 +55,7 @@ export function PurchaseChangeDraftFields({
                 draft={draft}
                 options={options}
                 disabled={disabled}
+                occurredExpenseIds={occurredExpenseIds}
             />
             <PurchaseChangeDeliverySection
                 form={form}

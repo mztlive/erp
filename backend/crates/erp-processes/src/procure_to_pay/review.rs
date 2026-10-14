@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use application_core::AuditActor;
 use erp_core::common::source::SourceType;
-use erp_core::common::time::Instant;
+use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{PurchaseLineSalesAllocationId, PurchaseOrderId, PurchaseReceiptId, SalesOrderLineId};
 use erp_core::money::Quantity;
 use erp_fulfillment::entity::fulfillment::{
@@ -17,9 +17,10 @@ use erp_fulfillment::repository::FulfillmentExt;
 use erp_procurement::dto::purchase_order::PurchaseReviewResult;
 use erp_procurement::entity::purchase_order::{
     FulfillmentResponsibility, PurchaseLineType, PurchaseOrder, PurchaseOrderRevision,
-    PurchaseOrderSubmission, PurchaseOrderSubmissionLine,
+    PurchaseOrderSubmission, PurchaseOrderSubmissionLine, PurchaseType,
 };
 use erp_procurement::repository::PurchaseOrderExt;
+use erp_read_models::finance::extra_cost::extra_cost_category;
 use erp_workflow::entity::work_item::WorkItemStatus;
 use id_generator::next_id;
 use persistence_core::{Executor, NoTransaction};
@@ -114,7 +115,9 @@ impl PurchaseOrderProcess {
             .iter()
             .filter(|line| line.line_type == PurchaseLineType::ItemService)
             .filter_map(|line| line.expected_delivery_date)
-            .max();
+            .max()
+            // 费用采购单没有交付日，后付账期从审批生效日起算。
+            .or_else(|| (order.purchase_type == PurchaseType::Expense).then(BusinessDate::today));
         let due_date = submission
             .payment_term_snapshot
             .payable_due_date(
@@ -150,6 +153,10 @@ impl PurchaseOrderProcess {
             .map(|line| erp_finance::service::cost::purchase_initial::PurchaseCostLine {
                 id: line.base.id.clone(),
                 is_logistics: line.line_type == PurchaseLineType::LogisticsFee,
+                fee_cost_type: line
+                    .expense
+                    .as_ref()
+                    .map(|expense| extra_cost_category(expense.category).cost_type()),
                 gross_amount: line.gross_amount,
                 net_amount: line.net_amount,
                 tax_amount: line.tax_amount,

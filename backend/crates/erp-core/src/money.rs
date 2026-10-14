@@ -273,6 +273,28 @@ pub fn line_amounts(unit_price: UnitPrice, quantity: Quantity, tax_rate: Rate) -
     (Amount(gross), Amount(net), Amount(tax))
 }
 
+/// 由含税总额拆分不带数量的费用金额三元组。
+///
+/// 规则与 [`line_amounts`] 一致：`tax` = `gross` × 税率舍入到分，`net` = `gross` − `tax`。
+///
+/// # 参数
+/// * `gross` - 含税金额
+/// * `tax_rate` - 税率（如 `0.06` 表示 6%）
+///
+/// # 返回
+/// 返回 `(gross, net, tax)` 三元组，恒等式 `gross = net + tax` 精确成立。
+///
+/// # 错误
+/// 不返回错误。
+///
+/// # Panics
+/// 含税金额乘税率超出 `Decimal` 范围时，运算符会 panic。
+pub fn fee_amounts(gross: Amount, tax_rate: Rate) -> (Amount, Amount, Amount) {
+    let tax = round_to_cent(gross.0 * tax_rate.to_decimal());
+    let net = gross.0 - tax;
+    (gross, Amount(net), Amount(tax))
+}
+
 /// 定点数值的反序列化访问器：接受字符串或扩展文档形态。
 struct MoneyVisitor;
 
@@ -443,6 +465,20 @@ mod tests {
     use serde::{Deserialize, Serialize};
 
     use super::*;
+
+    #[test]
+    fn fee_amounts_split_gross_with_line_rounding_rule() {
+        let (gross, net, tax) =
+            fee_amounts(Amount::from_str("106.00").unwrap(), Rate::from_str("0.06").unwrap());
+        assert_eq!(
+            (gross.to_string(), net.to_string(), tax.to_string()),
+            ("106.00".into(), "99.64".into(), "6.36".into())
+        );
+        let (_, net, tax) = fee_amounts(Amount::from_str("0.05").unwrap(), Rate::from_str("0.13").unwrap());
+        assert_eq!(net.checked_add(tax), Amount::from_str("0.05").unwrap());
+        let (_, net, tax) = fee_amounts(Amount::from_str("88.00").unwrap(), Rate::from_str("0").unwrap());
+        assert_eq!((net, tax), (Amount::from_str("88.00").unwrap(), Amount::zero()));
+    }
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     struct MoneyDoc {

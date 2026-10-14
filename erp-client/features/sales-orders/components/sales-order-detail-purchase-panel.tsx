@@ -9,6 +9,7 @@ import {
     RelatedDocumentList,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { ExpensePurchaseCreateDialog } from "@/features/purchase-orders/components/expense-purchase-create-dialog"
 import { PurchaseOrderPaperDialog } from "@/features/purchase-orders/components/purchase-order-paper-dialog"
 import { usePurchaseOrdersQuery } from "@/features/purchase-orders/hooks/queries"
 import { displayPurchaseOrderNo } from "@/features/purchase-orders/lib/purchase-orders-list-helpers"
@@ -20,6 +21,7 @@ import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-ord
 import { useSalesOrderDetailPermissions } from "@/features/sales-orders/hooks/use-sales-order-detail-permissions"
 import { SalesOrderProcurementProgress } from "@/features/sales-orders/components/sales-order-procurement-progress"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { hasPermission } from "@/lib/permissions"
 
 const RELATED_PURCHASE_PAGE_SIZE = 100
 
@@ -81,6 +83,14 @@ export function PurchasePanel({ order }: { order: SalesOrderDetailView }) {
     )
 
     const [previewId, setPreviewId] = React.useState<string | null>(null)
+    const [expenseOpen, setExpenseOpen] = React.useState(false)
+    const [expenseCreated, setExpenseCreated] = React.useState<string | null>(
+        null,
+    )
+    const canAddExpense =
+        order.nature === "physical_service" &&
+        order.currentRevisionNo != null &&
+        hasPermission(permissions.granted, "purchase_order:create")
     const affectedIds = new Set(
         order.related.procurementProgress.sourceUpdates.map(
             (update) => update.purchaseOrderId,
@@ -155,6 +165,35 @@ export function PurchasePanel({ order }: { order: SalesOrderDetailView }) {
                     />
                 </DocumentSection>
             )}
+
+            {canAddExpense ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed px-4 py-3">
+                    <p className="text-sm text-muted-foreground">
+                        {expenseCreated
+                            ? `已创建费用采购单 ${expenseCreated}，已提交审批。`
+                            : "本单有我方承担、不对应销售明细的费用（第三方物流、额外包装、上门安装等）时，追加费用采购单走审批和付款。"}
+                    </p>
+                    <Button
+                        id="sales-orders-detail-add-expense-purchase"
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setExpenseOpen(true)}
+                    >
+                        追加附加费用
+                    </Button>
+                </div>
+            ) : null}
+
+            <ExpensePurchaseCreateDialog
+                salesOrderId={order.id}
+                salesLines={order.lineItems
+                    .filter((line) => line.quantity !== "0")
+                    .map((line) => ({ id: line.id, name: line.name }))}
+                open={expenseOpen}
+                onOpenChange={setExpenseOpen}
+                onCreated={(created) => setExpenseCreated(created.purchaseNo)}
+            />
 
             <PurchaseOrderPaperDialog
                 purchaseOrderId={previewId}

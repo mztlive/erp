@@ -12,17 +12,19 @@ use erp_finance::repository::PayableExt;
 use erp_finance::repository::prelude::*;
 use erp_fulfillment::repository::FulfillmentExt;
 use erp_procurement::entity::purchase_order::{
-    FulfillmentResponsibility, ProgressStatus, PurchaseLineInput, PurchaseLineType, PurchaseOrder,
-    PurchaseOrderRevisionLine, SourceImpactKind, receipt_progress_after_change, rekey_to_current_lines,
-    validate_change_quantities,
+    ExpenseLineState, FulfillmentResponsibility, ProgressStatus, PurchaseLineInput, PurchaseLineType,
+    PurchaseOrder, PurchaseOrderRevisionLine, SourceImpactKind, receipt_progress_after_change,
+    rekey_to_current_lines, validate_change_expenses, validate_change_quantities,
 };
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::repository::prelude::*;
+use erp_procurement::repository::purchase_expense::occurrences_by_orders;
 use erp_read_models::purchase_center::change_bounds::{ChangeQuantityFacts, load_change_quantity_facts};
 use mongodb::Database;
 use persistence_core::Executor;
 
 use super::super::delivery_plan::{validate_change_input_delivery, validate_change_revision_delivery};
+use super::super::expense_confirm::expense_progress;
 use crate::{Error, Result};
 
 /// 生效时来源事实已变化的提示前缀。
@@ -62,6 +64,9 @@ pub(super) async fn check_change_inputs(
     let facts = load_change_quantity_facts(db, order, executor).await?;
     validate_change_quantities(&facts.bounds, &input_quantities(inputs))
         .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
+    let occurred = occurred_expense_lines(db, order, executor).await?;
+    validate_change_expenses(&revision_expenses(&facts.base_lines), &input_expenses(inputs), &occurred)
+        .map_err(|error| Error::BusinessLogicError(error.to_string()))?;
     let recheck = due_recheck_lines(&facts, order);
     validate_change_input_delivery(db, order, inputs, &facts.base_lines, &recheck, executor).await
 }
@@ -87,10 +92,16 @@ pub(super) async fn check_effective_lines(
 ) -> Result<Option<ProgressStatus>> {
     let facts = load_change_quantity_facts(db, order, executor).await?;
     validate_change_quantities(&facts.bounds, &revision_quantities(lines)).map_err(stale)?;
+    let occurred = occurred_expense_lines(db, order, executor).await?;
+    validate_change_expenses(&revision_expenses(&facts.base_lines), &revision_expenses(lines), &occurred)
+        .map_err(stale)?;
     let recheck = due_recheck_lines(&facts, order);
     validate_change_revision_delivery(db, order, lines, &facts.base_lines, &recheck, executor)
         .await
         .map_err(stale_process)?;
+    if order.fulfillment_responsibility == FulfillmentResponsibility::NotApplicable {
+        return Ok(Some(expense_progress(lines, &occurred)));
+    }
     if order.fulfillment_responsibility != FulfillmentResponsibility::Warehouse {
         return Ok(None);
     }
@@ -124,6 +135,45 @@ fn due_recheck_lines(facts: &ChangeQuantityFacts, order: &PurchaseOrder) -> Hash
         .flat_map(|impact| impact.reasons.iter())
         .filter(|reason| matches!(reason.kind, SourceImpactKind::DueEarlier { .. }))
         .map(|reason| reason.sales_order_line_id.clone())
+        .collect()
+}
+
+/// 本采购单已确认发生的费用行身份。
+async fn occurred_expense_lines(
+    db: &Database,
+    order: &PurchaseOrder,
+    executor: &mut dyn Executor,
+) -> Result<HashSet<String>> {
+    Ok(occurrences_by_orders(db, std::slice::from_ref(&order.base.id), executor)
+        .await?
+        .into_iter()
+        .map(|occurrence| occurrence.expense_line_id)
+        .collect())
+}
+
+/// 版本行中的费用行比对内容。
+fn revision_expenses(lines: &[PurchaseOrderRevisionLine]) -> Vec<ExpenseLineState<'_>> {
+    lines
+        .iter()
+        .filter(|line| line.line_type == PurchaseLineType::LogisticsFee)
+        .map(|line| ExpenseLineState {
+            expense: line.expense.as_ref(),
+            gross_amount: line.gross_amount,
+            input_tax_rate: line.input_tax_rate,
+        })
+        .collect()
+}
+
+/// 改单目标中的费用行比对内容；缺少金额的行按 0 比对，由行校验另行拒绝。
+fn input_expenses(inputs: &[PurchaseLineInput]) -> Vec<ExpenseLineState<'_>> {
+    inputs
+        .iter()
+        .filter(|line| line.line_type == PurchaseLineType::LogisticsFee)
+        .map(|line| ExpenseLineState {
+            expense: line.expense.as_ref(),
+            gross_amount: line.gross_amount.unwrap_or_else(Amount::zero),
+            input_tax_rate: line.input_tax_rate,
+        })
         .collect()
 }
 

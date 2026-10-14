@@ -17,6 +17,7 @@ import {
     VersionsPanel,
 } from "@/features/sales-orders/components/sales-order-detail-panels"
 import { SalesOrderCustomerFinancePanel } from "./sales-order-detail-receivable-panel"
+import { ExtraCostPanel } from "@/features/sales-orders/components/sales-order-extra-cost-panel"
 import { SalesOrderProcurementProgress } from "@/features/sales-orders/components/sales-order-procurement-progress"
 import { compareDecimal } from "@/lib/fixed-decimal"
 import {
@@ -142,6 +143,12 @@ export function SalesOrderDetailTabs({
 
             <ObjectSectionTabsPanel value="fulfillment">
                 <PurchasePanel order={order} />
+            </ObjectSectionTabsPanel>
+
+            <ObjectSectionTabsPanel value="extra-cost">
+                {navSection === "extra-cost" ? (
+                    <ExtraCostPanel order={order} />
+                ) : null}
             </ObjectSectionTabsPanel>
 
             <ObjectSectionTabsPanel value="acceptance">

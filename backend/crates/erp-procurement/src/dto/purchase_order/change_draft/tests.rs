@@ -93,6 +93,7 @@ fn item() -> PurchaseChangeSubmissionLine {
             sales_order_revision_line_id: Some(SalesOrderRevisionLineId::new("sales-rev-line-1")),
             sales_order_submission_line_id: Some(SalesOrderSubmissionLineId::new("historical-line-1")),
             allocated_quantity: Some(Quantity::from_str("4").unwrap()),
+            expense: None,
         },
     )
     .unwrap()
@@ -125,6 +126,7 @@ fn logistics() -> PurchaseChangeSubmissionLine {
             sales_order_revision_line_id: None,
             sales_order_submission_line_id: None,
             allocated_quantity: None,
+            expense: None,
         },
     )
     .unwrap()

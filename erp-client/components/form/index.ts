@@ -12,6 +12,7 @@ import { TextareaField } from "@/components/form/textarea-field"
 import { SubmitButton } from "@/components/form/submit-button"
 import { SelectField } from "@/components/form/select-field"
 import { PdfUploadField } from "@/components/form/pdf-upload-field"
+import { EvidenceUploadField } from "@/components/form/evidence-upload-field"
 import { DateField, DateTimeField } from "@/components/form/date-field"
 
 /**
@@ -30,6 +31,7 @@ export const { useAppForm, withForm, withFieldGroup } = createFormHook({
         TextareaField,
         SelectField,
         PdfUploadField,
+        EvidenceUploadField,
         DateField,
         DateTimeField,
     },
@@ -47,5 +49,10 @@ export {
     type SelectFieldOption,
 } from "@/components/form/select-field"
 export { PdfUploadField } from "@/components/form/pdf-upload-field"
+export {
+    EvidenceUploadField,
+    EVIDENCE_FILE_MAX_BYTES,
+    EVIDENCE_FILE_TYPES,
+} from "@/components/form/evidence-upload-field"
 export { DateField, DateTimeField } from "@/components/form/date-field"
 export { toFieldErrors } from "@/components/form/utils"

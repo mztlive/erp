@@ -3,6 +3,8 @@ import * as React from "react"
 import { PlusIcon } from "lucide-react"
 import { MoneyValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { SellableSkuSelectDialog } from "./sellable-sku-select-dialog"
@@ -285,7 +287,7 @@ function SalesChangeLineRow({
                     label={label}
                     inputMode={inputMode}
                     required
-                    disabled={disabled}
+                    disabled={disabled || (key === "unitPrice" && value.gift)}
                     className={labelClass}
                     inputClassName="num"
                     description={previous(key, money)}
@@ -316,11 +318,38 @@ function SalesChangeLineRow({
                     {badge ? (
                         <Badge variant={badge.variant}>{badge.label}</Badge>
                     ) : null}
+                    {value.gift && original ? (
+                        <Badge variant="secondary">赠品</Badge>
+                    ) : null}
                 </div>
                 <p className="text-xs text-muted-foreground">
                     {line.spec_snapshot ?? "无规格"} ·{" "}
                     {line.unit_snapshot ?? "—"}
                 </p>
+                {line.goods && !original ? (
+                    <form.AppField name={`lines[${index}].gift`}>
+                        {(field) => (
+                            <Label
+                                htmlFor={`${id}-${line.line_no}-gift`}
+                                className="flex items-center gap-1.5 text-xs font-normal text-muted-foreground"
+                            >
+                                <Checkbox
+                                    id={`${id}-${line.line_no}-gift`}
+                                    checked={field.state.value}
+                                    disabled={disabled}
+                                    onCheckedChange={(checked) => {
+                                        field.handleChange(checked === true)
+                                        form.setFieldValue(
+                                            `lines[${index}].unitPrice`,
+                                            checked === true ? "0" : "",
+                                        )
+                                    }}
+                                />
+                                赠品（单价为 0，不收款）
+                            </Label>
+                        )}
+                    </form.AppField>
+                ) : null}
             </div>
             {line.goods ? (
                 numberField("quantity", "quantity", "数量", "decimal")

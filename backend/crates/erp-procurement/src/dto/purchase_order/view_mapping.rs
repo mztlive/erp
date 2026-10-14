@@ -2,8 +2,8 @@
 
 use super::{PurchaseOrderLineView, TotalsView};
 use crate::entity::purchase_order::{
-    PurchaseDeliveryAllocation, PurchaseLineType, PurchaseOrderRevision, PurchaseOrderRevisionLine,
-    PurchaseOrderSubmissionLine,
+    PurchaseDeliveryAllocation, PurchaseExpenseDetail, PurchaseLineType, PurchaseOrderRevision,
+    PurchaseOrderRevisionLine, PurchaseOrderSubmissionLine,
 };
 
 /// 采购行视图的统一数据源（版本行与提交行共用字段）。
@@ -54,6 +54,7 @@ trait PurchaseLineViewSource {
     fn view_sales_order_submission_line_id(&self) -> Option<String> {
         None
     }
+    fn view_expense(&self) -> Option<PurchaseExpenseDetail>;
 }
 
 /// 为同形行实体生成视图字段读取。
@@ -137,6 +138,10 @@ macro_rules! common_view_methods {
         fn view_allocated_quantity(&self) -> Option<String> {
             self.allocated_quantity.map(|q| q.to_string())
         }
+
+        fn view_expense(&self) -> Option<PurchaseExpenseDetail> {
+            self.expense.clone()
+        }
     };
 }
 
@@ -176,6 +181,8 @@ fn line_to_view(line: &impl PurchaseLineViewSource) -> PurchaseOrderLineView {
         sales_order_revision_line_id: line.view_sales_order_revision_line_id(),
         sales_order_submission_line_id: line.view_sales_order_submission_line_id(),
         allocated_quantity: line.view_allocated_quantity(),
+        expense: line.view_expense(),
+        expense_occurrence: None,
     }
 }
 
@@ -271,6 +278,7 @@ mod tests {
             sales_order_submission_line_id: item("ssl-1"),
             allocated_quantity: item("3.000000"),
             gross_amount: (!is_item).then(|| "100.00".to_string()),
+            expense: None,
         };
         let data = request
             .to_line_input()

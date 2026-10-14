@@ -110,6 +110,7 @@ fn cost(source: &mut Sources, id: &str, stage: CostStage, kind: CostType, net: &
             source_version: "1".into(),
             adjusts_cost_entry_id: None,
             evidence_attachment_id: None,
+            description: None,
         },
     )
     .unwrap();
@@ -180,6 +181,19 @@ fn missing_cost_unfinished_delivery_and_future_facts_never_create_profit() {
             .actual_profit_loss_net
             .is_none()
     );
+}
+#[test]
+fn pending_extra_cost_blocks_complete_profit_until_confirmed() {
+    let mut source = sources();
+    source.pending_extra_cost_orders.insert("order-1".into());
+    let result = calculation::calculate(&source, as_of(), true).unwrap();
+    assert!(result[0].row.totals.actual_profit_loss_net.is_none());
+    assert!(result[0].row.coverage_blockers.iter().any(|b| b.code == "EXTRA_COST_PENDING"));
+    let mut source = sources();
+    cost(&mut source, "freight", CostStage::Actual, CostType::Logistics, "5");
+    let result = calculation::calculate(&source, as_of(), true).unwrap();
+    assert_eq!(result[0].row.totals.actual_profit_loss_net.as_deref(), Some("30.00"));
+    assert_eq!(result[0].row.coverage_state, "COVERED");
 }
 #[test]
 fn voucher_scope_and_excess_reduction_do_not_inflate_profit() {

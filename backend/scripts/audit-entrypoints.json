@@ -2439,6 +2439,22 @@
       "reason": "用例 create_cost_entry 在自身事务或已声明 run_audited 边界通过 .resource_log、persist_log 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
     },
     {
+      "path": "crates/erp-processes/src/finance_posting/extra_cost/mod.rs",
+      "function": "write",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "用例步骤 write 在附加费用登记或冲减事务内通过 .resource_log、persist_log 构造并写入审计；接收所属命令的 Executor，与凭证登记和成本事实同事务提交，重放由成本事实确定性主键控制。"
+    },
+    {
       "path": "crates/erp-processes/src/finance_posting/payable/account.rs",
       "function": "create_payable_account",
       "policy": "Audited",
@@ -3933,6 +3949,64 @@
       },
       "location_count": 1,
       "reason": "用例或步骤 persist_draft_replacement 通过 .resource_log_with_id、persist_log 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
+    },
+    {
+      "path": "crates/erp-processes/src/procure_to_pay/expense_confirm.rs",
+      "function": "apply_confirm",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log_with_message",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log_with_message": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "用例 apply_confirm 在费用行确认发生事务内通过 .resource_log_with_message、persist_log 构造并写入审计；与确认事实、实际成本和凭证登记沿同一 Executor 提交，重复确认由唯一索引拒绝。"
+    },
+    {
+      "path": "crates/erp-processes/src/procure_to_pay/expense_create.rs",
+      "function": "expense_audit",
+      "policy": "Audited",
+      "stage": "MetadataFactory",
+      "boundaries": [
+        ".resource_log_with_id"
+      ],
+      "call_counts": {
+        ".resource_log_with_id": 1
+      },
+      "location_count": 1,
+      "reason": "元数据工厂 expense_audit 通过 .resource_log_with_id 构造费用采购建单审计上下文；只证明元数据调用被登记，实际记录由 write_expense_receipt 在同事务写入。"
+    },
+    {
+      "path": "crates/erp-processes/src/procure_to_pay/expense_create.rs",
+      "function": "expense_transaction",
+      "policy": "Audited",
+      "stage": "MetadataFactory",
+      "boundaries": [
+        ".run_authorized_policy_transaction"
+      ],
+      "call_counts": {
+        ".run_authorized_policy_transaction": 1
+      },
+      "location_count": 1,
+      "reason": "元数据工厂 expense_transaction 通过 .run_authorized_policy_transaction 绑定授权快照事务；只登记该调用边界，实际审计由同事务内的建单回执步骤写入。"
+    },
+    {
+      "path": "crates/erp-processes/src/procure_to_pay/expense_create.rs",
+      "function": "write_expense_receipt",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        "persist_log"
+      ],
+      "call_counts": {
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "用例步骤 write_expense_receipt 通过 persist_log 写入费用采购建单审计；接收建单事务 Executor，与命令回执同事务提交，不增加重试或重复成功事件。"
     },
     {
       "path": "crates/erp-processes/src/procure_to_pay/formalization_posting.rs",

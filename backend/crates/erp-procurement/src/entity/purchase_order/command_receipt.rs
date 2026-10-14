@@ -13,7 +13,8 @@ use sha2::{Digest, Sha256};
 
 use super::{CreationReceipt, PurchaseSubmitReceipt, SaveDraftReceipt, SourcingReceipt, VoidDraftReceipt};
 use crate::dto::purchase_order::{
-    CREATE_ACTION, CREATE_SOURCING_ACTION, PURCHASE_SUBMIT_ACTION, SAVE_ACTION, VOID_ACTION,
+    CREATE_ACTION, CREATE_EXPENSE_ACTION, CREATE_SOURCING_ACTION, PURCHASE_SUBMIT_ACTION, SAVE_ACTION,
+    VOID_ACTION,
 };
 
 /// 原采购长度前缀 SHA-256 算法的版本化摘要。
@@ -273,12 +274,12 @@ impl PurchaseReceiptResult for CreationReceipt {
     /// * `id` - 当前命令身份。
     ///
     /// # 返回
-    /// 动作为 `CREATE_ACTION` 或 `CREATE_SOURCING_ACTION`，采购单 ID 与单号非空白，且 `lock_version` 大于 0 时返回 `true`。
+    /// 动作为 `CREATE_ACTION`、`CREATE_SOURCING_ACTION` 或 `CREATE_EXPENSE_ACTION`，采购单 ID 与单号非空白，且 `lock_version` 大于 0 时返回 `true`。
     ///
     /// # 错误
     /// 不返回错误；任一条件不满足时返回 `false`。
     fn valid_result(&self, id: &PurchaseCommandReceiptIdentity) -> bool {
-        [CREATE_ACTION, CREATE_SOURCING_ACTION].contains(&id.action.as_str())
+        [CREATE_ACTION, CREATE_SOURCING_ACTION, CREATE_EXPENSE_ACTION].contains(&id.action.as_str())
             && !self.purchase_order_id.trim().is_empty()
             && !self.purchase_no.trim().is_empty()
             && self.lock_version > 0

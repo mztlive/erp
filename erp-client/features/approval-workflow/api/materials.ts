@@ -5,6 +5,12 @@ export type ApprovalMaterials = {
     document_no: string
     sales_order?: ApprovalSalesSubmission | null
     purchase_lines?: ApprovalPurchaseLine[] | null
+    /** 费用采购单：来源销售单已生效的附加费用合计（不含本次提交）。 */
+    extra_cost_summary?: {
+        sales_order_id: string
+        occurred_gross_total: string
+        pending_gross_total: string
+    } | null
     source_sales_orders?: {
         document_no: string
         revision: ApprovalSalesRevision
@@ -68,6 +74,8 @@ export type ApprovalPurchaseLine = {
     quantity: string | null
     unit: string | null
     unit_cost_gross: string | null
+    /** 行含税金额；费用行按此核对。 */
+    gross_amount?: string
     expected_delivery_date: string | null
     source: {
         revision_id: string

@@ -76,6 +76,7 @@ pub fn prepare(fact: FulfillmentCostFact) -> Result<Option<PreparedCostEntry>> {
         source_line_id: fact.allocation_id,
         source_version: fact.allocation_version.to_string(),
         evidence_attachment_id: fact.evidence_attachment_id,
+        description: None,
         allocations: vec![CostAllocationLineRequest {
             sales_order_id: fact.sales_order_id,
             sales_order_line_id: Some(fact.sales_order_line_id),

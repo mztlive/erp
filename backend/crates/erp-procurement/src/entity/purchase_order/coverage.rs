@@ -771,6 +771,7 @@ mod tests {
                 sales_order_revision_line_id: Some(SalesOrderRevisionLineId::new("sorl-1")),
                 sales_order_submission_line_id: None,
                 allocated_quantity: quantity.map(|q| Quantity::from_str(q).unwrap()),
+                expense: None,
             },
         )
         .unwrap()
@@ -809,6 +810,7 @@ mod tests {
                 sales_order_line_id: stable_line_id.map(SalesOrderLineId::new),
                 sales_order_revision_line_id: current_line_id.map(SalesOrderRevisionLineId::new),
                 allocated_quantity: Some(Quantity::from_str("2").unwrap()),
+                expense: None,
             },
         )
         .unwrap()

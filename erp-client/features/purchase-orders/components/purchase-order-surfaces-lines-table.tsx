@@ -21,7 +21,7 @@ export type PurchaseOrderLineRow =
     PurchaseOrderLinesTableOrder["currentContent"]["lines"][number]
 
 function lineTypeLabel(lineType: PurchaseOrderLineRow["lineType"]) {
-    return lineType === "LOGISTICS_FEE" ? "物流费用" : "商品/服务"
+    return lineType === "LOGISTICS_FEE" ? "费用" : "商品/服务"
 }
 
 function taxRatePercent(inputTaxRate: string) {
@@ -113,7 +113,11 @@ function buildPurchaseOrderLinesColumns(
                     <MaskedAmount />
                 ) : (
                     <div>
-                        <MoneyValue value={row.original.unitCostGross} />
+                        {row.original.lineType === "LOGISTICS_FEE" ? (
+                            "—"
+                        ) : (
+                            <MoneyValue value={row.original.unitCostGross} />
+                        )}
                         {summary ? (
                             <div className="text-xs text-muted-foreground">
                                 税率{" "}

@@ -216,6 +216,9 @@ fn order_row(
         .with_modes(scenarios.into_iter().collect(), vec![])
         .with_drilldown(None, if drill { vec!["cost_entry".into()] } else { vec![] }, vec![])
 }
+/// 存在已生效但未确认发生的采购费用行。
+pub(super) const EXTRA_COST_PENDING: &str = "EXTRA_COST_PENDING";
+
 /// 按订单和版本索引归集，数据库读取次数及内存遍历不随单据数平方增长。
 ///
 /// # 参数
@@ -247,6 +250,13 @@ pub(super) fn calculate(source: &Sources, as_of: i64, drill: bool) -> Result<Vec
                 apply_cost(&mut result, allocation, &entries, as_of, &mut covered_lines)?;
             }
             check_coverage(&mut result, sales.lines(order), order, &covered_lines)?;
+            if source.pending_extra_cost_orders.contains(&order.id) {
+                blocker(
+                    &mut result,
+                    EXTRA_COST_PENDING,
+                    "附加费用待确认发生，确认发生或移除后才计入成本完整",
+                );
+            }
             result.finish()?;
             Ok(result)
         })

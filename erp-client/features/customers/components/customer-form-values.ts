@@ -68,6 +68,7 @@ export type CustomerFormApi = AppFieldExtendedReactFormApi<
         TextareaField: typeof import("@/components/form").TextareaField
         SelectField: typeof import("@/components/form").SelectField
         PdfUploadField: typeof import("@/components/form").PdfUploadField
+        EvidenceUploadField: typeof import("@/components/form").EvidenceUploadField
         DateField: typeof import("@/components/form").DateField
         DateTimeField: typeof import("@/components/form").DateTimeField
     },

@@ -28,6 +28,7 @@ mod creation_basis;
 mod delivery_allocation;
 mod delivery_capacity;
 mod draft_edit;
+mod expense;
 mod line_amounts;
 mod line_common;
 pub use delivery_allocation::PurchaseDeliveryAllocation;
@@ -74,6 +75,10 @@ pub use creation_basis::{
 };
 pub use draft_edit::{
     DraftLineEdit, DraftLineEditViolation, validate_draft_line_edits, validate_rebased_draft_line_edits,
+};
+pub use expense::{
+    EXPENSE_DESCRIPTION_MAX_LEN, ExpenseLineState, PurchaseExpenseCategory, PurchaseExpenseDetail,
+    PurchaseExpenseOccurrence, PurchaseExpenseOccurrenceData, validate_change_expenses,
 };
 pub use line_amounts::{LineAmountViolation, PurchaseLineInput, compute_header_totals};
 pub(crate) use line_amounts::{zero_amount, zero_rate};

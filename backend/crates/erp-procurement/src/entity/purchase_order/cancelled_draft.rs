@@ -190,6 +190,7 @@ mod tests {
                     "sales-submission-line-1",
                 )),
                 allocated_quantity: Some(Quantity::from_str("2").unwrap()),
+                expense: None,
             },
         )
         .unwrap();

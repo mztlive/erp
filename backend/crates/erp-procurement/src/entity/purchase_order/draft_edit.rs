@@ -375,6 +375,7 @@ mod tests {
                 sales_order_revision_line_id: Some(SalesOrderRevisionLineId::new(revision_line_id)),
                 sales_order_submission_line_id: submission_line_id.map(SalesOrderSubmissionLineId::new),
                 allocated_quantity: Some(quantity),
+                expense: None,
             },
         )
         .unwrap()

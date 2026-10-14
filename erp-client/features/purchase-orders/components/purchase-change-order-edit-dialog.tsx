@@ -21,6 +21,7 @@ import type { SubmitPurchaseChangeInput } from "../api/purchase-order-commands"
 import {
     usePurchaseDeliveryOptionsQuery,
     useSubmitPurchaseChangeMutation,
+    usePurchaseOrderCenterQuery,
 } from "../hooks/queries"
 import {
     usePurchaseChangeDraftQuery,
@@ -197,6 +198,19 @@ function PurchaseChangeEditForm({
 }) {
     const mutation = useSubmitPurchaseChangeMutation()
     const submissionState = usePurchaseChangeSubmissionQuery(changeOrderId)
+    const centerQuery = usePurchaseOrderCenterQuery(purchaseOrderId)
+    const occurredExpenseIds = React.useMemo(
+        () =>
+            new Set(
+                (centerQuery.data?.currentContent.lines ?? []).flatMap(
+                    (line) =>
+                        line.expense && line.expenseOccurrence
+                            ? [line.expense.expenseLineId]
+                            : [],
+                ),
+            ),
+        [centerQuery.data],
+    )
     const [unknown, setUnknown] = React.useState(false)
     const [error, setError] = React.useState<string | null>(null)
     const inFlight = React.useRef(false)
@@ -334,6 +348,7 @@ function PurchaseChangeEditForm({
                 draft={draft}
                 options={options}
                 disabled={disabled}
+                occurredExpenseIds={occurredExpenseIds}
             />
             <SubmissionRouteConfirmation definition={approval?.definition} />
             {error ? (

@@ -32,7 +32,9 @@ import { deriveSalesOrderDetailState } from "@/features/sales-orders/lib/sales-o
 import type { SalesOrderDetailActionResult } from "@/features/sales-orders/lib/sales-order-detail-model"
 import { mapWorkItemDto } from "@/features/work-items/types"
 import { useWorkItemDetailQuery } from "@/features/work-items/queries"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { FormalCommandKeyLedger } from "@/lib/formal-command"
+import { hasPermission } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 
 /**
@@ -48,6 +50,11 @@ export function SalesOrderDetailPage({
     section?: string
 }) {
     const query = useSalesOrderDetailQuery(salesOrderId, true)
+    const account = useAccountProfileQuery()
+    const canViewExtraCost = hasPermission(
+        account.data?.permissions,
+        "cost_entry:list",
+    )
     const eligibilityQuery = useSalesOrderAcceptanceEligibilityQuery(
         salesOrderId,
         Boolean(
@@ -185,6 +192,7 @@ export function SalesOrderDetailPage({
         fromWorkspace,
         returnTo,
         hasEligibleAcceptance: eligibilityQuery.data === true,
+        canViewExtraCost,
     })
     if (derived.showEditor) {
         return (

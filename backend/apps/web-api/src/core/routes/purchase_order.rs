@@ -253,6 +253,22 @@ fn purchase_correspondence_routes(rbac: &SharedRbacService) -> Router<AppState> 
             ),
         )
         .route(
+            "/sales-orders/{id}/expense-purchases",
+            with_permission(
+                post(purchase_order::expense::expense_purchase_create),
+                rbac,
+                purchase_order::expense::expense_purchase_create_permission_key(),
+            ),
+        )
+        .route(
+            "/purchase-orders/{id}/expenses/{expense_line_id}/occurrence",
+            with_permission(
+                post(purchase_order::expense::expense_occurrence_confirm),
+                rbac,
+                purchase_order::expense::expense_occurrence_confirm_permission_key(),
+            ),
+        )
+        .route(
             "/purchase-orders/{id}/email",
             with_permission(
                 post(purchase_order::correspondence::send_purchase_email),

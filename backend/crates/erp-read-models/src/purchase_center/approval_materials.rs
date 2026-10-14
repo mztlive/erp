@@ -1,7 +1,8 @@
 //! 采购审批对照仅读取精确采购提交及冻结允许的销售版本，不访问当前草稿。
 
 use erp_core::ids::{PurchaseOrderId, PurchaseOrderSubmissionId, SalesOrderRevisionLineId};
-use erp_procurement::entity::purchase_order::{PurchaseLineType, PurchaseOrderSubmissionLine};
+use erp_finance::dto::extra_cost::{SalesExtraCostListView, SalesExtraCostView};
+use erp_procurement::entity::purchase_order::{PurchaseLineType, PurchaseOrderSubmissionLine, PurchaseType};
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::repository::prelude::*;
 use erp_sales::entity::sales_order::{LineType, SalesOrderGoodsServiceLineRevision, SalesOrderRevisionLine};
@@ -13,6 +14,7 @@ use mongodb::Database;
 use persistence_core::NoTransaction;
 use serde::Serialize;
 
+use crate::finance::extra_cost::{order_costs, purchase_expense_facts, purchase_expense_views};
 use crate::sales_center::materials::repository::revision_lines;
 use crate::{Error, Result};
 
@@ -26,8 +28,52 @@ pub struct ApprovalPurchaseLine {
     pub quantity: Option<String>,
     pub unit: Option<String>,
     pub unit_cost_gross: Option<String>,
+    pub gross_amount: String,
     pub expected_delivery_date: Option<String>,
     pub source: Option<ApprovalPurchaseSourceLine>,
+}
+
+/// 费用采购单审批时来源销售单的附加费用合计（含本单之外已生效的费用）。
+#[derive(Debug, Serialize)]
+pub struct ApprovalExtraCostSummary {
+    pub sales_order_id: String,
+    pub occurred_gross_total: String,
+    pub pending_gross_total: String,
+}
+
+/// 费用采购单审批资料附带来源销售单已有附加费用合计；其他采购单返回空。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `materials` - 已授权的审批资料
+///
+/// # 返回
+/// 费用采购单返回来源销售单的附加费用合计。
+///
+/// # 错误
+/// 仓储读取失败时返回错误。
+pub(crate) async fn extra_cost_summary(
+    db: &Database,
+    materials: &ApprovalMaterialsView,
+) -> Result<Option<ApprovalExtraCostSummary>> {
+    let Some(order) = db.purchase_orders().find_by_id(&materials.document_id, &mut NoTransaction).await?
+    else {
+        return Ok(None);
+    };
+    if order.purchase_type != PurchaseType::Expense {
+        return Ok(None);
+    }
+    let sales_order_id = order.sales_order_id.to_string();
+    let (entries, allocations) = order_costs(db, &sales_order_id, &mut NoTransaction).await?;
+    let mut items = SalesExtraCostView::registrations(&entries, &allocations);
+    let facts = purchase_expense_facts(db, std::slice::from_ref(&sales_order_id), &mut NoTransaction).await?;
+    items.extend(purchase_expense_views(&facts));
+    let list = SalesExtraCostListView::from_items(items);
+    Ok(Some(ApprovalExtraCostSummary {
+        sales_order_id,
+        occurred_gross_total: list.occurred_gross_total.to_string(),
+        pending_gross_total: list.pending_gross_total.to_string(),
+    }))
 }
 
 /// 已冻结允许版本中的销售行；金额与数量保持十进制字符串。
@@ -140,18 +186,16 @@ fn comparison_line(
     Ok(ApprovalPurchaseLine {
         id: line.base.id.clone(),
         line_no: line.line_no,
-        title: line.product_name_snapshot.clone().unwrap_or_else(|| {
-            if line.line_type == PurchaseLineType::LogisticsFee {
-                "物流费用"
-            } else {
-                "未记录商品名称"
-            }
-            .into()
+        title: line.product_name_snapshot.clone().unwrap_or_else(|| match &line.expense {
+            Some(expense) => format!("{}：{}", expense.category.label(), expense.description),
+            None if line.line_type == PurchaseLineType::LogisticsFee => "费用".into(),
+            None => "未记录商品名称".into(),
         }),
         specification: line.specification_snapshot.clone(),
         quantity: line.quantity.as_ref().map(|value| value.to_decimal().to_string()),
         unit: line.base_unit_code.clone(),
         unit_cost_gross: line.unit_cost_gross.as_ref().map(|value| value.to_decimal().to_string()),
+        gross_amount: line.gross_amount.to_string(),
         expected_delivery_date: line.expected_delivery_date.map(|date| date.to_string()),
         source: source_line(line, allowed, sources, goods)?,
     })
@@ -255,6 +299,7 @@ mod tests {
                 sales_order_revision_line_id: Some(SalesOrderRevisionLineId::new("source-line")),
                 sales_order_submission_line_id: None,
                 allocated_quantity: Some("2".parse().unwrap()),
+                expense: None,
             },
         )
         .unwrap()
@@ -327,7 +372,19 @@ mod tests {
         let view = comparison_line(&purchase, &allowed(), &[], &[]).unwrap();
         assert!(view.source.is_none());
         assert!(view.unit_cost_gross.is_none());
-        assert_eq!(view.title, "物流费用");
+        assert_eq!(view.title, "费用");
+        purchase.expense = Some(
+            erp_procurement::entity::purchase_order::PurchaseExpenseDetail::new(
+                "exp-1".into(),
+                erp_procurement::entity::purchase_order::PurchaseExpenseCategory::Logistics,
+                "第三方物流".into(),
+                None,
+            )
+            .unwrap(),
+        );
+        let view = comparison_line(&purchase, &allowed(), &[], &[]).unwrap();
+        assert_eq!(view.title, "物流：第三方物流");
+        assert_eq!(view.gross_amount, purchase.gross_amount.to_string());
     }
 
     #[test]

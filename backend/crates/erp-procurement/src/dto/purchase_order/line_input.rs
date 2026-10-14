@@ -102,6 +102,7 @@ impl SavePurchaseOrderLine {
                 .as_ref()
                 .map(|value| SalesOrderSubmissionLineId::new(value.clone())),
             allocated_quantity: parsed.allocated_quantity,
+            expense: self.expense.clone(),
             gross_amount: parsed.gross_amount,
         }
     }
@@ -169,6 +170,7 @@ mod tests {
             sales_order_submission_line_id: Some("ssl-1".to_string()),
             allocated_quantity: Some("3.000000".to_string()),
             gross_amount: None,
+            expense: None,
         }
     }
 
@@ -192,6 +194,7 @@ mod tests {
             sales_order_submission_line_id: None,
             allocated_quantity: None,
             gross_amount: Some("100.00".to_string()),
+            expense: None,
         }
     }
 

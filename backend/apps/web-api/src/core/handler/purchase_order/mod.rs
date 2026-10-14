@@ -7,6 +7,7 @@ pub mod change_draft;
 pub mod change_void;
 pub mod correspondence;
 pub mod delivery_options;
+pub mod expense;
 pub mod payments;
 pub mod sales_material;
 

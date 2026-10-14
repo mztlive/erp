@@ -81,7 +81,11 @@ export function WorkspacePurchaseApproval({
             </>
         )
 
-    const { display, purchase_lines: lines } = query.data
+    const {
+        display,
+        purchase_lines: lines,
+        extra_cost_summary: extraCost,
+    } = query.data
     const sources = display.source_sales ?? []
     return (
         <>
@@ -175,6 +179,15 @@ export function WorkspacePurchaseApproval({
                         </span>
                     )}
                 </header>
+                {extraCost ? (
+                    <p className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+                        来源销售单已有附加费用（不含本次提交）：已发生{" "}
+                        <MoneyValue value={extraCost.occurred_gross_total} />
+                        ，待发生{" "}
+                        <MoneyValue value={extraCost.pending_gross_total} />
+                        。附加费用不向客户收费，会直接减少本单利润。
+                    </p>
+                ) : null}
                 {lines?.length ? (
                     <div className="space-y-5">
                         {lines.map((line) => (
@@ -253,6 +266,19 @@ function PurchaseComparison({
     }
 }) {
     const source = line.source
+    if (!source && line.quantity == null && line.gross_amount) {
+        return (
+            <article className="flex min-w-0 flex-wrap items-baseline justify-between gap-2 rounded-md border border-grid px-3 py-2 text-sm">
+                <span className="min-w-0 wrap-anywhere">
+                    <span className="mr-2 text-xs text-muted-foreground">
+                        费用
+                    </span>
+                    {displayName(line.title) || "费用"}
+                </span>
+                <MoneyValue value={line.gross_amount} />
+            </article>
+        )
+    }
     const title = (name: string, spec: string | null) =>
         [
             displayName(name) || "未记录商品名称",

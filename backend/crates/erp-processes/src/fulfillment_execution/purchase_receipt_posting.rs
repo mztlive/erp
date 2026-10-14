@@ -649,6 +649,7 @@ mod posting_contract_tests {
             sales_order_line_id: Some(SalesOrderLineId::new("sales-line")),
             sales_order_revision_line_id: Some(SalesOrderRevisionLineId::new("sales-revision-line")),
             allocated_quantity: Some(quantity.parse().unwrap()),
+            expense: None,
         }
     }
 

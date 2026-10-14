@@ -4,13 +4,14 @@ import type { SourceImpactReasonView } from "@/features/purchase-orders/lib/sour
 import type { StatusTone } from "@/components/ui/status-badge"
 import type { DocumentApprovalView } from "@/features/approval-workflow/types"
 
-export type PurchaseType = "PHYSICAL" | "VIRTUAL" | "SERVICE"
+export type PurchaseType = "PHYSICAL" | "VIRTUAL" | "SERVICE" | "EXPENSE"
 
 export type FulfillmentResponsibility =
     | "WAREHOUSE"
     | "SUPPLIER_DIRECT"
     | "ELECTRONIC"
     | "SERVICE"
+    | "NONE"
 
 export type PurchaseOrderStatus =
     | "DRAFT"
@@ -80,6 +81,46 @@ type PurchaseOrderLineView = Readonly<{
     salesAllocationLabel?: string
     /** 精确关联销售版本行的客户成交含税单价；未关联时缺省。 */
     salesUnitPriceGross?: string
+    /** 费用行内容；商品行缺省。 */
+    expense?: PurchaseExpenseDetail
+    /** 费用行已确认发生时的记录。 */
+    expenseOccurrence?: PurchaseExpenseOccurrence
+}>
+
+export type PurchaseExpenseCategory =
+    | "logistics"
+    | "printing"
+    | "storage"
+    | "delivery"
+    | "platform_tech"
+    | "offline_service"
+    | "other"
+
+export const PURCHASE_EXPENSE_CATEGORY_LABEL: Record<
+    PurchaseExpenseCategory,
+    string
+> = {
+    logistics: "物流",
+    printing: "印刷",
+    storage: "仓储",
+    delivery: "配送",
+    platform_tech: "平台技术",
+    offline_service: "线下服务",
+    other: "其他",
+}
+
+export type PurchaseExpenseDetail = Readonly<{
+    expenseLineId: string
+    category: PurchaseExpenseCategory
+    description: string
+    salesOrderLineId?: string
+}>
+
+export type PurchaseExpenseOccurrence = Readonly<{
+    occurredOn: string
+    confirmedBy: string
+    evidenceAttachmentId: string
+    grossAmount: string
 }>
 
 export type PurchaseSourceSalesMaterialView = Readonly<{
@@ -450,6 +491,7 @@ export const PURCHASE_TYPE_LABEL: Record<PurchaseType, string> = {
     PHYSICAL: "实物",
     VIRTUAL: "虚拟",
     SERVICE: "线下服务",
+    EXPENSE: "费用",
 }
 
 export const FULFILLMENT_RESPONSIBILITY_LABEL: Record<
@@ -460,6 +502,7 @@ export const FULFILLMENT_RESPONSIBILITY_LABEL: Record<
     SUPPLIER_DIRECT: "供应商直发",
     ELECTRONIC: "电子交付",
     SERVICE: "线下服务",
+    NONE: "无需履约",
 }
 
 export const PO_STATUS_LABEL: Record<PurchaseOrderStatus, string> = {

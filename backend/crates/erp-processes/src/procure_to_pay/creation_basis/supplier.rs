@@ -60,6 +60,8 @@ impl CreationBasisSupplierPort for CreationBasisSupplierAdapter {
             PurchaseType::Physical => OfferingProductKind::Physical,
             PurchaseType::Virtual => OfferingProductKind::Virtual,
             PurchaseType::Service => OfferingProductKind::OfflineService,
+            // 费用采购不供货，收款供应商只需已建档并具备商务结算版本。
+            PurchaseType::Expense => return Ok(()),
         };
         erp_supplier::service::supplier::eligibility::ensure_offering_capability_qualified(
             &self.db,

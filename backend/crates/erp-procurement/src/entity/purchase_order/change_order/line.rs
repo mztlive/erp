@@ -11,10 +11,14 @@ use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::entity::purchase_order::line_common::{PurchaseLineDataRef, normalize_and_validate_line};
+use crate::entity::purchase_order::line_common::{
+    PurchaseLineDataRef, normalize_and_validate_line, normalize_expense,
+};
 use crate::entity::purchase_order::offering_source::ensure_offering_source;
 use crate::entity::purchase_order::types::PurchaseLineType;
-use crate::entity::purchase_order::{PurchaseDeliveryAllocation, PurchaseOfferingSource};
+use crate::entity::purchase_order::{
+    PurchaseDeliveryAllocation, PurchaseExpenseDetail, PurchaseOfferingSource,
+};
 
 /// 采购变更提交行创建数据（不含系统字段）。
 ///
@@ -68,6 +72,9 @@ pub struct PurchaseChangeSubmissionLineData {
     pub sales_order_submission_line_id: Option<SalesOrderSubmissionLineId>,
     /// 商品行对应的分配数量。
     pub allocated_quantity: Option<Quantity>,
+    /// 费用行内容（稳定身份、类别、说明、归属）；商品行为空。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expense: Option<PurchaseExpenseDetail>,
 }
 
 /// 采购变更提交行实体（数据模型 §6.6）。
@@ -121,6 +128,9 @@ pub struct PurchaseChangeSubmissionLine {
     pub sales_order_submission_line_id: Option<SalesOrderSubmissionLineId>,
     /// 商品行对应的分配数量。
     pub allocated_quantity: Option<Quantity>,
+    /// 费用行内容（稳定身份、类别、说明、归属）；商品行为空。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expense: Option<PurchaseExpenseDetail>,
 }
 
 impl PurchaseLineDataRef for PurchaseChangeSubmissionLineData {
@@ -266,6 +276,7 @@ impl PurchaseChangeSubmissionLine {
             sales_order_revision_line_id: data.sales_order_revision_line_id,
             sales_order_submission_line_id: data.sales_order_submission_line_id,
             allocated_quantity: data.allocated_quantity,
+            expense: normalize_expense(data.line_type, data.expense)?,
         })
     }
 }
@@ -327,6 +338,7 @@ mod tests {
             sales_order_revision_line_id: Some(SalesOrderRevisionLineId::new("sorl-1")),
             sales_order_submission_line_id: Some(SalesOrderSubmissionLineId::new("ssl-1")),
             allocated_quantity: Some(Quantity::from_str("3.000000").unwrap()),
+            expense: None,
         }
     }
 

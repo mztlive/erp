@@ -2,5 +2,6 @@
 
 mod command_recovery;
 pub mod cost;
+pub mod extra_cost;
 pub mod payable;
 pub mod receivable;

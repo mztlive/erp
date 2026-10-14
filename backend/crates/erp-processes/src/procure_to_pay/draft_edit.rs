@@ -487,6 +487,7 @@ mod tests {
                 sales_order_revision_line_id: Some("sales-revision-line-1".to_string()),
                 sales_order_submission_line_id: Some("sales-submission-line-1".to_string()),
                 allocated_quantity: Some(quantity.to_string()),
+                expense: None,
                 gross_amount: None,
             }],
             line_patches: vec![],

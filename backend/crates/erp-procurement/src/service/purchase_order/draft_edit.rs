@@ -270,6 +270,7 @@ mod tests {
                 sales_order_submission_line_id: Some("sales-submission-line-1".to_string()),
                 allocated_quantity: Some(quantity.to_string()),
                 gross_amount: None,
+                expense: None,
             }])
     }
     /// 验证非创建人无法观察目标采购单的版本或状态错误。

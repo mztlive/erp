@@ -131,7 +131,12 @@ export function parsePaymentTermSnapshot(raw: string): {
 }
 
 export function mapPurchaseType(value: string): PurchaseType {
-    if (value === "PHYSICAL" || value === "VIRTUAL" || value === "SERVICE") {
+    if (
+        value === "PHYSICAL" ||
+        value === "VIRTUAL" ||
+        value === "SERVICE" ||
+        value === "EXPENSE"
+    ) {
         return value
     }
     return "PHYSICAL"
@@ -142,7 +147,8 @@ export function mapFulfillment(value: string): FulfillmentResponsibility {
         value === "WAREHOUSE" ||
         value === "SUPPLIER_DIRECT" ||
         value === "ELECTRONIC" ||
-        value === "SERVICE"
+        value === "SERVICE" ||
+        value === "NONE"
     ) {
         return value
     }

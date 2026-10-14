@@ -6,6 +6,7 @@ use erp_procurement::dto::purchase_order::{
 use erp_procurement::entity::purchase_order::{
     ProgressStatus, PurchaseChangeOrder, PurchaseLineSalesAllocation, PurchaseOrder,
 };
+use erp_procurement::repository::purchase_expense::occurrences_by_orders;
 use erp_warehouse::repository::WarehouseExt;
 use erp_workflow::service::document_registry::find_approval_binding;
 use mongodb::Database;
@@ -61,7 +62,10 @@ impl PurchaseOrderReadService {
         let mut facts = load_purchase_order_center_facts(&self.db, id, &mut NoTransaction).await?;
         let order = facts.order.take().ok_or_else(|| Error::NotFound("采购单不存在或无权查看".into()))?;
         let identity = center_identity(&order, &facts)?;
-        let content = center_content(&facts);
+        let mut content = center_content(&facts);
+        let occurrences =
+            occurrences_by_orders(&self.db, std::slice::from_ref(&order.base.id), &mut NoTransaction).await?;
+        PurchaseOrderLineView::attach_occurrences(&mut content.lines, &occurrences);
         let source = match source_sales(&self.db, &order, &content.lines, &mut NoTransaction).await {
             Ok(source) => Some(source),
             Err(error) => {

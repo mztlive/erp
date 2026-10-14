@@ -20,6 +20,7 @@ export type NavSectionId =
     | "overview"
     | "approval"
     | "fulfillment"
+    | "extra-cost"
     | "acceptance"
     | "receivable"
     | "receipt"
@@ -103,6 +104,8 @@ export function resolveNavSection(
         case "fulfillment":
         case "purchase":
             return "fulfillment"
+        case "extra-cost":
+            return isCard ? "overview" : "extra-cost"
         case "acceptance":
             return isCard ? "fulfillment" : "acceptance"
         case "change-review":
@@ -302,7 +305,10 @@ export function buildSelfHref(
         : `/sales/orders/${salesOrderId}`
 }
 
-export function navItemsFor(order: SalesOrderDetailView): Array<{
+export function navItemsFor(
+    order: SalesOrderDetailView,
+    options: { canViewExtraCost?: boolean } = {},
+): Array<{
     id: NavSectionId
     label: string
     hint: string
@@ -326,6 +332,14 @@ export function navItemsFor(order: SalesOrderDetailView): Array<{
             label: "采购",
             hint: "本单已创建的采购单",
             show: true,
+        },
+        {
+            id: "extra-cost",
+            label: "附加费用",
+            hint: "我方承担、不对应销售明细的费用",
+            show:
+                order.nature === "physical_service" &&
+                Boolean(options.canViewExtraCost),
         },
         {
             id: "acceptance",

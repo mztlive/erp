@@ -9,6 +9,10 @@ import { compactFixed } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
 import type { PurchaseChangeDraft } from "../api/purchase-change-draft"
 import {
+    expenseLineName,
+    mapExpenseDetail,
+} from "../api/purchase-order-mapping"
+import {
     purchaseChangeBaseLine,
     purchaseChangeGapAfter,
     purchaseChangeLineAmount,
@@ -48,12 +52,15 @@ export function PurchaseChangeLineItems({
     draft,
     options,
     disabled,
+    occurredExpenseIds,
 }: {
     form: PurchaseChangeDraftFormApi
     id: string
     draft: PurchaseChangeDraft
     options: PurchaseChangeDeliveryOptions
     disabled: boolean
+    /** 已确认发生的费用行身份；这些行在改单中只读。 */
+    occurredExpenseIds: ReadonlySet<string>
 }) {
     return (
         <form.Subscribe selector={(state) => state.values.lines}>
@@ -104,6 +111,7 @@ export function PurchaseChangeLineItems({
                                         draft={draft}
                                         options={options}
                                         disabled={disabled}
+                                        occurredExpenseIds={occurredExpenseIds}
                                     />
                                 ))}
                             </div>
@@ -123,7 +131,8 @@ function PurchaseChangeLineRow({
     diff,
     draft,
     options,
-    disabled,
+    disabled: formDisabled,
+    occurredExpenseIds,
 }: {
     form: PurchaseChangeDraftFormApi
     id: string
@@ -133,9 +142,15 @@ function PurchaseChangeLineRow({
     draft: PurchaseChangeDraft
     options: PurchaseChangeDeliveryOptions
     disabled: boolean
+    occurredExpenseIds: ReadonlySet<string>
 }) {
     const line = value.source
     const item = line.line_type === "ITEM_SERVICE"
+    const expense = mapExpenseDetail(line.expense)
+    const occurred = Boolean(
+        expense && occurredExpenseIds.has(expense.expenseLineId),
+    )
+    const disabled = formDisabled || occurred
     const removed = diff.status === "removed"
     const prefix = `${id}-line-${toAutomationIdSegment(value.lineKey)}`
     const badge = diff.status === "unchanged" ? null : DIFF_BADGE[diff.status]
@@ -184,8 +199,11 @@ function PurchaseChangeLineRow({
                         >
                             {item
                                 ? (line.product_name ?? "采购商品/服务")
-                                : "物流费用"}
+                                : expenseLineName(expense)}
                         </p>
+                        {occurred ? (
+                            <Badge variant="secondary">已发生 · 不可修改</Badge>
+                        ) : null}
                         {badge ? (
                             <Badge variant={badge.variant}>{badge.label}</Badge>
                         ) : null}
@@ -222,7 +240,7 @@ function PurchaseChangeLineRow({
                             : numberField(
                                   "grossAmount",
                                   "logistics-gross",
-                                  "含税物流费用",
+                                  "含税费用金额",
                                   true,
                               )}
                         {numberField("inputTaxRate", "tax-rate", "进项税率")}

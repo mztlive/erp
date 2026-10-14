@@ -125,7 +125,7 @@ export function PurchaseOrderPaperDocument({
                             ) : null}
                             {row.lineType === "LOGISTICS_FEE" ? (
                                 <div className="mt-1 text-xs text-muted-foreground">
-                                    物流费用
+                                    费用
                                     {row.logisticsFeeReason
                                         ? ` · ${row.logisticsFeeReason}`
                                         : ""}

@@ -73,9 +73,10 @@ export const salesChangeDraftSchema = z.object({
                 unitPrice: z
                     .string()
                     .refine(
-                        (value) => positiveSalesDecimal(value, 4),
-                        "含税单价须大于0，最多4位小数",
+                        (value) => /^\d+(?:\.\d{1,4})?$/.test(value.trim()),
+                        "含税单价最多4位小数",
                     ),
+                gift: z.boolean(),
                 taxRate: z
                     .string()
                     .refine(validSalesTaxRate, "税率应在0至1之间，最多6位小数"),
@@ -95,6 +96,25 @@ export const salesChangeDraftSchema = z.object({
                     ),
             })
             .superRefine((line, context) => {
+                if (
+                    line.source.goods &&
+                    !line.gift &&
+                    !positiveSalesDecimal(line.unitPrice, 4)
+                )
+                    context.addIssue({
+                        code: "custom",
+                        path: ["unitPrice"],
+                        message: "含税单价须大于0；随单赠送请勾选赠品",
+                    })
+                if (
+                    !line.source.goods &&
+                    !positiveSalesDecimal(line.unitPrice, 4)
+                )
+                    context.addIssue({
+                        code: "custom",
+                        path: ["unitPrice"],
+                        message: "含税单价须大于0，最多4位小数",
+                    })
                 if (
                     line.source.goods &&
                     (!/^\d{4}-\d{2}-\d{2}$/.test(line.dueDate) ||

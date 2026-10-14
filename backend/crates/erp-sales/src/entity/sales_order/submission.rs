@@ -19,7 +19,7 @@ use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
-use super::amount_validation::{sum_line_amounts, validate_amount_triple};
+use super::amount_validation::{sum_line_amounts, validate_submission_amounts};
 use super::snapshot::HeaderSnapshots;
 use super::types::{
     BusinessType, GoodsLineFields, LineSummary, LineType, VoucherLineDraft, WelfareScenario,
@@ -317,7 +317,7 @@ impl SalesOrderSubmission {
             receivable_due_date: data.receivable_due_date,
             submitted_at: data.submitted_at,
         })?;
-        validate_amount_triple(data.gross_amount, data.net_amount, data.tax_amount)?;
+        validate_submission_amounts(data.gross_amount, data.net_amount, data.tax_amount)?;
         let lines = data
             .lines
             .into_iter()

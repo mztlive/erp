@@ -338,7 +338,8 @@ pub fn supply_cost(
         FulfillmentResponsibility::Warehouse => revision.bulk_supply_price_gross,
         FulfillmentResponsibility::SupplierDirect
         | FulfillmentResponsibility::Electronic
-        | FulfillmentResponsibility::Service => revision.dropship_supply_price_gross,
+        | FulfillmentResponsibility::Service
+        | FulfillmentResponsibility::NotApplicable => revision.dropship_supply_price_gross,
     }
 }
 

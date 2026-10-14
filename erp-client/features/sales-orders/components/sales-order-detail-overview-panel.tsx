@@ -1,5 +1,6 @@
 "use client"
 
+import { Badge } from "@/components/ui/badge"
 import * as React from "react"
 
 import { SalesOrderSelectionSource } from "./sales-order-selection-source"
@@ -71,7 +72,12 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
                     {order.lineItems.map((line) => (
                         <TableRow key={line.id}>
                             <TableCell className="min-w-44 whitespace-normal">
-                                <div>{line.name}</div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <span>{line.name}</span>
+                                    {line.isGift ? (
+                                        <Badge variant="secondary">赠品</Badge>
+                                    ) : null}
+                                </div>
                                 {line.deliveryAllocations?.map(
                                     (allocation, index) => (
                                         <div

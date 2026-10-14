@@ -173,6 +173,7 @@ mod tests {
                 sales_order_line_id: Some(SalesOrderLineId::new(stable)),
                 sales_order_revision_line_id: Some(SalesOrderRevisionLineId::new("sorl-1")),
                 allocated_quantity: Some(quantity),
+                expense: None,
             },
         )
         .unwrap()

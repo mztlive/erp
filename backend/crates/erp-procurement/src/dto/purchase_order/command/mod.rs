@@ -1,6 +1,7 @@
 //! 采购订单写命令 DTO（创建、保存、提交、作废、审核）。
 
 mod create;
+mod expense;
 mod review;
 mod save;
 mod submit;
@@ -10,6 +11,11 @@ pub use create::{
     CREATE_ACTION, CREATE_SOURCING_ACTION, CreatePurchaseOrderFromBasisRequest,
     CreatePurchaseOrderLineRequest, CreatePurchaseOrderResult, CreatePurchaseOrdersFromSourcingRequest,
     CreatePurchaseOrdersFromSourcingResult, ExistingStockReservationResult, SourcingLineAssignment,
+};
+pub use expense::{
+    CONFIRM_EXPENSE_ACTION, CREATE_EXPENSE_ACTION, ConfirmExpenseOccurrenceRequest,
+    ConfirmExpenseOccurrenceResult, CreateExpenseLineRequest, CreateExpensePurchaseRequest,
+    EXPENSE_LINE_LIMIT,
 };
 pub use review::{CancelPurchaseOrderApprovalRequest, MaintainPurchaseSourceRequest, PurchaseReviewResult};
 pub use save::{

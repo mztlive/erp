@@ -134,6 +134,7 @@ pub fn build_submission_line(
             )),
             sales_order_submission_line_id: None,
             allocated_quantity: Some(line.selected.quantity),
+            expense: None,
         },
     )
     .map_err(Into::into)

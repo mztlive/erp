@@ -11,9 +11,11 @@
 pub mod cost_allocation;
 pub mod cost_allocation_set;
 pub mod cost_entry;
+pub mod extra_cost;
 
 pub use cost_allocation::*;
 pub use cost_allocation_set::*;
 pub use cost_entry::*;
+pub use extra_cost::*;
 
 pub mod profit_loss;

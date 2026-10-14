@@ -86,7 +86,7 @@ function refineLine(
             context.addIssue({
                 code: "custom",
                 path: ["grossAmount"],
-                message: "物流费用须为非负金额",
+                message: "费用金额须为非负金额；填 0 表示移除",
             })
         return
     }

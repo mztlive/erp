@@ -85,7 +85,7 @@ export function purchaseChangeDraftValues(
     }
 }
 
-/** 当前生效版本中的对应行：商品按销售稳定行，物流费用按出现顺序。 */
+/** 当前生效版本中的对应行：商品按销售稳定行，费用按费用行身份（历史费用按出现顺序）。 */
 export function purchaseChangeBaseLine(
     draft: PurchaseChangeDraft,
     line: PurchaseChangeDraftLine,
@@ -96,6 +96,13 @@ export function purchaseChangeBaseLine(
             (item) =>
                 item.line_type === "ITEM_SERVICE" &&
                 item.sales_order_line_id === line.sales_order_line_id,
+        )
+    const expenseId = line.expense?.expense_line_id
+    if (expenseId)
+        return base.find(
+            (item) =>
+                item.line_type === "LOGISTICS_FEE" &&
+                item.expense?.expense_line_id === expenseId,
         )
     const fees = draft.lines.filter(
         (item) => item.line_type === "LOGISTICS_FEE",

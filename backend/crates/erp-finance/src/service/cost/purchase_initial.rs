@@ -14,8 +14,10 @@ use crate::repository::CostExt;
 pub struct PurchaseCostLine {
     /// 原采购提交行身份。
     pub id: String,
-    /// 该行是否物流费用。
+    /// 该行是否费用行（历史称物流费用）。
     pub is_logistics: bool,
+    /// 费用行的成本类型；缺省按物流费用计。
+    pub fee_cost_type: Option<crate::entity::cost::CostType>,
     /// 冻结含税金额。
     pub gross_amount: Amount,
     /// 冻结不含税金额。
@@ -51,7 +53,7 @@ pub fn prepare(
             CostEntryId::new(next_id()),
             crate::entity::cost::CostEntryData {
                 cost_type: if line.is_logistics {
-                    crate::entity::cost::CostType::Logistics
+                    line.fee_cost_type.unwrap_or(crate::entity::cost::CostType::Logistics)
                 } else {
                     crate::entity::cost::CostType::Product
                 },
@@ -71,6 +73,7 @@ pub fn prepare(
                 source_version: revision_no.to_string(),
                 adjusts_cost_entry_id: None,
                 evidence_attachment_id: None,
+                description: None,
             },
         )?);
     }

@@ -804,6 +804,7 @@ mod tests {
                 sales_order_line_id: Some(SalesOrderLineId::new("sol-1")),
                 sales_order_revision_line_id: Some(SalesOrderRevisionLineId::new(recorded)),
                 allocated_quantity: Some(qty(line.quantity)),
+                expense: None,
             },
         )
         .unwrap()
@@ -840,6 +841,7 @@ mod tests {
                 sales_order_revision_line_id: Some(SalesOrderRevisionLineId::new(recorded)),
                 sales_order_submission_line_id: None,
                 allocated_quantity: Some(qty(line.quantity)),
+                expense: None,
             },
         )
         .unwrap()

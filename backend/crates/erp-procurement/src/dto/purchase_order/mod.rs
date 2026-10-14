@@ -30,17 +30,20 @@ pub use self::change_order::{
     StartPurchaseChangeResult, SubmitPurchaseChangeRequest, VoidPurchaseChangeRequest,
 };
 pub use self::command::{
-    CREATE_ACTION, CREATE_SOURCING_ACTION, CancelPurchaseOrderApprovalRequest,
-    CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderLineRequest, CreatePurchaseOrderResult,
-    CreatePurchaseOrdersFromSourcingRequest, CreatePurchaseOrdersFromSourcingResult,
-    ExistingStockReservationResult, MaintainPurchaseSourceRequest, PURCHASE_SUBMIT_ACTION,
-    PurchaseReviewResult, SAVE_ACTION, SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult,
-    SavePurchaseOrderLine, SavePurchaseOrderLinePatch, SourcingLineAssignment, SubmitPurchaseOrderRequest,
+    CONFIRM_EXPENSE_ACTION, CREATE_ACTION, CREATE_EXPENSE_ACTION, CREATE_SOURCING_ACTION,
+    CancelPurchaseOrderApprovalRequest, ConfirmExpenseOccurrenceRequest, ConfirmExpenseOccurrenceResult,
+    CreateExpenseLineRequest, CreateExpensePurchaseRequest, CreatePurchaseOrderFromBasisRequest,
+    CreatePurchaseOrderLineRequest, CreatePurchaseOrderResult, CreatePurchaseOrdersFromSourcingRequest,
+    CreatePurchaseOrdersFromSourcingResult, EXPENSE_LINE_LIMIT, ExistingStockReservationResult,
+    MaintainPurchaseSourceRequest, PURCHASE_SUBMIT_ACTION, PurchaseReviewResult, SAVE_ACTION,
+    SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult, SavePurchaseOrderLine,
+    SavePurchaseOrderLinePatch, SourcingLineAssignment, SubmitPurchaseOrderRequest,
     SubmitPurchaseOrderResult, VOID_ACTION, VoidPurchaseOrderRequest, VoidPurchaseOrderResult,
 };
 pub use self::query::{
-    PURCHASE_ORDER_SORT_FIELDS, PageParams, PurchaseChangeSummaryView, PurchaseOrderLineView,
-    PurchaseOrderListParams, PurchaseOrderListQuery, PurchaseSalesAllocationView, TotalsView,
+    ExpenseOccurrenceView, PURCHASE_ORDER_SORT_FIELDS, PageParams, PurchaseChangeSummaryView,
+    PurchaseOrderLineView, PurchaseOrderListParams, PurchaseOrderListQuery, PurchaseSalesAllocationView,
+    TotalsView,
 };
 pub use crate::entity::purchase_order::SupplySourceType;
 
@@ -123,6 +126,7 @@ mod tests {
                 sales_order_submission_line_id: Some("sales-submission-line-1".to_string()),
                 allocated_quantity: Some("1".to_string()),
                 gross_amount: None,
+                expense: None,
             }]);
         assert_eq!(
             request.request_fingerprint("po-1").unwrap(),
@@ -541,6 +545,7 @@ mod tests {
                 sales_order_revision_line_id: Some(SalesOrderRevisionLineId::new("sorl-1")),
                 sales_order_submission_line_id: Some(SalesOrderSubmissionLineId::new("sosl-1")),
                 allocated_quantity: Some(quantity),
+                expense: None,
             },
         )
         .unwrap()
@@ -578,6 +583,7 @@ mod tests {
             sales_order_submission_line_id: None,
             allocated_quantity: Some("1".to_string()),
             gross_amount: None,
+            expense: None,
         }];
         both.line_patches = vec![SavePurchaseOrderLinePatch {
             line_id: "subl-1".to_string(),
@@ -648,6 +654,7 @@ mod tests {
             sales_order_submission_line_id: None,
             allocated_quantity: Some("9".to_string()),
             gross_amount: None,
+            expense: None,
         }];
         let full = request.resolve_lines(&existing).unwrap();
         assert_eq!(full[0].quantity.as_deref(), Some("9"));
@@ -705,6 +712,7 @@ mod tests {
             sales_order_submission_line_id: Some("sosl-1".to_string()),
             allocated_quantity: Some("5".to_string()),
             gross_amount: None,
+            expense: None,
         };
         let edit = line.to_draft_edit();
         assert_eq!(edit.line_type, PurchaseLineType::ItemService);
