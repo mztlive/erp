@@ -71,8 +71,6 @@ export function useProductListState(
         productSalesPriceMax: filters.productSalesPriceMax,
         ownerUserIds: filters.ownerUserIds,
         procurementOwnerUserIds: filters.procurementOwnerUserIds,
-        orgUnitIds: filters.orgUnitIds,
-        includeDescendants: filters.includeDescendants,
     })
     const productFilterOptionsQuery = useProductFilterOptionsQuery(true)
     const { exportMeta, handleExport } = useMasterDataListExport()
@@ -221,12 +219,6 @@ export function useProductListState(
                 label: `采购负责人：${filters.procurementOwnerUserIds}`,
             })
         }
-        if (filters.orgUnitIds) {
-            chips.push({
-                key: "orgUnitIds",
-                label: `业务组织：${filters.orgUnitIds}`,
-            })
-        }
         if (filters.productSalesPriceMin || filters.productSalesPriceMax) {
             const minimum = filters.productSalesPriceMin ?? "不限"
             const maximum = filters.productSalesPriceMax ?? "不限"
@@ -249,7 +241,6 @@ export function useProductListState(
         filters.revisionTiming,
         filters.ownerUserIds,
         filters.procurementOwnerUserIds,
-        filters.orgUnitIds,
         selectedBrandLabel,
         selectedCategoryLabel,
         selectedSupplierLabel,
@@ -336,8 +327,6 @@ export function useProductListState(
                 productSalesPriceMax: filters.productSalesPriceMax,
                 ownerUserIds: filters.ownerUserIds,
                 procurementOwnerUserIds: filters.procurementOwnerUserIds,
-                orgUnitIds: filters.orgUnitIds,
-                includeDescendants: filters.includeDescendants,
             },
             filterSnapshotLabel,
             resourceLabel("products"),

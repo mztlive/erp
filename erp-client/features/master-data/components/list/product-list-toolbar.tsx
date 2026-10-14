@@ -31,7 +31,6 @@ import type {
     ProductListingFilter,
     ProductSkuCoverageFilter,
 } from "@/features/master-data/types"
-import { OrganizationUnitFilter } from "@/features/organization/components/organization-unit-filter"
 
 const MORE_CHIP_KEYS = [
     "revisionTiming",
@@ -42,7 +41,6 @@ const MORE_CHIP_KEYS = [
     "salesPrice",
     "ownerUserIds",
     "procurementOwnerUserIds",
-    "orgUnitIds",
 ] as const
 
 export function ProductListToolbar({
@@ -194,19 +192,9 @@ export function ProductListToolbar({
                     </fieldset>
                     <fieldset className="min-w-0">
                         <legend className="mb-3 text-xs font-medium">
-                            范围
+                            状态
                         </legend>
                         <div className="grid min-w-0 gap-3">
-                            <OrganizationUnitFilter
-                                id={`${prefix}-org`}
-                                label="业务组织"
-                                value={f.orgUnitIdsDraft}
-                                onChange={f.setOrgUnitIdsDraft}
-                                includeDescendants={f.includeDescendantsDraft}
-                                onDescendantsChange={
-                                    f.setIncludeDescendantsDraft
-                                }
-                            />
                             <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,0.72fr)_minmax(0,0.9fr)_minmax(0,1.25fr)]">
                                 <ListWorkspaceFilterField
                                     htmlFor={`${prefix}-revision`}

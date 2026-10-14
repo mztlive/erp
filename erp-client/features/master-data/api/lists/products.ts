@@ -55,8 +55,6 @@ export async function listProducts(query: MasterDataListQuery): Promise<{
         sales_price_max: query.productSalesPriceMax,
         owner_user_ids: query.ownerUserIds || undefined,
         procurement_owner_user_ids: query.procurementOwnerUserIds || undefined,
-        org_unit_ids: query.orgUnitIds || undefined,
-        include_descendants: query.includeDescendants || undefined,
     })
     return {
         rows: page.items.map((product) => mapProductRow(product)),

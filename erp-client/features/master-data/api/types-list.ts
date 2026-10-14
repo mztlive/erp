@@ -139,8 +139,6 @@ export type MasterDataListQuery = Readonly<{
     productSalesPriceMax?: string
     ownerUserIds?: string
     procurementOwnerUserIds?: string
-    orgUnitIds?: string
-    includeDescendants?: boolean
     supplierCapabilityCodes?: readonly string[]
     supplierQualificationTypes?: readonly string[]
     supplierQualificationHealth?: SupplierQualificationHealth

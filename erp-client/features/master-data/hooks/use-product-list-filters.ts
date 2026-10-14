@@ -33,7 +33,6 @@ export type ProductFilterKey =
     | "salesPrice"
     | "ownerUserIds"
     | "procurementOwnerUserIds"
-    | "orgUnitIds"
 
 /** 商品列表：搜索 + 类型 / 启停 / 版本 / 上架 / 供给 / 归属 / 售价。 */
 export function useProductListFilters(
@@ -49,6 +48,14 @@ export function useProductListFilters(
         changePagination,
     } = useListUrl()
     const { searchDraft, setSearchDraft } = useSearchDraft(q, searchInputRef)
+
+    const hasLegacyOrganizationFilter =
+        searchParams.has("orgUnitIds") || searchParams.has("includeDescendants")
+    React.useEffect(() => {
+        if (!hasLegacyOrganizationFilter) return
+        patchUrl({ orgUnitIds: null, includeDescendants: null, page: null })
+        resetPagination()
+    }, [hasLegacyOrganizationFilter, patchUrl, resetPagination])
 
     const lifecycleStatus = parseLifecycleStatus(
         searchParams.get("lifecycleStatus"),
@@ -78,8 +85,6 @@ export function useProductListFilters(
     const ownerUserIds = searchParams.get("ownerUserIds")?.trim() || undefined
     const procurementOwnerUserIds =
         searchParams.get("procurementOwnerUserIds")?.trim() || undefined
-    const orgUnitIds = searchParams.get("orgUnitIds")?.trim() || undefined
-    const includeDescendants = searchParams.get("includeDescendants") === "true"
     const metricKey = lifecycleStatus
     const hasStructuredProductFilters = Boolean(
         productKind ||
@@ -93,9 +98,7 @@ export function useProductListFilters(
         productSalesPriceMin ||
         productSalesPriceMax ||
         ownerUserIds ||
-        procurementOwnerUserIds ||
-        orgUnitIds ||
-        includeDescendants,
+        procurementOwnerUserIds,
     )
 
     // 深链只显示已生效标签，不自动打开筛选浮层。
@@ -135,11 +138,6 @@ export function useProductListFilters(
     )
     const [procurementOwnerUserIdsDraft, setProcurementOwnerUserIdsDraft] =
         React.useState(procurementOwnerUserIds ?? "")
-    const [orgUnitIdsDraft, setOrgUnitIdsDraft] = React.useState(
-        orgUnitIds ?? "",
-    )
-    const [includeDescendantsDraft, setIncludeDescendantsDraft] =
-        React.useState(includeDescendants)
 
     const commitSearch = React.useCallback(() => {
         const next = searchDraft.trim()
@@ -170,7 +168,6 @@ export function useProductListFilters(
             setProductFilterPanelOpen(true)
             return
         }
-        const organizationIds = orgUnitIdsDraft.trim()
         patchUrl({
             q: searchDraft.trim() || null,
             productKind: productKindDraft === "all" ? null : productKindDraft,
@@ -192,9 +189,6 @@ export function useProductListFilters(
             ownerUserIds: ownerUserIdsDraft.trim() || null,
             procurementOwnerUserIds:
                 procurementOwnerUserIdsDraft.trim() || null,
-            orgUnitIds: organizationIds || null,
-            includeDescendants:
-                organizationIds && includeDescendantsDraft ? "true" : null,
             page: null,
         })
         resetPagination()
@@ -211,8 +205,6 @@ export function useProductListFilters(
         productSupplyCoverageDraft,
         ownerUserIdsDraft,
         procurementOwnerUserIdsDraft,
-        orgUnitIdsDraft,
-        includeDescendantsDraft,
         resetPagination,
         revisionTimingDraft,
         searchDraft,
@@ -242,10 +234,6 @@ export function useProductListFilters(
             if (key === "procurementOwnerUserIds") {
                 setProcurementOwnerUserIdsDraft("")
             }
-            if (key === "orgUnitIds") {
-                setOrgUnitIdsDraft("")
-                setIncludeDescendantsDraft(false)
-            }
             patchUrl(
                 key === "salesPrice"
                     ? {
@@ -253,13 +241,7 @@ export function useProductListFilters(
                           productSalesPriceMax: null,
                           page: null,
                       }
-                    : key === "orgUnitIds"
-                      ? {
-                            orgUnitIds: null,
-                            includeDescendants: null,
-                            page: null,
-                        }
-                      : { [key]: null, page: null },
+                    : { [key]: null, page: null },
             )
             resetPagination()
         },
@@ -278,8 +260,6 @@ export function useProductListFilters(
         setProductSalesPriceError(null)
         setOwnerUserIdsDraft("")
         setProcurementOwnerUserIdsDraft("")
-        setOrgUnitIdsDraft("")
-        setIncludeDescendantsDraft(false)
     }, [])
 
     /** 取消、外点和 Esc 只恢复低频草稿，保留搜索、类型和分类。 */
@@ -294,12 +274,8 @@ export function useProductListFilters(
         setProductSalesPriceError(null)
         setOwnerUserIdsDraft(ownerUserIds ?? "")
         setProcurementOwnerUserIdsDraft(procurementOwnerUserIds ?? "")
-        setOrgUnitIdsDraft(orgUnitIds ?? "")
-        setIncludeDescendantsDraft(includeDescendants)
         setProductFilterPanelOpen(false)
     }, [
-        includeDescendants,
-        orgUnitIds,
         ownerUserIds,
         procurementOwnerUserIds,
         productBrandId,
@@ -323,9 +299,7 @@ export function useProductListFilters(
         productSalesPriceMinDraft.trim() !== (productSalesPriceMin ?? "") ||
         productSalesPriceMaxDraft.trim() !== (productSalesPriceMax ?? "") ||
         ownerUserIdsDraft !== (ownerUserIds ?? "") ||
-        procurementOwnerUserIdsDraft !== (procurementOwnerUserIds ?? "") ||
-        orgUnitIdsDraft !== (orgUnitIds ?? "") ||
-        includeDescendantsDraft !== includeDescendants
+        procurementOwnerUserIdsDraft !== (procurementOwnerUserIds ?? "")
 
     const clearAllFilters = React.useCallback(() => {
         setSearchDraft("")
@@ -341,8 +315,6 @@ export function useProductListFilters(
         setProductSalesPriceError(null)
         setOwnerUserIdsDraft("")
         setProcurementOwnerUserIdsDraft("")
-        setOrgUnitIdsDraft("")
-        setIncludeDescendantsDraft(false)
         setProductFilterPanelOpen(false)
         patchUrl({
             q: null,
@@ -359,8 +331,6 @@ export function useProductListFilters(
             productSalesPriceMax: null,
             ownerUserIds: null,
             procurementOwnerUserIds: null,
-            orgUnitIds: null,
-            includeDescendants: null,
             page: null,
         })
         resetPagination()
@@ -379,8 +349,6 @@ export function useProductListFilters(
         setProductSalesPriceError(null)
         setOwnerUserIdsDraft(ownerUserIds ?? "")
         setProcurementOwnerUserIdsDraft(procurementOwnerUserIds ?? "")
-        setOrgUnitIdsDraft(orgUnitIds ?? "")
-        setIncludeDescendantsDraft(includeDescendants)
     }, [
         lifecycleStatus,
         productBrandId,
@@ -393,8 +361,6 @@ export function useProductListFilters(
         productSupplyCoverage,
         ownerUserIds,
         procurementOwnerUserIds,
-        orgUnitIds,
-        includeDescendants,
         revisionTiming,
     ])
 
@@ -412,8 +378,6 @@ export function useProductListFilters(
         productSalesPriceMax,
         ownerUserIds,
         procurementOwnerUserIds,
-        orgUnitIds,
-        includeDescendants,
         metricKey,
         hasStructuredProductFilters,
         searchDraft,
@@ -444,10 +408,6 @@ export function useProductListFilters(
         setOwnerUserIdsDraft,
         procurementOwnerUserIdsDraft,
         setProcurementOwnerUserIdsDraft,
-        orgUnitIdsDraft,
-        setOrgUnitIdsDraft,
-        includeDescendantsDraft,
-        setIncludeDescendantsDraft,
         hasPendingChanges,
         pagination,
         setPagination,
