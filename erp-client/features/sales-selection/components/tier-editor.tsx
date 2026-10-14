@@ -5,6 +5,8 @@
 
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -96,6 +98,7 @@ export const TierEditor = ({
                                 htmlFor={`sales-selection-tier-${index}-name`}
                             >
                                 名称
+                                <RequiredMark />
                             </Label>
                             <Input
                                 id={`sales-selection-tier-${index}-name`}
@@ -116,6 +119,7 @@ export const TierEditor = ({
                                     htmlFor={`sales-selection-tier-${index}-target`}
                                 >
                                     目标金额 · 元
+                                    <RequiredMark />
                                 </Label>
                                 <Input
                                     id={`sales-selection-tier-${index}-target`}
@@ -136,6 +140,7 @@ export const TierEditor = ({
                                     htmlFor={`sales-selection-tier-${index}-tolerance`}
                                 >
                                     容差 · 元
+                                    <RequiredMark />
                                 </Label>
                                 <Input
                                     id={`sales-selection-tier-${index}-tolerance`}
@@ -157,6 +162,7 @@ export const TierEditor = ({
                                 htmlFor={`sales-selection-tier-${index}-count`}
                             >
                                 套餐数量（1–20）
+                                <RequiredMark />
                             </Label>
                             <Input
                                 id={`sales-selection-tier-${index}-count`}
@@ -179,6 +185,7 @@ export const TierEditor = ({
                                 htmlFor={`sales-selection-tier-${index}-sku`}
                             >
                                 每套餐件数（2–8）
+                                <RequiredMark />
                             </Label>
                             <Input
                                 id={`sales-selection-tier-${index}-sku`}

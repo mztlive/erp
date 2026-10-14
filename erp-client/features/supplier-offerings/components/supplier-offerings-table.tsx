@@ -168,16 +168,13 @@ export function SupplierOfferingsTable({
         },
         {
             id: "conditions",
-            header: "起订量 / 区域",
-            meta: { label: "起订量 / 区域" },
+            header: "集采起订量",
+            meta: { label: "集采起订量" },
             enableSorting: false,
             cell: ({ row: { original: item } }) => (
-                <>
-                    <div>{item.bulk_minimum_order_quantity ?? "—"}</div>
-                    <div className="mt-1 max-w-48 truncate text-xs text-muted-foreground">
-                        {item.supply_region.join("、") || "—"}
-                    </div>
-                </>
+                <span className="tabular-nums">
+                    {item.bulk_minimum_order_quantity ?? "—"}
+                </span>
             ),
         },
         {

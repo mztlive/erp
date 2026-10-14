@@ -103,6 +103,20 @@ impl SupplierDeliveryTemplate {
         Ok(true)
     }
 
+    /// 判断模板是否归该供应商所有；供给只能引用本供应商的模板。
+    ///
+    /// # 参数
+    /// * `supplier_id` - 供给所属供应商
+    ///
+    /// # 返回
+    /// 同一供应商时返回 `true`。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn belongs_to(&self, supplier_id: &SupplierAccountId) -> bool {
+        &self.supplier_id == supplier_id
+    }
+
     /// 取消默认标记，供另一模板设为默认时调用。
     ///
     /// # 参数
@@ -299,6 +313,13 @@ mod tests {
             "buyer",
         )
         .unwrap()
+    }
+
+    #[test]
+    fn template_only_belongs_to_its_supplier() {
+        let template = template();
+        assert!(template.belongs_to(&SupplierAccountId::new("supplier-1")));
+        assert!(!template.belongs_to(&SupplierAccountId::new("supplier-2")));
     }
 
     #[test]

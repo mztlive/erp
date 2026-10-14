@@ -1,4 +1,6 @@
 "use client"
+
+import { RequiredMark } from "@/components/ui/required-mark"
 import * as React from "react"
 import { DiscardConfirmDialog } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -161,7 +163,8 @@ function BatchSupplyEditor({
                                                                 htmlFor="batch-supply-supplier"
                                                                 className="text-sm font-medium"
                                                             >
-                                                                供应商 *
+                                                                供应商
+                                                                <RequiredMark />
                                                             </label>
                                                             <SupplierSearchCombobox
                                                                 id="batch-supply-supplier"
@@ -212,7 +215,8 @@ function BatchSupplyEditor({
                                                 {(field) => (
                                                     <field.TextField
                                                         id="batch-supply-reason"
-                                                        label="变更原因 *"
+                                                        label="变更原因"
+                                                        required
                                                         disabled={
                                                             unknown.length > 0
                                                         }

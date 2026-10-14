@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import { z } from "zod"
 import { PlusIcon } from "lucide-react"
 import { useAppForm } from "@/components/form"
@@ -147,7 +149,10 @@ export function FulfillmentTrackingEntriesField({
                     void form.handleSubmit()
                 }}
             >
-                <Label htmlFor={`${id}-tracking-no`}>物流信息</Label>
+                <Label htmlFor={`${id}-tracking-no`}>
+                    物流信息
+                    <RequiredMark />
+                </Label>
                 <div className="flex items-start gap-2">
                     <InputGroup
                         className="h-auto flex-1 items-stretch"

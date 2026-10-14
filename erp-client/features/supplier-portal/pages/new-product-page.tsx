@@ -430,6 +430,7 @@ export function PortalNewProductEditor({
                         <field.TextField
                             id={`${idPrefix}-name`}
                             label="商品名称"
+                            required
                             disabled={disabled}
                         />
                     )}
@@ -439,6 +440,7 @@ export function PortalNewProductEditor({
                         <field.SelectField
                             id={`${idPrefix}-kind`}
                             label="商品类型"
+                            required
                             allowClear={false}
                             disabled={disabled}
                             options={[
@@ -455,6 +457,7 @@ export function PortalNewProductEditor({
                         <field.TextField
                             id={`${idPrefix}-brand-raw`}
                             label="品牌原始资料"
+                            required
                             disabled={disabled}
                             description="未匹配时保留真实名称；无品牌请明确填写，不以未知替代。"
                         />
@@ -486,6 +489,7 @@ export function PortalNewProductEditor({
                         <field.TextField
                             id={`${idPrefix}-category-raw`}
                             label="分类原始完整路径"
+                            required
                             disabled={disabled}
                             description="例如：食品 / 饮料 / 果汁；尚未匹配可保存并送审。"
                         />
@@ -677,6 +681,11 @@ export function PortalNewProductEditor({
                                                     <field.TextField
                                                         id={`${prefix}-${name}`}
                                                         label={label}
+                                                        required={[
+                                                            "name",
+                                                            "orderingCode",
+                                                            "unitRaw",
+                                                        ].includes(name)}
                                                         disabled={disabled}
                                                     />
                                                 )}
@@ -723,6 +732,12 @@ export function PortalNewProductEditor({
                                                     <field.TextField
                                                         id={`${prefix}-${name}`}
                                                         label={label}
+                                                        required={[
+                                                            "dropshipPrice",
+                                                            "bulkPrice",
+                                                            "taxPercentage",
+                                                            "minimumQuantity",
+                                                        ].includes(name)}
                                                         disabled={disabled}
                                                     />
                                                 )}
@@ -735,6 +750,7 @@ export function PortalNewProductEditor({
                                                 <field.DateField
                                                     id={`${prefix}-valid-from`}
                                                     label="生效日期"
+                                                    required
                                                     disabled={disabled}
                                                 />
                                             )}
@@ -826,6 +842,16 @@ export function PortalNewProductEditor({
                                                         <field.TextField
                                                             id={`${prefix}-${name}`}
                                                             label={label}
+                                                            required={
+                                                                name !==
+                                                                    "quoteBasis" &&
+                                                                [
+                                                                    sku.packOriginalUnit,
+                                                                    sku.packBaseUnit,
+                                                                    sku.packRatio,
+                                                                    sku.packOriginalPrice,
+                                                                ].some(Boolean)
+                                                            }
                                                             disabled={disabled}
                                                         />
                                                     )}

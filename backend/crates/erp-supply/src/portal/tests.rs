@@ -16,7 +16,7 @@ fn internal() -> AuditActor {
     AuditActor::new("buyer".into(), "buyer".into(), AccountKind::Admin)
 }
 fn terms() -> SupplierOfferingTermsWrite {
-    serde_json::from_value(json!({"dropship_supply_price_gross":"11.30","bulk_supply_price_gross":"9.04","input_tax_rate":"0.13","bulk_minimum_order_quantity":"10","supply_region":["CN"],"valid_from":"2026-01-01","valid_to":"2026-12-31"})).unwrap()
+    serde_json::from_value(json!({"dropship_supply_price_gross":"11.30","bulk_supply_price_gross":"9.04","input_tax_rate":"0.13","bulk_minimum_order_quantity":"10","valid_from":"2026-01-01","valid_to":"2026-12-31"})).unwrap()
 }
 fn snapshot() -> OfferingApplicationSnapshot {
     OfferingApplicationSnapshot::ExistingQuote {

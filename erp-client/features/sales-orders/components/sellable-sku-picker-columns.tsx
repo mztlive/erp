@@ -15,27 +15,6 @@ const REFERENCE_PRICE_COLUMNS = [
     { id: "marketPrice", label: "市场价（含税）" },
 ] as const
 
-function SupplyRegions({ regions }: { regions: readonly string[] }) {
-    if (regions.length === 0) {
-        return <span className="text-sm text-muted-foreground">未标注</span>
-    }
-    const shown = regions.slice(0, 2)
-    const rest = regions.length - 2
-    return (
-        <div
-            className="flex min-w-0 flex-wrap gap-1"
-            title={regions.join("、")}
-        >
-            {shown.map((region) => (
-                <Badge key={region} variant="secondary">
-                    {region}
-                </Badge>
-            ))}
-            {rest > 0 ? <Badge variant="neutral">+{rest}</Badge> : null}
-        </div>
-    )
-}
-
 export function useSellableSkuPickerColumns() {
     return React.useMemo<ColumnDef<MasterDataListItem>[]>(
         () => [
@@ -123,17 +102,6 @@ export function useSellableSkuPickerColumns() {
                         ),
                     }) satisfies ColumnDef<MasterDataListItem>,
             ),
-            {
-                id: "supplyRegions",
-                header: "可供区域",
-                meta: { label: "可供区域", width: "default" },
-                enableSorting: false,
-                cell: ({ row }) => (
-                    <SupplyRegions
-                        regions={row.original.sellableItem?.supplyRegions ?? []}
-                    />
-                ),
-            },
             {
                 id: "supplierCount",
                 accessorFn: (row) => row.sellableItem?.supplierCount ?? 0,

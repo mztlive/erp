@@ -7,7 +7,10 @@
 //! 供给单域命令：身份、商业修订、实时可供及命令重放。
 mod history;
 use erp_core::common::time::Instant;
-use erp_core::ids::{SupplierOfferingAvailabilityId, SupplierOfferingId, SupplierOfferingRevisionId};
+use erp_core::ids::{
+    SupplierDeliveryTemplateId, SupplierOfferingAvailabilityId, SupplierOfferingId,
+    SupplierOfferingRevisionId,
+};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
@@ -162,6 +165,13 @@ impl SupplierOfferingService {
         )?;
         self.ensure_identity_available(&offering, executor).await?;
         self.ensure_source_connection(&offering, executor).await?;
+        self.assign_requested_template(
+            &mut offering,
+            req.delivery_template_id.as_deref(),
+            actor.id(),
+            executor,
+        )
+        .await?;
         let revision_data = req.terms.try_into_revision_data(offering_id.clone(), 1)?;
         let revision =
             SupplierOfferingRevision::new(SupplierOfferingRevisionId::new(next_id()), revision_data)?;
@@ -439,6 +449,29 @@ impl SupplierOfferingService {
         }
         Ok(())
     }
+    /// 新增时指定的配送模板必须存在且属于本供应商；未指定时跟随供应商默认模板。
+    async fn assign_requested_template(
+        &self,
+        offering: &mut SupplierOffering,
+        template_id: Option<&str>,
+        actor: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let Some(template_id) = template_id.map(str::trim).filter(|id| !id.is_empty()) else {
+            return Ok(());
+        };
+        let template = self
+            .db
+            .supplier_delivery_templates()
+            .find_by_id(template_id, executor)
+            .await?
+            .ok_or_else(|| Error::NotFound("配送模板不存在".to_string()))?;
+        if !template.belongs_to(&offering.supplier_id) {
+            return Err(Error::ValidationError("配送模板不属于所选供应商".to_string()));
+        }
+        offering.assign_delivery_template(Some(SupplierDeliveryTemplateId::new(template.base.id)), actor);
+        Ok(())
+    }
     async fn current_revision_no(
         &self,
         offering: &SupplierOffering,
@@ -576,14 +609,11 @@ mod tests {
                 bulk_supply_price_gross: "9.00".to_string(),
                 input_tax_rate: "0.13".to_string(),
                 bulk_minimum_order_quantity: "10".to_string(),
-                supply_region: vec!["CN".to_string()],
                 product_capabilities: vec!["DROP_SHIP".to_string()],
                 valid_from: "2026-01-01".to_string(),
                 valid_to: None,
-                dropship_express: None,
-                freight_amount: None,
-                service_fee_amount: None,
             },
+            delivery_template_id: None,
             availability_status: AvailabilityStatus::Available,
             available_quantity: Some("100".to_string()),
             source_updated_at: Some(1_700_000_000),

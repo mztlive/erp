@@ -21,7 +21,6 @@ export function useSellableSkuPickerQuery(
                 productKind: input.productKind,
                 productCategoryId: input.productCategoryId,
                 productBrandId: input.productBrandId,
-                supplyRegion: input.supplyRegion,
                 productPriceKind: input.productPriceKind,
                 productSalesPriceMin: input.productSalesPriceMin,
                 productSalesPriceMax: input.productSalesPriceMax,

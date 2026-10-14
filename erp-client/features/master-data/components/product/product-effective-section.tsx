@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import { DatePicker } from "@/components/ui/date-picker"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -68,7 +70,7 @@ function ProductEffectiveSection({
                         {isCreate
                             ? "创建说明"
                             : masterDataCopy.fieldChangeReason}{" "}
-                        *
+                        <RequiredMark />
                     </Label>
                     <Textarea
                         id={`${prefix}-reason`}

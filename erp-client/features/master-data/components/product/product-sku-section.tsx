@@ -20,7 +20,6 @@ import type {
     ProductSkuFields,
     ProductSpecDimension,
 } from "@/features/master-data/types"
-import type { FixedSku } from "@/features/supplier-offerings/types"
 
 type ProductSkuSectionProps = {
     idPrefix?: string
@@ -50,11 +49,6 @@ type ProductSkuSectionProps = {
         trigger: HTMLButtonElement,
     ) => void
     rememberSkuFile: (previewUrl: string, file: File) => void
-    supplierCounts: Map<string, number> | undefined
-    supplierCountsPending: boolean
-    supplierCountsError: unknown
-    onRegisterSupply: (sku: FixedSku) => void
-    stableId: string
 }
 
 function ProductSkuSection({
@@ -82,11 +76,6 @@ function ProductSkuSection({
     inventoryActionHint,
     onOpenInventory,
     rememberSkuFile,
-    supplierCounts,
-    supplierCountsPending,
-    supplierCountsError,
-    onRegisterSupply,
-    stableId,
 }: ProductSkuSectionProps) {
     const [specOpen, setSpecOpen] = React.useState(isCreate)
     const [bulkOpen, setBulkOpen] = React.useState(false)
@@ -268,17 +257,11 @@ function ProductSkuSection({
                     <ProductSkuTable
                         fields={fields}
                         activeSpecs={activeSpecs}
-                        isCreate={isCreate}
                         canRevise={canRevise}
                         name={name}
                         updateSku={updateSku}
                         rememberSkuFile={rememberSkuFile}
                         onOpenInventory={onOpenInventory}
-                        supplierCounts={supplierCounts}
-                        supplierCountsPending={supplierCountsPending}
-                        supplierCountsError={supplierCountsError}
-                        onRegisterSupply={onRegisterSupply}
-                        stableId={stableId}
                     />
                 </div>
             )}

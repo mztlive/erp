@@ -409,6 +409,7 @@ export function AllocationSessionPanel({
                                 {
                                     id: "amount",
                                     header: "分配金额",
+                                    required: true,
                                     align: "end",
                                     numeric: true,
                                     renderValue: ({ item }) => (

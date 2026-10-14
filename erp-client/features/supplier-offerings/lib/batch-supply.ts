@@ -9,7 +9,6 @@ import {
     idempotencyKey,
     percentageFromRate,
     rateFromPercentage,
-    splitValues,
 } from "./offering-forms"
 
 export type BatchMode = "create" | "revise" | "availability"
@@ -105,14 +104,10 @@ export function offeringBatchRow(item: SupplierOfferingView): BatchRow {
         bulkPrice: item.bulk_supply_price_gross ?? "",
         inputTaxPercentage: percentageFromRate(item.input_tax_rate),
         minimumQuantity: item.bulk_minimum_order_quantity ?? "",
-        supplyRegionText: item.supply_region.join("、"),
         capabilities: item.product_capabilities,
         validFrom: item.valid_from ?? "",
         validTo: item.valid_to ?? "",
         validityMode: item.valid_to ? "dated" : "ongoing",
-        dropshipExpress: item.dropship_express ?? "",
-        freightAmount: item.freight_amount ?? "",
-        serviceFeeAmount: item.service_fee_amount ?? "",
         availableQuantity: item.available_quantity ?? "",
         quantityMode: item.available_quantity == null ? "unknown" : "provided",
         availabilityStatus: item.availability_status ?? "UNAVAILABLE",
@@ -127,7 +122,7 @@ export function batchDefaults(
     supplierId: string,
 ): BatchValues {
     const common = registerSupplyDefaults()
-    // 未填写的公共设置不覆盖行值；日期、区域、数量均需用户明确选择。
+    // 未填写的公共设置不覆盖行值；日期、数量均需用户明确选择。
     common.minimumQuantity = ""
     common.validFrom = ""
     return {
@@ -168,13 +163,10 @@ export function rowErrors(
         bulkPrice: "集采含税价",
         inputTaxPercentage: "税率",
         minimumQuantity: "集采起订量",
-        supplyRegionText: "可供区域",
         validFrom: "生效日期",
         validTo: "失效日期",
         availableQuantity: "可供数量",
         changeReason: "变更原因",
-        freightAmount: "运费",
-        serviceFeeAmount: "服务费",
     }
     const issues = new Map<string, string>()
     if (!parsed.success)
@@ -240,13 +232,9 @@ export function rowInput(
         bulk_supply_price_gross: row.bulkPrice.trim(),
         input_tax_rate: rateFromPercentage(row.inputTaxPercentage),
         bulk_minimum_order_quantity: row.minimumQuantity.trim(),
-        supply_region: splitValues(row.supplyRegionText),
         product_capabilities: row.capabilities,
         valid_from: row.validFrom,
         valid_to: row.validityMode === "dated" ? row.validTo : null,
-        dropship_express: row.dropshipExpress.trim() || null,
-        freight_amount: row.freightAmount.trim() || null,
-        service_fee_amount: row.serviceFeeAmount.trim() || null,
     }
     if (mode === "revise")
         return {
@@ -275,27 +263,19 @@ export type TextFieldKey =
     | "bulkPrice"
     | "inputTaxPercentage"
     | "minimumQuantity"
-    | "supplyRegionText"
     | "validFrom"
     | "validTo"
     | "availableQuantity"
     | "supplierProductCode"
-    | "dropshipExpress"
-    | "freightAmount"
-    | "serviceFeeAmount"
 export const GRID_FIELDS: { key: TextFieldKey; label: string }[] = [
     { key: "supplierSkuCode", label: "供应商订货编码" },
     { key: "dropshipPrice", label: "代发含税价" },
     { key: "bulkPrice", label: "集采含税价" },
     { key: "inputTaxPercentage", label: "税率 %" },
     { key: "minimumQuantity", label: "集采起订量" },
-    { key: "supplyRegionText", label: "可供区域" },
 ]
 export const EXTRA_FIELDS: { key: TextFieldKey; label: string }[] = [
     { key: "supplierProductCode", label: "供应商商品编码" },
     { key: "validFrom", label: "生效日期" },
     { key: "validTo", label: "失效日期（留空长期有效）" },
-    { key: "dropshipExpress", label: "代发快递" },
-    { key: "freightAmount", label: "运费" },
-    { key: "serviceFeeAmount", label: "服务费" },
 ]

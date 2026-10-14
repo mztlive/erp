@@ -101,7 +101,6 @@ impl SelectionCatalogPort for CatalogAdapter {
         as_of: BusinessDate,
     ) -> SalesResult<Vec<SelectionSkuFact>> {
         let catalog_filter = erp_catalog::repository::SellableSkuFilter {
-            nationwide_only: filter.nationwide_only,
             keyword: filter.q.clone(),
             product_kind: filter
                 .product_kind
@@ -110,7 +109,6 @@ impl SelectionCatalogPort for CatalogAdapter {
             category_id: filter.category_id.clone(),
             brand_id: filter.brand_id.clone(),
             supplier_id: filter.supplier_id.clone(),
-            supply_region: filter.supply_region.clone(),
             max_supplier_count: filter.max_supplier_count,
             price_kind: match filter.price_kind {
                 PoolPriceKind::Dropship => SellablePriceKind::Dropship,

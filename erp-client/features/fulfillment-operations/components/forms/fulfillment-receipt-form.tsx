@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import { OptionCombobox } from "@/components/business"
 import { DateTimeLocalPicker } from "@/components/ui/date-picker"
 import { Input } from "@/components/ui/input"
@@ -59,6 +61,7 @@ export function FulfillmentReceiptForm({
                 <div className="space-y-1.5">
                     <Label htmlFor="fulfillment-operations-receipt-form-occurred-at">
                         入库时间
+                        <RequiredMark />
                     </Label>
                     <DateTimeLocalPicker
                         id="fulfillment-operations-receipt-form-occurred-at"
@@ -94,6 +97,7 @@ export function FulfillmentReceiptForm({
                                     htmlFor={`fulfillment-operations-receipt-form-received-quantity-${toAutomationIdSegment(line.purchaseRevisionLineId)}`}
                                 >
                                     到货数量
+                                    <RequiredMark />
                                 </Label>
                                 <Input
                                     id={`fulfillment-operations-receipt-form-received-quantity-${toAutomationIdSegment(line.purchaseRevisionLineId)}`}
@@ -151,6 +155,7 @@ export function FulfillmentReceiptForm({
                                     htmlFor={`fulfillment-operations-receipt-form-rejected-quantity-${toAutomationIdSegment(line.purchaseRevisionLineId)}`}
                                 >
                                     不合格数量
+                                    <RequiredMark />
                                 </Label>
                                 <Input
                                     id={`fulfillment-operations-receipt-form-rejected-quantity-${toAutomationIdSegment(line.purchaseRevisionLineId)}`}
@@ -179,6 +184,7 @@ export function FulfillmentReceiptForm({
                                 htmlFor={`fulfillment-operations-receipt-form-quality-result-${toAutomationIdSegment(line.purchaseRevisionLineId)}`}
                             >
                                 质量结果
+                                <RequiredMark />
                             </Label>
                             <OptionCombobox
                                 id={`fulfillment-operations-receipt-form-quality-result-${toAutomationIdSegment(line.purchaseRevisionLineId)}`}

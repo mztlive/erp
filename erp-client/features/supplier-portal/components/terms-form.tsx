@@ -257,7 +257,6 @@ export function PortalTermsForm({
                                     "bulkPrice",
                                     "taxPercentage",
                                     "minimumQuantity",
-                                    "regions",
                                 ].includes(name)}
                             />
                         )}
@@ -298,6 +297,7 @@ export function PortalTermsForm({
                                 <field.SelectField
                                     id="supplier-portal-quote-availability"
                                     label="可供情况"
+                                    required
                                     disabled={
                                         readOnly ||
                                         mutation.isPending ||

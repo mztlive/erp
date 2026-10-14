@@ -392,6 +392,7 @@ function CancelRequestForm({
                     <field.TextareaField
                         id="invoice-request-cancel-reason"
                         label="撤回原因"
+                        required
                         disabled={cancel.isPending || uncertain}
                     />
                 )}

@@ -21,13 +21,9 @@ export type PortalTerms = {
     bulk_supply_price_gross: string
     input_tax_rate: string
     bulk_minimum_order_quantity: string
-    supply_region: string[]
     product_capabilities: string[]
     valid_from: string
     valid_to: string | null
-    dropship_express: string | null
-    freight_amount: string | null
-    service_fee_amount: string | null
 }
 export type PortalOffering = {
     id: string
@@ -49,13 +45,9 @@ export type PortalOffering = {
     bulk_supply_price_gross?: string
     input_tax_rate?: string
     bulk_minimum_order_quantity?: string
-    supply_region?: string[]
     product_capabilities?: string[]
     valid_from?: string
     valid_to?: string | null
-    freight_amount?: string | null
-    service_fee_amount?: string | null
-    dropship_express?: string | null
     availability_status: string
     available_quantity: string | null
     availability_version: number

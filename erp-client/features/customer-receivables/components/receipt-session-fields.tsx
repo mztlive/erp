@@ -48,6 +48,7 @@ export function ReceiptSessionFields({
                         <field.DateTimeField
                             id="customer-receivables-session-received-at"
                             label="实际到账时间"
+                            required
                             timeZone="Asia/Shanghai"
                             showTimeZone={false}
                             description="北京时间（UTC+8）"

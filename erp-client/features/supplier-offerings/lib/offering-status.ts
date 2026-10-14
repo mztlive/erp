@@ -72,7 +72,6 @@ export function statusRevisionBlocker(
         !offering.bulk_supply_price_gross?.trim() ||
         !offering.input_tax_rate?.trim() ||
         !offering.bulk_minimum_order_quantity?.trim() ||
-        offering.supply_region.length === 0 ||
         !offering.valid_from?.trim()
     ) {
         return "当前条款不完整或看不到价格，请先修订条款。"

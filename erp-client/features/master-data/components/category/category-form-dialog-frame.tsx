@@ -321,6 +321,7 @@ export function CategoryFormDialogFrame({
                                                         masterDataCopy.fProductKind
                                                     }
                                                     id={`${prefix}-product-kind`}
+                                                    required
                                                     options={PRODUCT_KIND_OPTIONS.map(
                                                         (option) => ({
                                                             value: option,

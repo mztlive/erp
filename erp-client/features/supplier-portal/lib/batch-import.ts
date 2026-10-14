@@ -57,7 +57,6 @@ function requiredColumns(mode: PortalBatchMode): BatchField[] {
         "bulkPrice",
         "taxPercentage",
         "minimumQuantity",
-        "regions",
         "validFrom",
     ]
     return mode === "new_product"
@@ -238,7 +237,7 @@ export async function downloadPortalBatchTemplate(mode: PortalBatchMode) {
         "每批最多100条SKU或供给数据，文件不超过5 MB。此模板只用于标题对应的操作。",
         "编号、订货编码、条码按文本填写，保留前导零；供应商订货编码须使用自己的真实编码。",
         "价格、数量、税率按十进制数字填写；税率填百分数，如13；可供数量空白表示未提供，0表示明确为零。",
-        "多个可供区域用顿号分隔；日期使用YYYY-MM-DD；失效日期留空表示长期有效。",
+        "日期使用YYYY-MM-DD；失效日期留空表示长期有效。",
         "只接受UTF-8 CSV；Excel公式须先粘贴为值。导入和校验不会创建申请或更新可供。",
     ]
     const specific =

@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import { useQuery } from "@tanstack/react-query"
 import { fetchSettlementReviewerOptions } from "../api/reviewer-options"
 
@@ -58,6 +60,7 @@ function SettlementResolveDialog({
                     <div className="space-y-1.5">
                         <Label htmlFor="supplier-settlements-resolve-resolution">
                             处理结论
+                            <RequiredMark />
                         </Label>
                         <OptionCombobox
                             id="supplier-settlements-resolve-resolution"
@@ -82,6 +85,7 @@ function SettlementResolveDialog({
                     <div className="space-y-1.5">
                         <Label htmlFor="supplier-settlements-resolve-reason">
                             处理原因
+                            <RequiredMark />
                         </Label>
                         <OptionCombobox
                             id="supplier-settlements-resolve-reason"
@@ -167,6 +171,7 @@ function SettlementEvidenceDialog({
                 <div className="space-y-1.5">
                     <Label htmlFor="supplier-settlements-evidence-reference">
                         凭证编号或链接
+                        <RequiredMark />
                     </Label>
                     <Input
                         id="supplier-settlements-evidence-reference"
@@ -238,6 +243,7 @@ function SettlementRejectDialog({
                 <div className="space-y-1.5">
                     <Label htmlFor="supplier-settlements-reject-reason">
                         处理原因
+                        <RequiredMark />
                     </Label>
                     <OptionCombobox
                         id="supplier-settlements-reject-reason"
@@ -331,6 +337,7 @@ function SettlementSubmitReviewDialog({
                 <div className="space-y-1.5">
                     <Label htmlFor="supplier-settlements-submit-reviewer-input">
                         复核人
+                        <RequiredMark />
                     </Label>
                     <OptionCombobox
                         id="supplier-settlements-submit-reviewer-input"

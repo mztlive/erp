@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 
@@ -234,7 +236,12 @@ function buildPurchaseOrderEditLineColumns(
         {
             id: "quantity",
             accessorKey: "quantity",
-            header: "数量",
+            header: () => (
+                <>
+                    数量
+                    <RequiredMark />
+                </>
+            ),
             meta: {
                 label: "数量",
                 width: "quantity",
@@ -283,7 +290,12 @@ function buildPurchaseOrderEditLineColumns(
         {
             id: "unitCost",
             accessorKey: "unitCostGross",
-            header: "含税单价",
+            header: () => (
+                <>
+                    含税单价
+                    <RequiredMark />
+                </>
+            ),
             meta: {
                 label: "含税单价",
                 width: "amount",
@@ -320,7 +332,12 @@ function buildPurchaseOrderEditLineColumns(
         {
             id: "taxRate",
             accessorKey: "inputTaxRate",
-            header: "税率",
+            header: () => (
+                <>
+                    税率
+                    <RequiredMark />
+                </>
+            ),
             meta: {
                 label: "税率",
                 width: "rate",
@@ -355,7 +372,12 @@ function buildPurchaseOrderEditLineColumns(
         {
             id: "delivery",
             accessorKey: "expectedDeliveryDate",
-            header: "预计交付日",
+            header: () => (
+                <>
+                    预计交付日
+                    <RequiredMark />
+                </>
+            ),
             meta: { label: "预计交付日", width: "default" },
             cell: ({ row }) => {
                 const line = row.original

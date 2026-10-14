@@ -51,22 +51,9 @@ export function SellableItemPreviewPanel({ row }: { row: MasterDataListItem }) {
 
             <section className="space-y-3 border-b border-border pb-6">
                 <div className="flex items-center gap-2 font-medium">
-                    <h3>可供区域</h3>
+                    <h3>供应保障</h3>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                    {item.supplyRegions.length > 0 ? (
-                        item.supplyRegions.map((region) => (
-                            <span key={region} className="text-sm">
-                                {region}
-                            </span>
-                        ))
-                    ) : (
-                        <span className="text-muted-foreground">
-                            未标注区域
-                        </span>
-                    )}
-                </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <UsersIcon className="size-3.5" aria-hidden />
                     <span>
                         当前由{" "}

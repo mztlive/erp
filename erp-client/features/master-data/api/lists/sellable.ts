@@ -19,7 +19,6 @@ function sellableListParams(
         category_id: query.productCategoryId,
         brand_id: query.productBrandId,
         supplier_id: query.productSupplierId,
-        supply_region: query.supplyRegion,
         delivery_region_code: query.deliveryRegion,
         delivery_extent: query.deliveryRegion
             ? query.deliveryExtent

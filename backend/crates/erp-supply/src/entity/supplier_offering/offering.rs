@@ -1,7 +1,7 @@
 //! `supplier_offering` 与不可变商业条款修订。
 //!
 //! 供给直接连接公司 SKU 与供应商。供应商侧订货编码属于供给身份，不再通过
-//! 供应商商品/SKU 主档或映射间接取得。价格、税率、起订量、区域和有效期属于
+//! 供应商商品/SKU 主档或映射间接取得。价格、税率、起订量和有效期属于
 //! 不可变修订；实时库存与可供状态由 `supplier_offering_availability` 承担。
 
 use entity_core::BaseModel;
@@ -10,11 +10,10 @@ use erp_core::common::revision::RevisionBase;
 use erp_core::common::stable::StableBase;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{
-    SkuId, SupplierAccountId, SupplierApiConnectionId, SupplierCapabilityRevisionId,
-    SupplierCommercialProfileRevisionId, SupplierDeliveryTemplateId, SupplierOfferingId,
-    SupplierOfferingRevisionId,
+    SkuId, SupplierAccountId, SupplierApiConnectionId, SupplierCommercialProfileRevisionId,
+    SupplierDeliveryTemplateId, SupplierOfferingId, SupplierOfferingRevisionId,
 };
-use erp_core::money::{Amount, Quantity, Rate, UnitPrice, round_to_cent};
+use erp_core::money::{Quantity, Rate, UnitPrice, round_to_cent};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -22,12 +21,9 @@ use serde::{Deserialize, Serialize};
 use crate::entity::supplier_offering::{OfferingRevisionImpact, OfferingSourceType, OfferingStatus};
 
 const SUPPLIER_CODE_MAX_LEN: usize = 128;
-const DROPSHIP_EXPRESS_MAX_LEN: usize = 512;
 const TIMEZONE_MAX_LEN: usize = 64;
 const CALENDAR_VERSION_MAX_LEN: usize = 64;
-const MAX_REGIONS: usize = 50;
 const MAX_CAPABILITIES: usize = 50;
-const REGION_MAX_LEN: usize = 128;
 const CAPABILITY_MAX_LEN: usize = 64;
 
 /// 供给稳定身份创建数据。
@@ -317,8 +313,6 @@ impl SupplierOffering {
 pub struct PrefillSourceRefs {
     /// 税率预填来源。
     pub input_tax_rate: Option<SupplierCommercialProfileRevisionId>,
-    /// 区域预填来源。
-    pub supply_region: Option<SupplierCapabilityRevisionId>,
     /// 生效日期预填值。
     pub valid_from_date: Option<BusinessDate>,
     /// 生效日期预填时区。
@@ -344,16 +338,8 @@ pub struct SupplierOfferingRevisionData {
     pub bulk_supply_price_net: UnitPrice,
     /// 进项税率。
     pub input_tax_rate: Rate,
-    /// 一件代发快递说明。
-    pub dropship_express: Option<String>,
-    /// 运费。
-    pub freight_amount: Option<Amount>,
-    /// 服务费。
-    pub service_fee_amount: Option<Amount>,
     /// 集采起订量。
     pub bulk_minimum_order_quantity: Quantity,
-    /// 可供区域。
-    pub supply_region: Vec<String>,
     /// 商品级能力。
     pub product_capabilities: Vec<String>,
     /// 生效日期。
@@ -377,16 +363,8 @@ pub struct FromGrossPricesParams {
     pub bulk_supply_price_gross: UnitPrice,
     /// 进项税率。
     pub input_tax_rate: Rate,
-    /// 一件代发快递说明。
-    pub dropship_express: Option<String>,
-    /// 运费。
-    pub freight_amount: Option<Amount>,
-    /// 服务费。
-    pub service_fee_amount: Option<Amount>,
     /// 集采起订量。
     pub bulk_minimum_order_quantity: Quantity,
-    /// 可供区域。
-    pub supply_region: Vec<String>,
     /// 商品级能力。
     pub product_capabilities: Vec<String>,
     /// 生效日期。
@@ -423,11 +401,7 @@ impl SupplierOfferingRevisionData {
             bulk_supply_price_gross: params.bulk_supply_price_gross,
             bulk_supply_price_net: net_price(params.bulk_supply_price_gross, params.input_tax_rate),
             input_tax_rate: params.input_tax_rate,
-            dropship_express: params.dropship_express,
-            freight_amount: params.freight_amount,
-            service_fee_amount: params.service_fee_amount,
             bulk_minimum_order_quantity: params.bulk_minimum_order_quantity,
-            supply_region: params.supply_region,
             product_capabilities: params.product_capabilities,
             valid_from: params.valid_from,
             valid_to: params.valid_to,
@@ -455,16 +429,8 @@ pub struct SupplierOfferingRevision {
     pub bulk_supply_price_net: UnitPrice,
     /// 进项税率。
     pub input_tax_rate: Rate,
-    /// 一件代发快递说明。
-    pub dropship_express: Option<String>,
-    /// 运费。
-    pub freight_amount: Option<Amount>,
-    /// 服务费。
-    pub service_fee_amount: Option<Amount>,
     /// 集采起订量。
     pub bulk_minimum_order_quantity: Quantity,
-    /// 可供区域。
-    pub supply_region: Vec<String>,
     /// 商品级能力。
     pub product_capabilities: Vec<String>,
     /// 生效日期。
@@ -486,15 +452,11 @@ impl SupplierOfferingRevision {
     /// 返回规范化后的修订。
     ///
     /// # 错误
-    /// 价格换算、起订量、区域、费用或有效期不合法时返回错误。
+    /// 价格换算、起订量或有效期不合法时返回错误。
     pub fn new(id: SupplierOfferingRevisionId, data: SupplierOfferingRevisionData) -> Result<Self> {
         ensure_revision_no(data.revision_no)?;
         ensure_price_pairs(&data)?;
         ensure_supply_conditions(&data)?;
-        let dropship_express =
-            normalize_optional_text(data.dropship_express, "快递说明", DROPSHIP_EXPRESS_MAX_LEN)?;
-        let supply_region =
-            normalize_required_list(data.supply_region, REGION_MAX_LEN, MAX_REGIONS, "供给区域")?;
         let product_capabilities =
             normalize_list(data.product_capabilities, CAPABILITY_MAX_LEN, MAX_CAPABILITIES, "商品能力")?;
         let prefill_source_refs = normalize_prefill_refs(data.prefill_source_refs)?;
@@ -508,11 +470,7 @@ impl SupplierOfferingRevision {
             bulk_supply_price_gross: data.bulk_supply_price_gross,
             bulk_supply_price_net: data.bulk_supply_price_net,
             input_tax_rate: data.input_tax_rate,
-            dropship_express,
-            freight_amount: data.freight_amount,
-            service_fee_amount: data.service_fee_amount,
             bulk_minimum_order_quantity: data.bulk_minimum_order_quantity,
-            supply_region,
             product_capabilities,
             valid_from: data.valid_from,
             valid_to: data.valid_to,
@@ -535,9 +493,7 @@ impl SupplierOfferingRevision {
     /// 不返回错误。
     pub fn impact_from(&self, prior: &Self) -> OfferingRevisionImpact {
         let critical_changed = prior.bulk_minimum_order_quantity != self.bulk_minimum_order_quantity
-            || prior.supply_region != self.supply_region
             || prior.product_capabilities != self.product_capabilities
-            || prior.dropship_express != self.dropship_express
             || prior.valid_from != self.valid_from
             || prior.valid_to != self.valid_to;
         if critical_changed {
@@ -547,9 +503,7 @@ impl SupplierOfferingRevision {
             || prior.dropship_supply_price_net != self.dropship_supply_price_net
             || prior.bulk_supply_price_gross != self.bulk_supply_price_gross
             || prior.bulk_supply_price_net != self.bulk_supply_price_net
-            || prior.input_tax_rate != self.input_tax_rate
-            || prior.freight_amount != self.freight_amount
-            || prior.service_fee_amount != self.service_fee_amount;
+            || prior.input_tax_rate != self.input_tax_rate;
         if cost_changed { OfferingRevisionImpact::CostChanged } else { OfferingRevisionImpact::None }
     }
 }
@@ -605,12 +559,6 @@ fn ensure_supply_conditions(data: &SupplierOfferingRevisionData) -> Result<()> {
     if data.bulk_minimum_order_quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
         return Err(Error::from("集采起订量必须为正"));
     }
-    if data.freight_amount.is_some_and(|value| value.to_decimal().is_sign_negative()) {
-        return Err(Error::from("运费不能为负"));
-    }
-    if data.service_fee_amount.is_some_and(|value| value.to_decimal().is_sign_negative()) {
-        return Err(Error::from("服务费不能为负"));
-    }
     Ok(())
 }
 
@@ -619,19 +567,6 @@ fn ensure_validity_window(valid_from: BusinessDate, valid_to: Option<BusinessDat
         return Err(Error::from("有效期结束必须晚于开始"));
     }
     Ok(())
-}
-
-fn normalize_required_list(
-    values: Vec<String>,
-    item_max_len: usize,
-    max_count: usize,
-    label: &str,
-) -> Result<Vec<String>> {
-    let values = normalize_list(values, item_max_len, max_count, label)?;
-    if values.is_empty() {
-        return Err(Error::from(format!("{label}不能为空")));
-    }
-    Ok(values)
 }
 
 fn normalize_list(
@@ -663,7 +598,6 @@ fn normalize_prefill_refs(refs: PrefillSourceRefs) -> Result<PrefillSourceRefs> 
     }
     Ok(PrefillSourceRefs {
         input_tax_rate: refs.input_tax_rate,
-        supply_region: refs.supply_region,
         valid_from_date: refs.valid_from_date,
         valid_from_timezone: timezone,
         valid_from_calendar_version: calendar_version,
@@ -678,7 +612,7 @@ mod tests {
     use erp_core::ids::{
         SkuId, SupplierAccountId, SupplierApiConnectionId, SupplierOfferingId, SupplierOfferingRevisionId,
     };
-    use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
+    use erp_core::money::{Quantity, Rate, UnitPrice};
 
     use super::{
         FromGrossPricesParams, PrefillSourceRefs, SupplierOffering, SupplierOfferingData,
@@ -708,12 +642,8 @@ mod tests {
             bulk_supply_price_gross: UnitPrice::from_str("9.04").unwrap(),
             bulk_supply_price_net: UnitPrice::from_str("7.86").unwrap(),
             input_tax_rate: Rate::from_str("0.13").unwrap(),
-            dropship_express: Some(" 顺丰 ".to_string()),
-            freight_amount: Some(Amount::from_str("1").unwrap()),
-            service_fee_amount: None,
             bulk_minimum_order_quantity: Quantity::from_str("10").unwrap(),
-            supply_region: vec![" 全国 ".to_string()],
-            product_capabilities: vec!["REFUND".to_string()],
+            product_capabilities: vec![" REFUND ".to_string(), "REFUND".to_string()],
             valid_from: BusinessDate::from_str("2026-08-08").unwrap(),
             valid_to: None,
             prefill_source_refs: PrefillSourceRefs::default(),
@@ -806,7 +736,7 @@ mod tests {
             SupplierOfferingRevision::new(SupplierOfferingRevisionId::new("revision-1"), revision_data())
                 .unwrap();
         assert_eq!(revision.revision.revision_no, 1);
-        assert_eq!(revision.supply_region, vec!["全国"]);
+        assert_eq!(revision.product_capabilities, vec!["REFUND"]);
 
         let zero_moq = SupplierOfferingRevisionData {
             bulk_minimum_order_quantity: Quantity::from_str("0").unwrap(),
@@ -825,11 +755,7 @@ mod tests {
             dropship_supply_price_gross: UnitPrice::from_str("11.30").unwrap(),
             bulk_supply_price_gross: UnitPrice::from_str("9.04").unwrap(),
             input_tax_rate: Rate::from_str("0.13").unwrap(),
-            dropship_express: None,
-            freight_amount: None,
-            service_fee_amount: None,
             bulk_minimum_order_quantity: Quantity::from_str("10").unwrap(),
-            supply_region: vec!["CN".to_string()],
             product_capabilities: vec!["REFUND".to_string()],
             valid_from: BusinessDate::from_str("2026-08-08").unwrap(),
             valid_to: None,
@@ -848,11 +774,7 @@ mod tests {
                 dropship_supply_price_gross: UnitPrice::from_str("12.00").unwrap(),
                 bulk_supply_price_gross: data.bulk_supply_price_gross,
                 input_tax_rate: data.input_tax_rate,
-                dropship_express: None,
-                freight_amount: None,
-                service_fee_amount: None,
                 bulk_minimum_order_quantity: data.bulk_minimum_order_quantity,
-                supply_region: data.supply_region.clone(),
                 product_capabilities: data.product_capabilities.clone(),
                 valid_from: data.valid_from,
                 valid_to: data.valid_to,
@@ -864,10 +786,28 @@ mod tests {
 
         let mut critical_data = data;
         critical_data.revision_no = 2;
-        critical_data.supply_region.push("HK".to_string());
+        critical_data.bulk_minimum_order_quantity = Quantity::from_str("20").unwrap();
         let critical =
             SupplierOfferingRevision::new(SupplierOfferingRevisionId::new("revision-3"), critical_data)
                 .unwrap();
         assert_eq!(critical.impact_from(&prior), OfferingRevisionImpact::CriticalSupplyChanged);
+    }
+
+    #[test]
+    fn revision_reads_documents_with_retired_terms() {
+        let revision =
+            SupplierOfferingRevision::new(SupplierOfferingRevisionId::new("revision-1"), revision_data())
+                .unwrap();
+        let mut document = serde_json::to_value(&revision).unwrap();
+        let fields = document.as_object_mut().unwrap();
+        fields.insert("supply_region".into(), serde_json::json!(["全国"]));
+        fields.insert("dropship_express".into(), serde_json::json!("顺丰"));
+        fields.insert("freight_amount".into(), serde_json::json!("1.00"));
+        fields.insert("service_fee_amount".into(), serde_json::json!("0.50"));
+        let restored: SupplierOfferingRevision = serde_json::from_value(document).unwrap();
+        assert_eq!(restored, revision);
+        let written = serde_json::to_value(&restored).unwrap();
+        assert!(written.get("supply_region").is_none());
+        assert!(written.get("freight_amount").is_none());
     }
 }

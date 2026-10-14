@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import { Fragment } from "react"
 import {
     SalesDeliveryRequirements,
@@ -64,12 +66,22 @@ export function PurchaseOrderCreateSourcingTable({
                         <TableHead data-align="end">剩余数量</TableHead>
                         <TableHead className="min-w-64">
                             供给来源 / 履约责任
+                            <RequiredMark />
                         </TableHead>
-                        <TableHead>采购入库目标仓</TableHead>
-                        <TableHead data-align="end">本次分配数量</TableHead>
+                        <TableHead>
+                            采购入库目标仓
+                            <RequiredMark />
+                        </TableHead>
+                        <TableHead data-align="end">
+                            本次分配数量
+                            <RequiredMark />
+                        </TableHead>
                         <TableHead data-align="end">含税成本</TableHead>
                         <TableHead data-align="end">进项税率</TableHead>
-                        <TableHead data-align="end">预计交期</TableHead>
+                        <TableHead data-align="end">
+                            预计交期
+                            <RequiredMark />
+                        </TableHead>
                         <TableHead className="w-24">操作</TableHead>
                     </TableRow>
                 </TableHeader>
@@ -179,6 +191,7 @@ export function PurchaseOrderCreateSourcingTable({
                                                 <field.TextField
                                                     id={`procurement-orders-create-row-${toAutomationIdSegment(input.rowKey)}-quantity`}
                                                     label="本次分配数量"
+                                                    required
                                                     hideLabel
                                                     type="number"
                                                     inputMode="decimal"

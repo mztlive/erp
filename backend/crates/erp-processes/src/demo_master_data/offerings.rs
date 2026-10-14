@@ -414,7 +414,7 @@ mod tests {
         invalid[0].source_connection_id = Some("unexpected-api-connection".into());
         assert!(validate(&invalid, &steps).is_err());
         invalid = rows;
-        invalid[0].terms.supply_region = vec![" ".into()];
+        invalid[0].terms.bulk_minimum_order_quantity = "0".into();
         assert!(validate(&invalid, &steps).is_err());
     }
 

@@ -8,7 +8,6 @@ export const SELLABLE_SUPPLY_PRESET_LABELS: Record<
     string
 > = {
     "single-supplier": "单一供应商",
-    nationwide: "全国可供",
 }
 
 /**
@@ -22,8 +21,7 @@ export function matchesSellableSupplyPreset(
     if (!preset) return true
     const sellable = row.sellableItem
     if (!sellable) return false
-    if (preset === "single-supplier") return sellable.supplierCount === 1
-    return sellable.supplyRegions.includes("全国")
+    return sellable.supplierCount === 1
 }
 
 export function filterBySellableSupplyPreset(

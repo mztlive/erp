@@ -40,9 +40,6 @@ pub struct SupplierOfferingTermsWrite {
     /// 集采起订量。
     #[validate(custom(function = "non_blank", message = "集采起订量不能为空"))]
     pub bulk_minimum_order_quantity: String,
-    /// 可供区域。
-    #[validate(length(min = 1, message = "可供区域不能为空"))]
-    pub supply_region: Vec<String>,
     /// 商品级能力。
     #[serde(default)]
     pub product_capabilities: Vec<String>,
@@ -51,12 +48,6 @@ pub struct SupplierOfferingTermsWrite {
     pub valid_from: String,
     /// 失效日期。
     pub valid_to: Option<String>,
-    /// 一件代发快递说明。
-    pub dropship_express: Option<String>,
-    /// 运费。
-    pub freight_amount: Option<String>,
-    /// 服务费。
-    pub service_fee_amount: Option<String>,
 }
 impl SupplierOfferingTermsWrite {
     /// 以必填商业条款构造写入字段；可选维度默认为空。
@@ -69,7 +60,7 @@ impl SupplierOfferingTermsWrite {
     /// * `valid_from` - 生效日期
     ///
     /// # 返回
-    /// 返回区域为空的可写条款。
+    /// 返回可选维度为空的可写条款。
     ///
     /// # 错误
     /// 无。
@@ -85,13 +76,9 @@ impl SupplierOfferingTermsWrite {
             bulk_supply_price_gross,
             input_tax_rate,
             bulk_minimum_order_quantity,
-            supply_region: Vec::new(),
             product_capabilities: Vec::new(),
             valid_from,
             valid_to: None,
-            dropship_express: None,
-            freight_amount: None,
-            service_fee_amount: None,
         }
     }
 }
@@ -117,6 +104,9 @@ pub struct CreateSupplierOfferingRequest {
     /// 首版商业条款。
     #[validate(nested)]
     pub terms: SupplierOfferingTermsWrite,
+    /// 配送模板；空表示跟随供应商默认模板。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivery_template_id: Option<String>,
     /// 初始可供状态。
     pub availability_status: AvailabilityStatus,
     /// 初始可供数量。
@@ -388,10 +378,6 @@ impl SupplierOfferingTermsWrite {
                 .map_err(|error| Error::ValidationError(error.to_string()))?;
         let bulk_gross = write_data::parse_unit_price(&self.bulk_supply_price_gross, "集采供给价")
             .map_err(|error| Error::ValidationError(error.to_string()))?;
-        let freight = write_data::parse_optional_amount(self.freight_amount.as_deref())
-            .map_err(|error| Error::ValidationError(error.to_string()))?;
-        let service_fee = write_data::parse_optional_amount(self.service_fee_amount.as_deref())
-            .map_err(|error| Error::ValidationError(error.to_string()))?;
         let moq = write_data::parse_minimum_order_quantity(&self.bulk_minimum_order_quantity)
             .map_err(|error| Error::ValidationError(error.to_string()))?;
         let valid_from = write_data::parse_business_date(&self.valid_from)
@@ -408,11 +394,7 @@ impl SupplierOfferingTermsWrite {
             dropship_supply_price_gross: dropship_gross,
             bulk_supply_price_gross: bulk_gross,
             input_tax_rate: rate,
-            dropship_express: self.dropship_express.clone(),
-            freight_amount: freight,
-            service_fee_amount: service_fee,
             bulk_minimum_order_quantity: moq,
-            supply_region: self.supply_region.clone(),
             product_capabilities: self.product_capabilities.clone(),
             valid_from,
             valid_to,
@@ -647,11 +629,11 @@ mod tests {
     fn command_fingerprint_golden_contracts() {
         assert_eq!(
             create_request().command_fingerprint().unwrap(),
-            "b4ffb0315515f864f185763a8629534919751a5bdb898cd241e31036f97d436b"
+            "7564353a6563c6a7e6fa015dbc5edf8043d583e9e4ea10314ee322f19a604ae4"
         );
         assert_eq!(
             revise_request().command_fingerprint("offering-1").unwrap(),
-            "bf555bf28973bd5c274b1e8b2aa359bc5bf72f636cd33040614a0db03823a7d1"
+            "f39d802d85a6f52cd715ff14f38266a40fbede0db97495ee0716b745b233102f"
         );
         assert_eq!(
             update_request().command_fingerprint("offering-1").unwrap(),
@@ -665,13 +647,9 @@ mod tests {
             bulk_supply_price_gross: "9.00".to_string(),
             input_tax_rate: "0.13".to_string(),
             bulk_minimum_order_quantity: "10".to_string(),
-            supply_region: vec!["CN".to_string()],
             product_capabilities: vec!["DROP_SHIP".to_string()],
             valid_from: "2026-01-01".to_string(),
             valid_to: None,
-            dropship_express: Some("顺丰".to_string()),
-            freight_amount: None,
-            service_fee_amount: None,
         }
     }
 
@@ -684,6 +662,7 @@ mod tests {
             source_type: OfferingSourceType::Manual,
             source_connection_id: None,
             terms: terms(),
+            delivery_template_id: None,
             availability_status: AvailabilityStatus::Available,
             available_quantity: Some("100".to_string()),
             source_updated_at: Some(1_700_000_000),
@@ -742,10 +721,6 @@ mod tests {
         let mut bad_window = terms();
         bad_window.valid_from = "not-a-date".to_string();
         assert!(bad_window.try_into_revision_data(SupplierOfferingId::new("o1"), 1).is_err());
-        let mut bad_amount = terms();
-        bad_amount.freight_amount = Some("abc".to_string());
-        let err = bad_amount.try_into_revision_data(SupplierOfferingId::new("o1"), 1).unwrap_err();
-        assert!(err.to_string().contains("非法金额"));
     }
 
     #[test]
@@ -792,18 +767,35 @@ mod tests {
     }
 
     #[test]
-    fn terms_reject_illegal_valid_to_and_blank_nullable_amounts() {
+    fn terms_reject_illegal_valid_to() {
         use erp_core::ids::SupplierOfferingId;
         let mut bad_to = terms();
         bad_to.valid_to = Some("abc".to_string());
         let err = bad_to.try_into_revision_data(SupplierOfferingId::new("o1"), 1).unwrap_err();
         assert!(err.to_string().contains("非法业务日期"));
-        let mut blank_amounts = terms();
-        blank_amounts.freight_amount = Some("  ".to_string());
-        blank_amounts.service_fee_amount = Some(String::new());
-        let data = blank_amounts.try_into_revision_data(SupplierOfferingId::new("o1"), 1).unwrap();
-        assert!(data.freight_amount.is_none());
-        assert!(data.service_fee_amount.is_none());
+    }
+
+    #[test]
+    fn terms_reject_retired_fields() {
+        let mut document = serde_json::to_value(terms()).unwrap();
+        document.as_object_mut().unwrap().insert("freight_amount".into(), serde_json::json!("1.00"));
+        assert!(serde_json::from_value::<SupplierOfferingTermsWrite>(document).is_err());
+        let mut document = serde_json::to_value(terms()).unwrap();
+        document.as_object_mut().unwrap().insert("supply_region".into(), serde_json::json!(["全国"]));
+        assert!(serde_json::from_value::<SupplierOfferingTermsWrite>(document).is_err());
+    }
+
+    #[test]
+    fn create_request_delivery_template_is_optional_and_fingerprinted() {
+        let mut document = serde_json::to_value(create_request()).unwrap();
+        assert!(document.get("delivery_template_id").is_none());
+        document.as_object_mut().unwrap().insert("delivery_template_id".into(), serde_json::json!("tpl-1"));
+        let with_template: CreateSupplierOfferingRequest = serde_json::from_value(document).unwrap();
+        assert_eq!(with_template.delivery_template_id.as_deref(), Some("tpl-1"));
+        assert_ne!(
+            with_template.command_fingerprint().unwrap(),
+            create_request().command_fingerprint().unwrap()
+        );
     }
 
     #[test]

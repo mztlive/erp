@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import { DateTimeLocalPicker } from "@/components/ui/date-picker"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -80,7 +82,10 @@ export function FulfillmentDeliveryForm({
                                 : "space-y-1.5"
                         }
                     >
-                        <Label htmlFor={`${prefix}-shipped-at`}>发货时间</Label>
+                        <Label htmlFor={`${prefix}-shipped-at`}>
+                            发货时间
+                            <RequiredMark />
+                        </Label>
                         <div className={compact ? "min-w-0 flex-1" : undefined}>
                             <DateTimeLocalPicker
                                 id={`${prefix}-shipped-at`}

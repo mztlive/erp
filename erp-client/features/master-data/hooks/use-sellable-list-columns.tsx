@@ -24,26 +24,6 @@ function decimalSortingFn(maxScale: number): SortingFn<MasterDataListItem> {
 const moneySortingFn = decimalSortingFn(2)
 const quantitySortingFn = decimalSortingFn(6)
 
-/** 可供区域最多展开 2 个，其余折成「+N」；完整值进 title。 */
-function SupplyRegions({ regions }: { regions: readonly string[] }) {
-    if (regions.length === 0) {
-        return <span className="text-sm text-muted-foreground">未标注</span>
-    }
-    const shown = regions.slice(0, 2)
-    const rest = regions.length - 2
-    return (
-        <div
-            className="flex min-w-0 flex-wrap gap-x-2 gap-y-1 text-body-compact text-muted-foreground"
-            title={regions.join("、")}
-        >
-            {shown.map((region) => (
-                <span key={region}>{region}</span>
-            ))}
-            {rest > 0 ? <span className="num">+{rest}</span> : null}
-        </div>
-    )
-}
-
 export function useSellableListColumns() {
     return React.useMemo<ColumnDef<MasterDataListItem>[]>(
         () => [
@@ -166,17 +146,6 @@ export function useSellableListColumns() {
                         {row.original.sellableItem?.supplierCodes?.join("、") ||
                             "—"}
                     </span>
-                ),
-            },
-            {
-                id: "supplyRegions",
-                header: "可供区域",
-                meta: { label: "可供区域", width: "default" },
-                enableSorting: false,
-                cell: ({ row }) => (
-                    <SupplyRegions
-                        regions={row.original.sellableItem?.supplyRegions ?? []}
-                    />
                 ),
             },
             {

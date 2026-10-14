@@ -153,7 +153,6 @@ export function PortalOfferingDetailPage({
                     {availabilityLabels[offering.availability_status] ??
                         "待核对"}
                 </p>
-                <p>可供区域：{terms.supply_region.join("、")}</p>
                 <p>
                     集采起订量：
                     <QuantityValue

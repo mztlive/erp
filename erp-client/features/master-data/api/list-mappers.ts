@@ -257,9 +257,6 @@ export function mapSkuAsSellable(dto: SellableSkuDto): MasterDataListItem {
                 : []),
             ...(kindLabel ? [{ label: "商品类型", value: kindLabel }] : []),
             { label: "有效供应商", value: `${dto.supplier_count} 家` },
-            ...(dto.supply_regions.length > 0
-                ? [{ label: "可供区域", value: dto.supply_regions.join("、") }]
-                : []),
         ],
         selectorEligibility: [],
         ...commonActions("sellable-items", lifecycle),
@@ -280,7 +277,6 @@ export function mapSkuAsSellable(dto: SellableSkuDto): MasterDataListItem {
             marketPrice: dto.market_price ?? undefined,
             supplierCodes: dto.supplier_codes ?? [],
             supplierCount: dto.supplier_count,
-            supplyRegions: dto.supply_regions,
             deliveryFreightExtra: dto.delivery_freight_extra ?? false,
             eligibilityAsOf: dto.eligibility_as_of,
             mainImageAssetId: dto.main_image_asset_id?.trim() || undefined,

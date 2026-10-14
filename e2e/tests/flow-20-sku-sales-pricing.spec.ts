@@ -253,7 +253,6 @@ async function prepareProduct(
                 bulk_supply_price_gross: "47.00",
                 input_tax_rate: "0.09",
                 bulk_minimum_order_quantity: "6",
-                supply_region: ["全国"],
                 product_capabilities: [],
                 valid_from: businessDate(),
             },

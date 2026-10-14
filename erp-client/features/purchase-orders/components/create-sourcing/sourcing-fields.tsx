@@ -132,6 +132,7 @@ export function SourcingExpectedDeliveryField({
                             <field.DateField
                                 id={`procurement-orders-create-row-${toAutomationIdSegment(rowKey)}-delivery-date`}
                                 label="预计交付日"
+                                required
                                 hideLabel
                             />
                         )}
@@ -162,6 +163,7 @@ export function SourcingOptionField({
                 <field.SelectField
                     id={`procurement-orders-create-row-${toAutomationIdSegment(rowKey)}-sourcing-option`}
                     label={`履约方案，${product.itemName}`}
+                    required
                     hideLabel={hideLabel}
                     allowClear={product.options.length > 1}
                     placeholder="选择履约方案"

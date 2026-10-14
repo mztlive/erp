@@ -18,5 +18,4 @@ export {
 export {
     fetchMasterDataCenter,
     fetchMasterDataList,
-    fetchSkuSupplierCounts,
 } from "@/features/master-data/api/resource-queries"

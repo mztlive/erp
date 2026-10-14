@@ -99,6 +99,7 @@ function DeliveryGroup({
                             <field.DateField
                                 id={`${prefix}-expected-date`}
                                 label="预计交付日"
+                                required
                                 description={`不晚于销售履约期限 ${option.salesDueDate}`}
                                 clearable={false}
                                 disabledDates={afterDueDates(

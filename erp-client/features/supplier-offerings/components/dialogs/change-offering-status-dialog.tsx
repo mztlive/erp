@@ -78,7 +78,7 @@ export function ChangeOfferingStatusDialog({
                 <DialogHeader>
                     <DialogTitle>{intent.title}</DialogTitle>
                     <DialogDescription>
-                        将追加一版商业条款。价格、起订量、区域和有效期保持当前内容，条款号从
+                        将追加一版商业条款。价格、起订量和有效期保持当前内容，条款号从
                         v{currentNo} 变为 v{nextNo}，关系状态变为
                         {OFFERING_STATUS_LABELS[intent.nextStatus]}。
                     </DialogDescription>

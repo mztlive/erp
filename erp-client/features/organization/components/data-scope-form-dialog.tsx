@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import * as React from "react"
 import { z } from "zod"
 import { useAppForm, toFieldErrors } from "@/components/form"
@@ -183,6 +185,7 @@ export function DataScopeFormDialog({
                                 <field.SelectField
                                     id="organization-scope-subject-type"
                                     label="配置对象"
+                                    required
                                     allowClear={false}
                                     onValueChange={() =>
                                         form.setFieldValue("subjectId", "")
@@ -206,6 +209,7 @@ export function DataScopeFormDialog({
                                         <field.SelectField
                                             id="organization-scope-subject"
                                             label="角色或人员"
+                                            required
                                             options={
                                                 type === "role"
                                                     ? roles.map((role) => ({
@@ -229,6 +233,7 @@ export function DataScopeFormDialog({
                         <Field>
                             <FieldLabel htmlFor="organization-scope-resource">
                                 业务
+                                <RequiredMark />
                             </FieldLabel>
                             <OptionCombobox
                                 id="organization-scope-resource"
@@ -282,6 +287,7 @@ export function DataScopeFormDialog({
                                 <Field>
                                     <FieldLabel htmlFor="organization-scope-actions">
                                         允许的操作
+                                        <RequiredMark />
                                     </FieldLabel>
                                     <MultiOptionCombobox
                                         id="organization-scope-actions"
@@ -329,6 +335,7 @@ export function DataScopeFormDialog({
                                     <Field>
                                         <FieldLabel htmlFor="organization-scope-dimension">
                                             本条规则限制什么
+                                            <RequiredMark />
                                         </FieldLabel>
                                         <OptionCombobox
                                             id="organization-scope-dimension"
@@ -386,6 +393,7 @@ export function DataScopeFormDialog({
                                 <field.SelectField
                                     id="organization-scope-type"
                                     label="允许访问哪些数据"
+                                    required
                                     options={[
                                         ...(dimension === "internal_org"
                                             ? [
@@ -445,6 +453,7 @@ export function DataScopeFormDialog({
                                         <Field>
                                             <FieldLabel htmlFor="organization-scope-targets">
                                                 允许的目标
+                                                <RequiredMark />
                                             </FieldLabel>
                                             <ScopeTargetPicker
                                                 dimension={value.dimension}

@@ -1,4 +1,6 @@
 "use client"
+
+import { RequiredMark } from "@/components/ui/required-mark"
 import { PlusIcon } from "lucide-react"
 import { toFieldErrors } from "@/components/form"
 import { Badge } from "@/components/ui/badge"
@@ -224,7 +226,10 @@ function DeliveryGroup({
                         className={`${ADDRESS_GRID} hidden rounded-t-md border-b border-grid bg-muted/40 px-3 py-2 text-xs text-muted-foreground @3xl/delivery:grid`}
                     >
                         {labels.map(([name, label]) => (
-                            <span key={name}>{label}</span>
+                            <span key={name}>
+                                {label}
+                                <RequiredMark />
+                            </span>
                         ))}
                         <span className="text-center">操作</span>
                     </div>
@@ -246,6 +251,7 @@ function DeliveryGroup({
                                                     <DeliveryRegionField
                                                         id={`${rowId}-region`}
                                                         label={label}
+                                                        required
                                                         labelClassName="@3xl/delivery:sr-only"
                                                         className="sm:col-span-2 @3xl/delivery:col-span-1"
                                                         value={
@@ -299,6 +305,7 @@ function DeliveryGroup({
                                                     <field.TextField
                                                         id={`${rowId}-${name}`}
                                                         label={label}
+                                                        required
                                                         disabled={disabled}
                                                         className={`min-w-0 gap-2 @3xl/delivery:[&>[data-slot=field-label]]:sr-only ${name === "address" ? "sm:col-span-2 @3xl/delivery:col-span-1" : ""}`}
                                                         inputClassName={

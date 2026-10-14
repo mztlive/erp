@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -110,6 +112,7 @@ export function AcceptanceRegisterBatchRow({
                 <fieldset className="mt-4 min-w-0">
                     <legend className="mb-2 text-xs font-medium">
                         本批验收结果
+                        <RequiredMark />
                     </legend>
                     <RadioGroup
                         value={result}
@@ -175,6 +178,7 @@ export function AcceptanceRegisterBatchRow({
                             htmlFor={`sales-orders-acceptance-batch-${segmentId}-qty`}
                         >
                             本次验收数量
+                            <RequiredMark />
                         </FieldLabel>
                         <Input
                             id={`sales-orders-acceptance-batch-${segmentId}-qty`}
@@ -195,6 +199,7 @@ export function AcceptanceRegisterBatchRow({
                                 htmlFor={`sales-orders-acceptance-batch-${segmentId}-exception-qty`}
                             >
                                 {exceptionQuantityLabel(result)}
+                                <RequiredMark />
                             </FieldLabel>
                             <Input
                                 id={`sales-orders-acceptance-batch-${segmentId}-exception-qty`}
@@ -221,6 +226,7 @@ export function AcceptanceRegisterBatchRow({
                             htmlFor={`sales-orders-acceptance-batch-${segmentId}-reason`}
                         >
                             客户反馈
+                            <RequiredMark />
                         </FieldLabel>
                         <Textarea
                             id={`sales-orders-acceptance-batch-${segmentId}-reason`}

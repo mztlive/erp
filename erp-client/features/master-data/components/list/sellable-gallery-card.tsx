@@ -11,20 +11,6 @@ import type { MasterDataListItem } from "@/features/master-data/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 
-function SupplyRegions({ regions }: { regions: readonly string[] }) {
-    if (regions.length === 0) {
-        return <span className="text-xs text-muted-foreground">未标注</span>
-    }
-    const shown = regions.slice(0, 2)
-    const rest = regions.length - 2
-    return (
-        <p className="text-xs text-muted-foreground" title={regions.join("、")}>
-            {shown.join("、")}
-            {rest > 0 ? <span className="num"> +{rest}</span> : null}
-        </p>
-    )
-}
-
 export function SellableGalleryCard({
     row,
     selected,
@@ -146,7 +132,6 @@ export function SellableGalleryCard({
                             "—"
                         )}
                     </p>
-                    <SupplyRegions regions={item?.supplyRegions ?? []} />
                     {item?.deliveryFreightExtra ? (
                         <p className="text-warning-soft-foreground">
                             所选地区部分需另付运费

@@ -24,7 +24,6 @@ import {
     useCreateRevisionMutation,
     useMasterDataCenterQuery,
     useMasterDataListQuery,
-    useSkuSupplierCountsQuery,
 } from "@/features/master-data/hooks/queries"
 import { useProductDirtyGuard } from "@/features/master-data/hooks/use-product-dirty-guard"
 import { useProductSectionSpy } from "@/features/master-data/hooks/use-product-section-spy"
@@ -66,11 +65,6 @@ export function useProductEditor(stableId: string) {
     const reviseMutation = useCreateRevisionMutation()
 
     const data = detailQuery.data
-    const supplierCountsQuery = useSkuSupplierCountsQuery(
-        data?.productDetail?.skus.flatMap((sku) =>
-            sku.skuId ? [sku.skuId] : [],
-        ) ?? [],
-    )
     const lockVersion = data?.lockVersion
     const revisionId = data?.currentRevision.revisionId
     const [formError, setFormError] = React.useState<string | null>(null)
@@ -337,7 +331,6 @@ export function useProductEditor(stableId: string) {
         brandOptions,
         unitOptionsQuery,
         data,
-        supplierCountsQuery,
         form,
         formError,
         formErrorTitle,

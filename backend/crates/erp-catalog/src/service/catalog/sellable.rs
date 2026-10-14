@@ -35,8 +35,6 @@ pub struct SellableSkuListParams {
     pub brand_id: Option<String>,
     /// 当前有效供给中的供应商筛选；响应仅返回供应商业务编号。
     pub supplier_id: Option<String>,
-    /// 当前有效供给可供区域筛选（精确匹配）。
-    pub supply_region: Option<String>,
     /// 当前有效供给去重供应商数量上限（含）；用于「单一供应商」快捷视图。
     #[validate(range(min = 1, message = "供应商数量上限必须大于0"))]
     pub max_supplier_count: Option<u32>,
@@ -122,8 +120,6 @@ pub struct SellableSkuView {
     pub supplier_count: u32,
     /// 当前有效供给对应的去重供应商业务编号，由跨域读取批量补齐。
     pub supplier_codes: Vec<String>,
-    /// 当前有效供给可供区域并集。
-    pub supply_regions: Vec<String>,
     /// 按地区筛选且含运费另计时，所选地区内是否有需另付运费才能送到的地方。
     pub delivery_freight_extra: bool,
     /// 本次资格判定的服务端业务日期。
@@ -201,13 +197,11 @@ pub fn prepare_sellable_sku_list(params: &SellableSkuListParams) -> Result<Sella
     let page_size = page_size_or_default(params.page_size);
     let eligibility_as_of = params.eligibility_as_of.unwrap_or_else(BusinessDate::today);
     Ok(SellableSkuFilter {
-        nationwide_only: false,
         keyword: normalized_text(params.q.as_deref()),
         product_kind: params.product_kind,
         category_id: normalized_text(params.category_id.as_deref()),
         brand_id: normalized_text(params.brand_id.as_deref()),
         supplier_id: normalized_text(params.supplier_id.as_deref()),
-        supply_region: normalized_text(params.supply_region.as_deref()),
         max_supplier_count: params.max_supplier_count,
         price_kind: params.price_kind,
         sales_price_min: params.sales_price_min,
@@ -335,7 +329,6 @@ pub fn sellable_sku_page_view(
             effective_to: row.effective_to,
             supplier_count: row.supplier_count,
             supplier_codes: Vec::new(),
-            supply_regions: row.supply_regions,
             delivery_freight_extra: row.delivery_freight_extra,
             eligibility_as_of,
         });

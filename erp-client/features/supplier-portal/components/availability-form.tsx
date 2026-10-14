@@ -99,6 +99,7 @@ export function PortalAvailabilityForm({
                         <field.SelectField
                             id="supplier-portal-availability-status"
                             label="可供状态"
+                            required
                             options={[
                                 { value: "AVAILABLE", label: "有货" },
                                 { value: "OUT_OF_STOCK", label: "临时缺货" },

@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import { useState } from "react"
 import { useOpaqueReferenceOptionsQuery } from "@/features/supplier-api-connections/hooks/use-opaque-reference-options"
 
@@ -109,6 +111,7 @@ export function ReferenceBindDialog({
                     ) : null}
                     <Label htmlFor={inputId}>
                         {kind === "credential" ? "密钥配置" : "地址配置"}
+                        <RequiredMark />
                     </Label>
                     <OpaqueReferenceSearchCombobox
                         options={optionsQuery.data ?? []}

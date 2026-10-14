@@ -236,13 +236,9 @@ fn terms_from_view(view: &SupplierOfferingView) -> Option<SupplierOfferingTermsW
         bulk_supply_price_gross: view.bulk_supply_price_gross.clone()?,
         input_tax_rate: view.input_tax_rate.clone()?,
         bulk_minimum_order_quantity: view.bulk_minimum_order_quantity.clone()?,
-        supply_region: view.supply_region.clone(),
         product_capabilities: view.product_capabilities.clone(),
         valid_from: view.valid_from.clone()?,
         valid_to: view.valid_to.clone(),
-        dropship_express: view.dropship_express.clone(),
-        freight_amount: view.freight_amount.clone(),
-        service_fee_amount: view.service_fee_amount.clone(),
     })
 }
 
@@ -257,13 +253,9 @@ impl PortalRevisionView {
                 bulk_supply_price_gross: revision.bulk_supply_price_gross.to_string(),
                 input_tax_rate: revision.input_tax_rate.to_string(),
                 bulk_minimum_order_quantity: revision.bulk_minimum_order_quantity.to_string(),
-                supply_region: revision.supply_region,
                 product_capabilities: revision.product_capabilities,
                 valid_from: revision.valid_from.to_string(),
                 valid_to: revision.valid_to.map(|date| date.to_string()),
-                dropship_express: revision.dropship_express,
-                freight_amount: revision.freight_amount.map(|value| value.to_string()),
-                service_fee_amount: revision.service_fee_amount.map(|value| value.to_string()),
             },
         }
     }

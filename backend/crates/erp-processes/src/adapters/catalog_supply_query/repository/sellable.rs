@@ -260,12 +260,6 @@ fn append_sellable_optional_filters(pipeline: &mut Vec<Document>, filter: &Sella
         // 仅匹配资格供给中的供应商；响应投影仍不返回供应商身份。
         pipeline.push(doc! { "$match": { "supplier_ids": supplier_id } });
     }
-    if let Some(region) = filter.supply_region.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
-        pipeline.push(doc! { "$match": { "supply_regions": region } });
-    }
-    if filter.nationwide_only {
-        pipeline.push(doc! { "$match": { "supply_regions": "全国" } });
-    }
     if let Some(max_supplier_count) = filter.max_supplier_count {
         pipeline.push(doc! {
             "$match": {
@@ -420,7 +414,6 @@ fn sellable_sku_projection() -> Document {
             "effective_to": "$sku_revision.effective_to",
             "supplier_count": 1,
             "supplier_ids": 1,
-            "supply_regions": 1,
             "brand_id": "$product_revision.brand_id",
             "product_name": "$product_revision.name",
         }
@@ -641,14 +634,14 @@ fn sellable_offering_lookup(as_of: &str, not_deleted: i64) -> Document {
                 doc! { "$unwind": "$revision" },
                 sellable_availability_lookup(not_deleted),
                 doc! { "$unwind": "$availability" },
-                doc! { "$project": { "_id": 0, "supplier_id": 1, "supply_region": "$revision.supply_region" } },
+                doc! { "$project": { "_id": 0, "supplier_id": 1 } },
             ],
             "as": "offerings"
         }
     }
 }
 
-/// 从已符合资格的供给中汇总去重供应商与可供区域。
+/// 从已符合资格的供给中汇总去重供应商。
 ///
 /// # 参数
 /// 无。
@@ -662,13 +655,6 @@ fn sellable_supply_summary() -> Document {
     doc! {
         "$set": {
             "supplier_ids": { "$setUnion": ["$offerings.supplier_id", []] },
-            "supply_regions": {
-                "$reduce": {
-                    "input": "$offerings.supply_region",
-                    "initialValue": [],
-                    "in": { "$setUnion": ["$$value", "$$this"] }
-                }
-            }
         }
     }
 }
@@ -718,13 +704,11 @@ mod tests {
     fn sellable_sku_pipeline_is_fail_closed_and_cost_safe() {
         let date = BusinessDate::from_ymd(2026, 8, 8).unwrap();
         let filter = SellableSkuFilter {
-            nationwide_only: false,
             keyword: Some("礼盒".to_string()),
             product_kind: Some(ProductKind::Physical),
             category_id: Some("cat-1".to_string()),
             brand_id: Some("brand-1".to_string()),
             supplier_id: Some("supplier-1".to_string()),
-            supply_region: Some("全国".to_string()),
             max_supplier_count: Some(1),
             price_kind: SellablePriceKind::Dropship,
             sales_price_min: Some(Amount::from_str("10.00").unwrap()),
@@ -753,7 +737,6 @@ mod tests {
         assert!(json.contains("category_id"));
         assert!(json.contains("brand_id"));
         assert!(json.contains("supplier_ids"));
-        assert!(json.contains("supply_regions"));
         assert!(json.contains("$size"));
         assert!(json.contains("barcode"));
         assert!(json.contains("eligibility") || json.contains("valid_from"));

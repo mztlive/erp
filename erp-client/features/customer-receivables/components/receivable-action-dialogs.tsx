@@ -1,3 +1,4 @@
+import { RequiredMark } from "@/components/ui/required-mark"
 import { PlusIcon } from "lucide-react"
 
 import { MoneyValue } from "@/components/business"
@@ -161,6 +162,7 @@ export function ReceivableActionDialogs({
                             <div className="space-y-1.5">
                                 <Label htmlFor="customer-receivables-reverse-amount">
                                     红票金额
+                                    <RequiredMark />
                                 </Label>
                                 <Input
                                     id="customer-receivables-reverse-amount"
@@ -198,6 +200,7 @@ export function ReceivableActionDialogs({
                         <div className="space-y-1.5">
                             <Label htmlFor="customer-receivables-reverse-reason">
                                 原因说明
+                                <RequiredMark />
                             </Label>
                             <Textarea
                                 id="customer-receivables-reverse-reason"

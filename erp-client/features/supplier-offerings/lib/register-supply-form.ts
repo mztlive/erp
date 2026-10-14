@@ -1,7 +1,7 @@
 import { format } from "date-fns"
 import { z } from "zod"
 
-import { createSchema, splitValues } from "./offering-forms"
+import { createSchema } from "./offering-forms"
 
 export const registerSupplySchema = createSchema
     .extend({
@@ -10,7 +10,8 @@ export const registerSupplySchema = createSchema
         quantityMode: z.enum(["unknown", "provided"]),
         validityMode: z.enum(["ongoing", "dated"]),
         supplierSkuCode: z.string().trim().min(1, "请填写供应商订货编码"),
-        supplyRegionText: z.string(),
+        /** 空表示跟随供应商默认模板。 */
+        deliveryTemplateId: z.string(),
     })
     .superRefine((value, context) => {
         if (
@@ -21,13 +22,6 @@ export const registerSupplySchema = createSchema
                 code: "custom",
                 path: ["availableQuantity"],
                 message: "请填写可供数量，或选择数量未提供",
-            })
-        }
-        if (!splitValues(value.supplyRegionText).length) {
-            context.addIssue({
-                code: "custom",
-                path: ["supplyRegionText"],
-                message: "请选择或添加可供区域",
             })
         }
         if (!z.iso.date().safeParse(value.validFrom).success) {
@@ -69,13 +63,10 @@ export function registerSupplyDefaults(
         bulkPrice: "",
         minimumQuantity: "1",
         inputTaxPercentage: "",
-        supplyRegionText: "",
         validFrom: format(today, "yyyy-MM-dd"),
         validTo: "",
         validityMode: "ongoing",
-        dropshipExpress: "",
-        freightAmount: "",
-        serviceFeeAmount: "",
+        deliveryTemplateId: "",
         availabilityStatus: "AVAILABLE",
         availableQuantity: "",
         changeReason: "新增供应商供给",

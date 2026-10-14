@@ -46,13 +46,9 @@ const termsFields: FieldSpec[] = [
     field("bulk_supply_price_gross", "集采含税供货价", "money"),
     field("input_tax_rate", "税率", "rate"),
     field("bulk_minimum_order_quantity", "集采起订量", "quantity"),
-    field("supply_region", "可供区域", "list"),
     field("product_capabilities", "商品能力", "capabilities"),
     field("valid_from", "生效日期", "date"),
     field("valid_to", "失效日期", "end_date"),
-    field("dropship_express", "代发快递说明"),
-    field("freight_amount", "运费", "money"),
-    field("service_fee_amount", "服务费", "money"),
 ]
 const cooperationFields: FieldSpec[] = [
     field("settlement_mode", "结算方式", "settlement"),

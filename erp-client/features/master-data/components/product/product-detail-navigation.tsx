@@ -66,7 +66,9 @@ function ProductSectionTabs({
                     (section) =>
                         section.id !== "effective" &&
                         section.id !== "sku" &&
-                        (!isCreate || section.id !== "history"),
+                        (!isCreate ||
+                            (section.id !== "history" &&
+                                section.id !== "supply")),
                 ).map((section) => (
                     <TabsTrigger
                         key={section.id}

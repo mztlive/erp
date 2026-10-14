@@ -106,6 +106,7 @@ export function PortalReassignForm({
                     <field.SelectField
                         id="supplier-portal-reassign-person"
                         label="新的具体处理人"
+                        required
                         options={(query.data ?? []).map((item) => ({
                             value: item.user_id,
                             label: `${item.display_name} · ${item.account}`,

@@ -459,14 +459,6 @@ fn projection_filter(filter: &SellableSkuFilter, restrict: Option<&[String]>) ->
             query.insert(field, value);
         }
     }
-    let mut regions = filter.supply_region.iter().map(|region| region.trim().to_string()).collect::<Vec<_>>();
-    if filter.nationwide_only {
-        regions.push("全国".to_string());
-    }
-    regions.retain(|region| !region.is_empty());
-    if !regions.is_empty() {
-        query.insert("row.supply_regions", doc! { "$all": regions });
-    }
     if let Some(maximum) = filter.max_supplier_count {
         query.insert("row.supplier_count", doc! { "$lte": i64::from(maximum) });
     }
@@ -567,8 +559,6 @@ mod tests {
         value.category_id = Some("cat-1".into());
         value.brand_id = Some(" ".into());
         value.supplier_id = Some("supplier-1".into());
-        value.supply_region = Some("华南".into());
-        value.nationwide_only = true;
         value.max_supplier_count = Some(1);
         value.price_kind = SellablePriceKind::Bulk;
         value.sales_price_min = Some(Amount::from_str("10.00").unwrap());
@@ -579,7 +569,6 @@ mod tests {
         assert_eq!(query.get_str("row.category_id").unwrap(), "cat-1");
         assert!(!query.contains_key("row.brand_id"));
         assert_eq!(query.get_str("row.supplier_ids").unwrap(), "supplier-1");
-        assert_eq!(query.get_document("row.supply_regions").unwrap(), &doc! { "$all": ["华南", "全国"] });
         assert_eq!(query.get_document("row.supplier_count").unwrap(), &doc! { "$lte": 1_i64 });
         let price = query.get_document("row.bulk_price_gross").unwrap();
         assert_eq!(price.get_str("$type").unwrap(), "decimal");

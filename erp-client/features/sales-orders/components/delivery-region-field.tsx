@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import type { ComponentProps, ReactNode } from "react"
 
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
@@ -18,6 +20,7 @@ export function DeliveryRegionField({
     hint,
     className,
     labelClassName,
+    required = false,
 }: {
     id: string
     label?: string
@@ -29,6 +32,7 @@ export function DeliveryRegionField({
     hint?: ReactNode
     className?: string
     labelClassName?: string
+    required?: boolean
 }) {
     const errorId = `${id}-error`
     return (
@@ -38,6 +42,7 @@ export function DeliveryRegionField({
         >
             <FieldLabel htmlFor={`${id}-province`} className={labelClassName}>
                 {label}
+                {required ? <RequiredMark /> : null}
             </FieldLabel>
             <RegionCascadeSelect
                 idPrefix={id}

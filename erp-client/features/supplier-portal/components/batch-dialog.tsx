@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import { useEffect, useRef, useState, type ClipboardEvent } from "react"
 import Link from "next/link"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
@@ -754,6 +756,16 @@ export function PortalBatchDialog({
                                     className="min-w-36 px-2 py-3 text-left font-medium"
                                 >
                                     {item.label}
+                                    {![
+                                        "model",
+                                        "description",
+                                        "specs",
+                                        "barcode",
+                                        "validTo",
+                                        "quantity",
+                                    ].includes(item.key) ? (
+                                        <RequiredMark />
+                                    ) : null}
                                 </TableHead>
                             ))}
                             <TableHead className="px-3 py-3 text-left font-medium">
@@ -920,7 +932,7 @@ export function PortalBatchDialog({
                                                     >
                                                         {mode === "new_product"
                                                             ? "公共资料、规格及其他条款"
-                                                            : "数量、区域、日期及其他条款"}
+                                                            : "数量、日期及其他条款"}
                                                     </summary>
                                                     <div className="mt-3 grid gap-3 md:grid-cols-3">
                                                         {extraColumns.map(
@@ -937,6 +949,18 @@ export function PortalBatchDialog({
                                                                         {
                                                                             item.label
                                                                         }
+                                                                        {![
+                                                                            "model",
+                                                                            "description",
+                                                                            "specs",
+                                                                            "barcode",
+                                                                            "validTo",
+                                                                            "quantity",
+                                                                        ].includes(
+                                                                            item.key,
+                                                                        ) ? (
+                                                                            <RequiredMark />
+                                                                        ) : null}
                                                                     </label>
                                                                     {cell(
                                                                         row,

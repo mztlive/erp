@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import { useSelector } from "@tanstack/react-form"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
@@ -62,6 +64,7 @@ export function SalesOrderContractPickerDialog({
                         <Field>
                             <FieldLabel htmlFor="sales-contract-picker-contract">
                                 有效合同
+                                <RequiredMark />
                             </FieldLabel>
                             <ContractSearchCombobox
                                 id="sales-contract-picker-contract"

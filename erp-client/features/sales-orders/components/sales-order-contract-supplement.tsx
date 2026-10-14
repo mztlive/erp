@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import { useEffect, useState } from "react"
 import { useSelector } from "@tanstack/react-form"
 import { useQueryClient } from "@tanstack/react-query"
@@ -146,6 +148,7 @@ export function SalesOrderContractSupplement({
                                 >
                                     <FieldLabel htmlFor="sales-order-contract-supplement-select">
                                         销售合同
+                                        <RequiredMark />
                                     </FieldLabel>
                                     <ContractSearchCombobox
                                         id="sales-order-contract-supplement-select"

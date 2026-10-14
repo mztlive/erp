@@ -134,37 +134,6 @@ function useConfirmColumns(onRemove: (id: string) => void, pending: boolean) {
                 ),
             },
             {
-                id: "supplyRegions",
-                header: "可供区域",
-                meta: { label: "可供区域", width: "default" },
-                enableSorting: false,
-                cell: ({ row }) => {
-                    const regions =
-                        row.original.sellableItem?.supplyRegions ?? []
-                    if (regions.length === 0) {
-                        return (
-                            <span className="text-sm text-muted-foreground">
-                                未标注
-                            </span>
-                        )
-                    }
-                    return (
-                        <span
-                            className="text-body-compact text-muted-foreground"
-                            title={regions.join("、")}
-                        >
-                            {regions.slice(0, 2).join("、")}
-                            {regions.length > 2 ? (
-                                <span className="num">
-                                    {" "}
-                                    +{regions.length - 2}
-                                </span>
-                            ) : null}
-                        </span>
-                    )
-                },
-            },
-            {
                 id: "supplierCount",
                 header: "供应保障",
                 meta: { label: "供应保障", width: "status" },

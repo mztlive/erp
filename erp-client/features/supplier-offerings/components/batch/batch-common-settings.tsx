@@ -25,7 +25,6 @@ export function BatchCommonSettings({ editor }: { editor: BatchEditor }) {
             : [
                   { key: "inputTaxPercentage", label: "税率 %" },
                   { key: "minimumQuantity", label: "集采起订量" },
-                  { key: "supplyRegionText", label: "可供区域" },
                   { key: "validFrom", label: "生效日期" },
                   { key: "validTo", label: "失效日期" },
                   { key: "dropshipPrice", label: "代发含税价" },

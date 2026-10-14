@@ -5,6 +5,8 @@
 
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import * as React from "react"
 import { useAppForm } from "@/components/form"
 import { CustomerSearchCombobox } from "@/features/entity-selectors/components/customer-search-combobox"
@@ -171,7 +173,8 @@ export const BookCreateDialog = ({
                         children={(field) => (
                             <div className="grid gap-1.5">
                                 <Label htmlFor="sales-selection-create-customer">
-                                    客户 *
+                                    客户
+                                    <RequiredMark />
                                 </Label>
                                 <CustomerSearchCombobox
                                     id="sales-selection-create-customer"
@@ -304,7 +307,8 @@ export const BookCreateDialog = ({
                             selectionForm === "PACKAGE" ? (
                                 <div className="grid gap-2">
                                     <span className="text-sm font-medium">
-                                        档位规则 *
+                                        档位规则
+                                        <RequiredMark />
                                     </span>
                                     <form.AppField
                                         name="tiers"

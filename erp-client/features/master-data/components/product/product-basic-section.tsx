@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import * as React from "react"
 
 import {
@@ -63,7 +65,10 @@ function ProductBasicSection({
         >
             <div className="grid gap-5 sm:grid-cols-12">
                 <div className="space-y-1.5 sm:col-span-12">
-                    <Label htmlFor={`${prefix}-name`}>商品名称 *</Label>
+                    <Label htmlFor={`${prefix}-name`}>
+                        商品名称
+                        <RequiredMark />
+                    </Label>
                     <Input
                         id={`${prefix}-name`}
                         value={name}
@@ -73,7 +78,8 @@ function ProductBasicSection({
                 </div>
                 <div className="space-y-1.5 sm:col-span-6 xl:col-span-3">
                     <Label htmlFor={`${prefix}-kind-combobox`}>
-                        商品类型 *
+                        商品类型
+                        <RequiredMark />
                     </Label>
                     <OptionCombobox
                         id={`${prefix}-kind-combobox`}
@@ -94,12 +100,12 @@ function ProductBasicSection({
                         className="w-full"
                     />
                     <p className="text-xs text-muted-foreground">
-                        决定商品业务作用；创建后不可变，也不随分类变化。
+                        创建后不可修改，也不随分类变化。
                     </p>
                 </div>
                 <div className="space-y-1.5 sm:col-span-6 xl:col-span-3">
                     <Label htmlFor={`${prefix}-unit-combobox`}>
-                        {masterDataCopy.fBaseUnit} *
+                        {masterDataCopy.fBaseUnit} <RequiredMark />
                     </Label>
                     <OptionCombobox
                         id={`${prefix}-unit-combobox`}
@@ -130,7 +136,7 @@ function ProductBasicSection({
                 </div>
                 <div className="space-y-1.5 sm:col-span-6 xl:col-span-3">
                     <Label htmlFor={`${prefix}-category-combobox`}>
-                        {masterDataCopy.fCategory} *
+                        {masterDataCopy.fCategory} <RequiredMark />
                     </Label>
                     <CategoryCombobox
                         id={`${prefix}-category-combobox`}
@@ -154,7 +160,7 @@ function ProductBasicSection({
                 </div>
                 <div className="space-y-1.5 sm:col-span-6 xl:col-span-3">
                     <Label htmlFor={`${prefix}-brand-combobox`}>
-                        {masterDataCopy.fBrand} *
+                        {masterDataCopy.fBrand} <RequiredMark />
                     </Label>
                     <BrandCombobox
                         id={`${prefix}-brand-combobox`}

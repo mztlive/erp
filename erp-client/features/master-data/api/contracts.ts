@@ -156,7 +156,6 @@ export type SellableSkuDto = {
     effective_from: string
     effective_to: string | null
     supplier_count: number
-    supply_regions: string[]
     /** 按配送地区筛选且含运费另计时，所选地区内是否有需另付运费才能送到的地方。 */
     delivery_freight_extra?: boolean
     eligibility_as_of: string

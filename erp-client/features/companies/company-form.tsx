@@ -122,6 +122,7 @@ export const CompanyForm = ({
                                 disabled={locked}
                                 id="company-form-legal-name"
                                 label="公司全称"
+                                required
                             />
                         )}
                     </form.AppField>

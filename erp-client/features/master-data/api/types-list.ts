@@ -111,7 +111,6 @@ export type MasterDataListItem = Readonly<{
         marketPrice?: string
         supplierCodes?: readonly string[]
         supplierCount: number
-        supplyRegions: readonly string[]
         /** 按配送地区筛选且含运费另计时，所选地区内有需另付运费才能送到的地方。 */
         deliveryFreightExtra: boolean
         eligibilityAsOf: string
@@ -132,8 +131,6 @@ export type MasterDataListQuery = Readonly<{
     productCategoryId?: string
     productBrandId?: string
     productSupplierId?: string
-    /** 公司商品池：可供区域精确匹配。 */
-    supplyRegion?: string
     /** 公司商品池：配送地区代码（省、市或区县）。 */
     deliveryRegion?: string
     /** 公司商品池：配送地区范围，默认全部可送。 */
@@ -164,7 +161,7 @@ export type MasterDataListQuery = Readonly<{
     include_descendants?: boolean
 }>
 
-export type SellableSupplyPreset = "single-supplier" | "nationwide"
+export type SellableSupplyPreset = "single-supplier"
 
 export type MasterDataListResult = Readonly<{
     resource: MasterDataResource

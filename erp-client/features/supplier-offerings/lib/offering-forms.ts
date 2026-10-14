@@ -53,12 +53,8 @@ const termsSchema = {
         "起订量必须大于 0",
     ),
     inputTaxPercentage: taxPercentage,
-    supplyRegionText: z.string().trim().min(1, "请填写可供区域"),
     validFrom: z.string().trim().min(1, "请选择生效日期"),
     validTo: z.string(),
-    dropshipExpress: z.string(),
-    freightAmount: z.union([z.literal(""), decimal]),
-    serviceFeeAmount: z.union([z.literal(""), decimal]),
 }
 
 export const createSchema = z.object({
@@ -102,13 +98,6 @@ export function idempotencyKey(prefix: string): string {
     return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-export function splitValues(value: string): readonly string[] {
-    return value
-        .split(/[，,、]/)
-        .map((item) => item.trim())
-        .filter(Boolean)
-}
-
 export function rateFromPercentage(value: string): string {
     return divideFixed(value, "100", {
         numeratorMaxScale: 4,
@@ -131,7 +120,7 @@ export function percentageFromRate(value?: string | null): string {
 export const errorMessage = (error: unknown, fallback: string): string =>
     getErrorMessage(error, fallback)
 
-function optionalAmount(value?: string | null): string | null {
+function optionalText(value?: string | null): string | null {
     const trimmed = value?.trim()
     return trimmed ? trimmed : null
 }
@@ -159,7 +148,6 @@ export function buildStatusRevisionInput(
         !bulk ||
         !tax ||
         !moq ||
-        offering.supply_region.length === 0 ||
         !validFrom
     ) {
         return null
@@ -172,13 +160,9 @@ export function buildStatusRevisionInput(
             bulk_supply_price_gross: bulk,
             input_tax_rate: tax,
             bulk_minimum_order_quantity: moq,
-            supply_region: offering.supply_region,
             product_capabilities: offering.product_capabilities,
             valid_from: validFrom,
-            valid_to: optionalAmount(offering.valid_to),
-            dropship_express: optionalAmount(offering.dropship_express),
-            freight_amount: optionalAmount(offering.freight_amount),
-            service_fee_amount: optionalAmount(offering.service_fee_amount),
+            valid_to: optionalText(offering.valid_to),
         },
         status,
         change_reason: changeReason.trim(),

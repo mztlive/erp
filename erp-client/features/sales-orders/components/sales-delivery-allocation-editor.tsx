@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import { useRef } from "react"
 import { PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -182,7 +184,10 @@ function DeliveryAllocationGroup({
                         className={`${addressGrid} hidden border-b border-grid bg-muted/30 px-3 py-2 text-xs text-muted-foreground @3xl/delivery:grid`}
                     >
                         {labels.map(([name, label]) => (
-                            <span key={name}>{label}</span>
+                            <span key={name}>
+                                {label}
+                                <RequiredMark />
+                            </span>
                         ))}
                         <span className="text-center">操作</span>
                     </div>
@@ -205,6 +210,7 @@ function DeliveryAllocationGroup({
                                                     <DeliveryRegionField
                                                         id={`${prefix}-${addressKey}-region`}
                                                         label={label}
+                                                        required
                                                         labelClassName="@3xl/delivery:sr-only"
                                                         className="sm:col-span-2 @3xl/delivery:col-span-1"
                                                         value={
@@ -255,6 +261,7 @@ function DeliveryAllocationGroup({
                                                     <field.TextField
                                                         id={`${prefix}-${addressKey}-${name}`}
                                                         label={label}
+                                                        required
                                                         className={`min-w-0 gap-2 @3xl/delivery:[&>[data-slot=field-label]]:sr-only ${name === "address" ? "sm:col-span-2 @3xl/delivery:col-span-1" : ""}`}
                                                         inputClassName={
                                                             name === "quantity"

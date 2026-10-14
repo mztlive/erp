@@ -11,7 +11,6 @@ export const SELLABLE_EXCEL_HEADERS = [
     "市场价（含税）",
     "集采起订量",
     "供应商编号",
-    "可供区域",
     "供应保障",
     "商品类型",
     "基础单位",
@@ -30,7 +29,6 @@ export type SellableExcelRow = Readonly<{
     marketPrice: string
     bulkMinQuantity: string
     supplierCodes: string
-    supplyRegions: string
     supplierLabel: string
     productKind: string
     baseUnit: string
@@ -58,10 +56,6 @@ export function toSellableExcelRow(row: MasterDataListItem): SellableExcelRow {
         marketPrice: item?.marketPrice ?? "—",
         bulkMinQuantity: item?.bulkMinQuantity ?? "—",
         supplierCodes: item?.supplierCodes?.join("、") || "—",
-        supplyRegions:
-            item && item.supplyRegions.length > 0
-                ? item.supplyRegions.join("、")
-                : "未标注",
         supplierLabel: sellableSupplierLabel(item?.supplierCount ?? 0),
         productKind: item?.productKindLabel ?? "—",
         baseUnit: item?.baseUnit ?? "—",

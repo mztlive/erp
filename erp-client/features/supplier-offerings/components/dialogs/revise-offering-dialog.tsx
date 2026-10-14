@@ -24,7 +24,6 @@ import {
     percentageFromRate,
     rateFromPercentage,
     reviseSchema,
-    splitValues,
 } from "@/features/supplier-offerings/lib/offering-forms"
 import type { SupplierOfferingView } from "@/features/supplier-offerings/types"
 import { OFFERING_STATUS_LABELS } from "@/features/supplier-offerings/types"
@@ -44,12 +43,8 @@ export function ReviseOfferingDialog({
             bulkPrice: offering.bulk_supply_price_gross ?? "",
             minimumQuantity: offering.bulk_minimum_order_quantity ?? "1",
             inputTaxPercentage: percentageFromRate(offering.input_tax_rate),
-            supplyRegionText: offering.supply_region.join("，"),
             validFrom: offering.valid_from ?? "",
             validTo: offering.valid_to ?? "",
-            dropshipExpress: offering.dropship_express ?? "",
-            freightAmount: offering.freight_amount ?? "",
-            serviceFeeAmount: offering.service_fee_amount ?? "",
             status: offering.status,
             changeReason: "调整供给条款",
         },
@@ -68,14 +63,9 @@ export function ReviseOfferingDialog({
                         ),
                         bulk_minimum_order_quantity:
                             value.minimumQuantity.trim(),
-                        supply_region: splitValues(value.supplyRegionText),
                         product_capabilities: offering.product_capabilities,
                         valid_from: value.validFrom,
                         valid_to: value.validTo || null,
-                        dropship_express: value.dropshipExpress.trim() || null,
-                        freight_amount: value.freightAmount.trim() || null,
-                        service_fee_amount:
-                            value.serviceFeeAmount.trim() || null,
                     },
                     status: value.status,
                     change_reason: value.changeReason.trim(),
@@ -92,7 +82,7 @@ export function ReviseOfferingDialog({
         <Dialog open onOpenChange={onOpenChange}>
             <DialogContent
                 closeButtonId="supplier-offerings-dialog-revise-close"
-                className="w-[calc(100vw-2rem)] gap-4 p-5 sm:max-w-5xl"
+                className="w-[calc(100vw-2rem)] gap-4 p-5 sm:max-w-4xl"
             >
                 <DialogHeader>
                     <DialogTitle>修订供给条款</DialogTitle>
@@ -169,21 +159,9 @@ export function ReviseOfferingDialog({
 
                             <FieldSet className="gap-4 rounded-lg border p-4">
                                 <FieldLegend variant="label">
-                                    供应范围与时效
+                                    有效期与状态
                                 </FieldLegend>
                                 <div className="grid gap-3 sm:grid-cols-2">
-                                    <form.AppField name="supplyRegionText">
-                                        {(field) => (
-                                            <div className="sm:col-span-2">
-                                                <field.TextField
-                                                    id="supplier-offerings-dialog-revise-supply-region"
-                                                    label="可供区域"
-                                                    required
-                                                    description="多个区域使用逗号分隔"
-                                                />
-                                            </div>
-                                        )}
-                                    </form.AppField>
                                     <form.AppField name="validFrom">
                                         {(field) => (
                                             <field.DateField
@@ -198,51 +176,10 @@ export function ReviseOfferingDialog({
                                             <field.DateField
                                                 id="supplier-offerings-dialog-revise-valid-to"
                                                 label="失效日期"
+                                                description="不填为长期有效"
                                             />
                                         )}
                                     </form.AppField>
-                                </div>
-                            </FieldSet>
-                        </div>
-
-                        <div className="grid gap-4 lg:grid-cols-2">
-                            <FieldSet className="gap-4 rounded-lg border p-4">
-                                <FieldLegend variant="label">
-                                    物流与费用
-                                </FieldLegend>
-                                <div className="grid gap-3 sm:grid-cols-2">
-                                    <form.AppField name="dropshipExpress">
-                                        {(field) => (
-                                            <field.TextField
-                                                id="supplier-offerings-dialog-revise-dropship-express"
-                                                label="一件代发快递说明"
-                                            />
-                                        )}
-                                    </form.AppField>
-                                    <form.AppField name="freightAmount">
-                                        {(field) => (
-                                            <field.TextField
-                                                id="supplier-offerings-dialog-revise-freight-amount"
-                                                label="运费"
-                                            />
-                                        )}
-                                    </form.AppField>
-                                    <form.AppField name="serviceFeeAmount">
-                                        {(field) => (
-                                            <field.TextField
-                                                id="supplier-offerings-dialog-revise-service-fee-amount"
-                                                label="服务费"
-                                            />
-                                        )}
-                                    </form.AppField>
-                                </div>
-                            </FieldSet>
-
-                            <FieldSet className="gap-4 rounded-lg border p-4">
-                                <FieldLegend variant="label">
-                                    状态与说明
-                                </FieldLegend>
-                                <div className="grid gap-3 sm:grid-cols-2">
                                     <form.AppField name="status">
                                         {(field) => (
                                             <field.SelectField

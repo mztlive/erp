@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import { MoneyValue } from "@/components/business"
 import { ChangeOrderSection } from "@/components/business/change-order-section"
 import { Badge } from "@/components/ui/badge"
@@ -93,9 +95,18 @@ export function PurchaseChangeLineItems({
                                 )}
                             >
                                 <span>商品</span>
-                                <span>数量</span>
-                                <span>含税采购单价</span>
-                                <span>进项税率</span>
+                                <span>
+                                    数量
+                                    <RequiredMark />
+                                </span>
+                                <span>
+                                    含税采购单价
+                                    <RequiredMark />
+                                </span>
+                                <span>
+                                    进项税率
+                                    <RequiredMark />
+                                </span>
                                 <span className="text-right">小计</span>
                                 <span />
                             </div>

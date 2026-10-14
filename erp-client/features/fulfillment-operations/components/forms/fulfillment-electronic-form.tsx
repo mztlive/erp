@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import { OptionCombobox } from "@/components/business"
 import { DateTimeLocalPicker } from "@/components/ui/date-picker"
 import { FileUpload } from "@/components/ui/file-upload"
@@ -51,6 +53,7 @@ export function FulfillmentElectronicForm({
                 <div className="space-y-1.5">
                     <Label htmlFor="fulfillment-operations-electronic-form-recipient">
                         交付对象
+                        <RequiredMark />
                     </Label>
                     <Input
                         id="fulfillment-operations-electronic-form-recipient"
@@ -67,6 +70,7 @@ export function FulfillmentElectronicForm({
                 <div className="space-y-1.5">
                     <Label htmlFor="fulfillment-operations-electronic-form-occurred-at">
                         实际时间
+                        <RequiredMark />
                     </Label>
                     <DateTimeLocalPicker
                         id="fulfillment-operations-electronic-form-occurred-at"
@@ -81,6 +85,7 @@ export function FulfillmentElectronicForm({
                 <div className="space-y-1.5">
                     <Label htmlFor="fulfillment-operations-electronic-form-result">
                         履约结果
+                        <RequiredMark />
                     </Label>
                     <OptionCombobox
                         id="fulfillment-operations-electronic-form-result"
@@ -139,6 +144,7 @@ export function FulfillmentElectronicForm({
                                 htmlFor={`fulfillment-operations-electronic-form-quantity-${toAutomationIdSegment(line.salesOrderLineId)}`}
                             >
                                 交付数量
+                                <RequiredMark />
                             </Label>
                             <Input
                                 id={`fulfillment-operations-electronic-form-quantity-${toAutomationIdSegment(line.salesOrderLineId)}`}

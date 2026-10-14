@@ -102,16 +102,8 @@ pub struct SupplierOfferingView {
     pub input_tax_rate: Option<String>,
     /// 集采起订量。
     pub bulk_minimum_order_quantity: Option<String>,
-    /// 可供区域。
-    pub supply_region: Vec<String>,
     /// 商品级能力。
     pub product_capabilities: Vec<String>,
-    /// 一件代发快递说明。
-    pub dropship_express: Option<String>,
-    /// 运费。
-    pub freight_amount: Option<String>,
-    /// 服务费。
-    pub service_fee_amount: Option<String>,
     /// 生效日期。
     pub valid_from: Option<String>,
     /// 失效日期。
@@ -196,11 +188,7 @@ impl SupplierOfferingView {
             bulk_supply_price_net: None,
             input_tax_rate: None,
             bulk_minimum_order_quantity: None,
-            supply_region: Vec::new(),
             product_capabilities: Vec::new(),
-            dropship_express: None,
-            freight_amount: None,
-            service_fee_amount: None,
             valid_from: None,
             valid_to: None,
             availability_status: None,
@@ -234,22 +222,18 @@ impl SupplierOfferingView {
         self.bulk_supply_price_net = Some(revision.bulk_supply_price_net.to_string());
         self.input_tax_rate = Some(revision.input_tax_rate.to_string());
         self.bulk_minimum_order_quantity = Some(revision.bulk_minimum_order_quantity.to_string());
-        self.supply_region = revision.supply_region;
         self.product_capabilities = revision.product_capabilities;
-        self.dropship_express = revision.dropship_express;
-        self.freight_amount = revision.freight_amount.map(|value| value.to_string());
-        self.service_fee_amount = revision.service_fee_amount.map(|value| value.to_string());
         self.valid_from = Some(revision.valid_from.to_string());
         self.valid_to = revision.valid_to.map(|value| value.to_string());
     }
 
-    /// 清除采购成本、税率和费用字段。
+    /// 清除采购成本与税率字段。
     ///
     /// # 参数
     /// 无。
     ///
     /// # 返回
-    /// 无返回值。原地清空含税价、不含税价、进项税率、运费和服务费。
+    /// 无返回值。原地清空含税价、不含税价与进项税率。
     ///
     /// # 错误
     /// 不返回错误。
@@ -259,8 +243,6 @@ impl SupplierOfferingView {
         self.bulk_supply_price_gross = None;
         self.bulk_supply_price_net = None;
         self.input_tax_rate = None;
-        self.freight_amount = None;
-        self.service_fee_amount = None;
     }
 }
 
@@ -392,11 +374,7 @@ mod tests {
             bulk_supply_price_net: Some("7".to_string()),
             input_tax_rate: Some("0.13".to_string()),
             bulk_minimum_order_quantity: Some("10".to_string()),
-            supply_region: vec![],
             product_capabilities: vec![],
-            dropship_express: None,
-            freight_amount: Some("1".to_string()),
-            service_fee_amount: None,
             valid_from: None,
             valid_to: None,
             availability_status: None,

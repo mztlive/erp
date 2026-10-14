@@ -505,7 +505,6 @@ async function setupCatalog(token: string, prefix: string) {
                     bulk_supply_price_gross: "7.00",
                     input_tax_rate: "0.09",
                     bulk_minimum_order_quantity: "1",
-                    supply_region: ["全国"],
                     product_capabilities: [],
                     valid_from: today,
                 },

@@ -126,30 +126,14 @@ export function OfferingTerms({
                             {deliveryTemplateName}
                         </OfferingField>
                     ) : null}
-                    <OfferingField label="可供区域">
-                        {terms.supply_region.join("、") || "未标注"}
-                    </OfferingField>
                     <OfferingField label="条款有效期">
                         <span className="num">{offeringValidity(terms)}</span>
                     </OfferingField>
-                    <OfferingField label="快递说明">
-                        {terms.dropship_express || "未标注"}
-                    </OfferingField>
-                    {canViewCosts ? (
-                        <>
-                            <OfferingField label="运费">
-                                <MoneyValue value={terms.freight_amount} />
-                            </OfferingField>
-                            <OfferingField label="服务费">
-                                <MoneyValue value={terms.service_fee_amount} />
-                            </OfferingField>
-                        </>
-                    ) : null}
-                    {!compact ? (
+                    {!compact && terms.product_capabilities.length > 0 ? (
                         <OfferingField label="商品能力">
                             {terms.product_capabilities
                                 .map(capabilityLabel)
-                                .join("、") || "未标注"}
+                                .join("、")}
                         </OfferingField>
                     ) : null}
                 </dl>
@@ -159,7 +143,7 @@ export function OfferingTerms({
 }
 
 /** 已知能力以业务名称展示，未知编码不直接上屏。 */
-function capabilityLabel(value: string) {
+export function capabilityLabel(value: string) {
     const labels: Record<string, string> = {
         physical: "实物商品",
         virtual: "虚拟商品",

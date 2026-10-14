@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
 
@@ -146,6 +148,7 @@ export function SalesOrderHandoverButton({
                                 className="text-sm font-medium"
                             >
                                 接收人（只列出合格有效人员）
+                                <RequiredMark />
                             </label>
                             <NativeSelect
                                 id={`sales-orders-detail-handover-target-${orderSegment}`}
@@ -188,6 +191,7 @@ export function SalesOrderHandoverButton({
                                 className="text-sm font-medium"
                             >
                                 交接原因
+                                <RequiredMark />
                             </label>
                             <Textarea
                                 id={`sales-orders-detail-handover-reason-${orderSegment}`}

@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import * as React from "react"
 import { PlusIcon, Trash2Icon, TriangleAlertIcon } from "lucide-react"
 
@@ -47,6 +49,7 @@ interface EditableLineItemColumn<TItem> {
     /** 同一张表内稳定且唯一的列标识。 */
     readonly id: string
     readonly header: React.ReactNode
+    readonly required?: boolean
     /** 只读态内容。 */
     readonly renderValue: (
         context: EditableLineItemContext<TItem>,
@@ -260,6 +263,9 @@ function EditableLineItemTable<TItem>({
                                     )}
                                 >
                                     {column.header}
+                                    {mode === "edit" && column.required ? (
+                                        <RequiredMark />
+                                    ) : null}
                                 </TableHead>
                             ))}
                             {hasRowActions ? (

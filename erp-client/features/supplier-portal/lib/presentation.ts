@@ -39,13 +39,9 @@ export function offeringTerms(offering: PortalOffering): PortalTerms {
             input_tax_rate: offering.input_tax_rate ?? "",
             bulk_minimum_order_quantity:
                 offering.bulk_minimum_order_quantity ?? "",
-            supply_region: offering.supply_region ?? [],
             product_capabilities: offering.product_capabilities ?? [],
             valid_from: offering.valid_from ?? "",
             valid_to: offering.valid_to ?? null,
-            freight_amount: offering.freight_amount ?? null,
-            service_fee_amount: offering.service_fee_amount ?? null,
-            dropship_express: offering.dropship_express ?? null,
         }
     )
 }

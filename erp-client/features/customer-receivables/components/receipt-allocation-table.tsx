@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import { useState } from "react"
 
 import {
@@ -135,6 +137,7 @@ export function ReceiptAllocationTable({
                                 <TableHead scope="col">到期日</TableHead>
                                 <TableHead scope="col" data-align="end">
                                     本次核销金额
+                                    <RequiredMark />
                                 </TableHead>
                             </TableRow>
                         </TableHeader>

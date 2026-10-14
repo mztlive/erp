@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import { useEffect, useRef, useState } from "react"
 import { useStore } from "@tanstack/react-form"
 import { useAppForm, toFieldErrors } from "@/components/form"
@@ -436,6 +438,7 @@ function ContractImportReviewForm({
                                 <Field>
                                     <FieldLabel htmlFor="contract-import-customer">
                                         系统客户
+                                        <RequiredMark />
                                     </FieldLabel>
                                     <CustomerSearchCombobox
                                         id="contract-import-customer"
@@ -579,6 +582,7 @@ function ContractImportReviewForm({
                                     className="font-semibold"
                                 >
                                     我方签约主体
+                                    <RequiredMark />
                                 </FieldLabel>
                                 <CompanySearchCombobox
                                     id="contract-import-company"

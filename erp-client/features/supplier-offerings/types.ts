@@ -34,11 +34,7 @@ export type SupplierOfferingView = Readonly<{
     bulk_supply_price_net?: string | null
     input_tax_rate?: string | null
     bulk_minimum_order_quantity?: string | null
-    supply_region: readonly string[]
     product_capabilities: readonly string[]
-    dropship_express?: string | null
-    freight_amount?: string | null
-    service_fee_amount?: string | null
     valid_from?: string | null
     valid_to?: string | null
     availability_status?: AvailabilityStatus | null
@@ -119,13 +115,9 @@ export type SupplierOfferingTermsInput = Readonly<{
     bulk_supply_price_gross: string
     input_tax_rate: string
     bulk_minimum_order_quantity: string
-    supply_region: readonly string[]
     product_capabilities: readonly string[]
     valid_from: string
     valid_to?: string | null
-    dropship_express?: string | null
-    freight_amount?: string | null
-    service_fee_amount?: string | null
 }>
 
 export type CreateSupplierOfferingInput = Readonly<{
@@ -136,6 +128,8 @@ export type CreateSupplierOfferingInput = Readonly<{
     source_type: OfferingSourceType
     source_connection_id?: string | null
     terms: SupplierOfferingTermsInput
+    /** 配送模板；省略时跟随供应商默认模板。 */
+    delivery_template_id?: string | null
     availability_status: AvailabilityStatus
     available_quantity?: string | null
     change_reason: string
@@ -218,11 +212,7 @@ export type OfferingRevisionView = Pick<
     | "bulk_supply_price_net"
     | "input_tax_rate"
     | "bulk_minimum_order_quantity"
-    | "supply_region"
     | "product_capabilities"
-    | "dropship_express"
-    | "freight_amount"
-    | "service_fee_amount"
     | "valid_from"
     | "valid_to"
 > &

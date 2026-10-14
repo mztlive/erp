@@ -206,7 +206,6 @@ async function createOfferingInput(adminToken: string, prefix: string) {
                 bulk_supply_price_gross: "19.00",
                 input_tax_rate: "0.09",
                 bulk_minimum_order_quantity: "5",
-                supply_region: ["全国"],
                 product_capabilities: [],
                 valid_from: businessDate(),
             },

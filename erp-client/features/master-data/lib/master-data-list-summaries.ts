@@ -49,7 +49,6 @@ export function buildSellableFilterSnapshotLabel(input: {
     productPriceKind?: PriceFilterKind
     productSalesPriceMin?: string
     productSalesPriceMax?: string
-    supplyRegion?: string
     selectedCategoryLabel?: string
     selectedBrandLabel?: string
     selectedSupplierLabel?: string
@@ -71,7 +70,6 @@ export function buildSellableFilterSnapshotLabel(input: {
         ...(input.selectedSupplierLabel
             ? [`供应商=${input.selectedSupplierLabel}`]
             : []),
-        ...(input.supplyRegion ? [`可供区域=${input.supplyRegion}`] : []),
         ...(input.deliveryLabel ? [`配送地区=${input.deliveryLabel}`] : []),
         ...(input.supplyPresetLabel
             ? [`快捷视图=${input.supplyPresetLabel}`]
@@ -171,7 +169,6 @@ export function buildSellableTableDescription(input: {
     productPriceKind?: PriceFilterKind
     productSalesPriceMin?: string
     productSalesPriceMax?: string
-    supplyRegion?: string
     selectedCategoryLabel?: string
     selectedBrandLabel?: string
     selectedSupplierLabel?: string
@@ -194,7 +191,6 @@ export function buildSellableTableDescription(input: {
     if (input.selectedSupplierLabel) {
         active.push(`供应商 ${input.selectedSupplierLabel}`)
     }
-    if (input.supplyRegion) active.push(`区域 ${input.supplyRegion}`)
     if (input.deliveryLabel) active.push(`配送地区 ${input.deliveryLabel}`)
     if (input.supplyPresetLabel) {
         active.push(`快捷视图 ${input.supplyPresetLabel}`)

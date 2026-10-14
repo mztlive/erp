@@ -180,7 +180,7 @@ impl DeliveryTemplateService {
         };
         let mut updated = 0;
         for mut offering in offerings {
-            if template.as_ref().is_some_and(|template| template.supplier_id != offering.supplier_id) {
+            if template.as_ref().is_some_and(|template| !template.belongs_to(&offering.supplier_id)) {
                 return Err(Error::ValidationError("配送模板不属于所选供给的供应商".into()));
             }
             let target =

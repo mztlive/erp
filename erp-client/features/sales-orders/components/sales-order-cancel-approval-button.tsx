@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import * as React from "react"
 import { useRouter } from "next/navigation"
 
@@ -130,6 +132,7 @@ export function SalesOrderCancelApprovalButton({
                             className="text-sm font-medium"
                         >
                             撤回原因
+                            <RequiredMark />
                         </label>
                         <Textarea
                             id={`sales-orders-detail-cancel-reason-${toAutomationIdSegment(order.id)}`}

@@ -26,9 +26,6 @@ pub enum PoolPriceKind {
 /// 与公司商品池列表对齐的筛选条件；不含分页。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct PoolFilterSnapshot {
-    /// 全国可供快捷视图，与其他区域条件同时成立。
-    #[serde(default)]
-    pub nationwide_only: bool,
     /// 关键字。
     pub q: Option<String>,
     /// 商品类型。
@@ -39,8 +36,6 @@ pub struct PoolFilterSnapshot {
     pub brand_id: Option<String>,
     /// 供应商（仅筛选，快照不保存供应商身份到陈列）。
     pub supplier_id: Option<String>,
-    /// 可供区域。
-    pub supply_region: Option<String>,
     /// 去重供应商数量上限。
     pub max_supplier_count: Option<u32>,
     /// 所选价格口径；与上下限一同冻结。
@@ -88,13 +83,11 @@ impl PoolFilterSnapshot {
             .transpose()?;
         let delivery_selected = delivery_region_code.is_some();
         Ok(Self {
-            nationwide_only: self.nationwide_only,
             q: blank_to_none(self.q),
             product_kind: blank_to_none(self.product_kind),
             category_id: blank_to_none(self.category_id),
             brand_id: blank_to_none(self.brand_id),
             supplier_id: blank_to_none(self.supplier_id),
-            supply_region: blank_to_none(self.supply_region),
             max_supplier_count: self.max_supplier_count,
             price_kind: self.price_kind,
             sales_price_min: self.sales_price_min,

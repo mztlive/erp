@@ -19,11 +19,10 @@ import { statusVariant } from "../lib/presentation"
 import { OFFERING_STATUS_LABELS } from "../types"
 import type { OfferingStatusIntent } from "../lib/offering-status"
 import {
-    OfferingAvailability,
-    OfferingIdentity,
-    OfferingLinks,
-} from "../components/offering-context"
-import { OfferingTerms } from "../components/offering-terms"
+    OfferingIdentityCard,
+    OfferingSummary,
+    OfferingTermsCard,
+} from "../components/offering-overview"
 import { OfferingDeliverySection } from "../components/delivery-templates/offering-delivery-section"
 import { OfferingHistory } from "../components/offering-history"
 import { SupplierOfferingRowActions } from "../components/supplier-offering-row-actions"
@@ -80,7 +79,7 @@ export function SupplierOfferingDetailPage({
         <PageScaffold density="compact">
             <div className="min-w-0 space-y-5">
                 <DetailPageHeader
-                    title={`${offering.sku_name || offering.sku_no || "供给资料"} · ${offering.supplier_name || offering.supplier_no || "供应商"}`}
+                    title={offering.sku_name || offering.sku_no || "供给资料"}
                     back={back}
                     titleExtra={
                         <Badge variant={statusVariant(offering.status)}>
@@ -90,14 +89,16 @@ export function SupplierOfferingDetailPage({
                     meta={
                         <>
                             <span>
-                                供应商订货编码：{offering.supplier_sku_code}
+                                {offering.supplier_name ||
+                                    offering.supplier_no ||
+                                    "供应商"}
+                            </span>
+                            <span className="num">
+                                订货编码 {offering.supplier_sku_code}
                             </span>
                             {offering.specification ? (
                                 <span>{offering.specification}</span>
                             ) : null}
-                            <span>
-                                当前条款 v{offering.current_revision_no ?? "—"}
-                            </span>
                         </>
                     }
                     primaryAction={
@@ -126,6 +127,10 @@ export function SupplierOfferingDetailPage({
                         )
                     }
                 />
+                <OfferingSummary
+                    offering={offering}
+                    canViewCosts={canViewCosts}
+                />
                 <Tabs
                     value={section}
                     onValueChange={(value) => {
@@ -153,34 +158,28 @@ export function SupplierOfferingDetailPage({
                             条款历史
                         </TabsTrigger>
                     </TabsList>
-                    <TabsContent value="current" className="min-w-0 p-4 md:p-6">
-                        <div className="grid min-w-0 gap-8 xl:grid-cols-[minmax(0,1fr)_320px]">
-                            <OfferingTerms
-                                terms={offering}
-                                canViewCosts={canViewCosts}
-                            />
-                            <aside className="min-w-0 space-y-6 xl:border-l xl:border-border xl:pl-6">
-                                <OfferingAvailability offering={offering} />
-                                <div className="border-t border-border pt-6">
-                                    <OfferingDeliverySection
-                                        offering={offering}
-                                        canEdit={
-                                            !taskMode &&
-                                            hasPermission(
-                                                account.data?.permissions,
-                                                "supplier_offering:update",
-                                            )
-                                        }
-                                    />
-                                </div>
-                                <div className="border-t border-border pt-6">
-                                    <OfferingIdentity offering={offering} />
-                                </div>
-                                <OfferingLinks
+                    <TabsContent
+                        value="current"
+                        className="min-w-0 bg-muted/20 p-4 md:p-6"
+                    >
+                        <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+                            <div className="min-w-0 space-y-5">
+                                <OfferingDeliverySection
                                     offering={offering}
-                                    idPrefix="supplier-offering-detail-open"
+                                    canEdit={
+                                        !taskMode &&
+                                        hasPermission(
+                                            account.data?.permissions,
+                                            "supplier_offering:update",
+                                        )
+                                    }
                                 />
-                            </aside>
+                                <OfferingTermsCard
+                                    offering={offering}
+                                    canViewCosts={canViewCosts}
+                                />
+                            </div>
+                            <OfferingIdentityCard offering={offering} />
                         </div>
                     </TabsContent>
                     <TabsContent value="history" className="min-w-0 p-4 md:p-6">

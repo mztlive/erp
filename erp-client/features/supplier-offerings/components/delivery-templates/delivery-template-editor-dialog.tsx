@@ -332,6 +332,7 @@ function RuleSetEditor({
                                             <field.SelectField
                                                 id={`${rowId}-term`}
                                                 label={`${title}例外判定`}
+                                                required
                                                 hideLabel
                                                 allowClear={false}
                                                 options={TERM_OPTIONS[mode]}

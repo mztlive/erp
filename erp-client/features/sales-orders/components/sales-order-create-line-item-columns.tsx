@@ -69,6 +69,7 @@ export function buildSalesOrderCreateLineItemColumns(
         {
             id: "item",
             header: "销售项目",
+            required: true,
             renderValue: ({ item }) => item.name,
             renderEditor: ({ rowIndex }) => (
                 <SalesOrderCreateLineSkuEditor
@@ -83,6 +84,7 @@ export function buildSalesOrderCreateLineItemColumns(
         {
             id: "quantity",
             header: "数量 / 单位",
+            required: true,
             numeric: true,
             renderValue: ({ item }) => `${item.quantity} ${item.unit}`,
             renderEditor: ({ rowIndex }) => {
@@ -101,6 +103,7 @@ export function buildSalesOrderCreateLineItemColumns(
                                     <field.TextField
                                         id={`sales-orders-create-line-${toAutomationIdSegment(lineKey)}-quantity`}
                                         label="数量"
+                                        required
                                         hideLabel
                                         type="number"
                                         step="any"
@@ -132,6 +135,7 @@ export function buildSalesOrderCreateLineItemColumns(
         {
             id: "unitPrice",
             header: "含税成交单价",
+            required: true,
             numeric: true,
             align: "end",
             renderValue: ({ item }) => item.unitPriceGross,
@@ -151,6 +155,7 @@ export function buildSalesOrderCreateLineItemColumns(
                   {
                       id: "faceValue",
                       header: "面值",
+                      required: true,
                       numeric: true,
                       align: "end",
                       renderValue: ({ item }) => item.faceValue || "—",
@@ -166,6 +171,7 @@ export function buildSalesOrderCreateLineItemColumns(
                                           <field.TextField
                                               id={`sales-orders-create-line-${toAutomationIdSegment(lineKey)}-face-value`}
                                               label="面值"
+                                              required
                                               hideLabel
                                               type="number"
                                               placeholder="0.00"
@@ -215,6 +221,7 @@ export function buildSalesOrderCreateLineItemColumns(
                   {
                       id: "cardForm",
                       header: "卡形态",
+                      required: true,
                       renderValue: ({ item }) => item.cardForm || "—",
                       renderEditor: ({ rowIndex }) => {
                           const lineKey = values.lineItems[rowIndex]?.rowKey
@@ -228,6 +235,7 @@ export function buildSalesOrderCreateLineItemColumns(
                                           <field.SelectField
                                               id={`sales-orders-create-line-${toAutomationIdSegment(lineKey)}-card-form`}
                                               label="卡形态"
+                                              required
                                               hideLabel
                                               options={CARD_FORM_OPTIONS}
                                               allowClear={false}
@@ -245,6 +253,7 @@ export function buildSalesOrderCreateLineItemColumns(
                   {
                       id: "fulfillment",
                       header: "承诺交付日",
+                      required: true,
                       renderValue: ({ item }) => item.dueDate || "—",
                       renderEditor: ({ rowIndex }) => {
                           const lineKey = values.lineItems[rowIndex]?.rowKey
@@ -258,6 +267,7 @@ export function buildSalesOrderCreateLineItemColumns(
                                           <field.DateField
                                               id={`sales-orders-create-line-${toAutomationIdSegment(lineKey)}-due-date`}
                                               label="承诺交付日"
+                                              required
                                               size="default"
                                               hideLabel
                                           />

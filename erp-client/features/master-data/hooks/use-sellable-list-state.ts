@@ -35,7 +35,6 @@ export function useSellableListState(
             productKind: filters.productKind,
             productCategoryId: filters.productCategoryId,
             productBrandId: filters.productBrandId,
-            supplyRegion: filters.supplyRegion,
             deliveryRegion: filters.deliveryRegion,
             deliveryExtent: filters.deliveryExtent,
             includeFreightExtra: filters.includeFreightExtra,
@@ -48,7 +47,6 @@ export function useSellableListState(
             filters.productKind,
             filters.productCategoryId,
             filters.productBrandId,
-            filters.supplyRegion,
             filters.deliveryRegion,
             filters.deliveryExtent,
             filters.includeFreightExtra,
@@ -129,12 +127,6 @@ export function useSellableListState(
                 label: `品牌：${selectedBrandLabel}`,
             })
         }
-        if (filters.supplyRegion) {
-            chips.push({
-                key: "supplyRegion",
-                label: `可供区域：${filters.supplyRegion}`,
-            })
-        }
         if (deliveryLabel) {
             chips.push({
                 key: "deliveryRegion",
@@ -159,7 +151,6 @@ export function useSellableListState(
         filters.productPriceKind,
         filters.productSalesPriceMin,
         filters.q,
-        filters.supplyRegion,
         selectedBrandLabel,
         selectedCategoryLabel,
     ])
@@ -172,7 +163,6 @@ export function useSellableListState(
                 productPriceKind: filters.productPriceKind,
                 productSalesPriceMin: filters.productSalesPriceMin,
                 productSalesPriceMax: filters.productSalesPriceMax,
-                supplyRegion: filters.supplyRegion,
                 deliveryLabel,
                 selectedCategoryLabel,
                 selectedBrandLabel,
@@ -184,7 +174,6 @@ export function useSellableListState(
             filters.productPriceKind,
             filters.productSalesPriceMin,
             filters.q,
-            filters.supplyRegion,
             selectedBrandLabel,
             selectedCategoryLabel,
         ],
@@ -197,7 +186,6 @@ export function useSellableListState(
                 productPriceKind: filters.productPriceKind,
                 productSalesPriceMin: filters.productSalesPriceMin,
                 productSalesPriceMax: filters.productSalesPriceMax,
-                supplyRegion: filters.supplyRegion,
                 deliveryLabel,
                 selectedCategoryLabel,
                 selectedBrandLabel,
@@ -210,7 +198,6 @@ export function useSellableListState(
             filters.productPriceKind,
             filters.productSalesPriceMin,
             filters.q,
-            filters.supplyRegion,
             list.total,
             selectedBrandLabel,
             selectedCategoryLabel,
@@ -226,7 +213,6 @@ export function useSellableListState(
                 productKind: filters.productKind,
                 productCategoryId: filters.productCategoryId,
                 productBrandId: filters.productBrandId,
-                supplyRegion: filters.supplyRegion,
                 deliveryRegion: filters.deliveryRegion,
                 deliveryExtent: filters.deliveryExtent,
                 includeFreightExtra: filters.includeFreightExtra,

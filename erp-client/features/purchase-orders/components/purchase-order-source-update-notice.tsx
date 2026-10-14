@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import * as React from "react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -264,6 +266,7 @@ function MaintainSourceButton({
                             className="text-sm font-medium"
                         >
                             无法调整的原因
+                            <RequiredMark />
                         </label>
                         <Textarea
                             id={reasonId}

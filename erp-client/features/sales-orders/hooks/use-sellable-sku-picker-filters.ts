@@ -22,7 +22,6 @@ export function useSellableSkuPickerFilters() {
         productKind,
         productCategoryId,
         productBrandId,
-        supplyRegion,
         productPriceKind = "dropship",
         productSalesPriceMin,
         productSalesPriceMax,
@@ -38,7 +37,6 @@ export function useSellableSkuPickerFilters() {
         productKind ||
         productCategoryId ||
         productBrandId ||
-        supplyRegion ||
         productSalesPriceMin ||
         productSalesPriceMax,
     )
@@ -56,7 +54,6 @@ export function useSellableSkuPickerFilters() {
             productPriceKindDraft: productPriceKind,
             productSalesPriceMinDraft: productSalesPriceMin ?? "",
             productSalesPriceMaxDraft: productSalesPriceMax ?? "",
-            supplyRegionDraft: supplyRegion ?? "",
         },
         onSubmit: ({ value }) => {
             const minimum = value.productSalesPriceMinDraft.trim()
@@ -75,7 +72,6 @@ export function useSellableSkuPickerFilters() {
                         : value.productKindDraft,
                 productCategoryId: value.productCategoryIdDraft ?? undefined,
                 productBrandId: value.productBrandIdDraft ?? undefined,
-                supplyRegion: value.supplyRegionDraft.trim() || undefined,
                 productPriceKind:
                     minimum || maximum
                         ? value.productPriceKindDraft
@@ -95,7 +91,6 @@ export function useSellableSkuPickerFilters() {
         productPriceKindDraft,
         productSalesPriceMinDraft,
         productSalesPriceMaxDraft,
-        supplyRegionDraft,
     } = useStore(form.store, (state) => state.values)
     const setSearchDraft = React.useCallback(
         (value: string) => form.setFieldValue("searchDraft", value),
@@ -131,10 +126,6 @@ export function useSellableSkuPickerFilters() {
             form.setFieldValue("productSalesPriceMaxDraft", value),
         [form],
     )
-    const setSupplyRegionDraft = React.useCallback(
-        (value: string) => form.setFieldValue("supplyRegionDraft", value),
-        [form],
-    )
 
     const applySellableFilters = React.useCallback(() => {
         void form.handleSubmit()
@@ -147,7 +138,6 @@ export function useSellableSkuPickerFilters() {
             if (key === "productKind") setProductKindDraft("all")
             if (key === "productCategoryId") setProductCategoryIdDraft(null)
             if (key === "productBrandId") setProductBrandIdDraft(null)
-            if (key === "supplyRegion") setSupplyRegionDraft("")
             if (key === "salesPrice") {
                 setProductPriceKindDraft("dropship")
                 setProductSalesPriceMinDraft("")
@@ -176,7 +166,6 @@ export function useSellableSkuPickerFilters() {
             setProductPriceKindDraft,
             setProductSalesPriceMinDraft,
             setProductSalesPriceMaxDraft,
-            setSupplyRegionDraft,
         ],
     )
 
@@ -186,20 +175,17 @@ export function useSellableSkuPickerFilters() {
         setProductPriceKindDraft("dropship")
         setProductSalesPriceMinDraft("")
         setProductSalesPriceMaxDraft("")
-        setSupplyRegionDraft("")
         setProductSalesPriceError(null)
     }, [
         setProductBrandIdDraft,
         setProductPriceKindDraft,
         setProductSalesPriceMinDraft,
         setProductSalesPriceMaxDraft,
-        setSupplyRegionDraft,
     ])
 
     /** 取消、外点和 Esc 只恢复低频草稿，保留搜索、商品类型和分类。 */
     const cancelMoreFilters = React.useCallback(() => {
         setProductBrandIdDraft(productBrandId ?? null)
-        setSupplyRegionDraft(supplyRegion ?? "")
         setProductPriceKindDraft(productPriceKind)
         setProductSalesPriceMinDraft(productSalesPriceMin ?? "")
         setProductSalesPriceMaxDraft(productSalesPriceMax ?? "")
@@ -214,8 +200,6 @@ export function useSellableSkuPickerFilters() {
         setProductSalesPriceMaxDraft,
         setProductPriceKindDraft,
         setProductSalesPriceMinDraft,
-        setSupplyRegionDraft,
-        supplyRegion,
     ])
 
     const hasPendingChanges =
@@ -223,7 +207,6 @@ export function useSellableSkuPickerFilters() {
         productKindDraft !== (productKind ?? "all") ||
         productCategoryIdDraft !== (productCategoryId ?? null) ||
         productBrandIdDraft !== (productBrandId ?? null) ||
-        supplyRegionDraft.trim() !== (supplyRegion ?? "") ||
         (Boolean(
             productSalesPriceMinDraft.trim() ||
             productSalesPriceMaxDraft.trim(),
@@ -240,7 +223,6 @@ export function useSellableSkuPickerFilters() {
         setProductPriceKindDraft("dropship")
         setProductSalesPriceMinDraft("")
         setProductSalesPriceMaxDraft("")
-        setSupplyRegionDraft("")
         setProductSalesPriceError(null)
         setSellableFilterPanelOpen(false)
         setApplied(EMPTY_FILTERS)
@@ -254,7 +236,6 @@ export function useSellableSkuPickerFilters() {
         setProductPriceKindDraft,
         setProductSalesPriceMinDraft,
         setProductSalesPriceMaxDraft,
-        setSupplyRegionDraft,
     ])
 
     return {
@@ -263,7 +244,6 @@ export function useSellableSkuPickerFilters() {
         productKind,
         productCategoryId,
         productBrandId,
-        supplyRegion,
         productPriceKind,
         productSalesPriceMin,
         productSalesPriceMax,
@@ -285,8 +265,6 @@ export function useSellableSkuPickerFilters() {
         setProductSalesPriceMinDraft,
         productSalesPriceMaxDraft,
         setProductSalesPriceMaxDraft,
-        supplyRegionDraft,
-        setSupplyRegionDraft,
         productSalesPriceError,
         setProductSalesPriceError,
         pagination,

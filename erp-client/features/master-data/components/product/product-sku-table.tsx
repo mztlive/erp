@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import { useChangeConfirmation } from "../../hooks/use-change-confirmation"
 
 import { Label } from "@/components/ui/label"
@@ -20,20 +22,17 @@ import {
     MoneyInput,
     SkuMainImageField,
 } from "@/features/master-data/components/product/product-editor-media"
-import { SkuSupplierCell } from "@/features/master-data/components/product/product-sku-supplier-cell"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type {
     ProductFields,
     ProductSkuFields,
     ProductSpecDimension,
 } from "@/features/master-data/types"
-import type { FixedSku } from "@/features/supplier-offerings/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
 type SkuRowProps = {
     sku: ProductSkuFields
     index: number
-    isCreate: boolean
     canRevise: boolean
     name: string
     fields: ProductFields
@@ -44,17 +43,11 @@ type SkuRowProps = {
         skuId: string | undefined,
         trigger: HTMLButtonElement,
     ) => void
-    supplierCount: number
-    supplierCountsPending: boolean
-    supplierCountsError: unknown
-    onRegisterSupply: (sku: FixedSku) => void
-    stableId: string
 }
 
 function SkuRow({
     sku,
     index,
-    isCreate,
     canRevise,
     name,
     fields,
@@ -62,11 +55,6 @@ function SkuRow({
     updateSku,
     rememberSkuFile,
     onOpenInventory,
-    supplierCount,
-    supplierCountsPending,
-    supplierCountsError,
-    onRegisterSupply,
-    stableId,
 }: SkuRowProps) {
     const skuSegment = toAutomationIdSegment(
         sku.skuId || sku.specificationSignature || sku.skuNo || "default",
@@ -86,7 +74,7 @@ function SkuRow({
         : "默认规格"
     return (
         <TableRow>
-            <TableCell className="sticky left-0 z-10 min-w-64 max-w-80 whitespace-normal bg-card align-middle">
+            <TableCell className="sticky left-0 z-10 min-w-56 max-w-80 whitespace-normal bg-card align-middle">
                 <div className="flex items-center gap-3">
                     <div
                         className="size-14 shrink-0"
@@ -243,46 +231,9 @@ function SkuRow({
                     aria-label={`${sku.specLabel} 市场价`}
                 />
             </TableCell>
-            <SkuSupplierCell
-                sku={sku}
-                name={name}
-                fields={fields}
-                isCreate={isCreate}
-                canRevise={canRevise}
-                stableId={stableId}
-                supplierCount={supplierCount}
-                supplierCountsPending={supplierCountsPending}
-                supplierCountsError={supplierCountsError}
-                onRegisterSupply={onRegisterSupply}
-            />
-            {fields.productKind === "PHYSICAL" ? (
-                <TableCell className={cellPad}>
-                    {sku.skuId ? (
-                        <Button
-                            id={`master-data-product-sku-${skuSegment}-inventory`}
-                            type="button"
-                            variant="link"
-                            size="xs"
-                            className="h-auto px-0 text-xs"
-                            onClick={(event) =>
-                                onOpenInventory(sku.skuId, event.currentTarget)
-                            }
-                        >
-                            查看库存
-                        </Button>
-                    ) : (
-                        <span className="block text-xs text-muted-foreground">
-                            保存后可查看
-                        </span>
-                    )}
-                </TableCell>
-            ) : null}
             <TableCell className={cellPad}>
                 <div className="flex flex-col items-start gap-1.5">
                     <div className="flex items-center gap-2">
-                        <span className="whitespace-nowrap text-xs text-muted-foreground">
-                            上架状态
-                        </span>
                         <Badge
                             variant={
                                 sku.listingStatus === "LISTED"
@@ -296,12 +247,6 @@ function SkuRow({
                         </Badge>
                     </div>
                     <div className="flex items-center gap-2">
-                        <Label
-                            htmlFor={`master-data-product-sku-${skuSegment}-enable`}
-                            className="whitespace-nowrap text-xs font-normal text-muted-foreground"
-                        >
-                            SKU 启用
-                        </Label>
                         <Switch
                             id={`master-data-product-sku-${skuSegment}-enable`}
                             size="sm"
@@ -331,12 +276,38 @@ function SkuRow({
                             }}
                             aria-label={`${skuName} SKU 启用`}
                         />
-                        <span className="text-xs text-muted-foreground">
+                        <Label
+                            htmlFor={`master-data-product-sku-${skuSegment}-enable`}
+                            className="whitespace-nowrap text-xs font-normal text-muted-foreground"
+                        >
                             {sku.lifecycleStatus === "ENABLED"
-                                ? "启用"
-                                : "停用"}
-                        </span>
+                                ? "SKU 已启用"
+                                : "SKU 已停用"}
+                        </Label>
                     </div>
+                    {fields.productKind === "PHYSICAL" ? (
+                        sku.skuId ? (
+                            <Button
+                                id={`master-data-product-sku-${skuSegment}-inventory`}
+                                type="button"
+                                variant="link"
+                                size="xs"
+                                className="h-auto px-0 text-xs"
+                                onClick={(event) =>
+                                    onOpenInventory(
+                                        sku.skuId,
+                                        event.currentTarget,
+                                    )
+                                }
+                            >
+                                查看库存
+                            </Button>
+                        ) : (
+                            <span className="text-xs text-muted-foreground">
+                                保存后可查看库存
+                            </span>
+                        )
+                    ) : null}
                 </div>
                 {disableConfirmation.dialog}
             </TableCell>
@@ -347,7 +318,6 @@ function SkuRow({
 type ProductSkuTableProps = {
     fields: ProductFields
     activeSpecs: readonly ProductSpecDimension[]
-    isCreate: boolean
     canRevise: boolean
     name: string
     updateSku: (index: number, patch: Partial<ProductSkuFields>) => void
@@ -356,97 +326,66 @@ type ProductSkuTableProps = {
         skuId: string | undefined,
         trigger: HTMLButtonElement,
     ) => void
-    supplierCounts: Map<string, number> | undefined
-    supplierCountsPending: boolean
-    supplierCountsError: unknown
-    onRegisterSupply: (sku: FixedSku) => void
-    stableId: string
 }
 
 function ProductSkuTable({
     fields,
     activeSpecs,
-    isCreate,
     canRevise,
     name,
     updateSku,
     rememberSkuFile,
     onOpenInventory,
-    supplierCounts,
-    supplierCountsPending,
-    supplierCountsError,
-    onRegisterSupply,
-    stableId,
 }: ProductSkuTableProps) {
     return (
         <div className="w-full max-w-full overflow-hidden rounded-lg border">
             <Table
                 data-density="comfortable"
-                className={
-                    fields.productKind === "PHYSICAL"
-                        ? "min-w-[81rem] [&_thead_th]:!static"
-                        : "min-w-[76rem] [&_thead_th]:!static"
-                }
+                className="min-w-[60rem] [&_thead_th]:!static"
             >
                 <TableHeader>
                     <TableRow>
-                        <TableHead className="min-w-64">
+                        <TableHead className="min-w-56">
                             SKU 名称与规格
+                            <RequiredMark />
                         </TableHead>
-                        <TableHead className="w-48 min-w-44">
+                        <TableHead className="w-44 min-w-40">
                             SKU 编码 / 条码
                         </TableHead>
-                        <TableHead className="w-32 min-w-28">
-                            一件代发价（含税）
+                        <TableHead className="w-28 min-w-24">
+                            代发价（含税）
                         </TableHead>
-                        <TableHead className="w-32 min-w-28">
+                        <TableHead className="w-28 min-w-24">
                             集采价（含税）
                         </TableHead>
-                        <TableHead className="w-32 min-w-28">
+                        <TableHead className="w-28 min-w-24">
                             集采起订量
                         </TableHead>
-                        <TableHead className="w-32 min-w-28">
+                        <TableHead className="w-28 min-w-24">
                             市场价（含税）
                         </TableHead>
-                        <TableHead className="w-36 min-w-28">供给</TableHead>
-                        {fields.productKind === "PHYSICAL" ? (
-                            <TableHead className="w-24 min-w-20">
-                                库存
-                            </TableHead>
-                        ) : null}
-                        <TableHead className="w-44 min-w-40">状态</TableHead>
+                        <TableHead className="w-36 min-w-32">状态</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {fields.skus.map((sku, index) => {
-                        const supplierCount = sku.skuId
-                            ? supplierCounts?.get(sku.skuId)
-                            : 0
-                        return (
-                            <SkuRow
-                                key={
-                                    sku.skuId ||
-                                    sku.specificationSignature ||
-                                    "default"
-                                }
-                                sku={sku}
-                                index={index}
-                                isCreate={isCreate}
-                                canRevise={canRevise}
-                                name={name}
-                                fields={fields}
-                                activeSpecs={activeSpecs}
-                                updateSku={updateSku}
-                                rememberSkuFile={rememberSkuFile}
-                                onOpenInventory={onOpenInventory}
-                                supplierCount={supplierCount ?? 0}
-                                supplierCountsPending={supplierCountsPending}
-                                supplierCountsError={supplierCountsError}
-                                onRegisterSupply={onRegisterSupply}
-                                stableId={stableId}
-                            />
-                        )
-                    })}
+                    {fields.skus.map((sku, index) => (
+                        <SkuRow
+                            key={
+                                sku.skuId ||
+                                sku.specificationSignature ||
+                                "default"
+                            }
+                            sku={sku}
+                            index={index}
+                            canRevise={canRevise}
+                            name={name}
+                            fields={fields}
+                            activeSpecs={activeSpecs}
+                            updateSku={updateSku}
+                            rememberSkuFile={rememberSkuFile}
+                            onOpenInventory={onOpenInventory}
+                        />
+                    ))}
                 </TableBody>
             </Table>
         </div>

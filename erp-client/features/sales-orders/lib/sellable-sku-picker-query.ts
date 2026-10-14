@@ -8,7 +8,6 @@ export type SellablePickerAppliedFilters = Readonly<{
     productKind?: ProductKind
     productCategoryId?: string
     productBrandId?: string
-    supplyRegion?: string
     productPriceKind?: PriceFilterKind
     productSalesPriceMin?: string
     productSalesPriceMax?: string
@@ -19,7 +18,6 @@ export type SellableSkuPickerListQuery = Readonly<{
     productKind?: ProductKind
     productCategoryId?: string
     productBrandId?: string
-    supplyRegion?: string
     productPriceKind?: PriceFilterKind
     productSalesPriceMin?: string
     productSalesPriceMax?: string
@@ -37,7 +35,6 @@ export function toSellablePickerListQuery(
         productKind: filters.productKind,
         productCategoryId: filters.productCategoryId,
         productBrandId: filters.productBrandId,
-        supplyRegion: filters.supplyRegion?.trim() || undefined,
         productPriceKind: filters.productPriceKind,
         productSalesPriceMin: filters.productSalesPriceMin,
         productSalesPriceMax: filters.productSalesPriceMax,

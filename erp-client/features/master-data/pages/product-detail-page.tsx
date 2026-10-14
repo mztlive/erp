@@ -17,6 +17,7 @@ import {
     ProductMediaSection,
 } from "@/features/master-data/components/product/product-editor-sections"
 import { ProductSkuSection } from "@/features/master-data/components/product/product-sku-section"
+import { ProductSupplySection } from "@/features/master-data/components/product/product-supply-section"
 import { ProductDetailDialogs } from "@/features/master-data/components/product/product-detail-dialogs"
 import { ProductDetailEntryGate } from "@/features/master-data/components/product/product-detail-entry-gate"
 import { ProductDetailFeedback } from "@/features/master-data/components/product/product-detail-feedback"
@@ -28,6 +29,9 @@ import { productChangeSummary } from "@/features/master-data/lib/product-change-
 import { formatEffectiveRange } from "@/features/master-data/lib/filter"
 import { useProductEditor } from "@/features/master-data/hooks/use-product-editor"
 import { cn } from "@/lib/utils"
+
+/** 商品资料分区卡片：基础信息与规格各成一块，避免整页平铺。 */
+const productCardClassName = "rounded-lg border bg-card p-5 md:p-6"
 
 export function ProductDetailPage({ stableId }: { stableId: string }) {
     const editor = useProductEditor(stableId)
@@ -57,7 +61,6 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
         brandOptions,
         unitOptionsQuery,
         data,
-        supplierCountsQuery,
         form,
         formError,
         formErrorTitle,
@@ -218,32 +221,50 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                         isCreate={isCreate}
                                         onValueChange={setActiveSection}
                                     />
-                                    <div className="min-w-0 p-4 md:p-6">
+                                    <div
+                                        className={cn(
+                                            "min-w-0 p-4 md:p-6",
+                                            section === "basic" &&
+                                                "bg-muted/20",
+                                        )}
+                                    >
                                         {section === "basic" ? (
-                                            <div className="space-y-6">
-                                                <ProductBasicSection
-                                                    idPrefix="master-data-product-detail-basic"
-                                                    isCreate={isCreate}
-                                                    canRevise={canRevise}
-                                                    name={name}
-                                                    setName={setName}
-                                                    fields={fields}
-                                                    setFields={setFields}
-                                                    unitOptions={
-                                                        unitOptionsQuery.data
+                                            <div className="space-y-5">
+                                                <div
+                                                    className={
+                                                        productCardClassName
                                                     }
-                                                    categoryOptions={
-                                                        categoryOptions
+                                                >
+                                                    <ProductBasicSection
+                                                        idPrefix="master-data-product-detail-basic"
+                                                        isCreate={isCreate}
+                                                        canRevise={canRevise}
+                                                        name={name}
+                                                        setName={setName}
+                                                        fields={fields}
+                                                        setFields={setFields}
+                                                        unitOptions={
+                                                            unitOptionsQuery.data
+                                                        }
+                                                        categoryOptions={
+                                                            categoryOptions
+                                                        }
+                                                        brandOptions={
+                                                            brandOptions
+                                                        }
+                                                        categoryLoading={
+                                                            categoryListQuery.isPending
+                                                        }
+                                                        brandLoading={
+                                                            brandListQuery.isPending
+                                                        }
+                                                    />
+                                                </div>
+                                                <div
+                                                    className={
+                                                        productCardClassName
                                                     }
-                                                    brandOptions={brandOptions}
-                                                    categoryLoading={
-                                                        categoryListQuery.isPending
-                                                    }
-                                                    brandLoading={
-                                                        brandListQuery.isPending
-                                                    }
-                                                />
-                                                <div className="border-t border-border pt-6">
+                                                >
                                                     <ProductSkuSection
                                                         idPrefix="master-data-product-detail-sku"
                                                         isCreate={isCreate}
@@ -323,22 +344,18 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                                         rememberSkuFile={
                                                             rememberSkuFile
                                                         }
-                                                        supplierCounts={
-                                                            supplierCountsQuery.data
-                                                        }
-                                                        supplierCountsPending={
-                                                            supplierCountsQuery.isPending
-                                                        }
-                                                        supplierCountsError={
-                                                            supplierCountsQuery.error
-                                                        }
-                                                        onRegisterSupply={
-                                                            setSupplierDialogSku
-                                                        }
-                                                        stableId={stableId}
                                                     />
                                                 </div>
                                             </div>
+                                        ) : null}
+                                        {section === "supply" && !isCreate ? (
+                                            <ProductSupplySection
+                                                fields={fields}
+                                                name={name}
+                                                onRegisterSupply={
+                                                    setSupplierDialogSku
+                                                }
+                                            />
                                         ) : null}
                                         {section === "media" ? (
                                             <ProductMediaSection

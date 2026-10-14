@@ -59,6 +59,7 @@ function CounterForm({ counter }: { counter: ContractCounter }) {
                                 id={`template-counter-${counter.group}-last`.toLowerCase()}
                                 label={`${counter.group} · ${counter.year} 年已用到第几号`}
                                 inputMode="numeric"
+                                required
                                 disabled={mutation.isPending}
                             />
                         )}

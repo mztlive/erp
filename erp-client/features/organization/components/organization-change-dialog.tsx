@@ -250,6 +250,7 @@ export function OrganizationChangeDialog({
                                             <field.TextField
                                                 id="organization-change-name"
                                                 label="组织名称"
+                                                required
                                             />
                                         )}
                                     />
@@ -261,6 +262,7 @@ export function OrganizationChangeDialog({
                                             <field.SelectField
                                                 id="organization-change-kind"
                                                 label="类型"
+                                                required
                                                 options={Object.entries(
                                                     KIND_LABEL,
                                                 ).map(([value, label]) => ({
@@ -294,6 +296,7 @@ export function OrganizationChangeDialog({
                                         children={(field) => (
                                             <field.SelectField
                                                 id="organization-change-unit"
+                                                required
                                                 label={
                                                     operation ===
                                                     "transfer_member"
@@ -313,6 +316,7 @@ export function OrganizationChangeDialog({
                                             <field.SelectField
                                                 id="organization-change-user"
                                                 label="人员"
+                                                required
                                                 disabled={Boolean(draft.userId)}
                                                 options={peopleOptions}
                                             />
@@ -350,6 +354,7 @@ export function OrganizationChangeDialog({
                             <field.TextareaField
                                 id="organization-change-reason"
                                 label="变更原因"
+                                required
                             />
                         )}
                     />

@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import { MoneyValue } from "@/components/business"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -79,6 +81,7 @@ export function PaymentBasis({
                             <div className="space-y-2">
                                 <Label htmlFor={inputId}>
                                     本单实际付款金额
+                                    <RequiredMark />
                                 </Label>
                                 <Input
                                     id={inputId}

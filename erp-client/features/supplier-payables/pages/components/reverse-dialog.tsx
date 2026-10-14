@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import {
@@ -56,6 +58,7 @@ export function ReverseDialog({
                     <div className="space-y-1">
                         <Label htmlFor="supplier-payables-reverse-dialog-reason">
                             原因
+                            <RequiredMark />
                         </Label>
                         <Textarea
                             id="supplier-payables-reverse-dialog-reason"
@@ -68,6 +71,7 @@ export function ReverseDialog({
                         <div className="space-y-1">
                             <Label htmlFor="supplier-payables-reverse-dialog-red-invoice-no">
                                 红票号码
+                                <RequiredMark />
                             </Label>
                             <InputGroup>
                                 <InputGroupInput

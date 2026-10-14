@@ -79,7 +79,6 @@ export function SellableSkuSelectDialog({
                     productKind: filters.productKind,
                     productCategoryId: filters.productCategoryId,
                     productBrandId: filters.productBrandId,
-                    supplyRegion: filters.supplyRegion,
                     productPriceKind: filters.productPriceKind,
                     productSalesPriceMin: filters.productSalesPriceMin,
                     productSalesPriceMax: filters.productSalesPriceMax,
@@ -152,12 +151,6 @@ export function SellableSkuSelectDialog({
                 label: `品牌：${selectedBrandLabel}`,
             })
         }
-        if (filters.supplyRegion) {
-            chips.push({
-                key: "supplyRegion",
-                label: `可供区域：${filters.supplyRegion}`,
-            })
-        }
         if (filters.productSalesPriceMin || filters.productSalesPriceMax) {
             const minimum = filters.productSalesPriceMin ?? "不限"
             const maximum = filters.productSalesPriceMax ?? "不限"
@@ -175,7 +168,6 @@ export function SellableSkuSelectDialog({
         filters.productSalesPriceMin,
         filters.q,
         filters.productPriceKind,
-        filters.supplyRegion,
         selectedBrandLabel,
         selectedCategoryLabel,
     ])

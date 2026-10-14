@@ -285,6 +285,7 @@ export function PortalCooperationEditor({
                     <field.SelectField
                         id="supplier-portal-cooperation-settlement"
                         label="结算方式"
+                        required
                         allowClear={false}
                         options={settlements}
                         disabled={disabled}
@@ -312,6 +313,7 @@ export function PortalCooperationEditor({
                                 <field.SelectField
                                     id="supplier-portal-cooperation-prepay"
                                     label="先款比例"
+                                    required
                                     options={prepayments}
                                     allowClear={false}
                                     disabled={disabled}
@@ -326,6 +328,7 @@ export function PortalCooperationEditor({
                                 <field.TextField
                                     id="supplier-portal-cooperation-days"
                                     label="自然结算期末后付款天数"
+                                    required
                                     disabled={disabled}
                                 />
                             )}

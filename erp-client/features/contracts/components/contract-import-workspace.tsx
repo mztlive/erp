@@ -215,6 +215,7 @@ export function ContractImportWorkspace(props: Props) {
                                     <field.PdfUploadField
                                         id="card-contracts-upload-pdf"
                                         label="已签署合同 PDF"
+                                        required
                                         description="仅支持单个 PDF，文件不超过 20 MB。选择文件后自动上传并识别。"
                                         disabled={busy}
                                     />

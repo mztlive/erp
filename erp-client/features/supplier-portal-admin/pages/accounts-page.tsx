@@ -1,4 +1,6 @@
 "use client"
+
+import { RequiredMark } from "@/components/ui/required-mark"
 import { useMemo, useRef, useState } from "react"
 import { z } from "zod"
 import type { ColumnDef } from "@tanstack/react-table"
@@ -302,6 +304,7 @@ export function PortalAdminAccountsPage() {
                                     className="text-sm"
                                 >
                                     启用的供应商
+                                    <RequiredMark />
                                 </label>
                                 <SupplierSearchCombobox
                                     id="supplier-portal-account-supplier"
@@ -361,6 +364,7 @@ export function PortalAdminAccountsPage() {
                                 <field.SelectField
                                     id="supplier-portal-account-create-role"
                                     label="门户岗位"
+                                    required
                                     options={roles}
                                     allowClear={false}
                                     disabled={
@@ -494,6 +498,7 @@ function PortalAccountEdit({
                         <field.SelectField
                             id="supplier-portal-account-edit-role"
                             label="门户岗位"
+                            required
                             options={roles}
                             allowClear={false}
                             disabled={mutation.isPending || !!intent.current}
@@ -505,6 +510,7 @@ function PortalAccountEdit({
                         <field.SelectField
                             id="supplier-portal-account-edit-active"
                             label="账号状态"
+                            required
                             options={[
                                 { value: "active", label: "启用" },
                                 { value: "inactive", label: "停用" },

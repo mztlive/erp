@@ -1,4 +1,6 @@
 "use client"
+
+import { RequiredMark } from "@/components/ui/required-mark"
 import * as React from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -145,9 +147,18 @@ export function BatchSupplyTable({
                         {fields.map((field) => (
                             <TableHead key={field.key} className="min-w-28">
                                 {field.label}
+                                {field.key !== "availableQuantity" ||
+                                rows.some(
+                                    (row) => row.quantityMode === "provided",
+                                ) ? (
+                                    <RequiredMark />
+                                ) : null}
                             </TableHead>
                         ))}
-                        <TableHead className="min-w-32">可供状态</TableHead>
+                        <TableHead className="min-w-32">
+                            可供状态
+                            <RequiredMark />
+                        </TableHead>
                         <TableHead className="min-w-32">处理结果</TableHead>
                     </TableRow>
                 </TableHeader>
@@ -353,6 +364,10 @@ export function BatchSupplyTable({
                                                             className="space-y-1 text-xs"
                                                         >
                                                             {field.label}
+                                                            {field.key ===
+                                                            "validFrom" ? (
+                                                                <RequiredMark />
+                                                            ) : null}
                                                             {input(
                                                                 row,
                                                                 field.key,

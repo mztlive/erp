@@ -23,13 +23,11 @@ export type CreateTierInput = {
 }
 
 export type PoolFilterSnapshot = {
-    nationwide_only?: boolean
     q?: string
     product_kind?: string
     category_id?: string
     brand_id?: string
     supplier_id?: string
-    supply_region?: string
     max_supplier_count?: number
     price_kind?: PriceFilterKind
     sales_price_min?: string

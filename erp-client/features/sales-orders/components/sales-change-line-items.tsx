@@ -1,4 +1,6 @@
 "use client"
+
+import { RequiredMark } from "@/components/ui/required-mark"
 import * as React from "react"
 import { PlusIcon } from "lucide-react"
 import { MoneyValue } from "@/components/business"
@@ -136,6 +138,15 @@ export function SalesChangeLineItems({
                                         }
                                     >
                                         {label}
+                                        {[
+                                            "数量",
+                                            "单卡面额",
+                                            "卡张数",
+                                            "含税成交单价",
+                                            "销项税率",
+                                        ].includes(label) ? (
+                                            <RequiredMark />
+                                        ) : null}
                                     </span>
                                 ))}
                             </div>

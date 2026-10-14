@@ -32,7 +32,6 @@ type Offering = {
     dropship_supply_price_gross: string
     bulk_supply_price_gross: string
     input_tax_rate: string
-    supply_region: string[]
     availability_status: string
     availability_version: number
     available_quantity: string | null
@@ -42,7 +41,6 @@ type Terms = {
     bulk_supply_price_gross: string
     input_tax_rate: string
     bulk_minimum_order_quantity: string
-    supply_region: string[]
     product_capabilities: string[]
     valid_from: string
 }
@@ -58,7 +56,7 @@ type BatchResult = {
 type BatchBody = { rows: BatchRow[]; validate_only: boolean }
 type Envelope<T> = { success?: boolean; errorMessage?: string; data: T }
 const VISIBLE = { timeout: 20_000 }
-const IMPORT_HEADERS = ["公司 SKU 编号", "供应商订货编码", "代发含税价", "集采含税价", "税率 %", "集采起订量", "可供区域", "生效日期", "可供状态", "可供数量"]
+const IMPORT_HEADERS = ["公司 SKU 编号", "供应商订货编码", "代发含税价", "集采含税价", "税率 %", "集采起订量", "生效日期", "可供状态", "可供数量"]
 
 function businessDate(): string {
     return new Intl.DateTimeFormat("en-CA", {
@@ -72,7 +70,6 @@ function terms(dropship = "21.00", bulk = "19.00"): Terms {
         bulk_supply_price_gross: bulk,
         input_tax_rate: "0.09",
         bulk_minimum_order_quantity: "5",
-        supply_region: ["全国"],
         product_capabilities: [],
         valid_from: businessDate(),
     }
@@ -338,7 +335,7 @@ test("批量页面：文件精确匹配、公共设置、冲突重读及真实�
     const create = page.getByRole("dialog", { name: "批量添加供给", exact: true })
     await expect(create).toBeVisible(VISIBLE)
     await expect(create.locator("#batch-supply-supplier")).not.toHaveValue("")
-    const sourceRows = fixture.skus.map((sku, index) => [sku.sku_no, `000${prefix}-${index}`, index === 0 ? "17.00" : "19.00", "15.00", "9", "5", "全国", businessDate(), "可供", index === 0 ? "0" : ""])
+    const sourceRows = fixture.skus.map((sku, index) => [sku.sku_no, `000${prefix}-${index}`, index === 0 ? "17.00" : "19.00", "15.00", "9", "5", businessDate(), "可供", index === 0 ? "0" : ""])
 
     await test.step("下载真实模板；未知和重复 SKU 文件整次拒绝，正确导入仅添加待提交行", async () => {
         const [download] = await Promise.all([page.waitForEvent("download"), create.locator("#batch-supply-template").click()])
@@ -353,7 +350,7 @@ test("批量页面：文件精确匹配、公共设置、冲突重读及真实�
         for (const [rows, message] of [
             [[sourceRows[0]!, [`${prefix}-MISSING`, ...sourceRows[1]!.slice(1)]], /不存在、无权选择或匹配不唯一/],
             [[sourceRows[0]!, sourceRows[0]!], /文件中重复/],
-            [[sourceRows[0]!, [...sourceRows[1]!.slice(0, 8), "不可识别状态", sourceRows[1]![9]!]], /可供状态无法识别/],
+            [[sourceRows[0]!, [...sourceRows[1]!.slice(0, 7), "不可识别状态", sourceRows[1]![8]!]], /可供状态无法识别/],
         ] as const) {
             await create.locator("#batch-supply-file").setInputFiles({ name: "invalid.csv", mimeType: "text/csv", buffer: csv([...rows]) })
             await expect(create.getByRole("status")).toContainText(message, VISIBLE)
@@ -414,7 +411,7 @@ test("批量页面：文件精确匹配、公共设置、冲突重读及真实�
 
     await test.step("TSV多行粘贴保留文本订货编码，超出表格范围整次拒绝", async () => {
         const first = create.getByLabel(`${fixture.skus[0]!.sku_no} 供应商订货编码`, { exact: true })
-        const pasteRows = sourceRows.map((row) => row.slice(1, 7).map((cell) => `"${cell.replaceAll('"', '""')}"`).join("\t"))
+        const pasteRows = sourceRows.map((row) => row.slice(1, 6).map((cell) => `"${cell.replaceAll('"', '""')}"`).join("\t"))
         await first.evaluate((input, text) => {
             const clipboard = new DataTransfer()
             clipboard.setData("text/plain", text)
@@ -452,7 +449,6 @@ test("批量页面：文件精确匹配、公共设置、冲突重读及真实�
         for (const sku of fixture.skus) {
             await expect(create.getByLabel(`${sku.sku_no} 代发含税价`, { exact: true })).toHaveValue("22.00")
             await expect(create.getByLabel(`${sku.sku_no} 集采含税价`, { exact: true })).toHaveValue("20.00")
-            await expect(create.getByLabel(`${sku.sku_no} 可供区域`, { exact: true })).toHaveValue("全国")
         }
         await expect(create.locator("#batch-supply-submit")).toHaveText("校验并提交 2 行")
         const validated = await clickBatch(page, create, "create", "#batch-supply-validate")
@@ -477,7 +473,7 @@ test("批量页面：文件精确匹配、公共设置、冲突重读及真实�
 
     await test.step("外部修改导致版本冲突；重新读取替换完整最新条款后再次修改提交", async () => {
         await revise.getByLabel(`${fixture.skus[0]!.sku_no} 代发含税价`, { exact: true }).fill("99.00")
-        const externalTerms = { ...terms("34.00", "33.00"), supply_region: ["华东"] }
+        const externalTerms = { ...terms("34.00", "33.00"), input_tax_rate: "0.13" }
         await post(token, `/admin/supplier-offerings/${initial[0]!.id}/revisions`, {
             expected_revision_no: initial[0]!.current_revision_no,
             terms: externalTerms,
@@ -495,7 +491,7 @@ test("批量页面：文件精确匹配、公共设置、冲突重读及真实�
         await revise.locator("#batch-supply-reload-confirm").click()
         await expect(revise.getByLabel(`${fixture.skus[0]!.sku_no} 代发含税价`, { exact: true })).toHaveValue("34.00", VISIBLE)
         await expect(revise.getByLabel(`${fixture.skus[0]!.sku_no} 集采含税价`, { exact: true })).toHaveValue("33.00")
-        await expect(revise.getByLabel(`${fixture.skus[0]!.sku_no} 可供区域`, { exact: true })).toHaveValue("华东")
+        await expect(revise.getByLabel(`${fixture.skus[0]!.sku_no} 税率 %`, { exact: true })).toHaveValue("13")
         for (const [index, sku] of fixture.skus.entries()) {
             await revise.getByLabel(`${sku.sku_no} 代发含税价`, { exact: true }).fill(index === 0 ? "35.00" : "36.00")
         }
@@ -506,7 +502,7 @@ test("批量页面：文件精确匹配、公共设置、冲突重读及真实�
         const after = await details(token, initial)
         expect(after.map((item) => item.current_revision_no)).toEqual([3, 2])
         expect(after.map((item) => item.available_quantity)).toEqual(["0", null])
-        expect(after[0]!.supply_region).toEqual(["华东"])
+        expect(after[0]!.input_tax_rate).toMatch(/^0\.130*$/)
     })
 
     const beforeAvailability = await details(token, initial)

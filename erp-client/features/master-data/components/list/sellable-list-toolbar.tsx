@@ -47,13 +47,11 @@ const SUPPLY_PRESET_OPTIONS: ReadonlyArray<{
 }> = [
     { value: "all", label: "全部" },
     { value: "single-supplier", label: "单一供应商" },
-    { value: "nationwide", label: "全国可供" },
 ]
 
 const MORE_CHIP_KEYS = [
     "productBrandId",
     "productSupplierId",
-    "supplyRegion",
     "salesPrice",
 ] as const
 
@@ -72,8 +70,6 @@ export function SellableListToolbar({
     setSellableFilterPanelOpen,
     applySellableFilters,
     resetMoreFilters,
-    supplyRegionDraft,
-    setSupplyRegionDraft,
     productKindDraft,
     setProductKindDraft,
     productCategoryIdDraft,
@@ -116,8 +112,6 @@ export function SellableListToolbar({
     hasStructuredSellableFilters?: boolean
     applySellableFilters: () => void
     resetMoreFilters: () => void
-    supplyRegionDraft: string
-    setSupplyRegionDraft: SetState<string>
     productKindDraft: ProductKind | "all"
     setProductKindDraft: SetState<ProductKind | "all">
     productCategoryIdDraft: string | null
@@ -374,22 +368,6 @@ export function SellableListToolbar({
                                         searchPlaceholder="搜索供应商名称或代码"
                                     />
                                 </DirectoryFilterControl>
-                            </ListWorkspaceFilterField>
-                            <ListWorkspaceFilterField
-                                htmlFor="master-data-list-sellable-list-toolbar-input-1"
-                                label="可供区域"
-                            >
-                                <Input
-                                    id="master-data-list-sellable-list-toolbar-input-1"
-                                    className="w-full"
-                                    value={supplyRegionDraft}
-                                    onChange={(event) =>
-                                        setSupplyRegionDraft(event.target.value)
-                                    }
-                                    autoComplete="off"
-                                    placeholder="如：全国"
-                                    aria-label="可供区域"
-                                />
                             </ListWorkspaceFilterField>
                         </div>
                     </fieldset>

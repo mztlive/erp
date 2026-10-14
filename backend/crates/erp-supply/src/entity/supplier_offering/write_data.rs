@@ -6,7 +6,7 @@
 use std::str::FromStr;
 
 use erp_core::common::time::BusinessDate;
-use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
+use erp_core::money::{Quantity, Rate, UnitPrice};
 use erp_core::{Error, Result};
 
 /// 解析进项税率字符串。
@@ -42,27 +42,6 @@ pub fn parse_input_tax_rate(raw: &str) -> Result<Rate> {
 /// 纯内存转换，不触碰 I/O、时钟、ID 生成器或密钥。
 pub fn parse_unit_price(value: &str, label: &str) -> Result<UnitPrice> {
     UnitPrice::from_str(value.trim()).map_err(|_| Error::from(format!("非法{label}: {value}")))
-}
-
-/// 解析可空金额字符串。
-///
-/// # 参数
-/// * `value` - 原始金额字符串；`None` 或空白表示缺省
-///
-/// # 返回
-/// 缺省时返回 `None`，否则返回类型化金额。
-///
-/// # 错误
-/// 非法数值时返回领域错误，文案为 `非法金额: {value}`。
-///
-/// # 约束
-/// 纯内存转换，不触碰 I/O、时钟、ID 生成器或密钥。
-pub fn parse_optional_amount(value: Option<&str>) -> Result<Option<Amount>> {
-    value
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(|value| Amount::from_str(value).map_err(|_| Error::from(format!("非法金额: {value}"))))
-        .transpose()
 }
 
 /// 解析可空数量字符串。
@@ -123,8 +102,8 @@ pub fn parse_business_date(value: &str) -> Result<BusinessDate> {
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_business_date, parse_input_tax_rate, parse_minimum_order_quantity, parse_optional_amount,
-        parse_optional_quantity, parse_unit_price,
+        parse_business_date, parse_input_tax_rate, parse_minimum_order_quantity, parse_optional_quantity,
+        parse_unit_price,
     };
 
     #[test]
@@ -135,7 +114,6 @@ mod tests {
         assert!(parse_unit_price("abc", "一件代发供给价").is_err());
         assert!(parse_minimum_order_quantity(" ").is_err());
         assert!(parse_business_date("not-a-date").is_err());
-        assert!(parse_optional_amount(Some("abc")).is_err());
         assert!(parse_optional_quantity(Some("abc")).is_err());
     }
 
@@ -143,11 +121,8 @@ mod tests {
     fn whitespace_is_normalized_and_empty_is_absent() {
         assert!(parse_input_tax_rate(" 0.13 ").is_ok());
         assert!(parse_unit_price(" 10.00 ", "一件代发供给价").is_ok());
-        assert!(parse_optional_amount(None).unwrap().is_none());
-        assert!(parse_optional_amount(Some("  ")).unwrap().is_none());
         assert!(parse_optional_quantity(None).unwrap().is_none());
         assert!(parse_optional_quantity(Some(" ")).unwrap().is_none());
-        assert!(parse_optional_amount(Some(" 1.50 ")).unwrap().is_some());
         assert!(parse_optional_quantity(Some(" 8 ")).unwrap().is_some());
     }
 
@@ -174,7 +149,6 @@ mod tests {
             parse_unit_price("abc", "一件代发供给价").unwrap_err().to_string(),
             "非法一件代发供给价: abc"
         );
-        assert_eq!(parse_optional_amount(Some("abc")).unwrap_err().to_string(), "非法金额: abc");
         assert_eq!(parse_optional_quantity(Some("abc")).unwrap_err().to_string(), "非法数量: abc");
         assert_eq!(parse_minimum_order_quantity("abc").unwrap_err().to_string(), "非法集采起订量: abc");
         assert_eq!(parse_business_date("abc").unwrap_err().to_string(), "非法业务日期: abc");

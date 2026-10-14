@@ -670,7 +670,7 @@ mod tests {
         assert!(duplicate_business_units(&independent).is_empty());
     }
     fn quote_row(id: &str, key: &str, code: &str) -> PortalBatchRow {
-        let terms = json!({"dropship_supply_price_gross":"11.30","bulk_supply_price_gross":"9.04","input_tax_rate":"0.13","bulk_minimum_order_quantity":"10","supply_region":["CN"],"valid_from":"2026-01-01","valid_to":"2026-12-31"});
+        let terms = json!({"dropship_supply_price_gross":"11.30","bulk_supply_price_gross":"9.04","input_tax_rate":"0.13","bulk_minimum_order_quantity":"10","valid_from":"2026-01-01","valid_to":"2026-12-31"});
         PortalBatchRow {
             row_id: id.into(),
             idempotency_key: key.into(),

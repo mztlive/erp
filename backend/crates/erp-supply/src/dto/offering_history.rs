@@ -45,16 +45,8 @@ pub struct OfferingRevisionView {
     pub input_tax_rate: Option<String>,
     /// 集采起订量。
     pub bulk_minimum_order_quantity: String,
-    /// 供应区域。
-    pub supply_region: Vec<String>,
     /// 商品能力。
     pub product_capabilities: Vec<String>,
-    /// 快递说明。
-    pub dropship_express: Option<String>,
-    /// 运费。
-    pub freight_amount: Option<String>,
-    /// 服务费。
-    pub service_fee_amount: Option<String>,
     /// 生效日期。
     pub valid_from: String,
     /// 失效日期。
@@ -84,11 +76,7 @@ impl OfferingRevisionView {
             bulk_supply_price_net: Some(revision.bulk_supply_price_net.to_string()),
             input_tax_rate: Some(revision.input_tax_rate.to_string()),
             bulk_minimum_order_quantity: revision.bulk_minimum_order_quantity.to_string(),
-            supply_region: revision.supply_region,
             product_capabilities: revision.product_capabilities,
-            dropship_express: revision.dropship_express,
-            freight_amount: revision.freight_amount.map(|value| value.to_string()),
-            service_fee_amount: revision.service_fee_amount.map(|value| value.to_string()),
             valid_from: revision.valid_from.to_string(),
             valid_to: revision.valid_to.map(|value| value.to_string()),
         }
@@ -100,7 +88,7 @@ impl OfferingRevisionView {
     /// 无。
     ///
     /// # 返回
-    /// 原地清除价格、税率和费用，保留非成本条款。
+    /// 原地清除价格和税率，保留非成本条款。
     ///
     /// # 错误
     /// 无。
@@ -110,8 +98,6 @@ impl OfferingRevisionView {
         self.bulk_supply_price_gross = None;
         self.bulk_supply_price_net = None;
         self.input_tax_rate = None;
-        self.freight_amount = None;
-        self.service_fee_amount = None;
     }
 }
 
@@ -154,8 +140,7 @@ mod tests {
             "dropship_supply_price_gross": "11.30", "dropship_supply_price_net": "9.83",
             "bulk_supply_price_gross": "9.04", "bulk_supply_price_net": "7.86",
             "input_tax_rate": "0.13", "bulk_minimum_order_quantity": "10",
-            "freight_amount": "1", "service_fee_amount": "0", "dropship_express": "顺丰",
-            "supply_region": ["全国"], "product_capabilities": ["REFUND"],
+            "product_capabilities": ["REFUND"],
             "valid_from": "2026-10-01", "valid_to": null,
             "prefill_source_refs": {}
         }))
@@ -190,7 +175,7 @@ mod tests {
     #[test]
     fn history_redacts_all_cost_fields_without_losing_non_cost_terms() {
         let mut view = OfferingRevisionView::from_revision(revision(1), Some("revision-1"));
-        assert!(view.freight_amount.is_some());
+        assert!(view.dropship_supply_price_gross.is_some());
         let minimum = view.bulk_minimum_order_quantity.clone();
         view.redact_costs();
         let json = serde_json::to_value(view).unwrap();
@@ -200,13 +185,11 @@ mod tests {
             "bulk_supply_price_gross",
             "bulk_supply_price_net",
             "input_tax_rate",
-            "freight_amount",
-            "service_fee_amount",
         ] {
             assert!(json[key].is_null(), "{key}");
         }
         assert_eq!(json["bulk_minimum_order_quantity"], minimum);
-        assert_eq!(json["supply_region"], serde_json::json!(["全国"]));
+        assert_eq!(json["product_capabilities"], serde_json::json!(["REFUND"]));
         assert_eq!(json["valid_from"], "2026-10-01");
         assert!(json.get("available_quantity").is_none());
         assert!(json.get("availability_status").is_none());

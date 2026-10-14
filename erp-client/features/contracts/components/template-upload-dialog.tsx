@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
 import { toFieldErrors } from "@/components/form/utils"
@@ -106,6 +108,7 @@ export function TemplateUploadDialog({ onClose }: { onClose: () => void }) {
                             <Field>
                                 <FieldLabel htmlFor="template-upload-company">
                                     签约公司
+                                    <RequiredMark />
                                 </FieldLabel>
                                 <CompanySearchCombobox
                                     id="template-upload-company"
@@ -129,6 +132,7 @@ export function TemplateUploadDialog({ onClose }: { onClose: () => void }) {
                             <field.SelectField
                                 id="template-upload-group"
                                 label="合同编号组"
+                                required
                                 options={NUMBER_GROUP_OPTIONS}
                                 disabled={upload.isPending}
                                 allowClear={false}
@@ -140,6 +144,7 @@ export function TemplateUploadDialog({ onClose }: { onClose: () => void }) {
                             <Field>
                                 <FieldLabel htmlFor="template-upload-file-input">
                                     Word 模板
+                                    <RequiredMark />
                                 </FieldLabel>
                                 <FileUpload
                                     idPrefix="template-upload-file"

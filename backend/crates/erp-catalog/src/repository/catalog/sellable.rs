@@ -12,8 +12,6 @@ use crate::entity::catalog::{ProductKind, SellablePriceKind};
 /// 调用方可选的业务筛选。供应商身份仅在内部传递，用于筛选与批量补齐业务编号。
 #[derive(Debug, Clone)]
 pub struct SellableSkuFilter {
-    /// 额外要求区域并集包含全国，不替代已有区域条件。
-    pub nationwide_only: bool,
     /// SKU 编号、SKU 名称、商品编号、商品名称、规格或条码关键字；`None` 表示不筛选。
     pub keyword: Option<String>,
     /// 商品业务类型；`None` 表示不筛选。
@@ -24,8 +22,6 @@ pub struct SellableSkuFilter {
     pub brand_id: Option<String>,
     /// 当前有效供给中的供应商；`None` 表示不筛选。
     pub supplier_id: Option<String>,
-    /// 当前有效供给可供区域（精确匹配并集中的任一区域）；`None` 表示不筛选。
-    pub supply_region: Option<String>,
     /// 当前有效供给去重供应商数量上限（含）；`None` 表示不按供应保障筛选。
     pub max_supplier_count: Option<u32>,
     /// 价格筛选口径；单个区间只匹配一种价格。
@@ -61,13 +57,11 @@ impl SellableSkuFilter {
     /// 无。
     pub fn as_of(eligibility_as_of: BusinessDate) -> Self {
         Self {
-            nationwide_only: false,
             keyword: None,
             product_kind: None,
             category_id: None,
             brand_id: None,
             supplier_id: None,
-            supply_region: None,
             max_supplier_count: None,
             price_kind: SellablePriceKind::default(),
             sales_price_min: None,
@@ -139,9 +133,6 @@ pub struct SellableSkuRow {
     /// 当前有效供给对应的去重供应商稳定 ID，仅供跨域读取补齐业务编号。
     #[serde(default)]
     pub supplier_ids: Vec<String>,
-    /// 当前有效供给的可供区域并集。
-    #[serde(default)]
-    pub supply_regions: Vec<String>,
     /// 按地区筛选且含运费另计时，所选地区内是否有需另付运费才能送到的地方。
     #[serde(default)]
     pub delivery_freight_extra: bool,

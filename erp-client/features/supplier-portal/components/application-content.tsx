@@ -66,10 +66,6 @@ export function PortalTermsContent({
                     </dd>
                 </div>
                 <div>
-                    <dt className="text-muted-foreground">可供区域</dt>
-                    <dd>{terms.supply_region?.join("、") || "未填写"}</dd>
-                </div>
-                <div>
                     <dt className="text-muted-foreground">有效期</dt>
                     <dd>
                         {terms.valid_from || "未填写"} 起
@@ -77,28 +73,6 @@ export function PortalTermsContent({
                             ? `，${terms.valid_to} 失效`
                             : "长期有效"}
                     </dd>
-                </div>
-                <div>
-                    <dt className="text-muted-foreground">运费</dt>
-                    <dd>
-                        <MoneyValue
-                            value={terms.freight_amount}
-                            taxBasis="gross"
-                        />
-                    </dd>
-                </div>
-                <div>
-                    <dt className="text-muted-foreground">服务费</dt>
-                    <dd>
-                        <MoneyValue
-                            value={terms.service_fee_amount}
-                            taxBasis="gross"
-                        />
-                    </dd>
-                </div>
-                <div>
-                    <dt className="text-muted-foreground">快递说明</dt>
-                    <dd>{terms.dropship_express || "未填写"}</dd>
                 </div>
             </dl>
         </section>

@@ -52,8 +52,6 @@ export type SellableItemsFilterControls = Pick<
     | "setProductSalesPriceMinDraft"
     | "setSearchDraft"
     | "setSellableFilterPanelOpen"
-    | "setSupplyRegionDraft"
-    | "supplyRegionDraft"
 >
 
 export function SellableItemsFilterBar({
@@ -95,12 +93,7 @@ export function SellableItemsFilterBar({
     const directory = productFilterDirectoryState(filterOptions)
     const priceInputRef = React.useRef<HTMLInputElement>(null)
     const moreCount = appliedChips.filter(({ key }) =>
-        [
-            "productBrandId",
-            "supplyRegion",
-            "deliveryRegion",
-            "salesPrice",
-        ].includes(key),
+        ["productBrandId", "deliveryRegion", "salesPrice"].includes(key),
     ).length
     React.useEffect(() => {
         if (f.productSalesPriceError && f.sellableFilterPanelOpen)
@@ -236,22 +229,6 @@ export function SellableItemsFilterBar({
                                         searchPlaceholder="搜索品牌名称或代码"
                                     />
                                 </DirectoryFilterControl>
-                            </ListWorkspaceFilterField>
-                            <ListWorkspaceFilterField
-                                htmlFor={`${prefix}-region`}
-                                label="可供区域"
-                            >
-                                <Input
-                                    id={`${prefix}-region`}
-                                    value={f.supplyRegionDraft}
-                                    onChange={(event) =>
-                                        f.setSupplyRegionDraft(
-                                            event.target.value,
-                                        )
-                                    }
-                                    placeholder="如：全国、北京"
-                                    autoComplete="off"
-                                />
                             </ListWorkspaceFilterField>
                         </div>
                     </fieldset>

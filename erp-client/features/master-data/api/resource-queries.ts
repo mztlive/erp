@@ -16,7 +16,6 @@ import type {
     MasterDataListResult,
     MasterDataResource,
 } from "@/features/master-data/types"
-import type { SupplierOfferingSummaryDto } from "@/features/master-data/api/contracts"
 import {
     centerBrand,
     centerCategory,
@@ -28,7 +27,6 @@ import {
     centerWarehouse,
 } from "@/features/master-data/api/centers"
 import {
-    fetchAllPages,
     listBrands,
     listCategories,
     listProducts,
@@ -129,32 +127,6 @@ export async function fetchMasterDataList(
     }
 
     return wrapListResult(query.resource, rows, extra)
-}
-
-/** 按稳定 SKU 查询正式供给，返回当前启用供给的去重供应商数量。 */
-export async function fetchSkuSupplierCounts(
-    skuIds: readonly string[],
-): Promise<Map<string, number>> {
-    const uniqueIds = [...new Set(skuIds.filter(Boolean))]
-    const entries = await Promise.all(
-        uniqueIds.map(async (skuId) => {
-            const offerings = await fetchAllPages<SupplierOfferingSummaryDto>(
-                "/admin/supplier-offerings",
-                { sku_id: skuId },
-            )
-            const supplierIds = new Set(
-                offerings
-                    .filter(
-                        (offering) =>
-                            offering.status === "ACTIVE" &&
-                            Boolean(offering.current_revision_id),
-                    )
-                    .map((offering) => offering.supplier_id),
-            )
-            return [skuId, supplierIds.size] as const
-        }),
-    )
-    return new Map(entries)
 }
 
 export async function fetchMasterDataCenter(

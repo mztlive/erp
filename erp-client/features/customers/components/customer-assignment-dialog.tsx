@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import * as React from "react"
 import { useSelector } from "@tanstack/react-form"
 
@@ -101,7 +103,10 @@ export function CustomerAssignmentDialog({
                                 !field.state.meta.isValid
                             return (
                                 <Field data-invalid={invalid || undefined}>
-                                    <FieldLabel>销售人员</FieldLabel>
+                                    <FieldLabel>
+                                        销售人员
+                                        <RequiredMark />
+                                    </FieldLabel>
                                     <OwnerCombobox
                                         id="customers-assignment-dialog-owner"
                                         owners={owners.data ?? []}
@@ -128,6 +133,7 @@ export function CustomerAssignmentDialog({
                                 <div className="space-y-2">
                                     <Label htmlFor="customer-assignment-from">
                                         生效日期
+                                        <RequiredMark />
                                     </Label>
                                     <Input
                                         id="customer-assignment-from"

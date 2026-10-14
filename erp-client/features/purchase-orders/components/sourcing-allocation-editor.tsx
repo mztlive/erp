@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import { Trash2Icon } from "lucide-react"
 import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -103,7 +105,10 @@ export function SourcingAllocationEditor({
                 </div>
             ) : null}
             <div className="min-w-0 space-y-1.5">
-                <p className="text-xs text-muted-foreground">供给来源</p>
+                <p className="text-xs text-muted-foreground">
+                    供给来源
+                    <RequiredMark />
+                </p>
                 <SourcingOptionField
                     form={form}
                     index={index}
@@ -132,13 +137,14 @@ export function SourcingAllocationEditor({
             >
                 <div className="min-w-0 space-y-1.5">
                     <p className="text-xs text-muted-foreground">
-                        本次分配数量（{product.unit}）
+                        本次分配数量（{product.unit}）<RequiredMark />
                     </p>
                     <form.AppField name={`lines[${index}].quantity`}>
                         {(field) => (
                             <field.TextField
                                 id={`${id}-quantity`}
                                 label={`本次分配数量，${product.itemName}`}
+                                required
                                 hideLabel
                                 type="number"
                                 inputMode="decimal"
@@ -158,6 +164,7 @@ export function SourcingAllocationEditor({
                     <div className="min-w-0 space-y-1.5">
                         <p className="text-xs text-muted-foreground">
                             采购入库目标仓
+                            <RequiredMark />
                         </p>
                         <SourcingTargetWarehouseField
                             form={form}
@@ -176,6 +183,7 @@ export function SourcingAllocationEditor({
                     <div className="min-w-0 space-y-1.5">
                         <p className="text-xs text-muted-foreground">
                             预计交付日
+                            <RequiredMark />
                         </p>
                         <SourcingExpectedDeliveryField
                             form={form}

@@ -671,6 +671,7 @@ function PortalReviewForm({
                                         }
                                         id="supplier-portal-review-brand"
                                         label={`品牌原稿：${rawProduct.brand.raw_name}`}
+                                        required
                                         options={dictionaryOptions(brands.data)}
                                         disabled={
                                             disabled ||
@@ -699,6 +700,7 @@ function PortalReviewForm({
                                         }}
                                         id="supplier-portal-review-category"
                                         label={`分类原稿：${rawProduct.category.raw_name}`}
+                                        required
                                         options={dictionaryOptions(
                                             categories.data?.filter(
                                                 (item) =>
@@ -940,6 +942,7 @@ function PortalReviewForm({
                                 <field.SelectField
                                     id="supplier-portal-review-product-target"
                                     label="本次商品建档决定"
+                                    required
                                     allowClear={false}
                                     options={[
                                         {
@@ -960,9 +963,12 @@ function PortalReviewForm({
                             )}
                         </form.AppField>
                         <form.Subscribe
-                            selector={(state) => state.values.productTarget}
+                            selector={(state) => ({
+                                productTarget: state.values.productTarget,
+                                mappings: state.values.mappings,
+                            })}
                         >
-                            {(selected) => (
+                            {({ productTarget: selected, mappings }) => (
                                 <>
                                     {rawProduct.skus.map((sku, index) => {
                                         const prefix = `supplier-portal-review-sku-${toAutomationIdSegment(sku.row_id)}`
@@ -1023,6 +1029,7 @@ function PortalReviewForm({
                                                             }}
                                                             id={`${prefix}-unit`}
                                                             label="确认基础单位"
+                                                            required
                                                             options={dictionaryOptions(
                                                                 units.data,
                                                             )}
@@ -1099,6 +1106,10 @@ function PortalReviewForm({
                                                         <field.TextField
                                                             id={`${prefix}-unit-synonym-reason`}
                                                             label="单位同义核对依据（勾选同义确认时必填）"
+                                                            required={
+                                                                mappings[index]
+                                                                    ?.unitSynonymConfirmed
+                                                            }
                                                             disabled={disabled}
                                                         />
                                                     )}
@@ -1110,6 +1121,7 @@ function PortalReviewForm({
                                                         <field.SelectField
                                                             id={`${prefix}-target`}
                                                             label="本次规格建档决定"
+                                                            required
                                                             options={[
                                                                 {
                                                                     value: "unconfirmed",
@@ -1309,6 +1321,7 @@ function PortalReviewForm({
                     {(field) => (
                         <field.TextareaField
                             id="supplier-portal-review-comment"
+                            required={Boolean(rawProduct)}
                             label={
                                 rawProduct
                                     ? "匹配与建档核对说明／供应商可见处理意见（必填）"

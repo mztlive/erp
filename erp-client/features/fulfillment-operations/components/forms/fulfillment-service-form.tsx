@@ -1,5 +1,7 @@
 "use client"
 
+import { RequiredMark } from "@/components/ui/required-mark"
+
 import { OptionCombobox } from "@/components/business"
 import { DateTimeRangeLocalPicker } from "@/components/ui/date-picker"
 import { FileUpload } from "@/components/ui/file-upload"
@@ -74,6 +76,7 @@ export function FulfillmentServiceForm({
                                     htmlFor={`fulfillment-operations-service-form-quantity-${toAutomationIdSegment(line.salesOrderLineId)}`}
                                 >
                                     本次完成数量
+                                    <RequiredMark />
                                 </Label>
                                 <Input
                                     id={`fulfillment-operations-service-form-quantity-${toAutomationIdSegment(line.salesOrderLineId)}`}

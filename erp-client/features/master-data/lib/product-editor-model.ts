@@ -93,6 +93,7 @@ type ProductEditorFormValues = Readonly<{
 
 type ProductEditorSectionId =
     | "basic"
+    | "supply"
     | "media"
     | "sku"
     | "effective"
@@ -103,6 +104,7 @@ const PRODUCT_EDITOR_SECTIONS: ReadonlyArray<{
     label: string
 }> = [
     { id: "basic", label: "商品资料" },
+    { id: "supply", label: "供应商供给" },
     { id: "sku", label: "规格与 SKU" },
     { id: "media", label: "图片与详情" },
     { id: "effective", label: "生效信息" },
@@ -183,7 +185,10 @@ function parseProductSectionId(
         ? raw.slice("product-section-".length)
         : raw
     const match = PRODUCT_EDITOR_SECTIONS.find((section) => section.id === id)
-    if (!match || (isCreate && match.id === "history")) {
+    if (
+        !match ||
+        (isCreate && (match.id === "history" || match.id === "supply"))
+    ) {
         return "basic"
     }
     return match.id

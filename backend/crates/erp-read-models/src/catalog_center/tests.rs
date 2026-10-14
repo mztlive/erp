@@ -122,7 +122,7 @@ impl CatalogSupplyQueryPort for RecordingQuery {
         self.calls.lock().unwrap().push("sellable");
         assert!(executor.session().is_none());
         assert_eq!(filter.keyword.as_deref(), Some("茶礼"));
-        assert_eq!(filter.supply_region.as_deref(), Some("上海"));
+        assert!(filter.supplier_id.is_none());
         assert_eq!(filter.eligibility_as_of.to_string(), "2026-09-07");
         Ok(PageResult { items: vec![], total: 9 })
     }
@@ -170,10 +170,9 @@ async fn product_projection_preserves_optional_fields_counts_and_page() {
 async fn sellable_query_keeps_normalized_filters_explicit_date_and_default_page() {
     let query = Arc::new(RecordingQuery::default());
     let service = CatalogCenterReadService::for_query(query.clone());
-    let params = serde_json::from_value(
-        json!({"q":" 茶礼 ","supplier_id":" ","supply_region":" 上海 ","eligibility_as_of":"2026-09-07"}),
-    )
-    .unwrap();
+    let params =
+        serde_json::from_value(json!({"q":" 茶礼 ","supplier_id":" ","eligibility_as_of":"2026-09-07"}))
+            .unwrap();
     let page = service.sellable_sku_list(&params).await.unwrap();
     assert_eq!((page.page, page.page_size, page.total), (1, 20, 9));
     assert_eq!(*query.calls.lock().unwrap(), vec!["sellable"]);

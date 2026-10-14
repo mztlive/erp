@@ -17,7 +17,6 @@ import {
     fetchMasterDataList,
     fetchProductFilterOptions,
     fetchProductListSkus,
-    fetchSkuSupplierCounts,
     listSellableItemsPage,
     updateProductListingStatus,
 } from "@/features/master-data/api"
@@ -173,15 +172,6 @@ export function useMasterDataCenterQuery(
 }
 
 /** W14 SKU 行的正式供给供应商数量，不从入库队列反推。 */
-export function useSkuSupplierCountsQuery(skuIds: readonly string[]) {
-    const normalized = [...new Set(skuIds.filter(Boolean))].sort()
-    return useQuery({
-        queryKey: [...masterDataKeys.all, "sku-supplier-counts", normalized],
-        queryFn: () => fetchSkuSupplierCounts(normalized),
-        enabled: normalized.length > 0,
-    })
-}
-
 /** 主数据变更后同步失效相关缓存（含计量单位下拉）。 */
 async function invalidateMasterDataCaches(
     queryClient: ReturnType<typeof useQueryClient>,

@@ -150,12 +150,8 @@ export function useBatchSupplyEditor({
                       "bulkPrice",
                       "inputTaxPercentage",
                       "minimumQuantity",
-                      "supplyRegionText",
                       "validFrom",
                       "validTo",
-                      "dropshipExpress",
-                      "freightAmount",
-                      "serviceFeeAmount",
                   ]
         changeRows(
             rows.map((row) => {

@@ -9,11 +9,7 @@ import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { OfferingField } from "./offering-terms"
 import { offeringTime } from "../lib/detail"
-import {
-    AVAILABILITY_STATUS_LABELS,
-    SOURCE_TYPE_LABELS,
-    type SupplierOfferingView,
-} from "../types"
+import { AVAILABILITY_STATUS_LABELS, type SupplierOfferingView } from "../types"
 
 export function OfferingAvailability({
     offering,
@@ -58,41 +54,6 @@ export function OfferingAvailability({
             <p className="text-xs leading-5 text-muted-foreground">
                 关系状态、条款有效期与当前可供分别核对；采购时以最新校验结果为准。
             </p>
-        </section>
-    )
-}
-
-export function OfferingIdentity({
-    offering,
-}: {
-    offering: SupplierOfferingView
-}) {
-    return (
-        <section className="space-y-3 text-sm">
-            <h3 className="font-medium">供给资料</h3>
-            <dl className="space-y-3">
-                <OfferingField label="公司商品编号">
-                    {offering.product_no || "—"}
-                </OfferingField>
-                <OfferingField label="公司 SKU 编号">
-                    {offering.sku_no || "—"}
-                </OfferingField>
-                <OfferingField label="供应商">
-                    {offering.supplier_name || offering.supplier_no || "未提供"}
-                </OfferingField>
-                <OfferingField label="供应商订货编码">
-                    <span className="num">{offering.supplier_sku_code}</span>
-                </OfferingField>
-                <OfferingField label="供应商商品编码">
-                    {offering.supplier_product_code || "未标注"}
-                </OfferingField>
-                <OfferingField label="登记来源">
-                    {SOURCE_TYPE_LABELS[offering.source_type]}
-                </OfferingField>
-                <OfferingField label="维护人">
-                    {offering.maintainer_user_name || "未提供"}
-                </OfferingField>
-            </dl>
         </section>
     )
 }

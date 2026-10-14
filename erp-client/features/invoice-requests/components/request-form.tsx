@@ -1,4 +1,6 @@
 "use client"
+
+import { RequiredMark } from "@/components/ui/required-mark"
 import { useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useStore } from "@tanstack/react-form"
@@ -147,6 +149,7 @@ export function InvoiceRequestForm({
                         <div className="space-y-2">
                             <label htmlFor="invoice-request-sales-order">
                                 销售单
+                                <RequiredMark />
                             </label>
                             <SalesOrderSearchCombobox
                                 id="invoice-request-sales-order"
@@ -262,6 +265,7 @@ export function InvoiceRequestForm({
                             <field.TextareaField
                                 id="invoice-request-reason"
                                 label="申请事由"
+                                required
                             />
                         )}
                     </form.AppField>
