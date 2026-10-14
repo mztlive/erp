@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_core::common::time::BusinessDate;
-use id_generator::next_id;
-use persistence_core::Transactional;
+use id_generator::{DocumentNumberGenerator, DocumentNumberKind, next_id};
+use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
 
 use super::CatalogService;
@@ -14,7 +14,7 @@ use crate::entity::catalog::product::{Product, ProductData};
 use crate::entity::catalog::product_revision::{ProductRevision, ProductRevisionData};
 use crate::entity::catalog::product_revision_media::{MediaRole, ProductRevisionMedia};
 use crate::entity::catalog::{EnableStatus, ProductId, ProductRevisionId, SpecificationSignatureSet};
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::ports::{EmptyPendingAttachments, PendingAttachmentBatch};
 use crate::repository::CatalogExt;
 
@@ -36,7 +36,8 @@ impl CatalogService {
     /// 创建商品（SPU + 首个商品修订 + 媒体 + 全部 SKU 行，跨集合事务）。
     ///
     /// 数据模型 §6.3：`product_no`/`sku_no`/`(product_id, specification_signature)`
-    /// 唯一由唯一索引兜底（`DuplicateKey` → 409）；新签名分配新 `sku_id`；
+    /// 唯一由唯一索引兜底（`DuplicateKey` → 409）；未指定 `product_no` 时自动取号，
+    /// 未填写编号的 SKU 按 `{product_no}-NN` 编号；新签名分配新 `sku_id`；
     /// 条码冲突阻断；分类必须允许商品类型；规格名和值在所属 SPU 内直接生效。
     ///
     /// # 参数
@@ -99,7 +100,7 @@ impl CatalogService {
     /// 字典/媒体/规格校验失败时返回对应错误。
     async fn build_product_draft(
         &self,
-        req: CreateProductRequest,
+        mut req: CreateProductRequest,
         actor: &AuditActor,
         pending_assets: &dyn PendingAttachmentBatch,
     ) -> Result<ProductDraft> {
@@ -117,10 +118,11 @@ impl CatalogService {
         let media = self.build_spu_media(&revision_id, &req, pending_assets).await?;
         let (maintainer_user_id, business_org_unit_id) =
             self.bind_create_maintainer(req.maintainer_user_id.as_deref(), actor).await?;
-        let product = Product::new(
+        let product_no = self.resolve_product_no(req.take_explicit_product_no()).await?;
+        let mut product = Product::new(
             product_id.clone(),
             ProductData {
-                product_no: req.product_no,
+                product_no,
                 product_kind: req.product_kind,
                 status,
                 maintainer_user_id,
@@ -128,10 +130,10 @@ impl CatalogService {
             },
             actor.id(),
         )?;
+        ProductSkuInput::fill_blank_sku_nos(&product.product_no, Vec::new(), &mut req.skus);
         let sku_items = self
             .build_create_sku_items(&product_id, req.effective_from, req.effective_to, actor.id(), req.skus)
             .await?;
-        let mut product = product;
         let revision = ProductRevision::new(
             revision_id.clone(),
             ProductRevisionData {
@@ -149,6 +151,32 @@ impl CatalogService {
         )?;
         product.attach_revision(&revision, actor.id())?;
         Ok(ProductDraft { change_reason: req.change_reason, product, revision, media, sku_items })
+    }
+
+    /// 确定新商品编号：请求已指定时沿用，否则按 `SPU` 序列取号。
+    ///
+    /// 放在其余校验之后，减少无效请求消耗序号；序号一经消费不回收。
+    ///
+    /// # 参数
+    /// * `requested` - 请求显式指定的非空白商品编号
+    ///
+    /// # 返回
+    /// 返回待写入的商品编号，规范化由实体完成。
+    ///
+    /// # 错误
+    /// 计数器写入失败时返回内部错误。
+    async fn resolve_product_no(&self, requested: Option<String>) -> Result<String> {
+        if let Some(product_no) = requested {
+            return Ok(product_no);
+        }
+        DocumentNumberGenerator::new(self.db.clone())
+            .next_number(
+                DocumentNumberKind::Product,
+                BusinessDate::today().as_naive_date(),
+                &mut NoTransaction,
+            )
+            .await
+            .map_err(|error| Error::Internal(error.to_string()))
     }
 
     /// 构造 SPU 轮播图与详情图媒体行。

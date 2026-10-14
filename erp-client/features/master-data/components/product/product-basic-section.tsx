@@ -62,32 +62,7 @@ function ProductBasicSection({
             disabled={!canRevise}
         >
             <div className="grid gap-5 sm:grid-cols-12">
-                {isCreate ? (
-                    <div className="space-y-1.5 sm:col-span-6">
-                        <Label htmlFor={`${prefix}-product-no`}>
-                            商品编号 *
-                        </Label>
-                        <Input
-                            id={`${prefix}-product-no`}
-                            value={fields.productNo}
-                            disabled={!isCreate}
-                            onChange={(event) =>
-                                setFields((previous) => ({
-                                    ...previous,
-                                    productNo: event.target.value,
-                                }))
-                            }
-                            placeholder="请输入全局唯一商品编号"
-                        />
-                    </div>
-                ) : null}
-                <div
-                    className={
-                        isCreate
-                            ? "space-y-1.5 sm:col-span-6"
-                            : "space-y-1.5 sm:col-span-12"
-                    }
-                >
+                <div className="space-y-1.5 sm:col-span-12">
                     <Label htmlFor={`${prefix}-name`}>商品名称 *</Label>
                     <Input
                         id={`${prefix}-name`}

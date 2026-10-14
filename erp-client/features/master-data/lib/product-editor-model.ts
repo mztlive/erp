@@ -137,7 +137,6 @@ function applySpecsFromDrafts(
         specs,
         existing: reorderedExisting,
         baseUnit: current.baseUnit,
-        skuNoPrefix: "SKU",
         defaultSkuName: productName,
     })
     return { ...current, specs, skus }

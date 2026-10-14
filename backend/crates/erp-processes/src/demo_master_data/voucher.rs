@@ -42,11 +42,11 @@ pub(super) fn voucher_request(request: &CreateProductRequest) -> Result<CreateVo
     let [sku] = request.skus.as_slice() else {
         return Err(Error::ValidationError("演示卡券必须只有一个 SKU".into()));
     };
-    if sku.sku_no != request.product_no || !sku.spec_entries.is_empty() {
+    if request.product_no.as_deref() != Some(sku.sku_no.as_str()) || !sku.spec_entries.is_empty() {
         return Err(Error::ValidationError("演示卡券的商品与 SKU 编号必须相同且无规格组合".into()));
     }
     let result = CreateVoucherCategoryRequest {
-        voucher_no: request.product_no.clone(),
+        voucher_no: sku.sku_no.clone(),
         name: request.name.clone(),
         description: request.description.clone().unwrap_or_default(),
         specification: request.specification.clone(),

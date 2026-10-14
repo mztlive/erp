@@ -192,6 +192,84 @@ mod tests {
         assert!(request.validate().is_err(), "空 SKU 列表必须被拒绝");
     }
 
+    fn create_product_request_json(product_no: Option<&str>) -> serde_json::Value {
+        let mut value = serde_json::json!({
+            "product_kind": "PHYSICAL",
+            "name": "商品",
+            "category_id": "cat-1",
+            "brand_id": "brand-1",
+            "effective_from": "2026-01-01",
+            "skus": [{ "sku_no": "SKU-01", "name": "商品", "base_unit_id": "unit-1" }],
+        });
+        if let Some(product_no) = product_no {
+            value["product_no"] = serde_json::json!(product_no);
+        }
+        value
+    }
+
+    #[test]
+    fn create_product_request_without_product_no_leaves_numbering_to_server() {
+        let mut request: super::CreateProductRequest =
+            serde_json::from_value(create_product_request_json(None)).unwrap();
+
+        assert!(request.validate().is_ok(), "省略商品编号必须通过请求校验");
+        assert_eq!(request.take_explicit_product_no(), None);
+    }
+
+    #[test]
+    fn create_product_request_treats_blank_product_no_as_absent() {
+        let mut request: super::CreateProductRequest =
+            serde_json::from_value(create_product_request_json(Some("   "))).unwrap();
+
+        assert!(request.validate().is_ok());
+        assert_eq!(request.take_explicit_product_no(), None);
+    }
+
+    #[test]
+    fn create_product_request_keeps_explicit_product_no() {
+        let mut request: super::CreateProductRequest =
+            serde_json::from_value(create_product_request_json(Some(" P-1 "))).unwrap();
+
+        assert_eq!(request.take_explicit_product_no().as_deref(), Some(" P-1 "));
+        assert_eq!(request.product_no, None, "取出后请求不再持有编号");
+    }
+
+    fn sku_input(sku_no: &str) -> super::ProductSkuInput {
+        serde_json::from_value(
+            serde_json::json!({ "sku_no": sku_no, "name": "商品", "base_unit_id": "unit-1" }),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn create_product_request_accepts_skus_without_sku_no() {
+        let mut value = create_product_request_json(None);
+        value["skus"] = serde_json::json!([{ "name": "商品", "base_unit_id": "unit-1" }]);
+        let request: super::CreateProductRequest = serde_json::from_value(value).unwrap();
+
+        assert!(request.validate().is_ok(), "新增 SKU 省略编号必须通过请求校验");
+        assert_eq!(request.skus[0].sku_no, "");
+    }
+
+    #[test]
+    fn fill_blank_sku_nos_skips_existing_and_explicit_numbers() {
+        let mut skus = vec![sku_input(""), sku_input("SPU1-02"), sku_input("  ")];
+
+        super::ProductSkuInput::fill_blank_sku_nos("SPU1", vec!["SPU1-01".to_string()], &mut skus);
+
+        let numbers = skus.iter().map(|sku| sku.sku_no.as_str()).collect::<Vec<_>>();
+        assert_eq!(numbers, ["SPU1-03", "SPU1-02", "SPU1-04"]);
+    }
+
+    #[test]
+    fn fill_blank_sku_nos_keeps_rows_that_already_have_numbers() {
+        let mut skus = vec![sku_input("KEEP-1")];
+
+        super::ProductSkuInput::fill_blank_sku_nos("SPU1", Vec::new(), &mut skus);
+
+        assert_eq!(skus[0].sku_no, "KEEP-1");
+    }
+
     fn voucher_category_request_json() -> serde_json::Value {
         serde_json::json!({
             "voucher_no": "VC-1",

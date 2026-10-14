@@ -245,7 +245,7 @@ mod tests {
         let mut product = Product::new(
             ProductId::new("demo-product"),
             ProductData {
-                product_no: template.product_no.clone(),
+                product_no: template.product_no.clone().unwrap(),
                 product_kind: template.product_kind,
                 status: EnableStatus::Active,
                 maintainer_user_id: owner.into(),

@@ -138,7 +138,8 @@ impl CatalogService {
     /// 规格编辑商品（数据模型 §6.3 全量替换语义，跨集合事务）。
     ///
     /// 按规范化签名把提交前后的签名集合分类为「保留/新增/重新启用/移除」：
-    /// 签名未变沿用原 `sku_id` 并追加修订；从未存在的新签名分配新 `sku_id`；
+    /// 签名未变沿用原 `sku_id` 并追加修订；从未存在的新签名分配新 `sku_id`，
+    /// 未填写编号时按 `{product_no}-NN` 跳过该商品既有编号取号；
     /// 历史停用签名复用原 `sku_id` 并显式重新启用；移除签名的旧 SKU 保留
     /// 全部历史并转为停用。任一校验失败或并发冲突整体回滚。
     ///
@@ -219,6 +220,8 @@ impl CatalogService {
         pending_assets: &dyn PendingAttachmentBatch,
     ) -> Result<SpecEditPlan> {
         let mut base = self.prepare_spec_edit_base(&product, &req, pending_assets).await?;
+        let existing_sku_nos = base.current_by_signature.values().map(|sku| sku.sku_no.clone());
+        ProductSkuInput::fill_blank_sku_nos(&product.product_no, existing_sku_nos, &mut req.skus);
         let change_reason = req.change_reason.as_deref().map(str::trim);
         let audit_message = change_reason.filter(|reason| !reason.is_empty()).map(str::to_string);
         let line_ctx = SkuLineContext {

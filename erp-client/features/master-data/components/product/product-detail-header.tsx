@@ -133,7 +133,9 @@ export function ProductDetailHeader({
             }
             meta={
                 <>
-                    <span>商品编号：{fields.productNo || "待填写"}</span>
+                    <span>
+                        商品编号：{fields.productNo || "保存后自动生成"}
+                    </span>
                     {fields.brand ? <span>{fields.brand}</span> : null}
                     {fields.category ? <span>{fields.category}</span> : null}
                     {fields.productKind ? (

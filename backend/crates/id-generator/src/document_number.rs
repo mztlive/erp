@@ -82,6 +82,9 @@ pub enum DocumentNumberKind {
 
     /// 供应商结算单（二期预声明），对应 `supplier_settlement_statement`。
     SupplierSettlement,
+
+    /// 公司商品（SPU），对应内部建档未指定编号时的 `product.product_no`。
+    Product,
 }
 
 impl Display for DocumentNumberKind {
@@ -145,6 +148,7 @@ impl DocumentNumberKind {
             Self::PurchaseReturn => ("PR", "purchase_return"),
             Self::SupplierFulfillment => ("SF", "supplier_fulfillment"),
             Self::SupplierSettlement => ("SS", "supplier_settlement"),
+            Self::Product => ("SPU", "product"),
         }
     }
 }
@@ -280,7 +284,7 @@ mod tests {
 
     use super::{COUNTER_COLLECTION, DocumentNumberKind, SEQ_WIDTH, format_number};
 
-    const KIND_TABLE: [(DocumentNumberKind, &str); 13] = [
+    const KIND_TABLE: [(DocumentNumberKind, &str); 14] = [
         (DocumentNumberKind::SalesOrder, "SO"),
         (DocumentNumberKind::PurchaseOrder, "PO"),
         (DocumentNumberKind::PurchaseReceipt, "GRN"),
@@ -294,6 +298,7 @@ mod tests {
         (DocumentNumberKind::PurchaseReturn, "PR"),
         (DocumentNumberKind::SupplierFulfillment, "SF"),
         (DocumentNumberKind::SupplierSettlement, "SS"),
+        (DocumentNumberKind::Product, "SPU"),
     ];
 
     #[test]
@@ -337,6 +342,7 @@ mod tests {
 
         assert_eq!(format_number(DocumentNumberKind::SalesOrder, date, 123), "SO20260701-000123");
         assert_eq!(format_number(DocumentNumberKind::Invoice, date, 1), "INV20260701-000001");
+        assert_eq!(format_number(DocumentNumberKind::Product, date, 7), "SPU20260701-000007");
     }
 
     #[test]

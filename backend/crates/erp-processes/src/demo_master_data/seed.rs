@@ -47,7 +47,7 @@ impl SeedRequest {
             Self::Warehouse(row) => (DemoKind::Warehouse, &row.warehouse_code),
             Self::Customer(row) => (DemoKind::Customer, &row.idempotency_key),
             Self::Supplier(row) => (DemoKind::Supplier, &row.idempotency_key),
-            Self::Product(row) => (DemoKind::Product, &row.product_no),
+            Self::Product(row) => (DemoKind::Product, row.product_no.as_deref().unwrap_or_default()),
         }
     }
 

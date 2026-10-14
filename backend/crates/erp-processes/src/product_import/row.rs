@@ -174,7 +174,7 @@ fn imported_product_request(
 ) -> CreateProductRequest {
     CreateProductRequest {
         change_reason: Some(format!("产品报价表导入 第{}行", row.row_number)),
-        product_no: row.product_no,
+        product_no: Some(row.product_no),
         product_kind: ProductKind::Physical,
         maintainer_user_id: None,
         name: row.name.clone(),

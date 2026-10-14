@@ -101,7 +101,7 @@ export function createProductFormBindings(
                 title: `移除 ${removed.length} 个 SKU？`,
                 description: `应用后将得到 ${next.skus.length} 个 SKU。被移除 SKU 的价格、主图、条码和供给关联无法继承；保存商品后生效。`,
                 details: removed.map(
-                    (sku) => `${sku.skuNo || "未编码"} · ${sku.specLabel}`,
+                    (sku) => `${sku.skuNo || "新 SKU"} · ${sku.specLabel}`,
                 ),
                 confirmLabel: "应用规格",
                 destructive: true,
@@ -208,7 +208,7 @@ export function createProductFormBindings(
                 title: `覆盖 ${overwritten.length} 个 SKU 的价格或起订量？`,
                 description: `本次应用${fieldsChanged}，保存商品后生效。`,
                 details: overwritten.map(
-                    (sku) => `${sku.skuNo || "未编码"} · ${sku.specLabel}`,
+                    (sku) => `${sku.skuNo || "新 SKU"} · ${sku.specLabel}`,
                 ),
                 confirmLabel: "应用价格",
                 onConfirm: apply,

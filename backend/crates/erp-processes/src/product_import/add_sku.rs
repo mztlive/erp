@@ -1,18 +1,16 @@
 //! 同一产品编码追加 SKU 到已有 SPU。
 
-use std::collections::HashSet;
-
 use application_core::AuditActor;
 use erp_catalog::entity::catalog::product_revision_media::MediaRole;
 use erp_catalog::entity::catalog::{Product, Sku, SpecSignatureEntry, compute_specification_signature};
 use erp_catalog::repository::prelude::*;
-use erp_catalog::{CatalogExt, ProductMediaInput, ProductSkuInput, UpdateProductRequest};
+use erp_catalog::{CatalogExt, ProductMediaInput, ProductSkuInput, SkuNoSequence, UpdateProductRequest};
 use erp_core::ids::{FileAssetId, ProductId};
 use persistence_core::NoTransaction;
 
 use super::ProductImportProcess;
 use super::backfill::sku_inputs_with_main_image;
-use super::identity::{NormalizedImportRow, next_sku_no};
+use super::identity::NormalizedImportRow;
 use super::images::{RowMedia, RowMediaSource, resolve_row_media};
 use super::row::RowImportOutcome;
 use crate::{Error, Result};
@@ -172,12 +170,12 @@ fn appended_sku_input(
     sku_inputs: &[ProductSkuInput],
     main_image_asset_id: Option<FileAssetId>,
 ) -> Result<ProductSkuInput> {
-    let taken = sku_inputs.iter().map(|sku| sku.sku_no.clone()).collect::<HashSet<_>>();
+    let taken = sku_inputs.iter().map(|sku| sku.sku_no.clone());
     Ok(ProductSkuInput {
         sku_id: None,
         expected_sku_revision_id: None,
         reenable: false,
-        sku_no: next_sku_no(&row.product_no, &taken),
+        sku_no: SkuNoSequence::new(&row.product_no, taken).next_no(),
         name: row.name.clone(),
         base_unit_id: sku_inputs
             .first()

@@ -37,7 +37,7 @@ function mapProductSkus(fields: ProductFields) {
             sku_id: sku.skuId || null,
             expected_sku_revision_id: sku.skuRevisionId || null,
             reenable: Boolean(sku.skuId && sku.requiresExplicitReenable),
-            sku_no: sku.skuNo,
+            sku_no: sku.skuNo || undefined,
             name: sku.name.trim(),
             base_unit_id: fields.baseUnitId,
             barcode: sku.barcode || null,
@@ -95,7 +95,6 @@ export async function createProduct(
     try {
         const command = {
             change_reason: input.changeReason || "新建商品",
-            product_no: fields.productNo.trim(),
             product_kind: fields.productKind,
             name: input.name.trim(),
             description: fields.description || null,

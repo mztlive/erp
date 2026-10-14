@@ -33,8 +33,9 @@ pub use dto::{
 pub use entity::catalog::{
     EMPTY_SPEC_SIGNATURE, EnableStatus, ListingStatus, Product, ProductBrand, ProductCategory, ProductKind,
     ProductListingStatus, ProductRevision, Sku, SkuAttribute, SkuAttributeValue, SkuCoverageStatus,
-    SkuRevision, SpecSignatureEntry, SpecificationSignatureRead, SpecificationSignatureSet, UnitOfMeasure,
-    compute_specification_signature, parse_specification_signature, read_specification_signature,
+    SkuNoSequence, SkuRevision, SpecSignatureEntry, SpecificationSignatureRead, SpecificationSignatureSet,
+    UnitOfMeasure, compute_specification_signature, parse_specification_signature,
+    read_specification_signature,
 };
 pub use error::{Error, Result};
 pub use ports::{

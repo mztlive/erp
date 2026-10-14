@@ -82,12 +82,10 @@ export function rebuildSkusFromSpecs(input: {
     specs: readonly ProductSpecDimension[]
     existing: readonly ProductSkuFields[]
     baseUnit: string
-    skuNoPrefix?: string
     /** 新建 SKU 行时的默认名称（通常取商品名称）。 */
     defaultSkuName?: string
 }): ProductSkuFields[] {
     const combos = cartesianSpecValues(input.specs)
-    const prefix = (input.skuNoPrefix ?? "SKU").replace(/-+$/, "")
     const defaultSkuName = (input.defaultSkuName ?? "").trim()
     const existingBySignature = new Map<string, ProductSkuFields>()
     for (const sku of input.existing) {
@@ -99,16 +97,6 @@ export function rebuildSkusFromSpecs(input: {
         }
     }
 
-    const reservedCodes = new Set(input.existing.map((sku) => sku.skuNo))
-    let nextCode = 1
-    const allocateCode = () => {
-        let code: string
-        do {
-            code = `${prefix}-${String(nextCode++).padStart(2, "0")}`
-        } while (reservedCodes.has(code))
-        reservedCodes.add(code)
-        return code
-    }
     return combos.map((attributeValues) => {
         const signature = computeSpecificationSignature(
             input.specs,
@@ -120,8 +108,8 @@ export function rebuildSkusFromSpecs(input: {
             skuRevisionId: matched?.skuRevisionId,
             requiresExplicitReenable: matched?.requiresExplicitReenable,
             specificationSignature: signature,
-            /** 系统默认生成；已有编号或用户覆盖则保留。 */
-            skuNo: matched?.skuNo || allocateCode(),
+            /** 已有 SKU 保留原编号；新行留空，保存时由服务端按商品编号生成。 */
+            skuNo: matched?.skuNo ?? "",
             /** 已有名称优先；新建行默认带入商品名称。 */
             name: matched?.name?.trim() || defaultSkuName,
             attributeValues: [...attributeValues],
@@ -164,7 +152,7 @@ export function emptyProductFields(): ProductFields {
         specs: [],
         skus: [
             {
-                skuNo: "SKU-01",
+                skuNo: "",
                 name: "",
                 specificationSignature: "",
                 attributeValues: [],
@@ -179,7 +167,6 @@ export function emptyProductFields(): ProductFields {
 
 /** 校验：每个启用 SKU 必须有主图；SPU 级字段完整。 */
 export function validateProductFields(fields: ProductFields): string | null {
-    if (!fields.productNo.trim()) return "请填写商品编号"
     if (!fields.productKind) return "请选择商品类型"
     if (
         !fields.baseUnitId.trim() ||
@@ -192,16 +179,11 @@ export function validateProductFields(fields: ProductFields): string | null {
         return "请选择有效分类"
     if (!fields.brandId.trim() || !fields.brand.trim()) return "请选择有效品牌"
     if (fields.skus.length === 0) return "请至少生成一个 SKU"
-    const skuNos = new Set<string>()
     for (const sku of fields.skus) {
-        if (!sku.skuNo.trim()) return "SKU 编号不能为空"
-        if (!sku.name.trim())
-            return `SKU「${sku.skuNo.trim() || "未编号"}」名称不能为空`
-        if (skuNos.has(sku.skuNo.trim()))
-            return `SKU 编号「${sku.skuNo.trim()}」重复`
-        skuNos.add(sku.skuNo.trim())
+        const skuLabel = sku.skuNo || sku.specLabel
+        if (!sku.name.trim()) return `SKU「${skuLabel}」名称不能为空`
         if (sku.lifecycleStatus === "ENABLED" && !sku.mainImage.trim()) {
-            return `启用中的 SKU「${sku.skuNo}」必须上传主图`
+            return `启用中的 SKU「${skuLabel}」必须上传主图`
         }
         const moneyFields: Array<[string, string | undefined]> = [
             ["一件代发价", sku.salePrice],
@@ -216,16 +198,16 @@ export function validateProductFields(fields: ProductFields): string | null {
                     return `${label}不得为负数`
             }
         } catch {
-            return `SKU「${sku.skuNo}」的参考价格格式不正确`
+            return `SKU「${skuLabel}」的参考价格格式不正确`
         }
         if (sku.bulkMinQuantity) {
             try {
                 parseDecimal(sku.bulkMinQuantity, { maxScale: 6 })
                 if (compareDecimal(sku.bulkMinQuantity, "0", 6) <= 0) {
-                    return `SKU「${sku.skuNo}」的集采起订量必须大于零`
+                    return `SKU「${skuLabel}」的集采起订量必须大于零`
                 }
             } catch {
-                return `SKU「${sku.skuNo}」的集采起订量格式不正确`
+                return `SKU「${skuLabel}」的集采起订量格式不正确`
             }
         }
     }

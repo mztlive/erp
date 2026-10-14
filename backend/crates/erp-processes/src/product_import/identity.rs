@@ -1,7 +1,5 @@
 //! 导入编号与金额规范化。
 
-use std::collections::HashSet;
-
 use erp_catalog::entity::catalog::product_import::{
     IMPORT_NAME_MAX_CHARS, IMPORT_SPEC_MAX_CHARS, collapse_import_text, first_import_barcode,
     import_brand_name, is_import_blank, truncate_import_text,
@@ -157,31 +155,6 @@ pub fn sku_spec_value(spec: Option<&str>, barcode: Option<&str>, name: &str) -> 
     truncate_import_text(name, SKU_SPEC_VALUE_MAX_CHARS)
 }
 
-/// 在已占用编号中分配下一个 SKU 编号。
-///
-/// # 参数
-/// * `product_no` - 商品编号
-/// * `taken` - 已占用的 SKU 编号
-///
-/// # 返回
-/// 返回 `{product_no}-NN`。
-///
-/// # 错误
-/// 无。
-pub fn next_sku_no(product_no: &str, taken: &HashSet<String>) -> String {
-    let mut index = 1u32;
-    loop {
-        let candidate = format!("{product_no}-{index:02}");
-        if !taken.contains(&candidate) {
-            return candidate;
-        }
-        index = index.saturating_add(1);
-        if index == 0 {
-            return format!("{product_no}-SKU");
-        }
-    }
-}
-
 /// 生成稳定导入代码。
 ///
 /// # 参数
@@ -228,11 +201,9 @@ fn parse_optional_quantity(value: &str, column: &str) -> Result<Option<Quantity>
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-
     use erp_catalog::PRODUCT_IMPORT_HEADERS;
 
-    use super::{next_sku_no, normalize_import_row, stable_code};
+    use super::{normalize_import_row, stable_code};
 
     #[test]
     fn stable_code_is_deterministic() {
@@ -269,12 +240,6 @@ mod tests {
         assert_eq!(right.product_no, "FSY-1");
         assert_eq!(left.spec_entries[0].attribute_value_code, "5kg");
         assert_eq!(right.spec_entries[0].attribute_value_code, "10kg");
-    }
-
-    #[test]
-    fn next_sku_no_skips_taken_codes() {
-        let taken = HashSet::from(["FSY-1-01".into()]);
-        assert_eq!(next_sku_no("FSY-1", &taken), "FSY-1-02");
     }
 
     /// 原模板只导入公司代发/集采底价与市场价，供应商成本不能补成公司参考价。

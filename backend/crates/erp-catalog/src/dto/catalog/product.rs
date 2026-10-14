@@ -10,7 +10,7 @@ use validator::Validate;
 use super::common::{PageParams, non_blank, paging_params};
 use crate::entity::catalog::product_revision_media::{MediaRole, ProductRevisionMedia};
 use crate::entity::catalog::{
-    EnableStatus, ListingStatus, ProductKind, ProductListingStatus, ProductRevision, Sku,
+    EnableStatus, ListingStatus, ProductKind, ProductListingStatus, ProductRevision, Sku, SkuNoSequence,
 };
 use crate::error::Result;
 use crate::repository::{ProductRevisionRow, ProductRow, SkuRow};
@@ -60,8 +60,9 @@ pub struct ProductSkuInput {
     /// 历史停用签名是否明确重新启用。
     #[serde(default)]
     pub reenable: bool,
-    /// SKU 编号（全局唯一业务编码，允许手动覆盖）。
-    #[validate(custom(function = "non_blank", message = "SKU编号不能为空"))]
+    /// SKU 编号（全局唯一业务编码）；新增 SKU 留空时由服务端按 `{product_no}-NN` 编号，
+    /// 既有 SKU 必须回传原编号。
+    #[serde(default)]
     pub sku_no: String,
     /// 公司审核后的 SKU 名称（写入 SKU 修订快照，可与商品名称不同）。
     #[validate(custom(function = "non_blank", message = "SKU名称不能为空"))]
@@ -92,15 +93,44 @@ pub struct ProductSkuInput {
     pub spec_entries: Vec<SpecEntryInput>,
 }
 
+impl ProductSkuInput {
+    /// 为未填写编号的 SKU 行按 `{product_no}-NN` 补齐编号。
+    ///
+    /// 先登记既有编号与本次已填写的编号，再按行序为空白行取号，
+    /// 保证自动编号不与同一请求中的显式编号冲突。
+    ///
+    /// # 参数
+    /// * `product_no` - 所属商品编号
+    /// * `existing` - 该商品既有 SKU 的编号（含已停用）
+    /// * `skus` - 本次提交的 SKU 行
+    ///
+    /// # 返回
+    /// 无；空白行的 `sku_no` 被原地补齐。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn fill_blank_sku_nos(
+        product_no: &str,
+        existing: impl IntoIterator<Item = String>,
+        skus: &mut [Self],
+    ) {
+        let explicit = skus.iter().map(|sku| sku.sku_no.clone()).filter(|sku_no| !sku_no.trim().is_empty());
+        let mut sequence = SkuNoSequence::new(product_no, existing.into_iter().chain(explicit));
+        for sku in skus.iter_mut().filter(|sku| sku.sku_no.trim().is_empty()) {
+            sku.sku_no = sequence.next_no();
+        }
+    }
+}
+
 /// 商品（SPU）创建请求（W14 正向建品：SPU + 首个商品修订 + 媒体 + 全部 SKU 行，
 /// 在一个事务内原子写入）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CreateProductRequest {
     /// 创建原因，写入同一事务内的审计日志。
     pub change_reason: Option<String>,
-    /// 商品编号（全局唯一，创建后不可修改）。
-    #[validate(custom(function = "non_blank", message = "商品编号不能为空"))]
-    pub product_no: String,
+    /// 商品编号（全局唯一，创建后不可修改）；缺省或空白时由服务端按 `SPU` 序列取号。
+    #[serde(default)]
+    pub product_no: Option<String>,
     /// 商品业务类型（独立必填稳定属性，创建后不可变）。
     pub product_kind: ProductKind,
     /// 商品维护人；缺省为操作人。禁止用创建人字段兜底。
@@ -136,6 +166,22 @@ pub struct CreateProductRequest {
     #[validate(length(min = 1, message = "至少需要一个SKU"))]
     #[validate(nested)]
     pub skus: Vec<ProductSkuInput>,
+}
+
+impl CreateProductRequest {
+    /// 取出请求显式指定的商品编号。
+    ///
+    /// # 参数
+    /// 无；取出后请求中的编号置空。
+    ///
+    /// # 返回
+    /// 非空白时返回原编号（规范化由实体完成）；缺省或空白返回 `None`，表示由服务端取号。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn take_explicit_product_no(&mut self) -> Option<String> {
+        self.product_no.take().filter(|value| !value.trim().is_empty())
+    }
 }
 
 /// 商品（SPU）规格编辑请求（W14 编辑商品：一次性提交修订后的全部 SKU 行，

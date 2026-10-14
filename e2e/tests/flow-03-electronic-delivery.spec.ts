@@ -34,8 +34,8 @@ import {
 
 test.describe.configure({ mode: 'serial' })
 
-const VIRTUAL_PRODUCT_NO = 'E2E-VIRT-ED-001'
-const VIRTUAL_SKU_NO = 'E2E-VIRT-ED-001'
+// 供应商订货编码；公司商品与 SKU 编码由系统生成，不再作为查找键。
+const VIRTUAL_SUPPLIER_SKU_CODE = 'E2E-VIRT-ED-001'
 const VIRTUAL_PRODUCT_NAME = 'E2E 电子卡密（虚拟）'
 const VIRTUAL_CATEGORY_NAME = 'E2E虚拟商品'
 const VIRTUAL_CATEGORY_CODE = 'E2E-VIRTUAL'
@@ -190,7 +190,7 @@ async function ensureVirtualProduct(page: Page) {
     await expect(page.getByRole('heading', { name: '商品列表', exact: true, level: 1 })).toBeVisible({ timeout: 20000 })
     const search = page.locator('#master-data-products-list-toolbar-search-input')
     if (await search.count()) {
-        await search.fill(VIRTUAL_PRODUCT_NO)
+        await search.fill(VIRTUAL_PRODUCT_NAME)
         const searched = page
             .waitForResponse(
                 (response) =>
@@ -202,17 +202,19 @@ async function ensureVirtualProduct(page: Page) {
         await search.press('Enter')
         await searched
     }
-    if (await page.getByText(VIRTUAL_PRODUCT_NAME).count()) {
-        await page.getByText(VIRTUAL_PRODUCT_NAME).first().click()
+    // 只认结果行：工具栏关键词筛选标签也会显示商品名称。
+    const existing = page.getByRole('row').filter({ hasText: VIRTUAL_PRODUCT_NAME })
+    if (await existing.count()) {
+        await existing.getByText(VIRTUAL_PRODUCT_NAME).first().click()
         return
     }
     await page.locator('#master-data-products-list-create').click()
     // 详情页各分区使用 detail 前缀 id（basic 分区为 master-data-product-detail-basic）。
     const basicId = 'master-data-product-detail-basic'
-    await expect(page.locator(`#${basicId}-product-no`)).toBeVisible({
+    // 商品编号由系统在保存时生成，新建页不再提供编号输入。
+    await expect(page.locator(`#${basicId}-name`)).toBeVisible({
         timeout: 20000,
     })
-    await page.locator(`#${basicId}-product-no`).fill(VIRTUAL_PRODUCT_NO)
     await page.locator(`#${basicId}-name`).fill(VIRTUAL_PRODUCT_NAME)
     await page.locator(`#${basicId}-description`).fill('E2E 虚拟商品电子交付用')
     await chooseComboboxById(page, `${basicId}-kind-combobox`, '虚拟')
@@ -221,8 +223,7 @@ async function ensureVirtualProduct(page: Page) {
     await chooseComboboxById(page, `${basicId}-brand-combobox`, /福尚云/)
     // SKU 与商品资料同页编辑，使用稳定分区定位。
     await page.locator('#product-section-sku').scrollIntoViewIfNeeded()
-    // SKU 名称、编码、条码与价格都在 SKU 表格行内直接填写。
-    await page.getByLabel('默认规格 SKU 编码').fill(VIRTUAL_SKU_NO)
+    // SKU 名称、条码与价格在 SKU 表格行内直接填写；SKU 编码保存后由系统按商品编号生成。
     await page.getByLabel('默认规格 SKU 名称').fill(VIRTUAL_PRODUCT_NAME)
     // 主图在表格行内 tile 上传（启用 SKU 必填）：点行内「选择主图」走文件选择器。
     const imageGroup = page.getByRole('group', { name: /主图/ }).first()
@@ -279,7 +280,7 @@ async function ensureVirtualOfferingAndListing(page: Page) {
         timeout: 20000,
     })
     await offeringsLoaded
-    if (!(await page.getByText(VIRTUAL_SKU_NO).count())) {
+    if (!(await page.getByText(VIRTUAL_SUPPLIER_SKU_CODE).count())) {
         await page.locator('#supplier-offerings-page-create').click()
         const dialog = page.getByRole('dialog', { name: '添加供给' })
         await expect(dialog).toBeVisible({ timeout: 20000 })
@@ -289,7 +290,7 @@ async function ensureVirtualOfferingAndListing(page: Page) {
             VIRTUAL_PRODUCT_NAME,
         )
         await chooseComboboxById(page, 'supplier-offerings-dialog-register-supplier', /上海通卡/)
-        await dialog.locator('#supplier-offerings-dialog-register-supplier-sku-code').fill(VIRTUAL_SKU_NO)
+        await dialog.locator('#supplier-offerings-dialog-register-supplier-sku-code').fill(VIRTUAL_SUPPLIER_SKU_CODE)
         await dialog.locator('#supplier-offerings-dialog-register-dropship-price').fill('88.00')
         await dialog.locator('#supplier-offerings-dialog-register-bulk-price').fill('80.00')
         await dialog.locator('#supplier-offerings-dialog-register-minimum-quantity').fill('1')
@@ -315,14 +316,14 @@ async function ensureVirtualOfferingAndListing(page: Page) {
         } else {
             await expectToast(page, '供给已添加')
             await expect(dialog).toBeHidden({ timeout: 20000 })
-            await expect(page.getByText(VIRTUAL_SKU_NO).first()).toBeVisible({ timeout: 20000 })
+            await expect(page.getByText(VIRTUAL_SUPPLIER_SKU_CODE).first()).toBeVisible({ timeout: 20000 })
         }
     }
 
     await page.goto('/master-data/products')
     await expect(page.getByRole('heading', { name: '商品列表', exact: true, level: 1 })).toBeVisible({ timeout: 20000 })
     const search = page.locator('#master-data-products-list-toolbar-search-input')
-    await search.fill(VIRTUAL_PRODUCT_NO)
+    await search.fill(VIRTUAL_PRODUCT_NAME)
     await search.press('Enter')
     const listing = page.getByRole('switch', { name: `${VIRTUAL_PRODUCT_NAME}整组上架状态` })
     await expect(listing).toBeVisible({ timeout: 20000 })

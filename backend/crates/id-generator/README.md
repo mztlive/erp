@@ -47,12 +47,13 @@
 | `PurchaseReturn`      | `PR`  | 采购退货单   | 一期             | `purchase_return_order.purchase_return_no` |
 | `SupplierFulfillment` | `SF`  | 供应商履约单 | 二期（仅预声明） | `supplier_fulfillment_order`               |
 | `SupplierSettlement`  | `SS`  | 供应商结算单 | 二期（仅预声明） | `supplier_settlement_statement`            |
+| `Product`             | `SPU` | 公司商品     | 一期             | `product.product_no`（内部建档未指定时）   |
 
 数据模型未定义前缀时按业务缩写设计（SO=Sales Order、PO=Purchase Order、
 GRN=Goods Receipt Note、DN=Delivery Note、CA=Customer Acceptance、
 SA=Stock Adjustment、CR=Customer Receipt、PM=Payment、INV=Invoice、
 SR=Sales Return、PR=Purchase Return、SF=Supplier Fulfillment、
-SS=Supplier Settlement）。**前缀一经启用不得变更**（历史编号依赖前缀，见编号格式）。
+SS=Supplier Settlement、SPU=Standard Product Unit）。**前缀一经启用不得变更**（历史编号依赖前缀，见编号格式）。
 
 未占用序号的说明：
 

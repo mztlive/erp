@@ -21,6 +21,7 @@ import {
     SkuMainImageField,
 } from "@/features/master-data/components/product/product-editor-media"
 import { SkuSupplierCell } from "@/features/master-data/components/product/product-sku-supplier-cell"
+import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type {
     ProductFields,
     ProductSkuFields,
@@ -68,7 +69,7 @@ function SkuRow({
     stableId,
 }: SkuRowProps) {
     const skuSegment = toAutomationIdSegment(
-        sku.skuId || sku.specificationSignature || sku.skuNo || `sku-${index}`,
+        sku.skuId || sku.specificationSignature || sku.skuNo || "default",
     )
     const disableConfirmation = useChangeConfirmation(
         `master-data-product-sku-${skuSegment}-disable`,
@@ -159,24 +160,21 @@ function SkuRow({
             </TableCell>
             <TableCell className={`${cellPad} px-2`}>
                 <div className="flex min-w-40 flex-col gap-1">
-                    <Input
+                    <p
                         id={`master-data-product-sku-${skuSegment}-code`}
-                        className="h-control-sm num"
-                        value={sku.skuNo}
-                        disabled={!canRevise}
-                        onChange={(event) =>
-                            updateSku(index, {
-                                skuNo: event.target.value,
-                            })
+                        className={
+                            sku.skuNo
+                                ? "num flex h-control-sm items-center truncate px-1 text-sm"
+                                : "flex h-control-sm items-center truncate px-1 text-xs text-muted-foreground"
                         }
-                        placeholder="SKU 编码"
-                        aria-label={`${sku.specLabel} SKU 编码`}
                         title={
-                            canRevise
-                                ? "SKU 编码：系统默认生成，可手动覆盖"
-                                : "SKU 编码"
+                            sku.skuNo
+                                ? "SKU 编码：系统生成，不可修改"
+                                : undefined
                         }
-                    />
+                    >
+                        {sku.skuNo || masterDataCopy.productSkuNoPending}
+                    </p>
                     <Input
                         id={`master-data-product-sku-${skuSegment}-barcode`}
                         className="h-control-sm num"
@@ -317,7 +315,7 @@ function SkuRow({
                                             "保存商品后，新的业务单据将选不到此 SKU，历史单据不受影响。",
                                         details: [
                                             skuName,
-                                            `${sku.skuNo || "待填写编码"} · ${specText}`,
+                                            `${sku.skuNo || "新 SKU"} · ${specText}`,
                                         ],
                                         confirmLabel: "停用 SKU",
                                         destructive: true,
