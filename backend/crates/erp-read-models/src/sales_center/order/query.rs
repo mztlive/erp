@@ -24,6 +24,7 @@ use super::dto::{
 use super::status::stage_code_label_tone;
 use super::{SalesOrderReadService, dto};
 use crate::Result;
+use crate::purchase_center::freight_follow_up::{FreightFollowUpView, freight_follow_ups};
 
 /// 销售单阶段责任快照：`(责任角色, 责任人账号, 责任人姓名, 时限)`。
 type StageOwnerSnapshot = HashMap<String, (Option<String>, Option<String>, Option<String>, Option<u64>)>;
@@ -151,6 +152,33 @@ impl SalesOrderReadService {
             return Ok(blocked_purchase_creation_access("当前账号不是该销售单供给分配任务负责人"));
         }
         Ok(PurchaseCreationAccessView { allowed: true, task_count, blocker: None })
+    }
+
+    /// 读取运费另计尚未处理的采购商品，仅对可追加采购的账号返回。
+    ///
+    /// # 参数
+    /// * `order` - 销售单
+    /// * `actor` - 当前操作人；内部查询为空
+    ///
+    /// # 返回
+    /// 返回待追加运费的采购商品；无权或无待跟进时为空。
+    ///
+    /// # 错误
+    /// 账号、权限或采购事实读取失败时返回错误。
+    pub(super) async fn freight_follow_ups(
+        &self,
+        order: &erp_sales::entity::sales_order::SalesOrder,
+        actor: Option<&AuditActor>,
+    ) -> Result<Vec<FreightFollowUpView>> {
+        let Some(actor) = actor else {
+            return Ok(Vec::new());
+        };
+        if self.purchase_creation_actor_blocker(actor).await?.is_some() {
+            return Ok(Vec::new());
+        }
+        let mut grouped =
+            freight_follow_ups(&self.db, std::slice::from_ref(&order.base.id), &mut NoTransaction).await?;
+        Ok(grouped.remove(&order.base.id).unwrap_or_default())
     }
 
     /// 重验当前账号的登录状态、身份与供给分配权限。

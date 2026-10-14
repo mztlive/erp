@@ -13,7 +13,6 @@ import type {
     SourcingSalesOrder,
 } from "@/features/purchase-orders/lib/purchase-order-create-model"
 import {
-    FULFILLMENT_RESPONSIBILITY_LABEL,
     PO_STATUS_LABEL,
     PO_STATUS_TONE,
     PURCHASE_TYPE_LABEL,
@@ -87,10 +86,8 @@ export function PurchaseOrderPreviewPaper({
                 metadata={[
                     {
                         id: "fulfillment",
-                        label: "履约责任",
-                        value: FULFILLMENT_RESPONSIBILITY_LABEL[
-                            preview.fulfillmentResponsibility
-                        ],
+                        label: "履约方案",
+                        value: preview.routeLabel,
                     },
                     ...(preview.fulfillmentResponsibility === "WAREHOUSE"
                         ? [

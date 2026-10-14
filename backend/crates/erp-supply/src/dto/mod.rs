@@ -1,5 +1,6 @@
 //! 供应链领域各组公开合同。
 
+pub mod delivery_template;
 pub mod offering_scope;
 pub mod supplier_api;
 pub mod supplier_fulfillment;

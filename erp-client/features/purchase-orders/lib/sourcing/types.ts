@@ -1,7 +1,9 @@
 import type {
+    BasisLineDelivery,
     FulfillmentResponsibility,
     PurchaseType,
     PurchaseDeliveryAllocation,
+    SupplyPriceBasis,
     SupplySourceType,
 } from "@/features/purchase-orders/types"
 
@@ -14,6 +16,10 @@ export type SourcingSupplierOption = Readonly<{
     workItemId: string
     purchaseType: PurchaseType
     fulfillmentResponsibility: FulfillmentResponsibility
+    /** 价格依据；现有库存为空。 */
+    priceBasis?: SupplyPriceBasis
+    /** 本方案的配送判定；现有库存为空。 */
+    delivery?: BasisLineDelivery
     paymentTermCode: string
     paymentTermLabel: string
     businessCategory?: string
@@ -76,6 +82,8 @@ export type PurchaseOrderPreview = Readonly<{
     supplierName: string
     purchaseType: PurchaseType
     fulfillmentResponsibility: FulfillmentResponsibility
+    /** 方案名称：代发直发、集采直发、集采入仓等。 */
+    routeLabel: string
     paymentTermCode: string
     paymentTermLabel: string
     workItemId: string

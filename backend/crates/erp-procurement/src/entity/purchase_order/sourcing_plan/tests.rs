@@ -55,7 +55,7 @@ fn sourcing_preserves_optional_specification_through_formalization() {
         let plan = SourcingPlan::plan(&order, &[group], &[], "wi-1", &assignments).unwrap();
         let purchase = &plan.purchase_plans()[0];
         let selected = validate_requested_quantities(&purchase.requested_lines, &purchase.group).unwrap();
-        let computed = compute_selected_lines(&selected, purchase.group.scope.fulfillment_responsibility);
+        let computed = compute_selected_lines(&selected, purchase.group.scope.price_basis);
         let draft = build_submission_line(&"draft".to_string().into(), 1, &computed.lines[0]).unwrap();
         let frozen = PurchaseOrderSubmissionLine::freeze_from_draft(
             "frozen-line".to_string().into(),
@@ -179,6 +179,7 @@ fn offering_revision(offering_id: &str) -> SupplierOfferingRevision {
         dropship_supply_price_gross: UnitPrice::from_str("6").unwrap(),
         bulk_supply_price_gross: UnitPrice::from_str("5").unwrap(),
         input_tax_rate: Rate::from_str("0.13").unwrap(),
+        bulk_minimum_order_quantity: Quantity::from_str("1").unwrap(),
         valid_from: erp_core::common::time::BusinessDate::from_str("2026-01-01").unwrap(),
         valid_to: None,
     }
@@ -201,6 +202,7 @@ fn line_supply(offering_id: &str, supplier_id: &str, available: &str) -> LineSup
         offering: offering(offering_id, supplier_id),
         revision: offering_revision(offering_id),
         availability: availability(offering_id, available),
+        delivery: Default::default(),
     }
 }
 
@@ -237,6 +239,11 @@ fn basis_group(
             purchase_type: PurchaseType::Physical,
             payment_term_code: payment_term_code.to_string(),
             fulfillment_responsibility: fulfillment,
+            price_basis: if fulfillment == FulfillmentResponsibility::Warehouse {
+                crate::entity::purchase_order::SupplyPriceBasis::Bulk
+            } else {
+                crate::entity::purchase_order::SupplyPriceBasis::Dropship
+            },
         },
         business_category: None,
         lines,
@@ -992,6 +999,8 @@ fn split_suppliers_cannot_double_allocate_an_address() {
     let delivery = |address: &str, qty: &str| PurchaseDeliveryAllocation {
         recipient: "张三".into(),
         phone: "13800000000".into(),
+        region_code: erp_core::region::RegionCode::parse("310115").unwrap(),
+        region_name: "上海市浦东新区".into(),
         address: address.into(),
         quantity: Quantity::from_str(qty).unwrap(),
     };

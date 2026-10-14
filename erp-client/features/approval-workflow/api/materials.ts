@@ -118,6 +118,8 @@ export type ApprovalSalesSubmission = {
         delivery_allocations?: {
             recipient: string
             phone: string
+            region_code: string
+            region_name?: string
             address: string
             quantity: string
         }[]

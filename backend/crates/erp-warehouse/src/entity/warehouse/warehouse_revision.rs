@@ -14,6 +14,7 @@ use entity_macros::Entity;
 use erp_core::common::revision::RevisionBase;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{WarehouseId, WarehouseRevisionId};
+use erp_core::region::RegionCode;
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -113,6 +114,8 @@ pub struct WarehouseRevisionData {
     pub revision_no: u32,
     /// 仓库名称（结构化快照）。
     pub name: String,
+    /// 所在地区（行政区划最末级）。
+    pub region_code: RegionCode,
     /// 加密地址与查询指纹。
     pub address: SensitiveText,
     /// 加密联系人与查询指纹。
@@ -136,6 +139,9 @@ pub struct WarehouseRevision {
     pub warehouse_id: WarehouseId,
     /// 仓库名称（结构化快照）。
     pub name: String,
+    /// 所在地区（行政区划最末级）；本字段上线前建立的修订为空。
+    #[serde(default)]
+    pub region_code: Option<RegionCode>,
     /// 加密地址与查询指纹。
     pub address: SensitiveText,
     /// 加密联系人与查询指纹。
@@ -176,6 +182,7 @@ impl WarehouseRevision {
         if data.revision_no == 0 {
             return Err(Error::from("修订序号必须从 1 开始"));
         }
+        let region_code = RegionCode::parse_leaf(data.region_code.as_str())?;
         // 半开生效区间不倒挂（与策略区间同一规则、同一文案，见 `WarehouseSkuPolicyPeriod::new`）。
         WarehouseSkuPolicyPeriod::new(data.effective_from, data.effective_to)?;
 
@@ -184,6 +191,7 @@ impl WarehouseRevision {
             revision: RevisionBase::new(data.revision_no),
             warehouse_id: data.warehouse_id,
             name,
+            region_code: Some(region_code),
             address: data.address,
             contact: data.contact,
             effective_from: data.effective_from,
@@ -237,6 +245,7 @@ mod tests {
             warehouse_id: WarehouseId::new("wh-1"),
             revision_no: 1,
             name: " 北京一号仓 ".to_string(),
+            region_code: RegionCode::parse("110105").unwrap(),
             address: SensitiveText::new(
                 "cipher-address".to_string(),
                 fingerprint("北京市朝阳区望京街道 1 号", key),

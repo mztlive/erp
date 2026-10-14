@@ -50,10 +50,14 @@ export const salesChangeDraftSchema = z.object({
                                 .trim()
                                 .min(1, "请填写联系电话")
                                 .max(32),
+                            region_code: z
+                                .string()
+                                .min(1, "请选择收货地区（到区县）"),
+                            region_name: z.string().optional(),
                             address: z
                                 .string()
                                 .trim()
-                                .min(1, "请填写完整收货地址")
+                                .min(1, "请填写详细地址")
                                 .max(512),
                             quantity: z
                                 .string()

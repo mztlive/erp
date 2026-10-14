@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import { formatDateTime } from "@/lib/datetime"
 import {
     FULFILLMENT_RESPONSIBILITY_LABEL,
+    SUPPLY_PRICE_BASIS_LABEL,
     type PurchaseOrderCenterView,
 } from "@/features/purchase-orders/types"
 
@@ -201,6 +202,16 @@ export function PurchaseOrderDetailSidebar({
                                 order.header.fulfillmentResponsibility
                             ],
                         },
+                        ...(order.delivery
+                            ? [
+                                  {
+                                      label: "价格依据",
+                                      value: SUPPLY_PRICE_BASIS_LABEL[
+                                          order.delivery.priceBasis
+                                      ],
+                                  },
+                              ]
+                            : []),
                     ].map((item) => (
                         <div key={item.label} className="min-w-0">
                             <dt className="text-xs text-muted-foreground">

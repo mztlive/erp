@@ -27,6 +27,7 @@ mod coverage_summary;
 mod creation_basis;
 mod delivery_allocation;
 mod delivery_capacity;
+mod delivery_judgement;
 mod draft_edit;
 mod expense;
 mod line_amounts;
@@ -34,6 +35,10 @@ mod line_common;
 pub use delivery_allocation::PurchaseDeliveryAllocation;
 pub use delivery_capacity::{
     DeliveryEdit, DeliveryFields, RowCheck, delivery_edits, remaining_delivery_capacity,
+};
+pub use delivery_judgement::{
+    BulkOrderQuantity, OfferingDeliveryFact, PurchaseDeliveryJudgement, PurchaseFreightWaiver,
+    PurchaseSourcingDelivery, ensure_bulk_direct_minimum, judge_line_delivery,
 };
 mod offering_source;
 mod order;
@@ -70,8 +75,8 @@ pub use coverage::{
 pub use coverage_summary::ProcurementCoverageSummary;
 pub use creation_basis::{
     BasisGroup, BasisLine, BasisScope, CreationBasisFacts, LineSupply, RequestedLine, basis_id_for,
-    basis_scope_key, compose_basis_id, fulfillment_options, maximum_create_quantity,
-    normalize_requested_lines, purchase_type_from_product_kind, stable_line_id, supply_cost,
+    basis_scope_key, compose_basis_id, maximum_create_quantity, normalize_requested_lines, purchase_options,
+    purchase_type_from_product_kind, stable_line_id, supply_cost,
 };
 pub use draft_edit::{
     DraftLineEdit, DraftLineEditViolation, validate_draft_line_edits, validate_rebased_draft_line_edits,
@@ -114,7 +119,7 @@ pub use sourcing_plan::{
     SourcingPlanError, StockAllocationPlan, StockBasisGroup, StockBasisLine, SupplySourceType,
     stock_basis_id_for,
 };
-pub use types::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};
+pub use types::{FulfillmentResponsibility, PurchaseLineType, PurchaseType, SupplyPriceBasis};
 
 mod sourcing_quantity;
 pub use command_result::{

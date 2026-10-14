@@ -1,7 +1,7 @@
 "use client"
 
 import { Trash2Icon } from "lucide-react"
-import { MoneyValue, RateValue } from "@/components/business"
+import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -22,6 +22,12 @@ import {
 import type { SourcingEditorProps } from "./create-sourcing/types"
 import { SourcingDeliveryEditor } from "./sourcing-delivery-plan"
 import { SourcingRecommendationHint } from "./sourcing-recommendation-hint"
+import {
+    deliverySummary,
+    deliveryTermLabel,
+    sourcingRouteLabel,
+    warehouseDeliveryTerm,
+} from "../lib/sourcing/delivery-terms"
 
 /** 调整区沿用正式表单字段；按来源、数量与交期、交付地址的顺序填写。 */
 export function SourcingAllocationEditor({
@@ -112,7 +118,7 @@ export function SourcingAllocationEditor({
                         product={product}
                         index={index}
                     />
-                    <SourcingOptionFacts option={option} />
+                    <SourcingOptionFacts option={option} product={product} />
                 </div>
             </div>
             <div
@@ -160,6 +166,10 @@ export function SourcingAllocationEditor({
                             order={order}
                             salesOrderLineId={line.salesOrderLineId}
                         />
+                        <WarehouseDeliveryNote
+                            option={option}
+                            warehouseId={line.targetWarehouseId ?? ""}
+                        />
                     </div>
                 ) : null}
                 {!isStock ? (
@@ -188,11 +198,39 @@ export function SourcingAllocationEditor({
     )
 }
 
+/** 集采入仓目标仓所在地区的配送判定。 */
+function WarehouseDeliveryNote({
+    option,
+    warehouseId,
+}: {
+    option: ReturnType<typeof findSourcingOption>
+    warehouseId: string
+}) {
+    const judged = warehouseDeliveryTerm(option, warehouseId)
+    if (!option || !judged) return null
+    return (
+        <p
+            className={cn(
+                "text-xs",
+                judged.term === "NOT_DELIVERABLE"
+                    ? "text-destructive"
+                    : judged.term === "FREIGHT_EXTRA"
+                      ? "text-warning-soft-foreground"
+                      : "text-muted-foreground",
+            )}
+        >
+            {judged.regionName}：{deliveryTermLabel(option, judged.term)}
+        </p>
+    )
+}
+
 /** 方案属性紧随来源选择；每项独立成段，便于逐项核对。 */
 function SourcingOptionFacts({
     option,
+    product,
 }: {
     option: ReturnType<typeof findSourcingOption>
+    product: SourcingProductLine
 }) {
     if (!option) return <span>请选择供给来源</span>
     if (option.sourceType === "EXISTING_STOCK")
@@ -222,6 +260,25 @@ function SourcingOptionFacts({
             </span>
             <span>{PURCHASE_TYPE_LABEL[option.purchaseType]}</span>
             <span>付款条件 {option.paymentTermLabel || "—"}</span>
+            <span>{sourcingRouteLabel(option)}</span>
+            {option.delivery ? (
+                <span>
+                    配送模板{" "}
+                    {option.delivery.templateName ?? "未设置（全国配送、包邮）"}
+                </span>
+            ) : null}
+            {deliverySummary(option, product) ? (
+                <span>{deliverySummary(option, product)}</span>
+            ) : null}
+            {option.delivery?.bulkMinimumOrderQuantity ? (
+                <span>
+                    集采起订量{" "}
+                    <QuantityValue
+                        value={option.delivery.bulkMinimumOrderQuantity}
+                        unit={product.unit}
+                    />
+                </span>
+            ) : null}
         </>
     )
 }

@@ -1,3 +1,5 @@
+import { fullDeliveryAddress } from "@/lib/delivery-address"
+
 import type { SalesDeliveryAllocation } from "../types"
 
 /** 保存版本中的交付安排，不表示已发货。 */
@@ -15,7 +17,7 @@ export function SalesDeliveryPlan({
                 <p key={index}>
                     {row.quantity} {unit} → {row.recipient} · {row.phone}
                     <br />
-                    {row.address}
+                    {fullDeliveryAddress(row)}
                 </p>
             ))}
         </div>

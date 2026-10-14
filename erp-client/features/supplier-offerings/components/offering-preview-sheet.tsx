@@ -106,6 +106,9 @@ export function OfferingPreviewSheet({
                             "supplier_offering_cost:detail",
                         )}
                         compact
+                        deliveryTemplateName={
+                            offering.delivery_template?.display_name
+                        }
                     />
                     <div className="border-t border-border pt-6">
                         <OfferingAvailability offering={offering} />

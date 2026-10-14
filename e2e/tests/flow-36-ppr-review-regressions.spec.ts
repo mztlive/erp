@@ -116,7 +116,7 @@ test("同一合格账号付款后返回已缓存的先款履约任务，立即�
     await openWorkspaceTask(procurement.page, "待供给分配", order.order_no, "procurement")
     await expandSourcingEditor(procurement.page, "狮峰明前龙井礼盒")
     const editor = procurement.page.getByRole("region", { name: "当前商品供给编辑", exact: true })
-    await chooseOption(procurement.page, editor.locator('[id$="-sourcing-option"]:visible'), "杭州狮峰茶叶有限公司 · 入仓", "入仓")
+    await chooseOption(procurement.page, editor.locator('[id$="-sourcing-option"]:visible'), "杭州狮峰茶叶有限公司 · 集采入仓", "入仓")
     await chooseOption(procurement.page, editor.locator('[id$="-warehouse"]:visible'), "BJ-TZ-01", "BJ-TZ-01")
     await confirmSupplyAllocation(procurement.page)
     const purchaseApprover = await openLoggedInWorkspace(browser, "caigoushenpi")

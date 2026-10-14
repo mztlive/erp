@@ -19,6 +19,7 @@ use persistence_core::Executor;
 use super::dto::ProfitLossQuery;
 use super::query::PeriodBounds;
 use crate::finance::extra_cost::purchase_expense_facts;
+use crate::purchase_center::freight_follow_up::freight_follow_ups;
 use crate::{Error, Result};
 
 /// 单次分析装载的正式事实，均属于同一事务快照。
@@ -32,6 +33,8 @@ pub(super) struct Sources {
     pub entries: Vec<CostEntry>,
     /// 存在已生效但未确认发生附加费用的销售单。
     pub pending_extra_cost_orders: HashSet<String>,
+    /// 存在运费另计尚未追加物流费用采购或标记供应商不收运费的销售单。
+    pub pending_freight_orders: HashSet<String>,
 }
 impl Sources {
     /// 限制查询规模；超限必须缩小日期/客户范围，不返回不完整汇总。
@@ -64,12 +67,16 @@ impl Sources {
             allocations: vec![],
             entries: vec![],
             pending_extra_cost_orders: HashSet::new(),
+            pending_freight_orders: HashSet::new(),
         };
         result.load_sales(db, executor).await?;
         result.load_costs(db, executor).await?;
         let ids: Vec<_> = result.orders.iter().map(|o| o.id.clone()).collect();
         result.pending_extra_cost_orders =
             purchase_expense_facts(db, &ids, executor).await?.sales_orders_with_pending();
+        for chunk in ids.chunks(500) {
+            result.pending_freight_orders.extend(freight_follow_ups(db, chunk, executor).await?.into_keys());
+        }
         Ok(result)
     }
     /// 以批次读取当前正式销售版本；不回退到草稿或过期版本。

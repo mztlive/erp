@@ -9,7 +9,10 @@ import {
     RelatedDocumentList,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { ExpensePurchaseCreateDialog } from "@/features/purchase-orders/components/expense-purchase-create-dialog"
+import {
+    ExpensePurchaseCreateDialog,
+    type ExpensePurchasePrefill,
+} from "@/features/purchase-orders/components/expense-purchase-create-dialog"
 import { PurchaseOrderPaperDialog } from "@/features/purchase-orders/components/purchase-order-paper-dialog"
 import { usePurchaseOrdersQuery } from "@/features/purchase-orders/hooks/queries"
 import { displayPurchaseOrderNo } from "@/features/purchase-orders/lib/purchase-orders-list-helpers"
@@ -84,6 +87,10 @@ export function PurchasePanel({ order }: { order: SalesOrderDetailView }) {
 
     const [previewId, setPreviewId] = React.useState<string | null>(null)
     const [expenseOpen, setExpenseOpen] = React.useState(false)
+    const [expensePrefill, setExpensePrefill] = React.useState<
+        ExpensePurchasePrefill | undefined
+    >(undefined)
+    const freightFollowUps = order.related.freightFollowUps ?? []
     const [expenseCreated, setExpenseCreated] = React.useState<string | null>(
         null,
     )
@@ -166,6 +173,56 @@ export function PurchasePanel({ order }: { order: SalesOrderDetailView }) {
                 </DocumentSection>
             )}
 
+            {canAddExpense && freightFollowUps.length ? (
+                <section
+                    aria-labelledby="sales-orders-detail-freight-title"
+                    className="space-y-2 rounded-lg border border-warning-border bg-warning-soft px-4 py-3"
+                >
+                    <h3
+                        id="sales-orders-detail-freight-title"
+                        className="text-sm font-medium text-warning-soft-foreground"
+                    >
+                        运费待追加
+                    </h3>
+                    <p className="text-xs text-warning-soft-foreground">
+                        以下商品为集采运费另计。供应商收取运费时追加物流费用采购；供应商不收运费时在采购单上标记。
+                    </p>
+                    <ul className="divide-y divide-warning-border">
+                        {freightFollowUps.map((item) => (
+                            <li
+                                key={`${item.purchaseOrderId}-${item.salesOrderLineId}`}
+                                className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
+                            >
+                                <span className="min-w-0">
+                                    {item.productName ?? "商品"}
+                                    <span className="ml-2 text-xs text-muted-foreground">
+                                        {item.supplierName ?? "供应商"} · 采购单{" "}
+                                        {item.purchaseNo || "草稿"}
+                                    </span>
+                                </span>
+                                <Button
+                                    id={`sales-orders-detail-freight-add-${toAutomationIdSegment(item.purchaseOrderId)}-${toAutomationIdSegment(item.salesOrderLineId)}`}
+                                    type="button"
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => {
+                                        setExpensePrefill({
+                                            supplierId: item.supplierId,
+                                            salesOrderLineId:
+                                                item.salesOrderLineId,
+                                            description: `${item.productName ?? "商品"} 运费`,
+                                        })
+                                        setExpenseOpen(true)
+                                    }}
+                                >
+                                    追加运费
+                                </Button>
+                            </li>
+                        ))}
+                    </ul>
+                </section>
+            ) : null}
+
             {canAddExpense ? (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed px-4 py-3">
                     <p className="text-sm text-muted-foreground">
@@ -178,7 +235,10 @@ export function PurchasePanel({ order }: { order: SalesOrderDetailView }) {
                         type="button"
                         size="sm"
                         variant="secondary"
-                        onClick={() => setExpenseOpen(true)}
+                        onClick={() => {
+                            setExpensePrefill(undefined)
+                            setExpenseOpen(true)
+                        }}
                     >
                         追加附加费用
                     </Button>
@@ -192,6 +252,7 @@ export function PurchasePanel({ order }: { order: SalesOrderDetailView }) {
                     .map((line) => ({ id: line.id, name: line.name }))}
                 open={expenseOpen}
                 onOpenChange={setExpenseOpen}
+                prefill={expensePrefill}
                 onCreated={(created) => setExpenseCreated(created.purchaseNo)}
             />
 

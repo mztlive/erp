@@ -14,6 +14,7 @@ import type {
     SourcingSupplierOption,
     StockAllocationPreviewLine,
 } from "./types"
+import { sourcingRouteLabel } from "./delivery-terms"
 
 type PreviewGroup = {
     preview: Omit<PurchaseOrderPreview, "lines" | "totals">
@@ -47,6 +48,7 @@ export function buildPurchaseOrderPreviews(
             option.purchaseType,
             option.paymentTermCode,
             option.fulfillmentResponsibility,
+            option.priceBasis ?? "",
             input.targetWarehouseId,
         ].join("|")
         const existing = groups.get(key)
@@ -104,6 +106,7 @@ function purchasePreviewGroup(
             supplierName: option.supplierName,
             purchaseType: option.purchaseType,
             fulfillmentResponsibility: option.fulfillmentResponsibility,
+            routeLabel: sourcingRouteLabel(option),
             paymentTermCode: option.paymentTermCode,
             paymentTermLabel: option.paymentTermLabel,
             workItemId: option.workItemId,

@@ -7,6 +7,7 @@ use mongodb::Database;
 
 use crate::Result;
 
+pub mod delivery_coverage;
 mod procurement;
 mod scope;
 mod supplier_codes;

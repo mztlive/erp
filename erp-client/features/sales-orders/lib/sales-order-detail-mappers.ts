@@ -13,6 +13,7 @@ import type {
     ProgressTrack,
     SalesOrderProcurementProgress,
     SalesChangeOrderSummary,
+    SalesFreightFollowUp,
     SalesOrderLineItem,
     SalesOrderListItem,
     SalesOrderNature,
@@ -424,6 +425,7 @@ export function mapListItemFromBackend(
             taskCount: number
             blocker?: string
         }
+        freightFollowUps?: SalesFreightFollowUp[]
     },
 ): SalesOrderListItem {
     const nature = mapNature(row.business_type)
@@ -512,6 +514,7 @@ export function mapListItemFromBackend(
             purchaseOrders: extras?.purchaseOrderCount ?? 0,
             procurementProgress: mapProcurementProgress(row.purchase_coverage),
             purchaseCreationAccess: extras?.purchaseCreationAccess,
+            freightFollowUps: extras?.freightFollowUps,
             fulfillments: 0,
             receipts: 0,
             invoices: 0,

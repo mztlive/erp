@@ -55,9 +55,62 @@ type ActionBlocker = {
 export type PurchaseDeliveryAllocation = {
     recipient: string
     phone: string
+    /** 收货地区（行政区划最末级代码），沿用销售冻结值。 */
+    region_code: string
+    /** 地区完整名称，由服务端按代码生成。 */
+    region_name?: string
     address: string
     quantity: string
 }
+
+/** 采购单冻结的价格依据与逐行配送判定。 */
+export type PurchaseDeliverySummary = Readonly<{
+    priceBasis: SupplyPriceBasis
+    lines: readonly Readonly<{
+        salesOrderLineId: string
+        templateName?: string
+        freightExtra: boolean
+        /** 运费另计且尚未追加物流费用采购或标记供应商不收运费。 */
+        freightPending: boolean
+        waiver?: Readonly<{
+            reason: string
+            waivedBy: string
+            waivedAt: string
+        }>
+    }>[]
+}>
+
+export const SUPPLY_PRICE_BASIS_LABEL: Record<SupplyPriceBasis, string> = {
+    DROPSHIP: "代发",
+    BULK: "集采",
+}
+
+/** 发往某地区的配送判定：代发为配送/不配送，集采为包邮/运费另计/不配送。 */
+export type DeliveryTerm =
+    | "FREIGHT_INCLUDED"
+    | "FREIGHT_EXTRA"
+    | "NOT_DELIVERABLE"
+
+/** 采购单价依据。 */
+export type SupplyPriceBasis = "DROPSHIP" | "BULK"
+
+/** 一条依据行在本方案下的配送判定。 */
+export type BasisLineDelivery = Readonly<{
+    /** 供给生效配送模板名称；未设置模板时为空。 */
+    templateName?: string
+    /** 直发方案按销售收货地区代码的判定。 */
+    regionTerms: Readonly<Record<string, DeliveryTerm>>
+    /** 集采入仓方案按启用仓库的判定。 */
+    warehouseTerms: readonly Readonly<{
+        warehouseId: string
+        regionName: string
+        term: DeliveryTerm
+    }>[]
+    /** 集采直发要求的集采起订量。 */
+    bulkMinimumOrderQuantity?: string
+    /** 本行供给，用于按供给汇总起订量。 */
+    supplierOfferingId?: string
+}>
 
 type PurchaseOrderLineView = Readonly<{
     deliveryAllocations?: PurchaseDeliveryAllocation[]
@@ -152,6 +205,8 @@ export type PurchaseSourceSalesOrderView = Readonly<{
         deliveryAllocations?: {
             recipient: string
             phone: string
+            region_code?: string
+            region_name?: string
             address: string
             quantity: string
         }[]
@@ -344,6 +399,8 @@ export type PurchaseOrderCenterView = Readonly<{
     sourceSalesOrder?: PurchaseSourceSalesOrderView
     /** 来源销售变更对本采购的影响；无需提示时缺省。 */
     sourceUpdate?: PurchaseSourceUpdateView
+    /** 选源时冻结的价格依据与配送判定；费用采购单缺省。 */
+    delivery?: PurchaseDeliverySummary
     payableSummary?: PayableSummaryView
     fulfillmentSummary: FulfillmentSummaryView
     changes: readonly RelatedChangeView[]
@@ -385,6 +442,8 @@ export type PurchaseCreationBasis = Readonly<{
     paymentTermLabel: string
     /** 供应商经营类目；优先来自商务资料独立字段，兼容旧付款条件快照。 */
     businessCategory?: string
+    /** 价格依据；现有库存为空。 */
+    priceBasis?: SupplyPriceBasis
     /** 可拆入本单的销售当前版本行 */
     lines: readonly {
         salesOrderLineId: string
@@ -404,6 +463,7 @@ export type PurchaseCreationBasis = Readonly<{
         salesDeliveryDeadline: string
         deliveryAllocations: PurchaseDeliveryAllocation[]
         assignedDeliveryAllocations: PurchaseDeliveryAllocation[]
+        delivery: BasisLineDelivery
         salesAllocationLabel: string
     }[]
     estimatedGross: string

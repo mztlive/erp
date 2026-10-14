@@ -18,6 +18,7 @@ import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-ord
 import { SalesOrderEvidenceAttachments } from "@/features/sales-orders/components/sales-order-evidence-attachments"
 import { SalesOrderContractSupplement } from "@/features/sales-orders/components/sales-order-contract-supplement"
 import { cn } from "@/lib/utils"
+import { fullDeliveryAddress } from "@/lib/delivery-address"
 
 function OverviewField({
     label,
@@ -88,7 +89,7 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
                                             {allocation.recipient} ·{" "}
                                             {allocation.phone}
                                             <br />
-                                            {allocation.address}
+                                            {fullDeliveryAddress(allocation)}
                                         </div>
                                     ),
                                 )}

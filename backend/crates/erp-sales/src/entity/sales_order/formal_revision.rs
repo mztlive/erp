@@ -774,8 +774,8 @@ mod tests {
         let mut first = goods_line_data(1);
         first.goods.as_mut().unwrap().pricing_mode = SalesPricingMode::Auto;
         let allocations = serde_json::from_value(serde_json::json!([
-            {"recipient":"收货人甲", "phone":"13800000001", "address":"上海市甲路1号", "quantity":"1"},
-            {"recipient":"收货人乙", "phone":"13800000002", "address":"上海市乙路2号", "quantity":"2"}
+            {"recipient":"收货人甲", "phone":"13800000001", "region_code":"310115", "address":"甲路1号", "quantity":"1"},
+            {"recipient":"收货人乙", "phone":"13800000002", "region_code":"310115", "address":"乙路2号", "quantity":"2"}
         ]))
         .unwrap();
         first.goods.as_mut().unwrap().delivery_allocations = allocations;

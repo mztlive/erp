@@ -159,6 +159,7 @@
 //! - `supplier_offering` → `SupplierOfferingId`
 //! - `supplier_offering_revision` → `SupplierOfferingRevisionId`
 //! - `supplier_offering_availability` → `SupplierOfferingAvailabilityId`
+//! - `supplier_delivery_template` → `SupplierDeliveryTemplateId`
 //!
 //! D25 `supplier_api`：
 //! - `supplier_api_connection` → `SupplierApiConnectionId`
@@ -369,6 +370,7 @@ id_type!(LegacyImportConfirmationId);
 id_type!(SupplierOfferingId);
 id_type!(SupplierOfferingRevisionId);
 id_type!(SupplierOfferingAvailabilityId);
+id_type!(SupplierDeliveryTemplateId);
 
 // D25 supplier_api
 id_type!(SupplierApiConnectionId);

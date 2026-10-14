@@ -21,7 +21,7 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog"
 import type { SourcingSupplierOption } from "@/features/purchase-orders/lib/purchase-order-create-model"
-import { FULFILLMENT_RESPONSIBILITY_LABEL } from "@/features/purchase-orders/types"
+import { sourcingRouteLabel } from "../lib/sourcing/delivery-terms"
 
 export type PurchaseOrderCreateBatchBarProps = {
     compact?: boolean
@@ -163,7 +163,7 @@ export function PurchaseOrderCreateBatchBar({
                                 label:
                                     option.sourceType === "EXISTING_STOCK"
                                         ? `${option.supplierName} · 现货`
-                                        : `${option.supplierName} · ${FULFILLMENT_RESPONSIBILITY_LABEL[option.fulfillmentResponsibility]}`,
+                                        : `${option.supplierName} · ${sourcingRouteLabel(option)}`,
                                 keywords: `${option.sourceType} ${option.supplierId} ${option.warehouseName ?? ""} ${option.fulfillmentResponsibility}`,
                             }))}
                         />

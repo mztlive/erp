@@ -10,6 +10,7 @@ import type {
     SourcingProductLine,
     SourcingSalesOrder,
 } from "./types"
+import { directOptionHasFreightExtra } from "./delivery-terms"
 
 /** 复用当前参与范围的推荐结果；仅为仍采用推荐来源的采购行说明依据。 */
 export function sourcingRecommendationReason(
@@ -57,14 +58,24 @@ export function sourcingRecommendationReason(
 
     const direct = option.fulfillmentResponsibility === "SUPPLIER_DIRECT"
     const covers = optionCoversRemaining(option, remaining)
+    const freightExtra = directOptionHasFreightExtra(option, product)
     const peers = purchases.filter(
         (entry) =>
             (entry.fulfillmentResponsibility === "SUPPLIER_DIRECT") ===
-                direct && optionCoversRemaining(entry, remaining) === covers,
+                direct &&
+            optionCoversRemaining(entry, remaining) === covers &&
+            directOptionHasFreightExtra(entry, product) === freightExtra,
     )
     const scope = direct ? "优先选择供应商直发" : "当前无可用直发方案"
     const coverage = covers ? "可全量覆盖采购缺口" : "仅能部分覆盖采购缺口"
-    const basis = `${scope}；${coverage}。`
+    const freight =
+        direct &&
+        purchases.some((entry) => directOptionHasFreightExtra(entry, product))
+            ? freightExtra
+                ? "；部分地址运费另计"
+                : "；全部地址包邮优先"
+            : ""
+    const basis = `${scope}；${coverage}${freight}。`
     if (peers.length === 1) {
         return {
             title: direct ? "直发与供货数量优先" : "供货数量优先",

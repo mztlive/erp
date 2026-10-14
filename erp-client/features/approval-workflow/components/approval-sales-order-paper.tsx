@@ -13,6 +13,7 @@ import type {
     ApprovalSalesRevision,
 } from "../api/materials"
 import { displayActorName, displayReadableName } from "../display"
+import { fullDeliveryAddress } from "@/lib/delivery-address"
 
 const dateLabel = (value: number | null) =>
     value == null ? "—" : new Date(value * 1000).toLocaleDateString("zh-CN")
@@ -167,7 +168,7 @@ export function ApprovalSalesOrderPaper({
                                         {allocation.recipient} ·{" "}
                                         {allocation.phone}
                                         <br />
-                                        {allocation.address}
+                                        {fullDeliveryAddress(allocation)}
                                     </div>
                                 ),
                             )}

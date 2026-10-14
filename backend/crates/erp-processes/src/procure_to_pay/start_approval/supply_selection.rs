@@ -60,6 +60,7 @@ pub(super) async fn revalidate_selected_supply(
             offering: offering.clone(),
             revision: revision.clone(),
             availability: availability.clone(),
+            delivery: Default::default(),
         };
         source
             .ensure_current_supply(

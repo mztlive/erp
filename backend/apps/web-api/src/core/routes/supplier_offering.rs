@@ -1,7 +1,7 @@
 //! 供应商供给管理路由。
 
 use axum::Router;
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post, put};
 use erp_identity::SharedRbacService;
 
 use crate::app_state::AppState;
@@ -19,7 +19,56 @@ use crate::core::middleware::with_permission;
 /// # 错误
 /// 无。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
-    Router::new().merge(read_routes(rbac)).merge(batch_routes(rbac)).merge(command_routes(rbac))
+    Router::new()
+        .merge(read_routes(rbac))
+        .merge(batch_routes(rbac))
+        .merge(command_routes(rbac))
+        .merge(delivery_template_routes(rbac))
+}
+
+/// 注册供应商配送模板维护与供给指定入口。
+fn delivery_template_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/suppliers/{supplier_id}/delivery-templates",
+            with_permission(
+                get(supplier_offering::delivery_template::list),
+                rbac,
+                supplier_offering::delivery_template::list_permission_key(),
+            ),
+        )
+        .route(
+            "/suppliers/{supplier_id}/delivery-templates",
+            with_permission(
+                post(supplier_offering::delivery_template::create),
+                rbac,
+                supplier_offering::delivery_template::create_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-delivery-templates/{id}",
+            with_permission(
+                put(supplier_offering::delivery_template::update),
+                rbac,
+                supplier_offering::delivery_template::update_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-delivery-templates/{id}",
+            with_permission(
+                delete(supplier_offering::delivery_template::delete),
+                rbac,
+                supplier_offering::delivery_template::delete_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-offerings/delivery-template",
+            with_permission(
+                post(supplier_offering::delivery_template::assign),
+                rbac,
+                supplier_offering::delivery_template::assign_permission_key(),
+            ),
+        )
 }
 
 /// 注册供给列表、单条资料和历史条款的读取入口。

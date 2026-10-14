@@ -53,8 +53,8 @@ test.describe.configure({ mode: "serial" })
 const SKU_KEYWORD = "狮峰明前龙井"
 const SECOND_SKU_KEYWORD = "狮峰陈皮普洱"
 const SUPPLIER_SHORT = "狮峰茶叶"
-const DIRECT_OPTION = /狮峰茶叶.* · 供应商直发|供应商直发/
-const WAREHOUSE_OPTION = /狮峰茶叶.* · 入仓| · 入仓/
+const DIRECT_OPTION = /狮峰茶叶.* · 代发直发|代发直发/
+const WAREHOUSE_OPTION = /狮峰茶叶.* · 集采入仓| · 集采入仓/
 
 const MINIMAL_PDF = Buffer.from(
     "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000068 00000 n \n0000000125 00000 n \ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n210\n%%EOF\n",
@@ -369,8 +369,8 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
             const editor = page.getByRole("region", { name: "当前商品供给编辑" });
             const sourcing = editor.locator('[id^="procurement-orders-create-row-"][id$="-sourcing-option"]:visible');
             await expect(sourcing).toHaveCount(1);
-            await chooseOption(page, sourcing, DIRECT_OPTION, "供应商直发");
-            await expect(sourcing).toHaveValue(new RegExp("供应商直发"));
+            await chooseOption(page, sourcing, DIRECT_OPTION, "代发直发");
+            await expect(sourcing).toHaveValue(new RegExp("代发直发"));
             await expect(sourcing).not.toHaveValue(WAREHOUSE_OPTION);
             await expect(editor.locator('[id$="-warehouse"]:visible')).toHaveCount(0);
             await expect(editor.getByRole("combobox", { name: "仓库", exact: true })).toHaveCount(0);
@@ -385,7 +385,7 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
             timeout: 20000,
         })
         await expect(preview.getByText("现有库存分配")).toHaveCount(0)
-        await expect(preview.getByText("供应商直发").first()).toBeVisible()
+        await expect(preview.getByText("代发直发").first()).toBeVisible()
         await expect(preview.getByText("入仓")).not.toBeVisible()
         await confirmSupplyAllocation(page, /供给分配已完成|本次供给分配已保存/)
     }

@@ -4,12 +4,12 @@ import { compactFixed, compareDecimal, sumFixed } from "@/lib/fixed-decimal"
 
 type AddressIdentity = Pick<
     PurchaseDeliveryAllocation,
-    "recipient" | "phone" | "address"
+    "recipient" | "phone" | "region_code" | "address"
 >
 
-/** 收件资料身份：收货人、电话与地址。 */
+/** 收件资料身份：收货人、电话、地区与详细地址。 */
 export function deliveryAddressKey(row: AddressIdentity) {
-    return `${row.recipient}\u0000${row.phone}\u0000${row.address}`
+    return `${row.recipient}\u0000${row.phone}\u0000${row.region_code}\u0000${row.address}`
 }
 
 function sameAddress(left: AddressIdentity, right: AddressIdentity) {
@@ -26,6 +26,8 @@ export function editableDeliveryRows(
     return option.addresses.map((address) => ({
         recipient: address.recipient,
         phone: address.phone,
+        region_code: address.region_code,
+        region_name: address.region_name,
         address: address.address,
         quantity:
             current.find((row) => sameAddress(row, address))?.quantity ?? "0",

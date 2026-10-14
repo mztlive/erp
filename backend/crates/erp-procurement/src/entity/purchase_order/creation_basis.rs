@@ -17,7 +17,8 @@ use erp_core::{Error, Result};
 
 use super::command_receipt::digest_parts;
 use super::coverage::SalesProcurementCoverageLine;
-use super::types::{FulfillmentResponsibility, PurchaseType};
+use super::delivery_judgement::OfferingDeliveryFact;
+use super::types::{FulfillmentResponsibility, PurchaseType, SupplyPriceBasis};
 use crate::entity::facts::{
     AvailabilityFact as SupplierOfferingAvailability, OfferingFact as SupplierOffering,
     OfferingRevisionFact as SupplierOfferingRevision, ProductKind, SalesOrderBasisFact as SalesOrder,
@@ -35,6 +36,8 @@ pub struct LineSupply {
     pub revision: SupplierOfferingRevision,
     /// 当前可供投影。
     pub availability: SupplierOfferingAvailability,
+    /// 当前生效配送政策。
+    pub delivery: OfferingDeliveryFact,
 }
 
 /// 一条可进入精确创建依据的销售当前版本行。
@@ -59,6 +62,8 @@ pub struct BasisScope {
     pub payment_term_code: String,
     /// 履约责任。
     pub fulfillment_responsibility: FulfillmentResponsibility,
+    /// 价格依据；代发与集采分别成单。
+    pub price_basis: SupplyPriceBasis,
 }
 
 /// 一条精确采购创建依据。
@@ -106,6 +111,8 @@ pub struct CreationBasisFacts {
     pub commercial_profiles: std::collections::HashMap<String, SupplierCommercialProfileRevision>,
     /// 供应商当前法定名称，按供应商主键；关联缺失时不包含该键。
     pub supplier_names: std::collections::HashMap<String, String>,
+    /// 供给当前生效配送政策，按供给主键；缺失时按全国配送、包邮。
+    pub deliveries: std::collections::HashMap<String, OfferingDeliveryFact>,
 }
 
 impl RequestedLine {
@@ -258,7 +265,7 @@ fn basis_line_fingerprint(line: &BasisLine) -> String {
 /// * `scope` - 精确拆分范围
 ///
 /// # 返回
-/// 返回供应商、采购类型、付款条件和履约责任拼接键。
+/// 返回供应商、采购类型、付款条件、履约责任和价格依据拼接键。
 ///
 /// # 错误
 /// 无。
@@ -267,11 +274,12 @@ fn basis_line_fingerprint(line: &BasisLine) -> String {
 /// 该键只用于分组和指纹，不作为数据库自然键。
 pub fn basis_scope_key(scope: &BasisScope) -> String {
     format!(
-        "{}|{}|{}|{}",
+        "{}|{}|{}|{}|{}",
         scope.supplier_id,
         scope.purchase_type.as_str(),
         scope.payment_term_code,
         scope.fulfillment_responsibility.as_str(),
+        scope.price_basis.as_str(),
     )
 }
 
@@ -320,26 +328,20 @@ pub fn maximum_create_quantity(remaining: Quantity, available: Option<Quantity>)
 ///
 /// # 参数
 /// * `revision` - 当前有效供给条款
-/// * `responsibility` - 本采购依据选择的履约责任
+/// * `price_basis` - 本采购依据选择的价格依据
 ///
 /// # 返回
-/// 入仓返回集采价，其他方式返回一件代发价。
+/// 集采返回集采价，代发返回一件代发价。
 ///
 /// # 错误
 /// 无。
 ///
 /// # 关键业务约束
 /// 成本只从依据确定的当前供给修订读取。
-pub fn supply_cost(
-    revision: &SupplierOfferingRevision,
-    responsibility: FulfillmentResponsibility,
-) -> UnitPrice {
-    match responsibility {
-        FulfillmentResponsibility::Warehouse => revision.bulk_supply_price_gross,
-        FulfillmentResponsibility::SupplierDirect
-        | FulfillmentResponsibility::Electronic
-        | FulfillmentResponsibility::Service
-        | FulfillmentResponsibility::NotApplicable => revision.dropship_supply_price_gross,
+pub fn supply_cost(revision: &SupplierOfferingRevision, price_basis: SupplyPriceBasis) -> UnitPrice {
+    match price_basis {
+        SupplyPriceBasis::Bulk => revision.bulk_supply_price_gross,
+        SupplyPriceBasis::Dropship => revision.dropship_supply_price_gross,
     }
 }
 
@@ -365,26 +367,33 @@ pub fn purchase_type_from_product_kind(kind: ProductKind) -> Result<PurchaseType
     }
 }
 
-/// 返回商品类型允许采购选择的履约责任。
+/// 返回商品类型允许采购选择的履约责任与价格依据组合。
 ///
 /// # 参数
 /// * `kind` - 商品稳定业务类型
 ///
 /// # 返回
-/// 返回稳定顺序的履约责任集合。
+/// 返回稳定顺序的采购方案集合。
 ///
 /// # 错误
 /// 卡券进入商品/服务采购路径时返回业务错误。
 ///
 /// # 关键业务约束
-/// 实物允许采购在入仓与供应商直发之间选择；其他类型由商品事实唯一限定。
-pub fn fulfillment_options(kind: ProductKind) -> Result<&'static [FulfillmentResponsibility]> {
+/// 实物形成集采入仓、代发直发和集采直发三种方案；虚拟商品与线下服务只按
+/// 一件代发价由商品事实唯一限定履约责任。
+pub fn purchase_options(
+    kind: ProductKind,
+) -> Result<&'static [(FulfillmentResponsibility, SupplyPriceBasis)]> {
     match kind {
-        ProductKind::Physical => {
-            Ok(&[FulfillmentResponsibility::Warehouse, FulfillmentResponsibility::SupplierDirect])
+        ProductKind::Physical => Ok(&[
+            (FulfillmentResponsibility::Warehouse, SupplyPriceBasis::Bulk),
+            (FulfillmentResponsibility::SupplierDirect, SupplyPriceBasis::Dropship),
+            (FulfillmentResponsibility::SupplierDirect, SupplyPriceBasis::Bulk),
+        ]),
+        ProductKind::Virtual => Ok(&[(FulfillmentResponsibility::Electronic, SupplyPriceBasis::Dropship)]),
+        ProductKind::OfflineService => {
+            Ok(&[(FulfillmentResponsibility::Service, SupplyPriceBasis::Dropship)])
         },
-        ProductKind::Virtual => Ok(&[FulfillmentResponsibility::Electronic]),
-        ProductKind::OfflineService => Ok(&[FulfillmentResponsibility::Service]),
         ProductKind::Voucher => Err(Error::from("卡券商品不能进入商品/服务采购建单路径")),
     }
 }
@@ -421,7 +430,7 @@ mod tests {
 
     use super::{
         BasisGroup, BasisLine, BasisScope, LineSupply, RequestedLine, basis_id_for, basis_scope_key,
-        compose_basis_id, fulfillment_options, maximum_create_quantity, normalize_requested_lines,
+        compose_basis_id, maximum_create_quantity, normalize_requested_lines, purchase_options,
         purchase_type_from_product_kind, supply_cost,
     };
     use crate::entity::facts::{
@@ -433,7 +442,7 @@ mod tests {
     };
     use crate::entity::purchase_order::coverage::SalesProcurementCoverageLine;
     use crate::entity::purchase_order::{
-        FulfillmentResponsibility, ProcurementCoverageSummary, PurchaseType,
+        FulfillmentResponsibility, ProcurementCoverageSummary, PurchaseType, SupplyPriceBasis,
     };
 
     /// 构造销售当前版本头。
@@ -513,6 +522,7 @@ mod tests {
             dropship_supply_price_gross: UnitPrice::from_str("6").unwrap(),
             bulk_supply_price_gross: UnitPrice::from_str("5").unwrap(),
             input_tax_rate: Rate::from_str("0.13").unwrap(),
+            bulk_minimum_order_quantity: Quantity::from_str("1").unwrap(),
             valid_from: erp_core::common::time::BusinessDate::from_str(valid_from).unwrap(),
             valid_to: valid_to.map(|value| erp_core::common::time::BusinessDate::from_str(value).unwrap()),
         }
@@ -535,6 +545,7 @@ mod tests {
             offering: offering(offering_id, supplier_id),
             revision: offering_revision(offering_id, "2026-01-01", None),
             availability: availability(offering_id, Some("8")),
+            delivery: Default::default(),
         }
     }
 
@@ -563,6 +574,7 @@ mod tests {
                 purchase_type: PurchaseType::Physical,
                 payment_term_code: payment_term_code.to_string(),
                 fulfillment_responsibility: FulfillmentResponsibility::Warehouse,
+                price_basis: SupplyPriceBasis::Bulk,
             },
             business_category: None,
             lines: vec![line],
@@ -617,9 +629,10 @@ mod tests {
             purchase_type: PurchaseType::Physical,
             payment_term_code: "NET-30".to_string(),
             fulfillment_responsibility: FulfillmentResponsibility::Warehouse,
+            price_basis: SupplyPriceBasis::Bulk,
         };
 
-        assert_eq!(basis_scope_key(&scope), "sup-1|PHYSICAL|NET-30|WAREHOUSE");
+        assert_eq!(basis_scope_key(&scope), "sup-1|PHYSICAL|NET-30|WAREHOUSE|BULK");
     }
 
     /// 不同供应商、付款条件或履约责任必须形成不同依据 ID。
@@ -636,6 +649,10 @@ mod tests {
         let mut other_term = base.clone();
         other_term.scope.payment_term_code = "NET-60".to_string();
         assert_ne!(base_id, basis_id_for(&order, &other_term, "wi-1", None));
+
+        let mut other_basis = base.clone();
+        other_basis.scope.price_basis = SupplyPriceBasis::Dropship;
+        assert_ne!(base_id, basis_id_for(&order, &other_basis, "wi-1", None));
 
         let mut other_responsibility = base.clone();
         other_responsibility.scope.fulfillment_responsibility = FulfillmentResponsibility::SupplierDirect;
@@ -656,22 +673,26 @@ mod tests {
         assert!(purchase_type_from_product_kind(ProductKind::Voucher).is_err());
     }
 
-    /// 实物由采购选择入仓或直发，其他商品类型只允许其固有路线。
+    /// 实物形成集采入仓、代发直发和集采直发，其他商品类型只允许其固有路线。
     #[test]
-    fn product_kind_limits_fulfillment_options() {
+    fn product_kind_limits_purchase_options() {
         assert_eq!(
-            fulfillment_options(ProductKind::Physical).unwrap(),
-            &[FulfillmentResponsibility::Warehouse, FulfillmentResponsibility::SupplierDirect,]
+            purchase_options(ProductKind::Physical).unwrap(),
+            &[
+                (FulfillmentResponsibility::Warehouse, SupplyPriceBasis::Bulk),
+                (FulfillmentResponsibility::SupplierDirect, SupplyPriceBasis::Dropship),
+                (FulfillmentResponsibility::SupplierDirect, SupplyPriceBasis::Bulk),
+            ]
         );
         assert_eq!(
-            fulfillment_options(ProductKind::Virtual).unwrap(),
-            &[FulfillmentResponsibility::Electronic]
+            purchase_options(ProductKind::Virtual).unwrap(),
+            &[(FulfillmentResponsibility::Electronic, SupplyPriceBasis::Dropship)]
         );
         assert_eq!(
-            fulfillment_options(ProductKind::OfflineService).unwrap(),
-            &[FulfillmentResponsibility::Service]
+            purchase_options(ProductKind::OfflineService).unwrap(),
+            &[(FulfillmentResponsibility::Service, SupplyPriceBasis::Dropship)]
         );
-        assert!(fulfillment_options(ProductKind::Voucher).is_err());
+        assert!(purchase_options(ProductKind::Voucher).is_err());
     }
 
     /// 有限可供量不足销售剩余时允许形成部分数量。
@@ -685,27 +706,13 @@ mod tests {
         assert!(maximum_create_quantity(remaining, Some(Quantity::from_str("-1").unwrap())).is_err());
     }
 
-    /// 入仓取集采价，其他履约责任取一件代发价。
+    /// 集采取集采价，代发取一件代发价，与履约责任无关。
     #[test]
-    fn supply_cost_follows_fulfillment_responsibility() {
+    fn supply_cost_follows_price_basis() {
         let revision = offering_revision("offering-1", "2026-01-01", None);
 
-        assert_eq!(
-            supply_cost(&revision, FulfillmentResponsibility::Warehouse),
-            UnitPrice::from_str("5").unwrap()
-        );
-        assert_eq!(
-            supply_cost(&revision, FulfillmentResponsibility::SupplierDirect),
-            UnitPrice::from_str("6").unwrap()
-        );
-        assert_eq!(
-            supply_cost(&revision, FulfillmentResponsibility::Electronic),
-            UnitPrice::from_str("6").unwrap()
-        );
-        assert_eq!(
-            supply_cost(&revision, FulfillmentResponsibility::Service),
-            UnitPrice::from_str("6").unwrap()
-        );
+        assert_eq!(supply_cost(&revision, SupplyPriceBasis::Bulk), UnitPrice::from_str("5").unwrap());
+        assert_eq!(supply_cost(&revision, SupplyPriceBasis::Dropship), UnitPrice::from_str("6").unwrap());
     }
 
     /// 请求行解析去除空白并校验数量与交付日。

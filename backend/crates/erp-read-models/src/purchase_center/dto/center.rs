@@ -1,6 +1,8 @@
 //! 采购单对象中心与应付汇总视图。
 
-use erp_procurement::entity::purchase_order::{PurchaseSourceResolution, SourceImpactReason};
+use erp_procurement::entity::purchase_order::{
+    PurchaseFreightWaiver, PurchaseSourceResolution, SourceImpactReason, SupplyPriceBasis,
+};
 use erp_sales::entity::sales_order::SalesDeliveryAllocation;
 
 use super::*;
@@ -60,6 +62,8 @@ pub struct PurchaseOrderCenterView {
     pub source_sales_order: Option<PurchaseSourceSalesOrderView>,
     /// 来源销售变更对本采购的影响；采购引用当前销售版本且无待处理记录时为空。
     pub source_update: Option<PurchaseSourceUpdateView>,
+    /// 选源时冻结的价格依据与配送判定；费用采购单为空。
+    pub delivery: Option<PurchaseDeliverySummaryView>,
     /// 当前内容表头汇总。
     pub totals: TotalsView,
     /// 生效版本的销售分配。
@@ -72,6 +76,32 @@ pub struct PurchaseOrderCenterView {
     pub approval: DocumentApprovalView,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
+}
+
+/// 采购单冻结的价格依据与逐行配送判定。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct PurchaseDeliverySummaryView {
+    /// 价格依据。
+    pub price_basis: SupplyPriceBasis,
+    /// 逐行配送判定。
+    pub lines: Vec<PurchaseDeliveryJudgementView>,
+}
+
+/// 一条采购商品的配送判定与运费跟进状态。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct PurchaseDeliveryJudgementView {
+    /// 稳定销售行。
+    pub sales_order_line_id: String,
+    /// 判定时的配送模板名称；未设置模板时为空。
+    pub template_name: Option<String>,
+    /// 判定时的模板版本号。
+    pub template_revision_no: Option<u64>,
+    /// 是否运费另计。
+    pub freight_extra: bool,
+    /// 运费另计尚未追加物流费用采购且未标记供应商不收运费。
+    pub freight_pending: bool,
+    /// "供应商不收运费"标记。
+    pub waiver: Option<PurchaseFreightWaiver>,
 }
 
 /// 来源销售变更对本采购的影响（第一期 §6.3“销售变更对采购的影响”第 10 条）。

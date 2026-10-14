@@ -6,12 +6,14 @@
 //! Service 基于本事实解释执行；本模块只做持久化读取，查询次数与任务数、销售
 //! 行数及供给数无关，不得出现逐行 N+1。
 
+use std::collections::HashMap;
+
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::{SkuId, SupplierAccountId, SupplierOfferingId};
-use erp_procurement::entity::purchase_order::CreationBasisFacts;
+use erp_procurement::entity::purchase_order::{CreationBasisFacts, OfferingDeliveryFact};
 use erp_supplier::SupplierExt;
 use erp_supplier::repository::prelude::*;
-use erp_supply::entity::supplier_offering::OfferingStatus;
+use erp_supply::entity::supplier_offering::{OfferingStatus, SupplierOffering, resolve_offering_delivery};
 use erp_supply::repository::SupplierOfferingExt;
 use erp_supply::repository::prelude::*;
 use mongodb::Database;
@@ -19,7 +21,8 @@ use mongodb::bson::doc;
 use persistence_core::{Executor, Result};
 
 use super::mapping::{
-    availability_fact, offering_fact, offering_revision_fact, supplier_commercial_fact, supplier_role_fact,
+    availability_fact, offering_delivery_fact, offering_fact, offering_revision_fact,
+    supplier_commercial_fact, supplier_role_fact,
 };
 
 /// 批量加载采购创建依据计算所需的最小持久化事实。
@@ -85,7 +88,9 @@ pub async fn load_creation_basis_facts(
         db.supplier().list_commercial_profiles_by_ids(&profile_revision_ids, executor).await?;
     let supplier_names =
         super::supplier_names::current_legal_names_by_account_ids(db, &supplier_ids, executor).await?;
+    let deliveries = delivery_facts(db, &offerings, &supplier_ids, executor).await?;
     Ok(CreationBasisFacts {
+        deliveries,
         revisions: revisions
             .into_iter()
             .map(|revision| (revision.base.id.clone(), offering_revision_fact(revision)))
@@ -107,6 +112,37 @@ pub async fn load_creation_basis_facts(
         supplier_names,
         offerings: offerings.into_iter().map(offering_fact).collect(),
     })
+}
+
+/// 解析供给当前生效的配送政策，供应商模板一次批量读取。
+///
+/// # 参数
+/// * `db` - MongoDB 数据库句柄
+/// * `offerings` - 本批 ACTIVE 供给
+/// * `supplier_ids` - 本批供给涉及的供应商
+/// * `executor` - 数据访问执行器
+///
+/// # 返回
+/// 以供给主键索引的配送事实。
+///
+/// # 错误
+/// MongoDB 查询失败时返回错误。
+async fn delivery_facts(
+    db: &Database,
+    offerings: &[SupplierOffering],
+    supplier_ids: &[SupplierAccountId],
+    executor: &mut dyn Executor,
+) -> Result<HashMap<String, OfferingDeliveryFact>> {
+    let templates = db.supplier_delivery_templates().list_by_suppliers(supplier_ids, executor).await?;
+    Ok(offerings
+        .iter()
+        .map(|offering| {
+            (
+                offering.base.id.clone(),
+                offering_delivery_fact(resolve_offering_delivery(offering, &templates)),
+            )
+        })
+        .collect())
 }
 
 /// 去重 SKU 集合且保持首次出现顺序。

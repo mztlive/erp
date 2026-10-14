@@ -20,15 +20,29 @@ import {
 } from "@/features/supplier-offerings/api/offerings"
 import type {
     CompleteSupplierSupplyExceptionTaskInput,
+    DeliveryTemplateInput,
     CreateSupplierOfferingInput,
     ReviseSupplierOfferingInput,
     SupplierOfferingListQuery,
     UpdateOfferingAvailabilityInput,
 } from "@/features/supplier-offerings/types"
 import { workItemKeys } from "@/features/work-items/queries"
+import {
+    assignDeliveryTemplate,
+    createDeliveryTemplate,
+    deleteDeliveryTemplate,
+    fetchSupplierDeliveryTemplates,
+    updateDeliveryTemplate,
+} from "@/features/supplier-offerings/api/delivery-templates"
 
 const supplierOfferingKeys = {
     all: ["supplier-offerings"] as const,
+    deliveryTemplates: (supplierId: string) =>
+        [
+            ...supplierOfferingKeys.all,
+            "delivery-templates",
+            supplierId,
+        ] as const,
     detail: (id: string) =>
         [...supplierOfferingKeys.all, "detail", id] as const,
     history: (id: string) =>
@@ -137,5 +151,60 @@ export function useOfferingHistoryQuery(id: string) {
         queryFn: ({ pageParam }) => fetchOfferingHistory(id, pageParam),
         initialPageParam: undefined as number | undefined,
         getNextPageParam: (page) => page.next_before_revision_no ?? undefined,
+    })
+}
+
+/** 查询供应商全部配送模板。 */
+export function useSupplierDeliveryTemplatesQuery(supplierId: string) {
+    return useQuery({
+        queryKey: supplierOfferingKeys.deliveryTemplates(supplierId),
+        queryFn: () => fetchSupplierDeliveryTemplates(supplierId),
+        enabled: Boolean(supplierId),
+    })
+}
+
+/** 新建或保存配送模板；成功后刷新模板与供给列表。 */
+export function useSaveDeliveryTemplateMutation(supplierId: string) {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (input: { id?: string; value: DeliveryTemplateInput }) =>
+            input.id
+                ? updateDeliveryTemplate(input.id, input.value)
+                : createDeliveryTemplate(supplierId, input.value),
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({
+                queryKey: supplierOfferingKeys.all,
+            })
+        },
+    })
+}
+
+/** 删除配送模板。 */
+export function useDeleteDeliveryTemplateMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (input: { id: string; expectedVersion: number }) =>
+            deleteDeliveryTemplate(input.id, input.expectedVersion),
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({
+                queryKey: supplierOfferingKeys.all,
+            })
+        },
+    })
+}
+
+/** 为供给指定配送模板或改回跟随供应商默认。 */
+export function useAssignDeliveryTemplateMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: (input: {
+            offeringIds: readonly string[]
+            templateId: string | null
+        }) => assignDeliveryTemplate(input.offeringIds, input.templateId),
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({
+                queryKey: supplierOfferingKeys.all,
+            })
+        },
     })
 }

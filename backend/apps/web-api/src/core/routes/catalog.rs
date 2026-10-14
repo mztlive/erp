@@ -638,14 +638,23 @@ fn sku_routes(rbac: &SharedRbacService) -> Router<AppState> {
 /// # 错误
 /// 无；业务错误由处理器返回。
 fn sellable_sku_routes(rbac: &SharedRbacService) -> Router<AppState> {
-    Router::new().route(
-        "/sellable-skus",
-        with_permission(
-            get(catalog::product::sellable_sku_list),
-            rbac,
-            catalog::product::sellable_sku_list_permission_key(),
-        ),
-    )
+    Router::new()
+        .route(
+            "/sellable-skus",
+            with_permission(
+                get(catalog::product::sellable_sku_list),
+                rbac,
+                catalog::product::sellable_sku_list_permission_key(),
+            ),
+        )
+        .route(
+            "/sellable-skus/delivery-coverage",
+            with_permission(
+                post(catalog::delivery_coverage::delivery_coverage),
+                rbac,
+                catalog::delivery_coverage::delivery_coverage_permission_key(),
+            ),
+        )
 }
 
 /// SKU 修订管理路由。

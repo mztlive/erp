@@ -9,8 +9,8 @@ use erp_core::money::Quantity;
 use crate::entity::facts::{AvailabilityStatus, OfferingFact, SalesOrderBasisFact, SalesRevisionFact};
 use crate::entity::purchase_order::{
     self as purchase_order, BasisGroup, BasisLine, BasisScope, CreationBasisFacts, LineSupply,
-    SalesProcurementCoverage, SalesProcurementCoverageLine, basis_scope_key, fulfillment_options,
-    maximum_create_quantity, purchase_type_from_product_kind, stable_line_id,
+    SalesProcurementCoverage, SalesProcurementCoverageLine, basis_scope_key, maximum_create_quantity,
+    purchase_options, purchase_type_from_product_kind, stable_line_id,
 };
 use crate::{Error, Result};
 
@@ -118,12 +118,13 @@ fn append_line_supplies(
         if max_create_quantity <= zero_quantity() {
             continue;
         }
-        for &fulfillment_responsibility in fulfillment_options(line.product_kind)? {
+        for &(fulfillment_responsibility, price_basis) in purchase_options(line.product_kind)? {
             let scope = BasisScope {
                 supplier_id: supplier_id.clone(),
                 purchase_type,
                 payment_term_code: terms.payment_term_code.clone(),
                 fulfillment_responsibility,
+                price_basis,
             };
             let basis_line =
                 BasisLine { coverage: line.clone(), supply: supply.clone(), max_create_quantity };
@@ -257,6 +258,7 @@ fn qualified_supply(facts: &CreationBasisFacts, offering: &OfferingFact) -> Resu
         offering: offering.clone(),
         revision: revision.clone(),
         availability: availability.clone(),
+        delivery: facts.deliveries.get(&offering.base.id).cloned().unwrap_or_default(),
     }))
 }
 
@@ -330,6 +332,7 @@ mod tests {
                 bulk_supply_price_gross: UnitPrice::from_str("1").unwrap(),
                 dropship_supply_price_gross: UnitPrice::from_str("2").unwrap(),
                 input_tax_rate: Rate::from_str("0").unwrap(),
+                bulk_minimum_order_quantity: Quantity::from_str("1").unwrap(),
             },
         );
         facts.availabilities.insert(

@@ -17,9 +17,10 @@ use super::{center_content_source, owner_display, payment_progress, sales_no_for
 use crate::purchase_center::PurchaseOrderReadService;
 use crate::purchase_center::approval_query::load_document_approval;
 use crate::purchase_center::dto::{
-    DocumentApprovalView, PurchaseOrderCenterView, PurchaseOrderPayableSummaryView,
-    PurchaseSourceSalesOrderView,
+    DocumentApprovalView, PurchaseDeliveryJudgementView, PurchaseDeliverySummaryView,
+    PurchaseOrderCenterView, PurchaseOrderPayableSummaryView, PurchaseSourceSalesOrderView,
 };
+use crate::purchase_center::freight_follow_up::freight_follow_ups;
 use crate::purchase_center::repository::{PurchaseOrderCenterFacts, load_purchase_order_center_facts};
 use crate::purchase_center::source_sales::source_sales;
 use crate::{Error, Result};
@@ -87,8 +88,58 @@ impl PurchaseOrderReadService {
         let mut view = center_view(&order, identity, content, source, relations, approval);
         view.target_warehouse_name = target_warehouse_name(&self.db, &order).await?;
         view.source_update = purchase_source_update_view(&self.db, &order, &mut NoTransaction).await?;
+        view.delivery = delivery_summary(&self.db, &order).await?;
         Ok(view)
     }
+}
+
+/// 汇总采购单冻结的配送判定，并标出仍待追加运费的商品。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `order` - 采购单
+///
+/// # 返回
+/// 选源采购单返回价格依据与逐行判定；费用采购单与历史采购单返回空。
+///
+/// # 错误
+/// 采购事实读取失败时返回错误。
+async fn delivery_summary(
+    db: &Database,
+    order: &PurchaseOrder,
+) -> Result<Option<PurchaseDeliverySummaryView>> {
+    let Some(price_basis) = order.sourcing_delivery.supply_price_basis else {
+        return Ok(None);
+    };
+    let sales_order_id = order.sales_order_id.to_string();
+    let follow_ups =
+        freight_follow_ups(db, std::slice::from_ref(&sales_order_id), &mut NoTransaction).await?;
+    let pending = follow_ups
+        .get(&sales_order_id)
+        .into_iter()
+        .flatten()
+        .filter(|item| item.purchase_order_id == order.base.id)
+        .map(|item| item.sales_order_line_id.clone())
+        .collect::<std::collections::HashSet<_>>();
+    let lines = order
+        .sourcing_delivery
+        .delivery_judgements
+        .iter()
+        .map(|judgement| PurchaseDeliveryJudgementView {
+            sales_order_line_id: judgement.sales_order_line_id.to_string(),
+            template_name: judgement.template_name.clone(),
+            template_revision_no: judgement.template_revision_no,
+            freight_extra: judgement.freight_extra,
+            freight_pending: pending.contains(judgement.sales_order_line_id.as_ref()),
+            waiver: order
+                .sourcing_delivery
+                .freight_waivers
+                .iter()
+                .find(|waiver| waiver.sales_order_line_id == judgement.sales_order_line_id)
+                .cloned(),
+        })
+        .collect();
+    Ok(Some(PurchaseDeliverySummaryView { price_basis, lines }))
 }
 
 /// 保留供应商、销售单号、当前责任人的原校验顺序与默认展示规则。
@@ -216,6 +267,7 @@ fn center_view(
         lines: content.lines,
         source_sales_order,
         source_update: None,
+        delivery: None,
         totals: content.totals,
         allocations: relations.allocations,
         changes: relations.changes,

@@ -134,6 +134,8 @@ fn duplicate_index_conflict_message(index_name: Option<&str>) -> String {
 pub fn known_duplicate_index_message(index_name: &str) -> Option<&'static str> {
     match index_name {
         "uk_supplier_offerings_supplier_sku" => Some("该供应商 SKU 已登记供给"),
+        "uk_supplier_delivery_templates_supplier_name" => Some("该供应商已有同名配送模板"),
+        "uk_supplier_delivery_templates_default" => Some("该供应商的默认配送模板已变化，请刷新后重试"),
         _ => None,
     }
 }

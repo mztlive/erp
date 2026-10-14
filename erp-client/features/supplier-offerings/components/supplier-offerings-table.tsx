@@ -181,6 +181,17 @@ export function SupplierOfferingsTable({
             ),
         },
         {
+            id: "delivery-template",
+            header: "配送模板",
+            meta: { label: "配送模板" },
+            enableSorting: false,
+            cell: ({ row: { original: item } }) => (
+                <div className="max-w-40 truncate text-sm">
+                    {item.delivery_template?.display_name ?? "—"}
+                </div>
+            ),
+        },
+        {
             id: "availability",
             header: "当前可供",
             meta: { label: "当前可供" },

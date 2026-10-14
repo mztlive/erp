@@ -17,9 +17,9 @@ import {
     canSplitSourcingProduct,
     sourcingUnitQuantityError,
 } from "../lib/sourcing-quantity"
-import { FULFILLMENT_RESPONSIBILITY_LABEL } from "../types"
 import type { SourcingEditorProps } from "./create-sourcing/types"
 import { SourcingAllocationEditor } from "./sourcing-allocation-editor"
+import { sourcingRouteLabel } from "../lib/sourcing/delivery-terms"
 
 /** 默认阅读当前方案，需要调整或补齐信息时才展开表单。 */
 export function PurchaseOrderCreateSourcingCards(props: SourcingEditorProps) {
@@ -226,11 +226,7 @@ function SourcingAllocationSummary({
                             : option.supplierName}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                        {stock
-                            ? "现有库存"
-                            : FULFILLMENT_RESPONSIBILITY_LABEL[
-                                  option.fulfillmentResponsibility
-                              ]}
+                        {sourcingRouteLabel(option)}
                         {line.targetWarehouseName
                             ? ` · ${line.targetWarehouseName}`
                             : ""}

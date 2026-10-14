@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use erp_core::money::Quantity;
+use erp_core::region::RegionCode;
 use erp_core::{Error, Result};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -15,6 +16,12 @@ use super::{FulfillmentResponsibility, PurchaseLineType, ensure_sourcing_quantit
 pub struct PurchaseDeliveryAllocation {
     pub recipient: String,
     pub phone: String,
+    /// 收货地区，沿用销售冻结的最末级代码。
+    pub region_code: RegionCode,
+    /// 地区完整名称快照，构造采购行时按代码重新生成。
+    #[serde(default)]
+    pub region_name: String,
+    /// 详细地址。
     pub address: String,
     pub quantity: Quantity,
 }
@@ -26,28 +33,45 @@ impl fmt::Debug for PurchaseDeliveryAllocation {
 }
 
 impl PurchaseDeliveryAllocation {
-    /// 返回收件资料身份：收货人、电话与地址。
-    pub(super) fn key(&self) -> (&str, &str, &str) {
-        (&self.recipient, &self.phone, &self.address)
+    /// 返回收件资料身份：收货人、电话、地区与详细地址。
+    pub(super) fn key(&self) -> (&str, &str, &str, &str) {
+        (&self.recipient, &self.phone, self.region_code.as_str(), &self.address)
     }
 
-    /// 校验冻结采购行的交付数量和字段归属。
+    /// 返回"省市区 + 详细地址"的完整地址。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回拼接后的完整地址。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn full_address(&self) -> String {
+        format!("{}{}", self.region_name, self.address)
+    }
+
+    /// 校验冻结采购行的交付数量和字段归属，并按地区代码重新生成地区名称。
     /// # 参数
     /// `rows` 为交付安排，`kind`、`quantity` 为采购行内容。
     /// # 返回
     /// 空安排或交付合计等于采购数量时成功。
     /// # 错误
     /// 资料非法、数量非正、重复地址或数量不守恒时拒绝。
-    pub fn validate(rows: &[Self], kind: PurchaseLineType, quantity: Option<Quantity>) -> Result<()> {
+    pub fn validate(rows: &mut [Self], kind: PurchaseLineType, quantity: Option<Quantity>) -> Result<()> {
         if rows.is_empty() {
             return Ok(());
         }
         if kind != PurchaseLineType::ItemService || rows.len() > 100 {
             return Err(Error::from("交付安排仅适用于商品/服务行，最多100个地址"));
         }
+        for row in rows.iter_mut() {
+            row.region_name = row.region_code.full_name();
+        }
         let mut total = Decimal::ZERO;
         let mut seen = BTreeMap::new();
-        for row in rows {
+        for row in rows.iter() {
             if row.recipient.trim().is_empty()
                 || row.recipient.chars().count() > 64
                 || row.phone.trim().is_empty()
@@ -102,7 +126,7 @@ impl PurchaseDeliveryAllocation {
         if rows.is_empty() {
             return Err(Error::from("请确认本次采购承担的地址及交付数量"));
         }
-        Self::validate(rows, PurchaseLineType::ItemService, Some(quantity))?;
+        Self::validate(&mut rows.to_vec(), PurchaseLineType::ItemService, Some(quantity))?;
         let mut caps = BTreeMap::new();
         for row in source {
             *caps.entry(row.key()).or_insert(Decimal::ZERO) += row.quantity.to_decimal();
@@ -134,6 +158,8 @@ mod tests {
         PurchaseDeliveryAllocation {
             recipient: "张三".into(),
             phone: "13800000000".into(),
+            region_code: RegionCode::parse("310115").unwrap(),
+            region_name: String::new(),
             address: address.into(),
             quantity: Quantity::from_str(quantity).unwrap(),
         }

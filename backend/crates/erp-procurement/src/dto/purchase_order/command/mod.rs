@@ -2,6 +2,7 @@
 
 mod create;
 mod expense;
+mod freight;
 mod review;
 mod save;
 mod submit;
@@ -17,6 +18,7 @@ pub use expense::{
     ConfirmExpenseOccurrenceResult, CreateExpenseLineRequest, CreateExpensePurchaseRequest,
     EXPENSE_LINE_LIMIT,
 };
+pub use freight::{WAIVE_FREIGHT_ACTION, WaivePurchaseFreightRequest, WaivePurchaseFreightResult};
 pub use review::{CancelPurchaseOrderApprovalRequest, MaintainPurchaseSourceRequest, PurchaseReviewResult};
 pub use save::{
     SAVE_ACTION, SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult, SavePurchaseOrderLine,

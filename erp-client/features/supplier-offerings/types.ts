@@ -50,6 +50,8 @@ export type SupplierOfferingView = Readonly<{
     maintainer_user_name?: string | null
     maintainer_user_id?: string
     business_org_unit_id?: string
+    /** 当前生效配送模板。 */
+    delivery_template?: OfferingDeliveryTemplate | null
 }>
 
 export type SupplierOfferingPage = Readonly<{
@@ -230,3 +232,64 @@ export type OfferingHistoryPage = Readonly<{
     items: OfferingRevisionView[]
     next_before_revision_no: number | null
 }>
+
+/** 配送判定：代发为配送/不配送，集采为包邮/运费另计/不配送。 */
+export type DeliveryTerm =
+    | "FREIGHT_INCLUDED"
+    | "FREIGHT_EXTRA"
+    | "NOT_DELIVERABLE"
+
+/** 一种供货方式的地区规则。 */
+export type DeliveryRuleSetView = {
+    default_term: DeliveryTerm
+    rules: { region_code: string; region_name: string; term: DeliveryTerm }[]
+}
+
+/** 供应商配送模板。 */
+export type DeliveryTemplateView = {
+    id: string
+    supplier_id: string
+    name: string
+    is_default: boolean
+    version: number
+    dropship: DeliveryRuleSetView
+    bulk: DeliveryRuleSetView
+    updated_by: string
+    updated_at: number
+}
+
+/** 模板编辑内容。 */
+export type DeliveryTemplateInput = {
+    name: string
+    isDefault: boolean
+    dropship: DeliveryRuleSetInput
+    bulk: DeliveryRuleSetInput
+    expectedVersion?: number
+}
+
+export type DeliveryRuleSetInput = {
+    defaultTerm: DeliveryTerm
+    rules: { regionCode: string; term: DeliveryTerm }[]
+}
+
+/** 供给当前生效的配送模板。 */
+export type OfferingDeliveryTemplate = {
+    source: "ASSIGNED" | "SUPPLIER_DEFAULT" | "UNSET"
+    template_id?: string | null
+    template_name?: string | null
+    display_name: string
+}
+
+export const DROPSHIP_TERM_LABEL: Record<
+    Exclude<DeliveryTerm, "FREIGHT_EXTRA">,
+    string
+> = {
+    FREIGHT_INCLUDED: "配送",
+    NOT_DELIVERABLE: "不配送",
+}
+
+export const BULK_TERM_LABEL: Record<DeliveryTerm, string> = {
+    FREIGHT_INCLUDED: "包邮",
+    FREIGHT_EXTRA: "运费另计",
+    NOT_DELIVERABLE: "不配送",
+}

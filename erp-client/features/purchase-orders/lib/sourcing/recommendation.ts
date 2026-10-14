@@ -1,4 +1,9 @@
 import { compareDecimal, formatScaled } from "@/lib/fixed-decimal"
+import { directDeliveryCapacity } from "./delivery"
+import {
+    directOptionHasFreightExtra,
+    directOptionUndeliverable,
+} from "./delivery-terms"
 import { formatQuantityUnits, minimumUnits, quantityUnits } from "./quantity"
 import type {
     SourcingLineInput,
@@ -92,20 +97,50 @@ function allocatePurchaseResidual(
     allocationIndex: number,
 ): SourcingLineInput | undefined {
     if (remaining <= BigInt(0)) return undefined
+    const candidates = line.options
+        .filter((option) => option.sourceType === "PURCHASE")
+        .map((option) => ({
+            option,
+            capacity: purchaseCapacity(line, option, remaining),
+        }))
+        // 集采直发须与供应商确认集采订单，不自动推荐，由采购按需改选。
+        .filter(
+            ({ option, capacity }) =>
+                capacity > BigInt(0) &&
+                !directOptionUndeliverable(option, line) &&
+                !(
+                    option.priceBasis === "BULK" &&
+                    option.fulfillmentResponsibility === "SUPPLIER_DIRECT"
+                ),
+        )
     const purchase = pickBestSourcingOption(
-        line.options.filter((option) => option.sourceType === "PURCHASE"),
+        candidates.map(({ option }) => option),
         formatScaled(remaining, 6),
+        line,
     )
     if (!purchase) return undefined
-    const allocated = minimumUnits(
-        remaining,
-        quantityUnits(purchase.maxCreateQuantity),
-    )
+    const allocated =
+        candidates.find(({ option }) => option.basisId === purchase.basisId)
+            ?.capacity ?? BigInt(0)
     return sourcingInput(
         line.salesOrderLineId,
         allocationIndex,
         purchase,
         allocated,
+    )
+}
+
+/** 推荐数量上限：剩余缺口、供应商可供量与直发可配送地址的剩余需求取最小。 */
+function purchaseCapacity(
+    line: SourcingProductLine,
+    option: SourcingSupplierOption,
+    remaining: bigint,
+): bigint {
+    const capacity = directDeliveryCapacity(line, option)
+    return minimumUnits(
+        remaining,
+        quantityUnits(option.maxCreateQuantity),
+        ...(capacity === undefined ? [] : [quantityUnits(capacity)]),
     )
 }
 
@@ -147,15 +182,17 @@ const compareStockOptions = (
  * 为一条销售明细选出最优供给。
  *
  * 排序：现有库存优先；采购方案中供应商直发优先，再比较剩余数量覆盖能力、
- * 含税成本、交期、可创建量与供给方名称。
+ * 是否全部地址包邮、含税成本、交期、可创建量与供给方名称。
  *
  * @param options 该明细的可用供给。
  * @param remainingQuantity 销售剩余待分配数量；缺省时不比较覆盖能力。
+ * @param product 所属明细；提供时比较直发方案是否全部地址包邮。
  * @returns 最优选项；无合格供给时为空。
  */
 export function pickBestSourcingOption(
     options: readonly SourcingSupplierOption[],
     remainingQuantity?: string,
+    product?: SourcingProductLine,
 ): SourcingSupplierOption | undefined {
     if (options.length === 0) return undefined
     return [...options].sort((left, right) => {
@@ -172,6 +209,12 @@ export function pickBestSourcingOption(
         const leftCovers = optionCoversRemaining(left, remainingQuantity)
         const rightCovers = optionCoversRemaining(right, remainingQuantity)
         if (leftCovers !== rightCovers) return leftCovers ? -1 : 1
+        if (product) {
+            // 运费金额未知，全部地址包邮的方案优先于含运费另计的方案。
+            const leftExtra = directOptionHasFreightExtra(left, product)
+            const rightExtra = directOptionHasFreightExtra(right, product)
+            if (leftExtra !== rightExtra) return leftExtra ? 1 : -1
+        }
         const cost = compareDecimalSafe(
             left.unitCostGross,
             right.unitCostGross,

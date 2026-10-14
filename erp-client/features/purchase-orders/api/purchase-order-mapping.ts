@@ -316,6 +316,26 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
         })),
         sourceSalesOrder,
         sourceUpdate: mapPurchaseSourceUpdate(center.source_update),
+        delivery: center.delivery
+            ? {
+                  priceBasis: center.delivery.price_basis,
+                  lines: center.delivery.lines.map((line) => ({
+                      salesOrderLineId: line.sales_order_line_id,
+                      templateName: line.template_name ?? undefined,
+                      freightExtra: line.freight_extra,
+                      freightPending: line.freight_pending,
+                      waiver: line.waiver
+                          ? {
+                                reason: line.waiver.reason,
+                                waivedBy: line.waiver.waived_by,
+                                waivedAt: new Date(
+                                    line.waiver.waived_at * 1000,
+                                ).toISOString(),
+                            }
+                          : undefined,
+                  })),
+              }
+            : undefined,
         payableSummary: center.payable_summary
             ? {
                   payableOpenAmount: center.payable_summary.payable_open_amount,
@@ -450,6 +470,7 @@ export function mapBasis(basis: BackendBasis): PurchaseCreationBasis {
                 : basis.business_category?.trim() ||
                   paymentTerm.businessCategory ||
                   undefined,
+        priceBasis: basis.price_basis ?? undefined,
         lines: (basis.lines ?? []).map((line) => {
             const salesQuantity = String(
                 line.sales_quantity ?? line.confirmed_quantity ?? "0",
@@ -477,6 +498,25 @@ export function mapBasis(basis: BackendBasis): PurchaseCreationBasis {
                 deliveryAllocations: line.delivery_allocations ?? [],
                 assignedDeliveryAllocations:
                     line.assigned_delivery_allocations ?? [],
+                delivery: {
+                    templateName: line.delivery_template_name ?? undefined,
+                    regionTerms: Object.fromEntries(
+                        (line.delivery_terms ?? []).map((item) => [
+                            item.region_code,
+                            item.term,
+                        ]),
+                    ),
+                    warehouseTerms: (line.warehouse_delivery_terms ?? []).map(
+                        (item) => ({
+                            warehouseId: item.warehouse_id,
+                            regionName: item.region_name,
+                            term: item.term,
+                        }),
+                    ),
+                    bulkMinimumOrderQuantity:
+                        line.bulk_minimum_order_quantity ?? undefined,
+                    supplierOfferingId: line.supplier_offering_id ?? undefined,
+                },
                 salesDeliveryDeadline:
                     line.sales_delivery_deadline ??
                     line.expected_delivery_date ??

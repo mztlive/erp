@@ -17,6 +17,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{WarehouseId, WarehouseRevisionId};
+use erp_core::region::RegionCode;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{NoTransaction, PageResult, Transactional};
@@ -147,6 +148,7 @@ impl WarehouseService {
             1,
             WarehouseRevisionInput {
                 name: req.name,
+                region_code: req.region_code,
                 address: req.address,
                 contact: req.contact,
                 effective_from: req.effective_from,
@@ -207,6 +209,7 @@ impl WarehouseService {
             revision_no,
             WarehouseRevisionInput {
                 name: req.name,
+                region_code: req.region_code,
                 address: req.address,
                 contact: req.contact,
                 effective_from: req.effective_from,
@@ -625,6 +628,8 @@ impl WarehouseRevisionView {
             warehouse_id: row.warehouse_id,
             revision_no: row.revision_no,
             name: row.name,
+            region_name: row.region_code.as_ref().map(|code| code.full_name()),
+            region_code: row.region_code.as_ref().map(ToString::to_string),
             effective_from: row.effective_from,
             effective_to: row.effective_to,
             change_reason: row.change_reason,
@@ -725,6 +730,8 @@ pub(crate) fn handler_option_views(
 struct WarehouseRevisionInput {
     /// 仓库名称。
     name: String,
+    /// 所在地区代码。
+    region_code: String,
     /// 地址明文。
     address: String,
     /// 联系人明文。
@@ -768,12 +775,15 @@ fn build_warehouse_revision(
     let address = SensitiveText::new(input.address, address_fingerprint)?;
     let contact_fingerprint = fingerprint.content_fingerprint(&input.contact, fingerprint_key);
     let contact = SensitiveText::new(input.contact, contact_fingerprint)?;
+    let region_code = RegionCode::parse_leaf(&input.region_code)
+        .map_err(|error| Error::ValidationError(error.to_string()))?;
     Ok(WarehouseRevision::new(
         revision_id,
         WarehouseRevisionData {
             warehouse_id,
             revision_no,
             name: input.name,
+            region_code,
             address,
             contact,
             effective_from: input.effective_from,
@@ -1000,6 +1010,7 @@ mod tests {
             1,
             WarehouseRevisionInput {
                 name: "北京仓".to_string(),
+                region_code: "110105".to_string(),
                 address: address.clone(),
                 contact: contact.clone(),
                 effective_from: BusinessDate::from_ymd(2026, 1, 1).unwrap(),

@@ -4,8 +4,8 @@ use mongodb::Database;
 
 use super::super::supplier_offering::{SupplierOfferingDomainRepository, SupplierOfferingFilter};
 use crate::repository::owned::{
-    SupplierOfferingAvailabilityRepository, SupplierOfferingCommandRepository, SupplierOfferingRepository,
-    SupplierOfferingRevisionRepository,
+    SupplierDeliveryTemplateRepository, SupplierOfferingAvailabilityRepository,
+    SupplierOfferingCommandRepository, SupplierOfferingRepository, SupplierOfferingRevisionRepository,
 };
 
 /// 供应商供给仓储访问器。
@@ -18,6 +18,8 @@ pub trait SupplierOfferingExt: Sized {
     const SUPPLIER_OFFERING_AVAILABILITIES: &'static str = "supplier_offering_availabilities";
     /// 供给幂等命令集合。
     const SUPPLIER_OFFERING_COMMANDS: &'static str = "supplier_offering_commands";
+    /// `supplier_delivery_template` 集合名。
+    const SUPPLIER_DELIVERY_TEMPLATES: &'static str = "supplier_delivery_templates";
 
     /// 供给列表筛选条件类型。
     type SupplierOfferingFilter;
@@ -81,6 +83,18 @@ pub trait SupplierOfferingExt: Sized {
     /// # 错误
     /// 不返回错误。
     fn supplier_offering_repository(&self) -> SupplierOfferingDomainRepository<'_>;
+
+    /// 获取 `supplier_delivery_template` 集合的 Repository。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回配送模板仓储。
+    ///
+    /// # 错误
+    /// 不返回错误。
+    fn supplier_delivery_templates(&self) -> SupplierDeliveryTemplateRepository<'_>;
 }
 
 impl SupplierOfferingExt for Database {
@@ -104,5 +118,9 @@ impl SupplierOfferingExt for Database {
 
     fn supplier_offering_repository(&self) -> SupplierOfferingDomainRepository<'_> {
         SupplierOfferingDomainRepository::new(self)
+    }
+
+    fn supplier_delivery_templates(&self) -> SupplierDeliveryTemplateRepository<'_> {
+        SupplierDeliveryTemplateRepository::new(self, Self::SUPPLIER_DELIVERY_TEMPLATES)
     }
 }

@@ -431,11 +431,11 @@ impl PurchaseOrderRevisionLine {
     /// # 错误
     /// 行号为零、字段归属与行类型不符、快照超长、数量/单价/税率越界或
     /// 金额三元组不守恒时返回错误。
-    pub fn new(id: PurchaseOrderRevisionLineId, data: PurchaseOrderRevisionLineData) -> Result<Self> {
+    pub fn new(id: PurchaseOrderRevisionLineId, mut data: PurchaseOrderRevisionLineData) -> Result<Self> {
         ensure_line_no(data.line_no)?;
         let (product_name, specification, base_unit_code) = normalize_and_validate_line(&data)?;
         ensure_offering_source(data.line_type, data.supplier_offering_source.as_ref())?;
-        PurchaseDeliveryAllocation::validate(&data.delivery_allocations, data.line_type, data.quantity)?;
+        PurchaseDeliveryAllocation::validate(&mut data.delivery_allocations, data.line_type, data.quantity)?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             purchase_order_revision_id: data.purchase_order_revision_id,

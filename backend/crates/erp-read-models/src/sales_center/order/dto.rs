@@ -6,6 +6,8 @@ use erp_sales::entity::sales_order::selection_source::SalesSelectionSource;
 use erp_sales::entity::sales_order::{BusinessType, CommercialStatus, OriginSystem};
 use erp_workflow::service::work_item::{ProcessingBlockerView, ProcessingState, WorkItemPartyView};
 use serde::Serialize;
+
+pub use crate::purchase_center::freight_follow_up::FreightFollowUpView;
 /// 销售单列表行视图（契约形状；金额以字符串序列化）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct SalesOrderView {
@@ -304,6 +306,8 @@ pub struct SalesOrderDetailView {
     pub purchase_coverage: SalesProcurementCoverageView,
     /// 当前账号是否可以从该销售单继续执行供给分配。
     pub purchase_creation_access: PurchaseCreationAccessView,
+    /// 运费另计尚未追加物流费用或标记供应商不收运费的采购商品；仅对可追加采购的账号返回。
+    pub freight_follow_ups: Vec<FreightFollowUpView>,
     /// 应收子账已核销含税合计。
     pub settled_total: Amount,
     /// 应收子账净已开票含税合计。

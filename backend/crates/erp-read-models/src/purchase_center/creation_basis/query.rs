@@ -13,8 +13,8 @@ use persistence_core::NoTransaction;
 use super::super::PurchaseOrderReadService;
 use super::super::dto::{CreationBasisListParams, CreationBasisView};
 use super::super::repository::{
-    load_creation_basis_facts, load_sales_procurement_coverage, sales_order_basis_fact,
-    stock_basis_groups_for_order,
+    active_warehouse_regions, load_creation_basis_facts, load_sales_procurement_coverage,
+    sales_order_basis_fact, stock_basis_groups_for_order,
 };
 use super::mapping::{build_basis_view, build_stock_basis_view};
 use crate::{Error, Result};
@@ -112,6 +112,7 @@ impl PurchaseOrderReadService {
             coverage_by_order.insert(order_id.clone(), coverage);
         }
         let facts = load_creation_basis_facts(&self.db, &all_sku_ids, &mut NoTransaction).await?;
+        let warehouses = active_warehouse_regions(&self.db, &mut NoTransaction).await?;
         let mut views = Vec::new();
         for (order_id, task_indexes) in task_indexes_by_order {
             let Some(order) = orders.get(&order_id) else {
@@ -134,6 +135,7 @@ impl PurchaseOrderReadService {
                         &facts,
                         owner_name.clone(),
                         &task.base.id,
+                        &warehouses,
                     )?);
                 }
                 let stock_groups = stock_basis_groups_for_order(

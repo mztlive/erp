@@ -118,6 +118,8 @@ fn delivery_options(
             .map(|row| PurchaseDeliveryAddressOptionView {
                 recipient: row.recipient,
                 phone: row.phone,
+                region_code: row.region_code.to_string(),
+                region_name: row.region_name,
                 address: row.address,
                 available_quantity: row.quantity,
             })
@@ -221,6 +223,8 @@ mod tests {
         PurchaseDeliveryAllocation {
             recipient: "张三".into(),
             phone: "13800000000".into(),
+            region_code: erp_core::region::RegionCode::parse("310115").unwrap(),
+            region_name: "上海市浦东新区".into(),
             address: address.into(),
             quantity: qty(quantity),
         }

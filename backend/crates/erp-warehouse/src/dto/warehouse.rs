@@ -134,6 +134,9 @@ pub struct CreateWarehouseRequest {
     /// 仓库名称（结构化快照）。
     #[validate(custom(function = "non_blank", message = "仓库名称不能为空"))]
     pub name: String,
+    /// 所在地区（行政区划最末级代码）。
+    #[validate(custom(function = "non_blank", message = "请选择仓库所在地区"))]
+    pub region_code: String,
     /// 地址（敏感字段，落库前生成密文与查询指纹）。
     #[validate(custom(function = "non_blank", message = "仓库地址不能为空"))]
     pub address: String,
@@ -167,6 +170,9 @@ pub struct UpdateWarehouseRequest {
     /// 仓库名称（结构化快照）。
     #[validate(custom(function = "non_blank", message = "仓库名称不能为空"))]
     pub name: String,
+    /// 所在地区（行政区划最末级代码）。
+    #[validate(custom(function = "non_blank", message = "请选择仓库所在地区"))]
+    pub region_code: String,
     /// 地址（敏感字段）。
     #[validate(custom(function = "non_blank", message = "仓库地址不能为空"))]
     pub address: String,
@@ -347,6 +353,10 @@ pub struct WarehouseRevisionView {
     pub revision_no: u32,
     /// 仓库名称（结构化快照）。
     pub name: String,
+    /// 所在地区代码；未设置时为空。
+    pub region_code: Option<String>,
+    /// 所在地区完整名称；未设置时为空。
+    pub region_name: Option<String>,
     /// 生效开始日。
     pub effective_from: BusinessDate,
     /// 生效结束日；空表示无限期。
@@ -614,6 +624,7 @@ mod tests {
         let request: super::CreateWarehouseRequest = serde_json::from_value(serde_json::json!({
             "warehouse_code": "WH-1",
             "name": "一号仓",
+            "region_code": "110105",
             "address": "  ",
             "contact": "张三",
             "inbound_handler_user_id": "user-inbound",
@@ -623,5 +634,22 @@ mod tests {
         }))
         .unwrap();
         assert!(request.validate().is_err(), "空白地址必须被拒绝");
+    }
+
+    #[test]
+    fn create_warehouse_request_requires_region() {
+        let request: super::CreateWarehouseRequest = serde_json::from_value(serde_json::json!({
+            "warehouse_code": "WH-1",
+            "name": "一号仓",
+            "region_code": " ",
+            "address": "测试路 1 号",
+            "contact": "张三",
+            "inbound_handler_user_id": "user-inbound",
+            "outbound_handler_user_id": "user-outbound",
+            "effective_from": "2026-01-01",
+            "change_reason": "期初建仓",
+        }))
+        .unwrap();
+        assert!(request.validate().is_err(), "未选择所在地区必须被拒绝");
     }
 }

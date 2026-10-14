@@ -11,8 +11,8 @@ use erp_core::ids::{SkuId, SupplierAccountId, SupplierOfferingId};
 use erp_party::{Party, PartyRevision};
 use erp_supplier::SupplierAccount;
 use erp_supply::entity::supplier_offering::{
-    AvailabilityStatus, OfferingSourceType, OfferingStatus, SupplierOfferingAvailability,
-    SupplierOfferingRevision,
+    AvailabilityStatus, OfferingSourceType, OfferingStatus, SupplierDeliveryTemplate,
+    SupplierOfferingAvailability, SupplierOfferingRevision,
 };
 use erp_supply::repository::SupplierOfferingExt;
 use erp_supply::repository::prelude::*;
@@ -118,6 +118,8 @@ pub struct SupplierOfferingListBundle {
     pub parties: Vec<Party>,
     /// 主体当前修订批量事实。
     pub party_revisions: Vec<PartyRevision>,
+    /// 本页供应商的全部配送模板。
+    pub delivery_templates: Vec<SupplierDeliveryTemplate>,
 }
 
 impl<'a> SupplierOfferingReadRepository<'a> {
@@ -235,7 +237,16 @@ impl<'a> SupplierOfferingReadRepository<'a> {
             .map(|value| (value.supplier_offering_id.to_string(), value))
             .collect::<HashMap<_, _>>();
         let display = self.load_display_entities(&page.items, executor).await?;
+        let mut supplier_ids = Vec::<SupplierAccountId>::new();
+        for row in &page.items {
+            if !supplier_ids.contains(&row.supplier_id) {
+                supplier_ids.push(row.supplier_id.clone());
+            }
+        }
+        let delivery_templates =
+            self.db.supplier_delivery_templates().list_by_suppliers(&supplier_ids, executor).await?;
         Ok(SupplierOfferingListBundle {
+            delivery_templates,
             page,
             revisions,
             availabilities,

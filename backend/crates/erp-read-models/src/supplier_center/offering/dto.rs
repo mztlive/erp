@@ -2,6 +2,7 @@
 pub use application_core::PageView;
 pub(crate) use application_core::{SortDir, normalize_sort};
 use erp_core::ids::{SkuId, SupplierAccountId};
+use erp_supply::dto::delivery_template::OfferingDeliveryView;
 use erp_supply::entity::supplier_offering::{
     AvailabilityStatus, OfferingSourceType, OfferingStatus, SupplierOfferingRevision,
 };
@@ -135,6 +136,8 @@ pub struct SupplierOfferingView {
     /// 当前业务组织。
     #[serde(default)]
     pub business_org_unit_id: String,
+    /// 当前生效配送模板。
+    pub delivery_template: Option<OfferingDeliveryView>,
 }
 
 /// 列表响应保持现有字段并声明独立的授权时点及版本。
@@ -209,6 +212,7 @@ impl SupplierOfferingView {
             maintainer_user_id: row.maintainer_user_id,
             maintainer_user_name: None,
             business_org_unit_id: row.business_org_unit_id,
+            delivery_template: None,
         }
     }
 
@@ -404,6 +408,7 @@ mod tests {
             maintainer_user_id: "user-1".to_string(),
             maintainer_user_name: None,
             business_org_unit_id: "org-1".to_string(),
+            delivery_template: None,
         };
         view.redact_costs();
         assert!(view.dropship_supply_price_gross.is_none());

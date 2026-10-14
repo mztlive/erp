@@ -13,7 +13,6 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import { multiplyFixed } from "@/lib/fixed-decimal"
 import { findSourcingOption } from "../lib/purchase-order-create-model"
 import type { SourcingEditorRow } from "../lib/sourcing/editor-rows"
-import { FULFILLMENT_RESPONSIBILITY_LABEL } from "../types"
 import type {
     SourcingEditorProps,
     SourcingBatchSelectionProps,
@@ -21,6 +20,7 @@ import type {
 } from "./create-sourcing/types"
 import { SourcingParticipationControl } from "./sourcing-participation-control"
 import { SourcingProductAdjustDialog } from "./sourcing-product-adjust-dialog"
+import { sourcingRouteLabel } from "../lib/sourcing/delivery-terms"
 
 /** 窄屏行直接展示供给摘要，整行点击进入编辑弹窗。 */
 export function SourcingProductSummaryList({
@@ -193,12 +193,9 @@ export function SourcingProductSummaryList({
                                                         </span>
                                                         <span className="block text-sm text-muted-foreground">
                                                             {option
-                                                                ? stock
-                                                                    ? "现有库存"
-                                                                    : FULFILLMENT_RESPONSIBILITY_LABEL[
-                                                                          option
-                                                                              .fulfillmentResponsibility
-                                                                      ]
+                                                                ? sourcingRouteLabel(
+                                                                      option,
+                                                                  )
                                                                 : "未选来源"}
                                                             {" · "}
                                                             {line.quantity ? (

@@ -6,15 +6,22 @@ import {
 } from "@/lib/fixed-decimal"
 import type { PurchaseDeliveryAllocation } from "../../types"
 import { sourcingUnitQuantityError } from "../sourcing-quantity"
+import { addressDeliverable } from "./delivery-terms"
 import { findSourcingOption } from "./options"
 import type {
     SourcingLineInput,
     SourcingProductLine,
     SourcingSalesOrder,
+    SourcingSupplierOption,
 } from "./types"
 
 export function deliveryKey(row: PurchaseDeliveryAllocation): string {
-    return JSON.stringify([row.recipient, row.phone, row.address])
+    return JSON.stringify([
+        row.recipient,
+        row.phone,
+        row.region_code,
+        row.address,
+    ])
 }
 
 function groupDeliveryAllocations(
@@ -71,6 +78,31 @@ export function deliveryRequirementRows(
     }))
 }
 
+/** 本方案可配送的剩余地址恰好承担本次数量时，地址数量按销售要求默认带入。 */
+export function defaultDeliveryCoversQuantity(
+    product: SourcingProductLine,
+    input: SourcingLineInput,
+): boolean {
+    const rows = editableDeliveryAllocations(product, {
+        ...input,
+        deliveryAllocations: undefined,
+    })
+    try {
+        return (
+            compareDecimal(
+                sumFixed(
+                    rows.map((row) => row.quantity),
+                    { maxScale: 6, outputScale: 6 },
+                ),
+                input.quantity,
+                6,
+            ) === 0 && compareDecimal(input.quantity, "0", 6) > 0
+        )
+    } catch {
+        return false
+    }
+}
+
 /** 本次数量恰好承担全部剩余地址需求时，地址数量可按销售要求默认带入。 */
 export function deliveryDefaultsCoverQuantity(
     product: SourcingProductLine,
@@ -98,17 +130,41 @@ export function supplierDeliveryRequired(
     )
 }
 
-/** 仅全量承担剩余地址时默认带入；部分承担必须逐地址确认。 */
+/**
+ * 仅全量承担本方案可配送的剩余地址时默认带入；部分承担必须逐地址确认。
+ * 不在本方案配送范围内的地址始终为 0，不得分配。
+ */
 export function editableDeliveryAllocations(
     product: SourcingProductLine,
     input: SourcingLineInput,
 ): PurchaseDeliveryAllocation[] {
     if (input.deliveryAllocations) return input.deliveryAllocations
+    const option = findSourcingOption(product, input.basisId)
+    const rows = remainingDeliveryAllocations(product)
+    const deliverable = rows.filter((row) =>
+        addressDeliverable(option, row.region_code),
+    )
     // 数量格式错误时按部分承担处理，数量校验单独显示。
-    const all = deliveryDefaultsCoverQuantity(product, input.quantity)
-    return remainingDeliveryAllocations(product).map((row) => ({
+    let all = false
+    try {
+        all =
+            compareDecimal(
+                sumFixed(
+                    deliverable.map((row) => row.quantity),
+                    { maxScale: 6, outputScale: 6 },
+                ),
+                input.quantity,
+                6,
+            ) === 0
+    } catch {
+        all = false
+    }
+    return rows.map((row) => ({
         ...row,
-        quantity: all ? row.quantity : "0",
+        quantity:
+            all && addressDeliverable(option, row.region_code)
+                ? row.quantity
+                : "0",
     }))
 }
 
@@ -191,4 +247,26 @@ export function deliveryValidationErrors(
         })
     }
     return errors
+}
+
+/**
+ * 直发方案按本方案可配送地址的剩余需求合计，作为推荐数量上限。
+ * 非直发方案或销售未指定地址时为空，不限制。
+ */
+export function directDeliveryCapacity(
+    product: SourcingProductLine,
+    option: SourcingSupplierOption,
+): string | undefined {
+    if (
+        option.sourceType !== "PURCHASE" ||
+        option.fulfillmentResponsibility !== "SUPPLIER_DIRECT" ||
+        product.deliveryAllocations.length === 0
+    )
+        return undefined
+    return sumFixed(
+        remainingDeliveryAllocations(product)
+            .filter((row) => addressDeliverable(option, row.region_code))
+            .map((row) => row.quantity),
+        { maxScale: 6, outputScale: 6 },
+    )
 }

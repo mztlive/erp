@@ -1,5 +1,6 @@
-//! 域内共享固定枚举（数据模型 §6.6：采购类型、履约责任、行类型）。
+//! 域内共享固定枚举（数据模型 §6.6：采购类型、履约责任、行类型、价格依据）。
 
+use erp_core::delivery_policy::DeliveryMode;
 use serde::{Deserialize, Serialize};
 
 /// 由 `(变体 => (中文标签, 稳定代码))` 映射表生成 `label()`/`as_str()`。
@@ -134,10 +135,51 @@ status_display!(PurchaseLineType, {
     LogisticsFee => ("费用", "LOGISTICS_FEE"),
 });
 
+/// 采购单价依据：一件代发价或集采价。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum SupplyPriceBasis {
+    /// 一件代发价，价格已含运费。
+    Dropship,
+    /// 集采价。
+    Bulk,
+}
+
+status_display!(SupplyPriceBasis, {
+    Dropship => ("代发", "DROPSHIP"),
+    Bulk => ("集采", "BULK"),
+});
+
+impl SupplyPriceBasis {
+    /// 返回配送判定使用的供货方式。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 代发返回代发规则，集采返回集采规则。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn delivery_mode(self) -> DeliveryMode {
+        match self {
+            Self::Dropship => DeliveryMode::Dropship,
+            Self::Bulk => DeliveryMode::Bulk,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
-    use super::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};
+    use super::{FulfillmentResponsibility, PurchaseLineType, PurchaseType, SupplyPriceBasis};
+
+    #[test]
+    fn price_basis_codes_are_stable() {
+        assert_eq!(SupplyPriceBasis::Bulk.as_str(), "BULK");
+        assert_eq!(serde_json::to_string(&SupplyPriceBasis::Dropship).unwrap(), "\"DROPSHIP\"");
+        assert_eq!(SupplyPriceBasis::Bulk.label(), "集采");
+    }
 
     #[test]
     fn enums_expose_labels_and_stable_codes() {

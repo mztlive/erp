@@ -484,7 +484,7 @@ mod delivery_tests {
         let mut request: CreatePurchaseOrdersFromSourcingRequest = serde_json::from_value(serde_json::json!({
             "work_item_id":"wi", "sales_order_id":"so", "idempotency_key":"retry", "lines":[{
                 "sales_order_line_id":"sol", "basis_id":"basis", "quantity":"2", "expected_delivery_date":"2026-10-30",
-                "delivery_allocations":[{"recipient":"张三", "phone":"13800000000", "address":"A", "quantity":"2"}]
+                "delivery_allocations":[{"recipient":"张三", "phone":"13800000000", "region_code":"310115", "address":"A", "quantity":"2"}]
             }]
         })).unwrap();
         let first =

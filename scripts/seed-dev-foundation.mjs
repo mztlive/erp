@@ -59,12 +59,14 @@ const WAREHOUSES = [
   {
     code: "BJ-TZ-01",
     name: "北京通州仓",
+    regionCode: "110112",
     address: "北京市通州区马驹桥物流基地兴贸一街 6 号",
     contact: "周强",
   },
   {
     code: "SH-JD-01",
     name: "上海嘉定仓",
+    regionCode: "310114",
     address: "上海市嘉定区江桥镇金沙江南路 1358 号",
     contact: "吴婷",
   },
@@ -407,6 +409,7 @@ async function ensureWarehouse(adminToken, handlerUserId, spec) {
       body: {
         warehouse_code: spec.code,
         name: spec.name,
+        region_code: spec.regionCode,
         address: spec.address,
         contact: spec.contact,
         effective_from: todayBusinessDate(),
@@ -420,7 +423,37 @@ async function ensureWarehouse(adminToken, handlerUserId, spec) {
     return warehouse;
   }
   console.log("仓库已存在:", warehouse.warehouse_code);
-  return bindWarehouseHandlers(adminToken, warehouse, handlerUserId);
+  const bound = await bindWarehouseHandlers(adminToken, warehouse, handlerUserId);
+  return backfillWarehouseRegion(adminToken, bound, spec);
+}
+
+/** 所在地区上线前建立的种子仓库补一版带地区的修订，供集采入仓配送判定。 */
+async function backfillWarehouseRegion(adminToken, warehouse, spec) {
+  const revisions = await call(
+    "GET",
+    `/admin/warehouse-revisions?warehouse_id=${encodeURIComponent(warehouse.id)}&page=1&page_size=100&sort_by=revision_no&sort_dir=desc`,
+    { token: adminToken },
+  );
+  const latest = revisions?.items?.[0];
+  if (!latest || latest.region_code) return warehouse;
+  const updated = await call("PUT", `/admin/warehouses/${encodeURIComponent(warehouse.id)}`, {
+    token: adminToken,
+    body: {
+      version: warehouse.version,
+      name: latest.name,
+      region_code: spec.regionCode,
+      address: spec.address,
+      contact: spec.contact,
+      effective_from: todayBusinessDate(),
+      effective_to: null,
+      change_reason: "补充仓库所在地区",
+      status: warehouse.status,
+      inbound_handler_user_id: warehouse.inbound_handler_user_id,
+      outbound_handler_user_id: warehouse.outbound_handler_user_id,
+    },
+  });
+  console.log("仓库已补充所在地区:", warehouse.warehouse_code, spec.regionCode);
+  return updated;
 }
 
 async function ensureWarehouses(adminToken, handlerUserId) {

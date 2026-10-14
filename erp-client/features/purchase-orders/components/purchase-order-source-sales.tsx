@@ -21,6 +21,7 @@ import type {
 } from "@/features/purchase-orders/types"
 import { getErrorMessage } from "@/lib/api"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { fullDeliveryAddress } from "@/lib/delivery-address"
 
 type SalesLine = PurchaseSourceSalesOrderView["lines"][number]
 
@@ -41,7 +42,7 @@ const SALES_COLUMNS: ColumnDef<SalesLine>[] = [
                         {allocation.quantity} {row.original.unit} →{" "}
                         {allocation.recipient} · {allocation.phone}
                         <br />
-                        {allocation.address}
+                        {fullDeliveryAddress(allocation)}
                     </p>
                 ))}
                 <div className="text-xs text-muted-foreground">

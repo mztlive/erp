@@ -24,6 +24,7 @@ import {
     OfferingLinks,
 } from "../components/offering-context"
 import { OfferingTerms } from "../components/offering-terms"
+import { OfferingDeliverySection } from "../components/delivery-templates/offering-delivery-section"
 import { OfferingHistory } from "../components/offering-history"
 import { SupplierOfferingRowActions } from "../components/supplier-offering-row-actions"
 import { ReviseOfferingDialog } from "../components/dialogs/revise-offering-dialog"
@@ -160,6 +161,18 @@ export function SupplierOfferingDetailPage({
                             />
                             <aside className="min-w-0 space-y-6 xl:border-l xl:border-border xl:pl-6">
                                 <OfferingAvailability offering={offering} />
+                                <div className="border-t border-border pt-6">
+                                    <OfferingDeliverySection
+                                        offering={offering}
+                                        canEdit={
+                                            !taskMode &&
+                                            hasPermission(
+                                                account.data?.permissions,
+                                                "supplier_offering:update",
+                                            )
+                                        }
+                                    />
+                                </div>
                                 <div className="border-t border-border pt-6">
                                     <OfferingIdentity offering={offering} />
                                 </div>

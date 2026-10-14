@@ -1,6 +1,5 @@
 import { compareDecimal, subtractFixed, sumFixed } from "@/lib/fixed-decimal"
 import { sourcingFormValidationError } from "../purchase-order-create-validation"
-import { FULFILLMENT_RESPONSIBILITY_LABEL } from "../../types"
 import { findSourcingOption } from "./options"
 import { formatQuantityUnits, quantityUnits } from "./quantity"
 import type {
@@ -8,6 +7,7 @@ import type {
     SourcingProductLine,
     SourcingSalesOrder,
 } from "./types"
+import { sourcingRouteLabel } from "./delivery-terms"
 
 export type SourcingEditorRow = {
     product: SourcingProductLine
@@ -75,15 +75,7 @@ export function buildSourcingEditorRows(
             ...new Set(
                 selected.flatMap(({ line }) => {
                     const option = findSourcingOption(product, line.basisId)
-                    return option
-                        ? [
-                              option.sourceType === "EXISTING_STOCK"
-                                  ? "现有库存"
-                                  : FULFILLMENT_RESPONSIBILITY_LABEL[
-                                        option.fulfillmentResponsibility
-                                    ],
-                          ]
-                        : []
+                    return option ? [sourcingRouteLabel(option)] : []
                 }),
             ),
         ]

@@ -68,8 +68,8 @@ const WAREHOUSE_CODE = "BJ-TZ-01";
 const SALES_QTY = "1";
 const PAYMENT_TERM_CUSTOMER = "货到 15 天";
 const PAYMENT_TERM_SUPPLIER = "先款 50%";
-const INBOUND_OPTION = "杭州狮峰茶叶有限公司 · 入仓";
-const DIRECT_OPTION = "杭州狮峰茶叶有限公司 · 供应商直发";
+const INBOUND_OPTION = "杭州狮峰茶叶有限公司 · 集采入仓";
+const DIRECT_OPTION = "杭州狮峰茶叶有限公司 · 代发直发";
 const RECEIPT_PNG = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
     "base64",
@@ -731,9 +731,9 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         const previewChoices = preview.getByRole("navigation", { name: "将创建的采购单" }).getByRole("button");
         await expect(previewChoices).toHaveCount(2);
         await previewChoices.filter({ hasText: WAREHOUSE_CODE }).click();
-        await expect(preview.getByText("入仓", { exact: true })).toBeVisible();
+        await expect(preview.getByText("集采入仓", { exact: true })).toBeVisible();
         await previewChoices.filter({ hasNotText: WAREHOUSE_CODE }).click();
-        await expect(preview.getByText("供应商直发", { exact: true })).toBeVisible();
+        await expect(preview.getByText("代发直发", { exact: true })).toBeVisible();
         await preview.getByRole("button", { name: /确认提交 2 张采购单/ }).click();
         await expectToast(page, /供给分配已完成|已将缺口拆成 2 张采购单并提交审批/);
 

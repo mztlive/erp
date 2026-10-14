@@ -1,6 +1,7 @@
 "use client"
 
 import { QuantityValue } from "@/components/business"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -10,26 +11,52 @@ import type {
     SourcingLineInput,
     SourcingProductLine,
 } from "../lib/sourcing/types"
-import type { PurchaseDeliveryAllocation } from "../types"
+import type { DeliveryTerm, PurchaseDeliveryAllocation } from "../types"
 import {
-    deliveryDefaultsCoverQuantity,
+    addressDeliveryTerm,
+    deliveryTermLabel,
+} from "../lib/sourcing/delivery-terms"
+import { findSourcingOption } from "../lib/sourcing/options"
+import type { SourcingSupplierOption } from "../lib/sourcing/types"
+import {
+    defaultDeliveryCoversQuantity,
     deliveryRequirementRows,
     editableDeliveryAllocations,
     remainingDeliveryAllocations,
     supplierDeliveryRequired,
 } from "../lib/sourcing/delivery"
 import { sourcingQuantityStep } from "../lib/sourcing-quantity"
+import { fullDeliveryAddress } from "@/lib/delivery-address"
 
 const NO_ADDRESS_NOTE = "未指定交付地址，履约前补齐。"
 
-function DeliveryAddress({ row }: { row: PurchaseDeliveryAllocation }) {
+const TERM_BADGE: Record<DeliveryTerm, "neutral" | "warning" | "destructive"> =
+    {
+        FREIGHT_INCLUDED: "neutral",
+        FREIGHT_EXTRA: "warning",
+        NOT_DELIVERABLE: "destructive",
+    }
+
+function DeliveryAddress({
+    row,
+    option,
+}: {
+    row: PurchaseDeliveryAllocation
+    option?: SourcingSupplierOption
+}) {
+    const term = addressDeliveryTerm(option, row.region_code)
     return (
         <span className="min-w-0 text-xs leading-5">
-            <span className="font-medium">
+            <span className="flex flex-wrap items-center gap-1.5 font-medium">
                 {row.recipient} · {row.phone}
+                {option && term ? (
+                    <Badge variant={TERM_BADGE[term]}>
+                        {deliveryTermLabel(option, term)}
+                    </Badge>
+                ) : null}
             </span>
             <span className="block break-words text-muted-foreground">
-                {row.address}
+                {fullDeliveryAddress(row)}
             </span>
         </span>
     )
@@ -72,7 +99,7 @@ export function SalesDeliveryRequirements({
                                 />
                             </div>
                             <p className="mt-1 break-words text-muted-foreground">
-                                {row.address}
+                                {fullDeliveryAddress(row)}
                             </p>
                         </div>
                     ))}
@@ -165,7 +192,8 @@ export function SourcingDeliveryEditor({
             <p className="text-xs text-muted-foreground">{NO_ADDRESS_NOTE}</p>
         ) : null
     const remaining = remainingDeliveryAllocations(product)
-    const coversAll = deliveryDefaultsCoverQuantity(product, line.quantity)
+    const coversAll = defaultDeliveryCoversQuantity(product, line)
+    const option = findSourcingOption(product, line.basisId)
     const id = `sourcing-delivery-${toAutomationIdSegment(line.rowKey)}`
     return (
         <form.AppField name={`lines[${index}].deliveryAllocations`}>
@@ -233,7 +261,10 @@ export function SourcingDeliveryEditor({
                                                 htmlFor={`${id}-${addressIndex}`}
                                                 className="min-w-0"
                                             >
-                                                <DeliveryAddress row={row} />
+                                                <DeliveryAddress
+                                                    row={row}
+                                                    option={option}
+                                                />
                                                 <span className="text-xs text-muted-foreground">
                                                     剩余需求{" "}
                                                     <QuantityValue
@@ -257,8 +288,14 @@ export function SourcingDeliveryEditor({
                                                 }
                                                 inputMode="decimal"
                                                 className="num"
+                                                disabled={
+                                                    addressDeliveryTerm(
+                                                        option,
+                                                        row.region_code,
+                                                    ) === "NOT_DELIVERABLE"
+                                                }
                                                 value={row.quantity}
-                                                aria-label={`${row.recipient}，${row.address}，本次交付数量（${product.unit}）`}
+                                                aria-label={`${row.recipient}，${fullDeliveryAddress(row)}，本次交付数量（${product.unit}）`}
                                                 onBlur={() => {
                                                     // 只聚焦未修改时不固定地址数量，仍跟随本次分配数量。
                                                     if (customized)
@@ -324,7 +361,10 @@ export function SourcingDeliveryEditor({
                                                 key={addressIndex}
                                                 className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3"
                                             >
-                                                <DeliveryAddress row={row} />
+                                                <DeliveryAddress
+                                                    row={row}
+                                                    option={option}
+                                                />
                                                 <QuantityValue
                                                     className="text-xs leading-5"
                                                     value={row.quantity}

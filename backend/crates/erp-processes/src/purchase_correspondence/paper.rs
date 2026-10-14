@@ -64,7 +64,7 @@ fn render_delivery_lines(lines: &[PurchaseOrderLineView]) -> String {
                 escape(line.specification.as_deref().unwrap_or("")),
                 escape(&row.recipient),
                 escape(&row.phone),
-                escape(&row.address),
+                escape(&row.full_address()),
                 row.quantity,
                 escape(line.base_unit_code.as_deref().unwrap_or(""))
             ));
@@ -165,6 +165,8 @@ mod tests {
         line.delivery_allocations = vec![PurchaseDeliveryAllocation {
             recipient: "张三".into(),
             phone: "13800000000".into(),
+            region_code: erp_core::region::RegionCode::parse("310115").unwrap(),
+            region_name: "上海市浦东新区".into(),
             address: "A区<1号>".into(),
             quantity: "2".parse().unwrap(),
         }];

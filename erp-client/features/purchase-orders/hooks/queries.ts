@@ -18,6 +18,7 @@ import {
     voidPurchaseChange,
     submitPurchaseOrderForReview,
     voidPurchaseOrderDraft,
+    waivePurchaseFreight,
 } from "@/features/purchase-orders/api/purchase-orders"
 import type {
     CreationBasesQuery,
@@ -216,6 +217,17 @@ export function useMaintainPurchaseSourceMutation() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: maintainPurchaseSource,
+        onSuccess: async () => {
+            await invalidatePurchaseOrderApprovalCaches(queryClient)
+        },
+    })
+}
+
+/** 标记供应商不收运费；成功后刷新采购与销售单缓存。 */
+export function useWaivePurchaseFreightMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: waivePurchaseFreight,
         onSuccess: async () => {
             await invalidatePurchaseOrderApprovalCaches(queryClient)
         },

@@ -6,7 +6,8 @@ mod submission;
 pub use create::{
     ComputedSelection, SelectedLine, build_submission_line, compute_selected_lines,
     ensure_expected_delivery_within_sales_due, ensure_request_scope, find_requested_group,
-    parse_basis_sales_order_id, procurement_quantity_changed, validate_requested_quantities,
+    judge_selected_delivery, parse_basis_sales_order_id, procurement_quantity_changed,
+    validate_requested_quantities,
 };
 pub use mapping::{basis_groups_from_facts, business_date_of, zero_quantity};
 pub use stock::{physical_stock_lines, stock_groups_from_facts};

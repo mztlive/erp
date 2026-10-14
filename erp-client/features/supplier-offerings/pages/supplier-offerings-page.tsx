@@ -7,6 +7,8 @@ import { OfferingPreviewSheet } from "../components/offering-preview-sheet"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { BatchSupplyDialog } from "../components/batch/batch-supply-dialog"
+import { AssignDeliveryTemplateDialog } from "../components/delivery-templates/assign-delivery-template-dialog"
+import { DeliveryTemplatesDialog } from "../components/delivery-templates/delivery-templates-dialog"
 import type { BatchMode } from "../lib/batch-supply"
 import { PlusIcon } from "lucide-react"
 
@@ -73,6 +75,16 @@ export const SupplierOfferingsPage = () => {
         account.data?.permissions,
         "supplier_offering_availability:update",
     )
+    const canAssignTemplate = hasPermission(
+        account.data?.permissions,
+        "supplier_offering:update",
+    )
+    const canSelect =
+        canBatchRevise || canBatchAvailability || canAssignTemplate
+    const [templatesOpen, setTemplatesOpen] = React.useState(false)
+    const [assigning, setAssigning] = React.useState<
+        SupplierOfferingView[] | null
+    >(null)
     const [selection, setSelection] = React.useState<{
         scope: string
         ids: string[]
@@ -208,6 +220,16 @@ export const SupplierOfferingsPage = () => {
                     )}
                     {!state.taskMode ? (
                         <Button
+                            id="supplier-offerings-page-delivery-templates"
+                            type="button"
+                            variant="outline"
+                            onClick={() => setTemplatesOpen(true)}
+                        >
+                            配送模板
+                        </Button>
+                    ) : null}
+                    {!state.taskMode ? (
+                        <Button
                             id="supplier-offerings-page-create"
                             type="button"
                             onClick={() => setCreateOpen(true)}
@@ -333,8 +355,7 @@ export const SupplierOfferingsPage = () => {
                         />
                     }
                     selectionBar={
-                        !state.taskMode &&
-                        (canBatchRevise || canBatchAvailability) ? (
+                        !state.taskMode && canSelect ? (
                             <div className="flex flex-wrap items-center gap-2 text-sm">
                                 <span>本页已选 {selectedItems.length} 行</span>
                                 <Button
@@ -382,6 +403,20 @@ export const SupplierOfferingsPage = () => {
                                         批量调价与条款
                                     </Button>
                                 )}
+                                {canAssignTemplate && (
+                                    <Button
+                                        id="supplier-offerings-batch-delivery-template"
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={!selectedItems.length}
+                                        onClick={() =>
+                                            setAssigning(selectedItems)
+                                        }
+                                    >
+                                        设置配送模板
+                                    </Button>
+                                )}
                                 {canBatchAvailability && (
                                     <Button
                                         id="supplier-offerings-batch-availability"
@@ -417,8 +452,7 @@ export const SupplierOfferingsPage = () => {
                                 <SupplierOfferingsTable
                                     selectedIds={selectedIds}
                                     onSelectionChange={
-                                        !state.taskMode &&
-                                        (canBatchRevise || canBatchAvailability)
+                                        !state.taskMode && canSelect
                                             ? (ids) =>
                                                   setSelection({
                                                       scope: selectionScope,
@@ -479,6 +513,22 @@ export const SupplierOfferingsPage = () => {
                 onClose={closePreview}
                 onClosed={restorePreviewFocus}
             />
+            {templatesOpen ? (
+                <DeliveryTemplatesDialog
+                    open
+                    onOpenChange={setTemplatesOpen}
+                    initialSupplierId={state.urlState.supplierId}
+                    canEdit={canAssignTemplate}
+                />
+            ) : null}
+            {assigning ? (
+                <AssignDeliveryTemplateDialog
+                    offerings={assigning}
+                    onOpenChange={(open) => {
+                        if (!open) setAssigning(null)
+                    }}
+                />
+            ) : null}
             {batch && (
                 <BatchSupplyDialog
                     mode={batch.mode}

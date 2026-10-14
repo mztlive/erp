@@ -2,6 +2,7 @@
 use std::fmt;
 
 use erp_core::money::Quantity;
+use erp_core::region::RegionCode;
 use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
 use rust_decimal::Decimal;
@@ -12,6 +13,12 @@ use serde::{Deserialize, Serialize};
 pub struct SalesDeliveryAllocation {
     pub recipient: String,
     pub phone: String,
+    /// 收货地区，必须是行政区划最末级。
+    pub region_code: RegionCode,
+    /// 地区完整名称快照，由服务端按代码生成。
+    #[serde(default)]
+    pub region_name: String,
+    /// 详细地址。
     pub address: String,
     pub quantity: Quantity,
 }
@@ -29,7 +36,7 @@ impl SalesDeliveryAllocation {
     /// # 返回
     /// 返回规范化列表；空列表表示尚未指定交付地址。
     /// # 错误
-    /// 超过 100 个地址、资料缺失、数量非正、溢出或合计不等于行数量时拒绝。
+    /// 超过 100 个地址、资料缺失、地区不是最末级、数量非正、溢出或合计不等于行数量时拒绝。
     pub fn validate_all(mut allocations: Vec<Self>, quantity: Quantity) -> Result<Vec<Self>> {
         if allocations.is_empty() {
             return Ok(allocations);
@@ -51,9 +58,11 @@ impl SalesDeliveryAllocation {
                 32,
                 "联系电话过长",
             )?;
+            allocation.region_code = RegionCode::parse_leaf(allocation.region_code.as_str())?;
+            allocation.region_name = allocation.region_code.full_name();
             allocation.address = normalize_required_text(
                 std::mem::take(&mut allocation.address),
-                "请填写完整收货地址",
+                "请填写详细收货地址",
                 512,
                 "收货地址过长",
             )?;
@@ -69,6 +78,20 @@ impl SalesDeliveryAllocation {
         }
         Ok(allocations)
     }
+
+    /// 返回"省市区 + 详细地址"的完整地址。
+    ///
+    /// # 参数
+    /// 无。
+    ///
+    /// # 返回
+    /// 返回拼接后的完整地址。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn full_address(&self) -> String {
+        format!("{}{}", self.region_name, self.address)
+    }
 }
 
 #[cfg(test)]
@@ -78,7 +101,9 @@ mod tests {
         SalesDeliveryAllocation {
             recipient: " 张三 ".into(),
             phone: " 13800000000 ".into(),
-            address: " 上海市测试路 1 号 ".into(),
+            region_code: RegionCode::parse("310115").unwrap(),
+            region_name: String::new(),
+            address: " 测试路 1 号 ".into(),
             quantity: quantity.parse().unwrap(),
         }
     }
@@ -88,7 +113,9 @@ mod tests {
             SalesDeliveryAllocation::validate_all(vec![row("1.2"), row("2.3")], "3.5".parse().unwrap())
                 .unwrap();
         assert_eq!(rows[0].recipient, "张三");
-        assert_eq!(rows[0].address, "上海市测试路 1 号");
+        assert_eq!(rows[0].address, "测试路 1 号");
+        assert_eq!(rows[0].region_name, "上海市浦东新区");
+        assert_eq!(rows[0].full_address(), "上海市浦东新区测试路 1 号");
         assert!(!format!("{:?}", rows[0]).contains("张三"));
         let json = serde_json::to_string(&rows).unwrap();
         assert_eq!(serde_json::from_str::<Vec<SalesDeliveryAllocation>>(&json).unwrap(), rows);
@@ -101,6 +128,9 @@ mod tests {
         let mut missing = row("2");
         missing.address.clear();
         assert!(SalesDeliveryAllocation::validate_all(vec![missing], "2".parse().unwrap()).is_err());
+        let mut city_only = row("2");
+        city_only.region_code = RegionCode::parse("310100").unwrap();
+        assert!(SalesDeliveryAllocation::validate_all(vec![city_only], "2".parse().unwrap()).is_err());
         assert!(SalesDeliveryAllocation::validate_all(vec![row("1"); 101], "101".parse().unwrap()).is_err());
         assert!(SalesDeliveryAllocation::validate_all(vec![], "2".parse().unwrap()).unwrap().is_empty());
     }

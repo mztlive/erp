@@ -1,16 +1,23 @@
 //! 采购领域已形成的精确依据到 HTTP 展示视图的映射。
+use std::collections::BTreeSet;
+
 use erp_core::ids::SupplierAccountId;
 use erp_core::money::{Amount, UnitPrice, line_amounts};
 use erp_procurement::entity::facts::SalesOrderBasisFact;
 use erp_procurement::entity::purchase_order::{
-    BasisGroup, BasisLine, CreationBasisFacts, FulfillmentResponsibility, PurchaseType, StockBasisGroup,
-    StockBasisLine, basis_id_for, stable_line_id, stock_basis_id_for, supply_cost,
+    BasisGroup, BasisLine, BasisScope, CreationBasisFacts, FulfillmentResponsibility, PurchaseType,
+    StockBasisGroup, StockBasisLine, SupplyPriceBasis, basis_id_for, stable_line_id, stock_basis_id_for,
+    supply_cost,
 };
 use erp_procurement::service::purchase_order::creation_basis::business_date_of;
 use erp_procurement::service::purchase_order::shared::zero_amount;
 
-use super::super::dto::{CreationBasisLineView, CreationBasisView};
+use super::super::dto::{
+    CreationBasisDeliveryView, CreationBasisLineView, CreationBasisView, DeliveryRegionTermView,
+    WarehouseDeliveryTermView,
+};
 use super::super::query;
+use super::super::repository::WarehouseRegionFact;
 use crate::Result;
 /// 构造一条精确创建依据视图。
 ///
@@ -20,6 +27,7 @@ use crate::Result;
 /// * `facts` - 批量供应商结算事实
 /// * `sales_owner_name` - 销售负责人展示名
 /// * `work_item_id` - 冻结本依据责任范围的开放供给分配任务
+/// * `warehouses` - 启用仓库所在地区，用于集采入仓判定
 ///
 /// # 返回
 /// 返回前端可直接选择逐行数量的依据视图。
@@ -35,15 +43,18 @@ pub(super) fn build_basis_view(
     facts: &CreationBasisFacts,
     sales_owner_name: Option<String>,
     work_item_id: &str,
+    warehouses: &[WarehouseRegionFact],
 ) -> Result<CreationBasisView> {
     let supplier_name = query::supplier_display(group.scope.supplier_id.as_ref(), &facts.supplier_names);
     let mut estimated = zero_amount();
     let mut lines = Vec::with_capacity(group.lines.len());
     for line in &group.lines {
-        let cost = supply_cost(&line.supply.revision, group.scope.fulfillment_responsibility);
+        let cost = supply_cost(&line.supply.revision, group.scope.price_basis);
         let (gross, _, _) = line_amounts(cost, line.max_create_quantity, line.supply.revision.input_tax_rate);
         estimated = estimated.checked_add(gross);
-        lines.push(basis_line_view(line, &group.scope.supplier_id, cost, gross)?);
+        let delivery = delivery_view(line, &group.scope, warehouses);
+        lines
+            .push(basis_line_view(line, &group.scope.supplier_id, cost, gross)?.with_delivery_view(delivery));
     }
     Ok(CreationBasisView::new(
         work_item_id.to_string(),
@@ -62,7 +73,69 @@ pub(super) fn build_basis_view(
     .with_contract_no(group.revision.contract_snapshot.as_ref().map(|snapshot| snapshot.contract_no.clone()))
     .with_sales_owner_name(sales_owner_name)
     .with_business_category(group.business_category.clone())
+    .with_price_basis(group.scope.price_basis.as_str())
     .with_lines(lines))
+}
+
+/// 按依据范围计算一条依据行的配送判定视图。
+///
+/// # 参数
+/// * `line` - 依据行
+/// * `scope` - 依据范围
+/// * `warehouses` - 启用仓库所在地区
+///
+/// # 返回
+/// 直发返回逐销售收货地区判定，集采入仓返回逐仓库判定，集采直发附带起订量。
+///
+/// # 错误
+/// 无。
+fn delivery_view(
+    line: &BasisLine,
+    scope: &BasisScope,
+    warehouses: &[WarehouseRegionFact],
+) -> CreationBasisDeliveryView {
+    let delivery = &line.supply.delivery;
+    let mode = scope.price_basis.delivery_mode();
+    let mut view = CreationBasisDeliveryView {
+        delivery_template_name: delivery.template_name.clone(),
+        supplier_offering_id: Some(line.supply.offering.base.id.clone()),
+        ..CreationBasisDeliveryView::default()
+    };
+    match scope.fulfillment_responsibility {
+        FulfillmentResponsibility::SupplierDirect => {
+            let regions = line
+                .coverage
+                .goods_line
+                .delivery_allocations
+                .iter()
+                .map(|allocation| allocation.region_code.clone())
+                .collect::<BTreeSet<_>>();
+            view.delivery_terms = regions
+                .into_iter()
+                .map(|region| DeliveryRegionTermView {
+                    term: delivery.policy.judge(mode, &region),
+                    region_code: region.to_string(),
+                })
+                .collect();
+        },
+        FulfillmentResponsibility::Warehouse => {
+            view.warehouse_delivery_terms = warehouses
+                .iter()
+                .map(|warehouse| WarehouseDeliveryTermView {
+                    warehouse_id: warehouse.warehouse_id.clone(),
+                    region_name: warehouse.region_code.full_name(),
+                    term: delivery.policy.judge(mode, &warehouse.region_code),
+                })
+                .collect();
+        },
+        _ => {},
+    }
+    if scope.fulfillment_responsibility == FulfillmentResponsibility::SupplierDirect
+        && scope.price_basis == SupplyPriceBasis::Bulk
+    {
+        view.bulk_minimum_order_quantity = Some(line.supply.revision.bulk_minimum_order_quantity.to_string());
+    }
+    view
 }
 
 /// 构造一个现有库存供给依据视图。

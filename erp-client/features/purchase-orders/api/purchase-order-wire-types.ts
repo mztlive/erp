@@ -109,6 +109,20 @@ export type BackendCenter = {
     lines: BackendLine[]
     source_sales_order?: BackendPurchaseSourceSalesOrder | null
     source_update?: BackendPurchaseSourceUpdate | null
+    delivery?: {
+        price_basis: "DROPSHIP" | "BULK"
+        lines: {
+            sales_order_line_id: string
+            template_name?: string | null
+            freight_extra: boolean
+            freight_pending: boolean
+            waiver?: {
+                reason: string
+                waived_by: string
+                waived_at: number
+            } | null
+        }[]
+    } | null
     totals: { gross: string; net: string; tax: string }
     allocations: Array<{
         id: string
@@ -154,6 +168,8 @@ export type BackendPurchaseSourceSalesOrder = {
         delivery_allocations?: {
             recipient: string
             phone: string
+            region_code?: string
+            region_name?: string
             address: string
             quantity: string
         }[]
@@ -172,7 +188,21 @@ export type BackendPurchaseSourceSalesOrder = {
     materials_unavailable?: boolean
 }
 
+export type BackendDeliveryTerm =
+    | "FREIGHT_INCLUDED"
+    | "FREIGHT_EXTRA"
+    | "NOT_DELIVERABLE"
+
 export type BackendBasisLine = {
+    delivery_template_name?: string | null
+    delivery_terms?: { region_code: string; term: BackendDeliveryTerm }[]
+    warehouse_delivery_terms?: {
+        warehouse_id: string
+        region_name: string
+        term: BackendDeliveryTerm
+    }[]
+    bulk_minimum_order_quantity?: string | null
+    supplier_offering_id?: string | null
     delivery_allocations?: PurchaseDeliveryAllocation[]
     assigned_delivery_allocations?: PurchaseDeliveryAllocation[]
     sales_order_line_id: string
@@ -215,6 +245,7 @@ export type BackendBasis = {
     fulfillment_responsibility?: string | null
     payment_term_code: string
     business_category?: string | null
+    price_basis?: "DROPSHIP" | "BULK" | null
     lines: BackendBasisLine[]
     estimated_gross: string
 }

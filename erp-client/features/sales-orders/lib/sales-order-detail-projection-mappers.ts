@@ -253,6 +253,14 @@ export function mapDetailToListItem(
                 taskCount: detail.purchase_creation_access.task_count,
                 blocker: detail.purchase_creation_access.blocker ?? undefined,
             },
+            freightFollowUps: (detail.freight_follow_ups ?? []).map((item) => ({
+                purchaseOrderId: item.purchase_order_id,
+                purchaseNo: item.purchase_no,
+                supplierId: item.supplier_id,
+                supplierName: item.supplier_name ?? undefined,
+                salesOrderLineId: item.sales_order_line_id,
+                productName: item.product_name ?? undefined,
+            })),
         },
     )
 }

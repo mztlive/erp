@@ -149,6 +149,7 @@ mod tests {
             purchase_type: PurchaseType::Physical,
             payment_term_code: code.to_string(),
             fulfillment_responsibility: FulfillmentResponsibility::Warehouse,
+            price_basis: crate::entity::purchase_order::SupplyPriceBasis::Bulk,
         }
     }
     async fn invoke(outcome: SupplierOutcome, code: &str) -> (Result<PurchaseOrderSubmission>, Vec<String>) {

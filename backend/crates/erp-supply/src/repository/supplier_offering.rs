@@ -105,6 +105,9 @@ pub struct SupplierOfferingRow {
     /// 当前业务组织。
     #[serde(default)]
     pub business_org_unit_id: String,
+    /// 指定的配送模板。
+    #[serde(default)]
+    pub delivery_template_id: Option<erp_core::ids::SupplierDeliveryTemplateId>,
 }
 
 /// 供给列表筛选条件。
@@ -773,6 +776,7 @@ fn supplier_offering_projection() -> Document {
         "created_at": 1,
         "maintainer_user_id": 1,
         "business_org_unit_id": 1,
+        "delivery_template_id": 1,
     }
 }
 
@@ -995,6 +999,7 @@ mod tests {
                 created_at: 1,
                 maintainer_user_id: "user-1".to_string(),
                 business_org_unit_id: "org-1".to_string(),
+                delivery_template_id: None,
             },
             super::SupplierOfferingRow {
                 id: "offering-2".to_string(),
@@ -1010,6 +1015,7 @@ mod tests {
                 created_at: 2,
                 maintainer_user_id: "user-1".to_string(),
                 business_org_unit_id: "org-1".to_string(),
+                delivery_template_id: None,
             },
         ];
         let current_by_revision = rows

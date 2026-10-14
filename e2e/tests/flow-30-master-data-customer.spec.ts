@@ -781,6 +781,7 @@ test.describe.serial("[flow-30] 基础资料及客户治理", () => {
         const input = {
             warehouse_code: `E2E-WH-${suffix}`,
             name: `E2E 仓库 ${suffix}`,
+            region_code: "110105",
             address,
             contact: "仓库经办人",
             effective_from: businessDate(-1),

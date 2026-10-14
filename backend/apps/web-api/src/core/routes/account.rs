@@ -2,7 +2,7 @@ use axum::routing::get;
 use axum::{Router, middleware};
 
 use crate::app_state::AppState;
-use crate::core::handler::auth;
+use crate::core::handler::{auth, region};
 use crate::core::middleware::authenticate;
 
 /// 当前账号相关路由入口。
@@ -15,6 +15,7 @@ use crate::core::middleware::authenticate;
 pub fn routes(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/profile", get(auth::profile::account_profile))
+        .route("/regions", get(region::list_regions))
         .route_layer(middleware::from_fn_with_state(state.clone(), authenticate))
         .with_state(state)
 }

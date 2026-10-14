@@ -7,6 +7,10 @@ import { FieldError } from "@/components/ui/field"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { compactFixed } from "@/lib/fixed-decimal"
 import { allocationSummary } from "./sales-delivery-allocation-editor"
+import { DeliveryCoverageHint } from "./delivery-coverage-hint"
+import { DeliveryRegionField } from "./delivery-region-field"
+import type { DeliveryCoverageHint as DeliveryCoverageHintCode } from "../api/delivery-coverage"
+import { useDeliveryCoverage } from "../hooks/use-delivery-coverage"
 import { ChangeOrderSection } from "@/components/business/change-order-section"
 import {
     salesChangeLineRemoved,
@@ -17,7 +21,7 @@ import type { SalesChangeDraftFormApi } from "../lib/sales-change-draft-form-typ
 type LineValues = SalesChangeDraftValues["lines"][number]
 
 const ADDRESS_GRID =
-    "grid gap-3 sm:grid-cols-2 @3xl/delivery:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,2.6fr)_7rem_3.5rem]"
+    "grid gap-3 sm:grid-cols-2 @3xl/delivery:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_minmax(0,2.6fr)_minmax(0,1.8fr)_7rem_3.5rem]"
 
 /** 交付安排：按商品填写交付期限、服务地区和分地址数量。 */
 export function SalesChangeDeliverySection({
@@ -41,27 +45,55 @@ export function SalesChangeDeliverySection({
                 )
                 if (!rows.length) return null
                 return (
-                    <ChangeOrderSection
-                        id={`${id}-delivery`}
-                        title="交付安排"
-                        description="每项商品须有交付期限。分地址选填，填写后各地址数量合计须等于商品数量；也可在履约时补充。"
-                    >
-                        <div className="@container/delivery min-w-0 divide-y divide-grid rounded-lg border border-grid">
-                            {rows.map(({ line, index }) => (
-                                <DeliveryGroup
-                                    key={line.source.sales_order_line_id}
-                                    form={form}
-                                    id={id}
-                                    line={line}
-                                    index={index}
-                                    disabled={disabled}
-                                />
-                            ))}
-                        </div>
-                    </ChangeOrderSection>
+                    <DeliverySectionBody
+                        form={form}
+                        id={id}
+                        disabled={disabled}
+                        rows={rows}
+                    />
                 )
             }}
         </form.Subscribe>
+    )
+}
+
+function DeliverySectionBody({
+    form,
+    id,
+    disabled,
+    rows,
+}: {
+    form: SalesChangeDraftFormApi
+    id: string
+    disabled: boolean
+    rows: { line: LineValues; index: number }[]
+}) {
+    const coverageHint = useDeliveryCoverage(
+        rows.map(({ line }) => ({
+            sku: line.source.goods?.sku_id ?? "",
+            deliveryAllocations: line.deliveryAllocations,
+        })),
+    )
+    return (
+        <ChangeOrderSection
+            id={`${id}-delivery`}
+            title="交付安排"
+            description="每项商品须有交付期限。分地址选填，填写后各地址数量合计须等于商品数量；也可在履约时补充。"
+        >
+            <div className="@container/delivery min-w-0 divide-y divide-grid rounded-lg border border-grid">
+                {rows.map(({ line, index }) => (
+                    <DeliveryGroup
+                        key={line.source.sales_order_line_id}
+                        form={form}
+                        id={id}
+                        line={line}
+                        index={index}
+                        disabled={disabled}
+                        coverageHint={coverageHint}
+                    />
+                ))}
+            </div>
+        </ChangeOrderSection>
     )
 }
 
@@ -71,12 +103,14 @@ function DeliveryGroup({
     line,
     index,
     disabled,
+    coverageHint,
 }: {
     form: SalesChangeDraftFormApi
     id: string
     line: LineValues
     index: number
     disabled: boolean
+    coverageHint: (sku: string, regionCode: string) => DeliveryCoverageHintCode
 }) {
     const source = line.source
     const unit = source.unit_snapshot ?? ""
@@ -87,7 +121,8 @@ function DeliveryGroup({
     const labels = [
         ["recipient", "收货人"],
         ["phone", "联系电话"],
-        ["address", "完整收货地址"],
+        ["region_code", "收货地区"],
+        ["address", "详细地址"],
         ["quantity", `数量（${unit || "基础单位"}）`],
     ] as const
     return (
@@ -143,6 +178,7 @@ function DeliveryGroup({
                                     rowKey: crypto.randomUUID(),
                                     recipient: "",
                                     phone: "",
+                                    region_code: "",
                                     address: "",
                                     quantity: allocations.length
                                         ? ""
@@ -200,41 +236,96 @@ function DeliveryGroup({
                                     key={row.rowKey}
                                     className={`${ADDRESS_GRID} items-start py-3 @3xl/delivery:px-3`}
                                 >
-                                    {labels.map(([name, label]) => (
-                                        <form.AppField
-                                            key={name}
-                                            name={`lines[${index}].deliveryAllocations[${addressIndex}].${name}`}
-                                        >
-                                            {(field) => (
-                                                <field.TextField
-                                                    id={`${rowId}-${name}`}
-                                                    label={label}
-                                                    disabled={disabled}
-                                                    className={`min-w-0 gap-2 @3xl/delivery:[&>[data-slot=field-label]]:sr-only ${name === "address" ? "sm:col-span-2 @3xl/delivery:col-span-1" : ""}`}
-                                                    inputClassName={
-                                                        name === "quantity"
-                                                            ? "num"
-                                                            : undefined
-                                                    }
-                                                    inputMode={
-                                                        name === "quantity"
-                                                            ? "decimal"
-                                                            : undefined
-                                                    }
-                                                    placeholder={
-                                                        name === "address"
-                                                            ? "省、市、区及详细地址"
-                                                            : undefined
-                                                    }
-                                                    type={
-                                                        name === "phone"
-                                                            ? "tel"
-                                                            : "text"
-                                                    }
-                                                />
-                                            )}
-                                        </form.AppField>
-                                    ))}
+                                    {labels.map(([name, label]) =>
+                                        name === "region_code" ? (
+                                            <form.AppField
+                                                key={name}
+                                                name={`lines[${index}].deliveryAllocations[${addressIndex}].region_code`}
+                                            >
+                                                {(field) => (
+                                                    <DeliveryRegionField
+                                                        id={`${rowId}-region`}
+                                                        label={label}
+                                                        labelClassName="@3xl/delivery:sr-only"
+                                                        className="sm:col-span-2 @3xl/delivery:col-span-1"
+                                                        value={
+                                                            field.state.value ??
+                                                            ""
+                                                        }
+                                                        onValueChange={(code) =>
+                                                            field.handleChange(
+                                                                code,
+                                                            )
+                                                        }
+                                                        onBlur={
+                                                            field.handleBlur
+                                                        }
+                                                        invalid={
+                                                            field.state.meta
+                                                                .isTouched &&
+                                                            !field.state.meta
+                                                                .isValid
+                                                        }
+                                                        errors={toFieldErrors(
+                                                            field.state.meta
+                                                                .errors,
+                                                        )}
+                                                        hint={
+                                                            field.state
+                                                                .value ? (
+                                                                <DeliveryCoverageHint
+                                                                    id={`${rowId}-coverage`}
+                                                                    hint={coverageHint(
+                                                                        source
+                                                                            .goods
+                                                                            ?.sku_id ??
+                                                                            "",
+                                                                        field
+                                                                            .state
+                                                                            .value,
+                                                                    )}
+                                                                />
+                                                            ) : null
+                                                        }
+                                                    />
+                                                )}
+                                            </form.AppField>
+                                        ) : (
+                                            <form.AppField
+                                                key={name}
+                                                name={`lines[${index}].deliveryAllocations[${addressIndex}].${name}`}
+                                            >
+                                                {(field) => (
+                                                    <field.TextField
+                                                        id={`${rowId}-${name}`}
+                                                        label={label}
+                                                        disabled={disabled}
+                                                        className={`min-w-0 gap-2 @3xl/delivery:[&>[data-slot=field-label]]:sr-only ${name === "address" ? "sm:col-span-2 @3xl/delivery:col-span-1" : ""}`}
+                                                        inputClassName={
+                                                            name === "quantity"
+                                                                ? "num"
+                                                                : undefined
+                                                        }
+                                                        inputMode={
+                                                            name === "quantity"
+                                                                ? "decimal"
+                                                                : undefined
+                                                        }
+                                                        placeholder={
+                                                            name === "address"
+                                                                ? "街道、门牌号"
+                                                                : undefined
+                                                        }
+                                                        type={
+                                                            name === "phone"
+                                                                ? "tel"
+                                                                : "text"
+                                                        }
+                                                    />
+                                                )}
+                                            </form.AppField>
+                                        ),
+                                    )}
                                     <Button
                                         id={`${rowId}-address-remove`}
                                         type="button"

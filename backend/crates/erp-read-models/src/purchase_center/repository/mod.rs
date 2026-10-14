@@ -8,6 +8,7 @@ mod creation_basis;
 pub(super) mod list_facts;
 pub(crate) mod mapping;
 pub mod supplier_names;
+mod warehouse_regions;
 
 pub use basis_sources::{
     basis_groups_and_facts, basis_groups_for_order, load_effective_sales_order, sourcing_groups_for_order,
@@ -22,3 +23,4 @@ pub use list_facts::{PurchaseOrderListFacts, load_purchase_order_list_page};
 pub use mapping::{
     availability_fact, offering_fact, offering_revision_fact, sales_order_basis_fact, stock_balance_fact,
 };
+pub use warehouse_regions::{WarehouseRegionFact, active_warehouse_regions};

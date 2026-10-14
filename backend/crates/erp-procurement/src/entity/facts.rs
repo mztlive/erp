@@ -247,6 +247,8 @@ pub struct OfferingRevisionFact {
     pub dropship_supply_price_gross: UnitPrice,
     /// 进项税率。
     pub input_tax_rate: Rate,
+    /// 供应商集采起订量。
+    pub bulk_minimum_order_quantity: Quantity,
 }
 
 /// 供给可用状态的采购消费值。

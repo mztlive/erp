@@ -14,6 +14,7 @@ const OFFERINGS: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFERINGS;
 const OFFERING_REVISIONS: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFERING_REVISIONS;
 const OFFERING_AVAILABILITIES: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFERING_AVAILABILITIES;
 const OFFERING_COMMANDS: &str = <Database as SupplierOfferingExt>::SUPPLIER_OFFERING_COMMANDS;
+const DELIVERY_TEMPLATES: &str = <Database as SupplierOfferingExt>::SUPPLIER_DELIVERY_TEMPLATES;
 
 /// 创建供应商供给域的幂等命名索引。
 ///
@@ -29,7 +30,8 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, OFFERINGS, offering_indexes()).await?;
     create_indexes(db, OFFERING_REVISIONS, revision_indexes()).await?;
     create_indexes(db, OFFERING_AVAILABILITIES, availability_indexes()).await?;
-    create_indexes(db, OFFERING_COMMANDS, command_indexes()).await
+    create_indexes(db, OFFERING_COMMANDS, command_indexes()).await?;
+    create_indexes(db, DELIVERY_TEMPLATES, delivery_template_indexes()).await
 }
 
 async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel>) -> Result<()> {
@@ -51,6 +53,7 @@ fn offering_indexes() -> Vec<IndexModel> {
             "idx_supplier_offerings_maintainer_org",
             doc! { "maintainer_user_id": 1, "business_org_unit_id": 1, "created_at": -1, "id": 1 },
         ),
+        named_index("idx_supplier_offerings_delivery_template", doc! { "delivery_template_id": 1 }),
     ]
 }
 
@@ -81,6 +84,21 @@ fn command_indexes() -> Vec<IndexModel> {
     vec![unique_index("uk_supplier_offering_commands_idempotency_key", doc! { "idempotency_key": 1 })]
 }
 
+fn delivery_template_indexes() -> Vec<IndexModel> {
+    let default_only = IndexOptions::builder()
+        .name("uk_supplier_delivery_templates_default".to_string())
+        .unique(true)
+        .partial_filter_expression(doc! { "is_default": true, "deleted_at": 0_i64 })
+        .build();
+    vec![
+        unique_index(
+            "uk_supplier_delivery_templates_supplier_name",
+            doc! { "supplier_id": 1, "name": 1, "deleted_at": 1 },
+        ),
+        IndexModel::builder().keys(doc! { "supplier_id": 1 }).options(default_only).build(),
+    ]
+}
+
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
     IndexModel::builder().keys(keys).options(IndexOptions::builder().name(name.into()).build()).build()
 }
@@ -96,7 +114,7 @@ fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
 mod tests {
     use mongodb::bson::doc;
 
-    use super::{availability_indexes, offering_indexes, revision_indexes};
+    use super::{availability_indexes, delivery_template_indexes, offering_indexes, revision_indexes};
 
     #[test]
     fn supplier_sku_identity_is_unique_without_mapping() {
@@ -132,5 +150,19 @@ mod tests {
             index.keys
                 == doc! { "maintainer_user_id": 1, "business_org_unit_id": 1, "created_at": -1, "id": 1 }
         }));
+    }
+
+    #[test]
+    fn delivery_templates_keep_names_and_default_unique_per_supplier() {
+        let indexes = delivery_template_indexes();
+        assert!(indexes.iter().any(|index| {
+            index.keys == doc! { "supplier_id": 1, "name": 1, "deleted_at": 1 }
+                && index.options.as_ref().and_then(|value| value.unique) == Some(true)
+        }));
+        let default_index = indexes.iter().find(|index| index.keys == doc! { "supplier_id": 1 }).unwrap();
+        let options = default_index.options.as_ref().unwrap();
+        assert_eq!(options.unique, Some(true));
+        assert_eq!(options.partial_filter_expression, Some(doc! { "is_default": true, "deleted_at": 0_i64 }));
+        assert!(offering_indexes().iter().any(|index| index.keys == doc! { "delivery_template_id": 1 }));
     }
 }

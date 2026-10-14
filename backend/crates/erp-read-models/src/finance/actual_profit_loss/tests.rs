@@ -196,6 +196,15 @@ fn pending_extra_cost_blocks_complete_profit_until_confirmed() {
     assert_eq!(result[0].row.coverage_state, "COVERED");
 }
 #[test]
+fn pending_freight_blocks_complete_profit() {
+    let mut source = sources();
+    cost(&mut source, "freight", CostStage::Actual, CostType::Logistics, "5");
+    source.pending_freight_orders.insert("order-1".into());
+    let result = calculation::calculate(&source, as_of(), true).unwrap();
+    assert!(result[0].row.totals.actual_profit_loss_net.is_none());
+    assert!(result[0].row.coverage_blockers.iter().any(|b| b.code == "FREIGHT_PENDING"));
+}
+#[test]
 fn voucher_scope_and_excess_reduction_do_not_inflate_profit() {
     let mut source = sources();
     source.entries[0].cost_scope = CostScope::CardDirectFulfillment;

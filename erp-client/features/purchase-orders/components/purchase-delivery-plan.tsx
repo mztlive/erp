@@ -11,6 +11,7 @@ import {
 import { QuantityValue } from "@/components/business"
 import { compactFixed } from "@/lib/fixed-decimal"
 import type { PurchaseDeliveryAllocation } from "../types"
+import { fullDeliveryAddress } from "@/lib/delivery-address"
 
 /** 对外单据只使用本采购行已经确认的交付安排。 */
 export function PurchaseDeliveryPlan({
@@ -80,7 +81,7 @@ export function PurchaseDeliveryPlan({
                                                       </div>
                                                   </TableCell>
                                                   <TableCell className="whitespace-normal break-words border border-border p-2 align-top">
-                                                      {row.address}
+                                                      {fullDeliveryAddress(row)}
                                                   </TableCell>
                                                   <TableCell className="border border-border p-2 text-right align-top">
                                                       <QuantityValue

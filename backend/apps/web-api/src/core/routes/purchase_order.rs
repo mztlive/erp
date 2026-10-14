@@ -269,6 +269,14 @@ fn purchase_correspondence_routes(rbac: &SharedRbacService) -> Router<AppState> 
             ),
         )
         .route(
+            "/purchase-orders/{id}/freight-waivers",
+            with_permission(
+                post(purchase_order::freight::freight_waiver_create),
+                rbac,
+                purchase_order::freight::freight_waiver_create_permission_key(),
+            ),
+        )
+        .route(
             "/purchase-orders/{id}/email",
             with_permission(
                 post(purchase_order::correspondence::send_purchase_email),

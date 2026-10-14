@@ -251,7 +251,7 @@ async function confirmSplitAllocation(page: Page, salesOrderNo: string) {
     await expandSourcingEditor(page)
     const stockQty = await sourcingEditorControl(page, /可用/, "quantity")
     // 推荐采购缺口优先直发，本流程必须显式改同一供应商采购行为入仓；保留库存拆分。
-    const purchaseSource = await sourcingEditorControl(page, /供应商直发|入仓/, "sourcing-option")
+    const purchaseSource = await sourcingEditorControl(page, /代发直发|集采直发|入仓/, "sourcing-option")
     await chooseOption(page, purchaseSource, /杭州狮峰.*入仓/, "入仓")
     const purchaseQty = await sourcingEditorControl(page, /入仓/, "quantity")
     const warehouseInput = await sourcingEditorControl(page, /入仓/, "warehouse")

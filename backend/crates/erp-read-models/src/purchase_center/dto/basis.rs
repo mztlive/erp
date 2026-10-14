@@ -1,8 +1,44 @@
 //! 采购创建依据查询参数与行视图。
 
+use erp_core::delivery_policy::DeliveryTerm;
 use erp_procurement::entity::purchase_order::PurchaseDeliveryAllocation;
 
 use super::*;
+
+/// 某收货地区的配送判定。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct DeliveryRegionTermView {
+    /// 收货地区代码。
+    pub region_code: String,
+    /// 判定。
+    pub term: DeliveryTerm,
+}
+
+/// 某目标仓库的集采配送判定。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct WarehouseDeliveryTermView {
+    /// 仓库主键。
+    pub warehouse_id: String,
+    /// 仓库所在地区完整名称。
+    pub region_name: String,
+    /// 判定。
+    pub term: DeliveryTerm,
+}
+
+/// 依据行的配送判定视图。
+#[derive(Debug, Clone, Default, Serialize, PartialEq, Eq)]
+pub struct CreationBasisDeliveryView {
+    /// 供给生效配送模板名称；未设置模板时为空。
+    pub delivery_template_name: Option<String>,
+    /// 直发方案按销售收货地区的判定。
+    pub delivery_terms: Vec<DeliveryRegionTermView>,
+    /// 集采入仓方案按启用仓库的判定。
+    pub warehouse_delivery_terms: Vec<WarehouseDeliveryTermView>,
+    /// 集采直发要求的供应商集采起订量。
+    pub bulk_minimum_order_quantity: Option<String>,
+    /// 本行供给主键，用于按供给汇总起订量。
+    pub supplier_offering_id: Option<String>,
+}
 
 /// 采购创建依据查询参数。
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -16,6 +52,9 @@ pub struct CreationBasisListParams {
 /// 采购创建依据行视图（销售当前版本行 + 当前采购剩余量）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CreationBasisLineView {
+    /// 本方案的配送判定。
+    #[serde(flatten)]
+    pub delivery: CreationBasisDeliveryView,
     /// 当前销售冻结的客户交付要求。
     pub delivery_allocations: Vec<PurchaseDeliveryAllocation>,
     /// 当前采购已承担的地址数量。
@@ -114,6 +153,7 @@ impl CreationBasisLineView {
         gross_amount: String,
     ) -> Self {
         Self {
+            delivery: CreationBasisDeliveryView::default(),
             quantity_scale: None,
             delivery_allocations: Vec::new(),
             assigned_delivery_allocations: Vec::new(),
@@ -135,6 +175,21 @@ impl CreationBasisLineView {
             unit: None,
             gross_amount,
         }
+    }
+
+    /// 设置本方案的配送判定。
+    ///
+    /// # 参数
+    /// * `delivery` - 模板名称、逐地区与逐仓库判定及起订量
+    ///
+    /// # 返回
+    /// 返回更新后的行视图。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_delivery_view(mut self, delivery: CreationBasisDeliveryView) -> Self {
+        self.delivery = delivery;
+        self
     }
 
     /// 设置基础单位允许数量小数位。
@@ -258,6 +313,8 @@ pub struct CreationBasisView {
     pub lines: Vec<CreationBasisLineView>,
     /// 含税行汇总（只汇总已舍入行金额）。
     pub estimated_gross: String,
+    /// 价格依据：`DROPSHIP` 或 `BULK`；现有库存为空。
+    pub price_basis: Option<String>,
 }
 
 impl CreationBasisView {
@@ -319,7 +376,23 @@ impl CreationBasisView {
             business_category: None,
             lines: Vec::new(),
             estimated_gross,
+            price_basis: None,
         }
+    }
+
+    /// 设置价格依据。
+    ///
+    /// # 参数
+    /// * `price_basis` - 稳定代码
+    ///
+    /// # 返回
+    /// 返回更新后的依据视图。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn with_price_basis(mut self, price_basis: &str) -> Self {
+        self.price_basis = Some(price_basis.to_string());
+        self
     }
 
     /// 设置供给来源。

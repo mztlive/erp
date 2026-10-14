@@ -23,6 +23,9 @@ use persistence_core::{
 use serde::{Deserialize, Serialize};
 
 use super::extensions::WarehouseExt;
+use super::warehouse_projection::{
+    warehouse_projection, warehouse_revision_projection, warehouse_sku_policy_projection,
+};
 // 排序白名单唯一来源：DTO 校验侧同名常量；仓储排序回落与之同源，禁止漂移。
 use crate::dto::warehouse::{
     WAREHOUSE_REVISION_SORT_FIELDS, WAREHOUSE_SKU_POLICY_SORT_FIELDS, WAREHOUSE_SORT_FIELDS,
@@ -232,6 +235,9 @@ pub struct WarehouseRevisionRow {
     pub revision_no: u32,
     /// 仓库名称（结构化快照）。
     pub name: String,
+    /// 所在地区代码；本字段上线前建立的修订为空。
+    #[serde(default)]
+    pub region_code: Option<erp_core::region::RegionCode>,
     /// 生效开始日。
     pub effective_from: BusinessDate,
     /// 生效结束日；空表示无限期。
@@ -723,49 +729,6 @@ fn sort_doc(sort_by: Option<&str>, sort_ascending: bool, allowed: &[&str]) -> Do
     let direction = if sort_ascending { 1 } else { -1 };
     let field = sort_by.filter(|field| allowed.contains(field)).unwrap_or("created_at");
     doc! { field: direction, "id": direction }
-}
-
-/// 仓库列表投影字段。
-fn warehouse_projection() -> Document {
-    doc! {
-        "id": 1,
-        "warehouse_code": 1,
-        "status": 1,
-        "inbound_handler_user_id": 1,
-        "outbound_handler_user_id": 1,
-        "version": 1,
-        "created_at": 1,
-    }
-}
-
-/// 仓库修订列表投影字段（敏感字段密文/指纹不进入投影）。
-fn warehouse_revision_projection() -> Document {
-    doc! {
-        "id": 1,
-        "warehouse_id": 1,
-        "revision_no": 1,
-        "name": 1,
-        "effective_from": 1,
-        "effective_to": 1,
-        "change_reason": 1,
-        "version": 1,
-        "created_at": 1,
-    }
-}
-
-/// 仓库-SKU 预警策略列表投影字段。
-fn warehouse_sku_policy_projection() -> Document {
-    doc! {
-        "id": 1,
-        "warehouse_id": 1,
-        "sku_id": 1,
-        "minimum_available_quantity": 1,
-        "status": 1,
-        "effective_from": 1,
-        "effective_to": 1,
-        "version": 1,
-        "created_at": 1,
-    }
 }
 
 /// 代码 OR 当前修订名称；历史修订命中不能使仓库进入结果。

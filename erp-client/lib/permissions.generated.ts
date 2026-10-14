@@ -2547,6 +2547,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/sellable-skus/delivery-coverage",
+                description: "查询商品收货地区配送提示",
+                permission: {
+                    resource: "sellable_sku",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/sku-revisions",
                 description: "查询SKU修订列表",
@@ -3689,6 +3699,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "purchase_order",
                     action: "confirm_expense",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/freight-waivers",
+                description: "标记供应商不收运费",
+                permission: {
+                    resource: "purchase_order",
+                    action: "update",
                 },
             },
             {
@@ -5191,6 +5211,56 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         name: "供应商供给",
         description: "维护公司 SKU 的供应商供给、价格条款和可供状态",
         permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/suppliers/{supplier_id}/delivery-templates",
+                description: "查询供应商配送模板",
+                permission: {
+                    resource: "supplier_offering",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/suppliers/{supplier_id}/delivery-templates",
+                description: "新建供应商配送模板",
+                permission: {
+                    resource: "supplier_offering",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/supplier-delivery-templates/{id}",
+                description: "保存供应商配送模板",
+                permission: {
+                    resource: "supplier_offering",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/supplier-delivery-templates/{id}",
+                description: "删除供应商配送模板",
+                permission: {
+                    resource: "supplier_offering",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-offerings/delivery-template",
+                description: "为供给指定配送模板",
+                permission: {
+                    resource: "supplier_offering",
+                    action: "update",
+                },
+            },
             {
                 module: "admin",
                 method: "GET",

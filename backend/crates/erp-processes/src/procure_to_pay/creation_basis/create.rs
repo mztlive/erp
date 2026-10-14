@@ -1,6 +1,7 @@
 use application_core::AuditActor;
 use erp_audit::{AuditActorLogs, AuditLog};
 use erp_core::ids::{PurchaseOrderId, PurchaseOrderSubmissionId, SalesOrderId, WarehouseId};
+use erp_core::region::RegionCode;
 use erp_identity::SharedRbacService;
 use erp_procurement::dto::purchase_order::{
     CREATE_ACTION, CreatePurchaseOrderFromBasisRequest, CreatePurchaseOrderResult,
@@ -13,7 +14,7 @@ use erp_procurement::entity::purchase_order::{
 use erp_procurement::repository::{PurchaseCommandExt, PurchaseOrderExt};
 use erp_procurement::service::purchase_order::creation_basis::{
     SelectedLine, build_draft_submission, build_submission_line, compute_selected_lines,
-    ensure_request_scope, find_requested_group, parse_basis_sales_order_id,
+    ensure_request_scope, find_requested_group, judge_selected_delivery, parse_basis_sales_order_id,
 };
 use erp_read_models::purchase_center::repository::{
     basis_groups_and_facts, basis_groups_for_order, load_effective_sales_order, sales_order_basis_fact,
@@ -383,7 +384,10 @@ async fn prepare_basis_draft(
         executor,
     )
     .await?;
+    let warehouse_region = target_warehouse_region(db, target_warehouse_id.as_ref(), executor).await?;
+    let judgements = judge_selected_delivery(input.selected_lines, &group.scope, warehouse_region.as_ref())?;
     let mut order = new_basis_order(db, input, command, target_warehouse_id, executor).await?;
+    order.record_sourcing_delivery(group.scope.price_basis, judgements);
     let (submission, lines) = prepare_basis_submission(db, &order, input, executor).await?;
     order.attach_draft_submission(submission.base.id.clone().into())?;
     purchase_access(db.clone(), rbac.clone())
@@ -444,7 +448,7 @@ async fn prepare_basis_submission(
         .get(&group.scope.supplier_id.to_string())
         .cloned()
         .unwrap_or_else(|| group.scope.supplier_id.to_string());
-    let computed = compute_selected_lines(input.selected_lines, group.scope.fulfillment_responsibility);
+    let computed = compute_selected_lines(input.selected_lines, group.scope.price_basis);
     let submission = build_draft_submission(
         &CreationBasisSupplierAdapter::from_facts(db.clone(), &group.scope.supplier_id, facts),
         &PurchaseOrderId::new(order.base.id.clone()),
@@ -679,6 +683,36 @@ async fn resolve_target_warehouse(
         _ if normalized.is_some() => Err(Error::ValidationError("非仓库履约不能指定目标收货仓".to_string())),
         _ => Ok(None),
     }
+}
+
+/// 读取集采入仓目标仓库当前修订的所在地区。
+///
+/// # 参数
+/// * `db` - 数据库
+/// * `warehouse_id` - 已校验启用的目标仓库；非仓库履约为空
+/// * `executor` - 当前事务执行器
+///
+/// # 返回
+/// 返回所在地区；非仓库履约或仓库缺少当前修订时为空，由配送判定拒绝。
+///
+/// # 错误
+/// 查询失败时返回错误。
+async fn target_warehouse_region(
+    db: &Database,
+    warehouse_id: Option<&WarehouseId>,
+    executor: &mut dyn Executor,
+) -> Result<Option<RegionCode>> {
+    let Some(warehouse_id) = warehouse_id else {
+        return Ok(None);
+    };
+    let Some(warehouse) = db.warehouses().find_by_id(warehouse_id.as_ref(), executor).await? else {
+        return Ok(None);
+    };
+    let Some(revision_id) = warehouse.stable.current_revision_id.as_deref() else {
+        return Ok(None);
+    };
+    let revision = db.warehouse_revisions().find_by_id(revision_id, executor).await?;
+    Ok(revision.and_then(|revision| revision.region_code))
 }
 
 /// 把责任资格失败转换为当前创建场景可执行的校验提示，同时保留基础设施错误。

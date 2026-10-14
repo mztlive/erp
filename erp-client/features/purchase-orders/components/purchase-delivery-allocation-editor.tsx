@@ -11,6 +11,7 @@ import type { PurchaseDeliveryAllocation } from "@/features/purchase-orders/type
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { compactFixed } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
+import { fullDeliveryAddress } from "@/lib/delivery-address"
 
 /**
  * 按销售当前收件地址调整本采购各地址的交付数量（第一期 §6.3 第 5 条）。
@@ -62,12 +63,13 @@ export function PurchaseDeliveryAllocationEditor({
             <ul className="space-y-2">
                 {rows.map((row) => {
                     const key = toAutomationIdSegment(
-                        `${row.recipient}-${row.phone}-${row.address}`,
+                        `${row.recipient}-${row.phone}-${row.region_code}-${row.address}`,
                     )
                     const available = option.addresses.find(
                         (address) =>
                             address.recipient === row.recipient &&
                             address.phone === row.phone &&
+                            address.region_code === row.region_code &&
                             address.address === row.address,
                     )?.availableQuantity
                     const exceeds = deliveryRowExceedsAvailable(row, option)
@@ -77,7 +79,8 @@ export function PurchaseDeliveryAllocationEditor({
                             className="flex flex-wrap items-center justify-between gap-2 text-xs"
                         >
                             <span className="min-w-0 flex-1 break-words">
-                                {row.recipient} · {row.phone} · {row.address}
+                                {row.recipient} · {row.phone} ·{" "}
+                                {fullDeliveryAddress(row)}
                             </span>
                             <span className="flex items-center gap-2">
                                 <Input
@@ -86,7 +89,7 @@ export function PurchaseDeliveryAllocationEditor({
                                     inputMode="decimal"
                                     value={row.quantity}
                                     disabled={disabled}
-                                    aria-label={`${row.address} 交付数量`}
+                                    aria-label={`${fullDeliveryAddress(row)} 交付数量`}
                                     aria-invalid={exceeds || undefined}
                                     onChange={(event) =>
                                         onChange(
@@ -123,7 +126,10 @@ export function PurchaseDeliveryAllocationEditor({
                 <p className="text-xs text-muted-foreground">
                     以下原收件地址已不在销售收件资料中，保存后移除：
                     {removed
-                        .map((row) => `${row.recipient} · ${row.address}`)
+                        .map(
+                            (row) =>
+                                `${row.recipient} · ${fullDeliveryAddress(row)}`,
+                        )
                         .join("；")}
                 </p>
             ) : null}

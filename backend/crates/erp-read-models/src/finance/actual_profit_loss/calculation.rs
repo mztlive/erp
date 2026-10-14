@@ -218,6 +218,8 @@ fn order_row(
 }
 /// 存在已生效但未确认发生的采购费用行。
 pub(super) const EXTRA_COST_PENDING: &str = "EXTRA_COST_PENDING";
+/// 存在运费另计尚未追加物流费用采购或标记供应商不收运费的采购商品。
+pub(super) const FREIGHT_PENDING: &str = "FREIGHT_PENDING";
 
 /// 按订单和版本索引归集，数据库读取次数及内存遍历不随单据数平方增长。
 ///
@@ -255,6 +257,13 @@ pub(super) fn calculate(source: &Sources, as_of: i64, drill: bool) -> Result<Vec
                     &mut result,
                     EXTRA_COST_PENDING,
                     "附加费用待确认发生，确认发生或移除后才计入成本完整",
+                );
+            }
+            if source.pending_freight_orders.contains(&order.id) {
+                blocker(
+                    &mut result,
+                    FREIGHT_PENDING,
+                    "运费待追加，追加物流费用采购或标记供应商不收运费后才计入成本完整",
                 );
             }
             result.finish()?;

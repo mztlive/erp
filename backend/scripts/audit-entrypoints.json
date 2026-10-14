@@ -6619,6 +6619,88 @@
       },
       "location_count": 1,
       "reason": "元数据工厂/准备步骤 withdraw 通过 .resource_log 构造或验证审计上下文；本登记只证明该元数据调用被登记，不把构造上下文视为已执行正式业务或已持久化事件。实际记录由所属用例事务/审计 Port 委托。"
+    },
+    {
+      "path": "crates/erp-processes/src/procure_to_pay/freight_waiver.rs",
+      "function": "waive_freight",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log_with_message",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log_with_message": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "用例 waive_freight 在采购单\"供应商不收运费\"标记事务内通过 .resource_log_with_message、persist_log 构造并写入审计；与采购单标记沿同一 Executor 提交，重复标记由实体拒绝。"
+    },
+    {
+      "path": "crates/erp-processes/src/supplier_delivery_template.rs",
+      "function": "create_delivery_template",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log_with_message",
+        "run_audited"
+      ],
+      "call_counts": {
+        ".resource_log_with_message": 1,
+        "run_audited": 1
+      },
+      "location_count": 1,
+      "reason": "用例 create_delivery_template 通过 .resource_log_with_message、run_audited 在同一事务内新建配送模板并写入审计；模板名称与默认唯一由供给领域在事务内校验，唯一索引兜底。"
+    },
+    {
+      "path": "crates/erp-processes/src/supplier_delivery_template.rs",
+      "function": "update_delivery_template",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log_with_message",
+        "run_audited"
+      ],
+      "call_counts": {
+        ".resource_log_with_message": 1,
+        "run_audited": 1
+      },
+      "location_count": 1,
+      "reason": "用例 update_delivery_template 通过 .resource_log_with_message、run_audited 在同一事务内整体保存配送模板并写入审计；乐观锁版本由供给领域校验。"
+    },
+    {
+      "path": "crates/erp-processes/src/supplier_delivery_template.rs",
+      "function": "delete_delivery_template",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "run_audited"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "run_audited": 1
+      },
+      "location_count": 1,
+      "reason": "用例 delete_delivery_template 通过 .resource_log、run_audited 在同一事务内删除未被供给引用的配送模板并写入审计；引用保护由供给领域在事务内校验。"
+    },
+    {
+      "path": "crates/erp-processes/src/supplier_delivery_template.rs",
+      "function": "assign_offering_delivery_template",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_logs",
+        "run_audited"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_logs": 1,
+        "run_audited": 1
+      },
+      "location_count": 1,
+      "reason": "用例 assign_offering_delivery_template 通过 .resource_log、run_audited、persist_logs 在同一事务内逐条复验供给写访问、指定配送模板并为每条供给写入审计。"
     }
   ]
 }

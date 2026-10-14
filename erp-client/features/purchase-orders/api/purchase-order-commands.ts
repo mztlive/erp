@@ -114,6 +114,21 @@ export async function maintainPurchaseSource(input: {
     )
 }
 
+/** 标记采购单某商品的运费另计由供应商免收。 */
+export async function waivePurchaseFreight(input: {
+    purchaseOrderId: string
+    salesOrderLineId: string
+    reason: string
+}): Promise<void> {
+    await apiPost(
+        `/admin/purchase-orders/${encodeURIComponent(input.purchaseOrderId)}/freight-waivers`,
+        {
+            sales_order_line_id: input.salesOrderLineId,
+            reason: input.reason.trim(),
+        },
+    )
+}
+
 export async function voidPurchaseOrderDraft(
     input: VoidPurchaseOrderInput,
 ): Promise<

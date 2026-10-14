@@ -55,7 +55,11 @@ pub struct PurchaseDeliveryAddressOptionView {
     pub recipient: String,
     /// 联系电话。
     pub phone: String,
-    /// 收件地址。
+    /// 收货地区代码。
+    pub region_code: String,
+    /// 收货地区完整名称。
+    pub region_name: String,
+    /// 详细地址。
     pub address: String,
     /// 本采购最多可分配数量。
     pub available_quantity: Quantity,

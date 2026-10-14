@@ -13,8 +13,12 @@ import {
     subtractFixed,
     sumFixed,
 } from "@/lib/fixed-decimal"
+import type { DeliveryCoverageHint as DeliveryCoverageHintCode } from "../api/delivery-coverage"
+import { useDeliveryCoverage } from "../hooks/use-delivery-coverage"
 import type { SalesOrderCreateFormApi } from "../lib/sales-order-create-form-types"
 import type { CreateSalesOrderFormValues } from "../lib/sales-order-create-model"
+import { DeliveryCoverageHint } from "./delivery-coverage-hint"
+import { DeliveryRegionField } from "./delivery-region-field"
 
 type DeliveryLine = CreateSalesOrderFormValues["lineItems"][number]
 
@@ -23,6 +27,7 @@ export function allocationSummary(line: {
     deliveryAllocations?: {
         recipient: string
         phone: string
+        region_code: string
         address: string
         quantity: string
     }[]
@@ -42,6 +47,7 @@ export function allocationSummary(line: {
             row.recipient.trim().length <= 64 &&
             row.phone.trim() &&
             row.phone.trim().length <= 32 &&
+            row.region_code &&
             row.address.trim() &&
             row.address.trim().length <= 512,
     )
@@ -88,16 +94,18 @@ export function allocationSummary(line: {
 }
 
 const addressGrid =
-    "grid gap-3 sm:grid-cols-2 @3xl/delivery:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,2.6fr)_7rem_3.5rem]"
+    "grid gap-3 sm:grid-cols-2 @3xl/delivery:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_minmax(0,2.6fr)_minmax(0,1.8fr)_7rem_3.5rem]"
 
 function DeliveryAllocationGroup({
     form,
     line,
     rowIndex,
+    coverageHint,
 }: {
     form: SalesOrderCreateFormApi
     line: DeliveryLine
     rowIndex: number
+    coverageHint: (sku: string, regionCode: string) => DeliveryCoverageHintCode
 }) {
     const prefix = `sales-delivery-${toAutomationIdSegment(line.rowKey)}`
     const allocations = line.deliveryAllocations ?? []
@@ -111,7 +119,8 @@ function DeliveryAllocationGroup({
     const labels = [
         ["recipient", "收货人"],
         ["phone", "联系电话"],
-        ["address", "完整收货地址"],
+        ["region_code", "收货地区"],
+        ["address", "详细地址"],
         ["quantity", `数量（${line.unit || "基础单位"}）`],
     ] as const
 
@@ -152,6 +161,7 @@ function DeliveryAllocationGroup({
                                 {
                                     recipient: "",
                                     phone: "",
+                                    region_code: "",
                                     address: "",
                                     quantity: allocations.length
                                         ? ""
@@ -185,42 +195,95 @@ function DeliveryAllocationGroup({
                                     key={addressKey}
                                     className={`${addressGrid} items-start px-0 py-3 @3xl/delivery:px-3`}
                                 >
-                                    {labels.map(([name, label]) => (
-                                        <form.AppField
-                                            key={name}
-                                            name={`lineItems[${rowIndex}].deliveryAllocations[${allocationIndex}].${name}`}
-                                        >
-                                            {(field) => (
-                                                <field.TextField
-                                                    id={`${prefix}-${addressKey}-${name}`}
-                                                    label={label}
-                                                    className={`min-w-0 gap-2 @3xl/delivery:[&>[data-slot=field-label]]:sr-only ${name === "address" ? "sm:col-span-2 @3xl/delivery:col-span-1" : ""}`}
-                                                    inputClassName={
-                                                        name === "quantity"
-                                                            ? "num"
-                                                            : undefined
-                                                    }
-                                                    placeholder={
-                                                        name === "address"
-                                                            ? "省、市、区及详细地址"
-                                                            : undefined
-                                                    }
-                                                    step={
-                                                        name === "quantity"
-                                                            ? "any"
-                                                            : undefined
-                                                    }
-                                                    type={
-                                                        name === "quantity"
-                                                            ? "number"
-                                                            : name === "phone"
-                                                              ? "tel"
-                                                              : "text"
-                                                    }
-                                                />
-                                            )}
-                                        </form.AppField>
-                                    ))}
+                                    {labels.map(([name, label]) =>
+                                        name === "region_code" ? (
+                                            <form.AppField
+                                                key={name}
+                                                name={`lineItems[${rowIndex}].deliveryAllocations[${allocationIndex}].region_code`}
+                                            >
+                                                {(field) => (
+                                                    <DeliveryRegionField
+                                                        id={`${prefix}-${addressKey}-region`}
+                                                        label={label}
+                                                        labelClassName="@3xl/delivery:sr-only"
+                                                        className="sm:col-span-2 @3xl/delivery:col-span-1"
+                                                        value={
+                                                            field.state.value ??
+                                                            ""
+                                                        }
+                                                        onValueChange={(code) =>
+                                                            field.handleChange(
+                                                                code,
+                                                            )
+                                                        }
+                                                        onBlur={
+                                                            field.handleBlur
+                                                        }
+                                                        invalid={
+                                                            field.state.meta
+                                                                .isTouched &&
+                                                            !field.state.meta
+                                                                .isValid
+                                                        }
+                                                        errors={toFieldErrors(
+                                                            field.state.meta
+                                                                .errors,
+                                                        )}
+                                                        hint={
+                                                            field.state
+                                                                .value ? (
+                                                                <DeliveryCoverageHint
+                                                                    id={`${prefix}-${addressKey}-coverage`}
+                                                                    hint={coverageHint(
+                                                                        line.sku,
+                                                                        field
+                                                                            .state
+                                                                            .value,
+                                                                    )}
+                                                                />
+                                                            ) : null
+                                                        }
+                                                    />
+                                                )}
+                                            </form.AppField>
+                                        ) : (
+                                            <form.AppField
+                                                key={name}
+                                                name={`lineItems[${rowIndex}].deliveryAllocations[${allocationIndex}].${name}`}
+                                            >
+                                                {(field) => (
+                                                    <field.TextField
+                                                        id={`${prefix}-${addressKey}-${name}`}
+                                                        label={label}
+                                                        className={`min-w-0 gap-2 @3xl/delivery:[&>[data-slot=field-label]]:sr-only ${name === "address" ? "sm:col-span-2 @3xl/delivery:col-span-1" : ""}`}
+                                                        inputClassName={
+                                                            name === "quantity"
+                                                                ? "num"
+                                                                : undefined
+                                                        }
+                                                        placeholder={
+                                                            name === "address"
+                                                                ? "街道、门牌号"
+                                                                : undefined
+                                                        }
+                                                        step={
+                                                            name === "quantity"
+                                                                ? "any"
+                                                                : undefined
+                                                        }
+                                                        type={
+                                                            name === "quantity"
+                                                                ? "number"
+                                                                : name ===
+                                                                    "phone"
+                                                                  ? "tel"
+                                                                  : "text"
+                                                        }
+                                                    />
+                                                )}
+                                            </form.AppField>
+                                        ),
+                                    )}
                                     <Button
                                         id={`${prefix}-${addressKey}-remove`}
                                         type="button"
@@ -277,39 +340,51 @@ export function SalesDeliveryAllocationEditor({
         >
             {({ nature, lines }) =>
                 nature !== "physical_service" || !lines.length ? null : (
-                    <section
-                        className="@container/delivery min-w-0 space-y-5 border-t border-grid p-4 sm:p-5"
-                        aria-labelledby="sales-delivery-title"
-                    >
-                        <div className="space-y-1">
-                            <div className="flex flex-wrap items-baseline gap-2">
-                                <h2
-                                    id="sales-delivery-title"
-                                    className="font-heading text-base font-semibold"
-                                >
-                                    分地址交付
-                                </h2>
-                                <span className="text-sm text-muted-foreground">
-                                    选填
-                                </span>
-                            </div>
-                            <p className="text-xs leading-relaxed text-muted-foreground">
-                                填写后，各地址数量合计须等于商品数量；也可在履约时补充。
-                            </p>
-                        </div>
-                        <div className="divide-y divide-grid space-y-5 [&>div:not(:first-child)]:pt-5">
-                            {lines.map((line, rowIndex) => (
-                                <DeliveryAllocationGroup
-                                    key={line.rowKey}
-                                    form={form}
-                                    line={line}
-                                    rowIndex={rowIndex}
-                                />
-                            ))}
-                        </div>
-                    </section>
+                    <DeliveryAllocationSection form={form} lines={lines} />
                 )
             }
         </form.Subscribe>
+    )
+}
+
+function DeliveryAllocationSection({
+    form,
+    lines,
+}: {
+    form: SalesOrderCreateFormApi
+    lines: CreateSalesOrderFormValues["lineItems"]
+}) {
+    const coverageHint = useDeliveryCoverage(lines)
+    return (
+        <section
+            className="@container/delivery min-w-0 space-y-5 border-t border-grid p-4 sm:p-5"
+            aria-labelledby="sales-delivery-title"
+        >
+            <div className="space-y-1">
+                <div className="flex flex-wrap items-baseline gap-2">
+                    <h2
+                        id="sales-delivery-title"
+                        className="font-heading text-base font-semibold"
+                    >
+                        分地址交付
+                    </h2>
+                    <span className="text-sm text-muted-foreground">选填</span>
+                </div>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                    填写后，各地址数量合计须等于商品数量；也可在履约时补充。
+                </p>
+            </div>
+            <div className="divide-y divide-grid space-y-5 [&>div:not(:first-child)]:pt-5">
+                {lines.map((line, rowIndex) => (
+                    <DeliveryAllocationGroup
+                        key={line.rowKey}
+                        form={form}
+                        line={line}
+                        rowIndex={rowIndex}
+                        coverageHint={coverageHint}
+                    />
+                ))}
+            </div>
+        </section>
     )
 }

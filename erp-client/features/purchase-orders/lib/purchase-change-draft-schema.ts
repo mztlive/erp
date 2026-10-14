@@ -27,6 +27,8 @@ function decimalWithin(
 const deliveryRowSchema = z.object({
     recipient: z.string(),
     phone: z.string(),
+    region_code: z.string(),
+    region_name: z.string().optional(),
     address: z.string(),
     quantity: z.string(),
 })

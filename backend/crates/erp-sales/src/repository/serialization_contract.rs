@@ -344,7 +344,9 @@ mod sales_order_working_copy_line {
         goods.delivery_allocations = vec![SalesDeliveryAllocation {
             recipient: "张三".into(),
             phone: "13800000000".into(),
-            address: "上海市测试路 1 号".into(),
+            region_code: erp_core::region::RegionCode::parse("310115").unwrap(),
+            region_name: "上海市浦东新区".into(),
+            address: "测试路 1 号".into(),
             quantity: goods.quantity,
         }];
         let id = || SalesOrderWorkingCopyLineId::new("wcl-1");

@@ -1,5 +1,8 @@
 //! Extension traits for collection repositories.
 
+pub use super::delivery_template::{
+    OfferingDeliveryTemplateRepositoryExt, SupplierDeliveryTemplateRepositoryExt,
+};
 pub use super::supplier_api::{
     BusinessCapabilityConfirmationRepositoryExt, SupplierApiCapabilityRepositoryExt,
     SupplierApiConnectionRepositoryExt, SupplierConnectionCommandReceiptRepositoryExt,

@@ -28,6 +28,7 @@ export function OfferingTerms({
     terms,
     canViewCosts,
     compact = false,
+    deliveryTemplateName,
 }: {
     terms: Omit<
         OfferingRevisionView,
@@ -35,6 +36,8 @@ export function OfferingTerms({
     >
     canViewCosts: boolean
     compact?: boolean
+    /** 当前生效配送模板；条款历史不传。 */
+    deliveryTemplateName?: string
 }) {
     return (
         <div className="space-y-6 text-sm">
@@ -118,6 +121,11 @@ export function OfferingTerms({
             <section className="space-y-3">
                 <h3 className="font-medium">供应条件</h3>
                 <dl className="space-y-3">
+                    {deliveryTemplateName ? (
+                        <OfferingField label="配送模板">
+                            {deliveryTemplateName}
+                        </OfferingField>
+                    ) : null}
                     <OfferingField label="可供区域">
                         {terms.supply_region.join("、") || "未标注"}
                     </OfferingField>

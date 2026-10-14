@@ -201,9 +201,16 @@ export function salesChangeTargetLines(
                 goods: {
                     ...line.goods,
                     delivery_allocations: value.deliveryAllocations.map(
-                        ({ recipient, phone, address, quantity }) => ({
+                        ({
                             recipient,
                             phone,
+                            region_code,
+                            address,
+                            quantity,
+                        }) => ({
+                            recipient,
+                            phone,
+                            region_code,
                             address,
                             quantity,
                         }),

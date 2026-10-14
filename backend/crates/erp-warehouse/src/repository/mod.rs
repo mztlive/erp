@@ -4,6 +4,7 @@ pub mod extensions;
 pub mod owned;
 pub mod prelude;
 pub mod warehouse;
+mod warehouse_projection;
 
 pub use extensions::WarehouseExt;
 pub use owned::{WarehouseRepository, WarehouseRevisionRepository, WarehouseSkuPolicyRepository};

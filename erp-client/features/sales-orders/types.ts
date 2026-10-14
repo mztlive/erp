@@ -28,6 +28,11 @@ export type SalesLineProcurementResponsibility = {
 export type SalesDeliveryAllocation = {
     recipient: string
     phone: string
+    /** 收货地区（行政区划最末级代码）。 */
+    region_code: string
+    /** 地区完整名称；由服务端按代码生成，提交时可省略。 */
+    region_name?: string
+    /** 详细地址。 */
     address: string
     quantity: string
 }
@@ -184,6 +189,16 @@ export type SalesOrderProcurementProgress = {
     tone: StatusTone
 }
 
+/** 运费另计尚未处理的采购商品。 */
+export type SalesFreightFollowUp = {
+    purchaseOrderId: string
+    purchaseNo: string
+    supplierId: string
+    supplierName?: string
+    salesOrderLineId: string
+    productName?: string
+}
+
 type SalesOrderRelatedSummary = {
     purchaseOrders: number
     procurementProgress: SalesOrderProcurementProgress
@@ -192,6 +207,7 @@ type SalesOrderRelatedSummary = {
         taskCount: number
         blocker?: string
     }
+    freightFollowUps?: SalesFreightFollowUp[]
     fulfillments: number
     receipts: number
     invoices: number

@@ -7,7 +7,10 @@ use erp_catalog::{Product, Sku, SkuRevision};
 use erp_party::{Party, PartyRevision};
 use erp_supplier::SupplierAccount;
 use erp_supply::OfferingDataScopePort;
-use erp_supply::entity::supplier_offering::{SupplierOfferingAvailability, SupplierOfferingRevision};
+use erp_supply::dto::delivery_template::OfferingDeliveryView;
+use erp_supply::entity::supplier_offering::{
+    SupplierOfferingAvailability, SupplierOfferingRevision, resolve_delivery,
+};
 use erp_supply::repository::supplier_offering::SupplierOfferingRow;
 use mongodb::Database;
 use validator::Validate;
@@ -147,12 +150,19 @@ pub(super) fn page_view(
         .into_iter()
         .map(|row| {
             let id = row.id.clone();
-            build_view(
+            let delivery = resolve_delivery(
+                &row.supplier_id,
+                row.delivery_template_id.as_ref(),
+                &bundle.delivery_templates,
+            );
+            let mut view = build_view(
                 row,
                 bundle.revisions.get(&id).cloned(),
                 bundle.availabilities.get(&id).cloned(),
                 &context,
-            )
+            );
+            view.delivery_template = Some(OfferingDeliveryView::from_resolved(&delivery));
+            view
         })
         .collect();
     Ok(PageView { items, total: bundle.page.total, page: query.page, page_size: query.page_size })

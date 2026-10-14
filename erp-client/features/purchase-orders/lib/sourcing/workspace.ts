@@ -103,6 +103,8 @@ function optionFromBasis(
         workItemId: basis.workItemId,
         purchaseType: basis.purchaseType,
         fulfillmentResponsibility: basis.fulfillmentResponsibility,
+        priceBasis: basis.priceBasis,
+        delivery: basis.sourceType === "PURCHASE" ? line.delivery : undefined,
         paymentTermCode: basis.paymentTermCode,
         paymentTermLabel: basis.paymentTermLabel,
         businessCategory: basis.businessCategory,

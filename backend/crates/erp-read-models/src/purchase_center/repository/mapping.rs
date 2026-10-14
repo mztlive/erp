@@ -7,15 +7,15 @@ use erp_procurement::entity::facts::{
     SalesOrderBasisFact, SalesRevisionFact, SalesRevisionLineFact, SkuFact, StockBalanceFact,
     SupplierCommercialFact, SupplierRoleFact, VersionedFactIdentity,
 };
-use erp_procurement::entity::purchase_order::PurchaseDeliveryAllocation;
+use erp_procurement::entity::purchase_order::{OfferingDeliveryFact, PurchaseDeliveryAllocation};
 use erp_sales::entity::sales_order::{
     CommercialStatus, LineType, SalesOrder, SalesOrderGoodsServiceLineRevision, SalesOrderRevision,
     SalesOrderRevisionLine,
 };
 use erp_sales::entity::sales_review::SalesChangeSubmissionLine;
 use erp_supply::entity::supplier_offering::{
-    AvailabilityStatus as SupplyAvailabilityStatus, SupplierOffering, SupplierOfferingAvailability,
-    SupplierOfferingRevision,
+    AvailabilityStatus as SupplyAvailabilityStatus, ResolvedDelivery, SupplierOffering,
+    SupplierOfferingAvailability, SupplierOfferingRevision,
 };
 
 /// 投影采购依据身份；销售状态资格和 guard CAS 仍由对应调用位置执行。
@@ -107,6 +107,8 @@ pub(crate) fn sales_goods_fact(value: SalesOrderGoodsServiceLineRevision) -> Sal
             .map(|row| PurchaseDeliveryAllocation {
                 recipient: row.recipient,
                 phone: row.phone,
+                region_code: row.region_code,
+                region_name: row.region_name,
                 address: row.address,
                 quantity: row.quantity,
             })
@@ -249,8 +251,27 @@ pub fn offering_revision_fact(value: SupplierOfferingRevision) -> OfferingRevisi
         bulk_supply_price_gross: value.bulk_supply_price_gross,
         dropship_supply_price_gross: value.dropship_supply_price_gross,
         input_tax_rate: value.input_tax_rate,
+        bulk_minimum_order_quantity: value.bulk_minimum_order_quantity,
     }
 }
+/// 由供给生效配送政策形成采购消费的配送事实。
+///
+/// # 参数
+/// * `resolved` - 供给领域解析出的生效政策
+///
+/// # 返回
+/// 返回模板名称、版本与政策。
+///
+/// # 错误
+/// 不返回错误。
+pub(crate) fn offering_delivery_fact(resolved: ResolvedDelivery) -> OfferingDeliveryFact {
+    OfferingDeliveryFact {
+        template_name: resolved.template_name,
+        template_revision_no: resolved.template_revision_no,
+        policy: resolved.policy,
+    }
+}
+
 /// 可供状态显式映射；所有不可供状态保持采购原拒绝分支。
 ///
 /// # 参数
@@ -337,6 +358,8 @@ pub(crate) fn proposed_line_fact(
             .map(|row| PurchaseDeliveryAllocation {
                 recipient: row.recipient.clone(),
                 phone: row.phone.clone(),
+                region_code: row.region_code.clone(),
+                region_name: row.region_name.clone(),
                 address: row.address.clone(),
                 quantity: row.quantity,
             })

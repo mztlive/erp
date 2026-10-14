@@ -321,6 +321,7 @@ mod tests {
                 warehouse_id: WarehouseId::new(warehouse_id),
                 revision_no: 1,
                 name: "北京仓".to_string(),
+                region_code: erp_core::region::RegionCode::parse("110105").unwrap(),
                 address: SensitiveText::new("cipher-a".to_string(), "a".repeat(64)).unwrap(),
                 contact: SensitiveText::new("cipher-c".to_string(), "b".repeat(64)).unwrap(),
                 effective_from: BusinessDate::from_ymd(2026, 1, 1).unwrap(),

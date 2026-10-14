@@ -349,6 +349,15 @@ export type BackendSalesOrderDetail = {
         task_count: number
         blocker?: string | null
     }
+    /** 运费另计尚未追加物流费用或标记供应商不收运费的采购商品；仅对可追加采购的账号返回。 */
+    freight_follow_ups?: Array<{
+        purchase_order_id: string
+        purchase_no: string
+        supplier_id: string
+        supplier_name?: string | null
+        sales_order_line_id: string
+        product_name?: string | null
+    }>
     settled_total: string
     invoiced_total: string
     lines: Array<{ id: string; line_no: number; line_status: string }>

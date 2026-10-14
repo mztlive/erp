@@ -11,7 +11,8 @@ use erp_core::common::stable::StableBase;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{
     SkuId, SupplierAccountId, SupplierApiConnectionId, SupplierCapabilityRevisionId,
-    SupplierCommercialProfileRevisionId, SupplierOfferingId, SupplierOfferingRevisionId,
+    SupplierCommercialProfileRevisionId, SupplierDeliveryTemplateId, SupplierOfferingId,
+    SupplierOfferingRevisionId,
 };
 use erp_core::money::{Amount, Quantity, Rate, UnitPrice, round_to_cent};
 use erp_core::validation::{normalize_optional_text, normalize_required_text};
@@ -75,6 +76,9 @@ pub struct SupplierOffering {
     /// 当前业务组织；交接前不得为空。
     #[serde(default)]
     pub business_org_unit_id: String,
+    /// 指定的配送模板；为空时跟随供应商默认模板。
+    #[serde(default)]
+    pub delivery_template_id: Option<SupplierDeliveryTemplateId>,
 }
 
 impl PartialEq for SupplierOffering {
@@ -92,6 +96,7 @@ impl PartialEq for SupplierOffering {
             && self.source_connection_id == other.source_connection_id
             && self.maintainer_user_id == other.maintainer_user_id
             && self.business_org_unit_id == other.business_org_unit_id
+            && self.delivery_template_id == other.delivery_template_id
     }
 }
 
@@ -144,7 +149,34 @@ impl SupplierOffering {
             source_connection_id: data.source_connection_id,
             maintainer_user_id,
             business_org_unit_id,
+            delivery_template_id: None,
         })
+    }
+
+    /// 指定配送模板或改回跟随供应商默认模板。
+    ///
+    /// 模板必须属于本供给的供应商，归属由 Service 在事务内读取模板后校验。
+    ///
+    /// # 参数
+    /// * `template_id` - 目标模板；`None` 表示跟随供应商默认模板
+    /// * `updated_by` - 操作人
+    ///
+    /// # 返回
+    /// 指定有变化时返回 `true`。
+    ///
+    /// # 错误
+    /// 无。
+    pub fn assign_delivery_template(
+        &mut self,
+        template_id: Option<SupplierDeliveryTemplateId>,
+        updated_by: impl Into<String>,
+    ) -> bool {
+        if self.delivery_template_id == template_id {
+            return false;
+        }
+        self.delivery_template_id = template_id;
+        self.stable.touch(updated_by);
+        true
     }
 
     /// 更新供给关系状态。

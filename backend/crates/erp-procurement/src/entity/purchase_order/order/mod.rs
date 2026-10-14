@@ -13,8 +13,10 @@ use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::entity::facts::PaymentTermFact;
+use crate::entity::purchase_order::delivery_judgement::PurchaseSourcingDelivery;
 use crate::entity::purchase_order::types::{FulfillmentResponsibility, PurchaseType};
 
+mod delivery;
 mod status;
 pub use status::{ProgressStatus, PurchaseOrderStatus, PurchaseReviewStatus};
 
@@ -114,6 +116,9 @@ pub struct PurchaseOrder {
     /// 审批提交版本，初值 0。
     #[serde(default)]
     pub approval_subject_version: u32,
+    /// 选源时冻结的价格依据、配送判定与"供应商不收运费"标记。
+    #[serde(flatten)]
+    pub sourcing_delivery: PurchaseSourcingDelivery,
 }
 
 impl PartialEq for PurchaseOrder {
@@ -141,6 +146,7 @@ impl PartialEq for PurchaseOrder {
             && self.fulfillment_progress == other.fulfillment_progress
             && self.current_submission_id == other.current_submission_id
             && self.approval_subject_version == other.approval_subject_version
+            && self.sourcing_delivery == other.sourcing_delivery
     }
 }
 
@@ -216,6 +222,7 @@ impl PurchaseOrder {
             fulfillment_progress: ProgressStatus::None,
             current_submission_id: None,
             approval_subject_version: 0,
+            sourcing_delivery: PurchaseSourcingDelivery::default(),
         })
     }
 
@@ -789,7 +796,7 @@ mod tests {
         }
     }
 
-    fn new_order() -> PurchaseOrder {
+    pub(super) fn new_order() -> PurchaseOrder {
         PurchaseOrder::new(
             PurchaseOrderId::new("po-1"),
             order_data(),

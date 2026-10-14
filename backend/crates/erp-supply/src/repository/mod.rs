@@ -1,5 +1,6 @@
 //! 供应链拥有仓储及窄访问器。
 
+pub mod delivery_template;
 mod extensions;
 pub mod handover_receipt;
 pub mod organization;

@@ -3,15 +3,21 @@
 //! 公司 `Product`/`Sku` 是唯一商品主数据。本域不得复制供应商 SPU/SKU 商品主档，
 //! 也不存在供应商商品到公司商品的映射。供应商侧订货身份直接属于供给稳定对象；
 //! 价格、税率、起订量和有效期属于不可变修订；高频库存与可供状态属于独立投影。
+//! 配送模板归供应商所有，供给稳定对象引用模板，不产生条款修订。
 
 mod availability;
 mod command;
+mod delivery_template;
 mod offering;
 mod types;
 pub mod write_data;
 
 pub use availability::{SupplierOfferingAvailability, SupplierOfferingAvailabilityData};
 pub use command::{SupplierOfferingCommand, SupplierOfferingCommandData};
+pub use delivery_template::{
+    DeliveryTemplateSource, ResolvedDelivery, SupplierDeliveryTemplate, SupplierDeliveryTemplateContent,
+    resolve_delivery, resolve_offering_delivery,
+};
 pub use offering::{
     FromGrossPricesParams, PrefillSourceRefs, SupplierOffering, SupplierOfferingData,
     SupplierOfferingRevision, SupplierOfferingRevisionData,

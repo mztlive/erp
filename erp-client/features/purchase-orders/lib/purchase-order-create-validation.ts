@@ -2,7 +2,11 @@ import { z } from "zod"
 import { sourcingUnitQuantityError } from "./sourcing-quantity"
 
 import { findSourcingOption } from "./sourcing/options"
-import { deliveryValidationErrors } from "./sourcing/delivery"
+import {
+    deliveryValidationErrors,
+    editableDeliveryAllocations,
+} from "./sourcing/delivery"
+import { deliveryJudgementErrors } from "./sourcing/delivery-terms"
 import { sourcingQuantityError } from "./sourcing/quantity"
 import type { SourcingLineInput, SourcingSalesOrder } from "./sourcing/types"
 import { compareDecimal, sumFixed } from "@/lib/fixed-decimal"
@@ -58,6 +62,8 @@ export function buildSourcingFormSchema(order?: SourcingSalesOrder) {
                             z.object({
                                 recipient: z.string(),
                                 phone: z.string(),
+                                region_code: z.string(),
+                                region_name: z.string().optional(),
                                 address: z.string(),
                                 quantity: z.string(),
                             }),
@@ -77,10 +83,14 @@ export function buildSourcingFormSchema(order?: SourcingSalesOrder) {
                 })
                 return
             }
-            for (const [index, message] of deliveryValidationErrors(
-                order,
-                value.lines,
-            )) {
+            for (const [index, message] of [
+                ...deliveryValidationErrors(order, value.lines),
+                ...deliveryJudgementErrors(
+                    order,
+                    value.lines,
+                    editableDeliveryAllocations,
+                ),
+            ]) {
                 context.addIssue({
                     code: "custom",
                     path: ["lines", index, "deliveryAllocations"],

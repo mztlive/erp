@@ -81,8 +81,28 @@ function newLine(): LineValues {
     }
 }
 
-function defaults(): FormValues {
-    return { supplierId: "", paymentTermCode: "", lines: [newLine()] }
+/** 运费另计跟进时预填的收款供应商与物流费用行。 */
+export type ExpensePurchasePrefill = Readonly<{
+    supplierId: string
+    salesOrderLineId?: string
+    description?: string
+}>
+
+function defaults(prefill?: ExpensePurchasePrefill): FormValues {
+    if (!prefill)
+        return { supplierId: "", paymentTermCode: "", lines: [newLine()] }
+    return {
+        supplierId: prefill.supplierId,
+        paymentTermCode: "",
+        lines: [
+            {
+                ...newLine(),
+                category: "logistics",
+                description: prefill.description ?? "",
+                salesOrderLineId: prefill.salesOrderLineId ?? WHOLE_ORDER,
+            },
+        ],
+    }
 }
 
 function percentToRate(percent: string) {
@@ -119,12 +139,15 @@ export function ExpensePurchaseCreateDialog({
     open,
     onOpenChange,
     onCreated,
+    prefill,
 }: {
     salesOrderId: string
     salesLines: ReadonlyArray<{ id: string; name: string }>
     open: boolean
     onOpenChange: (open: boolean) => void
     onCreated?: (created: ExpensePurchaseCreated) => void
+    /** 预填收款供应商与物流费用行；缺省时为空白表单。 */
+    prefill?: ExpensePurchasePrefill
 }) {
     const mutation = useCreateExpensePurchaseMutation(salesOrderId)
     const [requestKey, setRequestKey] = React.useState(() =>
@@ -167,12 +190,12 @@ export function ExpensePurchaseCreateDialog({
     const wasOpen = React.useRef(false)
     React.useEffect(() => {
         if (open && !wasOpen.current) {
-            form.reset(defaults())
+            form.reset(defaults(prefill))
             setRequestKey(crypto.randomUUID())
             setFailure(null)
         }
         wasOpen.current = open
-    }, [form, open])
+    }, [form, open, prefill])
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>

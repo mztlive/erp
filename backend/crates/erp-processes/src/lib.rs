@@ -25,6 +25,7 @@ pub mod product_handover;
 pub mod product_import;
 pub mod source_registry;
 pub mod supplier;
+pub mod supplier_delivery_template;
 pub mod supplier_import;
 pub mod supplier_portal;
 pub mod supplier_profile;

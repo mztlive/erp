@@ -14,8 +14,8 @@ use persistence_core::NoTransaction;
 use self::facts::DetailFacts;
 use super::super::approval_query::load_document_approval;
 use super::super::dto::{
-    ActiveCardSalesApprovalView, DocumentApprovalView, PurchaseCreationAccessView, SalesOrderDetailView,
-    SalesOrderEvidenceFileView, SalesOrderStageSummary, SalesProcurementCoverageView,
+    ActiveCardSalesApprovalView, DocumentApprovalView, FreightFollowUpView, PurchaseCreationAccessView,
+    SalesOrderDetailView, SalesOrderEvidenceFileView, SalesOrderStageSummary, SalesProcurementCoverageView,
 };
 use super::super::status::{close_eligibility_view, compute_can_start_sales_change, stage_code_label_tone};
 use super::SalesOrderReadService;
@@ -28,6 +28,7 @@ struct DetailPresentation {
     stage: SalesOrderStageSummary,
     purchase_coverage: SalesProcurementCoverageView,
     purchase_creation_access: PurchaseCreationAccessView,
+    freight_follow_ups: Vec<FreightFollowUpView>,
     can_start_sales_change_order: bool,
     change_order_blocker: Option<String>,
     active_card_sales_approval: Option<ActiveCardSalesApprovalView>,
@@ -126,6 +127,7 @@ impl SalesOrderReadService {
         let purchase_coverage = self.sales_procurement_coverage(order, actor).await?;
         let purchase_creation_access =
             self.purchase_creation_access(order, &purchase_coverage, actor).await?;
+        let freight_follow_ups = self.freight_follow_ups(order, actor).await?;
         let active_card_sales_approval = match (actor, facts.submissions.first()) {
             (Some(actor), Some(submission)) => {
                 self.resolve_active_card_sales_approval(
@@ -157,6 +159,7 @@ impl SalesOrderReadService {
             stage,
             purchase_coverage,
             purchase_creation_access,
+            freight_follow_ups,
             can_start_sales_change_order,
             change_order_blocker,
             active_card_sales_approval,
@@ -242,6 +245,7 @@ impl SalesOrderDetailView {
             purchase_order_count: facts.purchase_order_count,
             purchase_coverage: presentation.purchase_coverage,
             purchase_creation_access: presentation.purchase_creation_access,
+            freight_follow_ups: presentation.freight_follow_ups,
             settled_total: facts.receivable_summary.settled_total,
             invoiced_total: facts.receivable_summary.invoiced_total,
             lines: facts.stable_lines,

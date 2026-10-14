@@ -81,6 +81,33 @@ pub async fn formal_orders_by_sales_orders(
     db.purchase_orders().find_many(filter, executor).await
 }
 
+/// 批量读取一组销售单下未作废的采购单（含草稿与审批中）。
+///
+/// # 参数
+/// * `db` - 业务数据库
+/// * `sales_order_ids` - 销售单主键；空集合直接返回空
+/// * `executor` - 调用方执行器
+///
+/// # 返回
+/// 返回未删除且未作废的采购单。
+///
+/// # 错误
+/// 仓储读取失败时返回错误。
+pub async fn active_orders_by_sales_orders(
+    db: &Database,
+    sales_order_ids: &[String],
+    executor: &mut dyn Executor,
+) -> Result<Vec<PurchaseOrder>> {
+    if sales_order_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let filter = doc! {
+        "sales_order_id": { "$in": sales_order_ids },
+        "status": { "$ne": PurchaseOrderStatus::Voided.as_str() },
+    };
+    db.purchase_orders().find_many(filter, executor).await
+}
+
 /// 读取一条费用行的确认发生事实。
 ///
 /// # 参数

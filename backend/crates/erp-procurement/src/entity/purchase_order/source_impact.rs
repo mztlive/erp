@@ -362,7 +362,7 @@ struct CurrentLine<'a> {
 }
 
 /// 收件资料累计承担键：稳定销售行、收货人、电话、地址。
-type AssignmentKey = (String, String, String, String);
+type AssignmentKey = (String, String, String, String, String);
 
 /// 判定上下文：当前行、历史行与维持基准索引。
 struct ImpactContext<'a> {
@@ -549,7 +549,13 @@ fn recipient_quantity(rows: &[PurchaseDeliveryAllocation], target: &PurchaseDeli
 
 /// 构造收件资料累计承担键。
 fn assignment_key(stable_id: &str, row: &PurchaseDeliveryAllocation) -> AssignmentKey {
-    (stable_id.to_string(), row.recipient.clone(), row.phone.clone(), row.address.clone())
+    (
+        stable_id.to_string(),
+        row.recipient.clone(),
+        row.phone.clone(),
+        row.region_code.to_string(),
+        row.address.clone(),
+    )
 }
 
 /// 汇总全部参与覆盖采购对各收件资料的累计承担量。
@@ -691,6 +697,8 @@ mod tests {
         PurchaseDeliveryAllocation {
             recipient: recipient.to_string(),
             phone: "13800000000".to_string(),
+            region_code: erp_core::region::RegionCode::parse("310115").unwrap(),
+            region_name: "上海市浦东新区".into(),
             address: format!("{recipient} 地址"),
             quantity: qty(quantity),
         }

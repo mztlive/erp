@@ -39,6 +39,7 @@ pub use self::command::{
     SavePurchaseOrderDraftRequest, SavePurchaseOrderDraftResult, SavePurchaseOrderLine,
     SavePurchaseOrderLinePatch, SourcingLineAssignment, SubmitPurchaseOrderRequest,
     SubmitPurchaseOrderResult, VOID_ACTION, VoidPurchaseOrderRequest, VoidPurchaseOrderResult,
+    WAIVE_FREIGHT_ACTION, WaivePurchaseFreightRequest, WaivePurchaseFreightResult,
 };
 pub use self::query::{
     ExpenseOccurrenceView, PURCHASE_ORDER_SORT_FIELDS, PageParams, PurchaseChangeSummaryView,
@@ -329,6 +330,8 @@ mod tests {
         crate::entity::purchase_order::PurchaseDeliveryAllocation {
             recipient: "张三".to_string(),
             phone: "13800000000".to_string(),
+            region_code: erp_core::region::RegionCode::parse("310115").unwrap(),
+            region_name: "上海市浦东新区".into(),
             address: address.to_string(),
             quantity: Quantity::from_str(quantity).unwrap(),
         }

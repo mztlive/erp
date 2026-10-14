@@ -29,4 +29,5 @@ export {
     voidPurchaseChange,
     submitPurchaseOrderForReview,
     voidPurchaseOrderDraft,
+    waivePurchaseFreight,
 } from "./purchase-order-commands"

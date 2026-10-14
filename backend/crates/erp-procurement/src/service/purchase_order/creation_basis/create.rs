@@ -2,15 +2,17 @@
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderId};
 use erp_core::money::{Amount, Quantity, UnitPrice, line_amounts};
+use erp_core::region::RegionCode;
 use id_generator::next_id;
 
 use super::{business_date_of, zero_amount};
 use crate::dto::purchase_order::CreatePurchaseOrderFromBasisRequest;
 use crate::entity::facts::SalesOrderBasisFact;
 use crate::entity::purchase_order::{
-    BasisGroup, BasisLine, BasisScope, FulfillmentResponsibility, PurchaseDeliveryAllocation,
-    PurchaseLineType, PurchaseOfferingSource, PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData,
-    RequestedLine, basis_id_for, stable_line_id, supply_cost,
+    BasisGroup, BasisLine, BasisScope, BulkOrderQuantity, FulfillmentResponsibility,
+    PurchaseDeliveryAllocation, PurchaseDeliveryJudgement, PurchaseLineType, PurchaseOfferingSource,
+    PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData, RequestedLine, SupplyPriceBasis,
+    basis_id_for, ensure_bulk_direct_minimum, judge_line_delivery, stable_line_id, supply_cost,
 };
 use crate::{Error, Result};
 
@@ -52,6 +54,7 @@ pub struct ComputedLine {
 ///
 /// # 参数
 /// * `selected_lines` - 事务内校验通过的本次采购行
+/// * `price_basis` - 依据范围的价格依据
 ///
 /// # 返回
 /// 返回逐行已舍入金额及汇总。
@@ -63,14 +66,14 @@ pub struct ComputedLine {
 /// 表头只汇总逐行舍入后的金额。
 pub fn compute_selected_lines(
     selected_lines: &[SelectedLine],
-    responsibility: FulfillmentResponsibility,
+    price_basis: SupplyPriceBasis,
 ) -> ComputedSelection {
     let mut gross_total = zero_amount();
     let mut net_total = zero_amount();
     let mut tax_total = zero_amount();
     let mut lines = Vec::with_capacity(selected_lines.len());
     for selected in selected_lines {
-        let cost = supply_cost(&selected.basis.supply.revision, responsibility);
+        let cost = supply_cost(&selected.basis.supply.revision, price_basis);
         let (gross, net, tax) =
             line_amounts(cost, selected.quantity, selected.basis.supply.revision.input_tax_rate);
         gross_total = gross_total.checked_add(gross);
@@ -248,6 +251,61 @@ pub fn validate_requested_quantities(
         });
     }
     Ok(selected)
+}
+
+/// 判定本次采购行的配送范围，并校验集采直发起订量。
+///
+/// # 参数
+/// * `selected` - 事务内校验通过的本次采购行
+/// * `scope` - 依据精确范围
+/// * `warehouse_region` - 集采入仓目标仓库所在地区
+///
+/// # 返回
+/// 返回逐行冻结的配送判定。
+///
+/// # 错误
+/// 收货地址或目标仓库不配送、入仓目标仓库未设置地区，或集采直发数量合计不足
+/// 起订量时返回校验错误。
+///
+/// # 关键业务约束
+/// 判定使用事务内读取的供给生效配送政策，不信任客户端的推荐结果。
+pub fn judge_selected_delivery(
+    selected: &[SelectedLine],
+    scope: &BasisScope,
+    warehouse_region: Option<&RegionCode>,
+) -> Result<Vec<PurchaseDeliveryJudgement>> {
+    let mut judgements = Vec::with_capacity(selected.len());
+    for line in selected {
+        let delivery = &line.basis.supply.delivery;
+        let freight_extra = judge_line_delivery(
+            delivery,
+            scope.price_basis,
+            scope.fulfillment_responsibility,
+            &line.delivery_allocations,
+            warehouse_region,
+        )
+        .map_err(|error| Error::ValidationError(error.to_string()))?;
+        judgements.push(PurchaseDeliveryJudgement {
+            sales_order_line_id: line.basis.coverage.revision_line.sales_order_line_id.clone(),
+            template_name: delivery.template_name.clone(),
+            template_revision_no: delivery.template_revision_no,
+            freight_extra,
+        });
+    }
+    if scope.fulfillment_responsibility == FulfillmentResponsibility::SupplierDirect
+        && scope.price_basis == SupplyPriceBasis::Bulk
+    {
+        let quantities = selected
+            .iter()
+            .map(|line| BulkOrderQuantity {
+                offering_id: line.basis.supply.offering.base.id.as_str(),
+                quantity: line.quantity,
+                minimum: line.basis.supply.revision.bulk_minimum_order_quantity,
+            })
+            .collect::<Vec<_>>();
+        ensure_bulk_direct_minimum(&quantities).map_err(|error| Error::ValidationError(error.to_string()))?;
+    }
+    Ok(judgements)
 }
 
 /// 校验采购预计交付日不突破销售对客户的承诺期限。

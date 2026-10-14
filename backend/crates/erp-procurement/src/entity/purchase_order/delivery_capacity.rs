@@ -331,6 +331,8 @@ mod tests {
         PurchaseDeliveryAllocation {
             recipient: "张三".into(),
             phone: "13800000000".into(),
+            region_code: erp_core::region::RegionCode::parse("310115").unwrap(),
+            region_name: "上海市浦东新区".into(),
             address: address.into(),
             quantity: qty(quantity),
         }

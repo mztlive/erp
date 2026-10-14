@@ -8,8 +8,11 @@ import {
     findSourcingOption,
     type SourcingSalesOrder,
 } from "../../lib/purchase-order-create-model"
-import { FULFILLMENT_RESPONSIBILITY_LABEL } from "../../types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import {
+    deliverySummary,
+    sourcingRouteLabel,
+} from "../../lib/sourcing/delivery-terms"
 
 /** 只有「采购 + 入仓」方案必须在建单前选定目标仓。 */
 export function SourcingTargetWarehouseField({
@@ -167,7 +170,13 @@ export function SourcingOptionField({
                         label:
                             option.sourceType === "EXISTING_STOCK"
                                 ? `${option.supplierName} · 可用 ${option.sourceAvailableQuantity ?? option.maxCreateQuantity}`
-                                : `${option.supplierName} · ${FULFILLMENT_RESPONSIBILITY_LABEL[option.fulfillmentResponsibility]}`,
+                                : [
+                                      option.supplierName,
+                                      sourcingRouteLabel(option),
+                                      deliverySummary(option, product),
+                                  ]
+                                      .filter(Boolean)
+                                      .join(" · "),
                         keywords: `${option.sourceType} ${option.supplierId} ${option.warehouseName ?? ""} ${option.fulfillmentResponsibility}`,
                     }))}
                     onValueChange={(value: string) => {

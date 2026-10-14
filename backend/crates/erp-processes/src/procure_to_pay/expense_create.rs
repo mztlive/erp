@@ -13,7 +13,7 @@ use erp_procurement::dto::purchase_order::{
 use erp_procurement::entity::purchase_order::{
     BasisScope, CreationReceipt, FulfillmentResponsibility, PurchaseCommandReceipt,
     PurchaseCommandReceiptIdentity, PurchaseOrder, PurchaseOrderData, PurchaseOrderSubmission,
-    PurchaseOrderSubmissionLine, PurchaseType,
+    PurchaseOrderSubmissionLine, PurchaseType, SupplyPriceBasis,
 };
 use erp_procurement::repository::PurchaseCommandExt;
 use erp_procurement::service::purchase_order::creation_basis::build_draft_submission;
@@ -201,6 +201,8 @@ async fn prepare_expense_draft(
         purchase_type: PurchaseType::Expense,
         payment_term_code: order.payment_term_code.clone(),
         fulfillment_responsibility: FulfillmentResponsibility::NotApplicable,
+        // 费用采购单不选择供给；价格依据只为满足依据范围结构，不写入采购单。
+        price_basis: SupplyPriceBasis::Dropship,
     };
     let supplier_name = supplier_name(db, &command.req, executor).await?;
     let payment_subject =

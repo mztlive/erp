@@ -221,6 +221,7 @@
     "data": {
       "warehouse_code": "DEMO-MD-W-01",
       "name": "杭州下沙仓",
+      "region_code": "330114",
       "address": "杭州市钱塘区下沙街道文泽路88号",
       "contact": "仓管周宁",
       "effective_from": "2026-01-01",
@@ -234,6 +235,7 @@
     "data": {
       "warehouse_code": "DEMO-MD-W-02",
       "name": "广州黄埔仓",
+      "region_code": "440112",
       "address": "广州市黄埔区开发大道358号",
       "contact": "仓管陈立",
       "effective_from": "2026-01-01",
@@ -247,6 +249,7 @@
     "data": {
       "warehouse_code": "DEMO-MD-W-03",
       "name": "成都双流仓",
+      "region_code": "510116",
       "address": "成都市双流区物流大道166号",
       "contact": "仓管刘畅",
       "effective_from": "2026-01-01",
@@ -260,6 +263,7 @@
     "data": {
       "warehouse_code": "DEMO-MD-W-04",
       "name": "上海外高桥仓",
+      "region_code": "310115",
       "address": "上海市浦东新区外高桥保税区美盛路168号",
       "contact": "仓管王磊",
       "effective_from": "2026-01-01",
@@ -273,6 +277,7 @@
     "data": {
       "warehouse_code": "DEMO-MD-W-05",
       "name": "武汉东西湖仓",
+      "region_code": "420112",
       "address": "武汉市东西湖区走马岭食品一路",
       "contact": "仓管赵敏",
       "effective_from": "2026-01-01",
@@ -286,6 +291,7 @@
     "data": {
       "warehouse_code": "DEMO-MD-W-06",
       "name": "西安浐灞仓",
+      "region_code": "610111",
       "address": "西安市浐灞生态区灞柳一路",
       "contact": "仓管孙浩",
       "effective_from": "2026-01-01",

@@ -46,7 +46,9 @@ const deliveryAllocationsSchema = z
         z.object({
             recipient: z.string().trim().min(1, "请填写收货人").max(64),
             phone: z.string().trim().min(1, "请填写联系电话").max(32),
-            address: z.string().trim().min(1, "请填写完整收货地址").max(512),
+            region_code: z.string().min(1, "请选择收货地区（到区县）"),
+            region_name: z.string().optional(),
+            address: z.string().trim().min(1, "请填写详细地址").max(512),
             quantity: decimalInput("分配数量", 6, { positive: true }),
         }),
     )

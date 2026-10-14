@@ -4,6 +4,8 @@ import { apiGet } from "@/lib/api"
 export type PurchaseDeliveryAddressOption = {
     recipient: string
     phone: string
+    region_code: string
+    region_name: string
     address: string
     /** 扣除其他采购后本采购最多可分配数量。 */
     availableQuantity: string
@@ -49,6 +51,8 @@ type BackendPurchaseDeliveryOptions = {
         addresses: Array<{
             recipient: string
             phone: string
+            region_code: string
+            region_name: string
             address: string
             available_quantity: string
         }>
@@ -80,6 +84,8 @@ export async function fetchPurchaseDeliveryOptions(
         addresses: line.addresses.map((row) => ({
             recipient: row.recipient,
             phone: row.phone,
+            region_code: row.region_code,
+            region_name: row.region_name,
             address: row.address,
             availableQuantity: row.available_quantity,
         })),

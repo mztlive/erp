@@ -16,6 +16,8 @@ pub type SupplierFulfillmentItemRepository<'a> =
     persistence_core::Repository<'a, crate::entity::supplier_fulfillment::SupplierFulfillmentItem>;
 pub type SupplierFulfillmentOrderRepository<'a> =
     persistence_core::Repository<'a, crate::entity::supplier_fulfillment::SupplierFulfillmentOrder>;
+pub type SupplierDeliveryTemplateRepository<'a> =
+    persistence_core::Repository<'a, crate::entity::supplier_offering::SupplierDeliveryTemplate>;
 pub type SupplierOfferingRepository<'a> =
     persistence_core::Repository<'a, crate::entity::supplier_offering::SupplierOffering>;
 pub type SupplierOfferingAvailabilityRepository<'a> =
