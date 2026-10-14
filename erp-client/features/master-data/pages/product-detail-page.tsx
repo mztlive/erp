@@ -3,14 +3,12 @@
 import { useChangeConfirmation } from "../hooks/use-change-confirmation"
 
 import * as React from "react"
-import { SaveIcon } from "lucide-react"
 import {
     DiscardConfirmDialog,
     PageScaffold,
     surfacePanelClassName,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { LoadingButton } from "@/components/ui/loading-button"
 import {
     ProductBasicSection,
     ProductHistorySection,
@@ -26,7 +24,6 @@ import { ProductSectionTabs } from "@/features/master-data/components/product/pr
 import { ProductSaveDialog } from "@/features/master-data/components/product/product-save-dialog"
 import { createProductFormBindings } from "@/features/master-data/lib/product-form-bindings"
 import { productChangeSummary } from "@/features/master-data/lib/product-change-summary"
-import { formatEffectiveRange } from "@/features/master-data/lib/filter"
 import { useProductEditor } from "@/features/master-data/hooks/use-product-editor"
 import { cn } from "@/lib/utils"
 
@@ -120,10 +117,10 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
         >
             <form.Subscribe
                 selector={(state) =>
-                    [state.values, state.isSubmitting, state.isDirty] as const
+                    [state.values, state.isSubmitting] as const
                 }
             >
-                {([values, isSubmitting, isDirty]) => {
+                {([values, isSubmitting]) => {
                     const bindings = createProductFormBindings(
                         form,
                         values,
@@ -208,6 +205,11 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                     onBack={() => navigateAway(listHref)}
                                     onMedia={() => setActiveSection("media")}
                                     onSave={() => requestSave(values)}
+                                    onReset={
+                                        changes.length > 0
+                                            ? () => setResetOpen(true)
+                                            : undefined
+                                    }
                                 />
                                 {!showSave ? feedback : null}
                                 <div
@@ -375,67 +377,6 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                         ) : null}
                                     </div>
                                 </div>
-                                {!isCreate && data ? (
-                                    <div className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
-                                        <span>
-                                            版本{" "}
-                                            {data.currentRevision.revisionNo} ·{" "}
-                                            {formatEffectiveRange(
-                                                data.currentRevision
-                                                    .effectiveFrom,
-                                                data.currentRevision
-                                                    .effectiveTo,
-                                            )}
-                                        </span>
-                                        <span>
-                                            {data.revisionTimingLabel} ·{" "}
-                                            {data.productConstraints
-                                                ?.hasFormalReferences
-                                                ? "已被业务单据引用"
-                                                : "尚未被业务单据引用"}
-                                        </span>
-                                    </div>
-                                ) : null}
-                                {isDirty && canRevise ? (
-                                    <div
-                                        className="sticky bottom-0 z-20 flex flex-wrap items-center gap-3 border-t border-border bg-card py-4"
-                                        role="region"
-                                        aria-label="未保存的修改"
-                                    >
-                                        <div className="min-w-0 flex-1">
-                                            <p className="text-sm font-medium">
-                                                有修改未保存
-                                            </p>
-                                            <p className="truncate text-xs text-muted-foreground">
-                                                {changes
-                                                    .slice(0, 2)
-                                                    .join(" · ") ||
-                                                    "完成编辑后保存更新"}
-                                            </p>
-                                        </div>
-                                        <Button
-                                            id="master-data-product-detail-reset"
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            disabled={saving}
-                                            onClick={() => setResetOpen(true)}
-                                        >
-                                            取消修改
-                                        </Button>
-                                        <LoadingButton
-                                            id="master-data-product-detail-save-bottom"
-                                            loading={saving}
-                                            type="button"
-                                            size="sm"
-                                            disabled={saving}
-                                            onClick={() => requestSave(values)}
-                                        >
-                                            <SaveIcon aria-hidden />
-                                            保存更新
-                                        </LoadingButton>
-                                    </div>
-                                ) : null}
                             </form>
                             {changeConfirmation.dialog}
                             {priceUndo ? (

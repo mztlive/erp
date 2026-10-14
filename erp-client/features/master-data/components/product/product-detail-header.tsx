@@ -37,6 +37,8 @@ type Props = {
     onBack: () => void
     onMedia: () => void
     onSave: () => void
+    /** 有未保存修改时提供；与保存并列放在页头，不另设底部保存条。 */
+    onReset?: () => void
 }
 
 export function ProductDetailHeader({
@@ -52,6 +54,7 @@ export function ProductDetailHeader({
     onBack,
     onMedia,
     onSave,
+    onReset,
 }: Props) {
     const image =
         fields.carouselPreviewUrls[fields.carouselImages[0]] ||
@@ -147,16 +150,33 @@ export function ProductDetailHeader({
                 </>
             }
             primaryAction={
-                <LoadingButton
-                    id="master-data-product-detail-header-submit"
-                    loading={pending}
-                    type="button"
-                    disabled={!canRevise || pending}
-                    onClick={onSave}
-                >
-                    <SaveIcon aria-hidden />
-                    {pending ? "提交中…" : isCreate ? "创建商品" : "保存更新"}
-                </LoadingButton>
+                <div className="flex items-center gap-2">
+                    {onReset && canRevise && !isCreate ? (
+                        <Button
+                            id="master-data-product-detail-reset"
+                            type="button"
+                            variant="outline"
+                            disabled={pending}
+                            onClick={onReset}
+                        >
+                            取消修改
+                        </Button>
+                    ) : null}
+                    <LoadingButton
+                        id="master-data-product-detail-header-submit"
+                        loading={pending}
+                        type="button"
+                        disabled={!canRevise || pending}
+                        onClick={onSave}
+                    >
+                        <SaveIcon aria-hidden />
+                        {pending
+                            ? "提交中…"
+                            : isCreate
+                              ? "创建商品"
+                              : "保存更新"}
+                    </LoadingButton>
+                </div>
             }
         />
     )
