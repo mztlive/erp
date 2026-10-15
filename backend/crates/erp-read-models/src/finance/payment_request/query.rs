@@ -12,6 +12,7 @@ use erp_workflow::dto::work_item::WorkItemAllowedAction;
 use erp_workflow::{DocumentType, WorkItemExt, WorkItemStatus, WorkItemType};
 use persistence_core::{Executor, Transactional};
 
+use super::list::PaymentRequestList;
 use super::previews::frozen_previews;
 use super::{PaymentRequestCurrentLine, PurchasePaymentRequestReadService, PurchasePaymentRequestView};
 use crate::approval_runtime::load_document_runtime_for_instance;
@@ -35,7 +36,7 @@ impl PurchasePaymentRequestReadService {
     ) -> Result<PageView<PurchasePaymentRequestView>> {
         let this = self.clone();
         let actor = actor.clone();
-        let query = query.clone();
+        let query = query.clone().normalize()?;
         self.db
             .client()
             .clone()
@@ -136,16 +137,16 @@ impl PurchasePaymentRequestReadService {
                 rows.push(row);
             }
         }
-        let total = i64::try_from(rows.len()).map_err(|_| Error::Internal("付款申请总数超过范围".into()))?;
-        let page = query.page.unwrap_or(1).max(1);
-        let page_size = query.page_size.unwrap_or(20).clamp(1, 100);
-        let start = page.saturating_sub(1).saturating_mul(u64::from(page_size));
-        let start = usize::try_from(start).unwrap_or(usize::MAX);
-        let mut items = Vec::new();
-        for row in rows.into_iter().skip(start).take(usize::try_from(page_size).unwrap_or(100)) {
+        let mut applicant_ids: Vec<_> = rows.iter().map(|row| row.created_by.clone()).collect();
+        applicant_ids.sort();
+        applicant_ids.dedup();
+        let names = self.db.accounts().names_by_ids(&applicant_ids, executor).await?;
+        let page = PaymentRequestList::page(rows, &names, query)?;
+        let mut items = Vec::with_capacity(page.items.len());
+        for row in page.items {
             items.push(self.view(row, executor).await?);
         }
-        Ok(PageView { items, total, page, page_size })
+        Ok(PageView { items, total: page.total, page: page.page, page_size: page.page_size })
     }
 
     pub(super) async fn load(&self, id: &str, executor: &mut dyn Executor) -> Result<PurchasePaymentRequest> {

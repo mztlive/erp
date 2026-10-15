@@ -44,8 +44,67 @@ pub struct PurchasePaymentRequestQuery {
     pub created_by: Option<String>,
     pub status: Option<PurchasePaymentRequestStatus>,
     pub q: Option<String>,
+    pub view: Option<PaymentRequestListView>,
+    pub request_no: Option<String>,
+    pub supplier_name: Option<String>,
+    pub payer_party_name: Option<String>,
+    pub applicant_name: Option<String>,
+    pub purchase_order_no: Option<String>,
+    pub sort_by: Option<PaymentRequestSort>,
+    pub sort_desc: Option<bool>,
     pub page: Option<u64>,
     pub page_size: Option<u32>,
+}
+
+/// 列表分类；草稿包含未提交、驳回及撤回，其他已提交状态属于有效。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PaymentRequestListView {
+    Effective,
+    Draft,
+}
+
+/// 允许在授权结果集上执行的全局排序字段。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PaymentRequestSort {
+    RequestNo,
+    Supplier,
+    Applicant,
+    Amount,
+    Paid,
+    Unpaid,
+    Date,
+    Status,
+}
+
+impl PurchasePaymentRequestQuery {
+    /// 规范化列表文本与分页，拒绝过长的查询条件。
+    ///
+    /// # 参数
+    /// 消费请求查询条件。
+    /// # 返回
+    /// 返回去除首尾空格、空条件和有界分页的查询。
+    /// # 错误
+    /// 任一文本条件超过 200 字符时拒绝。
+    pub fn normalize(mut self) -> Result<Self> {
+        for value in [
+            &mut self.q,
+            &mut self.request_no,
+            &mut self.supplier_name,
+            &mut self.payer_party_name,
+            &mut self.applicant_name,
+            &mut self.purchase_order_no,
+        ] {
+            *value = value.take().map(|text| text.trim().to_owned()).filter(|text| !text.is_empty());
+            if value.as_ref().is_some_and(|text| text.chars().count() > 200) {
+                return Err(Error::from("查询条件不能超过 200 个字符"));
+            }
+        }
+        self.page = Some(self.page.unwrap_or(1).max(1));
+        self.page_size = Some(self.page_size.unwrap_or(20).clamp(1, 100));
+        Ok(self)
+    }
 }
 
 /// 一次操作原子创建并提交多份独立申请，命令身份用于恢复原结果。
@@ -138,6 +197,47 @@ mod batch_tests {
         assert!(
             CreatePaymentRequestBatch { idempotency_key: " ".into(), requests: vec![request("a")] }
                 .normalize()
+                .is_err()
+        );
+    }
+}
+
+#[cfg(test)]
+mod list_query_tests {
+    use super::*;
+
+    #[test]
+    fn normalizes_filters_and_bounds_pagination() {
+        let query = PurchasePaymentRequestQuery {
+            applicant_name: Some(" 陈国平 ".into()),
+            request_no: Some("  ".into()),
+            page: Some(0),
+            page_size: Some(1000),
+            ..Default::default()
+        }
+        .normalize()
+        .unwrap();
+        assert_eq!(query.applicant_name.as_deref(), Some("陈国平"));
+        assert_eq!(query.request_no, None);
+        assert_eq!((query.page, query.page_size), (Some(1), Some(100)));
+        assert_eq!(PurchasePaymentRequestQuery::default().normalize().unwrap().page_size, Some(20));
+    }
+
+    #[test]
+    fn rejects_overlong_filters_and_unknown_view_or_sort() {
+        let query =
+            PurchasePaymentRequestQuery { supplier_name: Some("字".repeat(201)), ..Default::default() };
+        assert!(query.normalize().is_err());
+        assert!(
+            serde_json::from_value::<PurchasePaymentRequestQuery>(serde_json::json!({"view": "all"}))
+                .is_err()
+        );
+        assert!(
+            serde_json::from_value::<PurchasePaymentRequestQuery>(serde_json::json!({"sort_by": "$where"}))
+                .is_err()
+        );
+        assert!(
+            serde_json::from_value::<PurchasePaymentRequestQuery>(serde_json::json!({"sort_desc": "desc"}))
                 .is_err()
         );
     }

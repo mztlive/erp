@@ -5,6 +5,7 @@ import {
     useMutation,
     useQuery,
     useQueryClient,
+    type Query,
 } from "@tanstack/react-query"
 
 import { workItemKeys } from "@/features/work-items/queries"
@@ -40,12 +41,24 @@ export const approvalKeys = {
         [...approvalKeys.all, "recovery-options", instanceId] as const,
 }
 
+/** 详情和附件材料共享申请与任务身份；完成后不再自动读取该任务。 */
+const isCompletedPaymentTask = (query: Query, workItemId?: string) =>
+    Boolean(workItemId) &&
+    query.queryKey[0] === "purchase-payment-requests" &&
+    query.queryKey[1] === "detail" &&
+    query.queryKey[3] === workItemId
+
 /**
  * 命令成功后精确失效任务、实例和对应业务单据。
  */
 const invalidateApprovalCaches = async (
     queryClient: ReturnType<typeof useQueryClient>,
-    input?: { instanceId?: string; documentType?: string; documentId?: string },
+    input?: {
+        instanceId?: string
+        documentType?: string
+        documentId?: string
+        completedWorkItemId?: string
+    },
 ) => {
     await Promise.all([
         queryClient.invalidateQueries({ queryKey: workItemKeys.all }),
@@ -65,7 +78,13 @@ const invalidateApprovalCaches = async (
             "customer-receivables",
             "supplier-payables",
             "stock-adjustments",
-        ].map((root) => queryClient.invalidateQueries({ queryKey: [root] })),
+        ].map((root) =>
+            queryClient.invalidateQueries({
+                queryKey: [root],
+                predicate: (query) =>
+                    !isCompletedPaymentTask(query, input?.completedWorkItemId),
+            }),
+        ),
         input?.instanceId
             ? queryClient.invalidateQueries({
                   queryKey: approvalKeys.instance(input.instanceId),
@@ -117,13 +136,28 @@ export const useRecoveryOptionsQuery = (
 /**
  * 提交通过或驳回。成功后刷新任务、实例和单据缓存。
  */
-export const useSubmitDecisionMutation = () => {
+export const useSubmitDecisionMutation = (
+    onApplied?: (view: ApprovalCommandView) => void,
+) => {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: submitDecision,
-        onSuccess: async (view) => {
+        onSuccess: async (view, command) => {
+            const completedTask = {
+                predicate: (query: Query) =>
+                    isCompletedPaymentTask(query, command.work_item_id),
+            }
+            // 取消在途材料读取，并仅标记过期；不能再用已完成任务触发重查。
+            await queryClient.cancelQueries(completedTask)
+            await queryClient.invalidateQueries({
+                ...completedTask,
+                refetchType: "none",
+            })
+            // 刷新可能撤销旧任务读取资格并卸载作业面，先交付完成通知。
+            onApplied?.(view)
             await invalidateApprovalCaches(queryClient, {
                 instanceId: view.instanceId,
+                completedWorkItemId: command.work_item_id,
             })
         },
     })

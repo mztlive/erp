@@ -62,12 +62,15 @@ export function DecisionDialog({
     onApplied?: (view: ApprovalCommandView) => void
     id?: string
 }) {
-    const submitDecision = useSubmitDecisionMutation()
+    const submitDecision = useSubmitDecisionMutation((view) => {
+        setConflictMessage(null)
+        onOpenChange(false)
+        onApplied?.(view)
+    })
     const [slot, setSlot] = React.useState<IdempotencySlot | null>(null)
     const [conflictMessage, setConflictMessage] = React.useState<string | null>(
         null,
     )
-    const appliedViewRef = React.useRef<ApprovalCommandView | null>(null)
     const canApprove = allowedActions.includes("APPROVE")
     const canReject = allowedActions.includes("REJECT")
     const closesPaymentRequest = documentType === "purchase_payment_request"
@@ -96,7 +99,7 @@ export function DecisionDialog({
             )
             setSlot(nextSlot)
             try {
-                const view = await submitDecision.mutateAsync(
+                await submitDecision.mutateAsync(
                     buildDecisionRequest({
                         workItemId,
                         decision: value.decision,
@@ -105,9 +108,6 @@ export function DecisionDialog({
                         idempotencyKey: nextSlot.key,
                     }),
                 )
-                setConflictMessage(null)
-                appliedViewRef.current = view
-                onOpenChange(false)
             } catch (error) {
                 if (isApprovalConflict(error)) {
                     setConflictMessage(approvalConflictMessage(error))
@@ -123,20 +123,10 @@ export function DecisionDialog({
         form.reset({ decision: defaultDecision, reason: "" })
         setSlot(null)
         setConflictMessage(null)
-        appliedViewRef.current = null
     }, [defaultDecision, form, open])
 
     return (
-        <Dialog
-            open={open}
-            onOpenChange={onOpenChange}
-            onOpenChangeComplete={(nextOpen) => {
-                if (nextOpen || !appliedViewRef.current) return
-                const view = appliedViewRef.current
-                appliedViewRef.current = null
-                onApplied?.(view)
-            }}
-        >
+        <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent closeButtonId={`${id}-close`}>
                 <DialogHeader>
                     <DialogTitle>

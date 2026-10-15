@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { getErrorMessage } from "@/lib/api"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
@@ -17,6 +18,7 @@ export function PurchasePaymentRequestTask({
     onDecisionApplied?: (view: ApprovalCommandView) => void
     onTaskCompleted?: () => void
 }) {
+    const [completed, setCompleted] = useState(false)
     const scoped =
         item.workItemType !== "APPROVAL_INSTANCE" &&
         item.allowedActions.some(
@@ -28,7 +30,15 @@ export function PurchasePaymentRequestTask({
     const query = usePaymentRequestQuery(
         item.businessObjectId,
         scoped ? item.workItemId : undefined,
+        !completed,
     )
+    // 完成后旧任务不再具备材料读取资格，等待队列切换时不展示其刷新错误。
+    if (completed)
+        return (
+            <p role="status" className="p-7 text-sm text-muted-foreground">
+                当前任务已处理，正在更新待办…
+            </p>
+        )
     if (query.isPending)
         return (
             <p className="p-7 text-sm text-muted-foreground">
@@ -55,8 +65,14 @@ export function PurchasePaymentRequestTask({
             <RequestDetail
                 request={query.data}
                 task={item}
-                onDecisionApplied={onDecisionApplied}
-                onTaskCompleted={onTaskCompleted}
+                onDecisionApplied={(view) => {
+                    setCompleted(true)
+                    onDecisionApplied?.(view)
+                }}
+                onTaskCompleted={() => {
+                    setCompleted(true)
+                    onTaskCompleted?.()
+                }}
             />
         </div>
     )

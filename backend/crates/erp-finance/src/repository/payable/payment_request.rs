@@ -4,9 +4,11 @@ use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use mongodb::options::FindOptions;
-use persistence_core::{Error, Executor, PageResult, Repository, Result, mongo_ops};
+use persistence_core::{
+    Error, Executor, PageResult, Repository, Result, insert_literal_regex_filter, mongo_ops,
+};
 
-use crate::dto::payable::payment_request::PurchasePaymentRequestQuery;
+use crate::dto::payable::payment_request::{PaymentRequestListView, PurchasePaymentRequestQuery};
 use crate::entity::payable::PurchasePaymentRequest;
 
 /// 付款申请集合访问器，索引与仓储共用此集合常量。
@@ -158,6 +160,23 @@ fn query_doc(query: &PurchasePaymentRequestQuery) -> Document {
             filter.insert(field, value);
         }
     }
+    for (field, value) in [
+        ("request_no", &query.request_no),
+        ("lines.0.source_snapshot.purchase_preview.supplier_name", &query.supplier_name),
+        ("payer_party_name", &query.payer_party_name),
+        ("lines.source_snapshot.purchase_preview.purchase_no", &query.purchase_order_no),
+    ] {
+        insert_literal_regex_filter(&mut filter, field, value.as_deref().map(str::trim));
+    }
+    if let Some(view) = query.view {
+        let statuses = match view {
+            PaymentRequestListView::Draft => vec!["draft", "rejected", "withdrawn"],
+            PaymentRequestListView::Effective => {
+                vec!["in_approval", "approved", "partially_paid", "paid", "closed"]
+            },
+        };
+        filter.insert("$and", vec![doc! {"status": {"$in": statuses}}]);
+    }
     if let Some(status) = query.status {
         filter.insert("status", status.as_str());
     }
@@ -165,10 +184,73 @@ fn query_doc(query: &PurchasePaymentRequestQuery) -> Document {
         let mut terms = Vec::new();
         for field in ["request_no", "data.reason", "payer_party_name"] {
             let mut term = doc! {};
-            persistence_core::insert_literal_regex_filter(&mut term, field, Some(q.trim()));
+            insert_literal_regex_filter(&mut term, field, Some(q.trim()));
             terms.push(term);
         }
         filter.insert("$or", terms);
     }
     filter
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::entity::payable::PurchasePaymentRequestStatus;
+
+    #[test]
+    fn independent_filters_are_combined_and_regex_characters_are_literal() {
+        let query = PurchasePaymentRequestQuery {
+            view: Some(PaymentRequestListView::Effective),
+            request_no: Some(" FKSQ.1 ".into()),
+            supplier_name: Some("供应商+".into()),
+            payer_party_name: Some("我方".into()),
+            purchase_order_no: Some("CG[1]".into()),
+            status: Some(PurchasePaymentRequestStatus::Closed),
+            ..Default::default()
+        }
+        .normalize()
+        .unwrap();
+        let filter = query_doc(&query);
+        assert_eq!(filter.get_document("request_no").unwrap(), &doc! {"$regex": r"FKSQ\.1", "$options": "i"});
+        assert_eq!(
+            filter.get_document("lines.0.source_snapshot.purchase_preview.supplier_name").unwrap(),
+            &doc! {"$regex": r"供应商\+", "$options": "i"}
+        );
+        assert_eq!(
+            filter.get_document("payer_party_name").unwrap(),
+            &doc! {"$regex": "我方", "$options": "i"}
+        );
+        assert_eq!(
+            filter.get_document("lines.source_snapshot.purchase_preview.purchase_no").unwrap(),
+            &doc! {"$regex": r"CG\[1\]", "$options": "i"}
+        );
+        assert_eq!(filter.get_str("status").unwrap(), "closed");
+        let views = filter.get_array("$and").unwrap()[0]
+            .as_document()
+            .unwrap()
+            .get_document("status")
+            .unwrap()
+            .get_array("$in")
+            .unwrap();
+        assert!(views.contains(&"closed".into()));
+        assert!(!views.contains(&"draft".into()));
+    }
+
+    #[test]
+    fn draft_view_keeps_rejected_and_withdrawn_and_empty_text_has_no_filter() {
+        let query = PurchasePaymentRequestQuery {
+            view: Some(PaymentRequestListView::Draft),
+            supplier_name: Some("  ".into()),
+            ..Default::default()
+        }
+        .normalize()
+        .unwrap();
+        let filter = query_doc(&query);
+        assert_eq!(
+            filter.get_array("$and").unwrap(),
+            &vec![doc! {"status": {"$in": ["draft", "rejected", "withdrawn"]}}.into()]
+        );
+        assert!(!filter.contains_key("lines.0.source_snapshot.purchase_preview.supplier_name"));
+        assert_eq!(filter.get_i64("deleted_at").unwrap(), NOT_DELETED_TIMESTAMP_BSON);
+    }
 }

@@ -63,6 +63,15 @@ const isProfile = (query: Query) =>
 /** 独立目录按类别隔离；业务查询按所属资源失效，不跨到其他查询族。 */
 function scopeFamily(query: Query): string {
     const key = query.queryKey
+    // 付款材料按任务授权；一笔任务结束后的 403 不代表其他申请也失去资格。
+    if (
+        key[0] === "purchase-payment-requests" &&
+        key[1] === "detail" &&
+        typeof key[3] === "string" &&
+        key[3].length > 0
+    ) {
+        return JSON.stringify(key.slice(0, 4))
+    }
     // 期间配置与各经营口径独立授权；配置缺失不能撤下已成功查询的经营结果。
     if (key[0] === "customer-quality") {
         return JSON.stringify(key.slice(0, key[1] === "dual" ? 3 : 2))

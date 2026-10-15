@@ -1,3 +1,4 @@
+import type { RequestListQuery } from "../lib/list-query"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
     commandRequest,
@@ -20,10 +21,14 @@ export const paymentRequestKeys = {
     detail: (id: string, workItemId?: string) =>
         ["purchase-payment-requests", "detail", id, workItemId ?? ""] as const,
 }
-export function usePaymentRequestsQuery() {
+export function usePaymentRequestsQuery(
+    query: RequestListQuery,
+    enabled = true,
+) {
     return useQuery({
-        queryKey: paymentRequestKeys.list,
-        queryFn: fetchRequests,
+        queryKey: [...paymentRequestKeys.list, query],
+        queryFn: () => fetchRequests(query),
+        enabled,
     })
 }
 export function usePaymentCandidatesQuery(enabled = true) {
@@ -33,11 +38,15 @@ export function usePaymentCandidatesQuery(enabled = true) {
         enabled,
     })
 }
-export function usePaymentRequestQuery(id: string, workItemId?: string) {
+export function usePaymentRequestQuery(
+    id: string,
+    workItemId?: string,
+    enabled = true,
+) {
     return useQuery({
         queryKey: paymentRequestKeys.detail(id, workItemId),
         queryFn: () => fetchRequest(id, workItemId),
-        enabled: Boolean(id),
+        enabled: enabled && Boolean(id),
     })
 }
 export function usePaymentSubmissionQuery(

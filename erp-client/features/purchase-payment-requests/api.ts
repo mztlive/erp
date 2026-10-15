@@ -1,3 +1,4 @@
+import type { RequestListQuery } from "./lib/list-query"
 import {
     apiGet,
     apiGetBlob,
@@ -280,18 +281,11 @@ export async function fetchCandidates() {
         mapCandidate,
     )
 }
-export async function fetchRequests() {
-    const rows: RequestDto[] = []
-    for (let page = 1; page <= 100; page += 1) {
-        const dto = await apiGet<Page<RequestDto>>(ROOT, {
-            page,
-            page_size: 100,
-        })
-        rows.push(...dto.items)
-        if (rows.length >= dto.total || dto.items.length === 0) break
-    }
-    return rows.map(mapRequest)
+export async function fetchRequests(query: RequestListQuery) {
+    const dto = await apiGet<Page<RequestDto>>(ROOT, query)
+    return { ...dto, items: dto.items.map(mapRequest) }
 }
+
 function readRequestDto(id: string, workItemId?: string) {
     return apiGet<RequestDto>(
         workItemId

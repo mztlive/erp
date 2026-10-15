@@ -7,6 +7,7 @@ mod candidates;
 mod dto;
 mod entries;
 mod freshness;
+mod list;
 mod materials;
 mod payments;
 mod previews;

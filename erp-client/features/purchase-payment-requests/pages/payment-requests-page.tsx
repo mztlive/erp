@@ -18,11 +18,13 @@ import {
     listWorkspaceStyles,
 } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { getErrorMessage } from "@/lib/api"
 import { hasPermission } from "@/lib/permissions"
-import { paymentRequestKeys, usePaymentRequestsQuery } from "../hooks/queries"
+import { paymentRequestKeys } from "../hooks/queries"
+import { useRequestList } from "../hooks/use-request-list"
+import { emptyRequestFilters } from "../lib/list-query"
+import { RequestListFilters } from "../components/request-list-filters"
 import { requestStatusLabel, requestStatusTone } from "../lib/display"
 import type { PaymentRequest } from "../types"
 import { PaymentCandidatesList } from "../components/payment-candidates-list"
@@ -36,18 +38,15 @@ export function PaymentRequestsPage({
     purchaseOrderId?: string
     create?: boolean
 }) {
-    const query = usePaymentRequestsQuery()
+    const list = useRequestList()
+    const { query } = list
+    const view = list.url.view
     const queryClient = useQueryClient()
     const profile = useAccountProfileQuery()
     const [createOpen, setCreateOpen] = useState(create)
-    const [view, setView] = useState<"effective" | "available" | "draft">(
-        "effective",
-    )
     const [initialPayableAccountIds, setInitialPayableAccountIds] = useState<
         string[]
     >([])
-    const [search, setSearch] = useState("")
-    const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 50 })
     const [preview, setPreview] = useState<PaymentRequest | null>(null)
     const canCreate =
         hasPermission(
@@ -58,22 +57,7 @@ export function PaymentRequestsPage({
             profile.data?.permissions,
             "purchase_payment_request:submit",
         )
-    const isDraft = (request: PaymentRequest) =>
-        ["draft", "rejected", "withdrawn"].includes(request.status)
-    const rows = (query.data ?? []).filter(
-        (request) =>
-            (view === "draft" ? isDraft(request) : !isDraft(request)) &&
-            [
-                request.request_no,
-                request.supplier_name,
-                request.our_company_name,
-                request.applicant_name,
-                ...request.lines.map((line) => line.purchase_order_no),
-            ]
-                .join(" ")
-                .toLowerCase()
-                .includes(search.trim().toLowerCase()),
-    )
+    const rows = query.data?.items ?? []
     const views = (
         <ListWorkspaceViews
             ariaLabel="付款申请分类"
@@ -88,9 +72,11 @@ export function PaymentRequestsPage({
                 label,
                 active: view === value,
                 onClick: () => {
-                    setView(value)
-                    setSearch("")
-                    setPagination((current) => ({ ...current, pageIndex: 0 }))
+                    list.update({
+                        ...emptyRequestFilters,
+                        view: value,
+                        page: 1,
+                    })
                     setPreview(null)
                 },
             }))}
@@ -163,66 +149,62 @@ export function PaymentRequestsPage({
                     views={views}
                     ariaLabel="付款申请列表"
                     toolbar={
-                        <div className="space-y-2 py-3">
-                            <Input
-                                id="purchase-payment-requests-search"
-                                className="max-w-md"
-                                value={search}
-                                placeholder="搜索申请单、供应商、采购单或申请人"
-                                aria-label="搜索付款申请"
-                                onChange={(event) => {
-                                    setSearch(event.target.value)
-                                    setPagination((current) => ({
-                                        ...current,
-                                        pageIndex: 0,
-                                    }))
-                                }}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                {view === "draft"
-                                    ? "未提交、已驳回和已撤回的申请，可修改后提交。"
-                                    : "已提交的申请及付款记录，包含已关闭申请。"}
-                            </p>
-                        </div>
+                        <RequestListFilters
+                            key={JSON.stringify([view, list.applied])}
+                            applied={list.applied}
+                            view={view}
+                            onApply={(filters) => {
+                                list.update({ ...filters, page: 1 })
+                                setPreview(null)
+                            }}
+                        />
                     }
                     table={
                         <>
-                            {query.isError && (
-                                <div
-                                    role="alert"
-                                    className="py-6 text-sm text-destructive"
-                                >
-                                    {getErrorMessage(
-                                        query.error,
-                                        "付款申请查询失败，请刷新后重试",
-                                    )}
-                                </div>
-                            )}
                             <DataTable
                                 idPrefix="purchase-payment-requests-table"
                                 data={rows}
-                                rowCount={rows.length}
+                                rowCount={query.data?.total ?? 0}
                                 columns={requestColumns}
-                                manualPagination={false}
-                                manualSorting={false}
-                                pagination={{
-                                    ...pagination,
-                                    pageIndex: Math.min(
-                                        pagination.pageIndex,
-                                        Math.max(
-                                            0,
-                                            Math.ceil(
-                                                rows.length /
-                                                    pagination.pageSize,
-                                            ) - 1,
-                                        ),
-                                    ),
+                                manualPagination
+                                manualSorting
+                                sorting={list.sorting}
+                                onSortingChange={(next) => {
+                                    list.sort(next)
+                                    setPreview(null)
                                 }}
-                                onPaginationChange={setPagination}
+                                pagination={{
+                                    pageIndex: list.url.page - 1,
+                                    pageSize: list.url.page_size,
+                                }}
+                                pageSizeOptions={[20, 50, 100]}
+                                onPaginationChange={(next) => {
+                                    list.update({
+                                        page:
+                                            next.pageSize === list.url.page_size
+                                                ? next.pageIndex + 1
+                                                : 1,
+                                        page_size: next.pageSize,
+                                    })
+                                    setPreview(null)
+                                }}
                                 getRowId={(row) => row.id}
                                 onRowPreview={setPreview}
                                 highlightedRowId={preview?.id}
-                                loading={query.isPending}
+                                loading={query.isFetching}
+                                errorState={
+                                    query.isError ? (
+                                        <p
+                                            role="alert"
+                                            className="py-6 text-sm text-destructive"
+                                        >
+                                            {getErrorMessage(
+                                                query.error,
+                                                "付款申请查询失败，请刷新后重试",
+                                            )}
+                                        </p>
+                                    ) : undefined
+                                }
                                 caption="采购付款申请"
                             />
                         </>

@@ -18,6 +18,11 @@ use crate::repository::{PurchasePaymentRequestExt, PurchasePaymentRequestSnapsho
 pub async fn ensure(db: &Database) -> Result<()> {
     db.collection::<Document>(<Database as PurchasePaymentRequestExt>::PURCHASE_PAYMENT_REQUESTS)
         .create_indexes(vec![
+            index(
+                "idx_purchase_payment_requests_list",
+                doc! {"deleted_at": 1, "created_at": -1, "id": -1},
+                false,
+            ),
             index("uk_purchase_payment_requests_id", doc! {"id": 1}, true),
             index("uk_purchase_payment_requests_no", doc! {"request_no": 1}, true),
             index("uk_purchase_payment_requests_work_item", doc! {"work_item_id": 1}, true),
