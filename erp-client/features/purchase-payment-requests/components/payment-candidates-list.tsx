@@ -1,13 +1,14 @@
 "use client"
 
-import { useState, type ReactNode } from "react"
-import type { ColumnDef, RowSelectionState } from "@tanstack/react-table"
+import { type ReactNode } from "react"
+import type { ColumnDef } from "@tanstack/react-table"
 import { DataTable, MoneyValue } from "@/components/business"
 import { ListWorkSurface } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { getErrorMessage } from "@/lib/api"
-import { usePaymentCandidatesQuery } from "../hooks/queries"
+import { useCandidateList } from "../hooks/use-candidate-list"
+import { useCandidateSelection } from "../hooks/use-candidate-selection"
+import { CandidateListFilters } from "./candidate-list-filters"
 import type { PaymentCandidate } from "../types"
 
 const columns: ColumnDef<PaymentCandidate>[] = [
@@ -70,59 +71,30 @@ export function PaymentCandidatesList({
     canCreate: boolean
     onApply: (ids: string[]) => void
 }) {
-    const query = usePaymentCandidatesQuery(canRead)
-    const [search, setSearch] = useState("")
-    const [selection, setSelection] = useState<RowSelectionState>({})
-    const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 50 })
-    const candidates = canRead ? (query.data ?? []) : []
-    const rows = candidates.filter((item) =>
-        [
-            item.purchase_order_no,
-            item.purchase_summary,
-            item.supplier_name,
-            item.our_company_name,
-        ]
-            .join(" ")
-            .toLowerCase()
-            .includes(search.trim().toLowerCase()),
-    )
-    // Refreshes may remove occupied sources. Never forward stale selections.
-    const selectedIds = candidates
-        .filter((item) => selection[item.payable_account_id])
-        .map((item) => item.payable_account_id)
-    const rowSelection = Object.fromEntries(selectedIds.map((id) => [id, true]))
-    const allSelected =
-        rows.length > 0 &&
-        rows.every((item) => rowSelection[item.payable_account_id])
+    const list = useCandidateList(canRead)
+    const { query } = list
+    const selection = useCandidateSelection(list.applied, onApply)
+    const rows = canRead ? (query.data?.items ?? []) : []
+    const total = canRead ? (query.data?.total ?? 0) : 0
+    const hasFilters = Object.values(list.applied).some((value) => value.trim())
     return (
         <ListWorkSurface
             ariaLabel="可申请采购单列表"
             views={views}
             toolbar={
-                <div className="space-y-2 py-3">
-                    <Input
-                        id="purchase-payment-candidates-search"
-                        className="max-w-md"
-                        value={search}
-                        placeholder="搜索采购单、采购内容、供应商或我方主体"
-                        aria-label="搜索可申请采购单"
-                        onChange={(event) => {
-                            setSearch(event.target.value)
-                            setPagination((current) => ({
-                                ...current,
-                                pageIndex: 0,
-                            }))
-                        }}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                        仅显示已生效、有可申请余额且你有申请资格的采购单。支持跨供应商勾选，按供应商和我方主体分别生成申请。
-                    </p>
-                </div>
+                <CandidateListFilters
+                    key={JSON.stringify(list.applied)}
+                    applied={list.applied}
+                    onApply={(filters) => {
+                        selection.cancelPending()
+                        list.update({ ...filters, page: 1 })
+                    }}
+                />
             }
             selectionBar={
                 <div className="flex flex-wrap items-center gap-2 text-sm">
                     <span className="text-muted-foreground">
-                        共 {rows.length} 张 · 已选 {selectedIds.length} 张
+                        共 {total} 张 · 已选 {selection.ids.length} 张
                     </span>
                     <Button
                         id="purchase-payment-candidates-select-all"
@@ -130,21 +102,12 @@ export function PaymentCandidatesList({
                         size="sm"
                         disabled={
                             !canCreate ||
-                            !rows.length ||
-                            allSelected ||
+                            !total ||
+                            selection.busy ||
+                            query.isFetching ||
                             query.isError
                         }
-                        onClick={() =>
-                            setSelection({
-                                ...rowSelection,
-                                ...Object.fromEntries(
-                                    rows.map((item) => [
-                                        item.payable_account_id,
-                                        true,
-                                    ]),
-                                ),
-                            })
-                        }
+                        onClick={() => void selection.select("all")}
                     >
                         全选筛选结果
                     </Button>
@@ -152,8 +115,11 @@ export function PaymentCandidatesList({
                         id="purchase-payment-candidates-clear"
                         variant="ghost"
                         size="sm"
-                        disabled={!selectedIds.length}
-                        onClick={() => setSelection({})}
+                        disabled={!selection.ids.length || selection.busy}
+                        onClick={() => {
+                            selection.setSelection({})
+                            selection.cancelPending()
+                        }}
                     >
                         清空
                     </Button>
@@ -162,7 +128,8 @@ export function PaymentCandidatesList({
                         size="sm"
                         disabled={
                             !canCreate ||
-                            !selectedIds.length ||
+                            !selection.ids.length ||
+                            selection.busy ||
                             query.isFetching ||
                             query.isError
                         }
@@ -171,11 +138,23 @@ export function PaymentCandidatesList({
                                 ? "当前账号需要采购付款申请的创建和提交权限"
                                 : undefined
                         }
-                        onClick={() => onApply(selectedIds)}
+                        onClick={() => void selection.select("apply")}
                     >
                         发起申请
-                        {selectedIds.length ? `（${selectedIds.length}）` : ""}
+                        {selection.busy
+                            ? "（正在核对…）"
+                            : selection.ids.length
+                              ? `（${selection.ids.length}）`
+                              : ""}
                     </Button>
+                    {selection.error && (
+                        <p
+                            role="alert"
+                            className="w-full text-sm text-destructive"
+                        >
+                            {selection.error}
+                        </p>
+                    )}
                 </div>
             }
             table={
@@ -183,27 +162,36 @@ export function PaymentCandidatesList({
                     idPrefix="purchase-payment-candidates-table"
                     columns={columns}
                     data={rows}
-                    rowCount={rows.length}
+                    rowCount={total}
                     getRowId={(row) => row.payable_account_id}
                     rowLabel={(row) => row.purchase_order_no}
-                    enableRowSelection={canCreate && !query.isError}
-                    rowSelection={rowSelection}
-                    onRowSelectionChange={setSelection}
+                    enableRowSelection={
+                        canCreate &&
+                        !query.isError &&
+                        !query.isFetching &&
+                        !selection.busy
+                    }
+                    rowSelection={selection.selection}
+                    onRowSelectionChange={selection.setSelection}
                     pagination={{
-                        ...pagination,
-                        pageIndex: Math.min(
-                            pagination.pageIndex,
-                            Math.max(
-                                0,
-                                Math.ceil(rows.length / pagination.pageSize) -
-                                    1,
-                            ),
-                        ),
+                        pageIndex: list.url.page - 1,
+                        pageSize: list.url.page_size,
                     }}
-                    onPaginationChange={setPagination}
-                    manualPagination={false}
-                    manualSorting={false}
-                    loading={canRead && query.isPending}
+                    onPaginationChange={(next) =>
+                        list.update({
+                            page:
+                                next.pageSize === list.url.page_size
+                                    ? next.pageIndex + 1
+                                    : 1,
+                            page_size: next.pageSize,
+                        })
+                    }
+                    pageSizeOptions={[20, 50, 100]}
+                    manualPagination
+                    manualSorting
+                    sorting={list.sorting}
+                    onSortingChange={list.sort}
+                    loading={canRead && query.isFetching}
                     errorState={
                         canRead && query.isError ? (
                             <p
@@ -220,13 +208,13 @@ export function PaymentCandidatesList({
                     emptyTitle={
                         !canRead
                             ? "当前账号没有采购付款申请的创建权限"
-                            : search.trim()
+                            : hasFilters
                               ? "没有匹配的采购单"
                               : "暂无可申请付款的采购单"
                     }
                     emptyDescription={
                         canRead
-                            ? "请确认采购已生效、仍有可申请余额，或调整搜索条件。"
+                            ? "请确认采购已生效、仍有可申请余额，或调整查询条件。"
                             : undefined
                     }
                     caption="可申请付款的采购单"

@@ -3,7 +3,7 @@
 import { useAppForm } from "@/components/form"
 import { ListWorkspaceFilterBar } from "@/components/business/list-workspace"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { PaymentListFilterInput } from "./payment-list-filter-input"
 import {
     emptyRequestFilters,
     requestFilterFields,
@@ -51,17 +51,13 @@ export function RequestListFilters({
                                         >
                                             {label}
                                         </label>
-                                        <Input
+                                        <PaymentListFilterInput
                                             id={`purchase-payment-requests-filter-${key.replaceAll("_", "-")}`}
+                                            name={key}
                                             value={field.state.value}
-                                            onChange={(event) =>
-                                                field.handleChange(
-                                                    event.target.value,
-                                                )
-                                            }
+                                            onValueChange={field.handleChange}
                                             onBlur={field.handleBlur}
                                             placeholder={placeholder}
-                                            maxLength={200}
                                         />
                                     </div>
                                 )}

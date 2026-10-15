@@ -1,5 +1,6 @@
 //! 采购付款申请 HTTP 边界；来源、金额、任务和事务由组合层执行。
 
+pub mod candidate_list;
 pub mod materials;
 pub mod payments;
 

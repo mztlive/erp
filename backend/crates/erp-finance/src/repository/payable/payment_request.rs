@@ -151,6 +151,7 @@ fn query_doc(query: &PurchasePaymentRequestQuery) -> Document {
     let mut filter = doc! {"deleted_at": NOT_DELETED_TIMESTAMP_BSON};
     for (field, value) in [
         ("supplier_id", &query.supplier_id),
+        ("payer_party_id", &query.payer_party_id),
         ("created_by", &query.created_by),
         ("work_item_id", &query.work_item_id),
         ("lines.purchase_order_id", &query.purchase_order_id),
@@ -196,6 +197,30 @@ fn query_doc(query: &PurchasePaymentRequestQuery) -> Document {
 mod tests {
     use super::*;
     use crate::entity::payable::PurchasePaymentRequestStatus;
+
+    #[test]
+    fn identity_filters_are_exact_and_clearing_removes_them() {
+        let query = PurchasePaymentRequestQuery {
+            supplier_id: Some(" supplier-1 ".into()),
+            payer_party_id: Some(" party-1 ".into()),
+            ..Default::default()
+        }
+        .normalize()
+        .unwrap();
+        let filter = query_doc(&query);
+        assert_eq!(filter.get_str("supplier_id").unwrap(), "supplier-1");
+        assert_eq!(filter.get_str("payer_party_id").unwrap(), "party-1");
+        let cleared = PurchasePaymentRequestQuery {
+            supplier_id: Some(" ".into()),
+            payer_party_id: Some("".into()),
+            ..Default::default()
+        }
+        .normalize()
+        .unwrap();
+        let filter = query_doc(&cleared);
+        assert!(!filter.contains_key("supplier_id"));
+        assert!(!filter.contains_key("payer_party_id"));
+    }
 
     #[test]
     fn independent_filters_are_combined_and_regex_characters_are_literal() {

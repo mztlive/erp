@@ -2,8 +2,8 @@ import { createUrlStateCodec } from "@/lib/url-state"
 
 export const requestFilterFields = [
     ["request_no", "申请单号", "申请单号"],
-    ["supplier_name", "供应商", "供应商名称"],
-    ["payer_party_name", "我方主体", "我方主体名称"],
+    ["supplier_id", "供应商", "供应商名称"],
+    ["payer_party_id", "我方主体", "我方主体名称"],
     ["applicant_name", "申请人", "申请人姓名"],
     ["purchase_order_no", "采购单号", "采购单号"],
 ] as const
@@ -14,8 +14,8 @@ export type RequestFilters = Record<
 >
 export const emptyRequestFilters: RequestFilters = {
     request_no: "",
-    supplier_name: "",
-    payer_party_name: "",
+    supplier_id: "",
+    payer_party_id: "",
     applicant_name: "",
     purchase_order_no: "",
 }

@@ -1,3 +1,7 @@
+import type {
+    CandidateFilters,
+    CandidateListQuery,
+} from "./lib/candidate-list-query"
 import type { RequestListQuery } from "./lib/list-query"
 import {
     apiGet,
@@ -280,6 +284,16 @@ export async function fetchCandidates() {
     return (await apiGet<CandidateDto[]>(`${ROOT}/candidates`)).map(
         mapCandidate,
     )
+}
+export async function fetchCandidatePage(query: CandidateListQuery) {
+    const dto = await apiGet<Page<CandidateDto>>(
+        `${ROOT}/candidates/page`,
+        query,
+    )
+    return { ...dto, items: dto.items.map(mapCandidate) }
+}
+export function fetchCandidateIds(filters: Partial<CandidateFilters>) {
+    return apiGet<string[]>(`${ROOT}/candidates/ids`, filters)
 }
 export async function fetchRequests(query: RequestListQuery) {
     const dto = await apiGet<Page<RequestDto>>(ROOT, query)

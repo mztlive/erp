@@ -38,6 +38,7 @@ pub struct CancelPurchasePaymentRequest {
 pub struct PurchasePaymentRequestQuery {
     pub scope_version: Option<String>,
     pub supplier_id: Option<String>,
+    pub payer_party_id: Option<String>,
     pub purchase_order_id: Option<String>,
     pub payable_account_id: Option<String>,
     pub work_item_id: Option<String>,
@@ -89,6 +90,8 @@ impl PurchasePaymentRequestQuery {
     /// 任一文本条件超过 200 字符时拒绝。
     pub fn normalize(mut self) -> Result<Self> {
         for value in [
+            &mut self.supplier_id,
+            &mut self.payer_party_id,
             &mut self.q,
             &mut self.request_no,
             &mut self.supplier_name,

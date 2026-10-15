@@ -1,3 +1,7 @@
+import type {
+    CandidateFilters,
+    CandidateListQuery,
+} from "../lib/candidate-list-query"
 import type { RequestListQuery } from "../lib/list-query"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
@@ -5,6 +9,8 @@ import {
     commitPayment,
     downloadAttachment,
     fetchCandidates,
+    fetchCandidatePage,
+    fetchCandidateIds,
     fetchMaterials,
     fetchRequest,
     fetchRequests,
@@ -36,6 +42,26 @@ export function usePaymentCandidatesQuery(enabled = true) {
         queryKey: paymentRequestKeys.candidates,
         queryFn: fetchCandidates,
         enabled,
+    })
+}
+export function usePaymentCandidatePageQuery(
+    query: CandidateListQuery,
+    enabled: boolean,
+) {
+    return useQuery({
+        queryKey: [...paymentRequestKeys.candidates, "page", query],
+        queryFn: () => fetchCandidatePage(query),
+        enabled,
+    })
+}
+export function usePaymentCandidateIdsQuery(
+    filters: Partial<CandidateFilters>,
+) {
+    return useQuery({
+        queryKey: [...paymentRequestKeys.candidates, "ids", filters],
+        queryFn: () => fetchCandidateIds(filters),
+        enabled: false,
+        staleTime: 0,
     })
 }
 export function usePaymentRequestQuery(

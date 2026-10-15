@@ -31,9 +31,16 @@ export function useRequestList() {
                 "page_size",
                 "sort_by",
                 "sort_desc",
+                "supplier_name",
+                "payer_party_name",
                 ...requestFilterFields.map(([key]) => key),
             ])
                 params.delete(key)
+            if (patch.view && patch.view !== url.view) {
+                for (const key of Array.from(params.keys())) {
+                    if (key.startsWith("candidate_")) params.delete(key)
+                }
+            }
             next.forEach((value, key) => params.set(key, value))
             const query = params.toString()
             router.replace(`${pathname}${query ? `?${query}` : ""}`, {
@@ -51,8 +58,8 @@ export function useRequestList() {
     )
     const applied: RequestFilters = {
         request_no: url.request_no ?? "",
-        supplier_name: url.supplier_name ?? "",
-        payer_party_name: url.payer_party_name ?? "",
+        supplier_id: url.supplier_id ?? "",
+        payer_party_id: url.payer_party_id ?? "",
         applicant_name: url.applicant_name ?? "",
         purchase_order_no: url.purchase_order_no ?? "",
     }

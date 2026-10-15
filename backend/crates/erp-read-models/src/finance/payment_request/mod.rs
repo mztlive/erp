@@ -3,6 +3,7 @@
 mod access;
 mod actions;
 mod approval;
+mod candidate_list;
 mod candidates;
 mod dto;
 mod entries;
@@ -17,6 +18,7 @@ mod submissions;
 
 use std::sync::Arc;
 
+pub use candidate_list::{PaymentCandidateQuery, PaymentCandidateSort};
 pub use dto::*;
 use erp_finance::ports::funds_scope::FailClosedFundsDataScopePort;
 use erp_identity::SharedRbacService;

@@ -17,7 +17,7 @@ use crate::core::upload;
 /// # 错误
 /// 不执行 I/O，不返回错误。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
-    query_routes(rbac).merge(command_routes(rbac)).merge(material_routes(rbac))
+    query_routes(rbac).merge(candidate_routes(rbac)).merge(command_routes(rbac)).merge(material_routes(rbac))
 }
 
 fn query_routes(rbac: &SharedRbacService) -> Router<AppState> {
@@ -60,6 +60,26 @@ fn query_routes(rbac: &SharedRbacService) -> Router<AppState> {
                 get(purchase_payment_request::materials::task_context),
                 rbac,
                 purchase_payment_request::materials::task_context_permission_key(),
+            ),
+        )
+}
+
+fn candidate_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/purchase-payment-requests/candidates/page",
+            with_permission(
+                get(purchase_payment_request::candidate_list::page),
+                rbac,
+                purchase_payment_request::candidate_list::page_permission_key(),
+            ),
+        )
+        .route(
+            "/purchase-payment-requests/candidates/ids",
+            with_permission(
+                get(purchase_payment_request::candidate_list::ids),
+                rbac,
+                purchase_payment_request::candidate_list::ids_permission_key(),
             ),
         )
 }
