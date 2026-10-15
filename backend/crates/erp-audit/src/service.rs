@@ -336,6 +336,25 @@ mod ordinary_factory_tests {
     fn actor() -> AuditActor {
         AuditActor::new("actor".into(), "account".into(), AccountKind::Admin)
     }
+
+    #[test]
+    fn purchase_change_void_builds_audit_for_change_only() {
+        let log = actor()
+            .resource_log("purchase_change_order.void", "purchase_change_order", "change-1".into())
+            .unwrap();
+        let prepared = prepare_business_log(&log).unwrap();
+        assert_eq!(prepared.action, "purchase_change_order.void");
+        assert_eq!(prepared.resource_type, "purchase_change_order");
+        assert_eq!(prepared.resource_id.as_deref(), Some("change-1"));
+        assert!(prepared.success);
+        assert!(prepared.message.as_deref().unwrap().contains("作废采购变更单"));
+
+        let error = actor()
+            .resource_log("purchase_change_order.void", "purchase_order", "purchase-1".into())
+            .unwrap_err();
+        assert!(matches!(error, Error::ValidationError(_)));
+    }
+
     #[test]
     fn registered_factory_discards_uncontrolled_message_and_preserves_safe_snapshot() {
         let log = actor()

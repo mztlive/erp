@@ -69,6 +69,7 @@ import { WorkspaceImportTask } from "./workspace-import-task"
 import { WorkspaceIntegrationTask } from "./workspace-integration-task"
 import { PurchasePaymentRequestTask } from "@/features/purchase-payment-requests/components/purchase-payment-request-task"
 import { WorkspaceProcurementTask } from "./workspace-procurement-task"
+import { WorkspacePurchaseSourceUpdateTask } from "./workspace-purchase-source-update-task"
 import { WorkspaceSettlementTask } from "./workspace-settlement-task"
 import { WorkspaceSupplierInvestigationTask } from "./workspace-supplier-investigation-task"
 import { WorkspaceSupplyExceptionTask } from "./workspace-supply-exception-task"
@@ -207,6 +208,20 @@ function WorkspaceTaskSurface({
     ) {
         return (
             <WorkspaceProcurementTask
+                item={item}
+                onTaskCompleted={onTaskCompleted}
+            />
+        )
+    }
+
+    if (
+        item.workItemType === "PURCHASE_SOURCE_UPDATE" &&
+        item.handlerKey === "purchase_source_update" &&
+        item.businessObjectType === "purchase_order"
+    ) {
+        return (
+            <WorkspacePurchaseSourceUpdateTask
+                key={item.workItemId}
                 item={item}
                 onTaskCompleted={onTaskCompleted}
             />

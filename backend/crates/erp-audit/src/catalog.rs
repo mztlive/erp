@@ -205,6 +205,7 @@ const REGISTERED_ACTIONS: &[AuditAction] = &[
     action("purchase_change_order.create", "purchase_change_order", "创建采购变更单"),
     action("purchase_change_order.effect", "purchase_change_order", "生效采购变更单"),
     action("purchase_change_order.submit", "purchase_change_order", "提交审批采购变更单"),
+    action("purchase_change_order.void", "purchase_change_order", "作废采购变更单"),
     action("purchase_invoice_allocation.post", "purchase_invoice_allocation", "登记进项发票"),
     action("purchase_order.cancel_approval", "purchase_order", "撤回审批采购单"),
     action("purchase_order.confirm_expense", "purchase_order", "确认采购费用已发生"),

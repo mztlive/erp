@@ -44,6 +44,8 @@ type UsePurchaseOrderDetailEditActionsInput = {
     >
     getPaymentTermCode: () => string
     setDraftPaymentTermCode: (value: string) => void
+    /** 嵌入工作台时由调用方收起编辑，不跳转到独立详情页。 */
+    onFinished?: () => void
 }
 
 /**
@@ -59,6 +61,7 @@ export function usePurchaseOrderDetailEditActions({
     setResult,
     getPaymentTermCode,
     setDraftPaymentTermCode,
+    onFinished,
 }: UsePurchaseOrderDetailEditActionsInput) {
     const router = useRouter()
     const acquireToken = useAcquireDraftTokenMutation()
@@ -273,7 +276,8 @@ export function usePurchaseOrderDetailEditActions({
                     },
                 ],
             })
-            router.replace(`/procurement/orders/${purchaseOrderId}`)
+            if (onFinished) onFinished()
+            else router.replace(`/procurement/orders/${purchaseOrderId}`)
         } else if (response.status === "unknown") {
             setResult({
                 status: "unknown",
@@ -323,7 +327,8 @@ export function usePurchaseOrderDetailEditActions({
                     },
                 ],
             })
-            router.replace(`/procurement/orders/${purchaseOrderId}`)
+            if (onFinished) onFinished()
+            else router.replace(`/procurement/orders/${purchaseOrderId}`)
             await refetch()
         } else if (response.status === "unknown") {
             setResult({

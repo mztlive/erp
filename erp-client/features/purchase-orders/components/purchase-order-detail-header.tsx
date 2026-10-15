@@ -6,7 +6,7 @@ import { ExpensePurchaseStartDialog } from "./expense-purchase-start-dialog"
 
 import * as React from "react"
 import { PurchaseOrderCorrespondence } from "./purchase-order-correspondence"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { FilePenLineIcon, SendIcon, Trash2Icon } from "lucide-react"
 
 import {
@@ -70,6 +70,14 @@ export function PurchaseOrderDetailHeader({
     onDismissResult: () => void
 }) {
     const [expenseOpen, setExpenseOpen] = React.useState(false)
+    const searchParams = useSearchParams()
+    const returnTo = searchParams.get("returnTo")
+    const returnPath = returnTo?.split("?")[0]
+    const workspaceReturn =
+        searchParams.get("from") === "workspace" &&
+        (returnPath === "/workspace" || returnPath === "/workspace/tasks")
+            ? returnTo
+            : null
     const profile = useAccountProfileQuery()
     const canCreateExpense =
         !profile.isError &&
@@ -92,9 +100,13 @@ export function PurchaseOrderDetailHeader({
             <DetailPageHeader
                 back={{
                     id: "procurement-orders-detail-back",
-                    label: "采购单列表",
+                    label: workspaceReturn ? "返回工作台" : "采购单列表",
                     onClick: () =>
-                        requestLeave(() => router.push("/procurement/orders")),
+                        requestLeave(() =>
+                            router.push(
+                                workspaceReturn ?? "/procurement/orders",
+                            ),
+                        ),
                 }}
                 navigationMeta={mode === "edit" ? modeLabel : undefined}
                 headingProps={{

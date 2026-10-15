@@ -180,7 +180,7 @@ function revisionText(update: PurchaseSourceUpdateView, salesOrderNo: string) {
 }
 
 /** 登记维持原采购：填写无法调整的原因后关闭依据更新。 */
-function MaintainSourceButton({
+export function MaintainSourceButton({
     purchaseOrderId,
     update,
 }: {

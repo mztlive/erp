@@ -85,15 +85,20 @@ export function useSalesOrderDetailUrlState({
         ],
     )
 
+    const returnPath = returnTo?.split("?")[0]
+    const fromWorkbench =
+        fromWorkspace === "workspace" &&
+        (returnPath === "/workspace" || returnPath === "/workspace/tasks")
     const fromQueue =
         Boolean(returnTo) &&
         (fromWorkspace === "W07" ||
             fromWorkspace === "W01" ||
             fromWorkspace === "W08" ||
-            fromWorkspace === "W09")
+            fromWorkspace === "W09" ||
+            fromWorkbench)
     const backHref = fromQueue && returnTo ? returnTo : "/sales/orders"
     const backLabel =
-        fromWorkspace === "W07"
+        fromWorkspace === "W07" || fromWorkbench
             ? "返回工作台"
             : fromWorkspace === "W08"
               ? "返回采购单列表"
