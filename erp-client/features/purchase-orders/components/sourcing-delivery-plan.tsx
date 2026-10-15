@@ -227,7 +227,7 @@ export function SourcingDeliveryEditor({
                                     id={`${id}-customize`}
                                     type="button"
                                     size="sm"
-                                    variant="ghost"
+                                    variant="secondary"
                                     onClick={() => field.handleChange(rows)}
                                 >
                                     按地址调整
@@ -237,7 +237,7 @@ export function SourcingDeliveryEditor({
                                     id={`${id}-reset`}
                                     type="button"
                                     size="sm"
-                                    variant="ghost"
+                                    variant="secondary"
                                     onClick={() =>
                                         field.handleChange(undefined)
                                     }

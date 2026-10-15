@@ -259,6 +259,10 @@ export function AllocationFactFormCard({
                                                 label="上传银行回单"
                                                 description="支持 JPG、PNG、WebP，单张不超过 5 MB"
                                                 previewSelectedImage
+                                                selectedImageFile={
+                                                    field.state.value
+                                                }
+                                                maxFileSize={5 * 1024 * 1024}
                                                 onFilesSelected={(files) => {
                                                     field.handleChange(
                                                         files[0] ?? null,

@@ -1,16 +1,5 @@
 "use client"
 
-import { FileIcon, Trash2Icon } from "lucide-react"
-
-import {
-    Attachment,
-    AttachmentAction,
-    AttachmentActions,
-    AttachmentContent,
-    AttachmentGroup,
-    AttachmentMedia,
-    AttachmentTitle,
-} from "@/components/ui/attachment"
 import { FileUpload } from "@/components/ui/file-upload"
 import {
     Field,
@@ -18,7 +7,6 @@ import {
     FieldError,
     FieldLabel,
 } from "@/components/ui/field"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     INVOICE_FILE_ACCEPT,
     invoiceFileReference,
@@ -45,51 +33,23 @@ export function InvoiceFilesField({
     return (
         <Field data-invalid={invalid || undefined}>
             <FieldLabel htmlFor={`${baseId}-input`}>{label}</FieldLabel>
-            {files.length > 0 ? (
-                <AttachmentGroup>
-                    {files.map((file) => {
-                        const reference = invoiceFileReference(file)
-                        return (
-                            <Attachment key={reference} aria-label={file.name}>
-                                <AttachmentMedia>
-                                    <FileIcon aria-hidden="true" />
-                                </AttachmentMedia>
-                                <AttachmentContent>
-                                    <AttachmentTitle>
-                                        {file.name}
-                                    </AttachmentTitle>
-                                </AttachmentContent>
-                                <AttachmentActions>
-                                    <AttachmentAction
-                                        id={`${baseId}-${toAutomationIdSegment(reference)}-remove`}
-                                        type="button"
-                                        variant="destructive"
-                                        disabled={disabled}
-                                        aria-label={`移除 ${file.name}`}
-                                        onClick={() =>
-                                            onChange(
-                                                files.filter(
-                                                    (item) =>
-                                                        invoiceFileReference(
-                                                            item,
-                                                        ) !== reference,
-                                                ),
-                                            )
-                                        }
-                                    >
-                                        <Trash2Icon aria-hidden="true" />
-                                    </AttachmentAction>
-                                </AttachmentActions>
-                            </Attachment>
-                        )
-                    })}
-                </AttachmentGroup>
-            ) : null}
             <FileUpload
                 idPrefix={baseId}
                 density={density}
                 accept={INVOICE_FILE_ACCEPT}
                 multiple
+                selectedFiles={files}
+                fileKey={invoiceFileReference}
+                onFileRemove={(file) =>
+                    onChange(
+                        files.filter(
+                            (item) =>
+                                invoiceFileReference(item) !==
+                                invoiceFileReference(file),
+                        ),
+                    )
+                }
+                maxFileSize={5 * 1024 * 1024}
                 disabled={disabled}
                 label="添加发票附件"
                 description="支持 PDF、JPG、PNG、WebP，最多 32 个，单个不超过 5 MB"

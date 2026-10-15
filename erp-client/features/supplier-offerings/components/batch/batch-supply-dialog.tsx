@@ -4,6 +4,7 @@ import { RequiredMark } from "@/components/ui/required-mark"
 import * as React from "react"
 import { DiscardConfirmDialog } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { FileUpload } from "@/components/ui/file-upload"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
@@ -301,34 +302,24 @@ function BatchSupplyEditor({
                                                     >
                                                         下载供给模板
                                                     </LoadingButton>
-                                                    <label
-                                                        htmlFor="batch-supply-file"
-                                                        className="text-xs text-muted-foreground"
-                                                    >
-                                                        导入文件
-                                                        <input
-                                                            id="batch-supply-file"
-                                                            type="file"
-                                                            accept=".xlsx,.csv"
-                                                            disabled={
-                                                                editor.busy
-                                                            }
-                                                            className="block max-w-52 text-xs"
-                                                            onChange={(
-                                                                event,
-                                                            ) => {
-                                                                const file =
-                                                                    event.target
-                                                                        .files?.[0]
-                                                                event.target.value =
-                                                                    ""
-                                                                if (file)
-                                                                    void editor.importFile(
-                                                                        file,
-                                                                    )
-                                                            }}
-                                                        />
-                                                    </label>
+                                                    <FileUpload
+                                                        idPrefix="batch-supply-file"
+                                                        inputId="batch-supply-file"
+                                                        density="compact"
+                                                        label="导入供给资料"
+                                                        description="支持 XLSX、CSV，导入后在下方表格核对"
+                                                        accept=".xlsx,.csv"
+                                                        multiple={false}
+                                                        disabled={editor.busy}
+                                                        onFilesSelected={(
+                                                            files,
+                                                        ) => {
+                                                            if (files[0])
+                                                                void editor.importFile(
+                                                                    files[0],
+                                                                )
+                                                        }}
+                                                    />
                                                 </>
                                             )}
                                             <span className="text-xs text-muted-foreground">

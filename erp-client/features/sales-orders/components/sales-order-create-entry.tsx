@@ -1,9 +1,7 @@
 "use client"
 
-import * as React from "react"
 import {
     ChevronRightIcon,
-    FileIcon,
     FileTextIcon,
     InfoIcon,
     SquarePenIcon,
@@ -11,7 +9,7 @@ import {
 
 import { Button } from "@/components/ui/button"
 import { contractPdfError } from "@/features/contracts/lib/pdf"
-import { cn } from "@/lib/utils"
+import { FileUpload } from "@/components/ui/file-upload"
 
 /** 开单前只确定依据；合同核对归档后再展示销售表单。 */
 export function SalesOrderCreateEntry({
@@ -25,19 +23,6 @@ export function SalesOrderCreateEntry({
     selectedFileName?: string
     onResumeImport: () => void
 }) {
-    const inputRef = React.useRef<HTMLInputElement>(null)
-    const [dragging, setDragging] = React.useState(false)
-    const [error, setError] = React.useState<string | null>(null)
-    const selectFiles = (files: File[]) => {
-        if (!files.length) return
-        const error =
-            files.length !== 1
-                ? "请每次上传一份合同 PDF"
-                : contractPdfError(files[0])
-        setError(error)
-        if (!error) onUpload(files[0])
-    }
-
     return (
         <section
             className="border-t border-grid"
@@ -53,79 +38,24 @@ export function SalesOrderCreateEntry({
                 <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
                     上传已签署合同，核对归档后自动带入开单信息。
                 </p>
-                <div
-                    id="sales-orders-create-entry-upload-dropzone"
-                    className={cn(
-                        "mt-7 flex min-h-64 flex-col items-center justify-center rounded-lg border border-dashed border-border bg-surface-sunken/50 px-5 py-10 text-center transition-colors sm:min-h-72 lg:mt-9 lg:min-h-90",
-                        dragging && "border-ring bg-accent",
-                    )}
-                    onDragEnter={(event) => {
-                        event.preventDefault()
-                        setDragging(true)
+                <FileUpload
+                    idPrefix="sales-orders-create-entry-upload"
+                    selectId="sales-orders-create-entry-upload"
+                    density="hero"
+                    className="mt-7 lg:mt-9"
+                    label="拖拽合同 PDF 到这里"
+                    selectLabel="上传合同"
+                    description="仅支持单个 PDF，文件不超过 20 MB"
+                    accept="application/pdf,.pdf"
+                    multiple={false}
+                    maxFileSize={20 * 1024 * 1024}
+                    validateFiles={(files) =>
+                        contractPdfError(files[0] ?? null)
+                    }
+                    onFilesSelected={(files) => {
+                        if (files[0]) onUpload(files[0])
                     }}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDragLeave={(event) => {
-                        if (
-                            !event.currentTarget.contains(
-                                event.relatedTarget as Node | null,
-                            )
-                        )
-                            setDragging(false)
-                    }}
-                    onDrop={(event) => {
-                        event.preventDefault()
-                        setDragging(false)
-                        selectFiles(Array.from(event.dataTransfer.files))
-                    }}
-                >
-                    <FileIcon
-                        className="mb-6 size-12 text-muted-foreground"
-                        strokeWidth={1.5}
-                        aria-hidden="true"
-                    />
-                    <p className="text-base font-semibold sm:text-lg">
-                        拖拽合同 PDF 到这里
-                    </p>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                        或点击下方按钮选择文件
-                    </p>
-                    <input
-                        id="sales-orders-create-entry-upload-input"
-                        ref={inputRef}
-                        type="file"
-                        accept="application/pdf,.pdf"
-                        className="sr-only"
-                        aria-label="选择已签署合同 PDF"
-                        aria-describedby="sales-orders-create-entry-upload-help sales-orders-create-entry-upload-error"
-                        aria-invalid={Boolean(error)}
-                        onChange={(event) => {
-                            selectFiles(Array.from(event.target.files ?? []))
-                            event.target.value = ""
-                        }}
-                    />
-                    <Button
-                        id="sales-orders-create-entry-upload"
-                        type="button"
-                        size="lg"
-                        className="mt-6 min-w-44"
-                        onClick={() => inputRef.current?.click()}
-                    >
-                        上传合同
-                    </Button>
-                    <p
-                        id="sales-orders-create-entry-upload-help"
-                        className="mt-3 text-xs text-muted-foreground"
-                    >
-                        仅支持单个 PDF，文件不超过 20 MB
-                    </p>
-                </div>
-                <p
-                    id="sales-orders-create-entry-upload-error"
-                    role="alert"
-                    className={cn("text-sm text-destructive", error && "mt-3")}
-                >
-                    {error}
-                </p>
+                />
                 {selectedFileName ? (
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm">
                         <p className="min-w-0 break-all text-muted-foreground">

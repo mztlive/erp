@@ -111,6 +111,7 @@ export function SourcingAllocationEditor({
                 </p>
                 <SourcingOptionField
                     form={form}
+                    order={order}
                     index={index}
                     rowKey={line.rowKey}
                     product={product}

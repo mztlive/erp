@@ -249,7 +249,7 @@ export function MediaListField({
                     const names = files.map((f) => f.name)
                     onChange(joinMediaList([...items, ...names]))
                 }}
-                className="p-3"
+                density="compact"
             />
             <Dialog
                 open={preview != null}

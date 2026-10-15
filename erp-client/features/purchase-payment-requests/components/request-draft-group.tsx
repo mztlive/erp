@@ -1,8 +1,8 @@
-import { useRef } from "react"
-import { ChevronDownIcon, PaperclipIcon, SplitIcon } from "lucide-react"
+import { ChevronDownIcon, SplitIcon } from "lucide-react"
 import { MoneyValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { FileUpload } from "@/components/ui/file-upload"
+import { selectedFileKey } from "@/lib/file-selection"
 import {
     Collapsible,
     CollapsibleContent,
@@ -32,7 +32,6 @@ export function RequestDraftGroup({
     open: boolean
     onOpenChange: (open: boolean) => void
 }) {
-    const fileInput = useRef<HTMLInputElement>(null)
     const rows = group.ids
         .map((id) => candidates.find((item) => item.payable_account_id === id)!)
         .filter(Boolean)
@@ -285,48 +284,45 @@ export function RequestDraftGroup({
                     <form.Field name={`groups[${index}].files`}>
                         {(field) => (
                             <Field>
-                                <div className="flex flex-wrap items-center gap-3">
-                                    <Button
-                                        id={`${id}-attachments-trigger`}
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() =>
-                                            fileInput.current?.click()
-                                        }
-                                    >
-                                        <PaperclipIcon className="size-4" />
-                                        添加附件
-                                    </Button>
-                                    <span className="text-xs text-muted-foreground">
-                                        选填 · PDF / 图片，每份不超过 5 MB
-                                    </span>
-                                </div>
-                                <Input
-                                    id={fieldId("attachments")}
-                                    ref={fileInput}
-                                    className="sr-only"
-                                    tabIndex={-1}
-                                    aria-label="选择本组附件"
-                                    type="file"
+                                <FileUpload
+                                    idPrefix={`${id}-attachments`}
+                                    inputId={fieldId("attachments")}
+                                    selectId={`${id}-attachments-trigger`}
+                                    density="button"
+                                    label="添加附件"
+                                    selectLabel="添加附件"
+                                    description="选填 · PDF / 图片，每份不超过 5 MB"
                                     multiple
                                     accept="application/pdf,image/jpeg,image/png,image/webp"
-                                    onChange={(event) =>
+                                    maxFileSize={5 * 1024 * 1024}
+                                    selectedFiles={field.state.value}
+                                    onFileRemove={(file) =>
                                         field.handleChange(
-                                            Array.from(
-                                                event.target.files ?? [],
+                                            field.state.value.filter(
+                                                (item) =>
+                                                    selectedFileKey(item) !==
+                                                    selectedFileKey(file),
                                             ),
                                         )
                                     }
+                                    onFilesSelected={(files) => {
+                                        const selected = new Map(
+                                            field.state.value.map((file) => [
+                                                selectedFileKey(file),
+                                                file,
+                                            ]),
+                                        )
+                                        for (const file of files)
+                                            selected.set(
+                                                selectedFileKey(file),
+                                                file,
+                                            )
+                                        field.handleChange([
+                                            ...selected.values(),
+                                        ])
+                                        field.handleBlur()
+                                    }}
                                 />
-                                {!!field.state.value.length && (
-                                    <p className="text-xs text-muted-foreground">
-                                        已选：
-                                        {field.state.value
-                                            .map((file) => file.name)
-                                            .join("、")}
-                                    </p>
-                                )}
                             </Field>
                         )}
                     </form.Field>

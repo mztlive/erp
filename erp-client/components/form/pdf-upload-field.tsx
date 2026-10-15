@@ -1,19 +1,7 @@
 "use client"
 
-import { FileTextIcon, Trash2Icon } from "lucide-react"
-
 import { useFieldContext } from "@/components/form/form-context"
 import { toFieldErrors } from "@/components/form/utils"
-import {
-    Attachment,
-    AttachmentAction,
-    AttachmentActions,
-    AttachmentContent,
-    AttachmentDescription,
-    AttachmentGroup,
-    AttachmentMedia,
-    AttachmentTitle,
-} from "@/components/ui/attachment"
 import {
     Field,
     FieldDescription,
@@ -29,11 +17,6 @@ type PdfUploadFieldProps = {
     disabled?: boolean
     required?: boolean
     id?: string
-}
-
-function formatFileSize(size: number): string {
-    if (size < 1024 * 1024) return `${Math.ceil(size / 1024)} KB`
-    return `${(size / (1024 * 1024)).toFixed(1)} MB`
 }
 
 /** 绑定 TanStack Form 的单 PDF 上传字段。 */
@@ -68,48 +51,23 @@ export function PdfUploadField({
                 {label}
                 {required ? <span className="text-destructive">*</span> : null}
             </FieldLabel>
-            {file ? (
-                <AttachmentGroup>
-                    <Attachment aria-label={file.name}>
-                        <AttachmentMedia>
-                            <FileTextIcon aria-hidden="true" />
-                        </AttachmentMedia>
-                        <AttachmentContent>
-                            <AttachmentTitle>{file.name}</AttachmentTitle>
-                            <AttachmentDescription>
-                                PDF · {formatFileSize(file.size)}
-                            </AttachmentDescription>
-                        </AttachmentContent>
-                        <AttachmentActions>
-                            <AttachmentAction
-                                id={`${resolvedId}-remove`}
-                                type="button"
-                                variant="destructive"
-                                disabled={disabled}
-                                onClick={() => field.handleChange(null)}
-                                aria-label={`移除 ${file.name}`}
-                            >
-                                <Trash2Icon aria-hidden="true" />
-                            </AttachmentAction>
-                        </AttachmentActions>
-                    </Attachment>
-                </AttachmentGroup>
-            ) : (
-                <FileUpload
-                    idPrefix={resolvedId}
-                    accept="application/pdf,.pdf"
-                    multiple={false}
-                    disabled={disabled}
-                    label="上传合同 PDF"
-                    description="点击选择文件，或将单个 PDF 拖到此处"
-                    onFilesSelected={(files) => {
-                        field.handleChange(files[0] ?? null)
-                        field.handleBlur()
-                    }}
-                    aria-describedby={describedBy || undefined}
-                    aria-invalid={isInvalid || undefined}
-                />
-            )}
+            <FileUpload
+                idPrefix={resolvedId}
+                accept="application/pdf,.pdf"
+                multiple={false}
+                maxFileSize={20 * 1024 * 1024}
+                disabled={disabled}
+                selectedFiles={file ? [file] : []}
+                onFileRemove={() => field.handleChange(null)}
+                label="上传合同 PDF"
+                description="点击选择文件，或将单个 PDF 拖到此处"
+                onFilesSelected={(files) => {
+                    field.handleChange(files[0] ?? null)
+                    field.handleBlur()
+                }}
+                aria-describedby={describedBy || undefined}
+                aria-invalid={isInvalid || undefined}
+            />
             {description ? (
                 <FieldDescription id={descriptionId}>
                     {description}

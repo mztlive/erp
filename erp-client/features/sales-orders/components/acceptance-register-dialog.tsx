@@ -225,10 +225,20 @@ export function AcceptanceRegisterDialog({
                                                     disabled={
                                                         !canPost || postPending
                                                     }
-                                                    label={
+                                                    label="上传签收单凭证"
+                                                    selectedFiles={
                                                         field.state.value
-                                                            ?.name ??
-                                                        "上传签收单凭证"
+                                                            ? [
+                                                                  field.state
+                                                                      .value,
+                                                              ]
+                                                            : []
+                                                    }
+                                                    onFileRemove={() =>
+                                                        field.handleChange(null)
+                                                    }
+                                                    maxFileSize={
+                                                        5 * 1024 * 1024
                                                     }
                                                     description="点击选择图片或 PDF"
                                                     onFilesSelected={(

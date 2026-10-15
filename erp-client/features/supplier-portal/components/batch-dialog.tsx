@@ -16,6 +16,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { FileUpload } from "@/components/ui/file-upload"
 import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Table,
@@ -1267,35 +1268,33 @@ export function PortalBatchDialog({
                                                             >
                                                                 加入粘贴资料
                                                             </LoadingButton>
-                                                            <label
-                                                                htmlFor={`${prefix}-file`}
-                                                                className="text-sm"
-                                                            >
-                                                                导入Excel或CSV
-                                                            </label>
-                                                            <input
-                                                                id={`${prefix}-file`}
-                                                                type="file"
+                                                            <FileUpload
+                                                                idPrefix={`${prefix}-file`}
+                                                                inputId={`${prefix}-file`}
+                                                                density="compact"
+                                                                label="导入商品或供给资料"
+                                                                description="支持 XLSX、CSV，单个文件不超过 5 MB"
                                                                 accept=".xlsx,.csv"
-                                                                className="min-w-0 max-w-64 text-xs"
+                                                                multiple={false}
+                                                                maxFileSize={
+                                                                    5 *
+                                                                    1024 *
+                                                                    1024
+                                                                }
                                                                 disabled={
                                                                     busy ||
                                                                     readOnly ||
                                                                     unknown.length >
                                                                         0
                                                                 }
-                                                                onChange={(
-                                                                    event,
+                                                                onFilesSelected={(
+                                                                    files,
                                                                 ) => {
-                                                                    const file =
-                                                                        event
-                                                                            .target
-                                                                            .files?.[0]
-                                                                    event.target.value =
-                                                                        ""
-                                                                    if (file)
+                                                                    if (
+                                                                        files[0]
+                                                                    )
                                                                         void importRows(
-                                                                            file,
+                                                                            files[0],
                                                                         )
                                                                 }}
                                                             />

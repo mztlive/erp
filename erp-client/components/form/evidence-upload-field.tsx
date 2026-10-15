@@ -1,19 +1,7 @@
 "use client"
 
-import { FileTextIcon, Trash2Icon } from "lucide-react"
-
 import { useFieldContext } from "@/components/form/form-context"
 import { toFieldErrors } from "@/components/form/utils"
-import {
-    Attachment,
-    AttachmentAction,
-    AttachmentActions,
-    AttachmentContent,
-    AttachmentDescription,
-    AttachmentGroup,
-    AttachmentMedia,
-    AttachmentTitle,
-} from "@/components/ui/attachment"
 import {
     Field,
     FieldDescription,
@@ -40,11 +28,6 @@ type EvidenceUploadFieldProps = {
     disabled?: boolean
     required?: boolean
     id?: string
-}
-
-function formatFileSize(size: number): string {
-    if (size < 1024 * 1024) return `${Math.ceil(size / 1024)} KB`
-    return `${(size / (1024 * 1024)).toFixed(1)} MB`
 }
 
 /** 绑定 TanStack Form 的单个凭证上传字段（图片或 PDF）。 */
@@ -76,48 +59,23 @@ export function EvidenceUploadField({
                 {label}
                 {required ? <span className="text-destructive">*</span> : null}
             </FieldLabel>
-            {file ? (
-                <AttachmentGroup>
-                    <Attachment aria-label={file.name}>
-                        <AttachmentMedia>
-                            <FileTextIcon aria-hidden="true" />
-                        </AttachmentMedia>
-                        <AttachmentContent>
-                            <AttachmentTitle>{file.name}</AttachmentTitle>
-                            <AttachmentDescription>
-                                {formatFileSize(file.size)}
-                            </AttachmentDescription>
-                        </AttachmentContent>
-                        <AttachmentActions>
-                            <AttachmentAction
-                                id={`${resolvedId}-remove`}
-                                type="button"
-                                variant="destructive"
-                                disabled={disabled}
-                                onClick={() => field.handleChange(null)}
-                                aria-label={`移除 ${file.name}`}
-                            >
-                                <Trash2Icon aria-hidden="true" />
-                            </AttachmentAction>
-                        </AttachmentActions>
-                    </Attachment>
-                </AttachmentGroup>
-            ) : (
-                <FileUpload
-                    idPrefix={resolvedId}
-                    accept={EVIDENCE_FILE_TYPES.join(",")}
-                    multiple={false}
-                    disabled={disabled}
-                    label={uploadLabel}
-                    description="点击选择文件，或将单个文件拖到此处"
-                    onFilesSelected={(files) => {
-                        field.handleChange(files[0] ?? null)
-                        field.handleBlur()
-                    }}
-                    aria-describedby={describedBy || undefined}
-                    aria-invalid={isInvalid || undefined}
-                />
-            )}
+            <FileUpload
+                idPrefix={resolvedId}
+                accept={EVIDENCE_FILE_TYPES.join(",")}
+                multiple={false}
+                maxFileSize={EVIDENCE_FILE_MAX_BYTES}
+                disabled={disabled}
+                selectedFiles={file ? [file] : []}
+                onFileRemove={() => field.handleChange(null)}
+                label={uploadLabel}
+                description="点击选择文件，或将单个文件拖到此处"
+                onFilesSelected={(files) => {
+                    field.handleChange(files[0] ?? null)
+                    field.handleBlur()
+                }}
+                aria-describedby={describedBy || undefined}
+                aria-invalid={isInvalid || undefined}
+            />
             {description ? (
                 <FieldDescription id={descriptionId}>
                     {description}

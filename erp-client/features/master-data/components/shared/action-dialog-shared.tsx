@@ -1,10 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { ImageIcon } from "lucide-react"
 import { z } from "zod"
 
-import { Button } from "@/components/ui/button"
 import { DatePicker } from "@/components/ui/date-picker"
 import { FileUpload, imagePreviewSource } from "@/components/ui/file-upload"
 import { Label } from "@/components/ui/label"
@@ -17,7 +15,6 @@ import type {
     PendingAssetUpload,
 } from "@/features/master-data/types"
 import { getErrorMessage } from "@/lib/api/errors"
-import { cn } from "@/lib/utils"
 
 export function newIdempotencyKey(prefix: string): string {
     return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
@@ -148,140 +145,51 @@ export function MediaSingleField({
     previewUrl?: string
     onFilesSelected?: (files: File[]) => void
 }) {
-    const isSquare = aspectRatio === "1:1"
-    const [localPreview, setLocalPreview] = React.useState<string | null>(null)
-    const localPreviewRef = React.useRef<string | null>(null)
-    React.useEffect(
-        () => () => {
-            if (localPreviewRef.current) {
-                URL.revokeObjectURL(localPreviewRef.current)
-                localPreviewRef.current = null
-            }
-        },
-        [],
-    )
-    const previewSrc =
-        localPreview ?? previewUrl?.trim() ?? imagePreviewSource(value)
+    const [file, setFile] = React.useState<File | null>(null)
     return (
         <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-                <Label className="text-sm font-medium">
-                    {label}
-                    {required ? (
-                        <span className="ml-1 text-destructive">*</span>
-                    ) : null}
-                </Label>
-                {value ? (
-                    <Button
-                        id={id ? `${id}-remove` : undefined}
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                            if (localPreviewRef.current) {
-                                URL.revokeObjectURL(localPreviewRef.current)
-                                localPreviewRef.current = null
-                            }
-                            setLocalPreview(null)
-                            onChange("")
-                        }}
-                    >
-                        {masterDataCopy.mediaRemove}
-                    </Button>
+            <Label htmlFor={id ? `${id}-input` : undefined}>
+                {label}
+                {required ? (
+                    <span className="ml-1 text-destructive">*</span>
                 ) : null}
-            </div>
+            </Label>
+            <FileUpload
+                idPrefix={id}
+                label={label}
+                description={hint ?? masterDataCopy.mediaUploadHint}
+                density={aspectRatio === "1:1" ? "tile" : "compact"}
+                className={
+                    aspectRatio === "1:1" ? "aspect-square size-24" : undefined
+                }
+                accept="image/jpeg,image/png,image/webp"
+                multiple={false}
+                previewSelectedImage
+                selectedImageFile={file?.name === value ? file : null}
+                preview={
+                    value
+                        ? {
+                              src:
+                                  previewUrl?.trim() ||
+                                  imagePreviewSource(value),
+                              name: value,
+                          }
+                        : null
+                }
+                onPreviewRemove={() => {
+                    setFile(null)
+                    onChange("")
+                }}
+                onFilesSelected={(files) => {
+                    if (!files[0]) return
+                    setFile(files[0])
+                    onFilesSelected?.(files)
+                    onChange(files[0].name)
+                }}
+            />
             {value ? (
-                isSquare ? (
-                    <div className="flex items-start gap-3">
-                        <div
-                            className="flex size-24 shrink-0 items-center justify-center gap-1 overflow-hidden rounded-lg border border-border bg-surface-sunken aspect-square"
-                            aria-label={`${label} 预览 1:1`}
-                        >
-                            {previewSrc ? (
-                                // eslint-disable-next-line @next/next/no-img-element -- 本地待上传图片使用 blob URL。
-                                <img
-                                    src={previewSrc}
-                                    alt={value}
-                                    className="size-full object-cover"
-                                />
-                            ) : (
-                                <>
-                                    <ImageIcon
-                                        className="size-8 text-muted-foreground"
-                                        aria-hidden
-                                    />
-                                    <span className="text-2xs text-muted-foreground">
-                                        1:1
-                                    </span>
-                                </>
-                            )}
-                        </div>
-                        <div className="min-w-0 flex-1 pt-1">
-                            <div className="truncate text-sm font-medium">
-                                {value}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                                {selectedHint}
-                            </div>
-                            <div className="mt-1 text-xs text-muted-foreground">
-                                比例 1:1
-                            </div>
-                        </div>
-                    </div>
-                ) : (
-                    <div className="flex items-center gap-3 rounded-md border border-border bg-surface-sunken px-3 py-2">
-                        <div className="flex size-10 items-center justify-center overflow-hidden rounded-md bg-muted">
-                            {previewSrc ? (
-                                // eslint-disable-next-line @next/next/no-img-element -- 本地待上传图片使用 blob URL。
-                                <img
-                                    src={previewSrc}
-                                    alt={value}
-                                    className="size-full object-cover"
-                                />
-                            ) : (
-                                <ImageIcon
-                                    className="size-5 text-muted-foreground"
-                                    aria-hidden
-                                />
-                            )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-medium">
-                                {value}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                                {selectedHint}
-                            </div>
-                        </div>
-                    </div>
-                )
-            ) : (
-                <FileUpload
-                    idPrefix={id}
-                    accept="image/jpeg,image/png,image/webp"
-                    multiple={false}
-                    label={label}
-                    description={hint ?? masterDataCopy.mediaUploadHint}
-                    previewSelectedImage
-                    onFilesSelected={(files) => {
-                        onFilesSelected?.(files)
-                        const file = files[0]
-                        if (!file) return
-                        if (localPreviewRef.current) {
-                            URL.revokeObjectURL(localPreviewRef.current)
-                        }
-                        const blobUrl = URL.createObjectURL(file)
-                        localPreviewRef.current = blobUrl
-                        setLocalPreview(blobUrl)
-                        onChange(file.name)
-                    }}
-                    className={cn(
-                        "p-4",
-                        isSquare &&
-                            "mx-auto aspect-square max-w-[10rem] justify-center",
-                    )}
-                />
-            )}
+                <p className="text-xs text-muted-foreground">{selectedHint}</p>
+            ) : null}
         </div>
     )
 }

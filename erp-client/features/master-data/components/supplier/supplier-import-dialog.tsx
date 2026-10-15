@@ -6,7 +6,7 @@ import Link from "next/link"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
-import { Input } from "@/components/ui/input"
+import { FileUpload } from "@/components/ui/file-upload"
 import {
     Table,
     TableBody,
@@ -40,6 +40,7 @@ export const SupplierImportDialog = ({
     const [rows, setRows] = useState<SupplierImportRow[]>([])
     const [requestId, setRequestId] = useState("")
     const [fileName, setFileName] = useState("")
+    const [selectedFile, setSelectedFile] = useState<File | null>(null)
     const [error, setError] = useState("")
     const [reading, setReading] = useState(false)
     const [uncertain, setUncertain] = useState(false)
@@ -63,6 +64,7 @@ export const SupplierImportDialog = ({
         setRequestId(crypto.randomUUID())
         setUncertain(false)
         setFileName(file.name)
+        setSelectedFile(file)
         try {
             setRows(await readSupplierFile(file))
         } catch (err) {
@@ -126,17 +128,28 @@ export const SupplierImportDialog = ({
                             维护公司主体
                         </Link>
                     </div>
-                    <Input
-                        id="supplier-import-file"
-                        aria-label="选择供应商 Excel 文件"
-                        type="file"
+                    <FileUpload
+                        idPrefix="supplier-import-file"
+                        inputId="supplier-import-file"
+                        label="导入供应商资料"
+                        description="选择或拖入 Excel 文件，仅支持 XLSX"
+                        density="compact"
+                        multiple={false}
                         accept=".xlsx"
                         disabled={locked}
-                        onChange={(event) => void read(event.target.files?.[0])}
+                        selectedFiles={selectedFile ? [selectedFile] : []}
+                        onFileRemove={() => {
+                            setSelectedFile(null)
+                            setFileName("")
+                            setRows([])
+                            setRequestId("")
+                            setError("")
+                        }}
+                        onFilesSelected={(files) => void read(files[0])}
                     />
                     {fileName && (
                         <p className="text-sm">
-                            {fileName} · {reading ? "读取中…" : summary}
+                            {reading ? "读取中…" : summary}
                         </p>
                     )}
                     {error && (

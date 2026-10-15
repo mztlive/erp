@@ -13,6 +13,19 @@ export const tableActionText = {
     more: "更多",
 } as const
 
+export const fileUploadText = {
+    upload: "上传文件",
+    select: "选择文件",
+    replace: "更换文件",
+    add: "继续添加",
+    remove: "移除",
+    hint: "点击选择文件，或将文件拖到此处",
+    singleOnly: "请每次选择一个文件",
+    unsupported: "文件类型不支持，请按说明重新选择",
+    selected: "已选择",
+    uploaded: "已上传",
+} as const
+
 export const listFilterText = {
     selected: "已选条件：",
     clear: "清空",

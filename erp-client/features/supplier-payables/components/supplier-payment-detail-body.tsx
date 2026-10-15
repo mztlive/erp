@@ -466,6 +466,7 @@ function BankReceiptPreview({ row }: { row: PaymentRow }) {
             <FileUpload
                 idPrefix="supplier-payables-payment-detail-receipt-preview"
                 onFilesSelected={() => undefined}
+                readOnly
                 multiple={false}
                 density="compact"
                 preview={{

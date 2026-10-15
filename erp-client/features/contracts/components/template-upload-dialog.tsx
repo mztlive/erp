@@ -151,10 +151,16 @@ export function TemplateUploadDialog({ onClose }: { onClose: () => void }) {
                                     accept={`${DOCX_MIME},.docx`}
                                     multiple={false}
                                     disabled={upload.isPending}
-                                    label={
-                                        field.state.value?.name ??
-                                        "选择 Word 模板"
+                                    label="选择 Word 模板"
+                                    selectedFiles={
+                                        field.state.value
+                                            ? [field.state.value]
+                                            : []
                                     }
+                                    onFileRemove={() =>
+                                        field.handleChange(null)
+                                    }
+                                    maxFileSize={20 * 1024 * 1024}
                                     description="仅支持 DOCX，最大 20 MB。首页页眉右上角须留出编号位置。"
                                     onFilesSelected={(files) => {
                                         field.handleChange(files[0] ?? null)

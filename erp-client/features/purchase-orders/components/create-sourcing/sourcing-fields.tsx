@@ -13,6 +13,7 @@ import {
     deliverySummary,
     sourcingRouteLabel,
 } from "../../lib/sourcing/delivery-terms"
+import { bulkMinimumOptionState } from "../../lib/sourcing/bulk-minimum"
 
 /** 只有「采购 + 入仓」方案必须在建单前选定目标仓。 */
 export function SourcingTargetWarehouseField({
@@ -146,12 +147,14 @@ export function SourcingExpectedDeliveryField({
 /** 供给方案选择器；表格与工作台卡片共用选源后的数量、仓库和交期联动。 */
 export function SourcingOptionField({
     form,
+    order,
     index,
     rowKey,
     product,
     hideLabel = true,
 }: {
     form: PurchaseOrderCreateFormApi
+    order: SourcingSalesOrder
     index: number
     rowKey: string
     product: SourcingSalesOrder["lines"][number]
@@ -167,20 +170,25 @@ export function SourcingOptionField({
                     hideLabel={hideLabel}
                     allowClear={product.options.length > 1}
                     placeholder="选择履约方案"
-                    options={product.options.map((option) => ({
-                        value: option.basisId,
-                        label:
-                            option.sourceType === "EXISTING_STOCK"
-                                ? `${option.supplierName} · 可用 ${option.sourceAvailableQuantity ?? option.maxCreateQuantity}`
-                                : [
-                                      option.supplierName,
-                                      sourcingRouteLabel(option),
-                                      deliverySummary(option, product),
-                                  ]
-                                      .filter(Boolean)
-                                      .join(" · "),
-                        keywords: `${option.sourceType} ${option.supplierId} ${option.warehouseName ?? ""} ${option.fulfillmentResponsibility}`,
-                    }))}
+                    options={product.options.map((option) => {
+                        const minimum = bulkMinimumOptionState(order, option)
+                        return {
+                            value: option.basisId,
+                            disabled: minimum.disabled,
+                            label:
+                                option.sourceType === "EXISTING_STOCK"
+                                    ? `${option.supplierName} · 可用 ${option.sourceAvailableQuantity ?? option.maxCreateQuantity}`
+                                    : [
+                                          option.supplierName,
+                                          sourcingRouteLabel(option),
+                                          minimum.label,
+                                          deliverySummary(option, product),
+                                      ]
+                                          .filter(Boolean)
+                                          .join(" · "),
+                            keywords: `${option.sourceType} ${option.supplierId} ${option.warehouseName ?? ""} ${option.fulfillmentResponsibility}`,
+                        }
+                    })}
                     onValueChange={(value: string) => {
                         const option = findSourcingOption(product, value)
                         if (!option) return

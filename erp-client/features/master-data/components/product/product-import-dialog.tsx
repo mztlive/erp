@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
-import { Input } from "@/components/ui/input"
+import { FileUpload } from "@/components/ui/file-upload"
 import { Progress } from "@/components/ui/progress"
 import {
     Dialog,
@@ -94,19 +94,19 @@ export function ProductImportDialog({
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
-                    <Input
-                        id="product-import-file"
-                        aria-label="选择产品报价表"
-                        type="file"
+                    <FileUpload
+                        idPrefix="product-import-file"
+                        inputId="product-import-file"
+                        label="导入商品报价表"
+                        description="选择或拖入 Excel 文件，仅支持 XLSX"
+                        density="compact"
+                        multiple={false}
                         accept=".xlsx"
                         disabled={locked}
-                        onChange={(event) => pick(event.target.files?.[0])}
+                        selectedFiles={file ? [file] : []}
+                        onFileRemove={() => pick()}
+                        onFilesSelected={(files) => pick(files[0])}
                     />
-                    {file ? (
-                        <p className="text-sm">
-                            {file.name} · {formatUploadMegabytes(file.size)}
-                        </p>
-                    ) : null}
                     {progress ? (
                         <div className="space-y-2">
                             <Progress

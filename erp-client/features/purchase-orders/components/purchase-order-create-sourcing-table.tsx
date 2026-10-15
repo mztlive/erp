@@ -167,6 +167,7 @@ export function PurchaseOrderCreateSourcingTable({
                                     <TableCell className="min-w-64">
                                         <SourcingOptionField
                                             form={form}
+                                            order={order}
                                             index={index}
                                             rowKey={input.rowKey}
                                             product={product}

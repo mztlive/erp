@@ -290,6 +290,7 @@ function MediaListEditor({
                     accept="image/jpeg,image/png,image/webp"
                     multiple
                     label={`添加${label}`}
+                    density="tile"
                     description={
                         mode === "carousel"
                             ? "支持多选，首张作为首图"
@@ -318,10 +319,9 @@ function MediaListEditor({
                         }
                         onChange([...value, ...files.map((f) => f.name)])
                     }}
-                    className={cn(
-                        "gap-1.5 p-3 [&_[data-slot=button]]:mt-1",
-                        mode === "carousel" ? "aspect-square" : "aspect-[4/5]",
-                    )}
+                    className={
+                        mode === "carousel" ? "aspect-square" : "aspect-[4/5]"
+                    }
                 />
             </div>
             {value.length === 0 ? (
