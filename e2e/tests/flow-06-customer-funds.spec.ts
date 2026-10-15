@@ -14,7 +14,11 @@
  * - 财务岗位分别使用财务总监、出纳和开票员角色；caiwu 仅复核，不具备回款创建或提交权限。
  */
 import { archiveContractViaUi } from "../helpers/contracts"
-import { selectExistingContractForSalesOrder, expectSalesOrderContractSummary } from "../helpers/sales-orders"
+import {
+    expectSalesOrderContractSummary,
+    fillSalesLineUnitPrice,
+    selectExistingContractForSalesOrder,
+} from "../helpers/sales-orders"
 import { test, expect, type Browser, type BrowserContext, type Page } from "../helpers/test"
 import fs from "node:fs"
 import path from "node:path"
@@ -175,15 +179,17 @@ test.describe("flow-06 客户票款：分次回款、销项发票、核销与冲
                 await fukuan.page.goto(`/finance/customer-accounts?view=receivable&previewKind=receipt&previewId=${encodeURIComponent(draft.data.id)}`)
                 await expectReceiptPreview(fukuan.page, draftNo)
                 await fukuan.page.locator("#customer-receivables-preview-receipt-continue-allocate").click()
-                await expect(fukuan.page.getByRole("heading", { name: "继续核销回款", exact: true })).toBeVisible()
+                await expect(fukuan.page.getByRole("heading", { name: "编辑回款草稿", exact: true })).toBeVisible()
                 await expect(fukuan.page.locator("#customer-receivables-session-amount")).toHaveValue("100.00")
                 await expect(fukuan.page.locator("#customer-receivables-session-received-at")).toContainText("2026-10-02 00:30:00")
                 await expectReceiptCounterparty(fukuan.page, legalName)
                 await expect(fukuan.page.locator("#customer-receivables-session-bank-reference")).toHaveValue(`BANK-DRAFT-F06-${stamp}`)
                 for (const id of ["amount", "received-at", "bank-reference"]) {
                     const field = fukuan.page.locator(`#customer-receivables-session-${id}`)
-                    await expect(field).toBeDisabled()
+                    await expect(field).toBeEnabled()
                 }
+                const revisedBankReference = `BANK-DRAFT-REVISED-F06-${stamp}`
+                await fukuan.page.locator("#customer-receivables-session-bank-reference").fill(revisedBankReference)
                 await addPoolTarget(fukuan.page, orderA.orderNo)
                 await setAllocationAmount(fukuan.page, orderA.orderNo, "100.00")
                 const screenshot = test.info().outputPath("receipt-registration-existing-draft.png")
@@ -193,18 +199,26 @@ test.describe("flow-06 客户票款：分次回款、销项发票、核销与冲
                 const committed = fukuan.page.waitForResponse((response) =>
                     response.request().method() === "POST" && response.url().includes("/admin/customer-receipts/commit"),
                 )
+                const savedDraft = fukuan.page.waitForResponse((response) =>
+                    response.request().method() === "POST" && new URL(response.url()).pathname === "/admin/customer-receipts/drafts",
+                )
                 await fukuan.page.locator("#customer-receivables-session-receipt-confirm-dialog-confirm").click()
+                const savedResponse = await savedDraft
+                expect(savedResponse.ok(), await savedResponse.text()).toBeTruthy()
+                const saved = (await savedResponse.json()) as { data: { id: string; version: number } }
+                expect(saved.data.id).toBe(draft.data.id)
+                expect(saved.data.version).toBeGreaterThan(draft.data.version)
                 const response = await committed
                 expect(response.ok(), await response.text()).toBeTruthy()
                 expect(response.request().postDataJSON()).toMatchObject({
                     receipt_id: draft.data.id,
-                    expected_version: draft.data.version,
+                    expected_version: saved.data.version,
                     receipt: null,
                 })
                 const submitted = (await response.json()) as { data: { id: string; status: string; bank_reference: string; received_at: number } }
                 expect(submitted.data.id).toBe(draft.data.id)
                 expect(submitted.data.status).toBe("IN_APPROVAL")
-                expect(submitted.data.bank_reference).toBe(`BANK-DRAFT-F06-${stamp}`)
+                expect(submitted.data.bank_reference).toBe(revisedBankReference)
                 expect(submitted.data.received_at).toBe(receivedAt)
             })
             await fukuan.context.close()
@@ -479,6 +493,7 @@ async function createAndSubmitPhysicalSalesOrder(
         "暂未确定采购负责人",
         { timeout: LONG },
     )
+    await fillSalesLineUnitPrice(page, UNIT_PRICE)
 
     await page.locator("#sales-orders-create-batch-due-date-open").click()
     await pickCalendarDay(page, page.locator("#sales-orders-create-batch-due-date"), todayIso())

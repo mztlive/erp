@@ -98,13 +98,25 @@ async function upload(
     if (!options.fileFirst) form.append("file", blob, filename)
     if (options.duplicate === "command") form.append("command", metadata)
     if (options.duplicate === "file") form.append("file", blob, filename)
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-        const response = await fetch(`${API_BASE}/admin/contract-templates`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${token}` },
-            body: form,
-            signal: AbortSignal.timeout(60_000),
-        })
+    for (let attempt = 0, resets = 0; attempt < 2; attempt += 1) {
+        let response: globalThis.Response
+        try {
+            response = await fetch(`${API_BASE}/admin/contract-templates`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}` },
+                body: form,
+                signal: AbortSignal.timeout(60_000),
+            })
+        } catch (error) {
+            // 超限文件在读完请求体前即被拒绝，连接可能先于响应被重置；重发同一表单读取拒绝结果。
+            const code = (error as { cause?: { code?: string } }).cause?.code
+            if ((code === "EPIPE" || code === "ECONNRESET") && resets < 2) {
+                resets += 1
+                attempt -= 1
+                continue
+            }
+            throw error
+        }
         const body = await response.json() as Envelope<Template>
         if (response.status !== 429 || attempt === 1) return { response, body }
         // 上传限流明确保证请求尚未执行；按服务端窗口重试同一表单。

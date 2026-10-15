@@ -11,7 +11,7 @@
  *    subject_version 取详情 GET /admin/sales-orders/{id} 的 submissions[].submission_no。
  */
 import { archiveContractViaUi, SIGNING_COMPANY } from "../helpers/contracts"
-import { selectExistingContractForSalesOrder } from "../helpers/sales-orders"
+import { fillSalesLineUnitPrice, selectExistingContractForSalesOrder } from "../helpers/sales-orders"
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -33,6 +33,7 @@ import {
 const VISIBLE = { timeout: 20_000 } as const
 const API_BASE = process.env.API_BASE || 'http://127.0.0.1:10001'
 const SKU_NAME = '狮峰明前龙井礼盒'
+const UNIT_PRICE = '1288.00'
 const REJECT_REASON = '无法履约，成本上涨，交期不满足'
 const WITHDRAW_REASON = '与客户改数量后重提'
 const VOID_HTTP_NOTE = '销售单草稿作废无页面按钮，走已发布 POST /admin/sales-orders/{id}/void'
@@ -179,6 +180,7 @@ async function pickSkuAndFillLine(page: Page, due: Date, quantity: string): Prom
     VISIBLE,
   )
   await page.getByLabel('数量').first().fill(quantity)
+  await fillSalesLineUnitPrice(page, UNIT_PRICE)
   await page.locator('#sales-orders-create-batch-due-date-open').click()
   await pickCalendarDay(page, page.locator('#sales-orders-create-batch-due-date'), isoDate(due))
   await page.locator('#sales-orders-create-batch-due-date-apply').click()

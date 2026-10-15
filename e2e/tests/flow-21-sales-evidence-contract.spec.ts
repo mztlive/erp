@@ -309,7 +309,7 @@ async function createNoContractDraft(
         .check()
     await picker.locator("#sales-orders-sku-picker-confirm").click()
     await expect(picker).toBeHidden(VISIBLE)
-    await page.getByLabel("数量", { exact: true }).fill("2")
+    await page.locator('input[id^="sales-orders-create-line-"][id$="-quantity"]').fill("2")
     await page.getByLabel("含税成交单价", { exact: true }).fill("137.00")
     await page.locator("#sales-orders-create-batch-due-date-open").click()
     await pickCalendarDay(

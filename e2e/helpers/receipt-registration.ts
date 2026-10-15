@@ -70,7 +70,7 @@ export async function assertReceiptRegistrationDraft(
             await search.fill(input.orderNos[1])
             await validation
                 .getByRole("button")
-                .filter({ hasText: "核销金额不能为负" })
+                .filter({ hasText: "核销金额必须大于零" })
                 .click()
             await expect(search).toHaveValue("")
             await expect(amountA).toBeFocused()
@@ -80,13 +80,14 @@ export async function assertReceiptRegistrationDraft(
                 await expect(submit).toBeDisabled()
             }
             await amountA.fill("1288.01")
-            await expect(rowA).toContainText("核销金额不可超过应收项目金额")
+            await expect(rowA).toContainText("核销金额不可超过当前可核销余额")
             await expect(submit).toBeDisabled()
             await amountA.fill("644.00")
             await amountA.fill("0.00")
             await amountB.fill("0.00")
+            // 零金额分配须取消关联，不能作为一条有效核销提交。
             await expect(footer.getByRole("status")).toContainText(
-                "提交审批至少需要一条核销分配",
+                "核销金额必须大于零",
             )
             await expect(submit).toBeDisabled()
             await amountA.fill("644.00")

@@ -18,7 +18,7 @@
  * 6. 采购确认只通过/驳回，不选供给；选源只在生效后的供给分配。
  */
 import { archiveContractViaUi } from "../helpers/contracts";
-import { selectExistingContractForSalesOrder } from "../helpers/sales-orders";
+import { fillSalesLineUnitPrice, selectExistingContractForSalesOrder } from "../helpers/sales-orders";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -341,6 +341,7 @@ test("flow-11 现有库存仓发：盘盈 → 销售生效 → 纯库存供给�
         await expect(skuDialog).toBeHidden({ timeout: UI_TIMEOUT });
         await expect(page.getByText(SKU_NAME).first()).toBeVisible({ timeout: UI_TIMEOUT });
         await page.getByLabel("数量").fill(SALE_QTY);
+        await fillSalesLineUnitPrice(page, "1288.00");
         await page.locator("#sales-orders-create-batch-due-date-open").click()
         await pickCalendarDay(
             page,

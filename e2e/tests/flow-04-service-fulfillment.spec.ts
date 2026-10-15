@@ -12,7 +12,10 @@
  * - ServiceFulfillment / CustomerAcceptance 为 NO_APPROVAL，工作台原地确认，不出现审批决定栏
  */
 import { archiveContractViaUi } from "../helpers/contracts"
-import { selectExistingContractForSalesOrder } from "../helpers/sales-orders"
+import {
+    fillSalesLineUnitPrice,
+    selectExistingContractForSalesOrder,
+} from "../helpers/sales-orders"
 import { existsSync } from "node:fs"
 import path from "node:path"
 import { expect, test, type Page } from "../helpers/test"
@@ -318,6 +321,7 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
         ).not.toContainText("暂未确定采购负责人", { timeout: TIMEOUT })
 
         await sales.page.getByLabel("数量").fill("2")
+        await fillSalesLineUnitPrice(sales.page, "180.00")
         // 批量交期控件改名：用稳定 id 打开日历再跨月点选（与 flow-03 同款）。
         await sales.page
             .locator("#sales-orders-create-batch-due-date-open")
@@ -538,9 +542,9 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
                 `[id="${sourceControlId!.replace(/-sourcing-option$/, "-quantity")}"]`,
             )
             .and(
+                // 必填控件的可访问名称带必填标记，按名称前缀匹配。
                 serviceEditor.getByRole("spinbutton", {
-                    name: `本次分配数量，${SERVICE_ITEM_NAME}`,
-                    exact: true,
+                    name: new RegExp(`^本次分配数量，${SERVICE_ITEM_NAME.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
                 }),
             )
         await expect(serviceQuantity).toHaveCount(1)
@@ -614,7 +618,7 @@ test("flow-04 线下服务履约：客户合同开单 → 采购确认 → 仅�
             exact: true,
         })
         for (const [label, value] of [
-            ["履约责任", "线下服务"],
+            ["履约方案", "线下服务"],
             ["明细行数", "1 行"],
             ["含税合计", "¥190.00"],
         ]) {

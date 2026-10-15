@@ -1,9 +1,9 @@
 /**
- * 流程: [flow-20] 公司 SKU 三价、数量取价与销售成交快照。
+ * 流程: [flow-20] 公司 SKU 三价参考、销售手填成交价与成交快照。
  * 合同: docs/erp-phase-1.md §4.4.2。
  * 账号: caigou（维护公司 SKU）→ xiaoshou（商品池、草稿、提交）→ caigou（审批）。
  * 独立商品通过真实 API 建档，复用固定分类、品牌、单位和有效供应商；
- * 三价维护、商品池查询、销售数量/手动价格/恢复自动及审批均通过页面办理。
+ * 三价维护、商品池查询、销售数量与手填成交价及审批均通过页面办理；参考价不自动成为成交价。
  * 供应商成本与公司销售参考价使用不同数值，验证改公司价不改供给成本。
  */
 import { archiveContractViaUi } from "../helpers/contracts"
@@ -68,7 +68,7 @@ type SalesLine = {
     sku_revision_id: string
     quantity: string
     unit_price_gross: string
-    pricing_mode: "AUTO" | "MANUAL"
+    pricing_mode: "MANUAL" | "GIFT"
     gross_amount: string
     reference_prices?: Prices
 }
@@ -431,7 +431,7 @@ async function saveDraft(
 
 function expectWorkingPrice(
     order: SalesOrder,
-    pricingMode: "AUTO" | "MANUAL",
+    pricingMode: "MANUAL",
     quantity: string,
     price: string,
     gross: string,
@@ -446,7 +446,7 @@ function expectWorkingPrice(
     expect(order.working_copy?.gross_amount).toBe(gross)
 }
 
-test("[flow-20] 三价与供应商编号、数量自动报价、手动保留及销售快照冻结", async ({
+test("[flow-20] 三价与供应商编号、成交价手填不随数量改写及销售快照冻结", async ({
     browser,
 }, testInfo) => {
     test.setTimeout(10 * 60 * 1000)
@@ -569,25 +569,26 @@ test("[flow-20] 三价与供应商编号、数量自动报价、手动保留及�
         .check()
     await picker.locator("#sales-orders-sku-picker-confirm").click()
     await expect(picker).toBeHidden(VISIBLE)
-    const quantity = page.getByLabel("数量", { exact: true })
+    const quantity = page.locator(
+        'input[id^="sales-orders-create-line-"][id$="-quantity"]',
+    )
     const price = page.getByLabel("含税成交单价", { exact: true })
-    await expect(price).toHaveValue("129.00")
-    await test.step("跨集采门槛自动切价，手动修改后数量变化保留成交价", async () => {
-        for (const [count, unitPrice] of [
-            ["9", "129.00"],
-            ["10", "119.00"],
-            ["9", "129.00"],
-            ["10", "119.00"],
-        ]) {
-            await quantity.fill(count!)
-            await expect(price).toHaveValue(unitPrice!)
+    const autoPricing = page.getByRole("button", {
+        name: "按数量取价",
+        exact: true,
+    })
+    await test.step("成交价由销售填写，选品与跨集采门槛改数量都不带入或改写单价", async () => {
+        await expect(price).toHaveValue("")
+        await expect(autoPricing).toHaveCount(0)
+        for (const count of ["9", "10"]) {
+            await quantity.fill(count)
+            await expect(price).toHaveValue("")
         }
         await price.fill("125.00")
-        await quantity.fill("20")
-        await expect(price).toHaveValue("125.00")
-        await expect(
-            page.getByText("手动成交价", { exact: true }),
-        ).toBeVisible()
+        for (const count of ["9", "10", "20"]) {
+            await quantity.fill(count)
+            await expect(price).toHaveValue("125.00")
+        }
     })
     await page.locator("#sales-orders-create-batch-due-date-open").click()
     await pickCalendarDay(
@@ -605,7 +606,7 @@ test("[flow-20] 三价与供应商编号、数量自动报价、手动保留及�
     }
     expectWorkingPrice(firstSaved.order, "MANUAL", "20", "125.00", "2500.00")
 
-    await test.step("保存续编保留手动模式，显式恢复 AUTO 并由服务端核价", async () => {
+    await test.step("续编保留手填成交价，服务端不按参考价重算", async () => {
         await page.goto(`/sales/orders/${salesOrderId}`)
         await expectContractReady(page, contractNo)
         await expect(quantity).toHaveValue("20")
@@ -629,45 +630,9 @@ test("[flow-20] 三价与供应商编号、数量自动报价、手动保留及�
         await expectContractReady(page, contractNo)
         await expect(quantity).toHaveValue("9")
         await expect(price).toHaveValue("125.00")
-        await page
-            .getByRole("button", { name: "按数量取价", exact: true })
-            .click()
-        await expect(price).toHaveValue("129.00")
+        await expect(autoPricing).toHaveCount(0)
+        await price.fill("119.00")
         await quantity.fill("10")
-        await expect(price).toHaveValue("119.00")
-        const automaticSaved = await saveDraft(
-            page,
-            contractNo,
-            salesOrderId,
-            frozenContract,
-        )
-        expectWorkingPrice(
-            automaticSaved.order,
-            "AUTO",
-            "10",
-            "119.00",
-            "1190.00",
-        )
-        await price.fill("125.00")
-        const changedToManual = await saveDraft(
-            page,
-            contractNo,
-            salesOrderId,
-            frozenContract,
-        )
-        expectWorkingPrice(
-            changedToManual.order,
-            "MANUAL",
-            "10",
-            "125.00",
-            "1250.00",
-        )
-        await page.goto(`/sales/orders/${salesOrderId}`)
-        await expectContractReady(page, contractNo)
-        await expect(price).toHaveValue("125.00")
-        await page
-            .getByRole("button", { name: "按数量取价", exact: true })
-            .click()
         await expect(price).toHaveValue("119.00")
         const saved = await saveDraft(
             page,
@@ -675,24 +640,43 @@ test("[flow-20] 三价与供应商编号、数量自动报价、手动保留及�
             salesOrderId,
             frozenContract,
         )
-        expectWorkingPrice(saved.order, "AUTO", "10", "119.00", "1190.00")
+        expectWorkingPrice(saved.order, "MANUAL", "10", "119.00", "1190.00")
+        expect(saved.payload.draft.lines[0]!.goods.pricing_mode).toBe("MANUAL")
         expect(
             saved.order.working_copy?.lines[0]?.reference_prices,
         ).toMatchObject(PRICES)
-        const submittedPrice = structuredClone(saved.payload)
-        submittedPrice.version = saved.order.working_copy!.version
-        submittedPrice.draft.lines[0]!.goods.unit_price_gross = "0.01"
+        const lowPrice = structuredClone(saved.payload)
+        lowPrice.version = saved.order.working_copy!.version
+        lowPrice.draft.lines[0]!.goods.unit_price_gross = "0.01"
         await writeApi(
             salesToken,
             "PUT",
             `/admin/sales-orders/${salesOrderId}/working-copy`,
-            submittedPrice,
+            lowPrice,
         )
-        const checked = await apiGet<SalesOrder>(
+        const kept = await apiGet<SalesOrder>(
             salesToken,
             `/admin/sales-orders/${salesOrderId}`,
         )
-        expectWorkingPrice(checked, "AUTO", "10", "119.00", "1190.00")
+        expectWorkingPrice(kept, "MANUAL", "10", "0.01", "0.10")
+        const restored = structuredClone(saved.payload)
+        restored.version = kept.working_copy!.version
+        await writeApi(
+            salesToken,
+            "PUT",
+            `/admin/sales-orders/${salesOrderId}/working-copy`,
+            restored,
+        )
+        expectWorkingPrice(
+            await apiGet<SalesOrder>(
+                salesToken,
+                `/admin/sales-orders/${salesOrderId}`,
+            ),
+            "MANUAL",
+            "10",
+            "119.00",
+            "1190.00",
+        )
     })
 
     await test.step("提交与生效保存成交快照，后续公司 SKU 改价不得重算正式金额", async () => {
@@ -700,7 +684,7 @@ test("[flow-20] 三价与供应商编号、数量自动报价、手动保留及�
         await expectContractReady(page, contractNo)
         await expect(price).toHaveValue("119.00")
         await quantity.fill("9")
-        await expect(price).toHaveValue("129.00")
+        await expect(price).toHaveValue("119.00")
         await quantity.fill("10")
         await expect(price).toHaveValue("119.00")
         await dismissToasts(page)
@@ -728,7 +712,7 @@ test("[flow-20] 三价与供应商编号、数量自动报价、手动保留及�
             lines: [
                 expect.objectContaining({
                     sku_revision_id: selected.sku_revision_id,
-                    pricing_mode: "AUTO",
+                    pricing_mode: "MANUAL",
                     quantity: "10",
                     unit_price_gross: "119.00",
                     gross_amount: "1190.00",

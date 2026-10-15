@@ -14,7 +14,11 @@
  * - 销售单票款页只读，回款改在客户往来页登记
  */
 import { archiveContractViaUi } from "../helpers/contracts";
-import { selectExistingContractForSalesOrder, expectSalesOrderContractSummary } from "../helpers/sales-orders"
+import {
+    expectSalesOrderContractSummary,
+    fillSalesLineUnitPrice,
+    selectExistingContractForSalesOrder,
+} from "../helpers/sales-orders"
 import path from "node:path";
 import { test, expect, type Page } from "../helpers/test";
 
@@ -52,6 +56,7 @@ const WAREHOUSE_CODE = "BJ-TZ-01";
 /** 采购入库卡往来方是供应商法定名称，不是销售客户。 */
 const RECEIPT_SUPPLIER = "杭州狮峰茶叶有限公司";
 const SALES_QTY = "2";
+const SALES_UNIT_PRICE = "1288.00";
 
 type LoginName =
     | "xiaoshou"
@@ -169,6 +174,7 @@ test("flow-01 外部采购入仓后由公司仓库发货", async ({ browser }) =
         await expect(skuDialog).toBeHidden({ timeout: UI_TIMEOUT });
         await expect(page.getByText(SKU_NAME).first()).toBeVisible({ timeout: UI_TIMEOUT });
         await page.getByLabel("数量").fill(SALES_QTY);
+        await fillSalesLineUnitPrice(page, SALES_UNIT_PRICE);
         await page.locator("#sales-orders-create-batch-due-date-open").click()
         await pickCalendarDay(
             page,

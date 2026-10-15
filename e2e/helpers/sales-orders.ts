@@ -9,9 +9,20 @@ export async function selectExistingContractForSalesOrder(
     await page.locator("#sales-orders-create-entry-contract").click()
     const dialog = page.getByRole("dialog", { name: "选择已有合同" })
     await expect(dialog).toBeVisible()
+    const input = dialog.locator("#sales-contract-picker-contract")
+    // 先等远程搜索返回，避免在防抖查询替换旧候选时点击被卸载的选项。
+    const searched = page.waitForResponse((response) => {
+        const url = new URL(response.url())
+        return response.request().method() === "GET" &&
+            url.pathname === "/admin/contracts" && url.searchParams.get("q") === contractNo
+    })
+    await input.fill(contractNo)
+    const response = await searched
+    expect(response.ok(), await response.text()).toBeTruthy()
+    await expect(input).not.toHaveAttribute("aria-busy", "true")
     await chooseOption(
         page,
-        dialog.locator("#sales-contract-picker-contract"),
+        input,
         contractNo,
         contractNo,
     )
@@ -39,4 +50,17 @@ export async function expectSalesOrderContractSummary(
     if (input.contractNo) {
         await expect(page.locator("#contractId")).toContainText(`${input.contractNo} · v1`)
     }
+}
+
+/** 成交单价由销售填写：选择商品或修改数量都不带入参考价（第一期 §4.4.2）。 */
+export async function fillSalesLineUnitPrice(
+    page: Page,
+    unitPrice: string,
+    lineIndex = 0,
+): Promise<void> {
+    const input = page
+        .locator('input[id^="sales-orders-create-line-"][id$="-unit-price"]')
+        .nth(lineIndex)
+    await expect(input).toBeVisible()
+    await input.fill(unitPrice)
 }

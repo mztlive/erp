@@ -19,7 +19,11 @@
  * 6. 销售单对象中心冲正/红票关闭（canRequestReverse=false），红票只在财务工作台。
  */
 import { archiveContractViaUi } from "../helpers/contracts"
-import { selectExistingContractForSalesOrder, expectSalesOrderContractSummary } from "../helpers/sales-orders"
+import {
+    expectSalesOrderContractSummary,
+    fillSalesLineUnitPrice,
+    selectExistingContractForSalesOrder,
+} from "../helpers/sales-orders"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -124,7 +128,7 @@ test("销项与进项红票按 Invoice 强类型命令登记，不进审批且�
         await expectNotClosed(page)
         await expectNoChangeOrder(page)
         await page.getByRole("tab", { name: /^采购/ }).click()
-        await expect(page.getByTestId("sales-order-purchase-status")).toContainText(
+        await expect(page.getByTestId("sales-order-purchase-progress").getByTestId("sales-order-purchase-status")).toContainText(
             "供给未完全覆盖",
             { timeout: TIMEOUT },
         )
@@ -213,7 +217,7 @@ test("销项与进项红票按 Invoice 强类型命令登记，不进审批且�
         await expectFulfillmentNotStarted(page)
         await expectNoChangeOrder(page)
         await page.getByRole("tab", { name: "发票", exact: true }).click()
-        await expect(page.getByRole("heading", { name: "开票申请" })).toBeVisible({ timeout: LONG })
+        await expect(page.getByRole("heading", { name: "已开发票", exact: true })).toBeVisible({ timeout: LONG })
         await expect(page.locator("#customer-receivables-preview-invoice-red")).toHaveCount(0)
 
         // 红冲恢复可申请余额，但不恢复旧申请授权，也不自动生成开票任务。
@@ -505,6 +509,7 @@ async function createAndSubmitPhysicalSalesOrder(
         "暂未确定采购负责人",
         { timeout: LONG },
     )
+    await fillSalesLineUnitPrice(page, UNIT_PRICE)
 
     await page.locator("#sales-orders-create-batch-due-date-open").click()
     await pickCalendarDay(page, page.locator("#sales-orders-create-batch-due-date"), todayIso())

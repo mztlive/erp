@@ -8,12 +8,13 @@
  *
  * 验收约束:
  * 1. 仅 ACTIVE、条款有效且 AVAILABLE 的供给允许建采购单；停止可供后不得预览或确认。
- * 2. 本流程提交克隆的销售变更草稿，不修改 SKU/数量；生效后供给仍失效，仍不得建单。
- *    变更草稿编辑及驳回后原单重提由 flow-08 覆盖。
+ * 2. 不可售商品保留非零数量时拒绝保存；通过销售变更将原行归零，保留历史身份。
+ *    生效后不再产生该行采购需求，原版本保持不变；驳回后重提由 flow-08 覆盖。
  * 3. 销售变更由采购确认履约影响、财务复核，末节点通过后自动生效。
  * 4. 已生效销售单不得撤回原审批回到草稿改选源，必须另走销售变更。
  */
 import { archiveContractViaUi } from "../helpers/contracts"
+import { fillSalesLineUnitPrice } from "../helpers/sales-orders"
 import fs from "node:fs"
 import path from "node:path"
 
@@ -35,6 +36,7 @@ import {
 import {
     approveCurrentDocument,
     chooseOption,
+    dismissToasts,
     expectToast,
     openWorkspaceTask,
     pickCalendarDay,
@@ -413,6 +415,7 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
         await expect(skuDialog).toBeHidden({ timeout: UI_TIMEOUT })
         await expect(page.getByText(SKU_NAME).first()).toBeVisible({ timeout: UI_TIMEOUT })
         await page.getByLabel("数量").fill(SALES_QTY)
+        await fillSalesLineUnitPrice(page, "1288.00")
         await page.locator("#sales-orders-create-batch-due-date-open").click()
         await pickCalendarDay(page, page.locator("#sales-orders-create-batch-due-date"), dueDate)
         await page.locator("#sales-orders-create-batch-due-date-apply").click()
@@ -572,30 +575,67 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
         await expect(page.getByRole("tab", { name: /采购/ })).toHaveAttribute("aria-selected", "true")
         await expect(page.getByTestId("sales-order-purchase-status")).toContainText("供给未完全覆盖")
 
-        // 10) 发起销售变更单，本流程保留克隆的 SKU/数量
+        // 10) 发起销售变更单：不可售商品不得原样重提，取消原行须将数量归零。
+        type SalesResult = {
+            current_revision_id: string
+            purchase_order_count: number
+            purchase_coverage: { remaining_quantity: string; total_quantity: string }
+            revisions: Array<{ id: string; revision_no: number; gross_amount: string }>
+        }
+        const original = await apiGet<SalesResult>(await apiToken("xiaoshou"), `/admin/sales-orders/${salesOrderId}`)
+        const originalRevision = original.revisions.find((revision) => revision.revision_no === 1)
+        expect(originalRevision?.gross_amount).toBe("2576.00")
+        const createdChange = page.waitForResponse(
+            (response) =>
+                response.request().method() === "POST" &&
+                new URL(response.url()).pathname === "/admin/sales-change-orders",
+        )
         await startChange.click()
-        const startDialog = dialogish(page, "发起改单")
-        await expect(startDialog.first()).toBeVisible({ timeout: UI_TIMEOUT })
-        await startDialog.locator("#sales-orders-detail-change-confirm").click()
-        await expect(page.getByText("改单已创建")).toBeVisible({ timeout: UI_TIMEOUT })
-        await expect(startDialog.first()).toBeHidden({ timeout: UI_TIMEOUT })
-        await expect(page.locator("#sales-orders-detail-start-change")).toBeDisabled()
-        await expect(page.getByRole("tab", { name: /版本/ })).toContainText("改单中")
+        expect((await createdChange).ok()).toBe(true)
+        const changeEdit = page.getByRole("dialog", { name: "销售改单", exact: true })
+        await expect(changeEdit).toBeVisible({ timeout: UI_TIMEOUT })
+        await expect(changeEdit.getByText(SKU_NAME).first()).toBeVisible()
+        await changeEdit
+            .locator('textarea[id^="sales-change-edit-"][id$="-reason"]')
+            .fill("供给停止可供，客户确认取消该商品，原行数量归零")
+        const rejectedSave = page.waitForResponse((response) =>
+            response.request().method() === "POST" &&
+            /^\/admin\/sales-change-orders\/[^/]+\/draft$/.test(new URL(response.url()).pathname),
+        )
+        await changeEdit.getByRole("button", { name: "提交改单", exact: true }).click()
+        const rejectedHttp = await rejectedSave
+        expect(rejectedHttp.status()).toBe(422)
+        expect(await rejectedHttp.json()).toMatchObject({
+            success: false,
+            code: "BUSINESS_RULE_BLOCKED",
+            errorMessage: expect.stringContaining("销售商品已失效或修订已变化"),
+        })
+        // 页面可能按敏感内容规则收敛错误文案；具体拒绝原因以上方真实响应为准。
+        await expect(changeEdit.getByRole("alert")).toBeVisible()
+        await expect(changeEdit.getByRole("alert")).not.toBeEmpty()
+        await dismissToasts(page)
+        await changeEdit.locator('input[id^="sales-change-edit-"][id$="-quantity"]').fill("0")
+        const savedChange = page.waitForResponse((response) =>
+            response.request().method() === "POST" &&
+            /^\/admin\/sales-change-orders\/[^/]+\/draft$/.test(new URL(response.url()).pathname),
+        )
+        const submittedChange = page.waitForResponse(
+            (response) =>
+                response.request().method() === "POST" &&
+                /^\/admin\/sales-change-orders\/[^/]+\/submit-impact$/.test(new URL(response.url()).pathname),
+        )
+        await changeEdit.getByRole("button", { name: "提交改单", exact: true }).click()
+        const savedHttp = await savedChange
+        expect(savedHttp.ok(), await savedHttp.text()).toBe(true)
+        const submittedHttp = await submittedChange
+        const submittedBody = await submittedHttp.text()
+        expect(submittedHttp.ok(), submittedBody).toBe(true)
+        expect(JSON.parse(submittedBody).success, submittedBody).toBe(true)
+        await expect(changeEdit).toBeHidden({ timeout: UI_TIMEOUT })
+        await expect(page.locator("#sales-orders-detail-start-change")).toBeDisabled({ timeout: UI_TIMEOUT })
+        await expect(page.getByRole("tab", { name: /版本/ })).toContainText("改单中", { timeout: UI_TIMEOUT })
         await expect(page.getByRole("button", { name: "添加商品" })).toHaveCount(0)
         await expect(page.getByRole("heading", { name: "销售明细" })).toHaveCount(0)
-
-        await page.getByRole("tab", { name: /版本/ }).click()
-        await expect(page.getByRole("tab", { name: /版本/ })).toHaveAttribute("aria-selected", "true")
-        await expect(page.getByRole("button", { name: "提交改单" })).toBeVisible({
-            timeout: UI_TIMEOUT,
-        })
-        await expect(page.getByText(SKU_NAME).first()).toBeVisible()
-        await page.locator("#sales-orders-change-submit").click()
-        const changeSubmit = dialogish(page, /提交改单/)
-        await expect(changeSubmit.first()).toBeVisible({ timeout: UI_TIMEOUT })
-        await expect(changeSubmit.getByText("采购确认履约影响 → 财务复核金额与应收", { exact: true })).toBeVisible()
-        await changeSubmit.locator("#sales-orders-change-submit-confirm-confirm").click()
-        await expect(page.getByText("改单已提交审批")).toBeVisible({ timeout: UI_TIMEOUT })
         await expect(orderTitleRow(page, customerName).getByText("已生效")).toBeVisible()
         await expect(page.getByText("审批中").first()).toBeVisible({ timeout: UI_TIMEOUT })
 
@@ -626,7 +666,7 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
         await expect(page.locator("#workspace-home-refresh")).toBeEnabled({ timeout: UI_TIMEOUT })
         await expect(page.getByRole("button", { name: /采购单审批/ })).toHaveCount(0)
 
-        // 13) 变更生效后：版本递增，SKU 未改，供给仍失效，仍不得建采购单/履约/关闭
+        // 13) 变更生效后：原商品身份保留、数量归零，历史版本不改，无采购需求。
         page = await switchTo("xiaoshou")
         await page.goto(`/sales/orders/${salesOrderId}`)
         await expect(orderTitleRow(page, customerName).getByText("已生效")).toBeVisible({
@@ -636,13 +676,12 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
             page.getByText(/版本\s*v2/),
         ).toBeVisible({ timeout: UI_TIMEOUT })
         await expect(page.getByText(SKU_NAME).first()).toBeVisible()
-        await expect(page.getByText("未开始").first()).toBeVisible()
         await expect(orderTitleRow(page, customerName).getByText("已关闭", { exact: true })).toHaveCount(0)
         await expect(page.locator("#sales-orders-detail-cancel-approval-trigger")).toHaveCount(0)
         await expect(page.getByRole("button", { name: /^(通过|同意审批)$/ })).toHaveCount(0)
         await page.getByRole("tab", { name: /采购/ }).click()
         await expect(page.getByRole("tab", { name: /采购/ })).toHaveAttribute("aria-selected", "true")
-        await expect(page.getByTestId("sales-order-purchase-status")).toContainText("供给未完全覆盖")
+        await expect(page.getByTestId("sales-order-purchase-status")).not.toContainText("供给未完全覆盖")
         await page.getByRole("tab", { name: /版本/ }).click()
         await expect(page.getByRole("tab", { name: /版本/ })).toHaveAttribute("aria-selected", "true")
         await expect(page.getByText("v2", { exact: true }).first()).toBeVisible({
@@ -655,8 +694,28 @@ test("flow-18 停止可供后供给分配不得建采购单，必须走销售变
         await expect(page.getByRole("button", { name: "提交改单" })).toHaveCount(0)
         await expect(page.getByRole("button", { name: "添加商品" })).toHaveCount(0)
 
+        const changed = await apiGet<SalesResult>(await apiToken("xiaoshou"), `/admin/sales-orders/${salesOrderId}`)
+        expect(changed.revisions.find((revision) => revision.revision_no === 1)).toEqual(originalRevision)
+        expect(changed.revisions.find((revision) => revision.id === changed.current_revision_id)).toMatchObject({
+            revision_no: 2,
+            gross_amount: expect.stringMatching(/^0(?:\.0{1,2})?$/),
+        })
+        expect(changed.purchase_order_count).toBe(0)
+        expect(changed.purchase_coverage.total_quantity).toMatch(/^0(?:\.0+)?$/)
+        expect(changed.purchase_coverage.remaining_quantity).toMatch(/^0(?:\.0+)?$/)
+        const receivables = await apiGet<{ items: Array<{ sales_order_id: string; gross_total: string; open_total: string }> }>(
+            await apiToken("admin"), "/admin/receivable-accounts", { sales_order_id: salesOrderId, page_size: 100 },
+        )
+        expect(receivables.items).toHaveLength(1)
+        expect(receivables.items[0]).toMatchObject({
+            sales_order_id: salesOrderId,
+            gross_total: expect.stringMatching(/^0(?:\.0{1,2})?$/),
+            open_total: expect.stringMatching(/^0(?:\.0{1,2})?$/),
+        })
         page = await switchTo("caigou")
-        await expectAllocationCannotCreatePurchase(page, salesOrderNo, salesOrderId)
+        expect(await apiGet<unknown[]>(await apiToken("caigou"), "/admin/purchase-creation-bases", {
+            sales_order_id: salesOrderId,
+        })).toEqual([])
         await expectNoPurchaseOrders(page, salesOrderNo)
     } finally {
         try {

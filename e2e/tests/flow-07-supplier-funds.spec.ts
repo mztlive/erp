@@ -15,7 +15,7 @@
  * - 付款详情无提交审批入口；SupplierPayment 不得出现审批实例/审批任务。
  */
 import { archiveContractViaUi } from "../helpers/contracts";
-import { expectSalesOrderContractSummary } from "../helpers/sales-orders";
+import { expectSalesOrderContractSummary, fillSalesLineUnitPrice } from "../helpers/sales-orders";
 import { BANK_RECEIPT_FILE, openAuthorizedSupplierPaymentTask, purchasePaymentRequestCommand, supplierPaymentTaskPattern, type PurchasePaymentRequestResult } from "../helpers/payments";
 import { API_BASE, apiGet, apiToken } from "../helpers/api";
 import { randomUUID } from "node:crypto";
@@ -52,6 +52,7 @@ test.use(headedAwareViewport({ width: 1440, height: 960 }));
 test.setTimeout(12 * 60 * 1000);
 
 const SKU_NAME = "狮峰明前龙井礼盒";
+const UNIT_PRICE = "1288.00";
 const SUPPLIER_SHORT = "狮峰茶叶";
 const RECEIPT_PNG = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
@@ -441,6 +442,7 @@ test("供应商票款：W01 付款任务分次入账、进项发票核销与付�
         "暂未确定",
         { timeout: 20_000 },
     );
+    await fillSalesLineUnitPrice(page, UNIT_PRICE);
 
     await page.locator("#sales-orders-create-batch-due-date-open").click()
     await pickCalendarDay(page, page.locator("#sales-orders-create-batch-due-date"), isoDate());

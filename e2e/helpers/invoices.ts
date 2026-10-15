@@ -240,7 +240,7 @@ export async function expectSalesInvoiceEvidence(
     expect(body.data).toHaveLength(input.files.length)
     await page.goto(`/sales/orders/${input.salesOrderId}?section=invoice`)
     await expect(
-        page.getByRole("heading", { name: "发票文件", exact: true }),
+        page.getByRole("heading", { name: "已开发票", exact: true }),
     ).toBeVisible({
         timeout: TIMEOUT,
     })
@@ -256,7 +256,10 @@ export async function expectSalesInvoiceEvidence(
         const row = page
             .getByRole("listitem")
             .filter({ hasText: expected.name })
-        await expect(row).toContainText(input.invoiceNo ?? "附件登记", { timeout: TIMEOUT })
+        // 发票号码显示在所属发票记录的标题，文件行只列文件名与下载。
+        await expect(
+            page.getByRole("article").filter({ has: row }),
+        ).toContainText(input.invoiceNo ?? "附件登记", { timeout: TIMEOUT })
         const [download, response] = await Promise.all([
             page.waitForEvent("download"),
             page.waitForResponse(

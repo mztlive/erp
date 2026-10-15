@@ -19,6 +19,7 @@ import { uploadAcceptanceEvidence } from '../helpers/fulfillment'
 import { openLoggedInWorkspace } from '../helpers/login'
 import { expectProcurementPaymentReceipt, payOnlySupplierTask } from '../helpers/payments'
 import { ensureDefaultProcurementOwner } from '../helpers/procurement'
+import { fillSalesLineUnitPrice } from '../helpers/sales-orders'
 import {
     approveCurrentDocument,
     chooseOption,
@@ -435,6 +436,7 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
             await expect(page.locator("#sales-orders-create-header-payment-terms").locator("input, button, [role=combobox]")).toHaveCount(0)
             await pickVirtualSku(page)
             await page.locator('[id^="sales-orders-create-line-"][id$="-quantity"]').first().fill('10')
+            await fillSalesLineUnitPrice(page, '100.00')
             await page.locator("#sales-orders-create-batch-due-date-open").click()
             await pickCalendarDay(page, page.locator('#sales-orders-create-batch-due-date'), due)
             await page.locator('#sales-orders-create-batch-due-date-apply').click()
@@ -576,7 +578,7 @@ test('虚拟商品电子交付全流程：销售单生效后只能采购、登�
             await page.locator('#fulfillment-operations-electronic-form-recipient').fill('E2E 客户企业邮箱收件人')
             await page.locator('#fulfillment-operations-electronic-form-evidence-input').setInputFiles({ name: 'electronic-delivery.png', mimeType: 'image/png', buffer: PNG_1X1 })
             await chooseComboboxById(page, 'fulfillment-operations-electronic-form-result', '成功')
-            const quantity = await page.getByLabel('交付数量', { exact: true }).inputValue()
+            const quantity = await page.locator('input[id^="fulfillment-operations-electronic-form-quantity-"]').first().inputValue()
             expect(Number(quantity)).toBeGreaterThan(0)
             await page.locator('#fulfillment-operations-work-surface-confirm').click()
             const confirm = page.getByRole('alertdialog', { name: '确认交付？' })

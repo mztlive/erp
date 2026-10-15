@@ -7,7 +7,7 @@
  * 仓发任务必须继续可用，但本用例不得确认发货或消耗库存预占。
  */
 import { archiveContractViaUi } from "../helpers/contracts";
-import { selectExistingContractForSalesOrder } from "../helpers/sales-orders";
+import { fillSalesLineUnitPrice, selectExistingContractForSalesOrder } from "../helpers/sales-orders";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -446,6 +446,7 @@ test("flow-19 已生效销售单禁止直接作废：预占和仓发草稿保持
         await expect(skuDialog).toBeHidden({ timeout: UI_TIMEOUT });
         await expect(page.getByText(SKU_NAME).first()).toBeVisible({ timeout: UI_TIMEOUT });
         await page.getByLabel("数量").fill(SALE_QTY);
+        await fillSalesLineUnitPrice(page, "1288.00");
         await page.locator("#sales-orders-create-batch-due-date-open").click()
         await pickCalendarDay(
             page,

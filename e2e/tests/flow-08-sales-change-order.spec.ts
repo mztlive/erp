@@ -375,7 +375,7 @@ test.describe("flow-08 销售变更单（未履约）", () => {
                 .locator('input[id^="sales-change-edit-"][id$="-quantity"]')
                 .fill("3")
             await edit
-                .locator('input[id^="sales-change-edit-"][id$="-price"]')
+                .locator('input[id^="sales-change-edit-"][id$="-price"]:not([id$="-supply-price"])')
                 .fill("1300")
             const savedResponse = sales.page.waitForResponse(
                 (response) =>
@@ -500,7 +500,7 @@ test.describe("flow-08 销售变更单（未履约）", () => {
                 .locator('input[id^="sales-change-edit-"][id$="-quantity"]')
                 .fill("4")
             await expect(
-                edit.locator('input[id^="sales-change-edit-"][id$="-price"]'),
+                edit.locator('input[id^="sales-change-edit-"][id$="-price"]:not([id$="-supply-price"])'),
             ).toHaveValue(/^1300(?:\.0+)?$/)
             const resubmittedResponse = sales.page.waitForResponse(
                 (response) =>

@@ -16,6 +16,7 @@
  *   `data-selected` 的选项标签区分「可用」库存和「入仓」采购。
  */
 import { archiveContractViaUi } from "../helpers/contracts"
+import { fillSalesLineUnitPrice } from "../helpers/sales-orders"
 import fs from "node:fs"
 import path from "node:path"
 import { expect, test, type BrowserContext, type Locator, type Page } from "../helpers/test"
@@ -190,6 +191,7 @@ async function createSalesOrderWithContract(
     await expect(page.getByRole("button", { name: new RegExp(`更换销售项目 ${SKU_NAME}`) })).toBeVisible({ timeout: TIMEOUT })
 
     await page.getByLabel("数量").fill(SALES_QTY)
+    await fillSalesLineUnitPrice(page, "1288.00")
     await page.locator("#sales-orders-create-batch-due-date-open").click()
     await pickCalendarDay(page, page.locator("#sales-orders-create-batch-due-date"), plusDaysIso(21))
     await page.getByRole("button", { name: "应用到全部明细" }).click()

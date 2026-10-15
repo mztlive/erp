@@ -114,7 +114,7 @@ export async function registerCustomerReceiptForOrder(
 /** 回款预览标题是「回款单：SK-…」，不是单独的单号 heading。 */
 export async function expectReceiptPreview(page: Page, receiptNo: string): Promise<void> {
     await expect(
-        page.getByText(new RegExp(`回款单：${receiptNo}|${receiptNo}`)).first(),
+        page.getByRole("dialog").locator('[data-slot="quick-preview-identity"]').getByText(`回款单：${receiptNo}`, { exact: true }),
     ).toBeVisible({ timeout: LONG })
 }
 

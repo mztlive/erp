@@ -24,7 +24,7 @@
  *   本流程用狮峰茶叶实物拆「入仓 + 供应商直发」覆盖入库与代发；电子交付/服务与入库/直发共用 ensure_prepay_gate。
  */
 import { archiveContractViaUi } from "../helpers/contracts";
-import { selectExistingContractForSalesOrder } from "../helpers/sales-orders"
+import { fillSalesLineUnitPrice, selectExistingContractForSalesOrder } from "../helpers/sales-orders"
 import fs from "node:fs";
 import path from "node:path";
 import { test, expect, type Browser, type BrowserContext, type Page } from "../helpers/test";
@@ -662,6 +662,8 @@ test("flow-13 先款后货：付款完成前入库与代发均不可确认", asy
         await pickSku(page, "龙井", SKU_INBOUND);
         await pickSku(page, "普洱", SKU_DIRECT);
         await fillAllLineQuantities(page, SALES_QTY);
+        await fillSalesLineUnitPrice(page, "1288.00", 0);
+        await fillSalesLineUnitPrice(page, "568.00", 1);
         await page.locator("#sales-orders-create-batch-due-date-open").click()
         await pickCalendarDay(page, page.locator("#sales-orders-create-batch-due-date"), dueDate);
         await page.locator("#sales-orders-create-batch-due-date-apply").click();

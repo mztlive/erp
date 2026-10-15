@@ -20,7 +20,7 @@
  *    以同 ID、同单号及原资金来源编辑并重提，新的提交重新从首节点审批。
  */
 import { archiveContractViaUi } from "../helpers/contracts"
-import { selectExistingContractForSalesOrder } from "../helpers/sales-orders"
+import { fillSalesLineUnitPrice, selectExistingContractForSalesOrder } from "../helpers/sales-orders"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -968,6 +968,7 @@ async function createAndSubmitPhysicalSalesOrder(
     await expect(
         page.getByTestId(/sales-line-procurement-owner-/),
     ).not.toContainText("暂未确定采购负责人", { timeout: LONG })
+    await fillSalesLineUnitPrice(page, "1288.00")
 
     await page.locator("#sales-orders-create-batch-due-date-open").click()
     await pickCalendarDay(
@@ -1126,6 +1127,7 @@ async function openPostedReceiptPreview(page: Page, receiptNo: string) {
     await page.locator("#customer-receivables-view-receipt").click()
     await page.locator("#customer-receivables-toolbar-search").fill(receiptNo)
     await page.locator("#customer-receivables-toolbar-search").press("Enter")
+    await expect(page).toHaveURL((url) => url.searchParams.get("q") === receiptNo)
     const row = page.getByRole("row").filter({ hasText: receiptNo })
     await expect(row).toBeVisible({ timeout: LONG })
     await expect(row.getByText("已过账", { exact: true })).toBeVisible({

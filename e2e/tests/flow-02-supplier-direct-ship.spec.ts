@@ -25,7 +25,7 @@
  */
 
 import { archiveContractViaUi } from "../helpers/contracts"
-import { selectExistingContractForSalesOrder } from "../helpers/sales-orders"
+import { fillSalesLineUnitPrice, selectExistingContractForSalesOrder } from "../helpers/sales-orders"
 import { test, expect, type Page } from "../helpers/test"
 import fs from "node:fs"
 import path from "node:path"
@@ -52,6 +52,8 @@ test.describe.configure({ mode: "serial" })
 
 const SKU_KEYWORD = "狮峰明前龙井"
 const SECOND_SKU_KEYWORD = "狮峰陈皮普洱"
+const UNIT_PRICE = "1288.00"
+const SECOND_UNIT_PRICE = "568.00"
 const SUPPLIER_SHORT = "狮峰茶叶"
 const DIRECT_OPTION = /狮峰茶叶.* · 代发直发|代发直发/
 const WAREHOUSE_OPTION = /狮峰茶叶.* · 集采入仓| · 集采入仓/
@@ -260,7 +262,7 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
         await skuDialog.getByRole("checkbox", { name: new RegExp(SKU_KEYWORD) }).check()
         await skuDialog.locator("#sales-orders-sku-picker-confirm").click()
         await expect(skuDialog).toBeHidden({ timeout: 20000 })
-        await expect(page.getByText(SKU_KEYWORD)).toBeVisible({ timeout: 20000 })
+        await expect(page.getByRole("heading", { name: new RegExp(SKU_KEYWORD) })).toBeVisible({ timeout: 20000 })
 
         await page.locator("#sales-orders-create-line-items-add").click()
         await expect(skuDialog).toBeVisible({ timeout: 20000 })
@@ -269,8 +271,10 @@ test("供应商直接发客户（代发）全流程", async ({ browser }) => {
         await skuDialog.getByRole("checkbox", { name: new RegExp(SECOND_SKU_KEYWORD) }).check()
         await skuDialog.locator("#sales-orders-sku-picker-confirm").click()
         await expect(skuDialog).toBeHidden({ timeout: 20000 })
-        await expect(page.getByText(SECOND_SKU_KEYWORD)).toBeVisible({ timeout: 20000 })
+        await expect(page.getByRole("heading", { name: new RegExp(SECOND_SKU_KEYWORD) })).toBeVisible({ timeout: 20000 })
         await expect(page.locator('[id^="sales-orders-create-line-"][id$="-quantity"]')).toHaveCount(2)
+        await fillSalesLineUnitPrice(page, UNIT_PRICE, 0)
+        await fillSalesLineUnitPrice(page, SECOND_UNIT_PRICE, 1)
         const owners = page.locator('[data-testid^="sales-line-procurement-owner-"]')
         await expect(owners).toHaveCount(2)
         for (let index = 0; index < 2; index += 1) {

@@ -24,7 +24,7 @@
  * 10. 供给分配确认同一事务创建并立即提交采购单，不得留下未提交草稿。
  */
 import { archiveContractViaUi } from "../helpers/contracts";
-import { selectExistingContractForSalesOrder, expectSalesOrderContractSummary } from "../helpers/sales-orders"
+import { expectSalesOrderContractSummary, fillSalesLineUnitPrice, selectExistingContractForSalesOrder } from "../helpers/sales-orders"
 import { payOnlySupplierTask, supplierPaymentTaskPattern } from "../helpers/payments";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -247,6 +247,7 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await expect(skuDialog).toBeHidden({ timeout: UI_TIMEOUT });
         await expect(page.getByText(SKU_NAME).first()).toBeVisible({ timeout: UI_TIMEOUT });
         await page.getByLabel("数量").fill(SALES_QTY);
+        await fillSalesLineUnitPrice(page, "1288.00");
         await page.locator("#sales-orders-create-batch-due-date-open").click()
         await pickCalendarDay(page, page.locator("#sales-orders-create-batch-due-date"), dueDate);
         await page.locator("#sales-orders-create-batch-due-date-apply").click();
@@ -826,7 +827,7 @@ test("flow-15 客户拒收后走直退供应商、退款与红票纠正", async 
         await expect(page.getByText("改单中")).toHaveCount(0);
         await assertNoReturnCreateUi(page);
         await page.getByRole("tab", { name: "发票", exact: true }).click();
-        await expect(page.getByRole("heading", { name: "开票申请" })).toBeVisible({
+        await expect(page.getByRole("heading", { name: "已开发票", exact: true })).toBeVisible({
             timeout: UI_TIMEOUT,
         });
         // 全额红冲后有效开票归零；原蓝票和红票已在财务台账核验。
