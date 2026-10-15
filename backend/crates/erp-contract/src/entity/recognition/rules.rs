@@ -183,16 +183,15 @@ pub fn match_identity(
     candidates: Vec<MatchedIdentity>,
 ) -> Result<MatchedIdentity> {
     let credit = credit.map(str::trim).filter(|value| !value.is_empty()).map(str::to_ascii_uppercase);
-    let has_candidates = !candidates.is_empty();
-    let mut matches = candidates.into_iter().filter(|item| {
+    let mut matches = candidates.iter().filter(|item| {
         credit.as_ref().map_or_else(
             || item.legal_name.trim() == name.trim(),
             |code| item.credit_code.as_ref().is_some_and(|value| value.trim().eq_ignore_ascii_case(code)),
         )
     });
     let matched = matches.next().ok_or_else(|| {
-        if credit.is_some() && has_candidates {
-            ImportFailure::new("IDENTITY_CONFLICT", "合同名称与信用代码不一致，请核对合同和主数据")
+        if let Some(code) = credit.as_deref().filter(|_| !candidates.is_empty()) {
+            credit_conflict(name.trim(), code, &candidates)
         } else {
             ImportFailure::new("MASTER_NOT_FOUND", "未找到对应主体，请核对名称或确认创建客户")
         }
@@ -204,7 +203,113 @@ pub fn match_identity(
         ));
     }
     if matched.legal_name.trim() != name.trim() {
-        return Err(ImportFailure::new("IDENTITY_CONFLICT", "合同名称与信用代码不一致，请核对合同和主数据"));
+        return Err(ImportFailure::new(
+            "IDENTITY_CONFLICT",
+            &format!(
+                "该信用代码已登记在系统主体档案“{}”下，与本次填写的公司名称“{}”不一致。请核对合同原文；填写有误请修改导入信息，已有档案有误请联系管理员核实更正",
+                matched.legal_name.trim(),
+                name.trim(),
+            ),
+        ));
     }
-    Ok(matched)
+    Ok(matched.clone())
+}
+
+fn credit_conflict(name: &str, code: &str, candidates: &[MatchedIdentity]) -> ImportFailure {
+    let message = if let [candidate] = candidates {
+        match candidate.credit_code.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+            Some(existing) => format!(
+                "系统已有“{}”的主体档案，登记的统一社会信用代码为“{existing}”；本次为“{name}”填写的是“{code}”，两者不一致，暂不能继续导入。请核对合同原文；填写有误请修改导入信息，已有档案有误请联系管理员核实更正",
+                candidate.legal_name.trim(),
+            ),
+            None => format!(
+                "系统已有“{}”的主体档案，但未登记统一社会信用代码；本次填写的是“{code}”，暂时无法确认是否为同一主体。请联系管理员核实并补全已有档案后重试",
+                candidate.legal_name.trim(),
+            ),
+        }
+    } else {
+        format!(
+            "系统查到多个相关主体档案，但均未登记本次为“{name}”填写的信用代码“{code}”，无法确定对应关系。请核对填写内容；确认无误后，请联系管理员核实已有档案"
+        )
+    };
+    ImportFailure::new("IDENTITY_CONFLICT", &message)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn identity(name: &str, code: Option<&str>) -> MatchedIdentity {
+        MatchedIdentity {
+            id: "party-1".into(),
+            version: 1,
+            revision_id: Some("revision-1".into()),
+            legal_name: name.into(),
+            credit_code: code.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn identity_conflicts_explain_the_field_and_values() {
+        let cases = [
+            (
+                "客户公司",
+                identity("客户有限公司", Some("91310000ABCDEF1234")),
+                "该信用代码已登记在系统主体档案“客户有限公司”下，与本次填写的公司名称“客户公司”不一致。请核对合同原文；填写有误请修改导入信息，已有档案有误请联系管理员核实更正",
+            ),
+            (
+                "客户公司",
+                identity("客户公司", Some("91310000ABCDEF5678")),
+                "系统已有“客户公司”的主体档案，登记的统一社会信用代码为“91310000ABCDEF5678”；本次为“客户公司”填写的是“91310000ABCDEF1234”，两者不一致，暂不能继续导入。请核对合同原文；填写有误请修改导入信息，已有档案有误请联系管理员核实更正",
+            ),
+        ];
+        for (name, candidate, message) in cases {
+            let error = match_identity(name, Some("91310000ABCDEF1234"), vec![candidate]).unwrap_err();
+            assert_eq!(error.code, "IDENTITY_CONFLICT");
+            assert_eq!(error.message, message);
+        }
+    }
+
+    #[test]
+    fn missing_master_credit_requires_completion_after_identity_review() {
+        for code in [None, Some(""), Some("   ")] {
+            let error =
+                match_identity("客户公司", Some("91310000ABCDEF1234"), vec![identity("客户公司", code)])
+                    .unwrap_err();
+            assert_eq!(error.code, "IDENTITY_CONFLICT");
+            assert_eq!(
+                error.message,
+                "系统已有“客户公司”的主体档案，但未登记统一社会信用代码；本次填写的是“91310000ABCDEF1234”，暂时无法确认是否为同一主体。请联系管理员核实并补全已有档案后重试"
+            );
+        }
+    }
+
+    #[test]
+    fn multiple_conflicting_candidates_do_not_select_an_arbitrary_master() {
+        let error = match_identity(
+            "客户公司",
+            Some("91310000ABCDEF1234"),
+            vec![identity("客户公司", None), identity("客户公司", Some("91310000ABCDEF5678"))],
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "IDENTITY_CONFLICT");
+        assert_eq!(
+            error.message,
+            "系统查到多个相关主体档案，但均未登记本次为“客户公司”填写的信用代码“91310000ABCDEF1234”，无法确定对应关系。请核对填写内容；确认无误后，请联系管理员核实已有档案"
+        );
+    }
+
+    #[test]
+    fn identity_matching_preserves_normalization_and_missing_master_behavior() {
+        let candidate = identity("客户公司", Some("91310000ABCDEF1234"));
+        assert_eq!(
+            match_identity(" 客户公司 ", Some(" 91310000abcdef1234 "), vec![candidate.clone()]),
+            Ok(candidate.clone()),
+        );
+        assert_eq!(match_identity("客户公司", None, vec![candidate.clone()]), Ok(candidate));
+        assert_eq!(
+            match_identity("客户公司", Some("91310000ABCDEF1234"), vec![]).unwrap_err().code,
+            "MASTER_NOT_FOUND",
+        );
+    }
 }

@@ -170,8 +170,14 @@ pub(super) fn identity_from_candidates(
             credit_code: candidate.party.unified_credit_code.clone(),
         })
         .collect();
-    let identity = match_identity(name, credit, matches)
-        .map_err(|error| Error::BusinessLogicError(format!("对方签约主体：{}", error.message)))?;
+    let identity = match_identity(name, credit, matches).map_err(|error| {
+        let visibility_hint = if matches!(error.code.as_str(), "IDENTITY_CONFLICT" | "MASTER_AMBIGUOUS") {
+            "。已有主体档案不一定显示在您的客户列表中，客户是否可见还受负责人及权限范围影响；如查不到，请联系管理员查询并协助处理"
+        } else {
+            ""
+        };
+        Error::BusinessLogicError(format!("对方签约主体：{}{visibility_hint}", error.message))
+    })?;
     if candidates.iter().any(|candidate| {
         candidate.party.base.id == identity.id
             && (!candidate.party.is_active() || candidate.party.base.is_deleted())
@@ -231,5 +237,20 @@ mod tests {
         }
         let broken = candidate("a", None, "91310000ABCDEF1234");
         assert!(identity_from_candidates("客户公司", Some("91310000ABCDEF1234"), &[broken]).is_err());
+    }
+
+    #[test]
+    fn conflicting_counterparty_explains_existing_identity_and_customer_visibility() {
+        let candidates = [candidate("a", Some("广东省药师协会"), "123123123123123123")];
+        let error =
+            identity_from_candidates("广东省药师协会", Some("129371827391271921"), &candidates).unwrap_err();
+        let Error::BusinessLogicError(message) = error else {
+            panic!("主体冲突应返回可操作的业务提示");
+        };
+        assert!(message.starts_with("对方签约主体：系统已有“广东省药师协会”的主体档案"));
+        assert!(message.contains("123123123123123123"));
+        assert!(message.contains("129371827391271921"));
+        assert!(message.contains("已有主体档案不一定显示在您的客户列表中"));
+        assert!(message.contains("如查不到，请联系管理员查询并协助处理"));
     }
 }
