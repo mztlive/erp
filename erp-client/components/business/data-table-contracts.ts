@@ -37,6 +37,8 @@ export type DataTableProps<TData> = {
     rowSelection?: RowSelectionState
     defaultRowSelection?: RowSelectionState
     onRowSelectionChange?: (selection: RowSelectionState) => void
+    /** 点击行的非交互区域或按 Enter 切换选择，优先于打开预览或详情。 */
+    selectOnRowClick?: boolean
     columnVisibility?: VisibilityState
     defaultColumnVisibility?: VisibilityState
     onColumnVisibilityChange?: (visibility: VisibilityState) => void

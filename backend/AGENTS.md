@@ -2,6 +2,10 @@
 
 通用 Rust 编码规范见 `rust-coding-standards` skill；本文件只写本仓库特有规则，冲突时以本文件为准。
 
+## 效率要求
+
+非我主动要求时，不要使用use computer或者use broswer技能
+
 ## 目录结构
 
 ```text

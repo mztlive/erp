@@ -85,6 +85,7 @@ function DataTable<TData>({
     rowSelection: controlledRowSelection,
     defaultRowSelection = {},
     onRowSelectionChange,
+    selectOnRowClick = false,
     columnVisibility: controlledColumnVisibility,
     defaultColumnVisibility = {},
     onColumnVisibilityChange,
@@ -475,6 +476,7 @@ function DataTable<TData>({
                         emptyDescription={emptyDescription}
                         emptyAction={emptyAction}
                         onRowPreview={onRowPreview}
+                        selectOnRowClick={selectOnRowClick}
                         onRowOpen={onRowOpen}
                         enableRowSelection={enableRowSelection}
                         highlightedRowId={highlightedRowId}

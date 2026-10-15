@@ -118,11 +118,6 @@ export function SalesOrderSubmitPaper({
                                           rows={row.deliveryAllocations}
                                           unit={row.unit}
                                       />
-                                      {row.sku ? (
-                                          <div className="num mt-1 text-xs text-muted-foreground">
-                                              {row.sku}
-                                          </div>
-                                      ) : null}
                                   </div>
                               ),
                           },
@@ -183,11 +178,6 @@ export function SalesOrderSubmitPaper({
                                           rows={row.deliveryAllocations}
                                           unit={row.unit}
                                       />
-                                      {row.sku ? (
-                                          <div className="num mt-1 text-xs text-muted-foreground">
-                                              {row.sku}
-                                          </div>
-                                      ) : null}
                                   </div>
                               ),
                           },

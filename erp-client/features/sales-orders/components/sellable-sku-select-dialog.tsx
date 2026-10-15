@@ -265,6 +265,7 @@ export function SellableSkuSelectDialog({
                         rowSelection={rowSelection}
                         onRowSelectionChange={handleRowSelectionChange}
                         enableRowSelection
+                        selectOnRowClick
                         enableMultiRowSelection={multiple}
                         manualPagination
                         manualSorting

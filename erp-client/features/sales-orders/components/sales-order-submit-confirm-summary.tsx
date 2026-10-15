@@ -11,7 +11,6 @@ import type {
 export type SalesOrderSubmitLineSnapshot = {
     rowKey: string
     name: string
-    sku: string
     quantity: string
     unit: string
     deliveryAllocations?: SalesDeliveryAllocation[]
@@ -63,7 +62,6 @@ export function buildSalesOrderSubmitSnapshot(
         .map((line) => ({
             rowKey: line.rowKey,
             name: line.name,
-            sku: line.sku,
             quantity: line.quantity,
             unit: line.unit,
             unitPriceGross: line.unitPriceGross,

@@ -64,6 +64,7 @@ export function DataTableBody<TData>({
     emptyAction,
     onRowPreview,
     onRowOpen,
+    selectOnRowClick,
     enableRowSelection,
     highlightedRowId,
     enableColumnResizing,
@@ -86,6 +87,7 @@ export function DataTableBody<TData>({
     emptyAction?: React.ReactNode
     onRowPreview?: (row: TData) => void
     onRowOpen?: (row: TData) => void
+    selectOnRowClick: boolean
     enableRowSelection: boolean | ((row: never) => boolean)
     highlightedRowId?: string
     enableColumnResizing: boolean
@@ -158,6 +160,10 @@ export function DataTableBody<TData>({
                         )}
                         onClick={(event) => {
                             if (isInteractiveRowTarget(event.target)) return
+                            if (selectOnRowClick) {
+                                if (row.getCanSelect()) row.toggleSelected()
+                                return
+                            }
                             ;(onRowPreview ?? onRowOpen)?.(row.original)
                         }}
                         onKeyDown={(event) => {
@@ -170,9 +176,13 @@ export function DataTableBody<TData>({
                                 focusRelativeRow(rowIndex, -1)
                             } else if (
                                 event.key === "Enter" &&
-                                (onRowOpen || onRowPreview)
+                                (selectOnRowClick || onRowOpen || onRowPreview)
                             ) {
                                 event.preventDefault()
+                                if (selectOnRowClick) {
+                                    if (row.getCanSelect()) row.toggleSelected()
+                                    return
+                                }
                                 ;(onRowOpen ?? onRowPreview)?.(row.original)
                             } else if (
                                 event.key === " " &&

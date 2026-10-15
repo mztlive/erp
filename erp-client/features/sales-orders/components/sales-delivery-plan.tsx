@@ -1,4 +1,6 @@
-import { fullDeliveryAddress } from "@/lib/delivery-address"
+"use client"
+
+import { RegionName } from "@/features/regions"
 
 import type { SalesDeliveryAllocation } from "../types"
 
@@ -17,7 +19,8 @@ export function SalesDeliveryPlan({
                 <p key={index}>
                     {row.quantity} {unit} → {row.recipient} · {row.phone}
                     <br />
-                    {fullDeliveryAddress(row)}
+                    {row.region_name || <RegionName code={row.region_code} />}
+                    {row.address}
                 </p>
             ))}
         </div>

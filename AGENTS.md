@@ -4,6 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 员工福利 ERP 单仓：`backend/`（Rust + Axum + MongoDB）、`erp-client/`（Next.js 16，按纯 SPA 使用）、`e2e/`（Playwright 流程测试）、`scripts/`（根级开发/清库/种子/E2E 编排）、`docs/`（产品基线与接口合同）。
 
+## 效率要求
+
+非我主动要求时，不要使用use computer或者use broswer技能
+
 ## 子项目规则（权威来源）
 
 - **后端**：改 `backend/` 前必须先读 `backend/AGENTS.md`（架构归属、编码约定、事务、测试范围、质量门禁）。它不会被自动加载。选 crate 看 `backend/crates/README.md` 与目标 crate 的 README。
