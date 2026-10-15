@@ -391,3 +391,27 @@ fn sales_owner_is_explicit_and_independent_of_system_actor() {
     data.sales_owner_user_id = " ".into();
     assert!(SalesOrder::new(SalesOrderId::new("missing-owner"), data, "system-sync").is_err());
 }
+
+#[test]
+fn extra_cost_source_accepts_only_effective_goods_and_keeps_closed_orders() {
+    let mut order = SalesOrder::new(SalesOrderId::new("expense-source"), data(), "admin-1").unwrap();
+    for business in [BusinessType::GoodsService, BusinessType::Voucher] {
+        for status in [
+            CommercialStatus::Draft,
+            CommercialStatus::PendingReview,
+            CommercialStatus::Effective,
+            CommercialStatus::Voided,
+        ] {
+            order.business_type = business;
+            order.commercial_status = status;
+            assert_eq!(
+                order.ensure_extra_cost_source().is_ok(),
+                business == BusinessType::GoodsService && status == CommercialStatus::Effective
+            );
+        }
+    }
+    order.business_type = BusinessType::GoodsService;
+    order.commercial_status = CommercialStatus::Effective;
+    order.closed_at = Some(Instant::from_unix_secs(1_800_000_000));
+    assert!(order.ensure_extra_cost_source().is_ok());
+}

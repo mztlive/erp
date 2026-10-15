@@ -1,10 +1,12 @@
 import type {
+    PurchaseType,
     PurchaseOrderListItem,
     PurchaseOrderMetricFilter,
     PurchaseOrderStatusFilter,
 } from "@/features/purchase-orders/types"
 
 export type PurchaseOrderListQuery = {
+    purchaseType?: PurchaseType
     scopeVersion?: string
     ownerUserIds?: string
     q?: string

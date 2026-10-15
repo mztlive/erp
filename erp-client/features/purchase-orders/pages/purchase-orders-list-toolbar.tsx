@@ -1,6 +1,14 @@
 "use client"
 
 import * as React from "react"
+import { PURCHASE_TYPE_LABEL, type PurchaseType } from "../types"
+import {
+    Select,
+    SelectTrigger,
+    SelectValue,
+    SelectContent,
+    SelectItem,
+} from "@/components/ui/select"
 
 import {
     ListSearchField,
@@ -16,6 +24,8 @@ import type {
 const prefix = "procurement-orders-list"
 
 export type PurchaseOrdersListToolbarProps = {
+    typeDraft: PurchaseType | "all"
+    setTypeDraft: (value: PurchaseType | "all") => void
     ownerDraft: string
     setOwnerDraft: (value: string) => void
     searchInputRef: React.RefObject<HTMLInputElement | null>
@@ -32,6 +42,8 @@ export type PurchaseOrdersListToolbarProps = {
 }
 
 export function PurchaseOrdersListToolbar({
+    typeDraft,
+    setTypeDraft,
     ownerDraft,
     setOwnerDraft,
     searchInputRef,
@@ -65,15 +77,55 @@ export function PurchaseOrdersListToolbar({
                 />
             }
             primaryFilters={
-                <div className="w-56 max-w-full min-w-0">
-                    <PersonDirectoryFilter
-                        id="procurement-orders-list-owner"
-                        category="procurement"
-                        label="采购负责人"
-                        hideLabel
-                        value={ownerDraft}
-                        onChange={setOwnerDraft}
-                    />
+                <div className="flex flex-wrap gap-2">
+                    <Select
+                        value={typeDraft}
+                        onValueChange={(value) => {
+                            if (value)
+                                setTypeDraft(value as PurchaseType | "all")
+                        }}
+                    >
+                        <SelectTrigger
+                            id="procurement-orders-list-type"
+                            aria-label="采购类型"
+                            className="w-40"
+                        >
+                            <SelectValue>
+                                {typeDraft === "all"
+                                    ? "全部采购类型"
+                                    : PURCHASE_TYPE_LABEL[typeDraft]}
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem
+                                id="procurement-orders-list-type-all"
+                                value="all"
+                            >
+                                全部采购类型
+                            </SelectItem>
+                            {Object.entries(PURCHASE_TYPE_LABEL).map(
+                                ([value, label]) => (
+                                    <SelectItem
+                                        id={`procurement-orders-list-type-${value.toLowerCase()}`}
+                                        key={value}
+                                        value={value}
+                                    >
+                                        {label}
+                                    </SelectItem>
+                                ),
+                            )}
+                        </SelectContent>
+                    </Select>
+                    <div className="w-56 max-w-full min-w-0">
+                        <PersonDirectoryFilter
+                            id="procurement-orders-list-owner"
+                            category="procurement"
+                            label="采购负责人"
+                            hideLabel
+                            value={ownerDraft}
+                            onChange={setOwnerDraft}
+                        />
+                    </div>
                 </div>
             }
             queryButtonId={`${prefix}-apply-filters`}

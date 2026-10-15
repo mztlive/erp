@@ -19,7 +19,7 @@ impl SalesOrderReadService {
     /// 返回现行主体名称映射；缺失客户或主体资料保持缺失。
     /// # 错误
     /// 客户或主体仓储查询失败时返回错误。
-    pub(super) async fn customer_names_batch(
+    pub(crate) async fn customer_names_batch(
         &self,
         customer_ids: &[String],
     ) -> Result<HashMap<String, String>> {

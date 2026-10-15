@@ -121,7 +121,7 @@ where
                         permission = %permission,
                         "RBAC denied request"
                     );
-                    Ok(ApiResponse::<()>::permission_denied().into_response())
+                    Ok(ApiResponse::<()>::missing_permission(&permission).into_response())
                 },
                 Err(err) => {
                     error!(
@@ -136,5 +136,57 @@ where
                 },
             }
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::convert::Infallible;
+    use std::sync::Arc;
+
+    use axum::body::to_bytes;
+    use axum::http::StatusCode;
+    use tower::{ServiceExt, service_fn};
+
+    use super::*;
+
+    struct Authorization(Option<bool>);
+
+    #[async_trait]
+    impl AuthorizationPort for Authorization {
+        async fn allows(&self, _: &str, _: &Permission) -> erp_identity::Result<bool> {
+            self.0.ok_or_else(|| erp_identity::Error::Internal("private provider error".into()))
+        }
+        async fn organization_scope(&self, _: &str) -> erp_identity::Result<Option<OrganizationScopeFact>> {
+            Ok(None)
+        }
+    }
+
+    #[tokio::test]
+    async fn route_reports_only_the_actual_denied_permission() {
+        for (allowed, authenticated, status, key) in [
+            (Some(false), true, StatusCode::FORBIDDEN, Some("sales_order:list")),
+            (Some(true), true, StatusCode::OK, None),
+            (Some(false), false, StatusCode::UNAUTHORIZED, None),
+            (None, true, StatusCode::INTERNAL_SERVER_ERROR, None),
+        ] {
+            let layer = RbacAuthorizeLayer::new(
+                Arc::new(Authorization(allowed)),
+                Permission::parse("sales_order:list").unwrap(),
+            );
+            let inner = service_fn(|_: Request<Body>| async {
+                Ok::<_, Infallible>(ApiResponse::ok().into_response())
+            });
+            let mut request = Request::new(Body::empty());
+            if authenticated {
+                request.extensions_mut().insert(RbacSubject("user".into()));
+            }
+            let response = layer.layer(inner).oneshot(request).await.unwrap();
+            assert_eq!(response.status(), status);
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(json.get("requiredPermission").and_then(|v| v.as_str()), key);
+            assert!(!String::from_utf8(body.to_vec()).unwrap().contains("private provider error"));
+        }
     }
 }

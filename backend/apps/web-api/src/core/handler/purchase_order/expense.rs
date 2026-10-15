@@ -1,12 +1,15 @@
 //! 费用采购单创建与费用行确认发生的 HTTP 协议适配（§7.5.1）。
 
 use application_core::AuditActor;
-use axum::extract::{Multipart, Path, State};
+use axum::extract::{Multipart, Path, Query, State};
 use axum::{Extension, Json};
 use erp_processes::procure_to_pay::PurchaseOrderProcess;
 use erp_procurement::dto::purchase_order::{
     ConfirmExpenseOccurrenceRequest, ConfirmExpenseOccurrenceResult, CreateExpensePurchaseRequest,
     CreatePurchaseOrderResult,
+};
+use erp_read_models::purchase_center::expense_source::{
+    ExpenseSourceDetail, ExpenseSourceList, ExpenseSourceParams, ExpenseSourceReadService,
 };
 use erp_support::SensitivityClass;
 
@@ -17,6 +20,52 @@ use crate::core::handler::file_asset::{
     should_compensate_pending_assets, store_pending_asset_files,
 };
 use crate::core::response::ApiResponse;
+
+#[permission_macros::permission(
+    group = "采购单",
+    group_desc = "采购单、采购提交与采购变更管理",
+    desc = "查询费用采购来源销售单",
+    resource = "purchase_order",
+    action = "create"
+)]
+/// 查询费用采购可选的来源销售单。
+/// # 参数
+/// `state` 为应用，`actor` 为当前账号，`params` 为搜索与分页。
+/// # 返回
+/// 返回授权范围内的来源摘要。
+/// # 错误
+/// 权限、参数或查询失败时返回错误。
+pub async fn expense_sources(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Query(params): Query<ExpenseSourceParams>,
+) -> Result<ExpenseSourceList> {
+    let view = ExpenseSourceReadService::new(state.db(), state.rbac()).list(&params, &actor).await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "采购单",
+    group_desc = "采购单、采购提交与采购变更管理",
+    desc = "读取费用采购来源明细",
+    resource = "purchase_order",
+    action = "create"
+)]
+/// 读取可归属费用的销售明细。
+/// # 参数
+/// `state` 为应用，`actor` 为当前账号，`id` 为来源销售单。
+/// # 返回
+/// 返回来源摘要和当前可选明细。
+/// # 错误
+/// 来源无权访问、状态不适用或读取失败时返回错误。
+pub async fn expense_source_detail(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+) -> Result<ExpenseSourceDetail> {
+    let view = ExpenseSourceReadService::new(state.db(), state.rbac()).detail(&id, &actor).await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
 
 #[permission_macros::permission(
     group = "采购单",

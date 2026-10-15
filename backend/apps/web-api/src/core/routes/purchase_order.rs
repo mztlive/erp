@@ -236,6 +236,7 @@ fn purchase_change_draft_routes(rbac: &SharedRbacService) -> Router<AppState> {
 
 fn purchase_correspondence_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
+        .merge(expense_source_routes(rbac))
         .route(
             "/purchase-orders/{id}/emails",
             with_permission(
@@ -282,6 +283,26 @@ fn purchase_correspondence_routes(rbac: &SharedRbacService) -> Router<AppState> 
                 post(purchase_order::correspondence::send_purchase_email),
                 rbac,
                 purchase_order::correspondence::send_purchase_email_permission_key(),
+            ),
+        )
+}
+
+fn expense_source_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/purchase-orders/expense-sources",
+            with_permission(
+                get(purchase_order::expense::expense_sources),
+                rbac,
+                purchase_order::expense::expense_sources_permission_key(),
+            ),
+        )
+        .route(
+            "/purchase-orders/expense-sources/{id}",
+            with_permission(
+                get(purchase_order::expense::expense_source_detail),
+                rbac,
+                purchase_order::expense::expense_source_detail_permission_key(),
             ),
         )
 }

@@ -396,6 +396,7 @@ mod isolation_tests {
             sales_order_id: None,
             supplier_id: None,
             status: None,
+            purchase_type: None,
             page: 1,
             page_size: 20,
             sort_by: None,

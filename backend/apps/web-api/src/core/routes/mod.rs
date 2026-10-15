@@ -125,6 +125,7 @@ fn readiness_response(readiness: ExternalConnectorReadiness) -> ApiResponse<Exte
             "外部连接器尚未全部配置，相关能力保持失败关闭".to_string()
         },
         code: (!ready).then(|| "EXTERNAL_CONNECTOR_NOT_READY".to_string()),
+        required_permission: None,
         field_errors: None,
         retryable: Some(false),
         data: Some(readiness),

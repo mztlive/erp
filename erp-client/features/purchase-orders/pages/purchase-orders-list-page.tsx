@@ -1,5 +1,9 @@
 "use client"
 
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
+import { ExpensePurchaseStartDialog } from "../components/expense-purchase-start-dialog"
+
 import * as React from "react"
 import { DownloadIcon, PlusIcon } from "lucide-react"
 
@@ -33,6 +37,11 @@ const PURCHASE_ORDER_VIEWS = Object.entries(PO_STATUS_FILTER_LABEL) as Array<
 >
 
 export function PurchaseOrdersListPage() {
+    const [expenseOpen, setExpenseOpen] = React.useState(false)
+    const profile = useAccountProfileQuery()
+    const canCreateExpense =
+        !profile.isError &&
+        hasPermission(profile.data?.permissions, "purchase_order:create")
     const ctrl = usePurchaseOrdersListController()
     const exportPending = ctrl.exportQuery.isFetching
 
@@ -83,6 +92,18 @@ export function PurchaseOrdersListPage() {
             >
                 <PageActions
                     actions={[
+                        ...(canCreateExpense
+                            ? [
+                                  {
+                                      actionKey: "create-expense",
+                                      label: "新建费用采购单",
+                                      icon: PlusIcon,
+                                      variant: "outline" as const,
+                                      onClick: () => setExpenseOpen(true),
+                                      id: "procurement-orders-list-create-expense",
+                                  },
+                              ]
+                            : []),
                         {
                             actionKey: "export",
                             label: exportPending ? "导出中…" : "导出",
@@ -104,6 +125,13 @@ export function PurchaseOrdersListPage() {
                 />
             </ListWorkspaceHeader>
 
+            <ExpensePurchaseStartDialog
+                open={expenseOpen}
+                onOpenChange={setExpenseOpen}
+                onCreated={(created) =>
+                    ctrl.openDetail(created.purchaseOrderId)
+                }
+            />
             {ctrl.actionResult ? (
                 <FormalActionResult
                     status={
@@ -151,6 +179,8 @@ export function PurchaseOrdersListPage() {
                 }
                 toolbar={
                     <PurchaseOrdersListToolbar
+                        typeDraft={filters.typeDraft}
+                        setTypeDraft={filters.setTypeDraft}
                         ownerDraft={filters.ownerDraft}
                         setOwnerDraft={filters.setOwnerDraft}
                         searchInputRef={ctrl.searchInputRef}

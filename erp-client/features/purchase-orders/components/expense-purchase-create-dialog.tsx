@@ -29,7 +29,8 @@ const CATEGORY_OPTIONS = (
     Object.keys(PURCHASE_EXPENSE_CATEGORY_LABEL) as PurchaseExpenseCategory[]
 ).map((value) => ({ value, label: PURCHASE_EXPENSE_CATEGORY_LABEL[value] }))
 
-const WHOLE_ORDER = ""
+// SelectField 将空字符串视为未选择，整单归属使用独立的表单值。
+const WHOLE_ORDER = "whole-order"
 const LINE_LIMIT = 50
 
 const amountPattern = /^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/
@@ -86,6 +87,7 @@ export type ExpensePurchasePrefill = Readonly<{
     supplierId: string
     salesOrderLineId?: string
     description?: string
+    category?: PurchaseExpenseCategory
 }>
 
 function defaults(prefill?: ExpensePurchasePrefill): FormValues {
@@ -97,7 +99,7 @@ function defaults(prefill?: ExpensePurchasePrefill): FormValues {
         lines: [
             {
                 ...newLine(),
-                category: "logistics",
+                category: prefill.category ?? "logistics",
                 description: prefill.description ?? "",
                 salesOrderLineId: prefill.salesOrderLineId ?? WHOLE_ORDER,
             },
@@ -140,8 +142,14 @@ export function ExpensePurchaseCreateDialog({
     onOpenChange,
     onCreated,
     prefill,
+    sourceLabel,
+    title = "追加附加费用",
+    onChangeSource,
 }: {
     salesOrderId: string
+    sourceLabel?: string
+    title?: string
+    onChangeSource?: () => void
     salesLines: ReadonlyArray<{ id: string; name: string }>
     open: boolean
     onOpenChange: (open: boolean) => void
@@ -172,7 +180,10 @@ export function ExpensePurchaseCreateDialog({
                         description: line.description.trim(),
                         grossAmount: line.grossAmount.trim(),
                         inputTaxRate: percentToRate(line.taxRatePercent),
-                        salesOrderLineId: line.salesOrderLineId || undefined,
+                        salesOrderLineId:
+                            line.salesOrderLineId === WHOLE_ORDER
+                                ? undefined
+                                : line.salesOrderLineId || undefined,
                     })),
                     idempotencyKey: `expense-purchase:${requestKey}`,
                 })
@@ -204,11 +215,27 @@ export function ExpensePurchaseCreateDialog({
                 closeButtonId="sales-orders-expense-purchase-close"
             >
                 <DialogHeader>
-                    <DialogTitle>追加附加费用</DialogTitle>
+                    <DialogTitle>{title}</DialogTitle>
                     <DialogDescription>
                         为本单发生、由我方承担、客户不另付的费用（如第三方物流、额外包装、上门安装）创建费用采购单，提交后进入采购审批。客户另付费的事项请改单添加明细；要交给客户的物品请作为赠品明细。
                     </DialogDescription>
                 </DialogHeader>
+                {sourceLabel ? (
+                    <div className="flex items-center justify-between gap-3 rounded-md bg-muted p-3 text-sm">
+                        <span>归属销售单：{sourceLabel}</span>
+                        {onChangeSource ? (
+                            <Button
+                                id="procurement-expense-change-source"
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={onChangeSource}
+                            >
+                                重新选择
+                            </Button>
+                        ) : null}
+                    </div>
+                ) : null}
                 <form
                     className="flex flex-col gap-5"
                     onSubmit={(event) => {

@@ -185,6 +185,7 @@ async fn list_query(
         sales_order_id: query.sales_order_id.map(SalesOrderId::new),
         supplier_id: query.supplier_id.map(SupplierAccountId::new),
         status: query.status,
+        purchase_type: query.purchase_type,
         page: query.paging.page,
         page_size: query.paging.page_size,
         sort_by: Some(query.paging.sort_by.to_string()),

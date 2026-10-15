@@ -75,6 +75,7 @@ export async function fetchPurchaseOrders(
         q: query.q,
         sales_order_id: query.salesOrderId,
         owner_user_ids: query.ownerUserIds || undefined,
+        purchase_type: query.purchaseType,
         status,
         page,
         page_size: pageSize,

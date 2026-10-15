@@ -18,8 +18,8 @@ use erp_procurement::entity::purchase_order::{
 use erp_procurement::repository::PurchaseCommandExt;
 use erp_procurement::service::purchase_order::creation_basis::build_draft_submission;
 use erp_procurement::service::purchase_order::expense::build_expense_draft_lines;
+use erp_read_models::purchase_center::expense_source::ExpenseSourceReadService;
 use erp_read_models::purchase_center::repository::supplier_names::current_legal_names_by_account_ids;
-use erp_read_models::sales_center::access::SalesAccess;
 use erp_sales::entity::sales_order::SalesOrder;
 use id_generator::next_id;
 use mongodb::Database;
@@ -174,8 +174,8 @@ async fn load_expense_source(
     command: &ExpenseCommand,
     executor: &mut dyn Executor,
 ) -> Result<SalesOrder> {
-    let order = SalesAccess::new(db.clone(), rbac.clone())
-        .require_object(&command.actor, "detail", &command.sales_order_id, &[], executor)
+    let order = ExpenseSourceReadService::new(db.clone(), rbac.clone())
+        .require_order(&command.sales_order_id, &command.actor, executor)
         .await?;
     ensure_extra_cost_order(&order)?;
     for line in &command.req.lines {

@@ -2,7 +2,7 @@
  * fetch 封装基座：base URL、JWT 头、超时、ApiResponse 信封统一解包。
  *
  * 后端信封（backend/apps/web-api/src/core/response.rs）真实字段：
- * { status, errorMessage, code?, fieldErrors?, retryable?, data, success }
+ * { status, errorMessage, code?, requiredPermission?, fieldErrors?, retryable?, data, success }
  * 成功判定：HTTP 2xx 且信封 success === true，业务数据取信封 data。
  *
  * 失败统一抛 ApiError（errors.ts）：
@@ -43,6 +43,7 @@ interface ApiResponseEnvelope<T> {
     status: number
     errorMessage: string
     code?: string
+    requiredPermission?: string
     fieldErrors?: Record<string, string>
     retryable?: boolean
     requestId?: string
@@ -177,6 +178,7 @@ const apiFetch = async <T>(
                 "请求未通过业务校验，请检查填写内容后重试。",
             status: envelope.status,
             code: envelope.code,
+            requiredPermission: envelope.requiredPermission,
             fieldErrors: envelope.fieldErrors,
             retryable: envelope.retryable ?? false,
             requestId: envelope.requestId ?? requestId,

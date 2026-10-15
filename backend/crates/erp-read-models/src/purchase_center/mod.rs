@@ -8,6 +8,7 @@ pub mod change_bounds;
 mod creation_basis;
 mod delivery_options;
 pub mod dto;
+pub mod expense_source;
 pub mod freight_follow_up;
 mod payments;
 pub mod procurement_responsibility;

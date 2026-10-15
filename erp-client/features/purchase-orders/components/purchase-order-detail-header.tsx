@@ -1,6 +1,10 @@
 "use client"
 
-import type * as React from "react"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
+import { ExpensePurchaseStartDialog } from "./expense-purchase-start-dialog"
+
+import * as React from "react"
 import { PurchaseOrderCorrespondence } from "./purchase-order-correspondence"
 import { useRouter } from "next/navigation"
 import { FilePenLineIcon, SendIcon, Trash2Icon } from "lucide-react"
@@ -65,8 +69,26 @@ export function PurchaseOrderDetailHeader({
     result: PurchaseOrderDetailResult | null
     onDismissResult: () => void
 }) {
+    const [expenseOpen, setExpenseOpen] = React.useState(false)
+    const profile = useAccountProfileQuery()
+    const canCreateExpense =
+        !profile.isError &&
+        hasPermission(profile.data?.permissions, "purchase_order:create") &&
+        mode !== "edit" &&
+        order.identity.status !== "VOID"
     return (
         <>
+            <ExpensePurchaseStartDialog
+                open={expenseOpen}
+                onOpenChange={setExpenseOpen}
+                salesOrderId={order.header.salesOrderId}
+                supplierId={order.header.supplierId}
+                onCreated={(created) =>
+                    router.push(
+                        `/procurement/orders/${created.purchaseOrderId}`,
+                    )
+                }
+            />
             <DetailPageHeader
                 back={{
                     id: "procurement-orders-detail-back",
@@ -104,6 +126,18 @@ export function PurchaseOrderDetailHeader({
                         <PageActions
                             id="procurement-orders-detail-actions"
                             actions={[
+                                ...(canCreateExpense
+                                    ? [
+                                          {
+                                              actionKey: "add-expense",
+                                              label: "追加费用",
+                                              variant: "outline" as const,
+                                              id: "procurement-orders-detail-add-expense",
+                                              onClick: () =>
+                                                  setExpenseOpen(true),
+                                          },
+                                      ]
+                                    : []),
                                 ...(canEdit && mode !== "edit"
                                     ? [
                                           {

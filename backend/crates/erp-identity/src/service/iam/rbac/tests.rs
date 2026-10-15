@@ -327,3 +327,23 @@ async fn batch_role_permissions_should_include_roles_without_permissions() {
     assert_eq!(permissions.get("role-a"), Some(&vec![Permission::parse("customer:list").unwrap()]));
     assert!(permissions.get("role-b").is_some_and(Vec::is_empty));
 }
+
+#[test]
+fn permission_diagnostics_distinguish_missing_action_from_role_combination() {
+    let create = Permission::parse("purchase_order:create").unwrap();
+    let submit = Permission::parse("purchase_order:submit").unwrap();
+    let snapshot = RolePermissionSnapshot {
+        role_ids: vec!["creator".into(), "submitter".into()],
+        grants: HashMap::from([
+            ("creator".into(), HashSet::from([create.clone()])),
+            ("submitter".into(), HashSet::from([submit.clone()])),
+        ]),
+        policy_revision: 1,
+    };
+    assert!(snapshot.granting_role_ids_for_all(&[create.clone(), submit.clone()]).is_empty());
+    assert!(snapshot.denial_message(&[create, submit]).contains("同一有效角色"));
+    assert_eq!(
+        snapshot.denial_message(&[Permission::parse("sales_order:list").unwrap()]),
+        "当前账号缺少 sales_order:list 权限"
+    );
+}

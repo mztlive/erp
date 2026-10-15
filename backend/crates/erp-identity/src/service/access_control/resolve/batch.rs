@@ -214,7 +214,7 @@ impl<'a> DataScopeBatch<'a> {
         let facts = self.facts.as_ref().expect("公共身份事实已成功加载");
         let roles = qualified_roles(&facts.roles, &ids);
         if roles.is_empty() {
-            return Err(Error::Forbidden("没有该资源动作权限".into()));
+            return Err(Error::Forbidden(facts.snapshot.denial_message(&required)));
         }
         let at = facts.as_of;
         let state = self.scope_organizations(source.0, at).await?;

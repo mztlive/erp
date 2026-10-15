@@ -136,9 +136,10 @@ function RequestDraftForm({
         },
         initialPayableAccountIds,
     )
-    const [openGroup, setOpenGroup] = useState<string | null>(
-        form.state.values.groups[0]?.key ?? null,
-    )
+    const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
+        const first = form.state.values.groups[0]
+        return new Set(first ? [first.key] : [])
+    })
     const submitting = useStore(form.store, (state) => state.isSubmitting)
     const busy = submitting || pending
     useEffect(() => {
@@ -157,8 +158,16 @@ function RequestDraftForm({
                 values.amounts,
             ),
         )
-        if (!groups.some((group) => group.key === openGroup))
-            setOpenGroup(groups[0]?.key ?? null)
+        setOpenGroups((previous) => {
+            const retained = groups
+                .filter((group) => previous.has(group.key))
+                .map((group) => group.key)
+            return new Set(
+                retained.length
+                    ? retained
+                    : groups.slice(0, 1).map((group) => group.key),
+            )
+        })
         setStep(2)
     }
     if (saved)
@@ -233,7 +242,7 @@ function RequestDraftForm({
                 const values = form.state.values
                 const validation = draftSchema(candidates).safeParse(values)
                 if (!validation.success) {
-                    const invalid = values.groups.find((group, index) =>
+                    const invalid = values.groups.filter((group, index) =>
                         validation.error.issues.some(
                             (issue) =>
                                 (issue.path[0] === "groups" &&
@@ -242,7 +251,13 @@ function RequestDraftForm({
                                     group.ids.includes(String(issue.path[1]))),
                         ),
                     )
-                    if (invalid) setOpenGroup(invalid.key)
+                    setOpenGroups(
+                        (previous) =>
+                            new Set([
+                                ...previous,
+                                ...invalid.map((group) => group.key),
+                            ]),
+                    )
                 }
                 void form.handleSubmit().catch(() => undefined)
             }}
@@ -253,14 +268,14 @@ function RequestDraftForm({
                         ? "修改付款申请"
                         : step === 1
                           ? "选择本次付款的采购单"
-                          : "填写付款申请"}
+                          : "批量申请付款"}
                 </DialogTitle>
                 <DialogDescription>
                     {step === 1
                         ? "支持跨供应商选择采购单，下一步按付款关系分别生成申请。"
                         : request
                           ? "修改金额与付款安排，保存后可在申请详情提交审核。"
-                          : "逐份填写金额与付款安排，提交后直接生成正式申请单并进入财务审核。"}
+                          : "请逐份核对金额、收款账户和付款日期，提交后分别进入财务审核。"}
                 </DialogDescription>
                 <div
                     className="mt-3 flex items-center gap-3 text-xs"
@@ -308,26 +323,59 @@ function RequestDraftForm({
                                 ) : (
                                     <>
                                         <div className="flex flex-wrap items-center justify-between gap-2">
-                                            <p className="text-sm text-muted-foreground">
+                                            <p className="text-sm">
                                                 已选{" "}
-                                                {groups.reduce(
-                                                    (count, group) =>
-                                                        count +
-                                                        group.ids.length,
-                                                    0,
-                                                )}{" "}
-                                                张采购单，分为 {groups.length}{" "}
-                                                份申请
+                                                <strong className="font-semibold">
+                                                    {groups.reduce(
+                                                        (count, group) =>
+                                                            count +
+                                                            group.ids.length,
+                                                        0,
+                                                    )}{" "}
+                                                    张采购单
+                                                </strong>
+                                                ，{request ? "对应" : "将生成"}{" "}
+                                                <strong className="font-semibold">
+                                                    {groups.length} 份付款申请
+                                                </strong>
                                             </p>
-                                            <Button
-                                                id="ppr-create-reselect"
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => setStep(1)}
-                                            >
-                                                重新选择采购单
-                                            </Button>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                {groups.length > 0 && (
+                                                    <Button
+                                                        id="ppr-create-toggle-all-groups"
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() =>
+                                                            setOpenGroups(
+                                                                groups.every(
+                                                                    (group) =>
+                                                                        openGroups.has(
+                                                                            group.key,
+                                                                        ),
+                                                                )
+                                                                    ? new Set()
+                                                                    : new Set(
+                                                                          groups.map(
+                                                                              (
+                                                                                  group,
+                                                                              ) =>
+                                                                                  group.key,
+                                                                          ),
+                                                                      ),
+                                                            )
+                                                        }
+                                                    >
+                                                        {groups.every((group) =>
+                                                            openGroups.has(
+                                                                group.key,
+                                                            ),
+                                                        )
+                                                            ? "收起全部"
+                                                            : "展开全部"}
+                                                    </Button>
+                                                )}
+                                            </div>
                                         </div>
                                         {!groups.length && (
                                             <p
@@ -345,10 +393,24 @@ function RequestDraftForm({
                                                 index={index}
                                                 candidates={candidates}
                                                 editing={!!request}
-                                                open={openGroup === group.key}
+                                                open={openGroups.has(group.key)}
                                                 onOpenChange={(open) =>
-                                                    setOpenGroup(
-                                                        open ? group.key : null,
+                                                    setOpenGroups(
+                                                        (previous) => {
+                                                            const next =
+                                                                new Set(
+                                                                    previous,
+                                                                )
+                                                            if (open)
+                                                                next.add(
+                                                                    group.key,
+                                                                )
+                                                            else
+                                                                next.delete(
+                                                                    group.key,
+                                                                )
+                                                            return next
+                                                        },
                                                     )
                                                 }
                                             />

@@ -1,3 +1,5 @@
+import { PERMISSION_GROUPS } from "@/lib/permissions.generated"
+
 /** 错误分类：网络 / HTTP / 鉴权 / 解析 / 业务校验 / 未知。 */
 export type ApiErrorKind =
     | "Network"
@@ -14,6 +16,7 @@ export interface ApiError {
     /** HTTP 状态码（仅有 HTTP 响应时存在）。 */
     status?: number
     /** 稳定错误码；后端未返回时保持为空。 */
+    requiredPermission?: string
     code?: string
     /** 字段级校验说明；键为接口字段名，值为可直接展示的业务提示。 */
     fieldErrors?: Readonly<Record<string, string>>
@@ -38,6 +41,7 @@ type ApiErrorInput = Omit<ApiError, "message"> & { message: string }
 export class ApiErrorException extends Error implements ApiError {
     readonly kind: ApiErrorKind
     readonly status?: number
+    readonly requiredPermission?: string
     readonly code?: string
     readonly fieldErrors?: Readonly<Record<string, string>>
     readonly retryable?: boolean
@@ -50,6 +54,7 @@ export class ApiErrorException extends Error implements ApiError {
         this.name = "ApiError"
         this.kind = input.kind
         this.status = input.status
+        this.requiredPermission = input.requiredPermission
         this.code = input.code
         this.fieldErrors = input.fieldErrors
         this.retryable = input.retryable
@@ -80,6 +85,7 @@ export const getErrorCode = (error: unknown): string | undefined => {
 type ErrorEnvelope = {
     status?: unknown
     errorMessage?: unknown
+    requiredPermission?: unknown
     code?: unknown
     fieldErrors?: unknown
     retryable?: unknown
@@ -129,6 +135,7 @@ const envelopeDetails = (responseData: unknown) => {
         backendMessage: isErrorEnvelope
             ? nonEmptyString(envelope?.errorMessage)
             : undefined,
+        requiredPermission: nonEmptyString(envelope?.requiredPermission),
         code: nonEmptyString(envelope?.code),
         fieldErrors: asFieldErrors(envelope?.fieldErrors),
         retryable:
@@ -186,13 +193,20 @@ export const fromHttpResponse = (
     responseData?: unknown,
     responseRequestId?: string,
 ): ApiError => {
-    const { backendMessage, code, fieldErrors, retryable, requestId } =
-        envelopeDetails(responseData)
+    const {
+        backendMessage,
+        requiredPermission,
+        code,
+        fieldErrors,
+        retryable,
+        requestId,
+    } = envelopeDetails(responseData)
     const message = backendMessage ?? fallbackMessage(status)
 
     return createApiError({
         kind: status === 400 || status === 422 ? "Validation" : "Http",
         message,
+        requiredPermission,
         status,
         code,
         fieldErrors,
@@ -249,12 +263,32 @@ export interface ErrorPresentation {
     retryable: boolean
 }
 
+/** 仅使用 403 的明确权限字段；不从 URL 或通用拒绝原因猜测权限。 */
+const missingPermissionMessage = (error: ApiError): string | undefined => {
+    const key = error.requiredPermission
+    if (
+        error.status !== 403 ||
+        error.code !== "PERMISSION_DENIED" ||
+        !key ||
+        !/^[a-z][a-z0-9_]*:[a-z][a-z0-9_]*$/.test(key)
+    )
+        return undefined
+    const permission = PERMISSION_GROUPS.flatMap(
+        (group) => group.permissions,
+    ).find(
+        (item) =>
+            `${item.permission.resource}:${item.permission.action}` === key,
+    )
+    return `缺少「${permission?.description ?? "操作权限"}」权限（${key}），请联系管理员授权后重试。`
+}
+
 const presentationFromApiError = (
     error: ApiError,
     fallback: string,
 ): ErrorPresentation => {
     const status = error.status
     const description =
+        missingPermissionMessage(error) ??
         userReadableMessage(error.message) ??
         (typeof status === "number" ? fallbackMessage(status) : fallback)
     const retryable =

@@ -82,6 +82,21 @@ mod tests {
     /// # 错误
     /// 指纹算法或载荷形态变化导致摘要漂移时测试失败。
     #[test]
+    fn purchase_type_filter_is_typed_and_optional() {
+        let expense: PurchaseOrderListParams =
+            serde_json::from_value(serde_json::json!({"purchase_type":"EXPENSE"})).unwrap();
+        assert_eq!(
+            expense.normalized().unwrap().purchase_type,
+            Some(crate::entity::purchase_order::PurchaseType::Expense)
+        );
+        assert!(PurchaseOrderListParams::default().normalized().unwrap().purchase_type.is_none());
+        assert!(
+            serde_json::from_value::<PurchaseOrderListParams>(serde_json::json!({"purchase_type":"UNKNOWN"}))
+                .is_err()
+        );
+    }
+
+    #[test]
     fn void_fingerprint_golden() {
         let request = VoidPurchaseOrderRequest {
             expected_lock_version: 4,

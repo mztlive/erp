@@ -1,11 +1,12 @@
 "use client"
 
 import * as React from "react"
+import { PURCHASE_TYPE_LABEL, type PurchaseType } from "../types"
 
 import { usePurchaseOrdersListUrl } from "@/features/purchase-orders/hooks/use-purchase-orders-list-url"
 
 /** 可被单独移除的已生效筛选条件。 */
-export type PurchaseOrderFilterKey = "q" | "ownerUserIds"
+export type PurchaseOrderFilterKey = "q" | "ownerUserIds" | "purchaseType"
 
 /** 已生效条件的 chip 展示；所有被查询消费的参数都必须显性可见。 */
 export type PurchaseOrderAppliedChip = Readonly<{
@@ -40,12 +41,23 @@ export function usePurchaseOrdersListFilters(
     } = usePurchaseOrdersListUrl()
 
     const hasStructuredFilters =
-        statusFilter !== "all" || Boolean(url.ownerUserIds)
+        statusFilter !== "all" ||
+        Boolean(url.ownerUserIds) ||
+        Boolean(url.purchaseType)
     const hasActiveFilters =
+        Boolean(url.purchaseType) ||
         Boolean(url.q?.trim()) ||
         Boolean(url.ownerUserIds) ||
         statusFilter !== "all" ||
         effectiveMetric !== "all"
+
+    const [typeDraft, setTypeDraft] = React.useState<PurchaseType | "all">(
+        url.purchaseType ?? "all",
+    )
+    React.useEffect(
+        () => setTypeDraft(url.purchaseType ?? "all"),
+        [url.purchaseType],
+    )
 
     const [ownerDraft, setOwnerDraft] = React.useState(url.ownerUserIds ?? "")
     React.useEffect(
@@ -65,14 +77,20 @@ export function usePurchaseOrdersListFilters(
     const applyFilters = React.useCallback(() => {
         pushUrl({
             q: searchDraft.trim() || undefined,
+            purchaseType: typeDraft === "all" ? undefined : typeDraft,
             ownerUserIds: ownerDraft || undefined,
             page: 1,
         })
-    }, [pushUrl, searchDraft, ownerDraft])
+    }, [pushUrl, searchDraft, ownerDraft, typeDraft])
 
     /** 移除单个已生效条件；chip 关闭按钮只移除该条件。 */
     const removeFilter = React.useCallback(
         (key: PurchaseOrderFilterKey) => {
+            if (key === "purchaseType") {
+                setTypeDraft("all")
+                pushUrl({ purchaseType: undefined, page: 1 })
+                return
+            }
             if (key === "ownerUserIds") {
                 setOwnerDraft("")
                 pushUrl({ ownerUserIds: undefined, page: 1 })
@@ -88,14 +106,17 @@ export function usePurchaseOrdersListFilters(
     const resetMoreFilters = React.useCallback(() => {}, [])
 
     const hasPendingChanges =
+        typeDraft !== (url.purchaseType ?? "all") ||
         searchDraft.trim() !== search.trim() ||
         ownerDraft !== (url.ownerUserIds ?? "")
 
     /** 清除全部：Draft 与 URL 筛选参数一并重置；排序与导航上下文保留。 */
     const clearAllFilters = React.useCallback(() => {
+        setTypeDraft("all")
         setSearchDraft("")
         setOwnerDraft("")
         pushUrl({
+            purchaseType: undefined,
             q: undefined,
             ownerUserIds: undefined,
             status: "all",
@@ -108,6 +129,11 @@ export function usePurchaseOrdersListFilters(
         readonly PurchaseOrderAppliedChip[]
     >(() => {
         const chips: PurchaseOrderAppliedChip[] = []
+        if (url.purchaseType)
+            chips.push({
+                key: "purchaseType",
+                label: `采购类型：${PURCHASE_TYPE_LABEL[url.purchaseType]}`,
+            })
         if (url.ownerUserIds)
             chips.push({
                 key: "ownerUserIds",
@@ -116,9 +142,11 @@ export function usePurchaseOrdersListFilters(
         const q = url.q?.trim()
         if (q) chips.push({ key: "q", label: `搜索：${q}` })
         return chips
-    }, [url.q, url.ownerUserIds])
+    }, [url.q, url.ownerUserIds, url.purchaseType])
 
     return {
+        typeDraft,
+        setTypeDraft,
         ownerDraft,
         setOwnerDraft,
         // URL 派生值：查询 / 导出 / 摘要只读 Applied

@@ -85,6 +85,8 @@ pub struct PurchaseOrderFilter {
     pub supplier_id: Option<SupplierAccountId>,
     /// 主状态；`None` 表示不筛选。
     pub status: Option<PurchaseOrderStatus>,
+    /// 采购类型筛选，与状态及来源条件求交。
+    pub purchase_type: Option<PurchaseType>,
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数。
@@ -115,6 +117,7 @@ impl Default for PurchaseOrderFilter {
             sales_order_id: None,
             supplier_id: None,
             status: None,
+            purchase_type: None,
             page: 1,
             page_size: 20,
             sort_by: None,
@@ -164,6 +167,9 @@ impl QueryFilter for PurchaseOrderFilter {
         }
         if let Some(supplier_id) = &self.supplier_id {
             filter.insert("supplier_id", supplier_id.to_string());
+        }
+        if let Some(purchase_type) = self.purchase_type {
+            filter.insert("purchase_type", purchase_type.as_str());
         }
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
@@ -525,6 +531,7 @@ mod tests {
             sales_order_id: None,
             supplier_id: Some(SupplierAccountId::new("supplier-2")),
             status: Some(PurchaseOrderStatus::InApproval),
+            purchase_type: Some(crate::entity::purchase_order::PurchaseType::Expense),
             page: 2,
             page_size: 1,
             sort_by: None,
@@ -535,6 +542,7 @@ mod tests {
         assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
         assert_eq!(document.get_str("supplier_id").unwrap(), "supplier-2");
         assert_eq!(document.get_str("status").unwrap(), "IN_APPROVAL");
+        assert_eq!(document.get_str("purchase_type").unwrap(), "EXPENSE");
         assert!(!document.contains_key("purchase_no"));
         assert_eq!(
             document.get_array("$or").unwrap(),

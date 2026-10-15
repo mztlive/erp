@@ -123,6 +123,8 @@ export function usePurchaseOrdersListController() {
     return {
         searchInputRef,
         filters: {
+            typeDraft: filters.typeDraft,
+            setTypeDraft: filters.setTypeDraft,
             ownerDraft: filters.ownerDraft,
             setOwnerDraft: filters.setOwnerDraft,
             searchDraft: filters.searchDraft,

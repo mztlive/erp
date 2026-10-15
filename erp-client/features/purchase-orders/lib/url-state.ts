@@ -1,10 +1,12 @@
 import { createUrlStateCodec } from "@/lib/url-state"
 import type {
+    PurchaseType,
     PurchaseOrderMetricFilter,
     PurchaseOrderStatusFilter,
 } from "@/features/purchase-orders/types"
 
 export type PurchaseOrdersUrlState = {
+    purchaseType?: PurchaseType
     ownerUserIds?: string
     q?: string
     status: PurchaseOrderStatusFilter
@@ -39,6 +41,11 @@ const METRIC_VALUES: readonly PurchaseOrderMetricFilter[] = [
 ]
 
 const codec = createUrlStateCodec<PurchaseOrdersUrlState>([
+    {
+        key: "purchaseType",
+        type: "enum",
+        values: ["PHYSICAL", "VIRTUAL", "SERVICE", "EXPENSE"],
+    },
     { key: "ownerUserIds", type: "string" },
     { key: "q", type: "string", trim: true },
     { key: "status", type: "enum", values: STATUS_VALUES, defaultValue: "all" },

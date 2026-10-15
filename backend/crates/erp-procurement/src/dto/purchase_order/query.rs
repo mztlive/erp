@@ -6,7 +6,7 @@ use super::{SortDir, normalize_sort};
 use crate::Result;
 use crate::entity::purchase_order::{
     PurchaseDeliveryAllocation, PurchaseExpenseDetail, PurchaseExpenseOccurrence, PurchaseLineType,
-    PurchaseOrderStatus, PurchaseReviewStatus,
+    PurchaseOrderStatus, PurchaseReviewStatus, PurchaseType,
 };
 
 /// 采购单列表允许的排序字段白名单（api-contract §4：Service 层校验）。
@@ -42,6 +42,8 @@ pub struct PurchaseOrderListParams {
     pub supplier_id: Option<String>,
     /// 主状态筛选。
     pub status: Option<PurchaseOrderStatus>,
+    /// 采购类型；为空表示全部类型。
+    pub purchase_type: Option<PurchaseType>,
     /// 财务审核状态筛选。
     pub review_status: Option<PurchaseReviewStatus>,
     /// 页码（1 起）。
@@ -69,6 +71,8 @@ pub struct PurchaseOrderListQuery {
     pub supplier_id: Option<String>,
     /// 主状态。
     pub status: Option<PurchaseOrderStatus>,
+    /// 采购类型；为空表示全部类型。
+    pub purchase_type: Option<PurchaseType>,
     /// 财务审核状态。
     pub review_status: Option<PurchaseReviewStatus>,
     /// 分页与排序参数。
@@ -96,6 +100,7 @@ impl PurchaseOrderListParams {
             sales_order_id: normalized_text(self.sales_order_id.as_deref()),
             supplier_id: normalized_text(self.supplier_id.as_deref()),
             status: self.status,
+            purchase_type: self.purchase_type,
             review_status: self.review_status,
             paging: PageParams {
                 page: page_or_default(self.page),

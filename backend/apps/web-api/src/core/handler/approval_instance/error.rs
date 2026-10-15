@@ -181,6 +181,7 @@ impl IntoResponse for ApprovalHttpError {
             status: inner.status.as_u16(),
             message: inner.message,
             code: Some(inner.code.to_string()),
+            required_permission: None,
             field_errors: None,
             retryable: Some(inner.retryable),
             data,

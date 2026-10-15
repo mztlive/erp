@@ -12,8 +12,9 @@ import { Field } from "@/components/ui/field"
 import { formatCurrencyFixed } from "@/lib/fixed-decimal"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { DraftForm } from "../hooks/use-draft-form"
-import { requestAmountError, totalOf, type DraftGroup } from "../lib/draft"
+import { requestAmountError, type DraftGroup } from "../lib/draft"
 import type { PaymentCandidate } from "../types"
+import { RequestDraftGroupHeader } from "./request-draft-group-header"
 
 export function RequestDraftGroup({
     form,
@@ -47,36 +48,14 @@ export function RequestDraftGroup({
             className="overflow-hidden rounded-lg border"
             aria-label={`申请 ${index + 1} ${first.supplier_name}`}
         >
-            <CollapsibleTrigger
-                id={`${id}-trigger`}
-                className="flex w-full items-center gap-3 p-4 text-left outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring"
-            >
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs text-muted-foreground">
-                    {index + 1}
-                </span>
-                <span className="min-w-0 flex-1">
-                    <span className="block font-medium">
-                        {first.supplier_name}
-                    </span>
-                    <span className="mt-1 block text-xs text-muted-foreground">
-                        {rows.length} 张采购单 · {first.our_company_name}
-                    </span>
-                </span>
-                <form.Subscribe selector={(state) => state.values.amounts}>
-                    {(amounts) => (
-                        <span className="shrink-0 text-sm">
-                            <MoneyValue
-                                value={totalOf(
-                                    group.ids.map((key) => amounts[key] ?? ""),
-                                )}
-                            />
-                        </span>
-                    )}
-                </form.Subscribe>
-                <ChevronDownIcon
-                    className={`size-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
-                />
-            </CollapsibleTrigger>
+            <RequestDraftGroupHeader
+                id={id}
+                form={form}
+                group={group}
+                index={index}
+                rows={rows}
+                open={open}
+            />
             <CollapsibleContent
                 keepMounted
                 className="border-t data-[closed]:hidden"

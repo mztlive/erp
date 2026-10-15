@@ -4,6 +4,7 @@ use axum::Json;
 use axum::http::header::RETRY_AFTER;
 use axum::http::{HeaderValue, StatusCode};
 use axum::response::IntoResponse;
+use erp_identity::Permission;
 
 use super::response::ApiResponse;
 
@@ -418,6 +419,7 @@ impl IntoResponse for Error {
             status: http_status.as_u16(),
             message,
             code: Some(code),
+            required_permission: self.required_permission(),
             field_errors,
             retryable: Some(retryable),
             data: None,
@@ -436,6 +438,15 @@ impl IntoResponse for Error {
 }
 
 impl Error {
+    /// 提取授权层明确报告的单项缺权；对象范围拒绝不得推测为功能缺权。
+    fn required_permission(&self) -> Option<String> {
+        let Self::Forbidden(message) = self else {
+            return None;
+        };
+        let key = message.strip_prefix("当前账号缺少 ")?.strip_suffix(" 权限")?;
+        Permission::parse(key).ok().map(|permission| permission.to_string())
+    }
+
     /// 返回稳定的 HTTP 状态码。
     ///
     /// # 返回
@@ -653,6 +664,17 @@ mod tests {
     use serde_json::Value;
 
     use super::{Error, duplicate_index_conflict_message};
+
+    #[test]
+    fn nested_permission_diagnostic_requires_explicit_valid_permission() {
+        let missing = Error::Forbidden("当前账号缺少 purchase_order:submit 权限".into());
+        assert_eq!(missing.required_permission().as_deref(), Some("purchase_order:submit"));
+        for message in
+            ["单据不在当前数据范围内", "所需操作权限未由同一有效角色授予", "当前账号缺少 invalid 权限"]
+        {
+            assert!(Error::Forbidden(message.into()).required_permission().is_none());
+        }
+    }
 
     #[test]
     fn maps_service_error_with_semantics() {

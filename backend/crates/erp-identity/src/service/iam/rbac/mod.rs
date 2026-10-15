@@ -149,6 +149,20 @@ impl RolePermissionSnapshot {
             .collect()
     }
 
+    /// 区分确实缺少功能权限与同角色或有效角色配置不满足。
+    /// # 参数
+    /// `permissions` 为本次完整要求；调用方仅在授权拒绝时使用。
+    /// # 返回
+    /// 单项缺权使用稳定提示格式，供 HTTP 边界输出权限字段；不猜测数据范围原因。
+    /// # 错误
+    /// 无。
+    pub fn denial_message(&self, permissions: &[Permission]) -> String {
+        permissions.iter().find(|permission| self.granting_role_ids(permission).is_empty()).map_or_else(
+            || "所需操作权限未由同一有效角色授予，请联系管理员检查角色配置".into(),
+            |permission| format!("当前账号缺少 {permission} 权限"),
+        )
+    }
+
     /// 返回冻结 Enforcer 对应的 policy revision。
     ///
     /// # 参数

@@ -222,7 +222,7 @@ impl DataScopeService {
         let role_ids = snapshot.granting_role_ids_for_all(&required);
         let roles = self.db.roles().enabled_roles(&role_ids, executor).await?;
         if roles.is_empty() {
-            return Err(Error::Forbidden("没有该资源动作权限".into()));
+            return Err(Error::Forbidden(snapshot.denial_message(&required)));
         }
         let as_of = Instant::now();
         let state = self.scope_organizations(actor.id(), source.0, as_of, executor).await?;

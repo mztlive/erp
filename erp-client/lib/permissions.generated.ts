@@ -3721,6 +3721,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                     action: "send_email",
                 },
             },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-orders/expense-sources",
+                description: "查询费用采购来源销售单",
+                permission: {
+                    resource: "purchase_order",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-orders/expense-sources/{id}",
+                description: "读取费用采购来源明细",
+                permission: {
+                    resource: "purchase_order",
+                    action: "create",
+                },
+            },
         ],
     },
     {

@@ -1,7 +1,7 @@
 //! 附加费用归属的销售单与销售明细资格。
 
 use erp_core::ids::{SalesOrderLineId, SalesOrderRevisionId, SalesOrderRevisionLineId};
-use erp_sales::entity::sales_order::{BusinessType, CommercialStatus, LineType, SalesOrder};
+use erp_sales::entity::sales_order::{LineType, SalesOrder};
 use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
 use mongodb::Database;
@@ -20,13 +20,7 @@ use crate::{Error, Result};
 /// # 错误
 /// 卡券销售单或未生效销售单返回 `BusinessLogicError`。
 pub fn ensure_extra_cost_order(order: &SalesOrder) -> Result<()> {
-    if order.business_type != BusinessType::GoodsService {
-        return Err(Error::BusinessLogicError("卡券销售单不登记附加费用".into()));
-    }
-    if order.commercial_status != CommercialStatus::Effective {
-        return Err(Error::BusinessLogicError("销售单生效后才能登记附加费用".into()));
-    }
-    Ok(())
+    Ok(order.ensure_extra_cost_source()?)
 }
 
 /// 校验归属明细在销售当前生效版本中且数量大于 0。

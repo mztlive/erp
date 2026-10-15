@@ -154,12 +154,7 @@ impl PurchasePaymentRequestReadService {
             .purchase_order()
             .list_revision_lines(&PurchaseOrderRevisionId::new(&revision.base.id), executor)
             .await?;
-        let purchase_summary = lines
-            .iter()
-            .take(3)
-            .filter_map(|line| line.product_name_snapshot.as_deref())
-            .collect::<Vec<_>>()
-            .join("、");
+        let purchase_summary = PurchasePaymentRequestCandidate::summary_from_lines(&lines);
         let prepayment_gap = revision
             .payment_term_snapshot
             .required_prepayment(account.gross_total)?

@@ -411,7 +411,7 @@ impl SalesOrderReadService {
     /// 在分页前经拥有领域解析客户名称、合同号；空关键词不读取关联表。
     ///
     /// 返回销售域中性的搜索条件，关联读取失败时整次查询失败。
-    async fn keyword_search(
+    pub(crate) async fn keyword_search(
         &self,
         q: Option<&str>,
     ) -> Result<erp_sales::repository::sales_order::SalesOrderSearch> {

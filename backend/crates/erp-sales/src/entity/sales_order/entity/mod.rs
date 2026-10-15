@@ -6,6 +6,7 @@
 //! 卡券销售单与实物及服务销售单必须使用本表，不得增加平行销售单主表。
 
 mod contract_evidence;
+mod expense;
 mod line;
 mod order;
 mod status;
