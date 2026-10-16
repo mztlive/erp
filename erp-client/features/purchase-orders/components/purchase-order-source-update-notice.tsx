@@ -1,5 +1,7 @@
 "use client"
 
+import { PurchaseSourceReturnPanel } from "./purchase-source-return-panel"
+import { sourceReturnProgress } from "../lib/source-return-progress"
 import { RequiredMark } from "@/components/ui/required-mark"
 
 import * as React from "react"
@@ -57,6 +59,7 @@ export function PurchaseOrderSourceUpdateNotice({
     onRequestVoid: () => void
     onRequestChange: () => void
 }) {
+    const returnProgress = sourceReturnProgress(order)
     const update = order.sourceUpdate
     if (
         !update ||
@@ -120,13 +123,18 @@ export function PurchaseOrderSourceUpdateNotice({
                     {draft
                         ? "请修改原单：按新销售版本调整数量、预计交付日或收件分配后保存，再提交审批；无可采购数量的行填 0 即可移除。提交审批后才算处理完成。不再需要时可作废。"
                         : effective
-                          ? "请发起改单，按新销售版本调整数量、预计交付日或收件分配；不再需要的商品点「移除」。改后数量不能少于已入库、发货的数量，多出的货物按采购退货处理。"
+                          ? returnProgress.blocksChange
+                              ? "本采购已有履约记录，请按下方退货处理进度先完成实物退回和适用的款票处理，再调整采购。"
+                              : "请发起改单，按新销售版本调整数量、预计交付日或收件分配；已登记退回的数量会从履约下限中扣除。"
                           : "请撤回审批后修改原单。"}
                     供应商无法调整时，可登记维持原采购。
                     {update.blocksPayment
                         ? "处理完成前，本采购暂停付款申请和付款。"
                         : null}
                 </p>
+                {showActions ? (
+                    <PurchaseSourceReturnPanel order={order} />
+                ) : null}
                 {showActions ? (
                     <div className="flex flex-wrap gap-2">
                         {draft && canEdit ? (
@@ -139,7 +147,9 @@ export function PurchaseOrderSourceUpdateNotice({
                                 修改原单
                             </Button>
                         ) : null}
-                        {effective && canChange ? (
+                        {effective &&
+                        canChange &&
+                        !returnProgress.blocksChange ? (
                             <Button
                                 id="procurement-orders-detail-source-update-change"
                                 type="button"
@@ -160,10 +170,12 @@ export function PurchaseOrderSourceUpdateNotice({
                                 作废草稿
                             </Button>
                         ) : null}
-                        <MaintainSourceButton
-                            purchaseOrderId={order.identity.purchaseOrderId}
-                            update={update}
-                        />
+                        {!returnProgress.hasOpenReturns ? (
+                            <MaintainSourceButton
+                                purchaseOrderId={order.identity.purchaseOrderId}
+                                update={update}
+                            />
+                        ) : null}
                     </div>
                 ) : null}
             </AlertDescription>

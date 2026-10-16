@@ -16,6 +16,8 @@
 //!   追加反向分录；同一原事实的累计有效冲正不得超过原金额（跨实体部分归 P3）。
 
 pub mod common;
+pub mod direct_return;
+pub use direct_return::*;
 pub mod cumulative_limit;
 pub mod customer_refund;
 mod draft_edit;

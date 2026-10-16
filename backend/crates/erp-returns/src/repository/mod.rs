@@ -1,6 +1,7 @@
 //! 退货域拥有仓储、查询投影与调用方事务内持久化。
 
 mod command_receipt;
+pub mod direct_return;
 mod extensions;
 pub mod owned;
 pub mod prelude;

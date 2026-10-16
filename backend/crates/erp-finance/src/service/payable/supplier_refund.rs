@@ -1,18 +1,15 @@
-//! 供应商退款的财务反向分配、已结算回冲和减少分录写入。
+//! 原付款退款只追加反向核销并回冲已结算金额。应付差额由采购变更独立追加，禁止重复冲减。
 
-use erp_core::common::time::{BusinessDate, Instant};
-use erp_core::ids::{
-    PayableAccountId, PayableEntryId, PayableEntryOffsetId, PaymentAllocationId, SupplierPaymentId,
-};
+use erp_core::common::time::Instant;
+use erp_core::ids::{PayableAccountId, PayableEntryId, PaymentAllocationId, SupplierPaymentId};
 use erp_core::money::Amount;
 use mongodb::Database;
 use persistence_core::Executor;
 
 use super::offset_batch::{OffsetFacts, load_payable_offset_facts};
 use crate::entity::payable::{
-    AllocationAction as PayableAllocationAction, EntryDirection as PayableEntryDirection, PayableAccount,
-    PayableEntry, PayableEntryData, PayableEntryOffset, PayableEntryOffsetData, PayableEntryType,
-    PaymentAllocation, PaymentAllocationData, SupplierPayment, SupplierPaymentStatus,
+    AllocationAction as PayableAllocationAction, PayableAccount, PayableEntry, PaymentAllocation,
+    PaymentAllocationData, SupplierPayment, SupplierPaymentStatus,
 };
 use crate::repository::PayableExt;
 use crate::repository::prelude::*;
@@ -21,7 +18,7 @@ use crate::{Error, Result};
 /// 财务执行只消费退款稳定身份、金额和原发生时点。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SupplierRefundPostingFact {
-    /// 退款身份，作为原减少分录 source document/revision。
+    /// 退款身份，供调用方追溯退款记录。
     pub refund_id: String,
     /// 本次退款金额。
     pub amount: Amount,
@@ -57,7 +54,7 @@ pub async fn load_posted_payment_for_refund(
     Ok(payment)
 }
 
-/// 写入反向核销分配、冲减进度与减少分录。
+/// 写入反向核销分配并回冲已付进度，不修改应付总额。
 ///
 /// # 参数
 /// * `db` - 财务领域数据库。
@@ -67,7 +64,7 @@ pub async fn load_posted_payment_for_refund(
 /// * `session` - 调用方事务执行器。
 ///
 /// # 返回
-/// 反向分配、冲减进度与减少分录写入完成时无返回值。
+/// 反向分配和进度写入完成时无返回值；采购应付差额由原采购改单负责。
 ///
 /// # 错误
 /// 分录或账户缺失、跨供应商、超额冲减、实体构造失败或仓储失败时返回对应错误。
@@ -91,10 +88,7 @@ async fn persist_refund<P: RefundPostingPort>(
     let allocations = port.allocations(&payment.base.id.clone().into(), session).await?;
     let (reverse_rows, chunks) = PaymentAllocation::plan_reverse(&allocations, refund.amount)?;
     let seqs = PaymentAllocation::next_allocation_seq_range(&allocations, reverse_rows.len())?;
-    let decrease_entry = create_decrease_offsets(port, refund, payment, actor_id, &chunks, session).await?;
-    if let Some(entry) = decrease_entry {
-        port.entry(&entry, session).await?;
-    }
+    revert_settlements(port, payment, actor_id, &chunks, session).await?;
     for (reverse, seq) in reverse_rows.iter().zip(seqs.iter()) {
         let allocation = PaymentAllocation::new(
             PaymentAllocationId::new(port.next_id()),
@@ -113,22 +107,20 @@ async fn persist_refund<P: RefundPostingPort>(
     Ok(())
 }
 
-/// 按冲减块写减少分录抵销并回冲已核销进度。
+/// 按实际反向核销块回冲已付进度，校验原供应商和来源账户。
 ///
 /// # 错误
 /// 分录缺失、跨供应商或超额冲减时返回错误。
-async fn create_decrease_offsets<P: RefundPostingPort>(
+async fn revert_settlements<P: RefundPostingPort>(
     port: &P,
-    refund: &SupplierRefundPostingFact,
     payment: &crate::entity::payable::SupplierPayment,
     actor_id: &str,
     chunks: &[crate::entity::payable::PaymentReverseChunk],
     session: &mut dyn Executor,
-) -> Result<Option<PayableEntry>> {
+) -> Result<()> {
     let facts =
         port.facts(chunks.iter().map(|chunk| chunk.increase_entry_id.clone()).collect(), session).await?;
-    let mut decrease_entry: Option<PayableEntry> = None;
-    for (offset_index, chunk) in chunks.iter().enumerate() {
+    for chunk in chunks {
         let entry = facts
             .entries
             .get(chunk.increase_entry_id.as_ref())
@@ -141,12 +133,8 @@ async fn create_decrease_offsets<P: RefundPostingPort>(
             return Err(Error::BusinessLogicError("禁止跨供应商退款".to_string()));
         }
         revert_supplier_refund_settlement(port, entry, chunk, actor_id, session).await?;
-        if decrease_entry.is_none() {
-            decrease_entry = Some(build_decrease_entry(port, refund, &entry.payable_account_id)?);
-        }
-        persist_decrease_offset(port, decrease_entry.as_ref(), chunk, offset_index, session).await?;
     }
-    Ok(decrease_entry)
+    Ok(())
 }
 
 /// 原子回冲应付子账已核销进度。
@@ -165,65 +153,6 @@ async fn revert_supplier_refund_settlement<P: RefundPostingPort>(
     if !reverted {
         return Err(Error::BusinessLogicError("退款冲减超过已核销金额".to_string()));
     }
-    Ok(())
-}
-
-/// 构造供应商退款减少应付分录。
-///
-/// # 错误
-/// 分录字段校验失败时返回错误。
-fn build_decrease_entry<P: RefundPostingPort>(
-    port: &P,
-    refund: &SupplierRefundPostingFact,
-    payable_account_id: &erp_core::ids::PayableAccountId,
-) -> Result<PayableEntry> {
-    Ok(PayableEntry::new(
-        PayableEntryId::new(port.next_id()),
-        PayableEntryData {
-            payable_account_id: payable_account_id.clone(),
-            entry_type: PayableEntryType::SupplierRefund,
-            direction: PayableEntryDirection::Decrease,
-            amount: refund.amount,
-            due_date: port.today(),
-            source_fact_type: "supplier_refund".to_string(),
-            source_document_id: refund.refund_id.clone(),
-            source_revision_id: refund.refund_id.clone(),
-            source_sequence: 1,
-            posted_at: refund.occurred_at,
-        },
-    )?)
-}
-
-/// 写入一条减少分录抵销。
-///
-/// # 错误
-/// 减少分录缺失或仓储失败时返回错误。
-async fn persist_decrease_offset<P: RefundPostingPort>(
-    port: &P,
-    decrease_entry: Option<&PayableEntry>,
-    chunk: &crate::entity::payable::PaymentReverseChunk,
-    offset_index: usize,
-    session: &mut dyn Executor,
-) -> Result<()> {
-    let decrease_id = decrease_entry
-        .ok_or_else(|| Error::Internal("退款减少分录未创建".to_string()))?
-        .base
-        .id
-        .clone()
-        .into();
-    port.offset(
-        &PayableEntryOffset::new(
-            PayableEntryOffsetId::new(port.next_id()),
-            PayableEntryOffsetData {
-                decrease_entry_id: decrease_id,
-                increase_entry_id: chunk.increase_entry_id.clone(),
-                offset_sequence: offset_index as u32 + 1,
-                offset_amount: chunk.amount,
-            },
-        )?,
-        session,
-    )
-    .await?;
     Ok(())
 }
 
@@ -247,11 +176,8 @@ trait RefundPostingPort: Send + Sync {
         actor_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<bool>;
-    async fn offset(&self, offset: &PayableEntryOffset, executor: &mut dyn Executor) -> Result<()>;
-    async fn entry(&self, entry: &PayableEntry, executor: &mut dyn Executor) -> Result<()>;
     async fn allocation(&self, allocation: &PaymentAllocation, executor: &mut dyn Executor) -> Result<()>;
     fn next_id(&self) -> String;
-    fn today(&self) -> BusinessDate;
 }
 struct MongoRefundPosting<'a> {
     db: &'a Database,
@@ -285,23 +211,12 @@ impl RefundPostingPort for MongoRefundPosting<'_> {
     ) -> Result<bool> {
         Ok(self.db.payable_accounts().revert_settlement(id, amount, actor, e).await?)
     }
-    async fn offset(&self, offset: &PayableEntryOffset, e: &mut dyn Executor) -> Result<()> {
-        self.db.payable_entry_offsets().create(offset, e).await?;
-        Ok(())
-    }
-    async fn entry(&self, entry: &PayableEntry, e: &mut dyn Executor) -> Result<()> {
-        self.db.payable_entries().create(entry, e).await?;
-        Ok(())
-    }
     async fn allocation(&self, allocation: &PaymentAllocation, e: &mut dyn Executor) -> Result<()> {
         self.db.payment_allocations().create(allocation, e).await?;
         Ok(())
     }
     fn next_id(&self) -> String {
         id_generator::next_id()
-    }
-    fn today(&self) -> BusinessDate {
-        BusinessDate::today()
     }
 }
 
@@ -311,11 +226,13 @@ mod tests {
     use std::str::FromStr;
     use std::sync::Mutex;
 
+    use erp_core::common::time::BusinessDate;
     use erp_core::ids::{FileAssetId, PartyBankAccountId, SupplierAccountId};
 
     use super::*;
     use crate::entity::payable::{
-        PayableAccountData, PayableSourceType, PendingPaymentAllocation, SupplierPaymentData,
+        EntryDirection as PayableEntryDirection, PayableAccountData, PayableEntryData, PayableEntryOffset,
+        PayableEntryType, PayableSourceType, PendingPaymentAllocation, SupplierPaymentData,
     };
 
     fn amount(value: &str) -> Amount {
@@ -473,16 +390,6 @@ mod tests {
             self.io("settlement", e)?;
             Ok(self.revert)
         }
-        async fn offset(&self, offset: &PayableEntryOffset, e: &mut dyn Executor) -> Result<()> {
-            self.io("offset", e)?;
-            self.recorded.lock().unwrap().offsets.push(offset.clone());
-            Ok(())
-        }
-        async fn entry(&self, entry: &PayableEntry, e: &mut dyn Executor) -> Result<()> {
-            self.io("entry", e)?;
-            self.recorded.lock().unwrap().entries.push(entry.clone());
-            Ok(())
-        }
         async fn allocation(&self, allocation: &PaymentAllocation, e: &mut dyn Executor) -> Result<()> {
             self.io("reverse", e)?;
             self.recorded.lock().unwrap().allocations.push(allocation.clone());
@@ -493,10 +400,6 @@ mod tests {
             state.calls.push("id");
             state.ids += 1;
             format!("id{}", state.ids)
-        }
-        fn today(&self) -> BusinessDate {
-            self.recorded.lock().unwrap().calls.push("today");
-            BusinessDate::from_str("2026-09-01").unwrap()
         }
     }
     fn input() -> SupplierRefundPostingFact {
@@ -517,7 +420,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn refund_offsets_precede_decrease_entry_and_reverse_amount_is_conserved() {
+    async fn refund_reverses_settlement_without_reducing_purchase_liability_twice() {
         let mut e = TestExecutor { visits: 0 };
         let port = port(&mut e);
         let payment = payment();
@@ -525,35 +428,14 @@ mod tests {
         let state = port.recorded.lock().unwrap();
         assert_eq!(
             state.calls,
-            [
-                "allocations",
-                "facts",
-                "settlement",
-                "id",
-                "today",
-                "id",
-                "offset",
-                "settlement",
-                "id",
-                "offset",
-                "entry",
-                "id",
-                "reverse",
-                "id",
-                "reverse"
-            ]
+            ["allocations", "facts", "settlement", "settlement", "id", "reverse", "id", "reverse"]
         );
-        assert_eq!(state.entries.len(), 1);
-        let entry = &state.entries[0];
-        assert_eq!(entry.base.id, "id1");
-        assert_eq!(entry.source_document_id, "refund");
-        assert_eq!(entry.source_revision_id, "refund");
-        assert_eq!(entry.amount, amount("80"));
-        assert_eq!(entry.posted_at, Instant::from_unix_secs(10));
+        assert!(state.entries.is_empty());
+        assert!(state.offsets.is_empty());
         let total = state.allocations.iter().fold(amount("0"), |a, row| a.checked_add(row.allocated_amount));
         assert_eq!(total, amount("80"));
         let offset_total = state.offsets.iter().fold(amount("0"), |a, row| a.checked_add(row.offset_amount));
-        assert_eq!(offset_total, total);
+        assert_eq!(offset_total, amount("0"));
         assert_eq!(state.allocations.iter().map(|row| row.allocation_seq).collect::<Vec<_>>(), [3, 4]);
         assert!(
             state.allocations.iter().all(|row| row.allocation_action == PayableAllocationAction::Reverse
@@ -565,7 +447,7 @@ mod tests {
 
     #[tokio::test]
     async fn supplier_refund_finance_stops_at_each_io_failure() {
-        for fail in 0..9 {
+        for fail in 0..6 {
             let mut e = TestExecutor { visits: 0 };
             let mut port = port(&mut e);
             port.fail = Some(fail);

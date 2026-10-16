@@ -8,6 +8,7 @@ use erp_processes::reverse_flow::ReturnsProcess;
 use erp_read_models::returns_center::dto::{PurchaseReturnOrderListParams, PurchaseReturnOrderView};
 use erp_read_models::returns_center::{PurchaseReturnListView, ReturnsReadService};
 use erp_returns::dto::CreatePurchaseReturnOrderRequest;
+use erp_returns::entity::returns::DirectReturnRequest;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
@@ -113,4 +114,66 @@ pub async fn purchase_return_order_create(
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "退货退款",
+    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
+    desc = "建立采购退货单",
+    resource = "purchase_return_order",
+    action = "create"
+)]
+/// 登记已核实的客户直退，保留原采购和发货记录。
+/// # 参数
+/// * `state` - 应用状态。
+/// * `actor` - 已认证采购经办人。
+/// * `id` - 来源采购身份。
+/// * `req` - 实际退回凭据和同键请求。
+/// # 返回
+/// 采购退货单身份。
+/// # 错误
+/// 权限、版本、数量或凭据不满足时拒绝。
+pub async fn purchase_direct_return_confirm(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<DirectReturnRequest>,
+) -> Result<String> {
+    let result = ReturnsProcess::new(state.db())
+        .with_rbac(state.rbac())
+        .with_object_read(state.approval_object_read())
+        .confirm_direct_return(&id, req, &actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(result))
+}
+
+#[cfg(test)]
+mod direct_return_body_tests {
+    use erp_returns::entity::returns::DirectReturnRequest;
+    use serde_json::json;
+
+    #[test]
+    fn actual_receipt_body_requires_version_evidence_and_positive_unique_lines() {
+        let body = json!({
+            "expected_version": 7,
+            "idempotency_key": "12345678-1234-1234-1234-123456789abc",
+            "reason": "销售减量",
+            "receipt_reference": "供应商收货回单 1",
+            "lines": [{ "purchase_line_id": "line-1", "quantity": "27" }]
+        });
+        let request: DirectReturnRequest = serde_json::from_value(body.clone()).unwrap();
+        request.validate().unwrap();
+        let mut invalid = body.clone();
+        invalid["lines"][0]["quantity"] = json!("0");
+        assert!(serde_json::from_value::<DirectReturnRequest>(invalid).unwrap().validate().is_err());
+        let mut invalid = body.clone();
+        invalid["receipt_reference"] = json!("");
+        assert!(serde_json::from_value::<DirectReturnRequest>(invalid).unwrap().validate().is_err());
+        let mut invalid = body.clone();
+        invalid.as_object_mut().unwrap().remove("expected_version");
+        assert!(serde_json::from_value::<DirectReturnRequest>(invalid).is_err());
+        let mut invalid = body;
+        invalid["supplier_id"] = json!("client-must-not-replace-supplier");
+        assert!(serde_json::from_value::<DirectReturnRequest>(invalid).is_err());
+    }
 }

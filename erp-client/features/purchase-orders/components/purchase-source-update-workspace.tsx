@@ -1,5 +1,8 @@
 "use client"
 
+import { PurchaseSourceReturnPanel } from "./purchase-source-return-panel"
+import { sourceReturnProgress } from "../lib/source-return-progress"
+
 import { useState } from "react"
 import Link from "next/link"
 import {
@@ -92,6 +95,7 @@ export function PurchaseSourceUpdateWorkspace({
             />
         )
 
+    const returnProgress = sourceReturnProgress(order)
     const update = order.sourceUpdate
     const activeChange = order.activeChangeOrder
     const phase = activeChange
@@ -190,6 +194,12 @@ export function PurchaseSourceUpdateWorkspace({
                     </AlertDescription>
                 </Alert>
             ) : null}
+            {needsUpdate ? (
+                <PurchaseSourceReturnPanel
+                    order={order}
+                    disabled={query.isError || awaitingApproval}
+                />
+            ) : null}
             {result ? <FormalActionResult {...result} /> : null}
             {activeChange ? (
                 <PurchaseChangeOrderApprovalSection
@@ -212,7 +222,9 @@ export function PurchaseSourceUpdateWorkspace({
                         : awaitingApproval
                           ? "待改单生效后，系统自动核对处理结果。"
                           : needsUpdate
-                            ? "请根据影响原因调整采购；无法调整时填写维持原因。"
+                            ? returnProgress.blocksChange
+                                ? "请先完成退货及适用的款票处理，再调整采购。"
+                                : "请根据影响原因调整采购；无法调整时填写维持原因。"
                             : "按最新采购情况核对待办状态。"}
                 </p>
                 <Button
@@ -230,6 +242,7 @@ export function PurchaseSourceUpdateWorkspace({
                 {needsUpdate && !query.isError ? (
                     <>
                         {update?.affected &&
+                        !returnProgress.hasOpenReturns &&
                         !awaitingApproval &&
                         !actions.changePending &&
                         !actions.voidPending ? (
@@ -259,6 +272,7 @@ export function PurchaseSourceUpdateWorkspace({
                                     : "修改原单"}
                             </Button>
                         ) : !awaitingApproval &&
+                          !returnProgress.blocksChange &&
                           (permissions.canChange || continueChange) ? (
                             <LoadingButton
                                 id="purchase-source-update-change"
@@ -268,7 +282,8 @@ export function PurchaseSourceUpdateWorkspace({
                                 {continueChange ? "继续改单" : "发起改单"}
                             </LoadingButton>
                         ) : null}
-                        {!permissions.canEdit &&
+                        {!returnProgress.blocksChange &&
+                        !permissions.canEdit &&
                         !permissions.canChange &&
                         !continueChange &&
                         !awaitingApproval ? (

@@ -164,6 +164,9 @@ pub struct PurchaseReturnOrderUpdate {
 /// `PartialEq`，因此本实体手工实现 `PartialEq`/`Eq`（全字段语义相等）。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity)]
 pub struct PurchaseReturnOrder {
+    /// 已核实客户直退供应商凭据；旧数据为空。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direct_return: Option<super::DirectReturnEvidence>,
     #[serde(flatten)]
     pub base: BaseModel,
     #[serde(flatten)]
@@ -181,7 +184,8 @@ pub struct PurchaseReturnOrder {
 impl PartialEq for PurchaseReturnOrder {
     /// 全字段语义相等。
     fn eq(&self, other: &Self) -> bool {
-        self.base == other.base
+        self.direct_return == other.direct_return
+            && self.base == other.base
             && self.stable.status == other.stable.status
             && self.stable.current_revision_id == other.stable.current_revision_id
             && self.stable.created_by == other.stable.created_by
@@ -224,6 +228,7 @@ impl PurchaseReturnOrder {
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
+            direct_return: None,
             stable: StableBase::new(PurchaseReturnStatus::Draft, created_by),
             purchase_return_no,
             purchase_order_id: data.purchase_order_id,

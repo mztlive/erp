@@ -6701,6 +6701,22 @@
       },
       "location_count": 1,
       "reason": "用例 assign_offering_delivery_template 通过 .resource_log、run_audited、persist_logs 在同一事务内逐条复验供给写访问、指定配送模板并为每条供给写入审计。"
+    },
+    {
+      "path": "crates/erp-processes/src/reverse_flow/direct_return.rs",
+      "function": "persist",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "客户直退登记在原事务内追加双向退货凭据及成功审计；同键重放先校验原载荷与权限并返回已有结果，不追加事实。"
     }
   ]
 }

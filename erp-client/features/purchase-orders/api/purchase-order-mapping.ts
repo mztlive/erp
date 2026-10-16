@@ -535,6 +535,7 @@ function mapPurchaseSourceUpdate(
 ): PurchaseSourceUpdateView | undefined {
     if (!update) return undefined
     return {
+        returnHandling: update.return_handling ?? undefined,
         affected: update.affected,
         awaitingSubmission: update.awaiting_submission ?? false,
         recordVersion: update.record_version ?? undefined,

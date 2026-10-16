@@ -434,7 +434,9 @@ export function SupplierAccountsPage() {
                 onOpenChange={(open) => {
                     if (!open) refundFlow.setRefundRequest(null)
                 }}
-                onSubmit={(reason) => refundFlow.prepareRefundDraft(reason)}
+                onSubmit={(reason, amount) =>
+                    refundFlow.prepareRefundDraft(reason, amount)
+                }
             />
 
             <SupplierRefundSubmitConfirmDialog

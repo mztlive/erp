@@ -1,9 +1,9 @@
 //! 采购详情的来源依据提示（第一期 §6.3“销售变更对采购的影响”第 10 条）。
 //!
-//! 只读取依据更新记录与销售版本号，不在详情页重算整单覆盖。
+//! 读取依据更新记录；生效实物采购同时读取当前净履约和退货办理范围。
 
 use erp_procurement::entity::purchase_order::{
-    PurchaseOrder, PurchaseSourceResolution, PurchaseSourceUpdate, PurchaseSourceUpdateStatus,
+    PurchaseOrder, PurchaseSourceResolution, PurchaseSourceUpdate, PurchaseSourceUpdateStatus, PurchaseType,
 };
 use erp_procurement::repository::purchase_source_update::latest_for_purchase;
 use erp_sales::repository::SalesOrderExt;
@@ -12,6 +12,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::Result;
+use crate::purchase_center::direct_return::direct_return_plan;
 use crate::purchase_center::dto::PurchaseSourceUpdateView;
 
 /// 读取采购的来源依据提示。
@@ -48,12 +49,16 @@ pub(super) async fn purchase_source_update_view(
     let revision_no = |id: &str| {
         revisions.iter().find(|revision| revision.base.id == id).map(|revision| revision.revision.revision_no)
     };
-    Ok(Some(source_update_view(
+    let mut view = source_update_view(
         latest.as_ref(),
         outdated,
         revision_no(order.sales_order_revision_id.as_ref()),
         current_revision.as_deref().and_then(revision_no),
-    )))
+    );
+    if open && order.stable.current_revision_id.is_some() && order.purchase_type == PurchaseType::Physical {
+        view.return_handling = Some(direct_return_plan(db, order, executor).await?);
+    }
+    Ok(Some(view))
 }
 
 /// 由最近一条记录与版本信息构造提示视图。
@@ -68,6 +73,7 @@ fn source_update_view(
     let last_resolution = resolved.and_then(|update| update.resolution);
     let awaiting_submission = open.is_some_and(|update| update.awaiting_submission);
     PurchaseSourceUpdateView {
+        return_handling: None,
         affected: open.is_some() && !awaiting_submission,
         awaiting_submission,
         record_id: open.map(|update| update.base.id.clone()),

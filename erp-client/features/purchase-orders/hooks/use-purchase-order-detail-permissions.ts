@@ -2,6 +2,7 @@
 
 import * as React from "react"
 
+import { sourceReturnProgress } from "../lib/source-return-progress"
 import type { PurchaseOrderCenterView } from "@/features/purchase-orders/types"
 
 export type PurchaseOrderDetailPermissions = {
@@ -22,7 +23,9 @@ export function usePurchaseOrderDetailPermissions(
             canEdit: order?.allowedActions.includes("EDIT") ?? false,
             canSubmit: order?.allowedActions.includes("SUBMIT") ?? false,
             canVoid: order?.allowedActions.includes("VOID") ?? false,
-            canChange: order?.allowedActions.includes("START_CHANGE") ?? false,
+            canChange:
+                !!order?.allowedActions.includes("START_CHANGE") &&
+                !sourceReturnProgress(order).blocksChange,
         }
     }, [order])
 }

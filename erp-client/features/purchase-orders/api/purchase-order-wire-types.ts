@@ -333,6 +333,7 @@ export type BackendPurchaseChangeOrder = {
 
 /** 来源销售变更对采购的影响；采购引用当前销售版本且无待处理记录时为空。 */
 export type BackendPurchaseSourceUpdate = {
+    return_handling?: import("../direct-return-types").DirectReturnPlan | null
     affected: boolean
     awaiting_submission?: boolean
     record_id?: string | null

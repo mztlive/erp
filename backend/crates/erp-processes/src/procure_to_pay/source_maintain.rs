@@ -9,7 +9,10 @@ use erp_core::common::time::Instant;
 use erp_core::ids::SalesOrderId;
 use erp_procurement::dto::purchase_order::MaintainPurchaseSourceRequest;
 use erp_procurement::entity::purchase_order::{PurchaseOrder, PurchaseSourceUpdate};
+use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::repository::purchase_source_update::{find_open_for_purchase, purchase_source_updates};
+use erp_returns::entity::returns::PurchaseReturnStatus;
+use erp_returns::repository::direct_return::confirmed_direct_returns;
 use erp_sales::repository::SalesOrderExt;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::WorkItemStatus;
@@ -75,6 +78,18 @@ async fn maintain_in_transaction(
         .await?
         .ok_or_else(|| Error::ConflictError("采购依据已处理，请刷新后查看".to_string()))?;
     ensure_current(db, order, &update, req.expected_version, executor).await?;
+    if confirmed_direct_returns(db, &order.base.id, executor)
+        .await?
+        .iter()
+        .any(|r| r.stable.status == PurchaseReturnStatus::Returned)
+    {
+        return Err(Error::ConflictError(
+            "已登记实际退货，请完成款票处理和采购改单，不能维持原采购金额".into(),
+        ));
+    }
+    // 与实际直退登记竞争同一采购版本，禁止并发维持越过刚写入的退货事实。
+    let mut guarded_order = order.clone();
+    db.purchase_orders().update(&mut guarded_order, executor).await?;
     let now = Instant::now();
     update.maintain(&req.reason, actor.id(), now).map_err(Error::Logic)?;
     purchase_source_updates(db).update(&mut update, executor).await?;

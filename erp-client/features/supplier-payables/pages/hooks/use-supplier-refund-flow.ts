@@ -31,7 +31,7 @@ export function useSupplierRefundFlow(args: {
     setRefundRequest: React.Dispatch<
         React.SetStateAction<SupplierRefundRequest | null>
     >
-    prepareRefundDraft: (reason: string) => Promise<void>
+    prepareRefundDraft: (reason: string, amount?: string) => Promise<void>
     confirmRefundSubmit: () => Promise<void>
     beginRefundSubmit: (row: SupplierRefundRow) => void
     refundDraft: SupplierRefundRow | null
@@ -67,9 +67,15 @@ export function useSupplierRefundFlow(args: {
     function bindRefundSlot(
         scopeId: string,
         reason: string,
+        amount?: string,
     ): SupplierRefundIdempotencySlot {
         const current = refundSlotRef.current
-        const next = slotForSupplierRefundIntent(current, scopeId, reason)
+        const next = slotForSupplierRefundIntent(
+            current,
+            scopeId,
+            reason,
+            amount,
+        )
         refundSlotRef.current = next
         return next
     }
@@ -79,12 +85,16 @@ export function useSupplierRefundFlow(args: {
      *
      * @param reason 非空退款原因。
      */
-    async function prepareRefundDraft(reason: string) {
+    async function prepareRefundDraft(reason: string, amount?: string) {
         if (!refundRequest) return
-        const slot = bindRefundSlot(refundRequest.sourcePaymentId, reason)
+        const slot = bindRefundSlot(
+            refundRequest.sourcePaymentId,
+            reason,
+            amount ?? refundRequest.amount,
+        )
         const intent = {
             sourcePaymentId: refundRequest.sourcePaymentId,
-            amount: refundRequest.amount,
+            amount: amount ?? refundRequest.amount,
             reason,
         }
         setPendingCommit(intent)

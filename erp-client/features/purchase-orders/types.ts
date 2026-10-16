@@ -595,6 +595,7 @@ export { SUPPLIER_PAYMENT_TERM_OPTIONS as PAYMENT_TERM_OPTIONS } from "@/lib/bus
 
 /** 来源销售变更对采购的影响（第一期 §6.3 第 10 条）。 */
 export type PurchaseSourceUpdateView = {
+    returnHandling?: import("./direct-return-types").DirectReturnPlan
     /** 采购依据待更新：存在未处理且仍受影响的依据更新记录。 */
     affected: boolean
     /** 草稿已按新销售版本修改，重新提交审批后处理完成。 */

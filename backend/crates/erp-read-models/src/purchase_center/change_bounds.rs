@@ -1,7 +1,7 @@
 //! 采购改单逐行数量范围的事实装配（第一期 §6.3“实物与服务采购改单执行规则”）。
 //!
-//! 已发生数量 = 跨版本累计合格入库 + 本采购供应商直发已发货 + 已确认且未失败的
-//! 电子交付和服务履约。可填上限由销售当前覆盖与本采购受影响原因确定。
+//! 净履约数量 = 跨版本累计合格入库 + 本采购供应商直发已发货 + 已确认且未失败的
+//! 电子交付和服务履约 − 已核实客户直退。可填上限由销售当前覆盖与本采购受影响原因确定。
 
 use std::collections::HashMap;
 
@@ -15,6 +15,8 @@ use erp_procurement::entity::purchase_order::{
 };
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::repository::prelude::*;
+use erp_returns::entity::returns::net_fulfilled;
+use erp_returns::repository::direct_return::confirmed_direct_returns;
 use erp_sales::repository::SalesOrderExt;
 use mongodb::Database;
 use persistence_core::Executor;
@@ -115,7 +117,19 @@ pub async fn load_purchase_fulfilled_quantities(
             .filter(|row| row.purchase_order_id == order_id && row.result != FulfillmentResult::Failure)
             .map(|row| (row.sales_order_line_id.to_string(), row.quantity)),
     );
-    sum_by_line(rows)
+    let mut totals = sum_by_line(rows)?;
+    for returned in confirmed_direct_returns(db, &order.base.id, executor).await? {
+        if let Some(evidence) = returned.direct_return {
+            for (line, quantity) in evidence.returned_lines {
+                let gross = totals
+                    .get(&line)
+                    .copied()
+                    .unwrap_or(Quantity::try_from(Decimal::ZERO).map_err(Error::Logic)?);
+                totals.insert(line, net_fulfilled(gross, quantity).map_err(Error::Logic)?);
+            }
+        }
+    }
+    Ok(totals)
 }
 
 /// 本采购全部版本的版本行。
@@ -130,7 +144,7 @@ async fn all_revision_lines(
 }
 
 /// 本采购供应商直发已发货或已签收的发货行。
-async fn shipped_rows(
+pub(crate) async fn shipped_rows(
     db: &Database,
     order: &PurchaseOrder,
     executor: &mut dyn Executor,

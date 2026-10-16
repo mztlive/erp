@@ -231,6 +231,7 @@ const REGISTERED_ACTIONS: &[AuditAction] = &[
     action("purchase_receipt.create", "purchase_receipt", "创建采购收货单"),
     action("purchase_receipt.post", "purchase_receipt", "过账采购收货单"),
     action("purchase_receipt.update", "purchase_receipt", "修改采购收货单"),
+    action("purchase_return_order.confirm_direct", "purchase_return_order", "登记客户直退供应商"),
     action("purchase_return_order.create", "purchase_return_order", "创建采购退货单"),
     action("receipt_reversal.cancel_approval", "receipt_reversal", "撤回审批收款冲正单"),
     action("receipt_reversal.create", "receipt_reversal", "创建收款冲正单"),

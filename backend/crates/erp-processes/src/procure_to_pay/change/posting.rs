@@ -22,6 +22,7 @@ const CHANGE_SOURCE_AFFECTED: &str =
 use super::effect::EffectiveChangePosting;
 use super::guard::check_effective_lines;
 use crate::audit::persist_log;
+use crate::reverse_flow::direct_return_completion::complete_direct_returns;
 use crate::{Error, Result};
 
 /// 原事务中的真实跨域操作；没有成本构造或成本写入步骤，因为原差额成本恒空。
@@ -95,11 +96,7 @@ impl EffectSteps for MongoEffect<'_> {
         match step {
             QuantityGuard => guard_quantities(self.db, purchase, self.actor_id, executor).await?,
             SalesGuard => {
-                revalidate_payment_subject(self.db, &purchase.revision.payment_subject, executor).await?;
-                purchase.order.sales_order_revision_id =
-                    purchase.revision.payment_subject.sales_order_revision_id.clone();
-                advance_source_sales_procurement_guard(self.db, &purchase.order, self.actor_id, executor)
-                    .await?
+                guard_sales(self.db, purchase, self.actor_id, executor).await?;
             },
             PrepareAllocations => {
                 self.allocations = Some(
@@ -136,11 +133,25 @@ impl EffectSteps for MongoEffect<'_> {
             Submission => purchase.persist_approved_submission(self.db, executor).await?,
             Change => purchase.persist_change(self.db, executor).await?,
             Audit => {
+                complete_direct_returns(self.db, &purchase.order, self.actor_id, executor).await?;
                 persist_log(self.db, &self.audit, executor).await?;
             },
         }
         Ok(())
     }
+}
+
+/// 复核结算主体并串行化来源销售，保证后续分配基于同一销售版本。
+async fn guard_sales(
+    db: &Database,
+    purchase: &mut EffectiveChangeWrite,
+    actor_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    revalidate_payment_subject(db, &purchase.revision.payment_subject, executor).await?;
+    purchase.order.sales_order_revision_id =
+        purchase.revision.payment_subject.sales_order_revision_id.clone();
+    advance_source_sales_procurement_guard(db, &purchase.order, actor_id, executor).await
 }
 
 /// 按当时事实复核改后数量与交付安排，仓库履约采购同步重算入库进度。

@@ -248,7 +248,7 @@ export function purchaseChangeQuantityIssue(
     if (!bound) return undefined
     try {
         if (compareDecimal(quantity.trim() || "0", bound.minQuantity, 6) < 0)
-            return `已入库、发货或交付 ${compactFixed(bound.minQuantity)}，不能少于该数量；多出的货物请办理采购退货`
+            return `扣除已登记退回后，已履约 ${compactFixed(bound.minQuantity)}，不能少于该数量；多出的货物请办理采购退货`
         if (compareDecimal(quantity.trim() || "0", bound.maxQuantity, 6) > 0)
             return bound.quantityAffected
                 ? `销售已调减，本单最多保留 ${compactFixed(bound.maxQuantity)}；供应商不接受调减时请登记维持原采购`

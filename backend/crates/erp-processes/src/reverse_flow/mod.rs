@@ -6,6 +6,8 @@ mod cancel_approval;
 mod cancel_write;
 pub(crate) mod command_recovery;
 mod customer_refund;
+mod direct_return;
+pub(crate) mod direct_return_completion;
 mod draft_update;
 mod payment_posting;
 mod payment_reversal;

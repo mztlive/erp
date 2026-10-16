@@ -4831,6 +4831,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/direct-returns",
+                description: "建立采购退货单",
+                permission: {
+                    resource: "purchase_return_order",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/purchase-return-orders",
                 description: "查询采购退货单列表",

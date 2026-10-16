@@ -406,4 +406,38 @@ mod tests {
             assert!(matches!(error, Error::Logic(_)));
         }
     }
+    #[test]
+    fn return_27_of_47_refund_175_then_change_closes_payable_at_1000() {
+        let mut original = PayableAccount::new(
+            PayableAccountId::new("account-1"),
+            PayableAccountData {
+                source_document_id: "po-1".into(),
+                supplier_id: SupplierAccountId::new("supplier-1"),
+                source_type: PayableSourceType::PurchaseOrder,
+                gross_total: amount("2350"),
+                settled_total: amount("1175"),
+                invoiceable_total: amount("2350"),
+                invoiced_total: amount("0"),
+            },
+            "buyer",
+        )
+        .unwrap();
+        let change = prepared("2350", "1000");
+        assert!(change.build_posting(Some(original.clone())).is_err());
+        // 原付款部分退款只回冲已核销金额；不改采购金额。
+        original
+            .sync_totals(
+                original.settled_total.checked_sub(amount("175")),
+                original.invoiced_total,
+                "finance",
+            )
+            .unwrap();
+        assert_eq!(original.gross_total, amount("2350"));
+        let (settled, delta) = change.build_posting(Some(original)).unwrap();
+        assert_eq!(delta.amount, amount("1350"));
+        assert_eq!(settled.gross_total, amount("1000"));
+        assert_eq!(settled.settled_total, amount("1000"));
+        assert_eq!(settled.open_total, amount("0"));
+        assert_eq!(settled.stable.status, PayableAccountStatus::Settled);
+    }
 }

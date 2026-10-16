@@ -169,7 +169,8 @@ export type SupplierRefundIdempotencySlot = Readonly<{
 export const supplierRefundIntentFingerprint = (
     scopeId: string,
     reason: string,
-): string => `${scopeId}:${reason.trim()}`
+    amount?: string,
+): string => JSON.stringify([scopeId, reason.trim(), amount ?? null])
 
 /**
  * 按当前意图复用或轮换退款幂等键。
@@ -184,8 +185,9 @@ export const slotForSupplierRefundIntent = (
     current: SupplierRefundIdempotencySlot | null,
     scopeId: string,
     reason: string,
+    amount?: string,
 ): SupplierRefundIdempotencySlot => {
-    const fingerprint = supplierRefundIntentFingerprint(scopeId, reason)
+    const fingerprint = supplierRefundIntentFingerprint(scopeId, reason, amount)
     if (current && current.fingerprint === fingerprint) return current
     return {
         key: `w12-rev-${scopeId}-${crypto.randomUUID()}`,

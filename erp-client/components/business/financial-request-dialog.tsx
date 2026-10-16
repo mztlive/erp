@@ -14,16 +14,18 @@ import {
     DialogFooter,
 } from "@/components/ui/dialog"
 import { SubmissionResultUnknownError } from "@/lib/submission-result"
+import { compareDecimal, parseDecimal } from "@/lib/fixed-decimal"
 import { getErrorMessage } from "@/lib/api/errors"
 
 const schema = z.object({ reason: z.string().trim().min(1, "请填写原因") })
 
-/** Keep source, full amount, reason and final submission in one modal. */
+/** Keep source, amount, reason and final submission in one modal; amount editing is opt-in. */
 export function FinancialRequestDialog({
     open,
     pending,
     sourceLabel,
     amount,
+    editableAmount = false,
     title,
     description,
     submitLabel,
@@ -36,26 +38,46 @@ export function FinancialRequestDialog({
     pending: boolean
     sourceLabel?: string
     amount?: string
+    editableAmount?: boolean
     title: string
     description: string
     submitLabel: string
     id: string
     approvalContent?: React.ReactNode
     onOpenChange: (open: boolean) => void
-    onSubmit: (reason: string) => void | Promise<void>
+    onSubmit: (reason: string, amount?: string) => void | Promise<void>
 }) {
     const [error, setError] = React.useState<string | null>(null)
     const [unknown, setUnknown] = React.useState(false)
     const submitting = React.useRef(false)
     const form = useAppForm({
-        defaultValues: { reason: "" },
-        validators: { onChange: schema },
+        defaultValues: { reason: "", refundAmount: amount ?? "" },
+        validators: {
+            onChange: schema.extend({
+                refundAmount: z.string().refine((value) => {
+                    if (!editableAmount) return true
+                    try {
+                        parseDecimal(value, { maxScale: 2 })
+                        return (
+                            compareDecimal(value, "0", 6) > 0 &&
+                            !!amount &&
+                            compareDecimal(value, amount, 6) <= 0
+                        )
+                    } catch {
+                        return false
+                    }
+                }, "请填写大于零且不超过可退金额的数值，最多两位小数"),
+            }),
+        },
         onSubmit: async ({ value }) => {
             if (submitting.current) return
             submitting.current = true
             setError(null)
             try {
-                await onSubmit(value.reason.trim())
+                await onSubmit(
+                    value.reason.trim(),
+                    editableAmount ? value.refundAmount : undefined,
+                )
                 setUnknown(false)
             } catch (cause) {
                 setUnknown(cause instanceof SubmissionResultUnknownError)
@@ -67,10 +89,10 @@ export function FinancialRequestDialog({
     })
     React.useEffect(() => {
         if (!open) return
-        form.reset({ reason: "" })
+        form.reset({ reason: "", refundAmount: amount ?? "" })
         setError(null)
         setUnknown(false)
-    }, [open, sourceLabel, form])
+    }, [open, sourceLabel, amount, form])
     const close = () => {
         if (!pending && !submitting.current && !unknown) onOpenChange(false)
     }
@@ -100,11 +122,28 @@ export function FinancialRequestDialog({
                     <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 rounded-lg bg-muted/50 p-3 text-sm">
                         <dt className="text-muted-foreground">原单</dt>
                         <dd>{sourceLabel || "—"}</dd>
-                        <dt className="text-muted-foreground">全额金额</dt>
+                        <dt className="text-muted-foreground">
+                            {editableAmount ? "可退金额上限" : "全额金额"}
+                        </dt>
                         <dd>
                             {amount ? <MoneyValue value={amount} /> : "待核对"}
                         </dd>
                     </dl>
+                    {editableAmount ? (
+                        <form.AppField
+                            name="refundAmount"
+                            children={(field) => (
+                                <field.TextField
+                                    id={`${id}-amount`}
+                                    label="本次退款金额"
+                                    required
+                                    inputMode="decimal"
+                                    disabled={pending || unknown}
+                                    description="填写本次实际退回的款项。退货金额不一定等于现金退款金额。"
+                                />
+                            )}
+                        />
+                    ) : null}
                     <form.AppField
                         name="reason"
                         children={(field) => (

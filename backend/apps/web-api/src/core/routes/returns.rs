@@ -48,6 +48,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/purchase-orders/{id}/direct-returns",
+            with_permission(
+                post(returns::purchase_return::purchase_direct_return_confirm),
+                rbac,
+                returns::purchase_return::purchase_direct_return_confirm_permission_key(),
+            ),
+        )
+        .route(
             "/purchase-return-orders",
             with_permission(
                 get(returns::purchase_return::purchase_return_order_list),

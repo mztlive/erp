@@ -7,6 +7,7 @@ mod change;
 pub mod change_bounds;
 mod creation_basis;
 mod delivery_options;
+pub mod direct_return;
 pub mod dto;
 pub mod expense_source;
 pub mod freight_follow_up;

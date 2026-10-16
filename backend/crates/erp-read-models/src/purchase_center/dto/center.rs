@@ -6,6 +6,7 @@ use erp_procurement::entity::purchase_order::{
 use erp_sales::entity::sales_order::SalesDeliveryAllocation;
 
 use super::*;
+use crate::purchase_center::direct_return::DirectReturnPlan;
 
 /// 采购单对象中心视图。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -107,6 +108,8 @@ pub struct PurchaseDeliveryJudgementView {
 /// 来源销售变更对本采购的影响（第一期 §6.3“销售变更对采购的影响”第 10 条）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct PurchaseSourceUpdateView {
+    /// 已履约销售减量的实际退回与结算引导。
+    pub return_handling: Option<DirectReturnPlan>,
     /// 采购依据待更新：存在未处理且仍受影响的依据更新记录。
     pub affected: bool,
     /// 草稿已按新销售版本修改，重新提交审批后处理完成。

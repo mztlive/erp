@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
+import { confirmDirectReturn } from "../api/direct-returns"
 import { approvalKeys } from "@/features/approval-workflow/queries"
 import {
     acquireDraftEditToken,
@@ -213,6 +214,23 @@ export function useCancelPurchaseOrderApprovalMutation() {
 /**
  * 登记维持原采购。成功后刷新采购、任务、工作台与销售单缓存。
  */
+export function useConfirmDirectReturnMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: confirmDirectReturn,
+        retry: false,
+        onSuccess: async () => {
+            await invalidatePurchaseOrderApprovalCaches(queryClient)
+            await queryClient.invalidateQueries({
+                queryKey: ["purchase-return-orders"],
+            })
+            await queryClient.invalidateQueries({
+                queryKey: ["sales-return-cases"],
+            })
+        },
+    })
+}
+
 export function useMaintainPurchaseSourceMutation() {
     const queryClient = useQueryClient()
     return useMutation({

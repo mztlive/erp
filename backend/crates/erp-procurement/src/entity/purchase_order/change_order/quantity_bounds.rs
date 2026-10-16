@@ -1,6 +1,6 @@
 //! 采购改单逐行可填数量范围（第一期 §6.3“实物与服务采购改单执行规则”）。
 //!
-//! 下限是本采购在该销售行上已发生的入库、发货和交付数量，事实不回退；上限是
+//! 下限是本采购在该销售行上扣除已核实退回后的净入库、发货和交付数量，原事实保留；上限是
 //! 销售当前目标扣除其他来源覆盖后的剩余量。未因销售减量受影响的行允许保持原数量，
 //! 因销售归零或减量受影响的行必须调减到剩余量以内，否则应登记维持原采购。
 //! 下限高于上限时以已发生数量为准，超出部分走采购退货。
@@ -112,7 +112,7 @@ impl ChangeQuantityBound {
         let value = requested.to_decimal();
         if value < self.fulfilled_quantity.to_decimal() {
             return Err(Error::from(format!(
-                "第 {} 行 {} 已入库、发货或交付 {}，改后数量不能少于该数量；多出的货物请办理采购退货",
+                "第 {} 行 {} 扣除已登记退回后，已履约 {}，改后数量不能少于该数量；多出的货物请办理采购退货",
                 self.line_no,
                 self.item_name,
                 self.fulfilled_quantity.to_decimal().normalize()

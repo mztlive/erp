@@ -7,7 +7,7 @@ import { ChangeOrderSection } from "@/components/business/change-order-section"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { compactFixed } from "@/lib/fixed-decimal"
+import { compactFixed, compareDecimal } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
 import type { PurchaseChangeDraft } from "../api/purchase-change-draft"
 import {
@@ -167,7 +167,8 @@ function PurchaseChangeLineRow({
     const badge = diff.status === "unchanged" ? null : DIFF_BADGE[diff.status]
     const amount = formatAmount(value)
     const base = purchaseChangeBaseLine(draft, line)
-    const bound = purchaseChangeLineOption(line, options)?.quantityBound
+    const option = purchaseChangeLineOption(line, options)
+    const bound = option?.quantityBound
     const previous = (
         key: keyof PurchaseChangeLineDiff["previous"],
         money = false,
@@ -268,6 +269,54 @@ function PurchaseChangeLineRow({
                     )}
                 </div>
                 <div className="flex flex-wrap justify-end gap-1 sm:col-span-2 @3xl/lines:col-span-1 @3xl/lines:pt-0.5">
+                    {item &&
+                    bound?.quantityAffected &&
+                    compactFixed(value.quantity || "0") !==
+                        compactFixed(bound.maxQuantity) ? (
+                        <Button
+                            id={`${prefix}-use-sales-target`}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={disabled}
+                            onClick={() => {
+                                const target = compactFixed(bound.maxQuantity)
+                                form.setFieldValue(
+                                    `lines[${index}].quantity`,
+                                    target,
+                                )
+                                // 单地址无需用户重复填写；多地址保留人工分配。
+                                if (
+                                    option?.requiresAddresses &&
+                                    option.addresses.length === 1 &&
+                                    compareDecimal(
+                                        target,
+                                        option.addresses[0].availableQuantity,
+                                        6,
+                                    ) <= 0
+                                ) {
+                                    const address = option.addresses[0]
+                                    form.setFieldValue(
+                                        `lines[${index}].deliveryRows`,
+                                        [
+                                            {
+                                                recipient: address.recipient,
+                                                phone: address.phone,
+                                                region_code:
+                                                    address.region_code,
+                                                region_name:
+                                                    address.region_name,
+                                                address: address.address,
+                                                quantity: target,
+                                            },
+                                        ],
+                                    )
+                                }
+                            }}
+                        >
+                            按可调数量填入
+                        </Button>
+                    ) : null}
                     {!item ? null : removed ? (
                         <Button
                             id={`${prefix}-restore`}
@@ -331,7 +380,9 @@ function LineCoverageNote({
                 销售需要 {compactFixed(bound.salesQuantity)}
                 ，其他采购与库存已覆盖{" "}
                 {compactFixed(bound.otherCoveredQuantity)}
-                {fulfilled !== "0" ? `，本单已入库或发货 ${fulfilled}` : ""}
+                {fulfilled !== "0"
+                    ? `，本单已履约（扣除已退回）${fulfilled}`
+                    : ""}
                 ；本单可填 {compactFixed(bound.minQuantity)} 至{" "}
                 {compactFixed(bound.maxQuantity)}
             </p>
