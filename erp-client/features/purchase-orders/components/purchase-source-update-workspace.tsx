@@ -24,15 +24,13 @@ import { usePurchaseOrderDetailCommandState } from "../hooks/use-purchase-order-
 import { usePurchaseOrderDetailEditActions } from "../hooks/use-purchase-order-detail-edit-actions"
 import { usePurchaseOrderDetailPermissions } from "../hooks/use-purchase-order-detail-permissions"
 import { purchaseChangeOrderApprovalPhase } from "../lib/purchase-change-order-approval"
-import {
-    PurchaseOrderSourceUpdateNotice,
-    MaintainSourceButton,
-} from "./purchase-order-source-update-notice"
+import { MaintainSourceButton } from "./purchase-order-source-update-notice"
 import { PurchaseOrderDetailDialogs } from "./purchase-order-detail-dialogs"
 import { PurchaseChangeOrderEditDialog } from "./purchase-change-order-edit-dialog"
 import { PurchaseChangeOrderApprovalSection } from "./purchase-change-order-approval-section"
 import { PurchaseSourceUpdateDraftDialog } from "./purchase-source-update-draft-dialog"
 import { PurchaseSourceUpdateLines } from "./purchase-source-update-lines"
+import { PurchaseSourceUpdateContext } from "./purchase-source-update-context"
 
 /** 依据更新作业面：影响、原单明细、改单进度；处理入口固定在工作台底栏。 */
 export function PurchaseSourceUpdateWorkspace({
@@ -132,7 +130,7 @@ export function PurchaseSourceUpdateWorkspace({
         <div className="min-w-0 space-y-5 px-5 py-5 @container/document">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
                 <StatusBadge
-                    label={order.identity.statusLabel}
+                    label={`采购单${order.identity.statusLabel}`}
                     tone={order.identity.statusTone}
                 />
                 <span>
@@ -158,19 +156,7 @@ export function PurchaseSourceUpdateWorkspace({
                     </AlertDescription>
                 </Alert>
             ) : null}
-            {needsUpdate ? (
-                <PurchaseOrderSourceUpdateNotice
-                    order={order}
-                    showActions={false}
-                    showGuidance={false}
-                    canEdit={false}
-                    canVoid={false}
-                    canChange={false}
-                    onEdit={() => undefined}
-                    onRequestVoid={() => undefined}
-                    onRequestChange={() => undefined}
-                />
-            ) : null}
+            {needsUpdate ? <PurchaseSourceUpdateContext order={order} /> : null}
             {!update ? (
                 <Alert variant="warning">
                     <AlertTitle>暂时无法确认采购依据</AlertTitle>
@@ -216,10 +202,43 @@ export function PurchaseSourceUpdateWorkspace({
                     onResult={setResult}
                 />
             ) : null}
-            <section className="min-w-0 space-y-3" aria-label="当前采购明细">
-                <h3 className="text-sm font-medium">当前采购明细</h3>
-                <PurchaseSourceUpdateLines order={order} />
-            </section>
+            {needsUpdate &&
+            !query.isError &&
+            update?.affected &&
+            !returnProgress.hasOpenReturns &&
+            !awaitingApproval &&
+            !actions.changePending &&
+            !actions.voidPending ? (
+                <details className="rounded-lg border px-4 py-3">
+                    <summary
+                        id="purchase-source-update-exception"
+                        className="cursor-pointer text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-4"
+                    >
+                        供应商无法按销售变更调整采购
+                    </summary>
+                    <div className="mt-3 space-y-3">
+                        <p className="text-sm leading-relaxed text-muted-foreground">
+                            已与供应商核实无法调整时，可填写原因并维持原采购。登记后本次影响待办结束，原采购数量和金额不变；多出的商品仍需另行处理。
+                        </p>
+                        <MaintainSourceButton
+                            purchaseOrderId={purchaseOrderId}
+                            update={update}
+                            label="无法调整，维持原采购"
+                        />
+                    </div>
+                </details>
+            ) : null}
+            <details className="min-w-0 rounded-lg border px-4 py-3">
+                <summary
+                    id="purchase-source-update-order-details"
+                    className="cursor-pointer text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-4"
+                >
+                    查看当前采购明细与金额
+                </summary>
+                <div className="mt-3">
+                    <PurchaseSourceUpdateLines order={order} />
+                </div>
+            </details>
             <WorkspaceTaskFooter>
                 <p className="mr-auto text-xs text-muted-foreground">
                     {update?.awaitingSubmission
@@ -228,7 +247,7 @@ export function PurchaseSourceUpdateWorkspace({
                           ? "待改单生效后，系统自动核对处理结果。"
                           : needsUpdate
                             ? returnProgress.physicalPending
-                                ? "核实供应商实际收货数量后登记。"
+                                ? "供应商实际收到退货后，再登记收货结果。"
                                 : returnProgress.blocksChange
                                   ? returnProgress.decisionCurrent
                                       ? "财务正在处理，完成后可继续改单。"
@@ -250,16 +269,6 @@ export function PurchaseSourceUpdateWorkspace({
                 </Button>
                 {needsUpdate && !query.isError ? (
                     <>
-                        {update?.affected &&
-                        !returnProgress.hasOpenReturns &&
-                        !awaitingApproval &&
-                        !actions.changePending &&
-                        !actions.voidPending ? (
-                            <MaintainSourceButton
-                                purchaseOrderId={purchaseOrderId}
-                                update={update}
-                            />
-                        ) : null}
                         {!awaitingApproval ? (
                             <PurchaseSourceReturnAction
                                 order={order}

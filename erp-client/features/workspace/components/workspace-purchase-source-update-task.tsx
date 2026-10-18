@@ -60,17 +60,17 @@ export function WorkspacePurchaseSourceUpdateTask({
             header={
                 <WorkspaceTaskIdentityHeader
                     item={item}
-                    title="采购依据更新"
+                    title="处理销售变更影响"
                     subtitle={
                         <span className="flex flex-wrap gap-x-3 gap-y-1">
                             <span>{item.counterpartyName}</span>
                             <Link
                                 id={`workspace-source-update-purchase-${toAutomationIdSegment(item.workItemId)}`}
                                 href={purchaseHref}
-                                className="num break-all text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground focus-visible:outline-2 focus-visible:outline-offset-4"
+                                className="underline decoration-border underline-offset-4 hover:decoration-foreground focus-visible:outline-2 focus-visible:outline-offset-4"
                                 aria-label={`打开采购单 ${stripDocumentNumberPrefix(item.stableNumber)}`}
                             >
-                                {stripDocumentNumberPrefix(item.stableNumber)}
+                                查看采购单
                             </Link>
                             <span>采购负责人：{item.ownerUserLabel}</span>
                         </span>

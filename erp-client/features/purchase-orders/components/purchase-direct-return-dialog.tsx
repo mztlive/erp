@@ -136,7 +136,7 @@ export function PurchaseDirectReturnDialog({
                 className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl"
             >
                 <DialogHeader>
-                    <DialogTitle>登记客户直退供应商</DialogTitle>
+                    <DialogTitle>登记供应商收到的退货</DialogTitle>
                     <DialogDescription>
                         先与客户、供应商核实实物已退回并由供应商接收，再填写本次实际数量。可分批登记；未退回的商品填
                         0。
@@ -172,7 +172,7 @@ export function PurchaseDirectReturnDialog({
                                     children={(field) => (
                                         <field.TextField
                                             id={`purchase-direct-return-quantity-${toAutomationIdSegment(line.purchase_line_id)}`}
-                                            label="本次实际退回"
+                                            label="本次供应商实际收到"
                                             required
                                             inputMode="decimal"
                                             disabled={pending || unknown}
@@ -246,7 +246,7 @@ export function PurchaseDirectReturnDialog({
                                 label={
                                     unknown
                                         ? "核对登记结果"
-                                        : "确认供应商已收货并登记"
+                                        : "确认并登记退货收货结果"
                                 }
                             />
                         </form.AppForm>

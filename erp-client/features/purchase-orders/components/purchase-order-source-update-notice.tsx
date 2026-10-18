@@ -206,9 +206,11 @@ function revisionText(update: PurchaseSourceUpdateView, salesOrderNo: string) {
 export function MaintainSourceButton({
     purchaseOrderId,
     update,
+    label = purchaseSourceUpdateText.maintain,
 }: {
     purchaseOrderId: string
     update: PurchaseSourceUpdateView
+    label?: string
 }) {
     const [open, setOpen] = React.useState(false)
     const [reason, setReason] = React.useState("")
@@ -266,7 +268,7 @@ export function MaintainSourceButton({
                     setOpen(true)
                 }}
             >
-                {purchaseSourceUpdateText.maintain}
+                {label}
             </Button>
             <AlertDialog
                 open={open}
@@ -276,11 +278,9 @@ export function MaintainSourceButton({
             >
                 <AlertDialogContent className="sm:max-w-md">
                     <AlertDialogHeader>
-                        <AlertDialogTitle>
-                            {purchaseSourceUpdateText.maintain}
-                        </AlertDialogTitle>
+                        <AlertDialogTitle>{label}</AlertDialogTitle>
                         <AlertDialogDescription>
-                            登记后本采购不再提示依据待更新，采购单内容不变。超出销售数量的部分按入库、退货或库存调整处理。
+                            仅在已与供应商核实无法按最新销售要求调整采购时使用。登记后本次影响待办结束，原采购数量和金额不变。超出销售数量的商品仍需按实际情况另行办理入库、退货或库存调整。
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <div className="space-y-2">

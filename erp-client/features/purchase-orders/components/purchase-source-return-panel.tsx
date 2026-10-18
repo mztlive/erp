@@ -33,75 +33,87 @@ export function PurchaseSourceReturnPanel({
 
     return (
         <section
-            className="space-y-3 rounded-lg border p-4"
+            className="space-y-3 rounded-lg border p-4 @container/return-lines"
             aria-label="当前处理事项"
         >
-            <h3 className="text-sm font-medium">
+            <h3 className="text-base font-semibold">
                 {physicalPending
-                    ? "确认退货结果"
+                    ? "当前需要你处理：核实退货收货结果"
                     : !progress.decisionCurrent
                       ? "确认退货款处理方式"
                       : "财务处理中"}
             </h3>
             {physicalPending ? (
                 <>
+                    <p className="text-sm leading-relaxed">
+                        {canRegister
+                            ? "请与销售及供应商核实客户退回商品的接收结果，再登记供应商实际收到的数量和收货凭据。"
+                            : "请核对商品原发货来源，并按对应退货流程办理。当前没有可在此登记的供应商直发数量。"}
+                    </p>
                     <div className="divide-y">
                         {lines.map((line) => (
-                            <div
+                            <article
                                 key={line.purchase_line_id}
-                                className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
+                                className="space-y-3 py-4"
                             >
-                                <div>
-                                    <p className="font-medium">
-                                        {line.item_name}
-                                    </p>
-                                    <p className="mt-1 text-xs text-muted-foreground">
-                                        采购{" "}
-                                        <QuantityValue
-                                            unit=""
-                                            value={line.purchased_quantity}
-                                        />{" "}
-                                        → 本单目标{" "}
-                                        <QuantityValue
-                                            unit=""
-                                            value={line.target_quantity}
-                                        />{" "}
-                                        {line.unit}
-                                        {compareDecimal(
-                                            line.returned_quantity,
-                                            "0",
-                                            6,
-                                        ) > 0 ? (
-                                            <>
-                                                {" "}
-                                                · 已登记退回{" "}
-                                                <QuantityValue
-                                                    unit=""
-                                                    value={
-                                                        line.returned_quantity
-                                                    }
-                                                />{" "}
-                                                {line.unit}
-                                            </>
-                                        ) : null}
-                                    </p>
-                                </div>
-                                <span>
-                                    待确认退回{" "}
+                                <h4 className="text-sm font-medium">
+                                    {line.item_name}
+                                </h4>
+                                <dl className="grid grid-cols-1 gap-3 @sm/return-lines:grid-cols-3">
+                                    <div className="space-y-1 rounded-lg bg-muted/50 p-3">
+                                        <dt className="text-sm text-muted-foreground">
+                                            本采购当前数量
+                                        </dt>
+                                        <dd className="text-lg">
+                                            <QuantityValue
+                                                value={line.purchased_quantity}
+                                                unit={line.unit}
+                                            />
+                                        </dd>
+                                    </div>
+                                    <div className="space-y-1 rounded-lg bg-muted/50 p-3">
+                                        <dt className="text-sm text-muted-foreground">
+                                            调整后目标数量
+                                        </dt>
+                                        <dd className="text-lg">
+                                            <QuantityValue
+                                                value={line.target_quantity}
+                                                unit={line.unit}
+                                            />
+                                        </dd>
+                                    </div>
+                                    <div className="space-y-1 rounded-lg border border-warning-border bg-warning-soft p-3 text-warning-soft-foreground">
+                                        <dt className="text-sm">
+                                            尚待确认退回
+                                        </dt>
+                                        <dd className="text-lg font-semibold">
+                                            <QuantityValue
+                                                value={line.required_return}
+                                                unit={line.unit}
+                                            />
+                                        </dd>
+                                    </div>
+                                </dl>
+                                <p className="text-sm text-muted-foreground">
+                                    已登记供应商收到退货：
                                     <QuantityValue
-                                        unit=""
-                                        value={line.required_return}
-                                    />{" "}
-                                    {line.unit}
-                                </span>
-                            </div>
+                                        value={line.returned_quantity}
+                                        unit={line.unit}
+                                    />
+                                </p>
+                            </article>
                         ))}
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                        {canRegister
-                            ? "请与供应商核实收货结果；已收到的数量在此登记。"
-                            : "请核对原发货来源；当前没有可登记的供应商直发数量。"}
-                    </p>
+                    {canRegister ? (
+                        <div className="space-y-2 border-t pt-3 text-sm leading-relaxed">
+                            <p>
+                                供应商尚未收到退货时，暂不登记，本待办继续保留。支持分批登记，按本次实际收到的数量填写。
+                            </p>
+                            <p className="text-muted-foreground">
+                                本次登记仅记录退货收货结果，不会直接修改采购数量或结束待办。登记后请按更新后的当前事项继续处理。
+                            </p>
+                        </div>
+                    ) : null}
                     {showAction ? (
                         <PurchaseSourceReturnAction
                             order={order}
@@ -224,7 +236,7 @@ export function PurchaseSourceReturnAction({
                 onClick={() => setOpen(true)}
             >
                 {physicalPending
-                    ? "登记供应商已收货"
+                    ? "登记供应商收到的退货"
                     : plan.settlement_decision
                       ? "调整剩余款项方案"
                       : "确认款项处理方式"}

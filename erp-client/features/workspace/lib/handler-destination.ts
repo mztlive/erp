@@ -53,7 +53,7 @@ export const HANDLER_REGISTRY: Readonly<Record<string, HandlerRegistration>> = {
         baseHref: "/procurement/orders",
     },
     purchase_source_update: {
-        workItemTypeLabel: "采购依据更新",
+        workItemTypeLabel: "处理销售变更影响",
         family: "procurement",
         destinationWorkspaceId: "W08",
         baseHref: "/procurement/orders",

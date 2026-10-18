@@ -55,9 +55,9 @@ export const TYPE_META: Record<string, TypeMeta> = {
         openActionLabel: "去分配供给",
     },
     PURCHASE_SOURCE_UPDATE: {
-        label: "采购依据更新",
+        label: "处理销售变更影响",
         family: "procurement",
-        badgeLabel: "依据待更新",
+        badgeLabel: "采购待处理",
         badgeVariant: "orange",
         openActionLabel: "去处理采购单",
     },
