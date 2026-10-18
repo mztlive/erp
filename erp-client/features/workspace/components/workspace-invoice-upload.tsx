@@ -49,7 +49,8 @@ export function WorkspaceInvoiceUpload({
             <div>
                 <h3 className="text-base font-semibold">实际发票信息</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                    上传本次开票的 PDF 或图片，确认后按剩余批准金额完成开票。
+                    上传本次开票的 PDF
+                    或图片，合计金额须与本申请剩余可开票金额一致。此处不能填写部分金额；尚未全部开出时，暂不确认登记。
                 </p>
             </div>
             <form.AppField
@@ -108,7 +109,7 @@ export function WorkspaceInvoiceUpload({
                         <MoneyValue value={amount} className="font-semibold" />
                     </p>
                     <p className="text-xs text-muted-foreground">
-                        确认后完成本次申请，并核销关联应收。
+                        按全部剩余金额登记，完成本次开票申请并更新销售应收的已开票金额。
                     </p>
                 </div>
                 <form.Subscribe

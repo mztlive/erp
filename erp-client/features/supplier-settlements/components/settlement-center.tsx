@@ -152,7 +152,7 @@ function SettlementCenter({
                 </div>
             ) : detail.workItemBlocker ? (
                 <Alert variant="warning">
-                    <AlertTitle>正式复核任务不可处理</AlertTitle>
+                    <AlertTitle>当前无法办理结算复核</AlertTitle>
                     <AlertDescription>
                         {detail.workItemBlocker.message}
                     </AlertDescription>

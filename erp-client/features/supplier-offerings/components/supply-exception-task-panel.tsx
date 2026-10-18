@@ -64,8 +64,8 @@ const completionSchema = z.object({
     evidenceReference: z
         .string()
         .trim()
-        .min(1, "请填写处置证据引用")
-        .max(256, "证据引用不能超过 256 个字符"),
+        .min(1, "请填写核对凭据编号或链接")
+        .max(256, "核对凭据不能超过 256 个字符"),
     comment: z
         .string()
         .trim()
@@ -139,7 +139,7 @@ export function SupplyExceptionTaskPanel({
             setActionError(
                 getErrorMessage(
                     submitError,
-                    "核对结论未提交，请刷新任务版本后重试",
+                    "核对结论未提交，请刷新待办后重试",
                 ),
             )
         }
@@ -157,8 +157,8 @@ export function SupplyExceptionTaskPanel({
     if (error || !task) {
         return (
             <BusinessFailureState
-                title="供应停止任务已阻止"
-                description="当前责任、任务版本或供给对象未通过校验。本页不会提供供给写入动作。"
+                title="暂时无法办理停供核对"
+                description="请刷新待办重试；仍无法办理时，联系管理员核对当前负责人和关联供应商品。"
                 error={error}
                 onRetry={onRetry}
                 action={
@@ -169,7 +169,7 @@ export function SupplyExceptionTaskPanel({
                             variant="outline"
                             onClick={onRetry}
                         >
-                            重试校验
+                            刷新重试
                         </Button>
                         {!embedded ? (
                             <Button
@@ -202,7 +202,7 @@ export function SupplyExceptionTaskPanel({
                                 <Badge variant="destructive">待核对</Badge>
                             </CardTitle>
                             <CardDescription className="mt-1">
-                                核对停供来源和已固定的暂停影响，登记处置证据后完成当前责任；不选定替代供给，不发起恢复发布。
+                                请核实哪项供应已停止、影响哪些商品，并填写核对凭据和处理结论。
                             </CardDescription>
                         </div>
                         {!embedded ? (
@@ -221,16 +221,18 @@ export function SupplyExceptionTaskPanel({
                 <CardContent className="space-y-4">
                     <Alert variant="destructive">
                         <ShieldAlertIcon aria-hidden="true" />
-                        <AlertTitle>安全暂停不会随任务完成而解除</AlertTitle>
+                        <AlertTitle>
+                            核对完成后，供应和商品发布仍保持暂停
+                        </AlertTitle>
                         <AlertDescription>
-                            本动作只确认人工核对已经完成。供应商供给、暂停修订和商品发布暂停状态全部保持不变。
+                            提交后结束本条核对待办。如需替换供应或恢复商品发布，须另行办理。
                         </AlertDescription>
                     </Alert>
 
-                    <dl className="grid gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-2 lg:grid-cols-4">
+                    <dl className="grid gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-2">
                         <div className="bg-card p-3">
                             <dt className="text-xs text-muted-foreground">
-                                来源供给
+                                受影响的供应商品
                             </dt>
                             <dd className="mt-1 text-sm font-medium">
                                 {sourceLabel(task, offering)}
@@ -238,7 +240,7 @@ export function SupplyExceptionTaskPanel({
                         </div>
                         <div className="bg-card p-3">
                             <dt className="text-xs text-muted-foreground">
-                                当前责任
+                                当前负责人
                             </dt>
                             <dd className="mt-1 text-sm font-medium">
                                 {responsibility(task)}
@@ -248,38 +250,16 @@ export function SupplyExceptionTaskPanel({
                                 {task.ownerOrganization.displayName}
                             </div>
                         </div>
-                        <div className="bg-card p-3">
-                            <dt className="text-xs text-muted-foreground">
-                                任务版本
-                            </dt>
-                            <dd className="num mt-1 break-all text-sm">
-                                {task.taskVersion}
-                            </dd>
-                        </div>
-                        <div className="bg-card p-3">
-                            <dt className="text-xs text-muted-foreground">
-                                来源版本
-                            </dt>
-                            <dd className="num mt-1 break-all text-sm">
-                                {task.subjectVersion}
-                            </dd>
-                        </div>
                     </dl>
 
                     <div className="grid gap-3 lg:grid-cols-2">
                         <div className="rounded-lg border p-3">
                             <div className="text-xs font-medium text-muted-foreground">
-                                已固定影响
+                                本次停供影响
                             </div>
                             <p className="mt-1 text-sm">{task.impactSummary}</p>
                             <p className="mt-2 text-xs text-muted-foreground">
-                                原因：{task.reasonLabel}
-                                。影响只使用任务记录，不在页面重新计算。
-                            </p>
-                            <p className="mt-2 text-xs text-muted-foreground">
-                                {offering
-                                    ? "当前列表行只用于识别供给对象，不覆盖任务冻结的来源版本。"
-                                    : "当前分页未加载完整供给行；不在页面推断来源记录。"}
+                                原因：{task.reasonLabel}。
                             </p>
                         </div>
                         <div className="rounded-lg border p-3">
@@ -288,25 +268,25 @@ export function SupplyExceptionTaskPanel({
                                     className="size-4"
                                     aria-hidden="true"
                                 />
-                                核对边界
+                                当前需要你核对
                             </div>
                             <ul className="mt-2 list-disc space-y-1 pl-4 text-sm">
-                                <li>核对停供来源和来源版本。</li>
-                                <li>确认安全暂停影响已由系统固定。</li>
-                                <li>登记可审计的处置证据与核对结论。</li>
+                                <li>核实供应商和停止供应的商品。</li>
+                                <li>核对本次记录的停供原因和影响范围。</li>
+                                <li>填写核对凭据和结论，再提交完成待办。</li>
                             </ul>
                         </div>
                     </div>
 
                     <div>
                         <div className="text-xs font-medium text-muted-foreground">
-                            当前允许动作
+                            你可以进行的操作
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2">
                             {task.allowedActions.length > 0 ? (
                                 task.allowedActions.map((action) => (
                                     <Badge key={action} variant="outline">
-                                        {ACTION_LABELS[action] ?? action}
+                                        {ACTION_LABELS[action] ?? "其他操作"}
                                     </Badge>
                                 ))
                             ) : (
@@ -326,7 +306,7 @@ export function SupplyExceptionTaskPanel({
                             </ul>
                         ) : null}
                         <p className="mt-2 text-xs text-muted-foreground">
-                            转交只改变当前责任人；“确认已核对”完成任务，但不恢复发布。
+                            转交只改变当前负责人人；“确认已核对”完成任务，但不恢复发布。
                         </p>
                     </div>
 
@@ -347,7 +327,7 @@ export function SupplyExceptionTaskPanel({
                         <div>
                             <h3 className="text-sm font-semibold">完成核对</h3>
                             <p className="mt-1 text-xs text-muted-foreground">
-                                证据引用和核对结论进入审计；提交后当前任务完成，安全暂停继续生效。
+                                填写可查验的凭据编号或链接及核对结论。提交后本条待办结束，供应和商品发布继续暂停。
                             </p>
                         </div>
                         <form.AppField
@@ -355,7 +335,7 @@ export function SupplyExceptionTaskPanel({
                             children={(field) => (
                                 <field.TextField
                                     id="supplier-offerings-exception-evidence"
-                                    label="处置证据引用"
+                                    label="核对凭据编号或链接"
                                     placeholder="例如：供应商停供函、替代采购事项或内部工单编号"
                                     required
                                 />

@@ -123,16 +123,16 @@ export function WorkspaceInvoiceTask({
         >
             {!descriptor ? (
                 <Alert variant="destructive">
-                    <AlertTitle>任务责任与开票对象不一致</AlertTitle>
+                    <AlertTitle>无法确认本条待办对应的开票资料</AlertTitle>
                     <AlertDescription>
-                        请联系管理员核对责任人、应收子账与销售来源后重试。
+                        请联系管理员核对开票负责人和关联销售单，再刷新重试。
                     </AlertDescription>
                 </Alert>
             ) : receivableQuery.isPending ? (
                 <InvoiceSessionSkeleton />
             ) : receivableQuery.isError ? (
                 <Alert variant="destructive">
-                    <AlertTitle>应收子账加载失败</AlertTitle>
+                    <AlertTitle>销售应收资料读取失败</AlertTitle>
                     <AlertDescription className="flex flex-col gap-3">
                         <span>
                             {getErrorMessage(
@@ -154,9 +154,9 @@ export function WorkspaceInvoiceTask({
                 </Alert>
             ) : !identityOk || !receivable || !descriptor ? (
                 <Alert variant="destructive">
-                    <AlertTitle>应收子账与任务冻结事实不一致</AlertTitle>
+                    <AlertTitle>待办关联的销售应收不匹配</AlertTitle>
                     <AlertDescription>
-                        当前任务绑定的应收不是该销售单来源，已停止展开开票作业。
+                        请联系管理员核对本条待办关联的销售单和应收记录，修正后刷新再办理开票。
                     </AlertDescription>
                 </Alert>
             ) : !executionAuthorized ? (
@@ -247,11 +247,17 @@ function WorkspaceInvoiceSession({
                 "@container/invoice space-y-6 py-5",
             )}
         >
+            <Alert variant="info">
+                <AlertTitle>当前需要你处理：登记已开出的销项发票</AlertTitle>
+                <AlertDescription>
+                    按下方已批准资料开票后上传发票。本入口按申请的全部剩余金额登记，请先核对发票合计与下方剩余金额一致。
+                </AlertDescription>
+            </Alert>
             <dl className="grid grid-cols-1 gap-4 rounded-lg border border-grid p-5 @min-[420px]/invoice:grid-cols-3 @min-[420px]/invoice:gap-0">
                 {[
-                    ["批准金额", request.data.amount],
-                    ["已登记", request.invoiced_amount],
-                    ["剩余可开票", receivable.openInvoiceableTotal],
+                    ["本申请批准金额", request.data.amount],
+                    ["本申请已登记", request.invoiced_amount],
+                    ["本申请剩余可开票", receivable.openInvoiceableTotal],
                 ].map(([label, value]) => (
                     <div
                         key={label}

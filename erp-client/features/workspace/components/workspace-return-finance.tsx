@@ -26,6 +26,7 @@ import { useWorkItemDetailQuery } from "@/features/work-items/queries"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 import { ReturnInvoiceDialog } from "./return-invoice-dialog"
+import { ReturnFinanceSummary } from "./return-finance-summary"
 
 const decimal = { maxScale: 2, outputScale: 2 }
 export function WorkspaceReturnFinance({
@@ -114,13 +115,16 @@ export function WorkspaceReturnFinance({
                     item={item}
                     title={invoiceTask ? "退货进项红票" : "退货款处理"}
                     subtitle={
-                        <Link
-                            id="return-finance-purchase"
-                            href={`/procurement/orders/${encodeURIComponent(item.businessObjectId)}`}
-                            className="underline underline-offset-4"
-                        >
-                            {item.stableNumber}
-                        </Link>
+                        <span className="flex flex-wrap gap-x-3 gap-y-1">
+                            <span>{item.counterpartyName}</span>
+                            <Link
+                                id="return-finance-purchase"
+                                href={`/procurement/orders/${encodeURIComponent(item.businessObjectId)}`}
+                                className="underline underline-offset-4"
+                            >
+                                查看来源采购单
+                            </Link>
+                        </span>
                     }
                 />
             }
@@ -146,50 +150,25 @@ export function WorkspaceReturnFinance({
                                     role="alert"
                                     className="text-sm text-destructive"
                                 >
-                                    采购处置依据已变化，请由采购核对后再办理。
+                                    当前退货或款项方案尚不满足办理条件。请联系采购负责人核对实际退货和处理方案，再刷新办理。
                                 </p>
                             ) : (
                                 <>
-                                    <section className="space-y-2 text-sm">
-                                        <h3 className="font-medium">
-                                            采购已确认的处置方案
-                                        </h3>
-                                        <p>
-                                            现金退款{" "}
-                                            <MoneyValue
-                                                value={decision.refund_amount}
-                                            />{" "}
-                                            <span className="mx-3">·</span>留抵{" "}
-                                            <MoneyValue
-                                                value={decision.credit_amount}
-                                            />
-                                        </p>
-                                        <p className="whitespace-pre-wrap text-muted-foreground">
-                                            {decision.supplier_confirmation}
-                                        </p>
-                                    </section>
-                                    <div className="border-y py-4 text-sm">
-                                        {invoiceTask ? (
-                                            <>
-                                                尚需登记进项红票{" "}
-                                                <MoneyValue
-                                                    value={clampZeroFixed(
-                                                        progress?.redInvoice ??
-                                                            "0",
-                                                        decimal,
-                                                    )}
-                                                />
-                                            </>
-                                        ) : (
-                                            <>
-                                                可提交退款{" "}
-                                                <MoneyValue value={refund} />
-                                                <span className="mx-3">·</span>
-                                                可提交留抵{" "}
-                                                <MoneyValue value={credit} />
-                                            </>
+                                    <ReturnFinanceSummary
+                                        invoiceTask={invoiceTask}
+                                        refund={refund}
+                                        credit={credit}
+                                        redInvoice={clampZeroFixed(
+                                            progress?.redInvoice ?? "0",
+                                            decimal,
                                         )}
-                                    </div>
+                                        decision={decision}
+                                    />
+                                    {(plan?.settlements ?? []).length > 0 ? (
+                                        <h3 className="text-sm font-medium">
+                                            已提交的款项及办理状态
+                                        </h3>
+                                    ) : null}
                                     {(plan?.settlements ?? []).map((row) => (
                                         <div
                                             key={row.id}
@@ -223,14 +202,32 @@ export function WorkspaceReturnFinance({
                                                     key={row.invoiceId}
                                                     className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"
                                                 >
-                                                    <span>
-                                                        {row.invoiceNo} ·{" "}
-                                                        <MoneyValue
-                                                            value={
-                                                                row.grossAmount
-                                                            }
-                                                        />
-                                                    </span>
+                                                    <div className="space-y-1">
+                                                        <p>
+                                                            原蓝票：
+                                                            {row.invoiceNo}
+                                                        </p>
+                                                        <p className="text-muted-foreground">
+                                                            原票总额{" "}
+                                                            <MoneyValue
+                                                                value={
+                                                                    row.grossAmount
+                                                                }
+                                                            />
+                                                        </p>
+                                                        <p>
+                                                            本采购剩余可冲减{" "}
+                                                            <MoneyValue
+                                                                value={invoiceRemaining(
+                                                                    row,
+                                                                    sources.data
+                                                                        ?.invoices ??
+                                                                        [],
+                                                                    plan?.payable_account_id,
+                                                                )}
+                                                            />
+                                                        </p>
+                                                    </div>
                                                     <Button
                                                         id={`return-finance-invoice-${toAutomationIdSegment(row.invoiceId)}`}
                                                         variant="outline"
@@ -406,7 +403,15 @@ export function WorkspaceReturnFinance({
                                         compareDecimal(credit, "0", 2) ===
                                             0 && (
                                             <p className="text-sm text-muted-foreground">
-                                                已提交的款项仍须完成审批；入账后本待办自动结束。
+                                                {(plan?.settlements ?? []).some(
+                                                    (row) =>
+                                                        row.status ===
+                                                        "in_approval",
+                                                )
+                                                    ? "当前方案的款项已提交，请等待审批及入账，无需重复登记。"
+                                                    : progress?.refundPending
+                                                      ? "当前没有可提交的方案余额，请刷新核对款项结果；仍有差额时联系采购负责人核对方案。"
+                                                      : "本采购退货款差额已处理，请刷新待办状态。"}
                                             </p>
                                         )}
                                 </>

@@ -38,7 +38,7 @@ pub(crate) const WIRED_CONSUMERS: &[(&str, &[&str], &[ScopeDimension])] = &[
     ),
     (
         "purchase_order",
-        &["list", "detail", "create", "update", "delete", "submit", "cancel_approval"],
+        &["list", "detail", "create", "update", "delete", "submit", "cancel_approval", "maintain_source"],
         &[ScopeDimension::InternalOrg],
     ),
     ("cost_entry", &["list", "detail"], &[ScopeDimension::InternalOrg]),
@@ -245,6 +245,17 @@ mod tests {
         assert!(registration("customer", "detail").unwrap().allows_history);
         assert!(!registration("customer", "update").unwrap().allows_history);
         assert!(!registration("org_unit", "list").unwrap().allows_history);
+    }
+
+    /// 维持原采购沿采购责任范围授权，不从历史参与取得写权限。
+    #[test]
+    fn purchase_source_maintain_uses_current_purchase_scope() {
+        let registered = registration("purchase_order", "maintain_source").unwrap();
+        assert!(registered.default_self);
+        assert!(!registered.allows_history);
+        assert_eq!(registered.supported_dimensions, &[ScopeDimension::InternalOrg]);
+        assert_eq!(registered.required_dimensions, &[ScopeDimension::InternalOrg]);
+        assert!(registration("sales_order", "maintain_source").is_err());
     }
 
     /// 合同与采购主单已接线可解析；未接线动作与工作流资源必须拒绝。

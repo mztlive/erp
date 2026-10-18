@@ -337,6 +337,25 @@ mod ordinary_factory_tests {
         AuditActor::new("actor".into(), "account".into(), AccountKind::Admin)
     }
 
+    /// 维持原采购可构建有效审计，并拒绝把该动作记到销售单上。
+    #[test]
+    fn purchase_source_maintain_builds_audit_for_purchase_only() {
+        let log = actor()
+            .resource_log("purchase_order.maintain_source", "purchase_order", "purchase-1".into())
+            .unwrap();
+        let prepared = prepare_business_log(&log).unwrap();
+        assert_eq!(prepared.action, "purchase_order.maintain_source");
+        assert_eq!(prepared.resource_type, "purchase_order");
+        assert_eq!(prepared.resource_id.as_deref(), Some("purchase-1"));
+        assert!(prepared.success);
+        assert!(prepared.message.as_deref().unwrap().contains("登记维持原采购"));
+
+        let error = actor()
+            .resource_log("purchase_order.maintain_source", "sales_order", "sales-1".into())
+            .unwrap_err();
+        assert!(matches!(error, Error::ValidationError(_)));
+    }
+
     #[test]
     fn purchase_change_void_builds_audit_for_change_only() {
         let log = actor()

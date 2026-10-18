@@ -213,6 +213,7 @@ const REGISTERED_ACTIONS: &[AuditAction] = &[
     action("purchase_order.create_from_basis", "purchase_order", "根据采购依据建立采购单"),
     action("purchase_order.create_from_sourcing", "sales_order", "执行采购选源"),
     action("purchase_order.formalize", "purchase_order", "确认生效采购单"),
+    action("purchase_order.maintain_source", "purchase_order", "登记维持原采购"),
     action("purchase_order.owner_reassign", "purchase_order", "转交采购履约责任"),
     action("purchase_order.submit", "purchase_order", "提交审批采购单"),
     action("purchase_order.update", "purchase_order", "修改采购单草稿"),

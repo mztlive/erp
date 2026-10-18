@@ -25,9 +25,9 @@ export function WorkspaceIntegrationTask({
                 aria-label="当前集成异常任务"
             >
                 <Alert variant="destructive">
-                    <AlertTitle>异常任务对象未注册</AlertTitle>
+                    <AlertTitle>暂时无法打开本条异常待办</AlertTitle>
                     <AlertDescription>
-                        当前任务没有可验证的 W29 业务对象，已停止提供处理动作。
+                        请刷新待办重试；仍无法打开时，联系管理员核对关联的异常记录。
                     </AlertDescription>
                 </Alert>
             </WorkspaceTaskPane>
