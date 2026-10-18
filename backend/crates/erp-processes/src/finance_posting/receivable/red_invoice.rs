@@ -1,6 +1,6 @@
 //! 按原蓝票一次开具红票并红冲分配。
 
-use application_core::AuditActor;
+use application_core::{AuditActor, CommandReceipt};
 use erp_audit::AuditActorLogs;
 use erp_core::ids::{InvoiceId, ReceivableAccountId};
 use erp_finance::entity::receivable::{
@@ -8,8 +8,9 @@ use erp_finance::entity::receivable::{
 };
 use erp_finance::repository::prelude::*;
 use erp_finance::repository::{PayableExt, ReceivableExt};
+use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::receivable::red_invoice_plan::{
-    purchase_red_invoice_allocation_plan, sales_red_invoice_allocation_plan,
+    purchase_red_invoice_allocation_plan, purchase_red_invoice_for_account, sales_red_invoice_allocation_plan,
 };
 use erp_read_models::finance::receivable::snapshot::zero_amount;
 use id_generator::next_id;
@@ -21,6 +22,7 @@ use super::dto::{CommitRedInvoiceRequest, InvoiceView};
 use super::invoice::register_created_invoice_document;
 use super::{ReceivableProcess, invoice_task};
 use crate::audit::persist_log;
+use crate::reverse_flow::return_finance::sync_return_accounts;
 use crate::{Error, Result};
 
 impl ReceivableProcess {
@@ -79,6 +81,8 @@ struct RedInvoiceCommand {
     red_no: String,
     /// 本次红冲含税金额。
     requested_amount: Option<erp_core::money::Amount>,
+    requested_account: Option<String>,
+    receipt: CommandReceipt,
     /// 红冲业务原因。
     reason: String,
     /// 操作人快照。
@@ -106,6 +110,15 @@ impl RedInvoiceCommand {
             original_id: id.to_string(),
             red_no: red_number(req, &digest),
             requested_amount: req.amount,
+            requested_account: req.payable_account_id.clone(),
+            receipt: CommandReceipt::from_payload(
+                "red-invoice-",
+                actor.id(),
+                "invoice.red_issue",
+                "invoice",
+                &req.idempotency_key,
+                &(id, req),
+            )?,
             reason: req.reason.trim().to_string(),
             actor_id: actor.id().to_string(),
             actor: actor_owned,
@@ -153,6 +166,10 @@ async fn apply_red_invoice(
     command: &RedInvoiceCommand,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<String> {
+    let receipts = FinanceCommandReceiptService::new(db.clone());
+    if let Some(id) = receipts.committed_resource_id(&command.receipt, executor).await? {
+        return Ok(id);
+    }
     let original = db
         .invoices()
         .find_by_id(&command.original_id, executor)
@@ -161,11 +178,21 @@ async fn apply_red_invoice(
     if !original.is_registered() || original.invoice_kind != InvoiceKind::Blue {
         return Err(Error::BusinessLogicError("只有已登记的蓝票可以被红冲".to_string()));
     }
-    let allocation_plan = load_red_invoice_plan(db, &original, command.requested_amount, executor).await?;
+    let allocation_plan = load_red_invoice_plan(
+        db,
+        &original,
+        command.requested_amount,
+        command.requested_account.as_deref(),
+        executor,
+    )
+    .await?;
     let (red_gross, red_net, red_tax) = allocation_plan.totals();
     if let Some(existing) =
         find_red_idempotent(db, &original, &command.red_no, red_gross, red_net, red_tax, executor).await?
     {
+        if command.requested_account.is_some() {
+            return Err(Error::ConflictError("红票号码已登记，请核对原登记记录".into()));
+        }
         return Ok(existing);
     }
     let red_mut =
@@ -181,16 +208,8 @@ async fn apply_red_invoice(
         executor,
     )
     .await?;
-    let audit = command.actor.clone().resource_log_with_message(
-        "invoice.red_issue",
-        "invoice",
-        red_mut.base.id.clone(),
-        Some(command.reason.clone()),
-    )?;
-    persist_log(db, &audit, executor).await?;
-    if original_mut.invoice_direction == InvoiceDirection::Sales {
-        apply_red_invoice_fanout(db, &sales_ids, &command.actor_id, executor).await?;
-    }
+    complete_red_posting(db, command, &red_mut, &original_mut, &allocation_plan, &sales_ids, executor)
+        .await?;
     Ok(red_mut.base.id.clone())
 }
 
@@ -211,10 +230,14 @@ async fn load_red_invoice_plan(
     db: &mongodb::Database,
     original: &Invoice,
     requested_amount: Option<erp_core::money::Amount>,
+    requested_account: Option<&str>,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<erp_finance::entity::receivable::RedInvoiceAllocationPlan> {
     match original.invoice_direction {
         InvoiceDirection::Sales => {
+            if requested_account.is_some() {
+                return Err(Error::ValidationError("销项红票不能指定采购应付".into()));
+            }
             let blue = db
                 .sales_invoice_allocations()
                 .find_allocations_by_invoices(&[InvoiceId::new(original.base.id.clone())], executor)
@@ -234,7 +257,11 @@ async fn load_red_invoice_plan(
                 .purchase_invoice_allocations()
                 .find_allocations_by_accounts(&account_ids, executor)
                 .await?;
-            Ok(purchase_red_invoice_allocation_plan(&blue, &related, requested_amount)?)
+            Ok(if let Some(account) = requested_account {
+                purchase_red_invoice_for_account(&blue, &related, requested_amount, account)?
+            } else {
+                purchase_red_invoice_allocation_plan(&blue, &related, requested_amount)?
+            })
         },
     }
 }
@@ -433,5 +460,37 @@ async fn refresh_progress_shards(
             .await?;
         }
     }
+    Ok(())
+}
+
+async fn complete_red_posting(
+    db: &mongodb::Database,
+    command: &RedInvoiceCommand,
+    red_mut: &Invoice,
+    original_mut: &Invoice,
+    allocation_plan: &erp_finance::entity::receivable::RedInvoiceAllocationPlan,
+    sales_ids: &[String],
+    executor: &mut dyn persistence_core::Executor,
+) -> Result<()> {
+    let audit = command.actor.clone().resource_log_with_message(
+        "invoice.red_issue",
+        "invoice",
+        red_mut.base.id.clone(),
+        Some(command.reason.clone()),
+    )?;
+    persist_log(db, &audit, executor).await?;
+    if original_mut.invoice_direction == InvoiceDirection::Sales {
+        apply_red_invoice_fanout(db, sales_ids, &command.actor_id, executor).await?;
+    } else {
+        sync_return_accounts(
+            db,
+            allocation_plan.lines().iter().map(|line| line.account_id.clone()).collect(),
+            executor,
+        )
+        .await?;
+    }
+    FinanceCommandReceiptService::new(db.clone())
+        .save_resource(&command.receipt, red_mut.base.id.clone(), audit.base.id.clone(), executor)
+        .await?;
     Ok(())
 }

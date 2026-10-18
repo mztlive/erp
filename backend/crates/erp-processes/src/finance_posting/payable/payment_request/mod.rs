@@ -21,6 +21,7 @@ mod account;
 mod basis;
 mod batch;
 mod cancel;
+pub mod credit;
 mod current_sales;
 mod draft;
 pub(crate) mod execution;

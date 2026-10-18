@@ -8,6 +8,7 @@
 //! `invoice`（进项发票分配）；公开类型名与 serde 形态保持不变。
 
 pub mod account;
+pub mod credit;
 pub mod guidance;
 pub mod invoice;
 pub mod payment;

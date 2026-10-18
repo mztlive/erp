@@ -50,3 +50,26 @@ pub async fn direct_return_command(
 ) -> Result<Option<PurchaseReturnOrder>> {
     Ok(db.purchase_return_orders().find_one_by_field("purchase_return_no", number, executor).await?)
 }
+
+/// 查询采购处置方案已提交或已入账的款项处理记录。
+/// # 参数
+/// * `db` - 数据库。
+/// * `purchase_id` - 已授权采购。
+/// * `executor` - 原事务。
+/// # 返回
+/// 草稿和撤回记录不占用方案金额。
+/// # 错误
+/// 仓储读取失败时返回错误。
+pub async fn purchase_settlements(
+    db: &Database,
+    purchase_id: &str,
+    executor: &mut dyn Executor,
+) -> Result<Vec<crate::entity::returns::SupplierRefund>> {
+    db.supplier_refunds()
+        .find_many(
+            doc! {"source_purchase_order_id": purchase_id, "status": {"$in": ["in_approval", "posted"]}},
+            executor,
+        )
+        .await
+        .map_err(Into::into)
+}

@@ -1,5 +1,7 @@
 "use client"
 
+import { fetchReturnSources } from "../api/return-sources"
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { approvalKeys } from "@/features/approval-workflow/queries"
@@ -266,6 +268,7 @@ export function useCommitSupplierRefundMutation() {
         mutationFn: commitSupplierRefund,
         onSuccess: async (result) => {
             if (result.status === "succeeded") {
+                await invalidateFinanceAndSources(queryClient)
                 await queryClient.invalidateQueries({
                     queryKey: approvalKeys.document(
                         SUPPLIER_REFUND_DOCUMENT_TYPE,
@@ -364,5 +367,21 @@ export function useSubmitPaymentReversalMutation() {
 export function useSaveAllocationDraftMutation() {
     return useMutation({
         mutationFn: saveAllocationDraft,
+    })
+}
+
+export function useReturnSourcesQuery(
+    supplierId: string | undefined,
+    invoice: boolean,
+) {
+    return useQuery({
+        queryKey: [
+            ...supplierPayablesKeys.all,
+            "return-sources",
+            supplierId,
+            invoice,
+        ],
+        queryFn: () => fetchReturnSources(supplierId!, invoice),
+        enabled: !!supplierId,
     })
 }

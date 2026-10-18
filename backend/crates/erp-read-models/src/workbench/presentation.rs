@@ -75,6 +75,8 @@ pub(crate) fn next_action_hint(work_item_type: WorkItemType) -> String {
         WorkItemType::CustomerAcceptanceRegistration => {
             "核对客户签收、短少或拒收结果后，登记并提交客户验收。"
         },
+        WorkItemType::PurchaseReturnRefund => "退货款待处理",
+        WorkItemType::PurchaseReturnInvoice => "退货进项红票待登记",
         WorkItemType::SupplierPaymentExecution => "核对收款账户、应付金额和银行回单后，登记付款并完成核销。",
         WorkItemType::SalesInvoiceExecution => "核对本页待开金额后，登记销项发票并完成分配。",
         WorkItemType::ImportBusinessConfirmation => {
@@ -198,6 +200,8 @@ fn default_reason_label(work_item_type: WorkItemType) -> &'static str {
         WorkItemType::PurchaseSourceUpdate => "销售单已变更，需要更新采购依据",
         WorkItemType::FulfillmentOperation => "当前履约单据等待确认",
         WorkItemType::CustomerAcceptanceRegistration => "发货或交付已完成，需要登记客户验收",
+        WorkItemType::PurchaseReturnRefund => "退货款待处理",
+        WorkItemType::PurchaseReturnInvoice => "退货进项红票待登记",
         WorkItemType::SupplierPaymentExecution => "采购应付已确认，需要安排付款",
         WorkItemType::SalesInvoiceExecution => "销售应收已确认，需要安排销项开票",
         WorkItemType::PurchaseOrderReview => "采购已提交，需要核对成本、进项税和付款条件",
@@ -224,6 +228,8 @@ fn default_impact_summary(work_item_type: WorkItemType) -> &'static str {
         WorkItemType::PurchaseSourceUpdate => "不处理则采购仍按变更前的销售数量或交付要求执行",
         WorkItemType::FulfillmentOperation => "不确认则本次收货、发货或交付不能形成正式事实",
         WorkItemType::CustomerAcceptanceRegistration => "不登记则销售明细不能完成履约",
+        WorkItemType::PurchaseReturnRefund => "退货款待处理",
+        WorkItemType::PurchaseReturnInvoice => "退货进项红票待登记",
         WorkItemType::SupplierPaymentExecution => "不登记则应付无法完成付款核销",
         WorkItemType::SalesInvoiceExecution => "不登记则销售应收无法完成销项开票",
         WorkItemType::PurchaseOrderReview => "不审核则不能形成应付、不能付款",

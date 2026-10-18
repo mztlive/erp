@@ -261,7 +261,9 @@ fn resource_for_command(action: &str, resource_type: &str, id: String) -> Result
             "customer_receipt.commit" | "customer_receipt.submit" | "customer_receipt.save_draft",
             "customer_receipt",
         ) => FinanceCommandResource::CustomerReceipt(CustomerReceiptId::new(id)),
-        ("invoice.commit", "invoice") => FinanceCommandResource::Invoice(InvoiceId::new(id)),
+        ("invoice.commit" | "invoice.red_issue", "invoice") => {
+            FinanceCommandResource::Invoice(InvoiceId::new(id))
+        },
         ("sales_invoice_request.submit" | "sales_invoice_request.cancel", "sales_invoice_request") => {
             FinanceCommandResource::SalesInvoiceRequest(SalesInvoiceRequestId::new(id))
         },
@@ -346,6 +348,7 @@ mod tests {
             ("customer_receipt.submit", "customer_receipt"),
             ("customer_receipt.save_draft", "customer_receipt"),
             ("invoice.commit", "invoice"),
+            ("invoice.red_issue", "invoice"),
             ("sales_invoice_request.submit", "sales_invoice_request"),
             ("sales_invoice_request.cancel", "sales_invoice_request"),
             ("purchase_payment_request.submit", "purchase_payment_request"),
@@ -363,7 +366,7 @@ mod tests {
             receipt.result = FinanceCommandResult::ResourceCommitted {
                 resource: FinanceCommandResource::Invoice(InvoiceId::new("wrong")),
             };
-            if action != "invoice.commit" {
+            if resource_type != "invoice" {
                 assert!(matches!(receipt.resource_id(&command), Err(Error::Internal(_))));
             }
         }

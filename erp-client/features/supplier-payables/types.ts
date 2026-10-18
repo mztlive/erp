@@ -190,6 +190,10 @@ export type PaymentRow = Readonly<{
 
 /** SupplierRefund 为 PROCESS_REQUIRED：行投影携带只读审批区。 */
 export type SupplierRefundRow = Readonly<{
+    settlementMethod?: "CASH_REFUND" | "SUPPLIER_CREDIT"
+    settlementConfirmation?: string
+    sourcePurchaseOrderId?: string
+    settlementDecisionKey?: string
     refundId: string
     refundNo: string
     supplierId: string
@@ -209,6 +213,10 @@ export type SupplierRefundRow = Readonly<{
 
 /** 从已过账付款发起供应商退款所需的原事实。 */
 export type SupplierRefundRequest = Readonly<{
+    settlementMethod?: "CASH_REFUND" | "SUPPLIER_CREDIT"
+    settlementConfirmation?: string
+    sourcePurchaseOrderId?: string
+    settlementDecisionKey?: string
     supplierName?: string
     sourcePaymentId: string
     sourcePaymentNo: string
@@ -444,6 +452,8 @@ export type PostInvoiceInput = {
 }
 
 export type ReverseInvoiceInput = {
+    amount?: string
+    payableAccountId?: string
     invoiceId: string
     reason: string
     redInvoiceNo: string

@@ -102,7 +102,22 @@ pub struct CommitReturnFactRequest {
 pub type CommitCustomerRefundRequest = CommitReturnFactRequest;
 
 /// 供应商退款一次提交命令。
-pub type CommitSupplierRefundRequest = CommitReturnFactRequest;
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct CommitSupplierRefundRequest {
+    #[validate(custom(function = "non_blank", message = "原付款不能为空"))]
+    pub source_fact_id: String,
+    pub amount: Option<Amount>,
+    #[validate(custom(function = "non_blank", message = "原因说明不能为空"))]
+    pub reason: String,
+    #[validate(length(min = 1, max = 128))]
+    pub idempotency_key: String,
+    #[serde(default)]
+    pub settlement_method: crate::entity::returns::SupplierSettlementMethod,
+    pub source_purchase_order_id: Option<String>,
+    #[serde(default)]
+    pub settlement_decision_key: Option<String>,
+}
 
 /// 回款冲正一次提交命令。
 pub type CommitReceiptReversalRequest = CommitReturnFactRequest;

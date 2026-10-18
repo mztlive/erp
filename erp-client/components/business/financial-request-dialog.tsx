@@ -26,6 +26,9 @@ export function FinancialRequestDialog({
     sourceLabel,
     amount,
     editableAmount = false,
+    amountLabel = "本次退款金额",
+    amountDescription = "填写本次实际退回的款项。退货金额不一定等于现金退款金额。",
+    amountError = "请填写大于零且不超过可退金额的数值，最多两位小数",
     title,
     description,
     submitLabel,
@@ -39,6 +42,9 @@ export function FinancialRequestDialog({
     sourceLabel?: string
     amount?: string
     editableAmount?: boolean
+    amountLabel?: string
+    amountDescription?: string
+    amountError?: string
     title: string
     description: string
     submitLabel: string
@@ -66,7 +72,7 @@ export function FinancialRequestDialog({
                     } catch {
                         return false
                     }
-                }, "请填写大于零且不超过可退金额的数值，最多两位小数"),
+                }, amountError),
             }),
         },
         onSubmit: async ({ value }) => {
@@ -135,11 +141,11 @@ export function FinancialRequestDialog({
                             children={(field) => (
                                 <field.TextField
                                     id={`${id}-amount`}
-                                    label="本次退款金额"
+                                    label={amountLabel}
                                     required
                                     inputMode="decimal"
                                     disabled={pending || unknown}
-                                    description="填写本次实际退回的款项。退货金额不一定等于现金退款金额。"
+                                    description={amountDescription}
                                 />
                             )}
                         />

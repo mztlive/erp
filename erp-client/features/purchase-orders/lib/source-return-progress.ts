@@ -24,7 +24,14 @@ export function sourceReturnProgress(order: PurchaseOrderCenterView) {
             : "0"
     const refundPending = compareDecimal(refund, "0", 6) > 0
     const invoicePending = compareDecimal(redInvoice, "0", 6) > 0
+    const decision = plan?.settlement_decision
+    const decisionCurrent =
+        !!decision &&
+        !!plan &&
+        decision.sales_revision_id === plan.sales_revision_id &&
+        compareDecimal(decision.target_gross, plan.target_gross, 2) === 0
     return {
+        decisionCurrent,
         plan,
         physicalPending,
         hasReturns,

@@ -36,11 +36,32 @@ export function SupplierRefundDetailBody({
     const posted = row.status === "posted" || row.status === "reversed"
     return (
         <div className="min-h-0 flex-1 space-y-6 overflow-auto px-7 py-6 text-sm">
-            <PreviewAmount label="退款金额" value={row.amount} />
+            <PreviewAmount
+                label={
+                    row.settlementMethod === "SUPPLIER_CREDIT"
+                        ? "转留抵金额"
+                        : "退款金额"
+                }
+                value={row.amount}
+            />
+            <PreviewSection title="处理方式">
+                <p>
+                    {row.settlementMethod === "SUPPLIER_CREDIT"
+                        ? "供应商留抵，审批后形成可抵扣余额"
+                        : "供应商实际现金退款"}
+                </p>
+                {row.settlementConfirmation && (
+                    <p className="mt-2 whitespace-pre-wrap text-muted-foreground">
+                        采购确认依据：{row.settlementConfirmation}
+                    </p>
+                )}
+            </PreviewSection>
             <PreviewSection title="原因说明">
                 <p className="leading-6">{row.reasonText || "未填写原因"}</p>
                 <PreviewNote>
-                    退款时间：
+                    {row.settlementMethod === "SUPPLIER_CREDIT"
+                        ? "登记时间："
+                        : "退款时间："}
                     {formatDateTime(row.occurredAt, "full", "passthrough")}
                 </PreviewNote>
             </PreviewSection>

@@ -12,6 +12,7 @@ use mongodb::{Database, IndexModel};
 use persistence_core::Result;
 
 use crate::repository::extensions::PayableExt;
+use crate::repository::supplier_credit::{SUPPLIER_CREDIT_USES, SUPPLIER_CREDITS};
 
 /// `payable_account` 集合名。
 pub(crate) const PAYABLE_ACCOUNTS: &str = <mongodb::Database as PayableExt>::PAYABLE_ACCOUNTS;
@@ -48,6 +49,30 @@ pub async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, SUPPLIER_PAYMENTS, supplier_payment_indexes()).await?;
     create_indexes(db, PAYMENT_ALLOCATIONS, payment_allocation_indexes()).await?;
     create_indexes(db, PURCHASE_INVOICE_ALLOCATIONS, purchase_invoice_allocation_indexes()).await?;
+    create_indexes(
+        db,
+        SUPPLIER_CREDITS,
+        vec![
+            unique_index("uk_supplier_credits_id", doc! {"id": 1}),
+            unique_index("uk_supplier_credits_source", doc! {"source_refund_id": 1}),
+            named_index("idx_supplier_credits_payment", doc! {"original_payment_id": 1}),
+            named_index(
+                "idx_supplier_credits_owner",
+                doc! {"supplier_id": 1, "payer_party_id": 1, "created_at": 1},
+            ),
+        ],
+    )
+    .await?;
+    create_indexes(
+        db,
+        SUPPLIER_CREDIT_USES,
+        vec![
+            unique_index("uk_supplier_credit_uses_id", doc! {"id": 1}),
+            named_index("idx_supplier_credit_uses_request", doc! {"payment_request_id": 1}),
+            named_index("idx_supplier_credit_uses_credit", doc! {"credit_id": 1}),
+        ],
+    )
+    .await?;
     Ok(())
 }
 

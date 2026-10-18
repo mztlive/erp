@@ -14,7 +14,7 @@ use validator::Validate;
 use super::WorkItemService;
 use crate::entity::work_item::{
     AvailableWorkItemAccount, EnableStatus, FinanceResponsibilityOperation, FinanceResponsibilityRule,
-    FinanceResponsibilityRuleData, FinanceResponsibilityRuleSet, FinanceResponsibilityScope,
+    FinanceResponsibilityRuleData, FinanceResponsibilityRuleSet, FinanceResponsibilityScope, WorkItemType,
 };
 use crate::error::{Error, Result};
 use crate::ports::PreparedWorkflowAudit;
@@ -465,6 +465,43 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             owner_user_id: rule.owner_user_id.clone(),
             responsibility_key: rule.work_item_responsibility_key(),
         })
+    }
+
+    /// 沿用供应商付款或来源客户开票责任，重验退货财务完整权限。
+    /// # 参数
+    /// * `task_type` - 退款或进项红票任务。
+    /// * `counterparty_id` - 退款用供应商，红票用来源客户。
+    /// * `executor` - 原业务事务。
+    /// # 返回
+    /// 已冻结且可执行本任务的个人责任。
+    /// # 错误
+    /// 规则缺失、账号失效或缺少退货执行权限时拒绝。
+    pub async fn resolve_return_finance_responsibility(
+        &self,
+        task_type: WorkItemType,
+        counterparty_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<ResolvedFinanceResponsibility> {
+        let operation = match task_type {
+            WorkItemType::PurchaseReturnRefund => FinanceResponsibilityOperation::SupplierPayment,
+            WorkItemType::PurchaseReturnInvoice => FinanceResponsibilityOperation::SalesInvoice,
+            _ => return Err(Error::ValidationError("不是退货财务任务".into())),
+        };
+        let resolved = self.resolve_finance_responsibility(operation, counterparty_id, executor).await?;
+        let required = task_type
+            .required_execution_permissions("purchase_order")
+            .ok_or_else(|| Error::BusinessLogicError("退货财务权限未登记".into()))?;
+        let granted = self.auth.permission_codes(AccountKind::Admin, &resolved.owner_user_id).await?;
+        if !required
+            .iter()
+            .all(|code| granted.iter().any(|owned| crate::ports::permission_covers(owned, code)))
+        {
+            return Err(Error::BusinessLogicError(format!(
+                "{}负责人缺少退货处理权限，请调整财务责任配置",
+                operation.label()
+            )));
+        }
+        Ok(resolved)
     }
 
     async fn validate_finance_rule_data(

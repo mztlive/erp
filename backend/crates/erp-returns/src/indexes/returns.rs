@@ -116,6 +116,7 @@ fn customer_refund_indexes() -> Vec<IndexModel> {
 /// 返回 `supplier_refund` 的编号唯一、列表与原事实追溯索引。
 fn supplier_refund_indexes() -> Vec<IndexModel> {
     vec![
+        named_index("idx_supplier_refunds_purchase", doc! {"source_purchase_order_id": 1, "status": 1}),
         unique_index("uk_supplier_refunds_id", doc! { "id": 1 }),
         unique_index("uk_supplier_refunds_no", doc! { "refund_no": 1 }),
         named_index("idx_supplier_refunds_supplier_status", doc! { "supplier_id": 1, "status": 1 }),
@@ -253,7 +254,7 @@ mod tests {
             super::receipt_reversal_indexes(),
             super::payment_reversal_indexes(),
         ];
-        assert_eq!(groups.each_ref().map(Vec::len), [4, 3, 3, 3, 4, 4, 3, 3]);
+        assert_eq!(groups.each_ref().map(Vec::len), [4, 3, 3, 3, 4, 5, 3, 3]);
         let expected = [
             ("uk_sales_return_cases_id", doc! { "id": 1 }, true),
             ("uk_sales_return_cases_no", doc! { "return_no": 1 }, true),
@@ -276,6 +277,7 @@ mod tests {
                 doc! { "original_receipt_id": 1, "original_receivable_entry_id": 1 },
                 false,
             ),
+            ("idx_supplier_refunds_purchase", doc! { "source_purchase_order_id": 1, "status": 1 }, false),
             ("uk_supplier_refunds_id", doc! { "id": 1 }, true),
             ("uk_supplier_refunds_no", doc! { "refund_no": 1 }, true),
             ("idx_supplier_refunds_supplier_status", doc! { "supplier_id": 1, "status": 1 }, false),

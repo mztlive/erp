@@ -169,6 +169,9 @@ type BackendPaymentReversalSummary = {
 export type BackendSupplierRefund = {
     id: string
     refund_no: string
+    settlement_method?: "CASH_REFUND" | "SUPPLIER_CREDIT"
+    source_purchase_order_id?: string | null
+    settlement_confirmation?: string | null
     status: string
     purchase_return_order_id?: string | null
     supplier_id: string
@@ -494,6 +497,9 @@ export function projectSupplierRefund(
     return {
         refundId: refund.id,
         refundNo: refund.refund_no,
+        settlementMethod: refund.settlement_method,
+        sourcePurchaseOrderId: refund.source_purchase_order_id ?? undefined,
+        settlementConfirmation: refund.settlement_confirmation ?? undefined,
         supplierId: refund.supplier_id,
         originalPaymentId: refund.original_payment_id ?? undefined,
         originalPayableEntryId: refund.original_payable_entry_id ?? undefined,

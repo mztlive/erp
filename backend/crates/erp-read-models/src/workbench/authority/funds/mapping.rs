@@ -181,11 +181,21 @@ pub(in crate::workbench) fn supplier_refund_fact(
         });
     let mut fact = ObjectFact::new(
         refund.base.id.clone(),
-        format!("供应商退款 {}", refund.refund_no),
+        format!(
+            "{} {}",
+            if refund.settlement_method
+                == erp_returns::entity::returns::SupplierSettlementMethod::SupplierCredit
+            {
+                "供应商留抵"
+            } else {
+                "供应商退款"
+            },
+            refund.refund_no
+        ),
         refund.created_by.clone(),
     );
     fact.counterparty_label = supplier.or_else(|| origin.cloned());
-    fact.impact_summary = Some("不审批则供应商退款不能过账".to_string());
+    fact.impact_summary = Some("审核采购处置依据及本次结算方式，批准后入账".to_string());
     fact
 }
 /// 冲正对象以自身为参与根，名称仅消费命令 counterpart-only 来源。

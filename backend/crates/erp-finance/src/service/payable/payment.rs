@@ -122,8 +122,13 @@ async fn load_payment_ledger(
         .payment_allocations()
         .find_allocations_by_payments(&[payment.base.id.clone().into()], session)
         .await?;
-    PaymentAllocationLedger::new(payment.base.id.clone().into(), payment.amount, &existing, pending)
-        .map_err(Into::into)
+    PaymentAllocationLedger::new(
+        payment.base.id.clone().into(),
+        payment.effective_amount(),
+        &existing,
+        pending,
+    )
+    .map_err(Into::into)
 }
 
 /// 为没有上游任务事实的既有入口读取去重分录和关联子账。
@@ -222,6 +227,24 @@ pub async fn finish_supplier_payment(
     payment.post_from_execution(pending, &settlement.actor_id, Instant::now())?;
     db.supplier_payments().update(payment, session).await?;
     db.payable().create_payment_allocations_many(settlement.ledger.new_allocations(), session).await?;
+    Ok(())
+}
+
+/// 落留抵抵扣形成的核销行，不修改原付款的银行信息与原执行身份。
+/// # 参数
+/// * `db` - 数据库。
+/// * `settlement` - 已经完成余额条件更新的核销结果。
+/// * `executor` - 原抵扣事务。
+/// # 返回
+/// 核销记录写入成功。
+/// # 错误
+/// 仓储写入失败时返回错误。
+pub async fn finish_credit_allocation(
+    db: &Database,
+    settlement: &PaymentSettlement,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    db.payable().create_payment_allocations_many(settlement.ledger.new_allocations(), executor).await?;
     Ok(())
 }
 

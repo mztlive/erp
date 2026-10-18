@@ -406,6 +406,20 @@ type FixedRoute = (WorkItemType, &'static [&'static str], &'static str, &'static
 
 const FIXED_TASK_ROUTES: &[FixedRoute] = &[
     (
+        WorkItemType::PurchaseReturnRefund,
+        &["purchase_order"],
+        "purchase_return_refund",
+        "W12",
+        "退货退款任务业务对象未注册",
+    ),
+    (
+        WorkItemType::PurchaseReturnInvoice,
+        &["purchase_order"],
+        "purchase_return_invoice",
+        "W12",
+        "退货红票任务业务对象未注册",
+    ),
+    (
         WorkItemType::SupplierPortalReview,
         &["supplier_portal_request"],
         "supplier_portal_review",

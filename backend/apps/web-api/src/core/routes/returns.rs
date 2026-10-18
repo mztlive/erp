@@ -48,6 +48,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/purchase-orders/{id}/return-finance/sync",
+            with_permission(
+                post(returns::purchase_return::purchase_return_finance_sync),
+                rbac,
+                returns::purchase_return::purchase_return_finance_sync_permission_key(),
+            ),
+        )
+        .route(
             "/purchase-orders/{id}/direct-returns",
             with_permission(
                 post(returns::purchase_return::purchase_direct_return_confirm),

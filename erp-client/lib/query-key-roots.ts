@@ -4,6 +4,7 @@
  */
 export const queryKeyRoots = {
     invoiceRequests: ["invoice-requests"] as const,
+    purchaseOrders: ["purchase-orders"] as const,
     salesOrders: ["sales-orders"] as const,
     workspaceHome: ["workspace-home"] as const,
     entitySelectors: ["entity-selectors"] as const,

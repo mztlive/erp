@@ -437,6 +437,8 @@ impl NormalizedWorkItemData {
             self.work_item_type,
             WorkItemType::FulfillmentOperation
                 | WorkItemType::CustomerAcceptanceRegistration
+                | WorkItemType::PurchaseReturnRefund
+                | WorkItemType::PurchaseReturnInvoice
                 | WorkItemType::SupplierPaymentExecution
                 | WorkItemType::SalesInvoiceExecution
         ) && responsibility_key.is_none()

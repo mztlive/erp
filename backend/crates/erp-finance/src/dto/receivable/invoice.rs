@@ -120,6 +120,8 @@ pub struct CommitRedInvoiceRequest {
     pub invoice_no: Option<String>,
     /// 本次红冲含税金额；为空时红冲全部剩余有效分配。
     pub amount: Option<Amount>,
+    /// 只冲减指定采购应付；为空沿原票顺序。
+    pub payable_account_id: Option<String>,
     /// 红冲业务原因，写入审计日志。
     #[validate(custom(function = "non_blank", message = "红冲原因不能为空"))]
     pub reason: String,

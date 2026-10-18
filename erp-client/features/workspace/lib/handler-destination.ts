@@ -58,6 +58,18 @@ export const HANDLER_REGISTRY: Readonly<Record<string, HandlerRegistration>> = {
         destinationWorkspaceId: "W08",
         baseHref: "/procurement/orders",
     },
+    purchase_return_refund: {
+        workItemTypeLabel: "退货款处理",
+        family: "finance",
+        destinationWorkspaceId: "W12",
+        baseHref: "/workspace",
+    },
+    purchase_return_invoice: {
+        workItemTypeLabel: "退货进项红票",
+        family: "finance",
+        destinationWorkspaceId: "W12",
+        baseHref: "/workspace",
+    },
     supplier_payment_execution: {
         workItemTypeLabel: "待付款申请",
         family: "finance",
@@ -361,6 +373,12 @@ export function buildHandlerHref(item: HandlerNavigationInput): string | null {
             params,
         )
     }
+
+    if (
+        item.handlerKey === "purchase_return_refund" ||
+        item.handlerKey === "purchase_return_invoice"
+    )
+        return `/workspace?currentWorkItemId=${encodeURIComponent(workItemId)}`
 
     const queueContextId = requiredValue(item.queueContextId)
     if (!queueContextId) return null

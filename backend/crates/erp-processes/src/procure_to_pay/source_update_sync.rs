@@ -23,6 +23,7 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use crate::reverse_flow::return_finance::sync_return_finance;
 use crate::{Error, Result};
 
 /// 销售变更生效触发的待办原因代码。
@@ -76,6 +77,7 @@ impl SourceUpdateSync<'_> {
                 (SyncAction::Close, _, Some(update)) => self.close(update, executor).await?,
                 _ => {},
             }
+            sync_return_finance(self.db, &purchase.base.id, executor).await?;
         }
         for update in open.into_values() {
             self.close(update, executor).await?;

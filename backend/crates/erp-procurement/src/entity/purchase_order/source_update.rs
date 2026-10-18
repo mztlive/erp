@@ -14,6 +14,7 @@ use erp_core::validation::normalize_required_text_ref;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+use super::ReturnSettlementDecision;
 use super::order::PurchaseOrder;
 use super::source_impact::{PurchaseSourceImpact, SourceImpactKind, SourceImpactReason};
 
@@ -111,6 +112,11 @@ pub struct PurchaseSourceUpdate {
     /// 草稿已按销售当前事实修改、不再受影响，等待重新提交审批。
     #[serde(default)]
     pub awaiting_submission: bool,
+    /// 采购确认的款项处置方案；历史记录为空。
+    #[serde(default)]
+    pub return_settlement: Option<ReturnSettlementDecision>,
+    #[serde(default)]
+    pub return_settlement_history: Vec<ReturnSettlementDecision>,
     /// 处理方式；开放时为空。
     pub resolution: Option<PurchaseSourceResolution>,
     /// 处理所形成的单据，如采购提交或采购变更单。
@@ -161,6 +167,8 @@ impl PurchaseSourceUpdate {
             blocks_payment: opening.impact.blocks_payment(),
             status: PurchaseSourceUpdateStatus::Open,
             awaiting_submission: false,
+            return_settlement: None,
+            return_settlement_history: Vec::new(),
             resolution: None,
             resolution_document_id: None,
             maintain_note: None,

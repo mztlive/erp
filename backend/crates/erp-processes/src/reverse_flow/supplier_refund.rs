@@ -1,6 +1,7 @@
 use crate::audit::persist_log;
 
 mod commit_source;
+mod posting;
 use application_core::{AuditActor, CommandReceipt};
 use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
@@ -32,6 +33,7 @@ use erp_workflow::service::approval::execution::{command_recovery_delay, prepare
 use erp_workflow::service::document_registry::{find_approval_binding, new_registered_document};
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
+pub(super) use posting::apply_supplier_refund_final_post;
 use validator::Validate;
 
 use super::ReturnsProcess;
@@ -44,6 +46,7 @@ use super::cancel_approval::{
     SupplierRefundCancelPersistInput, build_supplier_refund_cancel_input, load_cancel_runtime,
     persist_supplier_refund_cancel,
 };
+use super::return_settlement::validate_settlement;
 use super::start_approval::{
     ReplayReturnStartInput, SupplierRefundStartInput, SupplierRefundStartPersistInput,
     build_supplier_refund_start_input, ensure_return_start_actor_active,
@@ -166,6 +169,8 @@ impl ReturnsProcess {
                     {
                         return Ok::<Option<String>, crate::Error>(Some(existing_id));
                     }
+                    validate_settlement(&db, &refund, executor).await?;
+                    super::return_settlement::freeze_confirmation(&db, &mut refund, executor).await?;
                     let binding = persist_bound_supplier_refund_document(
                         &db,
                         &rbac,
@@ -749,72 +754,4 @@ async fn persist_bound_supplier_refund_document(
     attach_published_binding(&mut document, binding.clone())?;
     db.business_documents().create(&document, executor).await?;
     Ok(binding)
-}
-
-/// 在最终通过事务内执行过账副作用并写回退款单。
-///
-/// # 参数
-/// * `db` - 数据库。
-/// * `refund_id` - 退款单主键。
-/// * `actor_id` - 过账操作人 ID。
-/// * `actor` - 审计操作人。
-/// * `executor` - 最终通过事务的执行器；本函数不再开启事务。
-///
-/// # 返回
-/// 成功时无返回值。退款单已过账并写回。
-///
-/// # 错误
-/// 非审批中、原付款不存在、累计超额或仓储失败时返回错误。
-pub(super) async fn apply_supplier_refund_final_post(
-    db: &Database,
-    refund_id: &str,
-    actor_id: &str,
-    actor: &AuditActor,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let mut refund =
-        ReturnsService::new(db.clone()).prepare_supplier_refund_post(refund_id, executor).await?;
-    execute_supplier_refund_domain_action(
-        &mut refund,
-        erp_workflow::service::approval::policy::ApprovalDomainAction::SupplierRefundPost,
-    )?;
-    apply_supplier_refund_posting(db, &refund, actor_id, executor).await?;
-    ReturnsService::new(db.clone()).persist_supplier_refund_post(&mut refund, executor).await?;
-    let audit =
-        actor.clone().resource_log("supplier_refund.post", "supplier_refund", refund.base.id.clone())?;
-    persist_log(db, &audit, executor).await?;
-    Ok(())
-}
-
-/// 在调用方事务内写入退款入账副作用。
-///
-/// # 错误
-/// 原付款不存在、累计超额或仓储失败时返回错误。
-async fn apply_supplier_refund_posting(
-    db: &Database,
-    refund: &SupplierRefund,
-    actor_id: &str,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let original_payment_id = erp_returns::service::supplier_refund::original_payment_id(refund)?;
-    let payment = erp_finance::service::payable::supplier_refund::load_posted_payment_for_refund(
-        db,
-        &original_payment_id,
-        executor,
-    )
-    .await?;
-    ReturnsService::new(db.clone()).validate_supplier_refund_amount(refund, payment.amount, executor).await?;
-    erp_finance::service::payable::supplier_refund::persist_refund_offsets_and_reversals(
-        db,
-        &erp_finance::service::payable::supplier_refund::SupplierRefundPostingFact {
-            refund_id: refund.base.id.clone(),
-            amount: refund.amount,
-            occurred_at: refund.occurred_at,
-        },
-        &payment,
-        actor_id,
-        executor,
-    )
-    .await?;
-    Ok(())
 }

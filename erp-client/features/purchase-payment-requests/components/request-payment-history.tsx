@@ -122,6 +122,27 @@ export function RequestPaymentHistory({
                     </article>
                 ))
             )}
+            {request.credit_uses.length > 0 && (
+                <section className="space-y-3">
+                    <h3 className="font-medium">留抵抵扣记录</h3>
+                    {request.credit_uses.map((use) => (
+                        <div
+                            key={use.id}
+                            className="flex flex-wrap justify-between gap-2 rounded-lg border p-4 text-sm"
+                        >
+                            <span>
+                                {request.lines.find(
+                                    (line) =>
+                                        line.payable_account_id ===
+                                        use.payable_account_id,
+                                )?.purchase_order_no ?? "本申请采购"}{" "}
+                                · 留抵抵扣
+                            </span>
+                            <MoneyValue value={use.amount} />
+                        </div>
+                    ))}
+                </section>
+            )}
             {download.isError && (
                 <p role="alert" className="text-sm text-destructive">
                     {getErrorMessage(download.error, "付款回单读取失败")}

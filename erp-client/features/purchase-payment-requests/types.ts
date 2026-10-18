@@ -85,6 +85,12 @@ export type PaymentRequest = {
     attachments: RequestAttachment[]
     approval?: DocumentApprovalViewDto | null
     allowed_actions: string[]
+    credit_uses: {
+        id: string
+        payable_account_id: string
+        amount: string
+        created_at: number
+    }[]
     payments: RequestPaymentRecord[]
     materials?: RequestMaterials
 }

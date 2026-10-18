@@ -69,6 +69,7 @@ import { WorkspaceImportTask } from "./workspace-import-task"
 import { WorkspaceIntegrationTask } from "./workspace-integration-task"
 import { PurchasePaymentRequestTask } from "@/features/purchase-payment-requests/components/purchase-payment-request-task"
 import { WorkspaceProcurementTask } from "./workspace-procurement-task"
+import { WorkspaceReturnFinance } from "./workspace-return-finance"
 import { WorkspacePurchaseSourceUpdateTask } from "./workspace-purchase-source-update-task"
 import { WorkspaceSettlementTask } from "./workspace-settlement-task"
 import { WorkspaceSupplierInvestigationTask } from "./workspace-supplier-investigation-task"
@@ -221,6 +222,22 @@ function WorkspaceTaskSurface({
     ) {
         return (
             <WorkspacePurchaseSourceUpdateTask
+                key={item.workItemId}
+                item={item}
+                onTaskCompleted={onTaskCompleted}
+            />
+        )
+    }
+
+    if (
+        ((item.workItemType === "PURCHASE_RETURN_REFUND" &&
+            item.handlerKey === "purchase_return_refund") ||
+            (item.workItemType === "PURCHASE_RETURN_INVOICE" &&
+                item.handlerKey === "purchase_return_invoice")) &&
+        item.businessObjectType === "purchase_order"
+    ) {
+        return (
+            <WorkspaceReturnFinance
                 key={item.workItemId}
                 item={item}
                 onTaskCompleted={onTaskCompleted}

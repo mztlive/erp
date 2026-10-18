@@ -1,6 +1,7 @@
 "use client"
+
+import { ReturnSettlementDialog } from "./return-settlement-dialog"
 import { useState } from "react"
-import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { MoneyValue, QuantityValue } from "@/components/business/values"
 import { useAccountProfileQuery } from "@/features/auth/queries"
@@ -10,7 +11,176 @@ import type { PurchaseOrderCenterView } from "../types"
 import { sourceReturnProgress } from "../lib/source-return-progress"
 import { PurchaseDirectReturnDialog } from "./purchase-direct-return-dialog"
 
+/** 只展示当前采购动作或阻碍；后续步骤不提前占用作业面。 */
 export function PurchaseSourceReturnPanel({
+    order,
+    disabled = false,
+    showAction = true,
+}: {
+    order: PurchaseOrderCenterView
+    disabled?: boolean
+    showAction?: boolean
+}) {
+    const progress = sourceReturnProgress(order)
+    const { plan, physicalPending, refundPending, invoicePending } = progress
+    if (!plan || !progress.blocksChange) return null
+    const lines = plan.lines.filter(
+        (line) => compareDecimal(line.required_return, "0", 6) > 0,
+    )
+    const canRegister = lines.some(
+        (line) => compareDecimal(line.max_direct_return, "0", 6) > 0,
+    )
+
+    return (
+        <section
+            className="space-y-3 rounded-lg border p-4"
+            aria-label="当前处理事项"
+        >
+            <h3 className="text-sm font-medium">
+                {physicalPending
+                    ? "确认退货结果"
+                    : !progress.decisionCurrent
+                      ? "确认退货款处理方式"
+                      : "财务处理中"}
+            </h3>
+            {physicalPending ? (
+                <>
+                    <div className="divide-y">
+                        {lines.map((line) => (
+                            <div
+                                key={line.purchase_line_id}
+                                className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
+                            >
+                                <div>
+                                    <p className="font-medium">
+                                        {line.item_name}
+                                    </p>
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                        采购{" "}
+                                        <QuantityValue
+                                            unit=""
+                                            value={line.purchased_quantity}
+                                        />{" "}
+                                        → 本单目标{" "}
+                                        <QuantityValue
+                                            unit=""
+                                            value={line.target_quantity}
+                                        />{" "}
+                                        {line.unit}
+                                        {compareDecimal(
+                                            line.returned_quantity,
+                                            "0",
+                                            6,
+                                        ) > 0 ? (
+                                            <>
+                                                {" "}
+                                                · 已登记退回{" "}
+                                                <QuantityValue
+                                                    unit=""
+                                                    value={
+                                                        line.returned_quantity
+                                                    }
+                                                />{" "}
+                                                {line.unit}
+                                            </>
+                                        ) : null}
+                                    </p>
+                                </div>
+                                <span>
+                                    待确认退回{" "}
+                                    <QuantityValue
+                                        unit=""
+                                        value={line.required_return}
+                                    />{" "}
+                                    {line.unit}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                        {canRegister
+                            ? "请与供应商核实收货结果；已收到的数量在此登记。"
+                            : "请核对原发货来源；当前没有可登记的供应商直发数量。"}
+                    </p>
+                    {showAction ? (
+                        <PurchaseSourceReturnAction
+                            order={order}
+                            disabled={disabled}
+                        />
+                    ) : null}
+                </>
+            ) : (
+                <>
+                    {!order.currentContent.costMasked ? (
+                        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+                            {refundPending ? (
+                                <>
+                                    <dt className="text-muted-foreground">
+                                        待处理款项差额
+                                    </dt>
+                                    <dd>
+                                        <MoneyValue value={progress.refund} />
+                                    </dd>
+                                </>
+                            ) : null}
+                            {invoicePending ? (
+                                <>
+                                    <dt className="text-muted-foreground">
+                                        预计需冲减进项票额
+                                    </dt>
+                                    <dd>
+                                        <MoneyValue
+                                            value={progress.redInvoice}
+                                        />
+                                    </dd>
+                                </>
+                            ) : null}
+                        </dl>
+                    ) : null}
+                    {progress.decisionCurrent ? (
+                        <div className="space-y-2 text-sm">
+                            {(plan.finance_tasks ?? []).map((task) => (
+                                <p key={task.work_item_id}>
+                                    {task.kind === "PURCHASE_RETURN_REFUND"
+                                        ? "退货款处理"
+                                        : "进项红票"}{" "}
+                                    · {task.owner_name} 正在办理
+                                </p>
+                            ))}
+                            {(plan.settlements ?? []).map((record) => (
+                                <p
+                                    key={record.id}
+                                    className="text-muted-foreground"
+                                >
+                                    {record.method === "SUPPLIER_CREDIT"
+                                        ? "留抵"
+                                        : "退款"}{" "}
+                                    <MoneyValue value={record.amount} /> ·{" "}
+                                    {record.status === "posted"
+                                        ? "已入账"
+                                        : "审批中"}
+                                </p>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-sm text-muted-foreground">
+                            请先与供应商确定退款或留抵及金额，再交给财务。
+                        </p>
+                    )}
+                    {showAction ? (
+                        <PurchaseSourceReturnAction
+                            order={order}
+                            disabled={disabled}
+                        />
+                    ) : null}
+                </>
+            )}
+        </section>
+    )
+}
+
+/** 工作台动作放入固定底栏；详情页复用同一登记入口。 */
+export function PurchaseSourceReturnAction({
     order,
     disabled = false,
 }: {
@@ -19,193 +189,54 @@ export function PurchaseSourceReturnPanel({
 }) {
     const [open, setOpen] = useState(false)
     const profile = useAccountProfileQuery()
-    const progress = sourceReturnProgress(order)
-    const { plan, physicalPending, hasReturns, refundPending, invoicePending } =
-        progress
-    if (
-        !plan ||
-        (!physicalPending && !hasReturns && !refundPending && !invoicePending)
+    const { plan, physicalPending, refund, blocksChange } =
+        sourceReturnProgress(order)
+    if (!plan || !blocksChange) return null
+    const awaitingApproval =
+        plan.settlements?.some((record) => record.status === "in_approval") ??
+        false
+    if (!physicalPending && awaitingApproval)
+        return (
+            <span className="text-xs text-muted-foreground">
+                款项审批中；如需变更方案，请先联系财务经办人撤回。
+            </span>
+        )
+    const canRegister = plan.lines.some(
+        (line) => compareDecimal(line.max_direct_return, "0", 6) > 0,
     )
-        return null
+    if (physicalPending && !canRegister) return null
     const canReturn = hasPermission(
         profile.data?.permissions,
         "purchase_return_order:create",
     )
-    const canRegister = plan.lines.some(
-        (line) => compareDecimal(line.max_direct_return, "0", 6) > 0,
-    )
-    const financeUrl = (view: string) =>
-        `/finance/supplier-accounts?${new URLSearchParams({ view, supplierId: order.header.supplierId, purchaseOrderId: order.identity.purchaseOrderId, from: "workspace", returnTo: `/procurement/orders/${encodeURIComponent(order.identity.purchaseOrderId)}` })}`
+    if (profile.isPending) return null
+    if (!canReturn)
+        return (
+            <span className="text-xs text-muted-foreground">
+                由具备采购退货权限的经办人登记。
+            </span>
+        )
     return (
-        <section className="space-y-4 border-y py-5" aria-label="退货处理进度">
-            <div>
-                <h3 className="text-sm font-semibold">采购调整前的处理</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                    原采购与发货记录保留。按实际退回、款票处理、采购调整的顺序完成。
-                </p>
-            </div>
-            <ol className="divide-y">
-                <li className="space-y-3 py-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                        <h4 className="text-sm font-medium">
-                            1. 客户退回，供应商确认接收
-                        </h4>
-                        <span className="text-xs text-muted-foreground">
-                            {physicalPending
-                                ? "待退回或登记"
-                                : "退回数量已满足本次调整"}
-                        </span>
-                    </div>
-                    <div className="space-y-3">
-                        {plan.lines.map((line) => (
-                            <div
-                                key={line.purchase_line_id}
-                                className="text-sm"
-                            >
-                                <p className="font-medium">{line.item_name}</p>
-                                <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
-                                    <span>
-                                        采购{" "}
-                                        <QuantityValue
-                                            unit=""
-                                            value={line.purchased_quantity}
-                                        />{" "}
-                                        {line.unit}
-                                    </span>
-                                    <span>
-                                        调整目标{" "}
-                                        <QuantityValue
-                                            unit=""
-                                            value={line.target_quantity}
-                                        />{" "}
-                                        {line.unit}
-                                    </span>
-                                    <span>
-                                        已登记退回{" "}
-                                        <QuantityValue
-                                            unit=""
-                                            value={line.returned_quantity}
-                                        />{" "}
-                                        {line.unit}
-                                    </span>
-                                    <span>
-                                        还需退回{" "}
-                                        <QuantityValue
-                                            unit=""
-                                            value={line.required_return}
-                                        />{" "}
-                                        {line.unit}
-                                    </span>
-                                </p>
-                            </div>
-                        ))}
-                    </div>
-                    {physicalPending ? (
-                        <>
-                            <p className="text-xs text-muted-foreground">
-                                请先落实退货地址和接收结果。实际退回后在此登记，未退回时保留待办。当前入口处理客户直退供应商，不产生公司仓出入库。
-                            </p>
-                            {canRegister && canReturn ? (
-                                <Button
-                                    id="purchase-source-register-return"
-                                    variant="outline"
-                                    disabled={disabled}
-                                    onClick={() => setOpen(true)}
-                                >
-                                    登记已退回供应商
-                                </Button>
-                            ) : (
-                                <p className="text-xs text-muted-foreground">
-                                    {!canReturn
-                                        ? "请由具有采购退货权限的经办人登记。"
-                                        : "当前未找到可直接关联本采购的直发数量；请核对发货来源和退货路线。"}
-                                </p>
-                            )}
-                        </>
-                    ) : null}
-                    {hasReturns ? (
-                        <p className="break-all text-xs text-muted-foreground">
-                            退货记录：{plan.return_numbers.join("、")}
-                        </p>
-                    ) : null}
-                </li>
-                <li className="space-y-3 py-4">
-                    <h4 className="text-sm font-medium">
-                        2. 核对供应商退款与发票
-                    </h4>
-                    {!order.currentContent.costMasked ? (
-                        <p className="text-sm">
-                            按原单价和现有费用，调整后预计含税金额{" "}
-                            <MoneyValue value={plan.target_gross} />
-                            {refundPending ? (
-                                <>
-                                    ；已付款超过该金额{" "}
-                                    <MoneyValue value={progress.refund} />
-                                    ，请按实际到账提交部分退款审批。
-                                </>
-                            ) : (
-                                "；当前未发现超付差额。"
-                            )}
-                        </p>
-                    ) : (
-                        <p className="text-sm text-muted-foreground">
-                            由财务核对退款和发票差额。
-                        </p>
-                    )}
-                    {invoicePending && !order.currentContent.costMasked ? (
-                        <p className="text-sm">
-                            已收票超过调整后金额{" "}
-                            <MoneyValue value={progress.redInvoice} />
-                            ，请先处理进项红票。
-                        </p>
-                    ) : null}
-                    <div className="flex flex-wrap gap-2">
-                        {refundPending ? (
-                            <Button
-                                variant="outline"
-                                render={
-                                    <Link
-                                        id="purchase-source-return-refund"
-                                        href={financeUrl("payment")}
-                                    />
-                                }
-                            >
-                                打开付款记录办理退款
-                            </Button>
-                        ) : null}
-                        {invoicePending ? (
-                            <Button
-                                variant="outline"
-                                render={
-                                    <Link
-                                        id="purchase-source-return-invoice"
-                                        href={financeUrl("purchase_invoice")}
-                                    />
-                                }
-                            >
-                                打开供应商发票
-                            </Button>
-                        ) : null}
-                    </div>
-                    {refundPending || invoicePending ? (
-                        <p className="text-xs text-muted-foreground">
-                            由财务在关联记录上办理，审批通过后返回并刷新。预计差额按当前分配到本采购的款票计算。
-                        </p>
-                    ) : null}
-                </li>
-                <li className="space-y-2 pt-4">
-                    <h4 className="text-sm font-medium">
-                        3. 调整采购并完成待办
-                    </h4>
-                    <p className="text-sm text-muted-foreground">
-                        {progress.blocksChange
-                            ? "完成以上适用事项后，再按销售目标调整采购数量和收件分配。"
-                            : "可以继续改单，按销售目标调整数量和收件分配，填写原因后提交审批。"}
-                        改单生效时调整应付；退货登记不重复冲减金额。系统核对通过后结束本次依据更新待办。
-                    </p>
-                </li>
-            </ol>
-            {open ? (
+        <>
+            <Button
+                id="purchase-source-register-return"
+                disabled={disabled}
+                onClick={() => setOpen(true)}
+            >
+                {physicalPending
+                    ? "登记供应商已收货"
+                    : plan.settlement_decision
+                      ? "调整剩余款项方案"
+                      : "确认款项处理方式"}
+            </Button>
+            {open && !physicalPending ? (
+                <ReturnSettlementDialog
+                    purchaseOrderId={order.identity.purchaseOrderId}
+                    plan={plan}
+                    excess={refund}
+                    onClose={() => setOpen(false)}
+                />
+            ) : open ? (
                 <PurchaseDirectReturnDialog
                     purchaseOrderId={order.identity.purchaseOrderId}
                     version={order.identity.lockVersion}
@@ -213,6 +244,6 @@ export function PurchaseSourceReturnPanel({
                     onClose={() => setOpen(false)}
                 />
             ) : null}
-        </section>
+        </>
     )
 }

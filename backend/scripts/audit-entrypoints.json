@@ -2846,7 +2846,7 @@
     },
     {
       "path": "crates/erp-processes/src/finance_posting/receivable/red_invoice.rs",
-      "function": "apply_red_invoice",
+      "function": "complete_red_posting",
       "policy": "Audited",
       "stage": "Command",
       "boundaries": [
@@ -2858,7 +2858,7 @@
         "persist_log": 1
       },
       "location_count": 1,
-      "reason": "用例或步骤 apply_red_invoice 通过 .resource_log_with_message、persist_log 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
+      "reason": "红票写入后在原事务内持久化审计、命令回执并同步相关待办。"
     },
     {
       "path": "crates/erp-processes/src/fulfillment_execution/customer_acceptance/completion.rs",
@@ -4599,7 +4599,7 @@
       "reason": "用例或步骤 persist_start 通过 .resource_log、persist_log 消费明确审计边界；接收既有 Executor 或委托自身上层事务，不因本登记增加事务、业务重试或重复成功事件。必要业务事实由当前命令显式提供。"
     },
     {
-      "path": "crates/erp-processes/src/reverse_flow/supplier_refund.rs",
+      "path": "crates/erp-processes/src/reverse_flow/supplier_refund/posting.rs",
       "function": "apply_supplier_refund_final_post",
       "policy": "Audited",
       "stage": "Command",
@@ -6717,6 +6717,38 @@
       },
       "location_count": 1,
       "reason": "客户直退登记在原事务内追加双向退货凭据及成功审计；同键重放先校验原载荷与权限并返回已有结果，不追加事实。"
+    },
+    {
+      "path": "crates/erp-processes/src/reverse_flow/direct_return.rs",
+      "function": "reconcile_return_finance",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "采购确认剩余款项处置方案、交接财务任务与成功审计同事务提交；相同方案重放零写入。"
+    },
+    {
+      "path": "crates/erp-processes/src/finance_posting/payable/payment_request/credit.rs",
+      "function": "apply",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "留抵消费、付款申请额度、核销分配、任务和审计沿同一事务提交；同键重放先核对原结果。"
     }
   ]
 }

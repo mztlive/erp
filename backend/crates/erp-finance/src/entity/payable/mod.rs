@@ -30,3 +30,5 @@ pub use payment_request::*;
 pub use purchase_invoice_allocation::*;
 pub use purchase_invoice_allocation_plan::*;
 pub use supplier_payment::*;
+
+pub mod supplier_credit;

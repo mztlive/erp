@@ -1,6 +1,9 @@
 "use client"
 
-import { PurchaseSourceReturnPanel } from "./purchase-source-return-panel"
+import {
+    PurchaseSourceReturnPanel,
+    PurchaseSourceReturnAction,
+} from "./purchase-source-return-panel"
 import { sourceReturnProgress } from "../lib/source-return-progress"
 
 import { useState } from "react"
@@ -159,6 +162,7 @@ export function PurchaseSourceUpdateWorkspace({
                 <PurchaseOrderSourceUpdateNotice
                     order={order}
                     showActions={false}
+                    showGuidance={false}
                     canEdit={false}
                     canVoid={false}
                     canChange={false}
@@ -194,9 +198,10 @@ export function PurchaseSourceUpdateWorkspace({
                     </AlertDescription>
                 </Alert>
             ) : null}
-            {needsUpdate ? (
+            {needsUpdate && !awaitingApproval ? (
                 <PurchaseSourceReturnPanel
                     order={order}
+                    showAction={false}
                     disabled={query.isError || awaitingApproval}
                 />
             ) : null}
@@ -222,9 +227,13 @@ export function PurchaseSourceUpdateWorkspace({
                         : awaitingApproval
                           ? "待改单生效后，系统自动核对处理结果。"
                           : needsUpdate
-                            ? returnProgress.blocksChange
-                                ? "请先完成退货及适用的款票处理，再调整采购。"
-                                : "请根据影响原因调整采购；无法调整时填写维持原因。"
+                            ? returnProgress.physicalPending
+                                ? "核实供应商实际收货数量后登记。"
+                                : returnProgress.blocksChange
+                                  ? returnProgress.decisionCurrent
+                                      ? "财务正在处理，完成后可继续改单。"
+                                      : "先与供应商确定款项处理方式，再交接财务。"
+                                  : "请根据影响原因调整采购；无法调整时填写维持原因。"
                             : "按最新采购情况核对待办状态。"}
                 </p>
                 <Button
@@ -249,6 +258,14 @@ export function PurchaseSourceUpdateWorkspace({
                             <MaintainSourceButton
                                 purchaseOrderId={purchaseOrderId}
                                 update={update}
+                            />
+                        ) : null}
+                        {!awaitingApproval ? (
+                            <PurchaseSourceReturnAction
+                                order={order}
+                                disabled={
+                                    actions.changePending || actions.voidPending
+                                }
                             />
                         ) : null}
                         {permissions.canVoid ? (

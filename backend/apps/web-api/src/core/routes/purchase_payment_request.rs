@@ -147,6 +147,22 @@ fn lifecycle_routes(rbac: &SharedRbacService) -> Router<AppState> {
 fn payment_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
+            "/purchase-payment-requests/{id}/supplier-credits",
+            with_permission(
+                get(purchase_payment_request::credit::list),
+                rbac,
+                purchase_payment_request::credit::list_permission_key(),
+            ),
+        )
+        .route(
+            "/purchase-payment-requests/{id}/supplier-credits/use",
+            with_permission(
+                post(purchase_payment_request::credit::apply),
+                rbac,
+                purchase_payment_request::credit::apply_permission_key(),
+            ),
+        )
+        .route(
             "/purchase-payment-requests/{id}/reveal-account",
             with_permission(
                 post(purchase_payment_request::payments::reveal_account),

@@ -185,6 +185,23 @@ pub struct SupplierRefund {
     /// 审批提交版本，初值 0。
     #[serde(default)]
     pub approval_subject_version: u32,
+    #[serde(default)]
+    pub settlement_method: SupplierSettlementMethod,
+    #[serde(default)]
+    pub source_purchase_order_id: Option<String>,
+    #[serde(default)]
+    pub settlement_confirmation: Option<String>,
+    #[serde(default)]
+    pub settlement_decision_key: Option<String>,
+}
+
+/// 供应商退货款的实际结算方式，历史记录默认现金退款。
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum SupplierSettlementMethod {
+    #[default]
+    CashRefund,
+    SupplierCredit,
 }
 
 impl SupplierRefund {
@@ -279,6 +296,10 @@ impl SupplierRefund {
             occurred_at: data.occurred_at,
             evidence_attachment_id: data.evidence_attachment_id,
             approval_subject_version: 0,
+            settlement_method: SupplierSettlementMethod::CashRefund,
+            source_purchase_order_id: None,
+            settlement_confirmation: None,
+            settlement_decision_key: None,
         })
     }
 

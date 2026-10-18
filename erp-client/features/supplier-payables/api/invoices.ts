@@ -1,3 +1,4 @@
+import { isOutcomeUnknown } from "./shared"
 import { invoiceTaxAllocations } from "@/features/supplier-payables/lib/invoice-tax-allocation"
 /**
  * W12 供应商往来 · 进项发票相关请求（登记+分配提交、红票）。
@@ -99,6 +100,8 @@ export async function reverseInvoice(
             `/admin/invoices/${encodeURIComponent(input.invoiceId)}/red-issue`,
             {
                 invoice_no: input.redInvoiceNo,
+                amount: input.amount,
+                payable_account_id: input.payableAccountId,
                 reason: input.reason,
                 idempotency_key: input.idempotencyKey,
             },
@@ -114,7 +117,7 @@ export async function reverseInvoice(
         return result
     } catch (err) {
         return {
-            status: "failed",
+            status: isOutcomeUnknown(err) ? "unknown" : "failed",
             title: "红票失败",
             description: errorMessage(err, "红票失败"),
             errorCode: "HTTP_ERROR",

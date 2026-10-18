@@ -65,3 +65,5 @@ pub(super) fn sort_doc_with_id(sort_by: Option<&str>, sort_ascending: bool, allo
     let field = sort_by.filter(|name| allowed.contains(name)).unwrap_or("created_at");
     doc! { field: direction, "id": direction }
 }
+
+pub mod supplier_credit;

@@ -143,6 +143,7 @@ type RequestDto = {
     purchase_previews?: PurchasePreviewDto[]
     sales_previews?: SalesSnapshot[]
     attachments?: RequestAttachment[]
+    credit_uses?: PaymentRequest["credit_uses"]
     payments?: RequestPaymentRecord[]
     current_lines?: {
         purchase_order_id: string
@@ -235,6 +236,7 @@ function mapRequest(dto: RequestDto): PaymentRequest {
         approval: dto.approval,
         allowed_actions: dto.allowed_actions ?? [],
         payments: dto.payments ?? [],
+        credit_uses: dto.credit_uses ?? [],
         lines: dto.lines.map((line) => {
             const preview =
                 (dto.purchase_previews ?? []).find(

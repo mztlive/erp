@@ -1,5 +1,6 @@
 "use client"
 
+import { SupplierCreditUsePanel } from "./supplier-credit-use"
 import { useState, type ReactNode } from "react"
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react"
 import { MoneyValue } from "@/components/business"
@@ -60,7 +61,7 @@ export function RequestPaymentExecution({
                         <p className="text-xs text-muted-foreground">
                             申请金额 <MoneyValue value={request.total_amount} />
                             <span className="mx-2">·</span>
-                            本申请已付{" "}
+                            本申请已结算{" "}
                             <MoneyValue value={request.paid_amount} />
                         </p>
                     </div>
@@ -86,15 +87,21 @@ export function RequestPaymentExecution({
                     </div>
                 </dl>
             </section>
+            <SupplierCreditUsePanel
+                request={request}
+                task={task}
+                onTaskCompleted={onTaskCompleted}
+            />
             <RequestPaymentForm
                 request={request}
                 task={task}
                 onTaskCompleted={onTaskCompleted}
             />
-            {request.payments.length > 0 && (
+            {(request.payments.length > 0 ||
+                request.credit_uses.length > 0) && (
                 <ReferenceSection
                     id="ppr-pay-history"
-                    label={`查看历史付款与回单（${request.payments.length} 笔）`}
+                    label={`查看付款与留抵记录（${request.payments.length + request.credit_uses.length} 笔）`}
                 >
                     <RequestPaymentHistory
                         request={request}

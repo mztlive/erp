@@ -20,6 +20,8 @@ use crate::{Error, Result};
 pub struct SupplierRefundPostingFact {
     /// 退款身份，供调用方追溯退款记录。
     pub refund_id: String,
+    /// 指定采购子账；历史退款为空时沿原付款分配执行。
+    pub target_account_id: Option<String>,
     /// 本次退款金额。
     pub amount: Amount,
     /// 原退款发生时点。
@@ -86,7 +88,8 @@ async fn persist_refund<P: RefundPostingPort>(
     session: &mut dyn Executor,
 ) -> Result<()> {
     let allocations = port.allocations(&payment.base.id.clone().into(), session).await?;
-    let (reverse_rows, chunks) = PaymentAllocation::plan_reverse(&allocations, refund.amount)?;
+    let scoped = target_allocations(port, &allocations, refund.target_account_id.as_deref(), session).await?;
+    let (reverse_rows, chunks) = PaymentAllocation::plan_reverse(&scoped, refund.amount)?;
     let seqs = PaymentAllocation::next_allocation_seq_range(&allocations, reverse_rows.len())?;
     revert_settlements(port, payment, actor_id, &chunks, session).await?;
     for (reverse, seq) in reverse_rows.iter().zip(seqs.iter()) {
@@ -105,6 +108,29 @@ async fn persist_refund<P: RefundPostingPort>(
         port.allocation(&allocation, session).await?;
     }
     Ok(())
+}
+
+async fn target_allocations<P: RefundPostingPort>(
+    port: &P,
+    allocations: &[PaymentAllocation],
+    target: Option<&str>,
+    executor: &mut dyn Executor,
+) -> Result<Vec<PaymentAllocation>> {
+    let Some(target) = target else {
+        return Ok(allocations.to_vec());
+    };
+    let ids = allocations.iter().map(|line| line.payable_entry_id.clone()).collect();
+    let facts = port.facts(ids, executor).await?;
+    Ok(allocations
+        .iter()
+        .filter(|line| {
+            facts
+                .entries
+                .get(line.payable_entry_id.as_ref())
+                .is_some_and(|entry| entry.payable_account_id.as_ref() == target)
+        })
+        .cloned()
+        .collect())
 }
 
 /// 按实际反向核销块回冲已付进度，校验原供应商和来源账户。
@@ -230,6 +256,33 @@ mod tests {
     use erp_core::ids::{FileAssetId, PartyBankAccountId, SupplierAccountId};
 
     use super::*;
+
+    #[tokio::test]
+    async fn refund_from_merged_payment_only_reverses_selected_purchase() {
+        let mut e = TestExecutor { visits: 0 };
+        let mut port = port(&mut e);
+        port.split_accounts = true;
+        let mut request = input();
+        request.target_account_id = Some("account".into());
+        request.amount = amount("40");
+        persist_refund(&port, &request, &payment(), "actor", &mut e).await.unwrap();
+        let rows = &port.recorded.lock().unwrap().allocations;
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].payable_entry_id.as_ref(), "entry2");
+        assert_eq!(rows[0].allocated_amount, amount("40"));
+    }
+    #[tokio::test]
+    async fn target_refund_cannot_borrow_other_purchase_balance() {
+        let mut e = TestExecutor { visits: 0 };
+        let mut port = port(&mut e);
+        port.split_accounts = true;
+        let mut request = input();
+        request.target_account_id = Some("account".into());
+        request.amount = amount("41");
+        assert!(persist_refund(&port, &request, &payment(), "actor", &mut e).await.is_err());
+        assert!(port.recorded.lock().unwrap().allocations.is_empty());
+    }
+
     use crate::entity::payable::{
         EntryDirection as PayableEntryDirection, PayableAccountData, PayableEntryData, PayableEntryOffset,
         PayableEntryType, PayableSourceType, PendingPaymentAllocation, SupplierPaymentData,
@@ -346,6 +399,7 @@ mod tests {
         fail: Option<usize>,
         supplier: &'static str,
         revert: bool,
+        split_accounts: bool,
         recorded: Mutex<Recorded>,
     }
     impl RecordingPort {
@@ -378,7 +432,14 @@ mod tests {
             e: &mut dyn Executor,
         ) -> Result<OffsetFacts<PayableEntry, PayableAccount>> {
             self.io("facts", e)?;
-            Ok(facts(self.supplier))
+            let mut value = facts(self.supplier);
+            if self.split_accounts {
+                value.entries.get_mut("entry1").unwrap().payable_account_id = PayableAccountId::new("other");
+                let mut account = value.accounts["account"].clone();
+                account.base.id = "other".into();
+                value.accounts.insert("other".into(), account);
+            }
+            Ok(value)
         }
         async fn revert_settlement(
             &self,
@@ -404,6 +465,7 @@ mod tests {
     }
     fn input() -> SupplierRefundPostingFact {
         SupplierRefundPostingFact {
+            target_account_id: None,
             refund_id: "refund".into(),
             amount: amount("80"),
             occurred_at: Instant::from_unix_secs(10),
@@ -415,6 +477,7 @@ mod tests {
             fail: None,
             supplier: "supplier",
             revert: true,
+            split_accounts: false,
             recorded: Mutex::new(Recorded::default()),
         }
     }

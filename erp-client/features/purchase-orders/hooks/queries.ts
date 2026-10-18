@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
-import { confirmDirectReturn } from "../api/direct-returns"
+import { confirmDirectReturn, syncReturnFinance } from "../api/direct-returns"
 import { approvalKeys } from "@/features/approval-workflow/queries"
 import {
     acquireDraftEditToken,
@@ -396,6 +396,24 @@ export function useConfirmExpenseOccurrenceMutation(purchaseOrderId: string) {
                 queryClient.invalidateQueries({
                     queryKey: queryKeyRoots.salesOrders,
                 }),
+            ])
+        },
+    })
+}
+
+export function useSyncReturnFinanceMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: syncReturnFinance,
+        onSuccess: async () => {
+            await Promise.all([
+                queryClient.invalidateQueries({
+                    queryKey: queryKeyRoots.workspaceHome,
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: purchaseOrderKeys.all,
+                }),
+                queryClient.invalidateQueries({ queryKey: workItemKeys.all }),
             ])
         },
     })

@@ -243,6 +243,7 @@ async fn persist_start(
     let PreparedExecution::Apply(writes) = prepared else {
         return Ok(refund);
     };
+    super::super::return_settlement::validate_settlement(&db, &refund, executor).await?;
     let audit = actor.resource_log("supplier_refund.submit", "supplier_refund", id)?;
     persist_start_guard(&db, &writes, now, executor).await?;
     let mut refund = refund;

@@ -3,17 +3,20 @@ use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_core::common::time::Instant;
 use erp_core::ids::{PurchaseReturnLineId, PurchaseReturnOrderId, SalesReturnCaseId, SalesReturnLineId};
-use erp_procurement::entity::purchase_order::PurchaseOrder;
+use erp_finance::repository::PayableExt;
+use erp_finance::repository::prelude::*;
+use erp_procurement::entity::purchase_order::{PurchaseOrder, ReturnSettlementDecision};
 use erp_procurement::repository::PurchaseOrderExt;
-use erp_procurement::repository::purchase_source_update::find_open_for_purchase;
+use erp_procurement::repository::purchase_source_update::{find_open_for_purchase, purchase_source_updates};
 use erp_read_models::purchase_center::direct_return::{DirectReturnPlan, direct_return_plan};
 use erp_returns::entity::returns::{
     CaseType, DirectReturnEvidence, DirectReturnRequest, PurchaseReturnLine, PurchaseReturnLineData,
     PurchaseReturnOrder, PurchaseReturnOrderData, PurchaseReturnStatus, ReturnMode, ReturnRoute,
     SalesReturnCase, SalesReturnCaseData, SalesReturnCaseStatus, SalesReturnLine, SalesReturnLineData,
+    SupplierRefundStatus,
 };
 use erp_returns::repository::ReturnsExt;
-use erp_returns::repository::direct_return::direct_return_command;
+use erp_returns::repository::direct_return::{direct_return_command, purchase_settlements};
 use erp_sales::repository::SalesOrderExt;
 use id_generator::next_id;
 use mongodb::Database;
@@ -21,12 +24,57 @@ use persistence_core::{Executor, Transactional};
 
 use super::ReturnsProcess;
 use super::purchase_return::register_created_purchase_return_document;
+use super::return_finance::sync_return_finance;
 use super::sales_return::register_created_sales_return_document;
 use crate::adapters::purchase_access;
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
 impl ReturnsProcess {
+    /// 保存采购确认的剩余款项方案并原子交接财务任务。
+    /// # 参数
+    /// * `id` - 采购身份。
+    /// * `actor` - 采购经办人。
+    /// # 返回
+    /// 已有开放任务复用，不登记资金或票据。
+    /// # 错误
+    /// 无权修改采购、责任配置缺失或并发冲突时拒绝。
+    pub async fn reconcile_return_finance(
+        &self,
+        id: &str,
+        decision: ReturnSettlementDecision,
+        actor: &AuditActor,
+    ) -> Result<()> {
+        let db = self.db.clone();
+        let rbac = self.rbac.clone();
+        let id = id.to_owned();
+        let actor = actor.clone();
+        self.db
+            .client()
+            .with_transaction(move |executor| {
+                Box::pin(async move {
+                    let mut order = purchase_access(db.clone(), rbac)
+                        .require_object(
+                            &actor,
+                            "update",
+                            &id,
+                            &["purchase_return_order:create".into()],
+                            executor,
+                        )
+                        .await?;
+                    if !save_settlement_decision(&db, &order, &decision, executor).await? {
+                        return Ok(());
+                    }
+                    db.purchase_orders().update(&mut order, executor).await?;
+                    sync_return_finance(&db, &id, executor).await?;
+                    let log = actor.resource_log("purchase_return_finance.sync", "purchase_order", id)?;
+                    persist_log(&db, &log, executor).await?;
+                    Ok(())
+                })
+            })
+            .await
+    }
+
     /// 核实客户直退供应商，追加实际退回凭据，保留采购依据待办到改单生效。
     /// # 参数
     /// * `id` - 原采购身份。
@@ -87,6 +135,7 @@ impl ReturnsProcess {
                     )
                     .await?;
                     persist(&db, &return_order, &sales_case, &plan, &req, &actor, executor).await?;
+                    sync_return_finance(&db, &id, executor).await?;
                     Ok(return_order.base.id)
                 })
             })
@@ -243,6 +292,56 @@ async fn persist(
     )?;
     persist_log(db, &audit, executor).await?;
     Ok(())
+}
+
+async fn save_settlement_decision(
+    db: &Database,
+    order: &PurchaseOrder,
+    decision: &ReturnSettlementDecision,
+    executor: &mut dyn Executor,
+) -> Result<bool> {
+    let mut update = find_open_for_purchase(db, &order.base.id, executor)
+        .await?
+        .ok_or_else(|| Error::ConflictError("采购依据更新已经结束".into()))?;
+    if let Some(existing) = &update.return_settlement {
+        if existing == decision {
+            return Ok(false);
+        }
+        if existing.idempotency_key == decision.idempotency_key
+            || update
+                .return_settlement_history
+                .iter()
+                .any(|row| row.idempotency_key == decision.idempotency_key)
+        {
+            return Err(Error::ConflictError("提交标识已用于其他方案，请刷新后重新提交".into()));
+        }
+        if purchase_settlements(db, &order.base.id, executor)
+            .await?
+            .iter()
+            .any(|row| row.status == SupplierRefundStatus::InApproval)
+        {
+            return Err(Error::ConflictError(
+                "财务仍有款项在审批中，请由经办人撤回后再修改剩余款项方案".into(),
+            ));
+        }
+    }
+    let plan = direct_return_plan(db, order, executor).await?;
+    if !plan.pending_settlement || plan.lines.iter().any(|line| !line.required_return.to_decimal().is_zero())
+    {
+        return Err(Error::ConflictError("请先确认供应商已收到本次应退货物".into()));
+    }
+    let account = db
+        .payable_accounts()
+        .find_by_purchase_order(&order.base.id.clone().into(), executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("采购应付不存在".into()))?;
+    let excess = ReturnSettlementDecision::excess(account.settled_total, plan.target_gross);
+    decision.validate(&plan.sales_revision_id, plan.target_gross, excess)?;
+    if let Some(previous) = update.return_settlement.replace(decision.clone()) {
+        update.return_settlement_history.push(previous);
+    }
+    purchase_source_updates(db).update(&mut update, executor).await?;
+    Ok(true)
 }
 
 #[cfg(test)]

@@ -62,6 +62,29 @@ impl WorkItem {
         Ok(())
     }
 
+    /// 按实际退款或红票归零结果完成退货财务任务。
+    /// # 参数
+    /// * `at` - 财务事实完成时间。
+    /// # 返回
+    /// 将开放退货财务任务标记为系统完成。
+    /// # 错误
+    /// 非退货财务任务或任务已结束时拒绝。
+    pub fn complete_when_return_settled(&mut self, at: Instant) -> Result<()> {
+        self.ensure_generic_mutation()?;
+        if !matches!(
+            self.work_item_type,
+            WorkItemType::PurchaseReturnRefund | WorkItemType::PurchaseReturnInvoice
+        ) {
+            return Err(Error::from("只有退货财务任务可以按款票差额归零自动完成"));
+        }
+        self.ensure_open()?;
+        self.status = WorkItemStatus::Completed;
+        self.completed_at = Some(at);
+        self.completed_by = Some("__system__".to_string());
+        self.last_activity_at = Some(at);
+        Ok(())
+    }
+
     /// 在应付开放余额归零时自动完成付款执行任务。
     ///
     /// # 参数
@@ -386,6 +409,34 @@ mod tests {
 
     use super::super::{AssignmentSource, WorkItem, WorkItemData, WorkItemStatus, WorkItemType, direct_data};
 
+    #[test]
+    fn return_tasks_require_explicit_owner_and_only_complete_once() {
+        for kind in [WorkItemType::PurchaseReturnRefund, WorkItemType::PurchaseReturnInvoice] {
+            let data = WorkItemData {
+                work_item_type: kind,
+                business_object_type: "purchase_order".into(),
+                owner_role: "role-finance".into(),
+                ..direct_data()
+            };
+            assert!(
+                WorkItem::new_at(WorkItemId::new("missing"), data.clone(), Instant::from_unix_secs(1))
+                    .is_err()
+            );
+            let mut task = WorkItem::new_with_responsibility_key(
+                WorkItemId::new("return"),
+                data,
+                "finance:SUPPLIER_PAYMENT:rule-1",
+            )
+            .unwrap();
+            task.complete_when_return_settled(Instant::from_unix_secs(2)).unwrap();
+            assert_eq!(task.status, WorkItemStatus::Completed);
+            assert!(task.complete_when_return_settled(Instant::from_unix_secs(3)).is_err());
+            assert!(kind.uses_explicit_owner_authorization());
+        }
+        let mut other =
+            WorkItem::new_at(WorkItemId::new("other"), direct_data(), Instant::from_unix_secs(1)).unwrap();
+        assert!(other.complete_when_return_settled(Instant::from_unix_secs(2)).is_err());
+    }
     #[test]
     fn reassign_and_complete_preserve_first_times() {
         let first = Instant::from_unix_secs(100);

@@ -55,6 +55,9 @@ impl ReturnsReadService {
         Ok(SupplierRefundView {
             id: refund.base.id.clone(),
             refund_no: refund.refund_no,
+            settlement_method: refund.settlement_method,
+            source_purchase_order_id: refund.source_purchase_order_id,
+            settlement_confirmation: refund.settlement_confirmation,
             status: refund.status,
             purchase_return_order_id: refund.purchase_return_order_id.map(|id| id.to_string()),
             supplier_id: refund.supplier_id.to_string(),

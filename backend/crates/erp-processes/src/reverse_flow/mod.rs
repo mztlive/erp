@@ -13,6 +13,8 @@ mod payment_posting;
 mod payment_reversal;
 mod purchase_return;
 mod receipt_reversal;
+pub(crate) mod return_finance;
+mod return_settlement;
 mod sales_return;
 mod start_approval;
 mod supplier_refund;

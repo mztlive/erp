@@ -186,6 +186,8 @@ impl WorkItemType {
             Self::FulfillmentOperation
                 | Self::SupplierPortalReview
                 | Self::CustomerAcceptanceRegistration
+                | Self::PurchaseReturnRefund
+                | Self::PurchaseReturnInvoice
                 | Self::SupplierPaymentExecution
                 | Self::SalesInvoiceExecution
                 | Self::CardFundsReview
@@ -323,6 +325,22 @@ impl WorkItemType {
             self.supplier_payment_execution_permissions(business_object_type)
         } else if self.is_sales_invoice_execution() {
             self.sales_invoice_execution_permissions(business_object_type)
+        } else if self == Self::PurchaseReturnRefund {
+            (business_object_type == "purchase_order").then_some(&[
+                "purchase_order:detail",
+                "supplier_payment:list",
+                "supplier_payment:detail",
+                "supplier_refund:submit",
+            ] as &[&str])
+        } else if self == Self::PurchaseReturnInvoice {
+            (business_object_type == "purchase_order").then_some(&[
+                "purchase_order:detail",
+                "supplier:detail",
+                "purchase_invoice_allocation:list",
+                "invoice:list",
+                "invoice:detail",
+                "invoice:reverse",
+            ] as &[&str])
         } else if self == Self::SupplierPortalReview {
             (business_object_type == "supplier_portal_request")
                 .then_some(&["supplier_portal_request:detail", "supplier_portal_request:review"] as &[&str])
@@ -353,6 +371,8 @@ impl WorkItemType {
                 | Self::PurchaseSourceUpdate
                 | Self::FulfillmentOperation
                 | Self::CustomerAcceptanceRegistration
+                | Self::PurchaseReturnRefund
+                | Self::PurchaseReturnInvoice
                 | Self::SupplierPaymentExecution
                 | Self::SalesInvoiceExecution
                 | Self::SupplierSettlementReview

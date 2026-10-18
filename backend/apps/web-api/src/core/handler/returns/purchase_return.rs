@@ -5,6 +5,7 @@ use axum::extract::{Path, Query, State};
 use axum::{Extension, Json};
 use erp_processes::adapters::MongoPurchaseDataScope;
 use erp_processes::reverse_flow::ReturnsProcess;
+use erp_procurement::entity::purchase_order::ReturnSettlementDecision;
 use erp_read_models::returns_center::dto::{PurchaseReturnOrderListParams, PurchaseReturnOrderView};
 use erp_read_models::returns_center::{PurchaseReturnListView, ReturnsReadService};
 use erp_returns::dto::CreatePurchaseReturnOrderRequest;
@@ -147,10 +148,72 @@ pub async fn purchase_direct_return_confirm(
     Ok(ApiResponse::ok_with_data(result))
 }
 
+#[permission_macros::permission(
+    group = "退货退款",
+    group_desc = "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
+    desc = "建立采购退货单",
+    resource = "purchase_return_order",
+    action = "create"
+)]
+/// 同步已有直退的财务责任交接。
+/// # 参数
+/// * `state` - 应用状态。
+/// * `actor` - 已认证经办人。
+/// * `id` - 来源采购身份。
+/// # 返回
+/// 同步成功。
+/// # 错误
+/// 无权处理采购或责任配置缺失时拒绝。
+pub async fn purchase_return_finance_sync(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(decision): Json<ReturnSettlementDecision>,
+) -> Result<()> {
+    ReturnsProcess::new(state.db())
+        .with_rbac(state.rbac())
+        .reconcile_return_finance(&id, decision, &actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(()))
+}
+
 #[cfg(test)]
 mod direct_return_body_tests {
     use erp_returns::entity::returns::DirectReturnRequest;
     use serde_json::json;
+
+    #[test]
+    fn settlement_body_requires_supplier_evidence_and_conserves_amounts() {
+        use std::str::FromStr;
+
+        use erp_core::money::Amount;
+
+        use super::ReturnSettlementDecision;
+        let body = json!({"idempotency_key":"decision", "sales_revision_id":"r2", "target_gross":"1000", "refund_amount":"75", "credit_amount":"100", "supplier_confirmation":"供应商确认退款 75、留抵 100"});
+        let target = Amount::from_str("1000").unwrap();
+        let excess = Amount::from_str("175").unwrap();
+        serde_json::from_value::<ReturnSettlementDecision>(body.clone())
+            .unwrap()
+            .validate("r2", target, excess)
+            .unwrap();
+        for (key, value) in [
+            ("supplier_confirmation", json!("")),
+            ("credit_amount", json!("101")),
+            ("sales_revision_id", json!("r1")),
+        ] {
+            let mut invalid = body.clone();
+            invalid[key] = value;
+            assert!(
+                serde_json::from_value::<ReturnSettlementDecision>(invalid)
+                    .unwrap()
+                    .validate("r2", target, excess)
+                    .is_err()
+            );
+        }
+        let mut invalid = body;
+        invalid["owner_user_id"] = json!("cannot-assign-finance");
+        assert!(serde_json::from_value::<ReturnSettlementDecision>(invalid).is_err());
+    }
 
     #[test]
     fn actual_receipt_body_requires_version_evidence_and_positive_unique_lines() {

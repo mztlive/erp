@@ -285,6 +285,31 @@ fn map_red_invoice_allocation_plan_error(error: RedInvoiceAllocationPlanError) -
     }
 }
 
+/// 按指定采购子账生成红票计划，保留原票其他采购的分配。
+/// # 参数
+/// * `blue` / `related` - 原票及相关历史反向事实。
+/// * `requested` - 本次红冲金额。
+/// * `account` - 指定采购应付。
+/// # 返回
+/// 反向分配计划。
+/// # 错误
+/// 目标无余额或金额超限时拒绝。
+pub fn purchase_red_invoice_for_account(
+    blue: &[PurchaseInvoiceAllocation],
+    related: &[PurchaseInvoiceAllocation],
+    requested: Option<Amount>,
+    account: &str,
+) -> Result<RedInvoiceAllocationPlan> {
+    RedInvoiceAllocationPlan::build_for_account(
+        InvoiceDirection::Purchase,
+        purchase_red_invoice_allocation_bases(blue),
+        &purchase_red_invoice_allocation_reversals(related),
+        requested,
+        account,
+    )
+    .map_err(map_red_invoice_allocation_plan_error)
+}
+
 #[cfg(test)]
 mod red_invoice_reversal_tests {
     use std::str::FromStr;

@@ -78,7 +78,7 @@ pub fn new_supplier_refund_commit(
     source: SupplierRefundSourceFact,
     actor_id: &str,
 ) -> Result<SupplierRefund> {
-    let result = SupplierRefund::new(
+    let mut result = SupplierRefund::new(
         SupplierRefundId::new(next_id()),
         SupplierRefundData {
             refund_no: return_command_no(SUPPLIER_REFUND_COMMAND_PREFIX, actor_id, &req.idempotency_key),
@@ -96,6 +96,9 @@ pub fn new_supplier_refund_commit(
         },
         actor_id,
     )?;
+    result.settlement_method = req.settlement_method;
+    result.source_purchase_order_id = req.source_purchase_order_id.clone();
+    result.settlement_decision_key = req.settlement_decision_key.clone();
     Ok(result)
 }
 

@@ -2,6 +2,7 @@
 
 use erp_core::common::time::Instant;
 use erp_core::money::Amount;
+use erp_finance::entity::payable::supplier_credit::SupplierCreditUse;
 use erp_finance::entity::payable::{PaymentRequestAllocation, PurchasePaymentRequest};
 use erp_party::PartyBankAccountView;
 use erp_procurement::entity::purchase_order::{PurchaseLineType, PurchaseOrderRevisionLine};
@@ -51,6 +52,7 @@ pub struct PurchasePaymentRequestView {
     pub allowed_actions: Vec<String>,
     pub attachments: Vec<PaymentRequestAttachmentView>,
     pub payments: Vec<PaymentRequestPaymentView>,
+    pub credit_uses: Vec<SupplierCreditUse>,
 }
 
 /// 本申请形成的实际付款与有效冲正金额，回单沿本申请资格读取。

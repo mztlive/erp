@@ -50,6 +50,9 @@ export function useSupplierRefundFlow(args: {
         React.useState<SupplierRefundRow | null>(null)
     const [pendingCommit, setPendingCommit] = React.useState<{
         sourcePaymentId: string
+        settlementMethod?: "CASH_REFUND" | "SUPPLIER_CREDIT"
+        sourcePurchaseOrderId?: string
+        settlementDecisionKey?: string
         amount?: string
         reason: string
     } | null>(null)
@@ -88,12 +91,15 @@ export function useSupplierRefundFlow(args: {
     async function prepareRefundDraft(reason: string, amount?: string) {
         if (!refundRequest) return
         const slot = bindRefundSlot(
-            refundRequest.sourcePaymentId,
+            `${refundRequest.sourcePaymentId}:${refundRequest.settlementMethod ?? "CASH_REFUND"}:${refundRequest.sourcePurchaseOrderId ?? ""}:${refundRequest.settlementDecisionKey ?? ""}`,
             reason,
             amount ?? refundRequest.amount,
         )
         const intent = {
             sourcePaymentId: refundRequest.sourcePaymentId,
+            settlementMethod: refundRequest.settlementMethod,
+            sourcePurchaseOrderId: refundRequest.sourcePurchaseOrderId,
+            settlementDecisionKey: refundRequest.settlementDecisionKey,
             amount: amount ?? refundRequest.amount,
             reason,
         }
@@ -162,7 +168,10 @@ export function useSupplierRefundFlow(args: {
         }
         setLastResult({
             status: "succeeded",
-            title: "退款已提交审批",
+            title:
+                res.refund.settlementMethod === "SUPPLIER_CREDIT"
+                    ? "留抵已提交审批"
+                    : "退款已提交审批",
             description: "已按已绑定的审批流程启动审批，原付款保留。",
             reference: res.refund.refundNo,
             facts: [

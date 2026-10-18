@@ -11,6 +11,10 @@ pub enum WorkItemType {
     ProcurementOrderCreation,
     /// 销售变更影响采购后，由采购负责人更新采购依据。
     PurchaseSourceUpdate,
+    /// 采购直退后的供应商退款办理。
+    PurchaseReturnRefund,
+    /// 采购直退后的进项红票办理。
+    PurchaseReturnInvoice,
     /// 入库、仓发、供应商直发、电子交付或线下服务的具体履约操作。
     FulfillmentOperation,
     /// 发货或交付完成后，由销售登记客户验收结果。
@@ -147,6 +151,18 @@ const WORK_ITEM_BRIEF_RELATIONS: &[WorkItemBriefRelation] = &[
         object_kind: WorkItemBriefObjectKind::SalesOrder,
         business_object_type: "sales_order",
         read_permission: "purchase_order:create",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::PurchaseReturnInvoice,
+        business_object_type: "purchase_order",
+        object_kind: WorkItemBriefObjectKind::PurchaseOrder,
+        read_permission: "purchase_order:detail",
+    },
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::PurchaseReturnRefund,
+        business_object_type: "purchase_order",
+        object_kind: WorkItemBriefObjectKind::PurchaseOrder,
+        read_permission: "purchase_order:detail",
     },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::PurchaseSourceUpdate,
@@ -345,6 +361,8 @@ impl WorkItemType {
         match self {
             Self::ProcurementOrderCreation => "供给分配",
             Self::PurchaseSourceUpdate => "采购依据更新",
+            Self::PurchaseReturnRefund => "退货款处理",
+            Self::PurchaseReturnInvoice => "退货进项红票",
             Self::FulfillmentOperation => "履约处理",
             Self::CustomerAcceptanceRegistration => "客户验收登记",
             Self::SupplierPaymentExecution => "供应商付款处理",
@@ -381,6 +399,8 @@ impl WorkItemType {
         match self {
             Self::ProcurementOrderCreation => "PROCUREMENT_ORDER_CREATION",
             Self::PurchaseSourceUpdate => "PURCHASE_SOURCE_UPDATE",
+            Self::PurchaseReturnRefund => "PURCHASE_RETURN_REFUND",
+            Self::PurchaseReturnInvoice => "PURCHASE_RETURN_INVOICE",
             Self::FulfillmentOperation => "FULFILLMENT_OPERATION",
             Self::CustomerAcceptanceRegistration => "CUSTOMER_ACCEPTANCE_REGISTRATION",
             Self::SupplierPaymentExecution => "SUPPLIER_PAYMENT_EXECUTION",
@@ -452,9 +472,10 @@ impl WorkItemType {
             Self::FulfillmentOperation | Self::CustomerAcceptanceRegistration => {
                 WorkItemAssignmentSeparationPolicy::RoleAndParticipation
             },
-            Self::SupplierPaymentExecution | Self::SalesInvoiceExecution => {
-                WorkItemAssignmentSeparationPolicy::RoleAndParticipation
-            },
+            Self::SupplierPaymentExecution
+            | Self::SalesInvoiceExecution
+            | Self::PurchaseReturnRefund
+            | Self::PurchaseReturnInvoice => WorkItemAssignmentSeparationPolicy::RoleAndParticipation,
             Self::ImportBusinessConfirmation
             | Self::PurchaseOrderReview
             | Self::SalesChangeImpactReview

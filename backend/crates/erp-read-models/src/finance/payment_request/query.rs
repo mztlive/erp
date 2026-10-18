@@ -217,6 +217,9 @@ impl PurchasePaymentRequestReadService {
         let approval = self.approval(&request, executor).await?;
         let attachments = self.attachments(&request, executor).await?;
         let payments = self.payments(&request, executor).await?;
+        let credit_uses =
+            erp_finance::repository::supplier_credit::uses_by_request(&self.db, &request.base.id, executor)
+                .await?;
         Ok(PurchasePaymentRequestView {
             request,
             supplier_name,
@@ -228,6 +231,7 @@ impl PurchasePaymentRequestReadService {
             allowed_actions: Vec::new(),
             attachments,
             payments,
+            credit_uses,
         })
     }
 

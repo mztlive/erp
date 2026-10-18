@@ -74,6 +74,20 @@ export const TYPE_META: Record<string, TypeMeta> = {
         badgeVariant: "success",
         openActionLabel: "去登记客户验收",
     },
+    PURCHASE_RETURN_REFUND: {
+        label: "退货款处理",
+        family: "finance",
+        badgeLabel: "待处理款项",
+        badgeVariant: "cyan",
+        openActionLabel: "处理退货款",
+    },
+    PURCHASE_RETURN_INVOICE: {
+        label: "退货进项红票",
+        family: "finance",
+        badgeLabel: "待红票",
+        badgeVariant: "violet",
+        openActionLabel: "登记进项红票",
+    },
     SUPPLIER_PAYMENT_EXECUTION: {
         label: "供应商付款处理",
         family: "finance",

@@ -58,6 +58,9 @@ export async function fetchSupplierRefund(
  */
 export async function commitSupplierRefund(input: {
     sourcePaymentId: string
+    settlementMethod?: "CASH_REFUND" | "SUPPLIER_CREDIT"
+    sourcePurchaseOrderId?: string
+    settlementDecisionKey?: string
     amount?: string
     reason: string
     idempotencyKey: string
@@ -68,6 +71,9 @@ export async function commitSupplierRefund(input: {
             {
                 source_fact_id: input.sourcePaymentId,
                 amount: input.amount,
+                settlement_method: input.settlementMethod,
+                source_purchase_order_id: input.sourcePurchaseOrderId,
+                settlement_decision_key: input.settlementDecisionKey,
                 reason: input.reason,
                 idempotency_key: input.idempotencyKey,
             },

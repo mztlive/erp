@@ -16,6 +16,7 @@ use crate::entity::payable::{
 };
 use crate::repository::PayableExt;
 use crate::repository::prelude::*;
+use crate::repository::supplier_credit::has_payment_credit;
 use crate::{Error, Result};
 
 /// 反向财务分配实际消费的金额与原发生时间。
@@ -59,6 +60,11 @@ pub async fn load_posted_payment_for_reversal(
         .ok_or_else(|| Error::NotFound("原付款不存在".to_string()))?;
     if payment.status != SupplierPaymentStatus::Posted {
         return Err(Error::BusinessLogicError("只有已过账付款可以冲正".to_string()));
+    }
+    if has_payment_credit(db, payment_id.as_ref(), executor).await? {
+        return Err(Error::ConflictError(
+            "原付款已形成供应商留抵，不能直接冲正；请按对应采购办理退货款处理".into(),
+        ));
     }
     payment.require_payment_request_basis()?;
     Ok(payment)

@@ -209,14 +209,10 @@ impl SupplierRefundPostedTotalsExt for persistence_core::Repository<'_, Supplier
         exclude_id: &str,
         executor: &mut dyn Executor,
     ) -> Result<Amount> {
-        posted_total_by_original(
-            &self.collection(),
-            "original_payment_id",
-            payment_id.as_ref(),
-            exclude_id,
-            executor,
-        )
-        .await
+        posted_total(&self.collection(), vec![
+            doc! {"$match": {"original_payment_id": payment_id.as_ref(), "status": "posted", "id": {"$ne": exclude_id}, "settlement_method": {"$ne": "SUPPLIER_CREDIT"}, "deleted_at": NOT_DELETED_TIMESTAMP_BSON}},
+            doc! {"$group": {"_id": null, "total": {"$sum": "$amount"}}},
+        ], executor).await
     }
 }
 

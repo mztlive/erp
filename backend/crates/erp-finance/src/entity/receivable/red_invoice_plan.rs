@@ -118,6 +118,33 @@ impl RedInvoiceAllocationPlan {
         Ok(Self { lines, fully_reversed: requested == remaining_total })
     }
 
+    /// 仅红冲指定子账，并按整张蓝票剩余分配判断是否全部红冲。
+    /// # 参数
+    /// * `direction` / `basis` / `reversals` - 原票完整事实。
+    /// * `requested` - 本次金额。
+    /// * `account` - 指定子账。
+    /// # 返回
+    /// 不触及其他采购的反向分配计划。
+    /// # 错误
+    /// 目标不存在、无余额或超额时拒绝。
+    pub fn build_for_account(
+        direction: InvoiceDirection,
+        basis: Vec<RedInvoiceAllocationBasis>,
+        reversals: &[RedInvoiceAllocationReversal],
+        requested: Option<Amount>,
+        account: &str,
+    ) -> std::result::Result<Self, RedInvoiceAllocationPlanError> {
+        let all = Self::build(direction, basis.clone(), reversals, None)?;
+        let mut selected = Self::build(
+            direction,
+            basis.into_iter().filter(|line| line.account_id == account).collect(),
+            reversals,
+            requested,
+        )?;
+        selected.fully_reversed = selected.totals().0 == all.totals().0;
+        Ok(selected)
+    }
+
     /// 返回按原分配顺序生成的只读反向分配行。
     ///
     /// # 参数
@@ -336,6 +363,55 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
+
+    #[test]
+    fn scoped_red_invoice_preserves_other_purchase_and_rejects_cross_account_excess() {
+        let basis = vec![red_basis("first", 1, "100", "90", "10"), red_basis("target", 2, "60", "54", "6")];
+        let plan = RedInvoiceAllocationPlan::build_for_account(
+            InvoiceDirection::Purchase,
+            basis.clone(),
+            &[],
+            None,
+            "account-target",
+        )
+        .unwrap();
+        assert_eq!(plan.lines().len(), 1);
+        assert_eq!(plan.lines()[0].account_id, "account-target");
+        assert_eq!(plan.totals().0, Amount::from_str("60").unwrap());
+        assert!(!plan.is_full_reversal());
+        assert!(
+            RedInvoiceAllocationPlan::build_for_account(
+                InvoiceDirection::Purchase,
+                basis.clone(),
+                &[],
+                Some(Amount::from_str("61").unwrap()),
+                "account-target"
+            )
+            .is_err()
+        );
+        assert!(
+            RedInvoiceAllocationPlan::build_for_account(
+                InvoiceDirection::Purchase,
+                basis.clone(),
+                &[],
+                None,
+                "missing"
+            )
+            .is_err()
+        );
+        let prior = [red_reversal("first", "100", "90", "10")];
+        assert!(
+            RedInvoiceAllocationPlan::build_for_account(
+                InvoiceDirection::Purchase,
+                basis,
+                &prior,
+                None,
+                "account-target"
+            )
+            .unwrap()
+            .is_full_reversal()
+        );
+    }
 
     /// 构建红票规划测试使用的原蓝票分配基数。
     ///

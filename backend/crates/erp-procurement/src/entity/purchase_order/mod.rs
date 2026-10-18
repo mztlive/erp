@@ -127,3 +127,6 @@ pub use command_result::{
     SourcingTaskStatus, VoidDraftReceipt,
 };
 pub use sourcing_quantity::ensure_sourcing_quantity;
+
+mod return_settlement;
+pub use return_settlement::ReturnSettlementDecision;

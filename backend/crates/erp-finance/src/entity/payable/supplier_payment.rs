@@ -185,6 +185,9 @@ pub struct SupplierPayment {
     pub amount: Amount,
     /// 已正式冲正的付款金额；部分冲正保留未冲正余额的付款身份。
     pub reversed_amount: Amount,
+    /// 实际现金退款累计；留抵不计入本字段。
+    #[serde(default = "Amount::zero")]
+    pub cash_refunded_amount: Amount,
     /// 银行流水号。
     pub bank_reference: Option<String>,
     /// 银行回单图片资产；异常旧数据可能为空，新付款必须提供。
@@ -240,6 +243,7 @@ impl SupplierPayment {
             paid_at: data.paid_at,
             amount: data.amount,
             reversed_amount: Amount::zero(),
+            cash_refunded_amount: Amount::zero(),
             bank_reference,
             bank_receipt_asset_id: Some(data.bank_receipt_asset_id),
         })
@@ -279,7 +283,7 @@ impl SupplierPayment {
         }
         self.status = to;
         if to == SupplierPaymentStatus::Reversed {
-            self.reversed_amount = self.amount;
+            self.reversed_amount = self.amount.checked_sub(self.cash_refunded_amount);
         }
         Ok(())
     }
@@ -293,7 +297,7 @@ impl SupplierPayment {
     /// # 错误
     /// 不返回错误，冲正规则保持累计金额不超额。
     pub fn effective_amount(&self) -> Amount {
-        self.amount.checked_sub(self.reversed_amount)
+        self.amount.checked_sub(self.reversed_amount).checked_sub(self.cash_refunded_amount)
     }
 
     /// 证明付款保留完整的原申请、我方主体和逐采购付款依据。
@@ -335,6 +339,24 @@ impl SupplierPayment {
             return Err(Error::from("逐申请采购付款分配合计必须等于实际付款金额"));
         }
         Ok(request_id)
+    }
+
+    /// 记录供应商实际现金退回，不把留抵当作银行退款。
+    /// # 参数
+    /// * `amount` - 已审批实际到账金额。
+    /// # 返回
+    /// 原付款金额保留，有效资金余额相应减少。
+    /// # 错误
+    /// 非已过账付款、非正数或超过剩余有效资金时拒绝。
+    pub fn record_cash_refund(&mut self, amount: Amount) -> Result<()> {
+        if self.status != SupplierPaymentStatus::Posted
+            || amount <= Amount::zero()
+            || amount > self.effective_amount()
+        {
+            return Err(Error::from("现金退款超过原付款剩余有效金额"));
+        }
+        self.cash_refunded_amount = self.cash_refunded_amount.checked_add(amount);
+        Ok(())
     }
 
     /// 记录一笔正式冲正，部分冲正后仍允许处理剩余有效付款。
@@ -457,6 +479,20 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
+
+    #[test]
+    fn cash_refund_reduces_reusable_funds_and_full_reversal_never_goes_negative() {
+        let mut payment = bound_payment();
+        let allocations =
+            [PendingPaymentAllocation::new(PayableEntryId::new("entry"), Amount::from_str("1000").unwrap())
+                .unwrap()];
+        payment.post_from_execution(&allocations, "executor", Instant::from_unix_secs(2)).unwrap();
+        payment.record_cash_refund(Amount::from_str("175").unwrap()).unwrap();
+        assert_eq!(payment.effective_amount(), Amount::from_str("825").unwrap());
+        assert!(payment.record_cash_refund(Amount::from_str("826").unwrap()).is_err());
+        payment.transition(SupplierPaymentStatus::Reversed).unwrap();
+        assert_eq!(payment.effective_amount(), Amount::zero());
+    }
 
     fn data() -> SupplierPaymentData {
         SupplierPaymentData {

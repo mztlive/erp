@@ -3869,6 +3869,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "GET",
+                path: "/admin/purchase-payment-requests/{id}/supplier-credits",
+                description: "在批准采购付款申请内登记付款",
+                permission: {
+                    resource: "purchase_payment_request",
+                    action: "pay",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-payment-requests/{id}/supplier-credits/use",
+                description: "在批准采购付款申请内登记付款",
+                permission: {
+                    resource: "purchase_payment_request",
+                    action: "pay",
+                },
+            },
+            {
+                module: "admin",
                 method: "POST",
                 path: "/admin/purchase-payment-requests/{id}/reveal-account",
                 description: "主动查看当前付款申请完整收款账号",
@@ -4827,6 +4847,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "sales_return_case",
                     action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/return-finance/sync",
+                description: "建立采购退货单",
+                permission: {
+                    resource: "purchase_return_order",
+                    action: "create",
                 },
             },
             {

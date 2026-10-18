@@ -659,6 +659,10 @@ pub struct SupplierRefundView {
     pub id: String,
     /// 退款单号。
     pub refund_no: String,
+    pub settlement_method: erp_returns::entity::returns::SupplierSettlementMethod,
+    pub source_purchase_order_id: Option<String>,
+    #[serde(default)]
+    pub settlement_confirmation: Option<String>,
     /// 退款状态。
     pub status: SupplierRefundStatus,
     /// 采购退货/错付款依据。
