@@ -1,5 +1,6 @@
 //! W01 活动与完成命令的真实生产读取、责任重验与写入边界。
 use async_trait::async_trait;
+use erp_core::common::time::Instant;
 use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::WorkItem;
 use mongodb::Database;
@@ -48,7 +49,7 @@ impl TaskCommandPort for MongoTaskCommand<'_> {
         Ok(())
     }
 }
-/// 先形成任务内存事实，再重验当前责任人权限并写回同一执行器。
+/// 同步已保存草稿版本与任务活动，再重验当前责任人权限并写回同一执行器。
 async fn execute(
     port: &dyn TaskCommandPort,
     object: FulfillmentTaskObject<'_>,
@@ -60,10 +61,11 @@ async fn execute(
         port.load_open(object.business_object_type(), object.business_object_id(), executor).await?;
     ensure_task_matches_frozen_identity(&task, &object)?;
     match kind {
-        CommandKind::Activity => task.record_activity(actor_id, erp_core::common::time::Instant::now())?,
-        CommandKind::Complete => {
-            task.complete_by_domain_command(actor_id, erp_core::common::time::Instant::now())?
+        CommandKind::Activity => {
+            task.record_activity(actor_id, Instant::now())?;
+            task.subject_version = object.subject_version();
         },
+        CommandKind::Complete => task.complete_by_domain_command(actor_id, Instant::now())?,
     }
     port.authorize(&task, actor_id, executor).await?;
     port.update(&mut task, executor).await?;
@@ -263,6 +265,49 @@ mod tests {
         assert_eq!(executor.marker, 79);
         (result, port.recorded.into_inner().unwrap())
     }
+    /// 连续保存草稿时同步任务关联版本，保留开放状态、当前责任人与任务身份。
+    #[tokio::test]
+    async fn saving_draft_keeps_open_task_aligned_with_document_version() {
+        let mut current = task();
+        let original_id = current.base.id.clone();
+        let original_owner = current.owner_user_id.clone();
+        let mut started_at = None;
+        for version in [2, 3] {
+            let mut executor = TestExecutor { marker: 79 };
+            let port = RecordingPort {
+                executor: (&mut executor as *mut TestExecutor) as usize,
+                task: current,
+                kind: CommandKind::Activity,
+                fail_at: None,
+                recorded: Mutex::default(),
+            };
+            let mut document = delivery();
+            document.base.version = version;
+            execute(
+                &port,
+                FulfillmentTaskObject::Delivery(&document),
+                "buyer-1",
+                CommandKind::Activity,
+                &mut executor,
+            )
+            .await
+            .unwrap();
+            let recorded = port.recorded.into_inner().unwrap();
+            assert_eq!(recorded.calls, ["load", "authorize", "update"]);
+            current = recorded.written.unwrap();
+            assert!(current.matches_subject_version(&version.to_string()));
+            assert_eq!(current.status, WorkItemStatus::Open);
+            assert_eq!(current.base.id, original_id);
+            assert_eq!(current.owner_user_id, original_owner);
+            assert!(current.completed_at.is_none());
+            assert!(current.completed_by.is_none());
+            if let Some(first) = started_at {
+                assert_eq!(current.started_at, Some(first));
+            }
+            started_at = current.started_at;
+        }
+    }
+
     /// 活动与完成均先形成原任务内存事实，再重验权限并写回同一执行器。
     #[tokio::test]
     async fn task_command_preserves_executor_and_original_mutate_authorize_write_order() {

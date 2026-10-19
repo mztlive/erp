@@ -73,8 +73,6 @@ export async function saveFulfillmentOperation(
                 `/admin/deliveries/${encodeURIComponent(input.operationId)}`,
                 {
                     version: input.expectedDocumentVersion,
-                    expected_source_version: input.expectedSourceVersion,
-                    idempotency_key: input.idempotencyKey,
                     tracking_entries: trackingEntriesToDto(
                         draft.trackingEntries,
                     ),
