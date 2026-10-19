@@ -3,7 +3,6 @@
 import { type ReactNode } from "react"
 import { CircleHelpIcon } from "lucide-react"
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
     DescriptionDetails,
@@ -28,6 +27,8 @@ import type { WorkspaceWorkItem } from "../types"
 import { isBlockedWorkItem } from "../lib/work-item"
 import { WorkspaceDocumentBadge } from "./workspace-document-badge"
 import { WorkspacePaneActions } from "./workspace-pane-actions"
+import { WorkspaceDescriptionText } from "./workspace-description-text"
+import { WorkspaceTaskInstructions } from "./workspace-task-instructions"
 
 const PRIORITY_LABEL: Record<number, string> = {
     1: "紧急",
@@ -70,7 +71,7 @@ function ContextFact({ label, value }: { label: string; value: string }) {
         <Item variant="muted" size="sm">
             <ItemContent>
                 <span className="text-xs text-muted-foreground">{label}</span>
-                <span className="text-pretty text-sm">{value}</span>
+                <WorkspaceDescriptionText text={value} />
             </ItemContent>
         </Item>
     )
@@ -121,7 +122,7 @@ export function WorkspaceTaskContextHelp({
             </PopoverTrigger>
             <PopoverContent
                 align="end"
-                className="w-80 sm:w-96"
+                className="max-h-[min(42rem,80dvh)] w-80 overflow-y-auto sm:w-96"
                 aria-label="任务责任与处理要求"
             >
                 <PopoverHeader className="gap-2">
@@ -134,18 +135,22 @@ export function WorkspaceTaskContextHelp({
                         </div>
                         <StatusBadge
                             label={
-                                blocked
-                                    ? "处理受阻"
-                                    : overdue
-                                      ? "已超期"
-                                      : "待处理"
+                                item.status !== "OPEN"
+                                    ? item.statusLabel
+                                    : blocked
+                                      ? "处理受阻"
+                                      : overdue
+                                        ? "已超期"
+                                        : "待处理"
                             }
                             tone={
-                                blocked
-                                    ? "warning"
-                                    : overdue
-                                      ? "destructive"
-                                      : "info"
+                                item.status !== "OPEN"
+                                    ? item.statusTone
+                                    : blocked
+                                      ? "warning"
+                                      : overdue
+                                        ? "destructive"
+                                        : "info"
                             }
                         />
                     </div>
@@ -159,15 +164,8 @@ export function WorkspaceTaskContextHelp({
 
                 <ItemGroup className="gap-2">
                     <ContextFact label="为什么到你" value={item.reasonLabel} />
-                    <ContextFact
-                        label="不处理的影响"
-                        value={item.impactSummary}
-                    />
-                    <ContextFact
-                        label="现在应做什么"
-                        value={item.nextActionHint}
-                    />
                 </ItemGroup>
+                <WorkspaceTaskInstructions item={item} />
 
                 <Separator />
 
@@ -194,23 +192,6 @@ export function WorkspaceTaskContextHelp({
                         </DescriptionDetails>
                     </DescriptionItem>
                 </DescriptionList>
-
-                {item.actionBlockers.length > 0 ? (
-                    <Alert variant="warning">
-                        <AlertTitle>当前处理受阻</AlertTitle>
-                        <AlertDescription>
-                            <ul className="flex list-disc flex-col gap-1 pl-4">
-                                {item.actionBlockers.map((blocker, index) => (
-                                    <li
-                                        key={`${blocker.action}:${blocker.code}:${index}`}
-                                    >
-                                        {blocker.message}
-                                    </li>
-                                ))}
-                            </ul>
-                        </AlertDescription>
-                    </Alert>
-                ) : null}
             </PopoverContent>
         </Popover>
     )

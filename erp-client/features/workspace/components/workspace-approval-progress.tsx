@@ -10,6 +10,7 @@ import {
 } from "@/features/approval-workflow/display"
 import type { ApprovalRuntimeInstance } from "@/features/approval-workflow/types"
 import { cn } from "@/lib/utils"
+import { WorkspaceDescriptionText } from "./workspace-description-text"
 
 /** 展示提交、当前办理与结果三个阶段，不把阶段位置当作审批节点完成比例。 */
 export function WorkspaceApprovalProgress({
@@ -210,8 +211,12 @@ export function WorkspaceApprovalProgress({
                 >
                     <AlertTitle>审批受阻</AlertTitle>
                     <AlertDescription>
-                        {instance.blockerMessage ??
-                            "当前审批无法继续，请按系统给出的恢复方式处理。"}
+                        <WorkspaceDescriptionText
+                            text={
+                                instance.blockerMessage ??
+                                "当前审批无法继续，请按系统给出的恢复方式处理。"
+                            }
+                        />
                     </AlertDescription>
                 </Alert>
             ) : null}
@@ -221,7 +226,10 @@ export function WorkspaceApprovalProgress({
                         最近驳回{rejectionBy ? ` · ${rejectionBy}` : ""}
                     </AlertTitle>
                     <AlertDescription>
-                        {instance.latestRejection}
+                        <WorkspaceDescriptionText
+                            text={instance.latestRejection}
+                            splitClauses={false}
+                        />
                     </AlertDescription>
                 </Alert>
             ) : null}

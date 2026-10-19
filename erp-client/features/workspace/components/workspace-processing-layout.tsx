@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceApprovalProgress } from "./workspace-approval-progress"
+import { WorkspaceTaskInstructions } from "./workspace-task-instructions"
 
 /** 所有审批、执行与只读跟踪入口共用完整办理页，动作仍由各业务模块提供。 */
 export function WorkspaceProcessingLayout({
@@ -107,24 +108,7 @@ export function WorkspaceProcessingLayout({
                         item.actionBlockers.length > 0) && (
                         <section className="space-y-4 border-t border-border/60 pt-5 text-sm leading-6">
                             <h3 className="font-medium">处理说明</h3>
-                            {item.nextActionHint && (
-                                <p className="text-muted-foreground">
-                                    {item.nextActionHint}
-                                </p>
-                            )}
-                            {item.impactSummary && (
-                                <p className="text-muted-foreground">
-                                    {item.impactSummary}
-                                </p>
-                            )}
-                            {item.actionBlockers.map((blocker) => (
-                                <p
-                                    key={`${blocker.action}:${blocker.code}`}
-                                    className="text-destructive"
-                                >
-                                    {blocker.message}
-                                </p>
-                            ))}
+                            <WorkspaceTaskInstructions item={item} />
                         </section>
                     )}
                 </>
