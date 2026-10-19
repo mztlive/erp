@@ -14,7 +14,7 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { DraftForm } from "../hooks/use-draft-form"
 import { requestAmountError, type DraftGroup } from "../lib/draft"
 import type { PaymentCandidate } from "../types"
-import { RequestDraftGroupHeader } from "./request-draft-group-header"
+import { RequestDraftOrderNumber } from "./request-draft-order-number"
 
 export function RequestDraftGroup({
     form,
@@ -23,7 +23,8 @@ export function RequestDraftGroup({
     candidates,
     editing,
     open,
-    onOpenChange,
+    onSplit,
+    issues,
 }: {
     form: DraftForm
     group: DraftGroup
@@ -31,40 +32,73 @@ export function RequestDraftGroup({
     candidates: PaymentCandidate[]
     editing: boolean
     open: boolean
-    onOpenChange: (open: boolean) => void
+    onSplit: (key: string) => void
+    issues: string[]
 }) {
     const rows = group.ids
         .map((id) => candidates.find((item) => item.payable_account_id === id)!)
         .filter(Boolean)
     const first = rows[0]
-    if (!first) return null
     const id = `ppr-group-${toAutomationIdSegment(group.key)}`
+    if (!first)
+        return (
+            <section
+                id={`${id}-panel`}
+                hidden={!open}
+                aria-labelledby={`${id}-title`}
+            >
+                <h3
+                    id={`${id}-title`}
+                    tabIndex={-1}
+                    className="font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                    申请 {index + 1} · 采购来源不可用
+                </h3>
+                <p className="mt-3 text-sm text-warning-soft-foreground">
+                    请返回上一步重新选择采购单。
+                </p>
+            </section>
+        )
     const fieldId = (suffix: string) =>
         index === 0 ? `ppr-create-${suffix}` : `${id}-${suffix}`
     return (
-        <Collapsible
-            open={open}
-            onOpenChange={onOpenChange}
-            className="overflow-hidden rounded-lg border"
-            aria-label={`申请 ${index + 1} ${first.supplier_name}`}
+        <section
+            id={`${id}-panel`}
+            hidden={!open}
+            aria-labelledby={`${id}-title`}
+            className="min-w-0"
         >
-            <RequestDraftGroupHeader
-                id={id}
-                form={form}
-                group={group}
-                index={index}
-                rows={rows}
-                open={open}
-            />
-            <CollapsibleContent
-                keepMounted
-                className="border-t data-[closed]:hidden"
-            >
-                <div className="divide-y px-4">
+            <header className="space-y-2 border-b pb-5">
+                <p className="text-xs text-muted-foreground">
+                    申请 {index + 1} · {rows.length} 张采购单
+                </p>
+                <h3
+                    id={`${id}-title`}
+                    tabIndex={-1}
+                    className="break-words text-lg font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                    {first.supplier_name}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                    付款主体：{first.our_company_name}
+                </p>
+            </header>
+            {issues.length > 0 && (
+                <div className="mt-4 rounded-md bg-warning-soft px-3 py-2 text-xs leading-relaxed text-warning-soft-foreground">
+                    <p className="font-medium">待补充</p>
+                    <ul className="mt-1 list-inside list-disc">
+                        {issues.map((message) => (
+                            <li key={message}>{message}</li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+            <div>
+                <div className="divide-y">
                     {rows.map((candidate) => (
                         <div
                             key={candidate.payable_account_id}
-                            className="grid gap-3 py-3 sm:grid-cols-[minmax(0,1fr)_12rem]"
+                            className="grid gap-4 py-5 sm:grid-cols-[minmax(0,1fr)_11rem]"
                         >
                             <div className="min-w-0">
                                 <p className="font-medium">
@@ -72,9 +106,9 @@ export function RequestDraftGroup({
                                         candidate.purchase_order_no}
                                 </p>
                                 {candidate.purchase_summary && (
-                                    <p className="num mt-1 break-all text-xs text-muted-foreground">
-                                        {candidate.purchase_order_no}
-                                    </p>
+                                    <RequestDraftOrderNumber
+                                        candidate={candidate}
+                                    />
                                 )}
                                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                                     <span>
@@ -96,6 +130,10 @@ export function RequestDraftGroup({
                                         <ChevronDownIcon className="size-3 group-data-[panel-open]:rotate-180" />
                                     </CollapsibleTrigger>
                                     <CollapsibleContent>
+                                        <p className="num mt-1 break-all text-xs text-muted-foreground">
+                                            采购单号：
+                                            {candidate.purchase_order_no}
+                                        </p>
                                         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                                             <span>
                                                 采购总额{" "}
@@ -145,6 +183,7 @@ export function RequestDraftGroup({
                                         onClick={() => {
                                             const current =
                                                 form.state.values.groups
+                                            const splitKey = `${group.key}:${candidate.payable_account_id}`
                                             form.setFieldValue("groups", [
                                                 ...current.map((item) =>
                                                     item.key === group.key
@@ -160,13 +199,14 @@ export function RequestDraftGroup({
                                                 ),
                                                 {
                                                     ...group,
-                                                    key: `${group.key}:${candidate.payable_account_id}`,
+                                                    key: splitKey,
                                                     ids: [
                                                         candidate.payable_account_id,
                                                     ],
                                                     files: [],
                                                 },
                                             ])
+                                            onSplit(splitKey)
                                         }}
                                     >
                                         <SplitIcon className="size-3" />
@@ -212,14 +252,14 @@ export function RequestDraftGroup({
                         </div>
                     ))}
                 </div>
-                <div className="space-y-3 border-t p-4">
-                    <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_19rem]">
+                <div className="space-y-5 border-t pt-5">
+                    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_13rem]">
                         <form.AppField name={`groups[${index}].account`}>
                             {(field) => (
                                 <field.SelectField
                                     id={fieldId("account")}
                                     label="收款账户"
-                                    className="gap-2 sm:grid sm:grid-cols-[6rem_minmax(0,1fr)] [&>[data-slot=field-error]]:col-span-2 sm:items-center"
+                                    className="min-w-0 gap-2"
                                     required
                                     options={first.bank_accounts.map(
                                         (account) => ({
@@ -236,7 +276,7 @@ export function RequestDraftGroup({
                                 <field.DateField
                                     id={fieldId("desired-payment-date")}
                                     label="希望付款日"
-                                    className="gap-2 sm:grid sm:grid-cols-[6rem_minmax(0,1fr)] [&>[data-slot=field-error]]:col-span-2 sm:items-center"
+                                    className="min-w-0 gap-2"
                                     required
                                 />
                             )}
@@ -254,9 +294,9 @@ export function RequestDraftGroup({
                                 label="申请说明"
                                 required
                                 placeholder="说明本组采购单的付款安排及依据"
-                                className="gap-2 sm:grid sm:grid-cols-[6rem_minmax(0,1fr)] [&>[data-slot=field-error]]:col-span-2 sm:items-start"
-                                textareaClassName="min-h-9"
-                                rows={1}
+                                className="gap-2"
+                                textareaClassName="min-h-20"
+                                rows={2}
                             />
                         )}
                     </form.AppField>
@@ -306,7 +346,7 @@ export function RequestDraftGroup({
                         )}
                     </form.Field>
                 </div>
-            </CollapsibleContent>
-        </Collapsible>
+            </div>
+        </section>
     )
 }

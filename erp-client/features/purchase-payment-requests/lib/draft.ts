@@ -236,3 +236,25 @@ export function draftSchema(candidates: PaymentCandidate[]) {
             }
         })
 }
+
+/** 填写进度与提交使用同一校验，避免金额超限或账户失效时误报已填完整。 */
+export function draftGroupIssues(
+    values: DraftValues,
+    candidates: PaymentCandidate[],
+): Map<string, string[]> {
+    const result = draftSchema(candidates).safeParse(values)
+    const issues = new Map<string, string[]>()
+    if (result.success) return issues
+    for (const [index, group] of values.groups.entries()) {
+        const messages = result.error.issues
+            .filter(
+                (issue) =>
+                    (issue.path[0] === "groups" && issue.path[1] === index) ||
+                    (issue.path[0] === "amounts" &&
+                        group.ids.includes(String(issue.path[1]))),
+            )
+            .map((issue) => issue.message)
+        if (messages.length) issues.set(group.key, [...new Set(messages)])
+    }
+    return issues
+}
