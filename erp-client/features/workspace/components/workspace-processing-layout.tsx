@@ -113,7 +113,7 @@ export function WorkspaceProcessingLayout({
                     )}
                 </>
             }
-            footer={
+            footerLeading={
                 <>
                     {actionable && item.workItemType !== "APPROVAL_INSTANCE" ? (
                         <label
@@ -136,14 +136,16 @@ export function WorkspaceProcessingLayout({
                                 : "当前任务资料"}
                         </span>
                     )}
-                    <Button
-                        id="workspace-processing-footer-back"
-                        variant="outline"
-                        onClick={onBack}
-                    >
-                        {backLabel}
-                    </Button>
                 </>
+            }
+            footer={
+                <Button
+                    id="workspace-processing-footer-back"
+                    variant="outline"
+                    onClick={onBack}
+                >
+                    {backLabel}
+                </Button>
             }
         >
             {children}

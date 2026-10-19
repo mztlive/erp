@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils"
 
 type WorkspaceTaskFooterHost = {
     element: HTMLElement | null
+    summaryElement?: HTMLElement | null
 }
 
 const WorkspaceTaskFooterHostContext =
@@ -22,6 +23,7 @@ const WorkspaceTaskFooterHostContext =
 type WorkspaceTaskPageLayout = {
     summary?: ReactNode
     aside: ReactNode
+    footerLeading?: ReactNode
     footer: ReactNode
 }
 const WorkspaceTaskPageContext = createContext<WorkspaceTaskPageLayout | null>(
@@ -97,9 +99,11 @@ export function WorkspaceTaskPane({
         [summaryHost, asideHost, bodyEndHost],
     )
     const [footerHost, setFooterHost] = useState<HTMLElement | null>(null)
+    const [footerSummaryHost, setFooterSummaryHost] =
+        useState<HTMLElement | null>(null)
     const hostValue = useMemo<WorkspaceTaskFooterHost>(
-        () => ({ element: footerHost }),
-        [footerHost],
+        () => ({ element: footerHost, summaryElement: footerSummaryHost }),
+        [footerHost, footerSummaryHost],
     )
 
     if (!layout)
@@ -232,12 +236,19 @@ export function WorkspaceTaskPane({
                             !layout && "justify-end empty:hidden",
                         )}
                     >
-                        {layout?.footer}
+                        {layout.footerLeading}
                         <div
-                            ref={setFooterHost}
-                            className="flex min-w-0 flex-wrap items-center justify-end gap-2 empty:hidden"
-                        >
-                            {footer}
+                            ref={setFooterSummaryHost}
+                            className="min-w-0 flex-[1_1_24rem] empty:hidden"
+                        ></div>
+                        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+                            {layout.footer}
+                            <div
+                                ref={setFooterHost}
+                                className="flex min-w-0 flex-wrap items-center justify-end gap-2 empty:hidden"
+                            >
+                                {footer}
+                            </div>
                         </div>
                     </footer>
                 </section>
@@ -253,14 +264,26 @@ export function WorkspaceTaskFooter({
     children,
     fallback,
     inline = false,
+    summary,
 }: {
     children: ReactNode
     fallback?: ReactNode
     inline?: boolean
+    summary?: ReactNode
 }) {
     const host = useContext(WorkspaceTaskFooterHostContext)
     if (!host || inline) return fallback ?? children
     if (!host.element) return null
+    if (summary) {
+        if (!host.summaryElement)
+            return createPortal(fallback ?? children, host.element)
+        return (
+            <>
+                {createPortal(summary, host.summaryElement)}
+                {createPortal(children, host.element)}
+            </>
+        )
+    }
     return createPortal(children, host.element)
 }
 
