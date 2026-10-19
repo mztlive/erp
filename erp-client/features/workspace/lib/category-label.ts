@@ -1,0 +1,11 @@
+import { TYPE_META } from "../api/work-item-meta"
+
+const CATEGORY_LABELS: Record<string, string> = {
+    PROCUREMENT_ORDER_CREATION: "供给分配",
+    PURCHASE_SOURCE_UPDATE: "销售变更影响",
+}
+
+/** 分类名称沿用任务元数据；未注册类型不直接显示内部枚举。 */
+export function workspaceCategoryLabel(type: string): string {
+    return CATEGORY_LABELS[type] ?? TYPE_META[type]?.label ?? "其他待办"
+}

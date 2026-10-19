@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { TYPE_META } from "../api/work-item-meta"
 import type { WorkspaceUrlState } from "../lib/url-state"
-import { workspaceCategoryLabel } from "./workspace-overview"
+import { workspaceCategoryLabel } from "../lib/category-label"
 
 /** 个人类型数量使用完整服务端统计，管理范围不复用个人数量。 */
 export function WorkspaceQueueTypeNav({

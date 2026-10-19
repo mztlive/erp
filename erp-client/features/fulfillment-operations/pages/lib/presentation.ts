@@ -30,7 +30,7 @@ export function responsibilityStatusLabel(
     return !canExecute
         ? "只能查看"
         : operation?.gate.state === "BLOCKED"
-          ? "业务条件未满足"
+          ? "处理受阻"
           : "当前岗位可处理"
 }
 

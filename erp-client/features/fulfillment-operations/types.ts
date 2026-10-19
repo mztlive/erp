@@ -207,7 +207,6 @@ export type FulfillmentDraft =
           /** 仅保留旧调用方的类型签名；生产流程不读取或提交。 */
           carrier?: string
           trackingNo?: string
-          shippedAt: string
           evidenceNote?: string
           lines: ShipDraftLine[]
       }
@@ -218,7 +217,6 @@ export type FulfillmentDraft =
           /** 仅保留旧调用方的类型签名；生产流程不读取或提交。 */
           carrier?: string
           trackingNo?: string
-          shippedAt: string
           evidenceNote?: string
           lines: DirectDraftLine[]
       }

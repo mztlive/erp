@@ -8,6 +8,15 @@ import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { InputGroup } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
+import {
+    Table,
+    TableHeader,
+    TableBody,
+    TableRow,
+    TableHead,
+    TableCell,
+    TableCaption,
+} from "@/components/ui/table"
 import { CARRIER_OPTIONS } from "@/lib/business-options"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
@@ -45,7 +54,7 @@ export function FulfillmentTrackingEntriesField({
     onChange,
     onPendingInputChange,
     disabled,
-    compact = false,
+    compact: _compact = false,
 }: {
     id: string
     salesOrderLineId: string
@@ -89,56 +98,81 @@ export function FulfillmentTrackingEntriesField({
     })
     return (
         <div className="space-y-3 border-t border-border pt-3">
-            {!compact ? (
-                <>
-                    <p className="text-sm font-medium">
-                        本明细物流号 · {packages.length} 个包裹
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                        同一明细可登记多个包裹。一个包裹包含多项明细时，请在对应明细下分别登记同一物流号。
-                    </p>
-                </>
-            ) : null}
-            {packages.length ? (
-                <ul className="space-y-2">
-                    {packages.map((entry) => (
-                        <li
-                            key={trackingEntryKey(entry)}
-                            className="flex items-center justify-between gap-2 rounded-md bg-muted/40 px-3 py-2 text-sm"
-                        >
-                            <div className="min-w-0">
-                                <span className="num break-all">
-                                    {entry.trackingNo}
-                                </span>
-                                <span className="ml-2 text-xs text-muted-foreground">
-                                    {entry.carrier || "承运方未填写"}
-                                </span>
-                            </div>
-                            <Button
-                                id={`${id}-remove-${toAutomationIdSegment(trackingEntryKey(entry))}`}
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                disabled={disabled}
-                                onClick={() =>
-                                    onChange(
-                                        entries.filter(
-                                            (item) =>
-                                                trackingEntryKey(item) !==
-                                                trackingEntryKey(entry),
-                                        ),
-                                    )
-                                }
-                            >
-                                移除
-                            </Button>
-                        </li>
-                    ))}
-                </ul>
-            ) : !compact ? (
-                <p className="text-xs text-muted-foreground">
-                    请添加本明细的物流号。
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <Label htmlFor={`${id}-tracking-no`}>
+                    物流公司与快递单号
+                    <RequiredMark />
+                </Label>
+                <p className="num text-xs text-muted-foreground">
+                    {packages.length} 个包裹
                 </p>
+            </div>
+            {packages.length ? (
+                <div className="overflow-hidden rounded-lg border border-grid">
+                    <Table className="w-full table-fixed text-left text-sm">
+                        <TableCaption className="sr-only">
+                            本商品已登记的物流包裹
+                        </TableCaption>
+                        <TableHeader className="bg-muted/30 text-xs text-muted-foreground">
+                            <TableRow>
+                                <TableHead
+                                    scope="col"
+                                    className="w-28 px-3 py-2 font-medium sm:w-40"
+                                >
+                                    物流公司
+                                </TableHead>
+                                <TableHead
+                                    scope="col"
+                                    className="px-3 py-2 font-medium"
+                                >
+                                    快递单号
+                                </TableHead>
+                                <TableHead
+                                    scope="col"
+                                    className="w-20 px-3 py-2 text-right font-medium"
+                                >
+                                    操作
+                                </TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody className="divide-y divide-border">
+                            {packages.map((entry) => (
+                                <TableRow key={trackingEntryKey(entry)}>
+                                    <TableCell className="break-words whitespace-normal px-3 py-1.5 text-muted-foreground">
+                                        {entry.carrier || "未填写"}
+                                    </TableCell>
+                                    <TableCell className="num break-all whitespace-normal px-3 py-1.5">
+                                        {entry.trackingNo}
+                                    </TableCell>
+                                    <TableCell className="px-2 py-1 text-right">
+                                        <Button
+                                            id={`${id}-remove-${toAutomationIdSegment(trackingEntryKey(entry))}`}
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            disabled={disabled}
+                                            onClick={() =>
+                                                onChange(
+                                                    entries.filter(
+                                                        (item) =>
+                                                            trackingEntryKey(
+                                                                item,
+                                                            ) !==
+                                                            trackingEntryKey(
+                                                                entry,
+                                                            ),
+                                                    ),
+                                                )
+                                            }
+                                        >
+                                            移除
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
             ) : null}
             <form
                 id={`${id}-form`}
@@ -149,13 +183,9 @@ export function FulfillmentTrackingEntriesField({
                     void form.handleSubmit()
                 }}
             >
-                <Label htmlFor={`${id}-tracking-no`}>
-                    物流信息
-                    <RequiredMark />
-                </Label>
-                <div className="flex items-start gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
                     <InputGroup
-                        className="h-auto flex-1 items-stretch"
+                        className="h-auto w-full min-w-0 flex-1 flex-col items-stretch sm:flex-row sm:items-stretch"
                         aria-label="物流公司与快递单号"
                         data-disabled={disabled || undefined}
                     >
@@ -170,7 +200,7 @@ export function FulfillmentTrackingEntriesField({
                                     allowClear
                                     hideLabel
                                     inInputGroup
-                                    className="w-40 shrink-0 border-r border-border sm:w-48"
+                                    className="w-full shrink-0 border-b border-border sm:w-48 sm:border-b-0 sm:border-r"
                                     placeholder="选择物流公司"
                                 />
                             )}
@@ -217,8 +247,8 @@ export function FulfillmentTrackingEntriesField({
                             id={`${id}-add`}
                             label="添加物流号"
                             aria-label="添加物流号"
-                            variant="default"
-                            className="shrink-0"
+                            variant="outline"
+                            className="w-full shrink-0 sm:w-auto"
                             disabled={disabled}
                         >
                             <PlusIcon data-icon="inline-start" />
@@ -227,15 +257,12 @@ export function FulfillmentTrackingEntriesField({
                     </form.AppForm>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                    按 Enter 或点击“添加”；Shift+Enter
-                    换行，也可一次粘贴多个单号。
+                    按 Enter 或点击“添加”；可一次粘贴多个单号。
                 </p>
             </form>
-            {compact ? (
-                <p className="text-xs text-muted-foreground">
-                    同一商品可添加多个物流号；同一包裹包含多项商品时，请在对应商品下分别登记。
-                </p>
-            ) : null}
+            <p className="text-xs leading-5 text-muted-foreground">
+                同一商品可添加多个物流号；同一包裹包含多项商品时，请在对应商品下分别登记。
+            </p>
         </div>
     )
 }

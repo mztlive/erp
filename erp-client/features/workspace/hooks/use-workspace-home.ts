@@ -108,23 +108,6 @@ export function useWorkspaceHome() {
         setSearchDraft("")
     }, [replaceUrl, urlState.view])
 
-    const openQueue = React.useCallback(
-        (workItemType?: string, due?: "today" | "overdue") => {
-            const next: WorkspaceUrlState = {
-                view: "inbox",
-                sort: "priority_due",
-                queue: true,
-                workItemType,
-                due,
-            }
-            router.push(`${pathname}${buildWorkspaceSearchParams(next)}`, {
-                scroll: false,
-            })
-            setSearchDraft("")
-        },
-        [pathname, router],
-    )
-
     const onPageChange = React.useCallback(
         (page: number) => {
             replaceUrl({ ...urlState, page, currentWorkItemId: undefined })
@@ -291,7 +274,6 @@ export function useWorkspaceHome() {
         selected,
         onMetricClick,
         clearFilters,
-        openQueue,
         onPageChange,
         onSelectTask,
         selectNextAfter,

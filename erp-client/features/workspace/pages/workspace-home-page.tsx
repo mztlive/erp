@@ -13,10 +13,7 @@ import {
     WorkspaceQueueScopeNav,
     WorkspaceQueueToolbar,
 } from "../components/workspace-filter-bar"
-import {
-    WorkspaceOverview,
-    workspaceCategoryLabel,
-} from "../components/workspace-overview"
+import { workspaceCategoryLabel } from "../lib/category-label"
 import { WorkspaceHomeSkeleton } from "../components/workspace-home-skeleton"
 import { WorkspaceTaskDetail } from "../components/workspace-task-detail"
 import { WorkspaceProcessingLayout } from "../components/workspace-processing-layout"
@@ -31,7 +28,7 @@ export function WorkspaceHomePage() {
     return <WorkspaceHomeView home={useWorkspaceHome()} />
 }
 
-/** 总览、队列与办理页互斥挂载；详情不会自动选中队列第一条。 */
+/** 队列与办理页互斥挂载；详情不会自动选中队列第一条。 */
 export function WorkspaceHomeView({
     home,
 }: {
@@ -56,7 +53,6 @@ export function WorkspaceHomeView({
         onQueueFiltersChange,
         onSortChange,
         applySearch,
-        openQueue,
         onPageChange,
         clearSearch,
         refresh,
@@ -66,13 +62,6 @@ export function WorkspaceHomeView({
         detailQuery,
     } = home
     const isDetail = Boolean(urlState.currentWorkItemId)
-    const fromOverview =
-        urlState.view === "inbox" &&
-        !urlState.queue &&
-        !hasActiveFilter &&
-        urlState.sort === "priority_due" &&
-        (urlState.page ?? 1) === 1
-    const overview = fromOverview && !isDetail
     if (accountProfileQuery.isError || (dashboardQuery.isError && !view))
         return (
             <PageScaffold>
@@ -86,8 +75,7 @@ export function WorkspaceHomeView({
                 />
             </PageScaffold>
         )
-    if (!view)
-        return <WorkspaceHomeSkeleton overview={overview} detail={isDetail} />
+    if (!view) return <WorkspaceHomeSkeleton detail={isDetail} />
     if (view.access !== "allowed")
         return (
             <PageScaffold>
@@ -103,11 +91,7 @@ export function WorkspaceHomeView({
             </PageScaffold>
         )
     const started = urlState.view === "started"
-    const backLabel = fromOverview
-        ? "返回总览"
-        : started
-          ? "返回审批队列"
-          : "返回任务队列"
+    const backLabel = started ? "返回审批队列" : "返回任务队列"
     const index = view.items.findIndex(
         (item) => item.workItemId === selected?.workItemId,
     )
@@ -226,21 +210,15 @@ export function WorkspaceHomeView({
             {announcement}
             <PageHeader
                 title={
-                    overview
-                        ? "我的工作台"
-                        : started
-                          ? "我发起的审批"
-                          : urlState.workItemType
-                            ? workspaceCategoryLabel(urlState.workItemType)
-                            : filterSummaryFor(activeMetric)
+                    started
+                        ? "我发起的审批"
+                        : urlState.workItemType
+                          ? workspaceCategoryLabel(urlState.workItemType)
+                          : filterSummaryFor(activeMetric)
                 }
                 actions={
                     <div className="flex flex-wrap items-center gap-3">
                         <DataFreshness
-                            label={overview ? "更新于" : undefined}
-                            showStatus={
-                                !overview || freshness.state !== "fresh"
-                            }
                             updatedAt={freshness.updatedAtLabel}
                             dateTime={freshness.dateTime}
                             state={freshness.state}
@@ -259,156 +237,139 @@ export function WorkspaceHomeView({
                     </div>
                 }
             />
-            {overview ? (
-                <WorkspaceOverview
-                    view={view}
-                    onOpenQueue={openQueue}
-                    onOpenManaged={() => onMetricClick("managed")}
-                    onSelect={onSelectTask}
+            <div className="flex flex-wrap items-center gap-4">
+                <WorkspaceQueueScopeNav
+                    metrics={view.metrics}
+                    activeMetric={activeMetric}
+                    onMetricClick={onMetricClick}
                 />
-            ) : (
-                <>
-                    <div className="flex flex-wrap items-center gap-4">
-                        <WorkspaceQueueScopeNav
-                            metrics={view.metrics}
-                            activeMetric={activeMetric}
-                            onMetricClick={onMetricClick}
-                        />
-                    </div>
-                    <section
-                        aria-label="队列查询条件"
-                        className="space-y-3 rounded-xl border border-border/60 bg-muted/15 p-4"
-                    >
-                        <WorkspaceQueueToolbar
-                            urlState={urlState}
-                            searchDraft={searchDraft}
-                            onSearchDraftChange={setSearchDraft}
-                            onSortChange={onSortChange}
-                            onSearch={applySearch}
-                            onClearSearch={clearSearch}
-                            showSort={!started}
-                            loading={refreshing}
-                            resultCount={view.total}
-                            resultNoun={started ? "条审批" : "条待办"}
-                            filters={
-                                !started ? (
-                                    <WorkspaceQueueFilters
-                                        state={urlState}
-                                        onChange={onQueueFiltersChange}
-                                    />
-                                ) : undefined
-                            }
-                        />
-                        {!started && (
-                            <WorkspaceQueueTypeNav
+            </div>
+            <section
+                aria-label="队列查询条件"
+                className="space-y-3 rounded-xl border border-border/60 bg-muted/15 p-4"
+            >
+                <WorkspaceQueueToolbar
+                    urlState={urlState}
+                    searchDraft={searchDraft}
+                    onSearchDraftChange={setSearchDraft}
+                    onSortChange={onSortChange}
+                    onSearch={applySearch}
+                    onClearSearch={clearSearch}
+                    showSort={!started}
+                    loading={refreshing}
+                    resultCount={view.total}
+                    resultNoun={started ? "条审批" : "条待办"}
+                    filters={
+                        !started ? (
+                            <WorkspaceQueueFilters
                                 state={urlState}
-                                counts={view.workItemTypeCounts}
-                                total={
-                                    view.metrics.find(
-                                        (metric) => metric.key === "inbox",
-                                    )?.count
-                                }
-                                onChange={(workItemType) =>
-                                    onQueueFiltersChange({ workItemType })
-                                }
+                                onChange={onQueueFiltersChange}
                             />
-                        )}
-                        {hasActiveFilter && (
-                            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                                <span>{filterText || "已限定任务分类"}</span>
+                        ) : undefined
+                    }
+                />
+                {!started && (
+                    <WorkspaceQueueTypeNav
+                        state={urlState}
+                        counts={view.workItemTypeCounts}
+                        total={
+                            view.metrics.find(
+                                (metric) => metric.key === "inbox",
+                            )?.count
+                        }
+                        onChange={(workItemType) =>
+                            onQueueFiltersChange({ workItemType })
+                        }
+                    />
+                )}
+                {hasActiveFilter && (
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                        <span>{filterText || "已限定任务分类"}</span>
+                        <Button
+                            id="workspace-queue-reset-filters"
+                            variant="ghost"
+                            size="xs"
+                            onClick={clearFilters}
+                        >
+                            清除筛选
+                        </Button>
+                    </div>
+                )}
+            </section>
+            {dashboardQuery.isError && (
+                <BusinessFailureState
+                    error={dashboardQuery.error}
+                    title="工作台更新失败"
+                    description="当前显示上次加载的结果，请刷新后重试。"
+                />
+            )}
+            <section
+                data-slot="workspace-queue"
+                aria-label="任务队列"
+                className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/60 bg-card"
+            >
+                {view.items.length ? (
+                    <WorkspaceTaskList
+                        items={view.items}
+                        onSelect={onSelectTask}
+                        tracking={started}
+                        workItemType={urlState.workItemType}
+                        scrollKey={buildWorkspaceSearchParams(urlState)}
+                    />
+                ) : (
+                    <BusinessEmptyState
+                        kind="no-tasks"
+                        title={
+                            hasActiveFilter
+                                ? "没有符合条件的事项"
+                                : "当前没有待处理事项"
+                        }
+                        description={
+                            hasActiveFilter
+                                ? "可调整条件或清除筛选。"
+                                : "新事项到达后会显示在这里。"
+                        }
+                    />
+                )}
+                <footer className="flex shrink-0 items-center justify-between gap-3 border-t px-5 py-3 text-xs text-muted-foreground">
+                    <span>
+                        共 {view.total} {started ? "条审批" : "条待办"}
+                    </span>
+                    {!started &&
+                        (view.total > 50 || (urlState.page ?? 1) > 1) && (
+                            <div className="flex items-center gap-2">
                                 <Button
-                                    id="workspace-queue-reset-filters"
-                                    variant="ghost"
+                                    id="workspace-queue-page-previous"
                                     size="xs"
-                                    onClick={clearFilters}
+                                    variant="ghost"
+                                    disabled={
+                                        (urlState.page ?? 1) <= 1 || refreshing
+                                    }
+                                    onClick={() =>
+                                        onPageChange((urlState.page ?? 1) - 1)
+                                    }
                                 >
-                                    清除筛选
+                                    上一页
+                                </Button>
+                                <span>第 {urlState.page ?? 1} 页</span>
+                                <Button
+                                    id="workspace-queue-page-next"
+                                    size="xs"
+                                    variant="ghost"
+                                    disabled={
+                                        (urlState.page ?? 1) * 50 >=
+                                            view.total || refreshing
+                                    }
+                                    onClick={() =>
+                                        onPageChange((urlState.page ?? 1) + 1)
+                                    }
+                                >
+                                    下一页
                                 </Button>
                             </div>
                         )}
-                    </section>
-                    {dashboardQuery.isError && (
-                        <BusinessFailureState
-                            error={dashboardQuery.error}
-                            title="工作台更新失败"
-                            description="当前显示上次加载的结果，请刷新后重试。"
-                        />
-                    )}
-                    <section
-                        data-slot="workspace-queue"
-                        aria-label="任务队列"
-                        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/60 bg-card"
-                    >
-                        {view.items.length ? (
-                            <WorkspaceTaskList
-                                items={view.items}
-                                onSelect={onSelectTask}
-                                tracking={started}
-                                workItemType={urlState.workItemType}
-                                scrollKey={buildWorkspaceSearchParams(urlState)}
-                            />
-                        ) : (
-                            <BusinessEmptyState
-                                kind="no-tasks"
-                                title={
-                                    hasActiveFilter
-                                        ? "没有符合条件的事项"
-                                        : "当前没有待处理事项"
-                                }
-                                description={
-                                    hasActiveFilter
-                                        ? "可调整条件或清除筛选。"
-                                        : "新事项到达后会显示在这里。"
-                                }
-                            />
-                        )}
-                        <footer className="flex shrink-0 items-center justify-between gap-3 border-t px-5 py-3 text-xs text-muted-foreground">
-                            <span>
-                                共 {view.total} {started ? "条审批" : "条待办"}
-                            </span>
-                            {!started &&
-                                (view.total > 50 ||
-                                    (urlState.page ?? 1) > 1) && (
-                                    <div className="flex items-center gap-2">
-                                        <Button
-                                            id="workspace-queue-page-previous"
-                                            size="xs"
-                                            variant="ghost"
-                                            disabled={
-                                                (urlState.page ?? 1) <= 1 ||
-                                                refreshing
-                                            }
-                                            onClick={() =>
-                                                onPageChange(
-                                                    (urlState.page ?? 1) - 1,
-                                                )
-                                            }
-                                        >
-                                            上一页
-                                        </Button>
-                                        <span>第 {urlState.page ?? 1} 页</span>
-                                        <Button
-                                            id="workspace-queue-page-next"
-                                            size="xs"
-                                            variant="ghost"
-                                            disabled={
-                                                (urlState.page ?? 1) * 50 >=
-                                                    view.total || refreshing
-                                            }
-                                            onClick={() =>
-                                                onPageChange(
-                                                    (urlState.page ?? 1) + 1,
-                                                )
-                                            }
-                                        >
-                                            下一页
-                                        </Button>
-                                    </div>
-                                )}
-                        </footer>
-                    </section>
-                </>
-            )}
+                </footer>
+            </section>
         </PageScaffold>
     )
 }

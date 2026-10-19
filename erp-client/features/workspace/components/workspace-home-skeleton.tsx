@@ -4,10 +4,8 @@ import { PageScaffold } from "@/components/business"
 import { Skeleton } from "@/components/ui/skeleton"
 
 export function WorkspaceHomeSkeleton({
-    overview = true,
     detail = false,
 }: {
-    overview?: boolean
     detail?: boolean
 }) {
     return (
@@ -25,18 +23,6 @@ export function WorkspaceHomeSkeleton({
                         <Skeleton className="hidden xl:block" />
                     </div>
                     <Skeleton className="h-14 w-full" />
-                </div>
-            ) : overview ? (
-                <div className="space-y-7 pt-8">
-                    <Skeleton className="h-12 w-72 max-w-full" />
-                    <Skeleton className="h-10 w-96 max-w-full" />
-                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                        <Skeleton className="h-48 w-full" />
-                        <Skeleton className="h-48 w-full" />
-                        <Skeleton className="h-48 w-full" />
-                    </div>
-                    <Skeleton className="h-7 w-28" />
-                    <Skeleton className="h-60 w-full" />
                 </div>
             ) : (
                 <div className="flex min-h-0 flex-1 overflow-hidden border border-border">

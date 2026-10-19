@@ -144,6 +144,7 @@ type ValidationIssue = {
 type ValidationSummaryProps = {
     issues: readonly ValidationIssue[]
     title?: string
+    compact?: boolean
     onLocate?: (issue: ValidationIssue) => void
     className?: string
     id?: string
@@ -164,6 +165,7 @@ function locateValidationIssue(issue: ValidationIssue) {
 function ValidationSummary({
     issues,
     title,
+    compact = false,
     onLocate,
     className,
     id,
@@ -177,12 +179,20 @@ function ValidationSummary({
             id={baseId}
             data-slot="validation-summary"
             variant="warning"
-            className={className}
+            className={cn(compact && "rounded-lg px-3 py-2", className)}
         >
             <TriangleAlertIcon aria-hidden="true" />
-            <AlertTitle>{title ?? `发现 ${issues.length} 项待处理`}</AlertTitle>
+            <AlertTitle className={compact ? "sr-only" : undefined}>
+                {title ?? `发现 ${issues.length} 项待处理`}
+            </AlertTitle>
             <AlertDescription>
-                <ol className="flex list-decimal flex-col gap-1 pl-5">
+                <ol
+                    className={
+                        compact
+                            ? "flex list-none flex-wrap gap-x-4 gap-y-1"
+                            : "flex list-decimal flex-col gap-1 pl-5"
+                    }
+                >
                     {issues.map((issue) => (
                         <li key={issue.id}>
                             <Button
@@ -195,7 +205,10 @@ function ValidationSummary({
                                 variant="link"
                                 size="xs"
                                 aria-controls={issue.targetId}
-                                className="h-auto justify-start p-0 text-left whitespace-normal"
+                                className={cn(
+                                    "h-auto justify-start p-0 text-left whitespace-normal",
+                                    compact && "text-xs",
+                                )}
                                 onClick={() => {
                                     if (onLocate) {
                                         onLocate(issue)

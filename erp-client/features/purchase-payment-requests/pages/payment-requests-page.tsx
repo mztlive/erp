@@ -21,7 +21,10 @@ import { Button } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { getErrorMessage } from "@/lib/api"
 import { hasPermission } from "@/lib/permissions"
-import { paymentRequestKeys } from "../hooks/queries"
+import {
+    paymentRequestKeys,
+    usePaymentCandidatePageQuery,
+} from "../hooks/queries"
 import { useRequestList } from "../hooks/use-request-list"
 import { emptyRequestFilters } from "../lib/list-query"
 import { RequestListFilters } from "../components/request-list-filters"
@@ -48,15 +51,21 @@ export function PaymentRequestsPage({
         string[]
     >([])
     const [preview, setPreview] = useState<PaymentRequest | null>(null)
+    const canReadCandidates = hasPermission(
+        profile.data?.permissions,
+        "purchase_payment_request:create",
+    )
     const canCreate =
-        hasPermission(
-            profile.data?.permissions,
-            "purchase_payment_request:create",
-        ) &&
+        canReadCandidates &&
         hasPermission(
             profile.data?.permissions,
             "purchase_payment_request:submit",
         )
+    // 标签显示全部可申请采购单数量，不受当前视图、筛选或分页影响。
+    const candidateCountQuery = usePaymentCandidatePageQuery(
+        { page: 1, page_size: 1 },
+        canReadCandidates,
+    )
     const rows = query.data?.items ?? []
     const views = (
         <ListWorkspaceViews
@@ -70,6 +79,12 @@ export function PaymentRequestsPage({
             ).map(([value, label]) => ({
                 id: `purchase-payment-requests-view-${value}`,
                 label,
+                count:
+                    value === "available" &&
+                    canReadCandidates &&
+                    candidateCountQuery.isSuccess
+                        ? candidateCountQuery.data.total
+                        : undefined,
                 active: view === value,
                 onClick: () => {
                     list.update({
@@ -133,10 +148,7 @@ export function PaymentRequestsPage({
             {view === "available" ? (
                 <PaymentCandidatesList
                     views={views}
-                    canRead={hasPermission(
-                        profile.data?.permissions,
-                        "purchase_payment_request:create",
-                    )}
+                    canRead={canReadCandidates}
                     canCreate={canCreate}
                     onApply={(ids) => {
                         setInitialPayableAccountIds(ids)

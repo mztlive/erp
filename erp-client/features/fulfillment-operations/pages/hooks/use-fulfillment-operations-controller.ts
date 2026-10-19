@@ -267,6 +267,14 @@ export function useFulfillmentOperationsController({
             return
         }
         if (!operation) return
+        // 付款受阻时先读顶部条件，避免自动滚到物流录入区而错过阻塞提示。
+        if (
+            operation.gate.state === "BLOCKED" &&
+            operation.operationType !== "WAREHOUSE_SHIP"
+        ) {
+            headingRef.current?.focus({ preventScroll: true })
+            return
+        }
         // 可执行角色直接落到第一个要填的框并全选，省一次鼠标；
         // 标题挂了 aria-live，换条时仍会播报，不靠抢焦点来通知。
         if (canExecute) {
@@ -275,7 +283,7 @@ export function useFulfillmentOperationsController({
                 | HTMLTextAreaElement
                 | null
             if (el) {
-                el.focus()
+                el.focus({ preventScroll: true })
                 el.select?.()
                 return
             }

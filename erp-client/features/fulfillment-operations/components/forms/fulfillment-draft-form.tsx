@@ -15,8 +15,8 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
  */
 export const FIRST_INPUT_ID: Record<FulfillmentOperationType, string> = {
     RECEIPT: "fulfillment-operations-receipt-form-received-quantity-0",
-    WAREHOUSE_SHIP: "fulfillment-operations-ship-form-shipped-at",
-    SUPPLIER_DIRECT: "fulfillment-operations-direct-form-shipped-at",
+    WAREHOUSE_SHIP: "",
+    SUPPLIER_DIRECT: "",
     ELECTRONIC: "fulfillment-operations-electronic-form-quantity-0",
     SERVICE: "fulfillment-operations-service-form-result",
 }
@@ -39,7 +39,7 @@ export function getFirstInputId(operation: FulfillmentOperation): string {
             const line = operation.lines[0]
             return line
                 ? `fulfillment-operations-${kind}-form-line-${toAutomationIdSegment(line.salesOrderLineId)}-tracking-no`
-                : `fulfillment-operations-${kind}-form-shipped-at`
+                : ""
         }
         case "ELECTRONIC": {
             const first = operation.lines[0] as

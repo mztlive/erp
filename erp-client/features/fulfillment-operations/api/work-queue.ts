@@ -203,7 +203,6 @@ export function fulfillmentQueueItemToOperation(
                     trackingEntries: trackingEntriesFromDto(
                         row.tracking_entries,
                     ),
-                    shippedAt: dueAt.slice(0, 16),
                     lines: [],
                 },
             })
@@ -216,7 +215,6 @@ export function fulfillmentQueueItemToOperation(
                     trackingEntries: trackingEntriesFromDto(
                         row.tracking_entries,
                     ),
-                    shippedAt: dueAt.slice(0, 16),
                     lines: [],
                 },
             })

@@ -17,6 +17,7 @@ import {
     SequentialProcessBar,
     ValidationSummary,
     WorkspaceTaskFooter,
+    WorkspaceTaskPageSlot,
     surfacePanelClassName,
     type ValidationIssue,
 } from "@/components/business"
@@ -28,6 +29,8 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { FulfillmentDraftForm } from "@/features/fulfillment-operations/components/forms/fulfillment-draft-form"
 import {
@@ -41,7 +44,8 @@ import { displayText } from "@/features/fulfillment-operations/lib/readable-labe
 import { displayName } from "@/lib/display-name"
 import { sourceContextFields } from "@/features/fulfillment-operations/pages/lib/presentation"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { cn } from "@/lib/utils"
+import { gateBlockedMessage } from "../../lib/validation"
+import { FulfillmentPaymentNotice } from "./fulfillment-payment-notice"
 import { FulfillmentGateStatus } from "./fulfillment-gate-status"
 import { FulfillmentDeliveryDialogSurface } from "./fulfillment-delivery-dialog-surface"
 
@@ -119,6 +123,9 @@ export function FulfillmentWorkSurface({
     onBack,
     onToggleShortcuts,
 }: FulfillmentWorkSurfaceProps) {
+    const paymentBlocked =
+        operation.gate.state === "BLOCKED" && draft.type !== "WAREHOUSE_SHIP"
+    const fieldIssues = validationIssues.filter((issue) => issue.id !== "gate")
     const purchaseNo = displayText(
         operation.source.purchaseNo,
         operation.source.purchaseOrderId,
@@ -189,31 +196,38 @@ export function FulfillmentWorkSurface({
 
     return (
         <div className={singleOperation ? "min-w-0" : "min-w-0 space-y-3"}>
-            <SequentialProcessBar
-                id="fulfillment-operations-work-surface-process-bar"
-                current={position}
-                total={total}
-                responsibilityStatus={responsibilityStatus}
-                responsibilityStatusLabel={responsibilityStatusLabel}
-                showProcess={false}
-                processLabel={OPERATION_ACTION_LABEL[operation.operationType]}
-                // 正式确认只留卡片底栏一颗主按钮，避免与连续处理条文案打架
-                showProcessNext={false}
-                processDisabled={formalPending || !canPost}
-                statusExtras={
-                    <FulfillmentGateStatus
-                        operation={operation}
-                        currentUrl={currentUrl}
-                        snapshotUpdatedAt={snapshotUpdatedAt}
-                        showPaymentAction={showSalesOrderLinks}
-                    />
-                }
-                onBack={onBack}
-                backLabel="返回"
-                showBack={showBack}
-                onProcess={onConfirm}
-                onProcessNext={onConfirm}
-            />
+            {!singleOperation ? (
+                <SequentialProcessBar
+                    id="fulfillment-operations-work-surface-process-bar"
+                    current={position}
+                    total={total}
+                    showPosition={!singleOperation}
+                    responsibilityStatus={responsibilityStatus}
+                    responsibilityStatusLabel={responsibilityStatusLabel}
+                    showProcess={false}
+                    processLabel={
+                        OPERATION_ACTION_LABEL[operation.operationType]
+                    }
+                    // 正式确认只留卡片底栏一颗主按钮，避免与连续处理条文案打架
+                    showProcessNext={false}
+                    processDisabled={formalPending || !canPost}
+                    statusExtras={
+                        !paymentBlocked ? (
+                            <FulfillmentGateStatus
+                                operation={operation}
+                                currentUrl={currentUrl}
+                                snapshotUpdatedAt={snapshotUpdatedAt}
+                                showPaymentAction={showSalesOrderLinks}
+                            />
+                        ) : undefined
+                    }
+                    onBack={onBack}
+                    backLabel="返回"
+                    showBack={showBack}
+                    onProcess={onConfirm}
+                    onProcessNext={onConfirm}
+                />
+            ) : null}
 
             {!singleOperation ? (
                 <button
@@ -270,14 +284,39 @@ export function FulfillmentWorkSurface({
                 )}
                 <CardContent className="space-y-5">
                     {singleOperation ? (
-                        <h3 ref={headingRef} tabIndex={-1} className="sr-only">
-                            {OPERATION_TYPE_LABEL[operation.operationType]}
-                        </h3>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <h3
+                                ref={headingRef}
+                                tabIndex={-1}
+                                className="text-base font-semibold outline-none"
+                            >
+                                {operation.operationType === "SUPPLIER_DIRECT"
+                                    ? "确认供应商直发"
+                                    : OPERATION_ACTION_LABEL[
+                                          operation.operationType
+                                      ]}
+                            </h3>
+                            {!paymentBlocked ? (
+                                <FulfillmentGateStatus
+                                    operation={operation}
+                                    currentUrl={currentUrl}
+                                    snapshotUpdatedAt={snapshotUpdatedAt}
+                                    showPaymentAction={false}
+                                />
+                            ) : null}
+                        </div>
+                    ) : null}
+                    {paymentBlocked ? (
+                        <WorkspaceTaskPageSlot slot="aside">
+                            <FulfillmentPaymentNotice
+                                operation={operation}
+                                canSaveDraft={canExecute && supportsSave}
+                            />
+                        </WorkspaceTaskPageSlot>
                     ) : null}
                     <FulfillmentSourceContext
                         operation={operation}
                         currentUrl={currentUrl}
-                        showSalesOrderLinks={showSalesOrderLinks}
                     />
 
                     <FulfillmentDraftForm
@@ -287,15 +326,20 @@ export function FulfillmentWorkSurface({
                         disabled={formalPending || !canExecute || resultUnknown}
                     />
 
-                    {validationIssues.length > 0 ? (
+                    {fieldIssues.length > 0 ? (
                         <ValidationSummary
-                            title="还差这些没填好"
-                            issues={validationIssues}
+                            id="fulfillment-operations-field-validation"
+                            compact
+                            title="请补充或检查履约信息"
+                            issues={fieldIssues}
                         />
                     ) : null}
 
                     {saveMessage ? (
-                        <p className="text-xs text-muted-foreground">
+                        <p
+                            role="status"
+                            className="text-xs text-muted-foreground"
+                        >
                             {saveMessage}
                         </p>
                     ) : null}
@@ -396,8 +440,23 @@ function FulfillmentExecuteActions({
     onSave: () => void
     onConfirm: () => void
 }) {
+    const paymentBlocked =
+        operation.gate.state === "BLOCKED" &&
+        operation.operationType !== "WAREHOUSE_SHIP"
+    const blockedMessage = paymentBlocked
+        ? gateBlockedMessage(operation)
+        : operation.actionBlockers.find((item) => item.action === "POST")
+              ?.message || "请先处理页面中的提示后再确认"
     return (
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+            {!canPost && blockedMessage ? (
+                <p
+                    id="fulfillment-operations-confirm-blocker"
+                    className="max-w-md text-xs text-muted-foreground"
+                >
+                    {blockedMessage}
+                </p>
+            ) : null}
             {!singleOperation ? (
                 <Button
                     id="fulfillment-operations-work-surface-skip"
@@ -426,7 +485,7 @@ function FulfillmentExecuteActions({
                 <LoadingButton
                     id="fulfillment-operations-work-surface-save"
                     type="button"
-                    variant="secondary"
+                    variant={paymentBlocked ? "default" : "secondary"}
                     className="rounded-lg shadow-none"
                     disabled={formalPending || !dirty}
                     loading={savePending}
@@ -435,13 +494,18 @@ function FulfillmentExecuteActions({
                     {!savePending ? (
                         <SaveIcon data-icon="inline-start" />
                     ) : null}
-                    {savePending ? "保存中…" : "保存"}
+                    {savePending ? "保存中…" : "保存草稿"}
                 </LoadingButton>
             ) : null}
             <Button
                 id="fulfillment-operations-work-surface-confirm"
                 type="button"
-                disabled={formalPending || !canPost}
+                disabled={formalPending || savePending || !canPost}
+                aria-describedby={
+                    !canPost && blockedMessage
+                        ? "fulfillment-operations-confirm-blocker"
+                        : undefined
+                }
                 onClick={onConfirm}
             >
                 {formalPending ? (
@@ -454,7 +518,7 @@ function FulfillmentExecuteActions({
                     <CircleCheckIcon data-icon="inline-start" />
                 )}
                 {formalPending
-                    ? "处理中…"
+                    ? "正在确认…"
                     : autoNext
                       ? `${OPERATION_ACTION_LABEL[operation.operationType]}并下一条`
                       : OPERATION_ACTION_LABEL[operation.operationType]}
@@ -502,12 +566,19 @@ function FulfillmentReadOnlyActions({
 function FulfillmentSourceContext({
     operation,
     currentUrl,
-    showSalesOrderLinks,
 }: {
     operation: FulfillmentOperation
     currentUrl: string
-    showSalesOrderLinks: boolean
 }) {
+    const profile = useAccountProfileQuery()
+    const canViewPurchase = hasPermission(
+        profile.data?.permissions,
+        "purchase_order:detail",
+    )
+    const canViewSales = hasPermission(
+        profile.data?.permissions,
+        "sales_order:detail",
+    )
     const fields = sourceContextFields(
         operation,
         salesOrderHref(operation.source.salesOrderId, currentUrl),
@@ -515,39 +586,54 @@ function FulfillmentSourceContext({
     if (fields.length === 0) return null
     return (
         <section aria-label="来源单据">
-            <dl
-                className={cn(
-                    "grid gap-px overflow-hidden rounded-lg border border-grid bg-grid",
-                    fields.length === 1
-                        ? "grid-cols-1"
-                        : "sm:grid-cols-2 lg:grid-cols-3",
-                )}
-            >
-                {fields.map((field) => (
-                    <div
-                        key={field.label}
-                        className="bg-card px-3 py-2.5 last:col-end-[-1]"
-                    >
-                        <dt className="text-xs text-muted-foreground">
-                            {field.label}
-                        </dt>
-                        <dd className="mt-1 text-sm font-medium">
-                            {showSalesOrderLinks &&
-                            field.href &&
-                            operation.source.salesOrderId ? (
-                                <Link
-                                    id={`fulfillment-operations-work-surface-source-${toAutomationIdSegment(field.label)}`}
-                                    href={field.href}
-                                    className="text-primary underline-offset-4 hover:underline"
-                                >
-                                    {field.value}
-                                </Link>
-                            ) : (
-                                field.value
-                            )}
-                        </dd>
-                    </div>
-                ))}
+            <dl className="flex flex-wrap gap-x-8 gap-y-3 rounded-lg bg-muted/20 px-4 py-3">
+                {fields.map((field) => {
+                    const purchaseLink =
+                        field.label === "采购单" &&
+                        operation.source.purchaseOrderId &&
+                        canViewPurchase
+                            ? `/procurement/orders/${encodeURIComponent(operation.source.purchaseOrderId)}`
+                            : undefined
+                    const href =
+                        purchaseLink || (canViewSales ? field.href : undefined)
+                    const isDocument =
+                        field.label === "销售单" || field.label === "采购单"
+                    return (
+                        <div
+                            key={field.label}
+                            className="min-w-0 max-w-full flex-[1_1_auto]"
+                        >
+                            <dt className="text-xs text-muted-foreground">
+                                {field.label}
+                            </dt>
+                            <dd
+                                title={isDocument ? field.value : undefined}
+                                className={
+                                    isDocument
+                                        ? "mt-1 truncate text-sm font-medium"
+                                        : "mt-1 break-words text-sm font-medium"
+                                }
+                            >
+                                {href ? (
+                                    <Link
+                                        id={`fulfillment-operations-work-surface-source-${toAutomationIdSegment(field.label)}`}
+                                        href={href}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-primary underline underline-offset-4"
+                                    >
+                                        {field.value}
+                                        <span className="sr-only">
+                                            （在新标签页打开{field.label}）
+                                        </span>
+                                    </Link>
+                                ) : (
+                                    field.value
+                                )}
+                            </dd>
+                        </div>
+                    )
+                })}
             </dl>
         </section>
     )

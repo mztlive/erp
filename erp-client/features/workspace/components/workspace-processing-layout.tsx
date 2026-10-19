@@ -25,6 +25,7 @@ export function WorkspaceProcessingLayout({
     onBack: () => void
     backLabel: string
 }) {
+    const fulfillment = item.workItemType === "FULFILLMENT_OPERATION"
     const approval = item.approval
     const payment = item.businessObjectType === "purchase_payment_request"
     const actionable = item.allowedActions.some((action) =>
@@ -34,7 +35,7 @@ export function WorkspaceProcessingLayout({
         <WorkspaceTaskPageProvider
             summary={
                 payment ? undefined : (
-                    <dl className="grid gap-4 rounded-lg border border-border/60 bg-muted/15 p-4 sm:grid-cols-2 2xl:grid-cols-4">
+                    <dl className="flex flex-wrap gap-x-8 gap-y-4 rounded-lg border border-border/60 bg-muted/15 p-4">
                         {item.amountSummary && (
                             <Fact
                                 label={item.amountSummary.label}
@@ -127,7 +128,9 @@ export function WorkspaceProcessingLayout({
                                     onAutoNextChange(value === true)
                                 }
                             />
-                            处理后进入下一项
+                            {fulfillment
+                                ? "确认成功后自动打开下一项"
+                                : "处理后进入下一项"}
                         </label>
                     ) : (
                         <span className="mr-auto text-xs text-muted-foreground">
@@ -155,7 +158,7 @@ export function WorkspaceProcessingLayout({
 
 function Fact({ label, value }: { label: string; value: string }) {
     return (
-        <div className="min-w-0 space-y-1.5">
+        <div className="min-w-[9rem] flex-1 space-y-1.5">
             <dt className="text-xs text-muted-foreground">{label}</dt>
             <dd className="break-words text-sm font-medium leading-6">
                 {value || "—"}

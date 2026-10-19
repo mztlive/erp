@@ -94,7 +94,6 @@ function applyDeliveryDetail(
                 trackingEntries: trackingEntriesFromDto(
                     delivery.tracking_entries,
                 ),
-                shippedAt: nowIso().slice(0, 16),
                 lines: detail.lines.map((line) => ({
                     salesOrderLineId: line.sales_order_line_id,
                     stockReservationId: line.stock_reservation_id ?? "",
@@ -111,7 +110,6 @@ function applyDeliveryDetail(
         draft: {
             type: "SUPPLIER_DIRECT",
             trackingEntries: trackingEntriesFromDto(delivery.tracking_entries),
-            shippedAt: nowIso().slice(0, 16),
             lines: detail.lines.map((line) => ({
                 salesOrderLineId: line.sales_order_line_id,
                 purchaseLineSalesAllocationId:

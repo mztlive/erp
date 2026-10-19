@@ -88,7 +88,7 @@ export function formalFromDelivery(
             displayBusinessText(posted.delivery_no, posted.id) ||
             "发货单号未提供",
         formalStatus: posted.status || "SHIPPED",
-        occurredAt: secsToIso(posted.shipped_at) || draft.shippedAt || nowIso(),
+        occurredAt: secsToIso(posted.shipped_at) || nowIso(),
         operationType: draft.type,
         inventoryDelta: [],
         reservationDelta: [],

@@ -184,7 +184,6 @@ export function deliveryToOperation(d: BackendDelivery): FulfillmentOperation {
                 trackingEntries: trackingEntriesFromDto(
                     delivery.tracking_entries,
                 ),
-                shippedAt: nowIso().slice(0, 16),
                 lines: [],
             },
         })
@@ -206,7 +205,6 @@ export function deliveryToOperation(d: BackendDelivery): FulfillmentOperation {
         draft: {
             type: "SUPPLIER_DIRECT",
             trackingEntries: trackingEntriesFromDto(delivery.tracking_entries),
-            shippedAt: nowIso().slice(0, 16),
             lines: [],
         },
     })

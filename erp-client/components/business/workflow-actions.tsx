@@ -510,6 +510,8 @@ export type SequentialProcessBarProps = Omit<
     idPrefix?: string
     current: number
     total: number
+    /** 单条作业面隐藏“第 1 / 1 条”，避免制造并不存在的队列。 */
+    showPosition?: boolean
     responsibilityStatus: ResponsibilityStatus
     responsibilityStatusLabel?: string
     processLabel?: string
@@ -552,6 +554,7 @@ function SequentialProcessBar({
     idPrefix,
     current,
     total,
+    showPosition = true,
     responsibilityStatus,
     responsibilityStatusLabel,
     processLabel = "处理当前任务",
@@ -595,11 +598,13 @@ function SequentialProcessBar({
                 className="flex min-w-0 flex-wrap items-center gap-3"
                 aria-live="polite"
             >
-                <StatusBadge
-                    tone="info"
-                    icon={ListChecksIcon}
-                    label={`第 ${current.toLocaleString("zh-CN")} / ${total.toLocaleString("zh-CN")} 条`}
-                />
+                {showPosition ? (
+                    <StatusBadge
+                        tone="info"
+                        icon={ListChecksIcon}
+                        label={`第 ${current.toLocaleString("zh-CN")} / ${total.toLocaleString("zh-CN")} 条`}
+                    />
+                ) : null}
                 <StatusBadge
                     tone={responsibility.tone}
                     icon={responsibility.icon}

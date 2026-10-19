@@ -1,12 +1,8 @@
 "use client"
 
-import { RequiredMark } from "@/components/ui/required-mark"
-
-import { DateTimeLocalPicker } from "@/components/ui/date-picker"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
 import { compactFixed, sumFixed } from "@/lib/fixed-decimal"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { displayText, lineItemTitle } from "../../lib/readable-label"
@@ -48,70 +44,32 @@ export function FulfillmentDeliveryForm({
                     : "供应商直发表单"
             }
         >
+            {draft.type === "WAREHOUSE_SHIP" &&
+            displayText(draft.warehouseLabel, draft.warehouseId) ? (
+                <div className="space-y-1.5">
+                    <Label htmlFor={`${prefix}-warehouse`}>发货仓</Label>
+                    <Input
+                        id={`${prefix}-warehouse`}
+                        value={displayText(
+                            draft.warehouseLabel,
+                            draft.warehouseId,
+                        )}
+                        disabled
+                        readOnly
+                    />
+                </div>
+            ) : null}
             <section className="space-y-3">
-                {!compact ? (
-                    <h3 className="text-sm font-semibold">发货信息</h3>
-                ) : null}
-                {!compact && draft.type === "SUPPLIER_DIRECT" ? (
-                    <p className="text-xs text-muted-foreground">
-                        供应商直接发给客户，不走自有仓库，库存不变。
-                    </p>
-                ) : null}
-                <div className="grid items-center gap-4 sm:grid-cols-2">
-                    {draft.type === "WAREHOUSE_SHIP" &&
-                    displayText(draft.warehouseLabel, draft.warehouseId) ? (
-                        <div className="space-y-1.5">
-                            <Label htmlFor={`${prefix}-warehouse`}>
-                                发货仓
-                            </Label>
-                            <Input
-                                id={`${prefix}-warehouse`}
-                                value={displayText(
-                                    draft.warehouseLabel,
-                                    draft.warehouseId,
-                                )}
-                                disabled
-                                readOnly
-                            />
-                        </div>
-                    ) : null}
-                    <div
-                        className={
-                            compact
-                                ? "flex flex-wrap items-center gap-3"
-                                : "space-y-1.5"
-                        }
-                    >
-                        <Label htmlFor={`${prefix}-shipped-at`}>
-                            发货时间
-                            <RequiredMark />
-                        </Label>
-                        <div className={compact ? "min-w-0 flex-1" : undefined}>
-                            <DateTimeLocalPicker
-                                id={`${prefix}-shipped-at`}
-                                value={draft.shippedAt || undefined}
-                                disabled={disabled}
-                                showTimeZone={false}
-                                onValueChange={(value) =>
-                                    onChange({
-                                        ...draft,
-                                        shippedAt: value ?? "",
-                                    })
-                                }
-                            />
-                        </div>
-                    </div>
-                    {compact && draft.type === "SUPPLIER_DIRECT" ? (
-                        <p className="text-xs text-muted-foreground">
-                            供应商直接发给客户，不走自有仓库。
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <h3 className="text-sm font-semibold">
+                        {compact ? "商品与物流" : "发货明细与物流号"}
+                    </h3>
+                    {!compact ? (
+                        <p className="num text-xs text-muted-foreground">
+                            {actualIds.size} 项商品
                         </p>
                     ) : null}
                 </div>
-            </section>
-            <section className="space-y-3">
-                <h3 className="text-sm font-semibold">
-                    {compact ? "商品与物流" : "发货明细与物流号"}
-                </h3>
                 <div
                     className={
                         compact
@@ -135,34 +93,33 @@ export function FulfillmentDeliveryForm({
                                 className={
                                     compact
                                         ? "space-y-3 p-4"
-                                        : "space-y-3 rounded-xl border border-border p-3"
+                                        : "space-y-3 rounded-xl border border-border p-4"
                                 }
                             >
-                                <div
-                                    className={cn(
-                                        compact
-                                            ? "flex flex-wrap items-start justify-between gap-2"
-                                            : "space-y-1",
-                                    )}
-                                >
-                                    <p className="text-sm font-medium">
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                    <p className="min-w-0 text-sm font-medium">
                                         {lineItemTitle(source?.itemName, index)}{" "}
                                         {displayText(source?.skuCode) ? (
-                                            <span className="num text-xs text-muted-foreground">
+                                            <span className="num text-xs font-normal text-muted-foreground">
                                                 {displayText(source?.skuCode)}
                                             </span>
                                         ) : null}
                                     </p>
-                                    <p className="text-xs text-muted-foreground">
+                                    <p className="shrink-0 text-xs text-muted-foreground">
                                         本次发货{" "}
-                                        {compactFixed(
-                                            sumFixed(
-                                                lines.map(
-                                                    (line) => line.quantity,
+                                        <span className="num font-medium text-foreground">
+                                            {compactFixed(
+                                                sumFixed(
+                                                    lines.map(
+                                                        (line) => line.quantity,
+                                                    ),
+                                                    {
+                                                        maxScale: 6,
+                                                        outputScale: 6,
+                                                    },
                                                 ),
-                                                { maxScale: 6, outputScale: 6 },
-                                            ),
-                                        )}
+                                            )}
+                                        </span>
                                         {displayText(source?.unitCode)}
                                     </p>
                                 </div>

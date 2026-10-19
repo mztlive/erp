@@ -22,6 +22,7 @@ import {
     clampZeroFixed,
     compactFixed,
     compareDecimal,
+    formatCurrencyFixed,
     subtractFixed,
     sumFixed,
 } from "@/lib/fixed-decimal"
@@ -57,6 +58,27 @@ function quantityTotal(values: readonly string[]): string {
         )
     } catch {
         return "—"
+    }
+}
+
+/** 先款未满足时直接给出差额，避免只看到“条件未满足”却不知道还差多少。 */
+export function gateBlockedMessage(operation: FulfillmentOperation): string {
+    const { requiredAmount, effectivePaidAmount } = operation.gate
+    if (!requiredAmount || effectivePaidAmount == null) {
+        return operation.gate.message
+    }
+    try {
+        const gap = clampZeroFixed(
+            subtractFixed(requiredAmount, effectivePaidAmount, {
+                maxScale: 2,
+                outputScale: 2,
+            }),
+            { maxScale: 2, outputScale: 2 },
+        )
+        if (gap === "0.00") return operation.gate.message
+        return `还差 ${formatCurrencyFixed(gap, { maxScale: 2, minimumFractionDigits: 2 })}，实际付款满足条件后方可确认履约`
+    } catch {
+        return operation.gate.message
     }
 }
 
@@ -107,7 +129,7 @@ export function clientValidation(
         issues.push({
             id: "gate",
             label: "先款条件",
-            message: operation.gate.message,
+            message: gateBlockedMessage(operation),
             targetId: "prepayment-gate",
         })
     }
@@ -161,10 +183,12 @@ export function clientValidation(
         }
     }
     if (draft.type === "WAREHOUSE_SHIP") {
-        const trackingMessage = trackingEntriesValidationMessage(
-            draft.trackingEntries,
-            draft.lines.map((line) => line.salesOrderLineId),
-        )
+        const trackingMessage = draft.trackingEntries?.length
+            ? trackingEntriesValidationMessage(
+                  draft.trackingEntries,
+                  draft.lines.map((line) => line.salesOrderLineId),
+              )
+            : null
         if (trackingMessage)
             issues.push({
                 id: "tracking",
@@ -174,7 +198,9 @@ export function clientValidation(
                     ? `fulfillment-operations-ship-form-line-${toAutomationIdSegment(draft.lines[0].salesOrderLineId)}-tracking-no`
                     : undefined,
             })
+        const pending = new Set(draft.pendingTrackingLineIds ?? [])
         for (const line of draft.lines) {
+            if (pending.has(line.salesOrderLineId)) continue
             if (
                 !draft.trackingEntries?.some(
                     (entry) => entry.salesOrderLineId === line.salesOrderLineId,
@@ -182,8 +208,8 @@ export function clientValidation(
             )
                 issues.push({
                     id: `tracking-${line.salesOrderLineId}`,
-                    label: "明细物流号",
-                    message: "请为本次发货的每项明细添加物流号",
+                    label: "物流号",
+                    message: "请为本项明细添加物流号",
                     targetId: `fulfillment-operations-ship-form-line-${toAutomationIdSegment(line.salesOrderLineId)}-tracking-no`,
                 })
         }
@@ -218,10 +244,12 @@ export function clientValidation(
         })
     }
     if (draft.type === "SUPPLIER_DIRECT") {
-        const trackingMessage = trackingEntriesValidationMessage(
-            draft.trackingEntries,
-            draft.lines.map((line) => line.salesOrderLineId),
-        )
+        const trackingMessage = draft.trackingEntries?.length
+            ? trackingEntriesValidationMessage(
+                  draft.trackingEntries,
+                  draft.lines.map((line) => line.salesOrderLineId),
+              )
+            : null
         if (trackingMessage)
             issues.push({
                 id: "d-tracking",
@@ -231,7 +259,9 @@ export function clientValidation(
                     ? `fulfillment-operations-direct-form-line-${toAutomationIdSegment(draft.lines[0].salesOrderLineId)}-tracking-no`
                     : undefined,
             })
+        const pending = new Set(draft.pendingTrackingLineIds ?? [])
         for (const line of draft.lines) {
+            if (pending.has(line.salesOrderLineId)) continue
             if (
                 !draft.trackingEntries?.some(
                     (entry) => entry.salesOrderLineId === line.salesOrderLineId,
@@ -239,8 +269,8 @@ export function clientValidation(
             )
                 issues.push({
                     id: `d-tracking-${line.salesOrderLineId}`,
-                    label: "明细物流号",
-                    message: "请为本次发货的每项明细添加物流号",
+                    label: "物流号",
+                    message: "请为本项明细添加物流号",
                     targetId: `fulfillment-operations-direct-form-line-${toAutomationIdSegment(line.salesOrderLineId)}-tracking-no`,
                 })
         }
