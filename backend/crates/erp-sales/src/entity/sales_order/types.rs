@@ -354,7 +354,7 @@ pub struct GoodsLineFields {
     pub sku_revision_id: SkuRevisionId,
     /// 福利场景。
     pub welfare_scenario: Option<WelfareScenario>,
-    /// 销售填写的采购供给价（含税单价）；只供审批参考，不参与任何计算。
+    /// 销售填写的采购供给价（含税单价）；提交时必填，用于含税毛利估算和审批参考。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub procurement_supply_price_gross: Option<UnitPrice>,
     /// 公司对客户承诺完成本明细交付或服务的最晚时间。
@@ -449,6 +449,22 @@ pub(crate) struct BuiltLineGroups {
 }
 
 impl BuiltLineGroups {
+    /// 校验提交行的采购供给价；卡券行和数量归零的移除行不适用。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 有效商品行已填写采购供给价时返回成功。
+    /// # 错误
+    /// 有效商品行未填写时返回“请填写采购供给价”。
+    pub(crate) fn ensure_supply_price(&self) -> Result<()> {
+        if self.goods.as_ref().is_some_and(|goods| {
+            !goods.quantity.to_decimal().is_zero() && goods.procurement_supply_price_gross.is_none()
+        }) {
+            return Err(Error::from("请填写采购供给价"));
+        }
+        Ok(())
+    }
+
     /// 读取商品行的交付分配；卡券行返回空列表。
     /// # 参数
     /// 无。
@@ -937,7 +953,7 @@ mod tests {
         assert_eq!(built.tax_amount, amt("3.90"));
     }
 
-    /// 采购供给价只保存：赠品与普通行都可填写且不影响行金额，负数拒绝。
+    /// 采购供给价不改变销售行金额：赠品与普通行均允许零价，负数拒绝。
     #[test]
     fn procurement_supply_price_is_kept_without_affecting_amounts() {
         let goods = |mode: SalesPricingMode, unit: &str, supply: Option<&str>| GoodsLineFields {

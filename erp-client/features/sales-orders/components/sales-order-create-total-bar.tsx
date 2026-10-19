@@ -8,7 +8,10 @@ import {
     ValidationSummary,
 } from "@/components/business"
 import { toFieldErrors } from "@/components/form"
-import { calculateTotals } from "@/features/sales-orders/lib/sales-order-create-model"
+import {
+    calculateGrossProfit,
+    calculateTotals,
+} from "@/features/sales-orders/lib/sales-order-create-model"
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
 
 const HEADER_VALIDATION_FIELDS = [
@@ -113,6 +116,7 @@ export function SalesOrderCreateTotalBar({
                         values.lineItems,
                         values.taxRatePercent,
                     )
+                    const grossProfit = calculateGrossProfit(values.lineItems)
                     return (
                         <StickyTotalBar
                             layout="inline"
@@ -140,6 +144,19 @@ export function SalesOrderCreateTotalBar({
                                     ),
                                     description: (
                                         <div className="flex flex-wrap items-center gap-x-5 gap-y-1 lg:justify-end">
+                                            {values.nature ===
+                                            "physical_service" ? (
+                                                <span title="各行（含税成交单价 − 采购供给单价）× 数量，逐行舍入后合计">
+                                                    预估毛利（含税）{" "}
+                                                    {grossProfit === null ? (
+                                                        <span>待完善</span>
+                                                    ) : (
+                                                        <MoneyValue
+                                                            value={grossProfit}
+                                                        />
+                                                    )}
+                                                </span>
+                                            ) : null}
                                             <span>
                                                 不含税金额{" "}
                                                 <MoneyValue

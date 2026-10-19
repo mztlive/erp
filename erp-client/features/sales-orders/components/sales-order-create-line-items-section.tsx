@@ -161,7 +161,7 @@ export function SalesOrderCreateLineItemsSection({
                             lines.length > 0 ? (
                                 <p className="text-xs text-muted-foreground">
                                     成交单价由销售填写。选择商品、修改数量或从选品册开单均不自动带入价格。勾选“赠品”的商品单价为
-                                    0、不收款；采购供给价选填，只供审批参考。
+                                    0、不收款；采购供给价必填，用于估算含税毛利。
                                 </p>
                             ) : null}
                             {nature === "physical_service" &&

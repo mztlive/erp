@@ -45,7 +45,7 @@ export type SalesOrderDraftLineInput = {
     skuRevisionId: string
     /** 商品池提供的可读规格，与 SKU 身份分开保存。 */
     specification?: string
-    /** 销售选填的采购供给价（含税单价），只供审批参考，不参与计算；空串表示未填写。 */
+    /** 采购供给价（含税单价），提交必填，用于毛利估算；草稿空串表示未填写。 */
     procurementSupplyPrice?: string
     quantity: string
     unit: string
@@ -131,7 +131,7 @@ export type SalesOrderLineItem = {
     giftRate?: string
     /** 卡券：电子卡 / 实体卡 */
     cardForm?: string
-    /** 销售选填的采购供给价（含税单价）。 */
+    /** 销售填写的采购供给价（含税单价）。 */
     procurementSupplyPrice?: string
     /** 对客户承诺的明细最晚交付日（实物/服务）。 */
     dueDate?: string

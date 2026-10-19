@@ -3,6 +3,7 @@ import {
     divideFixed,
     multiplyFixed,
     splitGrossByPercentRate,
+    subtractFixed,
     sumFixed,
 } from "@/lib/fixed-decimal"
 import { getErrorMessage } from "@/lib/api/errors"
@@ -197,3 +198,45 @@ export function calculateTotals(
 
 export const errorMessage = (error: unknown): string =>
     getErrorMessage(error, "创建失败，请重试。")
+
+/** 按各行含税价差乘数量估算毛利；逐行舍入到分，资料未齐时不估算。 */
+export function calculateGrossProfit(
+    lineItems: readonly SalesOrderDraftLineInput[],
+): string | null {
+    if (!lineItems.length) return null
+    try {
+        const margins = lineItems.map((line) => {
+            const supplyPrice = line.procurementSupplyPrice?.trim()
+            const sellingPrice =
+                line.pricingMode === "GIFT" ? "0" : line.unitPriceGross.trim()
+            if (
+                !line.sku.trim() ||
+                !supplyPrice ||
+                !sellingPrice ||
+                compareDecimal(line.quantity, "0", 6) <= 0 ||
+                (line.pricingMode !== "GIFT" &&
+                    compareDecimal(sellingPrice, "0", 4) <= 0)
+            ) {
+                throw new Error("INCOMPLETE_MARGIN_INPUT")
+            }
+            // 保留乘积的完整精度，价差计算后再逐行舍入，避免两次舍入偏差。
+            const options = {
+                leftMaxScale: 4,
+                rightMaxScale: 6,
+                outputScale: 10,
+            }
+            return subtractFixed(
+                multiplyFixed(sellingPrice, line.quantity, options),
+                multiplyFixed(supplyPrice, line.quantity, options),
+                { maxScale: 10, outputScale: 10 },
+            )
+        })
+        return sumFixed(margins, {
+            maxScale: 10,
+            outputScale: 2,
+            allowNegative: true,
+        })
+    } catch {
+        return null
+    }
+}

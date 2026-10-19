@@ -41,7 +41,7 @@ const salesReferencePriceSchema = z.object({
     marketPrice: z.string().optional(),
 })
 
-const deliveryAllocationsSchema = z
+export const deliveryAllocationsSchema = z
     .array(
         z.object({
             recipient: z.string().trim().min(1, "请填写收货人").max(64),
@@ -297,6 +297,13 @@ const createSalesOrderSchema = z
                     })
                 }
             } else {
+                if (!line.procurementSupplyPrice?.trim()) {
+                    context.addIssue({
+                        code: "custom",
+                        path: ["lineItems", index, "procurementSupplyPrice"],
+                        message: "请填写采购供给价",
+                    })
+                }
                 if (!line.sku.trim()) {
                     context.addIssue({
                         code: "custom",

@@ -50,6 +50,7 @@ export type SalesOrderCreateUnifiedAddressDialogProps = {
     allocatedLineCount: number
     /** 打开时带入的地址，通常取第一个已填写的地址。 */
     initialAddress?: UnifiedDeliveryAddress
+    triggerLabel?: string
     onApply: (address: UnifiedDeliveryAddress) => void
 }
 
@@ -58,6 +59,7 @@ export function SalesOrderCreateUnifiedAddressDialog({
     lineCount,
     allocatedLineCount,
     initialAddress,
+    triggerLabel = "设置统一地址",
     onApply,
 }: SalesOrderCreateUnifiedAddressDialogProps) {
     const [open, setOpen] = React.useState(false)
@@ -84,7 +86,7 @@ export function SalesOrderCreateUnifiedAddressDialog({
                 }}
             >
                 <MapPinIcon aria-hidden="true" />
-                设置统一收货地址
+                {triggerLabel}
             </Button>
             <Dialog open={open} onOpenChange={setOpen}>
                 <DialogContent

@@ -185,6 +185,7 @@ export function buildSalesOrderCreateLineItemColumns(
                   {
                       id: "procurementSupplyPrice",
                       header: "采购供给价",
+                      required: true,
                       numeric: true,
                       align: "end",
                       renderValue: ({ item }) =>
@@ -201,10 +202,11 @@ export function buildSalesOrderCreateLineItemColumns(
                                           <field.TextField
                                               id={`sales-orders-create-line-${toAutomationIdSegment(lineKey)}-supply-price`}
                                               label="采购供给价"
+                                              required
                                               hideLabel
                                               type="number"
                                               step="any"
-                                              placeholder="选填"
+                                              placeholder="请填写"
                                               className="gap-0"
                                               inputClassName="num text-right"
                                           />

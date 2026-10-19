@@ -147,6 +147,7 @@ export function SalesChangeLineItems({
                                     >
                                         {label}
                                         {[
+                                            "采购供给价",
                                             "数量",
                                             "单卡面额",
                                             "卡张数",
@@ -321,8 +322,9 @@ function SalesChangeLineRow({
                 <field.TextField
                     id={`${id}-${line.line_no}-supply-price`}
                     label="采购供给价"
+                    required
                     inputMode="decimal"
-                    placeholder="选填"
+                    placeholder="请填写"
                     disabled={disabled}
                     className={labelClass}
                     inputClassName="num"

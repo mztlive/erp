@@ -109,6 +109,16 @@ export const salesChangeDraftSchema = z.object({
             .superRefine((line, context) => {
                 if (
                     line.source.goods &&
+                    positiveSalesDecimal(line.quantity, 6) &&
+                    !line.supplyPrice.trim()
+                )
+                    context.addIssue({
+                        code: "custom",
+                        path: ["supplyPrice"],
+                        message: "请填写采购供给价",
+                    })
+                if (
+                    line.source.goods &&
                     !line.gift &&
                     !positiveSalesDecimal(line.unitPrice, 4)
                 )

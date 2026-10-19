@@ -599,7 +599,7 @@ pub struct SalesOrderSubmissionLine {
     pub sku_revision_id: Option<erp_core::ids::SkuRevisionId>,
     /// 福利场景。
     pub welfare_scenario: Option<WelfareScenario>,
-    /// 销售填写的采购供给价（含税单价）；只供审批参考，不参与任何计算。
+    /// 销售填写的采购供给价（含税单价）；提交时必填，用于含税毛利估算和审批参考。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub procurement_supply_price_gross: Option<UnitPrice>,
     /// 公司对客户承诺完成本明细交付或服务的最晚时间。
@@ -666,6 +666,7 @@ impl SalesOrderSubmissionLine {
         let spec_snapshot = normalize_optional_text(data.spec_snapshot, "规格", SPEC_MAX_LEN)?;
         let unit_snapshot = normalize_optional_text(data.unit_snapshot, "单位", UNIT_MAX_LEN)?;
         let built = build_line_groups(data.line_type, data.goods, data.voucher, data.sales_tax_rate)?;
+        built.ensure_supply_price()?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -819,6 +820,32 @@ mod tests {
 
     fn price(value: &str) -> UnitPrice {
         UnitPrice::from_str(value).unwrap()
+    }
+
+    /// 普通商品和赠品均须填写采购供给价；显式零价允许提交。
+    #[test]
+    fn submission_requires_supply_price_including_gifts() {
+        for gift in [false, true] {
+            for supply in [None, Some(price("0")), Some(price("8.5000"))] {
+                let mut data = line_data(1);
+                let goods = data.goods.as_mut().unwrap();
+                goods.procurement_supply_price_gross = supply;
+                if gift {
+                    goods.pricing_mode = SalesPricingMode::Gift;
+                    goods.unit_price_gross = price("0");
+                }
+                let result = SalesOrderSubmissionLine::new(
+                    SalesOrderSubmissionLineId::new("sl-supply"),
+                    SalesOrderSubmissionId::new("s-supply"),
+                    data,
+                );
+                if supply.is_none() {
+                    assert_eq!(result.unwrap_err().to_string(), "请填写采购供给价");
+                } else {
+                    assert_eq!(result.unwrap().procurement_supply_price_gross, supply);
+                }
+            }
+        }
     }
 
     fn goods_line() -> GoodsLineFields {

@@ -15,7 +15,7 @@ export type SalesChangeDraftLine = {
         sku_revision_id: string
         base_unit_code: string
         fulfillment_due_at: number
-        /** 销售选填的采购供给价（含税单价）；未填写为空。 */
+        /** 销售填写的采购供给价（含税单价）；未填写为空。 */
         procurement_supply_price_gross?: string | null
         welfare_scenario: string | null
         quantity: string

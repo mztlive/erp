@@ -21,7 +21,7 @@ export type SalesChangeDraftValues = {
     lines: {
         source: SalesChangeDraftLine
         dueDate: string
-        /** 采购供给价（含税单价），只供审批参考；空串表示未填写。 */
+        /** 采购供给价（含税单价），提交必填，用于毛利估算；草稿空串表示未填写。 */
         supplyPrice: string
         deliveryAllocations: (SalesDeliveryAllocation & { rowKey: string })[]
         quantity: string

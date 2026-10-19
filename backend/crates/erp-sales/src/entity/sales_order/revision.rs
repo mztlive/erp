@@ -473,7 +473,7 @@ pub struct SalesOrderGoodsServiceLineRevisionData {
     pub sku_revision_id: SkuRevisionId,
     /// 福利场景。
     pub welfare_scenario: Option<WelfareScenario>,
-    /// 销售填写的采购供给价（含税单价）；只供审批参考，不参与任何计算。
+    /// 销售填写的采购供给价（含税单价）；提交时必填，用于含税毛利估算和审批参考。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub procurement_supply_price_gross: Option<UnitPrice>,
     /// 公司对客户承诺完成本明细交付或服务的最晚时间。
@@ -505,7 +505,7 @@ pub struct SalesOrderGoodsServiceLineRevision {
     pub sku_revision_id: SkuRevisionId,
     /// 福利场景。
     pub welfare_scenario: Option<WelfareScenario>,
-    /// 销售填写的采购供给价（含税单价）；只供审批参考，不参与任何计算。
+    /// 销售填写的采购供给价（含税单价）；提交时必填，用于含税毛利估算和审批参考。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub procurement_supply_price_gross: Option<UnitPrice>,
     /// 公司对客户承诺完成本明细交付或服务的最晚时间。
