@@ -15,12 +15,12 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 
 import { workspaceTaskPresentation } from "../lib/task-presentation"
 import { findSourceSalesOrder } from "../lib/source-sales-order"
-import { isBlockedWorkItem } from "../lib/work-item"
+import { workspaceTaskRightContent } from "../lib/task-right-content"
 import type { WorkspaceWorkItem } from "../types"
 
-/** 表头和任务行共用列宽；手机将金额与截止时间合并到右列。 */
+/** 表头和任务行共用列宽；窄窗口将本次处理与状态合并到右列。 */
 export const workspaceTaskColumns =
-    "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 @min-[600px]/workspace-queue:grid-cols-[minmax(0,1fr)_7.5rem_8rem_1rem]"
+    "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 @min-[600px]/workspace-queue:grid-cols-[minmax(0,1fr)_10.5rem_10rem_1rem]"
 
 const FAMILY_APPEARANCE = {
     approval: {
@@ -45,7 +45,7 @@ const FAMILY_APPEARANCE = {
     },
 }
 
-/** 同一行对齐业务对象、金额与期限，保留原生按钮的键盘操作和稳定定位。 */
+/** 同一行对齐业务对象、本次处理摘要与状态，保留原生按钮的键盘操作和稳定定位。 */
 export function WorkspaceTaskCard({
     item,
     selected,
@@ -55,10 +55,6 @@ export function WorkspaceTaskCard({
     selected: boolean
     onSelect: (item: WorkspaceWorkItem) => void
 }) {
-    const blocked = isBlockedWorkItem(item)
-    const overdue = item.dueBucket === "overdue"
-    const fulfillment = item.workItemType === "FULFILLMENT_OPERATION"
-    const tracking = item.workItemType === "APPROVAL_INSTANCE"
     const presentation = workspaceTaskPresentation(item)
     const {
         title,
@@ -75,45 +71,8 @@ export function WorkspaceTaskCard({
         item.workItemType === "CUSTOMER_ACCEPTANCE_REGISTRATION"
             ? BadgeCheckIcon
             : appearance.icon
-    const deadline = tracking ? (
-        <>
-            <StatusBadge label={item.statusLabel} tone={item.statusTone} />
-            {approvalProgress && (
-                <span
-                    className="line-clamp-2 text-xs leading-relaxed text-muted-foreground"
-                    title={approvalProgress}
-                >
-                    {approvalProgress}
-                </span>
-            )}
-        </>
-    ) : (
-        <>
-            <time
-                dateTime={item.dueAt || undefined}
-                className="num text-xs sm:text-sm"
-            >
-                {item.dueAt
-                    ? item.dueAtLabel
-                    : fulfillment
-                      ? "任务未设截止"
-                      : "未设截止"}
-            </time>
-            {blocked ? (
-                <StatusBadge label="受阻" tone="warning" />
-            ) : overdue ? (
-                <StatusBadge label="已超期" tone="warning" />
-            ) : null}
-            {approvalProgress && (
-                <span
-                    className="line-clamp-2 text-xs leading-relaxed text-muted-foreground"
-                    title={approvalProgress}
-                >
-                    {approvalProgress}
-                </span>
-            )}
-        </>
-    )
+    const right = workspaceTaskRightContent(item, amount, approvalProgress)
+    const status = <TaskStatus content={right} />
 
     return (
         <button
@@ -124,7 +83,7 @@ export function WorkspaceTaskCard({
                     ? `work-item-procurement-order-creation-${item.workItemId}`
                     : undefined
             }
-            aria-label={`${typeLabel} ${title} ${number}${sourceSales ? " 来源 " + sourceSales.orderNo : ""}${tracking ? " " + item.statusLabel : ""}`}
+            aria-label={`${typeLabel} ${title} ${number}${sourceSales ? " 来源 " + sourceSales.orderNo : ""} ${right.metric.label} ${right.metric.value} ${right.status.label}`}
             aria-current={selected ? "true" : undefined}
             onClick={() => onSelect(item)}
             className={cn(
@@ -180,36 +139,72 @@ export function WorkspaceTaskCard({
                     )}
                 </span>
             </span>
-            <span className="flex flex-col items-end gap-2 @min-[600px]/workspace-queue:items-start">
+            <span className="flex min-w-0 flex-col items-end gap-1.5 @min-[600px]/workspace-queue:items-start">
                 <span
                     className={cn(
-                        "num whitespace-nowrap text-sm",
-                        fulfillment ? "text-muted-foreground" : "font-medium",
+                        "num line-clamp-2 text-sm",
+                        right.metric.unavailable || right.tracking
+                            ? "text-muted-foreground"
+                            : "font-medium",
                     )}
-                    aria-label={
-                        amount
-                            ? amount.label + " " + amount.value
-                            : "金额未提供"
-                    }
+                    title={right.metric.detail}
                 >
-                    {amount?.value ?? "—"}
+                    {right.metric.value}
                 </span>
-                {amount ? (
-                    <span className="text-xs text-muted-foreground">
-                        {amount.label}
+                <span className="text-xs text-muted-foreground">
+                    {right.metric.label}
+                </span>
+                {right.metric.detail && !right.metric.unavailable && (
+                    <span
+                        className="line-clamp-2 text-xs leading-relaxed text-muted-foreground"
+                        title={right.metric.detail}
+                    >
+                        {right.metric.detail}
                     </span>
-                ) : null}
-                <span className="flex flex-col items-end gap-1 text-muted-foreground @min-[600px]/workspace-queue:hidden">
-                    {deadline}
+                )}
+                <span className="mt-1 flex flex-col items-end gap-1.5 @min-[600px]/workspace-queue:hidden">
+                    {status}
                 </span>
             </span>
-            <span className="hidden flex-col items-start gap-1.5 @min-[600px]/workspace-queue:flex">
-                {deadline}
+            <span className="hidden min-w-0 flex-col items-start gap-1.5 @min-[600px]/workspace-queue:flex">
+                {status}
             </span>
             <ChevronRightIcon
                 aria-hidden="true"
                 className="hidden size-4 text-muted-foreground @min-[600px]/workspace-queue:block"
             />
         </button>
+    )
+}
+
+/** 审批跟踪突出节点与结果；执行任务按实际期限标注日期用途。 */
+function TaskStatus({
+    content,
+}: {
+    content: ReturnType<typeof workspaceTaskRightContent>
+}) {
+    return (
+        <>
+            <StatusBadge
+                label={content.status.label}
+                tone={content.status.tone}
+            />
+            {content.status.detail && (
+                <span
+                    className="line-clamp-2 text-xs leading-relaxed text-muted-foreground"
+                    title={content.status.detail}
+                >
+                    {content.status.detail}
+                </span>
+            )}
+            {content.date && (
+                <span className="flex flex-wrap gap-x-1 text-xs text-muted-foreground">
+                    <span>{content.date.label}</span>
+                    <time className="num" dateTime={content.date.dateTime}>
+                        {content.date.value}
+                    </time>
+                </span>
+            )}
+        </>
     )
 }

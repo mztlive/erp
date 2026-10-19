@@ -1,6 +1,7 @@
 "use client"
 
 import { WorkspaceTaskCard, workspaceTaskColumns } from "./workspace-task-card"
+import { workspaceTaskColumnLabels } from "../lib/task-right-content"
 import { useWorkspaceScroll } from "../hooks/use-workspace-scroll"
 import type { WorkspaceWorkItem } from "../types"
 
@@ -12,15 +13,18 @@ export function WorkspaceTaskList({
     selectedWorkItemId,
     onSelect,
     tracking = false,
+    workItemType,
     scrollKey = "",
 }: {
     items: readonly WorkspaceWorkItem[]
     selectedWorkItemId?: string
     onSelect: (item: WorkspaceWorkItem) => void
     tracking?: boolean
+    workItemType?: string
     scrollKey?: string
 }) {
     const scrollRef = useWorkspaceScroll<HTMLUListElement>(`queue:${scrollKey}`)
+    const columns = workspaceTaskColumnLabels(workItemType, tracking)
     return (
         <div className="@container/workspace-queue flex min-h-0 flex-1 flex-col">
             <div
@@ -30,10 +34,10 @@ export function WorkspaceTaskList({
                     " shrink-0 border-b border-grid bg-muted/35 px-4 py-3 text-xs font-medium sm:px-5"
                 }
             >
-                <span>任务与往来方</span>
-                <span>金额</span>
+                <span>事项</span>
+                <span>{columns.metric}</span>
                 <span className="hidden @min-[600px]/workspace-queue:block">
-                    {tracking ? "审批状态" : "截止时间"}
+                    {columns.status}
                 </span>
                 <span className="hidden @min-[600px]/workspace-queue:block" />
             </div>

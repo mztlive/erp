@@ -344,6 +344,7 @@ export function WorkspaceHomeView({
                                 items={view.items}
                                 onSelect={onSelectTask}
                                 tracking={started}
+                                workItemType={urlState.workItemType}
                                 scrollKey={buildWorkspaceSearchParams(urlState)}
                             />
                         ) : (

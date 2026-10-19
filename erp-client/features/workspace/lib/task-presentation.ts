@@ -115,7 +115,7 @@ const DOCUMENT_AMOUNTS: Record<string, readonly string[]> = {
 }
 
 /** 只从当前列表已授权的字段取值，不补查或替换审批提交资料。 */
-function section(item: WorkspaceWorkItem, label: string) {
+export function workspaceTaskSection(item: WorkspaceWorkItem, label: string) {
     return item.summarySections?.find(
         (field) =>
             field.label === label && displayName(field.value, field.objectId),
@@ -175,8 +175,8 @@ function attentionSummary(item: WorkspaceWorkItem): string | undefined {
     if (isBlockedWorkItem(item)) {
         return (
             join(item.actionBlockers.map((blocker) => blocker.message)) ||
-            section(item, "受阻原因")?.value ||
-            section(item, "错误摘要")?.value ||
+            workspaceTaskSection(item, "受阻原因")?.value ||
+            workspaceTaskSection(item, "错误摘要")?.value ||
             "当前事项受阻，请查看原因。"
         )
     }
@@ -211,7 +211,7 @@ function taskAmount(item: WorkspaceWorkItem, kind: string) {
                   "票款金额",
               ])
     for (const label of labels) {
-        const value = section(item, label)
+        const value = workspaceTaskSection(item, label)
         if (value) return value
     }
     return undefined
@@ -240,13 +240,13 @@ export function workspaceTaskPresentation(item: WorkspaceWorkItem) {
         : TASK_POLICIES[item.workItemType]
     const title =
         displayName(item.counterpartyName) ||
-        section(item, "仓库")?.value ||
-        section(item, "导入批次")?.value ||
+        workspaceTaskSection(item, "仓库")?.value ||
+        workspaceTaskSection(item, "导入批次")?.value ||
         item.objectTitle
     const fields =
         policy?.fields
             .map((label) => {
-                const value = section(item, label)?.value
+                const value = workspaceTaskSection(item, label)?.value
                 return value && value !== title
                     ? `${label}：${value}`
                     : undefined
@@ -270,7 +270,7 @@ export function workspaceTaskPresentation(item: WorkspaceWorkItem) {
         number: stripDocumentNumberPrefix(item.stableNumber),
         summary:
             attention ||
-            section(item, "历史资料")?.value ||
+            workspaceTaskSection(item, "历史资料")?.value ||
             summary ||
             (item.family === "exception"
                 ? join([item.reasonLabel, item.nextActionHint])
