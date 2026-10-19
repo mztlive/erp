@@ -14,6 +14,8 @@ mod dto;
 mod facts;
 mod fulfillment_operation_brief;
 mod fulfillment_queue;
+mod fulfillment_status;
+pub use fulfillment_status::{FulfillmentPaymentState, WorkItemFulfillmentStatus};
 mod funds_document_brief;
 mod integration_brief;
 mod integration_brief_labels;

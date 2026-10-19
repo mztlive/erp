@@ -519,6 +519,7 @@ mod tests {
 
     fn task_view(work_item_type: WorkItemType) -> WorkItemView {
         WorkItemView {
+            fulfillment_status: None,
             id: "task-id".to_string(),
             work_item_type,
             handler_key: "task-handler".to_string(),

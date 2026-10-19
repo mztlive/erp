@@ -9,6 +9,7 @@ import type { StatusTone } from "@/components/ui/status-badge"
 import type {
     WorkItemStatus,
     DeliveryTaskLine,
+    WorkItemFulfillmentStatus,
 } from "@/features/work-items/types"
 import type { WorkspaceId } from "@/lib/workspace-registry"
 
@@ -99,6 +100,7 @@ export type WorkspaceWorkItem = Readonly<{
         dueLabel?: string
     }>[]
     deliveryLines?: readonly DeliveryTaskLine[]
+    fulfillmentStatus?: WorkItemFulfillmentStatus
     briefMoreCount?: number
     /** 服务端已按审批版本解析摘要；空结果不得补拉当前单据替代。 */
     documentSummaryResolved?: boolean

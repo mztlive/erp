@@ -408,6 +408,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         self.apply_party_names_with(executor, &mut items).await?;
         self.apply_approval_contexts(&mut items, executor).await?;
         self.apply_owner_qualification(&mut items, executor).await?;
+        self.apply_fulfillment_statuses(&mut items, executor).await?;
         Ok(items)
     }
 
@@ -533,6 +534,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
         self.apply_party_names_with(executor, std::slice::from_mut(&mut view)).await?;
         self.apply_approval_contexts(std::slice::from_mut(&mut view), executor).await?;
         self.apply_owner_qualification(std::slice::from_mut(&mut view), executor).await?;
+        self.apply_fulfillment_statuses(std::slice::from_mut(&mut view), executor).await?;
         Ok(view)
     }
 }

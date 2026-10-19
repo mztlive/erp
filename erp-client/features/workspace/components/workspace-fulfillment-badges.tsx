@@ -1,9 +1,7 @@
 "use client"
 
-import { StatusBadge } from "@/components/ui/status-badge"
-import { useFulfillmentGate } from "../hooks/use-fulfillment-gate"
-import { usePurchasePayment } from "../hooks/use-purchase-payment"
-import { purchasePaymentStatus } from "../lib/purchase-payment"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
+import type { WorkItemFulfillmentStatus } from "@/features/work-items/types"
 import { isBlockedWorkItem } from "../lib/work-item"
 import {
     workspaceFulfillmentDescriptor,
@@ -11,7 +9,17 @@ import {
 } from "../lib/workspace-fulfillment"
 import type { WorkspaceWorkItem } from "../types"
 
-/** 列表和详情使用同一付款事实来源，不以付款申请审批代替实付。 */
+const PAYMENT_STATUS: Record<
+    NonNullable<WorkItemFulfillmentStatus["payment_state"]>,
+    { label: string; tone: StatusTone }
+> = {
+    UNPAID: { label: "未付款", tone: "warning" },
+    PARTIAL: { label: "部分付款", tone: "info" },
+    PAID: { label: "已付清", tone: "success" },
+    NOT_REQUIRED: { label: "无需付款", tone: "neutral" },
+}
+
+/** 仅消费服务端列表摘要，不为每行发起付款或履约详情请求。 */
 export function WorkspaceFulfillmentBadges({
     item,
 }: {
@@ -19,26 +27,21 @@ export function WorkspaceFulfillmentBadges({
 }) {
     const descriptor = workspaceFulfillmentDescriptor(item)
     if (!descriptor || descriptor.operationTypes[0] === "RECEIPT") return null
+    const paymentState = item.fulfillmentStatus?.payment_state
+    const payment = paymentState ? PAYMENT_STATUS[paymentState] : undefined
 
     return (
         <span className="flex flex-wrap items-center gap-1.5">
             {descriptor.role === "procurement" ? (
-                <PurchasePaymentBadge workItemId={item.workItemId} />
+                <StatusBadge
+                    {...(payment ?? {
+                        label: "付款状态待核对",
+                        tone: "neutral",
+                    })}
+                />
             ) : null}
             <FulfillmentGateBadge item={item} descriptor={descriptor} />
         </span>
-    )
-}
-
-function PurchasePaymentBadge({ workItemId }: { workItemId: string }) {
-    const query = usePurchasePayment(workItemId)
-    return query.isError || !query.data ? (
-        <StatusBadge
-            label={query.isError ? "付款状态待核对" : "付款状态查询中"}
-            tone="neutral"
-        />
-    ) : (
-        <StatusBadge {...purchasePaymentStatus(query.data)} />
     )
 }
 
@@ -50,24 +53,14 @@ function FulfillmentGateBadge({
     item: WorkspaceWorkItem
     descriptor: WorkspaceFulfillmentDescriptor
 }) {
-    const query = useFulfillmentGate(
-        item.workItemId,
-        item.businessObjectId,
-        descriptor.operationTypes[0],
-    )
-    const gate = query.data
+    const gate = item.fulfillmentStatus?.gate_state
     const action = ["SUPPLIER_DIRECT", "WAREHOUSE_SHIP"].includes(
         descriptor.operationTypes[0],
     )
         ? "发货"
         : "履约"
-    if (query.isError || !gate) {
-        return (
-            <StatusBadge
-                label={`${action}条件${query.isPending ? "查询中" : "待核对"}`}
-                tone="neutral"
-            />
-        )
+    if (!gate) {
+        return <StatusBadge label={`${action}条件待核对`} tone="neutral" />
     }
     const blocker = item.actionBlockers.find(
         (entry) => entry.action === "PROCESS" || entry.action === "POST",

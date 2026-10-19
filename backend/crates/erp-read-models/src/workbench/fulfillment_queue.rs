@@ -116,7 +116,15 @@ pub enum FulfillmentQueueGateState {
 }
 
 impl FulfillmentQueueGateState {
-    fn parse(value: &str) -> Option<Self> {
+    /// 解析共享的仓储放行码；未登记值不授予放行状态。
+    ///
+    /// # 参数
+    /// `value` 为仓储返回的稳定状态码。
+    /// # 返回
+    /// 已登记状态或 `None`。
+    /// # 错误
+    /// 不返回错误，调用方必须拒绝未知状态。
+    pub(super) fn parse(value: &str) -> Option<Self> {
         match value {
             "SATISFIED" => Some(Self::Satisfied),
             "BLOCKED" => Some(Self::Blocked),

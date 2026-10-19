@@ -15,6 +15,12 @@ import { displayBusinessText, displayName } from "@/lib/display-name"
 
 export type WorkItemStatus = "OPEN" | "COMPLETED" | "CLOSED"
 
+/** 与列表同一快照返回的履约状态；缺失付款事实不推断为未付。 */
+export type WorkItemFulfillmentStatus = Readonly<{
+    payment_state: "UNPAID" | "PARTIAL" | "PAID" | "NOT_REQUIRED" | null
+    gate_state: "SATISFIED" | "BLOCKED" | "NOT_APPLICABLE"
+}>
+
 export type WorkItemScope = "mine" | "managed" | "history"
 
 export type WorkItemProcessingState =
@@ -109,6 +115,7 @@ export type WorkItemDto = Readonly<{
     impact_summary?: string | null
     next_action_hint?: string | null
     delivery_lines?: readonly DeliveryTaskLine[]
+    fulfillment_status?: WorkItemFulfillmentStatus | null
     summary_sections?: readonly Readonly<{
         label: string
         value: string
@@ -195,6 +202,7 @@ export type WorkItemProjection = Readonly<{
     impactSummary: string
     nextActionHint: string
     deliveryLines?: readonly DeliveryTaskLine[]
+    fulfillmentStatus?: WorkItemFulfillmentStatus
     summarySections: readonly Readonly<{
         label: string
         value: string
@@ -322,6 +330,7 @@ export function mapWorkItemDto(dto: WorkItemDto): WorkItemProjection {
             workItemType: dto.work_item_type,
         }),
         deliveryLines: dto.delivery_lines,
+        fulfillmentStatus: dto.fulfillment_status ?? undefined,
         summarySections: (dto.summary_sections ?? []).map((section) => ({
             label: section.label,
             value: section.value,

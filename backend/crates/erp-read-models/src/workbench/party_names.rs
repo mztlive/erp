@@ -300,6 +300,7 @@ mod tests {
             AssignmentSource, WorkItemPriority, WorkItemStatus, WorkItemType,
         };
         WorkItemView {
+            fulfillment_status: None,
             delivery_lines: Vec::new(),
             id: "wi".to_string(),
             work_item_type: WorkItemType::ImportBusinessConfirmation,

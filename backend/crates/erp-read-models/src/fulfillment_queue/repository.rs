@@ -5,6 +5,8 @@
 //! 筛选、指标和分页；客户端不得逐页拉取四个单据列表后自行拼接。
 
 mod page;
+mod payment_status;
+pub(crate) use payment_status::FulfillmentPaymentStatusRow;
 mod pipeline;
 mod prepayment;
 

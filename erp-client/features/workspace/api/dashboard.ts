@@ -250,6 +250,7 @@ export function mapWorkspaceWorkItem(
         summarySections: task.summarySections,
         briefLines: task.briefLines,
         deliveryLines: task.deliveryLines,
+        fulfillmentStatus: task.fulfillmentStatus,
         briefMoreCount: task.briefMoreCount,
     }
 }

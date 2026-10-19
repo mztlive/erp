@@ -6,6 +6,7 @@ use erp_workflow::entity::work_item::{
 };
 use serde::Serialize;
 
+use super::super::WorkItemFulfillmentStatus;
 use super::super::brief::assemble_brief;
 use super::super::presentation::{
     UNRESOLVED_OWNER_DISPLAY_NAME, next_action_hint, reason_label, usable_impact_summary,
@@ -130,6 +131,9 @@ pub struct WorkItemView {
     /// 本发货批次的数量与交期；其他任务不返回。
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub delivery_lines: Vec<super::super::DeliveryTaskLine>,
+    /// 当前页批量读取的实际付款与放行状态；缺失时不得推断为可发货。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fulfillment_status: Option<WorkItemFulfillmentStatus>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub brief_more_count: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -219,6 +223,7 @@ impl WorkItemView {
         let brief = brief_source.as_ref().map(|source| assemble_brief(source, inner.reason_code.as_deref()));
         Ok(Self {
             delivery_lines,
+            fulfillment_status: None,
             id: inner.id,
             work_item_type: inner.work_item_type,
             handler_key: route.handler_key.to_string(),

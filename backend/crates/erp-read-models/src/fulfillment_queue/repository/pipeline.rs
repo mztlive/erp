@@ -39,8 +39,43 @@ pub(super) fn fulfillment_queue_pipeline(filter: &FulfillmentQueueFilter) -> Res
     let offset = i64::try_from(filter.offset)
         .map_err(|_| Error::EntityMetadataOutOfRange("fulfillment_queue_offset"))?;
     let page_size = i64::from(filter.page_size);
-    let mut pipeline = vec![
-        doc! { "$match": base_match(filter) },
+    let mut pipeline = fulfillment_facts_pipeline(base_match(filter));
+    if filter.query.is_some() {
+        pipeline.push(counterparty_lookup(
+            <Database as CustomerExt>::CUSTOMER_ACCOUNTS,
+            "$_sales_order.customer_id",
+            "_customer_names",
+        ));
+        pipeline.push(counterparty_lookup(
+            <Database as SupplierExt>::SUPPLIER_ACCOUNTS,
+            "$_purchase_order.supplier_id",
+            "_supplier_names",
+        ));
+    }
+    append_optional_filters(&mut pipeline, filter);
+    pipeline.push(page_facet(offset, page_size));
+    Ok(pipeline)
+}
+
+/// 复用任务身份校验、冻结付款条件和实付净额，调用方必须先限定授权任务范围。
+///
+/// # 参数
+/// `matched` 为已经限定到授权责任范围或当前页任务 ID 的匹配条件。
+/// # 返回
+/// 返回核验草稿身份、责任组织并计算付款门槛的聚合阶段。
+/// # 错误
+/// 不返回错误；数据读取失败由仓储执行入口返回。
+pub(super) fn fulfillment_facts_pipeline(matched: Document) -> Vec<Document> {
+    let mut stages = operation_stages(matched);
+    stages.extend(source_stages());
+    stages.extend(context_stages());
+    stages
+}
+
+/// 关联履约草稿并核验冻结任务身份。
+fn operation_stages(matched: Document) -> Vec<Document> {
+    vec![
+        doc! { "$match": matched },
         purchase_receipt_lookup(),
         delivery_lookup(),
         electronic_delivery_lookup(),
@@ -75,6 +110,12 @@ pub(super) fn fulfillment_queue_pipeline(filter: &FulfillmentQueueFilter) -> Res
                 }
             }
         },
+    ]
+}
+
+/// 读取来源采购、销售、仓库及付款门槛事实。
+fn source_stages() -> Vec<Document> {
+    vec![
         purchase_order_lookup(),
         doc! {
             "$set": {
@@ -92,6 +133,12 @@ pub(super) fn fulfillment_queue_pipeline(filter: &FulfillmentQueueFilter) -> Res
         prepayment::facts(),
         sales_order_lookup(),
         warehouse_lookup(),
+    ]
+}
+
+/// 核验责任组织并计算付款放行与排序字段。
+fn context_stages() -> Vec<Document> {
+    vec![
         doc! {
             "$set": {
                 "_sales_order": { "$arrayElemAt": ["$_sales_orders", 0] },
@@ -121,22 +168,7 @@ pub(super) fn fulfillment_queue_pipeline(filter: &FulfillmentQueueFilter) -> Res
                 "$expr": { "$eq": ["$owner_organization_id", "$_expected_owner_organization_id"] }
             }
         },
-    ];
-    if filter.query.is_some() {
-        pipeline.push(counterparty_lookup(
-            <Database as CustomerExt>::CUSTOMER_ACCOUNTS,
-            "$_sales_order.customer_id",
-            "_customer_names",
-        ));
-        pipeline.push(counterparty_lookup(
-            <Database as SupplierExt>::SUPPLIER_ACCOUNTS,
-            "$_purchase_order.supplier_id",
-            "_supplier_names",
-        ));
-    }
-    append_optional_filters(&mut pipeline, filter);
-    pipeline.push(page_facet(offset, page_size));
-    Ok(pipeline)
+    ]
 }
 
 fn base_match(filter: &FulfillmentQueueFilter) -> Document {
