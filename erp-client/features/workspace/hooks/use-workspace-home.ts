@@ -21,7 +21,6 @@ import {
     type WorkspaceUrlState,
 } from "@/features/workspace/lib/url-state"
 import type {
-    WorkspaceFamilyFilter,
     WorkspaceMetricKey,
     WorkspaceSort,
     WorkspaceWorkItem,
@@ -73,7 +72,6 @@ export function useWorkspaceHome() {
     const hasActiveFilter = Boolean(
         urlState.due ||
         urlState.blocked ||
-        urlState.family ||
         urlState.workItemType ||
         urlState.query ||
         urlState.handlerUserIds ||
@@ -201,19 +199,6 @@ export function useWorkspaceHome() {
         [queryClient, selectNextAfter],
     )
 
-    const onFamilyChange = React.useCallback(
-        (family?: WorkspaceFamilyFilter) => {
-            replaceUrl({
-                ...urlState,
-                family,
-                workItemType: undefined,
-                page: 1,
-                currentWorkItemId: undefined,
-            })
-        },
-        [replaceUrl, urlState],
-    )
-
     const onQueueFiltersChange = React.useCallback(
         (
             patch: Pick<WorkspaceUrlState, "workItemType" | "due" | "blocked">,
@@ -311,7 +296,6 @@ export function useWorkspaceHome() {
         onSelectTask,
         selectNextAfter,
         applyDecisionAfter,
-        onFamilyChange,
         onQueueFiltersChange,
         onSortChange,
         applySearch,

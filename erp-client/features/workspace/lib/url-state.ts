@@ -1,7 +1,6 @@
 import type {
     TodayWorkspaceQuery,
     WorkspaceDueFilter,
-    WorkspaceFamilyFilter,
     WorkspaceMetricKey,
     WorkspaceSort,
     WorkspaceViewFilter,
@@ -9,13 +8,6 @@ import type {
 import { createUrlStateCodec } from "@/lib/url-state"
 
 const DUE_VALUES = ["today", "overdue"] as const
-const FAMILY_VALUES = [
-    "approval",
-    "procurement",
-    "finance",
-    "fulfillment",
-    "exception",
-] as const
 const VIEW_VALUES = ["inbox", "started", "managed"] as const
 const SORT_VALUES = ["priority_due", "due_asc", "created_desc"] as const
 
@@ -23,7 +15,6 @@ export type WorkspaceUrlState = {
     view: WorkspaceViewFilter
     due?: WorkspaceDueFilter
     blocked?: boolean
-    family?: WorkspaceFamilyFilter
     workItemType?: string
     query?: string
     handlerUserIds?: string
@@ -44,7 +35,6 @@ const codec = createUrlStateCodec<WorkspaceUrlState>([
     },
     { key: "due", type: "enum", values: DUE_VALUES },
     { key: "blocked", type: "boolean", defaultValue: false },
-    { key: "family", type: "enum", values: FAMILY_VALUES },
     { key: "type", name: "workItemType", type: "string", trim: true },
     { key: "q", name: "query", type: "string", trim: true },
     {
@@ -123,10 +113,6 @@ export const pickLegalWorkspaceQuery = (
     if (due === "today" || due === "overdue") next.set("due", due)
     if (get("blocked") === "1" || get("blocked") === "true") {
         next.set("blocked", "1")
-    }
-    const family = get("family")
-    if (family && FAMILY_VALUES.includes(family as WorkspaceFamilyFilter)) {
-        next.set("family", family)
     }
     const type = get("type")
     if (type) next.set("type", type)
@@ -226,7 +212,6 @@ export function toTodayWorkspaceQuery(
         view: state.view,
         due: state.due,
         blocked: state.blocked || undefined,
-        family: state.family,
         workItemType: state.workItemType,
         query: state.query,
         handlerUserIds: state.handlerUserIds,

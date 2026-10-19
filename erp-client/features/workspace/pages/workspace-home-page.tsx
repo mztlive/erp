@@ -10,7 +10,6 @@ import {
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
-    WorkspaceFamilyNav,
     WorkspaceQueueScopeNav,
     WorkspaceQueueToolbar,
 } from "../components/workspace-filter-bar"
@@ -21,6 +20,7 @@ import {
 import { WorkspaceHomeSkeleton } from "../components/workspace-home-skeleton"
 import { WorkspaceTaskDetail } from "../components/workspace-task-detail"
 import { WorkspaceProcessingLayout } from "../components/workspace-processing-layout"
+import { WorkspaceQueueTypeNav } from "../components/workspace-queue-type-nav"
 import { WorkspaceQueueFilters } from "../components/workspace-queue-filters"
 import { WorkspaceTaskList } from "../components/workspace-task-list"
 import { useWorkspaceHome } from "../hooks/use-workspace-home"
@@ -53,7 +53,6 @@ export function WorkspaceHomeView({
         clearFilters,
         onSelectTask,
         applyDecisionAfter,
-        onFamilyChange,
         onQueueFiltersChange,
         onSortChange,
         applySearch,
@@ -311,18 +310,25 @@ export function WorkspaceHomeView({
                             resultNoun={started ? "条审批" : "条待办"}
                             filters={
                                 !started ? (
-                                    <WorkspaceFamilyNav
-                                        urlState={urlState}
-                                        counts={view.familyCounts}
-                                        onFamilyChange={onFamilyChange}
+                                    <WorkspaceQueueFilters
+                                        state={urlState}
+                                        onChange={onQueueFiltersChange}
                                     />
                                 ) : undefined
                             }
                         />
                         {!started && (
-                            <WorkspaceQueueFilters
+                            <WorkspaceQueueTypeNav
                                 state={urlState}
-                                onChange={onQueueFiltersChange}
+                                counts={view.workItemTypeCounts}
+                                total={
+                                    view.metrics.find(
+                                        (metric) => metric.key === "inbox",
+                                    )?.count
+                                }
+                                onChange={(workItemType) =>
+                                    onQueueFiltersChange({ workItemType })
+                                }
                             />
                         )}
                         {hasActiveFilter && (

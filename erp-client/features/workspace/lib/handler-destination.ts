@@ -352,7 +352,7 @@ export function buildHandlerHref(item: HandlerNavigationInput): string | null {
         return withParams(
             registration.baseHref,
             new URLSearchParams({
-                family: "fulfillment",
+                type: "FULFILLMENT_OPERATION",
                 currentWorkItemId: workItemId,
             }),
         )

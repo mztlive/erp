@@ -26,29 +26,10 @@ import { cn } from "@/lib/utils"
 
 import type { WorkspaceUrlState } from "../lib/url-state"
 import type {
-    WorkspaceFamilyFilter,
-    WorkspaceFamilyCounts,
     WorkspaceMetric,
     WorkspaceMetricKey,
     WorkspaceSort,
 } from "../types"
-
-const FAMILIES: readonly (WorkspaceFamilyFilter | undefined)[] = [
-    undefined,
-    "approval",
-    "procurement",
-    "fulfillment",
-    "finance",
-    "exception",
-]
-
-const FAMILY_LABEL: Record<string, string> = {
-    approval: "审批",
-    procurement: "采购",
-    fulfillment: "履约",
-    finance: "财务",
-    exception: "异常",
-}
 
 const SORT_OPTIONS: readonly { value: WorkspaceSort; label: string }[] = [
     { value: "priority_due", label: "超期优先，再按优先级" },
@@ -123,93 +104,6 @@ export function WorkspaceQueueScopeNav({
                     </span>
                 </WorkspaceTextNavButton>
             ))}
-        </div>
-    )
-}
-
-/**
- * 队列类型。和待办列表同一列，不跨到作业面。
- */
-export function WorkspaceFamilyNav({
-    urlState,
-    counts,
-    onFamilyChange,
-}: {
-    urlState: WorkspaceUrlState
-    counts?: WorkspaceFamilyCounts
-    onFamilyChange: (family?: WorkspaceFamilyFilter) => void
-}) {
-    const familyValue = urlState.family ?? "all"
-    const allCount = counts
-        ? Object.values(counts).reduce((total, count) => total + count, 0)
-        : undefined
-
-    return (
-        <div role="group" aria-label="任务类型">
-            <DropdownMenu>
-                <DropdownMenuTrigger
-                    id="workspace-family-filter-trigger"
-                    render={
-                        <Button
-                            type="button"
-                            variant="outline"
-                            className="min-w-32 justify-between"
-                            aria-label={
-                                "任务类型：" +
-                                (FAMILY_LABEL[familyValue] ?? "全部")
-                            }
-                        />
-                    }
-                >
-                    业务分类：{FAMILY_LABEL[familyValue] ?? "全部"}
-                    <ChevronDownIcon aria-hidden="true" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                    <DropdownMenuGroup>
-                        <DropdownMenuRadioGroup
-                            value={familyValue}
-                            onValueChange={(value) =>
-                                onFamilyChange(
-                                    value === "all"
-                                        ? undefined
-                                        : (value as WorkspaceFamilyFilter),
-                                )
-                            }
-                        >
-                            {FAMILIES.map((family) => {
-                                const value = family ?? "all"
-                                const count = family
-                                    ? counts?.[family]
-                                    : allCount
-                                const label = family
-                                    ? FAMILY_LABEL[family]
-                                    : "全部"
-                                return (
-                                    <DropdownMenuRadioItem
-                                        closeOnClick
-                                        key={value}
-                                        id={"workspace-family-nav-" + value}
-                                        value={value}
-                                        aria-label={
-                                            label +
-                                            (count == null
-                                                ? ""
-                                                : " " + count + " 项")
-                                        }
-                                    >
-                                        {label}
-                                        {count == null ? null : (
-                                            <span className="num ml-auto pl-6 text-xs text-muted-foreground">
-                                                {count}
-                                            </span>
-                                        )}
-                                    </DropdownMenuRadioItem>
-                                )
-                            })}
-                        </DropdownMenuRadioGroup>
-                    </DropdownMenuGroup>
-                </DropdownMenuContent>
-            </DropdownMenu>
         </div>
     )
 }
