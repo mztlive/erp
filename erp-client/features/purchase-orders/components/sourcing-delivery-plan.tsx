@@ -230,7 +230,7 @@ export function SourcingDeliveryEditor({
                                     variant="secondary"
                                     onClick={() => field.handleChange(rows)}
                                 >
-                                    按地址调整
+                                    调整各地址数量
                                 </Button>
                             ) : customized && coversAll ? (
                                 <Button
@@ -249,7 +249,7 @@ export function SourcingDeliveryEditor({
                         {expanded ? (
                             <>
                                 <p className="text-xs text-muted-foreground">
-                                    填写本来源送往各地址的数量，合计须等于本次分配数量。
+                                    按地址填写数量，合计等于本次分配数量。
                                 </p>
                                 <div className="max-h-80 space-y-3 overflow-y-auto">
                                     {rows.map((row, addressIndex) => (
@@ -352,11 +352,18 @@ export function SourcingDeliveryEditor({
                         ) : (
                             <>
                                 <p className="text-xs text-muted-foreground">
-                                    按销售要求全部送达
+                                    按销售要求全部送达 ·{" "}
+                                    {
+                                        rows.filter((row) =>
+                                            positive(row.quantity),
+                                        ).length
+                                    }{" "}
+                                    个地址
                                 </p>
                                 <ul className="max-h-48 space-y-2 overflow-y-auto">
-                                    {rows.map((row, addressIndex) =>
-                                        positive(row.quantity) ? (
+                                    {rows
+                                        .filter((row) => positive(row.quantity))
+                                        .map((row, addressIndex) => (
                                             <li
                                                 key={addressIndex}
                                                 className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3"
@@ -371,8 +378,7 @@ export function SourcingDeliveryEditor({
                                                     unit={product.unit}
                                                 />
                                             </li>
-                                        ) : null,
-                                    )}
+                                        ))}
                                 </ul>
                             </>
                         )}

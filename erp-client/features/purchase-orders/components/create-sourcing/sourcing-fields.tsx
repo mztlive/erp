@@ -125,6 +125,9 @@ export function SourcingExpectedDeliveryField({
                         </span>
                     )
                 }
+                const deadline = product?.deliveryDeadline
+                const validDeadline =
+                    deadline && /^\d{4}-\d{2}-\d{2}$/.test(deadline)
                 return (
                     <form.AppField
                         name={`lines[${index}].expectedDeliveryDate`}
@@ -133,8 +136,23 @@ export function SourcingExpectedDeliveryField({
                             <field.DateField
                                 id={`procurement-orders-create-row-${toAutomationIdSegment(rowKey)}-delivery-date`}
                                 label="预计交付日"
+                                description={
+                                    validDeadline
+                                        ? `不晚于销售承诺期限 ${deadline}`
+                                        : undefined
+                                }
                                 required
                                 hideLabel
+                                clearable={false}
+                                disabledDates={
+                                    validDeadline
+                                        ? {
+                                              after: new Date(
+                                                  `${deadline}T23:59:59`,
+                                              ),
+                                          }
+                                        : undefined
+                                }
                             />
                         )}
                     </form.AppField>
@@ -152,6 +170,7 @@ export function SourcingOptionField({
     rowKey,
     product,
     hideLabel = true,
+    showDeliverySummary = true,
 }: {
     form: PurchaseOrderCreateFormApi
     order: SourcingSalesOrder
@@ -159,6 +178,8 @@ export function SourcingOptionField({
     rowKey: string
     product: SourcingSalesOrder["lines"][number]
     hideLabel?: boolean
+    /** 紧凑编辑区由下方方案摘要展示配送条件，避免选中值过长。 */
+    showDeliverySummary?: boolean
 }) {
     return (
         <form.AppField name={`lines[${index}].basisId`}>
@@ -168,7 +189,7 @@ export function SourcingOptionField({
                     label={`履约方案，${product.itemName}`}
                     required
                     hideLabel={hideLabel}
-                    allowClear={product.options.length > 1}
+                    allowClear={false}
                     placeholder="选择履约方案"
                     options={product.options.map((option) => {
                         const minimum = bulkMinimumOptionState(order, option)
@@ -177,12 +198,14 @@ export function SourcingOptionField({
                             disabled: minimum.disabled,
                             label:
                                 option.sourceType === "EXISTING_STOCK"
-                                    ? `${option.supplierName} · 可用 ${option.sourceAvailableQuantity ?? option.maxCreateQuantity}`
+                                    ? `${option.warehouseName || option.supplierName} · 可用 ${option.sourceAvailableQuantity ?? option.maxCreateQuantity}`
                                     : [
                                           option.supplierName,
                                           sourcingRouteLabel(option),
                                           minimum.label,
-                                          deliverySummary(option, product),
+                                          showDeliverySummary
+                                              ? deliverySummary(option, product)
+                                              : "",
                                       ]
                                           .filter(Boolean)
                                           .join(" · "),

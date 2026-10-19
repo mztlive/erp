@@ -4,6 +4,7 @@ import { RequiredMark } from "@/components/ui/required-mark"
 
 import { Trash2Icon } from "lucide-react"
 import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -15,7 +16,6 @@ import type {
     SourcingLineInput,
     SourcingProductLine,
 } from "../lib/purchase-order-create-model"
-import { PURCHASE_TYPE_LABEL } from "../types"
 import {
     SourcingExpectedDeliveryField,
     SourcingOptionField,
@@ -105,18 +105,11 @@ export function SourcingAllocationEditor({
                 </div>
             ) : null}
             <div className="min-w-0 space-y-1.5">
-                <p className="text-xs text-muted-foreground">
-                    供给来源
-                    <RequiredMark />
-                </p>
-                <SourcingOptionField
-                    form={form}
-                    order={order}
-                    index={index}
-                    rowKey={line.rowKey}
-                    product={product}
-                />
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                <div className="flex min-h-6 flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-muted-foreground">
+                        供给来源
+                        <RequiredMark />
+                    </p>
                     <SourcingRecommendationHint
                         id={`${id}-recommendation`}
                         form={form}
@@ -124,8 +117,16 @@ export function SourcingAllocationEditor({
                         product={product}
                         index={index}
                     />
-                    <SourcingOptionFacts option={option} product={product} />
                 </div>
+                <SourcingOptionField
+                    form={form}
+                    order={order}
+                    index={index}
+                    rowKey={line.rowKey}
+                    product={product}
+                    showDeliverySummary={false}
+                />
+                <SourcingOptionFacts option={option} product={product} />
             </div>
             <div
                 className={cn(
@@ -233,7 +234,7 @@ function WarehouseDeliveryNote({
     )
 }
 
-/** 方案属性紧随来源选择；每项独立成段，便于逐项核对。 */
+/** 方案属性紧随来源选择；先给价格与履约标签，异常配送和起订量单独补一行。 */
 function SourcingOptionFacts({
     option,
     product,
@@ -241,53 +242,87 @@ function SourcingOptionFacts({
     option: ReturnType<typeof findSourcingOption>
     product: SourcingProductLine
 }) {
-    if (!option) return <span>请选择供给来源</span>
-    if (option.sourceType === "EXISTING_STOCK")
+    if (!option) {
         return (
-            <>
-                <span>
-                    现有库存 · {option.warehouseName || option.supplierName}
-                </span>
-                <span>成本按库存核算</span>
-            </>
+            <p className="rounded-lg border border-dashed border-border/70 px-3 py-2 text-xs text-muted-foreground">
+                选择供给来源后显示价格、付款与配送条件。
+            </p>
         )
+    }
+    if (option.sourceType === "EXISTING_STOCK") {
+        return (
+            <div className="rounded-lg border border-border/70 bg-muted/25 px-3 py-2.5">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <Badge variant="secondary">现有库存</Badge>
+                    <span className="text-sm font-medium">
+                        {option.warehouseName || option.supplierName}
+                    </span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                    成本按库存核算
+                </p>
+            </div>
+        )
+    }
+    const delivery = deliverySummary(option, product)
+    const deliveryException = delivery.startsWith("全部地址") ? "" : delivery
+    const template =
+        option.fulfillmentResponsibility === "SUPPLIER_DIRECT" &&
+        option.delivery
+            ? (option.delivery.templateName ??
+              (option.priceBasis === "BULK" ? "全国包邮" : "全国配送"))
+            : option.delivery?.templateName
     return (
-        <>
-            <span>
-                含税单价 <MoneyValue value={option.unitCostGross} />
-            </span>
-            <span>
-                进项税率{" "}
-                <RateValue
-                    value={multiplyFixed(option.inputTaxRate, "100", {
-                        leftMaxScale: 6,
-                        rightMaxScale: 0,
-                        outputScale: 2,
-                    })}
-                    precision={2}
-                />
-            </span>
-            <span>{PURCHASE_TYPE_LABEL[option.purchaseType]}</span>
-            <span>付款条件 {option.paymentTermLabel || "—"}</span>
-            <span>{sourcingRouteLabel(option)}</span>
-            {option.delivery ? (
-                <span>
-                    配送模板{" "}
-                    {option.delivery.templateName ?? "未设置（全国配送、包邮）"}
-                </span>
+        <div className="rounded-lg border border-border/70 bg-muted/25 px-3 py-2.5">
+            <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                    <Badge variant="secondary">
+                        {sourcingRouteLabel(option)}
+                    </Badge>
+                    {option.paymentTermLabel ? (
+                        <Badge variant="outline">
+                            付款 {option.paymentTermLabel}
+                        </Badge>
+                    ) : null}
+                    {template ? (
+                        <Badge variant="outline">{template}</Badge>
+                    ) : null}
+                </div>
+                <div className="shrink-0 text-right">
+                    <p className="text-sm font-semibold">
+                        <MoneyValue value={option.unitCostGross} />
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                        含税 · 税率{" "}
+                        <RateValue
+                            value={multiplyFixed(option.inputTaxRate, "100", {
+                                leftMaxScale: 6,
+                                rightMaxScale: 0,
+                                outputScale: 2,
+                            })}
+                            precision={2}
+                        />
+                    </p>
+                </div>
+            </div>
+            {deliveryException || option.delivery?.bulkMinimumOrderQuantity ? (
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    {deliveryException ? (
+                        <span className="text-warning-soft-foreground">
+                            {deliveryException}
+                        </span>
+                    ) : null}
+                    {option.delivery?.bulkMinimumOrderQuantity ? (
+                        <span>
+                            集采起订量{" "}
+                            <QuantityValue
+                                value={option.delivery.bulkMinimumOrderQuantity}
+                                unit={product.unit}
+                            />
+                        </span>
+                    ) : null}
+                </div>
             ) : null}
-            {deliverySummary(option, product) ? (
-                <span>{deliverySummary(option, product)}</span>
-            ) : null}
-            {option.delivery?.bulkMinimumOrderQuantity ? (
-                <span>
-                    集采起订量{" "}
-                    <QuantityValue
-                        value={option.delivery.bulkMinimumOrderQuantity}
-                        unit={product.unit}
-                    />
-                </span>
-            ) : null}
-        </>
+        </div>
     )
 }

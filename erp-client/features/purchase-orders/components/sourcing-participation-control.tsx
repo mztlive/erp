@@ -1,5 +1,6 @@
 "use client"
 
+import { Checkbox } from "@/components/ui/checkbox"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 
@@ -10,12 +11,15 @@ export function SourcingParticipationControl({
     included,
     onChange,
     showHint = true,
+    control = "switch",
 }: {
     idPrefix: string
     itemName: string
     included: boolean
     onChange: (included: boolean) => void
     showHint?: boolean
+    /** 弹层等紧凑场景用复选框，列表行保留开关。 */
+    control?: "switch" | "checkbox"
 }) {
     const id = `${idPrefix}-participation`
     const hint = showHint && !included
@@ -23,15 +27,28 @@ export function SourcingParticipationControl({
         <div className="space-y-1">
             <label
                 htmlFor={id}
-                className="inline-flex min-h-8 cursor-pointer items-center gap-3"
+                className={cn(
+                    "inline-flex cursor-pointer items-center",
+                    control === "checkbox" ? "gap-2" : "min-h-8 gap-3",
+                )}
             >
-                <Switch
-                    id={id}
-                    checked={included}
-                    onCheckedChange={onChange}
-                    aria-label={`本次分配 ${itemName}`}
-                    aria-describedby={hint ? `${id}-hint` : undefined}
-                />
+                {control === "checkbox" ? (
+                    <Checkbox
+                        id={id}
+                        checked={included}
+                        onCheckedChange={onChange}
+                        aria-label={`本次分配 ${itemName}`}
+                        aria-describedby={hint ? `${id}-hint` : undefined}
+                    />
+                ) : (
+                    <Switch
+                        id={id}
+                        checked={included}
+                        onCheckedChange={onChange}
+                        aria-label={`本次分配 ${itemName}`}
+                        aria-describedby={hint ? `${id}-hint` : undefined}
+                    />
+                )}
                 <span
                     className={cn(
                         "whitespace-nowrap text-xs font-medium",
