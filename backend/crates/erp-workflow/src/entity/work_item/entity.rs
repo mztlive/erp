@@ -1,6 +1,7 @@
 //! `work_item`：审批与独立人工任务的当前责任事实。
 
 mod approval;
+mod payment_arrangement;
 mod permissions;
 mod status;
 mod supplier_portal;

@@ -28,13 +28,16 @@ export function WorkspaceProcessingLayout({
     const fulfillment = item.workItemType === "FULFILLMENT_OPERATION"
     const approval = item.approval
     const payment = item.businessObjectType === "purchase_payment_request"
+    const paymentArrangement =
+        item.workItemType === "PURCHASE_PAYMENT_ARRANGEMENT"
     const actionable = item.allowedActions.some((action) =>
         ["PROCESS", "APPROVE", "REJECT"].includes(action),
     )
     return (
         <WorkspaceTaskPageProvider
+            compact={paymentArrangement}
             summary={
-                payment ? undefined : (
+                payment || paymentArrangement ? undefined : (
                     <dl className="flex flex-wrap gap-x-8 gap-y-4 rounded-lg border border-border/60 bg-muted/15 p-4">
                         {item.amountSummary && (
                             <Fact
@@ -101,6 +104,12 @@ export function WorkspaceProcessingLayout({
                                     label="进入时间"
                                     value={item.enteredAtLabel}
                                 />
+                                {paymentArrangement && item.dueAt && (
+                                    <Fact
+                                        label="截止时间"
+                                        value={item.dueAtLabel}
+                                    />
+                                )}
                             </dl>
                         </section>
                     )}

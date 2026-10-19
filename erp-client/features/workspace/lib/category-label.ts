@@ -2,6 +2,7 @@ import { TYPE_META } from "../api/work-item-meta"
 
 const CATEGORY_LABELS: Record<string, string> = {
     PROCUREMENT_ORDER_CREATION: "供给分配",
+    PURCHASE_PAYMENT_ARRANGEMENT: "采购付款安排",
     PURCHASE_SOURCE_UPDATE: "销售变更影响",
 }
 

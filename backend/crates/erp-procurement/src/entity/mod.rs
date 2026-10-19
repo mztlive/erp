@@ -8,3 +8,5 @@ pub mod purchase_order;
 pub(crate) mod test_support;
 
 pub mod purchase_email;
+
+pub mod payment_arrangement;

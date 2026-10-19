@@ -406,6 +406,13 @@ type FixedRoute = (WorkItemType, &'static [&'static str], &'static str, &'static
 
 const FIXED_TASK_ROUTES: &[FixedRoute] = &[
     (
+        WorkItemType::PurchasePaymentArrangement,
+        &["purchase_order"],
+        "purchase_payment_arrangement",
+        "W08",
+        "付款安排任务业务对象未注册",
+    ),
+    (
         WorkItemType::PurchaseReturnRefund,
         &["purchase_order"],
         "purchase_return_refund",

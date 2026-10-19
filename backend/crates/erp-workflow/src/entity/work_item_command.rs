@@ -12,6 +12,7 @@ use crate::{Error, Result};
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum WorkItemCommandResult {
     Reassigned { work_item_id: String, task_version: u64, target_user_id: String, reason: String },
+    PaymentFollowUp { work_item_id: String, task_version: u64, follow_up_date: String },
     Closed { work_item_id: String, task_version: u64, evidence_reference: String },
 }
 
@@ -68,6 +69,9 @@ impl WorkItemCommandReceipt {
                 }
                 (work_item_id, *task_version, "work_item.reassign", target_user_id)
             },
+            WorkItemCommandResult::PaymentFollowUp { work_item_id, task_version, follow_up_date } => {
+                (work_item_id, *task_version, "work_item.payment_follow_up", follow_up_date)
+            },
             WorkItemCommandResult::Closed { work_item_id, task_version, evidence_reference } => {
                 (work_item_id, *task_version, "work_item.close", evidence_reference)
             },
@@ -106,6 +110,7 @@ impl WorkItemCommandReceipt {
         }
         Ok(match &self.result {
             WorkItemCommandResult::Reassigned { work_item_id, task_version, .. }
+            | WorkItemCommandResult::PaymentFollowUp { work_item_id, task_version, .. }
             | WorkItemCommandResult::Closed { work_item_id, task_version, .. } => {
                 (work_item_id, *task_version)
             },
@@ -152,5 +157,41 @@ mod tests {
         let wire = serde_json::to_string(&receipt).unwrap();
         assert!(!wire.contains("command_fingerprint="));
         assert_eq!(serde_json::from_str::<WorkItemCommandReceipt>(&wire).unwrap(), receipt);
+    }
+}
+
+#[cfg(test)]
+mod payment_follow_up_tests {
+    use super::*;
+    #[test]
+    fn follow_up_receipt_replays_same_date_and_rejects_changed_payload() {
+        let command = |date: &str| {
+            CommandReceipt::from_resource_parts(
+                "payment-follow-up-",
+                "buyer",
+                "work_item.payment_follow_up",
+                "work_item",
+                "task",
+                "key",
+                ["purchase".to_string(), "1".to_string(), date.to_string()],
+            )
+            .unwrap()
+        };
+        let original = command("2026-10-20");
+        let receipt = WorkItemCommandReceipt::new(
+            &original,
+            WorkItemCommandResult::PaymentFollowUp {
+                work_item_id: "task".into(),
+                task_version: 2,
+                follow_up_date: "2026-10-20".into(),
+            },
+            "audit".into(),
+        )
+        .unwrap();
+        assert_eq!(receipt.committed_task(&original).unwrap(), ("task", 2));
+        assert!(receipt.committed_task(&command("2026-10-21")).is_err());
+        let mut invalid = receipt;
+        invalid.command.scope_id = Some("other-task".into());
+        assert!(invalid.validate().is_err());
     }
 }

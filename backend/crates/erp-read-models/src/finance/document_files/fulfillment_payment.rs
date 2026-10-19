@@ -171,7 +171,14 @@ impl BusinessFinanceFiles {
 mod tests;
 
 impl FulfillmentRequestView {
-    fn for_purchase(
+    /// 仅提取精确采购及应付身份匹配的申请分配。
+    /// # 参数
+    /// 关联申请、已授权采购身份及其应付子账身份。
+    /// # 返回
+    /// 匹配时返回本采购行的金额与申请进度，否则为空。
+    /// # 错误
+    /// 无；不返回其他采购的金额、附件或账户资料。
+    pub(crate) fn for_purchase(
         request: &PurchasePaymentRequest,
         purchase_id: &PurchaseOrderId,
         account_id: &str,

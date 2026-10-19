@@ -20,8 +20,18 @@ export function useRequestList() {
         () => requestListCodec.parse(searchParams),
         [searchParams],
     )
+    const purchaseOrderScope = useMemo(() => {
+        const id = url.purchase_order_id
+        if (!id) return null
+        const number =
+            searchParams.get("purchase_order_label")?.trim() ||
+            searchParams.get("purchase_order_no")?.trim()
+        return { id, number: number || undefined }
+    }, [searchParams, url.purchase_order_id])
     const update = useCallback(
         (patch: Partial<RequestListUrl>) => {
+            const clearsPurchaseOrder =
+                "purchase_order_id" in patch && !patch.purchase_order_id
             const next = requestListCodec.buildParams({ ...url, ...patch })
             // 保留新建入口的采购来源及其他导航上下文。
             const params = new URLSearchParams(searchParams.toString())
@@ -33,9 +43,11 @@ export function useRequestList() {
                 "sort_desc",
                 "supplier_name",
                 "payer_party_name",
+                "purchase_order_id",
                 ...requestFilterFields.map(([key]) => key),
             ])
                 params.delete(key)
+            if (clearsPurchaseOrder) params.delete("purchase_order_label")
             if (patch.view && patch.view !== url.view) {
                 for (const key of Array.from(params.keys())) {
                     if (key.startsWith("candidate_")) params.delete(key)
@@ -91,5 +103,5 @@ export function useRequestList() {
             page: 1,
         })
     }
-    return { url, update, query, applied, sorting, sort }
+    return { url, update, query, applied, sorting, sort, purchaseOrderScope }
 }

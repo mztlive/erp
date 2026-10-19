@@ -1,6 +1,8 @@
 "use client"
 
-import { Fragment, useState } from "react"
+import { Fragment, useMemo, useState } from "react"
+import Link from "next/link"
+import { usePathname, useSearchParams } from "next/navigation"
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react"
 import { MoneyValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -13,6 +15,8 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { PaymentRequest, RequestLine } from "../types"
 
@@ -112,6 +116,20 @@ export function RequestOrderDetails({
                     : [],
             ),
     )
+    const profile = useAccountProfileQuery()
+    const canOpenPurchaseOrder = hasPermission(
+        profile.data?.permissions,
+        "purchase_order:detail",
+    )
+    const pathname = usePathname()
+    const searchParams = useSearchParams()
+    // 返回本申请时保留工作台等上下文，避免嵌套上一层的 returnTo。
+    const returnTo = useMemo(() => {
+        const params = new URLSearchParams(searchParams.toString())
+        params.delete("returnTo")
+        const query = params.toString()
+        return `${pathname}${query ? `?${query}` : ""}`
+    }, [pathname, searchParams])
     const draft = request.status === "draft"
     const showLineProgress = !compact || request.lines.length > 1
     const columnCount = showLineProgress ? 5 : 3
@@ -161,57 +179,73 @@ export function RequestOrderDetails({
                                 <Fragment key={line.payable_account_id}>
                                     <TableRow>
                                         <TableCell className="whitespace-normal">
-                                            <Button
-                                                id={`ppr-order-${key}-toggle`}
-                                                variant="ghost"
-                                                className="h-auto max-w-full justify-start px-0 py-0 text-left hover:bg-transparent"
-                                                aria-expanded={expanded}
-                                                aria-controls={`ppr-order-${key}-basis`}
-                                                onClick={() =>
-                                                    setCollapsed((previous) => {
-                                                        const next = new Set(
-                                                            previous,
+                                            <div className="flex min-w-0 items-center gap-1.5">
+                                                <Button
+                                                    id={`ppr-order-${key}-toggle`}
+                                                    variant="ghost"
+                                                    size="icon-sm"
+                                                    className="shrink-0"
+                                                    aria-expanded={expanded}
+                                                    aria-controls={`ppr-order-${key}-basis`}
+                                                    aria-label={`${expanded ? "收起" : "展开"}采购单 ${line.purchase_order_no} 付款依据`}
+                                                    onClick={() =>
+                                                        setCollapsed(
+                                                            (previous) => {
+                                                                const next =
+                                                                    new Set(
+                                                                        previous,
+                                                                    )
+                                                                if (
+                                                                    next.has(
+                                                                        line.payable_account_id,
+                                                                    )
+                                                                )
+                                                                    next.delete(
+                                                                        line.payable_account_id,
+                                                                    )
+                                                                else
+                                                                    next.add(
+                                                                        line.payable_account_id,
+                                                                    )
+                                                                return next
+                                                            },
                                                         )
-                                                        if (
-                                                            next.has(
-                                                                line.payable_account_id,
-                                                            )
-                                                        )
-                                                            next.delete(
-                                                                line.payable_account_id,
-                                                            )
-                                                        else
-                                                            next.add(
-                                                                line.payable_account_id,
-                                                            )
-                                                        return next
-                                                    })
-                                                }
-                                            >
-                                                {expanded ? (
-                                                    <ChevronDownIcon />
-                                                ) : (
-                                                    <ChevronRightIcon />
-                                                )}
-                                                <span
-                                                    className="num min-w-0 truncate"
-                                                    title={
-                                                        line.purchase_order_no
                                                     }
                                                 >
-                                                    {line.purchase_order_no}
-                                                </span>
+                                                    {expanded ? (
+                                                        <ChevronDownIcon />
+                                                    ) : (
+                                                        <ChevronRightIcon />
+                                                    )}
+                                                </Button>
+                                                {canOpenPurchaseOrder ? (
+                                                    <Link
+                                                        id={`ppr-order-${key}-open`}
+                                                        href={`/procurement/orders/${encodeURIComponent(line.purchase_order_id)}?${new URLSearchParams({ section: "payable", returnTo })}`}
+                                                        className="num min-w-0 truncate text-sm text-primary underline-offset-2 hover:underline"
+                                                        title={
+                                                            line.purchase_order_no
+                                                        }
+                                                    >
+                                                        {line.purchase_order_no}
+                                                    </Link>
+                                                ) : (
+                                                    <span
+                                                        className="num min-w-0 truncate text-sm"
+                                                        title={
+                                                            line.purchase_order_no
+                                                        }
+                                                    >
+                                                        {line.purchase_order_no}
+                                                    </span>
+                                                )}
                                                 <Badge
                                                     variant="secondary"
                                                     className="shrink-0"
                                                 >
                                                     V{line.purchase_version}
                                                 </Badge>
-                                                <span className="sr-only">
-                                                    {expanded ? "收起" : "展开"}
-                                                    付款依据
-                                                </span>
-                                            </Button>
+                                            </div>
                                         </TableCell>
                                         <TableCell className="max-w-40 whitespace-normal">
                                             {line.payment_term_name}

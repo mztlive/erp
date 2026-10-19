@@ -3741,12 +3741,32 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                     action: "create",
                 },
             },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-orders/{id}/payment-arrangement",
+                description: "查询采购付款安排",
+                permission: {
+                    resource: "purchase_order",
+                    action: "detail",
+                },
+            },
         ],
     },
     {
         name: "采购付款申请",
         description: "采购申请、财务审核和批准额度内付款",
         permissions: [
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/payment-follow-up",
+                description: "安排采购付款跟进",
+                permission: {
+                    resource: "purchase_payment_request",
+                    action: "submit",
+                },
+            },
             {
                 module: "admin",
                 method: "GET",

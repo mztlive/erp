@@ -14,6 +14,7 @@ use crate::{Error, Result};
 enum Step {
     Purchase,
     Payable,
+    PaymentArrangement,
     Costs,
     Fulfillment,
     Audit,
@@ -25,7 +26,9 @@ trait PostingSteps: Send {
 }
 /// 生产流程与失败替身共同使用的顺序入口。
 async fn execute(steps: &mut impl PostingSteps, executor: &mut dyn Executor) -> Result<()> {
-    for step in [Step::Purchase, Step::Payable, Step::Costs, Step::Fulfillment, Step::Audit] {
+    for step in
+        [Step::Purchase, Step::Payable, Step::PaymentArrangement, Step::Costs, Step::Fulfillment, Step::Audit]
+    {
         steps.apply(step, executor).await?;
     }
     Ok(())
@@ -71,6 +74,10 @@ impl PostingSteps for MongoPosting<'_> {
                     self.db, &payable.0, &payable.1, executor,
                 )
                 .await?;
+            },
+            Step::PaymentArrangement => {
+                let id = self.effects()?.payable().0.source_document_id.clone();
+                super::sync_payment_arrangement(self.db, &id, false, executor).await?;
             },
             Step::Costs => {
                 erp_finance::service::cost::purchase_initial::persist(
@@ -154,11 +161,28 @@ mod tests {
             fail_at: None,
         };
         execute(&mut steps, &mut executor).await.unwrap();
-        assert_eq!(steps.calls, [Step::Purchase, Step::Payable, Step::Costs, Step::Fulfillment, Step::Audit]);
+        assert_eq!(
+            steps.calls,
+            [
+                Step::Purchase,
+                Step::Payable,
+                Step::PaymentArrangement,
+                Step::Costs,
+                Step::Fulfillment,
+                Step::Audit
+            ]
+        );
     }
     #[tokio::test]
     async fn every_failure_preserves_original_error_and_stops_later_writes() {
-        let order = [Step::Purchase, Step::Payable, Step::Costs, Step::Fulfillment, Step::Audit];
+        let order = [
+            Step::Purchase,
+            Step::Payable,
+            Step::PaymentArrangement,
+            Step::Costs,
+            Step::Fulfillment,
+            Step::Audit,
+        ];
         for (index, step) in order.into_iter().enumerate() {
             let mut executor = TestExecutor { _identity: 1 };
             let mut steps = RecordingSteps {

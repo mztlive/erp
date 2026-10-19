@@ -31,6 +31,12 @@ const POLICIES: Record<string, Policy> = {
         status: "待分配",
         dates: ["需求交期"],
     },
+    PURCHASE_PAYMENT_ARRANGEMENT: {
+        metric: "可申请余额",
+        fields: ["可申请余额"],
+        status: "待安排",
+        dates: ["下次跟进"],
+    },
     PURCHASE_SOURCE_UPDATE: {
         metric: "变更影响",
         fields: ["受影响行数", "待处理事项数"],

@@ -188,6 +188,7 @@ impl WorkItemType {
                 | Self::CustomerAcceptanceRegistration
                 | Self::PurchaseReturnRefund
                 | Self::PurchaseReturnInvoice
+                | Self::PurchasePaymentArrangement
                 | Self::SupplierPaymentExecution
                 | Self::SalesInvoiceExecution
                 | Self::CardFundsReview
@@ -325,6 +326,12 @@ impl WorkItemType {
             self.supplier_payment_execution_permissions(business_object_type)
         } else if self.is_sales_invoice_execution() {
             self.sales_invoice_execution_permissions(business_object_type)
+        } else if self == Self::PurchasePaymentArrangement {
+            (business_object_type == "purchase_order").then_some(&[
+                "purchase_order:detail",
+                "purchase_payment_request:create",
+                "purchase_payment_request:submit",
+            ] as &[&str])
         } else if self == Self::PurchaseReturnRefund {
             (business_object_type == "purchase_order").then_some(&[
                 "purchase_order:detail",
@@ -369,6 +376,7 @@ impl WorkItemType {
                 | Self::ImportBusinessConfirmation
                 | Self::ProcurementOrderCreation
                 | Self::PurchaseSourceUpdate
+                | Self::PurchasePaymentArrangement
                 | Self::FulfillmentOperation
                 | Self::CustomerAcceptanceRegistration
                 | Self::PurchaseReturnRefund

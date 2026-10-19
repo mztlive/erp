@@ -87,3 +87,5 @@ impl PurchaseOrderReadService {
 
 #[cfg(test)]
 mod test_support;
+
+pub mod payment_arrangement;

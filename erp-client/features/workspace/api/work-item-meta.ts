@@ -54,6 +54,13 @@ export const TYPE_META: Record<string, TypeMeta> = {
         badgeVariant: "lime",
         openActionLabel: "去分配供给",
     },
+    PURCHASE_PAYMENT_ARRANGEMENT: {
+        label: "采购付款待安排",
+        family: "procurement",
+        badgeLabel: "付款安排",
+        badgeVariant: "lime",
+        openActionLabel: "安排采购付款",
+    },
     PURCHASE_SOURCE_UPDATE: {
         label: "处理销售变更影响",
         family: "procurement",
@@ -89,7 +96,7 @@ export const TYPE_META: Record<string, TypeMeta> = {
         openActionLabel: "登记进项红票",
     },
     SUPPLIER_PAYMENT_EXECUTION: {
-        label: "供应商付款处理",
+        label: "待执行采购付款",
         family: "finance",
         badgeLabel: "待付款",
         badgeVariant: "cyan",
@@ -314,7 +321,7 @@ export function workspaceTypeLabel(
         workItemType === "SUPPLIER_PAYMENT_EXECUTION" &&
         normalizeObjectType(businessObjectType) === "purchase_payment_request"
     ) {
-        return "待付款申请"
+        return "待执行采购付款"
     }
     if (DOCUMENT_TYPED_WORK_ITEMS.has(workItemType)) {
         return (

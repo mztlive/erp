@@ -20,6 +20,7 @@ import { SalesOrderCreateContractLoading } from "./sales-order-create-contract-l
 import { SalesOrderCreateContractSummary } from "./sales-order-create-contract-summary"
 import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
 import { getErrorMessage } from "@/lib/api/errors"
+import { compareDecimal } from "@/lib/fixed-decimal"
 import type { FormalCommandKeyLedger } from "@/lib/formal-command"
 import { ContractImportWorkspace } from "@/features/contracts/components/contract-import-workspace"
 import { useContractFilePicker } from "@/features/contracts/hooks/use-contract-file-picker"
@@ -30,6 +31,7 @@ import { useAccountProfileQuery } from "@/features/auth/queries"
 import { entitySelectorKeys } from "@/features/entity-selectors"
 import type { SalesOrderDraftResumeData } from "@/features/sales-orders/api/sales-orders"
 import {
+    calculateGrossProfit,
     createEmptyLine,
     validateSalesOrderForm,
 } from "@/features/sales-orders/lib/sales-order-create-model"
@@ -47,6 +49,7 @@ import { SalesOrderCreateEntry } from "@/features/sales-orders/components/sales-
 import { SalesOrderCreateHeaderFields } from "@/features/sales-orders/components/sales-order-create-header-fields"
 import { SalesOrderCreateLineItemsSection } from "@/features/sales-orders/components/sales-order-create-line-items-section"
 import { SalesOrderCreateTotalBar } from "@/features/sales-orders/components/sales-order-create-total-bar"
+import { SalesOrderNegativeProfitConfirmDialog } from "@/features/sales-orders/components/sales-order-negative-profit-confirm-dialog"
 import { SalesOrderApprovalArea } from "@/features/sales-orders/components/sales-order-approval-area"
 import { SalesOrderSubmitConfirmDialog } from "@/features/sales-orders/components/sales-order-submit-confirm-dialog"
 import { VoucherSalesOrderApprovalArea } from "@/features/sales-orders/components/voucher-sales-order-approval-area"
@@ -89,6 +92,9 @@ export function SalesOrderCreateForm({
         (source ? initialDraft?.customerId : undefined)
     const router = useRouter()
     const [leaveConfirmOpen, setLeaveConfirmOpen] = React.useState(false)
+    const [negativeProfit, setNegativeProfit] = React.useState<string | null>(
+        null,
+    )
     const queryClient = useQueryClient()
     const profileQuery = useAccountProfileQuery()
     const [selectedContractId, setSelectedContractId] = React.useState(
@@ -222,6 +228,28 @@ export function SalesOrderCreateForm({
             await submission.handleSubmit(value, form)
         },
     })
+
+    /** 负毛利在提交预览后再确认一次；待完善或非负毛利直接提交。 */
+    const handleSubmitConfirm = () => {
+        const values = form.state.values
+        if (blocksSalesOrderSubmit(values)) return
+        const grossProfit =
+            values.nature === "physical_service"
+                ? calculateGrossProfit(values.lineItems)
+                : null
+        submission.setSubmitConfirmOpen(false)
+        if (grossProfit !== null && compareDecimal(grossProfit, "0", 2) < 0) {
+            setNegativeProfit(grossProfit)
+            return
+        }
+        void submission.handleSubmit(values, form)
+    }
+
+    const handleNegativeProfitConfirm = () => {
+        if (blocksSalesOrderSubmit(form.state.values)) return
+        setNegativeProfit(null)
+        void submission.handleSubmit(form.state.values, form)
+    }
 
     const dirty = useSelector(
         form.store,
@@ -890,11 +918,7 @@ export function SalesOrderCreateForm({
                     onOpenChange={submission.setSubmitConfirmOpen}
                     pending={submission.isSubmitting}
                     snapshot={buildSalesOrderSubmitSnapshot(form.state.values)}
-                    onConfirm={() => {
-                        if (blocksSalesOrderSubmit(form.state.values)) return
-                        submission.setSubmitConfirmOpen(false)
-                        void submission.handleSubmit(form.state.values, form)
-                    }}
+                    onConfirm={handleSubmitConfirm}
                 />
             ) : (
                 <SalesOrderSubmitConfirmDialog
@@ -902,11 +926,18 @@ export function SalesOrderCreateForm({
                     onOpenChange={submission.setSubmitConfirmOpen}
                     pending={submission.isSubmitting}
                     snapshot={buildSalesOrderSubmitSnapshot(form.state.values)}
-                    onConfirm={() => {
-                        if (blocksSalesOrderSubmit(form.state.values)) return
-                        submission.setSubmitConfirmOpen(false)
-                        void submission.handleSubmit(form.state.values, form)
+                    onConfirm={handleSubmitConfirm}
+                />
+            )}
+
+            {negativeProfit === null ? null : (
+                <SalesOrderNegativeProfitConfirmDialog
+                    grossProfit={negativeProfit}
+                    open
+                    onOpenChange={(open) => {
+                        if (!open) setNegativeProfit(null)
                     }}
+                    onConfirm={handleNegativeProfitConfirm}
                 />
             )}
         </>

@@ -78,6 +78,7 @@ impl SourceUpdateSync<'_> {
                 _ => {},
             }
             sync_return_finance(self.db, &purchase.base.id, executor).await?;
+            super::sync_payment_arrangement(self.db, &purchase.base.id, false, executor).await?;
         }
         for update in open.into_values() {
             self.close(update, executor).await?;

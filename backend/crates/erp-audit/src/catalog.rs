@@ -385,6 +385,7 @@ const REGISTERED_ACTIONS: &[AuditAction] = &[
     action("warehouse_sku_policy.create", "warehouse_sku_policy", "创建仓库商品策略"),
     action("warehouse_sku_policy.delete", "warehouse_sku_policy", "删除仓库商品策略"),
     action("warehouse_sku_policy.update", "warehouse_sku_policy", "修改仓库商品策略"),
+    action("work_item.payment_follow_up", "work_item", "安排采购付款跟进"),
     action("work_item.close", "work_item", "关闭异常任务"),
     action("work_item.reassign", "work_item", "转交任务责任"),
     action("workflow_action.append", "workflow_action", "登记工作流操作"),

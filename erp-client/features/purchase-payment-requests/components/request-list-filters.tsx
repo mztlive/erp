@@ -13,10 +13,14 @@ import {
 export function RequestListFilters({
     applied,
     onApply,
+    onReset,
+    scopeChip,
     view,
 }: {
     applied: RequestFilters
     onApply: (filters: RequestFilters) => void
+    onReset?: () => void
+    scopeChip?: { label: string; onClear: () => void }
     view: "effective" | "draft"
 }) {
     const form = useAppForm({
@@ -71,11 +75,23 @@ export function RequestListFilters({
                             variant="outline"
                             onClick={() => {
                                 form.reset(emptyRequestFilters)
-                                onApply(emptyRequestFilters)
+                                if (onReset) onReset()
+                                else onApply(emptyRequestFilters)
                             }}
                         >
                             重置
                         </Button>
+                    }
+                    chips={
+                        scopeChip
+                            ? [
+                                  {
+                                      key: "purchase_order_id",
+                                      label: scopeChip.label,
+                                      onClear: scopeChip.onClear,
+                                  },
+                              ]
+                            : []
                     }
                     hasPendingChanges={requestFilterFields.some(
                         ([key]) => values[key].trim() !== applied[key],

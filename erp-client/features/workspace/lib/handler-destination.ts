@@ -52,6 +52,12 @@ export const HANDLER_REGISTRY: Readonly<Record<string, HandlerRegistration>> = {
         destinationWorkspaceId: "W08",
         baseHref: "/procurement/orders",
     },
+    purchase_payment_arrangement: {
+        workItemTypeLabel: "采购付款待安排",
+        family: "procurement",
+        destinationWorkspaceId: "W08",
+        baseHref: "/procurement/orders",
+    },
     purchase_source_update: {
         workItemTypeLabel: "处理销售变更影响",
         family: "procurement",
@@ -71,7 +77,7 @@ export const HANDLER_REGISTRY: Readonly<Record<string, HandlerRegistration>> = {
         baseHref: "/workspace",
     },
     supplier_payment_execution: {
-        workItemTypeLabel: "待付款申请",
+        workItemTypeLabel: "待执行采购付款",
         family: "finance",
         destinationWorkspaceId: "W12",
         baseHref: "/procurement/payment-requests",
@@ -341,7 +347,10 @@ export function buildHandlerHref(item: HandlerNavigationInput): string | null {
         )
     }
 
-    if (item.handlerKey === "purchase_source_update") {
+    if (
+        item.handlerKey === "purchase_source_update" ||
+        item.handlerKey === "purchase_payment_arrangement"
+    ) {
         return withParams(
             `${registration.baseHref}/${encodeURIComponent(businessObjectId)}`,
             new URLSearchParams({ from: "workspace", workItemId }),

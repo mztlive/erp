@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
+import { usePathname, useSearchParams } from "next/navigation"
 import { ArrowUpRightIcon, PlusIcon, RefreshCwIcon } from "lucide-react"
 import {
     BusinessStatusBadge,
@@ -31,7 +32,7 @@ import { RequestListFilters } from "../components/request-list-filters"
 import { requestStatusLabel, requestStatusTone } from "../lib/display"
 import type { PaymentRequest } from "../types"
 import { PaymentCandidatesList } from "../components/payment-candidates-list"
-import { requestColumns } from "../components/request-list-columns"
+import { buildRequestColumns } from "../components/request-list-columns"
 import { RequestDraftDialog } from "../components/request-draft-dialog"
 
 export function PaymentRequestsPage({
@@ -46,6 +47,20 @@ export function PaymentRequestsPage({
     const view = list.url.view
     const queryClient = useQueryClient()
     const profile = useAccountProfileQuery()
+    const pathname = usePathname()
+    const searchParams = useSearchParams()
+    const listReturnHref = useMemo(() => {
+        const params = new URLSearchParams(searchParams.toString())
+        params.delete("returnTo")
+        params.delete("create")
+        params.delete("purchaseOrderId")
+        const query = params.toString()
+        return `${pathname}${query ? `?${query}` : ""}`
+    }, [pathname, searchParams])
+    const columns = useMemo(
+        () => buildRequestColumns({ listReturnHref }),
+        [listReturnHref],
+    )
     const [createOpen, setCreateOpen] = useState(create)
     const [initialPayableAccountIds, setInitialPayableAccountIds] = useState<
         string[]
@@ -89,6 +104,7 @@ export function PaymentRequestsPage({
                 onClick: () => {
                     list.update({
                         ...emptyRequestFilters,
+                        purchase_order_id: undefined,
                         view: value,
                         page: 1,
                     })
@@ -165,6 +181,30 @@ export function PaymentRequestsPage({
                             key={JSON.stringify([view, list.applied])}
                             applied={list.applied}
                             view={view}
+                            scopeChip={
+                                list.purchaseOrderScope
+                                    ? {
+                                          label: list.purchaseOrderScope.number
+                                              ? `采购单：${list.purchaseOrderScope.number}`
+                                              : "仅显示当前采购单",
+                                          onClear: () => {
+                                              list.update({
+                                                  purchase_order_id: undefined,
+                                                  page: 1,
+                                              })
+                                              setPreview(null)
+                                          },
+                                      }
+                                    : undefined
+                            }
+                            onReset={() => {
+                                list.update({
+                                    ...emptyRequestFilters,
+                                    purchase_order_id: undefined,
+                                    page: 1,
+                                })
+                                setPreview(null)
+                            }}
                             onApply={(filters) => {
                                 list.update({ ...filters, page: 1 })
                                 setPreview(null)
@@ -177,7 +217,7 @@ export function PaymentRequestsPage({
                                 idPrefix="purchase-payment-requests-table"
                                 data={rows}
                                 rowCount={query.data?.total ?? 0}
-                                columns={requestColumns}
+                                columns={columns}
                                 manualPagination
                                 manualSorting
                                 sorting={list.sorting}
@@ -257,7 +297,7 @@ export function PaymentRequestsPage({
                             id="ppr-list-preview-open"
                             render={
                                 <Link
-                                    href={`/procurement/payment-requests/${encodeURIComponent(preview?.id ?? "")}`}
+                                    href={`/procurement/payment-requests/${encodeURIComponent(preview?.id ?? "")}?returnTo=${encodeURIComponent(listReturnHref)}`}
                                 />
                             }
                         >
@@ -302,6 +342,37 @@ export function PaymentRequestsPage({
                                 <dd>{preview.applicant_name}</dd>
                             </div>
                         </dl>
+                        {preview.lines.length > 0 && (
+                            <div className="space-y-2">
+                                <p className="text-xs text-muted-foreground">
+                                    关联采购单
+                                </p>
+                                <ul className="space-y-2 text-sm">
+                                    {preview.lines.map((line) => (
+                                        <li
+                                            key={line.payable_account_id}
+                                            className="flex items-center justify-between gap-3"
+                                        >
+                                            <Link
+                                                href={`/procurement/orders/${encodeURIComponent(line.purchase_order_id)}?${new URLSearchParams(
+                                                    {
+                                                        section: "payable",
+                                                        returnTo: `/procurement/payment-requests/${encodeURIComponent(preview.id)}`,
+                                                    },
+                                                )}`}
+                                                className="num min-w-0 truncate text-primary underline-offset-2 hover:underline"
+                                                title={line.purchase_order_no}
+                                            >
+                                                {line.purchase_order_no}
+                                            </Link>
+                                            <MoneyValue
+                                                value={line.requested_amount}
+                                            />
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
                         <p className="text-sm text-muted-foreground">
                             {preview.description}
                         </p>

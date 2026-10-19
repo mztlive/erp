@@ -428,6 +428,13 @@ impl NormalizedWorkItemData {
         {
             return Err(Error::from("采购依据更新任务必须冻结采购单身份和责任键"));
         }
+        if self.work_item_type == WorkItemType::PurchasePaymentArrangement
+            && (self.business_object_type != "purchase_order"
+                || responsibility_key
+                    != Some(format!("purchase_payment_arrangement:{}", self.business_object_id).as_str()))
+        {
+            return Err(Error::from("付款安排任务必须冻结采购单身份和责任键"));
+        }
         if self.work_item_type == WorkItemType::ProcurementOrderCreation
             && (responsibility_key.is_none() || scope_ids.is_empty())
         {

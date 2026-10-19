@@ -20,6 +20,7 @@ import { EditSurface } from "@/features/purchase-orders/components/purchase-orde
 import { PurchaseOrderDetailDialogs } from "@/features/purchase-orders/components/purchase-order-detail-dialogs"
 import { PurchaseOrderDetailHeader } from "@/features/purchase-orders/components/purchase-order-detail-header"
 import { PurchaseOrderFreightNotice } from "@/features/purchase-orders/components/purchase-order-freight-notice"
+import { PurchasePaymentArrangement } from "../components/purchase-payment-arrangement"
 import { PurchaseOrderSourceUpdateNotice } from "@/features/purchase-orders/components/purchase-order-source-update-notice"
 import { PurchaseOrderDetailSidebar } from "@/features/purchase-orders/components/purchase-order-detail-sidebar"
 import { PurchaseOrderDetailSections } from "@/features/purchase-orders/components/purchase-order-detail-sections"
@@ -309,6 +310,16 @@ export function PurchaseOrderDetailPage({
                 result={result}
                 onDismissResult={() => handleResult(null)}
             />
+
+            {mode !== "edit" && order.payableSummary && (
+                <PurchasePaymentArrangement
+                    purchaseOrderId={order.identity.purchaseOrderId}
+                    purchaseOrderNo={
+                        order.identity.purchaseNo ?? order.identity.draftLabel
+                    }
+                    costMasked={costMasked}
+                />
+            )}
 
             <PurchaseOrderFreightNotice order={order} />
 

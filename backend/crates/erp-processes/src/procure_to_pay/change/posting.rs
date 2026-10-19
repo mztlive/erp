@@ -15,6 +15,7 @@ use super::super::allocation_maintenance::prepare_current_sales_allocations;
 use super::super::payment_subject::revalidate_payment_subject;
 use super::super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 use super::super::source_recheck::ensure_source_unaffected;
+use super::super::sync_payment_arrangement;
 
 /// 采购变更审批期间来源销售再次变更且影响本采购时的提示。
 const CHANGE_SOURCE_AFFECTED: &str =
@@ -133,6 +134,7 @@ impl EffectSteps for MongoEffect<'_> {
             Submission => purchase.persist_approved_submission(self.db, executor).await?,
             Change => purchase.persist_change(self.db, executor).await?,
             Audit => {
+                sync_payment_arrangement(self.db, &purchase.order.base.id, false, executor).await?;
                 complete_direct_returns(self.db, &purchase.order, self.actor_id, executor).await?;
                 persist_log(self.db, &self.audit, executor).await?;
             },

@@ -1,5 +1,6 @@
 "use client"
 
+import { PurchasePaymentArrangement } from "@/features/purchase-orders/components/purchase-payment-arrangement"
 import { useEffect, useState, type ReactNode } from "react"
 import { useMutation } from "@tanstack/react-query"
 import { downloadFileAsset } from "@/features/file-assets/api"
@@ -236,6 +237,37 @@ function WorkspaceTaskSurface({
                 item={item}
                 onTaskCompleted={onTaskCompleted}
             />
+        )
+    }
+
+    if (
+        item.workItemType === "PURCHASE_PAYMENT_ARRANGEMENT" &&
+        item.handlerKey === "purchase_payment_arrangement" &&
+        item.businessObjectType === "purchase_order"
+    ) {
+        return (
+            <WorkspaceTaskPane
+                header={
+                    <div className="min-w-0 space-y-2">
+                        <p className="text-xs font-medium text-muted-foreground">
+                            {item.workItemTypeLabel}
+                        </p>
+                        <h1 className="break-words text-xl font-semibold tracking-tight">
+                            {item.counterpartyName || "采购付款安排"}
+                        </h1>
+                        <p className="break-all text-xs text-muted-foreground">
+                            {item.objectTitle}
+                        </p>
+                    </div>
+                }
+            >
+                <PurchasePaymentArrangement
+                    key={item.workItemId}
+                    purchaseOrderId={item.businessObjectId}
+                    workItemId={item.workItemId}
+                    onTaskCompleted={onTaskCompleted}
+                />
+            </WorkspaceTaskPane>
         )
     }
 

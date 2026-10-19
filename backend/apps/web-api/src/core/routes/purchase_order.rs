@@ -22,6 +22,7 @@ use crate::core::middleware::with_permission;
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     purchase_document_routes(rbac)
         .merge(purchase_detail_routes(rbac))
+        .merge(payment_arrangement_routes(rbac))
         .merge(purchase_workflow_routes(rbac))
         .merge(purchase_change_routes(rbac))
         .merge(purchase_change_draft_routes(rbac))
@@ -303,6 +304,27 @@ fn expense_source_routes(rbac: &SharedRbacService) -> Router<AppState> {
                 get(purchase_order::expense::expense_source_detail),
                 rbac,
                 purchase_order::expense::expense_source_detail_permission_key(),
+            ),
+        )
+}
+
+/// 采购付款安排查询与当前负责人跟进日期登记。
+fn payment_arrangement_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/purchase-orders/{id}/payment-arrangement",
+            with_permission(
+                get(purchase_order::payment_arrangement::payment_arrangement),
+                rbac,
+                purchase_order::payment_arrangement::payment_arrangement_permission_key(),
+            ),
+        )
+        .route(
+            "/purchase-orders/{id}/payment-follow-up",
+            with_permission(
+                post(purchase_order::payment_arrangement::schedule_payment_follow_up),
+                rbac,
+                purchase_order::payment_arrangement::schedule_payment_follow_up_permission_key(),
             ),
         )
 }

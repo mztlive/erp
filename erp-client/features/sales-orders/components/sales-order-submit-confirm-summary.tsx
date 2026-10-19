@@ -15,6 +15,7 @@ export type SalesOrderSubmitLineSnapshot = {
     unit: string
     deliveryAllocations?: SalesDeliveryAllocation[]
     unitPriceGross: string
+    procurementSupplyPrice: string
     amountGross: string
     dueDate: string
     faceValue: string
@@ -65,6 +66,7 @@ export function buildSalesOrderSubmitSnapshot(
             quantity: line.quantity,
             unit: line.unit,
             unitPriceGross: line.unitPriceGross,
+            procurementSupplyPrice: line.procurementSupplyPrice ?? "",
             deliveryAllocations: line.deliveryAllocations,
             amountGross: lineGross(line.quantity, line.unitPriceGross),
             dueDate: line.dueDate,

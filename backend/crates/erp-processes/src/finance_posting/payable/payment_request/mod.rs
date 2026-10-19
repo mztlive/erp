@@ -15,6 +15,7 @@ use persistence_core::{Executor, Transactional};
 
 use crate::adapters::MongoPurchaseDataScope;
 use crate::adapters::identity::shared_rbac_service;
+use crate::procure_to_pay::sync_payment_arrangement;
 use crate::{Error, Result};
 
 mod account;
@@ -139,6 +140,7 @@ async fn release_remaining(
         {
             return Err(Error::ConflictError("付款申请占用金额已变化，请刷新后重试".into()));
         }
+        sync_payment_arrangement(db, &line.purchase_order_id, true, executor).await?;
     }
     Ok(())
 }

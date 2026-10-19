@@ -2,6 +2,7 @@
 use erp_core::common::time::Instant;
 use erp_core::ids::WorkItemId;
 use erp_core::money::Amount;
+use erp_finance::entity::payable::PayableSourceType;
 use erp_finance::repository::PayableExt;
 use erp_finance::repository::prelude::*;
 use erp_procurement::entity::purchase_order::{PurchaseOrder, ReturnSettlementDecision};
@@ -21,6 +22,7 @@ use persistence_core::Executor;
 
 use crate::adapters::identity::shared_rbac_service;
 use crate::adapters::workflow::work_item_service;
+use crate::procure_to_pay::sync_payment_arrangement;
 use crate::{Error, Result};
 
 /// 在原业务事务内按退货、净付款及净票额交接或完成财务任务。
@@ -162,6 +164,9 @@ pub(crate) async fn sync_return_accounts(
     for id in ids {
         if let Some(account) = db.payable_accounts().find_by_id(&id, executor).await? {
             sync_return_finance(db, &account.source_document_id, executor).await?;
+            if account.source_type == PayableSourceType::PurchaseOrder {
+                sync_payment_arrangement(db, &account.source_document_id, false, executor).await?;
+            }
         }
     }
     Ok(())

@@ -15,6 +15,7 @@ use erp_support::FileAssetExt;
 
 use super::*;
 use crate::adapters::purchase_access;
+use crate::procure_to_pay::sync_payment_arrangement;
 
 pub(super) async fn prepare_submission(
     db: &Database,
@@ -55,6 +56,11 @@ pub(super) async fn prepare_submission(
                 .await?
         {
             return Err(Error::ConflictError("采购可申请余额已变化，请刷新后重新核对".into()));
+        }
+    }
+    if reserve {
+        for line in &lines {
+            sync_payment_arrangement(db, &line.purchase_order_id, false, executor).await?;
         }
     }
     validate_attachments(db, request, actor, executor).await?;

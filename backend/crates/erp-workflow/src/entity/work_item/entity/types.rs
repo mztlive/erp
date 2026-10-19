@@ -11,6 +11,8 @@ pub enum WorkItemType {
     ProcurementOrderCreation,
     /// 销售变更影响采购后，由采购负责人更新采购依据。
     PurchaseSourceUpdate,
+    /// 采购生效后由采购经办人安排付款申请。
+    PurchasePaymentArrangement,
     /// 采购直退后的供应商退款办理。
     PurchaseReturnRefund,
     /// 采购直退后的进项红票办理。
@@ -140,6 +142,12 @@ pub enum WorkItemAssignmentSeparationPolicy {
 }
 
 const WORK_ITEM_BRIEF_RELATIONS: &[WorkItemBriefRelation] = &[
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::PurchasePaymentArrangement,
+        object_kind: WorkItemBriefObjectKind::PurchaseOrder,
+        business_object_type: "purchase_order",
+        read_permission: "purchase_order:detail",
+    },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::SupplierPortalReview,
         object_kind: WorkItemBriefObjectKind::SupplierPortalRequest,
@@ -361,11 +369,12 @@ impl WorkItemType {
         match self {
             Self::ProcurementOrderCreation => "供给分配",
             Self::PurchaseSourceUpdate => "采购依据更新",
+            Self::PurchasePaymentArrangement => "采购付款待安排",
             Self::PurchaseReturnRefund => "退货款处理",
             Self::PurchaseReturnInvoice => "退货进项红票",
             Self::FulfillmentOperation => "履约处理",
             Self::CustomerAcceptanceRegistration => "客户验收登记",
-            Self::SupplierPaymentExecution => "供应商付款处理",
+            Self::SupplierPaymentExecution => "待执行采购付款",
             Self::SalesInvoiceExecution => "销项开票处理",
             Self::PurchaseOrderReview => "采购单内部审核",
             Self::SalesChangeImpactReview => "销售变更履约影响复核",
@@ -399,6 +408,7 @@ impl WorkItemType {
         match self {
             Self::ProcurementOrderCreation => "PROCUREMENT_ORDER_CREATION",
             Self::PurchaseSourceUpdate => "PURCHASE_SOURCE_UPDATE",
+            Self::PurchasePaymentArrangement => "PURCHASE_PAYMENT_ARRANGEMENT",
             Self::PurchaseReturnRefund => "PURCHASE_RETURN_REFUND",
             Self::PurchaseReturnInvoice => "PURCHASE_RETURN_INVOICE",
             Self::FulfillmentOperation => "FULFILLMENT_OPERATION",
@@ -466,9 +476,10 @@ impl WorkItemType {
     pub fn assignment_separation_policy(self) -> WorkItemAssignmentSeparationPolicy {
         match self {
             Self::DocumentApproval => WorkItemAssignmentSeparationPolicy::ApprovalHistory,
-            Self::ProcurementOrderCreation | Self::PurchaseSourceUpdate | Self::SupplierPortalReview => {
-                WorkItemAssignmentSeparationPolicy::RoleAndParticipation
-            },
+            Self::ProcurementOrderCreation
+            | Self::PurchaseSourceUpdate
+            | Self::PurchasePaymentArrangement
+            | Self::SupplierPortalReview => WorkItemAssignmentSeparationPolicy::RoleAndParticipation,
             Self::FulfillmentOperation | Self::CustomerAcceptanceRegistration => {
                 WorkItemAssignmentSeparationPolicy::RoleAndParticipation
             },

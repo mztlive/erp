@@ -94,6 +94,7 @@ async fn maintain_in_transaction(
     update.maintain(&req.reason, actor.id(), now).map_err(Error::Logic)?;
     purchase_source_updates(db).update(&mut update, executor).await?;
     close_work_item(db, &update, now, executor).await?;
+    super::sync_payment_arrangement(db, &order.base.id, false, executor).await?;
     let audit = actor.clone().resource_log(
         "purchase_order.maintain_source",
         "purchase_order",

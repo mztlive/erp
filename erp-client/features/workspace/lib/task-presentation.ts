@@ -26,6 +26,9 @@ const REVERSAL: SummaryPolicy = {
 
 const TASK_POLICIES: Record<string, SummaryPolicy> = {
     PROCUREMENT_ORDER_CREATION: GOODS,
+    PURCHASE_PAYMENT_ARRANGEMENT: {
+        fields: ["付款条件", "可申请余额", "下次跟进"],
+    },
     PURCHASE_SOURCE_UPDATE: { fields: ["变更类型", "原因", "来源销售单"] },
     FULFILLMENT_OPERATION: {
         fields: ["批次明细", "发货仓库", "供应商", "最早预计交付日"],
@@ -269,6 +272,9 @@ export function workspaceTaskPresentation(item: WorkspaceWorkItem) {
             : item.workItemTypeLabel,
         number: stripDocumentNumberPrefix(item.stableNumber),
         summary:
+            (item.workItemType === "PURCHASE_PAYMENT_ARRANGEMENT"
+                ? item.impactSummary
+                : undefined) ||
             attention ||
             workspaceTaskSection(item, "历史资料")?.value ||
             summary ||

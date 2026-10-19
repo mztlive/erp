@@ -32,6 +32,8 @@ export const requestSortFields = [
 ] as const
 export type RequestSort = (typeof requestSortFields)[number]
 export type RequestListQuery = Partial<RequestFilters> & {
+    /** 从采购单详情进入时按采购身份收敛，避免单号变化或重号。 */
+    purchase_order_id?: string
     view: "effective" | "draft"
     page: number
     page_size: number
@@ -54,6 +56,7 @@ export const requestListCodec = createUrlStateCodec<RequestListUrl>([
         type: "string" as const,
         trim: true,
     })),
+    { key: "purchase_order_id", type: "string" as const, trim: true },
     { key: "page", type: "number", defaultValue: 1, min: 1 },
     { key: "page_size", type: "number", defaultValue: 50, min: 1, max: 100 },
     { key: "sort_by", type: "enum", values: requestSortFields },

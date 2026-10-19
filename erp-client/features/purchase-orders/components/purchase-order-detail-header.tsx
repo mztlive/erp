@@ -72,12 +72,22 @@ export function PurchaseOrderDetailHeader({
     const [expenseOpen, setExpenseOpen] = React.useState(false)
     const searchParams = useSearchParams()
     const returnTo = searchParams.get("returnTo")
-    const returnPath = returnTo?.split("?")[0]
+    const internalReturn =
+        returnTo?.startsWith("/") && !returnTo.startsWith("//")
+            ? returnTo
+            : null
+    const returnPath = internalReturn?.split("?")[0]
     const workspaceReturn =
         searchParams.get("from") === "workspace" &&
         (returnPath === "/workspace" || returnPath === "/workspace/tasks")
-            ? returnTo
+            ? internalReturn
             : null
+    const paymentRequestReturn = internalReturn?.startsWith(
+        "/procurement/payment-requests/",
+    )
+        ? internalReturn
+        : null
+    const backTarget = workspaceReturn ?? paymentRequestReturn
     const profile = useAccountProfileQuery()
     const canCreateExpense =
         !profile.isError &&
@@ -100,12 +110,14 @@ export function PurchaseOrderDetailHeader({
             <DetailPageHeader
                 back={{
                     id: "procurement-orders-detail-back",
-                    label: workspaceReturn ? "返回工作台" : "采购单列表",
+                    label: workspaceReturn
+                        ? "返回工作台"
+                        : paymentRequestReturn
+                          ? "返回付款申请"
+                          : "采购单列表",
                     onClick: () =>
                         requestLeave(() =>
-                            router.push(
-                                workspaceReturn ?? "/procurement/orders",
-                            ),
+                            router.push(backTarget ?? "/procurement/orders"),
                         ),
                 }}
                 navigationMeta={mode === "edit" ? modeLabel : undefined}

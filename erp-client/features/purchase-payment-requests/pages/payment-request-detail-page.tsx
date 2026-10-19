@@ -1,5 +1,6 @@
 "use client"
 
+import { useSearchParams } from "next/navigation"
 import { RefreshCwIcon } from "lucide-react"
 import { DetailPageHeader, PageScaffold } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -8,15 +9,28 @@ import { usePaymentRequestQuery } from "../hooks/queries"
 import { RequestDetail } from "../components/request-detail"
 import { requestStatusLabel, requestStatusTone } from "../lib/display"
 
+function safeReturnTo(value: string | null) {
+    if (!value || !value.startsWith("/") || value.startsWith("//")) return null
+    return value
+}
+
 export function PaymentRequestDetailPage({ requestId }: { requestId: string }) {
+    const searchParams = useSearchParams()
     const query = usePaymentRequestQuery(requestId)
+    const returnTo = safeReturnTo(searchParams.get("returnTo"))
+    const backHref = returnTo ?? "/procurement/payment-requests"
+    const backLabel = returnTo
+        ? returnTo.startsWith("/procurement/orders/")
+            ? "返回采购单"
+            : "返回上一页"
+        : "返回申请列表"
     return (
         <PageScaffold>
             <DetailPageHeader
                 back={{
                     id: "ppr-detail-back",
-                    label: "返回申请列表",
-                    href: "/procurement/payment-requests",
+                    label: backLabel,
+                    href: backHref,
                 }}
                 title={query.data?.supplier_name ?? "采购付款申请"}
                 numberLabel="申请单号"

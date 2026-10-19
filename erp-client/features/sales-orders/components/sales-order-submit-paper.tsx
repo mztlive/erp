@@ -209,6 +209,20 @@ export function SalesOrderSubmitPaper({
                               ),
                           },
                           {
+                              id: "supply-price",
+                              header: "采购供给价",
+                              align: "end",
+                              numeric: true,
+                              cell: (row) =>
+                                  row.procurementSupplyPrice ? (
+                                      <MoneyValue
+                                          value={row.procurementSupplyPrice}
+                                      />
+                                  ) : (
+                                      "—"
+                                  ),
+                          },
+                          {
                               id: "amount",
                               header: "小计（含税）",
                               align: "end",

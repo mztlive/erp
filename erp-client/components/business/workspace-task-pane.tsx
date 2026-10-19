@@ -21,6 +21,7 @@ const WorkspaceTaskFooterHostContext =
     createContext<WorkspaceTaskFooterHost | null>(null)
 
 type WorkspaceTaskPageLayout = {
+    compact?: boolean
     summary?: ReactNode
     aside: ReactNode
     footerLeading?: ReactNode
@@ -164,12 +165,15 @@ export function WorkspaceTaskPane({
                             "flex min-h-0 flex-1 flex-col",
                             layout &&
                                 "gap-4 overflow-auto bg-muted/20 p-3 sm:p-5",
+                            layout?.compact && "gap-5 sm:p-6",
                         )}
                     >
                         <div
                             className={cn(
                                 layout &&
                                     "shrink-0 rounded-xl border border-border/60 bg-card shadow-xs",
+                                layout?.compact &&
+                                    "mx-auto w-full max-w-7xl border-0 bg-transparent shadow-none",
                             )}
                         >
                             <header
@@ -179,12 +183,19 @@ export function WorkspaceTaskPane({
                                     "flex shrink-0 items-start justify-between gap-3 bg-card py-5",
                                     !layout && "border-b border-grid",
                                     layout && "rounded-t-xl sm:px-6",
+                                    layout?.compact &&
+                                        "bg-transparent px-0 py-1 sm:px-0",
                                 )}
                             >
                                 {header}
                             </header>
                             {layout && (
-                                <div className="px-5 pb-5 sm:px-6">
+                                <div
+                                    className={cn(
+                                        "px-5 pb-5 sm:px-6",
+                                        layout.compact && "px-0 pb-0 sm:px-0",
+                                    )}
+                                >
                                     {layout.summary}
                                     <div ref={setSummaryHost} />
                                 </div>
@@ -194,7 +205,9 @@ export function WorkspaceTaskPane({
                             className={cn(
                                 "min-h-0 min-w-0",
                                 layout
-                                    ? "grid shrink-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(17rem,28%)]"
+                                    ? layout.compact
+                                        ? "mx-auto grid w-full max-w-7xl shrink-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]"
+                                        : "grid shrink-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(17rem,28%)]"
                                     : "flex flex-1 flex-col",
                             )}
                         >
@@ -205,6 +218,7 @@ export function WorkspaceTaskPane({
                                     layout
                                         ? "rounded-xl border border-border/60 bg-card shadow-xs"
                                         : "min-h-0 flex-1 overflow-auto",
+                                    layout?.compact && "shadow-none",
                                     "[&>[data-slot=alert]]:mx-5 [&>[data-slot=alert]]:my-5 [&_[data-slot=page-scaffold]]:h-auto",
                                 )}
                             >
@@ -217,7 +231,11 @@ export function WorkspaceTaskPane({
                             {layout && (
                                 <aside
                                     aria-label="办理进度与状态"
-                                    className="space-y-6 rounded-xl border border-border/60 bg-card p-5 shadow-xs xl:sticky xl:top-0"
+                                    className={cn(
+                                        "space-y-6 rounded-xl border border-border/60 bg-card p-5 shadow-xs xl:sticky xl:top-0",
+                                        layout.compact &&
+                                            "shadow-none lg:sticky lg:top-0",
+                                    )}
                                 >
                                     {layout.aside}
                                     <div

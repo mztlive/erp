@@ -343,7 +343,7 @@ impl WorkItem {
         Ok(())
     }
 
-    fn ensure_generic_mutation(&self) -> Result<()> {
+    pub(super) fn ensure_generic_mutation(&self) -> Result<()> {
         self.ensure_generic_responsibility_mutation()
     }
 

@@ -13,6 +13,7 @@ import {
     calculateTotals,
 } from "@/features/sales-orders/lib/sales-order-create-model"
 import type { SalesOrderCreateFormApi } from "@/features/sales-orders/lib/sales-order-create-form-types"
+import { compareDecimal } from "@/lib/fixed-decimal"
 
 const HEADER_VALIDATION_FIELDS = [
     { name: "contractId", label: "有效合同", targetId: "contractId" },
@@ -117,6 +118,17 @@ export function SalesOrderCreateTotalBar({
                         values.taxRatePercent,
                     )
                     const grossProfit = calculateGrossProfit(values.lineItems)
+                    const grossProfitSign =
+                        grossProfit === null
+                            ? 0
+                            : compareDecimal(grossProfit, "0", 2)
+                    // 负毛利红色、正毛利绿色，零毛利保持默认色。
+                    const grossProfitTone =
+                        grossProfitSign < 0
+                            ? "text-destructive"
+                            : grossProfitSign > 0
+                              ? "text-success-soft-foreground"
+                              : undefined
                     return (
                         <StickyTotalBar
                             layout="inline"
@@ -153,6 +165,9 @@ export function SalesOrderCreateTotalBar({
                                                     ) : (
                                                         <MoneyValue
                                                             value={grossProfit}
+                                                            className={
+                                                                grossProfitTone
+                                                            }
                                                         />
                                                     )}
                                                 </span>

@@ -9,6 +9,7 @@ pub mod correspondence;
 pub mod delivery_options;
 pub mod expense;
 pub mod freight;
+pub mod payment_arrangement;
 pub mod payments;
 pub mod sales_material;
 
