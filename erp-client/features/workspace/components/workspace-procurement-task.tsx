@@ -43,12 +43,12 @@ export function WorkspaceProcurementTask({
     const id = `workspace-procurement-${toAutomationIdSegment(item.workItemId)}`
     return (
         <WorkspaceTaskPane
-            className="@container/document [&>[data-slot=workspace-task-header]]:py-3 [&>[data-slot=workspace-task-body]]:flex [&>[data-slot=workspace-task-body]]:flex-col [&>[data-slot=workspace-task-body]]:overflow-hidden"
+            className="@container/document"
             header={
                 <>
                     <div className="min-w-0 space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
-                            <h2 className="text-xl font-semibold tracking-tight">
+                            <h2 className="text-xl font-medium tracking-tight">
                                 供给分配
                             </h2>
                             {isBlockedWorkItem(item) ? (

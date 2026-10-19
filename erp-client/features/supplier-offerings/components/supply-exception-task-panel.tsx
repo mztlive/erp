@@ -12,6 +12,7 @@ import {
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
+import { WorkspaceTaskFooter } from "@/components/business/workspace-task-pane"
 import { Button } from "@/components/ui/button"
 import {
     Card,
@@ -318,6 +319,7 @@ export function SupplyExceptionTaskPanel({
                     ) : null}
 
                     <form
+                        id="supplier-offerings-exception-form"
                         className="grid gap-4 rounded-lg border p-4"
                         onSubmit={(event) => {
                             event.preventDefault()
@@ -353,17 +355,21 @@ export function SupplyExceptionTaskPanel({
                                 />
                             )}
                         />
-                        <form.AppForm>
-                            <form.SubmitButton
-                                id="supplier-offerings-exception-submit"
-                                label="确认已核对"
-                                pendingLabel="正在提交"
-                                loading={completeMutation.isPending}
-                                disabled={
-                                    !canProcess || completeMutation.isPending
-                                }
-                            />
-                        </form.AppForm>
+                        <WorkspaceTaskFooter>
+                            <form.AppForm>
+                                <form.SubmitButton
+                                    form="supplier-offerings-exception-form"
+                                    id="supplier-offerings-exception-submit"
+                                    label="确认已核对"
+                                    pendingLabel="正在提交"
+                                    loading={completeMutation.isPending}
+                                    disabled={
+                                        !canProcess ||
+                                        completeMutation.isPending
+                                    }
+                                />
+                            </form.AppForm>
+                        </WorkspaceTaskFooter>
                         {!canProcess ? (
                             <p className="text-xs text-destructive">
                                 当前账号不是责任人，或任务已被阻断；请刷新或由有权人员处理。

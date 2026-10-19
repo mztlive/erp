@@ -31,6 +31,8 @@ export type WorkspaceUrlState = {
     purchaseOrderIds?: string
     sort: WorkspaceSort
     currentWorkItemId?: string
+    queue?: boolean
+    page?: number
 }
 
 const codec = createUrlStateCodec<WorkspaceUrlState>([
@@ -70,6 +72,8 @@ const codec = createUrlStateCodec<WorkspaceUrlState>([
         defaultValue: "priority_due",
     },
     { key: "currentWorkItemId", type: "string", trim: true },
+    { key: "queue", type: "boolean", defaultValue: false },
+    { key: "page", type: "number", defaultValue: 1, min: 1 },
 ])
 
 export const parseWorkspaceSearchParams = codec.parse
@@ -229,6 +233,7 @@ export function toTodayWorkspaceQuery(
         salesOrderIds: state.salesOrderIds,
         purchaseOrderIds: state.purchaseOrderIds,
         sort: state.sort,
+        page: state.page,
         timezone,
     }
 }

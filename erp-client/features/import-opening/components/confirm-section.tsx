@@ -10,6 +10,7 @@ import {
     surfacePanelClassName,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
+import { WorkspaceTaskFooter } from "@/components/business/workspace-task-pane"
 import { Button } from "@/components/ui/button"
 import {
     Card,
@@ -254,35 +255,43 @@ export function ConfirmSection({
                                         {confirmation.comment}
                                     </p>
                                 ) : null}
-                                <div className="flex flex-wrap gap-2">
-                                    {canConfirm ? (
-                                        <>
-                                            <Button
-                                                id={`operations-import-batch-detail-confirm-${toAutomationIdSegment(confirmation.confirmationId)}-confirm`}
-                                                type="button"
-                                                size="sm"
-                                                disabled={isCompleting}
-                                                onClick={() =>
-                                                    setConfirming(confirmation)
-                                                }
-                                            >
-                                                确认本范围
-                                            </Button>
-                                            <Button
-                                                id={`operations-import-batch-detail-confirm-${toAutomationIdSegment(confirmation.confirmationId)}-return`}
-                                                type="button"
-                                                size="sm"
-                                                variant="outline"
-                                                disabled={isCompleting}
-                                                onClick={() =>
-                                                    setReturning(confirmation)
-                                                }
-                                            >
-                                                退回修复
-                                            </Button>
-                                        </>
-                                    ) : null}
-                                </div>
+                                <WorkspaceTaskFooter
+                                    inline={!confirmation.focused}
+                                >
+                                    <div className="flex flex-wrap gap-2">
+                                        {canConfirm ? (
+                                            <>
+                                                <Button
+                                                    id={`operations-import-batch-detail-confirm-${toAutomationIdSegment(confirmation.confirmationId)}-confirm`}
+                                                    type="button"
+                                                    size="sm"
+                                                    disabled={isCompleting}
+                                                    onClick={() =>
+                                                        setConfirming(
+                                                            confirmation,
+                                                        )
+                                                    }
+                                                >
+                                                    确认本范围
+                                                </Button>
+                                                <Button
+                                                    id={`operations-import-batch-detail-confirm-${toAutomationIdSegment(confirmation.confirmationId)}-return`}
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    disabled={isCompleting}
+                                                    onClick={() =>
+                                                        setReturning(
+                                                            confirmation,
+                                                        )
+                                                    }
+                                                >
+                                                    退回修复
+                                                </Button>
+                                            </>
+                                        ) : null}
+                                    </div>
+                                </WorkspaceTaskFooter>
                                 {!canConfirm ? (
                                     <p className="text-xs text-muted-foreground">
                                         {workItemTypeMissing

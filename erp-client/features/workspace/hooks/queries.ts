@@ -3,6 +3,8 @@
 import { useQuery } from "@tanstack/react-query"
 
 import type { AccountProfile } from "@/features/auth/api"
+import { getWorkItem } from "@/features/work-items/api"
+import { mapWorkspaceWorkItem } from "../api/dashboard"
 import { workItemKeys } from "@/features/work-items/queries"
 import {
     fetchWorkspaceDashboard,
@@ -25,7 +27,7 @@ const workspaceHomeKeys = {
 }
 
 /**
- * 工作台主查询。筛选切换保留上一页数据，避免整页闪烁。
+ * 工作台主查询。切换范围或分类后不得沿用旧队列，避免打开上一分类的任务。
  */
 export function useWorkspaceDashboardQuery(
     query: TodayWorkspaceQuery,
@@ -38,8 +40,33 @@ export function useWorkspaceDashboardQuery(
             return fetchWorkspaceDashboard(query, profile)
         },
         enabled: Boolean(profile),
-        placeholderData: (previous) => previous,
         refetchInterval: 60_000,
+    })
+}
+
+/** 深链接或翻页后的选中任务单独读取，缓存按当前账号与权限隔离。 */
+export function useWorkspaceSelectedTaskQuery(
+    workItemId: string | undefined,
+    profile?: AccountProfile,
+) {
+    return useQuery({
+        queryKey: [
+            ...workspaceHomeKeys.all,
+            "selected",
+            workItemId,
+            profile?.userid,
+            profile ? [...profile.permissions].sort() : [],
+            profile ? [...profile.role_ids].sort() : [],
+        ],
+        queryFn: async () => {
+            if (!workItemId || !profile) throw new Error("任务信息暂不可用")
+            return mapWorkspaceWorkItem(
+                await getWorkItem(workItemId),
+                "Asia/Shanghai",
+            )
+        },
+        enabled: Boolean(workItemId && profile),
+        retry: false,
     })
 }
 

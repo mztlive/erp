@@ -3,6 +3,7 @@
 import { SupplierCreditUsePanel } from "./supplier-credit-use"
 import { useState, type ReactNode } from "react"
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react"
+import { WorkspaceTaskPageSlot } from "@/components/business/workspace-task-pane"
 import { MoneyValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import type { PaymentRequest, PaymentTaskContext } from "../types"
@@ -51,42 +52,48 @@ export function RequestPaymentExecution({
 }) {
     return (
         <div className="space-y-6">
-            <section aria-label="付款任务摘要" className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg bg-muted/45 px-5 py-4">
-                    <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">
-                            本申请剩余待付
-                        </p>
-                        <MoneyValue value={request.unpaid_amount} size="hero" />
-                        <p className="text-xs text-muted-foreground">
-                            申请金额 <MoneyValue value={request.total_amount} />
-                            <span className="mx-2">·</span>
-                            本申请已结算{" "}
-                            <MoneyValue value={request.paid_amount} />
-                        </p>
+            <WorkspaceTaskPageSlot slot="summary">
+                <section aria-label="付款任务摘要" className="space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg bg-muted/45 px-5 py-4">
+                        <div className="space-y-1">
+                            <p className="text-xs text-muted-foreground">
+                                本申请剩余待付
+                            </p>
+                            <MoneyValue
+                                value={request.unpaid_amount}
+                                size="hero"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                申请金额{" "}
+                                <MoneyValue value={request.total_amount} />
+                                <span className="mx-2">·</span>
+                                本申请已结算{" "}
+                                <MoneyValue value={request.paid_amount} />
+                            </p>
+                        </div>
+                        <div className="space-y-1 text-sm">
+                            <p className="text-xs text-muted-foreground">
+                                希望付款日
+                            </p>
+                            <p className="num font-medium">
+                                {request.desired_payment_date}
+                            </p>
+                        </div>
                     </div>
-                    <div className="space-y-1 text-sm">
-                        <p className="text-xs text-muted-foreground">
-                            希望付款日
-                        </p>
-                        <p className="num font-medium">
-                            {request.desired_payment_date}
-                        </p>
-                    </div>
-                </div>
-                <dl className="space-y-2 text-sm">
-                    <div className="flex flex-wrap gap-x-3 gap-y-1">
-                        <dt className="text-muted-foreground">申请人</dt>
-                        <dd>{request.applicant_name}</dd>
-                    </div>
-                    <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-3">
-                        <dt className="text-muted-foreground">申请说明</dt>
-                        <dd className="whitespace-pre-wrap break-words">
-                            {request.description}
-                        </dd>
-                    </div>
-                </dl>
-            </section>
+                    <dl className="space-y-2 text-sm">
+                        <div className="flex flex-wrap gap-x-3 gap-y-1">
+                            <dt className="text-muted-foreground">申请人</dt>
+                            <dd>{request.applicant_name}</dd>
+                        </div>
+                        <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-3">
+                            <dt className="text-muted-foreground">申请说明</dt>
+                            <dd className="whitespace-pre-wrap break-words">
+                                {request.description}
+                            </dd>
+                        </div>
+                    </dl>
+                </section>
+            </WorkspaceTaskPageSlot>
             <SupplierCreditUsePanel
                 request={request}
                 task={task}

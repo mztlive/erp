@@ -1,5 +1,7 @@
 //! 责任队列待办统计；每批授权、资格重验及累计后立即释放。
 
+use std::collections::HashMap;
+
 use application_core::AuditActor;
 use erp_core::common::time::Instant;
 use erp_workflow::entity::work_item::{WorkItemStatus, WorkItemType};
@@ -39,6 +41,7 @@ struct StatIdentity {
 struct StatsCounts {
     selected: SelectedCounts,
     family_counts: WorkItemFamilyCountsView,
+    work_item_type_counts: HashMap<WorkItemType, u64>,
 }
 
 /// 选中范围的可处理总数、到期及异常指标。
@@ -75,6 +78,8 @@ impl StatsCounts {
             return;
         }
         increment_family_count(&mut self.family_counts, item.work_item_type);
+        let count = self.work_item_type_counts.entry(item.work_item_type).or_default();
+        *count = count.saturating_add(1);
         if !context.selected_types.contains(&item.work_item_type) {
             return;
         }
@@ -161,6 +166,7 @@ impl<A: WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchRead
             overdue: selected.overdue,
             exception: selected.exception,
             family_counts: personal.family_counts,
+            work_item_type_counts: personal.work_item_type_counts,
             as_of,
         })
     }
@@ -404,6 +410,14 @@ mod tests {
         assert_eq!(counts.selected.assigned, 2);
         assert_eq!(counts.selected.exception, 0);
         assert_eq!(
+            counts.work_item_type_counts,
+            HashMap::from([
+                (WorkItemType::DocumentApproval, 2),
+                (WorkItemType::FulfillmentOperation, 1),
+                (WorkItemType::BusinessException, 1),
+            ])
+        );
+        assert_eq!(
             counts.family_counts,
             WorkItemFamilyCountsView { approval: 2, fulfillment: 1, exception: 1, ..Default::default() }
         );
@@ -439,6 +453,32 @@ mod tests {
         assert_eq!(counts.selected.assigned, 1);
         assert_eq!(counts.selected.due_today, 1);
         assert_eq!(counts.family_counts.approval, 1);
+        assert_eq!(counts.work_item_type_counts, HashMap::from([(WorkItemType::DocumentApproval, 1)]));
+    }
+
+    /// 空队列不产生分类，跨越多个页面的任务仍完整累计并返回稳定类型码。
+    #[test]
+    fn type_counts_cover_multiple_pages_and_empty_queues() {
+        let actor = AuditActor::new("actor".into(), "actor".into(), AccountKind::Admin);
+        let access = ActorAccess::new("actor".into());
+        let types = [WorkItemType::ProcurementOrderCreation];
+        let context = context(&actor, &access, &types, Instant::from_unix_secs(1_790_784_000));
+        let mut counts = StatsCounts::default();
+        counts.extend_batch([], WorkItemScope::Mine, &context);
+        assert!(counts.work_item_type_counts.is_empty());
+        for batch_size in [50, 50, 25] {
+            counts.extend_batch(
+                (0..batch_size).map(|_| ready(WorkItemType::ProcurementOrderCreation, None)),
+                WorkItemScope::Mine,
+                &context,
+            );
+        }
+        assert_eq!(counts.selected.assigned, 125);
+        assert_eq!(counts.family_counts.procurement, 125);
+        assert_eq!(
+            serde_json::to_value(&counts.work_item_type_counts).unwrap(),
+            serde_json::json!({ "PROCUREMENT_ORDER_CREATION": 125 })
+        );
     }
 
     /// 今日使用半开窗口，等于统计时点的任务不算逾期，午夜两侧按同一时点判定。

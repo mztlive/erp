@@ -51,9 +51,9 @@ const FAMILY_LABEL: Record<string, string> = {
 }
 
 const SORT_OPTIONS: readonly { value: WorkspaceSort; label: string }[] = [
-    { value: "priority_due", label: "超期与优先级" },
-    { value: "due_asc", label: "截止时间" },
-    { value: "created_desc", label: "进入时间" },
+    { value: "priority_due", label: "超期优先，再按优先级" },
+    { value: "due_asc", label: "截止时间 · 最早优先" },
+    { value: "created_desc", label: "进入时间 · 最新优先" },
 ]
 
 /** 文字导航项。选中态同时使用字重与下划线，不能只依赖颜色。 */
@@ -161,7 +161,7 @@ export function WorkspaceFamilyNav({
                         />
                     }
                 >
-                    类型：{FAMILY_LABEL[familyValue] ?? "全部"}
+                    业务分类：{FAMILY_LABEL[familyValue] ?? "全部"}
                     <ChevronDownIcon aria-hidden="true" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start">

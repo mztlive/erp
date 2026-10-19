@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use application_core::{normalized_text, page_or_default, page_size_or_default};
 pub use erp_workflow::entity::work_item::WorkItemDueFilter;
 use erp_workflow::entity::work_item::{WorkItemPriority, WorkItemStatus, WorkItemType};
@@ -222,6 +224,8 @@ pub struct WorkItemStatsView {
     pub exception: u64,
     /// 当前责任范围内按任务族划分的可处理任务数。
     pub family_counts: WorkItemFamilyCountsView,
+    /// 本人可处理任务按固定任务类型汇总；不受列表分页及当前类型选择影响。
+    pub work_item_type_counts: HashMap<WorkItemType, u64>,
     /// 服务端统计时点。
     pub as_of: erp_core::common::time::Instant,
 }

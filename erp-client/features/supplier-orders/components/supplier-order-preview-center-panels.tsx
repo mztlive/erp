@@ -13,6 +13,10 @@ import {
 } from "@/components/business"
 import type { ResponsibilityStatus } from "@/components/business/workflow-actions"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import {
+    WorkspaceTaskFooter,
+    useWorkspaceTaskPane,
+} from "@/components/business/workspace-task-pane"
 import { Button } from "@/components/ui/button"
 import {
     Card,
@@ -45,6 +49,7 @@ export function WorkItemProcessPanel({
     onProcess: () => void
 }) {
     const router = useRouter()
+    const inWorkspace = useWorkspaceTaskPane()
 
     return (
         <>
@@ -59,19 +64,31 @@ export function WorkItemProcessPanel({
 
             {workItem ? (
                 <div className="space-y-2">
-                    <SequentialProcessBar
-                        id="supplier-order-center-process-bar"
-                        current={1}
-                        total={1}
-                        responsibilityStatus={responsibilityStatus}
-                        processLabel="确认处理结果并完成任务"
-                        processDisabled={!canCompleteTask}
-                        showProcessNext={false}
-                        pending={pending}
-                        onBack={() => router.push("/workspace")}
-                        onProcess={onProcess}
-                        onProcessNext={() => undefined}
-                    />
+                    {inWorkspace ? (
+                        <WorkspaceTaskFooter>
+                            <Button
+                                id="supplier-order-center-complete-task"
+                                disabled={!canCompleteTask || pending}
+                                onClick={onProcess}
+                            >
+                                确认处理结果并完成任务
+                            </Button>
+                        </WorkspaceTaskFooter>
+                    ) : (
+                        <SequentialProcessBar
+                            id="supplier-order-center-process-bar"
+                            current={1}
+                            total={1}
+                            responsibilityStatus={responsibilityStatus}
+                            processLabel="确认处理结果并完成任务"
+                            processDisabled={!canCompleteTask}
+                            showProcessNext={false}
+                            pending={pending}
+                            onBack={() => router.push("/workspace")}
+                            onProcess={onProcess}
+                            onProcessNext={() => undefined}
+                        />
+                    )}
                 </div>
             ) : null}
         </>

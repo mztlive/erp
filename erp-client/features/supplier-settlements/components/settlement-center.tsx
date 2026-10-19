@@ -1,5 +1,6 @@
 "use client"
 
+import { WorkspaceTaskFooter } from "@/components/business/workspace-task-pane"
 import {
     PageScaffold,
     SequentialProcessBar,
@@ -122,34 +123,55 @@ function SettlementCenter({
             {returnTo ? <CrossEntryBanner returnTo={returnTo} /> : null}
 
             {detail.workItem ? (
-                <div className="space-y-2">
-                    <SequentialProcessBar
-                        id="supplier-settlements-center-process-bar"
-                        current={1}
-                        total={1}
-                        responsibilityStatus={actions.responsibilityStatus}
-                        processLabel="确认结算"
-                        processDisabled={!actions.allowed.has("CONFIRM")}
-                        showProcessNext={false}
-                        pending={actions.decisionMutation.isPending}
-                        onBack={onBack}
-                        onProcess={() => actions.setConfirmOpen(true)}
-                        onProcessNext={() => undefined}
-                    />
-                    {actions.responsibilityStatus === "assigned_to_me" &&
-                    actions.allowed.has("REJECT") ? (
-                        <Button
-                            id="supplier-settlements-center-reject-trigger"
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={actions.decisionMutation.isPending}
-                            onClick={() => actions.setRejectOpen(true)}
-                        >
-                            驳回复核
-                        </Button>
-                    ) : null}
-                </div>
+                <WorkspaceTaskFooter inline={!embedded}>
+                    <div className="flex flex-wrap items-center gap-2">
+                        {embedded ? (
+                            <Button
+                                id="supplier-settlements-center-confirm-task"
+                                disabled={
+                                    actions.responsibilityStatus !==
+                                        "assigned_to_me" ||
+                                    !actions.allowed.has("CONFIRM") ||
+                                    actions.decisionMutation.isPending
+                                }
+                                onClick={() => actions.setConfirmOpen(true)}
+                            >
+                                确认结算
+                            </Button>
+                        ) : (
+                            <SequentialProcessBar
+                                id="supplier-settlements-center-process-bar"
+                                current={1}
+                                total={1}
+                                responsibilityStatus={
+                                    actions.responsibilityStatus
+                                }
+                                processLabel="确认结算"
+                                processDisabled={
+                                    !actions.allowed.has("CONFIRM")
+                                }
+                                showProcessNext={false}
+                                pending={actions.decisionMutation.isPending}
+                                onBack={onBack}
+                                onProcess={() => actions.setConfirmOpen(true)}
+                                onProcessNext={() => undefined}
+                            />
+                        )}
+                        {actions.responsibilityStatus === "assigned_to_me" &&
+                        actions.allowed.has("REJECT") ? (
+                            <Button
+                                id="supplier-settlements-center-reject-trigger"
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={actions.decisionMutation.isPending}
+                                onClick={() => actions.setRejectOpen(true)}
+                            >
+                                驳回复核
+                            </Button>
+                        ) : null}
+                    </div>
+                </WorkspaceTaskFooter>
             ) : detail.workItemBlocker ? (
                 <Alert variant="warning">
                     <AlertTitle>当前无法办理结算复核</AlertTitle>

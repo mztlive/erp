@@ -97,7 +97,7 @@ export function RequestDetail({
             <RequestDetailContent
                 request={request}
                 embedded={Boolean(task)}
-                showHistory={task?.workItemType !== "DOCUMENT_APPROVAL"}
+                showHistory
                 workItemId={scopedWorkItemId}
                 account={
                     isApprovalTask &&
@@ -167,49 +167,51 @@ export function RequestDetail({
                 </WorkspaceTaskFooter>
             )}
             {!isPaymentTask && (
-                <div className="flex flex-wrap justify-end gap-2">
-                    {actions.has("EDIT") && (
-                        <Button
-                            id="ppr-detail-edit"
-                            variant="outline"
-                            disabled={submitUnsettled}
-                            onClick={() => setEditOpen(true)}
-                        >
-                            修改申请
-                        </Button>
-                    )}
-                    {actions.has("WITHDRAW") && (
-                        <Button
-                            id="ppr-detail-withdraw"
-                            variant="outline"
-                            disabled={submitUnsettled}
-                            onClick={() => setReasonAction("withdraw")}
-                        >
-                            撤回申请
-                        </Button>
-                    )}
-                    {actions.has("CLOSE") && (
-                        <Button
-                            id="ppr-detail-close"
-                            variant="outline"
-                            disabled={submitUnsettled}
-                            onClick={() => setReasonAction("close")}
-                        >
-                            {closeLabel}
-                        </Button>
-                    )}
-                    {(actions.has("SUBMIT") || submitUnknown) && (
-                        <Button
-                            id="ppr-detail-submit"
-                            disabled={command.isPending}
-                            onClick={() => setSubmitOpen(true)}
-                        >
-                            {submitUnknown
-                                ? "查询本次提交结果"
-                                : "提交财务审核"}
-                        </Button>
-                    )}
-                </div>
+                <WorkspaceTaskFooter>
+                    <div className="flex flex-wrap justify-end gap-2">
+                        {actions.has("EDIT") && (
+                            <Button
+                                id="ppr-detail-edit"
+                                variant="outline"
+                                disabled={submitUnsettled}
+                                onClick={() => setEditOpen(true)}
+                            >
+                                修改申请
+                            </Button>
+                        )}
+                        {actions.has("WITHDRAW") && (
+                            <Button
+                                id="ppr-detail-withdraw"
+                                variant="outline"
+                                disabled={submitUnsettled}
+                                onClick={() => setReasonAction("withdraw")}
+                            >
+                                撤回申请
+                            </Button>
+                        )}
+                        {actions.has("CLOSE") && (
+                            <Button
+                                id="ppr-detail-close"
+                                variant="outline"
+                                disabled={submitUnsettled}
+                                onClick={() => setReasonAction("close")}
+                            >
+                                {closeLabel}
+                            </Button>
+                        )}
+                        {(actions.has("SUBMIT") || submitUnknown) && (
+                            <Button
+                                id="ppr-detail-submit"
+                                disabled={command.isPending}
+                                onClick={() => setSubmitOpen(true)}
+                            >
+                                {submitUnknown
+                                    ? "查询本次提交结果"
+                                    : "提交财务审核"}
+                            </Button>
+                        )}
+                    </div>
+                </WorkspaceTaskFooter>
             )}
             <RequestDraftDialog
                 open={editOpen}

@@ -30,26 +30,26 @@ export function WorkspaceTaskIdentityHeader({
     const resolvedSubtitle =
         subtitle !== undefined
             ? subtitle
-            : [
-                  `${item.ownerRoleLabel} · ${item.ownerUserLabel}`,
-                  item.counterpartyName,
-              ]
-                  .filter(Boolean)
-                  .join(" · ")
+            : [item.stableNumber].filter(Boolean).join(" · ")
 
     return (
         <>
             <div className="flex min-w-0 flex-col gap-2">
                 <div className="flex flex-wrap items-center gap-2">
                     <WorkspaceDocumentBadge item={item} />
-                    {badges}
+                    {badges ?? (
+                        <StatusBadge
+                            label={item.statusLabel}
+                            tone={item.statusTone}
+                        />
+                    )}
                     {blocked ? (
                         <StatusBadge label="受阻" tone="warning" />
                     ) : overdue ? (
                         <StatusBadge label="已超期" tone="destructive" />
                     ) : null}
                 </div>
-                <h2 className="text-xl font-semibold tracking-tight">
+                <h2 className="break-words text-xl font-medium tracking-tight">
                     {title ?? item.objectTitle}
                 </h2>
                 {resolvedSubtitle ? (

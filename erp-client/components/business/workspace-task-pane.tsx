@@ -19,6 +19,50 @@ type WorkspaceTaskFooterHost = {
 const WorkspaceTaskFooterHostContext =
     createContext<WorkspaceTaskFooterHost | null>(null)
 
+type WorkspaceTaskPageLayout = {
+    summary?: ReactNode
+    aside: ReactNode
+    footer: ReactNode
+}
+const WorkspaceTaskPageContext = createContext<WorkspaceTaskPageLayout | null>(
+    null,
+)
+const WorkspaceTaskSlotsContext = createContext<{
+    summary: HTMLElement | null
+    aside: HTMLElement | null
+    bodyEnd: HTMLElement | null
+} | null>(null)
+
+/** 完整办理页布局仅由工作台入口启用，不改变其他嵌入式消费者。 */
+export function WorkspaceTaskPageProvider({
+    children,
+    ...layout
+}: WorkspaceTaskPageLayout & { children: ReactNode }) {
+    return (
+        <WorkspaceTaskPageContext.Provider value={layout}>
+            {children}
+        </WorkspaceTaskPageContext.Provider>
+    )
+}
+
+export function useWorkspaceTaskPage() {
+    return useContext(WorkspaceTaskPageContext) !== null
+}
+
+/** 业务模块可把已授权的摘要、状态送入完整办理页；独立详情保留原位置。 */
+export function WorkspaceTaskPageSlot({
+    slot,
+    children,
+}: {
+    slot: "summary" | "aside" | "bodyEnd"
+    children: ReactNode
+}) {
+    const hosts = useContext(WorkspaceTaskSlotsContext)
+    if (!hosts) return children
+    const host = hosts[slot]
+    return host ? createPortal(children, host) : null
+}
+
 export type WorkspaceTaskPaneProps = {
     header: ReactNode
     footer?: ReactNode
@@ -38,48 +82,166 @@ export function WorkspaceTaskPane({
     className,
     "aria-label": ariaLabel = "当前任务",
 }: WorkspaceTaskPaneProps) {
+    const pageLayout = useContext(WorkspaceTaskPageContext)
+    const parentPane = useContext(WorkspaceTaskFooterHostContext)
+    const layout = parentPane ? null : pageLayout
+    const [summaryHost, setSummaryHost] = useState<HTMLElement | null>(null)
+    const [asideHost, setAsideHost] = useState<HTMLElement | null>(null)
+    const [bodyEndHost, setBodyEndHost] = useState<HTMLElement | null>(null)
+    const slots = useMemo(
+        () => ({
+            summary: summaryHost,
+            aside: asideHost,
+            bodyEnd: bodyEndHost,
+        }),
+        [summaryHost, asideHost, bodyEndHost],
+    )
     const [footerHost, setFooterHost] = useState<HTMLElement | null>(null)
     const hostValue = useMemo<WorkspaceTaskFooterHost>(
         () => ({ element: footerHost }),
         [footerHost],
     )
 
+    if (!layout)
+        return (
+            <WorkspaceTaskFooterHostContext.Provider value={hostValue}>
+                <WorkspaceTaskPageContext.Provider value={null}>
+                    <WorkspaceTaskSlotsContext.Provider value={null}>
+                        <section
+                            className={cn(
+                                "flex h-full min-h-0 flex-col",
+                                className,
+                            )}
+                            aria-label={ariaLabel}
+                        >
+                            <header
+                                data-slot="workspace-task-header"
+                                className={cn(
+                                    workspaceTaskSurfacePadClassName,
+                                    "flex shrink-0 items-start justify-between gap-3 border-b border-grid bg-card py-5",
+                                )}
+                            >
+                                {header}
+                            </header>
+                            <div
+                                data-slot="workspace-task-body"
+                                className="min-h-0 flex-1 overflow-auto [&>[data-slot=alert]]:mx-5 [&>[data-slot=alert]]:my-5 [&_[data-slot=page-scaffold]]:h-auto"
+                            >
+                                {children}
+                            </div>
+                            <footer
+                                ref={setFooterHost}
+                                data-slot="workspace-task-footer"
+                                className={cn(
+                                    workspaceTaskSurfacePadClassName,
+                                    "flex w-full min-w-0 shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border/40 bg-card py-3 empty:hidden",
+                                )}
+                            >
+                                {footer}
+                            </footer>
+                        </section>
+                    </WorkspaceTaskSlotsContext.Provider>
+                </WorkspaceTaskPageContext.Provider>
+            </WorkspaceTaskFooterHostContext.Provider>
+        )
+
     return (
         <WorkspaceTaskFooterHostContext.Provider value={hostValue}>
-            <section
-                className={cn("flex h-full min-h-0 flex-col", className)}
-                aria-label={ariaLabel}
-            >
-                <header
-                    data-slot="workspace-task-header"
+            <WorkspaceTaskSlotsContext.Provider value={layout ? slots : null}>
+                <section
                     className={cn(
-                        workspaceTaskSurfacePadClassName,
-                        "flex shrink-0 items-start justify-between gap-3 border-b border-grid bg-card py-5",
+                        "flex h-full min-h-0 min-w-0 flex-col",
+                        className,
                     )}
+                    aria-label={ariaLabel}
                 >
-                    {header}
-                </header>
-                <div
-                    data-slot="workspace-task-body"
-                    className={cn(
-                        "min-h-0 flex-1 overflow-auto",
-                        "[&>[data-slot=alert]]:mx-5 [&>[data-slot=alert]]:my-5",
-                        "[&_[data-slot=page-scaffold]]:h-auto",
-                    )}
-                >
-                    {children}
-                </div>
-                <footer
-                    ref={setFooterHost}
-                    data-slot="workspace-task-footer"
-                    className={cn(
-                        workspaceTaskSurfacePadClassName,
-                        "flex w-full min-w-0 shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border/40 bg-card py-3 empty:hidden",
-                    )}
-                >
-                    {footer}
-                </footer>
-            </section>
+                    <div
+                        className={cn(
+                            "flex min-h-0 flex-1 flex-col",
+                            layout &&
+                                "gap-4 overflow-auto bg-muted/20 p-3 sm:p-5",
+                        )}
+                    >
+                        <div
+                            className={cn(
+                                layout &&
+                                    "shrink-0 rounded-xl border border-border/60 bg-card shadow-xs",
+                            )}
+                        >
+                            <header
+                                data-slot="workspace-task-header"
+                                className={cn(
+                                    workspaceTaskSurfacePadClassName,
+                                    "flex shrink-0 items-start justify-between gap-3 bg-card py-5",
+                                    !layout && "border-b border-grid",
+                                    layout && "rounded-t-xl sm:px-6",
+                                )}
+                            >
+                                {header}
+                            </header>
+                            {layout && (
+                                <div className="px-5 pb-5 sm:px-6">
+                                    {layout.summary}
+                                    <div ref={setSummaryHost} />
+                                </div>
+                            )}
+                        </div>
+                        <div
+                            className={cn(
+                                "min-h-0 min-w-0",
+                                layout
+                                    ? "grid shrink-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(17rem,28%)]"
+                                    : "flex flex-1 flex-col",
+                            )}
+                        >
+                            <div
+                                data-slot="workspace-task-body"
+                                className={cn(
+                                    "min-w-0",
+                                    layout
+                                        ? "rounded-xl border border-border/60 bg-card shadow-xs"
+                                        : "min-h-0 flex-1 overflow-auto",
+                                    "[&>[data-slot=alert]]:mx-5 [&>[data-slot=alert]]:my-5 [&_[data-slot=page-scaffold]]:h-auto",
+                                )}
+                            >
+                                {children}
+                                <div
+                                    ref={setBodyEndHost}
+                                    className="px-5 pb-6 empty:hidden sm:px-7"
+                                />
+                            </div>
+                            {layout && (
+                                <aside
+                                    aria-label="办理进度与状态"
+                                    className="space-y-6 rounded-xl border border-border/60 bg-card p-5 shadow-xs xl:sticky xl:top-0"
+                                >
+                                    {layout.aside}
+                                    <div
+                                        ref={setAsideHost}
+                                        className="space-y-5 empty:hidden"
+                                    />
+                                </aside>
+                            )}
+                        </div>
+                    </div>
+                    <footer
+                        data-slot="workspace-task-footer"
+                        className={cn(
+                            workspaceTaskSurfacePadClassName,
+                            "flex w-full min-w-0 shrink-0 flex-wrap items-center gap-3 border-t border-border/60 bg-card py-3",
+                            !layout && "justify-end empty:hidden",
+                        )}
+                    >
+                        {layout?.footer}
+                        <div
+                            ref={setFooterHost}
+                            className="flex min-w-0 flex-wrap items-center justify-end gap-2 empty:hidden"
+                        >
+                            {footer}
+                        </div>
+                    </footer>
+                </section>
+            </WorkspaceTaskSlotsContext.Provider>
         </WorkspaceTaskFooterHostContext.Provider>
     )
 }
@@ -90,12 +252,14 @@ export function WorkspaceTaskPane({
 export function WorkspaceTaskFooter({
     children,
     fallback,
+    inline = false,
 }: {
     children: ReactNode
     fallback?: ReactNode
+    inline?: boolean
 }) {
     const host = useContext(WorkspaceTaskFooterHostContext)
-    if (!host) return fallback ?? children
+    if (!host || inline) return fallback ?? children
     if (!host.element) return null
     return createPortal(children, host.element)
 }

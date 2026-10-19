@@ -1,58 +1,37 @@
 "use client"
 
-import * as React from "react"
-import {
-    Maximize2Icon,
-    Minimize2Icon,
-    RefreshCwIcon,
-    XIcon,
-} from "lucide-react"
-
+import { ArrowLeftIcon, ArrowRightIcon, RefreshCwIcon } from "lucide-react"
 import {
     BusinessEmptyState,
     BusinessFailureState,
     DataFreshness,
-    PageActions,
     PageHeader,
     PageScaffold,
-    surfacePanelClassName,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
-import {
-    Sheet,
-    SheetContent,
-    SheetDescription,
-    SheetTitle,
-} from "@/components/ui/sheet"
-import {
-    // WorkspaceFamilyNav,
+    WorkspaceFamilyNav,
     WorkspaceQueueScopeNav,
-    // WorkspaceQueueStatusNav,
-    // WorkspaceQueueToolbar,
-} from "@/features/workspace/components/workspace-filter-bar"
-import { WorkspaceHomeSkeleton } from "@/features/workspace/components/workspace-home-skeleton"
-import { WorkspacePaneActionsProvider } from "@/features/workspace/components/workspace-pane-actions"
-import { WorkspaceTaskDetail } from "@/features/workspace/components/workspace-task-detail"
-import { WorkspaceTaskList } from "@/features/workspace/components/workspace-task-list"
-import { useWorkspaceHome } from "@/features/workspace/hooks/use-workspace-home"
-import { deriveWorkItemsFreshness } from "@/features/workspace/lib/freshness"
-import { filterSummaryFor } from "@/features/workspace/lib/url-state"
-import { cn } from "@/lib/utils"
-import { toAutomationIdSegment } from "@/lib/automation-id"
+    WorkspaceQueueToolbar,
+} from "../components/workspace-filter-bar"
+import {
+    WorkspaceOverview,
+    workspaceCategoryLabel,
+} from "../components/workspace-overview"
+import { WorkspaceHomeSkeleton } from "../components/workspace-home-skeleton"
+import { WorkspaceTaskDetail } from "../components/workspace-task-detail"
+import { WorkspaceProcessingLayout } from "../components/workspace-processing-layout"
+import { WorkspaceQueueFilters } from "../components/workspace-queue-filters"
+import { WorkspaceTaskList } from "../components/workspace-task-list"
+import { useWorkspaceHome } from "../hooks/use-workspace-home"
+import { deriveWorkItemsFreshness } from "../lib/freshness"
+import { filterSummaryFor, buildWorkspaceSearchParams } from "../lib/url-state"
 
-/**
- * 工作台：页头切换待办口径，队列与作业面左右分栏，审批在右侧连续提交。
- */
 export function WorkspaceHomePage() {
     return <WorkspaceHomeView home={useWorkspaceHome()} />
 }
 
-/** 工作台视图独立消费页面状态，业务请求与处理命令仍由现有 hooks 管理。 */
+/** 总览、队列与办理页互斥挂载；详情不会自动选中队列第一条。 */
 export function WorkspaceHomeView({
     home,
 }: {
@@ -66,499 +45,381 @@ export function WorkspaceHomeView({
         refreshing,
         activeMetric,
         hasActiveFilter,
-        // searchDraft,
-        // setSearchDraft,
-        narrowDetailOpen,
-        setNarrowDetailOpen,
-        setNarrowDetailSettledOpen,
+        searchDraft,
+        setSearchDraft,
         completionAnnouncement,
         selected,
         onMetricClick,
         clearFilters,
         onSelectTask,
         applyDecisionAfter,
-        // onFamilyChange,
-        // onSortChange,
-        // applySearch,
+        onFamilyChange,
+        onQueueFiltersChange,
+        onSortChange,
+        applySearch,
+        openQueue,
+        onPageChange,
         clearSearch,
         refresh,
+        autoNext,
+        setAutoNext,
+        backFromDetail,
+        detailQuery,
     } = home
-    const [detailFullscreen, setDetailFullscreen] = React.useState(false)
-    const [detailHidden, setDetailHidden] = React.useState(false)
-    const detailItem = detailHidden ? undefined : selected
-    const [queueVisibleTask, setQueueVisibleTask] = React.useState<
-        string | null
-    >(null)
-    const sourcingTask =
-        detailItem?.workItemType === "PROCUREMENT_ORDER_CREATION" &&
-        detailItem.allowedActions.includes("PROCESS")
-    const detailExpanded =
-        detailFullscreen ||
-        (sourcingTask && queueVisibleTask !== detailItem?.workItemId)
-    const selectTask = (item: NonNullable<typeof selected>) => {
-        setDetailHidden(false)
-        setQueueVisibleTask(null)
-        onSelectTask(item)
-    }
-    const closeDetail = () => {
-        setDetailHidden(true)
-        setDetailFullscreen(false)
-        setNarrowDetailOpen(false)
-        if (selected)
-            document
-                .getElementById(
-                    "workspace-task-" +
-                        toAutomationIdSegment(selected.workItemId),
-                )
-                ?.focus()
-    }
-
-    React.useEffect(() => {
-        if (!selected) setDetailFullscreen(false)
-    }, [selected])
-
-    React.useEffect(() => {
-        if (!detailExpanded) return
-        const onKeyDown = (event: KeyboardEvent) => {
-            if (event.key === "Escape" && !event.defaultPrevented) {
-                setDetailFullscreen(false)
-                setQueueVisibleTask(detailItem?.workItemId ?? null)
-            }
-        }
-        window.addEventListener("keydown", onKeyDown)
-        return () => window.removeEventListener("keydown", onKeyDown)
-    }, [detailExpanded, detailItem?.workItemId])
-
-    if ((accountProfileQuery.isPending || dashboardQuery.isPending) && !view) {
-        return <WorkspaceHomeSkeleton />
-    }
-
-    if (accountProfileQuery.isError) {
+    const isDetail = Boolean(urlState.currentWorkItemId)
+    const fromOverview =
+        urlState.view === "inbox" &&
+        !urlState.queue &&
+        !hasActiveFilter &&
+        urlState.sort === "priority_due" &&
+        (urlState.page ?? 1) === 1
+    const overview = fromOverview && !isDetail
+    if (accountProfileQuery.isError || (dashboardQuery.isError && !view))
         return (
             <PageScaffold>
                 <BusinessFailureState
-                    error={accountProfileQuery.error}
+                    error={accountProfileQuery.error ?? dashboardQuery.error}
                     action={
-                        <Button
-                            id="workspace-home-profile-retry"
-                            type="button"
-                            variant="outline"
-                            onClick={refresh}
-                        >
+                        <Button id="workspace-home-retry" onClick={refresh}>
                             重试
                         </Button>
                     }
                 />
             </PageScaffold>
         )
-    }
-
-    if (dashboardQuery.isError && !view) {
-        return (
-            <PageScaffold>
-                <BusinessFailureState
-                    error={dashboardQuery.error}
-                    action={
-                        <Button
-                            id="workspace-home-dashboard-retry"
-                            type="button"
-                            variant="outline"
-                            onClick={refresh}
-                        >
-                            重试
-                        </Button>
-                    }
-                />
-            </PageScaffold>
-        )
-    }
-
-    if (!view) return <WorkspaceHomeSkeleton />
-
-    if (view.access === "forbidden") {
+    if (!view)
+        return <WorkspaceHomeSkeleton overview={overview} detail={isDetail} />
+    if (view.access !== "allowed")
         return (
             <PageScaffold>
                 <BusinessFailureState
                     kind="permission"
-                    title="无工作台权限"
-                    description="当前账号没有工作台模块权限。入口应已隐藏；若通过链接直接访问，请联系管理员开通权限。"
+                    title={
+                        view.access === "forbidden"
+                            ? "无工作台权限"
+                            : "当前角色无数据范围"
+                    }
+                    description="请联系管理员确认工作台权限与数据范围。"
                 />
             </PageScaffold>
         )
-    }
-
-    if (view.access === "no_data_scope") {
+    const started = urlState.view === "started"
+    const backLabel = fromOverview
+        ? "返回总览"
+        : started
+          ? "返回审批队列"
+          : "返回任务队列"
+    const index = view.items.findIndex(
+        (item) => item.workItemId === selected?.workItemId,
+    )
+    const next = index >= 0 ? view.items[index + 1] : undefined
+    const freshness = deriveWorkItemsFreshness(view.freshness, { refreshing })
+    const announcement = (
+        <p
+            key={completionAnnouncement.sequence}
+            className="sr-only"
+            role="status"
+            aria-live="polite"
+        >
+            {completionAnnouncement.text}
+        </p>
+    )
+    if (isDetail)
         return (
-            <PageScaffold>
-                <PageHeader
-                    title="我的工作台"
-                    description="当前角色无数据范围"
-                />
-                <BusinessEmptyState
-                    kind="no-scope"
-                    title="当前角色无数据范围"
-                    description="你可以进入此页面，但当前权限范围内没有可查看的任务与指标。系统不会展示虚假的 0 指标。"
-                />
+            <PageScaffold density="compact" className="min-h-0 gap-0">
+                {announcement}
+                <nav
+                    aria-label="办理页导航"
+                    className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border/60 py-3"
+                >
+                    <Button
+                        id="workspace-processing-back"
+                        variant="ghost"
+                        size="sm"
+                        onClick={backFromDetail}
+                    >
+                        <ArrowLeftIcon />
+                        {backLabel}
+                    </Button>
+                    <span className="hidden border-l pl-4 text-xs text-muted-foreground sm:block">
+                        工作台 / {started ? "我发起的审批" : "任务办理"} /{" "}
+                        {selected?.workItemTypeLabel ?? "详情"}
+                    </span>
+                    <div className="ml-auto flex items-center gap-3">
+                        <span className="text-xs text-muted-foreground">
+                            {index >= 0
+                                ? `本页第 ${index + 1} / ${view.items.length} 项`
+                                : "当前任务"}
+                        </span>
+                        <Button
+                            id="workspace-processing-next"
+                            variant="outline"
+                            size="sm"
+                            disabled={!next}
+                            onClick={() => next && onSelectTask(next)}
+                        >
+                            下一项
+                            <ArrowRightIcon />
+                        </Button>
+                    </div>
+                </nav>
+                {selected ? (
+                    <WorkspaceProcessingLayout
+                        item={selected}
+                        autoNext={autoNext}
+                        onAutoNextChange={setAutoNext}
+                        onBack={backFromDetail}
+                        backLabel={backLabel}
+                    >
+                        <WorkspaceTaskDetail
+                            key={selected.workItemId}
+                            item={selected}
+                            grantedPermissions={
+                                accountProfileQuery.data?.permissions ?? []
+                            }
+                            onDecisionApplied={(result, id) =>
+                                applyDecisionAfter(
+                                    id,
+                                    result.nextOpenTask?.workItemId,
+                                )
+                            }
+                            onTaskCompleted={applyDecisionAfter}
+                        />
+                    </WorkspaceProcessingLayout>
+                ) : detailQuery.isFetching ? (
+                    <p
+                        role="status"
+                        className="p-8 text-sm text-muted-foreground"
+                    >
+                        正在读取任务…
+                    </p>
+                ) : (
+                    <BusinessFailureState
+                        error={detailQuery.error ?? undefined}
+                        title="当前任务不可用"
+                        description="任务可能已完成或不在当前可见范围内，请返回列表刷新。"
+                        action={
+                            <Button
+                                id="workspace-processing-unavailable-back"
+                                onClick={backFromDetail}
+                            >
+                                {backLabel}
+                            </Button>
+                        }
+                    />
+                )}
             </PageScaffold>
         )
-    }
-
-    const workItemsFreshness = deriveWorkItemsFreshness(view.freshness, {
-        refreshing,
-    })
-    const filterLabel = filterSummaryFor(activeMetric)
-    const metrics = view.metrics.filter((metric) => metric.visible)
-    const items = view.items
-    const startedView = urlState.view === "started"
-    const managedView = urlState.view === "managed"
-    const startedHasQuery = startedView && Boolean(urlState.query)
-    const hasEffectiveFilter =
-        startedHasQuery || (!startedView && hasActiveFilter)
-    const emptyTitle = startedHasQuery
-        ? "没有匹配的审批"
-        : startedView
-          ? "还没有我发起的审批"
-          : managedView && !hasEffectiveFilter
-            ? "范围内没有待办"
-            : hasEffectiveFilter
-              ? "当前筛选没有待办"
-              : "当前没有待处理事项"
-    const emptyDescription = startedHasQuery
-        ? "可清除关键词后查看全部我发起的审批。"
-        : startedView
-          ? "你发起的审批会在这里持续显示当前节点、审批人和处理状态。"
-          : managedView && !hasEffectiveFilter
-            ? "这里列出你权限范围内尚未完成的任务，不限于派给你本人处理的事项。"
-            : hasEffectiveFilter
-              ? managedView
-                  ? "可清除筛选后回到范围内待办。"
-                  : "可清除筛选后回到待我处理。"
-              : "新任务到达后会出现在这里。"
-    const emptyAction = startedHasQuery ? (
-        <Button
-            id="workspace-home-clear-search"
-            type="button"
-            variant="secondary"
-            onClick={clearSearch}
-        >
-            清除搜索
-        </Button>
-    ) : hasEffectiveFilter ? (
-        <Button
-            id="workspace-home-clear-filters"
-            type="button"
-            variant="secondary"
-            onClick={clearFilters}
-        >
-            清除筛选
-        </Button>
-    ) : undefined
-
-    // 暂停展示搜索、类型、超期和排序控件；恢复时一并取消相关导入与状态解构的注释。
-    // const queueToolbar = (
-    //     <WorkspaceQueueToolbar
-    //         urlState={urlState}
-    //         searchDraft={searchDraft}
-    //         onSearchDraftChange={setSearchDraft}
-    //         onSortChange={onSortChange}
-    //         onSearch={applySearch}
-    //         onClearSearch={clearSearch}
-    //         showSort={!startedView}
-    //         searchAriaLabel={startedView ? "搜索我发起的审批" : "搜索待办"}
-    //         filters={
-    //             !startedView ? (
-    //                 <>
-    //                     <WorkspaceFamilyNav
-    //                         urlState={urlState}
-    //                         counts={view.familyCounts}
-    //                         onFamilyChange={onFamilyChange}
-    //                     />
-    //                     <WorkspaceQueueStatusNav
-    //                         metrics={metrics}
-    //                         activeMetric={activeMetric}
-    //                         onMetricClick={onMetricClick}
-    //                     />
-    //                 </>
-    //             ) : undefined
-    //         }
-    //     />
-    // )
-
-    const paneActions = detailItem ? (
-        <>
-            <WorkspaceDetailFullscreenButton
-                expanded={detailExpanded}
-                onToggle={() => {
-                    setDetailFullscreen(!detailExpanded)
-                    setQueueVisibleTask(detailItem.workItemId)
-                }}
-            />
-            <Button
-                id="workspace-detail-close"
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label="关闭详情"
-                onClick={closeDetail}
-            >
-                <XIcon aria-hidden="true" />
-            </Button>
-        </>
-    ) : null
-
-    const detail = detailItem ? (
-        <WorkspacePaneActionsProvider actions={paneActions}>
-            <WorkspaceTaskDetail
-                item={detailItem}
-                grantedPermissions={accountProfileQuery.data?.permissions ?? []}
-                onDecisionApplied={(commandView, workItemId) => {
-                    applyDecisionAfter(
-                        workItemId,
-                        commandView.nextOpenTask?.workItemId,
-                    )
-                }}
-                onTaskCompleted={applyDecisionAfter}
-            />
-        </WorkspacePaneActionsProvider>
-    ) : null
-
+    const filterText = [
+        urlState.workItemType && workspaceCategoryLabel(urlState.workItemType),
+        urlState.query && `关键词：${urlState.query}`,
+        urlState.due === "today" && "今日到期",
+        urlState.due === "overdue" && "已超期",
+        urlState.blocked && "处理受阻",
+        urlState.handlerUserIds && "已限定处理人",
+        urlState.salesOrderIds && "已限定来源销售单",
+        urlState.purchaseOrderIds && "已限定来源采购单",
+    ]
+        .filter(Boolean)
+        .join(" · ")
     return (
-        <PageScaffold
-            className="min-h-0 gap-2 [&>[data-slot=page-header]]:pb-0"
-            density="compact"
-        >
-            <p
-                key={completionAnnouncement.sequence}
-                className="sr-only"
-                role="status"
-                aria-live="polite"
-                aria-atomic="true"
-            >
-                {completionAnnouncement.text}
-            </p>
+        <PageScaffold density="compact" className="min-h-0 gap-4">
+            {announcement}
             <PageHeader
-                title="我的工作台"
+                title={
+                    overview
+                        ? "我的工作台"
+                        : started
+                          ? "我发起的审批"
+                          : urlState.workItemType
+                            ? workspaceCategoryLabel(urlState.workItemType)
+                            : filterSummaryFor(activeMetric)
+                }
                 actions={
                     <div className="flex flex-wrap items-center gap-3">
                         <DataFreshness
-                            updatedAt={workItemsFreshness.updatedAtLabel}
-                            dateTime={workItemsFreshness.dateTime}
-                            state={workItemsFreshness.state}
-                            statusLabel={workItemsFreshness.statusLabel}
+                            updatedAt={freshness.updatedAtLabel}
+                            dateTime={freshness.dateTime}
+                            state={freshness.state}
+                            statusLabel={freshness.statusLabel}
                         />
-                        <PageActions
-                            actions={[
-                                {
-                                    actionKey: "refresh",
-                                    id: "workspace-home-refresh",
-                                    label: refreshing ? "刷新中" : "刷新",
-                                    icon: RefreshCwIcon,
-                                    variant: "ghost",
-                                    disabled: refreshing,
-                                    onClick: refresh,
-                                    className:
-                                        "text-muted-foreground hover:text-foreground",
-                                },
-                            ]}
-                        />
+                        <Button
+                            id="workspace-home-refresh"
+                            variant="ghost"
+                            size="sm"
+                            disabled={refreshing}
+                            onClick={refresh}
+                        >
+                            <RefreshCwIcon />
+                            刷新
+                        </Button>
                     </div>
                 }
             />
-
-            <div className="border-b border-border pb-1">
-                <WorkspaceQueueScopeNav
-                    metrics={metrics}
-                    activeMetric={activeMetric}
-                    onMetricClick={onMetricClick}
-                />
-            </div>
-            {/* 暂停展示筛选栏：{queueToolbar} */}
-            {hasEffectiveFilter ? (
-                <section aria-label="当前筛选" className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        <span>
-                            {[
-                                urlState.query
-                                    ? "关键词：" + urlState.query
-                                    : undefined,
-                                !startedView && urlState.due === "today"
-                                    ? "今日截止"
-                                    : undefined,
-                                !startedView && urlState.workItemType
-                                    ? "已限定任务类型"
-                                    : undefined,
-                            ]
-                                .filter(Boolean)
-                                .join(" · ") || "筛选已生效"}
-                        </span>
-                        <Button
-                            id="workspace-queue-reset-filters"
-                            type="button"
-                            variant="ghost"
-                            size="xs"
-                            onClick={startedView ? clearSearch : clearFilters}
-                        >
-                            清除筛选
-                        </Button>
+            {overview ? (
+                <>
+                    {view.metrics
+                        .filter(
+                            (metric) =>
+                                metric.visible && metric.key === "managed",
+                        )
+                        .map((metric) => (
+                            <Button
+                                id={`workspace-overview-open-${metric.key}`}
+                                key={metric.key}
+                                variant="outline"
+                                size="sm"
+                                className="self-start"
+                                onClick={() => onMetricClick(metric.key)}
+                            >
+                                {metric.label}
+                                <span className="num text-muted-foreground">
+                                    {metric.count}
+                                </span>
+                                <ArrowRightIcon />
+                            </Button>
+                        ))}
+                    <WorkspaceOverview
+                        view={view}
+                        onOpenQueue={openQueue}
+                        onSelect={onSelectTask}
+                    />
+                </>
+            ) : (
+                <>
+                    <div className="flex flex-wrap items-center gap-4">
+                        <WorkspaceQueueScopeNav
+                            metrics={view.metrics}
+                            activeMetric={activeMetric}
+                            onMetricClick={onMetricClick}
+                        />
                     </div>
-                </section>
-            ) : null}
-            <div
-                className={cn(
-                    surfacePanelClassName,
-                    "flex min-h-0 flex-1 overflow-hidden border border-border/70",
-                )}
-            >
-                <section
-                    data-slot="workspace-queue"
-                    className={cn(
-                        "flex min-h-0 min-w-0 flex-1 flex-col",
-                        detailExpanded && "xl:hidden",
-                        detailItem &&
-                            !narrowDetailOpen &&
-                            !detailExpanded &&
-                            (detailItem.workItemType ===
-                            "SALES_INVOICE_EXECUTION"
-                                ? "xl:w-[340px] xl:flex-none 2xl:w-[360px]"
-                                : "xl:w-[420px] xl:flex-none 2xl:w-[450px]"),
-                    )}
-                    aria-label={filterLabel}
-                >
-                    {items.length === 0 ? (
-                        <div className="flex min-h-72 flex-1 items-center justify-center px-6 py-12">
-                            <BusinessEmptyState
-                                kind={
-                                    hasEffectiveFilter ? "filter" : "no-tasks"
-                                }
-                                title={emptyTitle}
-                                description={emptyDescription}
-                                action={emptyAction}
-                                className="max-w-sm bg-transparent p-0 ring-0"
+                    <section
+                        aria-label="队列查询条件"
+                        className="space-y-3 rounded-xl border border-border/60 bg-muted/15 p-4"
+                    >
+                        <WorkspaceQueueToolbar
+                            urlState={urlState}
+                            searchDraft={searchDraft}
+                            onSearchDraftChange={setSearchDraft}
+                            onSortChange={onSortChange}
+                            onSearch={applySearch}
+                            onClearSearch={clearSearch}
+                            showSort={!started}
+                            loading={refreshing}
+                            resultCount={view.total}
+                            resultNoun={started ? "条审批" : "条待办"}
+                            filters={
+                                !started ? (
+                                    <WorkspaceFamilyNav
+                                        urlState={urlState}
+                                        counts={view.familyCounts}
+                                        onFamilyChange={onFamilyChange}
+                                    />
+                                ) : undefined
+                            }
+                        />
+                        {!started && (
+                            <WorkspaceQueueFilters
+                                state={urlState}
+                                onChange={onQueueFiltersChange}
                             />
-                        </div>
-                    ) : (
-                        <WorkspaceTaskList
-                            items={items}
-                            selectedWorkItemId={detailItem?.workItemId}
-                            onSelect={selectTask}
-                            tracking={startedView}
+                        )}
+                        {hasActiveFilter && (
+                            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                                <span>{filterText || "已限定任务分类"}</span>
+                                <Button
+                                    id="workspace-queue-reset-filters"
+                                    variant="ghost"
+                                    size="xs"
+                                    onClick={clearFilters}
+                                >
+                                    清除筛选
+                                </Button>
+                            </div>
+                        )}
+                    </section>
+                    {dashboardQuery.isError && (
+                        <BusinessFailureState
+                            error={dashboardQuery.error}
+                            title="工作台更新失败"
+                            description="当前显示上次加载的结果，请刷新后重试。"
                         />
                     )}
-                    <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-grid px-5 py-3 text-xs text-muted-foreground">
-                        <span role="status">
-                            {refreshing
-                                ? "正在更新…"
-                                : "共 " +
-                                  view.total.toLocaleString("zh-CN") +
-                                  (startedView ? " 条审批" : " 条待办")}
-                        </span>
-                        {view.total > items.length ? (
-                            <span>已显示 {items.length} 条</span>
-                        ) : null}
-                    </footer>
-                </section>
-                {detailItem && !narrowDetailOpen ? (
                     <section
-                        data-slot="workspace-detail"
-                        aria-label={startedView ? "审批详情" : "任务详情"}
-                        className={cn(
-                            "hidden min-h-0 min-w-0 flex-col border-l border-grid bg-card xl:flex",
-                            detailExpanded ? "flex-1 border-l-0" : "flex-1",
-                        )}
+                        data-slot="workspace-queue"
+                        aria-label="任务队列"
+                        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/60 bg-card"
                     >
-                        {detail}
-                    </section>
-                ) : null}
-            </div>
-
-            <Sheet
-                open={narrowDetailOpen && Boolean(detailItem)}
-                onOpenChange={setNarrowDetailOpen}
-                onOpenChangeComplete={setNarrowDetailSettledOpen}
-            >
-                <SheetContent
-                    side="right"
-                    size="detail"
-                    closeButtonId="workspace-detail-sheet-close"
-                    className="w-full p-0 sm:max-w-lg [&_[data-slot=workspace-task-header]]:px-7 [&_[data-slot=workspace-task-header]]:pt-10 [&_[data-slot=workspace-task-header]]:pr-14 [&_[data-slot=workspace-task-header]_h2]:leading-8 [&_[data-slot=workspace-task-footer]]:px-7 [&_[data-slot=workspace-task-footer]]:py-4"
-                >
-                    <SheetTitle className="sr-only">
-                        {selected?.objectTitle ?? "任务详情"}
-                    </SheetTitle>
-                    <SheetDescription className="sr-only">
-                        {startedView
-                            ? "当前审批的进度与处理记录"
-                            : "当前待办的摘要与处理动作"}
-                    </SheetDescription>
-                    {detailItem ? (
-                        <WorkspacePaneActionsProvider actions={null}>
-                            <WorkspaceTaskDetail
-                                item={detailItem}
-                                grantedPermissions={
-                                    accountProfileQuery.data?.permissions ?? []
-                                }
-                                onDecisionApplied={(
-                                    commandView,
-                                    workItemId,
-                                ) => {
-                                    applyDecisionAfter(
-                                        workItemId,
-                                        commandView.nextOpenTask?.workItemId,
-                                    )
-                                    setNarrowDetailOpen(false)
-                                }}
-                                onTaskCompleted={(
-                                    workItemId,
-                                    preferredWorkItemId,
-                                ) => {
-                                    applyDecisionAfter(
-                                        workItemId,
-                                        preferredWorkItemId,
-                                    )
-                                    setNarrowDetailOpen(false)
-                                }}
+                        {view.items.length ? (
+                            <WorkspaceTaskList
+                                items={view.items}
+                                onSelect={onSelectTask}
+                                tracking={started}
+                                scrollKey={buildWorkspaceSearchParams(urlState)}
                             />
-                        </WorkspacePaneActionsProvider>
-                    ) : null}
-                </SheetContent>
-            </Sheet>
+                        ) : (
+                            <BusinessEmptyState
+                                kind="no-tasks"
+                                title={
+                                    hasActiveFilter
+                                        ? "没有符合条件的事项"
+                                        : "当前没有待处理事项"
+                                }
+                                description={
+                                    hasActiveFilter
+                                        ? "可调整条件或清除筛选。"
+                                        : "新事项到达后会显示在这里。"
+                                }
+                            />
+                        )}
+                        <footer className="flex shrink-0 items-center justify-between gap-3 border-t px-5 py-3 text-xs text-muted-foreground">
+                            <span>
+                                共 {view.total} {started ? "条审批" : "条待办"}
+                            </span>
+                            {!started &&
+                                (view.total > 50 ||
+                                    (urlState.page ?? 1) > 1) && (
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            id="workspace-queue-page-previous"
+                                            size="xs"
+                                            variant="ghost"
+                                            disabled={
+                                                (urlState.page ?? 1) <= 1 ||
+                                                refreshing
+                                            }
+                                            onClick={() =>
+                                                onPageChange(
+                                                    (urlState.page ?? 1) - 1,
+                                                )
+                                            }
+                                        >
+                                            上一页
+                                        </Button>
+                                        <span>第 {urlState.page ?? 1} 页</span>
+                                        <Button
+                                            id="workspace-queue-page-next"
+                                            size="xs"
+                                            variant="ghost"
+                                            disabled={
+                                                (urlState.page ?? 1) * 50 >=
+                                                    view.total || refreshing
+                                            }
+                                            onClick={() =>
+                                                onPageChange(
+                                                    (urlState.page ?? 1) + 1,
+                                                )
+                                            }
+                                        >
+                                            下一页
+                                        </Button>
+                                    </div>
+                                )}
+                        </footer>
+                    </section>
+                </>
+            )}
         </PageScaffold>
-    )
-}
-
-/** 右侧作业面全屏：收起左列队列，Esc 退出。 */
-function WorkspaceDetailFullscreenButton({
-    expanded,
-    onToggle,
-}: {
-    expanded: boolean
-    onToggle: () => void
-}) {
-    const label = expanded ? "退出全屏" : "全屏处理"
-    return (
-        <Tooltip>
-            <TooltipTrigger
-                id="workspace-detail-fullscreen-trigger"
-                render={
-                    <Button
-                        id="workspace-detail-fullscreen-trigger"
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={label}
-                        aria-pressed={expanded}
-                        data-testid="workspace-detail-fullscreen"
-                        onClick={onToggle}
-                    />
-                }
-            >
-                {expanded ? (
-                    <Minimize2Icon aria-hidden="true" />
-                ) : (
-                    <Maximize2Icon aria-hidden="true" />
-                )}
-            </TooltipTrigger>
-            <TooltipContent>{label}</TooltipContent>
-        </Tooltip>
     )
 }

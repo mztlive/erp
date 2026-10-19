@@ -14,6 +14,7 @@ import { WorkspaceInvoiceApproval } from "./workspace-invoice-approval"
 import { WorkspaceReceiptApproval } from "./workspace-receipt-approval"
 import { WorkspacePurchaseApproval } from "./workspace-purchase-approval"
 import { WorkspaceApprovalProgress } from "./workspace-approval-progress"
+import { useWorkspaceTaskPage } from "@/components/business/workspace-task-pane"
 import { useRecoveryOptionsQuery } from "@/features/approval-workflow/queries"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
 import {
@@ -61,6 +62,7 @@ import { isBlockedWorkItem } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceAcceptanceTask } from "./workspace-acceptance-task"
 import {
+    WorkspaceFulfillmentTask,
     WorkspaceFulfillmentProcessAction,
     WorkspaceFulfillmentReassignAction,
 } from "./workspace-fulfillment-task"
@@ -371,11 +373,10 @@ function WorkspaceTaskSurface({
         ].includes(item.businessObjectType)
     ) {
         return (
-            <WorkspaceDocumentTaskDetail
+            <WorkspaceFulfillmentTask
                 item={item}
-                canReadSensitive={canReadSensitive}
                 grantedPermissions={grantedPermissions}
-                onTaskCompleted={onTaskCompleted}
+                onTaskCompleted={(id) => onTaskCompleted?.(id)}
             />
         )
     }
@@ -427,6 +428,7 @@ function WorkspaceDocumentTaskDetail({
         completedWorkItemId: string,
     ) => void
 }) {
+    const fullPage = useWorkspaceTaskPage()
     const approvalTask = isApprovalWorkbenchTask(
         item.allowedActions,
         item.approvalProcessInstanceId,
@@ -569,12 +571,28 @@ function WorkspaceDocumentTaskDetail({
 
     return (
         <WorkspaceTaskPane
-            className="@container/document [&>[data-slot=workspace-task-header]]:border-b-0 [&>[data-slot=workspace-task-header]]:pt-3 [&>[data-slot=workspace-task-header]]:pb-1"
+            className="@container/document"
             header={
                 <>
-                    <h2 className="min-w-0 text-xl font-semibold tracking-tight">
-                        {item.workItemTypeLabel}
-                    </h2>
+                    <div className="min-w-0 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
+                                {item.workItemTypeLabel}
+                            </span>
+                            <StatusBadge
+                                label={item.statusLabel}
+                                tone={item.statusTone}
+                            />
+                        </div>
+                        <h2 className="break-words text-xl font-medium tracking-tight">
+                            {canReadSensitive
+                                ? counterpartyName || item.objectTitle
+                                : "业务详情"}
+                        </h2>
+                        <p className="break-all text-sm text-muted-foreground">
+                            {stripDocumentNumberPrefix(item.stableNumber)}
+                        </p>
+                    </div>
                     <WorkspaceTaskHeaderActions item={item}>
                         {item.workItemType === "FULFILLMENT_OPERATION" ? (
                             <WorkspaceFulfillmentReassignAction
@@ -643,28 +661,6 @@ function WorkspaceDocumentTaskDetail({
             aria-label="当前任务"
         >
             <div className="@container/delivery-brief flex w-full min-w-0 flex-col">
-                <div className="flex flex-col gap-1 px-5 pt-1 pb-1 in-data-[slot=sheet-content]:px-7">
-                    <div className="flex items-start justify-between gap-3">
-                        <h3 className="min-w-0 break-words text-lg font-semibold">
-                            {canReadSensitive
-                                ? counterpartyName || item.objectTitle
-                                : "业务详情"}
-                        </h3>
-                        <StatusBadge
-                            label={item.statusLabel}
-                            tone={item.statusTone}
-                        />
-                    </div>
-                    <p className="num break-all text-sm text-muted-foreground">
-                        {stripDocumentNumberPrefix(item.stableNumber)}
-                    </p>
-                    {!canReadSensitive ? (
-                        <p className="text-xs text-muted-foreground">
-                            当前账号无权查看部分业务字段
-                        </p>
-                    ) : null}
-                </div>
-
                 {item.documentSummaryResolved &&
                 !item.summarySections?.length &&
                 !item.briefLines?.length ? (
@@ -922,7 +918,7 @@ function WorkspaceDocumentTaskDetail({
                     </DetailBlock>
                 ) : null}
 
-                {approvalTask && instance ? (
+                {!fullPage && approvalTask && instance ? (
                     <DetailBlock compact={purchaseApproval || receiptApproval}>
                         <WorkspaceApprovalProgress
                             instance={instance}

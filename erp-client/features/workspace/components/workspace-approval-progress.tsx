@@ -15,8 +15,10 @@ import { cn } from "@/lib/utils"
 export function WorkspaceApprovalProgress({
     instance,
     compact = false,
+    vertical = false,
 }: {
     compact?: boolean
+    vertical?: boolean
     instance: ApprovalRuntimeInstance
 }) {
     const approved = instance.status === "APPROVED"
@@ -124,7 +126,9 @@ export function WorkspaceApprovalProgress({
             <ol
                 aria-label="审批阶段"
                 className={cn(
-                    "grid grid-cols-3 pb-2",
+                    vertical
+                        ? "flex flex-col gap-6 pb-2"
+                        : "grid grid-cols-3 pb-2",
                     compact && "min-w-0 flex-1",
                 )}
             >
@@ -134,13 +138,20 @@ export function WorkspaceApprovalProgress({
                         aria-current={
                             active && index === 1 ? "step" : undefined
                         }
-                        className="relative flex min-w-0 flex-col items-center gap-2 px-2 text-center"
+                        className={cn(
+                            "relative min-w-0",
+                            vertical
+                                ? "grid grid-cols-[2rem_minmax(0,1fr)] gap-x-3 gap-y-1 text-left"
+                                : "flex flex-col items-center gap-2 px-2 text-center",
+                        )}
                     >
                         {index < steps.length - 1 ? (
                             <span
                                 aria-hidden="true"
                                 className={cn(
-                                    "absolute top-4 left-[calc(50%+22px)] h-px w-[calc(100%-44px)]",
+                                    vertical
+                                        ? "absolute top-9 left-4 h-[calc(100%-12px)] w-px bg-border"
+                                        : "absolute top-4 left-[calc(50%+22px)] h-px w-[calc(100%-44px)]",
                                     approved || (index === 0 && active)
                                         ? "bg-foreground/35"
                                         : "bg-border",
@@ -151,10 +162,11 @@ export function WorkspaceApprovalProgress({
                             aria-hidden="true"
                             className={cn(
                                 "relative flex size-8 shrink-0 items-center justify-center rounded-full border",
+                                vertical && "row-span-2",
                                 step.state === "done" &&
                                     "border-foreground/20 bg-muted text-foreground",
                                 step.state === "active" &&
-                                    "border-foreground bg-foreground text-background ring-4 ring-foreground/5",
+                                    "border-primary bg-primary text-primary-foreground ring-4 ring-primary/5",
                                 step.state === "blocked" &&
                                     "border-destructive/30 bg-destructive/10 text-destructive ring-4 ring-destructive/5",
                                 (step.state === "muted" ||
@@ -180,6 +192,7 @@ export function WorkspaceApprovalProgress({
                         <span
                             className={cn(
                                 "text-xs leading-5 wrap-anywhere",
+                                vertical && "col-start-2",
                                 step.state === "blocked"
                                     ? "text-destructive"
                                     : "text-muted-foreground",

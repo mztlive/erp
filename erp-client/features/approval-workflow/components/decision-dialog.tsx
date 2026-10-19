@@ -40,6 +40,7 @@ export function DecisionDialog({
     workItemId,
     expectedTaskVersion,
     defaultDecision,
+    initialReason = "",
     documentType,
     allowedActions,
     context,
@@ -50,6 +51,7 @@ export function DecisionDialog({
     onOpenChange: (open: boolean) => void
     workItemId: string
     expectedTaskVersion: string
+    initialReason?: string
     defaultDecision: ApprovalDecision
     documentType?: string
     allowedActions: readonly string[]
@@ -81,7 +83,7 @@ export function DecisionDialog({
     const form = useAppForm({
         defaultValues: {
             decision: defaultDecision,
-            reason: "",
+            reason: initialReason,
         },
         validators: {
             onChange: decisionFormSchema,
@@ -120,10 +122,10 @@ export function DecisionDialog({
 
     React.useEffect(() => {
         if (!open) return
-        form.reset({ decision: defaultDecision, reason: "" })
+        form.reset({ decision: defaultDecision, reason: initialReason })
         setSlot(null)
         setConflictMessage(null)
-    }, [defaultDecision, form, open])
+    }, [defaultDecision, form, open, initialReason])
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>

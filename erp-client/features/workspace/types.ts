@@ -162,6 +162,7 @@ export type TodayWorkspaceQuery = Readonly<{
     purchaseOrderIds?: string
     sort: WorkspaceSort
     cursor?: string
+    page?: number
     timezone: string
 }>
 
@@ -183,6 +184,8 @@ export type TodayWorkspaceView = Readonly<{
     metrics: readonly WorkspaceMetric[]
     /** 服务端授权统计快照；旧服务缺省时不展示，禁止从当前页推算。 */
     familyCounts?: WorkspaceFamilyCounts
+    workItemTypeCounts?: Readonly<Record<string, number>>
+    dueTodayCount: number
     items: readonly WorkspaceWorkItem[]
     nextCursor?: string
     total: number

@@ -1,3 +1,4 @@
+import { useWorkspaceTaskPage } from "@/components/business/workspace-task-pane"
 import { SequentialProcessBar } from "@/components/business"
 import type { ResponsibilityStatus } from "@/components/business/workflow-actions"
 import type { IntegrationResolutionItemView } from "../../types"
@@ -27,6 +28,8 @@ export function IntegrationItemProgress({
     id?: string
     idPrefix?: string
 }) {
+    const fullPage = useWorkspaceTaskPage()
+    if (fullPage) return null
     return (
         <SequentialProcessBar
             id={id}

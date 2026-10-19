@@ -340,6 +340,7 @@ async function listManagedWorkItems(
         | "purchaseOrderIds"
         | "sort"
         | "cursor"
+        | "page"
         | "timezone"
     >,
     pageSize: number,
@@ -358,7 +359,7 @@ async function listManagedWorkItems(
             sort: query.sort,
             cursor: query.cursor,
             timezone: query.timezone,
-            page: 1,
+            page: query.page ?? 1,
             pageSize,
         })
         return { items: page.items, total: page.total, available: true }
@@ -384,7 +385,7 @@ function listMineWorkItems(query: TodayWorkspaceQuery) {
         sort: query.sort,
         cursor: query.cursor,
         timezone: query.timezone,
-        page: 1,
+        page: query.page ?? 1,
         pageSize: 50,
     })
 }
@@ -467,12 +468,6 @@ export async function fetchWorkspaceDashboard(
                 })),
         getWorkItemStats({
             scope: "mine",
-            family: query.family,
-            workItemType: query.workItemType,
-            due: query.due,
-            handlerUserIds: query.handlerUserIds,
-            salesOrderIds: query.salesOrderIds,
-            purchaseOrderIds: query.purchaseOrderIds,
             timezone: query.timezone,
         }),
         startedMetricPromise,
@@ -532,7 +527,10 @@ export async function fetchWorkspaceDashboard(
             projectionState: updatedAt ? "fresh" : "stale",
         },
         metrics,
-        familyCounts: view === "started" ? undefined : buildFamilyCounts(stats),
+        familyCounts: view === "inbox" ? buildFamilyCounts(stats) : undefined,
+        workItemTypeCounts:
+            view === "inbox" ? stats.work_item_type_counts : undefined,
+        dueTodayCount: stats.due_today,
         items,
         nextCursor: page.nextCursor,
         total: page.total,

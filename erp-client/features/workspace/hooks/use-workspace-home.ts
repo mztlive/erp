@@ -9,6 +9,7 @@ import { queryKeyRoots } from "@/lib/query-key-roots"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
     useWorkspaceDashboardQuery,
+    useWorkspaceSelectedTaskQuery,
     workspaceHomeKeys,
 } from "@/features/workspace/hooks/queries"
 import {
@@ -27,8 +28,6 @@ import type {
 } from "@/features/workspace/types"
 
 const VIEWER_TIMEZONE = "Asia/Shanghai"
-const taskButtonId = (workItemId: string) => `workspace-task-${workItemId}`
-
 /**
  * W01 页面状态：URL 筛选、指标切换、当前项与连续处理后选中下一条。
  */
@@ -60,11 +59,11 @@ export function useWorkspaceHome() {
         !!view
 
     const [searchDraft, setSearchDraft] = React.useState(urlState.query ?? "")
-    const [narrowDetailOpen, setNarrowDetailOpen] = React.useState(false)
-    const [narrowDetailSettledOpen, setNarrowDetailSettledOpen] =
-        React.useState(false)
-    const [pendingFocusWorkItemId, setPendingFocusWorkItemId] =
-        React.useState<string>()
+    React.useEffect(() => {
+        setSearchDraft(urlState.query ?? "")
+    }, [urlState.query])
+    const [autoNext, setAutoNext] = React.useState(false)
+    const enteredFrom = React.useRef<string | null>(null)
     const [completionAnnouncement, setCompletionAnnouncement] = React.useState({
         sequence: 0,
         text: "",
@@ -92,36 +91,68 @@ export function useWorkspaceHome() {
 
     const onMetricClick = React.useCallback(
         (key: WorkspaceMetricKey) => {
-            replaceUrl(urlStateFromMetricKey(key, urlState))
-            setNarrowDetailOpen(false)
+            const base = { view: urlState.view, sort: "priority_due" as const }
+            router.push(
+                `${pathname}${buildWorkspaceSearchParams({ ...urlStateFromMetricKey(key, base), queue: true })}`,
+                { scroll: false },
+            )
+            setSearchDraft("")
         },
-        [replaceUrl, urlState],
+        [pathname, router, urlState],
     )
 
     const clearFilters = React.useCallback(() => {
         replaceUrl({
-            view: "inbox",
+            view: urlState.view,
             sort: "priority_due",
+            queue: true,
         })
         setSearchDraft("")
-        setNarrowDetailOpen(false)
-    }, [replaceUrl])
+    }, [replaceUrl, urlState.view])
+
+    const openQueue = React.useCallback(
+        (workItemType?: string, due?: "today" | "overdue") => {
+            const next: WorkspaceUrlState = {
+                view: "inbox",
+                sort: "priority_due",
+                queue: true,
+                workItemType,
+                due,
+            }
+            router.push(`${pathname}${buildWorkspaceSearchParams(next)}`, {
+                scroll: false,
+            })
+            setSearchDraft("")
+        },
+        [pathname, router],
+    )
+
+    const onPageChange = React.useCallback(
+        (page: number) => {
+            replaceUrl({ ...urlState, page, currentWorkItemId: undefined })
+        },
+        [replaceUrl, urlState],
+    )
+
+    const returnState = { ...urlState, currentWorkItemId: undefined }
+    const returnHref = `${pathname}${buildWorkspaceSearchParams(returnState)}`
+    const backFromDetail = React.useCallback(() => {
+        if (enteredFrom.current === returnHref) router.back()
+        else router.replace(returnHref, { scroll: false })
+        enteredFrom.current = null
+    }, [returnHref, router])
 
     const onSelectTask = React.useCallback(
         (item: WorkspaceWorkItem) => {
-            replaceUrl({
-                ...urlState,
-                currentWorkItemId: item.workItemId,
-            })
-            // 窄屏才打开详情 Sheet；桌面端详情已内联展示，弹出模态框会遮挡并
-            // 把背景（桌面详情区）置为 aria-hidden。
-            setNarrowDetailOpen(
-                typeof window !== "undefined" &&
-                    typeof window.matchMedia === "function" &&
-                    window.matchMedia("(max-width: 1279.98px)").matches,
-            )
+            const href = `${pathname}${buildWorkspaceSearchParams({ ...urlState, currentWorkItemId: item.workItemId })}`
+            if (urlState.currentWorkItemId)
+                router.replace(href, { scroll: false })
+            else {
+                enteredFrom.current = `${pathname}${buildWorkspaceSearchParams(urlState)}`
+                router.push(href, { scroll: false })
+            }
         },
-        [replaceUrl, urlState],
+        [pathname, router, urlState],
     )
 
     const selectNextAfter = React.useCallback(
@@ -133,14 +164,18 @@ export function useWorkspaceHome() {
             const next = preferredWorkItemId
                 ? items.find((item) => item.workItemId === preferredWorkItemId)
                 : (items[index + 1] ?? items[index - 1])
-            replaceUrl({
-                ...urlState,
-                currentWorkItemId: preferredWorkItemId ?? next?.workItemId,
-            })
-            if (!next) setNarrowDetailOpen(false)
-            return next
+            const target =
+                next ??
+                items.find((item) => item.workItemId !== completedWorkItemId)
+            if (autoNext && target)
+                replaceUrl({
+                    ...urlState,
+                    currentWorkItemId: target.workItemId,
+                })
+            else backFromDetail()
+            return autoNext ? target : undefined
         },
-        [replaceUrl, urlState, view?.items],
+        [replaceUrl, urlState, view?.items, autoNext, backFromDetail],
     )
 
     /**
@@ -155,13 +190,10 @@ export function useWorkspaceHome() {
             )
             setCompletionAnnouncement((current) => ({
                 sequence: current.sequence + 1,
-                text: preferredWorkItemId
-                    ? "当前任务已完成，后继任务已进入工作台"
-                    : next
-                      ? `任务已完成，已切换到${next.objectTitle}`
-                      : "任务已完成，当前队列没有其他待办",
+                text: next
+                    ? `任务已完成，已切换到${next.objectTitle}`
+                    : "任务已完成，已返回原列表",
             }))
-            setPendingFocusWorkItemId(preferredWorkItemId ?? next?.workItemId)
             void queryClient.invalidateQueries({
                 queryKey: workspaceHomeKeys.all,
             })
@@ -169,49 +201,28 @@ export function useWorkspaceHome() {
         [queryClient, selectNextAfter],
     )
 
-    React.useEffect(() => {
-        if (
-            !pendingFocusWorkItemId ||
-            urlState.currentWorkItemId !== pendingFocusWorkItemId ||
-            !accountProfileQuery.isSuccess ||
-            accountProfileQuery.isFetching ||
-            !dashboardQuery.isSuccess ||
-            dashboardQuery.isFetching ||
-            dashboardQuery.isPlaceholderData ||
-            narrowDetailOpen ||
-            narrowDetailSettledOpen
-        )
-            return
-        // 完成请求会重验权限并刷新队列；两者稳定后才聚焦，避免命中即将被骨架屏替换的旧节点。
-        const frame = window.requestAnimationFrame(() => {
-            const target = document.getElementById(
-                taskButtonId(pendingFocusWorkItemId),
-            )
-            if (!(target instanceof HTMLButtonElement)) return
-            target.focus()
-            if (document.activeElement === target) {
-                setPendingFocusWorkItemId(undefined)
-            }
-        })
-        return () => window.cancelAnimationFrame(frame)
-    }, [
-        accountProfileQuery.isFetching,
-        accountProfileQuery.isSuccess,
-        dashboardQuery.isFetching,
-        dashboardQuery.isPlaceholderData,
-        dashboardQuery.isSuccess,
-        narrowDetailOpen,
-        narrowDetailSettledOpen,
-        pendingFocusWorkItemId,
-        urlState.currentWorkItemId,
-        view?.items,
-    ])
-
     const onFamilyChange = React.useCallback(
         (family?: WorkspaceFamilyFilter) => {
             replaceUrl({
                 ...urlState,
                 family,
+                workItemType: undefined,
+                page: 1,
+                currentWorkItemId: undefined,
+            })
+        },
+        [replaceUrl, urlState],
+    )
+
+    const onQueueFiltersChange = React.useCallback(
+        (
+            patch: Pick<WorkspaceUrlState, "workItemType" | "due" | "blocked">,
+        ) => {
+            replaceUrl({
+                ...urlState,
+                ...patch,
+                queue: true,
+                page: 1,
                 currentWorkItemId: undefined,
             })
         },
@@ -220,7 +231,12 @@ export function useWorkspaceHome() {
 
     const onSortChange = React.useCallback(
         (sort: WorkspaceSort) => {
-            replaceUrl({ ...urlState, sort })
+            replaceUrl({
+                ...urlState,
+                sort,
+                page: 1,
+                currentWorkItemId: undefined,
+            })
         },
         [replaceUrl, urlState],
     )
@@ -229,6 +245,7 @@ export function useWorkspaceHome() {
         replaceUrl({
             ...urlState,
             query: searchDraft.trim() || undefined,
+            page: 1,
             currentWorkItemId: undefined,
         })
     }, [replaceUrl, searchDraft, urlState])
@@ -238,6 +255,7 @@ export function useWorkspaceHome() {
         replaceUrl({
             ...urlState,
             query: undefined,
+            page: 1,
             currentWorkItemId: undefined,
         })
     }, [replaceUrl, urlState])
@@ -256,10 +274,19 @@ export function useWorkspaceHome() {
         })
     }, [accountProfileQuery, queryClient])
 
-    const selected =
-        view?.items.find(
-            (item) => item.workItemId === urlState.currentWorkItemId,
-        ) ?? view?.items[0]
+    const listedSelection = view?.items.find(
+        (item) => item.workItemId === urlState.currentWorkItemId,
+    )
+    const detailQuery = useWorkspaceSelectedTaskQuery(
+        accountProfileQuery.isSuccess &&
+            view?.access === "allowed" &&
+            urlState.view !== "started" &&
+            !listedSelection
+            ? urlState.currentWorkItemId
+            : undefined,
+        accountProfileQuery.data,
+    )
+    const selected = listedSelection ?? detailQuery.data
 
     return {
         urlState,
@@ -271,17 +298,21 @@ export function useWorkspaceHome() {
         hasActiveFilter,
         searchDraft,
         setSearchDraft,
-        narrowDetailOpen,
-        setNarrowDetailOpen,
-        setNarrowDetailSettledOpen,
+        autoNext,
+        setAutoNext,
+        backFromDetail,
+        detailQuery,
         completionAnnouncement,
         selected,
         onMetricClick,
         clearFilters,
+        openQueue,
+        onPageChange,
         onSelectTask,
         selectNextAfter,
         applyDecisionAfter,
         onFamilyChange,
+        onQueueFiltersChange,
         onSortChange,
         applySearch,
         clearSearch,

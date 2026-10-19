@@ -72,6 +72,8 @@ export type WorkItemStats = Readonly<{
         finance: number
         exception: number
     }>
+    /** 服务端对本人全部可处理任务统计，禁止用已加载页面推算。 */
+    work_item_type_counts?: Readonly<Record<string, number>>
     as_of: number
 }>
 

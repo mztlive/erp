@@ -1,6 +1,7 @@
 "use client"
 
 import { WorkspaceTaskCard, workspaceTaskColumns } from "./workspace-task-card"
+import { useWorkspaceScroll } from "../hooks/use-workspace-scroll"
 import type { WorkspaceWorkItem } from "../types"
 
 /**
@@ -11,12 +12,15 @@ export function WorkspaceTaskList({
     selectedWorkItemId,
     onSelect,
     tracking = false,
+    scrollKey = "",
 }: {
     items: readonly WorkspaceWorkItem[]
     selectedWorkItemId?: string
     onSelect: (item: WorkspaceWorkItem) => void
     tracking?: boolean
+    scrollKey?: string
 }) {
+    const scrollRef = useWorkspaceScroll<HTMLUListElement>(`queue:${scrollKey}`)
     return (
         <div className="@container/workspace-queue flex min-h-0 flex-1 flex-col">
             <div
@@ -34,6 +38,7 @@ export function WorkspaceTaskList({
                 <span className="hidden @min-[600px]/workspace-queue:block" />
             </div>
             <ul
+                ref={scrollRef}
                 className="flex min-h-0 flex-1 flex-col divide-y divide-grid overflow-auto scroll-fade-b"
                 aria-label="待办列表"
             >

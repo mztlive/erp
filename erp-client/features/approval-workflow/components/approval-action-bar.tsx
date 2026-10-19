@@ -3,6 +3,11 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 
+import { useAppForm } from "@/components/form"
+import {
+    useWorkspaceTaskPage,
+    WorkspaceTaskPageSlot,
+} from "@/components/business/workspace-task-pane"
 import { Button } from "@/components/ui/button"
 
 import { RECOVERY_ACTION_LABEL } from "../display"
@@ -81,6 +86,8 @@ export function ApprovalActionBar({
     id?: string
 }) {
     const router = useRouter()
+    const fullPage = useWorkspaceTaskPage()
+    const opinionForm = useAppForm({ defaultValues: { reason: "" } })
     const [dialog, setDialog] = React.useState<DialogKind>(null)
     const hidden = new Set(hiddenActions)
     const actions = new Set(
@@ -104,6 +111,25 @@ export function ApprovalActionBar({
 
     return (
         <div className="flex flex-wrap gap-2">
+            {fullPage &&
+                (showApprove || showReject) &&
+                workItemId &&
+                expectedTaskVersion && (
+                    <WorkspaceTaskPageSlot slot="bodyEnd">
+                        <section className="border-t border-border/60 pt-5">
+                            <opinionForm.AppField name="reason">
+                                {(field) => (
+                                    <field.TextareaField
+                                        id={`${id}-opinion`}
+                                        label="审批意见"
+                                        placeholder="填写核对意见；驳回时请说明原因"
+                                        rows={3}
+                                    />
+                                )}
+                            </opinionForm.AppField>
+                        </section>
+                    </WorkspaceTaskPageSlot>
+                )}
             {showApprove && workItemId && expectedTaskVersion ? (
                 <Button
                     id={`${id}-approve`}
@@ -113,7 +139,7 @@ export function ApprovalActionBar({
                     }
                     onClick={() => setDialog("approve")}
                 >
-                    {presentation === "workspace" ? "同意审批" : "通过"}
+                    {presentation === "workspace" ? "通过审批" : "通过"}
                 </Button>
             ) : null}
             {showReject && workItemId && expectedTaskVersion ? (
@@ -210,7 +236,15 @@ export function ApprovalActionBar({
                     documentType={documentType}
                     allowedActions={allowedActions}
                     context={decisionContext}
-                    onApplied={onDecisionApplied}
+                    initialReason={
+                        fullPage
+                            ? opinionForm.getFieldValue("reason")
+                            : undefined
+                    }
+                    onApplied={(view) => {
+                        opinionForm.reset()
+                        onDecisionApplied?.(view)
+                    }}
                 />
             ) : null}
             {instance ? (

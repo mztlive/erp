@@ -1,3 +1,4 @@
+import { WorkspaceTaskFooter } from "@/components/business/workspace-task-pane"
 import * as React from "react"
 import { surfacePanelClassName } from "@/components/business"
 import type { ResponsibilityStatus } from "@/components/business/workflow-actions"
@@ -99,85 +100,96 @@ export function IntegrationActionZone({
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                    {can("QUERY_ORIGINAL_RESULT") && item.workItem ? (
-                        <LoadingButton
-                            id="integration-action-query-original-result"
-                            loading={
-                                pendingTaskAction === "QUERY_ORIGINAL_RESULT"
-                            }
-                            type="button"
-                            disabled={assignedDisabled}
-                            onClick={() =>
-                                void onTaskAction("QUERY_ORIGINAL_RESULT")
-                            }
-                        >
-                            查询原结果
-                        </LoadingButton>
-                    ) : null}
-                    {can("REPLAY_ORIGINAL") && item.workItem ? (
-                        <LoadingButton
-                            id="integration-action-replay-original"
-                            loading={pendingTaskAction === "REPLAY_ORIGINAL"}
-                            type="button"
-                            variant="secondary"
-                            disabled={assignedDisabled}
-                            onClick={() => void onTaskAction("REPLAY_ORIGINAL")}
-                        >
-                            重新提交
-                        </LoadingButton>
-                    ) : null}
-                    {can("ADD_EVIDENCE") && item.workItem ? (
-                        <LoadingButton
-                            id="integration-action-add-evidence"
-                            loading={pendingTaskAction === "ADD_EVIDENCE"}
-                            type="button"
-                            variant="outline"
-                            disabled={assignedDisabled}
-                            onClick={() => void onTaskAction("ADD_EVIDENCE")}
-                        >
-                            补充证据
-                        </LoadingButton>
-                    ) : null}
-                    {can("LINK_COMPENSATION") && item.workItem ? (
-                        <LoadingButton
-                            id="integration-action-link-compensation"
-                            loading={pendingTaskAction === "LINK_COMPENSATION"}
-                            type="button"
-                            variant="outline"
-                            disabled={assignedDisabled}
-                            onClick={() =>
-                                void onTaskAction("LINK_COMPENSATION")
-                            }
-                        >
-                            关联补偿
-                        </LoadingButton>
-                    ) : null}
-                    {can("REATTRIBUTE") && item.workItem ? (
-                        <LoadingButton
-                            id="integration-action-reatribute"
-                            loading={pendingTaskAction === "REATTRIBUTE"}
-                            type="button"
-                            variant="outline"
-                            disabled={assignedDisabled}
-                            onClick={() => void onTaskAction("REATTRIBUTE")}
-                        >
-                            重新归集
-                        </LoadingButton>
-                    ) : null}
-                    {can("RESOLVE") &&
-                    item.workItem &&
-                    item.resolutionEvidencePolicy ? (
-                        <Button
-                            id="integration-action-resolve"
-                            type="button"
-                            disabled={assignedDisabled}
-                            onClick={() =>
-                                onRequestTerminal({ kind: "RESOLVE" })
-                            }
-                        >
-                            标记已解决
-                        </Button>
-                    ) : null}
+                    <WorkspaceTaskFooter>
+                        {can("QUERY_ORIGINAL_RESULT") && item.workItem ? (
+                            <LoadingButton
+                                id="integration-action-query-original-result"
+                                loading={
+                                    pendingTaskAction ===
+                                    "QUERY_ORIGINAL_RESULT"
+                                }
+                                type="button"
+                                disabled={assignedDisabled}
+                                onClick={() =>
+                                    void onTaskAction("QUERY_ORIGINAL_RESULT")
+                                }
+                            >
+                                查询原结果
+                            </LoadingButton>
+                        ) : null}
+                        {can("REPLAY_ORIGINAL") && item.workItem ? (
+                            <LoadingButton
+                                id="integration-action-replay-original"
+                                loading={
+                                    pendingTaskAction === "REPLAY_ORIGINAL"
+                                }
+                                type="button"
+                                variant="secondary"
+                                disabled={assignedDisabled}
+                                onClick={() =>
+                                    void onTaskAction("REPLAY_ORIGINAL")
+                                }
+                            >
+                                重新提交
+                            </LoadingButton>
+                        ) : null}
+                        {can("ADD_EVIDENCE") && item.workItem ? (
+                            <LoadingButton
+                                id="integration-action-add-evidence"
+                                loading={pendingTaskAction === "ADD_EVIDENCE"}
+                                type="button"
+                                variant="outline"
+                                disabled={assignedDisabled}
+                                onClick={() =>
+                                    void onTaskAction("ADD_EVIDENCE")
+                                }
+                            >
+                                补充证据
+                            </LoadingButton>
+                        ) : null}
+                        {can("LINK_COMPENSATION") && item.workItem ? (
+                            <LoadingButton
+                                id="integration-action-link-compensation"
+                                loading={
+                                    pendingTaskAction === "LINK_COMPENSATION"
+                                }
+                                type="button"
+                                variant="outline"
+                                disabled={assignedDisabled}
+                                onClick={() =>
+                                    void onTaskAction("LINK_COMPENSATION")
+                                }
+                            >
+                                关联补偿
+                            </LoadingButton>
+                        ) : null}
+                        {can("REATTRIBUTE") && item.workItem ? (
+                            <LoadingButton
+                                id="integration-action-reatribute"
+                                loading={pendingTaskAction === "REATTRIBUTE"}
+                                type="button"
+                                variant="outline"
+                                disabled={assignedDisabled}
+                                onClick={() => void onTaskAction("REATTRIBUTE")}
+                            >
+                                重新归集
+                            </LoadingButton>
+                        ) : null}
+                        {can("RESOLVE") &&
+                        item.workItem &&
+                        item.resolutionEvidencePolicy ? (
+                            <Button
+                                id="integration-action-resolve"
+                                type="button"
+                                disabled={assignedDisabled}
+                                onClick={() =>
+                                    onRequestTerminal({ kind: "RESOLVE" })
+                                }
+                            >
+                                标记已解决
+                            </Button>
+                        ) : null}
+                    </WorkspaceTaskFooter>
                     {item.workItem?.allowedActions.includes("CLOSE") ? (
                         <div className="flex w-full flex-wrap items-end gap-2 rounded-lg border p-2">
                             <div className="space-y-1">

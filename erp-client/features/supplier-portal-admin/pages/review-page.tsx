@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useQueryClient } from "@tanstack/react-query"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
+import { WorkspaceTaskFooter } from "@/components/business/workspace-task-pane"
 import { Button } from "@/components/ui/button"
 import { NativeCheckbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
@@ -1332,48 +1333,50 @@ function PortalReviewForm({
                         />
                     )}
                 </form.AppField>
-                <div className="flex flex-wrap gap-2">
-                    <Button
-                        id="supplier-portal-review-approve"
-                        type="button"
-                        disabled={
-                            mutation.isPending ||
-                            conflict ||
-                            !canProcess ||
-                            (initialAvailability && !reportedConfirmed) ||
-                            (intent.current != null &&
-                                intent.current.decision !== "approve")
-                        }
-                        onClick={() => {
-                            decisionRef.current = "approve"
-                            void form.handleSubmit().catch(setError)
-                        }}
-                    >
-                        {intent.current?.decision === "approve"
-                            ? "重试原通过决定"
-                            : "确认通过并生效"}
-                    </Button>
-                    <Button
-                        id="supplier-portal-review-return"
-                        type="button"
-                        variant="outline"
-                        disabled={
-                            mutation.isPending ||
-                            conflict ||
-                            !canProcess ||
-                            (intent.current != null &&
-                                intent.current.decision !== "return")
-                        }
-                        onClick={() => {
-                            decisionRef.current = "return"
-                            void form.handleSubmit().catch(setError)
-                        }}
-                    >
-                        {intent.current?.decision === "return"
-                            ? "重试原退回决定"
-                            : "退回供应商修改"}
-                    </Button>
-                </div>
+                <WorkspaceTaskFooter>
+                    <div className="flex flex-wrap gap-2">
+                        <Button
+                            id="supplier-portal-review-approve"
+                            type="button"
+                            disabled={
+                                mutation.isPending ||
+                                conflict ||
+                                !canProcess ||
+                                (initialAvailability && !reportedConfirmed) ||
+                                (intent.current != null &&
+                                    intent.current.decision !== "approve")
+                            }
+                            onClick={() => {
+                                decisionRef.current = "approve"
+                                void form.handleSubmit().catch(setError)
+                            }}
+                        >
+                            {intent.current?.decision === "approve"
+                                ? "重试原通过决定"
+                                : "确认通过并生效"}
+                        </Button>
+                        <Button
+                            id="supplier-portal-review-return"
+                            type="button"
+                            variant="outline"
+                            disabled={
+                                mutation.isPending ||
+                                conflict ||
+                                !canProcess ||
+                                (intent.current != null &&
+                                    intent.current.decision !== "return")
+                            }
+                            onClick={() => {
+                                decisionRef.current = "return"
+                                void form.handleSubmit().catch(setError)
+                            }}
+                        >
+                            {intent.current?.decision === "return"
+                                ? "重试原退回决定"
+                                : "退回供应商修改"}
+                        </Button>
+                    </div>
+                </WorkspaceTaskFooter>
             </form>
         </section>
     )
