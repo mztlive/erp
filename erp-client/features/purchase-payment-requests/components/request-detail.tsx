@@ -132,6 +132,7 @@ export function RequestDetail({
                             <ApprovalReadonly
                                 approval={approval}
                                 id="ppr-approval-readonly"
+                                className="space-y-6 [&>[data-slot=card][data-size]]:px-0 [&>[data-slot=card][data-size]]:py-0 [&>[data-slot=card][data-size]>[data-slot=card-header]]:mx-0 [&>[data-slot=card][data-size]>[data-slot=card-header]]:px-0 [&>[data-slot=card][data-size]>[data-slot=card-header]]:pb-3 [&>[data-slot=card][data-size]>[data-slot=card-content]]:px-0 [&>[data-slot=card][data-size]>[data-slot=card-content]]:pb-4"
                             />
                         </section>
                     ) : null

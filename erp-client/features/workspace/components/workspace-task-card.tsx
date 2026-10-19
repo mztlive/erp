@@ -68,6 +68,9 @@ export function WorkspaceTaskCard({
     const tracking = item.workItemType === "APPROVAL_INSTANCE"
     const amount =
         item.amountSummary ??
+        (item.businessObjectType === "purchase_payment_request"
+            ? item.summarySections?.find((field) => field.label === "申请金额")
+            : undefined) ??
         splitDetailSections(item.summarySections, item.counterpartyName)
             .amounts[0]
     const number = stripDocumentNumberPrefix(item.stableNumber)
@@ -102,6 +105,69 @@ export function WorkspaceTaskCard({
             ) : null}
         </>
     )
+
+    if (tracking) {
+        return (
+            <button
+                id={`workspace-task-${toAutomationIdSegment(item.workItemId)}`}
+                type="button"
+                aria-label={`${item.workItemTypeLabel} ${title} ${number} ${item.statusLabel}`}
+                aria-current={selected ? "true" : undefined}
+                onClick={() => onSelect(item)}
+                className={cn(
+                    "relative w-full space-y-2 px-5 py-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                    selected
+                        ? "bg-muted/60 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-foreground"
+                        : "hover:bg-muted/30",
+                )}
+            >
+                <span className="flex items-baseline justify-between gap-4">
+                    <span
+                        className="min-w-0 truncate text-sm font-semibold"
+                        title={title}
+                    >
+                        {title}
+                    </span>
+                    <span
+                        className="num shrink-0 text-sm font-semibold"
+                        aria-label={
+                            amount
+                                ? `${amount.label} ${amount.value}`
+                                : "金额未提供"
+                        }
+                    >
+                        {amount?.value ?? "—"}
+                    </span>
+                </span>
+                <span className="flex items-center justify-between gap-3">
+                    <span className="truncate text-sm text-muted-foreground">
+                        {item.workItemTypeLabel}
+                    </span>
+                    {deadline}
+                </span>
+                <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                    <time
+                        className="num shrink-0"
+                        dateTime={item.createdAt || undefined}
+                    >
+                        {item.enteredAtLabel}
+                    </time>
+                    <span aria-hidden="true">·</span>
+                    <span className="num min-w-0 truncate" title={number}>
+                        {number}
+                    </span>
+                </span>
+                {item.approval?.lastRejectReason && (
+                    <span
+                        className="block truncate text-xs text-destructive"
+                        title={item.approval.lastRejectReason}
+                    >
+                        驳回原因：{item.approval.lastRejectReason}
+                    </span>
+                )}
+            </button>
+        )
+    }
 
     if (item.workItemType === "SALES_INVOICE_EXECUTION") {
         return (

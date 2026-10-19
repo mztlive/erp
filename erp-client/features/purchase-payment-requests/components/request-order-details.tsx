@@ -1,7 +1,7 @@
 "use client"
 
 import { Fragment, useState } from "react"
-import { ChevronDownIcon, ChevronRightIcon, InfoIcon } from "lucide-react"
+import { ChevronDownIcon, ChevronRightIcon } from "lucide-react"
 import { MoneyValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -97,9 +97,24 @@ function OrderBasis({ line, draft }: { line: RequestLine; draft: boolean }) {
 }
 
 /** 本申请金额、历史依据与当前余额分别展示，不以历史值补齐当前值。 */
-export function RequestOrderDetails({ request }: { request: PaymentRequest }) {
-    const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
+export function RequestOrderDetails({
+    request,
+    compact = false,
+}: {
+    request: PaymentRequest
+    compact?: boolean
+}) {
+    const [collapsed, setCollapsed] = useState<Set<string>>(
+        () =>
+            new Set(
+                compact
+                    ? request.lines.map((line) => line.payable_account_id)
+                    : [],
+            ),
+    )
     const draft = request.status === "draft"
+    const showLineProgress = !compact || request.lines.length > 1
+    const columnCount = showLineProgress ? 5 : 3
     return (
         <section className="space-y-4" aria-label="逐采购申请与付款进度">
             <div className="flex items-center justify-between gap-3">
@@ -108,21 +123,30 @@ export function RequestOrderDetails({ request }: { request: PaymentRequest }) {
                     共 {request.lines.length} 笔
                 </span>
             </div>
-            <p className="flex items-start gap-2 rounded-md bg-muted/40 px-4 py-3 text-xs leading-5 text-muted-foreground">
-                <InfoIcon className="mt-0.5 size-4 shrink-0" />
+            <p className="text-xs leading-5 text-muted-foreground">
                 {draft
                     ? "以下为保存草稿时核对的生效来源，提交时将再次校验。"
-                    : "以下保留提交时的付款依据，当前余额与履约进度单独展示。"}
+                    : "展开采购单，核对提交时依据与当前付款、履约进度。"}
             </p>
             <div className="overflow-hidden rounded-lg border border-border">
-                <Table className="min-w-[680px] [--table-cell-inline:1rem] [--table-cell-block:1rem]">
+                <Table
+                    className={`${showLineProgress ? "min-w-[600px]" : "min-w-[360px]"} table-fixed [--table-cell-inline:1rem] [--table-cell-block:0.75rem]`}
+                >
                     <TableHeader>
                         <TableRow>
                             <TableHead className="w-[42%]">采购单</TableHead>
                             <TableHead>付款条件</TableHead>
                             <TableHead data-align="end">本次申请</TableHead>
-                            <TableHead data-align="end">本申请已付</TableHead>
-                            <TableHead data-align="end">本申请待付</TableHead>
+                            {showLineProgress && (
+                                <TableHead data-align="end">
+                                    本申请已付
+                                </TableHead>
+                            )}
+                            {showLineProgress && (
+                                <TableHead data-align="end">
+                                    本申请待付
+                                </TableHead>
+                            )}
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -169,10 +193,20 @@ export function RequestOrderDetails({ request }: { request: PaymentRequest }) {
                                                 ) : (
                                                     <ChevronRightIcon />
                                                 )}
-                                                <span className="num break-all whitespace-normal">
-                                                    {line.purchase_order_no} · V
-                                                    {line.purchase_version}
+                                                <span
+                                                    className="num min-w-0 truncate"
+                                                    title={
+                                                        line.purchase_order_no
+                                                    }
+                                                >
+                                                    {line.purchase_order_no}
                                                 </span>
+                                                <Badge
+                                                    variant="secondary"
+                                                    className="shrink-0"
+                                                >
+                                                    V{line.purchase_version}
+                                                </Badge>
                                                 <span className="sr-only">
                                                     {expanded ? "收起" : "展开"}
                                                     付款依据
@@ -187,16 +221,20 @@ export function RequestOrderDetails({ request }: { request: PaymentRequest }) {
                                                 value={line.requested_amount}
                                             />
                                         </TableCell>
-                                        <TableCell data-align="end">
-                                            <MoneyValue
-                                                value={line.paid_amount}
-                                            />
-                                        </TableCell>
-                                        <TableCell data-align="end">
-                                            <MoneyValue
-                                                value={line.unpaid_amount}
-                                            />
-                                        </TableCell>
+                                        {showLineProgress && (
+                                            <TableCell data-align="end">
+                                                <MoneyValue
+                                                    value={line.paid_amount}
+                                                />
+                                            </TableCell>
+                                        )}
+                                        {showLineProgress && (
+                                            <TableCell data-align="end">
+                                                <MoneyValue
+                                                    value={line.unpaid_amount}
+                                                />
+                                            </TableCell>
+                                        )}
                                     </TableRow>
                                     <TableRow
                                         id={`ppr-order-${key}-basis`}
@@ -204,7 +242,7 @@ export function RequestOrderDetails({ request }: { request: PaymentRequest }) {
                                         className="hover:bg-transparent"
                                     >
                                         <TableCell
-                                            colSpan={5}
+                                            colSpan={columnCount}
                                             className="p-2 whitespace-normal"
                                         >
                                             <OrderBasis
@@ -216,7 +254,7 @@ export function RequestOrderDetails({ request }: { request: PaymentRequest }) {
                                     {line.source_changed && (
                                         <TableRow className="hover:bg-transparent">
                                             <TableCell
-                                                colSpan={5}
+                                                colSpan={columnCount}
                                                 className="whitespace-normal pt-0"
                                             >
                                                 <p

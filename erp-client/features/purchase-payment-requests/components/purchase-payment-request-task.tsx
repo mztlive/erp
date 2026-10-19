@@ -63,6 +63,7 @@ export function PurchasePaymentRequestTask({
     return (
         <div className="px-7 py-6">
             <RequestDetail
+                key={query.data.id}
                 request={query.data}
                 task={item}
                 onDecisionApplied={(view) => {

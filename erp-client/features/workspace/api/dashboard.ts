@@ -597,7 +597,10 @@ function startedInstanceToWorkItem(
                       numeric: true,
                   }
                 : undefined,
-        workItemTypeLabel: item.processName ?? typeLabel,
+        workItemTypeLabel:
+            businessObjectType === "purchase_payment_request"
+                ? typeLabel
+                : (item.processName ?? typeLabel),
         businessObjectType,
         businessObjectId: item.documentId ?? item.instanceId,
         subjectVersion: item.subjectVersion ?? "",

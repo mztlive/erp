@@ -168,7 +168,7 @@ const DOCUMENT_META: Record<string, DocumentMeta> = {
         badgeVariant: "lime",
     },
     purchase_payment_request: {
-        approvalLabel: "待审核付款申请",
+        approvalLabel: "付款申请",
         badgeLabel: "付款申请",
         documentName: "采购付款申请",
         badgeVariant: "cyan",

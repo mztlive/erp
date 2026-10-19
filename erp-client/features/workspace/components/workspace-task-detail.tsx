@@ -139,18 +139,40 @@ function WorkspaceTaskSurface({
                 header={
                     <WorkspaceTaskIdentityHeader
                         item={item}
-                        title={
-                            item.workItemType === "SUPPLIER_PAYMENT_EXECUTION"
-                                ? item.counterpartyName || "供应商付款"
-                                : undefined
+                        title={item.counterpartyName || "付款申请"}
+                        badges={
+                            item.workItemType === "APPROVAL_INSTANCE" ? (
+                                <StatusBadge
+                                    label={
+                                        item.statusLabel.startsWith("审批")
+                                            ? item.statusLabel
+                                            : `审批${item.statusLabel}`
+                                    }
+                                    tone={item.statusTone}
+                                />
+                            ) : undefined
                         }
                         subtitle={
-                            item.workItemType ===
-                            "SUPPLIER_PAYMENT_EXECUTION" ? (
-                                <span className="num break-all">
+                            <span className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
+                                <span
+                                    className="num min-w-0 max-w-full truncate text-xs select-all"
+                                    title={item.stableNumber}
+                                >
                                     {item.stableNumber}
                                 </span>
-                            ) : undefined
+                                {item.workItemType === "DOCUMENT_APPROVAL" && (
+                                    <span>待 {item.ownerUserLabel} 审核</span>
+                                )}
+                                {item.workItemType === "APPROVAL_INSTANCE" &&
+                                    ["RUNNING", "BLOCKED"].includes(
+                                        item.approval?.status ?? "",
+                                    ) && (
+                                        <span>
+                                            {item.approval?.currentNodeLabel} ·{" "}
+                                            {item.ownerUserLabel}
+                                        </span>
+                                    )}
+                            </span>
                         }
                     />
                 }
