@@ -318,6 +318,7 @@ export type ApprovalInstanceListItemDto = Readonly<{
 
 /** 实例列表页。 */
 export type ApprovalInstanceListPageDto = Readonly<{
+    document_type_counts?: Readonly<Record<string, number>> | null
     items: readonly ApprovalInstanceListItemDto[]
     next_cursor?: string | null
     total?: number | null
@@ -438,6 +439,7 @@ export type ApprovalInstanceListItem = Readonly<{
 }>
 
 export type ApprovalInstanceListPage = Readonly<{
+    documentTypeCounts?: Readonly<Record<string, number>>
     items: readonly ApprovalInstanceListItem[]
     nextCursor?: string
     total?: number

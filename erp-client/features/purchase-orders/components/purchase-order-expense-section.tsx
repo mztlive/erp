@@ -3,8 +3,8 @@
 import * as React from "react"
 import { z } from "zod"
 
-import { MoneyValue } from "@/components/business"
-import { DetailRecordSection } from "@/components/business/detail-presentation"
+import { MoneyValue, RateValue } from "@/components/business"
+import { PurchaseOrderDetailSection as DetailRecordSection } from "./purchase-order-detail-section"
 import {
     EVIDENCE_FILE_MAX_BYTES,
     EVIDENCE_FILE_TYPES,
@@ -35,7 +35,7 @@ import { useConfirmExpenseOccurrenceMutation } from "@/features/purchase-orders/
 import type { PurchaseOrderCenterView } from "@/features/purchase-orders/types"
 import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { compareDecimal } from "@/lib/fixed-decimal"
+import { compareDecimal, multiplyFixed } from "@/lib/fixed-decimal"
 import { hasPermission } from "@/lib/permissions"
 
 type ExpenseLine = PurchaseOrderCenterView["currentContent"]["lines"][number]
@@ -104,22 +104,32 @@ export function PurchaseOrderExpenseSection({
     const [confirming, setConfirming] = React.useState<ExpenseLine | null>(null)
     const lines = order.currentContent.lines.filter((line) => line.expense)
     if (lines.length === 0) return null
+    const expenseOnly = lines.length === order.currentContent.lines.length
     const pending = lines.filter(
         (line) =>
             !line.expenseOccurrence &&
             compareDecimal(line.grossAmount, "0", 2) > 0,
     ).length
     return (
-        <DetailRecordSection title="费用确认" count={lines.length}>
-            <p className="pb-3 text-sm text-muted-foreground">
+        <DetailRecordSection
+            title="费用确认"
+            count={lines.length}
+            description={
+                pending > 0 ? `${pending} 条待确认发生` : "无待确认费用"
+            }
+        >
+            <p className="rounded-lg bg-muted/40 px-4 py-3 text-sm leading-6 text-muted-foreground">
                 {pending > 0
-                    ? `还有 ${pending} 条费用待确认发生。费用发生后上传运单、签收单或账单确认，确认后计入来源销售单的实际经营盈亏，且不能再改单修改。`
-                    : "全部费用已确认发生。"}
+                    ? "费用发生后上传运单、签收单或账单凭证。确认后计入来源销售单的实际经营盈亏，该费用行不能再改单修改。"
+                    : "费用已确认发生或已移除，无需继续确认。"}
             </p>
             <Table>
                 <TableHeader>
                     <TableRow>
                         <TableHead>费用</TableHead>
+                        {expenseOnly ? (
+                            <TableHead className="text-right">税率</TableHead>
+                        ) : null}
                         <TableHead className="text-right">含税金额</TableHead>
                         <TableHead>状态</TableHead>
                         <TableHead className="text-right">操作</TableHead>
@@ -132,6 +142,7 @@ export function PurchaseOrderExpenseSection({
                             order={order}
                             line={line}
                             costMasked={costMasked}
+                            showTax={expenseOnly}
                             canConfirm={canConfirm}
                             canDownload={canDownload}
                             onConfirm={() => setConfirming(line)}
@@ -139,6 +150,20 @@ export function PurchaseOrderExpenseSection({
                     ))}
                 </TableBody>
             </Table>
+            {expenseOnly ? (
+                <div className="flex flex-wrap items-baseline justify-end gap-3 border-t border-border/60 pt-4 text-sm">
+                    <span className="text-muted-foreground">合计（含税）</span>
+                    <span className="text-xl font-semibold">
+                        {costMasked ? (
+                            "•••"
+                        ) : (
+                            <MoneyValue
+                                value={order.currentContent.totals.gross}
+                            />
+                        )}
+                    </span>
+                </div>
+            ) : null}
             <ConfirmExpenseDialog
                 order={order}
                 line={confirming}
@@ -155,6 +180,7 @@ function ExpenseRow({
     line,
     costMasked,
     canConfirm,
+    showTax,
     canDownload,
     onConfirm,
 }: {
@@ -162,6 +188,7 @@ function ExpenseRow({
     line: ExpenseLine
     costMasked: boolean
     canConfirm: boolean
+    showTax: boolean
     canDownload: boolean
     onConfirm: () => void
 }) {
@@ -182,8 +209,40 @@ function ExpenseRow({
                         : "归属整张销售单"}
                 </div>
             </TableCell>
+            {showTax ? (
+                <TableCell className="text-right">
+                    {costMasked ? (
+                        "•••"
+                    ) : (
+                        <RateValue
+                            value={multiplyFixed(line.inputTaxRate, "100", {
+                                leftMaxScale: 6,
+                                rightMaxScale: 0,
+                                outputScale: 2,
+                            })}
+                            precision={2}
+                        />
+                    )}
+                </TableCell>
+            ) : null}
             <TableCell className="text-right">
-                {costMasked ? "•••" : <MoneyValue value={line.grossAmount} />}
+                <div className="font-medium">
+                    {costMasked ? (
+                        "•••"
+                    ) : (
+                        <MoneyValue value={line.grossAmount} />
+                    )}
+                </div>
+                {showTax ? (
+                    <div className="mt-1 text-xs text-muted-foreground">
+                        税额{" "}
+                        {costMasked ? (
+                            "•••"
+                        ) : (
+                            <MoneyValue value={line.taxAmount} />
+                        )}
+                    </div>
+                ) : null}
             </TableCell>
             <TableCell>
                 {occurrence ? (

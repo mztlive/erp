@@ -1,8 +1,9 @@
 "use client"
 
+import { PurchaseOrderDetailSection as DetailRecordSection } from "./purchase-order-detail-section"
+
 import { BusinessStatusBadge, MoneyValue } from "@/components/business"
 import {
-    DetailRecordSection,
     DetailSummary,
     DetailSummaryItem,
 } from "@/components/business/detail-presentation"
@@ -47,7 +48,7 @@ export function PurchaseOrderDetailFulfillmentSection({
                     detail={order.header.supplierSnapshot}
                 />
             </DetailSummary>
-            <div className="divide-y divide-border/70">
+            <div className="space-y-5">
                 {quantities.length > 0 ? (
                     <DetailRecordSection title="履约数量">
                         <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">

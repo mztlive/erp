@@ -1,5 +1,7 @@
 //! 审批运行实例与不可变业务快照的联合只读仓储。
 
+use std::collections::BTreeMap;
+
 use bpm::ProcessKind;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use futures_util::TryStreamExt;
@@ -16,7 +18,7 @@ use super::super::bpm::{
 };
 use super::super::extensions::{ApprovalIntegrationExt, BpmExt};
 use super::facet_total_or_empty;
-use crate::entity::approval_integration::ApprovalSubjectSnapshot;
+use crate::entity::approval_integration::{ApprovalSubjectSnapshot, document_type_of};
 
 const INSTANCES: &str = <Database as BpmExt>::APPROVAL_PROCESS_INSTANCES;
 const SNAPSHOTS: &str = <Database as ApprovalIntegrationExt>::APPROVAL_SUBJECT_SNAPSHOTS;
@@ -69,6 +71,8 @@ pub struct ApprovalRuntimeReadPage {
     pub items: Vec<ApprovalRuntimeReadRow>,
     /// 不含游标的完整授权范围总数。
     pub total: u64,
+    /// 同一授权与检索条件下的完整单据类型数量，不受游标影响。
+    pub document_type_counts: BTreeMap<String, u64>,
 }
 
 /// 审批运行实例与不可变业务快照的联合只读仓储。
@@ -82,6 +86,15 @@ struct ApprovalRuntimeReadFacet {
     items: Vec<ApprovalRuntimeReadRow>,
     #[serde(default)]
     total: Vec<ApprovalRuntimeReadCount>,
+    #[serde(default)]
+    document_type_counts: Vec<ApprovalRuntimeTypeCount>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ApprovalRuntimeTypeCount {
+    #[serde(rename = "_id")]
+    process_kind: ProcessKind,
+    count: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -135,7 +148,7 @@ impl<'a> ApprovalRuntimeReadRepository<'a> {
         executor: &mut dyn Executor,
     ) -> Result<ApprovalRuntimeReadPage> {
         if runtime_read_scope_empty(filter, scope) {
-            return Ok(ApprovalRuntimeReadPage { items: Vec::new(), total: 0 });
+            return Ok(ApprovalRuntimeReadPage::default());
         }
         let rows = aggregate_runtime_read::<ApprovalRuntimeReadFacet>(
             &self.db.collection::<Document>(INSTANCES),
@@ -202,10 +215,18 @@ async fn aggregate_runtime_read<T: DeserializeOwned + Send + Sync>(
 /// 从联合分页分支恢复完整总数与当前页。
 fn runtime_read_page(facet: Option<ApprovalRuntimeReadFacet>) -> Result<ApprovalRuntimeReadPage> {
     let Some(facet) = facet else {
-        return Ok(ApprovalRuntimeReadPage { items: Vec::new(), total: 0 });
+        return Ok(ApprovalRuntimeReadPage::default());
     };
     let total = facet_total_or_empty(facet.total.first().map(|row| row.count), "approval_runtime_total")?;
-    Ok(ApprovalRuntimeReadPage { items: facet.items, total })
+    let document_type_counts = facet
+        .document_type_counts
+        .into_iter()
+        .map(|row| {
+            let count = facet_total_or_empty(Some(row.count), "approval_runtime_type_total")?;
+            Ok((document_type_of(row.process_kind).as_str().to_string(), count))
+        })
+        .collect::<Result<BTreeMap<_, _>>>()?;
+    Ok(ApprovalRuntimeReadPage { items: facet.items, total, document_type_counts })
 }
 
 /// 拒绝空范围、错接视图和不在已证明范围内的请求类型。
@@ -429,6 +450,7 @@ fn runtime_read_facets(filter: &ApprovalInstanceListFilter) -> Document {
     doc! {
         "items": items,
         "total": [{ "$count": "count" }],
+        "document_type_counts": [{ "$group": { "_id": "$process_kind", "count": { "$sum": 1 } } }],
     }
 }
 
@@ -449,10 +471,10 @@ fn runtime_read_projection() -> Document {
 mod tests {
     use bpm::ProcessKind;
     use bpm::model::types::ApprovalProcessInstanceStatus;
-    use mongodb::bson::{Bson, doc};
+    use mongodb::bson::{Bson, deserialize_from_document, doc};
 
     use super::{
-        ApprovalRuntimeReadScope, ApprovalRuntimeReadTypeScope, runtime_read_pipeline,
+        ApprovalRuntimeReadScope, ApprovalRuntimeReadTypeScope, runtime_read_page, runtime_read_pipeline,
         runtime_read_scope_empty, runtime_scan_pipeline, runtime_snapshot_scope_match,
     };
     use crate::repository::bpm::{
@@ -490,6 +512,38 @@ mod tests {
 
     fn runtime_scope() -> ApprovalRuntimeReadScope {
         ApprovalRuntimeReadScope::Managed { type_scopes: runtime_type_scopes() }
+    }
+
+    /// 类型数量覆盖完整结果，即使游标页为空仍保留各类型总数。
+    #[test]
+    fn runtime_type_counts_survive_empty_page() {
+        let facet = deserialize_from_document(doc! {
+            "items": [],
+            "total": [{ "count": 53_i64 }],
+            "document_type_counts": [
+                { "_id": ProcessKind::PurchaseOrder.as_str(), "count": 31_i64 },
+                { "_id": ProcessKind::PurchasePaymentRequest.as_str(), "count": 22_i64 },
+            ],
+        })
+        .unwrap();
+        let page = runtime_read_page(Some(facet)).unwrap();
+        assert!(page.items.is_empty());
+        assert_eq!(page.total, 53);
+        assert_eq!(page.document_type_counts.get("purchase_order"), Some(&31));
+        assert_eq!(page.document_type_counts.get("purchase_payment_request"), Some(&22));
+    }
+
+    /// 空授权结果不伪造类型；损坏计数必须失败。
+    #[test]
+    fn runtime_type_counts_reject_negative_and_allow_empty() {
+        assert!(runtime_read_page(None).unwrap().document_type_counts.is_empty());
+        let facet = deserialize_from_document(doc! {
+            "document_type_counts": [
+                { "_id": ProcessKind::PurchaseOrder.as_str(), "count": -1_i64 },
+            ],
+        })
+        .unwrap();
+        assert!(runtime_read_page(Some(facet)).is_err());
     }
 
     #[test]

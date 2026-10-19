@@ -12,6 +12,7 @@ export function RequestDraftWorkspace({
     values,
     candidates,
     editing,
+    fixedOrder = false,
     activeKey,
     issues,
     onSelect,
@@ -20,6 +21,7 @@ export function RequestDraftWorkspace({
     values: DraftValues
     candidates: PaymentCandidate[]
     editing: boolean
+    fixedOrder?: boolean
     activeKey: string | undefined
     issues: Map<string, string[]>
     onSelect: (key: string) => void
@@ -35,53 +37,62 @@ export function RequestDraftWorkspace({
     if (!selected)
         return (
             <p role="alert" className="p-6 text-sm">
-                当前采购来源不可申请，请返回上一步重新选择。
+                {fixedOrder
+                    ? "当前采购单暂无可申请付款的来源，请核对采购单是否已生效、余额是否已付清或已被其他申请占用，以及是否存在待处理的采购依据变更。"
+                    : "当前采购来源不可申请，请返回上一步重新选择。"}
             </p>
         )
     return (
         <div className="flex min-h-0 flex-1 flex-col">
-            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-6 py-3 text-sm">
-                <p>
-                    共 <strong>{groups.length}</strong> 份申请{" "}
-                    <span className="text-muted-foreground">
-                        · {values.selectedIds.length} 张采购单
-                    </span>
-                </p>
-                <p role="status" className="text-xs text-muted-foreground">
-                    已填完整 {groups.length - issues.size} 份
-                    {issues.size > 0 && (
-                        <span className="ml-3 text-warning-soft-foreground">
-                            {issues.size} 份待补充
+            {!fixedOrder ? (
+                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-6 py-3 text-sm">
+                    <p>
+                        共 <strong>{groups.length}</strong> 份申请{" "}
+                        <span className="text-muted-foreground">
+                            · {values.selectedIds.length} 张采购单
                         </span>
-                    )}
-                </p>
-            </div>
+                    </p>
+                    <p role="status" className="text-xs text-muted-foreground">
+                        已填完整 {groups.length - issues.size} 份
+                        {issues.size > 0 && (
+                            <span className="ml-3 text-warning-soft-foreground">
+                                {issues.size} 份待补充
+                            </span>
+                        )}
+                    </p>
+                </div>
+            ) : null}
             <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-                <nav
-                    aria-label="付款申请列表"
-                    className="max-h-44 shrink-0 overflow-y-auto border-b bg-muted/30 p-3 lg:max-h-none lg:w-[30%] lg:border-r lg:border-b-0"
-                >
-                    <div className="space-y-1.5">
-                        {groups.map((group, index) => (
-                            <RequestDraftGroupHeader
-                                key={group.key}
-                                id={`ppr-group-${toAutomationIdSegment(group.key)}`}
-                                group={group}
-                                index={index}
-                                first={candidates.find(
-                                    (row) =>
-                                        row.payable_account_id === group.ids[0],
-                                )}
-                                active={selected.key === group.key}
-                                incomplete={issues.has(group.key)}
-                                amount={totalOf(
-                                    group.ids.map((id) => amounts[id] ?? ""),
-                                )}
-                                onSelect={() => onSelect(group.key)}
-                            />
-                        ))}
-                    </div>
-                </nav>
+                {!fixedOrder ? (
+                    <nav
+                        aria-label="付款申请列表"
+                        className="max-h-44 shrink-0 overflow-y-auto border-b bg-muted/30 p-3 lg:max-h-none lg:w-[30%] lg:border-r lg:border-b-0"
+                    >
+                        <div className="space-y-1.5">
+                            {groups.map((group, index) => (
+                                <RequestDraftGroupHeader
+                                    key={group.key}
+                                    id={`ppr-group-${toAutomationIdSegment(group.key)}`}
+                                    group={group}
+                                    index={index}
+                                    first={candidates.find(
+                                        (row) =>
+                                            row.payable_account_id ===
+                                            group.ids[0],
+                                    )}
+                                    active={selected.key === group.key}
+                                    incomplete={issues.has(group.key)}
+                                    amount={totalOf(
+                                        group.ids.map(
+                                            (id) => amounts[id] ?? "",
+                                        ),
+                                    )}
+                                    onSelect={() => onSelect(group.key)}
+                                />
+                            ))}
+                        </div>
+                    </nav>
+                ) : null}
                 <div
                     id="ppr-create-editor"
                     className="min-h-0 min-w-0 flex-1 overflow-y-auto p-5 sm:p-6"
@@ -94,6 +105,7 @@ export function RequestDraftWorkspace({
                             index={index}
                             candidates={candidates}
                             editing={editing}
+                            fixedOrder={fixedOrder}
                             open={selected.key === group.key}
                             onSplit={onSelect}
                             issues={issues.get(group.key) ?? []}

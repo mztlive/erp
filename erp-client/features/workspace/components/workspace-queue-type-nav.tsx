@@ -1,5 +1,7 @@
 "use client"
 
+import { LayersIcon } from "lucide-react"
+import { workspaceCategoryIcon } from "../lib/category-icon"
 import { OptionCombobox } from "@/components/business/option-combobox"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -20,6 +22,8 @@ export function WorkspaceQueueTypeNav({
     total?: number
     onChange: (type?: string) => void
 }) {
+    const started = state.view === "started"
+    const groupLabel = started ? "审批类型" : "任务类型"
     const types = Object.keys(TYPE_META).filter(
         (type) => type !== "APPROVAL_INSTANCE",
     )
@@ -73,13 +77,18 @@ export function WorkspaceQueueTypeNav({
     return (
         <div
             role="group"
-            aria-label="任务类型"
+            aria-label={groupLabel}
             className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-3"
         >
-            <span className="mr-1 text-xs text-muted-foreground">任务类型</span>
+            <span className="mr-1 text-xs text-muted-foreground">
+                {groupLabel}
+            </span>
             {[undefined, ...visibleTypes].map((type) => {
                 const active = state.workItemType === type
-                const label = type ? workspaceCategoryLabel(type) : "全部"
+                const label = type
+                    ? workspaceCategoryLabel(type, started)
+                    : "全部"
+                const Icon = type ? workspaceCategoryIcon(type) : LayersIcon
                 const count = type
                     ? counts
                         ? (counts[type] ?? 0)
@@ -94,9 +103,10 @@ export function WorkspaceQueueTypeNav({
                         variant={active ? "secondary" : "outline"}
                         className="h-auto min-h-8 max-w-full rounded-full px-3 py-1.5 whitespace-normal"
                         aria-pressed={active}
-                        aria-label={`${label}${count == null ? "" : ` ${count} 项待处理`}`}
+                        aria-label={`${label}${count == null ? "" : ` ${count} ${started ? "条审批" : "项待处理"}`}`}
                         onClick={() => onChange(type)}
                     >
+                        <Icon aria-hidden="true" className="size-4 shrink-0" />
                         {label}
                         {count != null && (
                             <Badge

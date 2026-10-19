@@ -1,5 +1,5 @@
 //! 审批跟踪列表复用责任队列的单据摘要，读取授权与操作授权保持独立。
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use application_core::AuditActor;
 use erp_workflow::entity::work_item::WorkItemType;
@@ -39,6 +39,8 @@ pub struct ApprovalListPage {
     pub items: Vec<ApprovalListItem>,
     pub total: u64,
     pub next_cursor: Option<RuntimeInstanceListCursor>,
+    /// 运行服务按相同授权范围返回的单据类型统计。
+    pub document_type_counts: Option<BTreeMap<String, u64>>,
 }
 impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
     /// 先由已装配的运行服务执行原列表授权，再批量补齐相同单据摘要。
@@ -85,7 +87,12 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
             })
             .collect::<Vec<_>>();
         self.apply_approval_party_names(&mut items, executor).await?;
-        Ok(ApprovalListPage { items, total: page.total, next_cursor: page.next_cursor })
+        Ok(ApprovalListPage {
+            items,
+            total: page.total,
+            next_cursor: page.next_cursor,
+            document_type_counts: page.document_type_counts,
+        })
     }
 }
 /// 有提交级摘要时必须精确匹配版本，不得用当前提交覆盖历史审批。

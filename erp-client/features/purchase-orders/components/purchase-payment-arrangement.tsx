@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/popover"
 import { Button } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
+import { RequestDraftDialog } from "@/features/purchase-payment-requests/components/request-draft-dialog"
 import { getErrorMessage } from "@/lib/api"
 import { hasPermission } from "@/lib/permissions"
 import { compareDecimal } from "@/lib/fixed-decimal"
@@ -59,6 +60,7 @@ export function PurchasePaymentArrangement({
         return `${pathname}${queryString ? `?${queryString}` : ""}`
     }, [pathname, searchParams])
     const [followUpOpen, setFollowUpOpen] = useState(false)
+    const [requestOpen, setRequestOpen] = useState(false)
     const allRequestsParams = new URLSearchParams({
         purchase_order_id: purchaseOrderId,
     })
@@ -67,10 +69,11 @@ export function PurchasePaymentArrangement({
     const allRequestsHref = `/procurement/payment-requests?${allRequestsParams.toString()}`
     const notified = useRef(false)
     const arrangement = query.data
-    // 仅根据服务端余额状态推进队列，登记跟进日期仍保留开放责任。
+    // 关闭申请结果弹窗后才按服务端余额状态推进队列；部分申请和跟进仍保留责任。
     useEffect(() => {
         if (
             !workItemId ||
+            requestOpen ||
             !arrangement ||
             arrangement.task_id === workItemId ||
             query.isFetching ||
@@ -91,6 +94,7 @@ export function PurchasePaymentArrangement({
         query.isFetching,
         query.isError,
         workItemId,
+        requestOpen,
         onTaskCompleted,
     ])
     if (!arrangement && query.isPending)
@@ -99,7 +103,7 @@ export function PurchasePaymentArrangement({
                 正在读取付款安排…
             </p>
         )
-    if (query.isError)
+    if (query.isError && !requestOpen)
         return (
             <div role="alert" className="rounded-lg border p-4 text-sm">
                 {getErrorMessage(query.error, "付款安排读取失败")}
@@ -112,7 +116,8 @@ export function PurchasePaymentArrangement({
                 </Button>
             </div>
         )
-    if (!arrangement || arrangement.state === "inactive") return null
+    if (!arrangement || (arrangement.state === "inactive" && !requestOpen))
+        return null
     const canApply =
         hasPermission(
             profile.data?.permissions,
@@ -366,11 +371,7 @@ export function PurchasePaymentArrangement({
                             {arrangement.state === "available" && (
                                 <Button
                                     id="purchase-payment-arrangement-apply"
-                                    render={
-                                        <Link
-                                            href={`/procurement/payment-requests?${new URLSearchParams({ create: "1", purchaseOrderId })}`}
-                                        />
-                                    }
+                                    onClick={() => setRequestOpen(true)}
                                 >
                                     申请采购付款
                                 </Button>
@@ -378,6 +379,14 @@ export function PurchasePaymentArrangement({
                         </div>
                     </WorkspaceTaskFooter>
                 )}
+            {requestOpen ? (
+                <RequestDraftDialog
+                    key={`payment-request-${purchaseOrderId}`}
+                    open
+                    onOpenChange={setRequestOpen}
+                    fixedPurchaseOrderId={purchaseOrderId}
+                />
+            ) : null}
         </section>
     )
 }

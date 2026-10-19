@@ -194,7 +194,8 @@ export function WorkspaceHomeView({
             </PageScaffold>
         )
     const filterText = [
-        urlState.workItemType && workspaceCategoryLabel(urlState.workItemType),
+        urlState.workItemType &&
+            workspaceCategoryLabel(urlState.workItemType, started),
         urlState.query && `关键词：${urlState.query}`,
         urlState.due === "today" && "今日到期",
         urlState.due === "overdue" && "已超期",
@@ -268,20 +269,19 @@ export function WorkspaceHomeView({
                         ) : undefined
                     }
                 />
-                {!started && (
-                    <WorkspaceQueueTypeNav
-                        state={urlState}
-                        counts={view.workItemTypeCounts}
-                        total={
-                            view.metrics.find(
-                                (metric) => metric.key === "inbox",
-                            )?.count
-                        }
-                        onChange={(workItemType) =>
-                            onQueueFiltersChange({ workItemType })
-                        }
-                    />
-                )}
+                <WorkspaceQueueTypeNav
+                    state={urlState}
+                    counts={view.workItemTypeCounts}
+                    total={
+                        view.metrics.find(
+                            (metric) =>
+                                metric.key === (started ? "started" : "inbox"),
+                        )?.count
+                    }
+                    onChange={(workItemType) =>
+                        onQueueFiltersChange({ workItemType })
+                    }
+                />
                 {hasActiveFilter && (
                     <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                         <span>{filterText || "已限定任务分类"}</span>

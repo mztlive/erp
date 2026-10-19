@@ -7,6 +7,7 @@ import {
     ObjectSectionTabs,
     ObjectSectionTabsPanel,
 } from "@/components/business"
+import { PurchaseOrderDetailSection } from "./purchase-order-detail-section"
 import { Badge } from "@/components/ui/badge"
 
 import { PurchaseOrderDetailAuditSection } from "@/features/purchase-orders/components/purchase-order-detail-audit-section"
@@ -105,7 +106,9 @@ export function PurchaseOrderDetailSections({
                 </ObjectSectionTabsPanel>
 
                 <ObjectSectionTabsPanel value="approval">
-                    {approvalPanel}
+                    <PurchaseOrderDetailSection title="审批进度与记录">
+                        {approvalPanel}
+                    </PurchaseOrderDetailSection>
                 </ObjectSectionTabsPanel>
 
                 <ObjectSectionTabsPanel value="fulfillment">

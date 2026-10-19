@@ -5,7 +5,6 @@ import { MoneyValue } from "@/components/business"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { formatDateTime } from "@/lib/datetime"
 import {
-    FULFILLMENT_RESPONSIBILITY_LABEL,
     SUPPLY_PRICE_BASIS_LABEL,
     type PurchaseOrderCenterView,
 } from "@/features/purchase-orders/types"
@@ -52,7 +51,7 @@ export function PurchaseOrderDetailSidebar({
             <section aria-labelledby="purchase-order-amount-heading">
                 <h2
                     id="purchase-order-amount-heading"
-                    className="text-lg font-semibold"
+                    className="text-sm font-semibold"
                 >
                     金额信息
                 </h2>
@@ -61,23 +60,26 @@ export function PurchaseOrderDetailSidebar({
                 </p>
                 <div className="mt-1 wrap-anywhere">
                     {costMasked ? (
-                        <span className="text-value-hero leading-tight font-semibold tracking-tight">
+                        <span className="text-3xl leading-tight font-semibold tracking-tight">
                             •••
                         </span>
                     ) : (
                         <MoneyValue
                             value={order.currentContent.totals.gross}
-                            size="hero"
+                            className="text-3xl font-semibold tracking-tight"
                         />
                     )}
                 </div>
-                <dl className="mt-5 grid grid-cols-3 gap-3">
+                <dl className="mt-5 space-y-3">
                     {amounts.map((item) => (
-                        <div key={item.label} className="min-w-0">
+                        <div
+                            key={item.label}
+                            className="flex min-w-0 items-baseline justify-between gap-3"
+                        >
                             <dt className="text-xs text-muted-foreground">
                                 {item.label}
                             </dt>
-                            <dd className="mt-1.5 wrap-anywhere text-lg font-semibold">
+                            <dd className="wrap-anywhere text-right text-sm font-semibold">
                                 {amount(item.value)}
                             </dd>
                         </div>
@@ -109,7 +111,7 @@ export function PurchaseOrderDetailSidebar({
             >
                 <h2
                     id="purchase-order-progress-heading"
-                    className="text-lg font-semibold"
+                    className="text-sm font-semibold"
                 >
                     办理进度
                 </h2>
@@ -185,22 +187,16 @@ export function PurchaseOrderDetailSidebar({
             >
                 <h2
                     id="purchase-order-owner-heading"
-                    className="text-lg font-semibold"
+                    className="text-sm font-semibold"
                 >
                     责任人信息
                 </h2>
-                <dl className="mt-4 grid grid-cols-3 gap-3 text-sm">
+                <dl className="mt-4 grid grid-cols-2 gap-4 text-sm">
                     {[
                         { label: "负责人", value: order.header.ownerName },
                         {
                             label: "提交人",
                             value: order.header.submittedBy ?? "—",
-                        },
-                        {
-                            label: "履约责任",
-                            value: FULFILLMENT_RESPONSIBILITY_LABEL[
-                                order.header.fulfillmentResponsibility
-                            ],
                         },
                         ...(order.delivery
                             ? [
@@ -221,15 +217,6 @@ export function PurchaseOrderDetailSidebar({
                         </div>
                     ))}
                 </dl>
-                <p className="mt-4 text-xs text-muted-foreground">
-                    最近预计交期{" "}
-                    <span className="num">
-                        {order.header.expectedDate ?? "—"}
-                    </span>
-                </p>
-                <p className="mt-3 break-all text-xs text-muted-foreground">
-                    来源销售单 {order.header.salesOrderNo}
-                </p>
             </section>
         </aside>
     )

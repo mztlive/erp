@@ -102,6 +102,7 @@ export const listApprovalInstances = async (
     )
     return {
         items: page.items.map(mapInstanceListItemDto),
+        documentTypeCounts: page.document_type_counts ?? undefined,
         nextCursor: page.next_cursor ?? undefined,
         total: page.total ?? undefined,
     }

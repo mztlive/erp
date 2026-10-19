@@ -1,6 +1,6 @@
 "use client"
 
-import { DetailRecordSection } from "@/components/business/detail-presentation"
+import { PurchaseOrderDetailSection as DetailRecordSection } from "./purchase-order-detail-section"
 import { formatDateTime } from "@/lib/datetime"
 import type { PurchaseOrderCenterView } from "@/features/purchase-orders/types"
 
@@ -43,7 +43,7 @@ export function PurchaseOrderDetailAuditSection({
                                 {item.actorLabel}
                             </p>
                             {item.comment ? (
-                                <p className="mt-2 break-words text-sm text-muted-foreground">
+                                <p className="mt-3 whitespace-pre-wrap break-words rounded-lg bg-muted/40 px-4 py-3 text-sm leading-6">
                                     {item.comment}
                                 </p>
                             ) : null}

@@ -1,7 +1,11 @@
 "use client"
 
+import { PurchaseOrderDetailSection as DetailRecordSection } from "./purchase-order-detail-section"
+
 import { PurchaseOrderPayments } from "./purchase-order-payments"
 import Link from "next/link"
+import { useState } from "react"
+import { RequestDraftDialog } from "@/features/purchase-payment-requests/components/request-draft-dialog"
 import { Button } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
@@ -13,7 +17,6 @@ import {
 } from "@/components/business"
 import {
     DetailHint,
-    DetailRecordSection,
     DetailSummary,
     DetailSummaryItem,
 } from "@/components/business/detail-presentation"
@@ -32,6 +35,7 @@ export function PurchaseOrderDetailPayableSection({
     order: PurchaseOrderCenterView
     costMasked: boolean
 }) {
+    const [requestOpen, setRequestOpen] = useState(false)
     const profile = useAccountProfileQuery()
     const canListRequests = hasPermission(
         profile.data?.permissions,
@@ -62,28 +66,6 @@ export function PurchaseOrderDetailPayableSection({
         costMasked ? "•••" : <MoneyValue value={value} />
     return (
         <div className="space-y-6">
-            {hasPermission(
-                profile.data?.permissions,
-                "purchase_payment_request:create",
-            ) &&
-                hasPermission(
-                    profile.data?.permissions,
-                    "purchase_payment_request:submit",
-                ) && (
-                    <div className="flex justify-end">
-                        <Button
-                            id="purchase-order-payment-request-create"
-                            variant="outline"
-                            render={
-                                <Link
-                                    href={`/procurement/payment-requests?${new URLSearchParams({ create: "1", purchaseOrderId: order.identity.purchaseOrderId })}`}
-                                />
-                            }
-                        >
-                            申请采购付款
-                        </Button>
-                    </div>
-                )}
             <DetailSummary label="采购票款摘要">
                 <DetailSummaryItem
                     title="付款"
@@ -116,22 +98,42 @@ export function PurchaseOrderDetailPayableSection({
                     }
                 />
             </DetailSummary>
-            <DetailRecordSection title="关联付款申请" count={requests.length}>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-xs text-muted-foreground">
-                        显示与本采购单关联的申请；合并申请仅列出本单申请、已付和未付金额。
-                    </p>
-                    {canListRequests && (
-                        <Button
-                            id="purchase-order-payment-requests-open"
-                            variant="outline"
-                            size="sm"
-                            render={<Link href={allRequestsHref} />}
-                        >
-                            查看全部付款申请
-                        </Button>
-                    )}
-                </div>
+            <DetailRecordSection
+                title="关联付款申请"
+                count={arrangement.isSuccess ? requests.length : undefined}
+                description="合并申请仅列出本单申请、已付和未付金额。"
+                action={
+                    <>
+                        {hasPermission(
+                            profile.data?.permissions,
+                            "purchase_payment_request:create",
+                        ) &&
+                            hasPermission(
+                                profile.data?.permissions,
+                                "purchase_payment_request:submit",
+                            ) && (
+                                <Button
+                                    id="purchase-order-payment-request-create"
+                                    size="sm"
+                                    onClick={() => setRequestOpen(true)}
+                                >
+                                    申请采购付款
+                                </Button>
+                            )}
+
+                        {canListRequests && (
+                            <Button
+                                id="purchase-order-payment-requests-open"
+                                variant="outline"
+                                size="sm"
+                                render={<Link href={allRequestsHref} />}
+                            >
+                                查看全部付款申请
+                            </Button>
+                        )}
+                    </>
+                }
+            >
                 {arrangement.isPending ? (
                     <p role="status" className="text-sm text-muted-foreground">
                         正在读取付款申请…
@@ -183,19 +185,32 @@ export function PurchaseOrderDetailPayableSection({
                                         {request.desired_payment_date}
                                     </p>
                                 </div>
-                                <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
-                                    <span>
-                                        本单申请{" "}
-                                        {amount(request.requested_amount)}
-                                    </span>
-                                    <span>
-                                        本单已付 {amount(request.paid_amount)}
-                                    </span>
-                                    <span>
-                                        本单未付{" "}
-                                        {amount(request.remaining_amount)}
-                                    </span>
-                                </div>
+                                <dl className="grid min-w-0 grid-cols-1 gap-4 rounded-lg bg-muted/35 px-4 py-3 text-sm sm:grid-cols-3">
+                                    <div>
+                                        <dt className="text-xs text-muted-foreground">
+                                            本单申请
+                                        </dt>
+                                        <dd className="mt-1 wrap-anywhere font-medium">
+                                            {amount(request.requested_amount)}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-xs text-muted-foreground">
+                                            本单已付
+                                        </dt>
+                                        <dd className="mt-1 wrap-anywhere font-medium">
+                                            {amount(request.paid_amount)}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-xs text-muted-foreground">
+                                            本单未付
+                                        </dt>
+                                        <dd className="mt-1 wrap-anywhere font-medium">
+                                            {amount(request.remaining_amount)}
+                                        </dd>
+                                    </div>
+                                </dl>
                             </li>
                         ))}
                     </ul>
@@ -205,8 +220,16 @@ export function PurchaseOrderDetailPayableSection({
                     </p>
                 )}
             </DetailRecordSection>
+            {requestOpen ? (
+                <RequestDraftDialog
+                    key={`payment-request-${order.identity.purchaseOrderId}`}
+                    open
+                    onOpenChange={setRequestOpen}
+                    fixedPurchaseOrderId={order.identity.purchaseOrderId}
+                />
+            ) : null}
             <PurchaseOrderPayments
-                key={order.identity.purchaseOrderId}
+                key={`payment-records-${order.identity.purchaseOrderId}`}
                 purchaseOrderId={order.identity.purchaseOrderId}
                 costMasked={costMasked}
             />

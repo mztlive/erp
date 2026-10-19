@@ -54,7 +54,7 @@ impl AuthorizedRuntimePage {
 
     /// 交付完整授权总数与有界页面，不需要再次查询授权 ID 集合。
     fn into_page(self) -> ApprovalRuntimeReadPage {
-        ApprovalRuntimeReadPage { items: self.rows, total: self.total }
+        ApprovalRuntimeReadPage { items: self.rows, total: self.total, ..Default::default() }
     }
 }
 
@@ -126,7 +126,12 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         query: &RuntimeInstanceListQuery,
     ) -> Result<RuntimeInstanceListPage> {
         if !approval_participant_permissions_with_executor(&self.auth, actor, &mut NoTransaction).await? {
-            return Ok(RuntimeInstanceListPage { items: Vec::new(), total: 0, next_cursor: None });
+            return Ok(RuntimeInstanceListPage {
+                items: Vec::new(),
+                total: 0,
+                next_cursor: None,
+                document_type_counts: None,
+            });
         }
         let document_type = query.document_type.as_deref().map(parse_document_type).transpose()?;
         let cursor = query
@@ -158,7 +163,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         } else {
             None
         };
-        Ok(RuntimeInstanceListPage { items, total: page.total, next_cursor })
+        Ok(RuntimeInstanceListPage { items, total: page.total, next_cursor, document_type_counts: None })
     }
 
     /// 批量装载 Mine 页的 execution、instance、summary 与 snapshot，并按原任务
@@ -270,7 +275,13 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             .into_iter()
             .map(|row| item_from_runtime_read_row(row, actor, query.view, &type_scopes))
             .collect::<Result<Vec<_>>>()?;
-        Ok(RuntimeInstanceListPage { items, total: page.total, next_cursor })
+        Ok(RuntimeInstanceListPage {
+            items,
+            total: page.total,
+            next_cursor,
+            document_type_counts: (query.view == RuntimeInstanceListView::Started)
+                .then_some(page.document_type_counts),
+        })
     }
 
     /// 有界扫描不计算候选总数，只保留授权页；最终总数覆盖全部真实来源授权行。

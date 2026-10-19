@@ -31,7 +31,6 @@ import type {
     AllocationTrack,
     SupplierAccountsQuery,
 } from "@/features/supplier-payables/types"
-import { purchaseOrderKeys } from "@/features/purchase-orders/queries"
 import { fulfillmentKeys } from "@/features/fulfillment-operations/queries"
 import { workItemKeys } from "@/features/work-items/queries"
 import { queryKeyRoots } from "@/lib/query-key-roots"
@@ -186,7 +185,9 @@ async function invalidateFinanceAndSources(
     queryClient: ReturnType<typeof useQueryClient>,
 ) {
     await queryClient.invalidateQueries({ queryKey: supplierPayablesKeys.all })
-    await queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.all })
+    await queryClient.invalidateQueries({
+        queryKey: queryKeyRoots.purchaseOrders,
+    })
     await queryClient.invalidateQueries({ queryKey: fulfillmentKeys.all })
     await queryClient.invalidateQueries({ queryKey: workItemKeys.all })
     await queryClient.invalidateQueries({
@@ -215,7 +216,7 @@ export function useSubmitPaymentMutation() {
                     refetchType: "none",
                 }),
                 queryClient.invalidateQueries({
-                    queryKey: purchaseOrderKeys.all,
+                    queryKey: queryKeyRoots.purchaseOrders,
                     refetchType: "none",
                 }),
                 queryClient.invalidateQueries({

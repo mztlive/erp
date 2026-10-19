@@ -2,6 +2,8 @@
 
 mod query_list;
 
+use std::collections::BTreeMap;
+
 use application_core::AuditActor;
 use bpm::engine::TaskIntent;
 use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
@@ -86,6 +88,9 @@ pub struct RuntimeInstanceListPage {
     pub total: u64,
     /// 下一页稳定游标。
     pub next_cursor: Option<RuntimeInstanceListCursor>,
+    /// 本人发起视图的完整单据类型数量；其他视图不提供。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub document_type_counts: Option<BTreeMap<String, u64>>,
 }
 
 /// 恢复选项。

@@ -13,6 +13,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { getErrorMessage } from "@/lib/api"
+import { cn } from "@/lib/utils"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { usePaymentCandidatesQuery } from "../hooks/queries"
 import { useDraftForm } from "../hooks/use-draft-form"
@@ -30,12 +31,15 @@ export function RequestDraftDialog({
     open,
     onOpenChange,
     purchaseOrderId,
+    fixedPurchaseOrderId,
     initialPayableAccountIds,
     request,
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
     purchaseOrderId?: string
+    /** 采购详情发起时限定唯一来源，不能切回选单或添加其他采购单。 */
+    fixedPurchaseOrderId?: string
     initialPayableAccountIds?: readonly string[]
     request?: PaymentRequest
 }) {
@@ -52,14 +56,21 @@ export function RequestDraftDialog({
                 id="ppr-create-dialog"
                 closeButtonId="ppr-create-dialog-close"
                 showCloseButton={!locked}
-                className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-clip p-0 sm:max-w-6xl"
+                className={cn(
+                    "flex flex-col gap-0 overflow-clip p-0",
+                    fixedPurchaseOrderId
+                        ? "max-h-[75dvh] sm:max-w-4xl"
+                        : "max-h-[94dvh] sm:max-w-6xl",
+                )}
             >
                 {query.isPending || query.isError ? (
                     <div className="space-y-4 p-6">
                         <DialogHeader>
                             <DialogTitle>申请采购付款</DialogTitle>
                             <DialogDescription>
-                                从已生效采购单中选择本次付款来源。
+                                {fixedPurchaseOrderId
+                                    ? "为当前采购单填写付款金额、收款账户和付款日期。"
+                                    : "从已生效采购单中选择本次付款来源。"}
                             </DialogDescription>
                         </DialogHeader>
                         {query.isPending ? (
@@ -86,10 +97,25 @@ export function RequestDraftDialog({
                 ) : (
                     open && (
                         <RequestDraftForm
-                            candidates={query.data}
+                            candidates={
+                                fixedPurchaseOrderId
+                                    ? query.data.filter(
+                                          (candidate) =>
+                                              candidate.purchase_order_id ===
+                                              fixedPurchaseOrderId,
+                                      )
+                                    : query.data
+                            }
                             request={request}
-                            purchaseOrderId={purchaseOrderId}
-                            initialPayableAccountIds={initialPayableAccountIds}
+                            purchaseOrderId={
+                                fixedPurchaseOrderId ?? purchaseOrderId
+                            }
+                            fixedOrder={Boolean(fixedPurchaseOrderId)}
+                            initialPayableAccountIds={
+                                fixedPurchaseOrderId
+                                    ? undefined
+                                    : initialPayableAccountIds
+                            }
                             onClose={() => onOpenChange(false)}
                             onLockChange={setLocked}
                         />
@@ -102,6 +128,7 @@ export function RequestDraftDialog({
 
 function RequestDraftForm({
     candidates: allCandidates,
+    fixedOrder,
     purchaseOrderId,
     initialPayableAccountIds,
     request,
@@ -109,6 +136,7 @@ function RequestDraftForm({
     onLockChange,
 }: {
     candidates: PaymentCandidate[]
+    fixedOrder: boolean
     purchaseOrderId?: string
     initialPayableAccountIds?: readonly string[]
     request?: PaymentRequest
@@ -189,7 +217,9 @@ function RequestDraftForm({
                     <DialogDescription>
                         {request
                             ? "修改已保存，请打开申请核对后提交财务审核。"
-                            : "付款申请已提交财务审核，并占用相应采购余额。可打开申请查看审核及付款进度。"}
+                            : fixedOrder
+                              ? "本采购单的付款申请已提交财务审核，关联申请记录已更新。"
+                              : "付款申请已提交财务审核，并占用相应采购余额。可打开申请查看审核及付款进度。"}
                     </DialogDescription>
                 </DialogHeader>
                 <div
@@ -213,18 +243,20 @@ function RequestDraftForm({
                                     <MoneyValue value={row.total_amount} />
                                 </p>
                             </div>
-                            <Button
-                                id={`ppr-result-${toAutomationIdSegment(row.id)}`}
-                                variant="outline"
-                                render={
-                                    <Link
-                                        href={`/procurement/payment-requests/${encodeURIComponent(row.id)}`}
-                                    />
-                                }
-                                onClick={onClose}
-                            >
-                                打开申请
-                            </Button>
+                            {!fixedOrder ? (
+                                <Button
+                                    id={`ppr-result-${toAutomationIdSegment(row.id)}`}
+                                    variant="outline"
+                                    render={
+                                        <Link
+                                            href={`/procurement/payment-requests/${encodeURIComponent(row.id)}`}
+                                        />
+                                    }
+                                    onClick={onClose}
+                                >
+                                    打开申请
+                                </Button>
+                            ) : null}
                         </div>
                     ))}
                 </div>
@@ -239,7 +271,10 @@ function RequestDraftForm({
         <form
             id="ppr-create-form"
             noValidate
-            className="flex h-[min(48rem,calc(100dvh-2rem))] min-h-0 flex-col overflow-hidden"
+            className={cn(
+                "flex min-h-0 flex-col overflow-hidden",
+                fixedOrder ? "h-[75dvh]" : "h-[94dvh]",
+            )}
             onSubmit={(event) => {
                 event.preventDefault()
                 if (busy || unknown) return
@@ -263,39 +298,48 @@ function RequestDraftForm({
                         ? "修改付款申请"
                         : step === 1
                           ? "选择本次付款的采购单"
-                          : "批量申请付款"}
+                          : fixedOrder
+                            ? "申请采购付款"
+                            : "批量申请付款"}
                 </DialogTitle>
                 <DialogDescription>
                     {step === 1
                         ? "支持跨供应商选择采购单，下一步按付款关系分别生成申请。"
                         : request
                           ? "修改金额与付款安排，保存后可在申请详情提交审核。"
-                          : "请逐份核对金额、收款账户和付款日期，提交后分别进入财务审核。"}
+                          : fixedOrder
+                            ? "仅为当前采购单申请付款，请核对金额、收款账户和付款日期。"
+                            : "请逐份核对金额、收款账户和付款日期，提交后分别进入财务审核。"}
                 </DialogDescription>
-                <div
-                    className="mt-2 flex items-center gap-3 text-xs"
-                    aria-label={`当前第 ${step} 步`}
-                >
-                    <span
-                        className={
-                            step === 1
-                                ? "font-medium text-foreground"
-                                : "text-muted-foreground"
-                        }
+                {!fixedOrder ? (
+                    <div
+                        className="mt-2 flex items-center gap-3 text-xs"
+                        aria-label={`当前第 ${step} 步`}
                     >
-                        1 选择采购单
-                    </span>
-                    <span aria-hidden="true" className="h-px w-10 bg-border" />
-                    <span
-                        className={
-                            step === 2
-                                ? "font-medium text-foreground"
-                                : "text-muted-foreground"
-                        }
-                    >
-                        2 填写申请
-                    </span>
-                </div>
+                        <span
+                            className={
+                                step === 1
+                                    ? "font-medium text-foreground"
+                                    : "text-muted-foreground"
+                            }
+                        >
+                            1 选择采购单
+                        </span>
+                        <span
+                            aria-hidden="true"
+                            className="h-px w-10 bg-border"
+                        />
+                        <span
+                            className={
+                                step === 2
+                                    ? "font-medium text-foreground"
+                                    : "text-muted-foreground"
+                            }
+                        >
+                            2 填写申请
+                        </span>
+                    </div>
+                ) : null}
             </DialogHeader>
             <form.Subscribe
                 selector={(state) => [state.values, state.errors] as const}
@@ -326,6 +370,7 @@ function RequestDraftForm({
                                         values={values}
                                         candidates={candidates}
                                         editing={!!request}
+                                        fixedOrder={fixedOrder}
                                         activeKey={activeKey}
                                         issues={issues}
                                         onSelect={selectGroup}
@@ -338,8 +383,9 @@ function RequestDraftForm({
                                         role="alert"
                                         className="text-sm text-destructive"
                                     >
-                                        请核对必填项和逐单申请金额；采购来源不可用或超过
-                                        50 份时，请返回上一步调整。
+                                        {fixedOrder
+                                            ? "请核对必填项和申请金额；当前采购单不可申请时，请关闭弹窗后刷新详情。"
+                                            : "请核对必填项和逐单申请金额；采购来源不可用或超过 50 份时，请返回上一步调整。"}
                                     </p>
                                 )}
                                 {error && (
@@ -392,7 +438,9 @@ function RequestDraftForm({
                                                 className="mt-1 text-xs text-muted-foreground"
                                             >
                                                 {!groups.length
-                                                    ? "请返回上一步选择采购单"
+                                                    ? fixedOrder
+                                                        ? "当前采购单暂无可申请付款的来源"
+                                                        : "请返回上一步选择采购单"
                                                     : issues.size
                                                       ? `${groups.length} 份申请中，${issues.size} 份待补充`
                                                       : request
@@ -408,12 +456,14 @@ function RequestDraftForm({
                                             variant="outline"
                                             disabled={busy || unknown}
                                             onClick={
-                                                step === 1
+                                                step === 1 || fixedOrder
                                                     ? onClose
                                                     : () => setStep(1)
                                             }
                                         >
-                                            {step === 1 ? "取消" : "上一步"}
+                                            {step === 1 || fixedOrder
+                                                ? "取消"
+                                                : "上一步"}
                                         </Button>
                                         {step === 1 ? (
                                             <Button
@@ -460,7 +510,9 @@ function RequestDraftForm({
                                                         ? `继续填写（剩 ${issues.size} 份）`
                                                         : request
                                                           ? "保存申请草稿"
-                                                          : `提交 ${groups.length} 份付款申请`}
+                                                          : fixedOrder
+                                                            ? "提交付款申请"
+                                                            : `提交 ${groups.length} 份付款申请`}
                                             </Button>
                                         )}
                                     </div>

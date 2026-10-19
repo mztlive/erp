@@ -5,7 +5,7 @@ import {
     BusinessStatusBadge,
     surfaceInsetClassName,
 } from "@/components/business"
-import { DetailRecordSection } from "@/components/business/detail-presentation"
+import { PurchaseOrderDetailSection as DetailRecordSection } from "./purchase-order-detail-section"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { usePurchaseReturnOrdersQuery } from "@/features/purchase-orders/hooks/use-purchase-return-orders-query"

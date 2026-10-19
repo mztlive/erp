@@ -243,9 +243,22 @@ export function LinesTable({
     summary?: boolean
 }) {
     const lines = order.currentContent.lines
+    const expenseOnly =
+        lines.length > 0 &&
+        lines.every((line) => line.lineType === "LOGISTICS_FEE")
     const columns = React.useMemo(
-        () => buildPurchaseOrderLinesColumns(costMasked, summary),
-        [costMasked, summary],
+        () =>
+            buildPurchaseOrderLinesColumns(costMasked, summary).filter(
+                (column) =>
+                    !expenseOnly ||
+                    ![
+                        "quantity",
+                        "unitCost",
+                        "salesUnitPrice",
+                        "delivery",
+                    ].includes(column.id ?? ""),
+            ),
+        [costMasked, summary, expenseOnly],
     )
 
     return (
@@ -254,7 +267,7 @@ export function LinesTable({
             data={[...lines]}
             columns={columns}
             defaultColumnVisibility={
-                summary ? { type: false, taxRate: false, tax: false } : {}
+                summary ? { type: false, taxRate: expenseOnly, tax: false } : {}
             }
             getRowId={(row) => row.lineId}
             rowCount={lines.length}

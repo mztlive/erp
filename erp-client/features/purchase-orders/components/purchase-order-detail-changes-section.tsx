@@ -1,8 +1,9 @@
 "use client"
 
+import { PurchaseOrderDetailSection as DetailRecordSection } from "./purchase-order-detail-section"
+
 import { BusinessStatusBadge } from "@/components/business"
 import {
-    DetailRecordSection,
     DetailSummary,
     DetailSummaryItem,
 } from "@/components/business/detail-presentation"
@@ -41,7 +42,7 @@ export function PurchaseOrderDetailChangesSection({
                     value={order.activeChangeOrder?.statusLabel ?? "无在途变更"}
                 />
             </DetailSummary>
-            <div className="divide-y divide-border/70">
+            <div className="space-y-5">
                 {order.activeChangeOrder ? (
                     <DetailRecordSection title="当前变更">
                         <PurchaseChangeOrderApprovalSection

@@ -94,6 +94,7 @@ pub async fn instance_list(
     ok_json(serde_json::json!({
         "items": page.items,
         "total": page.total,
+        "document_type_counts": page.document_type_counts,
         "next_cursor": next_cursor,
     }))
 }

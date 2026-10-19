@@ -22,6 +22,7 @@ export function RequestDraftGroup({
     index,
     candidates,
     editing,
+    fixedOrder = false,
     open,
     onSplit,
     issues,
@@ -31,6 +32,7 @@ export function RequestDraftGroup({
     index: number
     candidates: PaymentCandidate[]
     editing: boolean
+    fixedOrder?: boolean
     open: boolean
     onSplit: (key: string) => void
     issues: string[]
@@ -55,7 +57,9 @@ export function RequestDraftGroup({
                     申请 {index + 1} · 采购来源不可用
                 </h3>
                 <p className="mt-3 text-sm text-warning-soft-foreground">
-                    请返回上一步重新选择采购单。
+                    {fixedOrder
+                        ? "当前采购单已不可申请，请关闭弹窗后刷新详情。"
+                        : "请返回上一步重新选择采购单。"}
                 </p>
             </section>
         )
@@ -70,7 +74,9 @@ export function RequestDraftGroup({
         >
             <header className="space-y-2 border-b pb-5">
                 <p className="text-xs text-muted-foreground">
-                    申请 {index + 1} · {rows.length} 张采购单
+                    {fixedOrder
+                        ? "当前采购单付款申请"
+                        : `申请 ${index + 1} · ${rows.length} 张采购单`}
                 </p>
                 <h3
                     id={`${id}-title`}
@@ -173,7 +179,7 @@ export function RequestDraftGroup({
                                         )}
                                     </CollapsibleContent>
                                 </Collapsible>
-                                {!editing && rows.length > 1 && (
+                                {!editing && !fixedOrder && rows.length > 1 && (
                                     <Button
                                         id={`ppr-split-${toAutomationIdSegment(candidate.payable_account_id)}`}
                                         type="button"
@@ -293,7 +299,11 @@ export function RequestDraftGroup({
                                 id={fieldId("description")}
                                 label="申请说明"
                                 required
-                                placeholder="说明本组采购单的付款安排及依据"
+                                placeholder={
+                                    fixedOrder
+                                        ? "说明本采购单的付款安排及依据"
+                                        : "说明本组采购单的付款安排及依据"
+                                }
                                 className="gap-2"
                                 textareaClassName="min-h-20"
                                 rows={2}

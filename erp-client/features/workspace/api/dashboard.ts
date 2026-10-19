@@ -413,19 +413,25 @@ export async function fetchWorkspaceDashboard(
             ? listApprovalInstances({
                   view: "started",
                   cursor:
-                      view === "started" && !query.query
+                      view === "started" && !query.query && !query.workItemType
                           ? query.cursor
                           : undefined,
-                  limit: view === "started" && !query.query ? 20 : 1,
+                  limit:
+                      view === "started" && !query.query && !query.workItemType
+                          ? 20
+                          : 1,
               })
             : Promise.resolve({ items: [], total: 0 })
     const startedListPromise: Promise<ApprovalInstanceListPage> =
-        canReadStarted && view === "started" && query.query
+        canReadStarted &&
+        view === "started" &&
+        (query.query || query.workItemType)
             ? listApprovalInstances({
                   view: "started",
                   cursor: query.cursor,
                   limit: 20,
                   query: query.query,
+                  documentType: query.workItemType,
               })
             : startedMetricPromise
 
@@ -529,7 +535,11 @@ export async function fetchWorkspaceDashboard(
         metrics,
         familyCounts: view === "inbox" ? buildFamilyCounts(stats) : undefined,
         workItemTypeCounts:
-            view === "inbox" ? stats.work_item_type_counts : undefined,
+            view === "inbox"
+                ? stats.work_item_type_counts
+                : view === "started"
+                  ? startedPage.documentTypeCounts
+                  : undefined,
         dueTodayCount: stats.due_today,
         items,
         nextCursor: page.nextCursor,
