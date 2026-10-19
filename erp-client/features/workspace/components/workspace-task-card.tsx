@@ -17,6 +17,7 @@ import { workspaceTaskPresentation } from "../lib/task-presentation"
 import { findSourceSalesOrder } from "../lib/source-sales-order"
 import { workspaceTaskRightContent } from "../lib/task-right-content"
 import type { WorkspaceWorkItem } from "../types"
+import { WorkspaceFulfillmentBadges } from "./workspace-fulfillment-badges"
 
 /** 表头和任务行共用列宽；窄窗口将本次处理与状态合并到右列。 */
 export const workspaceTaskColumns =
@@ -124,6 +125,7 @@ export function WorkspaceTaskCard({
                             {number}
                         </span>
                     </span>
+                    <WorkspaceFulfillmentBadges item={item} />
                     {summary && (
                         <span
                             className={cn(
