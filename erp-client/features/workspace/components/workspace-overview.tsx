@@ -5,9 +5,9 @@ import {
     BoxIcon,
     ChevronRightIcon,
     CircleAlertIcon,
+    CircleCheckIcon,
     ClipboardCheckIcon,
     FilePenLineIcon,
-    InfoIcon,
     TruckIcon,
     UsersIcon,
     WalletIcon,
@@ -19,6 +19,7 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import { useWorkspaceScroll } from "../hooks/use-workspace-scroll"
 import { TYPE_META } from "@/features/workspace/api/work-item-meta"
 import { isBlockedWorkItem } from "@/features/workspace/lib/work-item"
+import { workspaceTaskPresentation } from "../lib/task-presentation"
 import type {
     TodayWorkspaceView,
     WorkspaceWorkItem,
@@ -81,10 +82,12 @@ export function workspaceCategoryLabel(type: string): string {
 export function WorkspaceOverview({
     view,
     onOpenQueue,
+    onOpenManaged,
     onSelect,
 }: {
     view: TodayWorkspaceView
     onOpenQueue: (type?: string, due?: "today" | "overdue") => void
+    onOpenManaged: () => void
     onSelect: (item: WorkspaceWorkItem) => void
 }) {
     const scrollRef = useWorkspaceScroll<HTMLDivElement>("overview")
@@ -108,171 +111,201 @@ export function WorkspaceOverview({
             return rank(left) - rank(right) || left.localeCompare(right)
         })
     const priorityItems = view.items.slice(0, 5)
+    const managed = view.metrics.find(
+        (metric) => metric.key === "managed" && metric.visible,
+    )
+    const empty =
+        inbox === 0 &&
+        view.total === 0 &&
+        priorityItems.length === 0 &&
+        view.workItemTypeCounts != null &&
+        categories.length === 0
 
     return (
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto pb-6">
-            <section
-                aria-labelledby="workspace-overview-title"
-                className="pt-3 pb-6"
-            >
-                <h2
-                    id="workspace-overview-title"
-                    className="text-xl font-medium tracking-tight"
-                >
-                    待办概览
-                </h2>
-                <div className="mt-5 flex flex-wrap items-center gap-x-7 gap-y-3">
-                    <OverviewMetric
-                        label="待处理"
-                        value={inbox}
-                        id="workspace-overview-all"
-                        onClick={() => onOpenQueue()}
-                    />
-                    <OverviewMetric
-                        label="已超期"
-                        value={overdue}
-                        id="workspace-overview-overdue"
-                        tone="text-destructive"
-                        onClick={() => onOpenQueue(undefined, "overdue")}
-                    />
-                    <OverviewMetric
-                        label="今日到期"
-                        value={view.dueTodayCount}
-                        id="workspace-overview-today"
-                        tone="text-warning-soft-foreground"
-                        onClick={() => onOpenQueue(undefined, "today")}
-                    />
-                </div>
-            </section>
-
-            {view.workItemTypeCounts == null ? (
-                <div
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-5 text-sm text-muted-foreground"
-                    role="status"
-                >
-                    <span>分类统计暂不可用，可进入全部待办继续处理。</span>
-                    <Button
-                        id="workspace-overview-unavailable-queue"
-                        variant="outline"
-                        onClick={() => onOpenQueue()}
+            {empty ? (
+                <div className="space-y-4 pt-2">
+                    <section
+                        aria-labelledby="workspace-empty-title"
+                        className="flex min-h-40 items-center gap-5 rounded-xl border border-border/60 bg-muted/15 px-5 py-8 sm:px-8"
                     >
-                        查看全部待办
-                    </Button>
-                </div>
-            ) : categories.length > 0 ? (
-                <section
-                    aria-label="我的任务分类"
-                    className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
-                >
-                    {categories.map(([type, count]) => {
-                        const family = TYPE_META[type]?.family ?? "exception"
-                        const appearance = FAMILY_STYLE[family]
-                        const Icon =
-                            type === "PURCHASE_SOURCE_UPDATE"
-                                ? FilePenLineIcon
-                                : type === "SUPPLIER_PORTAL_REVIEW"
-                                  ? UsersIcon
-                                  : appearance.icon
-                        const color =
-                            type === "PURCHASE_SOURCE_UPDATE"
-                                ? "bg-teal-soft/50 text-teal-soft-foreground"
-                                : type === "SUPPLIER_PORTAL_REVIEW"
-                                  ? "bg-violet-soft/50 text-violet-soft-foreground"
-                                  : appearance.color
-                        return (
-                            <button
-                                key={type}
-                                id={`workspace-category-${toAutomationIdSegment(type)}`}
-                                type="button"
-                                onClick={() => onOpenQueue(type)}
-                                aria-label={`${workspaceCategoryLabel(type)} ${count} 项，进入处理`}
-                                className={cn(
-                                    "group flex min-w-0 items-start gap-4 rounded-xl border border-border/60 bg-card p-5 text-left transition-colors hover:border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:p-6",
-                                    "text-foreground",
-                                )}
-                            >
-                                <span
-                                    className={cn(
-                                        "flex size-10 shrink-0 items-center justify-center rounded-lg",
-                                        color,
-                                    )}
-                                >
-                                    <Icon
-                                        className="size-6"
-                                        aria-hidden="true"
-                                    />
-                                </span>
-                                <span className="min-w-0 flex-1 text-foreground">
-                                    <span className="block text-sm font-medium">
-                                        {workspaceCategoryLabel(type)}
-                                    </span>
-                                    <span className="num mt-1 block text-2xl font-medium">
-                                        {count.toLocaleString("zh-CN")}
-                                    </span>
-                                    <span className="mt-2 block text-sm text-muted-foreground">
-                                        {TYPE_GUIDANCE[type]?.description ??
-                                            "查看任务要求，完成对应处理"}
-                                    </span>
-                                    <span className="mt-4 flex items-center gap-2 text-sm font-medium">
-                                        进入处理{" "}
-                                        <ArrowRightIcon
-                                            className="size-4 transition-transform group-hover:translate-x-1"
-                                            aria-hidden="true"
-                                        />
-                                    </span>
-                                </span>
-                                <ChevronRightIcon
-                                    className="mt-1 size-4 shrink-0 text-muted-foreground"
-                                    aria-hidden="true"
-                                />
-                            </button>
-                        )
-                    })}
-                </section>
-            ) : null}
-
-            <section
-                aria-labelledby="workspace-priority-title"
-                className="mt-8"
-            >
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                    <h3
-                        id="workspace-priority-title"
-                        className="text-base font-medium"
-                    >
-                        优先处理
-                    </h3>
-                    <Button
-                        id="workspace-overview-view-all"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onOpenQueue()}
-                    >
-                        查看全部待办 <ArrowRightIcon data-icon="inline-end" />
-                    </Button>
-                </div>
-                {priorityItems.length === 0 ? (
-                    <BusinessEmptyState
-                        kind="no-tasks"
-                        title="当前没有待处理事项"
-                        description="新任务到达后会出现在这里。"
-                    />
-                ) : (
-                    <div className="divide-y divide-border rounded-lg border border-border bg-card px-4 sm:px-5">
-                        {priorityItems.map((item) => (
-                            <PriorityRow
-                                key={item.workItemId}
-                                item={item}
-                                onSelect={onSelect}
+                        <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-success-soft text-success-soft-foreground sm:size-14">
+                            <CircleCheckIcon
+                                className="size-6 sm:size-7"
+                                aria-hidden="true"
                             />
-                        ))}
-                    </div>
-                )}
-                <p className="mt-4 flex items-start gap-2 text-xs text-muted-foreground">
-                    <InfoIcon className="size-4 shrink-0" aria-hidden="true" />
-                    按超期与优先级展示前 5 项；点击分类可集中处理同类任务。
-                </p>
-            </section>
+                        </span>
+                        <div className="min-w-0">
+                            <p className="mb-2 text-xs text-muted-foreground">
+                                待我处理
+                            </p>
+                            <h2
+                                id="workspace-empty-title"
+                                className="text-lg font-medium tracking-tight sm:text-xl"
+                            >
+                                当前暂无待你处理的事项
+                            </h2>
+                            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                                新的待办到达后，会显示在这里。
+                            </p>
+                        </div>
+                    </section>
+                    {managed && (
+                        <section
+                            aria-label="范围内待办"
+                            className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border/60 bg-card px-5 py-5 sm:px-8"
+                        >
+                            <div className="min-w-0">
+                                <p className="flex flex-wrap items-baseline gap-3 text-sm font-medium">
+                                    {managed.label}
+                                    <span className="num text-muted-foreground">
+                                        {managed.count.toLocaleString("zh-CN")}{" "}
+                                        项
+                                    </span>
+                                </p>
+                                <p className="mt-1.5 text-sm text-muted-foreground">
+                                    你可查看的业务范围内的待办事项。
+                                </p>
+                            </div>
+                            <Button
+                                id="workspace-overview-open-managed"
+                                variant="outline"
+                                size="sm"
+                                onClick={onOpenManaged}
+                            >
+                                查看待办{" "}
+                                <ArrowRightIcon data-icon="inline-end" />
+                            </Button>
+                        </section>
+                    )}
+                </div>
+            ) : (
+                <div className="space-y-6 pt-2">
+                    <section
+                        aria-label="待办概览"
+                        className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-muted/30 px-5 py-5 sm:px-6"
+                    >
+                        <div className="grid w-full max-w-xl grid-cols-3 gap-4 sm:gap-8">
+                            <OverviewMetric
+                                label="待我处理"
+                                value={inbox}
+                                id="workspace-overview-all"
+                                onClick={() => onOpenQueue()}
+                            />
+                            <OverviewMetric
+                                label="已超期"
+                                value={overdue}
+                                id="workspace-overview-overdue"
+                                tone="text-destructive"
+                                onClick={() =>
+                                    onOpenQueue(undefined, "overdue")
+                                }
+                            />
+                            <OverviewMetric
+                                label="今日到期"
+                                value={view.dueTodayCount}
+                                id="workspace-overview-today"
+                                tone="text-warning-soft-foreground"
+                                onClick={() => onOpenQueue(undefined, "today")}
+                            />
+                        </div>
+                        {managed && (
+                            <Button
+                                id="workspace-overview-open-managed"
+                                variant="ghost"
+                                size="sm"
+                                onClick={onOpenManaged}
+                            >
+                                {managed.label}
+                                <span className="num text-muted-foreground">
+                                    {managed.count}
+                                </span>
+                                <ArrowRightIcon data-icon="inline-end" />
+                            </Button>
+                        )}
+                    </section>
+                    <section
+                        aria-labelledby="workspace-priority-title"
+                        className="overflow-hidden rounded-xl border border-border/60 bg-card"
+                    >
+                        <div className="space-y-4 border-b border-border/60 px-5 py-5 sm:px-6">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div>
+                                    <h2
+                                        id="workspace-priority-title"
+                                        className="text-base font-medium"
+                                    >
+                                        优先处理
+                                    </h2>
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                        {view.total > 5
+                                            ? "按超期与优先级排序，展示前 5 项"
+                                            : "按超期与优先级排序"}
+                                    </p>
+                                </div>
+                                <Button
+                                    id="workspace-overview-view-all"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => onOpenQueue()}
+                                >
+                                    查看全部待办{" "}
+                                    <ArrowRightIcon data-icon="inline-end" />
+                                </Button>
+                            </div>
+                            {view.workItemTypeCounts == null ? (
+                                <div
+                                    className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground"
+                                    role="status"
+                                >
+                                    <span>
+                                        分类统计暂不可用，可进入全部待办继续处理。
+                                    </span>
+                                    <Button
+                                        id="workspace-overview-unavailable-queue"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => onOpenQueue()}
+                                    >
+                                        查看全部待办
+                                    </Button>
+                                </div>
+                            ) : categories.length > 0 ? (
+                                <nav
+                                    aria-label="按任务分类查看"
+                                    className="flex flex-wrap gap-2"
+                                >
+                                    {categories.map(([type, count]) => (
+                                        <CategoryShortcut
+                                            key={type}
+                                            type={type}
+                                            count={count}
+                                            onClick={() => onOpenQueue(type)}
+                                        />
+                                    ))}
+                                </nav>
+                            ) : null}
+                        </div>
+                        {priorityItems.length === 0 ? (
+                            <BusinessEmptyState
+                                kind="no-tasks"
+                                title="当前没有待处理事项"
+                                description="新任务到达后会出现在这里。"
+                            />
+                        ) : (
+                            <div className="divide-y divide-border/60">
+                                {priorityItems.map((item) => (
+                                    <PriorityRow
+                                        key={item.workItemId}
+                                        item={item}
+                                        onSelect={onSelect}
+                                    />
+                                ))}
+                            </div>
+                        )}
+                    </section>
+                </div>
+            )}
         </div>
     )
 }
@@ -295,13 +328,63 @@ function OverviewMetric({
             id={id}
             type="button"
             onClick={onClick}
-            className="flex items-baseline gap-3 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="group flex min-w-0 flex-col items-start gap-1.5 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label={`${label} ${value ?? "暂不可用"} 项`}
         >
-            <span className="text-sm text-muted-foreground">{label}</span>
-            <span className={cn("num text-2xl font-medium", tone)}>
+            <span className="text-xs text-muted-foreground transition-colors group-hover:text-foreground">
+                {label}
+            </span>
+            <span
+                className={cn(
+                    "num text-2xl font-medium",
+                    value ? tone : "text-muted-foreground",
+                )}
+            >
                 {value?.toLocaleString("zh-CN") ?? "—"}
             </span>
+        </button>
+    )
+}
+
+function CategoryShortcut({
+    type,
+    count,
+    onClick,
+}: {
+    type: string
+    count: number
+    onClick: () => void
+}) {
+    const appearance = FAMILY_STYLE[TYPE_META[type]?.family ?? "exception"]
+    const Icon =
+        type === "PURCHASE_SOURCE_UPDATE"
+            ? FilePenLineIcon
+            : type === "SUPPLIER_PORTAL_REVIEW"
+              ? UsersIcon
+              : appearance.icon
+    return (
+        <button
+            id={`workspace-category-${toAutomationIdSegment(type)}`}
+            type="button"
+            onClick={onClick}
+            aria-label={`${workspaceCategoryLabel(type)} ${count} 项，进入处理`}
+            title={TYPE_GUIDANCE[type]?.description}
+            className="group inline-flex max-w-full items-center gap-2 rounded-lg border border-border/60 px-3 py-2 text-sm transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+            <Icon
+                className="size-4 shrink-0 text-muted-foreground"
+                aria-hidden="true"
+            />
+            <span className="min-w-0 truncate">
+                {workspaceCategoryLabel(type)}
+            </span>
+            <span className="num rounded bg-muted px-1.5 text-xs font-medium">
+                {count.toLocaleString("zh-CN")}
+            </span>
+            <ChevronRightIcon
+                className="size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+                aria-hidden="true"
+            />
         </button>
     )
 }
@@ -313,68 +396,62 @@ function PriorityRow({
     item: WorkspaceWorkItem
     onSelect: (item: WorkspaceWorkItem) => void
 }) {
+    const presentation = workspaceTaskPresentation(item)
     const blocked = isBlockedWorkItem(item)
     const overdue = item.dueBucket === "overdue"
     const today = item.dueBucket === "today"
-    const label = blocked
+    const attentionLabel = blocked
         ? "受阻"
         : overdue
           ? "已超期"
           : today
             ? "今日到期"
-            : "待处理"
+            : undefined
     return (
-        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 py-5 lg:grid-cols-[6rem_10rem_minmax(0,1fr)_minmax(0,1fr)_auto]">
-            <div className="hidden lg:block">
-                <StatusBadge
-                    label={label}
-                    tone={
-                        blocked || today
-                            ? "warning"
-                            : overdue
-                              ? "destructive"
-                              : "neutral"
-                    }
-                />
-            </div>
-            <div className="hidden text-sm font-medium lg:block">
-                {item.workItemTypeLabel}
-            </div>
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-5 gap-y-2 px-5 py-5 transition-colors hover:bg-muted/15 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto] lg:gap-x-8">
             <div className="min-w-0">
-                <div className="mb-1 flex flex-wrap items-center gap-2 lg:hidden">
-                    <StatusBadge
-                        label={label}
-                        tone={
-                            blocked || today
-                                ? "warning"
-                                : overdue
-                                  ? "destructive"
-                                  : "neutral"
-                        }
-                    />
-                    <span className="text-xs text-muted-foreground">
-                        {item.workItemTypeLabel}
-                    </span>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                    <p
+                        className="min-w-0 truncate text-sm font-medium"
+                        title={presentation.title}
+                    >
+                        {presentation.title}
+                    </p>
+                    {attentionLabel && (
+                        <StatusBadge
+                            label={attentionLabel}
+                            tone={blocked || today ? "warning" : "destructive"}
+                        />
+                    )}
                 </div>
-                <p
-                    className="truncate text-sm font-medium"
-                    title={item.counterpartyName || item.objectTitle}
-                >
-                    {item.counterpartyName || item.objectTitle}
-                </p>
-                <p className="num mt-1 truncate text-xs text-muted-foreground">
-                    {item.stableNumber}
-                </p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                    <span>{presentation.typeLabel}</span>
+                    <span aria-hidden="true">·</span>
+                    <span className="num break-all">{presentation.number}</span>
+                </div>
             </div>
-            <p className="hidden min-w-0 text-sm text-muted-foreground lg:line-clamp-2">
-                {item.listSummary || item.reasonLabel || item.nextActionHint}
-            </p>
+            {presentation.summary && (
+                <p
+                    className={cn(
+                        "col-start-1 row-start-2 line-clamp-2 min-w-0 text-sm leading-relaxed lg:col-start-2 lg:row-start-1",
+                        presentation.attention
+                            ? "text-warning-soft-foreground"
+                            : "text-muted-foreground",
+                    )}
+                    title={presentation.summary}
+                >
+                    {presentation.summary}
+                </p>
+            )}
             <Button
                 id={`workspace-task-${toAutomationIdSegment(item.workItemId)}`}
                 size="sm"
+                variant="outline"
+                className="col-start-2 row-start-1 lg:col-start-3"
                 onClick={() => onSelect(item)}
             >
                 {blocked ? "查看原因" : "去处理"}
+                <ArrowRightIcon data-icon="inline-end" />
             </Button>
         </div>
     )

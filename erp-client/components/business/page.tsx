@@ -282,6 +282,7 @@ export type DataFreshnessProps = Omit<
     label?: React.ReactNode
     state?: DataFreshnessState
     statusLabel?: string
+    showStatus?: boolean
 }
 
 function DataFreshness({
@@ -290,6 +291,7 @@ function DataFreshness({
     label = "数据更新于",
     state = "fresh",
     statusLabel,
+    showStatus = true,
     className,
     ...props
 }: DataFreshnessProps) {
@@ -313,10 +315,12 @@ function DataFreshness({
         >
             <span>{label}</span>
             {time}
-            <StatusBadge
-                tone={status.tone}
-                label={statusLabel ?? status.label}
-            />
+            {showStatus && (
+                <StatusBadge
+                    tone={status.tone}
+                    label={statusLabel ?? status.label}
+                />
+            )}
         </div>
     )
 }

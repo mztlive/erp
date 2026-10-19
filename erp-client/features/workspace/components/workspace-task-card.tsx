@@ -13,9 +13,8 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import { cn } from "@/lib/utils"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 
-import { splitDetailSections } from "../lib/detail-facts"
+import { workspaceTaskPresentation } from "../lib/task-presentation"
 import { findSourceSalesOrder } from "../lib/source-sales-order"
-import { stripDocumentNumberPrefix } from "../lib/stable-number"
 import { isBlockedWorkItem } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
 
@@ -59,33 +58,35 @@ export function WorkspaceTaskCard({
     const blocked = isBlockedWorkItem(item)
     const overdue = item.dueBucket === "overdue"
     const fulfillment = item.workItemType === "FULFILLMENT_OPERATION"
-    const fulfillmentFacts = (item.summarySections ?? []).filter((field) =>
-        ["供应商", "发货仓库", "批次明细"].includes(field.label),
-    )
-    const deliveryDate = item.summarySections?.find(
-        (field) => field.label === "最早预计交付日",
-    )?.value
     const tracking = item.workItemType === "APPROVAL_INSTANCE"
-    const amount =
-        item.amountSummary ??
-        (item.businessObjectType === "purchase_payment_request"
-            ? item.summarySections?.find((field) => field.label === "申请金额")
-            : undefined) ??
-        splitDetailSections(item.summarySections, item.counterpartyName)
-            .amounts[0]
-    const number = stripDocumentNumberPrefix(item.stableNumber)
+    const presentation = workspaceTaskPresentation(item)
+    const {
+        title,
+        typeLabel,
+        number,
+        summary,
+        amount,
+        attention,
+        approvalProgress,
+    } = presentation
     const sourceSales = findSourceSalesOrder(item.summarySections)
-    const supplyWarnings = (item.summarySections ?? []).filter(
-        (section) => section.label === "供给影响提示",
-    )
     const appearance = FAMILY_APPEARANCE[item.family]
     const Icon =
         item.workItemType === "CUSTOMER_ACCEPTANCE_REGISTRATION"
             ? BadgeCheckIcon
             : appearance.icon
-    const title = item.counterpartyName || item.objectTitle
     const deadline = tracking ? (
-        <StatusBadge label={item.statusLabel} tone={item.statusTone} />
+        <>
+            <StatusBadge label={item.statusLabel} tone={item.statusTone} />
+            {approvalProgress && (
+                <span
+                    className="line-clamp-2 text-xs leading-relaxed text-muted-foreground"
+                    title={approvalProgress}
+                >
+                    {approvalProgress}
+                </span>
+            )}
+        </>
     ) : (
         <>
             <time
@@ -103,115 +104,16 @@ export function WorkspaceTaskCard({
             ) : overdue ? (
                 <StatusBadge label="已超期" tone="warning" />
             ) : null}
+            {approvalProgress && (
+                <span
+                    className="line-clamp-2 text-xs leading-relaxed text-muted-foreground"
+                    title={approvalProgress}
+                >
+                    {approvalProgress}
+                </span>
+            )}
         </>
     )
-
-    if (tracking) {
-        return (
-            <button
-                id={`workspace-task-${toAutomationIdSegment(item.workItemId)}`}
-                type="button"
-                aria-label={`${item.workItemTypeLabel} ${title} ${number} ${item.statusLabel}`}
-                aria-current={selected ? "true" : undefined}
-                onClick={() => onSelect(item)}
-                className={cn(
-                    "relative w-full space-y-2 px-5 py-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-                    selected
-                        ? "bg-muted/60 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-foreground"
-                        : "hover:bg-muted/30",
-                )}
-            >
-                <span className="flex items-baseline justify-between gap-4">
-                    <span
-                        className="min-w-0 truncate text-sm font-semibold"
-                        title={title}
-                    >
-                        {title}
-                    </span>
-                    <span
-                        className="num shrink-0 text-sm font-semibold"
-                        aria-label={
-                            amount
-                                ? `${amount.label} ${amount.value}`
-                                : "金额未提供"
-                        }
-                    >
-                        {amount?.value ?? "—"}
-                    </span>
-                </span>
-                <span className="flex items-center justify-between gap-3">
-                    <span className="truncate text-sm text-muted-foreground">
-                        {item.workItemTypeLabel}
-                    </span>
-                    {deadline}
-                </span>
-                <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                    <time
-                        className="num shrink-0"
-                        dateTime={item.createdAt || undefined}
-                    >
-                        {item.enteredAtLabel}
-                    </time>
-                    <span aria-hidden="true">·</span>
-                    <span className="num min-w-0 truncate" title={number}>
-                        {number}
-                    </span>
-                </span>
-                {item.approval?.lastRejectReason && (
-                    <span
-                        className="block truncate text-xs text-destructive"
-                        title={item.approval.lastRejectReason}
-                    >
-                        驳回原因：{item.approval.lastRejectReason}
-                    </span>
-                )}
-            </button>
-        )
-    }
-
-    if (item.workItemType === "SALES_INVOICE_EXECUTION") {
-        return (
-            <button
-                id={`workspace-task-${toAutomationIdSegment(item.workItemId)}`}
-                type="button"
-                aria-label={`销项开票 ${title}${sourceSales ? " " + sourceSales.orderNo : ""}`}
-                aria-current={selected ? "true" : undefined}
-                onClick={() => onSelect(item)}
-                className={cn(
-                    "relative w-full space-y-2 px-5 py-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-                    selected
-                        ? "bg-muted/60 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-foreground"
-                        : "hover:bg-muted/30",
-                )}
-            >
-                <span className="flex items-start justify-between gap-2">
-                    <span className="min-w-0 break-words font-medium">
-                        {title}
-                    </span>
-                    <StatusBadge
-                        label={blocked ? "受阻" : "待开票"}
-                        tone={blocked ? "warning" : "info"}
-                    />
-                </span>
-                <span className="block text-xs text-muted-foreground">
-                    销项开票{sourceSales ? ` · ${sourceSales.orderNo}` : ""}
-                </span>
-                <span className="flex items-baseline justify-between gap-2">
-                    <span className="text-xs text-muted-foreground">
-                        剩余待开票
-                    </span>
-                    <span className="num text-sm font-semibold">
-                        {amount?.value ?? "—"}
-                    </span>
-                </span>
-                {item.dueAt ? (
-                    <span className="block text-xs text-muted-foreground">
-                        {item.dueAtLabel}
-                    </span>
-                ) : null}
-            </button>
-        )
-    }
 
     return (
         <button
@@ -222,12 +124,12 @@ export function WorkspaceTaskCard({
                     ? `work-item-procurement-order-creation-${item.workItemId}`
                     : undefined
             }
-            aria-label={`${item.workItemTypeLabel} ${title} ${number}${sourceSales ? " 来源 " + sourceSales.orderNo : ""}`}
+            aria-label={`${typeLabel} ${title} ${number}${sourceSales ? " 来源 " + sourceSales.orderNo : ""}${tracking ? " " + item.statusLabel : ""}`}
             aria-current={selected ? "true" : undefined}
             onClick={() => onSelect(item)}
             className={cn(
                 workspaceTaskColumns,
-                "relative min-h-22 w-full px-4 py-3 text-left transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-5",
+                "relative min-h-24 w-full px-4 py-4 text-left transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-5",
                 selected
                     ? "bg-muted/60 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-foreground"
                     : "hover:bg-muted/30",
@@ -236,53 +138,46 @@ export function WorkspaceTaskCard({
             <span className="flex min-w-0 items-start gap-3">
                 <span
                     className={cn(
-                        "mt-1 flex size-9 shrink-0 items-center justify-center rounded-lg",
+                        "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg",
                         appearance.className,
                     )}
                 >
                     <Icon className="size-4" aria-hidden="true" />
                 </span>
-                <span className="flex min-w-0 flex-col gap-0.5">
-                    <span className="truncate text-sm text-muted-foreground">
-                        {item.workItemTypeLabel}
-                    </span>
+                <span className="flex min-w-0 flex-1 flex-col gap-1.5">
                     <span
-                        className="truncate text-base font-medium"
+                        className="truncate text-sm font-medium"
                         title={title}
                     >
                         {title}
                     </span>
-                    <span
-                        className="num truncate text-xs text-muted-foreground"
-                        title={
-                            sourceSales
-                                ? number + " · 来源 " + sourceSales.orderNo
-                                : number
-                        }
-                    >
-                        {number}
-                    </span>
-                    {fulfillment ? (
-                        <span className="mt-1 text-xs text-muted-foreground">
-                            {fulfillmentFacts
-                                .map((field) => field.value)
-                                .join(" · ")}
-                            {deliveryDate ? ` · 预计 ${deliveryDate}` : ""}
-                        </span>
-                    ) : null}
-                    {supplyWarnings.map((section) => (
+                    <span className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                        <span>{typeLabel}</span>
+                        <span aria-hidden="true">·</span>
                         <span
-                            key={section.value}
-                            className="whitespace-pre-wrap text-xs text-muted-foreground"
+                            className="num min-w-0 truncate"
+                            title={
+                                sourceSales
+                                    ? number + " · 来源 " + sourceSales.orderNo
+                                    : number
+                            }
                         >
-                            {section.value}
+                            {number}
                         </span>
-                    ))}
-                    {item.listSummary ? (
-                        <span className="truncate text-xs text-muted-foreground">
-                            {item.listSummary}
+                    </span>
+                    {summary && (
+                        <span
+                            className={cn(
+                                "line-clamp-2 text-xs leading-relaxed",
+                                attention
+                                    ? "text-warning-soft-foreground"
+                                    : "text-muted-foreground",
+                            )}
+                            title={summary}
+                        >
+                            {summary}
                         </span>
-                    ) : null}
+                    )}
                 </span>
             </span>
             <span className="flex flex-col items-end gap-2 @min-[600px]/workspace-queue:items-start">

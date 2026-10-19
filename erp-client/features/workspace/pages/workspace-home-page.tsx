@@ -237,6 +237,10 @@ export function WorkspaceHomeView({
                 actions={
                     <div className="flex flex-wrap items-center gap-3">
                         <DataFreshness
+                            label={overview ? "更新于" : undefined}
+                            showStatus={
+                                !overview || freshness.state !== "fresh"
+                            }
                             updatedAt={freshness.updatedAtLabel}
                             dateTime={freshness.dateTime}
                             state={freshness.state}
@@ -256,34 +260,12 @@ export function WorkspaceHomeView({
                 }
             />
             {overview ? (
-                <>
-                    {view.metrics
-                        .filter(
-                            (metric) =>
-                                metric.visible && metric.key === "managed",
-                        )
-                        .map((metric) => (
-                            <Button
-                                id={`workspace-overview-open-${metric.key}`}
-                                key={metric.key}
-                                variant="outline"
-                                size="sm"
-                                className="self-start"
-                                onClick={() => onMetricClick(metric.key)}
-                            >
-                                {metric.label}
-                                <span className="num text-muted-foreground">
-                                    {metric.count}
-                                </span>
-                                <ArrowRightIcon />
-                            </Button>
-                        ))}
-                    <WorkspaceOverview
-                        view={view}
-                        onOpenQueue={openQueue}
-                        onSelect={onSelectTask}
-                    />
-                </>
+                <WorkspaceOverview
+                    view={view}
+                    onOpenQueue={openQueue}
+                    onOpenManaged={() => onMetricClick("managed")}
+                    onSelect={onSelectTask}
+                />
             ) : (
                 <>
                     <div className="flex flex-wrap items-center gap-4">
