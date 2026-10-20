@@ -3,12 +3,14 @@
 use std::collections::HashSet;
 
 use application_core::AuditActor;
+use bpm::engine::TaskIntent;
 use bpm::model::ApprovalNodeExecution;
 use erp_core::common::time::Instant;
 use mongodb::Database;
 use persistence_core::Executor;
 
 use super::super::apply_plan::PlannedWrites;
+use super::super::notification_outbox::NotificationIntent;
 use crate::entity::approval_integration::ApprovalSubjectSnapshot;
 use crate::entity::document_registry::DocumentType;
 use crate::error::{Error, Result};
@@ -211,40 +213,9 @@ pub(super) async fn persist_decision_notifications(
         if !seen.insert(intent.dedup_key.as_str()) {
             return Err(Error::Internal("审批决定计划包含重复通知意图".to_string()));
         }
-        let event_execution = match intent.event_kind {
-            EventKind::Entered | EventKind::NodeApproved | EventKind::NodeRejected | EventKind::Blocked => {
-                let execution_id = intent
-                    .dedup_key
-                    .split_once(':')
-                    .map(|(_, id)| id)
-                    .filter(|id| !id.is_empty())
-                    .ok_or_else(|| Error::Internal("审批决定通知缺少执行引用".to_string()))?;
-                writes
-                    .created_executions
-                    .iter()
-                    .chain(writes.updated_executions.iter())
-                    .find(|execution| execution.base.id == execution_id)
-                    .or_else(|| {
-                        (facts.ended_execution.base.id == execution_id).then_some(facts.ended_execution)
-                    })
-                    .ok_or_else(|| Error::Internal("审批决定通知执行引用不存在".to_string()))?
-            },
-            EventKind::Completed => facts.ended_execution,
-            _ => return Err(Error::Internal("审批决定计划包含非决定通知事件".to_string())),
-        };
-        let expected_dedup = match intent.event_kind {
-            EventKind::Entered => format!("entered:{}", event_execution.base.id),
-            EventKind::NodeApproved => format!("approved:{}", event_execution.base.id),
-            EventKind::NodeRejected => format!("rejected:{}", event_execution.base.id),
-            EventKind::Blocked => format!("blocked:{}", event_execution.base.id),
-            EventKind::Completed => format!("completed:{}", writes.instance.base.id),
-            _ => unreachable!("unsupported decision event was rejected above"),
-        };
-        if intent.dedup_key != expected_dedup {
-            return Err(Error::Internal("审批决定通知去重键不匹配".to_string()));
-        }
+        let event_execution = decision_event_execution(writes, &facts, intent)?;
         let recipients = match intent.event_kind {
-            EventKind::Entered => vec![event_execution.assignee_participant_id.as_str().to_string()],
+            EventKind::Entered => requested_recipients(writes, event_execution),
             EventKind::NodeApproved | EventKind::NodeRejected | EventKind::Completed => {
                 vec![facts.submitted_by.to_string()]
             },
@@ -263,7 +234,7 @@ pub(super) async fn persist_decision_notifications(
                 document_type_label: facts.document_type_label.to_string(),
                 document_no: facts.document_no.to_string(),
                 current_node_name: event_execution.node_name.clone(),
-                current_approver_display_name: event_execution.assignee_name_snapshot.clone(),
+                current_approver_display_name: event_execution.assignee_display_name(),
                 round_no: event_execution.round_no,
                 reject_reason_summary: (intent.event_kind == EventKind::NodeRejected)
                     .then(|| facts.reject_reason.map(ToOwned::to_owned))
@@ -376,7 +347,7 @@ pub(super) async fn persist_resume_notifications(
         }
         let primary = facts.new_execution.assignee_participant_id.as_str();
         let recipients = match intent.event_kind {
-            EventKind::Entered => vec![primary.to_string()],
+            EventKind::Entered => requested_recipients(writes, facts.new_execution),
             EventKind::Resumed => notification_recipients(primary, [facts.submitted_by]),
             _ => unreachable!("unsupported resume event was rejected above"),
         };
@@ -389,7 +360,7 @@ pub(super) async fn persist_resume_notifications(
                 document_type_label: facts.document_type_label.to_string(),
                 document_no: facts.document_no.to_string(),
                 current_node_name: facts.new_execution.node_name.clone(),
-                current_approver_display_name: facts.new_execution.assignee_name_snapshot.clone(),
+                current_approver_display_name: facts.new_execution.assignee_display_name(),
                 round_no: facts.new_execution.round_no,
                 reject_reason_summary: None,
             },
@@ -402,4 +373,58 @@ pub(super) async fn persist_resume_notifications(
         return Err(Error::Internal("原审批人恢复缺少进入节点或恢复通知意图".to_string()));
     }
     Ok(())
+}
+
+fn decision_event_execution<'a>(
+    writes: &'a PlannedWrites,
+    facts: &DecisionNotificationFacts<'a>,
+    intent: &NotificationIntent,
+) -> Result<&'a ApprovalNodeExecution> {
+    use crate::entity::approval_integration::ApprovalNotificationEventKind as EventKind;
+    let event_execution = match intent.event_kind {
+        EventKind::Entered | EventKind::NodeApproved | EventKind::NodeRejected | EventKind::Blocked => {
+            let execution_id = intent
+                .dedup_key
+                .split_once(':')
+                .map(|(_, id)| id)
+                .filter(|id| !id.is_empty())
+                .ok_or_else(|| Error::Internal("审批决定通知缺少执行引用".to_string()))?;
+            writes
+                .created_executions
+                .iter()
+                .chain(writes.updated_executions.iter())
+                .find(|execution| execution.base.id == execution_id)
+                .or_else(|| (facts.ended_execution.base.id == execution_id).then_some(facts.ended_execution))
+                .ok_or_else(|| Error::Internal("审批决定通知执行引用不存在".to_string()))?
+        },
+        EventKind::Completed => facts.ended_execution,
+        _ => return Err(Error::Internal("审批决定计划包含非决定通知事件".to_string())),
+    };
+    let expected_dedup = match intent.event_kind {
+        EventKind::Entered => format!("entered:{}", event_execution.base.id),
+        EventKind::NodeApproved => format!("approved:{}", event_execution.base.id),
+        EventKind::NodeRejected => format!("rejected:{}", event_execution.base.id),
+        EventKind::Blocked => format!("blocked:{}", event_execution.base.id),
+        EventKind::Completed => format!("completed:{}", writes.instance.base.id),
+        _ => unreachable!("unsupported decision event was rejected above"),
+    };
+    if intent.dedup_key != expected_dedup {
+        return Err(Error::Internal("审批决定通知去重键不匹配".to_string()));
+    }
+    Ok(event_execution)
+}
+
+fn requested_recipients(writes: &PlannedWrites, execution: &ApprovalNodeExecution) -> Vec<String> {
+    writes
+        .create_tasks
+        .iter()
+        .filter_map(|task| match task {
+            TaskIntent::HumanTaskRequested { execution_id, assignee, .. }
+                if execution_id.as_ref() == execution.base.id =>
+            {
+                Some(assignee.as_str().to_string())
+            },
+            _ => None,
+        })
+        .collect()
 }

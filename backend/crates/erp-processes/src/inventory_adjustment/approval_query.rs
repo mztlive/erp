@@ -213,19 +213,7 @@ async fn cancel_token(
     }
     ensure_cancel_instance_subject(instance, &adjustment.base.id, adjustment.approval_subject_version)?;
     ensure_cancel_instance_binding(instance, require_frozen_binding(binding)?)?;
-    let snapshot = service
-        .db
-        .approval_subject_snapshots()
-        .find_by_process_instance_id(&instance.base.id, &mut NoTransaction)
-        .await?
-        .ok_or_else(|| Error::ConflictError("审批实例缺少冻结业务快照".to_string()))?;
-    snapshot
-        .ensure_matches_runtime_subject(
-            DocumentType::StockAdjustment,
-            &adjustment.base.id,
-            instance.subject_version,
-        )
-        .map_err(|_| Error::ConflictError("审批实例与冻结业务快照不一致".to_string()))?;
+    let organization_id = cancel_snapshot_org(service, adjustment, instance).await?;
     let Some(current) = current else {
         return Ok(None);
     };
@@ -237,14 +225,11 @@ async fn cancel_token(
     }
     let expected_task_version = match instance.status {
         ApprovalProcessInstanceStatus::Running
-            if current.status == ApprovalNodeExecutionStatus::Active && open_tasks.len() == 1 =>
+            if current.status == ApprovalNodeExecutionStatus::Active
+                && !open_tasks.is_empty()
+                && open_tasks.len() <= 1 + current.additional_assignees.len() =>
         {
-            ensure_stock_adjustment_open_task_identity(
-                &open_tasks[0],
-                instance,
-                current,
-                &snapshot.payload.responsible_org_id,
-            )?;
+            ensure_stock_adjustment_open_task_identity(&open_tasks[0], instance, current, &organization_id)?;
             Some(open_tasks[0].base.version.to_string())
         },
         ApprovalProcessInstanceStatus::Blocked
@@ -267,6 +252,27 @@ async fn cancel_token(
         expected_execution_version: current.base.version.to_string(),
         expected_task_version,
     }))
+}
+
+async fn cancel_snapshot_org(
+    service: &InventoryAdjustmentService,
+    adjustment: &StockAdjustment,
+    instance: &ApprovalProcessInstance,
+) -> Result<String> {
+    let snapshot = service
+        .db
+        .approval_subject_snapshots()
+        .find_by_process_instance_id(&instance.base.id, &mut NoTransaction)
+        .await?
+        .ok_or_else(|| Error::ConflictError("审批实例缺少冻结业务快照".to_string()))?;
+    snapshot
+        .ensure_matches_runtime_subject(
+            DocumentType::StockAdjustment,
+            &adjustment.base.id,
+            instance.subject_version,
+        )
+        .map_err(|_| Error::ConflictError("审批实例与冻结业务快照不一致".to_string()))?;
+    Ok(snapshot.payload.responsible_org_id)
 }
 
 /// BLOCKED 普通撤回令牌只接受实例与执行两端完全一致的人员失效 blocker。

@@ -270,7 +270,7 @@ pub(super) fn task_proves_current_responsibility(
         && subject.instance.status == ApprovalProcessInstanceStatus::Running
         && execution.status == ApprovalNodeExecutionStatus::Active
         && execution.round_no == subject.instance.current_round_no
-        && execution.assignee_participant_id.as_str() == actor_id
+        && execution.has_participant(actor_id)
         && task.work_item_type == WorkItemType::DocumentApproval
         && task.status == WorkItemStatus::Open
         && task.assignment_source == AssignmentSource::ApprovalRuntime
@@ -331,12 +331,12 @@ pub(super) fn mine_runtime_chain_matches(
         && execution.status == ApprovalNodeExecutionStatus::Active
         && execution.process_instance_id.as_ref() == summary.id
         && execution.round_no == summary.current_round_no
-        && execution.assignee_participant_id.as_str() == actor_id
+        && execution.has_participant(actor_id)
         && summary.current_node_key.as_deref() == Some(execution.node_key.as_str())
         && summary.current_node_name.as_deref() == Some(execution.node_name.as_str())
         && summary.current_assignee_participant_id.as_deref()
             == Some(execution.assignee_participant_id.as_str())
-        && summary.current_assignee_name.as_deref() == Some(execution.assignee_name_snapshot.as_str());
+        && summary.current_assignee_name.as_deref() == Some(execution.assignee_display_name().as_str());
     if !runtime_chain_matches {
         return Ok(false);
     }
@@ -453,6 +453,29 @@ where
         }
     }
     Ok(by_id)
+}
+
+/// 校验同节点开放任务的人员归属及每人唯一性。
+/// # 参数
+/// `execution` 为冻结节点执行，`tasks` 为该执行全部开放任务。
+/// # 返回
+/// 非空、人数不超出冻结集合且每人恰有一项时返回 true。
+/// # 错误
+/// 无。
+pub(super) fn open_tasks_match(execution: &ApprovalNodeExecution, tasks: &[WorkItem]) -> bool {
+    let mut owners = HashSet::new();
+    !tasks.is_empty()
+        && tasks.len() <= 1 + execution.additional_assignees.len()
+        && tasks.iter().all(|task| {
+            task.status == WorkItemStatus::Open
+                && task.work_item_type == WorkItemType::DocumentApproval
+                && task.assignment_source == AssignmentSource::ApprovalRuntime
+                && task.approval_node_execution_id.as_ref().is_some_and(|id| id.as_ref() == execution.base.id)
+                && task
+                    .owner_user_id
+                    .as_deref()
+                    .is_some_and(|owner| execution.has_participant(owner) && owners.insert(owner))
+        })
 }
 
 #[cfg(test)]

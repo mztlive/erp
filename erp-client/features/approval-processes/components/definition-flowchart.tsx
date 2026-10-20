@@ -59,7 +59,16 @@ export function DefinitionFlowchart({
                             node.client_id === selectedClientId
                         const segment = toAutomationIdSegment(node.client_id)
                         const title = node.node_name.trim() || "未命名节点"
-                        const assignee = node.assignee_name.trim()
+                        const assignee =
+                            [
+                                node.assignee_name,
+                                ...node.additional_assignees.map(
+                                    (person) => person.name,
+                                ),
+                            ]
+                                .filter(Boolean)
+                                .join("、") +
+                            (node.additional_assignees.length ? "（或签）" : "")
                         return (
                             <li
                                 key={node.client_id}

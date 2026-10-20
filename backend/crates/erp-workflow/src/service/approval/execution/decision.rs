@@ -74,13 +74,16 @@ pub fn prepare_decision(input: DecisionExecutionInput) -> Result<PreparedExecuti
         },
         ReceiptBranch::Fresh => {},
     }
+    if !input.current.has_participant(input.actor.as_str()) {
+        return Err(Error::ConflictError("APPROVAL_RESPONSIBILITY_CONFLICT".into()));
+    }
     ensure_triple_responsibility(
         input.actor.as_str(),
         &input.task_owner_id,
-        input.current.assignee_participant_id.as_str(),
+        input.actor.as_str(),
         &input.instance_assignee_id,
     )?;
-    if input.open_task_count > 1 {
+    if input.open_task_count > 1 + input.current.additional_assignees.len() {
         return prepare_open_task_conflict(input);
     }
     let terminal_reject = input.decision == ApprovalDecision::Reject

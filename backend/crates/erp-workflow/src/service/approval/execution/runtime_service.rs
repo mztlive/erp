@@ -231,7 +231,7 @@ async fn persisted_command_view_with_executor(
                     executor,
                 )
                 .await?;
-            if tasks.len() > 1 {
+            if !tasks.is_empty() && !read_auth::open_tasks_match(execution, &tasks) {
                 return Err(Error::ConflictError("当前执行关联多个开放审批任务".to_string()));
             }
             tasks.into_iter().next().map(|task| OpenTaskSummary {

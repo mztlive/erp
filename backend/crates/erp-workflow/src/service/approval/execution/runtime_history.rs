@@ -94,7 +94,7 @@ pub fn history_item_from_execution(execution: &ApprovalNodeExecution) -> Runtime
         node_key: execution.node_key.clone(),
         node_name: execution.node_name.clone(),
         result: execution.status.as_str().to_string(),
-        assignee_name: optional_text(&execution.assignee_name_snapshot),
+        assignee_name: optional_text(&execution.assignee_display_name()),
         decided_by: execution.decided_by.as_ref().map(|participant| participant.as_str().to_string()),
         decision_reason: execution.decision_reason.clone(),
         decided_at: execution.decided_at.map(|stamp| stamp.unix_secs()),

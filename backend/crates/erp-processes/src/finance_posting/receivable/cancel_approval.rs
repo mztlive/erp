@@ -83,8 +83,8 @@ pub(crate) async fn load_cancel_runtime(
             &mut NoTransaction,
         )
         .await?;
-    task_policy
-        .ensure_open_task_count(open_tasks.len())
+    current
+        .ensure_cancellation_tasks(task_policy, open_tasks.len())
         .map_err(|error| Error::ConflictError(error.to_string()))?;
     Ok(LoadedCancelRuntime {
         graph: load_bound_definition_graph(db, binding).await?,

@@ -88,6 +88,9 @@ pub fn validate_linear_graph(
     nodes: &[ApprovalNodeDefinition],
     transitions: &[ApprovalTransitionDefinition],
 ) -> ModelResult<()> {
+    for node in nodes {
+        node.clone().with_additional_assignees(node.additional_assignees.clone())?;
+    }
     let ordered = ordered_nodes(nodes)?;
     let keys = ordered.into_iter().map(|node| node.node_key.clone()).collect::<Vec<_>>();
     validate_entry_node(&definition.entry_node_key, &keys)?;

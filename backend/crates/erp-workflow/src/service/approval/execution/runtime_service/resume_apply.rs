@@ -7,7 +7,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 use application_core::AuditActor;
-use bpm::engine::{CommitRequired, Eligibility};
+use bpm::engine::{CommitRequired, Eligibility, TaskIntent};
 use bpm::ids::ApprovalProcessInstanceId;
 use bpm::model::types::ApprovalProcessInstanceStatus;
 use mongodb::Database;
@@ -181,22 +181,27 @@ async fn apply_resume(
     prepared: &PreparedResume,
     executor: &mut dyn Executor,
 ) -> Result<ApprovalCommandView> {
-    revalidate_resume_with_executor(
-        db,
-        rbac,
-        object_read,
-        actor,
-        RevalidateDecisionApproverInput {
-            assignee_id: &prepared.assignee_id,
-            assignee_name: &prepared.assignee_name,
-            authenticated_actor: None,
-            snapshot: &prepared.snapshot,
-            spec: &prepared.spec,
-            separation_policy: process_required_separation_policy(prepared.snapshot.document_type)?,
-        },
-        executor,
-    )
-    .await?;
+    for intent in &prepared.writes.create_tasks {
+        let TaskIntent::HumanTaskRequested { assignee, .. } = intent else {
+            continue;
+        };
+        revalidate_resume_with_executor(
+            db,
+            rbac,
+            object_read,
+            actor,
+            RevalidateDecisionApproverInput {
+                assignee_id: assignee.as_str(),
+                assignee_name: &prepared.assignee_name,
+                authenticated_actor: None,
+                snapshot: &prepared.snapshot,
+                spec: &prepared.spec,
+                separation_policy: process_required_separation_policy(prepared.snapshot.document_type)?,
+            },
+            executor,
+        )
+        .await?;
+    }
     persist_resume_writes(db, prepared, audit_port, executor).await?;
     Ok(map_command_view(
         &prepared.writes.instance,

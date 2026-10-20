@@ -13,8 +13,8 @@ use crate::model::types::{
     ApprovalDecision, ApprovalTransitionEvent, ModelError, ModelResult, NODE_KEY_MAX_LEN, normalize_required,
 };
 use crate::model::{
-    ApprovalNodeDefinition, ApprovalProcessDefinition, ApprovalTransitionDefinition, NewNodeDefinition,
-    ParticipantId, ProcessKind, Timestamp,
+    ApprovalNodeDefinition, ApprovalParticipant, ApprovalProcessDefinition, ApprovalTransitionDefinition,
+    NewNodeDefinition, ParticipantId, ProcessKind, Timestamp,
 };
 
 /// 单个审批定义允许的最大节点数。
@@ -46,6 +46,8 @@ pub struct NodeReplacementDraft {
     pub display_order: u32,
     /// 指定审批人。
     pub assignee_participant_id: ParticipantId,
+    /// 同节点的其他或签参与人。
+    pub additional_assignees: Vec<ApprovalParticipant>,
 }
 
 impl NodeReplacementDraft {
@@ -94,6 +96,7 @@ impl NodeReplacementDraft {
             node_name: ApprovalNodeDefinition::normalize_name(node_name)?,
             display_order,
             assignee_participant_id,
+            additional_assignees: Vec::new(),
         })
     }
 }
@@ -297,17 +300,20 @@ impl DefinitionGraph {
         for draft in drafts {
             let (node_id, node_key) =
                 replacement_identity(&self.definition.base.id, &existing, &mut seen_existing, draft)?;
-            planned.push(ApprovalNodeDefinition::new(NewNodeDefinition {
-                id: node_id,
-                process_definition_id: ApprovalProcessDefinitionId::new(self.definition.base.id.clone()),
-                node_key,
-                node_name: draft.node_name.clone(),
-                node_purpose: None,
-                display_order: draft.display_order,
-                assignee_participant_id: draft.assignee_participant_id.clone(),
-                assignee_label_snapshot: "pending".to_string(),
-                at,
-            })?);
+            planned.push(
+                ApprovalNodeDefinition::new(NewNodeDefinition {
+                    id: node_id,
+                    process_definition_id: ApprovalProcessDefinitionId::new(self.definition.base.id.clone()),
+                    node_key,
+                    node_name: draft.node_name.clone(),
+                    node_purpose: None,
+                    display_order: draft.display_order,
+                    assignee_participant_id: draft.assignee_participant_id.clone(),
+                    assignee_label_snapshot: "pending".to_string(),
+                    at,
+                })?
+                .with_additional_assignees(draft.additional_assignees.clone())?,
+            );
         }
         ensure_unique_node_identities(&planned)?;
         Ok(planned)
@@ -423,8 +429,11 @@ pub struct NewPopulatedDraftParams {
 /// # 关键业务约束
 /// 输出不得依赖节点存储顺序，供批量账号查询与资格重验复用。
 pub fn assignee_ids(nodes: &[ApprovalNodeDefinition]) -> Vec<String> {
-    let mut ids =
-        nodes.iter().map(|node| node.assignee_participant_id.as_str().to_string()).collect::<Vec<_>>();
+    let mut ids = nodes
+        .iter()
+        .flat_map(|node| node.participants())
+        .map(|person| person.participant_id.as_str().to_string())
+        .collect::<Vec<_>>();
     ids.sort();
     ids.dedup();
     ids
@@ -458,17 +467,20 @@ pub fn copy_nodes_for_definition(
     }
     let mut copied = Vec::with_capacity(ordered.len());
     for (node, identity) in ordered.into_iter().zip(identities) {
-        copied.push(ApprovalNodeDefinition::new(NewNodeDefinition {
-            id: identity.node_id.clone(),
-            process_definition_id: definition_id.clone(),
-            node_key: identity.node_key.clone(),
-            node_name: node.node_name.clone(),
-            node_purpose: None,
-            display_order: node.display_order,
-            assignee_participant_id: node.assignee_participant_id.clone(),
-            assignee_label_snapshot: node.assignee_label_snapshot.clone(),
-            at,
-        })?);
+        copied.push(
+            ApprovalNodeDefinition::new(NewNodeDefinition {
+                id: identity.node_id.clone(),
+                process_definition_id: definition_id.clone(),
+                node_key: identity.node_key.clone(),
+                node_name: node.node_name.clone(),
+                node_purpose: None,
+                display_order: node.display_order,
+                assignee_participant_id: node.assignee_participant_id.clone(),
+                assignee_label_snapshot: node.assignee_label_snapshot.clone(),
+                at,
+            })?
+            .with_additional_assignees(node.additional_assignees.clone())?,
+        );
     }
     ensure_unique_node_identities(&copied)?;
     Ok(copied)

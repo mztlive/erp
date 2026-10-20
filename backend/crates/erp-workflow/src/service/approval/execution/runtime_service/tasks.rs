@@ -58,6 +58,11 @@ pub(super) async fn complete_or_close_tasks(
     let requested =
         tasks.iter().find(|item| item.base.id == input.work_item_id).ok_or_else(hidden_not_found)?;
     ensure_expected_version("审批任务", input.expected_task_version, requested.base.version)?;
+    let ending = if ending == ApprovalRuntimeTaskEnding::Complete && tasks.len() > 1 {
+        ApprovalRuntimeTaskEnding::CompleteAnyOf { work_item_id: input.work_item_id.to_string() }
+    } else {
+        ending
+    };
     let tasks =
         WorkItem::end_all_for_approval_execution(tasks, &execution_id, input.actor_id, &ending, input.now)
             .map_err(|error| Error::ValidationError(error.to_string()))?;

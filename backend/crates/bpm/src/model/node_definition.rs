@@ -4,12 +4,13 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
+use super::approval_participant::validate_additional;
 use crate::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId};
 use crate::model::types::{
     ApprovalNodeType, LABEL_MAX_LEN, ModelError, ModelResult, NAME_MAX_LEN, NODE_KEY_MAX_LEN,
     PURPOSE_MAX_LEN, base_model_at, normalize_optional, normalize_required,
 };
-use crate::model::{ParticipantId, Timestamp};
+use crate::model::{ApprovalParticipant, ParticipantId, Timestamp};
 
 /// 创建人工审批节点所需的身份与责任快照。
 pub struct NewNodeDefinition {
@@ -54,9 +55,53 @@ pub struct ApprovalNodeDefinition {
     pub assignee_participant_id: ParticipantId,
     /// 发布时冻结的显示名。
     pub assignee_label_snapshot: String,
+    /// 同节点的其他或签审批人；缺失时兼容单人节点。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub additional_assignees: Vec<ApprovalParticipant>,
 }
 
 impl ApprovalNodeDefinition {
+    /// 设置同节点的其他或签审批人。
+    /// # 参数
+    /// `assignees` 为除首位之外的参与人快照。
+    /// # 返回
+    /// 返回包含完整或签集合的节点。
+    /// # 错误
+    /// 人员重复、超限或显示名非法时失败。
+    pub fn with_additional_assignees(mut self, assignees: Vec<ApprovalParticipant>) -> ModelResult<Self> {
+        validate_additional(&self.assignee_participant_id, &assignees)?;
+        self.additional_assignees = assignees;
+        Ok(self)
+    }
+
+    /// 返回冻结的全部参与人。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 首位与其他参与人按定义顺序返回。
+    /// # 错误
+    /// 无。
+    pub fn participants(&self) -> Vec<ApprovalParticipant> {
+        let mut result = vec![ApprovalParticipant {
+            participant_id: self.assignee_participant_id.clone(),
+            name: self.assignee_label_snapshot.clone(),
+        }];
+        result.extend(self.additional_assignees.clone());
+        result
+    }
+
+    /// 判断身份是否属于冻结参与人。
+    /// # 参数
+    /// `id` 为待校验身份。
+    /// # 返回
+    /// 集合内身份返回 true。
+    /// # 错误
+    /// 无。
+    pub fn has_participant(&self, id: &str) -> bool {
+        self.assignee_participant_id.as_str() == id
+            || self.additional_assignees.iter().any(|item| item.participant_id.as_str() == id)
+    }
+
     /// 规范化节点显示名称，供命令摘要与实体构造共享同一规则源。
     ///
     /// # 参数
@@ -98,6 +143,7 @@ impl ApprovalNodeDefinition {
             node_type: ApprovalNodeType::UserApproval,
             node_purpose: normalize_optional(input.node_purpose, PURPOSE_MAX_LEN, "用途键过长")?,
             display_order: input.display_order,
+            additional_assignees: Vec::new(),
             assignee_participant_id: input.assignee_participant_id,
             assignee_label_snapshot: normalize_required(
                 input.assignee_label_snapshot,
@@ -137,7 +183,8 @@ impl ApprovalNodeDefinition {
             assignee_participant_id: self.assignee_participant_id.clone(),
             assignee_label_snapshot: assignee_label_snapshot.into(),
             at,
-        })
+        })?
+        .with_additional_assignees(self.additional_assignees.clone())
     }
 }
 

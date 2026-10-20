@@ -222,6 +222,7 @@ fn approval_nodes(spec: &ApprovalSpec, accounts: &PreparedAccounts) -> Result<Ve
                 )));
             }
             Ok(DefinitionNodeRequest {
+                additional_assignee_user_ids: Vec::new(),
                 node_id: None,
                 node_name: node.name.clone(),
                 display_order: u32::try_from(index)

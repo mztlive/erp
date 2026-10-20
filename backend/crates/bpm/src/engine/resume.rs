@@ -170,7 +170,10 @@ fn ensure_binding_eligibility_affinity(
         return Err(EngineError::InvalidCommand("资格结果必须属于原审批人"));
     }
     let node = graph.node(&assignee.node_key).ok_or(EngineError::GraphCorrupted)?;
-    if node.assignee_participant_id != assignee.definition_assignee_participant_id {
+    if node.additional_assignees != assignee.additional_assignees
+        || current.additional_assignees != assignee.additional_assignees
+        || node.assignee_participant_id != assignee.definition_assignee_participant_id
+    {
         return Err(EngineError::GraphCorrupted);
     }
     Ok(())

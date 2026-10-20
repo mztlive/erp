@@ -5,7 +5,8 @@ use bpm::engine::{CommitRequired, DefinitionGraph, Eligibility};
 use bpm::ids::{ApprovalCommandReceiptId, ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::types::ApprovalDecision;
 use bpm::model::{
-    ApprovalInstanceAssignee, ApprovalNodeExecution, ApprovalProcessInstance, ParticipantId, Timestamp,
+    ApprovalInstanceAssignee, ApprovalNodeDefinition, ApprovalNodeExecution, ApprovalProcessInstance,
+    ParticipantId, Timestamp,
 };
 use erp_core::common::time::Instant;
 use id_generator::next_id;
@@ -19,8 +20,8 @@ use super::super::hidden_not_found;
 use super::super::notifications::runtime_admin_notification_recipients;
 use super::super::query::list_projection_from_writes;
 use super::super::read_auth::{
-    RevalidateDecisionApproverInput, RuntimeReadSubject, process_required_separation_policy,
-    revalidate_decision_approver, task_proves_current_responsibility,
+    RevalidateDecisionApproverInput, RuntimeReadSubject, open_tasks_match,
+    process_required_separation_policy, revalidate_decision_approver, task_proves_current_responsibility,
 };
 use super::{RuntimeDecisionCommand, map_approval_task_error, map_runtime_graph_error};
 use crate::entity::approval_integration::ApprovalSubjectSnapshot;
@@ -232,7 +233,53 @@ async fn load_open_decision_tasks(
         .find_assignee_for_node(&subject.instance_id, &loaded.execution.node_key, executor)
         .await?
         .ok_or_else(|| Error::ConflictError("实例缺少节点审批人绑定".to_string()))?;
+    ensure_decision_binding(&loaded.execution, &instance_assignee, actor.id())?;
+    if !loaded.execution.additional_assignees.is_empty() {
+        ensure_or_sign_tasks(
+            &loaded.execution,
+            &open_tasks,
+            &read_subject,
+            subject.spec.owner_role.as_str(),
+        )?;
+    }
     Ok((open_tasks, instance_assignee))
+}
+
+fn ensure_decision_binding(
+    execution: &ApprovalNodeExecution,
+    binding: &ApprovalInstanceAssignee,
+    actor_id: &str,
+) -> Result<()> {
+    binding.ensure_unchanged_from_definition().map_err(|error| Error::ConflictError(error.to_string()))?;
+    if binding.current_assignee_participant_id != execution.assignee_participant_id
+        || binding.additional_assignees != execution.additional_assignees
+        || !binding.has_participant(actor_id)
+    {
+        return Err(Error::ConflictError("APPROVAL_RESPONSIBILITY_CONFLICT".into()));
+    }
+    Ok(())
+}
+
+fn ensure_or_sign_tasks(
+    execution: &ApprovalNodeExecution,
+    tasks: &[WorkItem],
+    subject: &RuntimeReadSubject,
+    role: &str,
+) -> Result<()> {
+    if !open_tasks_match(execution, tasks)
+        || tasks.iter().any(|task| {
+            !task_proves_current_responsibility(
+                task,
+                execution,
+                subject,
+                task.owner_user_id.as_deref().unwrap_or_default(),
+                role,
+            )
+        })
+    {
+        return Err(Error::ConflictError("审批任务与冻结参与人不一致".into()));
+    }
+    Ok(())
 }
 
 /// 重验当前与下一节点资格，并形成尚未写库的决定计划。
@@ -282,13 +329,20 @@ async fn revalidate_decision_eligibilities(
 ) -> Result<(DefinitionGraph, Eligibility, Eligibility)> {
     let separation_policy = process_required_separation_policy(loaded.document_type)?;
     let graph = load_frozen_definition_graph(db, loaded, executor).await?;
+    let actor_name = loaded
+        .execution
+        .participants()
+        .into_iter()
+        .find(|person| person.participant_id.as_str() == actor.id())
+        .map(|person| person.name)
+        .unwrap_or_default();
     let current_eligibility = revalidate_decision_approver(
         db,
         rbac,
         object_read,
         RevalidateDecisionApproverInput {
             assignee_id: actor.id(),
-            assignee_name: &loaded.execution.assignee_name_snapshot,
+            assignee_name: &actor_name,
             authenticated_actor: Some(actor),
             snapshot: &loaded.snapshot,
             spec: &loaded.spec,
@@ -307,28 +361,43 @@ async fn revalidate_decision_eligibilities(
         .map_err(map_runtime_graph_error)?;
     let next_eligibility = match decision_target {
         Some(node_key) => match graph.node(&node_key) {
-            Some(node) => {
-                revalidate_decision_approver(
-                    db,
-                    rbac,
-                    object_read,
-                    RevalidateDecisionApproverInput {
-                        assignee_id: node.assignee_participant_id.as_str(),
-                        assignee_name: &node.assignee_label_snapshot,
-                        authenticated_actor: None,
-                        snapshot: &loaded.snapshot,
-                        spec: &loaded.spec,
-                        separation_policy,
-                    },
-                    executor,
-                )
-                .await?
-            },
+            Some(node) => revalidate_node_eligibility(db, rbac, object_read, loaded, node, executor).await?,
             None => return Err(Error::ConflictError("审批定义缺少目标节点".to_string())),
         },
         None => current_eligibility.clone(),
     };
     Ok((graph, current_eligibility, next_eligibility))
+}
+
+async fn revalidate_node_eligibility(
+    db: &Database,
+    rbac: &impl crate::ports::WorkflowAuthorizationPort,
+    object_read: &dyn crate::ports::ApprovalObjectReadPort,
+    loaded: &OpenDecisionRuntime,
+    node: &ApprovalNodeDefinition,
+    executor: &mut dyn Executor,
+) -> Result<Eligibility> {
+    let mut members = Vec::new();
+    for person in node.participants() {
+        members.push(
+            revalidate_decision_approver(
+                db,
+                rbac,
+                object_read,
+                RevalidateDecisionApproverInput {
+                    assignee_id: person.participant_id.as_str(),
+                    assignee_name: &person.name,
+                    authenticated_actor: None,
+                    snapshot: &loaded.snapshot,
+                    spec: &loaded.spec,
+                    separation_policy: process_required_separation_policy(loaded.document_type)?,
+                },
+                executor,
+            )
+            .await?,
+        );
+    }
+    Eligibility::any_of(members).map_err(|error| Error::ValidationError(error.to_string()))
 }
 
 async fn load_frozen_definition_graph(
@@ -365,7 +434,11 @@ fn plan_open_decision(
         current: loaded.execution.clone(),
         work_item_id: command.work_item_id.clone(),
         task_owner_id: loaded.item.owner_user_id.clone().unwrap_or_default(),
-        instance_assignee_id: loaded.instance_assignee.current_assignee_participant_id.as_str().to_string(),
+        instance_assignee_id: if loaded.instance_assignee.has_participant(actor.id()) {
+            actor.id().to_string()
+        } else {
+            String::new()
+        },
         decision: command.decision,
         reason: command.reason.clone(),
         expected_task_version: command.expected_task_version,

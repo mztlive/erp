@@ -462,7 +462,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
             }
             if executions.iter().any(|execution| {
                 execution.process_instance_id == instance_id
-                    && execution.assignee_participant_id.as_str() == actor.id()
+                    && execution.has_participant(actor.id())
                     && execution
                         .decided_by
                         .as_ref()
@@ -516,18 +516,20 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         };
         if execution.status != ApprovalNodeExecutionStatus::Active
             || execution.round_no != subject.instance.current_round_no
-            || execution.assignee_participant_id.as_str() != actor.id()
+            || !execution.has_participant(actor.id())
         {
             return Ok(false);
         }
         let execution_id = ApprovalNodeExecutionId::new(execution.base.id.clone());
         let tasks =
             self.db.work_items().open_approval_tasks_for_execution(&execution_id, &mut NoTransaction).await?;
-        if tasks.len() != 1 {
+        if !super::read_auth::open_tasks_match(execution, &tasks) {
             return Ok(false);
         }
         let owner_role = adapter_spec_of(subject.document_type)?.owner_role;
-        Ok(task_proves_current_responsibility(&tasks[0], execution, subject, actor.id(), owner_role.as_str()))
+        Ok(tasks.iter().any(|task| {
+            task_proves_current_responsibility(task, execution, subject, actor.id(), owner_role.as_str())
+        }))
     }
 }
 
@@ -756,7 +758,7 @@ pub(super) fn list_projection_from_writes(
         current_node_name: current.map(|item| item.node_name.clone()),
         current_assignee_participant_id: current
             .map(|item| item.assignee_participant_id.as_str().to_string()),
-        current_assignee_name: current.map(|item| item.assignee_name_snapshot.clone()),
+        current_assignee_name: current.map(|item| item.assignee_display_name()),
         latest_rejected_execution_id: reject_reason.as_ref().map(|_| ended_execution_id.to_string()),
         latest_rejection_summary: reject_reason,
         last_status_changed_at: Some(now.unix_secs()),

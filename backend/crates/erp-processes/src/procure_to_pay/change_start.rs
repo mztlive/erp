@@ -17,7 +17,9 @@ use erp_workflow::entity::document_registry::business_document::ApprovalDefiniti
 use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
 use erp_workflow::repository::bpm::ApprovalInstanceListProjection;
 use erp_workflow::repository::prelude::*;
-use erp_workflow::service::approval::execution::authorization::{AuthorizationFailure, converge_eligibility};
+use erp_workflow::service::approval::execution::authorization::{
+    AuthorizationFailure, converge_node_eligibility,
+};
 use erp_workflow::service::approval::execution::idempotency::{
     ReceiptBranch, StartIdentityParams, normalize_idempotency_key, payload_conflict_error, start_identity,
     start_scope_candidates,
@@ -271,15 +273,15 @@ pub(super) fn build_purchase_change_start_input(
         .nodes
         .iter()
         .map(|node| {
-            let assignee = node.assignee_participant_id.as_str();
-            let failure = match purchase_change_order_object_readable(organization_id, assignee) {
-                Ok(_) => None,
-                Err(_) => Some(AuthorizationFailure::CannotReadSubject),
-            };
             Ok(StartBindingInput {
                 node_key: node.node_key.clone(),
                 assignee_id: ApprovalInstanceAssigneeId::new(next_id()),
-                eligibility: converge_eligibility(assignee, &node.assignee_label_snapshot, failure)?,
+                eligibility: converge_node_eligibility(node, |assignee| {
+                    match purchase_change_order_object_readable(organization_id, assignee) {
+                        Ok(_) => None,
+                        Err(_) => Some(AuthorizationFailure::CannotReadSubject),
+                    }
+                })?,
             })
         })
         .collect::<Result<Vec<_>>>()?;
@@ -505,7 +507,7 @@ fn list_projection_from_execution(
         current_node_key: Some(execution.node_key.clone()),
         current_node_name: Some(execution.node_name.clone()),
         current_assignee_participant_id: Some(execution.assignee_participant_id.as_str().to_string()),
-        current_assignee_name: Some(execution.assignee_name_snapshot.clone()),
+        current_assignee_name: Some(execution.assignee_display_name()),
         latest_rejected_execution_id: None,
         latest_rejection_summary: None,
         last_status_changed_at: Some(now.unix_secs()),

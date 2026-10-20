@@ -88,6 +88,7 @@ fn build_enter_plan(
     {
         return Err(EngineError::InvalidCommand("节点责任人必须匹配定义审批人"));
     }
+    input.eligibility.validate_node(node)?;
     let execution_input = NewNodeExecution {
         id: input.execution_id.clone(),
         process_instance_id: input.instance.typed_id(),
@@ -104,26 +105,39 @@ fn build_enter_plan(
     if let Some(code) = input.eligibility.blocked_code() {
         return blocked_enter(input.instance, execution_input, input.execution_id, node, code, input.now);
     }
-    let execution = ApprovalNodeExecution::new_active(execution_input)?;
+    let execution = ApprovalNodeExecution::new_active(execution_input)?
+        .with_additional_assignees(node.additional_assignees.clone())?;
     input.instance.set_current_execution(input.execution_id.clone(), input.now)?;
     if input.instance.status == ApprovalProcessInstanceStatus::Blocked {
         input.instance.exit_blocked(input.now)?;
     }
     let mut plan = TransitionPlan::for_instance(input.instance, CommitRequired::Proceed);
-    let entered = BpmEvent::new(BpmEventKind::NodeEntered, plan.instance.typed_id(), input.round_no)
-        .with_execution(input.execution_id.clone())
-        .with_node_key(node.node_key.clone())
-        .with_actor(input.participant.clone());
-    plan.events.push(entered);
-    plan.task_intents.push(TaskIntent::HumanTaskRequested {
-        execution_id: input.execution_id,
-        assignee: input.participant,
-        node_key: node.node_key.clone(),
-        node_name: node.node_name.clone(),
-        round_no: input.round_no,
-    });
+    add_enter_intents(&mut plan, &input.eligibility, &execution, node);
     plan.created_executions.push(execution);
     Ok(plan)
+}
+
+fn add_enter_intents(
+    plan: &mut TransitionPlan,
+    eligibility: &Eligibility,
+    execution: &ApprovalNodeExecution,
+    node: &ApprovalNodeDefinition,
+) {
+    plan.events.push(
+        BpmEvent::new(BpmEventKind::NodeEntered, plan.instance.typed_id(), execution.round_no)
+            .with_execution(execution.typed_id())
+            .with_node_key(node.node_key.clone())
+            .with_actor(execution.assignee_participant_id.clone()),
+    );
+    for member in eligibility.members().into_iter().filter(|member| member.blocked_code().is_none()) {
+        plan.task_intents.push(TaskIntent::HumanTaskRequested {
+            execution_id: execution.typed_id(),
+            assignee: member.participant(),
+            node_key: node.node_key.clone(),
+            node_name: node.node_name.clone(),
+            round_no: execution.round_no,
+        });
+    }
 }
 
 /// 人员或结构资格无效时创建受阻执行。
@@ -135,7 +149,8 @@ fn blocked_enter(
     code: ApprovalBlockerCode,
     now: Timestamp,
 ) -> EngineResult<TransitionPlan> {
-    let execution = ApprovalNodeExecution::new_blocked(input, code)?;
+    let execution = ApprovalNodeExecution::new_blocked(input, code)?
+        .with_additional_assignees(node.additional_assignees.clone())?;
     instance.set_current_execution(execution_id.clone(), now)?;
     instance.enter_blocked(code, now)?;
     let mut plan = TransitionPlan::for_instance(instance, CommitRequired::Blocked);

@@ -1,8 +1,8 @@
 //! 写时授权重验结果收敛为引擎资格。
 
 use bpm::engine::Eligibility;
-use bpm::model::ParticipantId;
 use bpm::model::types::ApprovalBlockerCode;
+use bpm::model::{ApprovalNodeDefinition, ParticipantId};
 
 use crate::error::{Error, Result};
 
@@ -130,6 +130,31 @@ pub fn ensure_triple_responsibility(
         return Ok(());
     }
     Err(Error::ConflictError("APPROVAL_RESPONSIBILITY_CONFLICT".to_string()))
+}
+
+/// 按定义顺序重验同节点全部参与人并组合或签资格。
+/// # 参数
+/// `node` 为冻结节点，`check` 对每人返回调用方资格失败原因。
+/// # 返回
+/// 返回完整节点资格；单人保持旧格式。
+/// # 错误
+/// 人员、显示名或集合非法时失败。
+pub fn converge_node_eligibility(
+    node: &ApprovalNodeDefinition,
+    mut check: impl FnMut(&str) -> Option<AuthorizationFailure>,
+) -> Result<Eligibility> {
+    let members = node
+        .participants()
+        .into_iter()
+        .map(|person| {
+            converge_eligibility(
+                person.participant_id.as_str(),
+                &person.name,
+                check(person.participant_id.as_str()),
+            )
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Eligibility::any_of(members).map_err(|error| Error::ValidationError(error.to_string()))
 }
 
 #[cfg(test)]

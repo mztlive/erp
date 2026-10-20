@@ -1,5 +1,7 @@
 //! 真实实例、当前执行、开放任务与历史使用同一调用方执行器读取。
 
+use std::collections::HashSet;
+
 use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use bpm::model::types::{ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus};
 use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance};
@@ -170,13 +172,15 @@ fn ensure_runtime_tasks(
     current: Option<&ApprovalNodeExecution>,
     tasks: &[WorkItem],
 ) -> Result<()> {
-    if tasks.len() > 1 {
+    if tasks.len() > current.map_or(0, |execution| 1 + execution.additional_assignees.len())
+        || tasks.iter().map(|task| &task.owner_user_id).collect::<HashSet<_>>().len() != tasks.len()
+    {
         return Err(Error::ConflictError("当前审批执行存在多个开放任务".into()));
     }
     for task in tasks {
         if current.is_none_or(|execution| {
             task.approval_node_execution_id.as_ref().map(AsRef::as_ref) != Some(execution.base.id.as_str())
-                || task.owner_user_id.as_deref() != Some(execution.assignee_participant_id.as_str())
+                || !task.owner_user_id.as_deref().is_some_and(|id| execution.has_participant(id))
         }) || !task.matches_business_object(instance.subject.subject_kind(), instance.subject.subject_id())
             || !task.matches_subject_version(&instance.subject_version.to_string())
         {
@@ -195,9 +199,9 @@ fn runtime_cancellable(
     current.is_some()
         && !instance.blocker_code.is_some_and(requires_blocked_cancel)
         && !current.and_then(|execution| execution.blocker_code).is_some_and(requires_blocked_cancel)
-        && instance
-            .cancellation_task_policy()
-            .is_ok_and(|policy| policy.ensure_open_task_count(task_count).is_ok())
+        && instance.cancellation_task_policy().is_ok_and(|policy| {
+            current.is_some_and(|execution| execution.ensure_cancellation_tasks(policy, task_count).is_ok())
+        })
 }
 
 /// 使用权威字段映射版本、节点、任务和最后驳回；不做 JSON 转换。
@@ -214,7 +218,8 @@ fn instance_view(
         current_node: current.map(|execution| execution.node_key.clone()),
         current_node_name: current.map(|execution| execution.node_name.clone()),
         current_assignee: current.map(|execution| execution.assignee_participant_id.as_str().to_owned()),
-        current_assignee_name: current.and_then(|execution| optional_text(&execution.assignee_name_snapshot)),
+        current_assignee_name: current
+            .and_then(|execution| optional_text(&execution.assignee_display_name())),
         latest_rejection: rejected
             .and_then(|execution| execution.decision_reason.as_deref())
             .and_then(optional_text),
@@ -222,7 +227,7 @@ fn instance_view(
             .and_then(|execution| execution.decided_by.as_ref())
             .map(|actor| actor.as_str().to_owned()),
         latest_rejection_by_name: rejected
-            .and_then(|execution| optional_text(&execution.assignee_name_snapshot)),
+            .and_then(|execution| optional_text(&execution.assignee_display_name())),
         subject_version: Some(instance.subject_version.to_string()),
         instance_version: Some(instance.base.version.to_string()),
         current_execution_id: current.map(|execution| execution.base.id.clone()),

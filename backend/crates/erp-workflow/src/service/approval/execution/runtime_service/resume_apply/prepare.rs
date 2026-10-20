@@ -62,7 +62,6 @@ pub(super) struct PreparedResume {
     pub(super) closed_task_guard: Option<ClosedTaskGuard>,
     pub(super) snapshot: ApprovalSubjectSnapshot,
     pub(super) spec: ApprovalAdapterSpec,
-    pub(super) assignee_id: String,
     pub(super) assignee_name: String,
     pub(super) subject_version: String,
     pub(super) document_type_label: String,
@@ -88,15 +87,21 @@ impl<A: WorkflowAuthorizationPort> ApprovalRuntimeService<A> {
         idempotency_key: IdempotencyKey,
     ) -> Result<Option<PreparedResume>> {
         let runtime = self.load_resume_runtime(actor, command).await?;
-        let eligibility = self
-            .revalidate_approver(
-                runtime.assignee.current_assignee_participant_id.as_str(),
-                &runtime.current.assignee_name_snapshot,
-                &runtime.snapshot,
-                &runtime.spec,
-                &mut NoTransaction,
-            )
-            .await?;
+        let mut members = Vec::new();
+        for person in runtime.current.participants() {
+            members.push(
+                self.revalidate_approver(
+                    person.participant_id.as_str(),
+                    &person.name,
+                    &runtime.snapshot,
+                    &runtime.spec,
+                    &mut NoTransaction,
+                )
+                .await?,
+            );
+        }
+        let eligibility =
+            Eligibility::any_of(members).map_err(|error| Error::ValidationError(error.to_string()))?;
         ensure_resume_approver_recovered(&eligibility)?;
         let graph = self
             .db
@@ -312,7 +317,6 @@ fn finish_prepared_resume(
         expected_execution_version: command.expected_execution_version,
         subject_version: runtime.snapshot.subject_version.to_string(),
         document_type_label: runtime.document_type.label().to_string(),
-        assignee_id: runtime.assignee.current_assignee_participant_id.as_str().to_string(),
         assignee_name: runtime.current.assignee_name_snapshot,
         ended_execution_id: runtime.current.base.id,
         closed_task_guard: runtime.closed_task_guard,

@@ -22,7 +22,7 @@ pub mod store;
 pub mod view;
 
 pub use apply_plan::{DomainActionKind, PlannedWrites, apply_plan};
-pub use authorization::{AuthorizationFailure, converge_eligibility};
+pub use authorization::{AuthorizationFailure, converge_eligibility, converge_node_eligibility};
 use bpm::engine::{DefinitionGraph, Eligibility};
 use bpm::model::{ApprovalCommandReceipt, IdempotencyKey, Timestamp};
 pub use cancel::{

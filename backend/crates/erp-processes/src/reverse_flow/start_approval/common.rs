@@ -12,7 +12,9 @@ use bpm::model::{ParticipantId, SubjectRef, Timestamp};
 use erp_core::common::time::Instant;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
-use erp_workflow::service::approval::execution::authorization::{AuthorizationFailure, converge_eligibility};
+use erp_workflow::service::approval::execution::authorization::{
+    AuthorizationFailure, converge_node_eligibility,
+};
 use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
 use erp_workflow::service::approval::execution::{ExecutionCommandInput, StartExecutionInput};
 use erp_workflow::service::approval::process_kind::process_kind_of;
@@ -145,16 +147,16 @@ pub fn reverse_start_bindings(
 ) -> Result<Vec<StartAssigneeBinding>> {
     let mut bindings = Vec::with_capacity(graph.nodes.len());
     for node in &graph.nodes {
-        let assignee = node.assignee_participant_id.as_str();
-        let failure = match readable(organization_id, assignee) {
-            Ok(_) => None,
-            Err(_) => Some(AuthorizationFailure::CannotReadSubject),
-        };
         bindings.push(StartAssigneeBinding {
             id: ApprovalInstanceAssigneeId::new(next_id()),
             node_key: node.node_key.clone(),
             participant: node.assignee_participant_id.clone(),
-            eligibility: converge_eligibility(assignee, &node.assignee_label_snapshot, failure)?,
+            eligibility: converge_node_eligibility(node, |assignee| {
+                match readable(organization_id, assignee) {
+                    Ok(_) => None,
+                    Err(_) => Some(AuthorizationFailure::CannotReadSubject),
+                }
+            })?,
         });
     }
     if bindings.is_empty() {

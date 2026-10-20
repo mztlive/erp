@@ -15,21 +15,34 @@ export const createDraftSchema = z.object({
         ),
 })
 
-const editorNodeSchema = z.object({
-    client_id: z.string().min(1),
-    node_id: z.string().nullable(),
-    node_name: z
-        .string()
-        .trim()
-        .min(1, "请输入节点名称")
-        .max(64, "节点名称过长"),
-    assignee_user_id: z.string().min(1, "请选择一位审批人"),
-    assignee_name: z.string(),
-    node_purpose: z.string().nullable(),
-    unsaved_purpose_slot: z.boolean(),
-})
+const editorNodeSchema = z
+    .object({
+        client_id: z.string().min(1),
+        node_id: z.string().nullable(),
+        node_name: z
+            .string()
+            .trim()
+            .min(1, "请输入节点名称")
+            .max(64, "节点名称过长"),
+        assignee_user_id: z.string().min(1, "请选择一位审批人"),
+        assignee_name: z.string(),
+        additional_assignees: z
+            .array(z.object({ user_id: z.string().min(1), name: z.string() }))
+            .max(49, "每个节点最多 50 名审批人"),
+        node_purpose: z.string().nullable(),
+        unsaved_purpose_slot: z.boolean(),
+    })
+    .refine(
+        (node) =>
+            new Set([
+                node.assignee_user_id,
+                ...node.additional_assignees.map((person) => person.user_id),
+            ]).size ===
+            node.additional_assignees.length + 1,
+        "同一节点审批人不能重复",
+    )
 
-/** 草稿编辑器校验：至少一个节点，每人恰好一位审批人。 */
+/** 草稿编辑器校验：至少一个节点，每个节点至少一位审批人，多人按或签处理。 */
 export const definitionEditorSchema = z.object({
     name: z.string().trim().min(1, "请输入审批流程名称").max(64, "名称过长"),
     nodes: z.array(editorNodeSchema).min(1, "至少需要一个审批节点"),

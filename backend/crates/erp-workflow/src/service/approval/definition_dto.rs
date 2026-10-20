@@ -2,6 +2,10 @@
 //!
 //! 写请求使用 `deny_unknown_fields`，拒绝客户端提交节点键、类型、用途、连线或处理器。
 
+use std::collections::HashSet;
+
+use bpm::model::{ApprovalNodeDefinition, ApprovalParticipant, ModelError, ModelResult};
+use bpm::{Error as BpmError, ParticipantId};
 use serde::{Deserialize, Serialize};
 
 use crate::entity::document_registry::DocumentType;
@@ -62,6 +66,9 @@ pub struct DefinitionNodeRequest {
     pub display_order: u32,
     /// 指定审批人账号。
     pub assignee_user_id: String,
+    /// 同节点的其他或签审批人账号。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub additional_assignee_user_ids: Vec<String>,
 }
 
 impl DefinitionNodeRequest {
@@ -77,7 +84,13 @@ impl DefinitionNodeRequest {
     /// # 错误
     /// 无。
     pub fn new(node_name: String, assignee_user_id: String) -> Self {
-        Self { node_id: None, node_name, display_order: 1, assignee_user_id }
+        Self {
+            node_id: None,
+            node_name,
+            display_order: 1,
+            assignee_user_id,
+            additional_assignee_user_ids: Vec::new(),
+        }
     }
 
     /// 清洗客户端提交的节点文本，供命令摘要与 BPM 草稿构造共用。
@@ -93,15 +106,26 @@ impl DefinitionNodeRequest {
     ///
     /// # 关键业务约束
     /// 本方法只清洗外部文本，不生成节点 ID，也不判断已有节点归属。
-    pub fn prepare(mut self) -> bpm::model::types::ModelResult<Self> {
+    pub fn prepare(mut self) -> ModelResult<Self> {
         self.node_id = self.node_id.map(|value| value.trim().to_string()).filter(|value| !value.is_empty());
-        self.node_name = bpm::model::ApprovalNodeDefinition::normalize_name(self.node_name)?;
+        self.node_name = ApprovalNodeDefinition::normalize_name(self.node_name)?;
         let assignee = self.assignee_user_id.trim().to_string();
-        bpm::ParticipantId::new(assignee.clone()).map_err(|error| match error {
-            bpm::Error::InvalidParticipantId(message) => bpm::model::types::ModelError::InvalidField(message),
-            _ => bpm::model::types::ModelError::InvalidField("处理人引用不能为空"),
+        ParticipantId::new(assignee.clone()).map_err(|error| match error {
+            BpmError::InvalidParticipantId(message) => ModelError::InvalidField(message),
+            _ => ModelError::InvalidField("处理人引用不能为空"),
         })?;
         self.assignee_user_id = assignee;
+        let mut seen = HashSet::from([self.assignee_user_id.clone()]);
+        if self.additional_assignee_user_ids.len() > 49 {
+            return Err(ModelError::InvalidField("每个节点最多配置 50 名审批人"));
+        }
+        for id in &mut self.additional_assignee_user_ids {
+            *id = id.trim().to_string();
+            ParticipantId::new(id.clone()).map_err(|_| ModelError::InvalidField("审批人引用无效"))?;
+            if !seen.insert(id.clone()) {
+                return Err(ModelError::InvalidField("同一节点审批人不能重复"));
+            }
+        }
         Ok(self)
     }
 }
@@ -235,6 +259,8 @@ pub struct DefinitionNodeView {
     pub assignee_user_id: String,
     /// 审批人显示名快照。
     pub assignee_name_snapshot: String,
+    /// 同节点其他参与人的姓名快照。
+    pub additional_assignees: Vec<ApprovalParticipant>,
 }
 
 /// 定义详情。
@@ -395,6 +421,7 @@ mod tests {
     #[test]
     fn node_request_prepare_trims_external_text() {
         let prepared = DefinitionNodeRequest {
+            additional_assignee_user_ids: Vec::new(),
             node_id: Some("  node-1  ".to_string()),
             node_name: " 仓储复核 ".to_string(),
             display_order: 1,
@@ -407,6 +434,7 @@ mod tests {
         assert_eq!(prepared.assignee_user_id, "u1");
 
         let blank_id = DefinitionNodeRequest {
+            additional_assignee_user_ids: Vec::new(),
             node_id: Some("   ".to_string()),
             node_name: "财务".to_string(),
             display_order: 2,
@@ -418,6 +446,7 @@ mod tests {
 
         assert!(
             DefinitionNodeRequest {
+                additional_assignee_user_ids: Vec::new(),
                 node_id: None,
                 node_name: "   ".to_string(),
                 display_order: 1,
@@ -428,6 +457,7 @@ mod tests {
         );
         assert!(
             DefinitionNodeRequest {
+                additional_assignee_user_ids: Vec::new(),
                 node_id: None,
                 node_name: "仓储".to_string(),
                 display_order: 1,
@@ -436,5 +466,24 @@ mod tests {
             .prepare()
             .is_err()
         );
+    }
+
+    #[test]
+    fn or_sign_request_normalizes_members_and_rejects_duplicates() {
+        let mut request = DefinitionNodeRequest::new("复核".into(), "u1".into());
+        request.additional_assignee_user_ids = vec![" u2 ".into(), "u3".into()];
+        assert_eq!(request.clone().prepare().unwrap().additional_assignee_user_ids, ["u2", "u3"]);
+        request.additional_assignee_user_ids.push("u1".into());
+        assert!(request.prepare().is_err());
+        let old: DefinitionNodeRequest =
+            serde_json::from_str(r#"{"node_name":"复核","display_order":1,"assignee_user_id":"u1"}"#)
+                .unwrap();
+        assert!(old.additional_assignee_user_ids.is_empty());
+        let mut empty = old.clone();
+        empty.additional_assignee_user_ids = vec![" ".into()];
+        assert!(empty.prepare().is_err());
+        let mut too_many = old;
+        too_many.additional_assignee_user_ids = (0..50).map(|i| format!("other{i}")).collect();
+        assert!(too_many.prepare().is_err());
     }
 }

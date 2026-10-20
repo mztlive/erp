@@ -21,7 +21,7 @@ use erp_workflow::entity::document_registry::business_document::ApprovalDefiniti
 use erp_workflow::ports::WorkflowAuthorizationPort;
 use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::business_adapter::ensure_separation_of_duties;
-use erp_workflow::service::approval::execution::authorization::converge_eligibility;
+use erp_workflow::service::approval::execution::authorization::converge_node_eligibility;
 use erp_workflow::service::approval::execution::idempotency::{
     ReceiptBranch, StartIdentityParams, normalize_idempotency_key, payload_conflict_error, start_identity,
 };
@@ -647,12 +647,11 @@ async fn start_bindings_from_graph(
         .await?;
     let mut bindings = Vec::with_capacity(graph.nodes.len());
     for node in &graph.nodes {
-        let assignee = node.assignee_participant_id.as_str();
         bindings.push(StartAssigneeBinding {
             id: ApprovalInstanceAssigneeId::new(next_id()),
             node_key: node.node_key.clone(),
             participant: node.assignee_participant_id.clone(),
-            eligibility: converge_eligibility(assignee, &node.assignee_label_snapshot, None)?,
+            eligibility: converge_node_eligibility(node, |_| None)?,
         });
     }
     Ok(bindings)
@@ -684,15 +683,14 @@ pub(super) async fn revalidate_stock_adjustment_start_candidates(
     if organization_id.trim().is_empty() {
         return Err(Error::ValidationError("库存调整责任组织不能为空".to_string()));
     }
-    let assignee_ids =
-        graph.nodes.iter().map(|node| node.assignee_participant_id.as_str().to_string()).collect::<Vec<_>>();
+    let assignee_ids = graph.assignee_ids();
     let policy = require_process_required(DocumentType::StockAdjustment)?;
     ensure_separation_of_duties(policy.separation_of_duties_policy, initiator_id, &assignee_ids)?;
     let accounts = stock_adjustment_candidate_accounts(db, &assignee_ids, executor).await?;
     let mut checked = HashSet::with_capacity(assignee_ids.len());
     let auth = crate::adapters::workflow::workflow_auth(db.clone(), rbac.clone());
-    for node in &graph.nodes {
-        let assignee = node.assignee_participant_id.as_str();
+    for assignee_id in &assignee_ids {
+        let assignee = assignee_id.as_str();
         if accounts.is_some() && !checked.insert(assignee) {
             continue;
         }

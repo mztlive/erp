@@ -38,6 +38,8 @@ pub enum ApprovalDecisionTaskError {
 pub enum ApprovalRuntimeTaskEnding {
     /// 当前审批决定已经完成。
     Complete,
+    /// 或签首个有效任务完成，其余任务关闭。
+    CompleteAnyOf { work_item_id: String },
     /// 当前执行因受控原因关闭。
     Close {
         /// 审批运行时提供的稳定关闭原因。
@@ -109,6 +111,8 @@ impl WorkItem {
             impact_summary: None,
         };
         let mut item = Self::new_at_with_optional_responsibility(id, generic, None, Vec::new(), at)?;
+        item.responsibility_key =
+            Some(format!("approval:{}:{}", data.approval_node_execution_id, owner_user_id));
         item.work_item_type = WorkItemType::DocumentApproval;
         item.approval_node_execution_id = Some(data.approval_node_execution_id);
         item.assignment_source = AssignmentSource::ApprovalRuntime;
@@ -269,11 +273,33 @@ impl WorkItem {
         ending: &ApprovalRuntimeTaskEnding,
         at: Instant,
     ) -> Result<Vec<Self>> {
+        if let ApprovalRuntimeTaskEnding::CompleteAnyOf { work_item_id } = ending
+            && items
+                .iter()
+                .filter(|item| {
+                    &item.base.id == work_item_id && item.owner_user_id.as_deref() == Some(actor_id)
+                })
+                .count()
+                != 1
+        {
+            return Err(Error::from("或签决定任务与操作人不一致"));
+        }
         for item in &mut items {
             if item.approval_node_execution_id.as_ref() != Some(execution_id) {
                 return Err(Error::from("审批任务不属于当前节点执行"));
             }
             match ending {
+                ApprovalRuntimeTaskEnding::CompleteAnyOf { work_item_id } => {
+                    if &item.base.id == work_item_id {
+                        item.complete_by_approval_runtime(actor_id, at)?;
+                    } else {
+                        item.close_by_approval_runtime(
+                            actor_id,
+                            WorkItemCloseData { close_reason: "APPROVAL_OR_SIGN_RESOLVED".into() },
+                            at,
+                        )?;
+                    }
+                },
                 ApprovalRuntimeTaskEnding::Complete => {
                     item.complete_by_approval_runtime(actor_id, at)?;
                 },
@@ -482,6 +508,46 @@ mod tests {
                 "bob",
                 &ApprovalRuntimeTaskEnding::Complete,
                 Instant::from_unix_secs(120),
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn or_sign_completes_winner_and_closes_other_tasks() {
+        let first = approval_item("wi-1");
+        let mut second = approval_item("wi-2");
+        second.owner_user_id = Some("bob".into());
+        let ended = WorkItem::end_all_for_approval_execution(
+            vec![first.clone(), second.clone()],
+            &ApprovalNodeExecutionId::new("exec-1"),
+            "bob",
+            &ApprovalRuntimeTaskEnding::CompleteAnyOf { work_item_id: "wi-2".into() },
+            Instant::from_unix_secs(120),
+        )
+        .unwrap();
+        assert_eq!(ended[0].status, WorkItemStatus::Closed);
+        assert_eq!(ended[0].close_reason.as_deref(), Some("APPROVAL_OR_SIGN_RESOLVED"));
+        assert_eq!(ended[0].closed_by.as_deref(), Some("bob"));
+        assert_eq!(ended[1].status, WorkItemStatus::Completed);
+        assert_eq!(ended[1].completed_by.as_deref(), Some("bob"));
+        assert!(
+            WorkItem::end_all_for_approval_execution(
+                ended,
+                &ApprovalNodeExecutionId::new("exec-1"),
+                "alice",
+                &ApprovalRuntimeTaskEnding::CompleteAnyOf { work_item_id: "wi-1".into() },
+                Instant::from_unix_secs(121)
+            )
+            .is_err()
+        );
+        assert!(
+            WorkItem::end_all_for_approval_execution(
+                vec![first, second],
+                &ApprovalNodeExecutionId::new("exec-1"),
+                "outsider",
+                &ApprovalRuntimeTaskEnding::CompleteAnyOf { work_item_id: "wi-2".into() },
+                Instant::from_unix_secs(120)
             )
             .is_err()
         );

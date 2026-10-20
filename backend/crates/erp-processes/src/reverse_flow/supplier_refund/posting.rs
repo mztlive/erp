@@ -84,10 +84,8 @@ async fn apply_supplier_refund_posting(
         payment.record_cash_refund(refund.amount)?;
     }
     db.supplier_payments().update(&mut payment, executor).await?;
-    let allocations = db
-        .payment_allocations()
-        .find_allocations_by_payments(&[original_payment_id], executor)
-        .await?;
+    let allocations =
+        db.payment_allocations().find_allocations_by_payments(&[original_payment_id], executor).await?;
     let entry_ids = allocations.into_iter().map(|line| line.payable_entry_id).collect::<Vec<_>>();
     let entries = db.payable_entries().find_entries_by_ids(&entry_ids, executor).await?;
     sync_return_accounts(

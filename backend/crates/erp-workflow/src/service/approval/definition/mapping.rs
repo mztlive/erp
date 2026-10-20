@@ -219,6 +219,7 @@ pub(super) fn node_view(node: &ApprovalNodeDefinition) -> DefinitionNodeView {
         node_purpose: node.node_purpose.clone(),
         display_order: node.display_order,
         assignee_user_id: node.assignee_participant_id.as_str().to_string(),
+        additional_assignees: node.additional_assignees.clone(),
         assignee_name_snapshot: node.assignee_label_snapshot.clone(),
     }
 }

@@ -18,6 +18,8 @@ export function AssigneeCombobox({
     disabled = false,
     assignees,
     id,
+    excludedIds = [],
+    placeholder = "搜索并选择一位审批人",
 }: {
     documentType: DocumentType
     value: string
@@ -27,6 +29,8 @@ export function AssigneeCombobox({
     /** 测试可注入候选人，生产路径走 Query。 */
     assignees?: readonly EligibleAssignee[]
     id?: string
+    excludedIds?: readonly string[]
+    placeholder?: string
 }) {
     const [search, setSearch] = React.useState("")
     const [debounced, setDebounced] = React.useState("")
@@ -41,7 +45,9 @@ export function AssigneeCombobox({
         debounced,
         assignees == null && !disabled,
     )
-    const rows = assignees ?? query.data ?? []
+    const rows = (assignees ?? query.data ?? []).filter(
+        (person) => !excludedIds.includes(person.user_id),
+    )
     // 候选人已经过服务端资格过滤，主行只显示人名；资格说明见空状态。
     const options = rows.map((item) => ({
         value: item.user_id,
@@ -82,7 +88,7 @@ export function AssigneeCombobox({
             onSearchChange={setSearch}
             filterMode="remote"
             loading={assignees == null && query.isFetching}
-            placeholder="搜索并选择一位审批人"
+            placeholder={placeholder}
             emptyLabel="没有符合定义期资格的账号"
             disabled={disabled}
             allowClear

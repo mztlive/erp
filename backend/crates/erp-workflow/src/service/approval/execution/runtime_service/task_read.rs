@@ -92,10 +92,10 @@ async fn task_subject_readable(
     open_tasks: &[WorkItem],
     executor: &mut dyn Executor,
 ) -> Result<bool> {
-    let Some(execution) = &subject.current_execution else {
+    let Some(_execution) = &subject.current_execution else {
         return Ok(false);
     };
-    let owner = execution.assignee_participant_id.as_str();
+    let owner = item.owner_user_id.as_deref().unwrap_or_default();
     if !task_chain_matches_subject(item, subject, open_tasks)? {
         return Ok(false);
     }
@@ -128,10 +128,10 @@ fn task_chain_matches_subject(
         return Ok(false);
     };
     let owner_role = adapter_spec_of(subject.document_type)?.owner_role;
-    let owner = execution.assignee_participant_id.as_str();
+    let owner = item.owner_user_id.as_deref().unwrap_or_default();
     Ok(if item.status == WorkItemStatus::Open {
-        open_tasks.len() == 1
-            && open_tasks[0].base.id == item.base.id
+        super::read_auth::open_tasks_match(execution, open_tasks)
+            && open_tasks.iter().any(|task| task.base.id == item.base.id)
             && task_proves_current_responsibility(item, execution, subject, owner, owner_role.as_str())
     } else {
         terminal_task_matches_subject(item, subject, owner, owner_role.as_str())
@@ -192,6 +192,22 @@ fn terminal_task_matches_subject(
     let Some(execution) = &subject.current_execution else {
         return false;
     };
+    if item.status == WorkItemStatus::Closed
+        && item.close_reason.as_deref() == Some("APPROVAL_OR_SIGN_RESOLVED")
+    {
+        return execution.has_participant(owner)
+            && item.approval_node_execution_id.as_ref().is_some_and(|id| id.as_ref() == execution.base.id)
+            && execution
+                .decided_by
+                .as_ref()
+                .is_some_and(|actor| item.closed_by.as_deref() == Some(actor.as_str()))
+            && execution.status.is_ended()
+            && item.business_object_id == subject.snapshot.business_object_id
+            && item.business_object_type == subject.document_type.as_str()
+            && item.subject_version == subject.instance.subject_version.to_string()
+            && item.owner_organization_id == subject.snapshot.payload.responsible_org_id
+            && item.owner_role == owner_role;
+    }
     item.status == WorkItemStatus::Completed
         && item.completed_by.as_deref() == Some(owner)
         && item.owner_user_id.as_deref() == Some(owner)

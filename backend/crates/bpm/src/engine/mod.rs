@@ -15,6 +15,8 @@ mod start_plan;
 pub(crate) mod test_fixtures;
 mod transition_plan;
 
+use std::collections::HashSet;
+
 pub use cancel::{CancelCommand, cancel};
 pub use cancel_plan::{CancelPlan, CancelPlanInput, plan_cancel};
 pub use decision::{DecideCommand, block_current, decide, reject_terminal};
@@ -58,6 +60,13 @@ pub type EngineResult<T> = std::result::Result<T, EngineError>;
 /// 调用方已收敛的人员资格。BPM 不再访问账号或权限。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Eligibility {
+    /// 同节点或签资格；首位仅用于保持旧快照字段兼容。
+    AnyOf {
+        /// 首位参与人资格。
+        primary: Box<Eligibility>,
+        /// 其余参与人资格。
+        additional: Vec<Eligibility>,
+    },
     /// 责任人当前有效。
     Eligible {
         /// 责任人。
@@ -77,6 +86,60 @@ pub enum Eligibility {
 }
 
 impl Eligibility {
+    /// 组合同节点参与人的资格。
+    /// # 参数
+    /// `members` 按定义顺序提供全部人员资格。
+    /// # 返回
+    /// 单人保持原格式，多人返回或签资格。
+    /// # 错误
+    /// 空集合、重复人员或嵌套集合时失败。
+    pub fn any_of(mut members: Vec<Self>) -> EngineResult<Self> {
+        if members.is_empty() || members.len() > 50 {
+            return Err(EngineError::InvalidCommand("节点审批人数必须为 1 至 50"));
+        }
+        let mut seen = HashSet::new();
+        for item in &members {
+            if matches!(item, Self::AnyOf { .. }) || !seen.insert(item.participant_ref()) {
+                return Err(EngineError::InvalidCommand("或签资格不能重复或嵌套"));
+            }
+        }
+        let primary = members.remove(0);
+        if members.is_empty() {
+            Ok(primary)
+        } else {
+            Ok(Self::AnyOf { primary: Box::new(primary), additional: members })
+        }
+    }
+
+    /// 返回节点内逐人的资格。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 返回有序资格引用。
+    /// # 错误
+    /// 无。
+    pub fn members(&self) -> Vec<&Self> {
+        match self {
+            Self::AnyOf { primary, additional } => {
+                std::iter::once(primary.as_ref()).chain(additional.iter()).collect()
+            },
+            _ => vec![self],
+        }
+    }
+
+    pub(crate) fn validate_node(&self, node: &ApprovalNodeDefinition) -> EngineResult<()> {
+        let members = self.members();
+        let people = node.participants();
+        if members.len() != people.len()
+            || members.iter().zip(&people).any(|(member, person)| {
+                matches!(member, Self::AnyOf { .. }) || member.participant_ref() != &person.participant_id
+            })
+        {
+            return Err(EngineError::InvalidCommand("资格结果必须属于定义审批人"));
+        }
+        Ok(())
+    }
+
     /// 返回资格对应的显示名。
     ///
     /// # 参数
@@ -89,6 +152,7 @@ impl Eligibility {
     /// 不返回错误。
     pub fn name_snapshot(&self) -> &str {
         match self {
+            Self::AnyOf { primary, .. } => primary.name_snapshot(),
             Self::Eligible { assignee_name_snapshot, .. } | Self::Blocked { assignee_name_snapshot, .. } => {
                 assignee_name_snapshot
             },
@@ -107,6 +171,14 @@ impl Eligibility {
     /// 不返回错误。
     pub fn blocked_code(&self) -> Option<ApprovalBlockerCode> {
         match self {
+            Self::AnyOf { .. } => {
+                let members = self.members();
+                if members.iter().any(|item| item.blocked_code().is_none()) {
+                    None
+                } else {
+                    members[0].blocked_code()
+                }
+            },
             Self::Eligible { .. } => None,
             Self::Blocked { code, .. } => Some(*code),
         }
@@ -138,6 +210,7 @@ impl Eligibility {
     /// 无。
     pub(crate) fn participant_ref(&self) -> &ParticipantId {
         match self {
+            Self::AnyOf { primary, .. } => primary.participant_ref(),
             Self::Eligible { participant, .. } | Self::Blocked { participant, .. } => participant,
         }
     }
@@ -948,5 +1021,294 @@ mod tests {
             at: at(10),
         })
         .unwrap()
+    }
+}
+
+#[cfg(test)]
+mod or_sign_tests {
+    //! 或签执行的完整状态与兼容性回归。
+    use super::test_fixtures::{at, blocked, eligible, node, participant};
+    use super::{
+        CommitRequired, DecideCommand, DefinitionGraph, Eligibility, StartAssigneeBinding, StartCommand,
+        TaskIntent, decide, reject_terminal, start,
+    };
+    use crate::graph::build_linear_transitions;
+    use crate::ids::{
+        ApprovalInstanceAssigneeId, ApprovalNodeExecutionId, ApprovalProcessDefinitionId,
+        ApprovalProcessInstanceId, ApprovalTransitionDefinitionId,
+    };
+    use crate::model::types::{
+        ApprovalBlockerCode, ApprovalDecision, ApprovalNodeExecutionStatus, ApprovalProcessInstanceStatus,
+    };
+    use crate::model::{
+        ApprovalNodeDefinition, ApprovalParticipant, ApprovalProcessDefinition, ProcessKind, SubjectRef,
+    };
+
+    fn graph() -> DefinitionGraph {
+        let definition = ApprovalProcessDefinition::new_draft(
+            ApprovalProcessDefinitionId::new("def"),
+            ProcessKind::StockAdjustment,
+            1,
+            "或签",
+            "n1",
+            participant("admin"),
+            at(1),
+        )
+        .unwrap();
+        let nodes = vec![
+            node("nd1", "n1", "复核", 1, "u1", "张三", at(1))
+                .with_additional_assignees(vec![ApprovalParticipant::new(participant("u2"), "李四").unwrap()])
+                .unwrap(),
+            node("nd2", "n2", "终审", 2, "u3", "王五", at(1)),
+        ];
+        let transitions = build_linear_transitions(
+            &ApprovalProcessDefinitionId::new("def"),
+            &nodes,
+            (1..=4).map(|i| ApprovalTransitionDefinitionId::new(format!("t{i}"))).collect(),
+            at(1),
+        )
+        .unwrap();
+        DefinitionGraph { definition, nodes, transitions }
+    }
+
+    fn group() -> Eligibility {
+        Eligibility::any_of(vec![eligible("u1", "张三"), eligible("u2", "李四")]).unwrap()
+    }
+    fn started(graph: &DefinitionGraph) -> super::TransitionPlan {
+        start(
+            StartCommand {
+                instance_id: ApprovalProcessInstanceId::new("i1"),
+                process_kind: ProcessKind::StockAdjustment,
+                subject: SubjectRef::new("stock_adjustment", "s1").unwrap(),
+                subject_version: 1,
+                started_by: participant("starter"),
+                entry_execution_id: ApprovalNodeExecutionId::new("e1"),
+                now: at(10),
+            },
+            graph,
+            &[
+                StartAssigneeBinding {
+                    id: ApprovalInstanceAssigneeId::new("a1"),
+                    node_key: "n1".into(),
+                    participant: participant("u1"),
+                    eligibility: group(),
+                },
+                StartAssigneeBinding {
+                    id: ApprovalInstanceAssigneeId::new("a2"),
+                    node_key: "n2".into(),
+                    participant: participant("u3"),
+                    eligibility: Eligibility::any_of(
+                        graph.nodes[1]
+                            .participants()
+                            .iter()
+                            .map(|person| eligible(person.participant_id.as_str(), &person.name))
+                            .collect(),
+                    )
+                    .unwrap(),
+                },
+            ],
+        )
+        .unwrap()
+    }
+    fn command(actor: &str, decision: ApprovalDecision) -> DecideCommand {
+        DecideCommand {
+            decision,
+            actor: participant(actor),
+            reason: Some("已核对".into()),
+            current_eligibility: eligible(actor, "决定人"),
+            next_eligibility: if decision == ApprovalDecision::Reject {
+                group()
+            } else {
+                eligible("u3", "王五")
+            },
+            next_execution_id: ApprovalNodeExecutionId::new("e2"),
+            next_execution_no: 2,
+            now: at(20),
+        }
+    }
+
+    #[test]
+    fn any_member_can_approve_once_and_next_node_has_one_execution() {
+        for actor in ["u1", "u2"] {
+            let graph = graph();
+            let start = started(&graph);
+            assert_eq!(start.created_executions.len(), 1);
+            let owners = start
+                .task_intents
+                .iter()
+                .filter_map(|task| {
+                    if let TaskIntent::HumanTaskRequested { assignee, .. } = task {
+                        Some(assignee.as_str())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(owners, ["u1", "u2"]);
+            assert_eq!(start.created_assignees[0].additional_assignees, graph.nodes[0].additional_assignees);
+            let plan = decide(
+                start.instance,
+                start.created_executions[0].clone(),
+                &graph,
+                command(actor, ApprovalDecision::Approve),
+            )
+            .unwrap();
+            assert_eq!(plan.updated_executions[0].decided_by, Some(participant(actor)));
+            assert_eq!(plan.updated_executions[0].status, ApprovalNodeExecutionStatus::Approved);
+            assert_eq!(plan.created_executions.len(), 1);
+            assert_eq!(plan.created_executions[0].node_key, "n2");
+            assert_eq!(plan.task_intents.len(), 2);
+            assert!(
+                decide(
+                    plan.instance,
+                    plan.updated_executions[0].clone(),
+                    &graph,
+                    command("u2", ApprovalDecision::Approve)
+                )
+                .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn reject_restarts_group_or_terminates_according_to_existing_policy() {
+        let graph = graph();
+        let start = started(&graph);
+        let plan = decide(
+            start.instance.clone(),
+            start.created_executions[0].clone(),
+            &graph,
+            command("u2", ApprovalDecision::Reject),
+        )
+        .unwrap();
+        assert_eq!(plan.instance.current_round_no, 2);
+        assert_eq!(plan.created_executions[0].additional_assignees.len(), 1);
+        assert_eq!(plan.task_intents.len(), 3);
+        let terminal = reject_terminal(
+            start.instance,
+            start.created_executions[0].clone(),
+            &graph,
+            command("u2", ApprovalDecision::Reject),
+        )
+        .unwrap();
+        assert_eq!(terminal.instance.status, ApprovalProcessInstanceStatus::Rejected);
+        assert!(terminal.created_executions.is_empty());
+    }
+
+    #[test]
+    fn outsider_mismatched_eligibility_and_disabled_member_cannot_decide() {
+        let graph = graph();
+        let start = started(&graph);
+        let outsider = command("u9", ApprovalDecision::Approve);
+        let mut mismatched = command("u2", ApprovalDecision::Approve);
+        mismatched.current_eligibility = eligible("u1", "张三");
+        let mut inactive = command("u2", ApprovalDecision::Approve);
+        inactive.current_eligibility = blocked("u2", "李四", ApprovalBlockerCode::ApproverAccountInactive);
+        for cmd in [outsider, mismatched, inactive] {
+            assert!(
+                decide(start.instance.clone(), start.created_executions[0].clone(), &graph, cmd).is_err()
+            );
+        }
+        assert_eq!(start.instance.status, ApprovalProcessInstanceStatus::Running);
+    }
+
+    #[test]
+    fn next_group_can_run_with_one_eligible_member_and_blocks_when_all_fail() {
+        let mut graph = graph();
+        graph.nodes[1] = graph.nodes[1]
+            .clone()
+            .with_additional_assignees(vec![ApprovalParticipant::new(participant("u4"), "赵六").unwrap()])
+            .unwrap();
+        // 当前令牌的冻结定义仅增加尚未进入节点的测试候选人。
+        let start = started(&self::graph());
+        for all_blocked in [false, true] {
+            let mut cmd = command("u2", ApprovalDecision::Approve);
+            cmd.next_eligibility = Eligibility::any_of(vec![
+                blocked("u3", "王五", ApprovalBlockerCode::ApproverAccountInactive),
+                if all_blocked {
+                    blocked("u4", "赵六", ApprovalBlockerCode::ApproverAccountInactive)
+                } else {
+                    eligible("u4", "赵六")
+                },
+            ])
+            .unwrap();
+            let plan =
+                decide(start.instance.clone(), start.created_executions[0].clone(), &graph, cmd).unwrap();
+            assert_eq!(plan.commit, CommitRequired::Proceed);
+            assert_eq!(plan.updated_executions[0].status, ApprovalNodeExecutionStatus::Approved);
+            assert_eq!(
+                plan.created_executions[0].status,
+                if all_blocked {
+                    ApprovalNodeExecutionStatus::Blocked
+                } else {
+                    ApprovalNodeExecutionStatus::Active
+                }
+            );
+            assert_eq!(plan.task_intents.len(), if all_blocked { 1 } else { 2 });
+        }
+    }
+
+    #[test]
+    fn legacy_node_and_execution_deserialize_as_single_person_and_duplicates_fail() {
+        let node = graph().nodes.remove(0);
+        let mut legacy = serde_json::to_value(&node).unwrap();
+        legacy.as_object_mut().unwrap().remove("additional_assignees");
+        let parsed: ApprovalNodeDefinition = serde_json::from_value(legacy).unwrap();
+        assert_eq!(parsed.participants().len(), 1);
+        assert!(
+            parsed
+                .with_additional_assignees(vec![ApprovalParticipant::new(participant("u1"), "重复").unwrap()])
+                .is_err()
+        );
+        assert!(Eligibility::any_of(vec![]).is_err());
+        assert!(Eligibility::any_of(vec![eligible("u1", "张三"), eligible("u1", "重复")]).is_err());
+        assert!(Eligibility::any_of(vec![group()]).is_err());
+    }
+
+    #[test]
+    fn blocked_or_sign_resumes_only_effective_members_and_can_finish() {
+        let mut graph = graph();
+        graph.nodes[1] = graph.nodes[1]
+            .clone()
+            .with_additional_assignees(vec![ApprovalParticipant::new(participant("u4"), "赵六").unwrap()])
+            .unwrap();
+        let start = started(&graph);
+        let binding = start.created_assignees[1].clone();
+        let mut cmd = command("u2", ApprovalDecision::Approve);
+        cmd.next_eligibility = Eligibility::any_of(vec![
+            blocked("u3", "王五", ApprovalBlockerCode::ApproverAccountInactive),
+            blocked("u4", "赵六", ApprovalBlockerCode::ApproverAccountInactive),
+        ])
+        .unwrap();
+        let waiting = decide(start.instance, start.created_executions[0].clone(), &graph, cmd).unwrap();
+        let resumed = super::resume(
+            waiting.instance,
+            waiting.created_executions[0].clone(),
+            &binding,
+            &graph,
+            super::ResumeCommand {
+                eligibility: Eligibility::any_of(vec![
+                    blocked("u3", "王五", ApprovalBlockerCode::ApproverAccountInactive),
+                    eligible("u4", "赵六"),
+                ])
+                .unwrap(),
+                next_execution_id: ApprovalNodeExecutionId::new("e3"),
+                next_execution_no: 3,
+                now: at(30),
+            },
+        )
+        .unwrap();
+        assert_eq!(resumed.updated_executions[0].status, ApprovalNodeExecutionStatus::Superseded);
+        assert_eq!(resumed.task_intents.len(), 1);
+        assert!(
+            matches!(&resumed.task_intents[0], TaskIntent::HumanTaskRequested { assignee, .. } if assignee.as_str() == "u4")
+        );
+        let mut final_command = command("u4", ApprovalDecision::Approve);
+        final_command.now = at(40);
+        let finished =
+            decide(resumed.instance, resumed.created_executions[0].clone(), &graph, final_command).unwrap();
+        assert_eq!(finished.instance.status, ApprovalProcessInstanceStatus::Approved);
+        assert!(finished.created_executions.is_empty());
+        assert_eq!(finished.updated_executions[0].assignee_display_name(), "赵六");
     }
 }

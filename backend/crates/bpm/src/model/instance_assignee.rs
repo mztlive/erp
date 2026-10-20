@@ -9,7 +9,7 @@ use crate::model::types::{
     ApprovalAssigneeBindingSource, ModelError, ModelResult, NODE_KEY_MAX_LEN, base_model_at,
     normalize_required,
 };
-use crate::model::{ParticipantId, Timestamp};
+use crate::model::{ApprovalParticipant, ParticipantId, Timestamp};
 
 /// 实例内某个节点的当前有效审批人。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
@@ -24,6 +24,9 @@ pub struct ApprovalInstanceAssignee {
     pub definition_assignee_participant_id: ParticipantId,
     /// 当前及后续轮次使用的责任人，永久等于定义审批人。
     pub current_assignee_participant_id: ParticipantId,
+    /// 同节点冻结的其他或签参与人。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub additional_assignees: Vec<ApprovalParticipant>,
     /// 绑定来源，永久为定义冻结。
     pub assignment_source: ApprovalAssigneeBindingSource,
     /// 保留的变更审计字段，运行时永久为空。
@@ -35,6 +38,18 @@ pub struct ApprovalInstanceAssignee {
 }
 
 impl ApprovalInstanceAssignee {
+    /// 判断身份是否属于实例冻结的审批人集合。
+    /// # 参数
+    /// `id` 为参与人身份。
+    /// # 返回
+    /// 已冻结成员返回 true。
+    /// # 错误
+    /// 无。
+    pub fn has_participant(&self, id: &str) -> bool {
+        self.current_assignee_participant_id.as_str() == id
+            || self.additional_assignees.iter().any(|item| item.participant_id.as_str() == id)
+    }
+
     /// 从定义审批人冻结实例绑定。
     ///
     /// # 参数
@@ -62,6 +77,7 @@ impl ApprovalInstanceAssignee {
             node_key: normalize_required(node_key, "节点键不能为空", NODE_KEY_MAX_LEN, "节点键过长")?,
             definition_assignee_participant_id: definition_assignee.clone(),
             current_assignee_participant_id: definition_assignee,
+            additional_assignees: Vec::new(),
             assignment_source: ApprovalAssigneeBindingSource::Definition,
             changed_by: None,
             changed_at: None,

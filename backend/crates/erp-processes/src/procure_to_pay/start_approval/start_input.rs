@@ -11,7 +11,9 @@ use bpm::model::{ParticipantId, SubjectRef, Timestamp};
 use erp_core::common::time::Instant;
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
-use erp_workflow::service::approval::execution::authorization::{AuthorizationFailure, converge_eligibility};
+use erp_workflow::service::approval::execution::authorization::{
+    AuthorizationFailure, converge_node_eligibility,
+};
 use erp_workflow::service::approval::execution::idempotency::normalize_idempotency_key;
 use erp_workflow::service::approval::execution::start::map_engine_error;
 use erp_workflow::service::approval::execution::{ExecutionCommandInput, StartExecutionInput};
@@ -99,22 +101,7 @@ pub(crate) fn build_purchase_order_start_input(
     let actor =
         ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("提交人引用无效".to_string()))?;
     let timestamp = Timestamp::from_utc(now.as_utc());
-    let binding_inputs = graph
-        .nodes
-        .iter()
-        .map(|node| {
-            let assignee = node.assignee_participant_id.as_str();
-            let failure = match purchase_order_object_readable(organization_id, assignee) {
-                Ok(_) => None,
-                Err(_) => Some(AuthorizationFailure::CannotReadSubject),
-            };
-            Ok(StartBindingInput {
-                node_key: node.node_key.clone(),
-                assignee_id: ApprovalInstanceAssigneeId::new(next_id()),
-                eligibility: converge_eligibility(assignee, &node.assignee_label_snapshot, failure)?,
-            })
-        })
-        .collect::<Result<Vec<_>>>()?;
+    let binding_inputs = start_binding_inputs(&graph, organization_id)?;
     let plan = plan_start(StartPlanInput {
         graph: &graph,
         expected_definition_version: binding.approval_definition_version,
@@ -141,6 +128,26 @@ pub(crate) fn build_purchase_order_start_input(
         receipt_id: ApprovalCommandReceiptId::new(next_id()),
         bindings: plan.bindings,
     })
+}
+
+fn start_binding_inputs(graph: &DefinitionGraph, organization_id: &str) -> Result<Vec<StartBindingInput>> {
+    graph
+        .nodes
+        .iter()
+        .map(|node| {
+            Ok(StartBindingInput {
+                node_key: node.node_key.clone(),
+                assignee_id: ApprovalInstanceAssigneeId::new(next_id()),
+                eligibility: converge_node_eligibility(
+                    node,
+                    |assignee| match purchase_order_object_readable(organization_id, assignee) {
+                        Ok(_) => None,
+                        Err(_) => Some(AuthorizationFailure::CannotReadSubject),
+                    },
+                )?,
+            })
+        })
+        .collect::<Result<Vec<_>>>()
 }
 
 /// 将启动计划错误映射为服务错误；计划前置条件保持冲突语义。

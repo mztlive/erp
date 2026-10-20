@@ -17,7 +17,9 @@ use erp_workflow::entity::document_registry::business_document::ApprovalDefiniti
 use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
 use erp_workflow::repository::bpm::ApprovalInstanceListProjection;
 use erp_workflow::repository::prelude::*;
-use erp_workflow::service::approval::execution::authorization::{AuthorizationFailure, converge_eligibility};
+use erp_workflow::service::approval::execution::authorization::{
+    AuthorizationFailure, converge_node_eligibility,
+};
 use erp_workflow::service::approval::execution::idempotency::{
     normalize_idempotency_key, start_scope_candidates,
 };
@@ -279,16 +281,17 @@ fn start_bindings_from_graph(
 ) -> Result<Vec<StartAssigneeBinding>> {
     let mut bindings = Vec::with_capacity(graph.nodes.len());
     for node in &graph.nodes {
-        let assignee = node.assignee_participant_id.as_str();
-        let failure = match customer_receipt_object_readable(organization_id, assignee) {
-            Ok(_) => None,
-            Err(_) => Some(AuthorizationFailure::CannotReadSubject),
-        };
         bindings.push(StartAssigneeBinding {
             id: ApprovalInstanceAssigneeId::new(next_id()),
             node_key: node.node_key.clone(),
             participant: node.assignee_participant_id.clone(),
-            eligibility: converge_eligibility(assignee, &node.assignee_label_snapshot, failure)?,
+            eligibility: converge_node_eligibility(node, |assignee| match customer_receipt_object_readable(
+                organization_id,
+                assignee,
+            ) {
+                Ok(_) => None,
+                Err(_) => Some(AuthorizationFailure::CannotReadSubject),
+            })?,
         });
     }
     if bindings.is_empty() {
@@ -487,7 +490,7 @@ fn list_projection_from_execution(
         current_node_key: Some(execution.node_key.clone()),
         current_node_name: Some(execution.node_name.clone()),
         current_assignee_participant_id: Some(execution.assignee_participant_id.as_str().to_string()),
-        current_assignee_name: Some(execution.assignee_name_snapshot.clone()),
+        current_assignee_name: Some(execution.assignee_display_name()),
         latest_rejected_execution_id: None,
         latest_rejection_summary: None,
         last_status_changed_at: Some(now.unix_secs()),

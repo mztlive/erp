@@ -271,7 +271,9 @@ pub(crate) async fn revalidate_cancel_open_tasks(
     }
     ensure_cancel_execution_identity(instance, &current_execution, policy)?;
     let tasks = db.work_items().open_approval_tasks_for_execution(execution_id, executor).await?;
-    policy.ensure_open_task_count(tasks.len()).map_err(|error| Error::ConflictError(error.to_string()))?;
+    current_execution
+        .ensure_cancellation_tasks(policy, tasks.len())
+        .map_err(|error| Error::ConflictError(error.to_string()))?;
     if tasks.len() != expected_tasks.len()
         || tasks.iter().zip(expected_tasks).any(|(current, expected)| {
             current.base.id != expected.base.id || current.base.version != expected.base.version

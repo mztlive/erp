@@ -88,7 +88,7 @@ pub fn map_command_view(
         current_node_name: current_execution.map(|item| item.node_name.clone()),
         current_assignee_participant_id: current_execution
             .map(|item| item.assignee_participant_id.as_str().to_string()),
-        current_assignee_name: current_execution.map(|item| item.assignee_name_snapshot.clone()),
+        current_assignee_name: current_execution.map(|item| item.assignee_display_name()),
         subject_status,
         latest_rejection_reason,
         next_open_task,

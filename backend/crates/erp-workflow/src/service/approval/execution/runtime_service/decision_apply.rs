@@ -482,8 +482,8 @@ pub(super) fn decision_terminal_actor<'a>(
                 && execution.blocker_code.is_some()
                 && execution.blocked_at.is_some()
                 && execution.ended_at.is_none()
-                && execution.assignee_participant_id.as_str() == closed_by)
-                .then_some(closed_by)
+                && execution.has_participant(closed_by))
+            .then_some(closed_by)
         },
         WorkItemStatus::Open => None,
     }
@@ -553,7 +553,7 @@ pub(super) fn terminal_task_subject_matches(
         && item.business_object_id == snapshot.business_object_id
         && item.subject_version == snapshot.subject_version.to_string()
         && item.owner_organization_id == snapshot.payload.responsible_org_id
-        && item.owner_user_id.as_deref() == Some(execution.assignee_participant_id.as_str())
+        && item.owner_user_id.as_deref().is_some_and(|id| execution.has_participant(id))
 }
 
 /// 回放只使用冻结运行事实证明原决定人当前仍具备动作权限，不信任收据或 WorkItem owner 投影。
@@ -570,8 +570,8 @@ async fn authorize_decision_terminal_replay(
         load_decision_terminal_replay_facts(db, execution, executor).await?;
     if !terminal_task_subject_matches(item, execution, &snapshot)
         || item.owner_role != spec.owner_role.as_str()
-        || execution.assignee_participant_id.as_str() != actor.id()
-        || assignee.current_assignee_participant_id.as_str() != actor.id()
+        || !execution.has_participant(actor.id())
+        || !assignee.has_participant(actor.id())
     {
         return Err(hidden_forbidden());
     }

@@ -147,16 +147,19 @@ fn freeze_assignees(
         if binding.eligibility.participant_ref() != &binding.participant {
             return Err(EngineError::InvalidCommand("资格结果必须属于定义审批人"));
         }
-        if binding.eligibility.blocked_code().is_some() {
+        binding.eligibility.validate_node(node)?;
+        if binding.eligibility.members().iter().any(|item| item.blocked_code().is_some()) {
             return Err(EngineError::InvalidCommand("启动时全部审批人必须有效，不得创建受阻实例"));
         }
-        assignees.push(ApprovalInstanceAssignee::from_definition(
+        let mut frozen = ApprovalInstanceAssignee::from_definition(
             binding.id.clone(),
             instance_id.clone(),
             node.node_key.clone(),
             binding.participant.clone(),
             now,
-        )?);
+        )?;
+        frozen.additional_assignees = node.additional_assignees.clone();
+        assignees.push(frozen);
     }
     Ok(assignees)
 }

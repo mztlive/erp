@@ -120,6 +120,7 @@ fn freeze_binding(
     if eligibility.participant_ref() != &node.assignee_participant_id {
         return Err(EngineError::InvalidCommand("资格结果必须属于定义审批人"));
     }
+    eligibility.validate_node(node)?;
     if frozen.iter().any(|prior| prior.id == assignee_id) {
         return Err(EngineError::InvalidCommand("实例审批人绑定主键不得重复"));
     }

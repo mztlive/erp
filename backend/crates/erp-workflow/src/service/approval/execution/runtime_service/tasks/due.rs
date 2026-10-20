@@ -50,12 +50,16 @@ async fn from_executions(
 ) -> Result<Option<Instant>> {
     for execution in executions {
         let tasks = db.work_items().approval_tasks_for_execution(&execution.typed_id(), executor).await?;
-        let task = match tasks.as_slice() {
-            [] => continue,
-            [task] => task,
-            _ => return Err(Error::ConflictError("原审批执行关联多个日期来源任务".into())),
+        let Some(task) = tasks.first() else {
+            continue;
         };
-        return task_due_at(instance, execution, task).map(Some);
+        let due = task_due_at(instance, execution, task)?;
+        for task in &tasks {
+            if task_due_at(instance, execution, task)? != due {
+                return Err(Error::ConflictError("原审批任务的希望付款日不一致".into()));
+            }
+        }
+        return Ok(Some(due));
     }
     Ok(None)
 }
@@ -72,7 +76,7 @@ pub(in crate::service::approval::execution) fn task_due_at(
         || task.approval_node_execution_id.as_ref().map(AsRef::as_ref) != Some(execution.base.id.as_str())
         || !task.matches_business_object(instance.subject.subject_kind(), instance.subject.subject_id())
         || !task.matches_subject_version(&instance.subject_version.to_string())
-        || task.owner_user_id.as_deref() != Some(execution.assignee_participant_id.as_str())
+        || !task.owner_user_id.as_deref().is_some_and(|id| execution.has_participant(id))
     {
         return Err(Error::ConflictError("付款申请审批日期来源与冻结运行身份不一致".into()));
     }

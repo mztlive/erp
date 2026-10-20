@@ -238,7 +238,7 @@ async fn assign_approval_due(
         .work_items()
         .open_approval_tasks_for_execution(&ApprovalNodeExecutionId::new(&execution.base.id), executor)
         .await?;
-    if tasks.len() != 1 {
+    if tasks.is_empty() || tasks.len() > 1 + execution.additional_assignees.len() {
         return Err(Error::ConflictError("申请入口审批任务不唯一".into()));
     }
     for mut task in tasks {
@@ -309,7 +309,7 @@ impl SubmitWrite<'_> {
             executor,
         )
         .await?;
-        if graph.nodes.iter().any(|node| node.assignee_participant_id.as_str() == request.created_by) {
+        if graph.nodes.iter().any(|node| node.has_participant(&request.created_by)) {
             return Err(Error::ConflictError("付款申请人不得审批本人申请，请配置合格财务审批人".into()));
         }
         let input = start_approval::build_document_start_input(start_approval::DocumentStartInput {

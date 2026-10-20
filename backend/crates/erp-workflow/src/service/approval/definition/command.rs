@@ -1,3 +1,4 @@
+mod replace_identity;
 use std::time::Duration;
 
 use application_core::AuditActor;
@@ -13,9 +14,12 @@ use chrono::Utc;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
+pub(super) use replace_identity::replace_nodes_identity;
 use sha2::{Digest, Sha256};
 
-use super::super::definition_dto::{DefinitionDetailView, DefinitionNodeRequest, DraftSource};
+#[cfg(test)]
+use super::super::definition_dto::DefinitionNodeRequest;
+use super::super::definition_dto::{DefinitionDetailView, DraftSource};
 use super::super::policy::{ProcessRequiredApprovalPolicy, require_process_required};
 use super::super::process_kind::{document_type_of, process_kind_of};
 use super::super::scope::definition_management_visibility_with_executor;
@@ -489,53 +493,6 @@ pub(super) fn create_draft_identity(
     })
 }
 
-/// 整组节点替换的 v3 身份；Create/Replace 即使资源文本相同也使用不同 domain。
-///
-/// # 参数
-/// * `key` - 规范幂等键
-/// * `definition_id` - 定义主键
-/// * `expected_lock` - 期望的定义锁版本
-/// * `nodes` - 整组节点请求
-/// * `actor_id` - 操作人 ID
-///
-/// # 返回
-/// 返回不含历史候选的当前 V3 身份。
-///
-/// # 错误
-/// 身份构造失败时返回内部错误。
-pub(super) fn replace_nodes_identity(
-    key: IdempotencyKey,
-    definition_id: &str,
-    expected_lock: u64,
-    nodes: &[DefinitionNodeRequest],
-    actor_id: &str,
-) -> Result<PreparedDefinitionIdentity> {
-    let node_fields = nodes
-        .iter()
-        .map(|node| {
-            CommandPayloadField::Sequence(vec![
-                CommandPayloadField::OptionalText(node.node_id.as_deref()),
-                CommandPayloadField::Text(&node.node_name),
-                CommandPayloadField::U32(node.display_order),
-                CommandPayloadField::Text(&node.assignee_user_id),
-            ])
-        })
-        .collect();
-    let current = ApprovalCommandIdentity::new(
-        ApprovalCommandKind::DefinitionWrite,
-        REPLACE_NODES_COMMAND_DOMAIN,
-        key,
-        CanonicalCommandPayload::new().field(CommandPayloadField::Text(definition_id)),
-        CanonicalCommandPayload::new()
-            .field(CommandPayloadField::Text(definition_id))
-            .field(CommandPayloadField::U64(expected_lock))
-            .field(CommandPayloadField::Sequence(node_fields))
-            .field(CommandPayloadField::Text(actor_id)),
-    )
-    .map_err(map_identity_error)?;
-    Ok(PreparedDefinitionIdentity { current, legacy: None })
-}
-
 /// 发布或退役的 v3 身份与可证明旧格式候选。
 ///
 /// # 参数
@@ -983,12 +940,14 @@ mod tests {
 
         let nodes = prepare_definition_nodes(vec![
             DefinitionNodeRequest {
+                additional_assignee_user_ids: Vec::new(),
                 node_id: None,
                 node_name: " 财务 ".to_string(),
                 display_order: 2,
                 assignee_user_id: " u2 ".to_string(),
             },
             DefinitionNodeRequest {
+                additional_assignee_user_ids: Vec::new(),
                 node_id: Some(" node-1 ".to_string()),
                 node_name: " 仓储复核 ".to_string(),
                 display_order: 1,
@@ -1056,6 +1015,7 @@ mod tests {
         .expect("分隔符文本");
         assert_ne!(create.current.digest(), create_changed.current.digest());
         let literal_null_nodes = prepare_definition_nodes(vec![DefinitionNodeRequest {
+            additional_assignee_user_ids: Vec::new(),
             node_id: Some("NULL".to_string()),
             node_name: "审批".to_string(),
             display_order: 1,
@@ -1063,6 +1023,7 @@ mod tests {
         }])
         .expect("字面量 NULL");
         let absent_nodes = prepare_definition_nodes(vec![DefinitionNodeRequest {
+            additional_assignee_user_ids: Vec::new(),
             node_id: None,
             node_name: "审批".to_string(),
             display_order: 1,

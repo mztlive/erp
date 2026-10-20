@@ -4,7 +4,7 @@ use application_core::AuditActor;
 use bpm::ParticipantId;
 use bpm::graph::{DefinitionGraph, NodeReplacementDraft, assignee_ids};
 use bpm::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId, ApprovalTransitionDefinitionId};
-use bpm::model::{ApprovalNodeDefinition, ApprovalProcessDefinition};
+use bpm::model::{ApprovalNodeDefinition, ApprovalParticipant, ApprovalProcessDefinition};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -346,7 +346,7 @@ fn node_replacement_drafts(requests: &[DefinitionNodeRequest]) -> Result<Vec<Nod
         .iter()
         .map(|request| {
             let existing_node_id = request.node_id.as_deref().map(ApprovalNodeDefinitionId::new);
-            NodeReplacementDraft::new(
+            let mut draft = NodeReplacementDraft::new(
                 existing_node_id,
                 ApprovalNodeDefinitionId::new(next_id()),
                 next_id(),
@@ -354,7 +354,18 @@ fn node_replacement_drafts(requests: &[DefinitionNodeRequest]) -> Result<Vec<Nod
                 request.display_order,
                 ParticipantId::new(request.assignee_user_id.clone()).map_err(map_bpm_error)?,
             )
-            .map_err(map_model_error)
+            .map_err(map_model_error)?;
+            draft.additional_assignees = request
+                .additional_assignee_user_ids
+                .iter()
+                .map(|id| {
+                    Ok(ApprovalParticipant {
+                        participant_id: ParticipantId::new(id.clone()).map_err(map_bpm_error)?,
+                        name: "pending".to_string(),
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?;
+            Ok(draft)
         })
         .collect()
 }
@@ -492,8 +503,22 @@ pub(super) fn apply_snapshots(
         let account = accounts
             .get(node.assignee_participant_id.as_str())
             .ok_or_else(|| Error::ValidationError("指定审批人账号不存在、已停用或任职失效".to_string()))?;
+        let additional = node
+            .additional_assignees
+            .iter()
+            .map(|person| {
+                let account = accounts
+                    .get(person.participant_id.as_str())
+                    .ok_or_else(|| Error::ValidationError("指定审批人账号不存在、已停用或任职失效".into()))?;
+                ApprovalParticipant::new(person.participant_id.clone(), account.display_name.clone())
+                    .map_err(map_model_error)
+            })
+            .collect::<Result<Vec<_>>>()?;
         refreshed.push(
-            node.with_assignee_label_snapshot(account.display_name.clone(), at).map_err(map_model_error)?,
+            node.with_assignee_label_snapshot(account.display_name.clone(), at)
+                .map_err(map_model_error)?
+                .with_additional_assignees(additional)
+                .map_err(map_model_error)?,
         );
     }
     Ok(refreshed)

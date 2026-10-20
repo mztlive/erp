@@ -55,8 +55,18 @@ export function DefinitionReadView({
                                     审批人
                                 </p>
                                 <p className="text-sm">
-                                    {node.assignee_name_snapshot ||
-                                        "审批人信息待确认"}
+                                    {[
+                                        node.assignee_name_snapshot,
+                                        ...(
+                                            node.additional_assignees ?? []
+                                        ).map((person) => person.name),
+                                    ]
+                                        .filter(Boolean)
+                                        .join("、") || "审批人信息待确认"}
+                                    {(node.additional_assignees?.length ?? 0) >
+                                    0
+                                        ? "（或签）"
+                                        : ""}
                                 </p>
                             </div>
                         </li>

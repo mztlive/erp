@@ -158,7 +158,7 @@ async fn validate_post_runtime_context(
         || execution.status != bpm::model::types::ApprovalNodeExecutionStatus::Active
         || execution.round_no != instance.current_round_no
         || execution.blocker_code.is_some()
-        || execution.assignee_participant_id.as_str() != actor.id()
+        || !execution.has_participant(actor.id())
     {
         return Err(Error::ConflictError("库存调整审批执行上下文已变化".to_string()));
     }

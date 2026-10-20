@@ -21,7 +21,7 @@ pub fn list_projection_from_execution(
         current_node_key: Some(execution.node_key.clone()),
         current_node_name: Some(execution.node_name.clone()),
         current_assignee_participant_id: Some(execution.assignee_participant_id.as_str().to_string()),
-        current_assignee_name: Some(execution.assignee_name_snapshot.clone()),
+        current_assignee_name: Some(execution.assignee_display_name()),
         latest_rejected_execution_id: None,
         latest_rejection_summary: None,
         last_status_changed_at: Some(now.unix_secs()),

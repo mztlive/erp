@@ -59,6 +59,7 @@ pub fn decide(
     command: DecideCommand,
 ) -> EngineResult<TransitionPlan> {
     ensure_current_token(&instance, &current)?;
+    ensure_actor(&current, graph, &command)?;
     if let Some(code) = command.current_eligibility.blocked_code() {
         return block_current(instance, current, code, command.now);
     }
@@ -97,6 +98,7 @@ pub fn reject_terminal(
     command: DecideCommand,
 ) -> EngineResult<TransitionPlan> {
     ensure_current_token(&instance, &current)?;
+    ensure_actor(&current, graph, &command)?;
     if command.decision != ApprovalDecision::Reject {
         return Err(EngineError::InvalidCommand("终态驳回只接受驳回命令"));
     }
@@ -125,6 +127,29 @@ pub fn reject_terminal(
     current.record_reject(command.actor.clone(), reason, command.now)?;
     instance.complete_rejected(command.now)?;
     Ok(completed_current_plan(instance, current, command.actor, BpmEventKind::NodeRejected))
+}
+
+fn ensure_actor(
+    current: &ApprovalNodeExecution,
+    graph: &DefinitionGraph,
+    command: &DecideCommand,
+) -> EngineResult<()> {
+    let node = graph.node(&current.node_key).ok_or(EngineError::GraphCorrupted)?;
+    if current.assignee_participant_id != node.assignee_participant_id
+        || current.additional_assignees != node.additional_assignees
+    {
+        return Err(EngineError::InvalidCommand("执行参与人必须匹配冻结定义"));
+    }
+    if !current.has_participant(command.actor.as_str())
+        || command.current_eligibility.participant_ref() != &command.actor
+        || matches!(command.current_eligibility, Eligibility::AnyOf { .. })
+    {
+        return Err(EngineError::InvalidCommand("决定人及资格必须属于当前节点"));
+    }
+    if !current.additional_assignees.is_empty() && command.current_eligibility.blocked_code().is_some() {
+        return Err(EngineError::InvalidCommand("当前或签审批人资格已失效"));
+    }
+    Ok(())
 }
 
 /// 通过当前节点，再进入下一节点或最终通过。

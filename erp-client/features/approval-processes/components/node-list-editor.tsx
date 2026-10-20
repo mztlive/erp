@@ -21,7 +21,7 @@ import type { DocumentType, EditorNode, EligibleAssignee } from "../types"
 import { AssigneeCombobox } from "./assignee-combobox"
 
 /**
- * 线性节点列表：只允许增删、排序、改名称和选择单人审批人。
+ * 线性节点列表：只允许增删、排序、改名称和配置单人或多人或签审批人。
  */
 export function NodeListEditor({
     documentType,
@@ -194,6 +194,9 @@ export function NodeListEditor({
                                             documentType={documentType}
                                             value={node.assignee_user_id}
                                             selectedName={node.assignee_name}
+                                            excludedIds={node.additional_assignees.map(
+                                                (person) => person.user_id,
+                                            )}
                                             disabled={readOnly}
                                             onChange={(
                                                 assignee: EligibleAssignee | null,
@@ -207,6 +210,70 @@ export function NodeListEditor({
                                             }
                                         />
                                     </div>
+                                </div>
+                                <div className="mt-3 flex flex-col gap-2">
+                                    <p className="text-xs text-muted-foreground">
+                                        {node.additional_assignees.length
+                                            ? "或签：任一人通过即可进入下一步；任一人驳回按本流程驳回规则处理。"
+                                            : "单人审批；增加审批人后按或签处理。"}
+                                    </p>
+                                    {node.additional_assignees.map((person) => (
+                                        <div
+                                            key={person.user_id}
+                                            className="flex items-center justify-between gap-2 rounded-md bg-muted px-3 py-1.5 text-sm"
+                                        >
+                                            <span>{person.name}</span>
+                                            <Button
+                                                id={`${id}-node-${nodeSegment}-assignee-${toAutomationIdSegment(person.user_id)}-remove`}
+                                                type="button"
+                                                size="xs"
+                                                variant="ghost"
+                                                disabled={readOnly}
+                                                aria-label={`移除审批人${person.name}`}
+                                                onClick={() =>
+                                                    update(index, {
+                                                        additional_assignees:
+                                                            node.additional_assignees.filter(
+                                                                (item) =>
+                                                                    item.user_id !==
+                                                                    person.user_id,
+                                                            ),
+                                                    })
+                                                }
+                                            >
+                                                移除
+                                            </Button>
+                                        </div>
+                                    ))}
+                                    {!readOnly && (
+                                        <AssigneeCombobox
+                                            id={`${id}-node-${nodeSegment}-add-assignee`}
+                                            documentType={documentType}
+                                            value=""
+                                            selectedName=""
+                                            placeholder="增加或签审批人"
+                                            disabled={
+                                                !node.assignee_user_id ||
+                                                node.additional_assignees
+                                                    .length >= 49
+                                            }
+                                            excludedIds={[
+                                                node.assignee_user_id,
+                                                ...node.additional_assignees.map(
+                                                    (person) => person.user_id,
+                                                ),
+                                            ]}
+                                            onChange={(person) => {
+                                                if (person)
+                                                    update(index, {
+                                                        additional_assignees: [
+                                                            ...node.additional_assignees,
+                                                            person,
+                                                        ],
+                                                    })
+                                            }}
+                                        />
+                                    )}
                                 </div>
                             </div>
                         </li>

@@ -48,7 +48,7 @@ pub struct CancelPlan {
 /// 本计划只计算纯规则，不读取仓储。
 pub fn plan_cancel(input: CancelPlanInput<'_>) -> EngineResult<CancelPlan> {
     let task_policy = input.instance.cancellation_task_policy()?;
-    task_policy.ensure_open_task_count(input.open_task_count)?;
+    input.current.ensure_cancellation_tasks(task_policy, input.open_task_count)?;
     let blocker = input.instance.blocker_code.or(input.current.blocker_code);
     let blocked_port_required = blocker.is_some_and(|code| !code.allows_assignee_recovery());
     Ok(CancelPlan { task_policy, close_open_task: task_policy.closes_open_task(), blocked_port_required })

@@ -4,13 +4,15 @@ use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
+use super::ApprovalCancellationTaskPolicy;
+use super::approval_participant::validate_additional;
 use crate::ids::{ApprovalNodeExecutionId, ApprovalProcessInstanceId};
 use crate::model::types::{
     ApprovalBlockerCode, ApprovalDecision, ApprovalExecutionAssignmentSource, ApprovalExecutionEndReason,
     ApprovalNodeExecutionStatus, LABEL_MAX_LEN, ModelError, ModelResult, NAME_MAX_LEN, NODE_KEY_MAX_LEN,
     REASON_MAX_LEN, base_model_at, normalize_optional, normalize_required, touch_base,
 };
-use crate::model::{ParticipantId, Timestamp};
+use crate::model::{ApprovalParticipant, ParticipantId, Timestamp};
 
 /// 节点每次进入形成的执行记录。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
@@ -39,6 +41,9 @@ pub struct ApprovalNodeExecution {
     pub assignee_participant_id: ParticipantId,
     /// 审批人显示名快照。
     pub assignee_name_snapshot: String,
+    /// 同节点的其他或签审批人；缺失时兼容单人节点。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub additional_assignees: Vec<ApprovalParticipant>,
     /// 正式决定。
     pub decision: Option<ApprovalDecision>,
     /// 决定原因。
@@ -84,6 +89,81 @@ pub struct NewNodeExecution {
 }
 
 impl ApprovalNodeExecution {
+    /// 返回当前参与人或实际决定人的显示名。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 已决定时返回决定人快照，待处理时返回完整参与人及或签标识。
+    /// # 错误
+    /// 无。
+    pub fn assignee_display_name(&self) -> String {
+        let people = self.participants();
+        if let Some(actor) = &self.decided_by
+            && let Some(person) = people.iter().find(|person| &person.participant_id == actor)
+        {
+            return person.name.clone();
+        }
+        let names = people.into_iter().map(|person| person.name).collect::<Vec<_>>().join("、");
+        if self.additional_assignees.is_empty() { names } else { format!("{names}（或签）") }
+    }
+
+    /// 根据冻结参与人数校验取消时的任务数量。
+    /// # 参数
+    /// `policy` 为实例取消策略，`count` 为开放任务数量。
+    /// # 返回
+    /// 单人恰一项、或签至少一项且不超过参与人数、受阻零项时成功。
+    /// # 错误
+    /// 数量不满足策略时返回模型错误。
+    pub fn ensure_cancellation_tasks(
+        &self,
+        policy: ApprovalCancellationTaskPolicy,
+        count: usize,
+    ) -> ModelResult<()> {
+        let normalized = if count > 0 && count <= 1 + self.additional_assignees.len() { 1 } else { count };
+        policy.ensure_open_task_count(normalized)
+    }
+
+    /// 设置同节点的其他或签审批人。
+    /// # 参数
+    /// `assignees` 为除首位之外的参与人快照。
+    /// # 返回
+    /// 返回包含完整或签集合的节点。
+    /// # 错误
+    /// 人员重复、超限或显示名非法时失败。
+    pub fn with_additional_assignees(mut self, assignees: Vec<ApprovalParticipant>) -> ModelResult<Self> {
+        validate_additional(&self.assignee_participant_id, &assignees)?;
+        self.additional_assignees = assignees;
+        Ok(self)
+    }
+
+    /// 返回冻结的全部参与人。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 首位与其他参与人按定义顺序返回。
+    /// # 错误
+    /// 无。
+    pub fn participants(&self) -> Vec<ApprovalParticipant> {
+        let mut result = vec![ApprovalParticipant {
+            participant_id: self.assignee_participant_id.clone(),
+            name: self.assignee_name_snapshot.clone(),
+        }];
+        result.extend(self.additional_assignees.clone());
+        result
+    }
+
+    /// 判断身份是否属于冻结参与人。
+    /// # 参数
+    /// `id` 为待校验身份。
+    /// # 返回
+    /// 集合内身份返回 true。
+    /// # 错误
+    /// 无。
+    pub fn has_participant(&self, id: &str) -> bool {
+        self.assignee_participant_id.as_str() == id
+            || self.additional_assignees.iter().any(|item| item.participant_id.as_str() == id)
+    }
+
     /// 返回克隆后的强类型执行 ID，避免调用方手写字符串克隆与重包。
     ///
     /// # 参数
@@ -277,6 +357,7 @@ impl ApprovalNodeExecution {
             assignment_source: input.assignment_source,
             replaces_execution_id: input.replaces_execution_id,
             ended_reason: None,
+            additional_assignees: Vec::new(),
             assignee_participant_id: input.assignee_participant_id,
             assignee_name_snapshot: normalize_required(
                 input.assignee_name_snapshot,

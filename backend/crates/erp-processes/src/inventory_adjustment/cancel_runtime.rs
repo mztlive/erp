@@ -154,8 +154,8 @@ pub(crate) async fn load_cancel_runtime(
             &mut NoTransaction,
         )
         .await?;
-    task_policy
-        .ensure_open_task_count(open_tasks.len())
+    current
+        .ensure_cancellation_tasks(task_policy, open_tasks.len())
         .map_err(|error| Error::ConflictError(error.to_string()))?;
     Ok(LoadedCancelRuntime {
         graph: load_bound_definition_graph(db, binding).await?,
@@ -585,7 +585,7 @@ pub(crate) fn ensure_stock_adjustment_open_task_identity(
         || task.business_object_type != DocumentType::StockAdjustment.as_str()
         || task.business_object_id != instance.subject.subject_id()
         || task.subject_version != instance.subject_version.to_string()
-        || task.owner_user_id.as_deref() != Some(current.assignee_participant_id.as_str())
+        || !task.owner_user_id.as_deref().is_some_and(|id| current.has_participant(id))
         || task.owner_role != adapter.owner_role
         || task.owner_organization_id != responsible_org_id
     {

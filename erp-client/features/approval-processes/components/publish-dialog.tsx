@@ -65,7 +65,20 @@ export function PublishDialog({
         detail.nodes
             .slice()
             .sort((left, right) => left.display_order - right.display_order)
-            .map((node) => node.assignee_name_snapshot || node.node_name),
+            .map(
+                (node) =>
+                    [
+                        node.assignee_name_snapshot,
+                        ...(node.additional_assignees ?? []).map(
+                            (person) => person.name,
+                        ),
+                    ]
+                        .filter(Boolean)
+                        .join("、") +
+                        ((node.additional_assignees?.length ?? 0) > 0
+                            ? "（或签）"
+                            : "") || node.node_name,
+            ),
     )
 
     const handlePublish = async () => {

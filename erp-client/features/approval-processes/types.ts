@@ -136,6 +136,7 @@ export type DefinitionNodeView = {
     display_order: number
     assignee_user_id: string
     assignee_name_snapshot: string
+    additional_assignees?: { participant_id: string; name: string }[]
 }
 
 /** 定义详情。 */
@@ -174,6 +175,7 @@ export type CreateDefinitionDraftRequest = {
 
 /** 草稿节点写请求。只允许定位、名称、顺序和指定审批人。 */
 export type DefinitionNodeWrite = {
+    additional_assignee_user_ids?: string[]
     node_id?: string
     node_name: string
     display_order: number
@@ -206,6 +208,7 @@ export type EditorNode = {
     node_name: string
     assignee_user_id: string
     assignee_name: string
+    additional_assignees: EligibleAssignee[]
     node_purpose: string | null
     unsaved_purpose_slot: boolean
 }

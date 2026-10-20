@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use application_core::AuditActor;
 use bpm::engine::{DefinitionGraph, TaskIntent};
 use bpm::ids::ApprovalProcessInstanceId;
@@ -322,6 +324,14 @@ fn validate_start_writes(
     let [first] = writes.created_executions.as_slice() else {
         return Err(Error::Internal("库存调整启动计划必须且只能创建一个入口执行".to_string()));
     };
+    validate_start_execution(writes, graph, first)
+}
+
+fn validate_start_execution(
+    writes: &PlannedWrites,
+    graph: &DefinitionGraph,
+    first: &ApprovalNodeExecution,
+) -> Result<()> {
     if first.process_instance_id.as_ref() != writes.instance.base.id
         || first.round_no != writes.instance.current_round_no
         || first.status != ApprovalNodeExecutionStatus::Active
@@ -336,24 +346,13 @@ fn validate_start_writes(
         graph.entry_node().map_err(|_| Error::Internal("库存调整事务内定义缺少入口节点".to_string()))?;
     if first.node_key != entry.node_key
         || first.node_name != entry.node_name
+        || first.additional_assignees != entry.additional_assignees
         || first.assignee_participant_id != entry.assignee_participant_id
         || first.assignee_name_snapshot != entry.assignee_label_snapshot
     {
         return Err(Error::ConflictError("库存调整启动入口执行与事务内定义事实不一致".to_string()));
     }
-    let [TaskIntent::HumanTaskRequested { execution_id, assignee, node_key, node_name, round_no }] =
-        writes.create_tasks.as_slice()
-    else {
-        return Err(Error::Internal("库存调整启动计划必须且只能创建一个入口任务".to_string()));
-    };
-    if execution_id.as_ref() != first.base.id
-        || assignee != &first.assignee_participant_id
-        || node_key != &first.node_key
-        || node_name != &first.node_name
-        || *round_no != first.round_no
-    {
-        return Err(Error::Internal("库存调整启动计划的入口任务身份不一致".to_string()));
-    }
+    ensure_start_tasks(writes, first)?;
     if writes.created_assignees.len() != graph.nodes.len()
         || graph.nodes.iter().any(|node| {
             !writes.created_assignees.iter().any(|assignee| {
@@ -361,6 +360,7 @@ fn validate_start_writes(
                     && assignee.node_key == node.node_key
                     && assignee.definition_assignee_participant_id == node.assignee_participant_id
                     && assignee.current_assignee_participant_id == node.assignee_participant_id
+                    && assignee.additional_assignees == node.additional_assignees
             })
         })
         || !writes.created_assignees.iter().any(|assignee| {
@@ -372,6 +372,29 @@ fn validate_start_writes(
         || !writes.close_tasks.is_empty()
     {
         return Err(Error::Internal("库存调整启动计划的审批人绑定或写入集合不一致".to_string()));
+    }
+    Ok(())
+}
+
+fn ensure_start_tasks(writes: &PlannedWrites, first: &ApprovalNodeExecution) -> Result<()> {
+    if writes.create_tasks.len() != first.participants().len() {
+        return Err(Error::Internal("库存调整启动任务必须覆盖全部审批人".into()));
+    }
+    let mut seen = HashSet::new();
+    for task in &writes.create_tasks {
+        let TaskIntent::HumanTaskRequested { execution_id, assignee, node_key, node_name, round_no } = task
+        else {
+            return Err(Error::Internal("库存调整启动任务类型非法".into()));
+        };
+        if execution_id.as_ref() != first.base.id
+            || !first.has_participant(assignee.as_str())
+            || !seen.insert(assignee)
+            || node_key != &first.node_key
+            || node_name != &first.node_name
+            || *round_no != first.round_no
+        {
+            return Err(Error::Internal("库存调整启动计划的入口任务身份不一致".into()));
+        }
     }
     Ok(())
 }
@@ -480,7 +503,11 @@ async fn persist_start_notifications(
         &first.base.id,
     )?;
     for intent in &writes.notifications {
-        let mut recipients = vec![first.assignee_participant_id.as_str().to_string()];
+        let mut recipients = first
+            .participants()
+            .iter()
+            .map(|person| person.participant_id.as_str().to_string())
+            .collect::<Vec<_>>();
         if intent.event_kind == ApprovalNotificationEventKind::Started {
             recipients.push(submitted_by.to_string());
         }
@@ -495,7 +522,7 @@ async fn persist_start_notifications(
                 document_type_label: DocumentType::StockAdjustment.label().to_string(),
                 document_no: document_no.to_string(),
                 current_node_name: first.node_name.clone(),
-                current_approver_display_name: first.assignee_name_snapshot.clone(),
+                current_approver_display_name: first.assignee_display_name(),
                 round_no: writes.instance.current_round_no,
                 reject_reason_summary: None,
             },

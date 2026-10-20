@@ -6,8 +6,8 @@ use std::slice::from_ref;
 use bpm::ids::{ApprovalNodeExecutionId, ApprovalProcessDefinitionId, ApprovalProcessInstanceId};
 use bpm::model::types::{ApprovalExecutionAssignmentSource, ApprovalProcessInstanceStatus};
 use bpm::model::{
-    ApprovalNodeExecution, ApprovalProcessInstance, NewNodeExecution, NewProcessInstance, ParticipantId,
-    Timestamp,
+    ApprovalNodeExecution, ApprovalParticipant, ApprovalProcessInstance, NewNodeExecution,
+    NewProcessInstance, ParticipantId, Timestamp,
 };
 use bpm::{ProcessKind, SubjectRef};
 use erp_core::common::time::Instant;
@@ -18,7 +18,8 @@ use super::{RuntimeReadSubject, task_chain_matches_subject};
 use crate::entity::approval_integration::{ApprovalSubjectSnapshot, ApprovalSubjectSnapshotPayload};
 use crate::entity::document_registry::DocumentType;
 use crate::entity::work_item::{
-    AssignmentSource, DocumentApprovalWorkItemData, WorkItem, WorkItemPriority, WorkItemStatus,
+    ApprovalRuntimeTaskEnding, AssignmentSource, DocumentApprovalWorkItemData, WorkItem, WorkItemPriority,
+    WorkItemStatus,
 };
 
 /// 构造一条正式开放审批任务及其精确冻结运行主体。
@@ -157,4 +158,46 @@ fn approval_task_batch_terminal_chain_requires_original_completed_decision() {
     assert!(!task_chain_matches_subject(&changed, &subject, &[]).unwrap());
     subject.current_execution.as_mut().unwrap().decided_at = None;
     assert!(!task_chain_matches_subject(&task, &subject, &[]).unwrap());
+}
+
+#[test]
+fn or_sign_tasks_are_readable_for_each_frozen_member_and_duplicate_owners_fail() {
+    let (mut subject, first) = fixture();
+    subject.current_execution = Some(
+        subject
+            .current_execution
+            .take()
+            .unwrap()
+            .with_additional_assignees(vec![
+                ApprovalParticipant::new(ParticipantId::new("owner-2").unwrap(), "第二人").unwrap(),
+            ])
+            .unwrap(),
+    );
+    let mut second = first.clone();
+    second.base.id = "task-2".into();
+    second.owner_user_id = Some("owner-2".into());
+    let tasks = vec![first.clone(), second.clone()];
+    assert!(task_chain_matches_subject(&first, &subject, &tasks).unwrap());
+    assert!(task_chain_matches_subject(&second, &subject, &tasks).unwrap());
+    let mut corrupt = second.clone();
+    corrupt.owner_user_id = Some("outsider".into());
+    assert!(!task_chain_matches_subject(&corrupt, &subject, &[first.clone(), corrupt.clone()]).unwrap());
+    corrupt.owner_user_id = first.owner_user_id.clone();
+    assert!(!task_chain_matches_subject(&first, &subject, &[first.clone(), corrupt]).unwrap());
+    let ended = WorkItem::end_all_for_approval_execution(
+        tasks,
+        &ApprovalNodeExecutionId::new("execution-1"),
+        "owner-2",
+        &ApprovalRuntimeTaskEnding::CompleteAnyOf { work_item_id: "task-2".into() },
+        Instant::from_unix_secs(20),
+    )
+    .unwrap();
+    subject
+        .current_execution
+        .as_mut()
+        .unwrap()
+        .record_approve(ParticipantId::new("owner-2").unwrap(), None, Timestamp::from_unix_secs(20).unwrap())
+        .unwrap();
+    assert!(task_chain_matches_subject(&ended[0], &subject, &[]).unwrap());
+    assert!(task_chain_matches_subject(&ended[1], &subject, &[]).unwrap());
 }

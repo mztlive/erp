@@ -27,6 +27,7 @@ pub const FINANCE_RESPONSIBILITY_RULES: &str =
 /// 既有数据违反开放唯一性，或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
     reconcile_open_object_type_index(db).await?;
+    reconcile_approval_execution_index(db).await?;
     db.collection::<Document>(WORK_ITEMS).create_indexes(work_item_indexes()).await?;
     db.collection::<Document>(FINANCE_RESPONSIBILITY_RULES)
         .create_indexes(finance_responsibility_indexes())
@@ -347,9 +348,27 @@ fn unique_open_payment_execution_object_index() -> IndexModel {
         .build()
 }
 
+async fn reconcile_approval_execution_index(db: &Database) -> Result<()> {
+    if !db.list_collection_names().await?.iter().any(|name| name == WORK_ITEMS) {
+        return Ok(());
+    }
+    let collection = db.collection::<Document>(WORK_ITEMS);
+    let mut indexes = collection.list_indexes().await?;
+    while let Some(index) = indexes.try_next().await? {
+        if index.options.as_ref().and_then(|options| options.name.as_deref())
+            == Some("uk_work_items_approval_execution")
+            && index.keys == doc! { "approval_node_execution_id": 1 }
+        {
+            collection.drop_index("uk_work_items_approval_execution").await?;
+            break;
+        }
+    }
+    Ok(())
+}
+
 fn unique_approval_execution_index() -> IndexModel {
     IndexModel::builder()
-        .keys(doc! { "approval_node_execution_id": 1 })
+        .keys(doc! { "approval_node_execution_id": 1, "owner_user_id": 1 })
         .options(
             IndexOptions::builder()
                 .name("uk_work_items_approval_execution".to_string())
@@ -486,7 +505,7 @@ mod tests {
         );
 
         let execution = index_named(&indexes, "uk_work_items_approval_execution");
-        assert_eq!(execution.keys, doc! { "approval_node_execution_id": 1 });
+        assert_eq!(execution.keys, doc! { "approval_node_execution_id": 1, "owner_user_id": 1 });
         assert_eq!(execution.options.as_ref().unwrap().unique, Some(true));
         assert_eq!(
             execution.options.as_ref().unwrap().partial_filter_expression,
