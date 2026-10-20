@@ -41,7 +41,7 @@ use super::approval_prepare::{
 };
 use super::approval_query::load_approval_binding;
 use super::mapping::{list_projection_from_execution, stock_adjustment_start_scopes};
-use crate::adapters::freeze_approval_materials;
+use crate::adapters::{freeze_approval_materials, persist_approval_snapshot};
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
@@ -467,7 +467,7 @@ async fn persist_runtime_writes(
     snapshot.display =
         Some(capture_stock_adjustment_display(db, context.adjustment, context.lines, executor).await?);
     let snapshot = freeze_approval_materials(db, snapshot, executor).await?;
-    db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, executor).await?;
+    persist_approval_snapshot(db, &snapshot, executor).await?;
     persist_open_tasks(db, writes, context.owner_role, context.organization_id, context.now, executor)
         .await?;
     persist_start_notifications(

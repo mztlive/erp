@@ -5,6 +5,7 @@ import { GitBranchIcon, ShieldCheckIcon, UsersRoundIcon } from "lucide-react"
 import { rejectionPolicyCopy } from "../labels"
 import { toEditorNode } from "../draft-nodes"
 import type { DefinitionDetailView } from "../types"
+import { CopyRuleSummary } from "./copy-rule-editor"
 import { DefinitionFlowchart } from "./definition-flowchart"
 
 /** 只读流程图与选中节点详情，避免重复铺开整份人员名单。 */
@@ -116,6 +117,7 @@ export function DefinitionReadView({
                     </div>
                 </aside>
             </div>
+            <CopyRuleSummary detail={detail} />
         </section>
     )
 }

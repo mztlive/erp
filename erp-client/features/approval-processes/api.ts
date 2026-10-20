@@ -86,11 +86,13 @@ export const fetchDefinitionDetail = (
 export const fetchEligibleAssignees = (
     documentType: DocumentType,
     search: string,
+    copies = false,
 ): ResultAsync<EligibleAssignee[], ApiError> =>
     fromPromise(async () =>
         apiGet<EligibleAssignee[]>(
             `/admin/approval-processes/${encodeURIComponent(documentType)}/eligible-assignees`,
             {
+                copies,
                 search: search.trim() || undefined,
                 limit: 20,
             },

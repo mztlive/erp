@@ -14,11 +14,10 @@ use erp_workflow::entity::approval_integration::{ApprovalSubjectSnapshot, Approv
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
 use erp_workflow::entity::work_item::{DocumentApprovalWorkItemData, WorkItem, WorkItemPriority};
-use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::execution::{
     PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
 };
-use erp_workflow::{ApprovalIntegrationExt, BpmExt, WorkItemExt};
+use erp_workflow::{BpmExt, WorkItemExt};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -28,7 +27,7 @@ use super::common::{ReverseStartContracts, ReverseStartInput, build_reverse_star
 use super::mapping::list_projection_from_execution;
 use super::prepare::{ensure_return_start_replay_authorized, load_start_receipt_for_document_type};
 use super::reversal_submit::{committed_reversal_submit, mark_reversal_started};
-use crate::adapters::freeze_approval_materials;
+use crate::adapters::{freeze_approval_materials, persist_approval_snapshot};
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
@@ -366,7 +365,7 @@ pub async fn persist_payment_reversal_runtime(
         .await?,
     );
     let snapshot = freeze_approval_materials(db, snapshot, executor).await?;
-    db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, executor).await?;
+    persist_approval_snapshot(db, &snapshot, executor).await?;
     persist_payment_reversal_open_tasks(db, writes, owner_role, organization_id, now, executor).await
 }
 

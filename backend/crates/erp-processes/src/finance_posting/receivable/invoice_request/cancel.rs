@@ -18,6 +18,7 @@ use persistence_core::{NoTransaction, Transactional};
 
 use super::super::{ReceivableProcess, cancel_approval};
 use super::*;
+use crate::adapters::persist_cancel_copies;
 use crate::audit::persist_log;
 
 impl ReceivableProcess {
@@ -67,6 +68,7 @@ impl ReceivableProcess {
                         executor,
                     )
                     .await?;
+                    persist_cancel_copies(&db, &prepared.writes, executor).await?;
                     let current = load(&db, &id, executor).await?;
                     ensure_expected_version(current.base.version, req.expected_version)?;
                     let event_id = cancel_and_record(&db, &id, &actor, Some(&command), executor).await?;

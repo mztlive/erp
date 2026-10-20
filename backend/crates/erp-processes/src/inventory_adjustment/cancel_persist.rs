@@ -34,6 +34,7 @@ use super::cancel_runtime::{
     ensure_cancel_execution_identity, ensure_cancel_instance_binding, ensure_cancel_instance_subject,
     ensure_stock_adjustment_open_task_identity,
 };
+use crate::adapters::persist_cancel_copies;
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
@@ -197,6 +198,7 @@ async fn apply_cancel_writes(
         .await?;
     db.work_items().persist_cancelled_approval_tasks(&closed_tasks, executor).await?;
     db.stock_adjustment_cancellations().create(&fact, executor).await?;
+    persist_cancel_copies(db, &input.writes, executor).await?;
     persist_stock_adjustment_cancel_notifications(
         db,
         StockAdjustmentCancelNotificationInput {

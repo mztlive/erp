@@ -1,5 +1,7 @@
 "use client"
 
+import type { ApprovalMaterials } from "../api/materials"
+import type { ReactNode } from "react"
 import { ApprovalMaterialFiles } from "./approval-material-files"
 import { ApprovalSalesOrderPaper } from "./approval-sales-order-paper"
 import {
@@ -44,16 +46,40 @@ export function ApprovalSubmittedMaterials({
                 />
             </div>
         )
+    return (
+        <ApprovalSubmittedMaterialsContent
+            data={query.data}
+            instanceId={instanceId}
+            view={view}
+            sourceRevisionId={sourceRevisionId}
+        />
+    )
+}
+
+/** 已授权冻结资料的共享展示；抄送通过附件插槽保持自己的读取入口。 */
+export function ApprovalSubmittedMaterialsContent({
+    data,
+    instanceId,
+    view = "all",
+    sourceRevisionId,
+    attachmentContent,
+}: {
+    data: ApprovalMaterials
+    instanceId: string
+    view?: "all" | "source-sales" | "attachments"
+    sourceRevisionId?: string
+    attachmentContent?: ReactNode
+}) {
     const {
         display,
         attachments,
         sales_order: submittedSalesOrder,
         subject_version: version,
         current_sales_basis: currentBasis,
-    } = query.data
+    } = data
     const sourceOrder =
         view === "source-sales"
-            ? query.data.source_sales_orders?.find(
+            ? data.source_sales_orders?.find(
                   (order) => order.revision.id === sourceRevisionId,
               )
             : undefined
@@ -116,9 +142,8 @@ export function ApprovalSubmittedMaterials({
                     submission={salesOrder}
                     documentNo={
                         displayBusinessText(
-                            sourceOrder?.document_no ?? query.data.document_no,
-                            sourceSnapshot?.document_id ??
-                                query.data.document_id,
+                            sourceOrder?.document_no ?? data.document_no,
+                            sourceSnapshot?.document_id ?? data.document_id,
                         ) || "未记录单据编号"
                     }
                     submitterName={submitterName ?? null}
@@ -244,9 +269,9 @@ export function ApprovalSubmittedMaterials({
                         />
                     </section>
                 )}
-            {view === "all" && query.data.current_sales_basis_error && (
+            {view === "all" && data.current_sales_basis_error && (
                 <p role="alert" className="text-sm text-muted-foreground">
-                    {query.data.current_sales_basis_error}
+                    {data.current_sales_basis_error}
                 </p>
             )}
             {(attachments.length > 0 || !currentBasis || view !== "all") && (
@@ -263,10 +288,12 @@ export function ApprovalSubmittedMaterials({
                                 : null
                         }
                     />
-                    <ApprovalMaterialFiles
-                        instanceId={instanceId}
-                        attachments={attachments}
-                    />
+                    {attachmentContent ?? (
+                        <ApprovalMaterialFiles
+                            instanceId={instanceId}
+                            attachments={attachments}
+                        />
+                    )}
                 </section>
             )}
         </article>

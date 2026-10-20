@@ -102,6 +102,7 @@ impl DemoMasterDataService {
         let replaced = definitions
             .replace_definition_nodes(
                 ReplaceDefinitionNodesRequest {
+                    copy_rules: None,
                     definition_id: definition_id.clone(),
                     expected_definition_lock_version: detail.definition_lock_version,
                     nodes: approval_nodes(spec, accounts)?,

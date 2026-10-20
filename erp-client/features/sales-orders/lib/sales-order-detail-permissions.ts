@@ -1,4 +1,21 @@
 import { hasAnyPermission, hasPermission } from "@/lib/permissions"
+import type { SalesOrderDetailView } from "@/features/sales-orders/api/contracts"
+
+/** 合同凭证入口与补录按钮共用资格；历史订单无需先有合同或凭证。 */
+export function canSupplementSalesOrderContract(
+    order: Pick<
+        SalesOrderDetailView,
+        "contractId" | "originSystem" | "primaryStatus"
+    >,
+    granted: readonly string[] | undefined | null,
+): boolean {
+    return (
+        !order.contractId &&
+        order.originSystem === "erp" &&
+        order.primaryStatus.code !== "voided" &&
+        hasPermission(granted, "sales_order:update")
+    )
+}
 
 /** 销售单详情页按钮对应的 Casbin 权限码。 */
 export const SALES_ORDER_DETAIL_PERMISSIONS = {

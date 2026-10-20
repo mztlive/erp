@@ -145,6 +145,7 @@ export function CreateDraftDialog({
                         copyDraftNodes(current.source.nodes),
                         null,
                         () => newCommandKey("copy-flow"),
+                        current.source.copy_rules ?? [],
                     )
                     detail = await replaceNodes.mutateAsync(current.copyCommand)
                 }

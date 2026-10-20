@@ -12,6 +12,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use crate::Result;
+use crate::adapters::persist_cancel_copies;
 use crate::audit::persist_log;
 
 pub(super) enum CancelledReturn<'a> {
@@ -66,6 +67,9 @@ impl CancelWritePort for MongoCancelWrite<'_> {
         Ok(())
     }
     async fn tasks(&mut self, executor: &mut dyn Executor) -> Result<()> {
+        if let PreparedExecution::Apply(writes) = &self.prepared {
+            persist_cancel_copies(self.db, writes, executor).await?;
+        }
         self.db.work_items().persist_cancelled_approval_tasks(&self.closed_tasks, executor).await?;
         Ok(())
     }

@@ -53,7 +53,7 @@ export function CopyFlowDialog({
                 <DialogHeader>
                     <DialogTitle>从其它审批流复制</DialogTitle>
                     <DialogDescription>
-                        复制节点顺序、名称和审批人，保存时按目标流程重新校验人员资格。
+                        复制节点顺序、名称、审批人和抄送规则，替换当前编辑内容；保存时按目标流程重新校验人员资格。
                     </DialogDescription>
                 </DialogHeader>
                 {open && (

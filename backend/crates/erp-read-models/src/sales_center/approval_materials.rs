@@ -8,8 +8,9 @@ use erp_sales::repository::SalesOrderExt;
 use erp_sales::repository::prelude::*;
 use erp_sales::service::sales_order::mapper::submission_view;
 use erp_workflow::WorkflowAuthorizationPort;
-use erp_workflow::service::approval::execution::ApprovalRuntimeService;
+use erp_workflow::entity::approval_copy::ApprovalCopyReceipt;
 use erp_workflow::service::approval::execution::runtime_service::ApprovalMaterialsView;
+use erp_workflow::service::approval::execution::{ApprovalRuntimeService, RuntimeHistoryPage};
 use mongodb::Database;
 use persistence_core::NoTransaction;
 use serde::Serialize;
@@ -69,6 +70,58 @@ pub async fn materials<A: WorkflowAuthorizationPort>(
         source_sales_orders,
         current_sales_basis,
         current_sales_basis_error,
+    })
+}
+
+/// 抄送资料只补齐冻结版本，不加载当前票款或最新销售依据。
+#[derive(Debug, Serialize)]
+pub struct CopyDocumentDetail {
+    pub receipt: ApprovalCopyReceipt,
+    pub instance_status: String,
+    pub materials: ApprovalDocumentMaterials,
+    pub history: RuntimeHistoryPage,
+}
+/// 以精确个人收件授权读取完整冻结单据。
+/// # 参数
+/// 数据库、运行服务、当前身份、收件 ID 和历史游标。
+/// # 返回
+/// 本次提交及已冻结关联销售版本；不含当前业务余额。
+/// # 错误
+/// 来源版本不匹配、账号撤权或数据读取失败。
+pub async fn copy_detail<A: WorkflowAuthorizationPort>(
+    db: &Database,
+    runtime: &ApprovalRuntimeService<A>,
+    actor: &AuditActor,
+    id: &str,
+    after: Option<u32>,
+) -> Result<CopyDocumentDetail> {
+    let detail = runtime.copy_detail(actor, id, after).await?;
+    let materials = detail.materials;
+    let sales_order = if matches!(materials.document_type.as_str(), "sales_order" | "voucher_sales_order") {
+        Some(sales_submission(db, &materials).await?)
+    } else {
+        None
+    };
+    let purchase_lines = if materials.document_type == "purchase_order" {
+        purchase_lines(db, &materials).await?
+    } else {
+        None
+    };
+    let source_sales_orders = source_sales_orders(db, &materials).await?;
+    runtime.copy_detail(actor, id, after).await?;
+    Ok(CopyDocumentDetail {
+        receipt: detail.receipt,
+        instance_status: detail.instance_status,
+        history: detail.history,
+        materials: ApprovalDocumentMaterials {
+            materials,
+            sales_order,
+            purchase_lines,
+            source_sales_orders,
+            extra_cost_summary: None,
+            current_sales_basis: None,
+            current_sales_basis_error: None,
+        },
     })
 }
 

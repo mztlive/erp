@@ -25,6 +25,7 @@ export type NavSectionId =
     | "receivable"
     | "receipt"
     | "invoice"
+    | "documents"
     | "collaboration"
     | "versions"
 
@@ -116,6 +117,8 @@ export function resolveNavSection(
             return section
         case "collaboration":
             return isCard ? "collaboration" : "overview"
+        case "documents":
+            return "documents"
         case "versions":
             return "versions"
         case "approval":
@@ -307,7 +310,10 @@ export function buildSelfHref(
 
 export function navItemsFor(
     order: SalesOrderDetailView,
-    options: { canViewExtraCost?: boolean } = {},
+    options: {
+        canViewExtraCost?: boolean
+        canSupplementContract?: boolean
+    } = {},
 ): Array<{
     id: NavSectionId
     label: string
@@ -364,6 +370,18 @@ export function navItemsFor(
             label: "发票",
             hint: "本单开票申请、发票文件与记录",
             show: true,
+        },
+        {
+            id: "documents",
+            label: "合同凭证",
+            hint: "本单关联合同与开单凭证",
+            show: Boolean(
+                options.canSupplementContract ||
+                order.contractId ||
+                order.contractNumber ||
+                order.evidenceFiles?.length ||
+                order.evidenceFileAssetIds?.length,
+            ),
         },
         {
             id: "collaboration",

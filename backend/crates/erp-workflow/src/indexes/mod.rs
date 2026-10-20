@@ -1,5 +1,6 @@
 //! 工作流集合索引。
 
+mod approval_copy;
 mod approval_integration;
 mod bpm;
 mod document_registry;

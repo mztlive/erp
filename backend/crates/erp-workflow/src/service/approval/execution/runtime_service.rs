@@ -47,8 +47,8 @@ use crate::service::approval::{ApprovalDomainActionPort, FailClosedApprovalActio
 /// HTTP 面审批运行服务。
 #[derive(Clone)]
 pub struct ApprovalRuntimeService<A> {
-    db: Database,
-    auth: A,
+    pub(crate) db: Database,
+    pub(crate) auth: A,
     action_port: Arc<dyn ApprovalDomainActionPort>,
     pub(crate) object_read: Arc<dyn ApprovalObjectReadPort>,
     pub(crate) upgrade: Arc<dyn UpgradeSubjectPort>,

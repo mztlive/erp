@@ -4,16 +4,19 @@ use application_core::AuditActor;
 use persistence_core::NoTransaction;
 use serde::{Deserialize, Serialize};
 
-use super::approval_participant_permissions_with_executor;
+use super::copies::COPY_READ_PERMISSION;
 use super::definition::ApprovalDefinitionService;
 use super::execution::runtime_service::RuntimeAssigneeCandidate;
 use super::policy::require_process_required;
+use super::{approval_action_roles_with_executor, approval_participant_permissions_with_executor};
 use crate::entity::document_registry::DocumentType;
 use crate::error::Result;
 
 /// 定义期候选人查询。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DefinitionAssigneeQuery {
+    /// 抄送候选只需要读取权限。
+    pub copies: bool,
     /// 单据类型。
     pub document_type: DocumentType,
     /// 姓名或账号检索。
@@ -57,9 +60,20 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
         let mut items = Vec::new();
         for account in accounts {
             let candidate = AuditActor::new(account.id.clone(), account.login_account, account.kind);
-            if approval_participant_permissions_with_executor(&self.auth, &candidate, &mut NoTransaction)
+            let eligible = if query.copies {
+                !approval_action_roles_with_executor(
+                    &self.auth,
+                    &candidate,
+                    COPY_READ_PERMISSION,
+                    &mut NoTransaction,
+                )
                 .await?
-            {
+                .is_empty()
+            } else {
+                approval_participant_permissions_with_executor(&self.auth, &candidate, &mut NoTransaction)
+                    .await?
+            };
+            if eligible {
                 items.push(RuntimeAssigneeCandidate { user_id: account.id, name: account.display_name });
             }
         }

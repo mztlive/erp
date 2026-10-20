@@ -196,6 +196,7 @@ mod tests {
     #[test]
     fn sales_list_omits_owner_candidates_and_keeps_row_owner_name() {
         use application_core::PageView;
+        use erp_core::money::Amount;
         use erp_sales::entity::sales_order::{
             BusinessType, CloseStatus, CollectionProgress, CommercialStatus, FulfillmentProgress,
             InvoiceProgress, OriginSystem, ReviewStatus,
@@ -226,6 +227,9 @@ mod tests {
                     updated_at: 1,
                     owner_user_id: "sales-1".to_string(),
                     owner_user_name: Some("张三".to_string()),
+                    gross_amount: Amount::zero(),
+                    net_amount: Amount::zero(),
+                    tax_amount: Amount::zero(),
                     stage: SalesOrderStageSummary {
                         code: "draft",
                         label: "草稿",

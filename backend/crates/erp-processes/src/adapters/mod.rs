@@ -2,7 +2,9 @@
 
 mod approval_materials;
 mod catalog;
-pub(crate) use approval_materials::freeze_approval_materials;
+pub(crate) use approval_materials::{
+    freeze_approval_materials, persist_approval_snapshot, persist_cancel_copies,
+};
 mod catalog_data_scope;
 mod contract;
 mod contract_data_scope;

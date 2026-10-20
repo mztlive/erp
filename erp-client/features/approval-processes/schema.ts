@@ -37,6 +37,29 @@ const editorNodeSchema = z
 
 /** 草稿编辑器校验：至少一个节点，每个节点至少一位审批人，多人按或签处理。 */
 export const definitionEditorSchema = z.object({
+    copyRules: z
+        .array(
+            z.object({
+                trigger: z.enum([
+                    "STARTED",
+                    "NODE_APPROVED",
+                    "APPROVED",
+                    "REJECTED",
+                    "CANCELLED",
+                ]),
+                nodeClientId: z.string().nullable(),
+                recipients: z
+                    .array(
+                        z.object({
+                            user_id: z.string().min(1),
+                            name: z.string(),
+                        }),
+                    )
+                    .min(1, "请选择抄送人")
+                    .max(50),
+            }),
+        )
+        .max(54),
     name: z.string().trim().min(1, "请输入审批流程名称").max(64, "名称过长"),
     nodes: z
         .array(editorNodeSchema)

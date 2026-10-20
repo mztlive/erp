@@ -1,5 +1,7 @@
 "use client"
 
+import { ApprovalCopyHistory } from "./copy-history"
+
 import { cn } from "@/lib/utils"
 import { BusinessFailureState } from "@/components/business"
 import { DefinitionBindingCard } from "./definition-binding-card"
@@ -61,6 +63,12 @@ export function ApprovalReadonly({
                 }
                 compact
             />
+            {instanceId && (
+                <ApprovalCopyHistory
+                    instanceId={instanceId}
+                    idPrefix={`${id}-copies`}
+                />
+            )}
         </div>
     )
 }

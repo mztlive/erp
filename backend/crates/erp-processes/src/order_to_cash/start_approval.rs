@@ -31,7 +31,7 @@ use erp_workflow::service::approval::execution::{
     map_receipt_first_write_error,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
-use erp_workflow::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, WorkItemExt};
+use erp_workflow::{BpmExt, DocumentRegistryExt, WorkItemExt};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
@@ -39,7 +39,7 @@ use persistence_core::{Executor, NoTransaction, Transactional};
 use super::SalesOrderCommandProcess;
 use super::adapter::sales_order_object_readable;
 use super::authorization::SalesCommandAccess;
-use crate::adapters::freeze_approval_materials;
+use crate::adapters::{freeze_approval_materials, persist_approval_snapshot};
 use crate::order_to_cash::command_event::{SalesCommandEvent, replay_submission_with_executor};
 use crate::{Error, Result};
 
@@ -694,7 +694,7 @@ pub(super) async fn persist_runtime_writes(
     )
     .map_err(|error| Error::ValidationError(error.to_string()))?;
     let snapshot = freeze_approval_materials(db, snapshot, executor).await?;
-    db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, executor).await?;
+    persist_approval_snapshot(db, &snapshot, executor).await?;
     persist_open_tasks(db, writes, document_type, owner_role, organization_id, now, executor).await
 }
 

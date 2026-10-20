@@ -1,4 +1,5 @@
 import type {
+    ApprovalCopyRule,
     CreateDefinitionDraftRequest,
     DefinitionLockRequest,
     DefinitionNodeWrite,
@@ -108,22 +109,27 @@ export const buildStableReplaceNodesCommand = (
     nodes: readonly EditorNode[],
     pending: ReplaceDefinitionNodesCommand | null,
     createIdempotencyKey: () => string,
+    copyRules?: ApprovalCopyRule[],
 ): ReplaceDefinitionNodesCommand => {
     const nodeWrites = buildNodeWrites(nodes)
     if (
         pending?.definitionId === definitionId &&
         pending.request.expected_definition_lock_version === lockVersion &&
-        sameNodeWrites(pending.request.nodes, nodeWrites)
+        sameNodeWrites(pending.request.nodes, nodeWrites) &&
+        JSON.stringify(pending.request.copy_rules) === JSON.stringify(copyRules)
     ) {
         return pending
     }
     return {
         definitionId,
-        request: buildReplaceNodesRequest(
-            lockVersion,
-            nodes,
-            createIdempotencyKey(),
-        ),
+        request: {
+            ...buildReplaceNodesRequest(
+                lockVersion,
+                nodes,
+                createIdempotencyKey(),
+            ),
+            copy_rules: copyRules,
+        },
     }
 }
 

@@ -29,13 +29,13 @@ use erp_workflow::service::approval::execution::{
     ExecutionCommandInput, PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
-use erp_workflow::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, WorkItemExt};
+use erp_workflow::{BpmExt, DocumentRegistryExt, WorkItemExt};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::change_adapter::purchase_change_order_object_readable;
-use crate::adapters::freeze_approval_materials;
+use crate::adapters::{freeze_approval_materials, persist_approval_snapshot};
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
@@ -487,7 +487,7 @@ async fn persist_runtime_writes(
     )
     .map_err(|error| Error::ValidationError(error.to_string()))?;
     let snapshot = freeze_approval_materials(db, snapshot, executor).await?;
-    db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, executor).await?;
+    persist_approval_snapshot(db, &snapshot, executor).await?;
     persist_open_tasks(db, writes, owner_role, organization_id, now, executor).await
 }
 

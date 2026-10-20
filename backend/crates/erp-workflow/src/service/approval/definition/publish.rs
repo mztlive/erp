@@ -1,5 +1,6 @@
 use application_core::AuditActor;
 use bpm::graph::DefinitionGraph;
+use bpm::model::ApprovalProcessDefinition;
 use bpm::model::types::ApprovalCommandKind;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -15,13 +16,16 @@ use super::command::{
     lock_command_identity, map_model_error, now, parse_idempotency_key, participant, policy_for_definition,
     replay_prepared_definition_receipt, write_definition_audit, write_receipt,
 };
-use super::mapping::detail_view;
+use super::mapping::detail_with_copies;
 use super::replace::{
     apply_snapshots, load_assignee_snapshots, rebuild_draft_graph, reload_draft_for_cas, replace_graph,
     validate_assignees,
 };
+use crate::entity::approval_copy::ApprovalCopyRule;
 use crate::error::Result;
 use crate::repository::BpmExt;
+use crate::repository::approval_copy::ApprovalCopyExt;
+use crate::service::approval::copies::validate_recipients;
 
 impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
     /// 发布草稿为当前唯一已发布版本。
@@ -175,30 +179,13 @@ async fn publish_tx(
     {
         return Ok(view);
     }
-    let mut current =
-        reload_draft_for_cas(db, &graph.definition, request.expected_definition_lock_version, executor)
+    let current =
+        publish_candidate(db, rbac, &graph, &policy, request.expected_definition_lock_version, executor)
             .await?;
-    let PublishWriteStep::RefreshSnapshotsAndRetirePrevious = decide_publish_write(
-        current.validate_linear().map_err(map_model_error),
-        validate_required_purposes(&policy, &current.purpose_refs()),
-        validate_assignees(db, rbac, &policy, &current.assignee_ids(), executor).await,
-        ensure_actions_registered(&policy),
-    )?;
-    current = prepare_publish_graph(db, rbac, current, executor).await?;
-    let previous = db.bpm_workflow().find_published_by_process_kind(policy.process_kind, executor).await?;
-    let previous_lock = previous.as_ref().map(|item| item.definition_lock_version());
-    let (published, previous) = current
-        .definition
-        .clone()
-        .publish_replacing(previous, participant(actor)?, now()?)
-        .map_err(map_model_error)?;
-    let mut result = DefinitionGraph {
-        definition: published,
-        nodes: current.nodes.clone(),
-        transitions: current.transitions.clone(),
-    };
-    let result_ref = DefinitionCommandResultRef::from_graph(&result).encode();
-    write_receipt(db, &identity.current, &result_ref, executor).await?;
+    let Publication { mut result, previous, previous_lock } =
+        plan_publication(db, &current, actor, executor).await?;
+    write_receipt(db, &identity.current, &DefinitionCommandResultRef::from_graph(&result).encode(), executor)
+        .await?;
     let refreshed = replace_graph(db, current, request.expected_definition_lock_version, executor).await?;
     let outcome = db
         .bpm_workflow()
@@ -221,7 +208,61 @@ async fn publish_tx(
         executor,
     )
     .await?;
-    Ok(detail_view(&result))
+    detail_with_copies(db, &result, executor).await
+}
+
+struct Publication {
+    result: DefinitionGraph,
+    previous: Option<ApprovalProcessDefinition>,
+    previous_lock: Option<u64>,
+}
+
+/// 先构造新旧定义的发布状态，写收据前不落库。
+async fn plan_publication(
+    db: &Database,
+    current: &DefinitionGraph,
+    actor: &AuditActor,
+    executor: &mut dyn Executor,
+) -> Result<Publication> {
+    let previous =
+        db.bpm_workflow().find_published_by_process_kind(current.definition.process_kind, executor).await?;
+    let previous_lock = previous.as_ref().map(|item| item.definition_lock_version());
+    let (published, previous) = current
+        .definition
+        .clone()
+        .publish_replacing(previous, participant(actor)?, now()?)
+        .map_err(map_model_error)?;
+    Ok(Publication {
+        result: DefinitionGraph {
+            definition: published,
+            nodes: current.nodes.clone(),
+            transitions: current.transitions.clone(),
+        },
+        previous,
+        previous_lock,
+    })
+}
+
+async fn publish_candidate(
+    db: &Database,
+    rbac: &impl crate::ports::WorkflowAuthorizationPort,
+    graph: &DefinitionGraph,
+    policy: &ProcessRequiredApprovalPolicy,
+    expected_lock: u64,
+    executor: &mut dyn Executor,
+) -> Result<DefinitionGraph> {
+    let current = reload_draft_for_cas(db, &graph.definition, expected_lock, executor).await?;
+    let PublishWriteStep::RefreshSnapshotsAndRetirePrevious = decide_publish_write(
+        current.validate_linear().map_err(map_model_error),
+        validate_required_purposes(policy, &current.purpose_refs()),
+        validate_assignees(db, rbac, policy, &current.assignee_ids(), executor).await,
+        ensure_actions_registered(policy),
+    )?;
+    if let Some(config) = db.approval_copies().config(&current.definition.base.id, executor).await? {
+        let rules = ApprovalCopyRule::prepare(config.rules, current.nodes.len())?;
+        validate_recipients(rbac, &rules, executor).await?;
+    }
+    prepare_publish_graph(db, rbac, current, executor).await
 }
 
 /// 刷新快照并构造待写草稿图，供发布事务在 receipt-first 后持久化。

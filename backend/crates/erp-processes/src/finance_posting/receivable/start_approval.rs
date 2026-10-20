@@ -27,13 +27,13 @@ use erp_workflow::service::approval::execution::{
     ExecutionCommandInput, PreparedExecution, StartExecutionInput, map_receipt_first_write_error,
 };
 use erp_workflow::service::approval::process_kind::process_kind_of;
-use erp_workflow::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, WorkItemExt};
+use erp_workflow::{BpmExt, DocumentRegistryExt, WorkItemExt};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, NoTransaction};
 
 use super::adapter::customer_receipt_object_readable;
-use crate::adapters::freeze_approval_materials;
+use crate::adapters::{freeze_approval_materials, persist_approval_snapshot};
 use crate::{Error, Result};
 
 /// 加载绑定定义图。缺失时失败关闭，不得用空图启动。
@@ -470,7 +470,7 @@ pub(crate) async fn persist_runtime_writes(
         .await?,
     );
     let snapshot = freeze_approval_materials(db, snapshot, executor).await?;
-    db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, executor).await?;
+    persist_approval_snapshot(db, &snapshot, executor).await?;
     persist_open_tasks(db, document_type, writes, owner_role, organization_id, now, executor).await
 }
 

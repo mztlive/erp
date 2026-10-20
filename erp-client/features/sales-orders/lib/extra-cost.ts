@@ -33,6 +33,9 @@ export const REGISTER_CATEGORY_OPTIONS = (
     Object.keys(EXTRA_COST_CATEGORY_LABEL) as ExtraCostCategory[]
 ).map((value) => ({ value, label: EXTRA_COST_CATEGORY_LABEL[value] }))
 
+// SelectField 将空字符串视为未选择，整单归属使用独立的表单值。
+export const EXTRA_COST_WHOLE_ORDER = "whole-order"
+
 const amountPattern = /^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/
 const percentPattern = /^(?:0|[1-9]\d?)(?:\.\d{1,2})?$/
 
@@ -136,7 +139,7 @@ export function registerDefaults(): RegisterExtraCostValues {
         taxRatePercent: "0",
         occurredOn: todayDate(),
         supplierId: "",
-        salesOrderLineId: "",
+        salesOrderLineId: EXTRA_COST_WHOLE_ORDER,
         evidence: null,
     }
 }

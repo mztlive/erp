@@ -17,6 +17,7 @@ import {
     VersionsPanel,
 } from "@/features/sales-orders/components/sales-order-detail-panels"
 import { SalesOrderCustomerFinancePanel } from "./sales-order-detail-receivable-panel"
+import { SalesOrderDocumentsPanel } from "./sales-order-documents-panel"
 import { ExtraCostPanel } from "@/features/sales-orders/components/sales-order-extra-cost-panel"
 import { SalesOrderProcurementProgress } from "@/features/sales-orders/components/sales-order-procurement-progress"
 import { compareDecimal } from "@/lib/fixed-decimal"
@@ -176,6 +177,10 @@ export function SalesOrderDetailTabs({
                     order={order}
                     section="invoice"
                 />
+            </ObjectSectionTabsPanel>
+
+            <ObjectSectionTabsPanel value="documents">
+                <SalesOrderDocumentsPanel order={order} />
             </ObjectSectionTabsPanel>
 
             <ObjectSectionTabsPanel value="collaboration">

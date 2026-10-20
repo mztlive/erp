@@ -21,6 +21,7 @@ export function deriveSalesOrderDetailState(
         returnTo: string | null
         hasEligibleAcceptance: boolean
         canViewExtraCost?: boolean
+        canSupplementContract?: boolean
     },
 ) {
     const { section, fromWorkspace, returnTo, hasEligibleAcceptance } = input
@@ -61,6 +62,7 @@ export function deriveSalesOrderDetailState(
     )
     const visibleNav = navItemsFor(order, {
         canViewExtraCost: input.canViewExtraCost,
+        canSupplementContract: input.canSupplementContract,
     }).filter((item) => item.show)
 
     const hasPrimaryTaskAction = Boolean(actionableFocusTask)

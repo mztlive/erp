@@ -18,6 +18,7 @@ use crate::{Error, Result};
 /// 精确审批文件目标；销售版本只用于独立的当前来源资料入口。
 #[derive(Clone, Copy)]
 pub struct ApprovalMaterialTarget<'a> {
+    pub copy_receipt_id: Option<&'a str>,
     pub instance_id: &'a str,
     pub file_id: &'a str,
     pub source_revision_id: Option<&'a str>,
@@ -30,6 +31,12 @@ impl ApprovalMaterialTarget<'_> {
         runtime: &ApprovalRuntimeService<A>,
         actor: &AuditActor,
     ) -> Result<ApprovalMaterialFile> {
+        if let Some(id) = self.copy_receipt_id {
+            if self.source_revision_id.is_some() {
+                return Err(Error::Forbidden("抄送仅允许本次提交附件".into()));
+            }
+            return Ok(runtime.copy_material_reference(actor, id, self.file_id).await?);
+        }
         match self.source_revision_id {
             Some(revision) => {
                 Ok(invoice_sales_reference(db, runtime, actor, self.instance_id, revision, self.file_id)

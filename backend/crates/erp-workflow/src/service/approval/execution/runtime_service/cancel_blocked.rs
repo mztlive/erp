@@ -37,6 +37,7 @@ use crate::ports::{ApprovalObjectReadPort, PreparedWorkflowAudit};
 use crate::repository::prelude::*;
 use crate::repository::{ApprovalCancellationExt, BpmExt, WorkItemExt};
 use crate::service::approval::business_adapter::adapter_spec_of;
+use crate::service::approval::copies::persist_copies;
 use crate::service::approval::{
     ApprovalActionContext, ApprovalCancelBlockedCommand, ApprovalDomainActionPort, BlockedCancelActionParams,
     require_approval_management_with_executor,
@@ -378,7 +379,7 @@ async fn cancel_blocked_apply(
     }
     let source = load_cancel_source(db, rbac, object_read, actor, command, executor).await?;
     let operation = prepare_blocked_cancel(db, source, command, idempotency_key, actor, executor).await?;
-    persist_cancel_operation(db, action_port, audit_port, actor, command, operation, executor).await
+    persist_cancel_operation(db, rbac, action_port, audit_port, actor, command, operation, executor).await
 }
 
 /// 事务内授权和运行事实，版本均为取消前版本。
@@ -540,8 +541,10 @@ fn cancel_input(
 }
 
 /// 保持回执首写、领域动作、终态、事实、通知及成功审计的提交顺序。
+#[allow(clippy::too_many_arguments)]
 async fn persist_cancel_operation(
     db: &Database,
+    rbac: &impl crate::ports::WorkflowAuthorizationPort,
     action_port: &dyn ApprovalDomainActionPort,
     audit_port: &dyn crate::ports::WorkflowAuditPort,
     actor: &AuditActor,
@@ -562,6 +565,7 @@ async fn persist_cancel_operation(
         .persist_cancelled_runtime_after_receipt(&writes.instance, &writes.updated_executions, executor)
         .await?;
     db.approval_cancellation_facts().create(&fact, executor).await?;
+    persist_copies(db, rbac, &writes.instance, &writes.events, executor).await?;
     persist_cancel_notifications(
         db,
         &writes,

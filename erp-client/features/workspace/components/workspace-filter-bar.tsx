@@ -1,5 +1,6 @@
 "use client"
 
+import { CopyNavLink } from "@/features/approval-copies/page"
 import type { ComponentProps, ReactNode } from "react"
 import { ChevronDownIcon, SearchIcon, XIcon } from "lucide-react"
 
@@ -104,6 +105,7 @@ export function WorkspaceQueueScopeNav({
                     </span>
                 </WorkspaceTextNavButton>
             ))}
+            <CopyNavLink />
         </div>
     )
 }

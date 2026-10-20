@@ -8,6 +8,7 @@ pub(crate) const SALES_LEADER_PERMISSIONS: &[&str] = &[
     "sales_invoice_request:submit",
     "sales_invoice_request:cancel",
     "work_item:list",
+    "approval_copy:read",
     "work_item:detail",
     // 直接指派的审批任务依赖 manage 参与权可见（与采购/财务等审批角色一致）；
     // 无 manage 时既非创建人又非参与人，任务会被参与权过滤掉。

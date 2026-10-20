@@ -99,6 +99,7 @@ pub async fn preview(
         &state,
         &actor,
         ApprovalMaterialTarget {
+            copy_receipt_id: None,
             instance_id: &id,
             file_id: &file_id,
             source_revision_id: query.source_revision_id.as_deref(),
@@ -132,6 +133,7 @@ pub async fn download(
         &state,
         &actor,
         ApprovalMaterialTarget {
+            copy_receipt_id: None,
             instance_id: &id,
             file_id: &file_id,
             source_revision_id: query.source_revision_id.as_deref(),
@@ -142,7 +144,7 @@ pub async fn download(
 }
 
 /// 文件授权由组合层执行；对象存储读取在事务之外完成。
-async fn content(
+pub(super) async fn content(
     state: &AppState,
     actor: &AuditActor,
     target: ApprovalMaterialTarget<'_>,

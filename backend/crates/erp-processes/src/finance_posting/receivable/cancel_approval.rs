@@ -23,6 +23,7 @@ use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 
 use super::start_approval::load_bound_definition_graph;
+use crate::adapters::persist_cancel_copies;
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
@@ -217,6 +218,7 @@ pub(crate) async fn persist_customer_receipt_cancel(
         .with_transaction(move |executor| {
             Box::pin(async move {
                 claim_and_persist_document_cancel_runtime(&db, &writes, &closed_tasks, executor).await?;
+                persist_cancel_copies(&db, &writes, executor).await?;
                 db.customer_receipts().update(&mut receipt, executor).await?;
                 persist_log(&db, &audit, executor).await?;
                 Ok::<(), crate::Error>(())

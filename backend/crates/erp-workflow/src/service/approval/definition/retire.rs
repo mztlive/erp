@@ -14,7 +14,7 @@ use super::command::{
     map_model_error, now, parse_idempotency_key, participant, policy_for_definition,
     replay_prepared_definition_receipt, write_definition_audit, write_receipt,
 };
-use super::mapping::detail_view;
+use super::mapping::detail_with_copies;
 use crate::error::{Error, Result};
 use crate::repository::BpmExt;
 
@@ -197,7 +197,7 @@ async fn retire_tx(
         executor,
     )
     .await?;
-    Ok(detail_view(&graph))
+    detail_with_copies(db, &graph, executor).await
 }
 
 /// 退役写库步骤。仅当前 PUBLISHED 且锁匹配才允许写回。

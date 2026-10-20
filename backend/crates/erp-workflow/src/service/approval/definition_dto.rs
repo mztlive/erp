@@ -2,12 +2,13 @@
 //!
 //! 写请求使用 `deny_unknown_fields`，拒绝客户端提交节点键、类型、用途、连线或处理器。
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use bpm::model::{ApprovalNodeDefinition, ApprovalParticipant, ModelError, ModelResult};
 use bpm::{Error as BpmError, ParticipantId};
 use serde::{Deserialize, Serialize};
 
+use crate::entity::approval_copy::ApprovalCopyRule;
 use crate::entity::document_registry::DocumentType;
 
 /// 草稿创建来源。
@@ -134,6 +135,9 @@ impl DefinitionNodeRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct ReplaceDefinitionNodesRequest {
+    /// 完整抄送规则；旧客户端未提交时保留已有规则。
+    #[serde(default)]
+    pub copy_rules: Option<Vec<ApprovalCopyRule>>,
     /// 草稿定义主键。
     pub definition_id: String,
     /// 期望的定义锁版本。
@@ -266,6 +270,11 @@ pub struct DefinitionNodeView {
 /// 定义详情。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DefinitionDetailView {
+    #[serde(default)]
+    pub copy_recipient_names: BTreeMap<String, String>,
+    /// 随定义版本冻结的抄送规则。
+    #[serde(default)]
+    pub copy_rules: Vec<ApprovalCopyRule>,
     /// 定义主键。
     pub definition_id: String,
     /// 固定单据类型。

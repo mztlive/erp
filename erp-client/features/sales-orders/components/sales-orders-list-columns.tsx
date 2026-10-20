@@ -133,7 +133,7 @@ export function buildSalesOrdersListColumns(
             cell: ({ row }) => (
                 <StatusTrackSummary
                     variant="inline"
-                    className="max-w-60 flex-wrap gap-x-2 gap-y-1"
+                    className="flex-nowrap gap-x-2"
                     tracks={[
                         {
                             id: "fulfillment",

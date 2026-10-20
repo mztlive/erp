@@ -4,6 +4,7 @@ use bpm::graph::{
 };
 use bpm::ids::{ApprovalNodeDefinitionId, ApprovalProcessDefinitionId};
 use bpm::model::ApprovalProcessDefinition;
+use entity_core::BaseModel;
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::{Executor, Transactional};
@@ -16,10 +17,12 @@ use super::command::{
     create_draft_identity, ensure_definition_admin_permission, map_model_error, now, parse_idempotency_key,
     participant, replay_prepared_definition_receipt, write_definition_audit, write_receipt,
 };
-use super::mapping::detail_view;
+use super::mapping::detail_with_copies;
 use super::replace::{next_transition_ids, validate_assignees};
 use crate::error::{Error, ErrorCode, Result};
 use crate::repository::BpmExt;
+use crate::repository::approval_copy::ApprovalCopyExt;
+use crate::service::approval::copies::validate_recipients;
 
 impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
     /// 创建定义草稿。
@@ -182,9 +185,22 @@ async fn create_draft_tx(
     let result_ref = DefinitionCommandResultRef::from_graph(&graph).encode();
     write_receipt(db, &identity.current, &result_ref, executor).await?;
     persist_new_draft(db, &graph, executor).await?;
+    if request.draft_source == DraftSource::CurrentPublished {
+        let source = db
+            .bpm_workflow()
+            .find_published_by_process_kind(policy.process_kind, executor)
+            .await?
+            .ok_or_else(second_draft_error)?;
+        if let Some(mut config) = db.approval_copies().config(&source.base.id, executor).await? {
+            validate_recipients(rbac, &config.rules, executor).await?;
+            config.base = BaseModel::new(graph.definition.base.id.clone());
+            db.approval_copies().save_config(&config, executor).await?;
+        }
+    }
+
     write_definition_audit(audit, actor, "approval_definition.create_draft", &graph, None, None, executor)
         .await?;
-    Ok(detail_view(&graph))
+    detail_with_copies(db, &graph, executor).await
 }
 
 /// 构造空草稿或从当前发布复制。

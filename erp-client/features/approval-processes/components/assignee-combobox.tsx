@@ -12,6 +12,7 @@ import type { DocumentType, EligibleAssignee } from "../types"
  */
 export function AssigneeCombobox({
     documentType,
+    copies = false,
     value,
     selectedName,
     onChange,
@@ -21,6 +22,7 @@ export function AssigneeCombobox({
     excludedIds = [],
     placeholder = "搜索并选择一位审批人",
 }: {
+    copies?: boolean
     documentType: DocumentType
     value: string
     selectedName: string
@@ -44,6 +46,7 @@ export function AssigneeCombobox({
         documentType,
         debounced,
         assignees == null && !disabled,
+        copies,
     )
     const rows = (assignees ?? query.data ?? []).filter(
         (person) => !excludedIds.includes(person.user_id),
@@ -69,7 +72,7 @@ export function AssigneeCombobox({
     return (
         <OptionCombobox
             id={id}
-            aria-label="选择审批人"
+            aria-label={copies ? "选择抄送人" : "选择审批人"}
             options={options}
             value={value || null}
             onValueChange={(next) => {

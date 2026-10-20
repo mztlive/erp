@@ -23,10 +23,13 @@ use super::command::{
     node_summary, now, parse_idempotency_key, policy_for_definition, replace_nodes_identity,
     replay_prepared_definition_receipt, write_definition_audit, write_receipt,
 };
-use super::mapping::detail_view;
+use super::mapping::detail_with_copies;
+use crate::entity::approval_copy::ApprovalCopyRule;
 use crate::error::{Error, ErrorCode, Result};
 use crate::repository::BpmExt;
+use crate::repository::approval_copy::ApprovalCopyExt;
 use crate::repository::bpm::CasWriteOutcome;
+use crate::service::approval::copies::{save_config, validate_recipients};
 
 impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
     /// 整组替换草稿节点。
@@ -47,12 +50,17 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
     ) -> Result<DefinitionDetailView> {
         let key = parse_idempotency_key(&request.idempotency_key)?;
         request.nodes = prepare_definition_nodes(request.nodes)?;
+        request.copy_rules = request
+            .copy_rules
+            .map(|rules| ApprovalCopyRule::prepare(rules, request.nodes.len()))
+            .transpose()?;
         request.idempotency_key = key.as_str().to_string();
         let identity = replace_nodes_identity(
             key,
             &request.definition_id,
             request.expected_definition_lock_version,
             &request.nodes,
+            request.copy_rules.as_deref(),
             actor.id(),
         )?;
         let graph = self.require_graph(&request.definition_id).await?;
@@ -188,8 +196,19 @@ async fn replace_nodes_tx(
         reload_draft_for_cas(db, &graph.definition, request.expected_definition_lock_version, executor)
             .await?;
     let prepared = prepare_replacement(db, rbac, &reloaded, &policy, &request.nodes, actor, executor).await?;
+    let repository = db.approval_copies();
+    let rules = match request.copy_rules {
+        Some(rules) => rules,
+        None => preserve_copy_rules(
+            repository.config(&request.definition_id, executor).await?.map_or_else(Vec::new, |c| c.rules),
+            &reloaded.nodes,
+            &prepared.nodes,
+        )?,
+    };
+    validate_recipients(rbac, &rules, executor).await?;
     let result_ref = DefinitionCommandResultRef::from_graph(&prepared).encode();
     write_receipt(db, &identity.current, &result_ref, executor).await?;
+    save_config(db, &prepared, rbac, rules, executor).await?;
     apply_draft_graph(
         db,
         audit,
@@ -201,6 +220,25 @@ async fn replace_nodes_tx(
         executor,
     )
     .await
+}
+
+/// 旧客户端省略配置时按节点身份保留规则，禁止随顺序变更抄送到其他节点。
+fn preserve_copy_rules(
+    mut rules: Vec<ApprovalCopyRule>,
+    previous: &[ApprovalNodeDefinition],
+    next: &[ApprovalNodeDefinition],
+) -> Result<Vec<ApprovalCopyRule>> {
+    for rule in &mut rules {
+        let Some(order) = rule.node_order else { continue };
+        let old_node = previous.iter().find(|node| node.display_order == order);
+        let new_node = old_node.and_then(|old| next.iter().find(|node| node.base.id == old.base.id));
+        rule.node_order = Some(
+            new_node
+                .ok_or_else(|| Error::ValidationError("删除抄送关联节点时须同时更新抄送规则".into()))?
+                .display_order,
+        );
+    }
+    ApprovalCopyRule::prepare(rules, next.len())
 }
 
 /// 重新加载草稿并核对锁版本。
@@ -295,7 +333,7 @@ async fn apply_draft_graph(
         session,
     )
     .await?;
-    Ok(detail_view(&applied))
+    detail_with_copies(db, &applied, session).await
 }
 
 /// 调用仓储整组替换草稿图。
@@ -699,10 +737,40 @@ pub(super) fn ensure_static_decide_permission(has_decide: bool) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use bpm::model::NewNodeDefinition;
     use bpm::{ProcessKind, Timestamp};
 
     use super::super::test_support::draft_definition;
     use super::*;
+    use crate::entity::approval_copy::CopyTrigger;
+
+    #[test]
+    fn omitted_copy_rules_follow_node_identity_and_reject_deleted_nodes() {
+        let node = |id: &str, display_order| {
+            ApprovalNodeDefinition::new(NewNodeDefinition {
+                id: ApprovalNodeDefinitionId::new(id),
+                process_definition_id: ApprovalProcessDefinitionId::new("definition"),
+                node_key: id.into(),
+                node_name: id.into(),
+                node_purpose: None,
+                display_order,
+                assignee_participant_id: ParticipantId::new("approver").unwrap(),
+                assignee_label_snapshot: "审批人".into(),
+                at: Timestamp::from_unix_secs(1).unwrap(),
+            })
+            .unwrap()
+        };
+        let old = vec![node("first", 1), node("second", 2)];
+        let reordered = vec![node("second", 1), node("first", 2)];
+        let rule = ApprovalCopyRule {
+            trigger: CopyTrigger::NodeApproved,
+            node_order: Some(1),
+            recipient_user_ids: vec!["reader".into()],
+        };
+        let preserved = preserve_copy_rules(vec![rule.clone()], &old, &reordered).unwrap();
+        assert_eq!(preserved[0].node_order, Some(2));
+        assert!(preserve_copy_rules(vec![rule], &old, &[node("second", 1)]).is_err());
+    }
 
     /// 陈旧锁或 VersionConflict 立即失败，不得继续规划或写图。
     #[test]

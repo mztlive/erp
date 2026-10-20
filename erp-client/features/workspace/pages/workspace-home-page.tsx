@@ -1,5 +1,9 @@
 "use client"
 
+import { useSearchParams } from "next/navigation"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { hasPermission } from "@/lib/permissions"
+import { ApprovalCopiesPage } from "@/features/approval-copies/page"
 import { ArrowLeftIcon, ArrowRightIcon, RefreshCwIcon } from "lucide-react"
 import {
     BusinessEmptyState,
@@ -25,6 +29,18 @@ import { deriveWorkItemsFreshness } from "../lib/freshness"
 import { filterSummaryFor, buildWorkspaceSearchParams } from "../lib/url-state"
 
 export function WorkspaceHomePage() {
+    const params = useSearchParams()
+    const profile = useAccountProfileQuery().data
+    if (
+        params.get("view") === "copied" ||
+        (profile &&
+            !hasPermission(profile.permissions, "work_item:list") &&
+            hasPermission(profile.permissions, "approval_copy:read"))
+    )
+        return <ApprovalCopiesPage />
+    return <WorkspaceTaskHome />
+}
+function WorkspaceTaskHome() {
     return <WorkspaceHomeView home={useWorkspaceHome()} />
 }
 

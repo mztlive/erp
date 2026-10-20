@@ -651,12 +651,78 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "GET",
+                path: "/admin/approval-instances/{id}/copies",
+                description: "查看实例抄送记录",
+                permission: {
+                    resource: "approval_instance",
+                    action: "read",
+                },
+            },
+            {
+                module: "admin",
                 method: "POST",
                 path: "/admin/stock-adjustments/{id}/cancel-approval",
                 description: "撤回库存调整审批",
                 permission: {
                     resource: "approval_instance",
                     action: "cancel",
+                },
+            },
+        ],
+    },
+    {
+        name: "审批抄送",
+        description: "接收和阅读本人审批抄送",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/approval-copies",
+                description: "读取本人抄送",
+                permission: {
+                    resource: "approval_copy",
+                    action: "read",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/approval-copies/read",
+                description: "标记本人抄送已读",
+                permission: {
+                    resource: "approval_copy",
+                    action: "read",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/approval-copies/{id}",
+                description: "读取本人抄送资料",
+                permission: {
+                    resource: "approval_copy",
+                    action: "read",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/approval-copies/{id}/materials/{file}/preview",
+                description: "预览抄送附件",
+                permission: {
+                    resource: "approval_copy",
+                    action: "read",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/approval-copies/{id}/materials/{file}/download",
+                description: "下载抄送附件",
+                permission: {
+                    resource: "approval_copy",
+                    action: "read",
                 },
             },
         ],

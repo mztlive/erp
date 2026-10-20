@@ -29,9 +29,9 @@ import type { SalesOrderDetailView } from "@/features/sales-orders/api/contracts
 import { useSupplementSalesOrderContract } from "@/features/sales-orders/hooks/use-sales-order-contract"
 import { useSalesOrderContractCheck } from "@/features/sales-orders/hooks/queries"
 import { ContractSupplementCheck } from "./contract-supplement-check"
-import { hasPermission } from "@/lib/permissions"
+import { canSupplementSalesOrderContract } from "@/features/sales-orders/lib/sales-order-detail-permissions"
 
-/** 概览内补录合同；客户必须一致，结算主体保留销售单选择。 */
+/** 合同凭证分区内补录合同；客户必须一致，结算主体保留销售单选择。 */
 export function SalesOrderContractSupplement({
     order,
 }: {
@@ -94,17 +94,12 @@ export function SalesOrderContractSupplement({
             contractQuery.data.currentRevision.revisionId,
         )
     }, [contractId, contractQuery.data, form])
-    if (
-        order.contractId ||
-        order.originSystem !== "erp" ||
-        order.primaryStatus.code === "voided" ||
-        !hasPermission(profile.data?.permissions, "sales_order:update")
-    )
+    if (!canSupplementSalesOrderContract(order, profile.data?.permissions))
         return null
     return (
         <>
             <Button
-                id="sales-order-overview-supplement-contract"
+                id="sales-order-documents-supplement-contract"
                 type="button"
                 variant="outline"
                 size="sm"

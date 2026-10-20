@@ -33,6 +33,7 @@ use super::adapter::{
     require_frozen_binding,
 };
 use super::start_approval::load_bound_definition_graph;
+use crate::adapters::persist_cancel_copies;
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
@@ -499,6 +500,7 @@ impl CancelSteps for CancelPosting<'_> {
             },
             CancelStep::Audit => {
                 persist_log(self.db, self.audit, executor).await?;
+                persist_cancel_copies(self.db, self.writes, executor).await?;
             },
         }
         Ok(())

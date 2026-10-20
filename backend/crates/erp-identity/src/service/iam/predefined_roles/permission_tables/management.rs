@@ -10,6 +10,7 @@ pub(crate) const MANAGEMENT_PERMISSIONS: &[&str] = &[
     "product:detail",
     "sku:list",
     "work_item:list",
+    "approval_copy:read",
     "work_item:detail",
     "work_item:manage",
     "work_item:reassign",

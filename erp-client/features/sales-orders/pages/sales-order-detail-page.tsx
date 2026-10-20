@@ -35,6 +35,7 @@ import { useWorkItemDetailQuery } from "@/features/work-items/queries"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { FormalCommandKeyLedger } from "@/lib/formal-command"
 import { hasPermission } from "@/lib/permissions"
+import { canSupplementSalesOrderContract } from "@/features/sales-orders/lib/sales-order-detail-permissions"
 import { cn } from "@/lib/utils"
 
 /**
@@ -193,6 +194,10 @@ export function SalesOrderDetailPage({
         returnTo,
         hasEligibleAcceptance: eligibilityQuery.data === true,
         canViewExtraCost,
+        canSupplementContract: canSupplementSalesOrderContract(
+            order,
+            account.data?.permissions,
+        ),
     })
     if (derived.showEditor) {
         return (

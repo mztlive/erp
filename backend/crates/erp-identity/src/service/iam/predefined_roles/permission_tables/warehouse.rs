@@ -2,6 +2,7 @@
 pub(crate) const WAREHOUSE_PERMISSIONS: &[&str] = &[
     "business_person:list",
     "work_item:list",
+    "approval_copy:read",
     "work_item:detail",
     "approval_instance:read",
     "approval_instance:decide",

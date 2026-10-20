@@ -136,16 +136,23 @@ export function useEligibleAssigneesQuery(
     documentType: DocumentType | null,
     search: string,
     enabled = true,
+    copies = false,
 ) {
     const normalized = search.trim()
     return useQuery({
         queryKey: documentType
-            ? approvalProcessKeys.eligibleAssignees(documentType, normalized)
+            ? [
+                  ...approvalProcessKeys.eligibleAssignees(
+                      documentType,
+                      normalized,
+                  ),
+                  copies,
+              ]
             : [...approvalProcessKeys.all, "eligibleAssignees", "idle"],
         queryFn: async () => {
             if (!documentType) throw new Error("请选择单据类型后重试")
             return unwrapResult(
-                await fetchEligibleAssignees(documentType, normalized),
+                await fetchEligibleAssignees(documentType, normalized, copies),
             )
         },
         enabled: Boolean(documentType) && enabled,

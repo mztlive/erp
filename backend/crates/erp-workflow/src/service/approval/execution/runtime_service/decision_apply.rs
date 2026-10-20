@@ -1,5 +1,6 @@
 //! 审批决定提交、回放与事务写入。
 
+use crate::service::approval::copies::persist_copies;
 mod decision_persist;
 mod decision_prepare;
 
@@ -353,6 +354,7 @@ async fn submit_decision_apply(
     }
     persist_decision_writes(db, persist_decision_input(&loaded, &prepared, command, audit_port), executor)
         .await?;
+    persist_copies(db, rbac, &prepared.writes.instance, &prepared.writes.events, executor).await?;
     let blocked = prepared.writes.commit == CommitRequired::Blocked;
     let view = map_command_view(
         &prepared.writes.instance,

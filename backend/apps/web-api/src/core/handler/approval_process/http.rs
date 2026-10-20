@@ -2,6 +2,7 @@
 //!
 //! 路径参数与字符串版本属于 HTTP 形态差异；节点写请求复用 Service DTO。
 
+use erp_workflow::entity::approval_copy::ApprovalCopyRule;
 use erp_workflow::service::approval::definition_dto::DefinitionNodeRequest;
 use serde::Deserialize;
 
@@ -11,6 +12,8 @@ use serde::Deserialize;
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct ReplaceNodesHttpRequest {
+    #[serde(default)]
+    pub copy_rules: Option<Vec<ApprovalCopyRule>>,
     /// 期望的定义锁版本。
     pub expected_definition_lock_version: String,
     /// 有序节点。
@@ -32,7 +35,7 @@ impl ReplaceNodesHttpRequest {
     /// # 错误
     /// 无。
     pub fn new(expected_definition_lock_version: String, idempotency_key: String) -> Self {
-        Self { expected_definition_lock_version, nodes: Vec::new(), idempotency_key }
+        Self { copy_rules: None, expected_definition_lock_version, nodes: Vec::new(), idempotency_key }
     }
 }
 
@@ -50,6 +53,8 @@ pub struct DefinitionLockHttpRequest {
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct EligibleAssigneesQuery {
+    #[serde(default)]
+    pub copies: bool,
     /// 姓名或账号检索。
     pub search: Option<String>,
     /// 稳定游标。
@@ -150,9 +155,14 @@ mod tests {
 
     #[test]
     fn eligible_assignee_query_caps_limit() {
-        let query = EligibleAssigneesQuery { search: Some("张".to_string()), cursor: None, limit: Some(50) };
+        let query = EligibleAssigneesQuery {
+            copies: false,
+            search: Some("张".to_string()),
+            cursor: None,
+            limit: Some(50),
+        };
         assert_eq!(query.normalized_limit().expect("max"), 50);
-        let overflow = EligibleAssigneesQuery { search: None, cursor: None, limit: Some(51) };
+        let overflow = EligibleAssigneesQuery { copies: false, search: None, cursor: None, limit: Some(51) };
         assert!(overflow.normalized_limit().is_err());
     }
 }

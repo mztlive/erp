@@ -386,8 +386,8 @@ async function supplementContract(
             },
         )
     } else {
-        await page.goto(`/sales/orders/${original.id}?section=overview`)
-        await page.locator("#sales-order-overview-supplement-contract").click()
+        await page.goto(`/sales/orders/${original.id}?section=documents`)
+        await page.locator("#sales-order-documents-supplement-contract").click()
         const dialog = page.getByRole("dialog", { name: "补录销售合同" })
         await expect(dialog).toBeVisible(VISIBLE)
         await chooseOption(
@@ -410,7 +410,7 @@ async function supplementContract(
         await readUiResult(response)
         await expect(dialog).toBeHidden(VISIBLE)
         await expect(
-            page.locator("#sales-order-overview-supplement-contract"),
+            page.locator("#sales-order-documents-supplement-contract"),
         ).toHaveCount(0)
     }
     const bound = await apiGet<SalesOrder>(
@@ -938,12 +938,12 @@ test("[flow-21] 信用代码可空、无合同凭证采购审批、合同筛选�
         expect(
             await apiGet<SalesOrder>(token, `/admin/sales-orders/${voided.id}`),
         ).toEqual(voided)
-        await page.goto(`/sales/orders/${voided.id}?section=overview`)
+        await page.goto(`/sales/orders/${voided.id}?section=documents`)
         await expect(
             page.getByText("已作废", { exact: true }).first(),
         ).toBeVisible(VISIBLE)
         await expect(
-            page.locator("#sales-order-overview-supplement-contract"),
+            page.locator("#sales-order-documents-supplement-contract"),
         ).toHaveCount(0)
     })
 

@@ -24,6 +24,7 @@ import {
     useRegisterSalesExtraCostMutation,
 } from "@/features/sales-orders/hooks/queries"
 import {
+    EXTRA_COST_WHOLE_ORDER,
     REGISTER_CATEGORY_OPTIONS,
     newExtraCostRequestKey,
     reduceDefaults,
@@ -34,8 +35,6 @@ import {
     todayDate,
 } from "@/features/sales-orders/lib/extra-cost"
 import { getErrorMessage } from "@/lib/api/errors"
-
-const WHOLE_ORDER = ""
 
 /** 财务按凭证登记附加费用。 */
 export function RegisterExtraCostDialog({
@@ -53,7 +52,7 @@ export function RegisterExtraCostDialog({
     )
     const [failure, setFailure] = React.useState<string | null>(null)
     const lineOptions = [
-        { value: WHOLE_ORDER, label: "整张销售单" },
+        { value: EXTRA_COST_WHOLE_ORDER, label: "整张销售单" },
         ...order.lineItems
             .filter((line) => line.quantity !== "0")
             .map((line) => ({
@@ -74,7 +73,10 @@ export function RegisterExtraCostDialog({
                     inputTaxRate: taxRateFromPercent(value.taxRatePercent),
                     occurredOn: value.occurredOn,
                     supplierId: value.supplierId || undefined,
-                    salesOrderLineId: value.salesOrderLineId || undefined,
+                    salesOrderLineId:
+                        value.salesOrderLineId === EXTRA_COST_WHOLE_ORDER
+                            ? undefined
+                            : value.salesOrderLineId || undefined,
                     evidence: value.evidence as File,
                     idempotencyKey: requestKey,
                 })

@@ -152,7 +152,7 @@ export function SalesOrderProcurementProgress({
                     </div>
                 </div>
                 {hasGap ? (
-                    <div className="px-4 py-4 md:px-5">
+                    <div className="border-t border-warning-border/60 px-4 py-4 md:px-5">
                         <h3 className="text-sm font-medium">待覆盖明细</h3>
                         {uncoveredLines?.length ? (
                             <ul className="mt-2 divide-y divide-border/60">
@@ -206,13 +206,15 @@ export function SalesOrderProcurementProgress({
                         )}
                     </div>
                 ) : null}
+                {hasExcess && excessLines?.length ? (
+                    <div className="border-t border-warning-border/60 px-4 py-4 md:px-5">
+                        <SalesOrderProcurementExcessLines
+                            id={`sales-order-${surface}-procurement-excess`}
+                            lines={excessLines}
+                        />
+                    </div>
+                ) : null}
             </div>
-            {hasExcess && excessLines?.length ? (
-                <SalesOrderProcurementExcessLines
-                    id={`sales-order-${surface}-procurement-excess`}
-                    lines={excessLines}
-                />
-            ) : null}
             <SalesOrderProcurementSourceNotice
                 id={`sales-order-${surface}-source-changed-notice`}
                 progress={progress}
@@ -230,10 +232,7 @@ function SalesOrderProcurementExcessLines({
     lines: readonly SalesOrderProcurementCoverageLine[]
 }) {
     return (
-        <div
-            id={id}
-            className="rounded-xl border border-warning-border px-4 py-3 md:px-5"
-        >
+        <div id={id}>
             <h3 className="text-sm font-medium">超出明细</h3>
             <ul className="mt-2 divide-y divide-border/60">
                 {lines.map((line) => (

@@ -7,7 +7,7 @@ use super::super::definition_dto::{DefinitionCatalogItem, DefinitionDetailView, 
 use super::super::policy::{ALL_DOCUMENT_TYPES, DocumentApprovalPolicy, policy_of, require_process_required};
 use super::super::process_kind::{document_type_of, process_kind_of};
 use super::command::definition_not_found;
-use super::mapping::{catalog_facts_by_kind, catalog_item, detail_view, version_item};
+use super::mapping::{catalog_facts_by_kind, catalog_item, detail_with_copies, version_item};
 use super::{ApprovalDefinitionService, DefinitionManagementVisibility, definition_management_visibility};
 use crate::entity::document_registry::DocumentType;
 use crate::error::Result;
@@ -108,7 +108,7 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
             .ok_or_else(definition_not_found)?;
         let document_type = document_type_of(graph.definition.process_kind);
         ensure_can_read_detail(&visibility, document_type)?;
-        Ok(detail_view(&graph))
+        detail_with_copies(&self.db, &graph, &mut NoTransaction).await
     }
 }
 

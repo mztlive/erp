@@ -8,12 +8,14 @@ use std::collections::{HashMap, HashSet};
 use application_core::AuditActor;
 use erp_contract::repository::prelude::*;
 use erp_core::ids::{SalesOrderId, SalesOrderSubmissionId};
+use erp_core::money::Amount;
 use erp_customer::repository::prelude::*;
 use erp_identity::repository::prelude::*;
 use erp_identity::{AccessControlExt, Permission, subject};
 use erp_sales::dto::sales_order::{PageView, SubmissionView};
 use erp_sales::entity::sales_order::{BusinessType, ReviewStatus};
 use erp_sales::repository::sales_order::SalesOrderRow;
+use erp_sales::repository::{SalesOrderExt, SalesOrderRevisionRepositoryExt};
 use erp_workflow::WorkItemExt;
 use erp_workflow::repository::prelude::*;
 use persistence_core::NoTransaction;
@@ -88,12 +90,13 @@ impl SalesOrderReadService {
         let customer_names = self
             .customer_names_batch(&page.items.iter().map(|row| row.customer_id.clone()).collect::<Vec<_>>())
             .await?;
+        let revision_amounts = self.revision_amounts(&page.items).await?;
         let items = page
             .items
             .into_iter()
             .map(|row| {
                 let customer_name = customer_names.get(&row.customer_id).cloned();
-                let mut view = map_sales_row(row, &owners, &owner_names);
+                let mut view = map_sales_row(row, &owners, &owner_names, &revision_amounts);
                 view.customer_name = customer_name;
                 view
             })
@@ -324,6 +327,43 @@ impl SalesOrderReadService {
             .collect())
     }
 
+    /// 批量读取列表当前正式版本的金额。
+    ///
+    /// # 参数
+    /// * `rows` - 当前页销售单投影行
+    ///
+    /// # 返回
+    /// 返回按正式版本身份索引的金额快照；无正式版本的单据不在结果中。
+    ///
+    /// # 错误
+    /// 版本仓储查询失败时返回仓储错误。
+    async fn revision_amounts(
+        &self,
+        rows: &[SalesOrderRow],
+    ) -> Result<HashMap<String, SalesRevisionAmounts>> {
+        let revision_ids = rows
+            .iter()
+            .filter_map(|row| row.current_revision_id.clone())
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        let revisions =
+            self.db.sales_order_revisions().find_revisions_by_ids(&revision_ids, &mut NoTransaction).await?;
+        Ok(revisions
+            .into_iter()
+            .map(|revision| {
+                (
+                    revision.base.id.clone(),
+                    SalesRevisionAmounts {
+                        gross: revision.gross_amount,
+                        net: revision.net_amount,
+                        tax: revision.tax_amount,
+                    },
+                )
+            })
+            .collect())
+    }
+
     /// 批量解析账号展示姓名。
     ///
     /// # 参数
@@ -341,11 +381,23 @@ impl SalesOrderReadService {
     }
 }
 
+/// 当前正式版本的列表金额快照。
+#[derive(Debug, Clone, Copy)]
+struct SalesRevisionAmounts {
+    /// 含税成交金额。
+    gross: Amount,
+    /// 不含税成交金额。
+    net: Amount,
+    /// 税额。
+    tax: Amount,
+}
+
 /// 映射销售列表行与阶段责任快照，纯内存组装不触库.
 fn map_sales_row(
     row: SalesOrderRow,
     owners: &StageOwnerSnapshot,
     owner_names: &HashMap<String, String>,
+    revision_amounts: &HashMap<String, SalesRevisionAmounts>,
 ) -> SalesOrderView {
     let (code, label, tone) = stage_code_label_tone(
         row.commercial_status,
@@ -357,6 +409,8 @@ fn map_sales_row(
         owners.get(&row.id).cloned().unwrap_or_default();
     let owner_user_id = row.sales_owner_user_id.clone();
     let owner_user_name = owner_names.get(&owner_user_id).cloned();
+    let amounts =
+        row.current_revision_id.as_deref().and_then(|revision_id| revision_amounts.get(revision_id)).copied();
     SalesOrderView {
         id: row.id,
         order_no: row.order_no,
@@ -378,6 +432,9 @@ fn map_sales_row(
         updated_at: row.updated_at,
         owner_user_id,
         owner_user_name,
+        gross_amount: amounts.map_or_else(Amount::zero, |value| value.gross),
+        net_amount: amounts.map_or_else(Amount::zero, |value| value.net),
+        tax_amount: amounts.map_or_else(Amount::zero, |value| value.tax),
         stage: dto::SalesOrderStageSummary {
             code,
             label,

@@ -28,7 +28,7 @@ use erp_workflow::repository::bpm::ApprovalInstanceListProjection;
 use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::execution::apply_plan::PlannedWrites;
 use erp_workflow::service::approval::execution::{PreparedExecution, map_receipt_first_write_error};
-use erp_workflow::{ApprovalIntegrationExt, BpmExt, DocumentRegistryExt, WorkItemExt};
+use erp_workflow::{BpmExt, DocumentRegistryExt, WorkItemExt};
 use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
@@ -40,7 +40,7 @@ use super::super::payment_subject::revalidate_payment_subject;
 use super::super::procurement_task_sync::sync_purchase_source_updates;
 use super::super::source_recheck::ensure_source_unaffected;
 use super::supply_selection::revalidate_selected_supply;
-use crate::adapters::freeze_approval_materials;
+use crate::adapters::{freeze_approval_materials, persist_approval_snapshot};
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
@@ -414,7 +414,7 @@ async fn persist_runtime_writes(
     )
     .map_err(|error| Error::ValidationError(error.to_string()))?;
     let snapshot = freeze_approval_materials(db, snapshot, executor).await?;
-    db.approval_subject_snapshots().create_immutable_snapshot(&snapshot, executor).await?;
+    persist_approval_snapshot(db, &snapshot, executor).await?;
     persist_open_tasks(db, writes, owner_role, organization_id, now, executor).await
 }
 

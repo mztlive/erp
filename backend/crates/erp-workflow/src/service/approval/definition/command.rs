@@ -24,7 +24,7 @@ use super::super::policy::{ProcessRequiredApprovalPolicy, require_process_requir
 use super::super::process_kind::{document_type_of, process_kind_of};
 use super::super::scope::definition_management_visibility_with_executor;
 use super::ApprovalDefinitionService;
-use super::mapping::detail_view;
+use super::mapping::detail_with_copies;
 use crate::entity::document_registry::DocumentType;
 use crate::error::{Error, ErrorCode, Result};
 use crate::ports::PreparedWorkflowAudit;
@@ -228,7 +228,7 @@ async fn replay_current_receipt(
         .await?
         .ok_or_else(idempotency_payload_conflict)?;
     result_ref.ensure_matches(&graph, expectation)?;
-    Ok(Some(detail_view(&graph)))
+    Ok(Some(detail_with_copies(db, &graph, session).await?))
 }
 
 /// 单一回放策略表（当前 V3 → 已登记历史候选），各命令入口共用。
@@ -281,7 +281,7 @@ async fn replay_legacy_receipt(
         .await?
         .ok_or_else(idempotency_payload_conflict)?;
     ensure_legacy_result(&receipt, &graph, &legacy.proof)?;
-    Ok(Some(detail_view(&graph)))
+    Ok(Some(detail_with_copies(db, &graph, session).await?))
 }
 
 /// 写入命令收据。
@@ -958,7 +958,8 @@ mod tests {
         assert_eq!(nodes[0].node_name, "仓储复核");
         assert_eq!(nodes[0].node_id.as_deref(), Some("node-1"));
         assert_eq!(nodes[1].assignee_user_id, "u2");
-        let replace = replace_nodes_identity(key.clone(), "def-1", 3, &nodes, "admin-1").expect("替换身份");
+        let replace =
+            replace_nodes_identity(key.clone(), "def-1", 3, &nodes, None, "admin-1").expect("替换身份");
         assert_eq!(
             replace.current.scope().as_str(),
             "v3:8fb38d7db619da0a2f1f164fa6575056b8ecadc45c066396f07aaba97c5a06f3"
@@ -1031,11 +1032,11 @@ mod tests {
         }])
         .expect("空可选值");
         assert_ne!(
-            replace_nodes_identity(key.clone(), "def-1", 3, &literal_null_nodes, "admin-1")
+            replace_nodes_identity(key.clone(), "def-1", 3, &literal_null_nodes, None, "admin-1")
                 .unwrap()
                 .current
                 .digest(),
-            replace_nodes_identity(key.clone(), "def-1", 3, &absent_nodes, "admin-1")
+            replace_nodes_identity(key.clone(), "def-1", 3, &absent_nodes, None, "admin-1")
                 .unwrap()
                 .current
                 .digest()

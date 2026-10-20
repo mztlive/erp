@@ -141,6 +141,8 @@ export type DefinitionNodeView = {
 
 /** 定义详情。 */
 export type DefinitionDetailView = {
+    copy_rules?: ApprovalCopyRule[]
+    copy_recipient_names?: Record<string, string>
     definition_id: string
     document_type: DocumentType
     document_type_label: string
@@ -184,6 +186,7 @@ export type DefinitionNodeWrite = {
 
 /** 整组替换草稿节点的 HTTP 请求体。 */
 export type ReplaceDefinitionNodesRequest = {
+    copy_rules?: ApprovalCopyRule[]
     expected_definition_lock_version: string
     nodes: DefinitionNodeWrite[]
     idempotency_key: string
@@ -227,4 +230,21 @@ export type DetailView = "current" | "draft" | "history"
 export type DetailUrlState = {
     view: DetailView
     version?: string
+}
+
+export type CopyTrigger =
+    | "STARTED"
+    | "NODE_APPROVED"
+    | "APPROVED"
+    | "REJECTED"
+    | "CANCELLED"
+export type ApprovalCopyRule = {
+    trigger: CopyTrigger
+    node_order: number | null
+    recipient_user_ids: string[]
+}
+export type EditorCopyRule = {
+    trigger: CopyTrigger
+    nodeClientId: string | null
+    recipients: EligibleAssignee[]
 }

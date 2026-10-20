@@ -220,22 +220,7 @@ pub async fn ensure_predefined_roles(rbac: &SharedRbacService) -> Result<()> {
 async fn ensure_missing_permissions(rbac: &SharedRbacService) -> Result<()> {
     for role in PREDEFINED_ROLES {
         // 已存在角色的目录授权由管理员显式维护；缺失无法区分从未授予与人工撤销。
-        let desired = startup_permissions(parse_permissions(role.permissions)?)
-            .into_iter()
-            .filter(|permission| {
-                !matches!(
-                    (permission.resource(), permission.action()),
-                    (
-                        "sales_person"
-                            | "procurement_person"
-                            | "business_person"
-                            | "settlement_party"
-                            | "warehouse",
-                        "list"
-                    ) | ("person_query_qualification", "manage")
-                )
-            })
-            .collect();
+        let desired = appendable_permissions(startup_permissions(parse_permissions(role.permissions)?));
         if rbac.ensure_missing_seeded_role_permissions(role.id, desired).await? {
             tracing::info!(
                 role_id = role.id,
@@ -245,6 +230,27 @@ async fn ensure_missing_permissions(rbac: &SharedRbacService) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// 显式维护的目录与抄送资格不进入既有角色的缺项自动追加。
+fn appendable_permissions(permissions: Vec<Permission>) -> Vec<Permission> {
+    permissions
+        .into_iter()
+        .filter(|permission| {
+            !matches!(
+                (permission.resource(), permission.action()),
+                (
+                    "sales_person"
+                        | "procurement_person"
+                        | "business_person"
+                        | "settlement_party"
+                        | "warehouse",
+                    "list"
+                ) | ("person_query_qualification", "manage")
+                    | ("approval_copy", "read")
+            )
+        })
+        .collect()
 }
 
 /// 启动过程不授予外部账号、定向目录与申请处理专项权限。
@@ -371,6 +377,16 @@ mod tests {
                 .iter()
                 .all(|permission| !permission.resource().starts_with("supplier_portal_"))
         );
+    }
+
+    #[test]
+    fn copy_read_is_seeded_but_never_appended_after_manual_revocation() {
+        for role in super::PREDEFINED_ROLES {
+            let initial = super::initial_permissions(role).unwrap();
+            assert!(initial.iter().any(|p| p.to_string() == "approval_copy:read"));
+            let appended = super::appendable_permissions(super::startup_permissions(initial));
+            assert!(appended.iter().all(|p| p.to_string() != "approval_copy:read"));
+        }
     }
 
     #[test]
@@ -814,6 +830,7 @@ mod tests {
                     | &"work_item:reassign"
                     | &"approval_process:read"
                     | &"approval_instance:read"
+                    | &"approval_copy:read"
                     | &"approval_instance:cancel"
                     | &"approval_instance:resume"
                     | &"approval_instance:cancel_blocked"

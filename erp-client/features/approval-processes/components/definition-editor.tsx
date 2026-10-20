@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { CopyRuleEditor } from "./copy-rule-editor"
+import { seedCopyRules, buildCopyRules } from "../copy-rules"
 import { CopyIcon, PlusIcon } from "lucide-react"
 import { DraftSaveIndicator } from "@/components/business"
 import { useAppForm } from "@/components/form"
@@ -60,10 +62,15 @@ export function DefinitionEditor({
     )
     const [copyOpen, setCopyOpen] = React.useState(false)
     const readOnly = detail.status !== "DRAFT"
+    const initialNodes = React.useMemo(
+        () => seedDraftNodes(detail.document_type, detail.nodes),
+        [detail.document_type, detail.nodes],
+    )
     const form = useAppForm({
         defaultValues: {
             name: detail.name,
-            nodes: seedDraftNodes(detail.document_type, detail.nodes),
+            nodes: initialNodes,
+            copyRules: seedCopyRules(detail, initialNodes),
         },
         validators: {
             onChange: definitionEditorSchema,
@@ -88,6 +95,10 @@ export function DefinitionEditor({
                     orderNodesForSave(detail.document_type, value.nodes),
                     pendingCommandRef.current,
                     () => newCommandKey("replace-nodes"),
+                    buildCopyRules(
+                        value.copyRules,
+                        orderNodesForSave(detail.document_type, value.nodes),
+                    ),
                 )
                 pendingCommandRef.current = command
                 const next = await replaceNodes.mutateAsync(command)
@@ -96,7 +107,11 @@ export function DefinitionEditor({
                 const selectedIndex = value.nodes.findIndex(
                     (node) => node.client_id === selectedNodeId,
                 )
-                form.reset({ name: next.name, nodes: nextNodes })
+                form.reset({
+                    name: next.name,
+                    nodes: nextNodes,
+                    copyRules: seedCopyRules(next, nextNodes),
+                })
                 setSelectedNodeId(
                     nextNodes[Math.max(0, selectedIndex)]?.client_id ?? null,
                 )
@@ -274,6 +289,18 @@ export function DefinitionEditor({
                                                     null,
                                             )
                                             form.setFieldValue("nodes", next)
+                                            form.setFieldValue(
+                                                "copyRules",
+                                                form.state.values.copyRules.filter(
+                                                    (r) =>
+                                                        !r.nodeClientId ||
+                                                        next.some(
+                                                            (n) =>
+                                                                n.client_id ===
+                                                                r.nodeClientId,
+                                                        ),
+                                                ),
+                                            )
                                             setSaveState("idle")
                                         }}
                                     />
@@ -287,6 +314,27 @@ export function DefinitionEditor({
                                     </p>
                                 </div>
                             </div>
+                        )}
+                    </form.Subscribe>
+                    <form.Subscribe
+                        selector={(state) =>
+                            [
+                                state.values.copyRules,
+                                state.values.nodes,
+                            ] as const
+                        }
+                    >
+                        {([rules, nodes]) => (
+                            <CopyRuleEditor
+                                rules={rules}
+                                nodes={nodes}
+                                documentType={detail.document_type}
+                                disabled={readOnly || replaceNodes.isPending}
+                                onChange={(rules) => {
+                                    form.setFieldValue("copyRules", rules)
+                                    setSaveState("idle")
+                                }}
+                            />
                         )}
                     </form.Subscribe>
                 </div>
@@ -347,6 +395,10 @@ export function DefinitionEditor({
                 onCopy={(source) => {
                     const nodes = copyDraftNodes(source.nodes)
                     form.setFieldValue("nodes", nodes)
+                    form.setFieldValue(
+                        "copyRules",
+                        seedCopyRules(source, nodes),
+                    )
                     setSelectedNodeId(nodes[0]?.client_id ?? null)
                     setSaveState("idle")
                     setSubmitError(null)

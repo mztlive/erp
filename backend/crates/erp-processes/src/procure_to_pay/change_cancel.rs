@@ -22,6 +22,7 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::change_start::load_bound_definition_graph;
+use crate::adapters::persist_cancel_copies;
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
@@ -257,6 +258,7 @@ pub(super) async fn persist_purchase_change_cancel(
                 if let PreparedExecution::Apply(writes) = prepared {
                     persist_cancel_runtime(&db, &writes, &open_tasks, &actor_id, &reason, now, executor)
                         .await?;
+                    persist_cancel_copies(&db, &writes, executor).await?;
                 }
                 db.purchase_change_orders().update(&mut change_order, executor).await?;
                 persist_log(&db, &audit, executor).await?;
@@ -389,7 +391,8 @@ mod tests {
     use bpm::model::types::{ApprovalBlockerCode, ApprovalExecutionAssignmentSource};
     use bpm::model::{ApprovalNodeExecution, ApprovalProcessInstance, NewNodeExecution, ParticipantId};
     use erp_core::common::time::Instant;
-    use erp_workflow::service::approval::execution::prepare_cancel;
+    use erp_workflow::entity::approval_copy::{ApprovalCopyRule, CopyTrigger};
+    use erp_workflow::service::approval::execution::{PreparedExecution, prepare_cancel};
 
     use super::{LoadedCancelRuntime, build_purchase_change_cancel_input};
     use crate::Error;
@@ -470,6 +473,33 @@ mod tests {
         assert_eq!(input.expected_execution_version, 1);
         assert_eq!(input.expected_task_version, Some(3));
         assert_eq!(input.reason, "撤销重提");
+    }
+
+    /// 采购变更撤回携带可命中抄送的事件；同键回放不再产生待写计划。
+    #[test]
+    fn purchase_change_cancel_emits_copy_event_and_replay_has_no_writes() {
+        let mut input = build_purchase_change_cancel_input(
+            &runtime(running_instance(), vec![open_task(1)]),
+            "撤回调整",
+            "u1",
+            "cancel-with-copy",
+            None,
+            Instant::from_unix_secs(20),
+        )
+        .unwrap();
+        let PreparedExecution::Apply(writes) = prepare_cancel(input.clone()).unwrap() else {
+            panic!("首次撤回必须产生写入计划");
+        };
+        let rule = ApprovalCopyRule {
+            trigger: CopyTrigger::Cancelled,
+            node_order: None,
+            recipient_user_ids: vec!["reader".into()],
+        };
+        assert_eq!(writes.instance.subject.subject_kind(), "purchase_change_order");
+        assert_eq!(writes.instance.status.as_str(), "CANCELLED");
+        assert_eq!(writes.events.iter().filter(|event| rule.matches(event, None)).count(), 1);
+        input.command.receipt = Some(writes.receipt.clone());
+        assert!(matches!(prepare_cancel(input).unwrap(), PreparedExecution::Replay { .. }));
     }
 
     /// 人员失效 blocker 走业务取消端口。

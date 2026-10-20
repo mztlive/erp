@@ -17,6 +17,7 @@ use erp_workflow::service::document_registry::find_approval_binding;
 use persistence_core::{NoTransaction, Transactional};
 
 use super::*;
+use crate::adapters::persist_cancel_copies;
 use crate::audit::persist_log;
 use crate::finance_posting::receivable::cancel_approval as runtime_cancel;
 
@@ -66,6 +67,7 @@ impl PurchasePaymentRequestProcess {
                     ensure_creator(&request, &actor)?;
                     require_sources(&db, &rbac, &request, &actor, "withdraw", executor).await?;
                     claim_and_persist_document_cancel_runtime(&db, &writes, &closed, executor).await?;
+                    persist_cancel_copies(&db, &writes, executor).await?;
                     release_remaining(&db, &request, actor.id(), executor).await?;
                     request.withdraw(&req.reason)?;
                     db.purchase_payment_requests().update(&mut request, executor).await?;

@@ -57,6 +57,9 @@ pub struct SalesOrderRow {
     pub created_by: String,
     /// 显式单据负责销售。
     pub sales_owner_user_id: String,
+    /// 当前正式版本身份；未生效单据为空。
+    #[serde(default)]
+    pub current_revision_id: Option<String>,
 }
 
 /// 销售单列表视图（`my_todo`/`exception_only` 互斥，非法组合不可表示）。
@@ -730,6 +733,7 @@ fn sales_order_projection() -> Document {
         "updated_at": 1,
         "created_by": 1,
         "sales_owner_user_id": 1,
+        "current_revision_id": 1,
     }
 }
 

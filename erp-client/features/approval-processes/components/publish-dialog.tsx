@@ -21,6 +21,7 @@ import {
 } from "../errors"
 import { documentTypeLabel, rejectionPolicyCopy, versionLabel } from "../labels"
 import { toEditorNode } from "../draft-nodes"
+import { CopyRuleSummary } from "./copy-rule-editor"
 import { DefinitionFlowchart } from "./definition-flowchart"
 import { usePublishDefinitionMutation } from "../queries"
 import type { DefinitionDetailView } from "../types"
@@ -104,6 +105,7 @@ export function PublishDialog({
                             compact
                         />
                     </div>
+                    <CopyRuleSummary detail={detail} />
                     <p
                         className="text-xs leading-5 text-muted-foreground"
                         data-testid="publish-reject-copy"

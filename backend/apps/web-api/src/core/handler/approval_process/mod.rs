@@ -246,6 +246,7 @@ pub async fn eligible_assignees(
         .eligible_assignees(
             &actor,
             erp_workflow::service::approval::definition_assignees::DefinitionAssigneeQuery {
+                copies: query.copies,
                 document_type,
                 search: query.search,
                 limit,
@@ -275,6 +276,7 @@ fn replace_nodes_command(
     headers: &HeaderMap,
 ) -> Result<ReplaceDefinitionNodesRequest, ApprovalHttpError> {
     Ok(ReplaceDefinitionNodesRequest {
+        copy_rules: request.copy_rules,
         definition_id,
         expected_definition_lock_version: parse_version(
             &request.expected_definition_lock_version,
@@ -339,6 +341,7 @@ mod tests {
         let command = replace_nodes_command(
             "def-1".to_string(),
             ReplaceNodesHttpRequest {
+                copy_rules: None,
                 expected_definition_lock_version: "3".to_string(),
                 nodes: Vec::new(),
                 idempotency_key: " replace-1 ".to_string(),

@@ -5,6 +5,7 @@ use mongodb::options::IndexOptions;
 use mongodb::{Database, IndexModel};
 use persistence_core::Result;
 
+use super::approval_copy::ensure_indexes as ensure_copy_indexes;
 use crate::repository::{ApprovalCancellationExt, ApprovalIntegrationExt};
 
 const SNAPSHOTS: &str = <mongodb::Database as ApprovalIntegrationExt>::APPROVAL_SUBJECT_SNAPSHOTS;
@@ -23,6 +24,7 @@ const OUTBOX: &str = <mongodb::Database as ApprovalIntegrationExt>::APPROVAL_NOT
 /// # 错误
 /// 既有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure(db: &Database) -> Result<()> {
+    ensure_copy_indexes(db).await?;
     create_indexes(db, SNAPSHOTS, snapshot_indexes()).await?;
     create_indexes(db, OUTBOX, outbox_indexes()).await?;
     create_indexes(

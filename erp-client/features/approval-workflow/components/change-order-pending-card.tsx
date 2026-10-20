@@ -1,5 +1,7 @@
 "use client"
 
+import { ApprovalCopyHistory } from "./copy-history"
+
 import type { ReactNode } from "react"
 import { ChevronDownIcon } from "lucide-react"
 
@@ -210,6 +212,12 @@ export function ChangeOrderPendingCard({
                                     : undefined
                             }
                         />
+                        {instance?.id && (
+                            <ApprovalCopyHistory
+                                instanceId={instance.id}
+                                idPrefix={`${id}-copies`}
+                            />
+                        )}
                     </CollapsibleContent>
                 </Collapsible>
             ) : null}

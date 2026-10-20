@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use bpm::graph::DefinitionGraph;
 use bpm::model::{ApprovalNodeDefinition, ApprovalProcessDefinition};
+use mongodb::Database;
+use persistence_core::Executor;
 
 use super::super::definition_dto::{
     ApprovalRequirementView, DefinitionAllowedAction, DefinitionCatalogItem, DefinitionConfigurationStatus,
@@ -11,6 +13,8 @@ use super::super::policy::{ApprovalRequirement, DocumentApprovalPolicy};
 use super::super::process_kind::document_type_of;
 use super::DefinitionManagementVisibility;
 use crate::entity::document_registry::DocumentType;
+use crate::error::Result;
+use crate::repository::approval_copy::ApprovalCopyExt;
 use crate::repository::bpm::DefinitionCatalogStatusFact;
 
 /// 配置状态。
@@ -183,6 +187,8 @@ pub(super) fn detail_view(graph: &DefinitionGraph) -> DefinitionDetailView {
     let mut nodes = graph.nodes.iter().collect::<Vec<_>>();
     nodes.sort_by_key(|node| node.display_order);
     DefinitionDetailView {
+        copy_rules: Vec::new(),
+        copy_recipient_names: Default::default(),
         definition_id: graph.definition.base.id.clone(),
         document_type,
         document_type_label: document_type.label().to_string(),
@@ -242,6 +248,26 @@ pub(super) fn version_item(definition: &ApprovalProcessDefinition) -> Definition
         name: definition.name.clone(),
         definition_lock_version: definition.definition_lock_version(),
     }
+}
+
+/// 加载同一版本抄送规则并组装详情。
+/// # 参数
+/// 数据库、定义图和执行器。
+/// # 返回
+/// 包含完整配置的定义详情。
+/// # 错误
+/// 仓储失败。
+pub(super) async fn detail_with_copies(
+    db: &Database,
+    graph: &DefinitionGraph,
+    ex: &mut dyn Executor,
+) -> Result<DefinitionDetailView> {
+    let mut view = detail_view(graph);
+    if let Some(config) = db.approval_copies().config(&graph.definition.base.id, ex).await? {
+        view.copy_rules = config.rules;
+        view.copy_recipient_names = config.recipient_names;
+    }
+    Ok(view)
 }
 
 #[cfg(test)]

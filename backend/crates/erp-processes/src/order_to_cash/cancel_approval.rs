@@ -22,6 +22,7 @@ use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 
 use super::start_approval::load_bound_definition_graph;
+use crate::adapters::persist_cancel_copies;
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
@@ -229,6 +230,7 @@ pub(super) async fn persist_sales_order_cancel(
             Box::pin(async move {
                 access.revalidate(&order.base.id, expected_order_version, executor).await?;
                 claim_and_persist_document_cancel_runtime(&db, &writes, &closed_tasks, executor).await?;
+                persist_cancel_copies(&db, &writes, executor).await?;
                 erp_sales::service::sales_order::SalesOrderService::new(db.clone())
                     .persist_order(&mut order, executor)
                     .await?;

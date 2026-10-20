@@ -175,6 +175,12 @@ export type BackendSalesOrderView = {
     updated_at: number
     owner_user_id?: string
     owner_user_name?: string | null
+    /** 当前正式版本含税成交金额；无正式版本时为零。 */
+    gross_amount?: string
+    /** 当前正式版本不含税成交金额；无正式版本时为零。 */
+    net_amount?: string
+    /** 当前正式版本税额；无正式版本时为零。 */
+    tax_amount?: string
     stage: BackendStageSummary
     purchase_coverage?: BackendPurchaseCoverage | null
 }

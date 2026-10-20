@@ -51,6 +51,12 @@ pub struct SalesOrderView {
     pub owner_user_id: String,
     /// 负责销售姓名；账号已删除时为空。
     pub owner_user_name: Option<String>,
+    /// 当前正式版本含税成交金额；无正式版本时为零。
+    pub gross_amount: Amount,
+    /// 当前正式版本不含税成交金额；无正式版本时为零。
+    pub net_amount: Amount,
+    /// 当前正式版本税额；无正式版本时为零。
+    pub tax_amount: Amount,
     /// 当前阶段摘要（服务端权威计算，替代前端字符串拼接）。
     pub stage: SalesOrderStageSummary,
 }

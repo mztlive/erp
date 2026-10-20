@@ -33,3 +33,5 @@ pub use upgrade_subject::{
     ApprovalUpgradeSubjectFacts, ensure_initial_unsubmitted_approval_upgrade_subject,
     load_approval_upgrade_subject_facts,
 };
+
+pub mod copies;
