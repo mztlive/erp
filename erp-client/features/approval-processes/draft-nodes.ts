@@ -81,3 +81,17 @@ export const orderNodesForSave = (
     _documentType: DocumentType,
     nodes: readonly EditorNode[],
 ): EditorNode[] => [...nodes]
+
+/** 跨流程只复制可编辑内容，禁止复用来源节点身份或内部用途。 */
+export const copyDraftNodes = (
+    nodes: readonly DefinitionNodeView[],
+): EditorNode[] =>
+    [...nodes]
+        .sort((a, b) => a.display_order - b.display_order)
+        .map((node) => ({
+            ...toEditorNode(node),
+            client_id: nextClientId(),
+            node_id: null,
+            node_purpose: null,
+            unsaved_purpose_slot: false,
+        }))

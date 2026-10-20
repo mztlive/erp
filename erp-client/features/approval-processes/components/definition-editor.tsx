@@ -1,20 +1,20 @@
 "use client"
 
 import * as React from "react"
-
+import { CopyIcon, PlusIcon } from "lucide-react"
 import { DraftSaveIndicator } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
-import { cn } from "@/lib/utils"
-
-import { orderNodesForSave, seedDraftNodes } from "../draft-nodes"
 import {
-    definitionErrorMessage,
-    isDefinitionVersionConflict,
-    newCommandKey,
-} from "../errors"
+    copyDraftNodes,
+    emptyEditorNode,
+    orderNodesForSave,
+    seedDraftNodes,
+} from "../draft-nodes"
+import { definitionErrorMessage, newCommandKey } from "../errors"
+import { rejectionPolicyCopy } from "../labels"
 import { useReplaceDefinitionNodesMutation } from "../queries"
 import { definitionEditorSchema } from "../schema"
 import type {
@@ -25,26 +25,26 @@ import {
     buildStableReplaceNodesCommand,
     lockVersionText,
 } from "../write-payload"
+import { CopyFlowDialog } from "./copy-flow-dialog"
 import { DefinitionFlowchart } from "./definition-flowchart"
 import { NodeListEditor } from "./node-list-editor"
 
-const INCOMPLETE_DRAFT_MESSAGE =
-    "请补全审批流程名称、每个节点的名称和审批人后再保存。"
+const INCOMPLETE_DRAFT_MESSAGE = "请补全每个节点的名称和审批人后再保存。"
 
-/**
- * 草稿编辑器。已发布 / 已退役永久只读；提交走 useAppForm + Zod + useMutation。
- */
+/** 流程图负责选择与顺序，属性栏只编辑当前节点。 */
 export function DefinitionEditor({
     detail,
     lockVersion,
     onLockVersionChange,
     onSaved,
+    onDirtyChange,
     id = "governance-approval-processes-detail-editor",
 }: {
     detail: DefinitionDetailView
     lockVersion: string
     onLockVersionChange: (next: string) => void
     onSaved?: (next: DefinitionDetailView) => void
+    onDirtyChange?: (dirty: boolean) => void
     id?: string
 }) {
     const replaceNodes = useReplaceDefinitionNodesMutation()
@@ -58,11 +58,8 @@ export function DefinitionEditor({
     const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(
         null,
     )
-    const [mobilePane, setMobilePane] = React.useState<"edit" | "preview">(
-        "edit",
-    )
+    const [copyOpen, setCopyOpen] = React.useState(false)
     const readOnly = detail.status !== "DRAFT"
-
     const form = useAppForm({
         defaultValues: {
             name: detail.name,
@@ -75,37 +72,34 @@ export function DefinitionEditor({
         onSubmitInvalid: () => {
             setSubmitError(INCOMPLETE_DRAFT_MESSAGE)
             setSaveState("failed")
-            toast.add({
-                title: "无法保存",
-                description: INCOMPLETE_DRAFT_MESSAGE,
-                type: "error",
-                timeout: 5000,
-            })
+            const invalid = form.state.values.nodes.find(
+                (node) => !node.node_name.trim() || !node.assignee_user_id,
+            )
+            if (invalid) setSelectedNodeId(invalid.client_id)
         },
         onSubmit: async ({ value }) => {
             if (readOnly) return
             setSubmitError(null)
             setSaveState("saving")
             try {
-                const nodes = orderNodesForSave(
-                    detail.document_type,
-                    value.nodes,
-                )
                 const command = buildStableReplaceNodesCommand(
                     detail.definition_id,
                     lockVersion,
-                    nodes,
+                    orderNodesForSave(detail.document_type, value.nodes),
                     pendingCommandRef.current,
                     () => newCommandKey("replace-nodes"),
                 )
                 pendingCommandRef.current = command
                 const next = await replaceNodes.mutateAsync(command)
                 pendingCommandRef.current = null
-                form.setFieldValue(
-                    "nodes",
-                    seedDraftNodes(next.document_type, next.nodes),
+                const nextNodes = seedDraftNodes(next.document_type, next.nodes)
+                const selectedIndex = value.nodes.findIndex(
+                    (node) => node.client_id === selectedNodeId,
                 )
-                form.setFieldValue("name", next.name)
+                form.reset({ name: next.name, nodes: nextNodes })
+                setSelectedNodeId(
+                    nextNodes[Math.max(0, selectedIndex)]?.client_id ?? null,
+                )
                 onLockVersionChange(
                     lockVersionText(next.definition_lock_version),
                 )
@@ -114,187 +108,277 @@ export function DefinitionEditor({
                 setSavedAt(new Date())
                 toast.add({
                     title: "草稿已保存",
-                    description: "节点顺序和审批人已写入当前草稿。",
                     type: "success",
                     timeout: 4000,
                 })
             } catch (error) {
-                const message = definitionErrorMessage(error)
-                setSubmitError(message)
+                setSubmitError(definitionErrorMessage(error))
                 setSaveState("failed")
-                if (isDefinitionVersionConflict(error)) {
-                    onLockVersionChange(lockVersion)
-                }
             }
         },
     })
-
-    React.useEffect(() => {
-        pendingCommandRef.current = null
-        form.reset()
-        setSubmitError(null)
-        setSelectedNodeId(null)
-        setMobilePane("edit")
+    const addNode = () => {
+        if (form.state.values.nodes.length >= 20) return
+        const node = emptyEditorNode()
+        form.setFieldValue("nodes", [...form.state.values.nodes, node])
+        setSelectedNodeId(node.client_id)
         setSaveState("idle")
-        setSavedAt(undefined)
-        // 仅在切换定义时重置，避免把 form 放进依赖导致循环。
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [detail.definition_id])
-
-    const handleFlowSelect = (clientId: string, index: number) => {
-        setSelectedNodeId(clientId)
-        setMobilePane("edit")
-        if (typeof document === "undefined") return
-        globalThis.setTimeout(() => {
-            document
-                .querySelector(`[data-testid="approval-node-${index}"]`)
-                ?.scrollIntoView({ behavior: "smooth", block: "center" })
-        }, 50)
     }
-
     return (
-        <form
-            className="flex flex-col"
-            onSubmit={(event) => {
-                event.preventDefault()
-                void form.handleSubmit()
-            }}
-        >
-            <div className="flex flex-col gap-5 py-5">
-                {readOnly ? (
-                    <Alert>
-                        <AlertTitle>此版本只读</AlertTitle>
-                        <AlertDescription>
-                            已发布或已退役的审批流程不可改写。如需调整人员或节点，请创建更高版本草稿。
-                        </AlertDescription>
-                    </Alert>
-                ) : null}
-                {submitError ? (
-                    <Alert variant="destructive">
-                        <AlertTitle>保存失败</AlertTitle>
-                        <AlertDescription>{submitError}</AlertDescription>
-                    </Alert>
-                ) : null}
-                <form.AppField name="name">
-                    {(field) => (
-                        <field.TextField
-                            id={`${id}-name`}
-                            label="审批流程名称"
-                            required
-                            disabled={readOnly}
-                            placeholder="例如：销售单审批"
-                            className="max-w-xl"
-                        />
+        <>
+            <form
+                className="flex min-w-0 flex-col"
+                onSubmit={(event) => {
+                    event.preventDefault()
+                    void form.handleSubmit()
+                }}
+            >
+                <form.Subscribe selector={(state) => state.isDirty}>
+                    {(dirty) => (
+                        <DirtyObserver dirty={dirty} onChange={onDirtyChange} />
                     )}
-                </form.AppField>
-                <div
-                    role="group"
-                    aria-label="编辑与预览切换"
-                    className="flex w-fit rounded-lg border border-border bg-card p-0.5 lg:hidden"
-                >
-                    <Button
-                        id={`${id}-mobile-edit`}
-                        type="button"
-                        size="sm"
-                        variant={mobilePane === "edit" ? "secondary" : "ghost"}
-                        aria-pressed={mobilePane === "edit"}
-                        onClick={() => setMobilePane("edit")}
-                    >
-                        编辑
-                    </Button>
-                    <Button
-                        id={`${id}-mobile-preview`}
-                        type="button"
-                        size="sm"
-                        variant={
-                            mobilePane === "preview" ? "secondary" : "ghost"
-                        }
-                        aria-pressed={mobilePane === "preview"}
-                        onClick={() => setMobilePane("preview")}
-                    >
-                        预览
-                    </Button>
-                </div>
-                <form.Subscribe selector={(state) => state.values.nodes}>
-                    {(nodes) => (
-                        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
-                            <div
-                                className={cn(
-                                    "min-w-0",
-                                    mobilePane === "edit"
-                                        ? "block"
-                                        : "hidden lg:block",
-                                )}
+                </form.Subscribe>
+                <div className="space-y-5 p-4 sm:p-6">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <h2 className="text-base font-semibold">
+                                {detail.name}
+                            </h2>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                                选择流程图中的节点，设置审批人及顺序。
+                            </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                                id={`${id}-copy-flow`}
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={readOnly || replaceNodes.isPending}
+                                onClick={() => setCopyOpen(true)}
                             >
-                                <NodeListEditor
-                                    id={`${id}-nodes`}
-                                    documentType={detail.document_type}
-                                    nodes={nodes}
-                                    readOnly={readOnly}
-                                    selectedClientId={selectedNodeId}
-                                    onChange={(next) =>
-                                        form.setFieldValue("nodes", next)
-                                    }
-                                />
-                            </div>
-                            <div
-                                className={cn(
-                                    "min-w-0 lg:sticky lg:top-4",
-                                    mobilePane === "preview"
-                                        ? "block"
-                                        : "hidden lg:block",
-                                )}
+                                <CopyIcon data-icon="inline-start" />
+                                从其它流程复制
+                            </Button>
+                            <form.Subscribe
+                                selector={(state) => state.values.nodes.length}
                             >
+                                {(count) => (
+                                    <Button
+                                        id={`${id}-add-node`}
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={
+                                            readOnly ||
+                                            replaceNodes.isPending ||
+                                            count >= 20
+                                        }
+                                        title={
+                                            count >= 20
+                                                ? "最多配置 20 个审批节点"
+                                                : undefined
+                                        }
+                                        onClick={addNode}
+                                    >
+                                        <PlusIcon data-icon="inline-start" />
+                                        添加节点
+                                    </Button>
+                                )}
+                            </form.Subscribe>
+                        </div>
+                    </div>
+                    {submitError && (
+                        <Alert variant="destructive">
+                            <AlertTitle>保存失败</AlertTitle>
+                            <AlertDescription>{submitError}</AlertDescription>
+                        </Alert>
+                    )}
+                    <form.Subscribe selector={(state) => state.values.nodes}>
+                        {(nodes) => (
+                            <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
                                 <DefinitionFlowchart
                                     id={`${id}-flow`}
                                     nodes={nodes}
-                                    selectedClientId={selectedNodeId}
-                                    onSelect={handleFlowSelect}
+                                    selectedClientId={
+                                        nodes.find(
+                                            (node) =>
+                                                node.client_id ===
+                                                selectedNodeId,
+                                        )?.client_id ?? nodes[0]?.client_id
+                                    }
+                                    onSelect={(clientId) => {
+                                        setSelectedNodeId(clientId)
+                                        if (
+                                            window.matchMedia(
+                                                "(max-width: 1023px)",
+                                            ).matches
+                                        ) {
+                                            document
+                                                .getElementById(
+                                                    `${id}-settings`,
+                                                )
+                                                ?.scrollIntoView({
+                                                    behavior: "smooth",
+                                                    block: "start",
+                                                })
+                                        }
+                                    }}
+                                    onAdd={
+                                        readOnly ||
+                                        replaceNodes.isPending ||
+                                        nodes.length >= 20
+                                            ? undefined
+                                            : addNode
+                                    }
                                 />
+                                <div
+                                    id={`${id}-settings`}
+                                    className="min-w-0 scroll-mt-4 space-y-4 lg:sticky lg:top-4"
+                                >
+                                    <NodeListEditor
+                                        id={`${id}-nodes`}
+                                        documentType={detail.document_type}
+                                        nodes={nodes}
+                                        readOnly={
+                                            readOnly || replaceNodes.isPending
+                                        }
+                                        selectedClientId={selectedNodeId}
+                                        onChange={(next) => {
+                                            const activeId =
+                                                nodes.find(
+                                                    (node) =>
+                                                        node.client_id ===
+                                                        selectedNodeId,
+                                                )?.client_id ??
+                                                nodes[0]?.client_id
+                                            const oldIndex = nodes.findIndex(
+                                                (node) =>
+                                                    node.client_id === activeId,
+                                            )
+                                            setSelectedNodeId(
+                                                next.find(
+                                                    (node) =>
+                                                        node.client_id ===
+                                                        activeId,
+                                                )?.client_id ??
+                                                    next[
+                                                        Math.max(
+                                                            0,
+                                                            Math.min(
+                                                                oldIndex,
+                                                                next.length - 1,
+                                                            ),
+                                                        )
+                                                    ]?.client_id ??
+                                                    null,
+                                            )
+                                            form.setFieldValue("nodes", next)
+                                            setSaveState("idle")
+                                        }}
+                                    />
+                                    <p className="px-1 text-xs leading-5 text-muted-foreground">
+                                        <span className="font-medium text-foreground">
+                                            驳回规则：
+                                        </span>
+                                        {rejectionPolicyCopy(
+                                            detail.document_type,
+                                        )}
+                                    </p>
+                                </div>
                             </div>
-                        </div>
+                        )}
+                    </form.Subscribe>
+                </div>
+                <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card px-4 py-3 sm:px-6">
+                    {saveState === "idle" ? (
+                        <form.Subscribe
+                            selector={(state) =>
+                                [state.isDirty, state.values.nodes] as const
+                            }
+                        >
+                            {([dirty, nodes]) => {
+                                const incomplete = nodes.filter(
+                                    (node) =>
+                                        !node.node_name.trim() ||
+                                        !node.assignee_user_id,
+                                ).length
+                                return (
+                                    <span className="text-xs text-muted-foreground">
+                                        {nodes.length === 0
+                                            ? "请添加至少一个审批节点"
+                                            : incomplete
+                                              ? `${incomplete} 个节点待补全，点击流程图继续配置`
+                                              : dirty
+                                                ? "有未保存的修改，请保存后再发布"
+                                                : "草稿未发布，不影响当前生效流程"}
+                                    </span>
+                                )
+                            }}
+                        </form.Subscribe>
+                    ) : (
+                        <DraftSaveIndicator
+                            state={saveState}
+                            savedAt={savedAt}
+                            message={
+                                saveState === "failed"
+                                    ? (submitError ?? undefined)
+                                    : undefined
+                            }
+                        />
                     )}
-                </form.Subscribe>
-            </div>
-            <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card py-4">
-                {readOnly ? (
-                    <span />
-                ) : saveState === "idle" ? (
-                    <span className="text-sm text-muted-foreground">
-                        保存后才会写入当前草稿，未发布不影响已生效流程。
-                    </span>
-                ) : (
-                    <DraftSaveIndicator
-                        state={saveState}
-                        savedAt={savedAt}
-                        message={
-                            saveState === "failed"
-                                ? (submitError ?? undefined)
-                                : undefined
-                        }
-                    />
-                )}
-                {readOnly ? (
-                    <Button
-                        id={`${id}-read-only`}
-                        type="button"
-                        variant="outline"
-                        disabled
-                    >
-                        此版本不可修改
-                    </Button>
-                ) : (
                     <form.AppForm>
                         <form.SubmitButton
                             loading={replaceNodes.isPending}
                             id={`${id}-save`}
                             label="保存草稿"
                             pendingLabel="保存中…"
-                            disabled={replaceNodes.isPending}
+                            disabled={readOnly || replaceNodes.isPending}
                         />
                     </form.AppForm>
-                )}
-            </div>
-        </form>
+                </div>
+            </form>
+            <CopyFlowDialog
+                id={`${id}-copy-dialog`}
+                targetType={detail.document_type}
+                open={copyOpen}
+                onOpenChange={setCopyOpen}
+                replacesNodes={form.state.values.nodes.length > 0}
+                onCopy={(source) => {
+                    const nodes = copyDraftNodes(source.nodes)
+                    form.setFieldValue("nodes", nodes)
+                    setSelectedNodeId(nodes[0]?.client_id ?? null)
+                    setSaveState("idle")
+                    setSubmitError(null)
+                    toast.add({
+                        title: "流程已带入",
+                        description: "确认审批人后保存草稿。",
+                        type: "success",
+                    })
+                }}
+            />
+        </>
     )
+}
+
+function DirtyObserver({
+    dirty,
+    onChange,
+}: {
+    dirty: boolean
+    onChange?: (dirty: boolean) => void
+}) {
+    React.useEffect(() => {
+        onChange?.(dirty)
+        const warn = (event: BeforeUnloadEvent) => {
+            event.preventDefault()
+            event.returnValue = ""
+        }
+        if (dirty) window.addEventListener("beforeunload", warn)
+        return () => {
+            onChange?.(false)
+            window.removeEventListener("beforeunload", warn)
+        }
+    }, [dirty, onChange])
+    return null
 }

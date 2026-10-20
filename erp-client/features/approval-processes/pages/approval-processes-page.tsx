@@ -69,6 +69,7 @@ export function ApprovalProcessesPage() {
             ),
         [searchParams],
     )
+    const [moreOpen, setMoreOpen] = React.useState(false)
     const [searchDraft, setSearchDraft] = React.useState(urlState.q)
     const [policyDraft, setPolicyDraft] = React.useState(urlState.policy)
     const [statusDraft, setStatusDraft] = React.useState(urlState.status)
@@ -88,6 +89,7 @@ export function ApprovalProcessesPage() {
     }
 
     const applyFilters = () => {
+        setMoreOpen(false)
         replaceState({
             policy: policyDraft,
             status: statusDraft,
@@ -180,7 +182,7 @@ export function ApprovalProcessesPage() {
                 <ListWorkspaceHeader
                     eyebrow="系统"
                     title="审批流程配置"
-                    description="设置各类单据的审批流程，发布后用于新建单据。"
+                    className="pb-5 md:pb-5"
                 />
                 <BusinessFailureState
                     kind="validation"
@@ -211,7 +213,7 @@ export function ApprovalProcessesPage() {
                 <ListWorkspaceHeader
                     eyebrow="系统"
                     title="审批流程配置"
-                    description="设置各类单据的审批流程，发布后用于新建单据。"
+                    className="pb-5 md:pb-5"
                 />
                 <BusinessFailureState
                     kind="permission"
@@ -230,14 +232,13 @@ export function ApprovalProcessesPage() {
             <ListWorkspaceHeader
                 eyebrow="系统"
                 title="审批流程配置"
-                description="设置各类单据的审批流程，发布后用于新建单据。"
+                className="pb-5 md:pb-5"
             />
 
             <ListWorkSurface
                 views={
                     <ListWorkspaceViews
                         ariaLabel="审批配置快捷筛选"
-                        hint="选择单据类型查看审批流程"
                         items={[
                             {
                                 key: "all",
@@ -299,15 +300,28 @@ export function ApprovalProcessesPage() {
                                 id="governance-approval-processes-catalog-search"
                                 value={searchDraft}
                                 onChange={setSearchDraft}
-                                placeholder="搜索单据类型"
+                                placeholder="搜索审批流程"
                                 aria-label="搜索单据类型"
                             />
                         }
-                        primaryFilters={
-                            <>
+                        moreSize="compact"
+                        moreOpen={moreOpen}
+                        onToggleMore={() => setMoreOpen((open) => !open)}
+                        moreCount={
+                            [
+                                urlState.policy !== "ALL",
+                                urlState.status !== "ALL",
+                            ].filter(Boolean).length
+                        }
+                        onResetMore={() => {
+                            setPolicyDraft("ALL")
+                            setStatusDraft("ALL")
+                        }}
+                        morePanel={
+                            <div className="grid gap-3">
                                 <OptionCombobox
                                     id="governance-approval-processes-catalog-policy"
-                                    className="w-56 max-w-full min-w-0"
+                                    className="w-full min-w-0"
                                     filterLabel="审批要求"
                                     aria-label="审批要求"
                                     options={[...POLICY_OPTIONS]}
@@ -325,7 +339,7 @@ export function ApprovalProcessesPage() {
                                 />
                                 <OptionCombobox
                                     id="governance-approval-processes-catalog-status"
-                                    className="w-56 max-w-full min-w-0"
+                                    className="w-full min-w-0"
                                     filterLabel="配置状态"
                                     aria-label="配置状态"
                                     options={[...STATUS_OPTIONS]}
@@ -344,7 +358,7 @@ export function ApprovalProcessesPage() {
                                         )
                                     }
                                 />
-                            </>
+                            </div>
                         }
                         resultStatus={listWorkspaceFilterStatusText({
                             loading: catalogQuery.isPending,

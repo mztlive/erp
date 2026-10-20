@@ -1,85 +1,121 @@
 "use client"
 
+import * as React from "react"
+import { GitBranchIcon, ShieldCheckIcon, UsersRoundIcon } from "lucide-react"
 import { rejectionPolicyCopy } from "../labels"
+import { toEditorNode } from "../draft-nodes"
 import type { DefinitionDetailView } from "../types"
+import { DefinitionFlowchart } from "./definition-flowchart"
 
-/** 已发布及历史版本以节点顺序展示，不复用草稿的禁用表单或生成默认节点。 */
+/** 只读流程图与选中节点详情，避免重复铺开整份人员名单。 */
 export function DefinitionReadView({
     detail,
 }: {
     detail: DefinitionDetailView
 }) {
     const nodes = [...detail.nodes].sort(
-        (left, right) => left.display_order - right.display_order,
+        (a, b) => a.display_order - b.display_order,
     )
+    const [selectedId, setSelectedId] = React.useState<string | null>(null)
+    const selected =
+        nodes.find((node) => node.node_id === selectedId) ?? nodes[0]
+    const orSignCount = nodes.filter(
+        (node) => node.additional_assignees?.length,
+    ).length
     return (
-        <section aria-label="审批流程详情" className="py-6">
-            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-5">
-                <div className="space-y-1.5">
+        <section aria-label="审批流程详情" className="space-y-5 p-4 sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
                     <h2 className="text-base font-semibold">{detail.name}</h2>
-                    <p className="text-sm text-muted-foreground">
-                        按以下顺序依次审批。
-                        {rejectionPolicyCopy(detail.document_type)}
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        {nodes.length} 个审批节点
+                        {orSignCount ? ` · ${orSignCount} 个或签节点` : ""}
                     </p>
                 </div>
-                <span className="text-xs text-muted-foreground">
-                    共 <span className="num">{nodes.length}</span> 个审批节点
+                <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <ShieldCheckIcon className="size-3.5" />
+                    只读版本
                 </span>
             </div>
-            {nodes.length ? (
-                <ol aria-label="审批顺序" className="divide-y divide-border">
-                    {nodes.map((node, index) => (
-                        <li
-                            key={node.node_id}
-                            className="grid items-center gap-3 py-5 sm:grid-cols-[3rem_minmax(0,1fr)_minmax(10rem,1fr)]"
-                        >
-                            <span
-                                className="num text-sm text-muted-foreground"
-                                aria-label={`第 ${index + 1} 个节点`}
-                            >
-                                {String(index + 1).padStart(2, "0")}
-                            </span>
-                            <div className="space-y-1">
-                                <p className="text-sm font-medium">
-                                    {node.node_name}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                    审批通过后
-                                    {index === nodes.length - 1
-                                        ? "完成流程"
-                                        : "进入下一节点"}
-                                </p>
+            <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+                <DefinitionFlowchart
+                    id="governance-approval-processes-detail-read-flow"
+                    nodes={nodes.map(toEditorNode)}
+                    selectedClientId={selected?.node_id}
+                    onSelect={(clientId) => setSelectedId(clientId)}
+                />
+                <aside className="space-y-5 lg:sticky lg:top-4">
+                    {selected && (
+                        <div className="overflow-hidden rounded-lg border border-border">
+                            <h3 className="border-b border-border px-4 py-3 text-sm font-medium">
+                                节点详情
+                            </h3>
+                            <div className="space-y-4 p-4">
+                                <div>
+                                    <p className="text-sm font-medium">
+                                        {selected.node_name}
+                                    </p>
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                        {selected.additional_assignees?.length
+                                            ? "或签 · 任一人通过即可"
+                                            : "单人审批"}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                                        <UsersRoundIcon className="size-3.5" />
+                                        审批人
+                                    </p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {[
+                                            {
+                                                participant_id:
+                                                    selected.assignee_user_id,
+                                                name: selected.assignee_name_snapshot,
+                                            },
+                                            ...(selected.additional_assignees ??
+                                                []),
+                                        ].map((person) => (
+                                            <span
+                                                key={person.participant_id}
+                                                className="max-w-full break-words rounded-md bg-muted px-2 py-1 text-xs"
+                                            >
+                                                {person.name || "待确认"}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
-                            <div className="space-y-1 sm:pl-6">
-                                <p className="text-xs text-muted-foreground">
-                                    审批人
-                                </p>
-                                <p className="text-sm">
-                                    {[
-                                        node.assignee_name_snapshot,
-                                        ...(
-                                            node.additional_assignees ?? []
-                                        ).map((person) => person.name),
-                                    ]
-                                        .filter(Boolean)
-                                        .join("、") || "审批人信息待确认"}
-                                    {(node.additional_assignees?.length ?? 0) >
-                                    0
-                                        ? "（或签）"
-                                        : ""}
-                                </p>
+                        </div>
+                    )}
+                    <div className="space-y-3 px-1">
+                        <h3 className="flex items-center gap-2 text-sm font-medium">
+                            <GitBranchIcon className="size-4 text-muted-foreground" />
+                            流转规则
+                        </h3>
+                        <dl className="space-y-3 text-xs leading-5">
+                            <div>
+                                <dt className="font-medium">通过</dt>
+                                <dd className="mt-1 text-muted-foreground">
+                                    依次进入下一节点，最后一个节点通过后完成审批。
+                                </dd>
                             </div>
-                        </li>
-                    ))}
-                </ol>
-            ) : (
-                <p className="py-8 text-sm text-muted-foreground">
-                    此版本没有审批节点记录。
-                </p>
-            )}
-            <p className="border-t border-border pt-4 text-xs leading-5 text-muted-foreground">
-                此版本只读。调整节点或审批人需创建新草稿，发布后用于新建单据。
-            </p>
+                            <div>
+                                <dt className="font-medium">驳回</dt>
+                                <dd className="mt-1 text-muted-foreground">
+                                    {rejectionPolicyCopy(detail.document_type)}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt className="font-medium">调整流程</dt>
+                                <dd className="mt-1 text-muted-foreground">
+                                    创建新草稿并发布后，用于新建单据。
+                                </dd>
+                            </div>
+                        </dl>
+                    </div>
+                </aside>
+            </div>
         </section>
     )
 }

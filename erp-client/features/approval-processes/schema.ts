@@ -1,18 +1,11 @@
 import { z } from "zod"
+import type { DefinitionDetailView } from "./types"
 
-/** 创建草稿表单校验。必须显式选择来源。 */
+/** 创建方式仅用于界面；跨类型复制先建空草稿，再走目标节点保存接口。 */
 export const createDraftSchema = z.object({
     name: z.string().trim().min(1, "请输入审批流程名称").max(64, "名称过长"),
-    draft_source: z
-        .union([
-            z.literal(""),
-            z.literal("EMPTY"),
-            z.literal("CURRENT_PUBLISHED"),
-        ])
-        .refine(
-            (value) => value === "EMPTY" || value === "CURRENT_PUBLISHED",
-            "请选择空白流程或复制当前已发布版本",
-        ),
+    draft_source: z.enum(["EMPTY", "CURRENT_PUBLISHED", "OTHER"]),
+    copy_source: z.custom<DefinitionDetailView>().nullable(),
 })
 
 const editorNodeSchema = z
@@ -45,5 +38,8 @@ const editorNodeSchema = z
 /** 草稿编辑器校验：至少一个节点，每个节点至少一位审批人，多人按或签处理。 */
 export const definitionEditorSchema = z.object({
     name: z.string().trim().min(1, "请输入审批流程名称").max(64, "名称过长"),
-    nodes: z.array(editorNodeSchema).min(1, "至少需要一个审批节点"),
+    nodes: z
+        .array(editorNodeSchema)
+        .min(1, "至少需要一个审批节点")
+        .max(20, "最多配置 20 个审批节点"),
 })

@@ -166,6 +166,7 @@ export function TableRowActions({
     actions,
     moreId,
     moreLabel,
+    moreIconOnly = false,
     maxInline = 2,
     className,
 }: {
@@ -173,6 +174,8 @@ export function TableRowActions({
     moreId: string
     /** 例如「销售员 更多操作」。 */
     moreLabel: string
+    /** 紧凑目录使用纯图标入口，菜单仍显示完整动作名称。 */
+    moreIconOnly?: boolean
     maxInline?: number
     className?: string
 }) {
@@ -225,7 +228,7 @@ export function TableRowActions({
                             aria-hidden="true"
                             className="size-3.5"
                         />
-                        {tableActionText.more}
+                        {moreIconOnly ? null : tableActionText.more}
                     </DropdownMenuTrigger>
                     <DropdownMenuContent
                         align="end"

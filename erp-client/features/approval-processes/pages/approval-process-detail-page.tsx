@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 
 import {
+    DiscardConfirmDialog,
     BusinessEmptyState,
     BusinessFailureState,
     PageHeader,
@@ -82,27 +83,32 @@ export function ApprovalProcessDetailPage({
         Boolean(documentType) &&
             catalogItem?.approval_requirement === "PROCESS_REQUIRED",
     )
-    const published = versionsQuery.data?.find(
-        (item) => item.status === "PUBLISHED",
-    )
-    const draft = versionsQuery.data?.find((item) => item.status === "DRAFT")
+    const versions = versionsQuery.isPlaceholderData
+        ? []
+        : (versionsQuery.data ?? [])
+    const published = versions.find((item) => item.status === "PUBLISHED")
+    const draft = versions.find((item) => item.status === "DRAFT")
     const historyTarget =
-        urlState.view === "history" && urlState.version
-            ? versionsQuery.data?.find(
-                  (item) =>
-                      String(item.definition_version) === urlState.version,
-              )
+        urlState.view === "history"
+            ? urlState.version
+                ? versions.find(
+                      (item) =>
+                          String(item.definition_version) === urlState.version,
+                  )
+                : (published ?? versions[0])
             : undefined
     const targetId =
         urlState.view === "draft"
             ? (draft?.definition_id ?? null)
             : urlState.view === "history"
-              ? (historyTarget?.definition_id ??
-                published?.definition_id ??
-                null)
-              : (published?.definition_id ?? draft?.definition_id ?? null)
+              ? (historyTarget?.definition_id ?? null)
+              : (published?.definition_id ?? null)
     const detailQuery = useDefinitionDetailQuery(targetId)
     const [lockVersion, setLockVersion] = React.useState("")
+    const [editorDirty, setEditorDirty] = React.useState(false)
+    const [pendingNavigation, setPendingNavigation] = React.useState<
+        string | null
+    >(null)
     const [publishOpen, setPublishOpen] = React.useState(false)
     const [retireOpen, setRetireOpen] = React.useState(false)
     const [createOpen, setCreateOpen] = React.useState(false)
@@ -122,6 +128,11 @@ export function ApprovalProcessDetailPage({
         setRetireOpen(false)
         setCreateOpen(false)
     }, [profileQuery.data])
+
+    const navigate = (href: string) => {
+        if (editorDirty) setPendingNavigation(href)
+        else router.replace(href)
+    }
 
     const replaceView = (view: typeof urlState.view, version?: string) => {
         const query = buildDetailSearchParams({ view, version })
@@ -230,6 +241,9 @@ export function ApprovalProcessDetailPage({
     const canCreate =
         catalogItem != null &&
         canPerformCatalogAction("CREATE_DRAFT", catalogItem, permissions)
+    const canEdit =
+        catalogItem != null &&
+        canPerformCatalogAction("REPLACE_NODES", catalogItem, permissions)
     const canPublish =
         catalogItem != null &&
         canPerformCatalogAction("PUBLISH", catalogItem, permissions)
@@ -240,6 +254,8 @@ export function ApprovalProcessDetailPage({
         catalogItem?.configuration_status === "MISSING_CONFIGURATION"
     const showEditor =
         Boolean(detailQuery.data) &&
+        !detailQuery.isPlaceholderData &&
+        !detailQuery.isError &&
         (urlState.view !== "history" || Boolean(historyTarget)) &&
         !(urlState.view === "draft" && !draft)
 
@@ -249,7 +265,7 @@ export function ApprovalProcessDetailPage({
                 back={{
                     id: "governance-approval-processes-detail-back",
                     label: "审批流程目录",
-                    href: "/system/approval-processes",
+                    onClick: () => navigate("/system/approval-processes"),
                 }}
                 title={typeTitle}
                 primaryStatus={
@@ -322,6 +338,12 @@ export function ApprovalProcessDetailPage({
                                 id="governance-approval-processes-detail-publish"
                                 type="button"
                                 size="sm"
+                                disabled={editorDirty}
+                                title={
+                                    editorDirty
+                                        ? "请先保存草稿后再发布"
+                                        : undefined
+                                }
                                 onClick={() => setPublishOpen(true)}
                             >
                                 发布
@@ -340,13 +362,16 @@ export function ApprovalProcessDetailPage({
                             next === "draft" ||
                             next === "history"
                         ) {
-                            replaceView(next)
+                            if (next !== urlState.view)
+                                navigate(
+                                    `/system/approval-processes/${rawDocumentType}${buildDetailSearchParams({ view: next })}`,
+                                )
                         }
                     }}
                 >
                     <TabsList
                         variant="line"
-                        className="h-auto w-full flex-wrap justify-start gap-6 rounded-none border-b border-border bg-card px-0 py-0"
+                        className="h-auto w-full flex-wrap justify-start gap-6 rounded-none border-b border-border bg-card px-4 py-0 sm:px-6"
                     >
                         <TabsTrigger
                             id="governance-approval-processes-detail-tab-current"
@@ -381,8 +406,44 @@ export function ApprovalProcessDetailPage({
                         </TabsTrigger>
                     </TabsList>
                 </Tabs>
+                {catalogQuery.isError || versionsQuery.isError ? (
+                    <div className="p-6">
+                        <BusinessFailureState
+                            kind="system"
+                            title="流程版本加载失败"
+                            description={definitionErrorMessage(
+                                catalogQuery.error ?? versionsQuery.error,
+                            )}
+                            action={
+                                <Button
+                                    id="governance-approval-processes-versions-retry"
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => {
+                                        if (catalogQuery.isError)
+                                            void catalogQuery.refetch()
+                                        else void versionsQuery.refetch()
+                                    }}
+                                >
+                                    重试
+                                </Button>
+                            }
+                        />
+                    </div>
+                ) : catalogQuery.isPending || versionsQuery.isPending ? (
+                    <p
+                        role="status"
+                        className="p-6 text-sm text-muted-foreground"
+                    >
+                        正在加载流程版本…
+                    </p>
+                ) : null}
 
-                {missing && !draft ? (
+                {missing &&
+                !draft &&
+                !versionsQuery.isPending &&
+                !versionsQuery.isError &&
+                urlState.view === "current" ? (
                     <div className="p-4">
                         <BusinessFailureState
                             kind="business"
@@ -403,7 +464,39 @@ export function ApprovalProcessDetailPage({
                     </div>
                 ) : null}
 
-                {urlState.view === "draft" && !draft ? (
+                {urlState.view === "current" && !published && draft ? (
+                    <BusinessEmptyState
+                        kind="no-data"
+                        title="尚未发布审批流程"
+                        description="已有一份草稿，发布后用于新建单据。"
+                        className="rounded-none border-0 bg-transparent p-6 shadow-none ring-0"
+                        action={
+                            <Button
+                                id="governance-approval-processes-detail-open-draft"
+                                type="button"
+                                variant="outline"
+                                onClick={() => replaceView("draft")}
+                            >
+                                打开草稿
+                            </Button>
+                        }
+                    />
+                ) : null}
+                {urlState.view === "history" &&
+                urlState.version &&
+                !historyTarget &&
+                !versionsQuery.isPending ? (
+                    <p
+                        role="status"
+                        className="p-6 text-sm text-muted-foreground"
+                    >
+                        所选版本不存在，请选择其它版本。
+                    </p>
+                ) : null}
+                {urlState.view === "draft" &&
+                !draft &&
+                !versionsQuery.isPending &&
+                !versionsQuery.isError ? (
                     <BusinessEmptyState
                         kind="no-data"
                         title="当前没有草稿"
@@ -438,7 +531,11 @@ export function ApprovalProcessDetailPage({
                         <VersionHistory
                             id="governance-approval-processes-detail-history"
                             versions={versionsQuery.data ?? []}
-                            selectedVersion={urlState.version}
+                            selectedVersion={
+                                historyTarget
+                                    ? String(historyTarget.definition_version)
+                                    : undefined
+                            }
                             onSelect={(item) =>
                                 replaceView(
                                     "history",
@@ -446,6 +543,17 @@ export function ApprovalProcessDetailPage({
                                 )
                             }
                         />
+                    </div>
+                ) : null}
+
+                {targetId &&
+                detailQuery.isFetching &&
+                (detailQuery.isPending || detailQuery.isPlaceholderData) ? (
+                    <div
+                        role="status"
+                        className="p-6 text-sm text-muted-foreground"
+                    >
+                        正在加载审批流程…
                     </div>
                 ) : null}
 
@@ -471,8 +579,12 @@ export function ApprovalProcessDetailPage({
                 ) : null}
 
                 {showEditor && detailQuery.data ? (
-                    detailQuery.data.status === "DRAFT" ? (
+                    detailQuery.data.status === "DRAFT" &&
+                    canEdit &&
+                    urlState.view !== "history" ? (
                         <DefinitionEditor
+                            key={detailQuery.data.definition_id}
+                            onDirtyChange={setEditorDirty}
                             id="governance-approval-processes-detail-editor"
                             detail={detailQuery.data}
                             lockVersion={
@@ -487,10 +599,28 @@ export function ApprovalProcessDetailPage({
                             }}
                         />
                     ) : (
-                        <DefinitionReadView detail={detailQuery.data} />
+                        <DefinitionReadView
+                            key={detailQuery.data.definition_id}
+                            detail={detailQuery.data}
+                        />
                     )
                 ) : null}
             </div>
+
+            <DiscardConfirmDialog
+                id="governance-approval-processes-discard"
+                open={pendingNavigation !== null}
+                onOpenChange={(open) => {
+                    if (!open) setPendingNavigation(null)
+                }}
+                onConfirm={() => {
+                    if (pendingNavigation) {
+                        setEditorDirty(false)
+                        router.replace(pendingNavigation)
+                        setPendingNavigation(null)
+                    }
+                }}
+            />
 
             {catalogItem ? (
                 <CreateDraftDialog

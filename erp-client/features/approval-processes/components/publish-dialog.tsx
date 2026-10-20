@@ -19,12 +19,9 @@ import {
     isDefinitionVersionConflict,
     newCommandKey,
 } from "../errors"
-import {
-    documentTypeLabel,
-    publishPathPreview,
-    rejectionPolicyCopy,
-    versionLabel,
-} from "../labels"
+import { documentTypeLabel, rejectionPolicyCopy, versionLabel } from "../labels"
+import { toEditorNode } from "../draft-nodes"
+import { DefinitionFlowchart } from "./definition-flowchart"
 import { usePublishDefinitionMutation } from "../queries"
 import type { DefinitionDetailView } from "../types"
 import { buildLockRequest } from "../write-payload"
@@ -61,26 +58,6 @@ export function PublishDialog({
         setCommandKey(newCommandKey("publish"))
     }, [open, lockVersion])
 
-    const path = publishPathPreview(
-        detail.nodes
-            .slice()
-            .sort((left, right) => left.display_order - right.display_order)
-            .map(
-                (node) =>
-                    [
-                        node.assignee_name_snapshot,
-                        ...(node.additional_assignees ?? []).map(
-                            (person) => person.name,
-                        ),
-                    ]
-                        .filter(Boolean)
-                        .join("、") +
-                        ((node.additional_assignees?.length ?? 0) > 0
-                            ? "（或签）"
-                            : "") || node.node_name,
-            ),
-    )
-
     const handlePublish = async () => {
         setError(null)
         try {
@@ -101,7 +78,10 @@ export function PublishDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent closeButtonId={`${id}-close`}>
+            <DialogContent
+                closeButtonId={`${id}-close`}
+                className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"
+            >
                 <DialogHeader>
                     <DialogTitle>发布审批流程</DialogTitle>
                     <DialogDescription>
@@ -113,13 +93,24 @@ export function PublishDialog({
                     </DialogDescription>
                 </DialogHeader>
                 <div className="flex flex-col gap-3 text-sm">
-                    <p data-testid="publish-path-preview">
-                        {path || "尚未配置审批人"}
-                    </p>
-                    <p data-testid="publish-reject-copy">
+                    <div data-testid="publish-path-preview">
+                        <DefinitionFlowchart
+                            id={`${id}-flow`}
+                            nodes={[...detail.nodes]
+                                .sort(
+                                    (a, b) => a.display_order - b.display_order,
+                                )
+                                .map(toEditorNode)}
+                            compact
+                        />
+                    </div>
+                    <p
+                        className="text-xs leading-5 text-muted-foreground"
+                        data-testid="publish-reject-copy"
+                    >
                         {rejectionPolicyCopy(detail.document_type)}
                     </p>
-                    <p className="text-muted-foreground">
+                    <p className="text-xs leading-5 text-muted-foreground">
                         发布后当前已发布版本将退役。已绑定单据和进行中的审批不受影响。
                     </p>
                 </div>

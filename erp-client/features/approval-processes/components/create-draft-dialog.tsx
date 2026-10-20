@@ -1,7 +1,10 @@
 "use client"
 
 import * as React from "react"
-
+import { CopyIcon, FilePlus2Icon, GitBranchIcon } from "lucide-react"
+import { useAccountProfileQuery } from "@/features/auth/hooks/queries"
+import { hasPermission } from "@/lib/permissions"
+import { PROCESS_PERMISSIONS } from "../permissions"
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -13,21 +16,38 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-
-import { newCommandKey } from "../errors"
-import { DRAFT_SOURCE_LABEL, documentTypeLabel } from "../labels"
-import { useCreateDefinitionDraftMutation } from "../queries"
+import { copyDraftNodes } from "../draft-nodes"
+import { definitionErrorMessage, newCommandKey } from "../errors"
+import { documentTypeLabel, versionLabel } from "../labels"
+import {
+    useCreateDefinitionDraftMutation,
+    useReplaceDefinitionNodesMutation,
+} from "../queries"
 import { createDraftSchema } from "../schema"
-import type { DefinitionCatalogItem, DraftSource } from "../types"
-import { definitionErrorMessage } from "../errors"
-import { buildCreateDraftRequest } from "../write-payload"
+import type {
+    CreateDefinitionDraftRequest,
+    DefinitionCatalogItem,
+    DefinitionDetailView,
+    ReplaceDefinitionNodesCommand,
+} from "../types"
+import {
+    buildCreateDraftRequest,
+    buildStableReplaceNodesCommand,
+    lockVersionText,
+} from "../write-payload"
+import { CopyFlowDialog } from "./copy-flow-dialog"
 
-/**
- * 创建草稿对话框。必须显式选择空白流程或复制当前已发布版本。
- */
+type CreationAttempt = {
+    signature: string
+    request: CreateDefinitionDraftRequest
+    source: DefinitionDetailView | null
+    created?: DefinitionDetailView
+    copyCommand?: ReplaceDefinitionNodesCommand
+}
+
+/** 创建可编辑草稿；跨流程复制沿目标类型的节点保存接口重新校验。 */
 export function CreateDraftDialog({
     item,
     open,
@@ -44,207 +64,345 @@ export function CreateDraftDialog({
     ) => void
     id?: string
 }) {
+    const profile = useAccountProfileQuery()
+    const canCopyOther = hasPermission(
+        profile.data?.permissions,
+        PROCESS_PERMISSIONS.edit,
+    )
     const createDraft = useCreateDefinitionDraftMutation()
+    const replaceNodes = useReplaceDefinitionNodesMutation()
+    const attempt = React.useRef<CreationAttempt | null>(null)
     const [submitError, setSubmitError] = React.useState<string | null>(null)
+    const [copyOpen, setCopyOpen] = React.useState(false)
+    const [createdDraft, setCreatedDraft] =
+        React.useState<DefinitionDetailView | null>(null)
+    const pending = createDraft.isPending || replaceNodes.isPending
     const canCopy = Boolean(item?.published_version)
-
+    const finish = (detail: DefinitionDetailView) => {
+        onOpenChange(false)
+        onCreated(detail.definition_id, detail.document_type)
+    }
     const form = useAppForm({
         defaultValues: {
             name: item ? `${item.document_type_label}审批` : "",
-            draft_source: "" as DraftSource | "",
+            draft_source: "EMPTY" as "EMPTY" | "CURRENT_PUBLISHED" | "OTHER",
+            copy_source: null as DefinitionDetailView | null,
         },
         validators: { onSubmit: createDraftSchema },
         onSubmit: async ({ value }) => {
             if (!item) return
-            if (
-                value.draft_source !== "EMPTY" &&
-                value.draft_source !== "CURRENT_PUBLISHED"
-            ) {
+            if (value.draft_source === "OTHER" && !canCopyOther) {
+                setSubmitError("当前账号没有编辑审批流程的权限。")
+                return
+            }
+            const source =
+                value.draft_source === "OTHER" ? value.copy_source : null
+            if (value.draft_source === "OTHER" && !source?.nodes.length) {
+                setSubmitError("请选择包含审批节点的来源流程。")
                 return
             }
             if (value.draft_source === "CURRENT_PUBLISHED" && !canCopy) {
-                setSubmitError("当前没有可复制的已发布版本，请改用空白流程。")
+                setSubmitError("当前没有可复制的已发布版本。")
                 return
             }
             setSubmitError(null)
+            const signature = JSON.stringify([
+                item.document_type,
+                value.name.trim(),
+                value.draft_source,
+                source,
+            ])
+            if (
+                !attempt.current ||
+                (!attempt.current.created &&
+                    attempt.current.signature !== signature)
+            ) {
+                attempt.current = {
+                    signature,
+                    source,
+                    request: buildCreateDraftRequest(
+                        item.document_type,
+                        value.name,
+                        value.draft_source === "CURRENT_PUBLISHED"
+                            ? "CURRENT_PUBLISHED"
+                            : "EMPTY",
+                        newCommandKey("create-draft"),
+                    ),
+                }
+            }
+            const current = attempt.current
             try {
-                const request = buildCreateDraftRequest(
-                    item.document_type,
-                    value.name,
-                    value.draft_source,
-                    newCommandKey("create-draft"),
-                )
-                const detail = await createDraft.mutateAsync(request)
-                onOpenChange(false)
-                form.reset()
-                onCreated(detail.definition_id, detail.document_type)
+                if (!current.created)
+                    current.created = await createDraft.mutateAsync(
+                        current.request,
+                    )
+                setCreatedDraft(current.created)
+                let detail = current.created
+                if (current.source) {
+                    current.copyCommand ??= buildStableReplaceNodesCommand(
+                        detail.definition_id,
+                        lockVersionText(detail.definition_lock_version),
+                        copyDraftNodes(current.source.nodes),
+                        null,
+                        () => newCommandKey("copy-flow"),
+                    )
+                    detail = await replaceNodes.mutateAsync(current.copyCommand)
+                }
+                finish(detail)
             } catch (error) {
                 setSubmitError(definitionErrorMessage(error))
             }
         },
     })
-
     React.useEffect(() => {
         if (!open) return
-        form.reset()
+        form.reset({
+            name: item ? `${item.document_type_label}审批` : "",
+            draft_source: "EMPTY",
+            copy_source: null,
+        })
+        attempt.current = null
+        setCreatedDraft(null)
         setSubmitError(null)
-        // form 实例在同一对话框生命周期内稳定，只在打开或类型变化时重置。
+        setCopyOpen(false)
+        // 仅在打开对话框或切换目标类型时初始化。
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, item?.document_type])
-
     if (!item) return null
-
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent closeButtonId={`${id}-close`}>
-                <DialogHeader>
-                    <DialogTitle>新建草稿</DialogTitle>
-                    <DialogDescription>
-                        为
-                        {documentTypeLabel(
-                            item.document_type,
-                            item.document_type_label,
-                        )}
-                        创建草稿：选择空白流程，或复制当前已发布版本。
-                    </DialogDescription>
-                </DialogHeader>
-                {submitError ? (
-                    <Alert variant="destructive">
-                        <AlertTitle>未能创建草稿</AlertTitle>
-                        <AlertDescription>{submitError}</AlertDescription>
-                    </Alert>
-                ) : null}
-                <form
-                    className="flex flex-col gap-4"
-                    onSubmit={(event) => {
-                        event.preventDefault()
-                        void form.handleSubmit()
-                    }}
+        <>
+            <Dialog
+                open={open}
+                onOpenChange={(next) => {
+                    if (!pending) onOpenChange(next)
+                }}
+            >
+                <DialogContent
+                    closeButtonId={`${id}-close`}
+                    className="max-h-[90dvh] overflow-y-auto sm:max-w-lg"
                 >
-                    <form.AppField name="name">
-                        {(field) => (
-                            <field.TextField
-                                id={`${id}-name`}
-                                label="审批流程名称"
-                                required
-                            />
-                        )}
-                    </form.AppField>
-                    <form.AppField name="draft_source">
-                        {(field) => (
-                            <Field data-invalid={!field.state.meta.isValid}>
-                                <FieldLabel id={`${id}-draft-source-label`}>
-                                    草稿来源
-                                    <span className="text-destructive">*</span>
-                                </FieldLabel>
-                                <RadioGroup
-                                    id={`${id}-draft-source`}
-                                    aria-labelledby={`${id}-draft-source-label`}
-                                    aria-invalid={!field.state.meta.isValid}
-                                    name={field.name}
-                                    value={field.state.value}
-                                    className="gap-2"
-                                    onValueChange={(value) => {
-                                        if (
-                                            value !== "EMPTY" &&
-                                            value !== "CURRENT_PUBLISHED"
-                                        ) {
-                                            return
-                                        }
-                                        if (
-                                            value === "CURRENT_PUBLISHED" &&
-                                            !canCopy
-                                        ) {
-                                            return
-                                        }
-                                        field.handleChange(value)
-                                    }}
-                                >
-                                    <Label
-                                        htmlFor={`${id}-draft-source-empty`}
-                                        className="flex items-center gap-2 font-normal"
+                    <DialogHeader>
+                        <DialogTitle>新建审批草稿</DialogTitle>
+                        <DialogDescription>
+                            {documentTypeLabel(
+                                item.document_type,
+                                item.document_type_label,
+                            )}{" "}
+                            · 保存为草稿，发布后用于新建单据。
+                        </DialogDescription>
+                    </DialogHeader>
+                    {submitError && (
+                        <Alert variant="destructive">
+                            <AlertTitle>
+                                {createdDraft
+                                    ? "草稿已创建，节点尚未复制完成"
+                                    : "未能创建草稿"}
+                            </AlertTitle>
+                            <AlertDescription>
+                                {submitError}
+                                {createdDraft
+                                    ? " 可重试复制，或打开草稿重新配置审批人。"
+                                    : ""}
+                            </AlertDescription>
+                        </Alert>
+                    )}
+                    <form
+                        className="space-y-5"
+                        onSubmit={(event) => {
+                            event.preventDefault()
+                            void form.handleSubmit()
+                        }}
+                    >
+                        <form.AppField name="name">
+                            {(field) => (
+                                <field.TextField
+                                    id={`${id}-name`}
+                                    label="审批流程名称"
+                                    required
+                                    disabled={pending || Boolean(createdDraft)}
+                                />
+                            )}
+                        </form.AppField>
+                        <form.AppField name="draft_source">
+                            {(field) => (
+                                <div className="space-y-2">
+                                    <Label id={`${id}-draft-source-label`}>
+                                        创建方式
+                                    </Label>
+                                    <RadioGroup
+                                        id={`${id}-draft-source`}
+                                        aria-labelledby={`${id}-draft-source-label`}
+                                        value={field.state.value}
+                                        className="gap-2"
+                                        onValueChange={(value) => {
+                                            if (
+                                                value === "EMPTY" ||
+                                                value === "CURRENT_PUBLISHED" ||
+                                                value === "OTHER"
+                                            )
+                                                field.handleChange(value)
+                                        }}
                                     >
-                                        <RadioGroupItem
-                                            id={`${id}-draft-source-empty`}
-                                            value="EMPTY"
-                                            nativeButton
-                                            render={
-                                                <button
-                                                    type="button"
-                                                    aria-label={
-                                                        DRAFT_SOURCE_LABEL.EMPTY
+                                        {[
+                                            {
+                                                value: "EMPTY",
+                                                label: "空白流程",
+                                                description:
+                                                    "从第一个审批节点开始配置",
+                                                icon: FilePlus2Icon,
+                                                disabled: false,
+                                                suffix: "empty",
+                                            },
+                                            {
+                                                value: "CURRENT_PUBLISHED",
+                                                label: "复制当前版本",
+                                                description: canCopy
+                                                    ? "保留当前流程的节点和审批人"
+                                                    : "当前没有已发布版本",
+                                                icon: GitBranchIcon,
+                                                disabled: !canCopy,
+                                                suffix: "current-published",
+                                            },
+                                            {
+                                                value: "OTHER",
+                                                label: "从其它审批流复制",
+                                                description: canCopyOther
+                                                    ? "复用其它单据类型的流程配置"
+                                                    : "需要审批流程编辑权限",
+                                                icon: CopyIcon,
+                                                disabled: !canCopyOther,
+                                                suffix: "other",
+                                            },
+                                        ].map((option) => (
+                                            <Label
+                                                key={option.value}
+                                                htmlFor={`${id}-draft-source-${option.suffix}`}
+                                                className="flex items-center gap-3 rounded-lg border border-border p-3 font-normal has-[[data-checked]]:border-primary/50 has-[[data-checked]]:bg-accent/40"
+                                            >
+                                                <RadioGroupItem
+                                                    id={`${id}-draft-source-${option.suffix}`}
+                                                    value={option.value}
+                                                    disabled={
+                                                        option.disabled ||
+                                                        pending ||
+                                                        Boolean(createdDraft)
+                                                    }
+                                                    nativeButton
+                                                    render={
+                                                        <button
+                                                            type="button"
+                                                            aria-label={
+                                                                option.label
+                                                            }
+                                                        />
                                                     }
                                                 />
-                                            }
-                                            aria-label={
-                                                DRAFT_SOURCE_LABEL.EMPTY
-                                            }
-                                        />
-                                        {DRAFT_SOURCE_LABEL.EMPTY}
-                                    </Label>
-                                    <Label
-                                        htmlFor={`${id}-draft-source-current-published`}
-                                        className="flex items-center gap-2 font-normal"
-                                    >
-                                        <RadioGroupItem
-                                            id={`${id}-draft-source-current-published`}
-                                            value="CURRENT_PUBLISHED"
-                                            nativeButton
-                                            render={
-                                                <button
-                                                    type="button"
-                                                    aria-label={
-                                                        DRAFT_SOURCE_LABEL.CURRENT_PUBLISHED
-                                                    }
-                                                />
-                                            }
-                                            aria-label={
-                                                DRAFT_SOURCE_LABEL.CURRENT_PUBLISHED
-                                            }
-                                            disabled={!canCopy}
-                                        />
-                                        {DRAFT_SOURCE_LABEL.CURRENT_PUBLISHED}
-                                        {!canCopy
-                                            ? "（当前没有已发布版本）"
-                                            : null}
-                                    </Label>
-                                </RadioGroup>
-                                {field.state.meta.errors.length > 0 ? (
-                                    <FieldError
-                                        errors={field.state.meta.errors.map(
-                                            (message) => ({
-                                                message:
-                                                    typeof message === "string"
-                                                        ? message
-                                                        : "请选择草稿来源",
-                                            }),
-                                        )}
-                                    />
-                                ) : null}
-                            </Field>
-                        )}
-                    </form.AppField>
-                    <DialogFooter>
-                        <Button
-                            id={`${id}-cancel`}
-                            type="button"
-                            variant="outline"
-                            disabled={createDraft.isPending}
-                            onClick={() => onOpenChange(false)}
+                                                <option.icon className="size-4 shrink-0 text-muted-foreground" />
+                                                <span className="space-y-1">
+                                                    <span className="block text-sm font-medium">
+                                                        {option.label}
+                                                    </span>
+                                                    <span className="block text-xs text-muted-foreground">
+                                                        {option.description}
+                                                    </span>
+                                                </span>
+                                            </Label>
+                                        ))}
+                                    </RadioGroup>
+                                </div>
+                            )}
+                        </form.AppField>
+                        <form.Subscribe
+                            selector={(state) =>
+                                [
+                                    state.values.draft_source,
+                                    state.values.copy_source,
+                                ] as const
+                            }
                         >
-                            取消
-                        </Button>
-                        <form.AppForm>
-                            <form.SubmitButton
-                                loading={createDraft.isPending}
-                                id={`${id}-submit`}
-                                label="创建草稿"
-                                disabled={createDraft.isPending}
-                            />
-                        </form.AppForm>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
+                            {([source, copied]) =>
+                                source === "OTHER" ? (
+                                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-muted/40 p-3">
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-medium">
+                                                {copied
+                                                    ? documentTypeLabel(
+                                                          copied.document_type,
+                                                          copied.document_type_label,
+                                                      )
+                                                    : "尚未选择来源"}
+                                            </p>
+                                            {copied && (
+                                                <p className="mt-1 text-xs text-muted-foreground">
+                                                    {versionLabel(
+                                                        copied.definition_version,
+                                                    )}{" "}
+                                                    · {copied.nodes.length}{" "}
+                                                    个节点
+                                                </p>
+                                            )}
+                                        </div>
+                                        <Button
+                                            id={`${id}-choose-source`}
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={
+                                                pending || Boolean(createdDraft)
+                                            }
+                                            onClick={() => setCopyOpen(true)}
+                                        >
+                                            {copied ? "更换来源" : "选择流程"}
+                                        </Button>
+                                    </div>
+                                ) : null
+                            }
+                        </form.Subscribe>
+                        <DialogFooter>
+                            {createdDraft ? (
+                                <Button
+                                    id={`${id}-open-created`}
+                                    type="button"
+                                    variant="outline"
+                                    disabled={pending}
+                                    onClick={() => finish(createdDraft)}
+                                >
+                                    打开草稿调整
+                                </Button>
+                            ) : (
+                                <Button
+                                    id={`${id}-cancel`}
+                                    type="button"
+                                    variant="outline"
+                                    disabled={pending}
+                                    onClick={() => onOpenChange(false)}
+                                >
+                                    取消
+                                </Button>
+                            )}
+                            <form.AppForm>
+                                <form.SubmitButton
+                                    loading={pending}
+                                    id={`${id}-submit`}
+                                    label={
+                                        createdDraft ? "重试复制" : "创建草稿"
+                                    }
+                                    disabled={pending}
+                                />
+                            </form.AppForm>
+                        </DialogFooter>
+                    </form>
+                    <CopyFlowDialog
+                        id={`${id}-copy`}
+                        targetType={item.document_type}
+                        open={copyOpen && open}
+                        onOpenChange={setCopyOpen}
+                        onCopy={(source) =>
+                            form.setFieldValue("copy_source", source)
+                        }
+                    />
+                </DialogContent>
+            </Dialog>
+        </>
     )
 }

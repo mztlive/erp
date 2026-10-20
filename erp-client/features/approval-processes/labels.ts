@@ -157,12 +157,12 @@ export const versionLabel = (version: number | null | undefined): string => {
 
 /** 固定驳回语义说明。 */
 export const REJECT_RESTART_COPY =
-    "任一层驳回后，将从第一位审批人开始下一轮审批。"
+    "任一层驳回后，将从第一个节点开始下一轮审批。"
 
 /** 付款申请驳回终止本次审批，重新提交须重新冻结并审核。 */
 export const rejectionPolicyCopy = (documentType: DocumentType): string =>
     documentType === "purchase_payment_request"
-        ? "任一层驳回后，本次申请结束并释放未付金额；重新提交后从第一位审批人重新审核。"
+        ? "任一层驳回后，本次申请结束并释放未付金额；重新提交后从第一个节点重新审核。"
         : REJECT_RESTART_COPY
 
 /**
