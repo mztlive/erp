@@ -76,6 +76,12 @@ pub(crate) fn ensure_targets(change: &OrganizationOperation, access: &Authorized
             targets.push(Some(org_unit_id));
             targets.push(state.own_org(user_id, access.as_of)?);
         },
+        TransferMembers { user_ids, org_unit_id } => {
+            targets.push(Some(org_unit_id));
+            for user_id in user_ids {
+                targets.push(state.own_org(user_id, access.as_of)?);
+            }
+        },
         EndMembership { user_id } => targets.push(state.own_org(user_id, access.as_of)?),
         GrantManagement { .. } | RevokeManagement { .. } => {
             return Err(Error::ValidationError("部门管理关系已停用，请在人员数据范围中设置授权".into()));
@@ -292,6 +298,40 @@ mod tests {
             reason: "组织调整".into(),
             change,
         }
+    }
+
+    fn member(id: &str, user: &str, org: &str) -> OrgMembership {
+        OrgMembership {
+            base: BaseModel::new(id.into()),
+            user_id: user.into(),
+            org_unit_id: org.into(),
+            validity: OrgValidity { valid_from: Instant::from_unix_secs(1), valid_to: None },
+            changed_by: "admin".into(),
+            reason: "初始化".into(),
+        }
+    }
+
+    /// 批量调岗必须逐一校验每个人的原组织和目标组织。
+    #[test]
+    fn batch_transfer_checks_every_member_org() {
+        let mut state = state();
+        state.memberships.push(member("buyer-membership", "buyer", "two"));
+        let change = OrganizationOperation::TransferMembers {
+            user_ids: vec!["sales".into(), "buyer".into()],
+            org_unit_id: "one".into(),
+        };
+        let limited = access_with(
+            ResolvedScope {
+                role_clauses: vec![ScopeClause {
+                    org_unit_ids: ["one".into()].into(),
+                    ..ScopeClause::default()
+                }],
+                user_limit: None,
+            },
+            state.clone(),
+        );
+        assert!(matches!(ensure_targets(&change, &limited), Err(Error::Forbidden(_))));
+        assert!(ensure_targets(&change, &company_access(state)).is_ok());
     }
 
     /// 合并命令必须检查每一项边界，回放必须匹配完整载荷。

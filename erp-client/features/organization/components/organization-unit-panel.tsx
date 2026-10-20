@@ -15,6 +15,7 @@ import {
 
 import { BusinessStatusBadge } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import type { OrganizationChangeDraft } from "@/features/organization/lib/change-payload"
 import { KIND_LABEL } from "@/features/organization/lib/labels"
 import { isRelationActive, personLabel } from "@/features/organization/lib/tree"
 import type { OrgTreeNode } from "@/features/organization/lib/tree"
@@ -48,7 +49,10 @@ export function OrganizationUnitPanel({
     view: OrganizationStateView
     canViewAccounts?: boolean
     canManage: boolean
-    onChange: (operation: string, extras?: Record<string, string>) => void
+    onChange: (
+        operation: OrganizationChangeDraft["operation"],
+        extras?: Partial<OrganizationChangeDraft>,
+    ) => void
 }) {
     const unit = node.unit
     const segment = toAutomationIdSegment(unit.id)

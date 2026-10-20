@@ -95,6 +95,11 @@ export type OrganizationOperation =
           user_id: string
           org_unit_id: string
       }
+    | {
+          operation: "transfer_members"
+          user_ids: string[]
+          org_unit_id: string
+      }
     | { operation: "end_membership"; user_id: string }
     | {
           operation: "grant_management"

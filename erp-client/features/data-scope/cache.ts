@@ -16,15 +16,15 @@ function stringField(
     return typeof value === "string" ? value : undefined
 }
 
-/** 会话身份和全局权限版本变化必须清除其他功能已缓存的业务内容。 */
+/** 会话身份和有效权限变化必须清除其他功能已缓存的业务内容。 */
 function authorizationVersion(data: unknown): string | null {
     if (!data || typeof data !== "object") return null
     const value = data as Record<string, unknown>
     if (typeof value.userid !== "string") return null
     return JSON.stringify([
         value.userid,
-        value.policy_version,
-        value.organization_version,
+        // 数字版本由下方的全局水位统一比较。业务接口已返回的新版本，
+        // 不得在下一次账号轮询时再次清缓存、卸载正在录入的弹窗。
         // 角色和权限是集合；接口顺序变化不代表授权变化，不能因此清空正在编辑的表单。
         Array.isArray(value.role_ids)
             ? [...value.role_ids].sort()

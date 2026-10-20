@@ -7,13 +7,14 @@ import type {
 export type OrganizationChangeDraft = {
     operation: Exclude<
         OrganizationOperation["operation"],
-        "update_person_profile"
+        "update_person_profile" | "transfer_members"
     >
     name: string
     parentId: string
     kind: OrgUnitKind
     orgUnitId: string
     userId: string
+    userIds: string[]
     roleId: string
     includeDescendants: "true" | "false"
     validTo: string
@@ -28,6 +29,7 @@ export const EMPTY_CHANGE_DRAFT: OrganizationChangeDraft = {
     kind: "department",
     orgUnitId: "",
     userId: "",
+    userIds: [],
     roleId: "",
     includeDescendants: "false",
     validTo: "",
@@ -75,8 +77,8 @@ export function buildOrganizationOperation(
             return { operation: "disable_unit", org_unit_id: draft.orgUnitId }
         case "transfer_member":
             return {
-                operation: "transfer_member",
-                user_id: draft.userId,
+                operation: "transfer_members",
+                user_ids: draft.userId ? [draft.userId] : draft.userIds,
                 org_unit_id: draft.orgUnitId,
             }
         case "end_membership":

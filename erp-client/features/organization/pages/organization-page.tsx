@@ -95,6 +95,7 @@ export function OrganizationPage() {
         operation: OrganizationChangeDraft["operation"],
         extras: Partial<OrganizationChangeDraft> = {},
     ) => {
+        if (!view || !canManage) return
         setChangeDraft({
             ...EMPTY_CHANGE_DRAFT,
             operation,
@@ -106,7 +107,17 @@ export function OrganizationPage() {
         setChangeOpen(true)
     }
 
-    if (profileQuery.isPending || stateQuery.isPending) {
+    const pending = profileQuery.isPending || stateQuery.isPending
+    const changeBlockedReason = pending
+        ? "正在重新读取组织资料，录入内容已保留，请稍候。"
+        : profileQuery.isError || stateQuery.isError || !view
+          ? "组织资料读取失败，录入内容已保留，暂不能提交。"
+          : !canManage || view.emptyReason === "no_scope"
+            ? "当前没有组织管理权限，录入内容已保留，暂不能提交。"
+            : undefined
+
+    // 已打开的表单独立于查询加载状态；清除服务端缓存不能卸载本地录入。
+    if (pending && !changeOpen) {
         return (
             <PageScaffold
                 density="compact"
@@ -153,7 +164,14 @@ export function OrganizationPage() {
                 className="min-h-0 overflow-hidden"
                 tableClassName="flex flex-col overflow-hidden p-0"
                 table={
-                    emptyReason === "NO_MODULE_PERMISSION" ? (
+                    pending ? (
+                        <p
+                            className="p-4 text-sm text-muted-foreground"
+                            role="status"
+                        >
+                            正在重新读取组织资料…
+                        </p>
+                    ) : emptyReason === "NO_MODULE_PERMISSION" ? (
                         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
                             <OrganizationEmptyByReason
                                 idPrefix="organization"
@@ -205,12 +223,7 @@ export function OrganizationPage() {
                                             profileQuery.data?.permissions,
                                             "admin:list",
                                         )}
-                                        onChange={(operation, extras) =>
-                                            openChange(
-                                                operation as OrganizationChangeDraft["operation"],
-                                                extras,
-                                            )
-                                        }
+                                        onChange={openChange}
                                     />
                                 ) : null}
                             </div>
@@ -224,13 +237,14 @@ export function OrganizationPage() {
                 {view ? <p>当前范围：{view.scopeSummary}</p> : null}
             </div>
 
-            {view && canManage ? (
+            {changeOpen ? (
                 <OrganizationChangeDialog
                     open={changeOpen}
                     onOpenChange={setChangeOpen}
                     view={view}
                     draft={changeDraft}
-                    expectedVersion={view.organizationVersion}
+                    expectedVersion={view?.organizationVersion}
+                    blockedReason={changeBlockedReason}
                     previewing={previewMutation.isPending}
                     submitting={submitMutation.isPending}
                     onPreview={(request) =>

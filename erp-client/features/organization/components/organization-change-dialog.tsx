@@ -54,6 +54,7 @@ const schema = z
         kind: z.enum(["department", "team"]),
         orgUnitId: z.string(),
         userId: z.string(),
+        userIds: z.array(z.string()),
         roleId: z.string(),
         includeDescendants: z.enum(["true", "false"]),
         validTo: z.string(),
@@ -61,13 +62,20 @@ const schema = z
         reason: z.string().trim().min(1, "必须填写变更原因").max(1000),
     })
     .superRefine((draft, context) => {
-        if (
-            ["transfer_member", "end_membership"].includes(draft.operation) &&
-            !draft.userId
-        )
+        if (draft.operation === "end_membership" && !draft.userId)
             context.addIssue({
                 code: "custom",
                 path: ["userId"],
+                message: "请选择人员",
+            })
+        if (
+            draft.operation === "transfer_member" &&
+            !draft.userId &&
+            draft.userIds.length === 0
+        )
+            context.addIssue({
+                code: "custom",
+                path: ["userIds"],
                 message: "请选择人员",
             })
         if (draft.operation === "transfer_member" && !draft.orgUnitId)
@@ -92,13 +100,17 @@ function PreviewReceiptGuard({
     onInvalidate,
 }: {
     values: OrganizationChangeDraft
-    expectedVersion: number
+    expectedVersion: number | undefined
     idempotencyKey: string
     receipt: OrganizationChangeReceipt | null
     onInvalidate: () => void
 }) {
     React.useEffect(() => {
         if (!receipt) return
+        if (expectedVersion === undefined) {
+            onInvalidate()
+            return
+        }
         const request = buildOrganizationChangeRequest(
             expectedVersion,
             idempotencyKey,
@@ -117,6 +129,7 @@ export function OrganizationChangeDialog({
     view,
     draft,
     expectedVersion,
+    blockedReason,
     previewing,
     submitting,
     onPreview,
@@ -124,9 +137,10 @@ export function OrganizationChangeDialog({
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
-    view: OrganizationStateView
+    view: OrganizationStateView | undefined
     draft: OrganizationChangeDraft
-    expectedVersion: number
+    expectedVersion: number | undefined
+    blockedReason?: string
     previewing: boolean
     submitting: boolean
     onPreview: (
@@ -146,6 +160,7 @@ export function OrganizationChangeDialog({
         defaultValues: { ...EMPTY_CHANGE_DRAFT, ...draft },
         validators: { onChange: schema },
         onSubmit: async ({ value }) => {
+            if (blockedReason || expectedVersion === undefined) return
             setActionError(null)
             const request = buildOrganizationChangeRequest(
                 expectedVersion,
@@ -153,6 +168,15 @@ export function OrganizationChangeDialog({
                 value,
             )
             try {
+                // 新建组织和批量添加成员只做组织归属调整，不进入影响预览。
+                if (
+                    value.operation === "create_unit" ||
+                    (value.operation === "transfer_member" && !value.userId)
+                ) {
+                    await onSubmit(request)
+                    onOpenChange(false)
+                    return
+                }
                 if (
                     !receipt ||
                     !sameOrganizationChangeRequest(receipt.request, request)
@@ -176,17 +200,41 @@ export function OrganizationChangeDialog({
         form.reset({ ...EMPTY_CHANGE_DRAFT, ...draft })
     }, [open, draft, form])
 
-    const unitOptions = view.units
+    const units = view?.units ?? []
+    const people = view?.people ?? []
+    const unitOptions = units
         .filter((unit) => unit.enabled)
         .map((unit) => ({ value: unit.id, label: unit.name }))
-    const peopleOptions = view.people
+    const peopleById = new Map(people.map((person) => [person.id, person]))
+    const peopleOptions = people
         .filter((person) => person.active)
         .map((person) => ({
             value: person.id,
-            label: `${person.label}（${person.account}） · ${person.own_org_unit_id ? unitLabel(view.units, person.own_org_unit_id) : "未分配部门"}`,
+            label: `${person.label}（${person.account}） · ${person.own_org_unit_id ? unitLabel(units, person.own_org_unit_id) : "未分配部门"}`,
         }))
+    const peopleOptionsFor = (targetUnitId: string) =>
+        people
+            .filter((person) => person.active)
+            .map((person) => {
+                const alreadyThere =
+                    Boolean(targetUnitId) &&
+                    person.own_org_unit_id === targetUnitId
+                return {
+                    value: person.id,
+                    label: `${person.label}（${person.account}） · ${
+                        person.own_org_unit_id
+                            ? unitLabel(units, person.own_org_unit_id)
+                            : "未分配部门"
+                    }${alreadyThere ? "（已在该部门）" : ""}`,
+                    keywords: `${person.label} ${person.account}`,
+                    disabled: alreadyThere,
+                }
+            })
     const changes = receipt ? impactChanges(receipt, view) : []
     const counts = impactCounts(changes)
+    const skipsPreview =
+        draft.operation === "create_unit" ||
+        (draft.operation === "transfer_member" && !draft.userId)
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -238,6 +286,12 @@ export function OrganizationChangeDialog({
                         void form.handleSubmit()
                     }}
                 >
+                    {blockedReason ? (
+                        <Alert>
+                            <AlertTitle>录入内容已保留</AlertTitle>
+                            <AlertDescription>{blockedReason}</AlertDescription>
+                        </Alert>
+                    ) : null}
                     <form.Subscribe
                         selector={(state) => state.values.operation}
                         children={(operation) => (
@@ -308,8 +362,42 @@ export function OrganizationChangeDialog({
                                         )}
                                     />
                                 ) : null}
-                                {operation === "transfer_member" ||
-                                operation === "end_membership" ? (
+                                {operation === "transfer_member" &&
+                                !draft.userId ? (
+                                    <form.Subscribe
+                                        selector={(state) =>
+                                            state.values.orgUnitId
+                                        }
+                                    >
+                                        {(targetUnitId) => (
+                                            <form.AppField
+                                                name="userIds"
+                                                children={(field) => (
+                                                    <field.MultiSelectField
+                                                        id="organization-change-users"
+                                                        label="人员"
+                                                        required
+                                                        placeholder="请选择人员，可多选"
+                                                        options={peopleOptionsFor(
+                                                            targetUnitId,
+                                                        )}
+                                                        getChipLabel={(
+                                                            option,
+                                                        ) =>
+                                                            peopleById.get(
+                                                                option.value,
+                                                            )?.label ??
+                                                            option.label
+                                                        }
+                                                    />
+                                                )}
+                                            />
+                                        )}
+                                    </form.Subscribe>
+                                ) : null}
+                                {operation === "end_membership" ||
+                                (operation === "transfer_member" &&
+                                    Boolean(draft.userId)) ? (
                                     <form.AppField
                                         name="userId"
                                         children={(field) => (
@@ -329,17 +417,40 @@ export function OrganizationChangeDialog({
                     {draft.operation === "transfer_member" ? (
                         <form.Subscribe selector={(state) => state.values}>
                             {(values) => {
-                                const person = view.people.find(
-                                    (item) => item.id === values.userId,
-                                )
+                                const selectedPeople = (
+                                    draft.userId
+                                        ? [values.userId]
+                                        : values.userIds
+                                ).flatMap((id) => {
+                                    const person = peopleById.get(id)
+                                    return person ? [person] : []
+                                })
+                                const target = values.orgUnitId
+                                    ? unitLabel(units, values.orgUnitId)
+                                    : "请选择部门"
+                                const summary =
+                                    selectedPeople.length === 0
+                                        ? "选择人员后，将显示当前部门与调整后的部门。"
+                                        : selectedPeople.length === 1
+                                          ? `${selectedPeople[0].label}：${
+                                                selectedPeople[0]
+                                                    .own_org_unit_id
+                                                    ? unitLabel(
+                                                          units,
+                                                          selectedPeople[0]
+                                                              .own_org_unit_id,
+                                                      )
+                                                    : "未分配部门"
+                                            } → ${target}`
+                                          : `已选择 ${selectedPeople.length} 人：${selectedPeople
+                                                .map((person) => person.label)
+                                                .join("、")} → ${target}`
                                 return (
                                     <p
                                         className="rounded-lg bg-muted/40 p-3 text-sm"
                                         role="status"
                                     >
-                                        {person
-                                            ? `${person.label}：${person.own_org_unit_id ? unitLabel(view.units, person.own_org_unit_id) : "未分配部门"} → ${values.orgUnitId ? unitLabel(view.units, values.orgUnitId) : "请选择部门"}`
-                                            : "选择账号后，将显示当前部门与调整后的部门。"}
+                                        {summary}
                                         <span className="mt-1 block text-xs text-muted-foreground">
                                             部门调整不会自动分配角色，也不会交接客户、单据或待办。
                                         </span>
@@ -371,14 +482,16 @@ export function OrganizationChangeDialog({
                         )}
                     />
 
-                    <form.Subscribe selector={(state) => state.values}>
-                        {(values) => (
-                            <OrganizationAccessImpact
-                                draft={values}
-                                view={view}
-                            />
-                        )}
-                    </form.Subscribe>
+                    {skipsPreview || !view || blockedReason ? null : (
+                        <form.Subscribe selector={(state) => state.values}>
+                            {(values) => (
+                                <OrganizationAccessImpact
+                                    draft={values}
+                                    view={view}
+                                />
+                            )}
+                        </form.Subscribe>
+                    )}
 
                     {actionError ? (
                         <Alert variant="destructive">
@@ -387,7 +500,7 @@ export function OrganizationChangeDialog({
                         </Alert>
                     ) : null}
 
-                    {receipt ? (
+                    {receipt && view && !blockedReason ? (
                         <div className="min-w-0 space-y-3">
                             <BatchImpactPreview
                                 title={
@@ -424,9 +537,21 @@ export function OrganizationChangeDialog({
                             loading={previewing || submitting}
                             id="organization-change-submit"
                             type="submit"
-                            disabled={previewing || submitting}
+                            disabled={
+                                previewing ||
+                                submitting ||
+                                Boolean(blockedReason) ||
+                                expectedVersion === undefined
+                            }
                         >
-                            {receipt ? "确认提交" : "预览影响"}
+                            {draft.operation === "create_unit"
+                                ? "创建组织"
+                                : draft.operation === "transfer_member" &&
+                                    !draft.userId
+                                  ? "添加成员"
+                                  : receipt
+                                    ? "确认提交"
+                                    : "预览影响"}
                         </LoadingButton>
                     </DialogFooter>
                 </form>

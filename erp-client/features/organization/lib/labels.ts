@@ -18,6 +18,7 @@ export const OPERATION_LABEL: Record<
     rename_unit: "重命名组织",
     disable_unit: "停用组织",
     transfer_member: "调整所属部门",
+    transfer_members: "调整所属部门",
     end_membership: "移出部门",
     grant_management: "设置管理部门",
     revoke_management: "撤销管理范围",

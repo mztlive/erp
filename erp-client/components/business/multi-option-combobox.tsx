@@ -43,9 +43,14 @@ export type MultiOptionComboboxProps = {
     filterLabel?: string
     emptyLabel?: string
     disabled?: boolean
+    required?: boolean
     id?: string
     "aria-label"?: string
+    "aria-invalid"?: boolean
     "aria-describedby"?: string
+    onBlur?: () => void
+    /** 已选标签的短文案；选项列表仍使用完整 label。 */
+    getChipLabel?: (option: ComboboxOption) => string
     className?: string
     size?: "sm" | "default"
     filterMode?: "local" | "remote"
@@ -68,9 +73,13 @@ export function MultiOptionCombobox({
     filterLabel,
     emptyLabel = "没有符合条件的选项",
     disabled = false,
+    required = false,
     id,
     "aria-label": ariaLabel,
+    "aria-invalid": ariaInvalid,
     "aria-describedby": ariaDescribedBy,
+    onBlur,
+    getChipLabel,
     className,
     size = "default",
     filterMode = "local",
@@ -147,6 +156,7 @@ export function MultiOptionCombobox({
                     </ComboboxTrigger>
                 ) : (
                     <ComboboxChips
+                        aria-invalid={ariaInvalid || undefined}
                         className={cn(
                             size === "sm" &&
                                 "min-h-7 py-0.5 *:data-[slot=combobox-chip]:h-5",
@@ -165,7 +175,7 @@ export function MultiOptionCombobox({
                                         aria-label={item.label}
                                     >
                                         <span className="min-w-0 truncate">
-                                            {item.label}
+                                            {getChipLabel?.(item) ?? item.label}
                                         </span>
                                     </ComboboxChip>
                                 ))
@@ -174,9 +184,12 @@ export function MultiOptionCombobox({
                         <ComboboxChipsInput
                             id={id}
                             aria-label={ariaLabel}
+                            aria-invalid={ariaInvalid || undefined}
                             aria-describedby={ariaDescribedBy}
                             placeholder={selected.length > 0 ? "" : placeholder}
                             disabled={disabled}
+                            aria-required={required || undefined}
+                            onBlur={onBlur}
                             className={cn(size === "sm" && "text-xs")}
                         />
                     </ComboboxChips>

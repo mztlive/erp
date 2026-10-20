@@ -226,6 +226,11 @@ impl OrganizationService {
             OrganizationOperation::TransferMember { user_id, .. } => {
                 self.ensure_account(user_id, executor).await?;
             },
+            OrganizationOperation::TransferMembers { user_ids, .. } => {
+                for user_id in user_ids {
+                    self.ensure_account(user_id, executor).await?;
+                }
+            },
             OrganizationOperation::DisableUnit { org_unit_id } => {
                 self.ensure_no_unsettled(org_unit_id, executor).await?
             },

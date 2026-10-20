@@ -1,5 +1,7 @@
 //! 组织变更的确定性状态迁移；写入、审计与版本推进由 Service 事务提交。
 
+use std::collections::BTreeSet;
+
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use erp_core::common::time::Instant;
@@ -44,6 +46,11 @@ pub enum OrganizationOperation {
     },
     TransferMember {
         user_id: String,
+        org_unit_id: String,
+    },
+    /// 一次事务内为多人调整主属组织；任一人失败则全部不生效。
+    TransferMembers {
+        user_ids: Vec<String>,
         org_unit_id: String,
     },
     EndMembership {
@@ -115,6 +122,16 @@ impl OrganizationChangeRequest {
             },
             OrganizationOperation::UpdatePersonProfile { profile } => {
                 profile.operations()?;
+            },
+            OrganizationOperation::TransferMembers { user_ids, .. } => {
+                if user_ids.is_empty() {
+                    return Err(Error::ValidationError("请选择人员".into()));
+                }
+                if user_ids.iter().any(String::is_empty)
+                    || user_ids.iter().collect::<BTreeSet<_>>().len() != user_ids.len()
+                {
+                    return Err(Error::ValidationError("人员重复或为空".into()));
+                }
             },
             _ => {},
         }
@@ -218,6 +235,11 @@ impl OrganizationState {
             },
             OrganizationOperation::TransferMember { user_id, org_unit_id } => {
                 self.transfer(user_id, org_unit_id, id, actor, reason, at)?
+            },
+            OrganizationOperation::TransferMembers { user_ids, org_unit_id } => {
+                for (index, user_id) in user_ids.iter().enumerate() {
+                    self.transfer(user_id, org_unit_id, &format!("{id}-{index}"), actor, reason, at)?;
+                }
             },
             OrganizationOperation::EndMembership { user_id } => {
                 self.end_membership(user_id, actor, reason, at)?
@@ -449,6 +471,43 @@ mod tests {
         assert_eq!(next.own_org("sales", Instant::from_unix_secs(10)).unwrap(), Some("two"));
         assert_eq!(next.memberships.len(), 2);
         assert_eq!(next.version, 2);
+    }
+
+    #[test]
+    fn batch_transfer_moves_all_users_or_changes_nothing() {
+        let mut before = state();
+        before.memberships.push(OrgMembership {
+            base: BaseModel::new("buyer-membership".into()),
+            user_id: "buyer".into(),
+            org_unit_id: "one".into(),
+            validity: OrgValidity { valid_from: Instant::from_unix_secs(1), valid_to: None },
+            changed_by: "admin".into(),
+            reason: "初始化".into(),
+        });
+        let change = request(OrganizationOperation::TransferMembers {
+            user_ids: vec!["sales".into(), "buyer".into()],
+            org_unit_id: "two".into(),
+        });
+        let next = before.changed(&change, "batch", "admin", Instant::from_unix_secs(10)).unwrap();
+        assert_eq!(next.version, 2);
+        assert_eq!(next.own_org("sales", Instant::from_unix_secs(10)).unwrap(), Some("two"));
+        assert_eq!(next.own_org("buyer", Instant::from_unix_secs(10)).unwrap(), Some("two"));
+        assert_eq!(next.memberships.len(), 4);
+        assert_eq!(before.memberships.len(), 2);
+
+        let mut already = before.clone();
+        already.memberships[1].org_unit_id = "two".into();
+        assert!(already.changed(&change, "batch", "admin", Instant::from_unix_secs(10)).is_err());
+        assert_eq!(already.version, 1);
+        assert_eq!(already.memberships.len(), 2);
+
+        let duplicate = OrganizationOperation::TransferMembers {
+            user_ids: vec!["sales".into(), "sales".into()],
+            org_unit_id: "two".into(),
+        };
+        assert!(request(duplicate).validate().is_err());
+        let empty = OrganizationOperation::TransferMembers { user_ids: vec![], org_unit_id: "two".into() };
+        assert!(request(empty).validate().is_err());
     }
 
     #[test]
