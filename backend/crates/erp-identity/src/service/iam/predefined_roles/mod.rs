@@ -232,7 +232,7 @@ async fn ensure_missing_permissions(rbac: &SharedRbacService) -> Result<()> {
     Ok(())
 }
 
-/// 显式维护的目录与抄送资格不进入既有角色的缺项自动追加。
+/// 显式维护的目录资格不进入既有角色的缺项自动追加。
 fn appendable_permissions(permissions: Vec<Permission>) -> Vec<Permission> {
     permissions
         .into_iter()
@@ -247,7 +247,6 @@ fn appendable_permissions(permissions: Vec<Permission>) -> Vec<Permission> {
                         | "warehouse",
                     "list"
                 ) | ("person_query_qualification", "manage")
-                    | ("approval_copy", "read")
             )
         })
         .collect()
@@ -380,12 +379,12 @@ mod tests {
     }
 
     #[test]
-    fn copy_read_is_seeded_but_never_appended_after_manual_revocation() {
+    fn copy_receiving_is_not_a_role_permission() {
         for role in super::PREDEFINED_ROLES {
             let initial = super::initial_permissions(role).unwrap();
-            assert!(initial.iter().any(|p| p.to_string() == "approval_copy:read"));
+            assert!(initial.iter().all(|p| p.resource() != "approval_copy"));
             let appended = super::appendable_permissions(super::startup_permissions(initial));
-            assert!(appended.iter().all(|p| p.to_string() != "approval_copy:read"));
+            assert!(appended.iter().all(|p| p.resource() != "approval_copy"));
         }
     }
 
@@ -830,7 +829,6 @@ mod tests {
                     | &"work_item:reassign"
                     | &"approval_process:read"
                     | &"approval_instance:read"
-                    | &"approval_copy:read"
                     | &"approval_instance:cancel"
                     | &"approval_instance:resume"
                     | &"approval_instance:cancel_blocked"

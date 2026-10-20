@@ -110,6 +110,10 @@ fn workflow_action_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_workflow_actions_id", doc! { "id": 1 }),
         named_index("idx_workflow_actions_document_created", doc! { "document_id": 1, "created_at": -1 }),
+        named_index(
+            "idx_workflow_actions_timeline",
+            doc! { "document_id": 1, "deleted_at": 1, "created_at": -1, "id": -1 },
+        ),
         named_index("idx_workflow_actions_actor_created", doc! { "actor_id": 1, "created_at": -1 }),
     ]
 }

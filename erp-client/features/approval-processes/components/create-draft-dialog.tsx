@@ -53,6 +53,7 @@ export function CreateDraftDialog({
     open,
     onOpenChange,
     onCreated,
+    initialSource = "EMPTY",
     id = "governance-approval-processes-create-draft-dialog",
 }: {
     item: DefinitionCatalogItem | null
@@ -62,6 +63,7 @@ export function CreateDraftDialog({
         definitionId: string,
         documentType: DefinitionCatalogItem["document_type"],
     ) => void
+    initialSource?: "EMPTY" | "CURRENT_PUBLISHED"
     id?: string
 }) {
     const profile = useAccountProfileQuery()
@@ -85,7 +87,10 @@ export function CreateDraftDialog({
     const form = useAppForm({
         defaultValues: {
             name: item ? `${item.document_type_label}审批` : "",
-            draft_source: "EMPTY" as "EMPTY" | "CURRENT_PUBLISHED" | "OTHER",
+            draft_source: initialSource as
+                | "EMPTY"
+                | "CURRENT_PUBLISHED"
+                | "OTHER",
             copy_source: null as DefinitionDetailView | null,
         },
         validators: { onSubmit: createDraftSchema },
@@ -159,7 +164,7 @@ export function CreateDraftDialog({
         if (!open) return
         form.reset({
             name: item ? `${item.document_type_label}审批` : "",
-            draft_source: "EMPTY",
+            draft_source: initialSource,
             copy_source: null,
         })
         attempt.current = null

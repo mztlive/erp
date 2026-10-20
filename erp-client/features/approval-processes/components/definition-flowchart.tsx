@@ -2,6 +2,7 @@
 
 import {
     ArrowDownIcon,
+    BellIcon,
     CheckIcon,
     GitBranchIcon,
     PlusIcon,
@@ -10,22 +11,28 @@ import {
 import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
-import type { EditorNode } from "../types"
+import type { EditorCopyRule, EditorNode } from "../types"
 
-/** 共用线性流程画布；只在编辑模式下提供节点选择和增加入口。 */
+/** 共用线性流程画布；概览完整展示审批人，编辑模式提供节点选择和增加入口。 */
 export function DefinitionFlowchart({
     nodes,
     selectedClientId,
     onSelect,
     onAdd,
+    copyRules = [],
+    onConfigureCopies,
     compact = false,
+    overview = false,
     id = "governance-approval-processes-detail-editor-flow",
 }: {
     nodes: readonly EditorNode[]
     selectedClientId?: string | null
     onSelect?: (clientId: string, index: number) => void
     onAdd?: () => void
+    copyRules?: readonly EditorCopyRule[]
+    onConfigureCopies?: (nodeClientId: string | null) => void
     compact?: boolean
+    overview?: boolean
     id?: string
 }) {
     return (
@@ -38,9 +45,24 @@ export function DefinitionFlowchart({
                     <GitBranchIcon className="size-4 text-muted-foreground" />
                     审批流程
                 </h3>
-                <span className="text-xs text-muted-foreground">
-                    {nodes.length} 个节点 · 顺序审批
-                </span>
+                <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-xs text-muted-foreground">
+                        {nodes.length} 个节点 · 顺序审批
+                    </span>
+                    {onConfigureCopies && (
+                        <Button
+                            id={`${id}-copy-settings`}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onConfigureCopies(null)}
+                        >
+                            <BellIcon data-icon="inline-start" />
+                            抄送设置
+                            {copyRules.length ? ` · ${copyRules.length}` : ""}
+                        </Button>
+                    )}
+                </div>
             </div>
             <div
                 id={`${id}-canvas`}
@@ -48,7 +70,11 @@ export function DefinitionFlowchart({
                 aria-label="审批流程画布"
                 className={cn(
                     "overflow-y-auto px-4 py-8 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
-                    compact ? "max-h-80" : "max-h-[65vh] min-h-96",
+                    compact
+                        ? "max-h-80"
+                        : overview
+                          ? "max-h-[65vh]"
+                          : "max-h-[65vh] min-h-96",
                 )}
             >
                 <ol
@@ -64,10 +90,21 @@ export function DefinitionFlowchart({
                     </li>
                     {nodes.map((node, index) => {
                         const selected = node.client_id === selectedClientId
+                        const copyCount =
+                            copyRules.find(
+                                (rule) =>
+                                    rule.trigger === "NODE_APPROVED" &&
+                                    rule.nodeClientId === node.client_id,
+                            )?.recipients.length ?? 0
                         const people = [
-                            node.assignee_name,
+                            node.assignee_name ||
+                                (overview && node.assignee_user_id
+                                    ? "待确认人员"
+                                    : ""),
                             ...node.additional_assignees.map(
-                                (person) => person.name,
+                                (person) =>
+                                    person.name ||
+                                    (overview ? "待确认人员" : ""),
                             ),
                         ].filter(Boolean)
                         const content = (
@@ -88,8 +125,12 @@ export function DefinitionFlowchart({
                                     </span>
                                     <span className="shrink-0 rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                                         {node.additional_assignees.length
-                                            ? "或签"
-                                            : "单人"}
+                                            ? overview
+                                                ? "或签 · 任一人通过"
+                                                : "或签"
+                                            : overview
+                                              ? "单人审批"
+                                              : "单人"}
                                     </span>
                                 </div>
                                 <div className="flex items-start gap-2 px-4 py-3 text-xs text-muted-foreground">
@@ -102,9 +143,12 @@ export function DefinitionFlowchart({
                                         )}
                                     >
                                         {people.length
-                                            ? people.slice(0, 4).join("、")
+                                            ? (overview
+                                                  ? people
+                                                  : people.slice(0, 4)
+                                              ).join("、")
                                             : "待设置审批人"}
-                                        {people.length > 4
+                                        {!overview && people.length > 4
                                             ? ` 等 ${people.length} 人`
                                             : ""}
                                     </span>
@@ -112,37 +156,54 @@ export function DefinitionFlowchart({
                             </>
                         )
                         const cardClass = cn(
-                            "w-full rounded-lg border bg-card text-left shadow-sm transition-colors",
+                            "w-full overflow-hidden rounded-lg border bg-card text-left shadow-sm transition-colors",
                             selected
                                 ? "border-primary ring-2 ring-primary/15"
                                 : !node.assignee_user_id ||
                                     !node.node_name.trim()
                                   ? "border-warning-border"
                                   : "border-border",
-                            onSelect &&
-                                "hover:border-primary/50 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring",
+                            onSelect && "hover:border-primary/50",
                         )
                         return (
                             <li
                                 key={node.client_id}
                                 className="flex w-full flex-col items-center"
                             >
-                                {onSelect ? (
-                                    <button
-                                        id={`${id}-node-${toAutomationIdSegment(node.client_id)}`}
-                                        type="button"
-                                        aria-pressed={selected}
-                                        aria-label={`第 ${index + 1} 个节点：${node.node_name || "未命名节点"}`}
-                                        className={cardClass}
-                                        onClick={() =>
-                                            onSelect(node.client_id, index)
-                                        }
-                                    >
-                                        {content}
-                                    </button>
-                                ) : (
-                                    <div className={cardClass}>{content}</div>
-                                )}
+                                <div className={cardClass}>
+                                    {onSelect ? (
+                                        <button
+                                            id={`${id}-node-${toAutomationIdSegment(node.client_id)}`}
+                                            type="button"
+                                            aria-pressed={selected}
+                                            aria-label={`第 ${index + 1} 个节点：${node.node_name || "未命名节点"}`}
+                                            className="block w-full text-left focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                                            onClick={() =>
+                                                onSelect(node.client_id, index)
+                                            }
+                                        >
+                                            {content}
+                                        </button>
+                                    ) : (
+                                        <div>{content}</div>
+                                    )}
+                                    {copyCount > 0 && onConfigureCopies && (
+                                        <button
+                                            id={`${id}-node-${toAutomationIdSegment(node.client_id)}-copies`}
+                                            type="button"
+                                            className="flex w-full items-center gap-2 border-t border-border/60 bg-muted/30 px-4 py-2.5 text-left text-xs text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                                            aria-label={`${node.node_name.trim() || `第 ${index + 1} 个节点`}通过后抄送 ${copyCount} 人，设置抄送`}
+                                            onClick={() =>
+                                                onConfigureCopies(
+                                                    node.client_id,
+                                                )
+                                            }
+                                        >
+                                            <BellIcon className="size-3.5 shrink-0" />
+                                            通过后抄送 {copyCount} 人
+                                        </button>
+                                    )}
+                                </div>
                                 <FlowConnector />
                             </li>
                         )

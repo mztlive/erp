@@ -1,7 +1,6 @@
 "use client"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useAccountProfileQuery } from "@/features/auth/queries"
-import { hasPermission } from "@/lib/permissions"
 import {
     fetchCopies,
     fetchCopy,
@@ -13,10 +12,8 @@ export const copyKeys = ["approval-copies"] as const
 function useCopyIdentity() {
     const profile = useAccountProfileQuery().data
     return {
-        enabled: Boolean(
-            profile && hasPermission(profile.permissions, "approval_copy:read"),
-        ),
-        key: [profile?.userid, profile?.permissions, profile?.role_ids],
+        enabled: profile?.account_kind === "admin",
+        key: [profile?.userid, profile?.account_kind],
     }
 }
 export function useCopies(query: CopyFilters = {}) {

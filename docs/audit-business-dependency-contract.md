@@ -153,6 +153,7 @@ C01—C06 的两套消费入口必须同时迁移：[权威付款读取](../back
 | E06 | 供应商结算草稿创建 | [supply_settlement/draft.rs](../backend/crates/erp-processes/src/supply_settlement/draft.rs) 先走 `prepare_scoped_statement` 的领域重放分支；初始审计曾包含机器格式结果，未发现读取该创建审计的生产分支。不得与 B21 的刷新混淆；统一持久化边界生成安全结构化中文事件，新的展示记录不写机器协议 |
 | E07 | API 返回的审计编号 | 供应商 API 结果的 `audit_event_id`、导入结果中的审计编号是对外关联合同。前端 [supplier-api commands](../erp-client/features/supplier-api-connections/api/commands.ts) 映射为 `auditEventId`。回执解耦不授权删除或重命名这些响应字段；它们不等同于额外的审计正文反查 |
 | E08 | 登录、敏感读取与普通业务成功审计 | 登录在 [auth/login.rs](../backend/apps/web-api/src/core/handler/auth/login.rs) 采用 best-effort；敏感读取及正式写入沿各自合同保留。不能统一改成所有失败可忽略，也不能把登录强行加入业务写事务 |
+| E09 | 销售全流程及工作台动态 | [销售时间线合同](sales-order-timeline-contract.md) §2、§4、§5：通过 `timeline_events` 按已授权资源身份读取成功结构化审计，仅作展示；不读取自由文本协议，不驱动业务状态、审批资格或幂等恢复。领域事实与当前权限仍从拥有领域读取 |
 
 ### 2.6 已退出的基线消息协议
 

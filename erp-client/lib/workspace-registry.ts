@@ -140,7 +140,7 @@ function defaultNavPermissionsFor(
 ): readonly string[] {
     switch (routeId) {
         case "W01":
-            return ["work_item:list", "approval_copy:read"]
+            return []
         case "W02":
             return ["work_item:list"]
         case "W03":
@@ -469,10 +469,7 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                     label: "我的工作台",
                     icon: LayoutDashboardIcon,
                     badge: "todo-count",
-                    requiredPermissions: [
-                        "work_item:list",
-                        "approval_copy:read",
-                    ],
+                    requiredPermissions: [],
                 },
             ],
         },

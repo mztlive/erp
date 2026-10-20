@@ -92,7 +92,9 @@ export function AssigneeCombobox({
             filterMode="remote"
             loading={assignees == null && query.isFetching}
             placeholder={placeholder}
-            emptyLabel="没有符合定义期资格的账号"
+            emptyLabel={
+                copies ? "没有匹配的有效内部账号" : "没有符合定义期资格的账号"
+            }
             disabled={disabled}
             allowClear
         />

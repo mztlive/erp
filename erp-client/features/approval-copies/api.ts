@@ -44,14 +44,14 @@ export type CopyDetail = {
     }
 }
 export const fetchCopies = (query: CopyFilters) =>
-    apiGet<CopyPage>("/admin/approval-copies", query)
+    apiGet<CopyPage>("/account/approval-copies", query)
 export const fetchCopy = (id: string, after?: string) =>
-    apiGet<CopyDetail>(`/admin/approval-copies/${encodeURIComponent(id)}`, {
+    apiGet<CopyDetail>(`/account/approval-copies/${encodeURIComponent(id)}`, {
         after,
     })
 export const markCopiesRead = (ids: string[]) =>
-    apiPost<number>("/admin/approval-copies/read", { ids })
+    apiPost<number>("/account/approval-copies/read", { ids })
 export const fetchCopyFile = (id: string, fileId: string, preview: boolean) =>
     apiGetBlob(
-        `/admin/approval-copies/${encodeURIComponent(id)}/materials/${encodeURIComponent(fileId)}/${preview ? "preview" : "download"}`,
+        `/account/approval-copies/${encodeURIComponent(id)}/materials/${encodeURIComponent(fileId)}/${preview ? "preview" : "download"}`,
     )

@@ -135,6 +135,28 @@
         "V14"
       ],
       "removal_condition": "保留授权文件批次成功事件与角色、绑定、范围、回执及 policy 版本的同事务原子性；不得用审计查询代替命令回执。"
+    },
+    {
+      "path": "crates/erp-read-models/src/sales_timeline/history.rs",
+      "function": "audit",
+      "operation": "audit_logs.timeline_events",
+      "max_occurrences": 1,
+      "policy": "Display",
+      "contract_items": [
+        "E09"
+      ],
+      "removal_condition": "仅用于已授权销售及任务时间线的成功事件展示；禁止向业务状态、审批资格或命令恢复返回权威事实，移除时间线入口时同步删除本登记。"
+    },
+    {
+      "path": "crates/erp-read-models/src/sales_timeline/repository/approval_history.rs",
+      "function": "recovery_events",
+      "operation": "audit_logs.timeline_events",
+      "max_occurrences": 1,
+      "policy": "Display",
+      "contract_items": [
+        "E09"
+      ],
+      "removal_condition": "仅用于已授权销售及任务时间线的成功事件展示；禁止向业务状态、审批资格或命令恢复返回权威事实，移除时间线入口时同步删除本登记。"
     }
   ]
 }

@@ -6749,6 +6749,36 @@
       },
       "location_count": 1,
       "reason": "留抵消费、付款申请额度、核销分配、任务和审计沿同一事务提交；同键重放先核对原结果。"
+    },
+    {
+      "path": "crates/erp-processes/src/procure_to_pay/payment_follow_up.rs",
+      "function": "schedule_payment_follow_up",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".run_authorized_policy_transaction"
+      ],
+      "call_counts": {
+        ".run_authorized_policy_transaction": 1
+      },
+      "location_count": 1,
+      "reason": "采购付款跟进命令在当前策略版本事务中重验采购来源；事务内委托 schedule 同步写入任务、成功审计与独立命令回执，本登记不改变既有授权或事务。"
+    },
+    {
+      "path": "crates/erp-processes/src/procure_to_pay/payment_follow_up.rs",
+      "function": "schedule",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "沿调用方 Executor 重验任务身份、负责人、版本及跟进资格；原回执重放直接返回，首次写入任务后通过 persist_log 记录同事务成功审计并保存独立回执。"
     }
   ]
 }

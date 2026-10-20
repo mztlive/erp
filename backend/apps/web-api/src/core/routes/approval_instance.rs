@@ -72,6 +72,14 @@ fn material_routes(rbac: &SharedRbacService) -> Router<AppState> {
 fn query_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
+            "/approval-instances/{id}/timeline",
+            with_permission(
+                get(approval_instance::timeline::approval_timeline),
+                rbac,
+                approval_instance::timeline::approval_timeline_permission_key(),
+            ),
+        )
+        .route(
             "/approval-instances",
             with_permission(
                 get(approval_instance::instance_list),
@@ -143,53 +151,12 @@ fn command_routes(rbac: &SharedRbacService) -> Router<AppState> {
 }
 
 fn copy_routes(rbac: &SharedRbacService) -> Router<AppState> {
-    Router::new()
-        .route(
-            "/approval-instances/{id}/copies",
-            with_permission(
-                get(approval_instance::copies::history),
-                rbac,
-                approval_instance::copies::history_permission_key(),
-            ),
-        )
-        .route(
-            "/approval-copies",
-            with_permission(
-                get(approval_instance::copies::list),
-                rbac,
-                approval_instance::copies::list_permission_key(),
-            ),
-        )
-        .route(
-            "/approval-copies/read",
-            with_permission(
-                post(approval_instance::copies::mark_read),
-                rbac,
-                approval_instance::copies::mark_read_permission_key(),
-            ),
-        )
-        .route(
-            "/approval-copies/{id}",
-            with_permission(
-                get(approval_instance::copies::detail),
-                rbac,
-                approval_instance::copies::detail_permission_key(),
-            ),
-        )
-        .route(
-            "/approval-copies/{id}/materials/{file}/preview",
-            with_permission(
-                get(approval_instance::copies::preview),
-                rbac,
-                approval_instance::copies::preview_permission_key(),
-            ),
-        )
-        .route(
-            "/approval-copies/{id}/materials/{file}/download",
-            with_permission(
-                get(approval_instance::copies::download),
-                rbac,
-                approval_instance::copies::download_permission_key(),
-            ),
-        )
+    Router::new().route(
+        "/approval-instances/{id}/copies",
+        with_permission(
+            get(approval_instance::copies::history),
+            rbac,
+            approval_instance::copies::history_permission_key(),
+        ),
+    )
 }

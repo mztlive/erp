@@ -35,6 +35,10 @@ fn audit_log_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_audit_logs_id", doc! { "id": 1 }),
         named_index("idx_audit_logs_active_created", doc! { "deleted_at": 1, "created_at": -1 }),
+        named_index(
+            "idx_audit_logs_resource_timeline",
+            doc! { "resource_type": 1, "resource_id": 1, "deleted_at": 1, "created_at": -1, "id": -1 },
+        ),
     ]
 }
 

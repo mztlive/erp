@@ -1,5 +1,7 @@
 "use client"
 
+import { SalesTimeline } from "@/features/document-timeline/components/sales-timeline"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { ReactNode } from "react"
 
 import { Badge } from "@/components/ui/badge"
@@ -136,6 +138,25 @@ export function SalesOrderDetailTabs({
                         ) : undefined
                     }
                 />
+                {navSection === "overview" && (
+                    <div className="mt-6 border-t pt-5">
+                        <SalesTimeline
+                            salesOrderId={order.id}
+                            idPrefix={`sales-overview-timeline-${toAutomationIdSegment(order.id)}`}
+                            compact
+                            onOpenFull={() => onSelectSection("timeline")}
+                        />
+                    </div>
+                )}
+            </ObjectSectionTabsPanel>
+
+            <ObjectSectionTabsPanel value="timeline" className="py-5">
+                {navSection === "timeline" && (
+                    <SalesTimeline
+                        salesOrderId={order.id}
+                        idPrefix={`sales-detail-timeline-${toAutomationIdSegment(order.id)}`}
+                    />
+                )}
             </ObjectSectionTabsPanel>
 
             <ObjectSectionTabsPanel value="approval">

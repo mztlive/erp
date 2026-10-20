@@ -7,8 +7,13 @@ export type MutationErrorHandler = (error: unknown) => void
  * 所有服务端数据请求必须经由 TanStack Query（useQuery / useMutation / useInfiniteQuery 等）。
  */
 export const makeQueryClient = (onMutationError?: MutationErrorHandler) => {
-    return new QueryClient({
+    const client = new QueryClient({
         mutationCache: new MutationCache({
+            onSuccess: () => {
+                void client.invalidateQueries({
+                    predicate: (query) => query.meta?.businessTimeline === true,
+                })
+            },
             onError: (error, _variables, _context, mutation) => {
                 if (mutation.meta?.suppressErrorToast === true) return
                 onMutationError?.(error)
@@ -26,4 +31,5 @@ export const makeQueryClient = (onMutationError?: MutationErrorHandler) => {
             },
         },
     })
+    return client
 }

@@ -2,7 +2,7 @@
 
 use application_core::AuditActor;
 use erp_finance::entity::payable::{PayableSourceType, PurchasePaymentRequest};
-use erp_finance::repository::PayableExt;
+use erp_finance::repository::{PayableExt, PurchasePaymentRequestSnapshotExt};
 use erp_procurement::entity::purchase_order::PurchaseOrder;
 use erp_procurement::repository::PurchaseOrderExt;
 use erp_procurement::repository::prelude::*;
@@ -13,6 +13,34 @@ use super::PurchasePaymentRequestReadService;
 use crate::{Error, Result};
 
 impl PurchasePaymentRequestReadService {
+    /// 在时间线原读取事务内重验申请全部来源。
+    ///
+    /// # 参数
+    /// `actor` 为认证账号，`request` 为申请，`executor` 为原事务。
+    /// # 返回
+    /// 当前详情范围覆盖全部来源时返回 true。
+    /// # 错误
+    /// 权限配置及数据库故障继续传播。
+    pub async fn timeline_readable(
+        &self,
+        actor: &AuditActor,
+        request: &PurchasePaymentRequest,
+        executor: &mut dyn Executor,
+    ) -> Result<bool> {
+        let scope = self.source_scope(actor, "detail", executor).await?;
+        if !self.readable(request, &scope, executor).await? {
+            return Ok(false);
+        }
+        for snapshot in
+            self.db.purchase_payment_request_snapshots().find_for_request(&request.base.id, executor).await?
+        {
+            if !self.readable(&snapshot.request, &scope, executor).await? {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
     /// 在原命令事务证明申请动作和全部采购来源，不能由供应商可见性替代。
     ///
     /// # 参数

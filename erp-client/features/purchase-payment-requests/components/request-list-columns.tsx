@@ -1,9 +1,15 @@
-import type { ColumnDef } from "@tanstack/react-table"
+import type { ColumnDef, VisibilityState } from "@tanstack/react-table"
 import Link from "next/link"
 import { BusinessStatusBadge, MoneyValue } from "@/components/business"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { requestStatusLabel, requestStatusTone } from "../lib/display"
 import type { PaymentRequest } from "../types"
+
+/** 申请单号与关联采购单放进列设置，默认收起来，列表以供应商和金额为主。 */
+export const defaultRequestColumnVisibility: VisibilityState = {
+    number: false,
+    purchaseOrders: false,
+}
 
 export function buildRequestColumns({
     listReturnHref,

@@ -504,7 +504,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
     ///
     /// # 关键业务约束
     /// 授权快照、对象事实与展示读取共用同一执行器，不得换成 `NoTransaction`。
-    async fn detail_page(
+    pub(crate) async fn detail_page(
         &self,
         id: &str,
         actor: &AuditActor,

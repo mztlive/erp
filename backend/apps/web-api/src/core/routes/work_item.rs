@@ -17,6 +17,14 @@ use crate::core::middleware::with_permission;
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
+            "/work-items/{id}/timeline",
+            with_permission(
+                get(work_item::timeline::task_timeline),
+                rbac,
+                work_item::timeline::task_timeline_permission_key(),
+            ),
+        )
+        .route(
             "/work-items",
             with_permission(get(work_item::work_item_list), rbac, work_item::work_item_list_permission_key()),
         )

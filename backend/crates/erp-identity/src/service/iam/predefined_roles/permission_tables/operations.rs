@@ -3,7 +3,6 @@ pub(crate) const OPERATIONS_PERMISSIONS: &[&str] = &[
     "warehouse:list",
     "business_person:list",
     "work_item:list",
-    "approval_copy:read",
     "work_item:detail",
     "approval_instance:read",
     "approval_instance:decide",

@@ -38,8 +38,7 @@ const STATUS: Record<string, string> = {
 export function CopyNavLink() {
     const profile = useAccountProfileQuery().data
     const query = useCopies()
-    if (!profile || !hasPermission(profile.permissions, "approval_copy:read"))
-        return null
+    if (profile?.account_kind !== "admin") return null
     return (
         <Link
             id="workspace-queue-scope-copied"
@@ -80,11 +79,20 @@ export function ApprovalCopiesPage() {
     }
     useEffect(() => setSearch(filters.query ?? ""), [filters.query])
     if (profile.isPending) return <p role="status">正在读取账号…</p>
-    if (
-        !profile.data ||
-        !hasPermission(profile.data.permissions, "approval_copy:read")
-    )
-        return <BusinessFailureState kind="permission" title="无抄送读取权限" />
+    if (profile.isError)
+        return (
+            <BusinessFailureState
+                error={profile.error}
+                onRetry={() => void profile.refetch()}
+            />
+        )
+    if (profile.data?.account_kind !== "admin")
+        return (
+            <BusinessFailureState
+                kind="permission"
+                title="请使用内部账号查看抄送"
+            />
+        )
     return (
         <PageScaffold>
             <PageHeader

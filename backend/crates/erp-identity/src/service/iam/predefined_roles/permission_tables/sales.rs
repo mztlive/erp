@@ -11,7 +11,6 @@ pub(crate) const SALES_PERMISSIONS: &[&str] = &[
     "sales_invoice_request:cancel",
     "procurement_responsibility:list",
     "work_item:list",
-    "approval_copy:read",
     "work_item:detail",
     "approval_instance:read",
     "approval_instance:decide",

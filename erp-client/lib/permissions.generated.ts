@@ -370,6 +370,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "GET",
+                path: "/admin/work-items/{id}/timeline",
+                description: "查询本人有权查看的待办详情",
+                permission: {
+                    resource: "work_item",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
                 path: "/admin/work-items",
                 description: "查询本人授权范围内的待办",
                 permission: {
@@ -572,6 +582,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "GET",
+                path: "/admin/approval-instances/{id}/timeline",
+                description: "查询审批实例详情",
+                permission: {
+                    resource: "approval_instance",
+                    action: "read",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
                 path: "/admin/approval-instances",
                 description: "按固定 view 查询审批实例",
                 permission: {
@@ -667,62 +687,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "approval_instance",
                     action: "cancel",
-                },
-            },
-        ],
-    },
-    {
-        name: "审批抄送",
-        description: "接收和阅读本人审批抄送",
-        permissions: [
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/approval-copies",
-                description: "读取本人抄送",
-                permission: {
-                    resource: "approval_copy",
-                    action: "read",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/approval-copies/read",
-                description: "标记本人抄送已读",
-                permission: {
-                    resource: "approval_copy",
-                    action: "read",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/approval-copies/{id}",
-                description: "读取本人抄送资料",
-                permission: {
-                    resource: "approval_copy",
-                    action: "read",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/approval-copies/{id}/materials/{file}/preview",
-                description: "预览抄送附件",
-                permission: {
-                    resource: "approval_copy",
-                    action: "read",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/approval-copies/{id}/materials/{file}/download",
-                description: "下载抄送附件",
-                permission: {
-                    resource: "approval_copy",
-                    action: "read",
                 },
             },
         ],
@@ -1044,6 +1008,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 method: "GET",
                 path: "/admin/sales-orders/{id}/invoice-files/{invoice_id}/{asset_id}/download",
                 description: "下载本单发票文件",
+                permission: {
+                    resource: "sales_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-orders/{id}/timeline",
+                description: "查询销售单详情",
                 permission: {
                     resource: "sales_order",
                     action: "detail",

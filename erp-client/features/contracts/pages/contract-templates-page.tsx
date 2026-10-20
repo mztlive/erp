@@ -3,12 +3,20 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
-import { DownloadIcon, PlusIcon, SettingsIcon } from "lucide-react"
+import {
+    BanIcon,
+    CircleCheckIcon,
+    DownloadIcon,
+    FileTextIcon,
+    PlusIcon,
+    SettingsIcon,
+} from "lucide-react"
 import {
     BusinessEmptyState,
     DataTable,
     PageActions,
     PageScaffold,
+    TableRowActions,
 } from "@/components/business"
 import {
     ListWorkspaceHeader,
@@ -126,69 +134,68 @@ export function ContractTemplatesPage() {
             header: "操作",
             meta: { align: "end" },
             size: canManage ? 320 : 180,
+            minSize: canManage ? 320 : 180,
             enableHiding: false,
             cell: ({ row }) => {
                 const template = row.original
                 const segment = toAutomationIdSegment(template.id)
                 return (
-                    <div className="flex flex-wrap justify-end gap-2">
-                        {canApply && (
-                            <Button
-                                id={`contract-template-apply-${segment}`}
-                                size="sm"
-                                disabled={!template.enabled}
-                                onClick={() => apply(template)}
-                            >
-                                申请并下载
-                            </Button>
-                        )}
-                        {canManage && (
-                            <>
-                                <Button
-                                    id={`contract-template-sample-${segment}`}
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={mutations.download.isPending}
-                                    onClick={() =>
-                                        download({
+                    <TableRowActions
+                        moreId={`contract-template-more-${segment}`}
+                        moreLabel={`${template.name} 更多操作`}
+                        actions={[
+                            {
+                                id: `contract-template-apply-${segment}`,
+                                label: "申请并下载",
+                                icon: DownloadIcon,
+                                hidden: !canApply,
+                                disabled: !template.enabled,
+                                onClick: () => apply(template),
+                            },
+                            {
+                                id: `contract-template-sample-${segment}`,
+                                label: "编号样张",
+                                icon: FileTextIcon,
+                                hidden: !canManage,
+                                disabled: mutations.download.isPending,
+                                onClick: () =>
+                                    download({
+                                        id: template.id,
+                                        filename: `${template.group}-S-SAMPLE.docx`,
+                                        sample: true,
+                                    }),
+                            },
+                            {
+                                id: `contract-template-status-${segment}`,
+                                label: template.enabled ? "停用" : "启用",
+                                icon: template.enabled
+                                    ? BanIcon
+                                    : CircleCheckIcon,
+                                hidden: !canManage,
+                                placement: "menu",
+                                disabled: mutations.status.isPending,
+                                onClick: () => {
+                                    setError("")
+                                    mutations.status.mutate(
+                                        {
                                             id: template.id,
-                                            filename: `${template.group}-S-SAMPLE.docx`,
-                                            sample: true,
-                                        })
-                                    }
-                                >
-                                    编号样张
-                                </Button>
-                                <Button
-                                    id={`contract-template-status-${segment}`}
-                                    size="sm"
-                                    variant="ghost"
-                                    disabled={mutations.status.isPending}
-                                    onClick={() => {
-                                        setError("")
-                                        mutations.status.mutate(
-                                            {
-                                                id: template.id,
-                                                version: template.version,
-                                                enabled: !template.enabled,
-                                            },
-                                            {
-                                                onError: (cause) =>
-                                                    setError(
-                                                        getErrorMessage(
-                                                            cause,
-                                                            "模板状态修改失败，请刷新后重试",
-                                                        ),
+                                            version: template.version,
+                                            enabled: !template.enabled,
+                                        },
+                                        {
+                                            onError: (cause) =>
+                                                setError(
+                                                    getErrorMessage(
+                                                        cause,
+                                                        "模板状态修改失败，请刷新后重试",
                                                     ),
-                                            },
-                                        )
-                                    }}
-                                >
-                                    {template.enabled ? "停用" : "启用"}
-                                </Button>
-                            </>
-                        )}
-                    </div>
+                                                ),
+                                        },
+                                    )
+                                },
+                            },
+                        ]}
+                    />
                 )
             },
         },

@@ -29,6 +29,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
 fn read_create_routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
+            "/sales-orders/{id}/timeline",
+            with_permission(
+                get(sales_order::timeline::sales_timeline),
+                rbac,
+                sales_order::timeline::sales_timeline_permission_key(),
+            ),
+        )
+        .route(
             "/sales-orders/selection-proposals/{id}/basis",
             with_permission(
                 get(sales_order::selection::selection_basis),

@@ -1,7 +1,8 @@
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::{Router, middleware};
 
 use crate::app_state::AppState;
+use crate::core::handler::approval_instance::copies;
 use crate::core::handler::{auth, region};
 use crate::core::middleware::authenticate;
 
@@ -16,6 +17,17 @@ pub fn routes(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/profile", get(auth::profile::account_profile))
         .route("/regions", get(region::list_regions))
+        .merge(copy_routes())
         .route_layer(middleware::from_fn_with_state(state.clone(), authenticate))
         .with_state(state)
+}
+
+// 个人收件接口仅要求后台登录；领域服务逐条验证本人收件和冻结资料边界。
+fn copy_routes() -> Router<AppState> {
+    Router::new()
+        .route("/approval-copies", get(copies::list))
+        .route("/approval-copies/read", post(copies::mark_read))
+        .route("/approval-copies/{id}", get(copies::detail))
+        .route("/approval-copies/{id}/materials/{file}/preview", get(copies::preview))
+        .route("/approval-copies/{id}/materials/{file}/download", get(copies::download))
 }

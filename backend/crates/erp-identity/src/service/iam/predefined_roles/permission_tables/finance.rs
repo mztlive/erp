@@ -10,7 +10,6 @@ pub(crate) const FINANCE_PERMISSIONS: &[&str] = &[
     "finance_responsibility:list",
     "finance_responsibility:manage",
     "work_item:list",
-    "approval_copy:read",
     "work_item:detail",
     "approval_instance:read",
     "approval_instance:decide",

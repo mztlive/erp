@@ -1,4 +1,4 @@
-//! 个人抄送收件箱；静态权限与精确收件授权共同生效。
+//! 个人抄送收件箱；有效内部账号凭本人精确收件记录读取。
 use application_core::AuditActor;
 use axum::extract::{Path, Query, State};
 use axum::http::HeaderValue;
@@ -21,20 +21,13 @@ pub struct HistoryQuery {
     after: Option<u32>,
 }
 
-#[permission_macros::permission(
-    group = "审批抄送",
-    group_desc = "接收和阅读本人审批抄送",
-    desc = "读取本人抄送",
-    resource = "approval_copy",
-    action = "read"
-)]
 /// 返回本人收件箱。
 /// # 参数
 /// 应用状态、认证账号和筛选。
 /// # 返回
 /// 分页及未读统计。
 /// # 错误
-/// 无权限或查询失败。
+/// 内部账号失效或查询失败。
 pub async fn list(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
@@ -43,13 +36,6 @@ pub async fn list(
     let page = state.approval_runtime_service().copies(&actor, query).await?;
     Ok(no_store(ApiResponse::ok_with_data(page).into_response()))
 }
-#[permission_macros::permission(
-    group = "审批抄送",
-    group_desc = "接收和阅读本人审批抄送",
-    desc = "读取本人抄送资料",
-    resource = "approval_copy",
-    action = "read"
-)]
 /// 返回冻结资料与审批历史。
 /// # 参数
 /// 当前身份、收件 ID 和历史游标。
@@ -67,13 +53,6 @@ pub async fn detail(
         copy_detail(&state.db(), &state.approval_runtime_service(), &actor, &id, query.after).await?;
     Ok(no_store(ApiResponse::ok_with_data(result).into_response()))
 }
-#[permission_macros::permission(
-    group = "审批抄送",
-    group_desc = "接收和阅读本人审批抄送",
-    desc = "标记本人抄送已读",
-    resource = "approval_copy",
-    action = "read"
-)]
 /// 标记明确选中的本人记录已读。
 /// # 参数
 /// 当前身份和记录集合。
@@ -89,13 +68,6 @@ pub async fn mark_read(
     let changed = state.approval_runtime_service().read_copies(&actor, request).await?;
     Ok(no_store(ApiResponse::ok_with_data(changed).into_response()))
 }
-#[permission_macros::permission(
-    group = "审批抄送",
-    group_desc = "接收和阅读本人审批抄送",
-    desc = "预览抄送附件",
-    resource = "approval_copy",
-    action = "read"
-)]
 /// 预览本次抄送冻结附件。
 /// # 参数
 /// 当前身份、收件和文件 ID。
@@ -121,13 +93,6 @@ pub async fn preview(
     )
     .await
 }
-#[permission_macros::permission(
-    group = "审批抄送",
-    group_desc = "接收和阅读本人审批抄送",
-    desc = "下载抄送附件",
-    resource = "approval_copy",
-    action = "read"
-)]
 /// 下载本次抄送冻结附件。
 /// # 参数
 /// 当前身份、收件和文件 ID。
@@ -185,4 +150,23 @@ pub async fn history(
 ) -> Result<Response, Error> {
     let page = state.approval_runtime_service().copy_history(&actor, &id, query.after.as_deref()).await?;
     Ok(no_store(ApiResponse::ok_with_data(page).into_response()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn personal_copy_responses_are_private_and_never_cached() {
+        let response = no_store(ApiResponse::ok_with_data(0_u64).into_response());
+        assert_eq!(response.headers().get(CACHE_CONTROL).unwrap(), "private, no-store");
+    }
+
+    #[test]
+    fn detail_query_cannot_override_recipient_identity() {
+        let valid: HistoryQuery = serde_json::from_str(r#"{"after":2}"#).unwrap();
+        assert_eq!(valid.after, Some(2));
+        assert!(serde_json::from_str::<HistoryQuery>(r#"{"recipient_user_id":"other"}"#).is_err());
+        assert!(serde_json::from_str::<HistoryQuery>(r#"{"after":-1}"#).is_err());
+    }
 }

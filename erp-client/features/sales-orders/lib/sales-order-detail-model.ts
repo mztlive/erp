@@ -18,6 +18,7 @@ export type SalesOrderDetailActionResult = {
 
 export type NavSectionId =
     | "overview"
+    | "timeline"
     | "approval"
     | "fulfillment"
     | "extra-cost"
@@ -102,6 +103,8 @@ export function resolveNavSection(
     const { from, isCard } = options
 
     switch (section) {
+        case "timeline":
+            return "timeline"
         case "fulfillment":
         case "purchase":
             return "fulfillment"
@@ -325,6 +328,12 @@ export function navItemsFor(
             id: "overview",
             label: "概览",
             hint: "约定、明细和下一步",
+            show: true,
+        },
+        {
+            id: "timeline",
+            label: "全流程",
+            hint: "审批、采购、履约与票款的完整动态",
             show: true,
         },
         {

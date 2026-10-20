@@ -1,7 +1,6 @@
 //! 从原审批事务中的中性事件生成个人抄送，外部通知不参与此事务。
 use std::collections::BTreeSet;
 
-use application_core::AuditActor;
 use bpm::engine::{BpmEvent, BpmEventKind};
 use bpm::graph::DefinitionGraph;
 use bpm::model::ApprovalProcessInstance;
@@ -11,14 +10,12 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
 
-use super::COPY_READ_PERMISSION;
 use crate::entity::approval_copy::{ApprovalCopyConfig, ApprovalCopyReceipt, CopyTrigger};
 use crate::entity::approval_integration::ApprovalSubjectSnapshot;
 use crate::error::{Error, Result};
 use crate::ports::WorkflowAuthorizationPort;
 use crate::repository::approval_copy::ApprovalCopyExt;
 use crate::repository::{ApprovalIntegrationExt, ApprovalSubjectSnapshotRepositoryExt, BpmExt};
-use crate::service::approval::approval_action_roles_with_executor;
 
 /// 启动事务生成一次流程开始抄送；旧定义无配置时零写入。
 /// # 参数
@@ -52,7 +49,7 @@ pub async fn persist_started_copy(
 /// # 返回
 /// 无；恢复与受阻事件不产生记录。
 /// # 错误
-/// 快照不匹配、数据库或策略读取失败时回滚。
+/// 快照不匹配、数据库或账号读取失败时回滚。
 pub async fn persist_copies(
     db: &Database,
     auth: &impl WorkflowAuthorizationPort,
@@ -147,12 +144,7 @@ async fn persist_event(
     let mut rows = Vec::new();
     for id in ids {
         let account = accounts.iter().find(|a| a.id == id);
-        let delivered = if let Some(a) = account.filter(|a| a.is_active_backoffice()) {
-            let actor = AuditActor::new(a.id.clone(), a.login_account.clone(), a.kind);
-            !approval_action_roles_with_executor(auth, &actor, COPY_READ_PERMISSION, ex).await?.is_empty()
-        } else {
-            false
-        };
+        let delivered = account.is_some_and(|a| a.is_active_backoffice());
         rows.push(ApprovalCopyReceipt {
             base: BaseModel::new(next_id()),
             instance_id: instance.base.id.clone(),
@@ -171,7 +163,7 @@ async fn persist_event(
             ),
             recipient_user_id: id,
             delivered,
-            undelivered_reason: (!delivered).then(|| "账号停用或抄送读取资格已失效".into()),
+            undelivered_reason: (!delivered).then(|| "账号不存在、已停用或不是内部账号".into()),
             copied_at: now,
             read_at: None,
         });

@@ -32,7 +32,10 @@ import { RequestListFilters } from "../components/request-list-filters"
 import { requestStatusLabel, requestStatusTone } from "../lib/display"
 import type { PaymentRequest } from "../types"
 import { PaymentCandidatesList } from "../components/payment-candidates-list"
-import { buildRequestColumns } from "../components/request-list-columns"
+import {
+    buildRequestColumns,
+    defaultRequestColumnVisibility,
+} from "../components/request-list-columns"
 import { RequestDraftDialog } from "../components/request-draft-dialog"
 
 export function PaymentRequestsPage({
@@ -218,6 +221,9 @@ export function PaymentRequestsPage({
                                 data={rows}
                                 rowCount={query.data?.total ?? 0}
                                 columns={columns}
+                                defaultColumnVisibility={
+                                    defaultRequestColumnVisibility
+                                }
                                 manualPagination
                                 manualSorting
                                 sorting={list.sorting}

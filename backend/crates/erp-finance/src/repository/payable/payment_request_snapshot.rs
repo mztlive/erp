@@ -35,6 +35,43 @@ pub struct PurchasePaymentRequestSnapshotRepository<'a> {
 }
 
 impl PurchasePaymentRequestSnapshotRepository<'_> {
+    /// 沿不可变采购来源查找历史申请，防止重新提交后丢失关联。
+    ///
+    /// # 参数
+    /// `purchase_ids` 为已定位的采购单；`executor` 为原读取事务。
+    /// # 返回
+    /// 返回包含这些采购来源的历史提交快照，空输入返回空列表。
+    /// # 错误
+    /// 数据库或反序列化失败时返回错误。
+    pub async fn find_for_purchases(
+        &self,
+        purchase_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PurchasePaymentRequestSubmissionSnapshot>> {
+        if purchase_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.repository
+            .find_many(doc! { "request.lines.purchase_order_id": { "$in": purchase_ids } }, executor)
+            .await
+    }
+
+    /// 读取申请的全部历史来源，供历史记录授权使用。
+    ///
+    /// # 参数
+    /// `request_id` 为申请身份；`executor` 为原事务。
+    /// # 返回
+    /// 返回所有已冻结提交，禁止以当前申请代替旧版本。
+    /// # 错误
+    /// 数据库或反序列化失败时返回错误。
+    pub async fn find_for_request(
+        &self,
+        request_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<PurchasePaymentRequestSubmissionSnapshot>> {
+        self.repository.find_many(doc! { "request_id": request_id }, executor).await
+    }
+
     /// 在申请提交与审批启动的同一事务中保存一次。
     ///
     /// # 参数

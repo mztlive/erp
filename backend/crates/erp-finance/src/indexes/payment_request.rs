@@ -27,6 +27,16 @@ pub async fn ensure(db: &Database) -> Result<()> {
             index("uk_purchase_payment_requests_no", doc! {"request_no": 1}, true),
             index("uk_purchase_payment_requests_work_item", doc! {"work_item_id": 1}, true),
             index(
+                "idx_purchase_payment_requests_purchase",
+                doc! {"lines.purchase_order_id": 1, "deleted_at": 1},
+                false,
+            ),
+            index(
+                "idx_purchase_payment_requests_legacy_account",
+                doc! {"data.lines.payable_account_id": 1, "deleted_at": 1},
+                false,
+            ),
+            index(
                 "idx_purchase_payment_requests_account_status",
                 doc! {"lines.payable_account_id": 1, "status": 1},
                 false,
@@ -54,6 +64,11 @@ pub async fn ensure(db: &Database) -> Result<()> {
             true,
         ),
         index("uk_purchase_payment_request_snapshots_approval", doc! {"approval_instance_id": 1}, true),
+        index(
+            "idx_purchase_payment_request_snapshots_purchase",
+            doc! {"request.lines.purchase_order_id": 1, "deleted_at": 1},
+            false,
+        ),
     ])
     .await?;
     Ok(())

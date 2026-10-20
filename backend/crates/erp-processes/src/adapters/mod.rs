@@ -300,3 +300,6 @@ pub use warehouse_directory::warehouse_directory;
 mod directory_scope;
 
 pub(crate) use support_audit::map_audit_error as map_audit_to_support;
+
+mod sales_timeline;
+pub use sales_timeline::sales_timeline_service;

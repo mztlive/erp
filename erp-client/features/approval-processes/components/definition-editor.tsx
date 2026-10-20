@@ -61,6 +61,10 @@ export function DefinitionEditor({
         null,
     )
     const [copyOpen, setCopyOpen] = React.useState(false)
+    const [copySettings, setCopySettings] = React.useState<{
+        nodeClientId: string | null
+    } | null>(null)
+    const copyReturnFocus = React.useRef<HTMLElement | null>(null)
     const readOnly = detail.status !== "DRAFT"
     const initialNodes = React.useMemo(
         () => seedDraftNodes(detail.document_type, detail.nodes),
@@ -209,12 +213,28 @@ export function DefinitionEditor({
                             <AlertDescription>{submitError}</AlertDescription>
                         </Alert>
                     )}
-                    <form.Subscribe selector={(state) => state.values.nodes}>
-                        {(nodes) => (
+                    <form.Subscribe
+                        selector={(state) =>
+                            [
+                                state.values.nodes,
+                                state.values.copyRules,
+                            ] as const
+                        }
+                    >
+                        {([nodes, copyRules]) => (
                             <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
                                 <DefinitionFlowchart
                                     id={`${id}-flow`}
                                     nodes={nodes}
+                                    copyRules={copyRules}
+                                    onConfigureCopies={(nodeClientId) => {
+                                        copyReturnFocus.current =
+                                            document.activeElement instanceof
+                                            HTMLElement
+                                                ? document.activeElement
+                                                : null
+                                        setCopySettings({ nodeClientId })
+                                    }}
                                     selectedClientId={
                                         nodes.find(
                                             (node) =>
@@ -316,27 +336,6 @@ export function DefinitionEditor({
                             </div>
                         )}
                     </form.Subscribe>
-                    <form.Subscribe
-                        selector={(state) =>
-                            [
-                                state.values.copyRules,
-                                state.values.nodes,
-                            ] as const
-                        }
-                    >
-                        {([rules, nodes]) => (
-                            <CopyRuleEditor
-                                rules={rules}
-                                nodes={nodes}
-                                documentType={detail.document_type}
-                                disabled={readOnly || replaceNodes.isPending}
-                                onChange={(rules) => {
-                                    form.setFieldValue("copyRules", rules)
-                                    setSaveState("idle")
-                                }}
-                            />
-                        )}
-                    </form.Subscribe>
                 </div>
                 <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card px-4 py-3 sm:px-6">
                     {saveState === "idle" ? (
@@ -386,6 +385,31 @@ export function DefinitionEditor({
                     </form.AppForm>
                 </div>
             </form>
+            <form.Subscribe
+                selector={(state) =>
+                    [state.values.copyRules, state.values.nodes] as const
+                }
+            >
+                {([rules, nodes]) => (
+                    <CopyRuleEditor
+                        id={`${id}-copies`}
+                        open={copySettings !== null}
+                        onOpenChange={(open) => {
+                            if (!open) setCopySettings(null)
+                        }}
+                        targetNodeId={copySettings?.nodeClientId ?? null}
+                        returnFocus={copyReturnFocus}
+                        rules={rules}
+                        nodes={nodes}
+                        documentType={detail.document_type}
+                        disabled={readOnly || replaceNodes.isPending}
+                        onChange={(next) => {
+                            form.setFieldValue("copyRules", next)
+                            setSaveState("idle")
+                        }}
+                    />
+                )}
+            </form.Subscribe>
             <CopyFlowDialog
                 id={`${id}-copy-dialog`}
                 targetType={detail.document_type}

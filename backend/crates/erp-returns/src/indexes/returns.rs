@@ -105,6 +105,11 @@ fn customer_refund_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_customer_refunds_id", doc! { "id": 1 }),
         unique_index("uk_customer_refunds_no", doc! { "refund_no": 1 }),
+        named_index(
+            "idx_customer_refunds_entry",
+            doc! { "original_receivable_entry_id": 1, "deleted_at": 1 },
+        ),
+        named_index("idx_customer_refunds_return", doc! { "sales_return_case_id": 1, "deleted_at": 1 }),
         named_index("idx_customer_refunds_customer_status", doc! { "customer_id": 1, "status": 1 }),
         named_index(
             "idx_customer_refunds_original",
@@ -119,6 +124,8 @@ fn supplier_refund_indexes() -> Vec<IndexModel> {
         named_index("idx_supplier_refunds_purchase", doc! {"source_purchase_order_id": 1, "status": 1}),
         unique_index("uk_supplier_refunds_id", doc! { "id": 1 }),
         unique_index("uk_supplier_refunds_no", doc! { "refund_no": 1 }),
+        named_index("idx_supplier_refunds_entry", doc! { "original_payable_entry_id": 1, "deleted_at": 1 }),
+        named_index("idx_supplier_refunds_return", doc! { "purchase_return_order_id": 1, "deleted_at": 1 }),
         named_index("idx_supplier_refunds_supplier_status", doc! { "supplier_id": 1, "status": 1 }),
         named_index(
             "idx_supplier_refunds_original",
@@ -241,7 +248,7 @@ mod tests {
         );
     }
 
-    /// 固定八集合的 19 个索引，名称、复合键顺序与全局唯一语义不可漂移。
+    /// 固定八集合的命名索引，名称、复合键顺序与全局唯一语义不可漂移。
     #[test]
     fn all_named_indexes_keep_order_keys_and_unique_options() {
         let groups = [
@@ -254,7 +261,7 @@ mod tests {
             super::receipt_reversal_indexes(),
             super::payment_reversal_indexes(),
         ];
-        assert_eq!(groups.each_ref().map(Vec::len), [4, 3, 3, 3, 4, 5, 3, 3]);
+        assert_eq!(groups.each_ref().map(Vec::len), [4, 3, 3, 3, 6, 7, 3, 3]);
         let expected = [
             ("uk_sales_return_cases_id", doc! { "id": 1 }, true),
             ("uk_sales_return_cases_no", doc! { "return_no": 1 }, true),
@@ -271,6 +278,12 @@ mod tests {
             ("idx_purchase_return_lines_rev_line", doc! { "purchase_order_revision_line_id": 1 }, false),
             ("uk_customer_refunds_id", doc! { "id": 1 }, true),
             ("uk_customer_refunds_no", doc! { "refund_no": 1 }, true),
+            (
+                "idx_customer_refunds_entry",
+                doc! { "original_receivable_entry_id": 1, "deleted_at": 1 },
+                false,
+            ),
+            ("idx_customer_refunds_return", doc! { "sales_return_case_id": 1, "deleted_at": 1 }, false),
             ("idx_customer_refunds_customer_status", doc! { "customer_id": 1, "status": 1 }, false),
             (
                 "idx_customer_refunds_original",
@@ -280,6 +293,8 @@ mod tests {
             ("idx_supplier_refunds_purchase", doc! { "source_purchase_order_id": 1, "status": 1 }, false),
             ("uk_supplier_refunds_id", doc! { "id": 1 }, true),
             ("uk_supplier_refunds_no", doc! { "refund_no": 1 }, true),
+            ("idx_supplier_refunds_entry", doc! { "original_payable_entry_id": 1, "deleted_at": 1 }, false),
+            ("idx_supplier_refunds_return", doc! { "purchase_return_order_id": 1, "deleted_at": 1 }, false),
             ("idx_supplier_refunds_supplier_status", doc! { "supplier_id": 1, "status": 1 }, false),
             (
                 "idx_supplier_refunds_original",

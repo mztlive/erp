@@ -33,9 +33,8 @@ export function WorkspaceHomePage() {
     const profile = useAccountProfileQuery().data
     if (
         params.get("view") === "copied" ||
-        (profile &&
-            !hasPermission(profile.permissions, "work_item:list") &&
-            hasPermission(profile.permissions, "approval_copy:read"))
+        (profile?.account_kind === "admin" &&
+            !hasPermission(profile.permissions, "work_item:list"))
     )
         return <ApprovalCopiesPage />
     return <WorkspaceTaskHome />

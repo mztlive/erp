@@ -13,13 +13,14 @@ use mongodb::bson::{Document, doc};
 mod business_document;
 mod document_participant;
 mod document_relation;
+mod timeline;
 mod workflow_action;
-
 pub use business_document::{
     ApprovalBindingLookup, BusinessDocumentFilter, BusinessDocumentRepositoryExt, BusinessDocumentRow,
 };
 pub use document_participant::DocumentParticipantRepositoryExt;
 pub use document_relation::DocumentRelationRepositoryExt;
+pub use timeline::WorkflowTimelineRepositoryExt;
 pub use workflow_action::{WorkflowActionFilter, WorkflowActionRepositoryExt, WorkflowActionRow};
 
 /// 构建排序文档（排序字段白名单化，禁止透传任意字段名）。

@@ -4,18 +4,18 @@ use application_core::AuditActor;
 use persistence_core::NoTransaction;
 use serde::{Deserialize, Serialize};
 
-use super::copies::COPY_READ_PERMISSION;
+use super::approval_participant_permissions_with_executor;
 use super::definition::ApprovalDefinitionService;
 use super::execution::runtime_service::RuntimeAssigneeCandidate;
 use super::policy::require_process_required;
-use super::{approval_action_roles_with_executor, approval_participant_permissions_with_executor};
 use crate::entity::document_registry::DocumentType;
 use crate::error::Result;
+use crate::ports::{WorkflowAccountFact, WorkflowAuthorizationPort};
 
 /// 定义期候选人查询。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DefinitionAssigneeQuery {
-    /// 抄送候选只需要读取权限。
+    /// 抄送候选包含所有有效内部账号，不要求角色权限。
     pub copies: bool,
     /// 单据类型。
     pub document_type: DocumentType,
@@ -32,7 +32,7 @@ pub struct DefinitionAssigneePage {
     pub items: Vec<RuntimeAssigneeCandidate>,
 }
 
-impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
+impl<A: WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
     /// 定义期静态过滤可选审批人。
     ///
     /// 只按后台有效账号与检索串过滤，不复用运行期单据上下文。
@@ -59,24 +59,33 @@ impl<A: crate::ports::WorkflowAuthorizationPort> ApprovalDefinitionService<A> {
             .await?;
         let mut items = Vec::new();
         for account in accounts {
-            let candidate = AuditActor::new(account.id.clone(), account.login_account, account.kind);
-            let eligible = if query.copies {
-                !approval_action_roles_with_executor(
-                    &self.auth,
-                    &candidate,
-                    COPY_READ_PERMISSION,
-                    &mut NoTransaction,
-                )
-                .await?
-                .is_empty()
-            } else {
-                approval_participant_permissions_with_executor(&self.auth, &candidate, &mut NoTransaction)
-                    .await?
-            };
+            let eligible = eligible_candidate(&self.auth, &account, query.copies).await?;
             if eligible {
                 items.push(RuntimeAssigneeCandidate { user_id: account.id, name: account.display_name });
             }
         }
         Ok(DefinitionAssigneePage { items })
     }
+}
+
+/// 按用途校验候选账号；抄送不要求审批或角色权限。
+/// # 参数
+/// 授权端口、候选账号和是否用于抄送。
+/// # 返回
+/// 有效内部抄送人直接通过，审批人继续校验审批权限。
+/// # 错误
+/// 审批权限读取失败时拒绝。
+pub(super) async fn eligible_candidate(
+    auth: &impl WorkflowAuthorizationPort,
+    account: &WorkflowAccountFact,
+    copies: bool,
+) -> Result<bool> {
+    if !account.is_active_backoffice() {
+        return Ok(false);
+    }
+    if copies {
+        return Ok(true);
+    }
+    let candidate = AuditActor::new(account.id.clone(), account.login_account.clone(), account.kind);
+    approval_participant_permissions_with_executor(auth, &candidate, &mut NoTransaction).await
 }

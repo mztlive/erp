@@ -31,6 +31,7 @@ pub mod finance;
 
 pub mod purchase_center;
 pub mod sales_center;
+pub mod sales_timeline;
 pub mod supplier_center;
 pub mod supplier_portal;
 

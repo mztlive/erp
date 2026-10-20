@@ -3,6 +3,12 @@
 import * as React from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
+import {
+    ArchiveIcon,
+    EllipsisIcon,
+    PencilLineIcon,
+    PlusIcon,
+} from "lucide-react"
 
 import {
     DiscardConfirmDialog,
@@ -14,6 +20,12 @@ import {
     surfacePanelClassName,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAccountProfileQuery } from "@/features/auth/hooks/queries"
 import { cn } from "@/lib/utils"
@@ -309,28 +321,70 @@ export function ApprovalProcessDetailPage({
                         </span>
                     </>
                 }
+                secondaryActions={
+                    canRetire && published && urlState.view === "current" ? (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger
+                                id="governance-approval-processes-detail-more"
+                                render={<Button variant="outline" size="sm" />}
+                            >
+                                <EllipsisIcon
+                                    aria-hidden
+                                    data-icon="inline-start"
+                                />
+                                更多操作
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                    id="governance-approval-processes-detail-retire"
+                                    variant="destructive"
+                                    onClick={() => setRetireOpen(true)}
+                                >
+                                    <ArchiveIcon aria-hidden />
+                                    退役当前版本
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    ) : null
+                }
                 primaryAction={
                     <>
-                        {canCreate ? (
+                        {draft && urlState.view !== "draft" ? (
+                            <Button
+                                id="governance-approval-processes-detail-continue-draft"
+                                type="button"
+                                size="sm"
+                                onClick={() =>
+                                    navigate(
+                                        `/system/approval-processes/${rawDocumentType}${buildDetailSearchParams({ view: "draft" })}`,
+                                    )
+                                }
+                            >
+                                <PencilLineIcon
+                                    aria-hidden
+                                    data-icon="inline-start"
+                                />
+                                {canEdit ? "继续编辑草稿" : "查看草稿"}
+                            </Button>
+                        ) : canCreate && !draft ? (
                             <Button
                                 id="governance-approval-processes-detail-create-draft"
                                 type="button"
-                                variant="outline"
                                 size="sm"
                                 onClick={() => setCreateOpen(true)}
                             >
-                                新建草稿
-                            </Button>
-                        ) : null}
-                        {canRetire && published ? (
-                            <Button
-                                id="governance-approval-processes-detail-retire"
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setRetireOpen(true)}
-                            >
-                                退役
+                                {published ? (
+                                    <PencilLineIcon
+                                        aria-hidden
+                                        data-icon="inline-start"
+                                    />
+                                ) : (
+                                    <PlusIcon
+                                        aria-hidden
+                                        data-icon="inline-start"
+                                    />
+                                )}
+                                {published ? "调整流程" : "新建流程"}
                             </Button>
                         ) : null}
                         {canPublish && draft && urlState.view === "draft" ? (
@@ -346,7 +400,7 @@ export function ApprovalProcessDetailPage({
                                 }
                                 onClick={() => setPublishOpen(true)}
                             >
-                                发布
+                                发布新版本
                             </Button>
                         ) : null}
                     </>
@@ -626,6 +680,7 @@ export function ApprovalProcessDetailPage({
                 <CreateDraftDialog
                     id="governance-approval-processes-detail-create-draft-dialog"
                     item={catalogItem}
+                    initialSource={published ? "CURRENT_PUBLISHED" : "EMPTY"}
                     open={createOpen}
                     onOpenChange={setCreateOpen}
                     onCreated={() => replaceView("draft")}

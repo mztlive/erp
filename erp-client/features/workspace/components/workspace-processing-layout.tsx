@@ -1,5 +1,7 @@
 "use client"
 
+import { timelineDocumentTypes } from "@/features/document-timeline/types"
+import { TaskTimeline } from "@/features/document-timeline/components/task-timeline"
 import type { ReactNode } from "react"
 import { WorkspaceTaskPageProvider } from "@/components/business/workspace-task-pane"
 import { NativeCheckbox } from "@/components/ui/checkbox"
@@ -37,28 +39,41 @@ export function WorkspaceProcessingLayout({
         <WorkspaceTaskPageProvider
             compact={paymentArrangement}
             summary={
-                payment || paymentArrangement ? undefined : (
-                    <dl className="flex flex-wrap gap-x-8 gap-y-4 rounded-lg border border-border/60 bg-muted/15 p-4">
-                        {item.amountSummary && (
+                <>
+                    {payment || paymentArrangement ? undefined : (
+                        <dl className="flex flex-wrap gap-x-8 gap-y-4 rounded-lg border border-border/60 bg-muted/15 p-4">
+                            {item.amountSummary && (
+                                <Fact
+                                    label={item.amountSummary.label}
+                                    value={item.amountSummary.value}
+                                />
+                            )}
                             <Fact
-                                label={item.amountSummary.label}
-                                value={item.amountSummary.value}
+                                label={approval ? "当前审批人" : "当前处理人"}
+                                value={
+                                    approval?.currentAssigneeLabel ||
+                                    item.ownerUserLabel
+                                }
                             />
-                        )}
-                        <Fact
-                            label={approval ? "当前审批人" : "当前处理人"}
-                            value={
-                                approval?.currentAssigneeLabel ||
-                                item.ownerUserLabel
-                            }
+                            <Fact
+                                label="任务类型"
+                                value={item.workItemTypeLabel}
+                            />
+                            <Fact
+                                label="截止时间"
+                                value={item.dueAtLabel || "未设截止时间"}
+                            />
+                        </dl>
+                    )}
+                    {timelineDocumentTypes.has(item.businessObjectType) && (
+                        <TaskTimeline
+                            key={item.workItemId}
+                            taskId={item.workItemId}
+                            approval={Boolean(approval)}
+                            instance={item.workItemType === "APPROVAL_INSTANCE"}
                         />
-                        <Fact label="任务类型" value={item.workItemTypeLabel} />
-                        <Fact
-                            label="截止时间"
-                            value={item.dueAtLabel || "未设截止时间"}
-                        />
-                    </dl>
-                )
+                    )}
+                </>
             }
             aside={
                 <>
