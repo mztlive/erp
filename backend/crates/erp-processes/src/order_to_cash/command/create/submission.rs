@@ -277,6 +277,7 @@ mod tests {
             "goods": {
                 "sku_id": format!("sku-{number}"), "sku_revision_id": format!("revision-{number}"),
                 "welfare_scenario": "ANNUAL_GIFT_BAG",
+                "procurement_supply_price_gross": "3",
                 "fulfillment_due_at": 1800000000, "quantity": "2", "base_unit_code": "件",
                 "unit_price_gross": "5"
             }

@@ -74,6 +74,7 @@ impl SupplierProfileService {
         pending_assets: Arc<dyn PendingAttachmentBatch>,
         actor: &AuditActor,
     ) -> Result<SupplierProfileWithAssetsResult> {
+        let rbac = self.require_rbac()?.clone();
         req.validate_contract()?;
         let request_fingerprint = req.fingerprint()?;
         if let Some(command) = self.command_record(&req.idempotency_key).await? {
@@ -97,7 +98,6 @@ impl SupplierProfileService {
         let result = prepared.result.clone();
         let db = self.db.clone();
         let client = db.client().clone();
-        let rbac = self.require_rbac()?.clone();
         let actor = actor.clone();
         let scoped_id = supplier_id.to_string();
         let transaction_result = client

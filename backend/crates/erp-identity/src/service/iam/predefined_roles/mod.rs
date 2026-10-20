@@ -239,14 +239,8 @@ fn appendable_permissions(permissions: Vec<Permission>) -> Vec<Permission> {
         .filter(|permission| {
             !matches!(
                 (permission.resource(), permission.action()),
-                (
-                    "sales_person"
-                        | "procurement_person"
-                        | "business_person"
-                        | "settlement_party"
-                        | "warehouse",
-                    "list"
-                ) | ("person_query_qualification", "manage")
+                ("sales_person" | "procurement_person" | "business_person" | "warehouse", "list")
+                    | ("person_query_qualification", "manage")
             )
         })
         .collect()

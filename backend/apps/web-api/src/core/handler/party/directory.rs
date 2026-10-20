@@ -1,9 +1,10 @@
-//! 独立对象目录协议适配。
+//! 后台登录即可读取的结算主体目录；只返回最低识别字段。
 use application_core::AuditActor;
-use application_core::directory::{DirectoryPage, DirectoryQuery, DirectorySelectedQuery};
+use application_core::directory::{DirectoryQuery, DirectorySelectedQuery};
 use axum::Extension;
 use axum::extract::{Query, State};
-use erp_processes::adapters::party_directory;
+use erp_party::dto::directory::SettlementPartyDirectoryPage;
+use erp_party::service::directory::SettlementPartyDirectoryService;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
@@ -15,20 +16,13 @@ use crate::core::response::ApiResponse;
 /// # 返回
 /// 目录页。
 /// # 错误
-/// 权限、范围、参数或读取失败时传播。
-#[permission_macros::permission(
-    group = "对象目录",
-    group_desc = "按独立范围查询业务对象",
-    desc = "查询结算主体目录",
-    resource = "settlement_party",
-    action = "list"
-)]
+/// 参数、目录版本或读取失败时传播；后台身份由认证中间件校验。
 pub async fn list(
     State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
+    Extension(_actor): Extension<AuditActor>,
     Query(query): Query<DirectoryQuery>,
-) -> Result<DirectoryPage> {
-    let page = party_directory(state.db(), state.rbac()).list(actor, query).await?;
+) -> Result<SettlementPartyDirectoryPage> {
+    let page = SettlementPartyDirectoryService::new(state.db()).list(query).await?;
     Ok(ApiResponse::ok_with_data(page))
 }
 
@@ -38,19 +32,12 @@ pub async fn list(
 /// # 返回
 /// 当前可读对象页。
 /// # 错误
-/// 权限、范围、参数或读取失败时传播。
-#[permission_macros::permission(
-    group = "对象目录",
-    group_desc = "按独立范围查询业务对象",
-    desc = "回显settlement_party目录",
-    resource = "settlement_party",
-    action = "list"
-)]
+/// 参数、目录版本或读取失败时传播；后台身份由认证中间件校验。
 pub async fn selected(
     State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
+    Extension(_actor): Extension<AuditActor>,
     Query(query): Query<DirectorySelectedQuery>,
-) -> Result<DirectoryPage> {
-    let page = party_directory(state.db(), state.rbac()).list(actor, query.into()).await?;
+) -> Result<SettlementPartyDirectoryPage> {
+    let page = SettlementPartyDirectoryService::new(state.db()).list(query.into()).await?;
     Ok(ApiResponse::ok_with_data(page))
 }

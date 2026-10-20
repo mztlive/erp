@@ -84,7 +84,6 @@ pub(crate) const WIRED_CONSUMERS: &[(&str, &[&str], &[ScopeDimension])] = &[
         &[ScopeDimension::InternalOrg],
     ),
     ("person_query_qualification", &["manage"], &[ScopeDimension::InternalOrg]),
-    ("settlement_party", &["list"], &[ScopeDimension::SettlementParty]),
     ("warehouse", &["list"], &[ScopeDimension::Warehouse]),
     ("business_person", &["list"], &[ScopeDimension::InternalOrg]),
     ("sales_person", &["list"], &[ScopeDimension::InternalOrg]),
@@ -145,14 +144,13 @@ pub fn registration(resource: &str, action: &str) -> Result<ConsumerRegistration
 /// 范围类型被该资源接受时无返回值。
 ///
 /// # 错误
-/// `settlement_party` 与 `warehouse` 在类型不是 `Company` 或 `Organization` 时返回校验错误。
+/// `warehouse` 在类型不是 `Company` 或 `Organization` 时返回校验错误。
 /// `sales_person`、`procurement_person`、`business_person` 与 `person_query_qualification` 配置 `Collaborative` 时返回校验错误。
 ///
 /// # 关键业务约束
 /// 协作参与不能从业务单据扩张出人员读取权。配置入口和解析都必须拒绝。
 pub fn validate_scope_type(resource: &str, scope_type: DataScopeType) -> Result<()> {
-    if matches!(resource, "settlement_party" | "warehouse")
-        && !matches!(scope_type, DataScopeType::Company | DataScopeType::Organization)
+    if resource == "warehouse" && !matches!(scope_type, DataScopeType::Company | DataScopeType::Organization)
     {
         return Err(Error::ValidationError("对象目录仅接受公司或显式对象集合范围".into()));
     }
@@ -377,6 +375,13 @@ mod tests {
         assert!(registration("supplier_offering", "delete").is_err());
     }
     #[test]
+    fn settlement_directory_does_not_accept_person_scope_configuration() {
+        assert!(registration("settlement_party", "list").is_err());
+        assert!(configurable_registration("settlement_party", "list").is_err());
+        assert!(configurable_registration("warehouse", "list").is_ok());
+    }
+
+    #[test]
     fn defaults_only_apply_to_registered_business_ownership_dimensions() {
         for (resource, actions, _) in WIRED_CONSUMERS {
             for action in *actions {
@@ -392,7 +397,6 @@ mod tests {
             ("org_unit", "list"),
             ("person_query_qualification", "manage"),
             ("warehouse", "list"),
-            ("settlement_party", "list"),
             ("sales_person", "list"),
             ("procurement_person", "list"),
             ("business_person", "list"),

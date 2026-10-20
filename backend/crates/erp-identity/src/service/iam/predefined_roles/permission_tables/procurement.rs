@@ -1,7 +1,6 @@
 /// 采购推荐权限。
 pub(crate) const PROCUREMENT_PERMISSIONS: &[&str] = &[
     "business_person:list",
-    "settlement_party:list",
     "company:list",
     "company:detail",
     "procurement_responsibility:list",

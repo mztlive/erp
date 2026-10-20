@@ -35,7 +35,7 @@ export function TaskTimeline({
     return (
         <QuickPreviewSheet
             idPrefix={`${idPrefix}-sheet`}
-            size="detail"
+            size="preview"
             open={open}
             onOpenChange={(nextOpen) => {
                 setOpen(nextOpen)
@@ -74,7 +74,7 @@ export function TaskTimeline({
                 </Button>
             }
         >
-            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-7 py-6">
+            <div className="min-w-0 space-y-5 break-words">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-xs text-muted-foreground">
                         按时间倒序展示

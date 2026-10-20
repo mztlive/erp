@@ -378,7 +378,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             executor,
         )
         .await?;
-        require_order_task_read(&self.auth, &access.actor_id, policy.object_kind, fact, executor).await?;
+        if !item.owns_procurement_task(&access.actor_id) {
+            require_order_task_read(&self.auth, &access.actor_id, policy.object_kind, fact, executor).await?;
+        }
         if authorized_item_fields(item.clone(), access, &facts).is_none() {
             return Err(Error::Forbidden("业务对象不可访问".to_string()));
         }
@@ -640,6 +642,9 @@ pub fn authorized_item_fields(
 /// # 错误
 /// 无；对象未注册或事实缺失时返回 `false`。
 pub fn has_assignment_candidate_access(item: &WorkItem, access: &ActorAccess, facts: &ObjectFactMap) -> bool {
+    if item.work_item_type == WorkItemType::ProcurementOrderCreation && !item.is_open_procurement_task() {
+        return false;
+    }
     let Some(policy) = object_policy(item.work_item_type, &item.business_object_type) else {
         return false;
     };

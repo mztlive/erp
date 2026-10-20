@@ -58,7 +58,6 @@ pub(crate) const RESOURCE_ACTIONS: &[(&str, &[&str])] = &[
         &["list", "detail", "investigate", "complete", "submit", "cancel", "refund", "reject", "handover"],
     ),
     ("person_query_qualification", &["manage"]),
-    ("settlement_party", &["list"]),
     ("warehouse", &["list"]),
     ("business_person", &["list"]),
     ("sales_person", &["list"]),
@@ -67,19 +66,18 @@ pub(crate) const RESOURCE_ACTIONS: &[(&str, &[&str])] = &[
 
 /// 明确岗位、资源与动作的默认规则，RBAC 仍独立决定实际动作权限。
 fn definitions(role: &str, resource: &str, actions: &[&str]) -> Vec<DataScopeData> {
-    if matches!(resource, "settlement_party" | "warehouse") {
-        let eligible = matches!(role, "role-root" | "role-finance" | "role-management")
-            || (resource == "settlement_party"
-                && matches!(role, "role-sales" | "role-sales-leader" | "role-procurement"))
-            || (resource == "warehouse"
-                && matches!(
-                    role,
-                    "role-warehouse"
-                        | "role-procurement"
-                        | "role-sales"
-                        | "role-sales-leader"
-                        | "role-operations"
-                ));
+    if resource == "warehouse" {
+        let eligible = matches!(
+            role,
+            "role-root"
+                | "role-finance"
+                | "role-management"
+                | "role-warehouse"
+                | "role-procurement"
+                | "role-sales"
+                | "role-sales-leader"
+                | "role-operations"
+        );
         return if eligible {
             vec![definition(role, resource, actions, DataScopeType::Company)]
         } else {
@@ -269,7 +267,7 @@ fn definition(role: &str, resource: &str, actions: &[&str], scope_type: DataScop
                 "stock_adjustment" | "stock_balance" | "stock_movement" | "stock_reservation" => {
                     ScopeDimension::Warehouse
                 },
-                "customer_refund" | "supplier_refund" | "settlement_party" => ScopeDimension::SettlementParty,
+                "customer_refund" | "supplier_refund" => ScopeDimension::SettlementParty,
                 "warehouse" => ScopeDimension::Warehouse,
                 _ => ScopeDimension::InternalOrg,
             },

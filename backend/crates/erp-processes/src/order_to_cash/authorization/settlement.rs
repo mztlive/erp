@@ -1,7 +1,5 @@
-//! 销售结算主体资格；目录授权与写入重验使用同一范围判定。
+//! 销售结算主体资格；写入时重验我方公司、启用状态及当前资料。
 use erp_core::ids::PartyId;
-use erp_identity::access_control::ScopedObject;
-use erp_identity::service::access_control::resolve::DataScopeService;
 use erp_party::{PartyExt, PartyKind};
 use persistence_core::Executor;
 
@@ -11,15 +9,14 @@ use crate::{Error, Result};
 impl SalesCommandAccess {
     /// 校验所选结算主体并读取当前法定名称。
     /// # 参数
-    /// `authorized_default` 为已授权合同默认主体；`selected` 为所选我方公司主体。
+    /// `selected` 为所选我方公司主体。
     /// `executor` 沿用调用方事务。
     /// # 返回
-    /// 经授权且启用的企业主体名称。
+    /// 启用的我方企业主体名称。
     /// # 错误
-    /// 独立主体越权、停用、缺失或资料版本无效时拒绝。
+    /// 所选主体不是我方公司、停用、缺失或资料版本无效时拒绝。
     pub(in crate::order_to_cash) async fn settlement_name(
         &self,
-        authorized_default: &PartyId,
         selected: &PartyId,
         executor: &mut dyn Executor,
     ) -> Result<String> {
@@ -31,22 +28,6 @@ impl SalesCommandAccess {
             .filter(|party| party.is_active() && party.company_profile.is_some());
         if selected_company.is_none() {
             return Err(Error::ValidationError("我方结算主体必须是启用的我方公司".into()));
-        }
-        if selected != authorized_default {
-            let access = DataScopeService::new(self.db.clone(), self.rbac.clone())
-                .resolve(&self.actor, "settlement_party", "list", executor)
-                .await?;
-            let object = ScopedObject {
-                owned: false,
-                collaborating: false,
-                historical_read_participant: false,
-                org_unit_id: None,
-                warehouse_id: None,
-                settlement_party_id: Some(selected.as_ref()),
-            };
-            if !access.scope.allows(&object, false) {
-                return Err(Error::Forbidden("无权选择此结算主体，请重新选择".into()));
-            }
         }
         self.party_name(selected, executor).await
     }

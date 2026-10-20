@@ -256,11 +256,11 @@ impl SalesCommandAccess {
             let contract = self.load_contract(contract_id.as_ref(), executor).await?;
             ensure_contract_customer(&contract.customer_id, Some(&order.customer_id))?;
             self.require_customer(order.customer_id.as_ref(), executor).await?;
-            self.settlement_name(&contract.settlement_party_id, &order.settlement_party_id, executor).await?;
+            self.settlement_name(&order.settlement_party_id, executor).await?;
             Ok(())
         } else {
-            let customer = self.load_customer(order.customer_id.as_ref(), executor).await?;
-            self.settlement_name(&customer.party_id, &order.settlement_party_id, executor).await?;
+            self.load_customer(order.customer_id.as_ref(), executor).await?;
+            self.settlement_name(&order.settlement_party_id, executor).await?;
             Ok(())
         }
     }

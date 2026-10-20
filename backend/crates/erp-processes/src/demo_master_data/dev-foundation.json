@@ -22,8 +22,8 @@
     "operations": ["approval_instance:read", "approval_instance:decide", "product:detail", "voucher_category_profile:update"],
     "warehouse": ["purchase_receipt:create", "delivery:create", "stock_adjustment:create", "stock_adjustment:submit", "stock_balance:list", "warehouse:list"],
     "finance": ["approval_instance:read", "approval_instance:decide", "finance_ledger:read", "sales_order:detail", "purchase_order:detail"],
-    "payment": ["purchase_payment_request:detail", "purchase_payment_request:pay", "customer_receipt:create", "customer_receipt:submit", "supplier_payment:create", "customer_refund:submit", "supplier_refund:submit", "receipt_reversal:submit", "payment_reversal:submit", "finance_ledger:read", "settlement_party:list"],
-    "invoice": ["invoice:create", "invoice:list", "finance_ledger:read", "settlement_party:list"],
+    "payment": ["purchase_payment_request:detail", "purchase_payment_request:pay", "customer_receipt:create", "customer_receipt:submit", "supplier_payment:create", "customer_refund:submit", "supplier_refund:submit", "receipt_reversal:submit", "payment_reversal:submit", "finance_ledger:read"],
+    "invoice": ["invoice:create", "invoice:list", "finance_ledger:read"],
     "management": ["sales_order:detail", "purchase_order:detail"],
     "sysadmin": ["integration_error_task:list", "reconciliation_difference:list"]
   },

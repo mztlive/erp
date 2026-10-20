@@ -16,7 +16,7 @@ use crate::core::routes::{
 /// 管理后台路由入口。
 ///
 /// # 返回值
-/// 返回统一使用 Casbin RBAC 的管理后台路由。
+/// 返回统一认证的管理后台路由；业务操作按各路由校验 Casbin RBAC。
 pub fn routes(state: AppState) -> Router<AppState> {
     let rbac_service = state.rbac();
 

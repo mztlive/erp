@@ -3,3 +3,4 @@
 pub mod party;
 
 pub mod company;
+pub mod directory;

@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::num::NonZeroU32;
 
 use application_core::AuditActor;
-use erp_workflow::entity::work_item::{QueueContextField, QueueContextIdentity, WorkItem};
+use erp_workflow::entity::work_item::{QueueContextField, QueueContextIdentity};
 use erp_workflow::ports::OrderTaskSource;
 use erp_workflow::repository::prelude::*;
 use erp_workflow::repository::work_item::WorkItemScan;
@@ -12,8 +12,8 @@ use erp_workflow::{BpmExt, WorkItemExt};
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
 
-use super::access::{ActorAccess, authorized_item_fields, detail_scope};
-use super::facts::{OwnedFulfillmentTask, object_policy};
+use super::access::{ActorAccess, detail_scope};
+use super::facts::object_policy;
 use super::stats::apply_due_filter;
 use super::{
     ProcessingBlockerView, WorkItemAllowedAction, WorkItemDueFilter, WorkItemFilter, WorkItemListParams,
@@ -22,34 +22,6 @@ use super::{
 use crate::errors::{Error, Result};
 
 pub(super) const AUTHORIZED_SCAN_BATCH_SIZE: NonZeroU32 = NonZeroU32::new(100).expect("批次大小必须非零");
-
-/// 从工作项行借用履约授权所需的对象与负责人身份。
-///
-/// # 参数
-/// * `row` - 仓储工作项行
-///
-/// # 返回
-/// 返回借用该行标识的 `OwnedFulfillmentTask`。
-///
-/// # 错误
-/// 不返回错误。
-pub(super) fn owned_fulfillment_task(row: &erp_workflow::WorkItemRow) -> OwnedFulfillmentTask<'_> {
-    OwnedFulfillmentTask {
-        work_item_type: row.work_item_type,
-        business_object_type: &row.business_object_type,
-        business_object_id: &row.business_object_id,
-        owner_user_id: row.owner_user_id.as_deref(),
-    }
-}
-
-fn owned_fulfillment_task_item(item: &WorkItem) -> OwnedFulfillmentTask<'_> {
-    OwnedFulfillmentTask {
-        work_item_type: item.work_item_type,
-        business_object_type: &item.business_object_type,
-        business_object_id: &item.business_object_id,
-        owner_user_id: item.owner_user_id.as_deref(),
-    }
-}
 
 struct FocusedQueueContext<'a> {
     page_size: u32,
@@ -232,7 +204,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             .find_visible_by_id(current_id, &candidates, executor)
             .await?
             .ok_or_else(|| Error::NotFound("当前焦点任务不在授权队列中".to_string()))?;
-        let current = self.authorized_fields_with_executor(vec![current], context.access, executor).await?;
+        let current = self.authorized_fields_for_items(vec![current], context.access, executor).await?;
         let Some(current) = current.into_iter().find(|fields| {
             matches_keyword(fields, filter.query.as_deref())
                 && matches_handler(fields, &query.handler_user_ids)
@@ -309,65 +281,6 @@ impl<A: erp_workflow::WorkflowAuthorizationPort + Clone + Send + Sync + 'static>
             .open_work_item_scan(filter, AUTHORIZED_SCAN_BATCH_SIZE, executor)
             .await
             .map_err(Error::from)
-    }
-
-    /// 为完整任务列表重新读取对象并执行参与权过滤。
-    ///
-    /// # 参数
-    /// * `items` - 待授权的工作项
-    /// * `access` - 当前操作人的队列访问事实
-    /// * `executor` - 调用方执行器
-    ///
-    /// # 返回
-    /// 返回通过对象授权的任务字段；未授权的任务被略去。
-    ///
-    /// # 错误
-    /// 对象事实读取或审批授权失败时返回对应错误。
-    pub(super) async fn authorized_fields_for_items(
-        &self,
-        items: Vec<WorkItem>,
-        access: &ActorAccess,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<dto::WorkItemFields>> {
-        self.authorized_fields_with_executor(items, access, executor).await
-    }
-
-    /// 焦点和详情读取沿用调用方事务，不重新建立对象授权时点。
-    async fn authorized_fields_with_executor(
-        &self,
-        items: Vec<WorkItem>,
-        access: &ActorAccess,
-        executor: &mut dyn Executor,
-    ) -> Result<Vec<dto::WorkItemFields>> {
-        let keys = items
-            .iter()
-            .filter_map(|item| {
-                object_policy(item.work_item_type, &item.business_object_type)
-                    .map(|policy| (policy.object_kind, item.business_object_id.clone()))
-            })
-            .collect::<HashSet<_>>();
-        let mut facts = self.load_object_facts(&keys, executor).await?;
-        let original = facts.clone();
-        self.filter_order_access_keeping_owned_fulfillment(
-            &access.actor_id,
-            items.iter().map(owned_fulfillment_task_item),
-            &mut facts,
-            executor,
-        )
-        .await?;
-        let mut fields = Vec::new();
-        for item in items {
-            if item.work_item_type.is_document_approval() {
-                if let Some(authorized) =
-                    self.authorize_approval_item(&item, access, &original, executor).await?
-                {
-                    fields.push(authorized);
-                }
-            } else if let Some(authorized) = authorized_item_fields(item, access, &facts) {
-                fields.push(authorized);
-            }
-        }
-        Ok(fields)
     }
 
     /// 为已授权任务逐条计算审批阻断与允许动作。

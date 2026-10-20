@@ -312,7 +312,6 @@ impl<'a> DataScopeBatch<'a> {
                 | "procurement_person"
                 | "business_person"
                 | "person_query_qualification"
-                | "settlement_party"
                 | "warehouse"
         );
         let current = if directory { &self.directory } else { &self.organizations };

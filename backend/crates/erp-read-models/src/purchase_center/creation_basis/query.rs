@@ -76,7 +76,7 @@ impl PurchaseOrderReadService {
         // 按销售单归组任务，使覆盖与供给事实按单一次批量读取。
         let mut task_indexes_by_order: Vec<(String, Vec<usize>)> = Vec::new();
         for (index, task) in tasks.iter().enumerate() {
-            if task.responsibility_key().is_none() || task.responsibility_scope_ids().is_empty() {
+            if !task.owns_procurement_task(actor.id()) {
                 return Err(Error::ConflictError("供给分配任务缺少冻结责任范围".to_string()));
             }
             if let Some(entry) =

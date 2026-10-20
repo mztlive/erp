@@ -1,26 +1,15 @@
 "use client"
 
-import { useState } from "react"
-import { usePathname, useSearchParams } from "next/navigation"
-import { ArrowUpRightIcon, FileTextIcon } from "lucide-react"
 import { WorkspaceTaskPane } from "@/components/business"
-import { Button, buttonVariants } from "@/components/ui/button"
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
 import { PurchaseOrderCreatePage } from "@/features/purchase-orders/pages/purchase-order-create-page"
 import { useCreationBasesQuery } from "@/features/purchase-orders/hooks/queries"
-import { SalesOrderPaperPreviewDialog } from "@/features/sales-orders/components/sales-order-paper-preview-dialog"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { isBlockedWorkItem } from "../lib/work-item"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { WorkspaceWorkItem } from "../types"
 import { stripDocumentNumberPrefix } from "../lib/stable-number"
 import { WorkspaceTaskHeaderActions } from "./workspace-task-context"
 
-/** W01 供给分配作业面：锁定销售单，在紧凑页头查看原单，正文只展开供给操作。 */
+/** W01 供给分配作业面：锁定当前任务及销售责任行，正文展开供给操作。 */
 export function WorkspaceProcurementTask({
     item,
     onTaskCompleted,
@@ -28,7 +17,6 @@ export function WorkspaceProcurementTask({
     item: WorkspaceWorkItem
     onTaskCompleted?: (workItemId: string) => void
 }) {
-    const [previewId, setPreviewId] = useState<string | null>(null)
     const basesQuery = useCreationBasesQuery({
         salesOrderId: item.businessObjectId,
         workItemId: item.workItemId,
@@ -36,11 +24,6 @@ export function WorkspaceProcurementTask({
     const order = basesQuery.data?.find(
         (basis) => basis.salesOrderId === item.businessObjectId,
     )
-    const pathname = usePathname()
-    const searchParams = useSearchParams()
-    const returnTo = `${pathname}${searchParams.toString() ? `?${searchParams}` : ""}`
-    const href = `/sales/orders/${encodeURIComponent(item.businessObjectId)}?${new URLSearchParams({ from: "workspace", returnTo })}`
-    const id = `workspace-procurement-${toAutomationIdSegment(item.workItemId)}`
     return (
         <WorkspaceTaskPane
             className="@container/document"
@@ -87,45 +70,7 @@ export function WorkspaceProcurementTask({
                             ) : null}
                         </div>
                     </div>
-                    <WorkspaceTaskHeaderActions item={item}>
-                        <Tooltip>
-                            <TooltipTrigger
-                                render={
-                                    <Button
-                                        id={`${id}-preview`}
-                                        type="button"
-                                        size="icon-sm"
-                                        variant="ghost"
-                                        aria-label="查看销售单"
-                                        onClick={() =>
-                                            setPreviewId(item.businessObjectId)
-                                        }
-                                    />
-                                }
-                            >
-                                <FileTextIcon aria-hidden="true" />
-                            </TooltipTrigger>
-                            <TooltipContent>查看销售单</TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                            <TooltipTrigger
-                                render={
-                                    <a
-                                        id={`${id}-open`}
-                                        href={href}
-                                        aria-label="打开销售单"
-                                        className={buttonVariants({
-                                            variant: "ghost",
-                                            size: "icon-sm",
-                                        })}
-                                    />
-                                }
-                            >
-                                <ArrowUpRightIcon aria-hidden="true" />
-                            </TooltipTrigger>
-                            <TooltipContent>打开销售单</TooltipContent>
-                        </Tooltip>
-                    </WorkspaceTaskHeaderActions>
+                    <WorkspaceTaskHeaderActions item={item} />
                 </>
             }
             aria-label="当前供给分配任务"
@@ -135,16 +80,6 @@ export function WorkspaceProcurementTask({
                 initialWorkItemId={item.workItemId}
                 embedded
                 onTaskCompleted={onTaskCompleted}
-            />
-            <SalesOrderPaperPreviewDialog
-                salesOrderId={
-                    previewId === item.businessObjectId ? previewId : null
-                }
-                title={stripDocumentNumberPrefix(item.stableNumber)}
-                open={previewId === item.businessObjectId}
-                onOpenChange={(open) => {
-                    if (!open) setPreviewId(null)
-                }}
             />
         </WorkspaceTaskPane>
     )

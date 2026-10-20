@@ -31,6 +31,7 @@ pub(crate) struct WorkbenchObjectDisplay {
     pub(super) delivery_lines: Vec<super::DeliveryTaskLine>,
     pub(super) brief_source: Option<brief::ObjectBriefSource>,
     pub(super) subject_briefs: HashMap<String, WorkbenchSubjectDisplay>,
+    pub(super) procurement_brief: Option<super::procurement_brief::ProcurementBrief>,
 }
 
 impl WorkbenchObjectDisplay {
@@ -55,6 +56,7 @@ impl WorkbenchObjectDisplay {
             brief_source: None,
             delivery_lines: Vec::new(),
             subject_briefs: HashMap::new(),
+            procurement_brief: None,
         }
     }
 
@@ -176,6 +178,10 @@ pub(super) fn object_policy(
 pub(super) fn apply_object_display(fields: &mut dto::WorkItemFields, fact: &WorkbenchObjectFact) {
     fields.business_object_label = fact.display.label.clone();
     fields.root_business_object_id = fact.display.root_document_id.clone();
+    if fields.work_item_type == WorkItemType::ProcurementOrderCreation {
+        super::procurement_brief::apply_procurement_brief(fields, fact);
+        return;
+    }
     let subject = fact.display.subject_briefs.get(&fields.subject_version);
     apply_subject_display(fields, fact, subject);
     if fields.work_item_type == WorkItemType::FulfillmentOperation {

@@ -57,6 +57,7 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         let submissions = self.facts_reader().sales_submissions_for_orders(&orders, executor).await?;
         let lines_by_submission = self.sales_submission_brief_lines(&submissions, executor).await?;
         insert_sales_order_facts(facts, &orders, &submissions, &lines_by_submission);
+        self.load_procurement_briefs(&orders, facts, executor).await?;
         Ok(())
     }
 

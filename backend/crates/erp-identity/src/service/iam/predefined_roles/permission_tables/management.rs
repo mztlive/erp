@@ -2,7 +2,6 @@
 pub(crate) const MANAGEMENT_PERMISSIONS: &[&str] = &[
     "warehouse:list",
     "business_person:list",
-    "settlement_party:list",
     "procurement_responsibility:list",
     "finance_responsibility:list",
     "admin:list",

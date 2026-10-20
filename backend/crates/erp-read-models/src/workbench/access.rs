@@ -443,6 +443,12 @@ pub(super) fn authorized_item_fields(
     access: &ActorAccess,
     facts: &WorkbenchObjectFactMap,
 ) -> Option<dto::WorkItemFields> {
+    if item.work_item_type == WorkItemType::ProcurementOrderCreation
+        && item.status == WorkItemStatus::Open
+        && !item.is_open_procurement_task()
+    {
+        return None;
+    }
     let policy = object_policy(item.work_item_type, &item.business_object_type)?;
     let fact = facts.get(&(policy.object_kind, item.business_object_id.clone()))?;
     if !has_permission(access, policy.read_permission)

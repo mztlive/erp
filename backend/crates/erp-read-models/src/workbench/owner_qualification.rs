@@ -249,19 +249,33 @@ impl<A: WorkflowAuthorizationPort> WorkbenchReadService<A> {
             .flatten()
             .collect::<BTreeSet<_>>();
         let permissions = owner_permissions(&self.auth, account, required, qualification, executor).await?;
-        let sources = tasks.iter().map(|(_, source)| source.clone()).collect::<BTreeSet<_>>();
-        let readable = self.auth.readable_order_sources(&actor, &sources, executor).await?;
+        let sources = tasks
+            .iter()
+            .filter(|(index, _)| !task_source_grant(&items[*index]))
+            .map(|(_, source)| source.clone())
+            .collect::<BTreeSet<_>>();
+        let readable = if sources.is_empty() {
+            BTreeSet::new()
+        } else {
+            self.auth.readable_order_sources(&actor, &sources, executor).await?
+        };
         for (index, source) in tasks {
-            let item = &mut items[*index];
-            let executable = can_execute(item, &permissions.grants, &permissions.enabled_roles);
-            let fulfillment = item.work_item_type == WorkItemType::FulfillmentOperation;
-            if !order_source_allows_execution(readable.contains(source), executable, fulfillment)
-                || !executable
-            {
-                block_action_owner(item);
-            }
+            qualify_order_action(&mut items[*index], readable.contains(source), &permissions);
         }
         Ok(())
+    }
+}
+
+fn task_source_grant(item: &ActionProjection) -> bool {
+    item.work_item_type == WorkItemType::ProcurementOrderCreation
+        && item.business_object_type == "sales_order"
+}
+
+fn qualify_order_action(item: &mut ActionProjection, readable: bool, permissions: &OwnerPermissions) {
+    let executable = can_execute(item, &permissions.grants, &permissions.enabled_roles);
+    let assigned = item.work_item_type == WorkItemType::FulfillmentOperation || task_source_grant(item);
+    if !order_source_allows_execution(readable, executable, assigned) || !executable {
+        block_action_owner(item);
     }
 }
 
@@ -315,9 +329,9 @@ async fn owner_permissions(
 /// 本人履约任务在仍有执行权时，不因缺少销售单详情而失效。
 ///
 /// 仓发的订单来源是销售单。仓储经办人没有销售单详情权限，任务却派给本人。
-/// 非审批、非履约任务仍必须能读来源订单；审批另走精确任务授权。
-fn order_source_allows_execution(readable: bool, executable: bool, fulfillment: bool) -> bool {
-    readable || (fulfillment && executable)
+/// 供给分配沿当前任务读取必要销售资料；其他普通任务仍须读取来源订单。
+fn order_source_allows_execution(readable: bool, executable: bool, assigned: bool) -> bool {
+    readable || (assigned && executable)
 }
 
 /// 固定任务类型提供执行权限；审批额外要求静态决定权限。
@@ -621,6 +635,35 @@ mod tests {
         assert!(!order_source_allows_execution(false, false, true));
         assert!(!order_source_allows_execution(false, true, false));
         assert!(order_source_allows_execution(true, true, false));
+    }
+
+    #[test]
+    fn procurement_qualification_uses_purchase_permission_instead_of_sales_scope() {
+        let mut task = ActionProjection::from_view(&view());
+        task.work_item_type = WorkItemType::ProcurementOrderCreation;
+        task.business_object_type = "sales_order".into();
+        let mut permissions = OwnerPermissions {
+            kind: AccountKind::Admin,
+            required: BTreeSet::from(["purchase_order:create"]),
+            grants: RolePermissionSnapshotFact::new(
+                vec!["buyer".into()],
+                HashMap::from([("buyer".into(), vec!["purchase_order:create".into()])]),
+                1,
+            ),
+            enabled_roles: vec!["buyer".into()],
+        };
+        qualify_order_action(&mut task, false, &permissions);
+        assert_ne!(task.access.processing_state, ProcessingState::ExecutionBlocked);
+        assert!(task.access.allowed_actions.contains(&WorkItemAllowedAction::Process));
+        permissions.enabled_roles.clear();
+        qualify_order_action(&mut task, false, &permissions);
+        assert_eq!(task.access.processing_state, ProcessingState::ExecutionBlocked);
+        assert!(!task.access.allowed_actions.contains(&WorkItemAllowedAction::Process));
+        let mut task = ActionProjection::from_view(&view());
+        task.work_item_type = WorkItemType::ProcurementOrderCreation;
+        task.business_object_type = "purchase_order".into();
+        assert!(!task_source_grant(&task));
+        assert!(execution_permissions(&task).is_none());
     }
 
     fn view() -> WorkItemView {

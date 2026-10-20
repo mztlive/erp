@@ -2,7 +2,6 @@
 pub(crate) const FINANCE_PERMISSIONS: &[&str] = &[
     "warehouse:list",
     "business_person:list",
-    "settlement_party:list",
     "sales_invoice_request:list",
     "sales_invoice_request:detail",
     "sales_invoice_request:submit",

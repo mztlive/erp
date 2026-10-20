@@ -81,7 +81,7 @@ fn validate_procurement_task_access(
     if item.status != WorkItemStatus::Open {
         return Err(procurement_task_not_found());
     }
-    if item.responsibility_key().is_none() || item.responsibility_scope_ids().is_empty() {
+    if !item.owns_procurement_task(actor_id) {
         return Err(Error::ConflictError("供给分配任务缺少冻结责任范围".to_string()));
     }
     Ok(())

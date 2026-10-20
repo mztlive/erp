@@ -264,7 +264,6 @@ impl DataScopeService {
                 | "procurement_person"
                 | "business_person"
                 | "person_query_qualification"
-                | "settlement_party"
                 | "warehouse"
         ) {
             repository.directory_state(actor_id, at, executor).await

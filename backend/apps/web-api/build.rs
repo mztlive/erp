@@ -625,8 +625,10 @@ fn build_permission_groups(
     let mut used_handlers = HashSet::new();
 
     for route in route_handlers {
-        // 同文件的公开选品入口使用令牌授权，不生成管理员 RBAC 权限。
-        if route.path.starts_with("/public/selection/") || route.path.starts_with("/public/sales-selections/")
+        // 公开选品使用令牌授权；结算主体目录仅需后台登录，均不生成 RBAC 权限。
+        if route.path.starts_with("/public/selection/")
+            || route.path.starts_with("/public/sales-selections/")
+            || matches!(route.path.as_str(), "/settlement-parties" | "/settlement-parties/selected")
         {
             continue;
         }

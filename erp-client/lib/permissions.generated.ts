@@ -1440,52 +1440,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         ],
     },
     {
-        name: "对象目录",
-        description: "按独立范围查询业务对象",
-        permissions: [
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/settlement-parties",
-                description: "查询结算主体目录",
-                permission: {
-                    resource: "settlement_party",
-                    action: "list",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/settlement-parties/selected",
-                description: "回显settlement_party目录",
-                permission: {
-                    resource: "settlement_party",
-                    action: "list",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/warehouse-directory",
-                description: "查询仓库目录",
-                permission: {
-                    resource: "warehouse",
-                    action: "list",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/warehouse-directory/selected",
-                description: "回显warehouse目录",
-                permission: {
-                    resource: "warehouse",
-                    action: "list",
-                },
-            },
-        ],
-    },
-    {
         name: "公司主体",
         description: "我方公司及导入别名维护",
         permissions: [
@@ -2733,6 +2687,32 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "warehouse_sku_policy",
                     action: "delete",
+                },
+            },
+        ],
+    },
+    {
+        name: "对象目录",
+        description: "按独立范围查询业务对象",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/warehouse-directory",
+                description: "查询仓库目录",
+                permission: {
+                    resource: "warehouse",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/warehouse-directory/selected",
+                description: "回显warehouse目录",
+                permission: {
+                    resource: "warehouse",
+                    action: "list",
                 },
             },
         ],

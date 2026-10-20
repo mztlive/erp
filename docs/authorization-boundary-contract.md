@@ -60,6 +60,14 @@
 2. 先建立任务上下文授权与受限读取，再移除 `approval_instance:read/decide` 独立范围检查。禁止直接将解析结果替换为全量允许。
 3. 绑定、预览、候选审批人、执行、恢复、升级、幂等回放、工作台和后台重验须共同切换；不得只修改决定接口。
 
+### 3.4 供给分配任务
+
+1. 当前启用的内部账号具备 `purchase_order:create`，且为未删除、开放的供给分配任务负责人时，允许通过该任务读取办理所需销售资料。必须证明任务对象为本销售单、冻结责任键及销售行范围完整；普通销售单数据范围不得阻断此授权。
+2. 队列列表、统计、详情、供给依据、提交及改派目标资格采用同一任务责任规则。当前任务授权不得外溢到同单其他人的任务，不得扩大普通销售列表、详情、纸质单、合同或附件权限。
+3. 任务简报只读取当前生效销售版本中的冻结责任行及必要客户身份；不得回退整单审批简报或当前草稿。库存及采购供给依据继续按责任行与实时剩余量生成。
+4. 完成、关闭、改派或账号及采购权限失效后，原负责人的当前任务授权立即失效。管理人读取和改派仍须具有独立管理权限及来源读取资格；目标经办人按有效账号、采购权限及任务责任范围校验。
+5. 提交事务必须重读当前任务、销售状态、冻结责任范围及实时供给数量，并保持授权版本、库存并发守卫、审批和命令收据原子性。合法幂等回放执行第 3.1 节第 7 项，不要求已完成任务重新开放。
+
 ## 4. 资源与动作处置清单
 
 本节为实现应遵守的资源政策。第 8 节保留改造前审查基线；存量访问变化按第 6 节逐项核对后方可切换运行环境。
@@ -119,13 +127,22 @@
 | `work_item` | manage 限定可管理的任务责任人，供改派／关闭使用 | 明确任务治理委派，移出普通业务范围分区；本人处理任务走指派。保留来源读取、目标人员资格和审批任务禁止通用改派／关闭规则 |
 | `org_unit` | list 裁剪组织及成员；manage 检查组织变更、调岗和人员范围配置资格 | 组织可见与治理委派。保留移动子树、原新组织及公司级授权入口的边界，不能改成普通 manage 即可给自己扩权 |
 | `person_query_qualification` | manage 决定可维护哪些人员的销售／采购查询资格 | 人员资格治理委派，保留目标组织、版本、原因和审计；目录资格不授予业务操作权 |
-| `settlement_party` | list/selected 限制候选主体及最低识别字段 | 目录最小可见；可按明确场景派生集合，不能由一张可见业务单据扩大为主体完整档案可见 |
+| 结算主体公共目录 | list/selected 返回我方公司候选及最低识别字段 | 有效后台账号登录后即可查询和回显；不要求 `settlement_party:list`，不读取或配置人员数据范围。主体完整档案及业务操作继续执行各自权限和资格规则 |
 | `warehouse` | list 同时影响候选及仓库正式列表；create/update 未使用 list 范围作写边界 | 目录可见，与库存业务仓库范围区分。维护动作继续按自身资格；界面不得暗示 list 范围限制了所有仓库写操作 |
 | `business_person` | list/selected 按人员当前组织和本人身份过滤 | 人员目录可见；保持不可见 ID 不回显姓名，不引入销售／采购资格要求 |
 | `sales_person` | list/selected 要求销售查询资格与可见边界同时满足 | 销售人员目录可见；不按角色名称替代候选资格，不授予候选业务执行权 |
 | `procurement_person` | list/selected 要求采购查询资格与可见边界同时满足 | 采购人员目录可见，沿用资格、可见边界与请求筛选的交集 |
 | `integration_error_task` | list/detail 按当前处理人及其部门过滤；create 已登记但未发现独立范围消费 | 本人入口采用正式任务关系，跨人查询保留明确监督边界；create 采用操作权限及初始指派约束。退出无实际效果的 create 范围选项 |
 | `reconciliation_difference` | list/detail 按当前处理人过滤；create 未见范围消费；decide 由正式 WorkItem 本人及完整资格控制 | 读取分为本人任务与监督范围；create 明确初始指派；decide 退出独立范围配置，保留当前责任、任务状态、版本及业务命令校验 |
+
+### 结算主体公共目录执行要求
+
+1. `GET /admin/settlement-parties` 与 `GET /admin/settlement-parties/selected` 必须经过后台身份认证；不执行角色操作权限或人员数据范围校验。未登录、会话失效、账号停用及供应商门户身份仍按后台认证规则拒绝。
+2. 候选仅包含未删除的我方企业主体，只返回 ID、编号、当前名称和状态。停用主体允许历史回显；新建或修改业务单据时须重验主体启用状态、我方公司资格及当前资料版本。
+3. 搜索、已选 ID、稳定分页及内容版本校验继续生效。响应保留 `scope_version` 作为内容快照版本，不返回 `policy_version`、`organization_version` 或 `empty_reason: no_scope`。无匹配结果返回普通空列表。
+4. 角色权限目录、内建岗位模板及人员范围配置入口不得再提供 `settlement_party:list`。历史角色策略和人员范围记录不参与目录或销售结算主体选择校验，无需修改线上记录后再使用。
+5. 销售单创建、修改、保存及提交不得附加结算主体目录权限检查；客户、合同、销售单本身的权限、范围和业务校验继续执行。
+6. 发布须同时交付后端和前端生成权限目录。回退至旧版将恢复旧目录权限及范围检查；回退前须评估人员范围缺失导致的候选不可见。
 
 ### 4.5 未登记为独立范围的对照场景
 
@@ -218,7 +235,7 @@
 
 1. [任务管理范围](../backend/crates/erp-processes/src/adapters/workflow/task_scope.rs)按可管理的人员集合控制其他人的任务；[组织变更授权](../backend/crates/erp-identity/src/service/organization/access.rs)校验组织及成员目标。
 2. [人员资格管理](../backend/crates/erp-identity/src/service/person_directory/management.rs)与[人员目录查询](../backend/crates/erp-identity/src/service/person_directory/query.rs)分别控制治理目标和候选可见；两者不是同一业务权限。
-3. [主体目录适配](../backend/crates/erp-processes/src/adapters/party_directory.rs)与[仓库目录适配](../backend/crates/erp-processes/src/adapters/warehouse_directory.rs)均解析独立目录范围，selected 不能绕过列表可见边界。
+3. [结算主体目录](../backend/crates/erp-party/src/service/directory.rs)只要求有效后台登录；[仓库目录适配](../backend/crates/erp-processes/src/adapters/warehouse_directory.rs)继续解析独立目录范围，仓库 selected 不能绕过列表可见边界。
 4. [集成任务范围](../backend/crates/erp-integration/src/service/access.rs)按当前处理人及部门读取；[异常任务创建](../backend/crates/erp-processes/src/integration_resolution/error_task.rs)和[差异创建](../backend/crates/erp-processes/src/integration_resolution/reconciliation_difference.rs)未见 create 独立范围消费；[正式任务决定](../backend/crates/erp-processes/src/integration_resolution/task_decision/action.rs)走精确 WorkItem 授权。登记表不得代替这些调用链证据。
 
 ### 8.4 业务根对象与投影

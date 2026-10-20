@@ -111,8 +111,7 @@ impl SalesOrderCommandProcess {
         }
         let settlement_id =
             editable.settlement_party_id.clone().unwrap_or_else(|| contract.settlement_party_id.clone());
-        let settlement_name =
-            access.settlement_name(&contract.settlement_party_id, &settlement_id, executor).await?;
+        let settlement_name = access.settlement_name(&settlement_id, executor).await?;
         let draft = SalesOrderDraftRequest {
             editor_user_id: editable.editor_user_id,
             customer_name: revision.customer_snapshot.customer_name,

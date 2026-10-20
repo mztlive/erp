@@ -2,15 +2,17 @@
 use std::collections::{HashMap, HashSet};
 
 use application_core::AuditActor;
+use erp_workflow::entity::work_item::WorkItemType;
 use erp_workflow::service::approval::execution::runtime_service::{
     approval_task_readable_with_executor, approval_tasks_readable_with_executor,
 };
 use erp_workflow::{WorkItem, WorkItemExt, WorkItemRow, WorkflowAuthorizationPort};
 use persistence_core::Executor;
 
-use super::access::{ActorAccess, authorized_fields};
+use super::access::{ActorAccess, authorized_fields, authorized_item_fields};
 use super::dto::WorkItemFields;
 use super::facts::{apply_object_display, object_policy};
+use super::task_access::procurement_item_fields;
 use super::{WorkbenchObjectFactMap, WorkbenchReadService};
 use crate::Result;
 
@@ -35,17 +37,10 @@ impl<A: WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchRead
         facts: &mut WorkbenchObjectFactMap,
         executor: &mut dyn Executor,
     ) -> Result<Vec<WorkItemFields>> {
-        let original = approval_facts_for_rows(&rows, facts);
-        self.filter_order_access_keeping_owned_fulfillment(
-            &access.actor_id,
-            rows.iter().map(super::query::owned_fulfillment_task),
-            facts,
-            executor,
-        )
-        .await?;
+        let original = task_facts_for_rows(&rows, facts);
         let ids = rows
             .iter()
-            .filter(|row| row.work_item_type.is_document_approval())
+            .filter(|row| task_scoped(row.work_item_type))
             .map(|row| row.id.clone())
             .collect::<Vec<_>>();
         let tasks = self
@@ -56,30 +51,16 @@ impl<A: WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchRead
             .into_iter()
             .map(|item| (item.base.id.clone(), item))
             .collect::<HashMap<_, _>>();
-        let ordinary = ordinary_fields_for_rows(&rows, access, facts);
+        retain_ordinary_facts(&rows, &tasks, access, facts);
+        self.filter_order_access_keeping_owned_fulfillment(
+            &access.actor_id,
+            rows.iter().map(super::task_access::owned_fulfillment_task),
+            facts,
+            executor,
+        )
+        .await?;
         let readable = self.readable_approval_ids(&rows, &tasks, access, executor).await?;
-        let mut result = Vec::new();
-        for (row, fields) in rows.into_iter().zip(ordinary) {
-            if !row.work_item_type.is_document_approval() {
-                result.extend(fields);
-                continue;
-            }
-            let Some(item) = tasks.get(&row.id).filter(|item| item.base.version == row.version) else {
-                continue;
-            };
-            if readable.contains(&item.base.id)
-                && let Some(fields) = approval_item_fields(item, &original)
-            {
-                if let Some(policy) = object_policy(item.work_item_type, &item.business_object_type) {
-                    let key = (policy.object_kind, item.business_object_id.clone());
-                    if let Some(fact) = original.get(&key) {
-                        facts.insert(key, fact.clone());
-                    }
-                }
-                result.push(fields);
-            }
-        }
-        Ok(result)
+        Ok(assemble_queue(rows, &tasks, access, facts, &original, &readable))
     }
 
     /// 同批账号只装载一次，运行资格仍逐任务证明并批量读取必要责任链。
@@ -154,20 +135,62 @@ impl<A: WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchRead
     }
 }
 
-/// 仅保存本批审批行实际需要的原始对象事实，避免克隆其他任务事实。
+/// 先固定普通对象授权，再逐任务合并指派授权，禁止同单其他任务借用放回的事实。
+fn assemble_queue(
+    rows: Vec<WorkItemRow>,
+    tasks: &HashMap<String, WorkItem>,
+    access: &ActorAccess,
+    facts: &mut WorkbenchObjectFactMap,
+    original: &WorkbenchObjectFactMap,
+    readable: &HashSet<String>,
+) -> Vec<WorkItemFields> {
+    let ordinary = ordinary_fields_for_rows(&rows, access, facts);
+    let ordinary_facts = facts.clone();
+    let mut result = Vec::new();
+    for (row, fields) in rows.into_iter().zip(ordinary) {
+        if row.work_item_type == WorkItemType::ProcurementOrderCreation {
+            let Some(item) = tasks.get(&row.id).filter(|item| item.base.version == row.version) else {
+                continue;
+            };
+            if let Some(fields) = procurement_item_fields(item, access, original)
+                .or_else(|| authorized_item_fields(item.clone(), access, &ordinary_facts))
+            {
+                restore_task_fact(item, original, facts);
+                result.push(fields);
+            }
+            continue;
+        }
+        if !row.work_item_type.is_document_approval() {
+            result.extend(fields);
+            continue;
+        }
+        let Some(item) = tasks.get(&row.id).filter(|item| item.base.version == row.version) else {
+            continue;
+        };
+        if readable.contains(&item.base.id)
+            && let Some(fields) = approval_item_fields(item, original)
+        {
+            restore_task_fact(item, original, facts);
+            result.push(fields);
+        }
+    }
+    result
+}
+
+/// 仅保存审批和供给任务实际需要的原始对象事实。
 ///
 /// # 参数
 /// * `rows` - 当前候选行
 /// * `facts` - 未经普通业务范围过滤的对象事实
 ///
 /// # 返回
-/// 返回审批行对应的去重对象事实；无审批行时保持空映射。
+/// 返回按任务授权所需的去重对象事实；无对应任务时保持空映射。
 ///
 /// # 错误
 /// 无；未登记类型与缺失事实保持不可见。
-fn approval_facts_for_rows(rows: &[WorkItemRow], facts: &WorkbenchObjectFactMap) -> WorkbenchObjectFactMap {
+fn task_facts_for_rows(rows: &[WorkItemRow], facts: &WorkbenchObjectFactMap) -> WorkbenchObjectFactMap {
     let mut result = WorkbenchObjectFactMap::new();
-    for row in rows.iter().filter(|row| row.work_item_type.is_document_approval()) {
+    for row in rows.iter().filter(|row| task_scoped(row.work_item_type)) {
         let Some(policy) = object_policy(row.work_item_type, &row.business_object_type) else {
             continue;
         };
@@ -177,6 +200,41 @@ fn approval_facts_for_rows(rows: &[WorkItemRow], facts: &WorkbenchObjectFactMap)
         }
     }
     result
+}
+
+fn task_scoped(kind: WorkItemType) -> bool {
+    kind.is_document_approval() || kind == WorkItemType::ProcurementOrderCreation
+}
+
+/// 本人供给任务不消费普通销售范围；同对象其他任务仍独立证明来源读取。
+fn retain_ordinary_facts(
+    rows: &[WorkItemRow],
+    tasks: &HashMap<String, WorkItem>,
+    access: &ActorAccess,
+    facts: &mut WorkbenchObjectFactMap,
+) {
+    let keys = rows
+        .iter()
+        .filter(|row| {
+            !tasks.get(&row.id).is_some_and(|item| {
+                item.base.version == row.version && item.owns_procurement_task(&access.actor_id)
+            })
+        })
+        .filter_map(|row| {
+            object_policy(row.work_item_type, &row.business_object_type)
+                .map(|policy| (policy.object_kind, row.business_object_id.clone()))
+        })
+        .collect::<HashSet<_>>();
+    facts.retain(|key, _| keys.contains(key));
+}
+
+fn restore_task_fact(item: &WorkItem, original: &WorkbenchObjectFactMap, facts: &mut WorkbenchObjectFactMap) {
+    if let Some(policy) = object_policy(item.work_item_type, &item.business_object_type) {
+        let key = (policy.object_kind, item.business_object_id.clone());
+        if let Some(fact) = original.get(&key) {
+            facts.insert(key, fact.clone());
+        }
+    }
 }
 
 /// 在恢复审批显示事实之前固定普通任务的原对象范围判定。
@@ -233,7 +291,8 @@ mod tests {
     use erp_core::ids::WorkItemId;
     use erp_identity::Permission;
     use erp_workflow::entity::work_item::{
-        AssignmentSource, DocumentApprovalWorkItemData, WorkItemData, WorkItemPriority, WorkItemType,
+        AssignmentSource, DocumentApprovalWorkItemData, WorkItemData, WorkItemPriority, WorkItemStatus,
+        WorkItemType,
     };
     use erp_workflow::ports::{ObjectFact, ObjectKind};
 
@@ -241,8 +300,8 @@ mod tests {
     use super::*;
 
     /// 经正式责任范围构造器生成具有稳定销售行范围的供给分配投影。
-    fn row(id: &str) -> WorkItemRow {
-        let item = WorkItem::new_with_responsibility_scope(
+    fn task(id: &str) -> WorkItem {
+        WorkItem::new_with_responsibility_scope(
             WorkItemId::new(id),
             WorkItemData {
                 work_item_type: WorkItemType::ProcurementOrderCreation,
@@ -261,8 +320,64 @@ mod tests {
             "procurement:actor",
             vec!["sales-line-1".into()],
         )
-        .unwrap();
-        serde_json::from_value(serde_json::to_value(item).unwrap()).unwrap()
+        .unwrap()
+    }
+
+    fn row(id: &str) -> WorkItemRow {
+        serde_json::from_value(serde_json::to_value(task(id)).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn procurement_owner_without_sales_scope_can_read_only_the_current_task() {
+        let item = task("mine");
+        let access = ActorAccess::new("actor".into())
+            .with_permissions(vec![Permission::parse("purchase_order:create").unwrap()]);
+        let original = WorkbenchObjectFactMap::from([(
+            (ObjectKind::SalesOrder, "sales-1".into()),
+            WorkbenchObjectFact::from_authority(ObjectFact::new("sales-1", "SO-1", "salesperson")),
+        )]);
+        let mut other = task("other");
+        other.owner_user_id = Some("other-buyer".into());
+        let tasks =
+            HashMap::from([(item.base.id.clone(), item.clone()), (other.base.id.clone(), other.clone())]);
+        let mut task_only = original.clone();
+        retain_ordinary_facts(&[row("mine")], &tasks, &access, &mut task_only);
+        assert!(task_only.is_empty());
+        let mut shared_source = original.clone();
+        retain_ordinary_facts(&[row("mine"), row("other")], &tasks, &access, &mut shared_source);
+        assert_eq!(shared_source.len(), 1);
+        let rows = [&item, &other]
+            .into_iter()
+            .map(|task| serde_json::from_value(serde_json::to_value(task).unwrap()).unwrap())
+            .collect();
+        let mut filtered = WorkbenchObjectFactMap::new();
+        let fields = assemble_queue(rows, &tasks, &access, &mut filtered, &original, &HashSet::new());
+        assert_eq!(fields.len(), 1);
+        assert_eq!(fields[0].id, "mine");
+        assert_eq!(fields[0].procurement_scope_ids, vec!["sales-line-1"]);
+        assert_eq!(filtered.len(), 1);
+        // 放回的销售事实只用于已授权任务的资格重验，不能授予同单他人任务。
+        assert!(procurement_item_fields(&other, &access, &original).is_none());
+        assert!(procurement_item_fields(&item, &ActorAccess::new("actor".into()), &original).is_none());
+        assert!(procurement_item_fields(&item, &access, &WorkbenchObjectFactMap::new()).is_none());
+        for status in [WorkItemStatus::Completed, WorkItemStatus::Closed] {
+            let mut ended = item.clone();
+            ended.status = status;
+            assert!(procurement_item_fields(&ended, &access, &original).is_none());
+        }
+        let mut stale = row("mine");
+        stale.version += 1;
+        assert!(
+            assemble_queue(
+                vec![stale],
+                &tasks,
+                &access,
+                &mut WorkbenchObjectFactMap::new(),
+                &original,
+                &HashSet::new()
+            )
+            .is_empty()
+        );
     }
 
     /// 经专用审批构造器生成同一销售对象的合法审批投影。
@@ -286,7 +401,7 @@ mod tests {
         serde_json::from_value(serde_json::to_value(item).unwrap()).unwrap()
     }
 
-    /// 原始审批事实只克隆实际审批键，普通任务与重复键不放大保存集合。
+    /// 原始指派事实只保存审批和供给任务键；重复键不放大保存集合。
     #[test]
     fn approval_queue_fact_snapshot_keeps_only_distinct_approval_objects() {
         let approval = approval_row("approval");
@@ -301,10 +416,10 @@ mod tests {
                 WorkbenchObjectFact::from_authority(ObjectFact::new("purchase-1", "PO-1", "actor")),
             ),
         ]);
-        let saved = approval_facts_for_rows(&[approval.clone(), ordinary.clone(), approval], &facts);
+        let saved = task_facts_for_rows(&[approval.clone(), ordinary.clone(), approval], &facts);
         assert_eq!(saved.len(), 1);
         assert!(saved.contains_key(&(ObjectKind::SalesOrder, "sales-1".into())));
-        assert!(approval_facts_for_rows(&[ordinary], &facts).is_empty());
+        assert_eq!(task_facts_for_rows(&[ordinary], &facts).len(), 1);
     }
 
     /// 恢复审批展示事实之后不能重新授予先前已拒绝的普通任务访问权。

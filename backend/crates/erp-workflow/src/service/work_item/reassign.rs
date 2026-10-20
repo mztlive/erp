@@ -484,7 +484,9 @@ impl<A: crate::ports::WorkflowAuthorizationPort + Send + Sync + 'static> WorkIte
             executor,
         )
         .await?;
-        require_order_task_read(&self.auth, &access.actor_id, policy.object_kind, fact, executor).await?;
+        if !item.is_open_procurement_task() {
+            require_order_task_read(&self.auth, &access.actor_id, policy.object_kind, fact, executor).await?;
+        }
         require_supplier_portal_task_review(
             &self.auth,
             &access.actor_id,

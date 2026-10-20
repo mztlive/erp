@@ -4,6 +4,8 @@
 //! 直接复用 `erp_supplier` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
 pub mod import;
+#[cfg(test)]
+mod tests;
 
 use application_core::AuditActor;
 use axum::extract::{Multipart, Path, Query, State};
@@ -71,7 +73,7 @@ pub async fn supplier_profile_create_with_assets(
     let (req, files) = extract_command_with_asset_files::<SaveSupplierProfileRequest>(&mut multipart).await?;
     let pending = store_pending_asset_files(&state, files, supplier_asset_sensitivity).await?;
     let result =
-        create_supplier_profile_with_assets(state.db(), state.sensitive_data(), req, pending.clone(), actor)
+        create_supplier_profile_with_assets(&state.supplier_profile_service(), req, pending.clone(), actor)
             .await;
     let result = finish_asset_command(&state, &pending, result, |result| result.assets_committed).await?;
     Ok(ApiResponse::ok_with_data(result.view))
@@ -124,8 +126,7 @@ pub async fn supplier_profile_update_with_assets(
     let (req, files) = extract_command_with_asset_files::<SaveSupplierProfileRequest>(&mut multipart).await?;
     let pending = store_pending_asset_files(&state, files, supplier_asset_sensitivity).await?;
     let result = update_supplier_profile_with_assets(
-        state.db(),
-        state.sensitive_data(),
+        &state.supplier_profile_service(),
         id,
         req,
         pending.clone(),

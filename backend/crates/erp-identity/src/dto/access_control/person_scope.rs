@@ -97,8 +97,11 @@ impl RetiredPersonScope {
         Some(Self {
             resource: scope.resource.clone(),
             action: scope.action.clone(),
-            reason: policy
-                .map_or("当前资源未登记独立范围策略。".into(), |p| p.description().into()),
+            reason: if scope.resource == "settlement_party" {
+                "结算主体目录登录后即可查看，不再配置数据范围。".into()
+            } else {
+                policy.map_or("当前资源未登记独立范围策略。".into(), |p| p.description().into())
+            },
         })
     }
 }
@@ -273,6 +276,7 @@ mod tests {
     #[test]
     fn retired_resource_or_mixed_retired_action_cannot_be_saved() {
         for (resource, actions) in [
+            ("settlement_party", vec!["list"]),
             ("approval_instance", vec!["decide"]),
             ("contract", vec!["list"]),
             ("supplier_settlement_statement", vec!["submit", "confirm"]),

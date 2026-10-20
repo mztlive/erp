@@ -326,6 +326,8 @@ impl WorkItemType {
             self.supplier_payment_execution_permissions(business_object_type)
         } else if self.is_sales_invoice_execution() {
             self.sales_invoice_execution_permissions(business_object_type)
+        } else if self == Self::ProcurementOrderCreation {
+            (business_object_type == "sales_order").then_some(&["purchase_order:create"] as &[&str])
         } else if self == Self::PurchasePaymentArrangement {
             (business_object_type == "purchase_order").then_some(&[
                 "purchase_order:detail",

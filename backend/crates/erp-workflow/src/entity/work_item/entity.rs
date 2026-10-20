@@ -3,6 +3,7 @@
 mod approval;
 mod payment_arrangement;
 mod permissions;
+mod procurement_access;
 mod status;
 mod supplier_portal;
 mod types;

@@ -217,11 +217,6 @@ const WIRED_CONSUMERS: ReadonlyArray<{
         actions: ["manage"],
         dimensions: ["internal_org"],
     },
-    {
-        resource: "settlement_party",
-        actions: ["list"],
-        dimensions: ["settlement_party"],
-    },
     { resource: "warehouse", actions: ["list"], dimensions: ["warehouse"] },
     {
         resource: "business_person",
@@ -292,12 +287,7 @@ export function validateCreateDataScope(
     if (!isStableIdentity(input.subjectId)) {
         return "主体必须使用稳定 ID，不能用显示名"
     }
-    const objectDimension =
-        input.resource === "settlement_party"
-            ? "settlement_party"
-            : input.resource === "warehouse"
-              ? "warehouse"
-              : null
+    const objectDimension = input.resource === "warehouse" ? "warehouse" : null
     if (
         objectDimension &&
         (input.targetDimension !== objectDimension ||

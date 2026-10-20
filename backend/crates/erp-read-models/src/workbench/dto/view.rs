@@ -214,7 +214,7 @@ impl WorkItemView {
     /// # 错误
     /// 任务类型已退役、业务对象或责任角色未登记处理面、单据审批缺少已签署页面映射时返回 `Error::ValidationError`。
     pub(crate) fn from_fields(fields: WorkItemFields, queue_context_id: String) -> Result<Self> {
-        let WorkItemFields { inner, brief_source, delivery_lines } = fields;
+        let WorkItemFields { inner, brief_source, delivery_lines, .. } = fields;
         let route = handler_route(inner.work_item_type, &inner.business_object_type, &inner.owner_role)?;
         let owner_user = inner.owner_user_id.as_ref().map(|id| WorkItemPartyView {
             id: id.clone(),
@@ -315,6 +315,8 @@ pub(crate) struct WorkItemFields {
     inner: erp_workflow::dto::work_item::WorkItemFields,
     pub brief_source: Option<super::super::brief::ObjectBriefSource>,
     pub delivery_lines: Vec<super::super::DeliveryTaskLine>,
+    /// 供给任务的冻结销售行，仅用于服务端收窄任务简报。
+    pub procurement_scope_ids: Vec<String>,
 }
 
 impl Deref for WorkItemFields {
@@ -333,13 +335,19 @@ impl DerefMut for WorkItemFields {
 
 impl From<WorkItem> for WorkItemFields {
     fn from(item: WorkItem) -> Self {
-        Self { inner: item.into(), brief_source: None, delivery_lines: Vec::new() }
+        let procurement_scope_ids = item.responsibility_scope_ids().to_vec();
+        Self { inner: item.into(), brief_source: None, delivery_lines: Vec::new(), procurement_scope_ids }
     }
 }
 
 impl From<erp_workflow::WorkItemRow> for WorkItemFields {
     fn from(item: erp_workflow::WorkItemRow) -> Self {
-        Self { inner: item.into(), brief_source: None, delivery_lines: Vec::new() }
+        Self {
+            inner: item.into(),
+            brief_source: None,
+            delivery_lines: Vec::new(),
+            procurement_scope_ids: Vec::new(),
+        }
     }
 }
 

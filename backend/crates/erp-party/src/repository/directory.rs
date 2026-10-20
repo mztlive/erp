@@ -1,26 +1,25 @@
-//! 目录只投影稳定编号、当前名称和状态；授权和搜索先于有界读取。
-use application_core::directory::{DirectoryItem, DirectoryQuery, DirectoryScope};
+//! 目录只投影稳定编号、当前名称和状态；公司资格和搜索先于有界读取。
+use application_core::directory::{DirectoryItem, DirectoryQuery};
 use mongodb::Database;
 use mongodb::bson::{Document, doc};
 use persistence_core::{Executor, Result, insert_literal_regex_filter};
 
 use crate::repository::PartyExt;
 
-/// 查询授权目录快照。
+/// 查询我方公司目录快照。
 /// # 参数
-/// `scope` 为本域授权，`query` 为规范化条件，`executor` 为调用方事务。
+/// `query` 为规范化条件，`executor` 为调用方执行器。
 /// # 返回
 /// 最多10001项轻量结果；服务层对超限整体拒绝。
 /// # 错误
 /// 数据库读取或反序列化失败时传播原始错误。
 pub(crate) async fn snapshot(
     db: &Database,
-    scope: &DirectoryScope,
     query: &DirectoryQuery,
     executor: &mut dyn Executor,
 ) -> Result<Vec<DirectoryItem>> {
     let collection = db.collection::<Document>(<Database as PartyExt>::PARTIES);
-    let pipeline = pipeline(scope, query);
+    let pipeline = pipeline(query);
     let mut items = Vec::new();
     if let Some(session) = executor.session() {
         let mut cursor =
@@ -37,20 +36,13 @@ pub(crate) async fn snapshot(
     Ok(items)
 }
 
-/// 在关联修订前落实对象范围，回显 ID 仅收窄授权集合。
-fn pipeline(scope: &DirectoryScope, query: &DirectoryQuery) -> Vec<Document> {
+/// 在关联修订前筛选我方企业及回显 ID；停用主体保留供历史回显。
+fn pipeline(query: &DirectoryQuery) -> Vec<Document> {
     let mut filter = doc! { "deleted_at": 0 };
     filter.insert("party_kind", "enterprise");
     filter.insert("company_profile", doc! { "$exists": true, "$ne": null });
-    let mut clauses = Vec::new();
-    if let Some(ids) = &scope.ids {
-        clauses.push(doc! { "id": { "$in": ids } });
-    }
     if let Some(ids) = &query.ids {
-        clauses.push(doc! { "id": { "$in": ids.as_slice() } });
-    }
-    if !clauses.is_empty() {
-        filter.insert("$and", clauses);
+        filter.insert("id", doc! { "$in": ids.as_slice() });
     }
     let mut pipeline = vec![
         doc! { "$match": filter },
@@ -77,30 +69,26 @@ fn pipeline(scope: &DirectoryScope, query: &DirectoryQuery) -> Vec<Document> {
 mod tests {
     use super::*;
     #[test]
-    fn selected_ids_intersect_scope_before_revision_lookup() {
-        let scope = DirectoryScope {
-            ids: Some(vec!["allowed".into()]),
-            scope_version: "v1".into(),
-            policy_version: 1,
-            organization_version: 1,
-            as_of: "now".into(),
-            no_scope: false,
-        };
+    fn list_includes_all_companies_and_selected_only_filters_requested_ids() {
+        let list = pipeline(&DirectoryQuery::default());
+        let filter = list[0].get_document("$match").unwrap();
+        assert_eq!(
+            filter,
+            &doc! {
+                "deleted_at": 0, "party_kind": "enterprise",
+                "company_profile": { "$exists": true, "$ne": null }
+            }
+        );
         let query = DirectoryQuery {
-            ids: Some(serde_json::from_value(serde_json::json!("allowed,outside")).unwrap()),
+            ids: Some(serde_json::from_value(serde_json::json!("company-a,company-b")).unwrap()),
             ..Default::default()
         };
-        let stages = pipeline(&scope, &query);
-        let filter = stages[0].get_document("$match").unwrap();
-        assert_eq!(filter.get_str("party_kind").unwrap(), "enterprise");
-        assert_eq!(filter.get_document("company_profile").unwrap(), &doc! { "$exists": true, "$ne": null });
-        let clauses = filter.get_array("$and").unwrap();
-        assert_eq!(clauses.len(), 2);
-        assert_eq!(clauses[0].as_document().unwrap(), &doc! {"id": {"$in": ["allowed"]}});
-        assert_eq!(clauses[1].as_document().unwrap(), &doc! {"id": {"$in": ["allowed", "outside"]}});
-        assert!(!filter.contains_key("status"));
+        let selected = pipeline(&query);
+        let selected_filter = selected[0].get_document("$match").unwrap();
+        assert_eq!(selected_filter.get_document("id").unwrap(), &doc! {"$in": ["company-a", "company-b"]});
+        assert!(!selected_filter.contains_key("status"));
         assert_eq!(
-            stages[1].get_document("$lookup").unwrap().get_str("localField").unwrap(),
+            selected[1].get_document("$lookup").unwrap().get_str("localField").unwrap(),
             "current_revision_id"
         );
     }

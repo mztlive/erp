@@ -24,7 +24,6 @@ export type SettlementPartySearchComboboxProps = Omit<
     "loading" | "filterMode" | "onSearchChange" | "parties"
 > & {
     purpose?: PartySelectorPurpose
-    noScopeLabel?: string
     selectedItem?: SettlementPartyComboboxItem
     /** 已授权单据中的结算主体快照；只回显同一已选身份，目录错误仍保留。 */
     selectedSnapshot?: SettlementPartyComboboxItem
@@ -40,7 +39,6 @@ export function SettlementPartySearchCombobox({
     selectedSnapshot,
     onItemChange,
     emptyLabel,
-    noScopeLabel,
     value,
     onValueChange,
     restrictToPartyId,
@@ -108,24 +106,15 @@ export function SettlementPartySearchCombobox({
                 emptyLabel={
                     failed
                         ? getErrorMessage(error, "结算主体加载失败，请重试")
-                        : list.data?.empty_reason === "no_scope"
-                          ? (noScopeLabel ??
-                            "当前角色无此目录的数据范围，请申请权限")
-                          : restrictToPartyId && !query && parties.length === 0
-                            ? "请先选择客户"
-                            : emptyLabel
+                        : restrictToPartyId && !query && parties.length === 0
+                          ? "请先选择客户"
+                          : emptyLabel
                 }
             />
             <SelectorQueryFeedback
-                noScopeLabel={noScopeLabel}
                 id={props.id}
                 failed={failed}
                 error={error}
-                noScope={
-                    !list.isFetching &&
-                    !list.isError &&
-                    list.data?.empty_reason === "no_scope"
-                }
                 onRetry={() => {
                     void list.refetch()
                     if (value) void selected.refetch()

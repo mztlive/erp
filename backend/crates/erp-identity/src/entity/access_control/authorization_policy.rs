@@ -48,10 +48,7 @@ impl AuthorizationPolicy {
                 _,
             ) => Self::SourceInherited,
             ("work_item" | "org_unit" | "person_query_qualification", _) => Self::Governance,
-            (
-                "settlement_party" | "warehouse" | "business_person" | "sales_person" | "procurement_person",
-                _,
-            ) => Self::Directory,
+            ("warehouse" | "business_person" | "sales_person" | "procurement_person", _) => Self::Directory,
             (
                 "customer"
                 | "sales_order"
