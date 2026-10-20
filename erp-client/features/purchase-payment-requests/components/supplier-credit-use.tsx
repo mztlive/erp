@@ -234,6 +234,7 @@ function CreditUseDialog({
                         name="amount"
                         children={(field) => (
                             <field.TextField
+                                money
                                 id="ppr-credit-amount"
                                 label="本次抵扣金额"
                                 inputMode="decimal"

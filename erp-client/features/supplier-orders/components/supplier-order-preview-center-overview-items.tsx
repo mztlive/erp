@@ -109,6 +109,7 @@ export function ItemsSection({
                             <TableCell className="text-right">
                                 {item.unitCostGross != null ? (
                                     <MoneyValue
+                                        display="exact"
                                         value={item.unitCostGross}
                                         taxBasis="gross"
                                     />

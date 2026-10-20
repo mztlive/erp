@@ -1,11 +1,8 @@
-import { MetricItem, MetricStrip } from "@/components/business"
+import { MetricItem, MetricStrip, MoneyValue } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import type { ProfitLossView } from "@/features/actual-profit-loss/types"
 import { compareDecimal } from "@/lib/fixed-decimal"
-import {
-    formatMoneyDisplay,
-    PROFIT_LOSS_SCOPE_LABEL as SCOPE_LABEL,
-} from "@/features/actual-profit-loss/lib/presentation"
+import { PROFIT_LOSS_SCOPE_LABEL as SCOPE_LABEL } from "@/features/actual-profit-loss/lib/presentation"
 
 export function ProfitLossMetrics({ data }: { data: ProfitLossView }) {
     return (
@@ -16,38 +13,52 @@ export function ProfitLossMetrics({ data }: { data: ProfitLossView }) {
             >
                 <MetricItem
                     label="不含税销售收入"
-                    value={formatMoneyDisplay(data.totals.netSalesRevenue)}
+                    value={
+                        <MoneyValue
+                            display="compact"
+                            value={data.totals.netSalesRevenue}
+                        />
+                    }
                 />
                 <MetricItem
                     label="实际采购成本"
                     value={
-                        data.totals.actualProcurementCostNet != null
-                            ? formatMoneyDisplay(
-                                  data.totals.actualProcurementCostNet,
-                              )
-                            : "无权限"
+                        data.totals.actualProcurementCostNet != null ? (
+                            <MoneyValue
+                                display="compact"
+                                value={data.totals.actualProcurementCostNet}
+                            />
+                        ) : (
+                            "无权限"
+                        )
                     }
                     detail="实际发生 · 冲减另行加回"
                 />
                 <MetricItem
                     label="实际履约费用"
                     value={
-                        data.totals.actualFulfillmentCostNet != null
-                            ? formatMoneyDisplay(
-                                  data.totals.actualFulfillmentCostNet,
-                              )
-                            : "无权限"
+                        data.totals.actualFulfillmentCostNet != null ? (
+                            <MoneyValue
+                                display="compact"
+                                value={data.totals.actualFulfillmentCostNet}
+                            />
+                        ) : (
+                            "无权限"
+                        )
                     }
                     detail="印刷/仓储/配送等 · 不含税"
                 />
                 <MetricItem
                     label="实际经营盈亏"
                     value={
-                        data.totals.actualProfitLossNet != null
-                            ? formatMoneyDisplay(
-                                  data.totals.actualProfitLossNet,
-                              )
-                            : (data.totals.marginUnavailableReason ?? "不可用")
+                        data.totals.actualProfitLossNet != null ? (
+                            <MoneyValue
+                                display="compact"
+                                value={data.totals.actualProfitLossNet}
+                            />
+                        ) : (
+                            (data.totals.marginUnavailableReason ?? "不可用")
+                        )
                     }
                     detail={
                         data.coverage.reliability === "partial"

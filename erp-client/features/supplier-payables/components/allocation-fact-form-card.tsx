@@ -192,6 +192,7 @@ export function AllocationFactFormCard({
                             name="amount"
                             children={(field) => (
                                 <field.TextField
+                                    money
                                     id="supplier-payables-allocation-form-amount"
                                     label="本次实际付款金额"
                                     required
@@ -336,6 +337,7 @@ export function AllocationFactFormCard({
                                     name="grossAmount"
                                     children={(field) => (
                                         <field.TextField
+                                            money
                                             id="supplier-payables-allocation-form-gross-amount"
                                             label="含税金额"
                                             required

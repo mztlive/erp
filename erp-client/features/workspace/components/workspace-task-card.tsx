@@ -18,6 +18,7 @@ import { findSourceSalesOrder } from "../lib/source-sales-order"
 import { workspaceTaskRightContent } from "../lib/task-right-content"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceFulfillmentBadges } from "./workspace-fulfillment-badges"
+import { WorkspaceMoney } from "./workspace-money"
 
 /** 表头和任务行共用列宽；窄窗口将本次处理与状态合并到右列。 */
 export const workspaceTaskColumns =
@@ -144,14 +145,17 @@ export function WorkspaceTaskCard({
             <span className="flex min-w-0 flex-col items-end gap-1.5 @min-[600px]/workspace-queue:items-start">
                 <span
                     className={cn(
-                        "num line-clamp-2 text-sm",
+                        "num text-sm",
                         right.metric.unavailable || right.tracking
                             ? "text-muted-foreground"
                             : "font-medium",
                     )}
                     title={right.metric.detail}
                 >
-                    {right.metric.value}
+                    <WorkspaceMoney
+                        value={right.metric.value}
+                        display="compact"
+                    />
                 </span>
                 <span className="text-xs text-muted-foreground">
                     {right.metric.label}

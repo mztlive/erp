@@ -19,6 +19,7 @@ import { useApprovalMaterials } from "@/features/approval-workflow/hooks/use-app
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import type { WorkspaceWorkItem } from "../types"
+import { WorkspaceMoney } from "./workspace-money"
 
 const sectionClass = cn(
     workspaceTaskSurfacePadClassName,
@@ -81,7 +82,11 @@ export function WorkspaceReceiptApproval({
                             本次登记回款
                         </dt>
                         <dd className="num mt-1 text-3xl font-semibold tracking-tight">
-                            {amount || "金额未记录"}
+                            {amount ? (
+                                <WorkspaceMoney value={amount} />
+                            ) : (
+                                "金额未记录"
+                            )}
                         </dd>
                     </div>
                     <div>

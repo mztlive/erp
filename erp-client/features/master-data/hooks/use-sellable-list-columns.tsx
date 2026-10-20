@@ -108,7 +108,10 @@ export function useSellableListColumns() {
                 meta: { label, width: "amount", align: "end", numeric: true },
                 sortingFn: moneySortingFn,
                 cell: ({ row }) => (
-                    <MoneyValue value={row.original.sellableItem?.[key]} />
+                    <MoneyValue
+                        display="exact"
+                        value={row.original.sellableItem?.[key]}
+                    />
                 ),
             })),
             {

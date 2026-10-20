@@ -161,6 +161,7 @@ export function buildPurchaseOrdersListColumns({
                     <span className="text-sm text-muted-foreground">•••</span>
                 ) : (
                     <MoneyValue
+                        display="compact"
                         value={row.original.grossAmount}
                         taxBasis="gross"
                         className={taxAmountToneClass("含税金额")}

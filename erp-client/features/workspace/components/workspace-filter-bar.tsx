@@ -1,7 +1,7 @@
 "use client"
 
 import { CopyNavLink } from "@/features/approval-copies/page"
-import type { ComponentProps, ReactNode } from "react"
+import type { ReactNode } from "react"
 import { ChevronDownIcon, SearchIcon, XIcon } from "lucide-react"
 
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -24,6 +24,10 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
+import {
+    WorkspaceViewNav,
+    WorkspaceViewNavItem,
+} from "@/components/business/workspace-view-nav"
 
 import type { WorkspaceUrlState } from "../lib/url-state"
 import type {
@@ -37,29 +41,6 @@ const SORT_OPTIONS: readonly { value: WorkspaceSort; label: string }[] = [
     { value: "due_asc", label: "截止时间 · 最早优先" },
     { value: "created_desc", label: "进入时间 · 最新优先" },
 ]
-
-/** 文字导航项。选中态同时使用字重与下划线，不能只依赖颜色。 */
-function WorkspaceTextNavButton({
-    active,
-    children,
-    ...props
-}: ComponentProps<"button"> & { active: boolean }) {
-    return (
-        <button
-            {...props}
-            type="button"
-            aria-pressed={active}
-            className={cn(
-                "relative h-8 rounded-sm px-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-                active
-                    ? "font-medium text-foreground after:absolute after:inset-x-1.5 after:bottom-0 after:h-0.5 after:rounded-full after:bg-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-            )}
-        >
-            {children}
-        </button>
-    )
-}
 
 /**
  * 队列口径切换。数量直接使用服务端指标，禁止对已加载条目求和。
@@ -86,13 +67,9 @@ export function WorkspaceQueueScopeNav({
             : "inbox"
 
     return (
-        <div
-            role="group"
-            aria-label="工作视图"
-            className="flex flex-wrap items-center gap-x-8 gap-y-1"
-        >
+        <WorkspaceViewNav>
             {visibleMetrics.map((metric) => (
-                <WorkspaceTextNavButton
+                <WorkspaceViewNavItem
                     key={metric.key}
                     id={`workspace-queue-scope-${toAutomationIdSegment(metric.key)}`}
                     active={metric.key === scopeKey}
@@ -103,10 +80,10 @@ export function WorkspaceQueueScopeNav({
                     <span className="num ml-1 text-xs text-muted-foreground">
                         {metric.count}
                     </span>
-                </WorkspaceTextNavButton>
+                </WorkspaceViewNavItem>
             ))}
             <CopyNavLink />
-        </div>
+        </WorkspaceViewNav>
     )
 }
 

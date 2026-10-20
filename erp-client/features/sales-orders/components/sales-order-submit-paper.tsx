@@ -128,7 +128,10 @@ export function SalesOrderSubmitPaper({
                               numeric: true,
                               cell: (row) =>
                                   row.faceValue ? (
-                                      <MoneyValue value={row.faceValue} />
+                                      <MoneyValue
+                                          display="exact"
+                                          value={row.faceValue}
+                                      />
                                   ) : (
                                       "—"
                                   ),
@@ -163,7 +166,10 @@ export function SalesOrderSubmitPaper({
                               align: "end",
                               numeric: true,
                               cell: (row) => (
-                                  <MoneyValue value={row.amountGross} />
+                                  <MoneyValue
+                                      display="exact"
+                                      value={row.amountGross}
+                                  />
                               ),
                           },
                       ]
@@ -205,7 +211,10 @@ export function SalesOrderSubmitPaper({
                               align: "end",
                               numeric: true,
                               cell: (row) => (
-                                  <MoneyValue value={row.unitPriceGross} />
+                                  <MoneyValue
+                                      display="exact"
+                                      value={row.unitPriceGross}
+                                  />
                               ),
                           },
                           {
@@ -216,6 +225,7 @@ export function SalesOrderSubmitPaper({
                               cell: (row) =>
                                   row.procurementSupplyPrice ? (
                                       <MoneyValue
+                                          display="exact"
                                           value={row.procurementSupplyPrice}
                                       />
                                   ) : (
@@ -228,7 +238,10 @@ export function SalesOrderSubmitPaper({
                               align: "end",
                               numeric: true,
                               cell: (row) => (
-                                  <MoneyValue value={row.amountGross} />
+                                  <MoneyValue
+                                      display="exact"
+                                      value={row.amountGross}
+                                  />
                               ),
                           },
                       ]
@@ -239,17 +252,32 @@ export function SalesOrderSubmitPaper({
                 {
                     id: "net",
                     label: "不含税金额",
-                    value: <MoneyValue value={snapshot.amountNet} />,
+                    value: (
+                        <MoneyValue
+                            display="exact"
+                            value={snapshot.amountNet}
+                        />
+                    ),
                 },
                 {
                     id: "tax",
                     label: "税额",
-                    value: <MoneyValue value={snapshot.amountTax} />,
+                    value: (
+                        <MoneyValue
+                            display="exact"
+                            value={snapshot.amountTax}
+                        />
+                    ),
                 },
                 {
                     id: "gross",
                     label: "成交金额（含税）",
-                    value: <MoneyValue value={snapshot.amountGross} />,
+                    value: (
+                        <MoneyValue
+                            display="exact"
+                            value={snapshot.amountGross}
+                        />
+                    ),
                     emphasized: true,
                 },
             ]}

@@ -290,7 +290,10 @@ function SourcingOptionFacts({
                 </div>
                 <div className="shrink-0 text-right">
                     <p className="text-sm font-semibold">
-                        <MoneyValue value={option.unitCostGross} />
+                        <MoneyValue
+                            display="exact"
+                            value={option.unitCostGross}
+                        />
                     </p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
                         含税 · 税率{" "}

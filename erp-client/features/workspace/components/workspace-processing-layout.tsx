@@ -1,7 +1,5 @@
 "use client"
 
-import { timelineDocumentTypes } from "@/features/document-timeline/types"
-import { TaskTimeline } from "@/features/document-timeline/components/task-timeline"
 import type { ReactNode } from "react"
 import { WorkspaceTaskPageProvider } from "@/components/business/workspace-task-pane"
 import { NativeCheckbox } from "@/components/ui/checkbox"
@@ -10,6 +8,7 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceApprovalProgress } from "./workspace-approval-progress"
 import { WorkspaceTaskInstructions } from "./workspace-task-instructions"
+import { WorkspaceMoney } from "./workspace-money"
 
 /** 所有审批、执行与只读跟踪入口共用完整办理页，动作仍由各业务模块提供。 */
 export function WorkspaceProcessingLayout({
@@ -45,7 +44,11 @@ export function WorkspaceProcessingLayout({
                             {item.amountSummary && (
                                 <Fact
                                     label={item.amountSummary.label}
-                                    value={item.amountSummary.value}
+                                    value={
+                                        <WorkspaceMoney
+                                            value={item.amountSummary.value}
+                                        />
+                                    }
                                 />
                             )}
                             <Fact
@@ -64,14 +67,6 @@ export function WorkspaceProcessingLayout({
                                 value={item.dueAtLabel || "未设截止时间"}
                             />
                         </dl>
-                    )}
-                    {timelineDocumentTypes.has(item.businessObjectType) && (
-                        <TaskTimeline
-                            key={item.workItemId}
-                            taskId={item.workItemId}
-                            approval={Boolean(approval)}
-                            instance={item.workItemType === "APPROVAL_INSTANCE"}
-                        />
                     )}
                 </>
             }
@@ -180,7 +175,7 @@ export function WorkspaceProcessingLayout({
     )
 }
 
-function Fact({ label, value }: { label: string; value: string }) {
+function Fact({ label, value }: { label: string; value: ReactNode }) {
     return (
         <div className="min-w-[9rem] flex-1 space-y-1.5">
             <dt className="text-xs text-muted-foreground">{label}</dt>

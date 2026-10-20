@@ -80,6 +80,7 @@ export function useSellableSkuPickerColumns() {
                         cell: ({ row }) => (
                             <div className="space-y-1">
                                 <MoneyValue
+                                    display="exact"
                                     value={row.original.sellableItem?.[id]}
                                 />
                                 {id === "bulkPriceGross" &&

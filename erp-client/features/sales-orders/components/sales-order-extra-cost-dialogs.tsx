@@ -166,6 +166,7 @@ export function RegisterExtraCostDialog({
                             name="grossAmount"
                             children={(field) => (
                                 <field.TextField
+                                    money
                                     id="sales-orders-extra-cost-register-gross"
                                     label="含税金额（元）"
                                     required
@@ -349,6 +350,7 @@ export function ReduceExtraCostDialog({
                             name="grossAmount"
                             children={(field) => (
                                 <field.TextField
+                                    money
                                     id="sales-orders-extra-cost-reduce-gross"
                                     label="冲减金额（元）"
                                     required

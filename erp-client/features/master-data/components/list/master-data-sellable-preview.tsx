@@ -31,7 +31,7 @@ export function SellableItemPreviewPanel({ row }: { row: MasterDataListItem }) {
                                 {label}
                             </dt>
                             <dd className="mt-1">
-                                <MoneyValue value={value} />
+                                <MoneyValue display="exact" value={value} />
                             </dd>
                         </div>
                     ))}

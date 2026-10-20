@@ -121,7 +121,10 @@ export function SalesOrderPaperDocument({
                               numeric: true,
                               cell: (row) =>
                                   row.faceValue ? (
-                                      <MoneyValue value={row.faceValue} />
+                                      <MoneyValue
+                                          display="exact"
+                                          value={row.faceValue}
+                                      />
                                   ) : (
                                       "—"
                                   ),
@@ -159,7 +162,10 @@ export function SalesOrderPaperDocument({
                               align: "end",
                               numeric: true,
                               cell: (row) => (
-                                  <MoneyValue value={row.amountGross} />
+                                  <MoneyValue
+                                      display="exact"
+                                      value={row.amountGross}
+                                  />
                               ),
                           },
                       ]
@@ -206,7 +212,10 @@ export function SalesOrderPaperDocument({
                               align: "end",
                               numeric: true,
                               cell: (row) => (
-                                  <MoneyValue value={row.unitPriceGross} />
+                                  <MoneyValue
+                                      display="exact"
+                                      value={row.unitPriceGross}
+                                  />
                               ),
                           },
                           {
@@ -215,7 +224,10 @@ export function SalesOrderPaperDocument({
                               align: "end",
                               numeric: true,
                               cell: (row) => (
-                                  <MoneyValue value={row.amountGross} />
+                                  <MoneyValue
+                                      display="exact"
+                                      value={row.amountGross}
+                                  />
                               ),
                           },
                       ]
@@ -226,29 +238,45 @@ export function SalesOrderPaperDocument({
                 {
                     id: "net",
                     label: "不含税金额",
-                    value: <MoneyValue value={order.amountNet} />,
+                    value: (
+                        <MoneyValue display="exact" value={order.amountNet} />
+                    ),
                 },
                 {
                     id: "tax",
                     label: "税额",
-                    value: <MoneyValue value={order.taxAmount} />,
+                    value: (
+                        <MoneyValue display="exact" value={order.taxAmount} />
+                    ),
                 },
                 {
                     id: "gross",
                     label: "成交金额（含税）",
-                    value: <MoneyValue value={order.amountGross} />,
+                    value: (
+                        <MoneyValue display="exact" value={order.amountGross} />
+                    ),
                     emphasized: true,
                 },
                 {
                     id: "received",
                     label: "已回款（含税）",
-                    value: <MoneyValue value={order.receivedAmount} />,
+                    value: (
+                        <MoneyValue
+                            display="exact"
+                            value={order.receivedAmount}
+                        />
+                    ),
                     description: `回款进度：${order.collection.label}`,
                 },
                 {
                     id: "invoiced",
                     label: "已开票",
-                    value: <MoneyValue value={order.invoicedAmount} />,
+                    value: (
+                        <MoneyValue
+                            display="exact"
+                            value={order.invoicedAmount}
+                        />
+                    ),
                     description: `开票进度：${order.invoicing.label}`,
                 },
             ]}

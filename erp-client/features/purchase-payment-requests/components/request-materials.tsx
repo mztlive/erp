@@ -304,7 +304,9 @@ function PurchasePaper({
                     id: "cost",
                     header: "采购含税单价",
                     align: "end",
-                    cell: (row) => <MoneyValue value={row.unit_price} />,
+                    cell: (row) => (
+                        <MoneyValue display="exact" value={row.unit_price} />
+                    ),
                 },
                 {
                     id: "amount",
@@ -373,7 +375,12 @@ function SalesPaper({ sales, payer }: { sales: SalesSnapshot; payer: string }) {
                     id: "price",
                     header: "销售含税单价",
                     align: "end",
-                    cell: (row) => <MoneyValue value={row.unit_price_gross} />,
+                    cell: (row) => (
+                        <MoneyValue
+                            display="exact"
+                            value={row.unit_price_gross}
+                        />
+                    ),
                 },
                 {
                     id: "gross",

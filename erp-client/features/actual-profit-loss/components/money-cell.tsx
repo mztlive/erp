@@ -2,6 +2,7 @@ import Link from "next/link"
 
 import { formatMoneyDisplay } from "@/features/actual-profit-loss/lib/presentation"
 import { compareDecimal } from "@/lib/fixed-decimal"
+import { MoneyValue } from "@/components/business/values"
 
 export function MoneyCell({
     id,
@@ -37,7 +38,8 @@ export function MoneyCell({
                     : `人民币 ${display}，不含税${isNeg ? "，负值" : ""}`)
             }
         >
-            {isNeg ? `亏损 ${display}` : display}
+            {isNeg ? "亏损 " : null}
+            <MoneyValue value={value} />
         </span>
     )
     if (onClick) {

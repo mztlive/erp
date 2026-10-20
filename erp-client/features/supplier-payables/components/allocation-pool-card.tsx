@@ -7,7 +7,7 @@ import {
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Input } from "@/components/ui/input"
+import { MoneyInput } from "@/components/form/money-input"
 import { Label } from "@/components/ui/label"
 import {
     SOURCE_TYPE_LABEL,
@@ -169,7 +169,7 @@ export function AllocationPoolCard({
                                                 本次分配
                                             </span>
                                         </Label>
-                                        <Input
+                                        <MoneyInput
                                             id={`supplier-payables-allocation-pool-row-${toAutomationIdSegment(item.payableAccountId)}-amount`}
                                             className="num h-control min-h-0"
                                             inputMode="decimal"

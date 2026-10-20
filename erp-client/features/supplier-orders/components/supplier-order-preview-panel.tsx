@@ -197,6 +197,7 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
                                         </span>
                                         {item.unitCostGross != null ? (
                                             <MoneyValue
+                                                display="exact"
                                                 value={item.unitCostGross}
                                                 taxBasis="gross"
                                                 className="text-xs"

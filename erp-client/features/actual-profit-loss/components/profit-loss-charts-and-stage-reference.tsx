@@ -1,3 +1,4 @@
+import { MoneyValue } from "@/components/business/values"
 import {
     Bar,
     BarChart,
@@ -41,10 +42,7 @@ import {
 } from "@/components/ui/description-list"
 import type { ProfitLossView } from "../types"
 import { compareDecimal } from "@/lib/fixed-decimal"
-import {
-    formatMoneyDisplay,
-    PROFIT_LOSS_SCOPE_LABEL,
-} from "@/features/actual-profit-loss/lib/presentation"
+import { PROFIT_LOSS_SCOPE_LABEL } from "@/features/actual-profit-loss/lib/presentation"
 
 const trendChartConfig = {
     revenue: { label: "不含税收入", color: "var(--chart-1)" },
@@ -185,22 +183,30 @@ export function ProfitLossChartsAndStageReference({
                                                         {t.period}
                                                     </TableCell>
                                                     <TableCell data-align="end">
-                                                        {formatMoneyDisplay(
-                                                            t.netSalesRevenue,
-                                                        )}
+                                                        <MoneyValue
+                                                            value={
+                                                                t.netSalesRevenue
+                                                            }
+                                                        />
                                                     </TableCell>
                                                     <TableCell data-align="end">
-                                                        {formatMoneyDisplay(
-                                                            t.actualCostNet,
-                                                        )}
+                                                        <MoneyValue
+                                                            value={
+                                                                t.actualCostNet
+                                                            }
+                                                        />
                                                     </TableCell>
                                                     <TableCell data-align="end">
                                                         {t.actualProfitLossNet !=
-                                                        null
-                                                            ? formatMoneyDisplay(
-                                                                  t.actualProfitLossNet,
-                                                              )
-                                                            : "不可用"}
+                                                        null ? (
+                                                            <MoneyValue
+                                                                value={
+                                                                    t.actualProfitLossNet
+                                                                }
+                                                            />
+                                                        ) : (
+                                                            "不可用"
+                                                        )}
                                                     </TableCell>
                                                     <TableCell className="text-muted-foreground">
                                                         {t.reliability ===
@@ -290,9 +296,9 @@ export function ProfitLossChartsAndStageReference({
                                             >
                                                 <span>{c.label}</span>
                                                 <span className="num">
-                                                    {formatMoneyDisplay(
-                                                        c.netAmount,
-                                                    )}
+                                                    <MoneyValue
+                                                        value={c.netAmount}
+                                                    />
                                                     {c.share ? (
                                                         <span className="ml-2 text-muted-foreground">
                                                             {c.share}
@@ -346,9 +352,11 @@ export function ProfitLossChartsAndStageReference({
                                         </DescriptionTerm>
                                         <DescriptionDetails>
                                             <span className="num text-muted-foreground">
-                                                {formatMoneyDisplay(
-                                                    line.procurementCostNet,
-                                                )}
+                                                <MoneyValue
+                                                    value={
+                                                        line.procurementCostNet
+                                                    }
+                                                />
                                             </span>
                                         </DescriptionDetails>
                                     </DescriptionItem>
@@ -358,9 +366,11 @@ export function ProfitLossChartsAndStageReference({
                                         </DescriptionTerm>
                                         <DescriptionDetails>
                                             <span className="num text-muted-foreground">
-                                                {formatMoneyDisplay(
-                                                    line.fulfillmentCostNet,
-                                                )}
+                                                <MoneyValue
+                                                    value={
+                                                        line.fulfillmentCostNet
+                                                    }
+                                                />
                                             </span>
                                         </DescriptionDetails>
                                     </DescriptionItem>
@@ -370,9 +380,9 @@ export function ProfitLossChartsAndStageReference({
                                         </DescriptionTerm>
                                         <DescriptionDetails>
                                             <span className="num text-muted-foreground">
-                                                {formatMoneyDisplay(
-                                                    line.totalNet,
-                                                )}
+                                                <MoneyValue
+                                                    value={line.totalNet}
+                                                />
                                             </span>
                                         </DescriptionDetails>
                                     </DescriptionItem>

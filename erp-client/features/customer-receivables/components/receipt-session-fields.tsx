@@ -29,6 +29,7 @@ export function ReceiptSessionFields({
                     children={(field) => (
                         <field.TextField
                             id="customer-receivables-session-amount"
+                            money
                             label={
                                 existing
                                     ? "原单到账金额（含税）"

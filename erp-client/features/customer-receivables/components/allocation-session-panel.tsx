@@ -14,7 +14,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
-import { Input } from "@/components/ui/input"
+import { MoneyInput } from "@/components/form/money-input"
 import { SessionFactFields } from "@/features/customer-receivables/components/session-fact-fields"
 import { SessionHeader } from "@/features/customer-receivables/components/session-header"
 import { SessionPool } from "@/features/customer-receivables/components/session-pool"
@@ -419,7 +419,7 @@ export function AllocationSessionPanel({
                                     ),
                                     renderEditor: ({ item }) => (
                                         <div className="flex items-center justify-end gap-1">
-                                            <Input
+                                            <MoneyInput
                                                 id={`customer-receivables-session-allocation-${toAutomationIdSegment(item.lineKey)}-amount`}
                                                 className="num text-right"
                                                 value={item.amount}

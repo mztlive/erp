@@ -270,6 +270,7 @@ interface QuickPreviewSheetProps extends Omit<
     readonly identity?: React.ReactNode
     /** 多维状态等头部摘要。 */
     readonly summary?: React.ReactNode
+    readonly trigger?: React.ReactNode
     readonly children: React.ReactNode
     readonly footer?: React.ReactNode
     readonly contentClassName?: string
@@ -291,6 +292,7 @@ function QuickPreviewSheet({
     description,
     identity,
     summary,
+    trigger,
     children,
     footer,
     contentClassName,
@@ -306,6 +308,7 @@ function QuickPreviewSheet({
 
     return (
         <Sheet {...props} open={open} onOpenChange={onOpenChange}>
+            {trigger}
             <SheetContent
                 side="right"
                 size={size}

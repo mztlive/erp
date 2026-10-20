@@ -199,7 +199,10 @@ export function ApprovalSalesOrderPaper({
                                   row: ApprovalSalesSubmission["lines"][number],
                               ) =>
                                   row.face_value ? (
-                                      <MoneyValue value={row.face_value} />
+                                      <MoneyValue
+                                          display="exact"
+                                          value={row.face_value}
+                                      />
                                   ) : (
                                       "—"
                                   ),
@@ -227,6 +230,7 @@ export function ApprovalSalesOrderPaper({
                               ) =>
                                   row.unit_price_gross ? (
                                       <MoneyValue
+                                          display="exact"
                                           value={row.unit_price_gross}
                                       />
                                   ) : (
@@ -242,6 +246,7 @@ export function ApprovalSalesOrderPaper({
                               ) =>
                                   row.procurement_supply_price_gross ? (
                                       <MoneyValue
+                                          display="exact"
                                           value={
                                               row.procurement_supply_price_gross
                                           }
@@ -277,13 +282,17 @@ export function ApprovalSalesOrderPaper({
                     id: "tax",
                     header: "税额",
                     align: "end",
-                    cell: (row) => <MoneyValue value={row.tax_amount} />,
+                    cell: (row) => (
+                        <MoneyValue display="exact" value={row.tax_amount} />
+                    ),
                 },
                 {
                     id: "gross",
                     header: "含税金额",
                     align: "end",
-                    cell: (row) => <MoneyValue value={row.gross_amount} />,
+                    cell: (row) => (
+                        <MoneyValue display="exact" value={row.gross_amount} />
+                    ),
                 },
             ]}
             rows={lines}
@@ -292,17 +301,32 @@ export function ApprovalSalesOrderPaper({
                 {
                     id: "net",
                     label: "不含税金额",
-                    value: <MoneyValue value={submission.net_amount} />,
+                    value: (
+                        <MoneyValue
+                            display="exact"
+                            value={submission.net_amount}
+                        />
+                    ),
                 },
                 {
                     id: "tax",
                     label: "税额",
-                    value: <MoneyValue value={submission.tax_amount} />,
+                    value: (
+                        <MoneyValue
+                            display="exact"
+                            value={submission.tax_amount}
+                        />
+                    ),
                 },
                 {
                     id: "gross",
                     label: "含税金额",
-                    value: <MoneyValue value={submission.gross_amount} />,
+                    value: (
+                        <MoneyValue
+                            display="exact"
+                            value={submission.gross_amount}
+                        />
+                    ),
                     emphasized: true,
                 },
             ]}

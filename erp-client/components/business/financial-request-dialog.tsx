@@ -141,6 +141,7 @@ export function FinancialRequestDialog({
                             children={(field) => (
                                 <field.TextField
                                     id={`${id}-amount`}
+                                    money
                                     label={amountLabel}
                                     required
                                     inputMode="decimal"

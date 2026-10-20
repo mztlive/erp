@@ -55,7 +55,7 @@ function LineValues({
     return (
         <>
             <TableCell data-align="end">
-                <MoneyValue value={line.unit_price} />
+                <MoneyValue display="exact" value={line.unit_price} />
             </TableCell>
             {showQuantity ? (
                 <>

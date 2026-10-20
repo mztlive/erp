@@ -166,6 +166,7 @@ export function buildSalesOrdersListColumns(
             },
             cell: ({ row }) => (
                 <MoneyValue
+                    display="compact"
                     value={row.original.amountGross}
                     taxBasis="gross"
                     className="font-semibold text-foreground"

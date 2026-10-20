@@ -342,6 +342,7 @@ export function ExpensePurchaseCreateDialog({
                                             >
                                                 {(field) => (
                                                     <field.TextField
+                                                        money
                                                         id={`${prefix}-gross`}
                                                         label="含税金额"
                                                         required

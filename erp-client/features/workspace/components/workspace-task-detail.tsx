@@ -13,6 +13,7 @@ import { workspaceFulfillmentDescriptor } from "../lib/workspace-fulfillment"
 import { WorkspaceDeliveryBrief } from "./workspace-delivery-brief"
 import { WorkspaceInvoiceApproval } from "./workspace-invoice-approval"
 import { WorkspaceReceiptApproval } from "./workspace-receipt-approval"
+import { WorkspaceMoney } from "./workspace-money"
 import { WorkspacePurchaseApproval } from "./workspace-purchase-approval"
 import { WorkspaceApprovalProgress } from "./workspace-approval-progress"
 import { useWorkspaceTaskPage } from "@/components/business/workspace-task-pane"
@@ -248,17 +249,20 @@ function WorkspaceTaskSurface({
         return (
             <WorkspaceTaskPane
                 header={
-                    <div className="min-w-0 space-y-2">
-                        <p className="text-xs font-medium text-muted-foreground">
-                            {item.workItemTypeLabel}
-                        </p>
-                        <h1 className="break-words text-xl font-semibold tracking-tight">
-                            {item.counterpartyName || "采购付款安排"}
-                        </h1>
-                        <p className="break-all text-xs text-muted-foreground">
-                            {item.objectTitle}
-                        </p>
-                    </div>
+                    <>
+                        <div className="min-w-0 space-y-2">
+                            <p className="text-xs font-medium text-muted-foreground">
+                                {item.workItemTypeLabel}
+                            </p>
+                            <h1 className="break-words text-xl font-semibold tracking-tight">
+                                {item.counterpartyName || "采购付款安排"}
+                            </h1>
+                            <p className="break-all text-xs text-muted-foreground">
+                                {item.objectTitle}
+                            </p>
+                        </div>
+                        <WorkspaceTaskHeaderActions item={item} />
+                    </>
                 }
             >
                 <PurchasePaymentArrangement
@@ -748,7 +752,9 @@ function WorkspaceDocumentTaskDetail({
                                         "text-foreground",
                                     )}
                                 >
-                                    {primaryAmount.value}
+                                    <WorkspaceMoney
+                                        value={primaryAmount.value}
+                                    />
                                 </span>
                                 <span className="text-xs text-muted-foreground">
                                     {primaryAmount.label}
@@ -765,7 +771,7 @@ function WorkspaceDocumentTaskDetail({
                                             taxAmountToneClass(amount.label),
                                         )}
                                     >
-                                        {amount.value}
+                                        <WorkspaceMoney value={amount.value} />
                                     </span>
                                     <span className="text-xs text-muted-foreground">
                                         {amount.label}

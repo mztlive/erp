@@ -1,5 +1,5 @@
 "use client"
-import { Input } from "@/components/ui/input"
+import { MoneyInput } from "@/components/form/money-input"
 import { Label } from "@/components/ui/label"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { InvoiceFormApi } from "@/features/supplier-payables/lib/allocation-form-types"
@@ -38,7 +38,7 @@ export const InvoiceAllocationTaxes = ({
                                         <Label htmlFor={id}>
                                             {row.sourceDocumentNo} · 分配税额
                                         </Label>
-                                        <Input
+                                        <MoneyInput
                                             id={id}
                                             inputMode="decimal"
                                             value={

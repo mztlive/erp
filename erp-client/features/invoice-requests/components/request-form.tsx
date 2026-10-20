@@ -213,6 +213,7 @@ export function InvoiceRequestForm({
                 <form.AppField name="amount">
                     {(field) => (
                         <field.TextField
+                            money
                             id="invoice-request-amount"
                             label="本次申请金额（含税）"
                             inputMode="decimal"

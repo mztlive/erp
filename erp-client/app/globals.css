@@ -104,6 +104,9 @@
     --color-violet-soft: var(--violet-soft);
     --color-violet-soft-foreground: var(--violet-soft-foreground);
     --color-violet-border: var(--violet-border);
+    --color-money-wan: var(--money-wan);
+    --color-money-million: var(--money-million);
+    --color-money-yi: var(--money-yi);
     --color-lime-soft: var(--lime-soft);
     --color-lime-soft-foreground: var(--lime-soft-foreground);
     --color-lime-border: var(--lime-border);
@@ -219,6 +222,9 @@
    浅色模式：Notion / Vercel 纯净高级灰阶（素净冷白 + 纯黑曜石主键 + 克制低饱和度）
    -------------------------------------------------------------------------- */
 :root {
+    --money-wan: oklch(0.43 0.16 255);
+    --money-million: oklch(0.46 0.19 300);
+    --money-yi: oklch(0.34 0.18 300);
     --radius: 0.5rem;
 
     /* Vercel / Notion 风格：极简纯净画布 + 纯白微边卡片 */
@@ -333,6 +339,9 @@
    深色模式：Notion / Vercel 曜石暗夜黑灰
    -------------------------------------------------------------------------- */
 .dark {
+    --money-wan: oklch(0.78 0.11 255);
+    --money-million: oklch(0.8 0.13 300);
+    --money-yi: oklch(0.9 0.09 300);
     --background: oklch(0.12 0.005 260); /* #09090b 曜石纯黑背景 */
     --foreground: oklch(0.98 0 0);
     --card: oklch(0.16 0.005 260); /* #18181b 浮动卡片 */

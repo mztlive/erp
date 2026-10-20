@@ -259,7 +259,11 @@ function SourcingAllocationSummary({
             {!stock ? (
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     <span>
-                        含税单价 <MoneyValue value={option.unitCostGross} />
+                        含税单价{" "}
+                        <MoneyValue
+                            display="exact"
+                            value={option.unitCostGross}
+                        />
                     </span>
                     <span>
                         税率{" "}

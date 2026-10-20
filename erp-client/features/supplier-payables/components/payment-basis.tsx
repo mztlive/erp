@@ -3,7 +3,7 @@
 import { RequiredMark } from "@/components/ui/required-mark"
 
 import { MoneyValue } from "@/components/business"
-import { Input } from "@/components/ui/input"
+import { MoneyInput } from "@/components/form/money-input"
 import { Label } from "@/components/ui/label"
 import type { AllocationSessionView } from "@/features/supplier-payables/types"
 import {
@@ -83,7 +83,7 @@ export function PaymentBasis({
                                     本单实际付款金额
                                     <RequiredMark />
                                 </Label>
-                                <Input
+                                <MoneyInput
                                     id={inputId}
                                     inputMode="decimal"
                                     value={amount}

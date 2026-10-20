@@ -50,8 +50,12 @@ export function SummaryStrip({
                     含税总额 / 缺版本
                 </dt>
                 <dd className="num font-medium">
-                    <MoneyValue value={grossTotal} taxBasis="gross" /> /{" "}
-                    {unpricedCount}
+                    <MoneyValue
+                        display="compact"
+                        value={grossTotal}
+                        taxBasis="gross"
+                    />{" "}
+                    / {unpricedCount}
                 </dd>
             </div>
             <div className="col-span-2 min-w-0 sm:col-span-4">

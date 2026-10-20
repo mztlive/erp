@@ -333,7 +333,10 @@ function SourcingOptionFacts({
                                     按库存核算
                                 </span>
                             ) : option ? (
-                                <MoneyValue value={option.unitCostGross} />
+                                <MoneyValue
+                                    display="exact"
+                                    value={option.unitCostGross}
+                                />
                             ) : (
                                 "—"
                             )}

@@ -1,12 +1,10 @@
+import { MoneyValue } from "@/components/business/values"
 import { BusinessStatusBadge } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
 import type { ProfitLossView } from "@/features/actual-profit-loss/types"
 import { coveragePercentNumber } from "@/features/actual-profit-loss/lib/url-state"
-import {
-    formatMoneyDisplay,
-    PROFIT_LOSS_SCOPE_LABEL as SCOPE_LABEL,
-} from "@/features/actual-profit-loss/lib/presentation"
+import { PROFIT_LOSS_SCOPE_LABEL as SCOPE_LABEL } from "@/features/actual-profit-loss/lib/presentation"
 
 export function CoverageAlert({ data }: { data: ProfitLossView }) {
     return (
@@ -32,9 +30,9 @@ export function CoverageAlert({ data }: { data: ProfitLossView }) {
                     <div>
                         <span className="text-muted-foreground">覆盖收入 </span>
                         <span className="num font-medium">
-                            {formatMoneyDisplay(
-                                data.coverage.coveredNetRevenue,
-                            )}
+                            <MoneyValue
+                                value={data.coverage.coveredNetRevenue}
+                            />
                         </span>
                     </div>
                     <div>
@@ -42,9 +40,9 @@ export function CoverageAlert({ data }: { data: ProfitLossView }) {
                             未覆盖收入{" "}
                         </span>
                         <span className="num font-medium">
-                            {formatMoneyDisplay(
-                                data.coverage.uncoveredNetRevenue,
-                            )}
+                            <MoneyValue
+                                value={data.coverage.uncoveredNetRevenue}
+                            />
                         </span>
                     </div>
                     <div>

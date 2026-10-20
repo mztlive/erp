@@ -16,7 +16,7 @@ import {
 } from "@/components/business/table-toolbar"
 import { Button } from "@/components/ui/button"
 import { NativeCheckbox } from "@/components/ui/checkbox"
-import { Input } from "@/components/ui/input"
+import { MoneyInput } from "@/components/form/money-input"
 import {
     Table,
     TableBody,
@@ -246,7 +246,7 @@ export function ReceiptAllocationTable({
                                                 {line ? (
                                                     <div className="ml-auto min-w-36 max-w-52 whitespace-normal">
                                                         <div className="flex flex-wrap items-center justify-end gap-1">
-                                                            <Input
+                                                            <MoneyInput
                                                                 id={amountId}
                                                                 className="num text-right"
                                                                 inputMode="decimal"

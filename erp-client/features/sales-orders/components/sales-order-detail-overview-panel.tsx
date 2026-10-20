@@ -106,13 +106,17 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
                                 {line.quantity} {line.unit}
                             </TableCell>
                             <TableCell data-align="end">
-                                <MoneyValue value={line.unitPriceGross} />
+                                <MoneyValue
+                                    display="exact"
+                                    value={line.unitPriceGross}
+                                />
                             </TableCell>
                             {isCard ? (
                                 <>
                                     <TableCell data-align="end">
                                         {line.faceValue ? (
                                             <MoneyValue
+                                                display="exact"
                                                 value={line.faceValue}
                                             />
                                         ) : (

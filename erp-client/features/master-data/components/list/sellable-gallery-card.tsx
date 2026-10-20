@@ -101,6 +101,7 @@ export function SellableGalleryCard({
                                         {label}
                                     </span>
                                     <MoneyValue
+                                        display="exact"
                                         className="text-sm font-semibold"
                                         value={value}
                                     />

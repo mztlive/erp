@@ -146,6 +146,7 @@ export function useCustomerQualityColumns({
                     const content = (
                         <div className="text-right">
                             <MoneyValue
+                                display="compact"
                                 value={r.salesGrossAmount}
                                 taxBasis="gross"
                             />
@@ -212,6 +213,7 @@ export function useCustomerQualityColumns({
                                 <div>
                                     覆盖{" "}
                                     <MoneyValue
+                                        display="compact"
                                         value={r.costCoveredNetRevenue}
                                         taxBasis="net"
                                     />
@@ -219,6 +221,7 @@ export function useCustomerQualityColumns({
                                 <div className="text-muted-foreground">
                                     未覆盖{" "}
                                     <MoneyValue
+                                        display="compact"
                                         value={r.costUncoveredNetRevenue}
                                         taxBasis="net"
                                     />
@@ -250,6 +253,7 @@ export function useCustomerQualityColumns({
                     const content = (
                         <div className="text-right">
                             <MoneyValue
+                                display="compact"
                                 value={r.actualProfitLossNet}
                                 taxBasis="net"
                             />
@@ -294,6 +298,7 @@ export function useCustomerQualityColumns({
                         <div className="space-y-1 text-right text-sm">
                             <div className="flex flex-wrap items-center justify-end gap-1">
                                 <MoneyValue
+                                    display="compact"
                                     value={r.receivableOpenGross}
                                     taxBasis="gross"
                                     unavailableReason={
@@ -331,6 +336,7 @@ export function useCustomerQualityColumns({
                                 >
                                     逾期{" "}
                                     <MoneyValue
+                                        display="compact"
                                         value={r.overdueGross}
                                         taxBasis="gross"
                                     />
@@ -339,6 +345,7 @@ export function useCustomerQualityColumns({
                                 <div className="text-muted-foreground">
                                     逾期{" "}
                                     <MoneyValue
+                                        display="compact"
                                         value={r.overdueGross}
                                         taxBasis="gross"
                                         unavailableReason={

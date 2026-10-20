@@ -3,6 +3,9 @@
 import { type ReactNode } from "react"
 import { CircleHelpIcon } from "lucide-react"
 
+import { useWorkspaceTaskPage } from "@/components/business/workspace-task-pane"
+import { TaskTimeline } from "@/features/document-timeline/components/task-timeline"
+import { timelineDocumentTypes } from "@/features/document-timeline/types"
 import { Button } from "@/components/ui/button"
 import {
     DescriptionDetails,
@@ -201,7 +204,7 @@ export function WorkspaceTaskContextHelp({
  * 作业面标题栏右侧动作。问号固定放在打开原单据等图标旁边。
  *
  * @param item 当前工作台任务
- * @param children 查看单据、打开原单据、转交等动作；无额外动作时只渲染问号
+ * @param children 查看单据、打开原单据、转交等动作
  */
 export function WorkspaceTaskHeaderActions({
     item,
@@ -210,9 +213,24 @@ export function WorkspaceTaskHeaderActions({
     item: WorkspaceWorkItem
     children?: ReactNode
 }) {
+    const fullPage = useWorkspaceTaskPage()
     return (
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex max-w-full flex-wrap items-center justify-end gap-1">
             {children}
+            {fullPage && timelineDocumentTypes.has(item.businessObjectType) && (
+                <TaskTimeline
+                    key={item.workItemId}
+                    taskId={item.workItemId}
+                    approval={Boolean(item.approval)}
+                    instance={item.workItemType === "APPROVAL_INSTANCE"}
+                    title={item.counterpartyName || item.objectTitle}
+                    document={{
+                        type: item.businessObjectType,
+                        id: item.businessObjectId,
+                        number: item.stableNumber,
+                    }}
+                />
+            )}
             <WorkspaceTaskContextHelp item={item} />
             <WorkspacePaneActions />
         </div>

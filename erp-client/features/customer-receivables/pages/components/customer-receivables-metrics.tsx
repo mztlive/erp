@@ -62,6 +62,7 @@ export function CustomerReceivablesMetrics({
                     label={item.label}
                     value={
                         <MoneyValue
+                            display="compact"
                             value={item.value}
                             unavailableReason={
                                 item.value === null

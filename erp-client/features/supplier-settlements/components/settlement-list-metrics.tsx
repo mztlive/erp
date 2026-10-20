@@ -33,7 +33,13 @@ export function SettlementMetricsStrip({
             <MetricItem
                 id="supplier-settlements-metrics-confirmed"
                 label="已确认金额"
-                value={<MoneyValue value={confirmedAmount} taxBasis="gross" />}
+                value={
+                    <MoneyValue
+                        display="compact"
+                        value={confirmedAmount}
+                        taxBasis="gross"
+                    />
+                }
             />
         </MetricStrip>
     )

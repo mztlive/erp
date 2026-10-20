@@ -466,6 +466,7 @@ function FinancialDraftForm({
                     <form.AppField name="amount">
                         {(field) => (
                             <field.TextField
+                                money
                                 id={`${id}-amount`}
                                 label="金额"
                                 inputMode="decimal"

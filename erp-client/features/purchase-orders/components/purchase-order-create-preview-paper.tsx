@@ -115,7 +115,12 @@ export function PurchaseOrderPreviewPaper({
                     {
                         id: "gross",
                         label: "含税合计",
-                        value: <MoneyValue value={preview.totals.gross} />,
+                        value: (
+                            <MoneyValue
+                                display="exact"
+                                value={preview.totals.gross}
+                            />
+                        ),
                     },
                 ]}
                 lineItemLabel="采购明细"
@@ -151,7 +156,12 @@ export function PurchaseOrderPreviewPaper({
                         header: "含税成本",
                         align: "end",
                         numeric: true,
-                        cell: (row) => <MoneyValue value={row.unitCostGross} />,
+                        cell: (row) => (
+                            <MoneyValue
+                                display="exact"
+                                value={row.unitCostGross}
+                            />
+                        ),
                     },
                     {
                         id: "tax",
@@ -176,6 +186,7 @@ export function PurchaseOrderPreviewPaper({
                         numeric: true,
                         cell: (row) => (
                             <MoneyValue
+                                display="exact"
                                 value={row.grossAmount}
                                 className={taxAmountToneClass("含税金额")}
                             />
@@ -195,17 +206,32 @@ export function PurchaseOrderPreviewPaper({
                     {
                         id: "net",
                         label: "不含税金额",
-                        value: <MoneyValue value={preview.totals.net} />,
+                        value: (
+                            <MoneyValue
+                                display="exact"
+                                value={preview.totals.net}
+                            />
+                        ),
                     },
                     {
                         id: "tax",
                         label: "税额",
-                        value: <MoneyValue value={preview.totals.tax} />,
+                        value: (
+                            <MoneyValue
+                                display="exact"
+                                value={preview.totals.tax}
+                            />
+                        ),
                     },
                     {
                         id: "gross",
                         label: "含税合计",
-                        value: <MoneyValue value={preview.totals.gross} />,
+                        value: (
+                            <MoneyValue
+                                display="exact"
+                                value={preview.totals.gross}
+                            />
+                        ),
                         emphasized: true,
                     },
                 ]}

@@ -12,7 +12,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
+import { MoneyInput } from "@/components/form/money-input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import type { ReverseRequest } from "@/features/customer-receivables/components/customer-account-detail-preview"
@@ -164,7 +164,7 @@ export function ReceivableActionDialogs({
                                     红票金额
                                     <RequiredMark />
                                 </Label>
-                                <Input
+                                <MoneyInput
                                     id="customer-receivables-reverse-amount"
                                     className="num"
                                     inputMode="decimal"

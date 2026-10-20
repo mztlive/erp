@@ -1,6 +1,9 @@
 "use client"
 import { useState } from "react"
+import { HistoryIcon } from "lucide-react"
+import { QuickPreviewSheet } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { SheetTrigger } from "@/components/ui/sheet"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { useTimelineQuery } from "../hooks/queries"
 import type { TimelineSource } from "../types"
@@ -11,69 +14,106 @@ export function TaskTimeline({
     taskId,
     approval = false,
     instance = false,
+    title,
+    document,
 }: {
     taskId: string
     approval?: boolean
     instance?: boolean
+    title: string
+    document: { type: string; id: string; number: string }
 }) {
-    const [expanded, setExpanded] = useState(!approval)
+    const [open, setOpen] = useState(false)
     const [source, setSource] = useState<TimelineSource | null>(null)
     const idPrefix = `workspace-timeline-${toAutomationIdSegment(taskId)}`
     const query = useTimelineQuery(
         { kind: instance ? "approval" : "task", id: taskId },
         { pageSize: 5 },
-        expanded,
+        open,
     )
     const first = query.data?.pages[0]
     return (
-        <section
-            className="mt-4 rounded-lg border border-border/60 bg-background p-4"
-            aria-label={approval ? "相关业务动态" : "办理动态"}
-        >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-medium">
-                    {approval ? "相关业务动态" : "办理动态"}
-                </h3>
-                <Button
-                    id={`${idPrefix}-toggle`}
-                    size="sm"
-                    variant="ghost"
-                    aria-expanded={expanded}
-                    aria-controls={`${idPrefix}-content`}
-                    onClick={() => setExpanded(!expanded)}
-                >
-                    {expanded ? "收起" : "展开"}
-                </Button>
-            </div>
-            {expanded && (
-                <div id={`${idPrefix}-content`} className="mt-4 space-y-4">
-                    {approval && (
-                        <p className="text-xs text-muted-foreground">
-                            动态展示实际发生的操作，本次审批依据仍以提交资料为准。
-                        </p>
+        <QuickPreviewSheet
+            idPrefix={`${idPrefix}-sheet`}
+            size="detail"
+            open={open}
+            onOpenChange={(nextOpen) => {
+                setOpen(nextOpen)
+                if (!nextOpen) setSource(null)
+            }}
+            title="办理记录"
+            description={
+                <>
+                    {title}
+                    {document.number && (
+                        <span className="num mt-1 block">
+                            单号：{document.number}
+                        </span>
                     )}
-                    {query.isPending ? (
-                        <p className="text-sm text-muted-foreground">
-                            正在读取动态…
+                </>
+            }
+            trigger={
+                <SheetTrigger
+                    id={`${idPrefix}-trigger`}
+                    render={<Button variant="ghost" size="sm" />}
+                >
+                    <HistoryIcon aria-hidden="true" />
+                    办理记录
+                </SheetTrigger>
+            }
+            footer={
+                <Button
+                    id={`${idPrefix}-sheet-footer-close`}
+                    variant="outline"
+                    onClick={() => {
+                        setOpen(false)
+                        setSource(null)
+                    }}
+                >
+                    关闭
+                </Button>
+            }
+        >
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-7 py-6">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-muted-foreground">
+                        按时间倒序展示
+                    </p>
+                    <Button
+                        id={`${idPrefix}-refresh`}
+                        variant="ghost"
+                        size="sm"
+                        disabled={query.isFetching}
+                        onClick={() => void query.refetch()}
+                    >
+                        刷新
+                    </Button>
+                </div>
+                {approval && (
+                    <p className="text-xs text-muted-foreground">
+                        记录展示实际发生的操作，本次审批依据仍以提交资料为准。
+                    </p>
+                )}
+                {query.isPending ? (
+                    <p role="status" className="text-sm text-muted-foreground">
+                        正在读取记录…
+                    </p>
+                ) : query.isError ? (
+                    <div role="alert" className="space-y-3 text-sm">
+                        <p className="text-destructive">
+                            办理记录暂时无法读取。
                         </p>
-                    ) : query.isError ? (
-                        <div
-                            role="alert"
-                            className="flex flex-wrap items-center gap-3 text-sm"
+                        <Button
+                            id={`${idPrefix}-retry`}
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void query.refetch()}
                         >
-                            <p className="text-destructive">
-                                动态暂时无法读取。
-                            </p>
-                            <Button
-                                id={`${idPrefix}-retry`}
-                                variant="outline"
-                                size="sm"
-                                onClick={() => void query.refetch()}
-                            >
-                                重试
-                            </Button>
-                        </div>
-                    ) : (
+                            重试
+                        </Button>
+                    </div>
+                ) : (
+                    <>
                         <TimelineEvents
                             events={
                                 query.data?.pages.flatMap(
@@ -81,9 +121,9 @@ export function TaskTimeline({
                                 ) ?? []
                             }
                             idPrefix={idPrefix}
+                            groupByDate
+                            currentDocument={document}
                         />
-                    )}
-                    <div className="flex flex-wrap items-center gap-3">
                         {query.hasNextPage && (
                             <Button
                                 id={`${idPrefix}-more`}
@@ -92,30 +132,37 @@ export function TaskTimeline({
                                 disabled={query.isFetching}
                                 onClick={() => void query.fetchNextPage()}
                             >
-                                查看更早记录
+                                {query.isFetchingNextPage
+                                    ? "正在读取…"
+                                    : "查看更早记录"}
                             </Button>
                         )}
-                        {first?.salesOrders?.map((sale) => (
-                            <Button
-                                key={sale.id}
-                                id={`${idPrefix}-sales-${toAutomationIdSegment(sale.id)}`}
-                                variant="link"
-                                size="sm"
-                                onClick={() => setSource(sale)}
-                            >
-                                {first.salesOrders?.length === 1
-                                    ? "查看销售单全流程"
-                                    : `查看 ${sale.number || "关联销售单"} 全流程`}
-                            </Button>
-                        ))}
-                    </div>
-                </div>
-            )}
-            <SalesTimelineSheet
-                source={source}
-                onClose={() => setSource(null)}
-                idPrefix={idPrefix}
-            />
-        </section>
+                        {first?.salesOrders && first.salesOrders.length > 0 && (
+                            <div className="flex flex-wrap gap-3 border-t pt-4">
+                                {first.salesOrders.map((sale) => (
+                                    <Button
+                                        key={sale.id}
+                                        id={`${idPrefix}-sales-${toAutomationIdSegment(sale.id)}`}
+                                        variant="link"
+                                        size="sm"
+                                        className="h-auto whitespace-normal p-0 text-left"
+                                        onClick={() => setSource(sale)}
+                                    >
+                                        {first.salesOrders?.length === 1
+                                            ? "查看销售单全流程"
+                                            : `查看 ${sale.number || "关联销售单"} 全流程`}
+                                    </Button>
+                                ))}
+                            </div>
+                        )}
+                    </>
+                )}
+                <SalesTimelineSheet
+                    source={source}
+                    onClose={() => setSource(null)}
+                    idPrefix={`${idPrefix}-sales-flow`}
+                />
+            </div>
+        </QuickPreviewSheet>
     )
 }

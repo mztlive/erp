@@ -158,7 +158,10 @@ export function PurchaseOrderPaperDocument({
                         costMasked ? (
                             <MaskedAmount />
                         ) : (
-                            <MoneyValue value={row.unitCostGross} />
+                            <MoneyValue
+                                display="exact"
+                                value={row.unitCostGross}
+                            />
                         ),
                 },
                 {
@@ -170,7 +173,10 @@ export function PurchaseOrderPaperDocument({
                         row.salesUnitPriceGross == null ? (
                             "—"
                         ) : (
-                            <MoneyValue value={row.salesUnitPriceGross} />
+                            <MoneyValue
+                                display="exact"
+                                value={row.salesUnitPriceGross}
+                            />
                         ),
                 },
                 {
@@ -198,7 +204,10 @@ export function PurchaseOrderPaperDocument({
                         costMasked ? (
                             <MaskedAmount />
                         ) : (
-                            <MoneyValue value={row.grossAmount} />
+                            <MoneyValue
+                                display="exact"
+                                value={row.grossAmount}
+                            />
                         ),
                 },
                 {
@@ -218,7 +227,10 @@ export function PurchaseOrderPaperDocument({
                     value: costMasked ? (
                         <MaskedAmount />
                     ) : (
-                        <MoneyValue value={currentContent.totals.net} />
+                        <MoneyValue
+                            display="exact"
+                            value={currentContent.totals.net}
+                        />
                     ),
                 },
                 {
@@ -227,7 +239,10 @@ export function PurchaseOrderPaperDocument({
                     value: costMasked ? (
                         <MaskedAmount />
                     ) : (
-                        <MoneyValue value={currentContent.totals.tax} />
+                        <MoneyValue
+                            display="exact"
+                            value={currentContent.totals.tax}
+                        />
                     ),
                 },
                 {
@@ -236,7 +251,10 @@ export function PurchaseOrderPaperDocument({
                     value: costMasked ? (
                         <MaskedAmount />
                     ) : (
-                        <MoneyValue value={currentContent.totals.gross} />
+                        <MoneyValue
+                            display="exact"
+                            value={currentContent.totals.gross}
+                        />
                     ),
                     emphasized: true,
                 },

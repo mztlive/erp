@@ -10,6 +10,7 @@ import {
 import { useFieldContext } from "@/components/form/form-context"
 import { toFieldErrors } from "@/components/form/utils"
 import { cn } from "@/lib/utils"
+import { describeMoney } from "@/lib/money-display"
 
 type TextFieldProps = {
     label: string
@@ -28,6 +29,8 @@ type TextFieldProps = {
     step?: React.ComponentProps<"input">["step"]
     testId?: string
     id?: string
+    /** 金额仍以元录入；显示保留全部精度的中文辅助读数。 */
+    money?: boolean
 }
 
 /**
@@ -51,6 +54,7 @@ export function TextField({
     step,
     testId,
     id,
+    money = false,
 }: TextFieldProps) {
     const field = useFieldContext<string>()
     const isInvalid = field.state.meta.isTouched && !field.state.meta.isValid
@@ -58,9 +62,12 @@ export function TextField({
     const resolvedId = id ?? field.name
     const descriptionId = `${resolvedId}-description`
     const errorId = `${resolvedId}-error`
+    const moneyHintId = `${resolvedId}-money-hint`
+    const moneyHint = money ? describeMoney(field.state.value)?.readout : null
     const describedBy = [
         description ? descriptionId : undefined,
         isInvalid ? errorId : undefined,
+        moneyHint ? moneyHintId : undefined,
     ]
         .filter(Boolean)
         .join(" ")
@@ -96,6 +103,11 @@ export function TextField({
             {description ? (
                 <FieldDescription id={descriptionId}>
                     {description}
+                </FieldDescription>
+            ) : null}
+            {moneyHint ? (
+                <FieldDescription id={moneyHintId}>
+                    {moneyHint}
                 </FieldDescription>
             ) : null}
             {isInvalid ? <FieldError id={errorId} errors={errors} /> : null}

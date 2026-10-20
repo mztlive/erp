@@ -13,6 +13,7 @@ import {
     TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import { describeMoney, type MoneyMagnitude } from "@/lib/money-display"
 
 type BusinessStatusContext = "list" | "detail" | "preview"
 
@@ -338,19 +339,17 @@ function formatDecimal(
 type TaxBasis = "gross" | "net"
 
 /**
- * 税额三角（含税金额 / 不含税金额 / 税额）数字的语义配色：
- * 含税金额=信息蓝加粗、税额=深橙、不含税金额=默认前景色。
- * 按展示标签精确匹配；列头/标签已写明口径的列表与表单同样适用。
+ * 税口径由标签表达，含税汇总保留字重强调；颜色统一用于金额量级。
  */
 const TAX_AMOUNT_LABEL_TONES: Readonly<Record<string, string>> = {
-    含税金额: "text-info-soft-foreground font-semibold",
-    含税合计: "text-info-soft-foreground font-semibold",
-    含税: "text-info-soft-foreground font-semibold",
-    行含税: "text-info-soft-foreground font-semibold",
-    含税小计: "text-info-soft-foreground font-semibold",
+    含税金额: "font-semibold",
+    含税合计: "font-semibold",
+    含税: "font-semibold",
+    行含税: "font-semibold",
+    含税小计: "font-semibold",
     不含税金额: "",
     不含税: "",
-    税额: "text-orange-soft-foreground",
+    税额: "",
 }
 
 /** 按展示标签取税额三角的配色类；不认识的标签返回空串（保持默认色）。 */
@@ -361,6 +360,14 @@ export function taxAmountToneClass(label: unknown): string {
 }
 
 type MoneyValueSize = "inherit" | "section" | "summary" | "hero"
+type MoneyValueDisplay = "full" | "compact" | "exact"
+
+const moneyMagnitudeClasses: Record<MoneyMagnitude, string> = {
+    base: "text-foreground",
+    wan: "text-money-wan",
+    million: "text-money-million",
+    yi: "text-money-yi font-semibold",
+}
 
 const moneyValueSizeClassNames: Record<MoneyValueSize, string> = {
     inherit: "",
@@ -378,6 +385,8 @@ interface MoneyValueProps extends Omit<
     unavailableReason?: React.ReactNode
     /** 只调整金额数字；税口径徽章与不可用原因保持辅助字号。 */
     size?: MoneyValueSize
+    /** full：精确金额附量级；compact：简写附精确金额；exact：仅精确金额。 */
+    display?: MoneyValueDisplay
 }
 
 /** 精确展示 CNY 十进制字符串；仅格式化，不执行金额计算。 */
@@ -386,10 +395,15 @@ function MoneyValue({
     taxBasis,
     unavailableReason,
     size = "inherit",
+    display = "full",
     className,
+    onCopy,
     ...props
 }: MoneyValueProps) {
-    const isUnavailable = value == null || unavailableReason != null
+    const amount = unavailableReason == null ? describeMoney(value) : null
+    const isUnavailable = amount == null
+    const compactPrimary = display === "compact" && amount?.compact != null
+    const hint = display === "exact" ? null : amount?.compact
 
     return (
         <span
@@ -397,21 +411,64 @@ function MoneyValue({
             data-tax-basis={taxBasis}
             data-unavailable={isUnavailable || undefined}
             data-size={size}
+            data-display={display}
+            data-magnitude={amount?.magnitude}
             className={cn(
                 "inline-flex min-w-0 flex-nowrap items-baseline gap-2 font-medium",
                 className,
             )}
             {...props}
+            onCopy={(event) => {
+                onCopy?.(event)
+                const selection =
+                    event.currentTarget.ownerDocument.getSelection()
+                if (
+                    event.defaultPrevented ||
+                    !amount ||
+                    !selection ||
+                    selection.isCollapsed ||
+                    !event.currentTarget.contains(selection.anchorNode) ||
+                    !event.currentTarget.contains(selection.focusNode)
+                )
+                    return
+                event.clipboardData.setData("text/plain", amount.copyValue)
+                event.preventDefault()
+            }}
         >
-            <span
-                data-slot="money-value-number"
-                className={cn(
-                    "num",
-                    moneyValueSizeClassNames[size],
-                    isUnavailable && "text-muted-foreground",
-                )}
-            >
-                {isUnavailable ? "—" : formatDecimal(value, 2, "cny")}
+            <span className="inline-flex min-w-0 flex-col">
+                <span
+                    data-slot="money-value-number"
+                    aria-hidden={compactPrimary || undefined}
+                    className={cn(
+                        "num whitespace-nowrap",
+                        moneyValueSizeClassNames[size],
+                        compactPrimary && "print:hidden",
+                        compactPrimary &&
+                            moneyMagnitudeClasses[amount.magnitude],
+                        !compactPrimary && "text-foreground",
+                        isUnavailable && "text-muted-foreground",
+                    )}
+                >
+                    {amount
+                        ? compactPrimary
+                            ? amount.compact
+                            : amount.exact
+                        : "—"}
+                </span>
+                {hint && amount ? (
+                    <span
+                        data-slot="money-value-hint"
+                        aria-hidden={!compactPrimary || undefined}
+                        className={cn(
+                            "num whitespace-nowrap text-xs font-normal leading-5",
+                            compactPrimary
+                                ? "text-muted-foreground print:text-inherit"
+                                : `${moneyMagnitudeClasses[amount.magnitude]} print:hidden`,
+                        )}
+                    >
+                        {compactPrimary ? amount.exact : hint}
+                    </span>
+                ) : null}
             </span>
             {taxBasis ? (
                 <Badge variant="neutral">
@@ -583,6 +640,7 @@ export {
     type DocumentTotalsProps,
     type MoneyValueProps,
     type MoneyValueSize,
+    type MoneyValueDisplay,
     type QuantityValueProps,
     type RateValueProps,
     type StatusTrack,

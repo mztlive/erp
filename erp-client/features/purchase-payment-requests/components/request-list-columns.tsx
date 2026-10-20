@@ -85,7 +85,12 @@ export function buildRequestColumns({
                 align: "end",
                 numeric: true,
             },
-            cell: ({ row }) => <MoneyValue value={row.original.total_amount} />,
+            cell: ({ row }) => (
+                <MoneyValue
+                    display="compact"
+                    value={row.original.total_amount}
+                />
+            ),
         },
         {
             id: "paid",
@@ -97,7 +102,12 @@ export function buildRequestColumns({
                 align: "end",
                 numeric: true,
             },
-            cell: ({ row }) => <MoneyValue value={row.original.paid_amount} />,
+            cell: ({ row }) => (
+                <MoneyValue
+                    display="compact"
+                    value={row.original.paid_amount}
+                />
+            ),
         },
         {
             id: "unpaid",
@@ -110,7 +120,10 @@ export function buildRequestColumns({
                 numeric: true,
             },
             cell: ({ row }) => (
-                <MoneyValue value={row.original.unpaid_amount} />
+                <MoneyValue
+                    display="compact"
+                    value={row.original.unpaid_amount}
+                />
             ),
         },
         {

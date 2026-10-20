@@ -237,6 +237,7 @@ export function buildSalesOrderCreateLineItemColumns(
                                   >
                                       {(field) => (
                                           <field.TextField
+                                              money
                                               id={`sales-orders-create-line-${toAutomationIdSegment(lineKey)}-face-value`}
                                               label="面值"
                                               required

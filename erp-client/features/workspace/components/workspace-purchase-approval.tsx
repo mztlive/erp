@@ -311,8 +311,12 @@ function PurchaseComparison({
         },
         {
             label: "含税单价",
-            sales: <MoneyValue value={source?.unit_price_gross} />,
-            purchase: <MoneyValue value={line.unit_cost_gross} />,
+            sales: (
+                <MoneyValue display="exact" value={source?.unit_price_gross} />
+            ),
+            purchase: (
+                <MoneyValue display="exact" value={line.unit_cost_gross} />
+            ),
         },
         ...(source
             ? [
@@ -325,7 +329,12 @@ function PurchaseComparison({
                       ) : (
                           "未填写"
                       ),
-                      purchase: <MoneyValue value={line.unit_cost_gross} />,
+                      purchase: (
+                          <MoneyValue
+                              display="exact"
+                              value={line.unit_cost_gross}
+                          />
+                      ),
                   },
               ]
             : []),

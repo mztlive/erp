@@ -1,4 +1,4 @@
-import { formatCurrencyFixed } from "@/lib/fixed-decimal"
+import { describeMoney } from "@/lib/money-display"
 
 export const PROFIT_LOSS_SCOPE_LABEL = "非卡券 · 不含税"
 
@@ -23,14 +23,5 @@ export const COST_TYPE_LABEL: Record<string, string> = Object.fromEntries(
 )
 
 export function formatMoneyDisplay(value: string | undefined | null): string {
-    if (value == null || value === "" || value === "—") return "—"
-    try {
-        return formatCurrencyFixed(value, {
-            maxScale: 6,
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        })
-    } catch {
-        return value
-    }
+    return describeMoney(value)?.exact ?? "—"
 }

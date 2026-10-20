@@ -254,6 +254,7 @@ export function PortalApplicationContent({
                                 <p>
                                     原包装含税单价：
                                     <MoneyValue
+                                        display="exact"
                                         value={
                                             sku.packaging?.original_unit_price
                                         }

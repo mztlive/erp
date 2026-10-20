@@ -116,6 +116,7 @@ export function ReturnInvoiceDialog({
                         name="amount"
                         children={(field) => (
                             <field.TextField
+                                money
                                 id="return-invoice-amount"
                                 label="本次红冲含税金额"
                                 inputMode="decimal"

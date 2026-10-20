@@ -1,3 +1,4 @@
+import { MoneyValue } from "@/components/business/values"
 import Link from "next/link"
 import { ExternalLinkIcon } from "lucide-react"
 
@@ -12,7 +13,6 @@ import {
     DescriptionList,
     DescriptionTerm,
 } from "@/components/ui/description-list"
-import { formatMoneyDisplay } from "@/features/actual-profit-loss/lib/presentation"
 import type { CostEntryDetail } from "@/features/actual-profit-loss/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
@@ -25,8 +25,8 @@ export function CostEntryDetailBody({ entry }: { entry: CostEntryDetail }) {
                     <AlertTitle>仅可查看授权范围内的成本分配</AlertTitle>
                     <AlertDescription>
                         范围内含税金额{" "}
-                        {formatMoneyDisplay(entry.scopeAmountGross)}，
-                        不含税金额 {formatMoneyDisplay(entry.scopeAmountNet)}。
+                        <MoneyValue value={entry.scopeAmountGross} />，
+                        不含税金额 <MoneyValue value={entry.scopeAmountNet} />。
                         整笔金额、其他分配和完整来源资料受权限限制。
                     </AlertDescription>
                 </Alert>
@@ -65,7 +65,7 @@ export function CostEntryDetailBody({ entry }: { entry: CostEntryDetail }) {
                                 taxAmountToneClass("含税金额"),
                             )}
                         >
-                            {formatMoneyDisplay(entry.amountGross)}
+                            <MoneyValue value={entry.amountGross} />
                         </span>
                         <span className="ml-1 text-xs text-muted-foreground">
                             仅展示，不参与利润
@@ -78,7 +78,7 @@ export function CostEntryDetailBody({ entry }: { entry: CostEntryDetail }) {
                         <span className="num">
                             {entry.taxRate} /{" "}
                             <span className={taxAmountToneClass("税额")}>
-                                {formatMoneyDisplay(entry.taxAmount)}
+                                <MoneyValue value={entry.taxAmount} />
                             </span>
                         </span>
                     </DescriptionDetails>
@@ -92,7 +92,7 @@ export function CostEntryDetailBody({ entry }: { entry: CostEntryDetail }) {
                                 taxAmountToneClass("不含税金额"),
                             )}
                         >
-                            {formatMoneyDisplay(entry.amountNet)}
+                            <MoneyValue value={entry.amountNet} />
                         </span>
                         <span className="ml-1 text-xs text-muted-foreground">
                             利润口径

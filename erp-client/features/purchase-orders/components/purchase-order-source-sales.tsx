@@ -81,7 +81,9 @@ const SALES_COLUMNS: ColumnDef<SalesLine>[] = [
             align: "end",
             numeric: true,
         },
-        cell: ({ row }) => <MoneyValue value={row.original.unitPriceGross} />,
+        cell: ({ row }) => (
+            <MoneyValue display="exact" value={row.original.unitPriceGross} />
+        ),
     },
     {
         id: "gross",

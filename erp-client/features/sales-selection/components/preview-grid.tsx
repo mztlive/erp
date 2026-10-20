@@ -81,6 +81,7 @@ const PreviewCard = ({
                     <CardHeader className="gap-1.5 p-3 pb-0">
                         <div className="flex items-baseline gap-1.5">
                             <MoneyValue
+                                display="exact"
                                 className="text-base font-bold text-foreground"
                                 value={item.price_gross || item.price}
                             />

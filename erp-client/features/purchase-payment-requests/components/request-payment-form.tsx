@@ -196,6 +196,7 @@ export function RequestPaymentForm({
                     <form.AppField name="amount">
                         {(field) => (
                             <field.TextField
+                                money
                                 id="ppr-pay-amount"
                                 label="本次实际付款金额"
                                 inputMode="decimal"

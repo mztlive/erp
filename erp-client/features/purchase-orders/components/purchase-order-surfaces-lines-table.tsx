@@ -116,7 +116,10 @@ function buildPurchaseOrderLinesColumns(
                         {row.original.lineType === "LOGISTICS_FEE" ? (
                             "—"
                         ) : (
-                            <MoneyValue value={row.original.unitCostGross} />
+                            <MoneyValue
+                                display="exact"
+                                value={row.original.unitCostGross}
+                            />
                         )}
                         {summary ? (
                             <div className="text-xs text-muted-foreground">

@@ -237,6 +237,7 @@ export function RequestDraftGroup({
                             >
                                 {(field) => (
                                     <field.TextField
+                                        money
                                         id={`ppr-create-line-${toAutomationIdSegment(candidate.payable_account_id)}`}
                                         label="本次申请金额"
                                         required

@@ -184,6 +184,7 @@ export function SourcingProductSummaryList({
                                                                 <span className="shrink-0">
                                                                     含税单价{" "}
                                                                     <MoneyValue
+                                                                        display="exact"
                                                                         value={
                                                                             option.unitCostGross
                                                                         }
