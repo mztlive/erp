@@ -2966,6 +2966,660 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         ],
     },
     {
+        name: "采购询价",
+        description: "询价需求与采购反馈协作",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/procurement-inquiries/{id}/fee-bases/{basis_id}/attachments/{asset_id}",
+                description: "下载当前责任费用依据附件",
+                permission: {
+                    resource: "procurement_inquiry",
+                    action: "internal_quote",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/procurement-inquiries",
+                description: "查询当前采购询价任务",
+                permission: {
+                    resource: "procurement_inquiry",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/procurement-inquiries/{id}",
+                description: "读取当前采购询价责任资料",
+                permission: {
+                    resource: "procurement_inquiry",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/procurement-inquiries/{id}/receipts/{command_key}",
+                description: "核对采购询价命令结果",
+                permission: {
+                    resource: "procurement_inquiry",
+                    action: "recover",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/procurement-inquiries/{id}/claim",
+                description: "接手采购询价",
+                permission: {
+                    resource: "procurement_inquiry",
+                    action: "claim",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/procurement-inquiries/{id}/supplement",
+                description: "要求补充询价需求",
+                permission: {
+                    resource: "procurement_inquiry",
+                    action: "supplement",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/procurement-inquiries/{id}/reassign",
+                description: "改派询价责任",
+                permission: {
+                    resource: "procurement_inquiry",
+                    action: "reassign",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/procurement-inquiries/{id}/feedback",
+                description: "保存询价反馈草稿",
+                permission: {
+                    resource: "procurement_inquiry",
+                    action: "save_feedback",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/procurement-inquiries/{id}/publish",
+                description: "发布询价完整反馈",
+                permission: {
+                    resource: "procurement_inquiry",
+                    action: "publish",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/procurement-inquiries/{id}/internal-quotes",
+                description: "读取当前责任行内部报价",
+                permission: {
+                    resource: "procurement_inquiry",
+                    action: "internal_quote",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/procurement-inquiries/{id}/internal-quotes",
+                description: "保存询价内部报价",
+                permission: {
+                    resource: "procurement_inquiry",
+                    action: "internal_quote",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/procurement-inquiries/{id}/internal-quotes/{quote_id}/attachments/{asset_id}",
+                description: "下载当前责任报价附件",
+                permission: {
+                    resource: "procurement_inquiry",
+                    action: "internal_quote",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/procurement-inquiries/{id}/fee-bases",
+                description: "读取询价费用内部依据",
+                permission: {
+                    resource: "procurement_inquiry",
+                    action: "internal_quote",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/procurement-inquiries/{id}/fee-bases",
+                description: "保存询价费用内部依据",
+                permission: {
+                    resource: "procurement_inquiry",
+                    action: "internal_quote",
+                },
+            },
+        ],
+    },
+    {
+        name: "销售询价",
+        description: "询价需求与采购反馈协作",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-inquiries",
+                description: "查询销售询价列表",
+                permission: {
+                    resource: "sales_inquiry",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-inquiries/{id}",
+                description: "读取销售询价详情",
+                permission: {
+                    resource: "sales_inquiry",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-inquiries/template-products",
+                description: "重验客户模板商品资格",
+                permission: {
+                    resource: "sales_inquiry",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-inquiries",
+                description: "创建销售询价",
+                permission: {
+                    resource: "sales_inquiry",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/sales-inquiries/{id}/draft",
+                description: "保存询价需求",
+                permission: {
+                    resource: "sales_inquiry",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-inquiries/{id}/submit",
+                description: "提交询价需求",
+                permission: {
+                    resource: "sales_inquiry",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-inquiries/{id}/accept",
+                description: "接受询价反馈",
+                permission: {
+                    resource: "sales_inquiry",
+                    action: "accept",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-inquiries/{id}/reinquire",
+                description: "要求重新询价",
+                permission: {
+                    resource: "sales_inquiry",
+                    action: "reinquire",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-inquiries/{id}/close",
+                description: "关闭销售询价",
+                permission: {
+                    resource: "sales_inquiry",
+                    action: "close",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-inquiries/{id}/imports/preview",
+                description: "预览客户选品导入",
+                permission: {
+                    resource: "sales_inquiry",
+                    action: "import",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-inquiries/{id}/imports/confirm",
+                description: "确认客户选品导入",
+                permission: {
+                    resource: "sales_inquiry",
+                    action: "import",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-inquiries/{id}/sales-basis",
+                description: "读取询价转销售依据",
+                permission: {
+                    resource: "sales_inquiry",
+                    action: "convert_sales",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-inquiries/{id}/fee-sales",
+                description: "查询询价费用归属销售",
+                permission: {
+                    resource: "sales_inquiry",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-inquiries/{id}/fee-allocations",
+                description: "分配询价费用归属",
+                permission: {
+                    resource: "sales_inquiry",
+                    action: "convert_sales",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-inquiries/receipts/{command_key}",
+                description: "核对新建询价命令结果",
+                permission: {
+                    resource: "sales_inquiry",
+                    action: "recover",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-inquiries/{id}/receipts/{command_key}",
+                description: "核对销售询价命令结果",
+                permission: {
+                    resource: "sales_inquiry",
+                    action: "recover",
+                },
+            },
+        ],
+    },
+    {
+        name: "成本费用",
+        description: "成本事实与费用登记",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-orders/{id}/inquiry-fees",
+                description: "读取财务登记询价费用候选",
+                permission: {
+                    resource: "cost_entry",
+                    action: "create",
+                },
+            },
+        ],
+    },
+    {
+        name: "采购单",
+        description: "采购单、采购提交与采购变更管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-orders/expense-sources/{id}/inquiry-fees",
+                description: "读取销售来源询价费用候选",
+                permission: {
+                    resource: "purchase_order",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-orders/{id}/sales-materials/{asset_id}/download",
+                description: "下载采购关联销售合同及凭证",
+                permission: {
+                    resource: "purchase_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-orders",
+                description: "查询采购单列表",
+                permission: {
+                    resource: "purchase_order",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders",
+                description: "依据采购确认创建采购单",
+                permission: {
+                    resource: "purchase_order",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/from-sourcing",
+                description: "确认供给分配",
+                permission: {
+                    resource: "purchase_order",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-orders/{id}",
+                description: "查询采购单对象中心",
+                permission: {
+                    resource: "purchase_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-orders/{id}/payments",
+                description: "查询采购单对象中心",
+                permission: {
+                    resource: "purchase_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-orders/{id}/payments/{payment_id}/receipt",
+                description: "查询采购单对象中心",
+                permission: {
+                    resource: "purchase_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-orders/{id}/delivery-options",
+                description: "保存采购草稿",
+                permission: {
+                    resource: "purchase_order",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/draft",
+                description: "保存采购草稿",
+                permission: {
+                    resource: "purchase_order",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/void",
+                description: "作废采购单草稿",
+                permission: {
+                    resource: "purchase_order",
+                    action: "delete",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/submit",
+                description: "提交采购单审批",
+                permission: {
+                    resource: "purchase_order",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/source-update/maintain",
+                description: "登记维持原采购依据",
+                permission: {
+                    resource: "purchase_order",
+                    action: "maintain_source",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/cancel-approval",
+                description: "撤回采购单审批",
+                permission: {
+                    resource: "purchase_order",
+                    action: "cancel_approval",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-creation-bases",
+                description: "查询供给分配依据",
+                permission: {
+                    resource: "purchase_order",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/changes",
+                description: "发起采购变更",
+                permission: {
+                    resource: "purchase_change_order",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-change-orders",
+                description: "查询采购变更单列表",
+                permission: {
+                    resource: "purchase_change_order",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-change-orders/{id}",
+                description: "查询采购变更单详情",
+                permission: {
+                    resource: "purchase_change_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-change-orders/{id}/submit",
+                description: "提交采购变更审批",
+                permission: {
+                    resource: "purchase_change_order",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-change-orders/{id}/cancel-approval",
+                description: "撤回采购变更审批",
+                permission: {
+                    resource: "purchase_change_order",
+                    action: "cancel_approval",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-change-orders/{id}/effect",
+                description: "采购变更生效",
+                permission: {
+                    resource: "purchase_change_order",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-change-orders/{id}/draft",
+                description: "读取原采购变更草稿",
+                permission: {
+                    resource: "purchase_change_order",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-change-orders/{id}/void",
+                description: "作废采购变更单",
+                permission: {
+                    resource: "purchase_change_order",
+                    action: "delete",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-orders/{id}/emails",
+                description: "查看采购邮件发送记录",
+                permission: {
+                    resource: "purchase_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-orders/{id}/paper",
+                description: "下载供应商采购单",
+                permission: {
+                    resource: "purchase_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-orders/{id}/expense-purchases",
+                description: "从销售单追加费用采购单",
+                permission: {
+                    resource: "purchase_order",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/expenses/{expense_line_id}/occurrence",
+                description: "确认采购费用行已发生",
+                permission: {
+                    resource: "purchase_order",
+                    action: "confirm_expense",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/freight-waivers",
+                description: "标记供应商不收运费",
+                permission: {
+                    resource: "purchase_order",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/email",
+                description: "发送采购单邮件给供应商",
+                permission: {
+                    resource: "purchase_order",
+                    action: "send_email",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-orders/expense-sources",
+                description: "查询费用采购来源销售单",
+                permission: {
+                    resource: "purchase_order",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-orders/expense-sources/{id}",
+                description: "读取费用采购来源明细",
+                permission: {
+                    resource: "purchase_order",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-orders/{id}/payment-arrangement",
+                description: "查询采购付款安排",
+                permission: {
+                    resource: "purchase_order",
+                    action: "detail",
+                },
+            },
+        ],
+    },
+    {
         name: "销售复核",
         description: "销售审批与采购二次确认（W05/W07）管理",
         permissions: [
@@ -3463,322 +4117,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "sales_selection_booklet",
                     action: "get",
-                },
-            },
-        ],
-    },
-    {
-        name: "采购单",
-        description: "采购单、采购提交与采购变更管理",
-        permissions: [
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/purchase-orders/{id}/sales-materials/{asset_id}/download",
-                description: "下载采购关联销售合同及凭证",
-                permission: {
-                    resource: "purchase_order",
-                    action: "detail",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/purchase-orders",
-                description: "查询采购单列表",
-                permission: {
-                    resource: "purchase_order",
-                    action: "list",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/purchase-orders",
-                description: "依据采购确认创建采购单",
-                permission: {
-                    resource: "purchase_order",
-                    action: "create",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/purchase-orders/from-sourcing",
-                description: "确认供给分配",
-                permission: {
-                    resource: "purchase_order",
-                    action: "create",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/purchase-orders/{id}",
-                description: "查询采购单对象中心",
-                permission: {
-                    resource: "purchase_order",
-                    action: "detail",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/purchase-orders/{id}/payments",
-                description: "查询采购单对象中心",
-                permission: {
-                    resource: "purchase_order",
-                    action: "detail",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/purchase-orders/{id}/payments/{payment_id}/receipt",
-                description: "查询采购单对象中心",
-                permission: {
-                    resource: "purchase_order",
-                    action: "detail",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/purchase-orders/{id}/delivery-options",
-                description: "保存采购草稿",
-                permission: {
-                    resource: "purchase_order",
-                    action: "update",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/purchase-orders/{id}/draft",
-                description: "保存采购草稿",
-                permission: {
-                    resource: "purchase_order",
-                    action: "update",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/purchase-orders/{id}/void",
-                description: "作废采购单草稿",
-                permission: {
-                    resource: "purchase_order",
-                    action: "delete",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/purchase-orders/{id}/submit",
-                description: "提交采购单审批",
-                permission: {
-                    resource: "purchase_order",
-                    action: "submit",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/purchase-orders/{id}/source-update/maintain",
-                description: "登记维持原采购依据",
-                permission: {
-                    resource: "purchase_order",
-                    action: "maintain_source",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/purchase-orders/{id}/cancel-approval",
-                description: "撤回采购单审批",
-                permission: {
-                    resource: "purchase_order",
-                    action: "cancel_approval",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/purchase-creation-bases",
-                description: "查询供给分配依据",
-                permission: {
-                    resource: "purchase_order",
-                    action: "create",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/purchase-orders/{id}/changes",
-                description: "发起采购变更",
-                permission: {
-                    resource: "purchase_change_order",
-                    action: "create",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/purchase-change-orders",
-                description: "查询采购变更单列表",
-                permission: {
-                    resource: "purchase_change_order",
-                    action: "list",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/purchase-change-orders/{id}",
-                description: "查询采购变更单详情",
-                permission: {
-                    resource: "purchase_change_order",
-                    action: "detail",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/purchase-change-orders/{id}/submit",
-                description: "提交采购变更审批",
-                permission: {
-                    resource: "purchase_change_order",
-                    action: "submit",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/purchase-change-orders/{id}/cancel-approval",
-                description: "撤回采购变更审批",
-                permission: {
-                    resource: "purchase_change_order",
-                    action: "cancel_approval",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/purchase-change-orders/{id}/effect",
-                description: "采购变更生效",
-                permission: {
-                    resource: "purchase_change_order",
-                    action: "post",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/purchase-change-orders/{id}/draft",
-                description: "读取原采购变更草稿",
-                permission: {
-                    resource: "purchase_change_order",
-                    action: "submit",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/purchase-change-orders/{id}/void",
-                description: "作废采购变更单",
-                permission: {
-                    resource: "purchase_change_order",
-                    action: "delete",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/purchase-orders/{id}/emails",
-                description: "查看采购邮件发送记录",
-                permission: {
-                    resource: "purchase_order",
-                    action: "detail",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/purchase-orders/{id}/paper",
-                description: "下载供应商采购单",
-                permission: {
-                    resource: "purchase_order",
-                    action: "detail",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/sales-orders/{id}/expense-purchases",
-                description: "从销售单追加费用采购单",
-                permission: {
-                    resource: "purchase_order",
-                    action: "create",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/purchase-orders/{id}/expenses/{expense_line_id}/occurrence",
-                description: "确认采购费用行已发生",
-                permission: {
-                    resource: "purchase_order",
-                    action: "confirm_expense",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/purchase-orders/{id}/freight-waivers",
-                description: "标记供应商不收运费",
-                permission: {
-                    resource: "purchase_order",
-                    action: "update",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/purchase-orders/{id}/email",
-                description: "发送采购单邮件给供应商",
-                permission: {
-                    resource: "purchase_order",
-                    action: "send_email",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/purchase-orders/expense-sources",
-                description: "查询费用采购来源销售单",
-                permission: {
-                    resource: "purchase_order",
-                    action: "create",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/purchase-orders/expense-sources/{id}",
-                description: "读取费用采购来源明细",
-                permission: {
-                    resource: "purchase_order",
-                    action: "create",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/purchase-orders/{id}/payment-arrangement",
-                description: "查询采购付款安排",
-                permission: {
-                    resource: "purchase_order",
-                    action: "detail",
                 },
             },
         ],
