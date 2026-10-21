@@ -54,6 +54,7 @@ export function ContractSearchCombobox({
     )
     const {
         rows,
+        onRefresh,
         loading,
         emptyLabel: resolvedEmptyLabel,
     } = useRemoteSearchCombobox({
@@ -79,6 +80,7 @@ export function ContractSearchCombobox({
                 onSearchChange={search.onSearchChange}
                 filterMode="remote"
                 loading={loading}
+                onRefresh={onRefresh}
                 emptyLabel={resolvedEmptyLabel}
             />
             <SelectorQueryFeedback

@@ -1,5 +1,6 @@
 "use client"
 
+import { ApprovalQueryFeedback } from "@/features/approval-workflow/components/approval-query-feedback"
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
 import { DefinitionBindingCard } from "@/features/approval-workflow/components/definition-binding-card"
 import { ExecutionHistory } from "@/features/approval-workflow/components/execution-history"
@@ -64,6 +65,12 @@ export function SalesChangeOrderApprovalArea({
     )
     const approvalHistory = (
         <>
+            <ApprovalQueryFeedback
+                surface="sales-change-order-approval-area"
+                instanceId={instanceId}
+                historyQuery={historyQuery}
+                recoveryQuery={phase === "runtime" ? recoveryQuery : undefined}
+            />
             <RuntimeSummary instance={approval?.instance} compact />
             <ExecutionHistory
                 items={historyItems}
@@ -114,7 +121,11 @@ export function SalesChangeOrderApprovalArea({
             <ApprovalActionBar
                 id="sales-orders-change-approval-bar"
                 allowedActions={allowedActions}
-                recoveryOptions={recoveryQuery.data?.actions ?? []}
+                recoveryOptions={
+                    recoveryQuery.isError
+                        ? []
+                        : (recoveryQuery.data?.actions ?? [])
+                }
                 workItemId={workItemId}
                 expectedTaskVersion={expectedTaskVersion}
                 instance={approval?.instance}

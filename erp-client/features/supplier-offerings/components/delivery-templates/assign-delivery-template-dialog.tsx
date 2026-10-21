@@ -106,6 +106,11 @@ export function AssignDeliveryTemplateDialog({
                                     allowClear={false}
                                     loading={templates.isPending}
                                     options={options}
+                                    onRefresh={() =>
+                                        templates.refetch({
+                                            throwOnError: true,
+                                        })
+                                    }
                                 />
                             )}
                         </form.AppField>

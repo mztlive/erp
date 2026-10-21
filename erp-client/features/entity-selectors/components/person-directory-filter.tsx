@@ -147,6 +147,14 @@ export function PersonDirectoryFilter({
                         value={ids[0] ?? null}
                         options={uniqueOptions}
                         filterMode="remote"
+                        onRefresh={() =>
+                            Promise.all([
+                                list.refetch({ throwOnError: true }),
+                                ...(ids.length
+                                    ? [selected.refetch({ throwOnError: true })]
+                                    : []),
+                            ])
+                        }
                         onSearchChange={search.onSearchChange}
                         loading={list.isFetching || selected.isFetching}
                         emptyLabel={emptyLabel}
@@ -177,6 +185,14 @@ export function PersonDirectoryFilter({
                     value={ids}
                     options={uniqueOptions}
                     filterMode="remote"
+                    onRefresh={() =>
+                        Promise.all([
+                            list.refetch({ throwOnError: true }),
+                            ...(ids.length
+                                ? [selected.refetch({ throwOnError: true })]
+                                : []),
+                        ])
+                    }
                     onSearchChange={search.onSearchChange}
                     loading={list.isFetching}
                     hasMore={hasMore}

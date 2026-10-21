@@ -100,6 +100,14 @@ export function SettlementPartySearchCombobox({
                 }}
                 onSearchChange={setInput}
                 filterMode="remote"
+                onRefresh={() =>
+                    Promise.all([
+                        list.refetch({ throwOnError: true }),
+                        ...(value
+                            ? [selected.refetch({ throwOnError: true })]
+                            : []),
+                    ])
+                }
                 loading={
                     list.isFetching || (selected.isFetching && !selectedRow)
                 }

@@ -6,6 +6,7 @@ import { invoiceTaxAllocations } from "@/features/supplier-payables/lib/invoice-
  */
 
 import { apiPost } from "@/lib/api"
+import { getErrorCode } from "@/lib/api/errors"
 import type {
     BackendInvoice,
     BackendPurchaseInvoiceAllocation,
@@ -83,11 +84,13 @@ export async function submitInvoice(
         }
         return result
     } catch (err) {
+        const unknown = isOutcomeUnknown(err)
         return {
-            status: "failed",
-            title: "进项发票失败",
+            status: unknown ? "unknown" : "failed",
+            title: unknown ? "进项发票登记结果待确认" : "进项发票失败",
             description: errorMessage(err, "进项发票提交失败"),
-            errorCode: "HTTP_ERROR",
+            errorCode: getErrorCode(err) ?? "HTTP_ERROR",
+            error: err,
         }
     }
 }
@@ -120,7 +123,8 @@ export async function reverseInvoice(
             status: isOutcomeUnknown(err) ? "unknown" : "failed",
             title: "红票失败",
             description: errorMessage(err, "红票失败"),
-            errorCode: "HTTP_ERROR",
+            errorCode: getErrorCode(err) ?? "HTTP_ERROR",
+            error: err,
         }
     }
 }

@@ -98,7 +98,7 @@ export function RoleFormPage({
         )
     }
 
-    if (rolesQuery.isError) {
+    if (rolesQuery.isError && !rolesQuery.data) {
         return (
             <PageScaffold density="compact">
                 <PageHeader title={isEdit ? "编辑角色" : "新建角色"} />
@@ -153,6 +153,7 @@ export function RoleFormPage({
 
     return (
         <RoleForm
+            onRefreshRoles={() => rolesQuery.refetch({ throwOnError: true })}
             key={roleId ?? "new"}
             role={role}
             returnTo={returnTo}
@@ -168,11 +169,13 @@ export function RoleFormPage({
 function RoleForm({
     role,
     otherRoles,
+    onRefreshRoles,
     boundAccounts,
     returnTo,
 }: {
     role: AdminRole | null
     otherRoles: readonly AdminRole[]
+    onRefreshRoles: () => Promise<unknown>
     boundAccounts: number | null
     returnTo?: string
 }) {
@@ -325,6 +328,7 @@ function RoleForm({
                         >
                             {(permissions) => (
                                 <CopyRolePermissions
+                                    onRefreshRoles={onRefreshRoles}
                                     roles={otherRoles}
                                     disabled={hasWildcard || pending}
                                     currentCount={permissions.length}

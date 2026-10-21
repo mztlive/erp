@@ -16,7 +16,7 @@ import {
     listWorkspaceEmptyStateClassName,
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
-import { useAppForm } from "@/components/form"
+import { useAppForm, applyApiFormError } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
@@ -116,12 +116,16 @@ function eligibleOwners(
 
 function RuleDialog({
     open,
+    onRefreshOwners,
+
     onOpenChange,
     target,
     owners,
     ownersReady,
 }: {
     open: boolean
+    onRefreshOwners: () => Promise<unknown>
+
     onOpenChange: (open: boolean) => void
     target?: FinanceResponsibilityRule
     owners: readonly FinanceResponsibilityOwnerOption[]
@@ -154,8 +158,7 @@ function RuleDialog({
                 })
                 onOpenChange(false)
             } catch (error) {
-                // MutationCache 统一展示业务错误，避免表单重复提示。
-                void error
+                applyApiFormError(form, error)
             }
         },
     })
@@ -287,6 +290,7 @@ function RuleDialog({
                                             <field.SelectField
                                                 id="finance-responsibilities-rule-owner"
                                                 label="负责人"
+                                                onRefresh={onRefreshOwners}
                                                 options={eligibleOwners(
                                                     owners,
                                                     operation,
@@ -570,6 +574,10 @@ export function FinanceResponsibilityRulesPage() {
             </div>
             {canManage ? (
                 <RuleDialog
+                    onRefreshOwners={() =>
+                        ownersQuery.refetch({ throwOnError: true })
+                    }
+
                     key={dialogSession}
                     open={dialogOpen}
                     onOpenChange={setDialogOpen}

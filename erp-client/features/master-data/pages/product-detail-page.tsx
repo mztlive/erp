@@ -238,6 +238,27 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                                     }
                                                 >
                                                     <ProductBasicSection
+                                                        onRefreshUnits={() =>
+                                                            unitOptionsQuery.refetch(
+                                                                {
+                                                                    throwOnError: true,
+                                                                },
+                                                            )
+                                                        }
+                                                        onRefreshCategories={() =>
+                                                            categoryListQuery.refetch(
+                                                                {
+                                                                    throwOnError: true,
+                                                                },
+                                                            )
+                                                        }
+                                                        onRefreshBrands={() =>
+                                                            brandListQuery.refetch(
+                                                                {
+                                                                    throwOnError: true,
+                                                                },
+                                                            )
+                                                        }
                                                         idPrefix="master-data-product-detail-basic"
                                                         isCreate={isCreate}
                                                         canRevise={canRevise}
@@ -255,10 +276,10 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                                             brandOptions
                                                         }
                                                         categoryLoading={
-                                                            categoryListQuery.isPending
+                                                            categoryListQuery.isFetching
                                                         }
                                                         brandLoading={
-                                                            brandListQuery.isPending
+                                                            brandListQuery.isFetching
                                                         }
                                                     />
                                                 </div>

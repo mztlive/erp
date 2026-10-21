@@ -1,6 +1,11 @@
 "use client"
 
 import {
+    ComboboxRefresh,
+    type ComboboxRefreshProps,
+} from "@/components/business/combobox-refresh"
+
+import {
     Combobox,
     ComboboxContent,
     ComboboxEmpty,
@@ -29,7 +34,7 @@ type BusinessObjectOption = {
     description?: string
 }
 
-interface BusinessObjectComboboxProps {
+interface BusinessObjectComboboxProps extends ComboboxRefreshProps {
     items: readonly BusinessObjectOption[]
     value?: string
     onValueChange: (id?: string) => void
@@ -64,6 +69,7 @@ function BusinessObjectCombobox({
     placeholder = "搜索名称或编号",
     emptyLabel = "没有符合条件的对象",
     loading = false,
+    onRefresh,
     disabled = false,
     required = false,
     allowClear = true,
@@ -190,6 +196,12 @@ function BusinessObjectCombobox({
                             </ComboboxItem>
                         ))}
                     </ComboboxList>
+                    <ComboboxRefresh
+                        id={id}
+                        onRefresh={onRefresh}
+                        loading={loading}
+                        disabled={disabled}
+                    />
                 </ComboboxContent>
             </div>
         </Combobox>

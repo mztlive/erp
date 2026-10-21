@@ -13,6 +13,13 @@ export const tableActionText = {
     more: "更多",
 } as const
 
+export const comboboxText = {
+    refresh: "刷新选项",
+    refreshing: "正在刷新…",
+    refreshed: "选项已刷新",
+    refreshFailed: "选项刷新失败，请重试；已填写内容仍保留",
+} as const
+
 export const fileUploadText = {
     upload: "上传文件",
     select: "选择文件",

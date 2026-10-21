@@ -469,6 +469,9 @@ export function PortalNewProductEditor({
                             id={`${idPrefix}-brand`}
                             label="匹配已有品牌（可空）"
                             options={dictionaryOptions(brand.data ?? [])}
+                            onRefresh={() =>
+                                brand.refetch({ throwOnError: true })
+                            }
                             disabled={disabled}
                             onValueChange={(id) => {
                                 const selected = brand.data?.find(
@@ -500,6 +503,9 @@ export function PortalNewProductEditor({
                         <form.AppField name="categoryId">
                             {(field) => (
                                 <field.SelectField
+                                    onRefresh={() =>
+                                        category.refetch({ throwOnError: true })
+                                    }
                                     id={`${idPrefix}-category`}
                                     label="匹配已有分类（可空）"
                                     options={dictionaryOptions(
@@ -696,6 +702,11 @@ export function PortalNewProductEditor({
                                         >
                                             {(field) => (
                                                 <field.SelectField
+                                                    onRefresh={() =>
+                                                        unit.refetch({
+                                                            throwOnError: true,
+                                                        })
+                                                    }
                                                     id={`${prefix}-unit`}
                                                     label="匹配已有单位（可空）"
                                                     options={dictionaryOptions(

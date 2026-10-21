@@ -267,6 +267,11 @@ export function SellableListToolbar({
                             onRetry={directory.refetch}
                         >
                             <CategoryCombobox
+                                onRefresh={() =>
+                                    productFilterOptionsQuery.refetch({
+                                        throwOnError: true,
+                                    })
+                                }
                                 id="master-data-list-sellable-list-toolbar-categorycombobox-1"
                                 className="w-full"
                                 aria-label="商品分类"
@@ -310,6 +315,11 @@ export function SellableListToolbar({
                                     onRetry={directory.refetch}
                                 >
                                     <OptionCombobox
+                                        onRefresh={() =>
+                                            productFilterOptionsQuery.refetch({
+                                                throwOnError: true,
+                                            })
+                                        }
                                         id="master-data-list-sellable-list-toolbar-optioncombobox-1"
                                         className="w-full"
                                         value={productBrandIdDraft}
@@ -345,6 +355,11 @@ export function SellableListToolbar({
                                     onRetry={directory.refetch}
                                 >
                                     <OptionCombobox
+                                        onRefresh={() =>
+                                            productFilterOptionsQuery.refetch({
+                                                throwOnError: true,
+                                            })
+                                        }
                                         id="master-data-list-sellable-list-toolbar-optioncombobox-2"
                                         className="w-full"
                                         value={productSupplierIdDraft}

@@ -123,6 +123,14 @@ export function ReceivableCounterpartySearchCombobox({
                 parties={rows}
                 onSearchChange={setInput}
                 filterMode="remote"
+                onRefresh={() =>
+                    Promise.all([
+                        list.refetch({ throwOnError: true }),
+                        ...(value
+                            ? [selected.refetch({ throwOnError: true })]
+                            : []),
+                    ])
+                }
                 loading={list.isFetching || selected.isFetching}
                 emptyLabel={
                     list.isError || selected.isError

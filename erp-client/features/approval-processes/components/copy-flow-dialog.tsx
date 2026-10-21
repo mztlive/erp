@@ -132,6 +132,9 @@ function SourceFlowPicker({
                         aria-label="来源审批流"
                         value={sourceType}
                         loading={catalog.isFetching}
+                        onRefresh={() =>
+                            catalog.refetch({ throwOnError: true })
+                        }
                         options={sources.map((item) => ({
                             value: item.document_type,
                             label: documentTypeLabel(
@@ -162,6 +165,9 @@ function SourceFlowPicker({
                             label: `${versionLabel(item.definition_version)} · ${definitionStatusLabel(item.status)}`,
                         }))}
                         loading={versions.isFetching}
+                        onRefresh={() =>
+                            versions.refetch({ throwOnError: true })
+                        }
                         disabled={!sourceType}
                         allowClear={false}
                         placeholder="选择版本"

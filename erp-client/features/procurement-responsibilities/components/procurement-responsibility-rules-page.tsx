@@ -17,7 +17,7 @@ import {
     listWorkspaceStyles as styles,
 } from "@/components/business/list-workspace"
 import { CategoryCombobox } from "@/components/business/entity-comboboxes"
-import { useAppForm } from "@/components/form"
+import { useAppForm, applyApiFormError } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
@@ -117,12 +117,16 @@ function defaultValues(rule?: ProcurementResponsibilityRule): RuleFormValue {
 
 function RuleDialog({
     open,
+    onRefreshCategories,
+    onRefreshOwners,
     onOpenChange,
     target,
     categories,
     ownerOptions,
 }: {
     open: boolean
+    onRefreshCategories: () => Promise<unknown>
+    onRefreshOwners: () => Promise<unknown>
     onOpenChange: (open: boolean) => void
     target?: ProcurementResponsibilityRule
     categories: readonly {
@@ -159,8 +163,7 @@ function RuleDialog({
                 })
                 onOpenChange(false)
             } catch (error) {
-                // MutationCache 已统一提示；此处吞回异常，避免表单重复报告。
-                void error
+                applyApiFormError(form, error)
             }
         },
     })
@@ -254,6 +257,9 @@ function RuleDialog({
                                                     <CategoryCombobox
                                                         id="procurement-responsibility-rules-dialog-category"
                                                         categories={categories}
+                                                        onRefresh={
+                                                            onRefreshCategories
+                                                        }
                                                         value={
                                                             field.state.value ||
                                                             undefined
@@ -300,6 +306,7 @@ function RuleDialog({
                                     label="采购负责人"
                                     required
                                     options={ownerOptions}
+                                    onRefresh={onRefreshOwners}
                                     placeholder="选择现有账号"
                                     allowClear={false}
                                 />
@@ -608,6 +615,12 @@ export function ProcurementResponsibilityRulesPage() {
             </div>
             {canManage ? (
                 <RuleDialog
+                    onRefreshCategories={() =>
+                        categoriesQuery.refetch({ throwOnError: true })
+                    }
+                    onRefreshOwners={() =>
+                        adminsQuery.refetch({ throwOnError: true })
+                    }
                     open={dialogOpen}
                     onOpenChange={setDialogOpen}
                     target={editing}

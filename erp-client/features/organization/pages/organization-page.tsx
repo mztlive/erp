@@ -239,6 +239,9 @@ export function OrganizationPage() {
 
             {changeOpen ? (
                 <OrganizationChangeDialog
+                    onRefreshOptions={() =>
+                        stateQuery.refetch({ throwOnError: true })
+                    }
                     open={changeOpen}
                     onOpenChange={setChangeOpen}
                     view={view}

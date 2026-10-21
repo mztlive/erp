@@ -26,11 +26,13 @@ export function CopyRolePermissions({
     roles,
     disabled,
     currentCount,
+    onRefreshRoles,
     onCopy,
 }: {
     roles: readonly AdminRole[]
     disabled: boolean
     currentCount: number
+    onRefreshRoles: () => Promise<unknown>
     onCopy: (codes: string[]) => void
 }) {
     const [open, setOpen] = React.useState(false)
@@ -71,6 +73,7 @@ export function CopyRolePermissions({
                         id="governance-admin-role-form-copy-source"
                         value={sourceId}
                         onValueChange={setSourceId}
+                        onRefresh={onRefreshRoles}
                         options={sources.map((role) => ({
                             value: role.id,
                             label: role.name,

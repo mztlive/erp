@@ -166,6 +166,9 @@ export function SellableItemsFilterBar({
                         onRetry={directory.refetch}
                     >
                         <CategoryCombobox
+                            onRefresh={() =>
+                                filterOptions.refetch({ throwOnError: true })
+                            }
                             id={`${prefix}-category`}
                             className="w-full min-w-0"
                             filterLabel="分类"
@@ -208,6 +211,11 @@ export function SellableItemsFilterBar({
                                     onRetry={directory.refetch}
                                 >
                                     <OptionCombobox
+                                        onRefresh={() =>
+                                            filterOptions.refetch({
+                                                throwOnError: true,
+                                            })
+                                        }
                                         id={`${prefix}-brand`}
                                         className="w-full"
                                         aria-label="品牌"

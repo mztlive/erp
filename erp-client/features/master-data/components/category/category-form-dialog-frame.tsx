@@ -264,6 +264,13 @@ export function CategoryFormDialogFrame({
                                                     }
                                                 </Label>
                                                 <CategoryCombobox
+                                                    onRefresh={() =>
+                                                        categoryListQuery.refetch(
+                                                            {
+                                                                throwOnError: true,
+                                                            },
+                                                        )
+                                                    }
                                                     id={`${prefix}-parent`}
                                                     categories={
                                                         categoryParentOptions

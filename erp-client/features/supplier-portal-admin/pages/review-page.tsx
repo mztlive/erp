@@ -674,6 +674,11 @@ function PortalReviewForm({
                                         label={`品牌原稿：${rawProduct.brand.raw_name}`}
                                         required
                                         options={dictionaryOptions(brands.data)}
+                                        onRefresh={() =>
+                                            brands.refetch({
+                                                throwOnError: true,
+                                            })
+                                        }
                                         disabled={
                                             disabled ||
                                             !!rawProduct.brand.selected_id
@@ -687,6 +692,11 @@ function PortalReviewForm({
                             <form.AppField name="categoryId">
                                 {(field) => (
                                     <field.SelectField
+                                        onRefresh={() =>
+                                            categories.refetch({
+                                                throwOnError: true,
+                                            })
+                                        }
                                         onValueChange={(id) => {
                                             form.setFieldValue(
                                                 "categoryVersion",
@@ -941,6 +951,11 @@ function PortalReviewForm({
                         <form.AppField name="productTarget">
                             {(field) => (
                                 <field.SelectField
+                                    onRefresh={() =>
+                                        duplicates.refetch({
+                                            throwOnError: true,
+                                        })
+                                    }
                                     id="supplier-portal-review-product-target"
                                     label="本次商品建档决定"
                                     required
@@ -1006,6 +1021,11 @@ function PortalReviewForm({
                                                 >
                                                     {(field) => (
                                                         <field.SelectField
+                                                            onRefresh={() =>
+                                                                units.refetch({
+                                                                    throwOnError: true,
+                                                                })
+                                                            }
                                                             onValueChange={(
                                                                 id,
                                                             ) => {
@@ -1120,6 +1140,13 @@ function PortalReviewForm({
                                                 >
                                                     {(field) => (
                                                         <field.SelectField
+                                                            onRefresh={() =>
+                                                                duplicates.refetch(
+                                                                    {
+                                                                        throwOnError: true,
+                                                                    },
+                                                                )
+                                                            }
                                                             id={`${prefix}-target`}
                                                             label="本次规格建档决定"
                                                             required

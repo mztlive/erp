@@ -131,6 +131,7 @@ export function OrganizationChangeDialog({
     expectedVersion,
     blockedReason,
     previewing,
+    onRefreshOptions,
     submitting,
     onPreview,
     onSubmit,
@@ -142,6 +143,7 @@ export function OrganizationChangeDialog({
     expectedVersion: number | undefined
     blockedReason?: string
     previewing: boolean
+    onRefreshOptions: () => Promise<unknown>
     submitting: boolean
     onPreview: (
         request: ReturnType<typeof buildOrganizationChangeRequest>,
@@ -335,6 +337,7 @@ export function OrganizationChangeDialog({
                                             <field.SelectField
                                                 id="organization-change-parent"
                                                 label="上级组织"
+                                                onRefresh={onRefreshOptions}
                                                 options={unitOptions}
                                                 allowClear
                                             />
@@ -357,6 +360,7 @@ export function OrganizationChangeDialog({
                                                         ? "所属部门（调整后）"
                                                         : "目标组织"
                                                 }
+                                                onRefresh={onRefreshOptions}
                                                 options={unitOptions}
                                             />
                                         )}
@@ -378,6 +382,9 @@ export function OrganizationChangeDialog({
                                                         label="人员"
                                                         required
                                                         placeholder="请选择人员，可多选"
+                                                        onRefresh={
+                                                            onRefreshOptions
+                                                        }
                                                         options={peopleOptionsFor(
                                                             targetUnitId,
                                                         )}
@@ -406,6 +413,7 @@ export function OrganizationChangeDialog({
                                                 label="人员"
                                                 required
                                                 disabled={Boolean(draft.userId)}
+                                                onRefresh={onRefreshOptions}
                                                 options={peopleOptions}
                                             />
                                         )}

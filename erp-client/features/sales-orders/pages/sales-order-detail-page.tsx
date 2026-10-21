@@ -192,7 +192,8 @@ export function SalesOrderDetailPage({
         section,
         fromWorkspace,
         returnTo,
-        hasEligibleAcceptance: eligibilityQuery.data === true,
+        hasEligibleAcceptance:
+            !eligibilityQuery.isError && eligibilityQuery.data === true,
         canViewExtraCost,
         canSupplementContract: canSupplementSalesOrderContract(
             order,
@@ -214,6 +215,14 @@ export function SalesOrderDetailPage({
 
     return (
         <PageScaffold density="compact" className="min-h-0 overflow-hidden">
+            {eligibilityQuery.isError ? (
+                <BusinessFailureState
+                    id="sales-orders-acceptance-eligibility-failure"
+                    title="验收条件读取失败"
+                    error={eligibilityQuery.error}
+                    onRetry={() => void eligibilityQuery.refetch()}
+                />
+            ) : null}
             {order.loadWarnings?.map((warning) => (
                 <BusinessFailureState
                     key={warning}

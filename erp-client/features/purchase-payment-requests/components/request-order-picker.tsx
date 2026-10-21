@@ -21,10 +21,12 @@ export function RequestOrderPicker({
     form,
     candidates,
     editing,
+    onRefreshCandidates,
 }: {
     form: DraftForm
     candidates: PaymentCandidate[]
     editing: boolean
+    onRefreshCandidates: () => Promise<unknown>
 }) {
     const [search, setSearch] = useState("")
     const [supplierId, setSupplierId] = useState<string | null>(null)
@@ -74,6 +76,7 @@ export function RequestOrderPicker({
                             <OptionCombobox
                                 id="ppr-create-supplier-filter"
                                 options={suppliers}
+                                onRefresh={onRefreshCandidates}
                                 value={supplierId}
                                 onValueChange={setSupplierId}
                                 filterLabel="供应商"

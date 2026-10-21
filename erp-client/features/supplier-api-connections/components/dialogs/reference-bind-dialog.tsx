@@ -115,6 +115,9 @@ export function ReferenceBindDialog({
                     </Label>
                     <OpaqueReferenceSearchCombobox
                         options={optionsQuery.data ?? []}
+                        onRefresh={() =>
+                            optionsQuery.refetch({ throwOnError: true })
+                        }
                         loading={optionsQuery.isFetching}
                         emptyLabel="当前环境没有可选择的配置，请先登记对应的供应商技术参数。"
                         id={inputId}

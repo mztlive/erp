@@ -397,11 +397,16 @@ export async function fetchAllocationSession(input: {
 
     const draftSessionId = input.draftSessionId ?? nextSessionId()
     // 会话内供应商名以主数据实时解析；缺失时用业务占位，不上屏供应商 ID。
+    let supplierLoadError: unknown
     const supplierOption = await fetchSupplierOption(input.supplierId).catch(
-        () => null,
+        (error: unknown) => {
+            supplierLoadError = error
+            return null
+        },
     )
     const view: AllocationSessionView = {
         draftSessionId,
+        supplierLoadError,
         track: input.track,
         supplierId: input.supplierId,
         supplierName: businessLabelOrPlaceholder(

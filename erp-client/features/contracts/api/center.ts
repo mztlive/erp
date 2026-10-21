@@ -35,10 +35,7 @@ export async function fetchContractCenter(
             `/admin/contracts/${contractId}`,
         )
     } catch (error) {
-        if (
-            isApiError(error) &&
-            (error.status === 404 || error.status === 403)
-        ) {
+        if (isApiError(error) && error.status === 404) {
             return null
         }
         throw error

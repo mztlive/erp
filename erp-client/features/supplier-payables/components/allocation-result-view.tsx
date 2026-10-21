@@ -87,6 +87,7 @@ export function AllocationResultView({
                     <Button
                         id="supplier-payables-allocation-result-close"
                         type="button"
+                        disabled={result.status === "unknown" || pending}
                         variant="outline"
                         size="sm"
                         onClick={onClose}

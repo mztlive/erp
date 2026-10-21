@@ -1,5 +1,10 @@
 "use client"
 
+import {
+    ComboboxRefresh,
+    type ComboboxRefreshProps,
+} from "@/components/business/combobox-refresh"
+
 import * as React from "react"
 
 import {
@@ -33,7 +38,7 @@ function toInternal(options: readonly ComboboxOption[]): InternalOption[] {
     }))
 }
 
-export type MultiOptionComboboxProps = {
+export type MultiOptionComboboxProps = ComboboxRefreshProps & {
     options: readonly ComboboxOption[]
     /** 已选值；多选用逗号分隔值数组承载。 */
     value: readonly string[]
@@ -85,14 +90,25 @@ export function MultiOptionCombobox({
     filterMode = "local",
     onSearchChange,
     loading = false,
+    onRefresh,
     hasMore = false,
     onLoadMore,
     loadMoreId,
 }: MultiOptionComboboxProps) {
     const items = React.useMemo(() => toInternal(options), [options])
     const selected = React.useMemo(
-        () => items.filter((item) => value.includes(item.value)),
-        [items, value],
+        () =>
+            value.map(
+                (key) =>
+                    items.find((item) => item.value === key) ?? {
+                        value: key,
+                        label: loading
+                            ? "已选项（正在核对）"
+                            : "已选项（当前不可用）",
+                        __search: "",
+                    },
+            ),
+        [items, value, loading],
     )
     const anchorRef = useComboboxAnchor()
 
@@ -236,6 +252,12 @@ export function MultiOptionCombobox({
                         加载更多
                     </Button>
                 ) : null}
+                <ComboboxRefresh
+                    id={id}
+                    onRefresh={onRefresh}
+                    loading={loading}
+                    disabled={disabled}
+                />
             </ComboboxContent>
         </Combobox>
     )

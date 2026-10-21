@@ -378,6 +378,7 @@ type AllocationPoolItem = Readonly<{
 
 export type AllocationSessionView = Readonly<{
     draftSessionId: string
+    supplierLoadError?: unknown
     track: AllocationTrack
     supplierId: string
     supplierName: string
@@ -464,6 +465,7 @@ type FormalSubmitStatus = "succeeded" | "failed" | "unknown" | "blocked"
 
 export type FormalSubmitResult = {
     status: FormalSubmitStatus
+    error?: unknown
     title: string
     description: string
     reference?: string

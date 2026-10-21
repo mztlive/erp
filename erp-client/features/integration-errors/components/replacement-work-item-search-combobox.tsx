@@ -53,6 +53,11 @@ export function ReplacementWorkItemSearchCombobox({
         <OptionCombobox
             {...props}
             options={options}
+            onRefresh={
+                currentUserId
+                    ? () => query.refetch({ throwOnError: true })
+                    : undefined
+            }
             loading={profileQuery.isPending || query.isFetching}
             emptyLabel={
                 query.isError || profileQuery.isError

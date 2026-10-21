@@ -1,7 +1,12 @@
 "use client"
 
 import * as React from "react"
-import { KeyRoundIcon, PencilIcon, Trash2Icon } from "lucide-react"
+import {
+    EllipsisIcon,
+    KeyRoundIcon,
+    PencilIcon,
+    Trash2Icon,
+} from "lucide-react"
 import {
     AccountProfileEditor,
     type AccountProfileSnapshot,
@@ -13,12 +18,17 @@ import { DeleteAdminDialog } from "../components/accounts/delete-admin-dialog"
 import {
     BusinessFailureState,
     DetailPageHeader,
-    GuardedBusinessAction,
     PageScaffold,
     surfacePanelClassName,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
 import { Button } from "@/components/ui/button"
+import {
+    DropdownMenu,
+    DropdownMenuTrigger,
+    DropdownMenuContent,
+    DropdownMenuItem,
+} from "@/components/ui/dropdown-menu"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -99,9 +109,19 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
     const hasSystemRole = account.role_ids.some((id) =>
         roles.data?.some((role) => role.id === id && role.system),
     )
+    const singleRole =
+        account.role_ids.length === 1
+            ? roles.data?.find((role) => role.id === account.role_ids[0])
+            : undefined
+    const deleteDisabledReason = hasSystemRole
+        ? "系统角色账号不可删除"
+        : !roles.isSuccess
+          ? "角色尚未读取，暂不能删除"
+          : undefined
     return (
-        <PageScaffold density="compact">
+        <PageScaffold density="compact" className="gap-3">
             <DetailPageHeader
+                className="space-y-2"
                 back={{
                     id: "account-detail-back",
                     label: "人员账号",
@@ -113,32 +133,51 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                 meta={
                     <>
                         <span>所属部门：{departmentLabel}</span>
-                        <span>{account.role_ids.length} 个角色</span>
+                        <span>
+                            {singleRole
+                                ? `角色：${singleRole.name}`
+                                : `${account.role_ids.length} 个角色`}
+                        </span>
                     </>
                 }
                 secondaryActions={
                     can("admin:delete") && (
-                        <GuardedBusinessAction
-                            id="account-detail-delete"
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={!roles.isSuccess || hasSystemRole}
-                            reason={
-                                hasSystemRole
-                                    ? "系统角色账号不可删除"
-                                    : !roles.isSuccess
-                                      ? "角色尚未读取，暂不能删除"
-                                      : undefined
-                            }
-                            onClick={() => setDeleting(true)}
-                        >
-                            <Trash2Icon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                            删除账号
-                        </GuardedBusinessAction>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger
+                                id="account-detail-more"
+                                render={<Button variant="ghost" size="sm" />}
+                            >
+                                <EllipsisIcon
+                                    data-icon="inline-start"
+                                    aria-hidden
+                                />
+                                更多
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-56">
+                                <DropdownMenuItem
+                                    id="account-detail-delete"
+                                    variant="destructive"
+                                    disabled={Boolean(deleteDisabledReason)}
+                                    aria-describedby={
+                                        deleteDisabledReason
+                                            ? "account-detail-delete-reason"
+                                            : undefined
+                                    }
+                                    onClick={() => setDeleting(true)}
+                                >
+                                    <Trash2Icon aria-hidden />
+                                    删除账号
+                                </DropdownMenuItem>
+                                {deleteDisabledReason && (
+                                    <p
+                                        id="account-detail-delete-reason"
+                                        className="px-2 py-1.5 text-xs text-muted-foreground"
+                                    >
+                                        {deleteDisabledReason}
+                                    </p>
+                                )}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     )
                 }
             />

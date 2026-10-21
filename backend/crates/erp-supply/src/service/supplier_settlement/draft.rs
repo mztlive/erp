@@ -140,7 +140,7 @@ impl SupplierSettlementService {
             .ensure_version(req.expected_lock_version)
             .map_err(|_| Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string()))?;
         if statement.source_snapshot_hash != req.expected_source_snapshot_hash {
-            return Err(Error::ConflictError("结算来源快照已变化，请刷新详情后重试".to_string()));
+            return Err(Error::ConflictError("结算依据已变化，请刷新详情并重新核对结算明细".to_string()));
         }
         let source = self
             .db
@@ -291,7 +291,7 @@ impl SupplierSettlementService {
         if current.base.version != req.expected_lock_version
             || current.source_snapshot_hash != req.expected_source_snapshot_hash
         {
-            return Err(Error::ConflictError("结算单版本或来源快照已变化，请刷新后重试".to_string()));
+            return Err(Error::ConflictError("结算单或结算依据已更新，请刷新后重新核对结算明细".to_string()));
         }
         self.db
             .supplier_settlement()

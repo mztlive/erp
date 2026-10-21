@@ -85,6 +85,9 @@ export function ContractSalesAccessDialog({
                         name="users"
                         children={(field) => (
                             <field.MultiSelectField
+                                onRefresh={() =>
+                                    owners.refetch({ throwOnError: true })
+                                }
                                 id="contracts-sales-access-users"
                                 label="共享销售"
                                 options={(owners.data ?? []).map((owner) => ({

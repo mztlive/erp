@@ -203,10 +203,15 @@ export function WarehouseReviseDialog({
                                         id="master-data-warehouse-handler-inbound-combobox"
                                         label="入库经办人"
                                         options={inboundOptions}
+                                        onRefresh={() =>
+                                            optionsQuery.refetch({
+                                                throwOnError: true,
+                                            })
+                                        }
                                         placeholder="选择具备入库确认权限的账号"
                                         description="负责该仓库的采购收货与入库过账。"
-                                        loading={optionsQuery.isPending}
-                                        disabled={optionsQuery.isError}
+                                        loading={optionsQuery.isFetching}
+                                        disabled={optionsQuery.isPending}
                                         allowClear={false}
                                         required
                                     />
@@ -218,10 +223,15 @@ export function WarehouseReviseDialog({
                                         id="master-data-warehouse-handler-outbound-combobox"
                                         label="仓发经办人"
                                         options={outboundOptions}
+                                        onRefresh={() =>
+                                            optionsQuery.refetch({
+                                                throwOnError: true,
+                                            })
+                                        }
                                         placeholder="选择具备发货确认权限的账号"
                                         description="负责该仓库的现货发货与入库后发货；可与入库经办人为同一人。"
-                                        loading={optionsQuery.isPending}
-                                        disabled={optionsQuery.isError}
+                                        loading={optionsQuery.isFetching}
+                                        disabled={optionsQuery.isPending}
                                         allowClear={false}
                                         required
                                     />

@@ -12,10 +12,12 @@ import type { FixedSku } from "@/features/supplier-offerings/types"
 export function SupplySkuField({
     id,
     options,
+    onRefreshSkus,
     onItemChange,
 }: {
     id: string
     options?: readonly FixedSku[]
+    onRefreshSkus?: () => Promise<unknown>
     onItemChange: (item: ProductComboboxItem | undefined) => void
 }) {
     const field = useFieldContext<string>()
@@ -38,6 +40,7 @@ export function SupplySkuField({
             </FieldLabel>
             {options ? (
                 <OptionCombobox
+                    onRefresh={onRefreshSkus}
                     {...common}
                     aria-label="商品规格"
                     placeholder="请选择当前商品的规格"

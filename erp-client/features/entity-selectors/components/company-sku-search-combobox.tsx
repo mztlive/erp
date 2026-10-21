@@ -28,6 +28,7 @@ export function CompanySkuSearchCombobox({
     const query = useCompanySkuSelectorQuery({ query: search.input, purpose })
     const {
         rows,
+        onRefresh,
         loading,
         emptyLabel: resolvedEmptyLabel,
     } = useRemoteSearchCombobox({
@@ -50,6 +51,7 @@ export function CompanySkuSearchCombobox({
             onSearchChange={search.onSearchChange}
             filterMode="remote"
             loading={loading}
+            onRefresh={onRefresh}
             emptyLabel={resolvedEmptyLabel}
         />
     )

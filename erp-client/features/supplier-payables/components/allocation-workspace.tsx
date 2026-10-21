@@ -6,7 +6,11 @@ import { InvoiceAllocationTaxes } from "./invoice-allocation-taxes"
 
 import { ShieldAlertIcon } from "lucide-react"
 
-import { FormalActionConfirmDialog, MoneyValue } from "@/components/business"
+import {
+    BusinessFailureState,
+    FormalActionConfirmDialog,
+    MoneyValue,
+} from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
     AllocationAmountSummary,
@@ -94,6 +98,12 @@ export function SupplierAllocationWorkspace({
                 embedded ? "gap-0" : "gap-4",
             )}
         >
+            {session.supplierLoadError ? (
+                <BusinessFailureState
+                    title="供应商名称读取失败，请核对当前分配对象"
+                    error={session.supplierLoadError}
+                />
+            ) : null}
             {policy &&
             policy.state !== "AVAILABLE" &&
             !(embedded && track === "payment" && pool.length <= 1) ? (

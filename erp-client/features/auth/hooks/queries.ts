@@ -36,6 +36,7 @@ export function useLoginMutation() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: (input: LoginInput) => login(input),
+        meta: { suppressErrorToast: true },
         onSuccess: () => {
             // 新会话：丢弃可能残留的匿名/旧用户缓存
             queryClient.clear()

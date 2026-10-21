@@ -7,6 +7,7 @@ import type { EntitySelectorPurpose } from "@/features/entity-selectors/api/inde
 export type SmartProps<TProps, TItem> = Omit<
     TProps,
     | "loading"
+    | "onRefresh"
     | "filterMode"
     | "onSearchChange"
     | "contracts"

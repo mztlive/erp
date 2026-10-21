@@ -362,7 +362,7 @@ function WorkspaceFulfillmentReassignDialog({
                             <AlertDescription>
                                 {getErrorMessage(
                                     candidatesQuery.error,
-                                    "请关闭后重试",
+                                    "请刷新选项后重试",
                                 )}
                             </AlertDescription>
                         </Alert>
@@ -380,11 +380,16 @@ function WorkspaceFulfillmentReassignDialog({
                                     id={`workspace-fulfillment-reassign-target-${toAutomationIdSegment(item.workItemId)}`}
                                     label="新责任人"
                                     options={options}
+                                    onRefresh={() =>
+                                        candidatesQuery.refetch({
+                                            throwOnError: true,
+                                        })
+                                    }
                                     placeholder="选择合格人员"
                                     emptyLabel="没有同时满足当前责任约束的人员"
                                     description="选择能够接手当前任务的人员。"
-                                    loading={candidatesQuery.isPending}
-                                    disabled={candidatesQuery.isError}
+                                    loading={candidatesQuery.isFetching}
+                                    disabled={candidatesQuery.isPending}
                                     allowClear={false}
                                     required
                                 />

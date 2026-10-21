@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrganizationStateQuery } from "@/features/organization/hooks/queries"
+
 import { KeyRoundIcon } from "lucide-react"
 import * as React from "react"
 import { useStore } from "@tanstack/react-form"
@@ -62,6 +64,7 @@ export function AccountProfileEditor({
     canOrganization: boolean
     onDone: (saved: boolean) => void
 }) {
+    const directory = useOrganizationStateQuery(false)
     const { account, view } = snapshot
     const person = view?.people.find((person) => person.id === account.id)
     const preview = usePreviewOrganizationChangeMutation()
@@ -219,8 +222,8 @@ export function AccountProfileEditor({
         }
     }, [changed, completed])
     const unitOptions =
-        view?.units
-            .filter((unit) => unit.enabled)
+        (directory.data?.units ?? view?.units)
+            ?.filter((unit) => unit.enabled)
             .map((unit) => ({ value: unit.id, label: unit.name })) ?? []
     return (
         <form
@@ -265,6 +268,9 @@ export function AccountProfileEditor({
                                 id="account-profile-department"
                                 label="所属部门"
                                 options={unitOptions}
+                                onRefresh={() =>
+                                    directory.refetch({ throwOnError: true })
+                                }
                                 disabled={!canOrganization}
                                 allowClear={false}
                                 placeholder={

@@ -27,6 +27,7 @@ export function VoucherCategorySearchCombobox({
     const query = useVoucherCategorySelectorQuery(purpose)
     const {
         rows,
+        onRefresh,
         loading,
         emptyLabel: resolvedEmptyLabel,
     } = useRemoteSearchCombobox({
@@ -46,6 +47,7 @@ export function VoucherCategorySearchCombobox({
                 onItemChange?.(rows.find((item) => item.productId === id))
             }}
             loading={loading}
+            onRefresh={onRefresh}
             emptyLabel={resolvedEmptyLabel}
         />
     )

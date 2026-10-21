@@ -1,11 +1,11 @@
 "use client"
 
-import { BusinessFailureState } from "@/components/business"
 import { financialDraftEditHref } from "@/features/financial-draft-edit/types"
 import { FinancialDraftEditButton } from "@/features/financial-draft-edit/components/financial-draft-edit-button"
 import { useFinancialDraftQuery } from "@/features/financial-draft-edit/hooks/queries"
 import { useAccountProfileQuery } from "@/features/auth/hooks/queries"
 import { hasPermission } from "@/lib/permissions"
+import { ApprovalQueryFeedback } from "@/features/approval-workflow/components/approval-query-feedback"
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
 import { DefinitionBindingCard } from "@/features/approval-workflow/components/definition-binding-card"
 import { ExecutionHistory } from "@/features/approval-workflow/components/execution-history"
@@ -103,14 +103,11 @@ export function CustomerReceiptApprovalArea({
     if (presentation === "timeline") {
         return (
             <div className="space-y-3">
-                {historyQuery.isError ? (
-                    <BusinessFailureState
-                        id="customer-receivables-receipt-history-retry"
-                        title="审批历史加载失败"
-                        error={historyQuery.error}
-                        onRetry={() => void historyQuery.refetch()}
-                    />
-                ) : null}
+                <ApprovalQueryFeedback
+                    surface="customer-receipt-approval-timeline"
+                    instanceId={instanceId}
+                    historyQuery={historyQuery}
+                />
                 <ExecutionHistory
                     id="customer-receivables-receipt-approval-history"
                     presentation="timeline"
@@ -171,6 +168,14 @@ export function CustomerReceiptApprovalArea({
                     : "space-y-3"
             }
         >
+            <ApprovalQueryFeedback
+                surface={`customer-receipt-approval-${presentation}`}
+                instanceId={instanceId}
+                historyQuery={
+                    presentation === "default" ? historyQuery : undefined
+                }
+                recoveryQuery={recoveryQuery}
+            />
             {presentation === "default" ? (
                 <RuntimeSummary instance={approval?.instance} />
             ) : null}
@@ -198,7 +203,11 @@ export function CustomerReceiptApprovalArea({
             <ApprovalActionBar
                 id="customer-receivables-receipt-approval-action-bar"
                 allowedActions={allowedActions}
-                recoveryOptions={recoveryQuery.data?.actions ?? []}
+                recoveryOptions={
+                    recoveryQuery.isError
+                        ? []
+                        : (recoveryQuery.data?.actions ?? [])
+                }
                 workItemId={workItemId}
                 expectedTaskVersion={expectedTaskVersion}
                 instance={approval?.instance}

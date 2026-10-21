@@ -104,6 +104,7 @@ export function PortalReassignForm({
             <form.AppField name="target">
                 {(field) => (
                     <field.SelectField
+                        onRefresh={() => query.refetch({ throwOnError: true })}
                         id="supplier-portal-reassign-person"
                         label="新的具体处理人"
                         required

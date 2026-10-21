@@ -2,6 +2,7 @@
 
 import { financialDraftEditHref } from "@/features/financial-draft-edit/types"
 import { FinancialDraftEditButton } from "@/features/financial-draft-edit/components/financial-draft-edit-button"
+import { ApprovalQueryFeedback } from "@/features/approval-workflow/components/approval-query-feedback"
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
 import { DefinitionBindingCard } from "@/features/approval-workflow/components/definition-binding-card"
 import { ExecutionHistory } from "@/features/approval-workflow/components/execution-history"
@@ -101,6 +102,12 @@ export function ReceiptReversalApprovalArea({
 
     return (
         <div className="space-y-3">
+            <ApprovalQueryFeedback
+                surface="receipt-reversal-approval-area"
+                instanceId={instanceId}
+                historyQuery={historyQuery}
+                recoveryQuery={recoveryQuery}
+            />
             <RuntimeSummary instance={approval?.instance} />
             {documentId ? (
                 <FinancialDraftEditButton
@@ -124,7 +131,11 @@ export function ReceiptReversalApprovalArea({
             <ApprovalActionBar
                 id="customer-receivables-reversal-approval-action-bar"
                 allowedActions={allowedActions}
-                recoveryOptions={recoveryQuery.data?.actions ?? []}
+                recoveryOptions={
+                    recoveryQuery.isError
+                        ? []
+                        : (recoveryQuery.data?.actions ?? [])
+                }
                 workItemId={workItemId}
                 expectedTaskVersion={expectedTaskVersion}
                 instance={approval?.instance}

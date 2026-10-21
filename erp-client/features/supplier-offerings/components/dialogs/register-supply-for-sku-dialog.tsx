@@ -85,11 +85,13 @@ export function RegisterSupplyForSkuDialog({
     onOpenChange,
     fixedSku,
     skuOptions,
+    onRefreshSkus,
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
     fixedSku?: FixedSku
     skuOptions?: readonly FixedSku[]
+    onRefreshSkus?: () => Promise<unknown>
 }) {
     const mutation = useCreateSupplierOfferingMutation()
     const [discardOpen, setDiscardOpen] = React.useState(false)
@@ -263,6 +265,9 @@ export function RegisterSupplyForSkuDialog({
                                         <form.AppField name="skuId">
                                             {() => (
                                                 <SupplySkuField
+                                                    onRefreshSkus={
+                                                        onRefreshSkus
+                                                    }
                                                     id={`${prefix}-sku`}
                                                     options={skuOptions}
                                                     onItemChange={

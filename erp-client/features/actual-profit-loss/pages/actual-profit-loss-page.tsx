@@ -101,6 +101,9 @@ export function ActualProfitLossPage() {
             />
 
             <PeriodBasisPanel
+                onRefreshBasis={() =>
+                    page.basisQuery.refetch({ throwOnError: true })
+                }
                 presetRaw={page.periodPresetRaw}
                 from={page.from}
                 to={page.to}
@@ -159,6 +162,9 @@ export function ActualProfitLossPage() {
                     ) : null}
 
                     <ProfitLossRowsPanel
+                        onRefreshDirectory={() =>
+                            page.directoryQuery.refetch({ throwOnError: true })
+                        }
                         historyDirectory={page.historyDirectory}
                         directoryError={page.directoryQuery.error}
                         onRetryDirectory={() =>

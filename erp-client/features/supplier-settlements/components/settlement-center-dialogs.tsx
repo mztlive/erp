@@ -340,6 +340,9 @@ function SettlementSubmitReviewDialog({
                         <RequiredMark />
                     </Label>
                     <OptionCombobox
+                        onRefresh={() =>
+                            reviewers.refetch({ throwOnError: true })
+                        }
                         id="supplier-settlements-submit-reviewer-input"
                         value={reviewerUserId || null}
                         disabled={pending || reviewers.isError}

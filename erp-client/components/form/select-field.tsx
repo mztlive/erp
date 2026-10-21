@@ -1,5 +1,7 @@
 "use client"
 
+import type { ComboboxRefreshProps } from "@/components/business/combobox-refresh"
+
 import { OptionCombobox } from "@/components/business/option-combobox"
 import { useFieldContext } from "@/components/form/form-context"
 import { toFieldErrors } from "@/components/form/utils"
@@ -18,7 +20,7 @@ export type SelectFieldOption = Readonly<{
     keywords?: string
 }>
 
-type SelectFieldProps = {
+type SelectFieldProps = ComboboxRefreshProps & {
     label: string
     options: readonly SelectFieldOption[]
     placeholder?: string
@@ -49,6 +51,7 @@ export function SelectField({
     emptyLabel,
     description,
     disabled,
+    onRefresh,
     loading,
     required,
     hideLabel = false,
@@ -88,6 +91,7 @@ export function SelectField({
                 options={options}
                 value={field.state.value || null}
                 disabled={disabled}
+                onRefresh={onRefresh}
                 loading={loading}
                 placeholder={placeholder ?? "请选择"}
                 emptyLabel={emptyLabel}

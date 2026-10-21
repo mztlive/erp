@@ -63,7 +63,7 @@ export function RequestDraftDialog({
                         : "max-h-[94dvh] sm:max-w-6xl",
                 )}
             >
-                {query.isPending || query.isError ? (
+                {query.isPending || (query.isError && !query.data) ? (
                     <div className="space-y-4 p-6">
                         <DialogHeader>
                             <DialogTitle>申请采购付款</DialogTitle>
@@ -97,14 +97,17 @@ export function RequestDraftDialog({
                 ) : (
                     open && (
                         <RequestDraftForm
+                            onRefreshCandidates={() =>
+                                query.refetch({ throwOnError: true })
+                            }
                             candidates={
                                 fixedPurchaseOrderId
-                                    ? query.data.filter(
+                                    ? (query.data ?? []).filter(
                                           (candidate) =>
                                               candidate.purchase_order_id ===
                                               fixedPurchaseOrderId,
                                       )
-                                    : query.data
+                                    : (query.data ?? [])
                             }
                             request={request}
                             purchaseOrderId={
@@ -134,6 +137,7 @@ function RequestDraftForm({
     request,
     onClose,
     onLockChange,
+    onRefreshCandidates,
 }: {
     candidates: PaymentCandidate[]
     fixedOrder: boolean
@@ -142,6 +146,7 @@ function RequestDraftForm({
     request?: PaymentRequest
     onClose: () => void
     onLockChange: (value: boolean) => void
+    onRefreshCandidates: () => Promise<unknown>
 }) {
     const candidates = request
         ? allCandidates.filter(
@@ -359,6 +364,9 @@ function RequestDraftForm({
                                 {step === 1 ? (
                                     <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
                                         <RequestOrderPicker
+                                            onRefreshCandidates={
+                                                onRefreshCandidates
+                                            }
                                             form={form}
                                             candidates={candidates}
                                             editing={!!request}
@@ -366,6 +374,9 @@ function RequestDraftForm({
                                     </div>
                                 ) : (
                                     <RequestDraftWorkspace
+                                        onRefreshCandidates={
+                                            onRefreshCandidates
+                                        }
                                         form={form}
                                         values={values}
                                         candidates={candidates}

@@ -9,6 +9,8 @@ use erp_identity::Permission;
 
 use super::response::ApiResponse;
 
+mod diagnostics;
+
 const TECHNICAL_MESSAGE_TERMS: &[&str] = &[
     "work_item",
     "idempotency",
@@ -420,8 +422,11 @@ impl IntoResponse for Error {
         let code = self.error_code().to_string();
         let field_errors = self.field_errors();
         let retryable = self.retryable();
+        let diagnostic = diagnostics::Diagnostic::from_error(&self);
         tracing::warn!(
             target: "http_error", code = %code, status = http_status.as_u16(),
+            error_kind = diagnostic.kind, cause_category = diagnostic.category,
+            cause_fingerprint = %diagnostic.fingerprint,
             public_message = %message, fields = ?field_errors.as_ref().map(|fields| fields.keys().collect::<Vec<_>>()),
             "Request rejected"
         );
@@ -646,6 +651,7 @@ fn is_internal_code_token(token: &str) -> bool {
     if matches!(
         token,
         "SKU"
+            | "API"
             | "ERP"
             | "PDF"
             | "CSV"
@@ -901,6 +907,30 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
         assert_eq!(response.headers().get(RETRY_AFTER).unwrap(), "12");
+    }
+
+    #[tokio::test]
+    async fn supply_errors_keep_connection_and_settlement_recovery_instructions() {
+        for source in [
+            erp_supply::Error::BusinessLogicError(
+                "供应商 API 连接不属于该供应商或未启用，请核对连接归属和启用状态".into(),
+            ),
+            erp_supply::Error::ConflictError("结算依据已变化，请刷新详情并重新核对结算明细".into()),
+        ] {
+            let error = Error::from(source);
+            let expected = match &error {
+                Error::Unprocessable(message) | Error::Conflict(message) => message.clone(),
+                _ => panic!("unexpected supply error mapping"),
+            };
+            let status = error.http_status();
+            let response = error.into_response();
+            assert_eq!(response.status(), status);
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let body: Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(body["errorMessage"], expected);
+            assert_eq!(body["success"], false);
+            assert_eq!(body["retryable"], false);
+        }
     }
 
     #[test]

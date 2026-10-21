@@ -18,7 +18,7 @@ export type ProductFilterDirectoryQuery = {
     isError?: boolean
     isSuccess?: boolean
     error?: unknown
-    refetch?: () => unknown
+    refetch: (options?: { throwOnError?: boolean }) => Promise<unknown>
 }
 
 export type ProductFilterDirectoryState = {

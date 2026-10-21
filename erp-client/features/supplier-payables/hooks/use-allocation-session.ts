@@ -648,7 +648,18 @@ export function useAllocationSession(
                 onCompleted?.(r)
                 return true
             }
-            setResult({ ...r, returnTo: returnTo ?? session?.returnTo })
+            const stillUnknown =
+                result?.status === "unknown" && r.status !== "succeeded"
+            setResult({
+                ...r,
+                ...(stillUnknown
+                    ? {
+                          status: "unknown" as const,
+                          title: "提交结果仍待确认",
+                      }
+                    : {}),
+                returnTo: returnTo ?? session?.returnTo,
+            })
             if (r.status === "succeeded") onCompleted?.(r)
             return true
         }

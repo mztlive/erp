@@ -1,5 +1,10 @@
 "use client"
 
+import {
+    ComboboxRefresh,
+    type ComboboxRefreshProps,
+} from "@/components/business/combobox-refresh"
+
 import * as React from "react"
 
 import {
@@ -29,7 +34,7 @@ export type ComboboxOption = Readonly<{
     keywords?: string
 }>
 
-export type OptionComboboxProps = {
+export type OptionComboboxProps = ComboboxRefreshProps & {
     options: readonly ComboboxOption[]
     value?: string | null
     onValueChange: (value: string | null) => void
@@ -92,6 +97,7 @@ export function OptionCombobox({
     emptyLabel = "没有符合条件的选项",
     disabled = false,
     loading = false,
+    onRefresh,
     filterMode = "local",
     retainMissingSelection,
     onSearchChange,
@@ -209,6 +215,12 @@ export function OptionCombobox({
                             </ComboboxItem>
                         )}
                     </ComboboxList>
+                    <ComboboxRefresh
+                        id={id}
+                        onRefresh={onRefresh}
+                        loading={loading}
+                        disabled={disabled}
+                    />
                 </ComboboxContent>
             </div>
         </Combobox>

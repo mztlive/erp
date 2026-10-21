@@ -1,5 +1,10 @@
 "use client"
 
+import {
+    ComboboxRefresh,
+    type ComboboxRefreshProps,
+} from "@/components/business/combobox-refresh"
+
 import * as React from "react"
 import { ChevronRightIcon } from "lucide-react"
 
@@ -39,7 +44,7 @@ export type TreeComboboxNode = Readonly<{
     children: readonly TreeComboboxNode[]
 }>
 
-export type TreeComboboxProps = {
+export type TreeComboboxProps = ComboboxRefreshProps & {
     /** 森林（多根）；children 递归形成层级。 */
     nodes: readonly TreeComboboxNode[]
     value?: string
@@ -258,6 +263,7 @@ export function TreeCombobox({
     placeholder = "搜索名称或编号",
     emptyLabel = "没有符合条件的对象",
     loading = false,
+    onRefresh,
     disabled = false,
     required = false,
     id,
@@ -282,7 +288,7 @@ export function TreeCombobox({
     // 分类树原本就不把消失的节点留在 ref 里。显式关闭时用状态文案占位，避免清空后无法清除。
     const selected =
         matched ??
-        (retainMissingSelection === false && value
+        ((retainMissingSelection === false || onRefresh) && value
             ? {
                   id: value,
                   label: loading
@@ -406,19 +412,26 @@ export function TreeCombobox({
                             />
                         ))}
                     </ComboboxList>
+                    <ComboboxRefresh
+                        id={id}
+                        onRefresh={onRefresh}
+                        loading={loading}
+                        disabled={disabled}
+                    />
                 </ComboboxContent>
             </div>
         </Combobox>
     )
 }
 
-export type MultiTreeComboboxProps = {
+export type MultiTreeComboboxProps = ComboboxRefreshProps & {
     nodes: readonly TreeComboboxNode[]
     value: readonly string[]
     onValueChange: (ids: string[]) => void
     label: string
     placeholder?: string
     emptyLabel?: string
+    loading?: boolean
     disabled?: boolean
     id?: string
     "aria-describedby"?: string
@@ -451,6 +464,8 @@ export function MultiTreeCombobox({
     label,
     placeholder = "搜索名称",
     emptyLabel = "没有符合条件的对象",
+    loading = false,
+    onRefresh,
     disabled = false,
     id,
     "aria-describedby": ariaDescribedBy,
@@ -620,6 +635,12 @@ export function MultiTreeCombobox({
                         />
                     ))}
                 </ComboboxList>
+                <ComboboxRefresh
+                    id={id}
+                    onRefresh={onRefresh}
+                    loading={loading}
+                    disabled={disabled}
+                />
             </ComboboxContent>
         </Combobox>
     )

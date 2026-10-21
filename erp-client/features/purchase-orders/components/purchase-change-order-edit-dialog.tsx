@@ -3,6 +3,7 @@
 import * as React from "react"
 import { XIcon } from "lucide-react"
 import { useAppForm } from "@/components/form"
+import { BusinessFailureState } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
@@ -199,6 +200,7 @@ function PurchaseChangeEditForm({
     const mutation = useSubmitPurchaseChangeMutation()
     const submissionState = usePurchaseChangeSubmissionQuery(changeOrderId)
     const centerQuery = usePurchaseOrderCenterQuery(purchaseOrderId)
+    const expenseStateUnavailable = centerQuery.isError || !centerQuery.data
     const occurredExpenseIds = React.useMemo(
         () =>
             new Set(
@@ -223,6 +225,7 @@ function PurchaseChangeEditForm({
 
     const submit = async (payload?: EditPayload) => {
         if (inFlight.current) return
+        if (payload && expenseStateUnavailable) return
         const wasUnknown = unknown
         const command =
             ledger.peek<EditPayload>(slot) ??
@@ -309,7 +312,7 @@ function PurchaseChangeEditForm({
         defaultValues: purchaseChangeDraftValues(draft, options),
         validators: { onChange: schema },
         onSubmit: async ({ value }) => {
-            if (unknown || mutation.isPending) return
+            if (unknown || mutation.isPending || expenseStateUnavailable) return
             await submit({
                 purchaseChangeOrderId: changeOrderId,
                 purchaseOrderId,
@@ -330,7 +333,7 @@ function PurchaseChangeEditForm({
         onBusyChange,
         unknown,
     ])
-    const disabled = mutation.isPending || unknown
+    const disabled = mutation.isPending || unknown || expenseStateUnavailable
 
     return (
         <form
@@ -342,6 +345,20 @@ function PurchaseChangeEditForm({
                 void form.handleSubmit()
             }}
         >
+            {centerQuery.isError ||
+            (!centerQuery.isPending && !centerQuery.data) ? (
+                <BusinessFailureState
+                    id={`${id}-expense-state-failure`}
+                    title="费用发生情况读取失败，暂不能修改或提交"
+                    error={centerQuery.error ?? undefined}
+                    description="未能找到原采购单，请重新读取后核对。"
+                    onRetry={() => void centerQuery.refetch()}
+                />
+            ) : !centerQuery.data ? (
+                <p role="status" className="text-sm text-muted-foreground">
+                    正在读取费用发生情况，请稍候…
+                </p>
+            ) : null}
             <PurchaseChangeDraftFields
                 form={form}
                 id={id}
@@ -379,7 +396,7 @@ function PurchaseChangeEditForm({
                             id={`${id}-cancel`}
                             type="button"
                             variant="outline"
-                            disabled={disabled}
+                            disabled={mutation.isPending || unknown}
                             onClick={onClose}
                         >
                             取消

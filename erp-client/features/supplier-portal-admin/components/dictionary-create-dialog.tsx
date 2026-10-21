@@ -479,6 +479,11 @@ function DictionaryCreateForm({
                             <form.AppField name="parentId">
                                 {(field) => (
                                     <field.SelectField
+                                        onRefresh={() =>
+                                            dictionary.refetch({
+                                                throwOnError: true,
+                                            })
+                                        }
                                         id={`${prefix}-parent`}
                                         label="上级分类"
                                         description="留空创建根分类；选择已有分类时按完整层级路径核对。"

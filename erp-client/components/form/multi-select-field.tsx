@@ -1,5 +1,7 @@
 "use client"
 
+import type { ComboboxRefreshProps } from "@/components/business/combobox-refresh"
+
 import { MultiOptionCombobox } from "@/components/business"
 import { useFieldContext } from "@/components/form/form-context"
 import { toFieldErrors } from "@/components/form/utils"
@@ -12,12 +14,13 @@ import {
 } from "@/components/ui/field"
 import { cn } from "@/lib/utils"
 
-type MultiSelectFieldProps = {
+type MultiSelectFieldProps = ComboboxRefreshProps & {
     label: string
     options: readonly SelectFieldOption[]
     placeholder?: string
     emptyLabel?: string
     description?: string
+    loading?: boolean
     disabled?: boolean
     required?: boolean
     className?: string
@@ -36,7 +39,9 @@ export function MultiSelectField({
     placeholder,
     emptyLabel,
     description,
+    loading,
     disabled,
+    onRefresh,
     required,
     className,
     id,
@@ -68,7 +73,9 @@ export function MultiSelectField({
                 id={resolvedId}
                 options={options}
                 value={field.state.value ?? []}
+                loading={loading}
                 disabled={disabled}
+                onRefresh={onRefresh}
                 required={required}
                 placeholder={placeholder ?? "请选择，可多选"}
                 emptyLabel={emptyLabel}

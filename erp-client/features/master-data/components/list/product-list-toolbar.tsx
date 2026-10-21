@@ -145,6 +145,11 @@ export function ProductListToolbar({
                         onRetry={directory.refetch}
                     >
                         <CategoryCombobox
+                            onRefresh={() =>
+                                productFilterOptionsQuery.refetch({
+                                    throwOnError: true,
+                                })
+                            }
                             id={`${prefix}-category`}
                             className="w-full min-w-0"
                             filterLabel="分类"
@@ -300,6 +305,11 @@ export function ProductListToolbar({
                                     onRetry={directory.refetch}
                                 >
                                     <OptionCombobox
+                                        onRefresh={() =>
+                                            productFilterOptionsQuery.refetch({
+                                                throwOnError: true,
+                                            })
+                                        }
                                         id={`${prefix}-brand`}
                                         className="w-full min-w-0"
                                         value={f.productBrandIdDraft}
@@ -335,6 +345,11 @@ export function ProductListToolbar({
                                     onRetry={directory.refetch}
                                 >
                                     <OptionCombobox
+                                        onRefresh={() =>
+                                            productFilterOptionsQuery.refetch({
+                                                throwOnError: true,
+                                            })
+                                        }
                                         id={`${prefix}-supplier`}
                                         className="w-full min-w-0"
                                         value={f.productSupplierIdDraft}

@@ -56,6 +56,7 @@ export type ProfitLossRowsPanelProps = {
     data?: ProfitLossView
     historyDirectory?: HistoricalDirectory
     directoryError?: unknown
+    onRefreshDirectory: () => Promise<unknown>
     onRetryDirectory?: () => void
     dimension: ProfitLossDimension
     coverage: ProfitLossCoverage
@@ -104,6 +105,7 @@ export function ProfitLossRowsPanel({
     historyDirectory,
     directoryError,
     onRetryDirectory,
+    onRefreshDirectory,
     dimension,
     coverage,
     hasFilters,
@@ -247,6 +249,7 @@ export function ProfitLossRowsPanel({
                                         label="历史归属销售"
                                     >
                                         <MultiOptionCombobox
+                                            onRefresh={onRefreshDirectory}
                                             id="actual-profit-loss-filter-attribution-user"
                                             className="w-full min-w-0"
                                             value={attributionUsersDraft}
@@ -266,6 +269,7 @@ export function ProfitLossRowsPanel({
                                         label="历史归属组织（含当时下级）"
                                     >
                                         <MultiOptionCombobox
+                                            onRefresh={onRefreshDirectory}
                                             id="actual-profit-loss-filter-attribution-org"
                                             className="w-full min-w-0"
                                             value={attributionOrgsDraft}

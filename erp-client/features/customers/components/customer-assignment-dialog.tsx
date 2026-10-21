@@ -177,6 +177,11 @@ export function CustomerAssignmentDialog({
                                         <OwnerCombobox
                                             id="customers-assignment-dialog-owner"
                                             owners={owners.data ?? []}
+                                            onRefresh={() =>
+                                                owners.refetch({
+                                                    throwOnError: true,
+                                                })
+                                            }
                                             value={
                                                 field.state.value || undefined
                                             }

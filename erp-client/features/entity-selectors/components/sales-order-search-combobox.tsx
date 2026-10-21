@@ -31,6 +31,7 @@ export function SalesOrderSearchCombobox({
     )
     const {
         rows,
+        onRefresh,
         loading,
         emptyLabel: resolvedEmptyLabel,
     } = useRemoteSearchCombobox({
@@ -54,6 +55,7 @@ export function SalesOrderSearchCombobox({
             onSearchChange={search.onSearchChange}
             filterMode="remote"
             loading={loading}
+            onRefresh={onRefresh}
             emptyLabel={resolvedEmptyLabel}
         />
     )

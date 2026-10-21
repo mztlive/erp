@@ -16,6 +16,7 @@ export function RequestDraftWorkspace({
     activeKey,
     issues,
     onSelect,
+    onRefreshCandidates,
 }: {
     form: DraftForm
     values: DraftValues
@@ -25,6 +26,7 @@ export function RequestDraftWorkspace({
     activeKey: string | undefined
     issues: Map<string, string[]>
     onSelect: (key: string) => void
+    onRefreshCandidates: () => Promise<unknown>
 }) {
     const { groups, amounts } = values
     const selected =
@@ -99,6 +101,7 @@ export function RequestDraftWorkspace({
                 >
                     {groups.map((group, index) => (
                         <RequestDraftGroup
+                            onRefreshCandidates={onRefreshCandidates}
                             key={group.key}
                             form={form}
                             group={group}

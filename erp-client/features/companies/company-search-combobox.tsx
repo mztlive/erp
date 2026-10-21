@@ -47,6 +47,14 @@ export const CompanySearchCombobox = ({
             disabled={disabled}
             loading={list.isFetching || selected.isFetching}
             filterMode="remote"
+            onRefresh={() =>
+                Promise.all([
+                    list.refetch({ throwOnError: true }),
+                    ...(value
+                        ? [selected.refetch({ throwOnError: true })]
+                        : []),
+                ])
+            }
             onSearchChange={setSearch}
             placeholder={placeholder ?? "请选择公司主体"}
             allowClear

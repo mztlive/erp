@@ -1,5 +1,6 @@
 "use client"
 
+import { ApprovalQueryFeedback } from "@/features/approval-workflow/components/approval-query-feedback"
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
 import { DefinitionBindingCard } from "@/features/approval-workflow/components/definition-binding-card"
 import { ExecutionHistory } from "@/features/approval-workflow/components/execution-history"
@@ -86,6 +87,12 @@ export function VoucherSalesOrderApprovalArea({
 
     return (
         <div className="flex flex-col gap-4">
+            <ApprovalQueryFeedback
+                surface="voucher-sales-order-approval-area"
+                instanceId={instanceId}
+                historyQuery={historyQuery}
+                recoveryQuery={recoveryQuery}
+            />
             <RuntimeSummary instance={approval?.instance} compact />
             <ExecutionHistory
                 items={historyItems}
@@ -103,7 +110,11 @@ export function VoucherSalesOrderApprovalArea({
             <ApprovalActionBar
                 id="sales-orders-voucher-approval-bar"
                 allowedActions={allowedActions}
-                recoveryOptions={recoveryQuery.data?.actions ?? []}
+                recoveryOptions={
+                    recoveryQuery.isError
+                        ? []
+                        : (recoveryQuery.data?.actions ?? [])
+                }
                 workItemId={workItemId}
                 expectedTaskVersion={expectedTaskVersion}
                 instance={approval?.instance}

@@ -1,5 +1,9 @@
 "use client"
 
+import { useContext } from "react"
+
+import { SourcingOptionsRefreshContext } from "@/features/purchase-orders/components/create-sourcing/options-refresh-context"
+
 import { toFieldErrors } from "@/components/form"
 import { FieldError } from "@/components/ui/field"
 import { WarehouseSearchCombobox } from "@/features/entity-selectors"
@@ -181,10 +185,12 @@ export function SourcingOptionField({
     /** 紧凑编辑区由下方方案摘要展示配送条件，避免选中值过长。 */
     showDeliverySummary?: boolean
 }) {
+    const onRefresh = useContext(SourcingOptionsRefreshContext)
     return (
         <form.AppField name={`lines[${index}].basisId`}>
             {(field) => (
                 <field.SelectField
+                    onRefresh={onRefresh}
                     id={`procurement-orders-create-row-${toAutomationIdSegment(rowKey)}-sourcing-option`}
                     label={`履约方案，${product.itemName}`}
                     required

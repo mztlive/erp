@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrganizationStateQuery } from "@/features/organization/hooks/queries"
+
 import { MultiOptionCombobox } from "@/components/business/multi-option-combobox"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { Button } from "@/components/ui/button"
@@ -28,6 +30,7 @@ export function ScopeTargetPicker({
     onChange: (ids: string[]) => void
     units: OrganizationStateView["units"]
 }) {
+    const directory = useOrganizationStateQuery(false)
     if (dimension === "internal_org") {
         return (
             <MultiOptionCombobox
@@ -36,7 +39,9 @@ export function ScopeTargetPicker({
                 aria-label="组织目标"
                 value={value}
                 onValueChange={onChange}
-                options={units.map((unit) => ({
+                onRefresh={() => directory.refetch({ throwOnError: true })}
+                loading={directory.isFetching}
+                options={(directory.data?.units ?? units).map((unit) => ({
                     value: unit.id,
                     label: unit.name,
                 }))}

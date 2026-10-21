@@ -106,6 +106,12 @@ export function OrganizationUnitFilter({
                     aria-describedby={message ? `${id}-hint` : undefined}
                     className="min-w-0 [&_[data-slot=combobox-chip]]:max-w-full [&_[data-slot=combobox-chip-remove]]:shrink-0"
                     nodes={nodes}
+                    loading={query.isFetching}
+                    onRefresh={
+                        canRead
+                            ? () => query.refetch({ throwOnError: true })
+                            : undefined
+                    }
                     value={selected}
                     placeholder="搜索组织名称"
                     emptyLabel={message ?? "没有符合条件的组织"}

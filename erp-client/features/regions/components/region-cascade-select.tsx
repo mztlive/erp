@@ -54,7 +54,7 @@ export function RegionCascadeSelect({
     ariaDescribedBy,
     className,
 }: RegionCascadeSelectProps) {
-    const { data: index, isLoading } = useRegionIndex()
+    const { data: index, isFetching, refetch } = useRegionIndex()
     // 最末级模式下未选完的省、市只是界面草稿，不进入表单值。
     const [draft, setDraft] = React.useState({ province: "", city: "" })
     const fromValue = levels(index, value)
@@ -91,7 +91,7 @@ export function RegionCascadeSelect({
     }
     const common = {
         disabled,
-        loading: isLoading,
+        loading: isFetching,
         onBlur,
         "aria-invalid": invalid || undefined,
         "aria-describedby": ariaDescribedBy,
@@ -101,6 +101,7 @@ export function RegionCascadeSelect({
     return (
         <div className={cn("grid min-w-0 grid-cols-3 gap-2", className)}>
             <OptionCombobox
+                onRefresh={() => refetch({ throwOnError: true })}
                 {...common}
                 id={`${idPrefix}-province`}
                 aria-label={`${ariaLabel}（省）`}
@@ -110,6 +111,7 @@ export function RegionCascadeSelect({
                 onValueChange={(code) => chooseProvince(code ?? "")}
             />
             <OptionCombobox
+                onRefresh={() => refetch({ throwOnError: true })}
                 {...common}
                 id={`${idPrefix}-city`}
                 aria-label={`${ariaLabel}（市）`}
@@ -120,6 +122,7 @@ export function RegionCascadeSelect({
                 onValueChange={(code) => chooseCity(code ?? "")}
             />
             <OptionCombobox
+                onRefresh={() => refetch({ throwOnError: true })}
                 {...common}
                 id={`${idPrefix}-district`}
                 aria-label={`${ariaLabel}（区县）`}

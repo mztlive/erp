@@ -443,9 +443,11 @@ impl SupplierOfferingService {
             .supplier_api_connections()
             .find_by_id(connection_id, executor)
             .await?
-            .ok_or_else(|| Error::NotFound("供应商 API 连接不存在".to_string()))?;
+            .ok_or_else(|| Error::NotFound("供应商 API 连接不存在，请重新选择有效连接".to_string()))?;
         if connection.supplier_id != offering.supplier_id || !connection.is_active() {
-            return Err(Error::BusinessLogicError("供应商 API 连接不属于该供应商或未启用".to_string()));
+            return Err(Error::BusinessLogicError(
+                "供应商 API 连接不属于该供应商或未启用，请核对连接归属和启用状态".to_string(),
+            ));
         }
         Ok(())
     }

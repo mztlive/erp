@@ -28,6 +28,7 @@ import { ProductSupplyDialog } from "@/features/master-data/components/product/p
 import { ProductDisableDialog } from "@/features/master-data/components/shared/disable-action-dialog"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
 import { useProductListColumns } from "@/features/master-data/hooks/use-product-list-columns"
+import { useProductListSkusQuery } from "@/features/master-data/hooks/queries"
 import { useProductListState } from "@/features/master-data/hooks/use-product-list-state"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { RegisterSupplyForSkuDialog } from "@/features/supplier-offerings/offering-dialogs"
@@ -43,12 +44,34 @@ import type { ProductImportJob } from "@/features/master-data/api/product-import
 const IMPORT_ACTION_ID = "master-data-products-list-import"
 const BACKGROUND_TASKS_HREF = "/governance/background-jobs"
 
+function toSupplySkus(
+    product: MasterDataListItem,
+    skus: readonly ProductListSkuSummary[],
+): FixedSku[] {
+    return skus.map((sku) => ({
+        skuId: sku.skuId,
+        skuCode: sku.skuNo,
+        skuName: sku.skuName || product.name,
+        productName: product.name,
+        specification: sku.specification,
+        baseUnit: sku.baseUnit,
+        productKind: product.productKind,
+    }))
+}
+
 export function ProductsListPage() {
     const router = useRouter()
     const account = useAccountProfileQuery()
     const canBatchCreate = hasPermission(
         account.data?.permissions,
         "supplier_offering:create",
+    )
+    const [supplyDialogFixedSku, setSupplyDialogFixedSku] =
+        React.useState<FixedSku>()
+    const [supplyDialogProduct, setSupplyDialogProduct] =
+        React.useState<MasterDataListItem | null>(null)
+    const supplyOptionsQuery = useProductListSkusQuery(
+        supplyDialogProduct ? [supplyDialogProduct.stableId] : [],
     )
     const [batchSkus, setBatchSkus] = React.useState<FixedSku[] | null>(null)
     const [selection, setSelection] = React.useState<{
@@ -92,17 +115,10 @@ export function ProductsListPage() {
         product: MasterDataListItem,
         skus: readonly ProductListSkuSummary[],
     ) => {
-        state.setSupplyDialogSkus(
-            skus.map((sku) => ({
-                skuId: sku.skuId,
-                skuCode: sku.skuNo,
-                skuName: sku.skuName || product.name,
-                productName: product.name,
-                specification: sku.specification,
-                baseUnit: sku.baseUnit,
-                productKind: product.productKind,
-            })),
-        )
+        const options = toSupplySkus(product, skus)
+        setSupplyDialogFixedSku(options.length === 1 ? options[0] : undefined)
+        setSupplyDialogProduct(product)
+        state.setSupplyDialogSkus(options)
     }
     const columns = useProductListColumns({
         canUpdateProductListing: state.canUpdateProductListing,
@@ -482,12 +498,20 @@ export function ProductsListPage() {
             {state.supplyDialogSkus ? (
                 <RegisterSupplyForSkuDialog
                     open
-                    fixedSku={
-                        state.supplyDialogSkus.length === 1
-                            ? state.supplyDialogSkus[0]
-                            : undefined
-                    }
+                    fixedSku={supplyDialogFixedSku}
                     skuOptions={state.supplyDialogSkus}
+                    onRefreshSkus={async () => {
+                        if (!supplyDialogProduct) return
+                        const result = await supplyOptionsQuery.refetch({
+                            throwOnError: true,
+                        })
+                        state.setSupplyDialogSkus(
+                            toSupplySkus(
+                                supplyDialogProduct,
+                                result.data ?? [],
+                            ),
+                        )
+                    }}
                     onOpenChange={(open) => {
                         if (!open) state.setSupplyDialogSkus(null)
                     }}

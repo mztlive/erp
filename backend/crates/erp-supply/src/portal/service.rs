@@ -140,7 +140,7 @@ impl PortalOfferingService {
     /// API来源只读。
     pub fn ensure_portal_writable(offering: &SupplierOffering) -> Result<()> {
         if offering.source_type == OfferingSourceType::Api {
-            return Err(Error::Forbidden("API自动同步供给在门户中只读".into()));
+            return Err(Error::Forbidden("自动同步的供给不能在门户修改，请在来源系统更新后重新同步".into()));
         }
         Ok(())
     }
@@ -394,7 +394,9 @@ impl PortalOfferingService {
             availability_reported_at,
         } = quote
         else {
-            return Err(Error::ValidationError("首次报价快照无效".into()));
+            return Err(Error::ValidationError(
+                "首次报价内容不完整或已失效，请重新核对商品和供货条款后提交".into(),
+            ));
         };
         ensure_text(&sku_id, "公司SKU")?;
         ensure_text(&supplier_sku_code, "供应商订货编码")?;

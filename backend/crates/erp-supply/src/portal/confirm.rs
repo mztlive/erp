@@ -310,7 +310,9 @@ fn ensure_confirmation(input: &ConfirmedOfferingInput<'_>) -> Result<()> {
     let frozen =
         serde_json::to_value(&submitted.snapshot).map_err(|error| Error::Internal(error.to_string()))?;
     if current != frozen {
-        return Err(Error::ConflictError("供应商提交快照不得在审核时改写".into()));
+        return Err(Error::ConflictError(
+            "审核时不能修改供应商已提交的内容，请退回供应商修改后重新提交".into(),
+        ));
     }
     ensure_text(input.maintainer_user_id, "供给内部维护人")?;
     ensure_text(input.business_org_unit_id, "供给业务组织")
@@ -350,7 +352,9 @@ impl<'a> CreateInput<'a> {
             ..
         } = &context.application.snapshot
         else {
-            return Err(Error::ValidationError("首版供给需要首次报价快照".into()));
+            return Err(Error::ValidationError(
+                "新建供给缺少首次报价内容，请让供应商重新核对并提交报价".into(),
+            ));
         };
         Ok(Self {
             supplier_id: &context.application.supplier_id,

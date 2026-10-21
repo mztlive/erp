@@ -173,6 +173,9 @@ export function InvoiceRequestForm({
                 <form.AppField name="receivableAccountId">
                     {(field) => (
                         <field.SelectField
+                            onRefresh={() =>
+                                accounts.refetch({ throwOnError: true })
+                            }
                             id="invoice-request-account"
                             label="开票结算主体"
                             placeholder="选择本次开票的应收"

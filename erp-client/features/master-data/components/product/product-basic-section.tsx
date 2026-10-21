@@ -40,6 +40,9 @@ type ProductBasicSectionProps = {
     brandOptions: React.ComponentProps<typeof BrandCombobox>["brands"]
     categoryLoading: boolean
     brandLoading: boolean
+    onRefreshUnits: () => Promise<unknown>
+    onRefreshCategories: () => Promise<unknown>
+    onRefreshBrands: () => Promise<unknown>
 }
 
 function ProductBasicSection({
@@ -55,6 +58,9 @@ function ProductBasicSection({
     brandOptions,
     categoryLoading,
     brandLoading,
+    onRefreshUnits,
+    onRefreshCategories,
+    onRefreshBrands,
 }: ProductBasicSectionProps) {
     const prefix = idPrefix ?? "master-data-product-basic"
     return (
@@ -125,6 +131,7 @@ function ProductBasicSection({
                                 })),
                             }))
                         }}
+                        onRefresh={onRefreshUnits}
                         options={(unitOptions ?? []).map((unit) => ({
                             value: unit.id,
                             label: `${unit.label} · ${unit.code}`,
@@ -141,6 +148,7 @@ function ProductBasicSection({
                     <CategoryCombobox
                         id={`${prefix}-category-combobox`}
                         categories={categoryOptions}
+                        onRefresh={onRefreshCategories}
                         value={fields.categoryId || undefined}
                         onValueChange={(id) => {
                             const hit = categoryOptions.find(
@@ -165,6 +173,7 @@ function ProductBasicSection({
                     <BrandCombobox
                         id={`${prefix}-brand-combobox`}
                         brands={brandOptions}
+                        onRefresh={onRefreshBrands}
                         value={fields.brandId || undefined}
                         onValueChange={(id) => {
                             const hit = brandOptions.find(

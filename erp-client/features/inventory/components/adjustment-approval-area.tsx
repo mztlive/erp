@@ -1,5 +1,6 @@
 "use client"
 
+import { ApprovalQueryFeedback } from "@/features/approval-workflow/components/approval-query-feedback"
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
 import { DefinitionBindingCard } from "@/features/approval-workflow/components/definition-binding-card"
 import { ExecutionHistory } from "@/features/approval-workflow/components/execution-history"
@@ -125,6 +126,12 @@ export function AdjustmentApprovalArea({
 
     return (
         <div className="space-y-3">
+            <ApprovalQueryFeedback
+                surface="adjustment-approval-area"
+                instanceId={instanceId}
+                historyQuery={historyQuery}
+                recoveryQuery={recoveryQuery}
+            />
             <RuntimeSummary instance={approval?.instance} />
             <ExecutionHistory
                 items={historyItems}
@@ -141,7 +148,11 @@ export function AdjustmentApprovalArea({
             <ApprovalActionBar
                 id={derivedApprovalBarId}
                 allowedActions={allowedActions}
-                recoveryOptions={recoveryQuery.data?.actions ?? []}
+                recoveryOptions={
+                    recoveryQuery.isError
+                        ? []
+                        : (recoveryQuery.data?.actions ?? [])
+                }
                 workItemId={workItemId}
                 expectedTaskVersion={expectedTaskVersion}
                 instance={approval?.instance}

@@ -26,6 +26,7 @@ export function RequestDraftGroup({
     open,
     onSplit,
     issues,
+    onRefreshCandidates,
 }: {
     form: DraftForm
     group: DraftGroup
@@ -36,6 +37,7 @@ export function RequestDraftGroup({
     open: boolean
     onSplit: (key: string) => void
     issues: string[]
+    onRefreshCandidates: () => Promise<unknown>
 }) {
     const rows = group.ids
         .map((id) => candidates.find((item) => item.payable_account_id === id)!)
@@ -264,6 +266,7 @@ export function RequestDraftGroup({
                         <form.AppField name={`groups[${index}].account`}>
                             {(field) => (
                                 <field.SelectField
+                                    onRefresh={onRefreshCandidates}
                                     id={fieldId("account")}
                                     label="收款账户"
                                     className="min-w-0 gap-2"

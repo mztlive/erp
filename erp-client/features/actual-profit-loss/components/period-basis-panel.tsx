@@ -24,6 +24,7 @@ export function PeriodBasisPanel({
     periodBasis,
     basisConfig,
     periodBasisValid,
+    onRefreshBasis,
     patchUrl,
 }: {
     presetRaw: string
@@ -32,6 +33,7 @@ export function PeriodBasisPanel({
     periodBasis: string
     basisConfig: ProfitLossPeriodBasisConfig
     periodBasisValid: boolean
+    onRefreshBasis: () => Promise<unknown>
     patchUrl: (
         patch: ProfitLossUrlPatch,
         options?: { replace?: boolean },
@@ -122,6 +124,7 @@ export function PeriodBasisPanel({
                     <OptionCombobox
                         id="actual-profit-loss-period-basis"
                         value={periodBasis || ""}
+                        onRefresh={onRefreshBasis}
                         onValueChange={(v) => {
                             patchUrl({ periodBasis: v || null, page: null })
                         }}

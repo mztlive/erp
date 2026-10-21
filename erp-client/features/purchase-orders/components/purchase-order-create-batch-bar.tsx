@@ -1,5 +1,7 @@
 "use client"
 
+import { SourcingOptionsRefreshContext } from "@/features/purchase-orders/components/create-sourcing/options-refresh-context"
+
 import * as React from "react"
 import { ListFilterIcon, SparklesIcon } from "lucide-react"
 import { OptionCombobox } from "@/components/business/option-combobox"
@@ -49,11 +51,11 @@ export function PurchaseOrderCreateBatchBar({
     onMatchBest,
     onSetParticipation,
 }: PurchaseOrderCreateBatchBarProps) {
+    const onRefresh = React.useContext(SourcingOptionsRefreshContext)
     const [open, setOpen] = React.useState(false)
     const [basisId, setBasisId] = React.useState<string | null>(null)
     React.useEffect(() => {
-        if (!options.some((option) => option.basisId === basisId))
-            setBasisId(options[0]?.basisId ?? null)
+        if (!basisId) setBasisId(options[0]?.basisId ?? null)
     }, [basisId, options])
     const applicableCount = basisId ? getApplicableCount(basisId) : 0
     const allParticipating =
@@ -146,6 +148,7 @@ export function PurchaseOrderCreateBatchBar({
                     </DialogHeader>
                     <div className="space-y-3">
                         <OptionCombobox
+                            onRefresh={onRefresh}
                             id="procurement-orders-create-batch-option"
                             className="w-full min-w-0"
                             value={basisId}

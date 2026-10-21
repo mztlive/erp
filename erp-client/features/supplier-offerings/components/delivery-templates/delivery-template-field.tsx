@@ -84,6 +84,7 @@ export function DeliveryTemplateField({
                 allowClear={false}
                 placeholder={supplierId ? "请选择配送模板" : "请先选择供应商"}
                 options={options}
+                onRefresh={() => templates.refetch({ throwOnError: true })}
                 onValueChange={(next) =>
                     onChange(!next || next === FOLLOW_DEFAULT ? "" : next)
                 }

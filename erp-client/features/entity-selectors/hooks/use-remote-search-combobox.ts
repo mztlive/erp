@@ -1,4 +1,4 @@
-import type { UseQueryResult } from "@tanstack/react-query"
+import type { UseQueryResult, RefetchOptions } from "@tanstack/react-query"
 
 import { getErrorMessage } from "@/lib/api/errors"
 import { mergeSelected } from "@/features/entity-selectors/lib/merge-selected"
@@ -6,12 +6,15 @@ import { mergeSelected } from "@/features/entity-selectors/lib/merge-selected"
 export type RemoteSearchListQuery<TItem> = Pick<
     UseQueryResult<readonly TItem[], Error>,
     "data" | "isFetching" | "isError" | "error"
-> & { emptyReason?: string | null }
+> & {
+    emptyReason?: string | null
+    refetch: (options?: RefetchOptions) => Promise<unknown>
+}
 
 export type RemoteSearchSelectedQuery<TItem> = Pick<
     UseQueryResult<TItem | null, Error>,
     "data" | "isFetching" | "isError" | "error"
->
+> & { refetch: (options?: RefetchOptions) => Promise<unknown> }
 
 export type RemoteSearchComboboxOptions<TItem> = {
     list: RemoteSearchListQuery<TItem>
@@ -54,6 +57,15 @@ export function useRemoteSearchCombobox<TItem>(
     )
     return {
         rows,
+        onRefresh: blocked
+            ? undefined
+            : () =>
+                  Promise.all([
+                      options.list.refetch({ throwOnError: true }),
+                      ...(options.selected && options.selectedId
+                          ? [options.selected.refetch({ throwOnError: true })]
+                          : []),
+                  ]),
         loading:
             options.extraLoading === true ||
             options.list.isFetching ||

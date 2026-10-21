@@ -4,6 +4,7 @@ use erp_core::common::time::{BusinessDate, Instant};
 use serde_json::json;
 
 use super::*;
+use crate::Error;
 use crate::dto::supplier_offering::SupplierOfferingTermsWrite;
 use crate::entity::supplier_offering::{
     AvailabilityStatus, OfferingSourceType, OfferingStatus, SupplierOffering,
@@ -186,7 +187,9 @@ fn api_source_is_read_only_without_changing_internal_pause_or_provenance() {
     assert_eq!(offering.stable.status, OfferingStatus::Paused);
     assert_eq!(offering.source_type, OfferingSourceType::Excel);
     offering.source_type = OfferingSourceType::Api;
-    assert!(PortalOfferingService::ensure_portal_writable(&offering).is_err());
+    let error = PortalOfferingService::ensure_portal_writable(&offering).unwrap_err();
+    assert!(matches!(error, Error::Forbidden(message)
+        if message == "自动同步的供给不能在门户修改，请在来源系统更新后重新同步"));
 }
 fn command(payload: &serde_json::Value) -> CommandReceipt {
     CommandReceipt::from_payload("portal-", "portal-user", "save", "application", "same-key", payload)

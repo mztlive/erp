@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrganizationStateQuery } from "@/features/organization/hooks/queries"
+
 import { RequiredMark } from "@/components/ui/required-mark"
 
 import * as React from "react"
@@ -53,8 +55,8 @@ const schema = z.object({
 export function DataScopeFormDialog({
     open,
     onOpenChange,
-    roles,
-    people,
+    roles: initialRoles,
+    people: initialPeople,
     units,
     submitting,
     onSubmit,
@@ -77,6 +79,9 @@ export function DataScopeFormDialog({
     initialActions?: string[]
     permissions?: readonly string[]
 }) {
+    const directory = useOrganizationStateQuery(false)
+    const roles = directory.data?.roles ?? initialRoles
+    const people = directory.data?.people ?? initialPeople
     const [error, setError] = React.useState<string | null>(null)
     const resources = registeredResources()
     const initialKey = initialActions.join("|")
@@ -208,6 +213,11 @@ export function DataScopeFormDialog({
                                     {(field) => (
                                         <field.SelectField
                                             id="organization-scope-subject"
+                                            onRefresh={() =>
+                                                directory.refetch({
+                                                    throwOnError: true,
+                                                })
+                                            }
                                             label="角色或人员"
                                             required
                                             options={

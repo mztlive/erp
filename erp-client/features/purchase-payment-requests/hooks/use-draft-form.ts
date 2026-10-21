@@ -31,13 +31,16 @@ export function useDraftForm(
     const command = useRef<BatchSubmitCommand | null>(null)
     const uploaded = useRef(new Map<File, string>())
     const [unknown, setUnknown] = useState(false)
-    const form = useAppForm({
-        defaultValues: draftDefaults(
+    const [defaults] = useState(() =>
+        draftDefaults(
             candidates,
             purchaseId,
             request,
             initialPayableAccountIds,
         ),
+    )
+    const form = useAppForm({
+        defaultValues: defaults,
         validators: { onSubmit: draftSchema(candidates) },
         onSubmit: async ({ value }) => {
             if (!command.current) {

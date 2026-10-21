@@ -90,6 +90,11 @@ export function AssigneeCombobox({
             }}
             onSearchChange={setSearch}
             filterMode="remote"
+            onRefresh={
+                assignees == null
+                    ? () => query.refetch({ throwOnError: true })
+                    : undefined
+            }
             loading={assignees == null && query.isFetching}
             placeholder={placeholder}
             emptyLabel={

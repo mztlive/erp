@@ -61,7 +61,7 @@ function ResidentSupplierFilter({
         { query: search.input, purpose: "filter" },
         value ?? undefined,
     )
-    const { rows, loading, emptyLabel } = useRemoteSearchCombobox({
+    const { rows, loading, emptyLabel, onRefresh } = useRemoteSearchCombobox({
         selectedId: value ?? undefined,
         list: query.list,
         selected: query.selected,
@@ -81,6 +81,7 @@ function ResidentSupplierFilter({
                 filterMode="remote"
                 onSearchChange={search.onSearchChange}
                 loading={loading}
+                onRefresh={onRefresh}
                 emptyLabel={emptyLabel}
                 value={value}
                 onValueChange={onValueChange}
