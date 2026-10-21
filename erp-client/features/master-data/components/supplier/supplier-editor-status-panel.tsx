@@ -14,6 +14,7 @@ export function SupplierEditorStatusPanel({
     reviseBlocker,
     result,
     formError,
+    formErrorTitle,
     errorRef,
 }: {
     isCreate: boolean
@@ -21,6 +22,7 @@ export function SupplierEditorStatusPanel({
     reviseBlocker: { message: string } | undefined
     result: MasterDataMutationResult | null
     formError: string | null
+    formErrorTitle: string
     errorRef: React.RefObject<HTMLDivElement | null>
 }) {
     return (
@@ -74,7 +76,7 @@ export function SupplierEditorStatusPanel({
                 <div ref={errorRef}>
                     <Alert variant="destructive">
                         <CircleAlertIcon aria-hidden />
-                        <AlertTitle>填写不完整</AlertTitle>
+                        <AlertTitle>{formErrorTitle}</AlertTitle>
                         <AlertDescription>{formError}</AlertDescription>
                     </Alert>
                 </div>

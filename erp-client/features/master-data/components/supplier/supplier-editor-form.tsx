@@ -31,6 +31,7 @@ export function SupplierEditorForm({
         router,
         data,
         formError,
+        formErrorTitle,
         result,
         disableOpen,
         setDisableOpen,
@@ -108,6 +109,7 @@ export function SupplierEditorForm({
                         reviseBlocker={reviseBlocker}
                         result={result}
                         formError={formError}
+                        formErrorTitle={formErrorTitle}
                         errorRef={errorRef}
                     />
 

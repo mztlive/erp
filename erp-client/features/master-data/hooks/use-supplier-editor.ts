@@ -27,7 +27,7 @@ import {
     hydrateSupplierEditor,
     validateSupplierEditorFields,
 } from "@/features/master-data/lib/supplier-editor-model"
-import { getErrorMessage } from "@/lib/api/errors"
+import { getErrorPresentation } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
 
 function newIdempotencyKey(prefix: string): string {
@@ -50,6 +50,7 @@ export function useSupplierEditor(stableId: string) {
     const lockVersion = data?.lockVersion
     const revisionId = data?.currentRevision.revisionId
     const [formError, setFormError] = React.useState<string | null>(null)
+    const [formErrorTitle, setFormErrorTitle] = React.useState("填写不完整")
     const [result, setResult] = React.useState<MasterDataMutationResult | null>(
         null,
     )
@@ -91,6 +92,7 @@ export function useSupplierEditor(stableId: string) {
     const form = useAppForm({
         defaultValues: initialFormValues,
         onSubmit: async ({ value }) => {
+            setFormErrorTitle("填写不完整")
             setFormError(null)
             setResult(null)
 
@@ -155,23 +157,49 @@ export function useSupplierEditor(stableId: string) {
                         data?.supplierQualificationCapabilityCodes,
                 } as SupplierFields
             } catch (error) {
-                setFormError(
-                    getErrorMessage(
-                        error,
-                        "资质文件上传失败，请检查文件后重试。",
-                    ),
+                const failure = getErrorPresentation(
+                    error,
+                    "资质文件上传失败，请检查文件后重试。",
                 )
+                setFormErrorTitle(failure.title)
+                setFormError(failure.description)
                 return
             }
 
-            if (!isCreate) {
-                if (!data || !revisionId || lockVersion == null) return
-                const response = await reviseMutation.mutateAsync({
+            try {
+                if (!isCreate) {
+                    if (!data || !revisionId || lockVersion == null) return
+                    const response = await reviseMutation.mutateAsync({
+                        resource: "suppliers",
+                        stableId: data.stableId,
+                        baseRevisionId: revisionId,
+                        expectedLockVersion: lockVersion,
+                        expectedPartyVersion: data.partyLockVersion,
+                        name: value.name.trim(),
+                        effectiveFrom: defaultImmediateEffectiveFrom(),
+                        changeReason,
+                        fields,
+                        idempotencyKey,
+                        pendingAssetUploads,
+                    })
+                    if (response.outcome === "succeeded") {
+                        toast.add({
+                            title: masterDataCopy.reviseSuccessTitle,
+                            description: `${masterDataCopy.resultNo} ${response.stableNo} · v${response.revisionNo}`,
+                            type: "success",
+                            timeout: 4000,
+                        })
+                        setIdempotencyKey(newIdempotencyKey("revise-supplier"))
+                        hydratedKeyRef.current = null
+                        await detailQuery.refetch()
+                        return
+                    }
+                    setResult(response)
+                    return
+                }
+
+                const response = await createMutation.mutateAsync({
                     resource: "suppliers",
-                    stableId: data.stableId,
-                    baseRevisionId: revisionId,
-                    expectedLockVersion: lockVersion,
-                    expectedPartyVersion: data.partyLockVersion,
                     name: value.name.trim(),
                     effectiveFrom: defaultImmediateEffectiveFrom(),
                     changeReason,
@@ -181,40 +209,25 @@ export function useSupplierEditor(stableId: string) {
                 })
                 if (response.outcome === "succeeded") {
                     toast.add({
-                        title: masterDataCopy.reviseSuccessTitle,
+                        title: masterDataCopy.createSuccessTitle,
                         description: `${masterDataCopy.resultNo} ${response.stableNo} · v${response.revisionNo}`,
                         type: "success",
                         timeout: 4000,
                     })
-                    setIdempotencyKey(newIdempotencyKey("revise-supplier"))
-                    hydratedKeyRef.current = null
-                    await detailQuery.refetch()
+                    router.replace(
+                        `/master-data/suppliers/${response.stableId}`,
+                    )
                     return
                 }
                 setResult(response)
-                return
+            } catch (error) {
+                const failure = getErrorPresentation(
+                    error,
+                    "保存失败，请稍后重试。",
+                )
+                setFormErrorTitle(failure.title)
+                setFormError(failure.description)
             }
-
-            const response = await createMutation.mutateAsync({
-                resource: "suppliers",
-                name: value.name.trim(),
-                effectiveFrom: defaultImmediateEffectiveFrom(),
-                changeReason,
-                fields,
-                idempotencyKey,
-                pendingAssetUploads,
-            })
-            if (response.outcome === "succeeded") {
-                toast.add({
-                    title: masterDataCopy.createSuccessTitle,
-                    description: `${masterDataCopy.resultNo} ${response.stableNo} · v${response.revisionNo}`,
-                    type: "success",
-                    timeout: 4000,
-                })
-                router.replace(`/master-data/suppliers/${response.stableId}`)
-                return
-            }
-            setResult(response)
         },
     })
 
@@ -270,16 +283,6 @@ export function useSupplierEditor(stableId: string) {
             })
         }
     }, [formError])
-
-    // 成功面板不滞留：表单再次变脏后清掉「已保存」结果（禁止在 Subscribe 渲染里 setState）
-    React.useEffect(() => {
-        const subscription = form.store.subscribe(() => {
-            if (form.store.state.isDirty) {
-                setResult((prev) => (prev ? null : prev))
-            }
-        })
-        return () => subscription.unsubscribe()
-    }, [form.store])
 
     const navigateAway = React.useCallback(
         (href: string) => {
@@ -339,7 +342,9 @@ export function useSupplierEditor(stableId: string) {
         data,
         form,
         formError,
+        formErrorTitle,
         setFormError,
+        setFormErrorTitle,
         result,
         setResult,
         disableOpen,

@@ -24,6 +24,7 @@ export function useSupplierSaveFlow(editor: SupplierEditor) {
         data,
         form,
         setFormError,
+        setFormErrorTitle,
         setSaveReasonOpen,
         setReasonDraft,
         setReasonError,
@@ -58,6 +59,7 @@ export function useSupplierSaveFlow(editor: SupplierEditor) {
                 originalBankName: initialFormValues.bankName,
             })
             if (validation) {
+                setFormErrorTitle("填写不完整")
                 setFormError(validation)
                 return
             }
@@ -76,6 +78,7 @@ export function useSupplierSaveFlow(editor: SupplierEditor) {
             initialFormValues.contactName,
             isCreate,
             setFormError,
+            setFormErrorTitle,
             setReasonDraft,
             setReasonError,
             setSaveReasonOpen,
