@@ -128,7 +128,8 @@ impl SalesInquiry {
     /// 版本过期或状态不允许时拒绝。
     pub fn ensure_processing(&self, expected_version: u64) -> Result<()> {
         self.ensure_version(expected_version)?;
-        self.ensure_state(&[InquiryStatus::ProcurementProcessing])
+        // 历史待采购记录与已分配任务同属处理阶段，无需额外接手。
+        self.ensure_state(&[InquiryStatus::AwaitingProcurement, InquiryStatus::ProcurementProcessing])
     }
 
     /// 读取尚在采购处理阶段的冻结需求，残留任务不得取得关闭后的授权。

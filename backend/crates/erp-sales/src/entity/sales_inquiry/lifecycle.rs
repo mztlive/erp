@@ -36,7 +36,7 @@ impl SalesInquiry {
     /// # 参数
     /// `expected_version` 为聚合版本；`actor` 为销售；`reason` 为改版原因；`now` 为提交时刻。
     /// # 返回
-    /// 更新当前需求版本及待采购处理状态。
+    /// 更新当前需求版本并直接进入采购处理中。
     /// # 错误
     /// 需求不完整、改版原因缺失、身份或来源数量下限非法时拒绝。
     pub fn submit(&mut self, expected_version: u64, actor: &str, reason: String, now: Instant) -> Result<()> {
@@ -53,22 +53,8 @@ impl SalesInquiry {
             self.append_requirement(actor, reason.clone(), data, now)?;
         }
         self.freeze_work();
-        self.status = InquiryStatus::AwaitingProcurement;
-        self.event(actor, "submitted", reason, now);
-        Ok(())
-    }
-
-    /// 当前任务处理人接手；人员资格由 Process 在事务中核验。
-    /// # 参数
-    /// `expected_version` 为聚合版本。
-    /// # 返回
-    /// 进入采购处理中；已接手允许其他责任采购继续接手。
-    /// # 错误
-    /// 版本或状态不匹配时拒绝。
-    pub fn claim(&mut self, expected_version: u64) -> Result<()> {
-        self.ensure_version(expected_version)?;
-        self.ensure_state(&[InquiryStatus::AwaitingProcurement, InquiryStatus::ProcurementProcessing])?;
         self.status = InquiryStatus::ProcurementProcessing;
+        self.event(actor, "submitted", reason, now);
         Ok(())
     }
 
@@ -86,8 +72,7 @@ impl SalesInquiry {
         reason: String,
         now: Instant,
     ) -> Result<()> {
-        self.ensure_version(expected_version)?;
-        self.ensure_state(&[InquiryStatus::ProcurementProcessing])?;
+        self.ensure_processing(expected_version)?;
         validate_text(&reason, "补充需求原因", 2000)?;
         self.freeze_work();
         self.status = InquiryStatus::AwaitingSalesSupplement;
@@ -110,8 +95,7 @@ impl SalesInquiry {
         data: InquiryFeedbackData,
         now: Instant,
     ) -> Result<()> {
-        self.ensure_version(expected_version)?;
-        self.ensure_state(&[InquiryStatus::ProcurementProcessing])?;
+        self.ensure_processing(expected_version)?;
         validate_text(actor, "处理人", 128)?;
         let requirement = self.current_requirement()?;
         let unique: HashSet<_> = line_ids.iter().collect();
@@ -158,8 +142,7 @@ impl SalesInquiry {
         data: InquiryFeedbackData,
         now: Instant,
     ) -> Result<()> {
-        self.ensure_version(expected_version)?;
-        self.ensure_state(&[InquiryStatus::ProcurementProcessing])?;
+        self.ensure_processing(expected_version)?;
         data.validate(&self.current_requirement()?.data, now)?;
         if data.fees.iter().any(|fee| fee.line_ids.is_empty()) && self.shared_fee_owner_user_id.is_none() {
             return Err(Error::BusinessLogicError("整单费用须明确责任采购后发布".into()));
@@ -246,7 +229,7 @@ impl SalesInquiry {
             data,
         });
         self.freeze_work();
-        self.status = InquiryStatus::AwaitingProcurement;
+        self.status = InquiryStatus::ProcurementProcessing;
         Ok(())
     }
 

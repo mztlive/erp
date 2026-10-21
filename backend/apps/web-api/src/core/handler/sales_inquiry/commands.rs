@@ -5,8 +5,8 @@ use axum::Extension;
 use axum::extract::{Path, State};
 use erp_processes::sales_inquiry::dto::{
     AcceptInquiryCommand, CreateInquiryCommand, InquiryMutationView, InquiryReasonCommand,
-    InquiryTaskCommand, InquiryTaskReasonCommand, PublishInquiryCommand, ReassignInquiryCommand,
-    ReinquireInquiryCommand, SaveInquiryCommand, SaveInquiryFeedbackCommand, SubmitInquiryCommand,
+    InquiryTaskReasonCommand, PublishInquiryCommand, ReassignInquiryCommand, ReinquireInquiryCommand,
+    SaveInquiryCommand, SaveInquiryFeedbackCommand, SubmitInquiryCommand,
 };
 
 use crate::app_state::AppState;
@@ -154,30 +154,6 @@ pub async fn sales_close(
     Json(request): Json<InquiryReasonCommand>,
 ) -> Result<InquiryMutationView> {
     let result = state.sales_inquiry_process().close(&actor, &id, request).await?;
-    Ok(ApiResponse::ok_with_data(result))
-}
-
-#[permission_macros::permission(
-    group = "采购询价",
-    group_desc = "询价需求与采购反馈协作",
-    desc = "接手采购询价",
-    resource = "procurement_inquiry",
-    action = "claim"
-)]
-/// 接手采购询价。
-/// # 参数
-/// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
-/// # 返回
-/// 返回已提交状态及当前责任任务。
-/// # 错误
-/// 权限、当前责任、版本、状态或业务校验失败时拒绝。
-pub async fn procurement_claim(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(request): Json<InquiryTaskCommand>,
-) -> Result<InquiryMutationView> {
-    let result = state.sales_inquiry_process().claim(&actor, &id, request).await?;
     Ok(ApiResponse::ok_with_data(result))
 }
 

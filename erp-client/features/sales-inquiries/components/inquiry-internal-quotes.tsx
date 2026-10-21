@@ -107,8 +107,10 @@ export function InquiryInternalQuotes({
     userId,
     permissions,
     onSaved,
+    lineId,
 }: {
     inquiry: ProcurementInquiry
+    lineId?: string
     task: InquiryTask
     userId: string
     permissions: readonly string[]
@@ -138,8 +140,15 @@ export function InquiryInternalQuotes({
     })
     const storageKey = inquiryStorageKey(
         userId,
+        `${inquiry.id}:${task.id}:internal-quote${lineId ? `:${lineId}` : ""}`,
+    )
+    const legacyStorageKey = inquiryStorageKey(
+        userId,
         `${inquiry.id}:${task.id}:internal-quote`,
     )
+    const visibleQuotes =
+        quotes.data?.filter((quote) => !lineId || quote.line_id === lineId) ??
+        []
     if (!canRead) return null
     return (
         <section className="space-y-4" aria-label="采购内部报价">
@@ -155,9 +164,16 @@ export function InquiryInternalQuotes({
                     type="button"
                     variant="outline"
                     onClick={() => {
+                        const legacy =
+                            readInquiryLocalValue<QuoteInput>(legacyStorageKey)
                         setInitial(
                             readInquiryLocalValue<QuoteInput>(storageKey) ??
-                                blankQuote(),
+                                (legacy && legacy.line_id === lineId
+                                    ? legacy
+                                    : {
+                                          ...blankQuote(),
+                                          line_id: lineId ?? "",
+                                      }),
                         )
                         setOpen(true)
                     }}
@@ -174,13 +190,13 @@ export function InquiryInternalQuotes({
                 />
             ) : quotes.isPending ? (
                 <p role="status">正在读取内部报价…</p>
-            ) : quotes.data.length === 0 ? (
+            ) : visibleQuotes.length === 0 ? (
                 <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
                     尚未登记内部报价。
                 </p>
             ) : (
                 <div className="space-y-3">
-                    {quotes.data.map((quote) => {
+                    {visibleQuotes.map((quote) => {
                         const offering = offerings.data?.find(
                             (item) => item.id === quote.supplier_offering_id,
                         )
@@ -309,7 +325,19 @@ export function InquiryInternalQuotes({
                 <QuoteEditor
                     key={`${initial.quote_id}:${initial.revision_no}`}
                     initial={initial}
-                    inquiry={inquiry}
+                    inquiry={
+                        lineId
+                            ? {
+                                  ...inquiry,
+                                  draft: {
+                                      ...inquiry.draft,
+                                      lines: inquiry.draft.lines.filter(
+                                          (line) => line.line_id === lineId,
+                                      ),
+                                  },
+                              }
+                            : inquiry
+                    }
                     task={task}
                     userId={userId}
                     storageKey={storageKey}
@@ -318,6 +346,12 @@ export function InquiryInternalQuotes({
                     offerings={offerings.data ?? []}
                     offeringError={offerings.error}
                     onSaved={() => {
+                        if (
+                            lineId &&
+                            readInquiryLocalValue<QuoteInput>(legacyStorageKey)
+                                ?.line_id === lineId
+                        )
+                            localStorage.removeItem(legacyStorageKey)
                         void quotes.refetch()
                         onSaved()
                     }}

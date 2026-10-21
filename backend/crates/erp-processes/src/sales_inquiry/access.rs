@@ -196,13 +196,9 @@ impl SalesInquiryAccess {
             .ok_or_else(|| Error::BusinessLogicError("询价责任采购账号已失效".into()))?;
         let actor =
             AuditActor::new(account.base.id.clone(), account.secret.account().to_string(), account.kind);
-        self.ensure_procurement_permissions(
-            &actor,
-            &["detail", "claim", "save_feedback", "publish"],
-            executor,
-        )
-        .await
-        .map_err(|error| assignment_permission_error(error, &account.name, account.secret.account()))?;
+        self.ensure_procurement_permissions(&actor, &["detail", "save_feedback", "publish"], executor)
+            .await
+            .map_err(|error| assignment_permission_error(error, &account.name, account.secret.account()))?;
         required_business_org(&self.db, owner, executor).await
     }
 
@@ -257,7 +253,7 @@ fn task_missing() -> Error {
 fn assignment_permission_error(error: Error, name: &str, account: &str) -> Error {
     match error {
         Error::Forbidden(_) => Error::BusinessLogicError(format!(
-            "责任采购「{name}（{account}）」缺少有效的询价处理权限，请管理员检查其采购角色的查看、接手、保存反馈和发布权限后重试"
+            "责任采购「{name}（{account}）」缺少有效的询价处理权限，请管理员检查其采购角色的查看、保存反馈和发布权限后重试"
         )),
         other => other,
     }
@@ -279,7 +275,7 @@ mod tests {
         };
         assert_eq!(
             message,
-            "责任采购「陈国平（caigou）」缺少有效的询价处理权限，请管理员检查其采购角色的查看、接手、保存反馈和发布权限后重试"
+            "责任采购「陈国平（caigou）」缺少有效的询价处理权限，请管理员检查其采购角色的查看、保存反馈和发布权限后重试"
         );
     }
 

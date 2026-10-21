@@ -71,23 +71,6 @@ impl SalesInquiryProcess {
         self.execute(actor, id, InquiryCommand::Submit(req)).await
     }
 
-    /// 当前采购责任人接手询价。
-    ///
-    /// # 参数
-    /// `actor` 为当前账号，`req` 携带幂等键及业务内容；更新同时传入询价身份。
-    /// # 返回
-    /// 返回冻结的安全命令回执；同键同载荷返回原结果。
-    /// # 错误
-    /// 权限、责任、版本、状态或业务规则失效时拒绝；事务错误保持原分类。
-    pub async fn claim(
-        &self,
-        actor: &AuditActor,
-        id: &str,
-        req: InquiryTaskCommand,
-    ) -> Result<InquiryMutationView> {
-        self.execute(actor, id, InquiryCommand::Claim(req)).await
-    }
-
     /// 退回销售补充并冻结旧采购任务。
     ///
     /// # 参数

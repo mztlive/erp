@@ -9,6 +9,7 @@ use super::InquiryRequirementData;
 #[serde(rename_all = "snake_case")]
 pub enum InquiryStatus {
     Draft,
+    /// 历史状态；已有责任采购可直接处理，新提交不再写入。
     AwaitingProcurement,
     ProcurementProcessing,
     AwaitingSalesSupplement,
@@ -76,7 +77,7 @@ pub struct InquiryReinquiry {
     pub data: InquiryReinquiryData,
 }
 
-/// 退回、接手及关闭等非覆盖式状态记录。
+/// 退回、改派及关闭等非覆盖式状态记录。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InquiryEvent {
     pub actor_id: String,

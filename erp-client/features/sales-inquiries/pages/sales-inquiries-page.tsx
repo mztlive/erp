@@ -288,10 +288,16 @@ export function SalesInquiriesPage({
                                     value={field.state.value || undefined}
                                     options={Object.entries(
                                         INQUIRY_STATUS_LABEL,
-                                    ).map(([value, label]) => ({
-                                        value,
-                                        label,
-                                    }))}
+                                    )
+                                        .filter(
+                                            ([value]) =>
+                                                value !==
+                                                "awaiting_procurement",
+                                        )
+                                        .map(([value, label]) => ({
+                                            value,
+                                            label,
+                                        }))}
                                     onValueChange={(value) =>
                                         field.handleChange(value ?? "")
                                     }

@@ -63,7 +63,11 @@ impl InquiryListFilter {
             parts.push(doc! { "customer_id": id });
         }
         if let Some(status) = self.status {
-            parts.push(doc! { "status": status_string(status) });
+            if matches!(status, InquiryStatus::AwaitingProcurement | InquiryStatus::ProcurementProcessing) {
+                parts.push(doc! { "status": { "$in": ["awaiting_procurement", "procurement_processing"] } });
+            } else {
+                parts.push(doc! { "status": status_string(status) });
+            }
         }
         if let Some(q) = self.q.as_deref().map(str::trim).filter(|q| !q.is_empty()) {
             let mut no = Document::new();
@@ -215,6 +219,26 @@ fn ensure_document_size(inquiry: &SalesInquiry) -> SalesResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn processing_filter_includes_legacy_assignments_without_expanding_scope() {
+        for status in [InquiryStatus::AwaitingProcurement, InquiryStatus::ProcurementProcessing] {
+            let filter = InquiryListFilter { status: Some(status), ..Default::default() };
+            let query = filter.document();
+            let parts = query.get_array("$and").unwrap();
+            assert_eq!(parts[0].as_document().unwrap(), &filter.access_scope.document());
+            assert_eq!(
+                parts.last().unwrap().as_document().unwrap(),
+                &doc! { "status": { "$in": ["awaiting_procurement", "procurement_processing"] } }
+            );
+        }
+        let filter = InquiryListFilter { status: Some(InquiryStatus::AwaitingSales), ..Default::default() };
+        let query = filter.document();
+        assert_eq!(
+            query.get_array("$and").unwrap().last().unwrap().as_document().unwrap(),
+            &doc! { "status": "awaiting_sales" }
+        );
+    }
+
     #[test]
     fn default_scope_denies_and_search_stays_in_intersection() {
         let denied = InquiryListFilter::default().document();

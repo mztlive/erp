@@ -76,7 +76,6 @@ pub(crate) const PROCUREMENT_PERMISSIONS: &[&str] = &[
     "purchase_order:*",
     "procurement_inquiry:list",
     "procurement_inquiry:detail",
-    "procurement_inquiry:claim",
     "procurement_inquiry:supplement",
     "procurement_inquiry:reassign",
     "procurement_inquiry:internal_quote",

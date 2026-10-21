@@ -251,14 +251,6 @@ fn procurement_reads(rbac: &SharedRbacService) -> Router<AppState> {
 fn procurement_work(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
-            "/procurement-inquiries/{id}/claim",
-            with_permission(
-                post(sales_inquiry::commands::procurement_claim),
-                rbac,
-                sales_inquiry::commands::procurement_claim_permission_key(),
-            ),
-        )
-        .route(
             "/procurement-inquiries/{id}/supplement",
             with_permission(
                 post(sales_inquiry::commands::procurement_supplement),

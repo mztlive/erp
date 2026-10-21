@@ -11,6 +11,13 @@ import {
     PageScaffold,
 } from "@/components/business"
 import { Button, buttonVariants } from "@/components/ui/button"
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+} from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { apiPost, apiPostForm } from "@/lib/api"
@@ -177,6 +184,7 @@ function InquiryDetailContent({
     const [importOpen, setImportOpen] = React.useState(false)
     const [dirty, setDirty] = React.useState(false)
     const [feedbackDirty, setFeedbackDirty] = React.useState(false)
+    const [quoteLineId, setQuoteLineId] = React.useState<string | null>(null)
     const [editorEpoch, setEditorEpoch] = React.useState(0)
     const [demandDetailsContainer, setDemandDetailsContainer] =
         React.useState<HTMLDivElement | null>(null)
@@ -188,11 +196,9 @@ function InquiryDetailContent({
     )
         ? chosenRound
         : inquiry.feedback_round
-    const claimActions =
-        procurement && inquiry.status === "awaiting_procurement"
-    const demandActions =
-        ["draft", "awaiting_sales_supplement"].includes(inquiry.status) ||
-        claimActions
+    const demandActions = ["draft", "awaiting_sales_supplement"].includes(
+        inquiry.status,
+    )
     const command = useInquiryCommand(userId, inquiry.id)
     const task =
         "work_items" in inquiry
@@ -209,7 +215,9 @@ function InquiryDetailContent({
     const canProcess =
         procurement &&
         task &&
-        inquiry.status === "procurement_processing" &&
+        ["awaiting_procurement", "procurement_processing"].includes(
+            inquiry.status,
+        ) &&
         hasPermission(permissions, "procurement_inquiry:save_feedback")
     const accepted =
         "acceptances" in inquiry ? inquiry.acceptances.at(-1) : undefined
@@ -296,7 +304,11 @@ function InquiryDetailContent({
             onSaved={onSaved}
             disabled={dirty || feedbackDirty}
             feedbackRound={selectedRound}
-            renderActions={(primaryActions, secondaryActions) => (
+            renderActions={(
+                primaryActions,
+                secondaryActions,
+                assignmentActions,
+            ) => (
                 <div className="space-y-5">
                     <DetailPageHeader
                         title={inquiry.customer_name}
@@ -415,7 +427,7 @@ function InquiryDetailContent({
                     <InquiryDetailTabs
                         inquiry={inquiry}
                         procurement={procurement}
-                        actions={claimActions ? primaryActions : undefined}
+                        actions={assignmentActions}
                         demand={
                             <div className="space-y-6">
                                 {canEdit && "sales_owner_user_id" in inquiry ? (
@@ -448,7 +460,6 @@ function InquiryDetailContent({
                                 )}
 
                                 {!canEdit &&
-                                    !claimActions &&
                                     demandActions &&
                                     React.Children.count(primaryActions) >
                                         0 && (
@@ -468,14 +479,57 @@ function InquiryDetailContent({
                                             task={task}
                                             userId={userId}
                                             onSaved={onSaved}
+                                            footerActions={primaryActions}
+                                            onInternalQuote={
+                                                hasPermission(
+                                                    permissions,
+                                                    "procurement_inquiry:internal_quote",
+                                                )
+                                                    ? setQuoteLineId
+                                                    : undefined
+                                            }
                                         />
-                                        <InquiryInternalQuotes
-                                            inquiry={inquiry}
-                                            task={task}
-                                            userId={userId}
-                                            permissions={permissions}
-                                            onSaved={onSaved}
-                                        />
+                                        <Dialog
+                                            open={quoteLineId !== null}
+                                            onOpenChange={(open) => {
+                                                if (!open) setQuoteLineId(null)
+                                            }}
+                                        >
+                                            <DialogContent
+                                                id="procurement-feedback-internal-dialog"
+                                                closeButtonId="procurement-feedback-internal-close"
+                                                className="max-h-[85vh] overflow-y-auto sm:max-w-4xl"
+                                            >
+                                                <DialogHeader>
+                                                    <DialogTitle>
+                                                        {
+                                                            inquiry.draft.lines.find(
+                                                                (line) =>
+                                                                    line.line_id ===
+                                                                    quoteLineId,
+                                                            )?.product_name
+                                                        }{" "}
+                                                        · 内部采购信息
+                                                    </DialogTitle>
+                                                    <DialogDescription>
+                                                        仅采购可见；供应商报价独立保存，不随销售反馈公开。
+                                                    </DialogDescription>
+                                                </DialogHeader>
+                                                {quoteLineId && (
+                                                    <InquiryInternalQuotes
+                                                        key={quoteLineId}
+                                                        inquiry={inquiry}
+                                                        task={task}
+                                                        userId={userId}
+                                                        permissions={
+                                                            permissions
+                                                        }
+                                                        onSaved={onSaved}
+                                                        lineId={quoteLineId}
+                                                    />
+                                                )}
+                                            </DialogContent>
+                                        </Dialog>
                                     </>
                                 )}
 
@@ -484,7 +538,8 @@ function InquiryDetailContent({
                                     selectedRound={selectedRound}
                                     onRoundChange={setChosenRound}
                                 />
-                                {!demandActions &&
+                                {!canProcess &&
+                                    !demandActions &&
                                     (React.Children.count(primaryActions) > 0 ||
                                         canOpenSales) && (
                                         <div className="sticky bottom-0 flex flex-wrap items-center justify-end gap-3 border-t bg-card py-4">

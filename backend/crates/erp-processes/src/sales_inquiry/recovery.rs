@@ -96,6 +96,7 @@ fn recovery_result(
     })
 }
 
+// 历史接手回执仍可只读核对，不再提供对应写命令。
 fn is_procurement_action(action: &str) -> bool {
     matches!(
         action,

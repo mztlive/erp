@@ -23,7 +23,6 @@ pub(super) enum InquiryCommand {
     Create(CreateInquiryCommand),
     Save(SaveInquiryCommand),
     Submit(SubmitInquiryCommand),
-    Claim(InquiryTaskCommand),
     Supplement(InquiryTaskReasonCommand),
     SaveFeedback(SaveInquiryFeedbackCommand),
     Publish(PublishInquiryCommand),
@@ -42,7 +41,6 @@ impl InquiryCommand {
             Self::Create(_) => "create",
             Self::Save(_) => "save",
             Self::Submit(_) => "submit",
-            Self::Claim(_) => "claim",
             Self::Supplement(_) => "supplement",
             Self::SaveFeedback(_) => "save_feedback",
             Self::Publish(_) => "publish",
@@ -60,7 +58,7 @@ impl InquiryCommand {
             Self::Create(r) => &r.command_key,
             Self::Save(r) => &r.command_key,
             Self::Submit(r) => &r.command_key,
-            Self::Claim(r) | Self::Publish(r) => &r.command_key,
+            Self::Publish(r) => &r.command_key,
             Self::Supplement(r) => &r.command_key,
             Self::SaveFeedback(r) => &r.command_key,
             Self::Accept(r) => &r.command_key,
@@ -74,7 +72,7 @@ impl InquiryCommand {
     }
     fn task(&self) -> Option<(&str, u64)> {
         match self {
-            Self::Claim(r) | Self::Publish(r) => Some((&r.task_id, r.task_version)),
+            Self::Publish(r) => Some((&r.task_id, r.task_version)),
             Self::Supplement(r) => Some((&r.task_id, r.task_version)),
             Self::SaveFeedback(r) => Some((&r.task_id, r.task_version)),
             Self::Reassign(r) => Some((&r.task_id, r.task_version)),
@@ -271,7 +269,7 @@ mod tests {
 
     #[test]
     fn command_identity_replays_exact_payload_and_rejects_cross_inquiry_key_reuse() {
-        let command = InquiryCommand::Claim(InquiryTaskCommand {
+        let command = InquiryCommand::Publish(PublishInquiryCommand {
             command_key: "same-key".into(),
             expected_version: 2,
             task_id: "task".into(),
@@ -301,7 +299,7 @@ mod tests {
             receipt.id().into(),
             "buyer",
             "same-key",
-            "claim",
+            "publish",
             receipt.fingerprint().digest_hex().into(),
             mutation_result(&result),
         )
@@ -310,7 +308,7 @@ mod tests {
         assert_eq!(receipt.id(), replay.id());
         assert_eq!(
             mutation_from_result(
-                record.matches("buyer", "same-key", "claim", replay.fingerprint().digest_hex()).unwrap()
+                record.matches("buyer", "same-key", "publish", replay.fingerprint().digest_hex()).unwrap()
             )
             .unwrap(),
             result
@@ -318,7 +316,7 @@ mod tests {
         let other = make("b");
         assert_eq!(receipt.id(), other.id());
         assert!(matches!(
-            record.matches("buyer", "same-key", "claim", other.fingerprint().digest_hex()),
+            record.matches("buyer", "same-key", "publish", other.fingerprint().digest_hex()),
             Err(SalesError::ConflictError(_))
         ));
         let serialized = serde_json::to_string(&record).unwrap();

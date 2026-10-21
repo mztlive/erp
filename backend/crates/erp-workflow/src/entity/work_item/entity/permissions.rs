@@ -330,7 +330,6 @@ impl WorkItemType {
         } else if self == Self::SalesInquiryProcessing {
             (business_object_type == "sales_inquiry").then_some(&[
                 "procurement_inquiry:detail",
-                "procurement_inquiry:claim",
                 "procurement_inquiry:save_feedback",
                 "procurement_inquiry:publish",
             ] as &[&str])

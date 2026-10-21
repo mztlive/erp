@@ -745,7 +745,8 @@ mod tests {
             assert!(sales.covers_one(&Permission::parse(format!("sales_inquiry:{action}")).unwrap()));
             assert!(!procurement.covers_one(&Permission::parse(format!("sales_inquiry:{action}")).unwrap()));
         }
-        for action in ["detail", "claim", "save_feedback", "publish", "internal_quote", "convert_expenses"] {
+        for action in ["detail", "save_feedback", "publish", "reassign", "internal_quote", "convert_expenses"]
+        {
             let permission = Permission::parse(format!("procurement_inquiry:{action}")).unwrap();
             assert!(procurement.covers_one(&permission));
             assert!(!sales.covers_one(&permission));

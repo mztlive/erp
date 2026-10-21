@@ -3012,16 +3012,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
-                path: "/admin/procurement-inquiries/{id}/claim",
-                description: "接手采购询价",
-                permission: {
-                    resource: "procurement_inquiry",
-                    action: "claim",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
                 path: "/admin/procurement-inquiries/{id}/supplement",
                 description: "要求补充询价需求",
                 permission: {

@@ -1,13 +1,15 @@
 "use client"
 
 import * as React from "react"
+import { useStore } from "@tanstack/react-form"
+import { InquiryFeedbackTable } from "./inquiry-feedback-table"
+import { feedbackIssues } from "../lib/feedback-editing"
 import { InquiryFeedbackResults } from "./inquiry-feedback-results"
 import { MoneyValue } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { OptionCombobox } from "@/components/business/option-combobox"
 import { MultiOptionCombobox } from "@/components/business/multi-option-combobox"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DatePicker } from "@/components/ui/date-picker"
@@ -26,8 +28,6 @@ import {
     INQUIRY_CONCLUSION_LABEL,
     type InquiryFeedbackData,
     type InquiryFee,
-    type InquiryLine,
-    type InquiryPrice,
     type ProcurementInquiry,
 } from "../types"
 
@@ -45,25 +45,6 @@ const FEE_CATEGORIES = {
     platform_tech: "平台技术",
     offline_service: "线下服务",
     other: "其他",
-}
-
-function newPrice(line: InquiryLine): InquiryPrice {
-    return {
-        price_id: crypto.randomUUID(),
-        quantity: line.quantity,
-        unit_price_gross: "",
-        tax_rate: "0.13",
-        delivery_due_at: line.delivery_due_at,
-        valid_until: 0,
-        min_quantity: "1",
-        max_quantity: null,
-        allow_cumulative: false,
-        allocations: line.allocations.map((allocation) => ({
-            allocation_id: allocation.allocation_id,
-            quantity: allocation.quantity,
-        })),
-        included_cost_note: "",
-    }
 }
 
 function newFee(lineIds: string[]): InquiryFee {
@@ -112,12 +93,16 @@ export function InquiryFeedbackEditor({
     userId,
     onSaved,
     onDirtyChange,
+    footerActions,
+    onInternalQuote,
 }: {
     inquiry: ProcurementInquiry
     task: InquiryTask
     userId: string
     onSaved: () => void
     onDirtyChange: (dirty: boolean) => void
+    footerActions?: React.ReactNode
+    onInternalQuote?: (lineId: string) => void
 }) {
     const key = inquiryStorageKey(userId, `${inquiry.id}:${task.id}:feedback`)
     const [initial, setInitial] = React.useState<{
@@ -166,6 +151,8 @@ export function InquiryFeedbackEditor({
             userId={userId}
             onSaved={onSaved}
             onDirtyChange={onDirtyChange}
+            footerActions={footerActions}
+            onInternalQuote={onInternalQuote}
         />
     ) : (
         <p role="status">正在恢复采购输入…</p>
@@ -180,6 +167,8 @@ function FeedbackEditorContent({
     userId,
     onSaved,
     onDirtyChange,
+    footerActions,
+    onInternalQuote,
 }: {
     storageKey: string
     initial: {
@@ -193,10 +182,13 @@ function FeedbackEditorContent({
     userId: string
     onSaved: () => void
     onDirtyChange: (dirty: boolean) => void
+    footerActions?: React.ReactNode
+    onInternalQuote?: (lineId: string) => void
 }) {
     const command = useInquiryCommand(userId, inquiry.id)
     const [error, setError] = React.useState<string | null>(null)
     const [saved, setSaved] = React.useState(false)
+    const [validationRequest, setValidationRequest] = React.useState(0)
     const [ownCommandRevision, setOwnCommandRevision] = React.useState(0)
     const baseline = React.useRef(
         initial.baseline ??
@@ -324,6 +316,13 @@ function FeedbackEditorContent({
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [command.resolution])
+    const values = useStore(form.store, (state) => state.values)
+    const completeCount = values.lines.filter((line) => {
+        const demand = inquiry.draft.lines.find(
+            (item) => item.line_id === line.line_id,
+        )
+        return demand && feedbackIssues(line, demand).length === 0
+    }).length
     const disabled =
         conflict || command.isPending || !command.ready || command.unresolved
     const currentWork = inquiry.feedback_work.find(
@@ -331,19 +330,17 @@ function FeedbackEditorContent({
     )?.data
     return (
         <form
-            className="space-y-6"
+            id="procurement-inquiry-feedback-form"
+            className="space-y-4"
             onSubmit={(event) => {
                 event.preventDefault()
                 void form.handleSubmit()
             }}
         >
             <fieldset disabled={command.isPending} className="contents">
-                <div>
-                    <h2 className="text-lg font-medium">采购反馈</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        供给结论、供给价、交期及公开说明将在发布后提供销售查看。供应商与内部报价独立保存。
-                    </p>
-                </div>
+                <p className="text-sm text-muted-foreground">
+                    直接填写商品报价，展开明细维护有效期与配送数量。保存进度后，发布给销售。
+                </p>
                 {conflict && (
                     <Alert variant="warning">
                         <AlertDescription className="space-y-3">
@@ -496,494 +493,24 @@ function FeedbackEditorContent({
                 <form.Field
                     name="lines"
                     mode="array"
-                    children={(linesField) => (
-                        <div className="space-y-4">
-                            {linesField.state.value.map(
-                                (feedbackLine, index) => {
-                                    const line = inquiry.draft.lines.find(
-                                        (item) =>
-                                            item.line_id ===
-                                            feedbackLine.line_id,
-                                    )
-                                    if (!line) return null
-                                    const prefix = `procurement-inquiry-line-${toAutomationIdSegment(line.line_id)}`
-                                    return (
-                                        <section
-                                            key={line.line_id}
-                                            className="space-y-4 rounded-lg border p-4"
-                                        >
-                                            <div>
-                                                <h3 className="font-medium">
-                                                    {line.product_name}
-                                                </h3>
-                                                <p className="mt-1 text-xs text-muted-foreground">
-                                                    SKU {line.sku_code} · 需求{" "}
-                                                    {line.quantity}{" "}
-                                                    {line.unit_code}
-                                                </p>
-                                            </div>
-                                            <div className="grid gap-4 md:grid-cols-3">
-                                                <form.Field
-                                                    name={`lines[${index}].conclusion`}
-                                                    children={(field) => (
-                                                        <div className="space-y-2">
-                                                            <Label
-                                                                htmlFor={`${prefix}-conclusion`}
-                                                            >
-                                                                供给结论
-                                                            </Label>
-                                                            <OptionCombobox
-                                                                id={`${prefix}-conclusion`}
-                                                                aria-label="供给结论"
-                                                                allowClear={
-                                                                    false
-                                                                }
-                                                                options={Object.entries(
-                                                                    INQUIRY_CONCLUSION_LABEL,
-                                                                ).map(
-                                                                    ([
-                                                                        value,
-                                                                        label,
-                                                                    ]) => ({
-                                                                        value,
-                                                                        label,
-                                                                    }),
-                                                                )}
-                                                                value={
-                                                                    field.state
-                                                                        .value
-                                                                }
-                                                                onValueChange={(
-                                                                    value,
-                                                                ) => {
-                                                                    field.handleChange(
-                                                                        value as typeof field.state.value,
-                                                                    )
-                                                                    if (
-                                                                        value ===
-                                                                        "unavailable"
-                                                                    ) {
-                                                                        form.setFieldValue(
-                                                                            `lines[${index}].available_quantity`,
-                                                                            "0",
-                                                                        )
-                                                                        form.setFieldValue(
-                                                                            `lines[${index}].prices`,
-                                                                            [],
-                                                                        )
-                                                                    }
-                                                                    if (
-                                                                        value ===
-                                                                        "available"
-                                                                    )
-                                                                        form.setFieldValue(
-                                                                            `lines[${index}].available_quantity`,
-                                                                            line.quantity,
-                                                                        )
-                                                                }}
-                                                            />
-                                                        </div>
-                                                    )}
-                                                />
-                                                <form.AppField
-                                                    name={`lines[${index}].available_quantity`}
-                                                    children={(field) => (
-                                                        <field.TextField
-                                                            id={`${prefix}-available-quantity`}
-                                                            label="可供数量"
-                                                            inputMode="decimal"
-                                                        />
-                                                    )}
-                                                />
-                                                <form.AppField
-                                                    name={`lines[${index}].public_note`}
-                                                    children={(field) => (
-                                                        <field.TextField
-                                                            id={`${prefix}-public-note`}
-                                                            label="对销售说明"
-                                                            placeholder="部分供应说明剩余数量；不供应填写原因"
-                                                        />
-                                                    )}
-                                                />
-                                            </div>
-                                            <form.Field
-                                                name={`lines[${index}].prices`}
-                                                mode="array"
-                                                children={(pricesField) => (
-                                                    <div className="space-y-3">
-                                                        {pricesField.state.value.map(
-                                                            (
-                                                                price,
-                                                                priceIndex,
-                                                            ) => {
-                                                                const pricePrefix = `${prefix}-price-${toAutomationIdSegment(price.price_id)}`
-                                                                return (
-                                                                    <div
-                                                                        key={
-                                                                            price.price_id
-                                                                        }
-                                                                        className="space-y-3 rounded-md bg-muted/40 p-3"
-                                                                    >
-                                                                        <div className="flex items-center justify-between">
-                                                                            <h4 className="text-sm font-medium">
-                                                                                供给价格明细{" "}
-                                                                                {priceIndex +
-                                                                                    1}
-                                                                            </h4>
-                                                                            <Button
-                                                                                id={`${pricePrefix}-remove`}
-                                                                                type="button"
-                                                                                size="sm"
-                                                                                variant="ghost"
-                                                                                onClick={() =>
-                                                                                    pricesField.removeValue(
-                                                                                        priceIndex,
-                                                                                    )
-                                                                                }
-                                                                            >
-                                                                                移除价格明细
-                                                                            </Button>
-                                                                        </div>
-                                                                        <div className="grid gap-3 md:grid-cols-4">
-                                                                            <form.AppField
-                                                                                name={`lines[${index}].prices[${priceIndex}].quantity`}
-                                                                                children={(
-                                                                                    field,
-                                                                                ) => (
-                                                                                    <field.TextField
-                                                                                        id={`${pricePrefix}-quantity`}
-                                                                                        label="适用数量"
-                                                                                        inputMode="decimal"
-                                                                                    />
-                                                                                )}
-                                                                            />
-                                                                            <form.AppField
-                                                                                name={`lines[${index}].prices[${priceIndex}].unit_price_gross`}
-                                                                                children={(
-                                                                                    field,
-                                                                                ) => (
-                                                                                    <field.TextField
-                                                                                        id={`${pricePrefix}-gross-price`}
-                                                                                        label="含税供给单价"
-                                                                                        money
-                                                                                        inputMode="decimal"
-                                                                                    />
-                                                                                )}
-                                                                            />
-                                                                            <form.AppField
-                                                                                name={`lines[${index}].prices[${priceIndex}].tax_rate`}
-                                                                                children={(
-                                                                                    field,
-                                                                                ) => (
-                                                                                    <field.TextField
-                                                                                        id={`${pricePrefix}-tax-rate`}
-                                                                                        label="税率（0.13 表示 13%）"
-                                                                                        inputMode="decimal"
-                                                                                    />
-                                                                                )}
-                                                                            />
-                                                                            <form.AppField
-                                                                                name={`lines[${index}].prices[${priceIndex}].min_quantity`}
-                                                                                children={(
-                                                                                    field,
-                                                                                ) => (
-                                                                                    <field.TextField
-                                                                                        id={`${pricePrefix}-minimum`}
-                                                                                        label="最低适用数量"
-                                                                                        inputMode="decimal"
-                                                                                    />
-                                                                                )}
-                                                                            />
-                                                                            <form.Field
-                                                                                name={`lines[${index}].prices[${priceIndex}].max_quantity`}
-                                                                                children={(
-                                                                                    field,
-                                                                                ) => (
-                                                                                    <div className="space-y-2">
-                                                                                        <Label
-                                                                                            htmlFor={`${pricePrefix}-maximum`}
-                                                                                        >
-                                                                                            最高适用数量（可不填）
-                                                                                        </Label>
-                                                                                        <Input
-                                                                                            id={`${pricePrefix}-maximum`}
-                                                                                            inputMode="decimal"
-                                                                                            value={
-                                                                                                field
-                                                                                                    .state
-                                                                                                    .value ??
-                                                                                                ""
-                                                                                            }
-                                                                                            onChange={(
-                                                                                                event,
-                                                                                            ) =>
-                                                                                                field.handleChange(
-                                                                                                    event
-                                                                                                        .target
-                                                                                                        .value ||
-                                                                                                        null,
-                                                                                                )
-                                                                                            }
-                                                                                        />
-                                                                                    </div>
-                                                                                )}
-                                                                            />
-                                                                            <form.Field
-                                                                                name={`lines[${index}].prices[${priceIndex}].delivery_due_at`}
-                                                                                children={(
-                                                                                    field,
-                                                                                ) => (
-                                                                                    <div className="space-y-2">
-                                                                                        <Label
-                                                                                            htmlFor={`${pricePrefix}-delivery`}
-                                                                                        >
-                                                                                            供给交付日期
-                                                                                        </Label>
-                                                                                        <DatePicker
-                                                                                            id={`${pricePrefix}-delivery`}
-                                                                                            value={inquiryDateInput(
-                                                                                                field
-                                                                                                    .state
-                                                                                                    .value,
-                                                                                            )}
-                                                                                            onValueChange={(
-                                                                                                value,
-                                                                                            ) =>
-                                                                                                field.handleChange(
-                                                                                                    inquiryDateSeconds(
-                                                                                                        value ??
-                                                                                                            "",
-                                                                                                    ),
-                                                                                                )
-                                                                                            }
-                                                                                        />
-                                                                                    </div>
-                                                                                )}
-                                                                            />
-                                                                            <form.Field
-                                                                                name={`lines[${index}].prices[${priceIndex}].valid_until`}
-                                                                                children={(
-                                                                                    field,
-                                                                                ) => (
-                                                                                    <div className="space-y-2">
-                                                                                        <Label
-                                                                                            htmlFor={`${pricePrefix}-valid-until`}
-                                                                                        >
-                                                                                            价格有效日期
-                                                                                        </Label>
-                                                                                        <DatePicker
-                                                                                            id={`${pricePrefix}-valid-until`}
-                                                                                            value={inquiryDateInput(
-                                                                                                field
-                                                                                                    .state
-                                                                                                    .value,
-                                                                                            )}
-                                                                                            onValueChange={(
-                                                                                                value,
-                                                                                            ) =>
-                                                                                                field.handleChange(
-                                                                                                    inquiryDateSeconds(
-                                                                                                        value ??
-                                                                                                            "",
-                                                                                                    ),
-                                                                                                )
-                                                                                            }
-                                                                                        />
-                                                                                    </div>
-                                                                                )}
-                                                                            />
-                                                                            <form.Field
-                                                                                name={`lines[${index}].prices[${priceIndex}].allow_cumulative`}
-                                                                                children={(
-                                                                                    field,
-                                                                                ) => (
-                                                                                    <label
-                                                                                        htmlFor={`${pricePrefix}-cumulative`}
-                                                                                        className="flex items-center gap-2 text-sm"
-                                                                                    >
-                                                                                        <Checkbox
-                                                                                            id={`${pricePrefix}-cumulative`}
-                                                                                            checked={
-                                                                                                field
-                                                                                                    .state
-                                                                                                    .value
-                                                                                            }
-                                                                                            onCheckedChange={(
-                                                                                                value,
-                                                                                            ) =>
-                                                                                                field.handleChange(
-                                                                                                    value ===
-                                                                                                        true,
-                                                                                                )
-                                                                                            }
-                                                                                        />
-                                                                                        允许累计分批满足数量档位
-                                                                                    </label>
-                                                                                )}
-                                                                            />
-                                                                        </div>
-                                                                        <form.AppField
-                                                                            name={`lines[${index}].prices[${priceIndex}].included_cost_note`}
-                                                                            children={(
-                                                                                field,
-                                                                            ) => (
-                                                                                <field.TextField
-                                                                                    id={`${pricePrefix}-included-cost`}
-                                                                                    label="价格已包含费用"
-                                                                                />
-                                                                            )}
-                                                                        />
-                                                                        <div className="space-y-2">
-                                                                            <h5 className="text-xs font-medium">
-                                                                                本价格覆盖的配送数量
-                                                                            </h5>
-                                                                            {line.allocations.map(
-                                                                                (
-                                                                                    allocation,
-                                                                                ) => {
-                                                                                    const allocationIndex =
-                                                                                        price.allocations.findIndex(
-                                                                                            (
-                                                                                                item,
-                                                                                            ) =>
-                                                                                                item.allocation_id ===
-                                                                                                allocation.allocation_id,
-                                                                                        )
-                                                                                    const allocationPrefix = `${pricePrefix}-allocation-${toAutomationIdSegment(allocation.allocation_id)}`
-                                                                                    return (
-                                                                                        <div
-                                                                                            key={
-                                                                                                allocation.allocation_id
-                                                                                            }
-                                                                                            className="flex flex-wrap items-center gap-3 text-xs"
-                                                                                        >
-                                                                                            <label
-                                                                                                htmlFor={`${allocationPrefix}-included`}
-                                                                                                className="flex min-w-56 flex-1 items-center gap-2"
-                                                                                            >
-                                                                                                <Checkbox
-                                                                                                    id={`${allocationPrefix}-included`}
-                                                                                                    checked={
-                                                                                                        allocationIndex >=
-                                                                                                        0
-                                                                                                    }
-                                                                                                    onCheckedChange={(
-                                                                                                        checked,
-                                                                                                    ) => {
-                                                                                                        const next =
-                                                                                                            [
-                                                                                                                ...price.allocations,
-                                                                                                            ]
-                                                                                                        if (
-                                                                                                            checked
-                                                                                                        )
-                                                                                                            next.push(
-                                                                                                                {
-                                                                                                                    allocation_id:
-                                                                                                                        allocation.allocation_id,
-                                                                                                                    quantity:
-                                                                                                                        allocation.quantity,
-                                                                                                                },
-                                                                                                            )
-                                                                                                        else if (
-                                                                                                            allocationIndex >=
-                                                                                                            0
-                                                                                                        )
-                                                                                                            next.splice(
-                                                                                                                allocationIndex,
-                                                                                                                1,
-                                                                                                            )
-                                                                                                        form.setFieldValue(
-                                                                                                            `lines[${index}].prices[${priceIndex}].allocations`,
-                                                                                                            next,
-                                                                                                        )
-                                                                                                    }}
-                                                                                                />
-                                                                                                {
-                                                                                                    allocation.recipient
-                                                                                                }{" "}
-                                                                                                ·{" "}
-                                                                                                {
-                                                                                                    allocation.region_name
-                                                                                                }{" "}
-                                                                                                {
-                                                                                                    allocation.address
-                                                                                                }{" "}
-                                                                                                ·
-                                                                                                需求{" "}
-                                                                                                {
-                                                                                                    allocation.quantity
-                                                                                                }
-                                                                                            </label>
-                                                                                            {allocationIndex >=
-                                                                                                0 && (
-                                                                                                <form.Field
-                                                                                                    name={`lines[${index}].prices[${priceIndex}].allocations[${allocationIndex}].quantity`}
-                                                                                                    children={(
-                                                                                                        field,
-                                                                                                    ) => (
-                                                                                                        <Input
-                                                                                                            id={`${allocationPrefix}-quantity`}
-                                                                                                            className="w-28"
-                                                                                                            aria-label={`${allocation.recipient}可供数量`}
-                                                                                                            inputMode="decimal"
-                                                                                                            value={
-                                                                                                                field
-                                                                                                                    .state
-                                                                                                                    .value
-                                                                                                            }
-                                                                                                            onChange={(
-                                                                                                                event,
-                                                                                                            ) =>
-                                                                                                                field.handleChange(
-                                                                                                                    event
-                                                                                                                        .target
-                                                                                                                        .value,
-                                                                                                                )
-                                                                                                            }
-                                                                                                        />
-                                                                                                    )}
-                                                                                                />
-                                                                                            )}
-                                                                                        </div>
-                                                                                    )
-                                                                                },
-                                                                            )}
-                                                                        </div>
-                                                                    </div>
-                                                                )
-                                                            },
-                                                        )}
-                                                        <Button
-                                                            id={`${prefix}-add-price`}
-                                                            type="button"
-                                                            size="sm"
-                                                            variant="outline"
-                                                            disabled={
-                                                                feedbackLine.conclusion ===
-                                                                "unavailable"
-                                                            }
-                                                            onClick={() =>
-                                                                pricesField.pushValue(
-                                                                    newPrice(
-                                                                        line,
-                                                                    ),
-                                                                )
-                                                            }
-                                                        >
-                                                            添加供给价格明细
-                                                        </Button>
-                                                    </div>
-                                                )}
-                                            />
-                                        </section>
-                                    )
-                                },
-                            )}
-                        </div>
+                    children={(field) => (
+                        <InquiryFeedbackTable
+                            lines={field.state.value}
+                            demand={inquiry.draft.lines}
+                            onChange={field.handleChange}
+                            validationRequest={validationRequest}
+                            onInternalQuote={onInternalQuote}
+                            disabled={disabled}
+                        />
                     )}
                 />
-                <section className="space-y-4">
+                <details className="space-y-4 rounded-lg border p-4">
+                    <summary
+                        id="procurement-feedback-fees-toggle"
+                        className="cursor-pointer text-sm font-medium"
+                    >
+                        额外成本（{values.fees.length} 项）
+                    </summary>
                     <div className="flex items-center justify-between">
                         <h3 className="text-base font-medium">额外成本</h3>
                         <Button
@@ -1350,20 +877,49 @@ function FeedbackEditorContent({
                             </div>
                         )}
                     />
-                </section>
-                <div className="flex items-center justify-end gap-3">
+                </details>
+                <div
+                    className="sticky bottom-0 z-20 flex flex-wrap items-center justify-end gap-3 border-t bg-background py-4"
+                    onClickCapture={(event) => {
+                        if (
+                            !(event.target instanceof Element) ||
+                            !event.target.closest(
+                                "#sales-inquiry-action-publish",
+                            )
+                        )
+                            return
+                        const first = values.lines.find((line) => {
+                            const demand = inquiry.draft.lines.find(
+                                (item) => item.line_id === line.line_id,
+                            )
+                            return (
+                                demand &&
+                                feedbackIssues(line, demand).length > 0
+                            )
+                        })
+                        if (first) {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            setValidationRequest((value) => value + 1)
+                            setError("请先完善标出的商品反馈，再保存并发布。")
+                        }
+                    }}
+                >
                     <p className="mr-auto text-xs text-muted-foreground">
+                        已完成 {completeCount} / {values.lines.length} 项 ·{" "}
                         {saved
-                            ? "采购处理进度已保存；发布后销售才可见。"
-                            : "当前输入会保留。发布前须保存，所有责任结果齐备后统一发布。"}
+                            ? "处理进度已保存，发布后销售可见"
+                            : "修改后请保存处理进度"}
                     </p>
                     <Button
                         id="procurement-inquiry-save-feedback"
                         type="submit"
+                        variant="outline"
                         disabled={disabled}
                     >
                         {command.isPending ? "正在保存…" : "保存处理进度"}
                     </Button>
+                    {footerActions}
                 </div>
             </fieldset>
         </form>

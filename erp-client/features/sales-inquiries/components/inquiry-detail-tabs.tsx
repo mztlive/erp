@@ -28,7 +28,10 @@ export function InquiryDetailTabs({
 }) {
     const [active, setActive] = React.useState<InquiryTab>(() =>
         inquiry.status === "awaiting_sales" ||
-        (procurement && inquiry.status === "procurement_processing")
+        (procurement &&
+            ["awaiting_procurement", "procurement_processing"].includes(
+                inquiry.status,
+            ))
             ? "feedback"
             : "demand",
     )

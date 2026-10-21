@@ -116,7 +116,6 @@ fn feedback(quantity: &str, conclusion: InquirySupplyConclusion) -> InquiryFeedb
 fn accepted() -> SalesInquiry {
     let mut inquiry = inquiry();
     inquiry.submit(1, "sales", String::new(), now()).unwrap();
-    inquiry.claim(1).unwrap();
     inquiry.publish(1, "buyer", feedback("10", InquirySupplyConclusion::Available), now()).unwrap();
     inquiry.accept(1, "sales", 1, now()).unwrap();
     inquiry
@@ -182,7 +181,7 @@ fn draft_and_submission_preserve_excess_allocation_quantities() {
         assert_eq!(inquiry.draft, data);
         assert_eq!(inquiry.draft.lines[0].quantity, qty("10"));
         inquiry.submit(1, "sales", String::new(), now()).unwrap();
-        assert_eq!(inquiry.status, InquiryStatus::AwaitingProcurement);
+        assert_eq!(inquiry.status, InquiryStatus::ProcurementProcessing);
         assert_eq!(inquiry.requirements[0].data, data);
     }
 }
@@ -201,7 +200,7 @@ fn draft_saves_short_allocation_but_submission_requires_full_coverage() {
     data.lines[0].allocations[0].quantity = qty("10");
     inquiry.save_draft(1, data, None).unwrap();
     inquiry.submit(1, "sales", String::new(), now()).unwrap();
-    assert_eq!(inquiry.status, InquiryStatus::AwaitingProcurement);
+    assert_eq!(inquiry.status, InquiryStatus::ProcurementProcessing);
 }
 
 #[test]
@@ -239,7 +238,6 @@ fn three_feedback_rounds_preserve_accepted_and_submitted_history() {
             )
             .unwrap();
         assert!(inquiry.reserve_quantities("blocked", "sales", round - 1, selected("1"), now()).is_err());
-        inquiry.claim(1).unwrap();
         inquiry.publish(1, "buyer", feedback("10", InquirySupplyConclusion::Available), now()).unwrap();
         inquiry.accept(1, "sales", round, now()).unwrap();
     }
@@ -255,7 +253,6 @@ fn three_feedback_rounds_preserve_accepted_and_submitted_history() {
 fn only_final_complete_and_address_specific_feedback_can_be_published() {
     let mut inquiry = inquiry();
     inquiry.submit(1, "sales", String::new(), now()).unwrap();
-    inquiry.claim(1).unwrap();
     let before = inquiry.clone();
     assert!(inquiry.publish(1, "buyer", feedback("10", InquirySupplyConclusion::Pending), now()).is_err());
     assert_eq!(inquiry, before);
@@ -272,14 +269,13 @@ fn only_final_complete_and_address_specific_feedback_can_be_published() {
 fn all_unavailable_feedback_is_publishable_and_close_preserves_history() {
     let mut inquiry = inquiry();
     inquiry.submit(1, "sales", String::new(), now()).unwrap();
-    inquiry.claim(1).unwrap();
     inquiry.publish(1, "buyer", feedback("0", InquirySupplyConclusion::Unavailable), now()).unwrap();
     inquiry.accept(1, "sales", 1, now()).unwrap();
     assert!(inquiry.reserve_quantities("r", "order", 1, selected("1"), now()).is_err());
     inquiry.close(1, "sales", "客户暂不采购".into(), now()).unwrap();
     assert_eq!(inquiry.feedbacks.len(), 1);
     assert_eq!(inquiry.status, InquiryStatus::Closed);
-    assert!(inquiry.claim(1).is_err());
+    assert!(inquiry.ensure_processing(1).is_err());
 }
 
 #[test]
@@ -345,7 +341,6 @@ fn occupied_stable_sku_address_and_fee_identity_cannot_be_rewritten() {
             now(),
         )
         .unwrap();
-    inquiry.claim(1).unwrap();
     let mut lower = feedback("10", InquirySupplyConclusion::Available);
     lower.fees[0].amount_gross = amount("70");
     assert!(inquiry.publish(1, "buyer", lower, now()).is_err());
@@ -401,7 +396,6 @@ fn new_accepted_fee_can_resize_existing_allocation_and_unhandled_reservation() {
             now(),
         )
         .unwrap();
-    inquiry.claim(1).unwrap();
     let mut raised = feedback("10", InquirySupplyConclusion::Available);
     raised.fees[0].amount_gross = amount("150");
     inquiry.publish(1, "buyer", raised, now()).unwrap();
@@ -417,7 +411,6 @@ fn new_accepted_fee_can_resize_existing_allocation_and_unhandled_reservation() {
 fn current_task_work_is_required_and_reassignment_does_not_revive_old_work() {
     let mut inquiry = inquiry();
     inquiry.submit(1, "sales", String::new(), now()).unwrap();
-    inquiry.claim(1).unwrap();
     inquiry
         .save_feedback_work(
             1,
@@ -566,7 +559,6 @@ fn unknown_receipt_schema_deleted_receipts_and_corrupt_results_fail_closed() {
 fn single_price_address_capacity_cannot_be_bypassed_by_line_total() {
     let mut inquiry = inquiry();
     inquiry.submit(1, "sales", String::new(), now()).unwrap();
-    inquiry.claim(1).unwrap();
     let mut split = feedback("10", InquirySupplyConclusion::Available);
     let mut second = split.lines[0].prices[0].clone();
     split.lines[0].prices[0].quantity = qty("1");
@@ -606,7 +598,6 @@ fn shared_fee_owner_is_explicit_and_moves_with_responsibility() {
     inquiry.assign_shared_fee_owner(None, &["buyer1".into()]).unwrap();
     assert_eq!(inquiry.shared_fee_owner_user_id.as_deref(), Some("buyer1"));
     inquiry.submit(1, "sales", String::new(), now()).unwrap();
-    inquiry.claim(1).unwrap();
     let mut whole_fee = feedback("10", InquirySupplyConclusion::Available);
     whole_fee.fees[0].line_ids.clear();
     whole_fee.fees[0].allocation_ids.clear();
@@ -629,6 +620,51 @@ fn shared_fee_owner_is_explicit_and_moves_with_responsibility() {
         )
         .unwrap();
     assert_eq!(inquiry.shared_fee_owner_user_id.as_deref(), Some("buyer2"));
+}
+
+#[test]
+fn assigned_and_legacy_inquiries_allow_processing_without_acceptance() {
+    for legacy in [false, true] {
+        let mut inquiry = inquiry();
+        inquiry.submit(1, "sales", String::new(), now()).unwrap();
+        assert_eq!(inquiry.status, InquiryStatus::ProcurementProcessing);
+        if legacy {
+            inquiry.status = InquiryStatus::AwaitingProcurement;
+        }
+        inquiry.ensure_processing(1).unwrap();
+        assert!(inquiry.ensure_processing(2).is_err());
+        let data = feedback("10", InquirySupplyConclusion::Available);
+        let original = inquiry.clone();
+        assert!(inquiry.save_feedback_work(2, "buyer", vec!["line".into()], data.clone(), now()).is_err());
+        assert_eq!(inquiry, original);
+        assert!(inquiry.save_feedback_work(1, "buyer", vec!["outside".into()], data.clone(), now()).is_err());
+        assert_eq!(inquiry, original);
+        inquiry.save_feedback_work(1, "buyer", vec!["line".into()], data, now()).unwrap();
+        assert_eq!(inquiry.feedback_work.len(), 1);
+        let merged = inquiry.merge_feedback_work(&[("buyer".into(), vec!["line".into()])]).unwrap();
+        inquiry.publish(1, "buyer", merged, now()).unwrap();
+        assert_eq!(inquiry.status, InquiryStatus::AwaitingSales);
+        inquiry
+            .reinquire(
+                1,
+                "sales",
+                InquiryReinquiryData {
+                    reason: "调整交期".into(),
+                    line_ids: vec![],
+                    fee_ids: vec![],
+                    concerns: String::new(),
+                    requirement: None,
+                },
+                now(),
+            )
+            .unwrap();
+        assert_eq!(inquiry.status, InquiryStatus::ProcurementProcessing);
+        inquiry.request_supplement(1, "buyer", "补充说明".into(), now()).unwrap();
+        assert_eq!(inquiry.status, InquiryStatus::AwaitingSalesSupplement);
+        assert!(inquiry.ensure_processing(1).is_err());
+        inquiry.submit(1, "sales", String::new(), now()).unwrap();
+        assert_eq!(inquiry.status, InquiryStatus::ProcurementProcessing);
+    }
 }
 
 #[test]
@@ -656,13 +692,13 @@ fn mutation_state_matrix_matches_the_contract() {
             "submit {state:?}"
         );
         assert_eq!(
-            initial.clone().claim(1).is_ok(),
+            initial.ensure_processing(1).is_ok(),
             matches!(state, InquiryStatus::AwaitingProcurement | InquiryStatus::ProcurementProcessing),
-            "claim {state:?}"
+            "processing {state:?}"
         );
         assert_eq!(
             initial.clone().request_supplement(1, "buyer", "补充".into(), now()).is_ok(),
-            state == InquiryStatus::ProcurementProcessing,
+            matches!(state, InquiryStatus::AwaitingProcurement | InquiryStatus::ProcurementProcessing),
             "supplement {state:?}"
         );
         assert_eq!(
@@ -670,7 +706,7 @@ fn mutation_state_matrix_matches_the_contract() {
                 .clone()
                 .publish(1, "buyer", feedback("10", InquirySupplyConclusion::Available), now())
                 .is_ok(),
-            state == InquiryStatus::ProcurementProcessing,
+            matches!(state, InquiryStatus::AwaitingProcurement | InquiryStatus::ProcurementProcessing),
             "publish {state:?}"
         );
         assert_eq!(
@@ -740,7 +776,6 @@ fn two_line_accepted_inquiry() -> (SalesInquiry, InquiryFeedbackData) {
     second_demand.allocations[0].allocation_id = "address-b".into();
     inquiry.draft.lines.push(second_demand);
     inquiry.submit(1, "sales", String::new(), now()).unwrap();
-    inquiry.claim(1).unwrap();
     let mut complete = feedback("10", InquirySupplyConclusion::Available);
     let mut second_line = complete.lines[0].clone();
     second_line.line_id = "line-b".into();
@@ -783,7 +818,6 @@ fn unaccepted_new_feedback_preserves_old_accepted_unaffected_goods_and_fees() {
             now(),
         )
         .unwrap();
-    inquiry.claim(1).unwrap();
     inquiry.publish(1, "buyer", complete, now()).unwrap();
     assert_eq!(inquiry.feedback_round, 2);
     inquiry.accepted_feedback(1, now()).unwrap();
@@ -834,7 +868,6 @@ fn repeated_unaccepted_rounds_keep_the_union_of_affected_scopes_blocked() {
             now(),
         )
         .unwrap();
-    inquiry.claim(1).unwrap();
     inquiry.publish(1, "buyer", complete.clone(), now()).unwrap();
     inquiry
         .reinquire(
@@ -850,7 +883,6 @@ fn repeated_unaccepted_rounds_keep_the_union_of_affected_scopes_blocked() {
             now(),
         )
         .unwrap();
-    inquiry.claim(1).unwrap();
     inquiry.publish(1, "buyer", complete, now()).unwrap();
     assert!(inquiry.reserve_quantities("a", "order-a", 1, selected("1"), now()).is_err());
     inquiry.reserve_quantities("b", "order-b", 1, selected_b("1"), now()).unwrap();
@@ -901,7 +933,6 @@ fn acceptance_rechecks_ledger_changed_after_feedback_publication() {
             now(),
         )
         .unwrap();
-    inquiry.claim(1).unwrap();
     complete.lines[1].conclusion = InquirySupplyConclusion::PartiallyAvailable;
     complete.lines[1].available_quantity = qty("5");
     complete.lines[1].prices[0].quantity = qty("5");

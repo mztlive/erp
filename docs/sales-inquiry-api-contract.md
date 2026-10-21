@@ -104,7 +104,6 @@
 | --- | --- | --- | --- |
 | `GET /procurement-inquiries` | `procurement_inquiry:list` | §5 分页参数 | 当前任务范围的采购列表 |
 | `GET /procurement-inquiries/{id}?task_id=...` | `procurement_inquiry:detail` | 当前任务 ID | `ProcurementInquiryDetail`，附安全任务身份和版本 |
-| `POST /procurement-inquiries/{id}/claim` | `procurement_inquiry:claim` | `InquiryTaskCommand` | `InquiryMutationView` |
 | `POST /procurement-inquiries/{id}/supplement` | `procurement_inquiry:supplement` | `InquiryTaskReasonCommand` | `InquiryMutationView` |
 | `POST /procurement-inquiries/{id}/reassign` | `procurement_inquiry:reassign` | `ReassignInquiryCommand` | `InquiryMutationView` |
 | `PUT /procurement-inquiries/{id}/feedback` | `procurement_inquiry:save_feedback` | `SaveInquiryFeedbackCommand` | `InquiryMutationView` |
@@ -141,19 +140,20 @@
 | --- | --- | --- | --- |
 | 创建 | 无 | `draft` | 生成稳定询价身份及独立命令回执 |
 | 保存草稿或确认导入 | `draft`、`awaiting_sales_supplement` | 原态 | 聚合 CAS 更新；不覆盖已提交快照 |
-| 提交 | `draft`、`awaiting_sales_supplement` | `awaiting_procurement` | 需求有变化才追加需求版本；完整替换责任任务 |
-| 接手 | `awaiting_procurement`、`procurement_processing` | `procurement_processing` | 核对当前任务责任及版本 |
+| 提交 | `draft`、`awaiting_sales_supplement` | `procurement_processing` | 需求有变化才追加需求版本；完整替换责任任务 |
 | 退回补充 | `procurement_processing` | `awaiting_sales_supplement` | 冻结采购工作并关闭当前任务 |
 | 保存采购工作 | `procurement_processing` | 原态 | 只替换本人的当前责任工作片段，旧片段冻结 |
 | 发布 | `procurement_processing` | `awaiting_sales` | 追加反馈轮次；冻结工作并完成任务 |
 | 销售接受 | `awaiting_sales` | `confirmed` | 记录确切需求版本与反馈轮次 |
-| 重询 | `awaiting_sales`、`confirmed` | `awaiting_procurement` | 仅价格变化不增加需求版本；需求变化追加版本；重建任务 |
+| 重询 | `awaiting_sales`、`confirmed` | `procurement_processing` | 仅价格变化不增加需求版本；需求变化追加版本；重建任务 |
 | 关闭 | 除 `closed` 的有效状态 | `closed` | 保留全部历史；冻结工作并关闭任务 |
 
 1. 聚合 `version` 用于并发控制，`requirement_version` 用于需求快照，`feedback_round` 用于已发布反馈，三者不得混用。
 2. 已提交需求、已发布反馈、接受和来源引用保持历史事实。重新询价暂停受影响未转部分，既有销售或采购不被新轮次覆盖。局部重询及新反馈尚未接受期间，最近已接受轮次中未受影响的范围继续按原条件及余额使用；所有尚未接受重询的受影响范围合并阻断。销售接受新轮次后，旧轮次不得再用于新占用或增额。需求版本变化使旧需求版本的接受结果全部失效。
 3. 提交、发布、接受、重询、关闭在同一事务内处理业务聚合、工作项、审计及回执。
 4. 首次提交询价无需填写说明，提交确认框不展示说明输入项，`SubmitInquiryCommand.reason` 传空字符串；已提交需求发生修改并形成新需求版本时仍须提供需求变更原因。
+
+5. 分配任务后直接进入 `procurement_processing`，不提供接手接口或接手权限。历史 `awaiting_procurement` 记录允许当前责任人直接保存反馈、维护内部报价、发布、要求补充或改派；所有动作继续核验当前任务责任、操作权限和版本。改派是责任转移的唯一入口。列表“采购处理中”筛选同时覆盖上述两种存储状态。
 
 ## 7. 客户 Excel
 

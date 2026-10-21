@@ -228,7 +228,7 @@ export type InquiryList = {
 
 export const INQUIRY_STATUS_LABEL: Record<InquiryStatus, string> = {
     draft: "草稿",
-    awaiting_procurement: "待采购处理",
+    awaiting_procurement: "采购处理中",
     procurement_processing: "采购处理中",
     awaiting_sales_supplement: "待销售补充",
     awaiting_sales: "待销售处理",

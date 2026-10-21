@@ -304,7 +304,6 @@ mod tests {
         )
         .unwrap();
         inquiry.submit(1, "sales", String::new(), now()).unwrap();
-        inquiry.claim(1).unwrap();
         inquiry.publish(1, "buyer", feedback("10", "price-b"), now()).unwrap();
         inquiry.accept(1, "sales", 1, now()).unwrap();
         inquiry
@@ -356,7 +355,6 @@ mod tests {
         let mut inquiry = accepted();
         reinquire_a(&mut inquiry);
         assert_only_original_b(&inquiry);
-        inquiry.claim(1).unwrap();
         inquiry.publish(1, "buyer", feedback("8", "price-b-new"), now()).unwrap();
         assert_only_original_b(&inquiry);
         assert!(InquirySalesBasis::from_inquiry(&inquiry, 2, now()).is_err());

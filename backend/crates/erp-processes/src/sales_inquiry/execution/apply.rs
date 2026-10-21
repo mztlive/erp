@@ -130,7 +130,6 @@ impl SalesInquiryProcess {
     ) -> Result<()> {
         let now = Instant::now();
         match command {
-            InquiryCommand::Claim(req) => inquiry.claim(req.expected_version)?,
             InquiryCommand::SaveFeedback(req) => inquiry.save_feedback_work(
                 req.expected_version,
                 actor.id(),

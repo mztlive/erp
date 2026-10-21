@@ -36,7 +36,6 @@ type InquiryAction =
     | "accept"
     | "reinquire"
     | "close"
-    | "claim"
     | "supplement"
     | "publish"
     | "reassign"
@@ -45,7 +44,6 @@ const ACTION_LABEL: Record<InquiryAction, string> = {
     accept: "接受本轮结果",
     reinquire: "要求重新询价",
     close: "关闭询价",
-    claim: "接手处理",
     supplement: "要求补充需求",
     publish: "发布本轮反馈",
     reassign: "改派责任采购",
@@ -73,6 +71,7 @@ export function InquiryActions({
     renderActions?: (
         primaryActions: React.ReactNode,
         secondaryActions: React.ReactNode,
+        assignmentActions: React.ReactNode,
     ) => React.ReactNode
 }) {
     const [action, setAction] = React.useState<InquiryAction | null>(null)
@@ -138,11 +137,7 @@ export function InquiryActions({
                     }
                 if (["close", "supplement", "reassign"].includes(action))
                     data.reason = value.reason.trim()
-                if (
-                    ["claim", "supplement", "publish", "reassign"].includes(
-                        action,
-                    )
-                )
+                if (["supplement", "publish", "reassign"].includes(action))
                     Object.assign(data, taskBody)
                 if (action === "reassign") {
                     if (!value.buyer_user_id)
@@ -195,11 +190,11 @@ export function InquiryActions({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [storageKey])
     const actions: InquiryAction[] = procurement
-        ? inquiry.status === "awaiting_procurement"
-            ? ["claim", "reassign"]
-            : inquiry.status === "procurement_processing"
-              ? ["publish", "supplement", "reassign"]
-              : []
+        ? ["awaiting_procurement", "procurement_processing"].includes(
+              inquiry.status,
+          )
+            ? ["publish", "supplement", "reassign"]
+            : []
         : inquiry.status === "draft" ||
             inquiry.status === "awaiting_sales_supplement"
           ? ["submit", "close"]
@@ -284,10 +279,21 @@ export function InquiryActions({
             {renderActions ? (
                 renderActions(
                     actions
-                        .filter((item) => item !== "close")
+                        .filter(
+                            (item) =>
+                                item !== "close" &&
+                                item !== "reassign" &&
+                                item !== "supplement",
+                        )
                         .map(renderButton),
                     actions
                         .filter((item) => item === "close")
+                        .map(renderButton),
+                    actions
+                        .filter(
+                            (item) =>
+                                item === "reassign" || item === "supplement",
+                        )
                         .map(renderButton),
                 )
             ) : (
@@ -367,7 +373,7 @@ export function InquiryActions({
                                 : action === "submit" || action === "reinquire"
                                   ? "提交后按采购责任规则自动分派，无需选择采购人员。"
                                   : action === "publish"
-                                    ? "发布前请先保存处理进度；所有责任商品必须有最终供给结论。已发布内容冻结为本轮完整结果。"
+                                    ? "发布当前已保存的商品结论、供给价、交期、费用及对销售说明。内部供应商报价不会公开；所有责任商品齐备后统一发布。"
                                     : action === "close"
                                       ? "关闭后不能新增询价或转单，已生成销售与采购继续按各自流程办理。"
                                       : "核对当前需求和责任范围后执行。"}
