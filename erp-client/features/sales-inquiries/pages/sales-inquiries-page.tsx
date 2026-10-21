@@ -24,6 +24,7 @@ import {
 } from "@/components/business/list-workspace"
 import { OptionCombobox } from "@/components/business/option-combobox"
 import { useAppForm } from "@/components/form"
+import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { StatusBadge } from "@/components/ui/status-badge"
@@ -115,16 +116,23 @@ export function SalesInquiriesPage({
             accessorKey: "requirement_version",
             header: "需求版本",
             meta: { label: "需求版本" },
-            cell: ({ row }) => `第 ${row.original.requirement_version} 版`,
+            cell: ({ row }) => (
+                <Badge variant="neutral">
+                    第 {row.original.requirement_version} 版
+                </Badge>
+            ),
         },
         {
             accessorKey: "feedback_round",
             header: "反馈轮次",
             meta: { label: "反馈轮次" },
-            cell: ({ row }) =>
-                row.original.feedback_round
-                    ? `第 ${row.original.feedback_round} 轮`
-                    : "待首次反馈",
+            cell: ({ row }) => (
+                <Badge variant="neutral">
+                    {row.original.feedback_round
+                        ? `第 ${row.original.feedback_round} 轮`
+                        : "待首次反馈"}
+                </Badge>
+            ),
         },
         {
             accessorKey: "deadline_at",
@@ -142,22 +150,48 @@ export function SalesInquiriesPage({
                 header: "转单进度",
                 meta: { label: "转单进度", width: "status" },
                 cell: ({ row }) =>
-                    "sales_progress" in row.original
-                        ? TRANSFER_LABEL[
-                              row.original.sales_progress.transfer_status
-                          ]
-                        : "—",
+                    "sales_progress" in row.original ? (
+                        <StatusBadge
+                            label={
+                                TRANSFER_LABEL[
+                                    row.original.sales_progress.transfer_status
+                                ]
+                            }
+                            tone={
+                                row.original.sales_progress.transfer_status ===
+                                "complete"
+                                    ? "success"
+                                    : "neutral"
+                            }
+                        />
+                    ) : (
+                        "—"
+                    ),
             },
             {
                 id: "quote_validity",
                 header: "报价有效性",
                 meta: { label: "报价有效性", width: "status" },
                 cell: ({ row }) =>
-                    "sales_progress" in row.original
-                        ? VALIDITY_LABEL[
-                              row.original.sales_progress.quote_validity
-                          ]
-                        : "—",
+                    "sales_progress" in row.original ? (
+                        <StatusBadge
+                            label={
+                                VALIDITY_LABEL[
+                                    row.original.sales_progress.quote_validity
+                                ]
+                            }
+                            tone={
+                                row.original.sales_progress.quote_validity ===
+                                    "expired" ||
+                                row.original.sales_progress.quote_validity ===
+                                    "partially_expired"
+                                    ? "warning"
+                                    : "neutral"
+                            }
+                        />
+                    ) : (
+                        "—"
+                    ),
             },
         )
     return (

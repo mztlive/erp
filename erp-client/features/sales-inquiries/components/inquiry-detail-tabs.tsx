@@ -17,12 +17,14 @@ export function InquiryDetailTabs({
     demand,
     feedback,
     fees,
+    actions,
 }: {
     inquiry: SalesInquiry | ProcurementInquiry
     procurement: boolean
     demand: React.ReactNode
     feedback: React.ReactNode
     fees: React.ReactNode
+    actions?: React.ReactNode
 }) {
     const [active, setActive] = React.useState<InquiryTab>(() =>
         inquiry.status === "awaiting_sales" ||
@@ -76,7 +78,7 @@ export function InquiryDetailTabs({
             }}
             className="min-w-0 gap-5"
         >
-            <div className="flex flex-wrap items-center justify-between gap-x-6 border-b">
+            <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b">
                 <TabsList
                     variant="line"
                     aria-label="询价内容分区"
@@ -104,17 +106,20 @@ export function InquiryDetailTabs({
                         费用与办理
                     </TabsTrigger>
                 </TabsList>
-                <Button
-                    id="sales-inquiry-history-open"
-                    ref={historyTrigger}
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setHistoryOpen(true)}
-                >
-                    <HistoryIcon aria-hidden="true" />
-                    操作记录
-                </Button>
+                <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2 py-1">
+                    <Button
+                        id="sales-inquiry-history-open"
+                        ref={historyTrigger}
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setHistoryOpen(true)}
+                    >
+                        <HistoryIcon aria-hidden="true" />
+                        操作记录
+                    </Button>
+                    {actions}
+                </div>
             </div>
             {(["demand", "feedback", "fees"] as const).map((tab) => (
                 <TabsContent

@@ -80,6 +80,8 @@ export type WorkspaceNavBadgeKey =
     | "delivery-count"
     | "warehouse-count"
     | "selection-actionable-count"
+    | "inquiry-feedback-count"
+    | "procurement-inquiry-count"
 
 type WorkspaceNavItem = Readonly<{
     id: WorkspaceId
@@ -505,6 +507,7 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                     href: "/sales/inquiries",
                     label: "销售询价",
                     icon: ClipboardListIcon,
+                    badge: "inquiry-feedback-count",
                     requiredPermissions: ["sales_inquiry:list"],
                 },
                 {
@@ -533,6 +536,7 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                     href: "/procurement/inquiries",
                     label: "采购询价",
                     icon: PackageSearchIcon,
+                    badge: "procurement-inquiry-count",
                     requiredPermissions: ["procurement_inquiry:list"],
                 },
                 {

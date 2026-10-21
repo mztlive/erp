@@ -2,6 +2,7 @@
 
 import {
     ChevronRightIcon,
+    ClipboardListIcon,
     FileTextIcon,
     InfoIcon,
     SquarePenIcon,
@@ -17,11 +18,15 @@ export function SalesOrderCreateEntry({
     onSelectBasis,
     selectedFileName,
     onResumeImport,
+    onSelectInquiry,
+    inquiryDisabled = false,
 }: {
     onUpload: (file: File) => void
     onSelectBasis: (basis: "contract" | "evidence") => void
     selectedFileName?: string
     onResumeImport: () => void
+    onSelectInquiry?: () => void
+    inquiryDisabled?: boolean
 }) {
     return (
         <section
@@ -100,13 +105,29 @@ export function SalesOrderCreateEntry({
                             description:
                                 "选择客户与结算主体，上传业务凭证后开单",
                         },
+                        ...(onSelectInquiry
+                            ? [
+                                  {
+                                      basis: "inquiry" as const,
+                                      icon: ClipboardListIcon,
+                                      title: "从询价单带入",
+                                      description:
+                                          "选择已接受的询价结果，带入客户、商品与配送信息",
+                                  },
+                              ]
+                            : []),
                     ].map(({ basis, icon: Icon, title, description }) => (
                         <button
                             key={basis}
                             id={`sales-orders-create-entry-${basis}`}
                             type="button"
-                            className="flex w-full items-center gap-4 px-3 py-5 text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:gap-5"
-                            onClick={() => onSelectBasis(basis)}
+                            className="flex w-full items-center gap-4 px-3 py-5 text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:pointer-events-none disabled:opacity-50 sm:gap-5"
+                            disabled={basis === "inquiry" && inquiryDisabled}
+                            onClick={() =>
+                                basis === "inquiry"
+                                    ? onSelectInquiry?.()
+                                    : onSelectBasis(basis)
+                            }
                         >
                             <Icon
                                 className="size-7 shrink-0"

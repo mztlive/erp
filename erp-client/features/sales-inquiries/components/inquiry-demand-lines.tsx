@@ -4,6 +4,7 @@ import * as React from "react"
 import { useStore } from "@tanstack/react-form"
 import { PackageIcon, Trash2Icon, TruckIcon } from "lucide-react"
 import { withForm } from "@/components/form"
+import { BusinessFailureState } from "@/components/business"
 import { SkuThumbnail } from "@/features/sales-orders/components/sku-thumbnail"
 import { TableRowActions } from "@/components/business/table-row-actions"
 import { TableToolbarScope } from "@/components/business/table-toolbar"
@@ -30,14 +31,13 @@ import {
     TableCell,
 } from "@/components/ui/table"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { useUnitOptionsQuery } from "@/hooks/use-options"
 import { demandFormDefaults } from "../lib/demand-form"
 import { deliveryProgress } from "../lib/delivery-progress"
 import { inquiryDateInput, inquiryDateSeconds } from "../lib/format"
 import type { InquiryLine, SalesInquiry } from "../types"
 import { InquiryDeliveryEditor } from "./inquiry-delivery-editor"
 import { InquiryDueDateBatchBar } from "./inquiry-due-date-batch-bar"
-import { useInquirySkuImages } from "../hooks/queries"
+import { useInquirySkuDetailsQuery } from "../hooks/queries"
 
 export const InquiryDemandLines = withForm({
     defaultValues: demandFormDefaults,
@@ -47,10 +47,12 @@ export const InquiryDemandLines = withForm({
             form.store,
             (state) => state.values.draft.lines,
         )
-        const skuImages = useInquirySkuImages(
+        const skuDetails = useInquirySkuDetailsQuery(
             demandLines.map((line) => line.sku_id),
         )
-        const units = useUnitOptionsQuery()
+        const unitLabel = (code: string) =>
+            skuDetails.units.get(code) ??
+            (skuDetails.isPending ? "单位加载中" : "单位未匹配")
         const [activeLineId, setActiveLineId] = React.useState<string | null>(
             null,
         )
@@ -75,6 +77,14 @@ export const InquiryDemandLines = withForm({
                     ).length
                     return (
                         <TableToolbarScope>
+                            {skuDetails.error && (
+                                <BusinessFailureState
+                                    id="sales-inquiry-demand-sku-details"
+                                    title="商品图片与单位资料读取失败"
+                                    error={skuDetails.error}
+                                    onRetry={() => void skuDetails.refetch()}
+                                />
+                            )}
                             {lines.length > 0 && (
                                 <InquiryDueDateBatchBar
                                     count={selectedCount}
@@ -230,15 +240,9 @@ export const InquiryDemandLines = withForm({
                                         <TableBody>
                                             {lines.map((line, index) => {
                                                 const prefix = `sales-inquiry-line-${toAutomationIdSegment(line.line_id)}`
-                                                const unit = units.data?.find(
-                                                    (item) =>
-                                                        item.code ===
-                                                            line.unit_code ||
-                                                        item.id ===
-                                                            line.unit_code ||
-                                                        item.label ===
-                                                            line.unit_code,
-                                                )?.label
+                                                const unit = unitLabel(
+                                                    line.unit_code,
+                                                )
                                                 const progress =
                                                     deliveryProgress({
                                                         ...line,
@@ -294,7 +298,7 @@ export const InquiryDemandLines = withForm({
                                                         </TableCell>
                                                         <TableCell>
                                                             <SkuThumbnail
-                                                                assetId={skuImages.get(
+                                                                assetId={skuDetails.images.get(
                                                                     line.sku_id,
                                                                 )}
                                                                 label={
@@ -511,6 +515,9 @@ export const InquiryDemandLines = withForm({
                                                 form={form}
                                                 key={activeLine.line_id}
                                                 line={activeLine}
+                                                unit={unitLabel(
+                                                    activeLine.unit_code,
+                                                )}
                                                 index={activeIndex}
                                                 inquiry={inquiry}
                                                 disabled={disabled}

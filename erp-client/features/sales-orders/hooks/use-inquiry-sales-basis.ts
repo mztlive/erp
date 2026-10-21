@@ -7,6 +7,7 @@ export function useInquirySalesBasis(id: string, round: number) {
         queryKey: ["sales-orders", "inquiry-basis", id, round],
         queryFn: () => fetchInquirySalesBasis(id, round),
         enabled: Boolean(id) && round > 0,
+        staleTime: 0,
         retry: false,
     })
 }

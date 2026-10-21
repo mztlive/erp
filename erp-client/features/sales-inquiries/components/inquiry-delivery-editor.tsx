@@ -7,7 +7,6 @@ import { QuantityValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { useUnitOptionsQuery } from "@/hooks/use-options"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { compareDecimal, sumFixed } from "@/lib/fixed-decimal"
 import type { AddressImportChanges } from "../lib/address-import-plan"
@@ -35,8 +34,16 @@ export const InquiryDeliveryEditor = withForm({
         line: null as InquiryLine | null,
         inquiry: undefined as SalesInquiry | undefined,
         disabled: false,
+        unit: "",
     },
-    render: function DeliveryEditor({ form, index, line, inquiry, disabled }) {
+    render: function DeliveryEditor({
+        form,
+        index,
+        line,
+        inquiry,
+        disabled,
+        unit,
+    }) {
         const [editing, setEditing] = React.useState<{
             initial: InquiryAllocation
             sourceId?: string
@@ -51,15 +58,8 @@ export const InquiryDeliveryEditor = withForm({
         const [removed, setRemoved] = React.useState<
             { allocation: InquiryAllocation; index: number }[]
         >([])
-        const units = useUnitOptionsQuery()
         const prefix = `sales-inquiry-line-${toAutomationIdSegment(line?.line_id ?? "")}`
         if (!line) return null
-        const unit = units.data?.find(
-            (item) =>
-                item.code === line.unit_code ||
-                item.id === line.unit_code ||
-                item.label === line.unit_code,
-        )?.label
         const progress = deliveryProgress({ ...line, unit_code: unit ?? "" })
         const allocationsPath = `draft.lines[${index}].allocations` as const
 

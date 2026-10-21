@@ -201,7 +201,8 @@ impl SalesInquiryAccess {
             &["detail", "claim", "save_feedback", "publish"],
             executor,
         )
-        .await?;
+        .await
+        .map_err(|error| assignment_permission_error(error, &account.name, account.secret.account()))?;
         required_business_org(&self.db, owner, executor).await
     }
 
@@ -250,4 +251,44 @@ impl SalesInquiryAccess {
 
 fn task_missing() -> Error {
     Error::NotFound("当前询价任务不存在或无权操作".into())
+}
+
+/// 分派目标的授权失败属于责任配置问题，不得误报为提交人的权限不足。
+fn assignment_permission_error(error: Error, name: &str, account: &str) -> Error {
+    match error {
+        Error::Forbidden(_) => Error::BusinessLogicError(format!(
+            "责任采购「{name}（{account}）」缺少有效的询价处理权限，请管理员检查其采购角色的查看、接手、保存反馈和发布权限后重试"
+        )),
+        other => other,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn assignment_denial_identifies_target_buyer_and_required_actions() {
+        let error = assignment_permission_error(
+            Error::Forbidden("当前账号缺少 procurement_inquiry:detail 权限".into()),
+            "陈国平",
+            "caigou",
+        );
+        let Error::BusinessLogicError(message) = error else {
+            panic!("目标采购权限缺失必须表现为责任配置错误");
+        };
+        assert_eq!(
+            message,
+            "责任采购「陈国平（caigou）」缺少有效的询价处理权限，请管理员检查其采购角色的查看、接手、保存反馈和发布权限后重试"
+        );
+    }
+
+    #[test]
+    fn assignment_preserves_policy_conflict_and_internal_failure() {
+        let conflict =
+            assignment_permission_error(Error::ConflictError("授权策略已变化".into()), "采购", "buyer");
+        assert!(matches!(conflict, Error::ConflictError(message) if message == "授权策略已变化"));
+        let internal = assignment_permission_error(Error::Internal("授权源暂不可用".into()), "采购", "buyer");
+        assert!(matches!(internal, Error::Internal(message) if message == "授权源暂不可用"));
+    }
 }

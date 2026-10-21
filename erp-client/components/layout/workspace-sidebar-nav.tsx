@@ -35,12 +35,18 @@ import {
     type WorkspaceNavBadgeKey,
 } from "@/lib/workspace-registry"
 import { useAccountProfileQuery } from "@/features/auth/queries"
+import {
+    useInquiryFeedbackCountQuery,
+    useProcurementInquiryCountQuery,
+} from "@/features/sales-inquiries/hooks/queries"
 import { useActionableBookCountQuery } from "@/features/sales-selection/hooks/queries"
 import { useWorkspaceInboxCountQuery } from "@/features/workspace/hooks/queries"
 
 type NavBadgeCounts = {
     todo: number
     selectionActionable: number
+    inquiryFeedback: number | undefined
+    procurementInquiry: number | undefined
 }
 
 function badgeCountFor(
@@ -52,6 +58,10 @@ function badgeCountFor(
             return counts.todo
         case "selection-actionable-count":
             return counts.selectionActionable
+        case "inquiry-feedback-count":
+            return counts.inquiryFeedback
+        case "procurement-inquiry-count":
+            return counts.procurementInquiry
         case "delivery-count":
         case "warehouse-count":
             return undefined
@@ -171,9 +181,21 @@ export function WorkspaceSidebarNav() {
     const selectionCountQuery = useActionableBookCountQuery(
         canListSelectionBooks,
     )
+    const inquiryFeedbackCountQuery = useInquiryFeedbackCountQuery(
+        hasPermission(permissions, "sales_inquiry:list"),
+    )
+    const procurementInquiryCountQuery = useProcurementInquiryCountQuery(
+        hasPermission(permissions, "procurement_inquiry:list"),
+    )
     const counts: NavBadgeCounts = {
         todo: todoCountQuery.data?.mine ?? 0,
         selectionActionable: selectionCountQuery.data ?? 0,
+        inquiryFeedback: inquiryFeedbackCountQuery.isError
+            ? undefined
+            : inquiryFeedbackCountQuery.data,
+        procurementInquiry: procurementInquiryCountQuery.isError
+            ? undefined
+            : procurementInquiryCountQuery.data,
     }
 
     if (profileQuery.isPending) {
@@ -240,6 +262,23 @@ export function WorkspaceSidebarNav() {
                                 const badgeCount = item.badge
                                     ? badgeCountFor(item.badge, counts)
                                     : undefined
+                                const inquiryCountQuery =
+                                    item.badge === "inquiry-feedback-count"
+                                        ? inquiryFeedbackCountQuery
+                                        : item.badge ===
+                                            "procurement-inquiry-count"
+                                          ? procurementInquiryCountQuery
+                                          : undefined
+                                const badgeError = inquiryCountQuery?.isError
+                                    ? `询价待处理数量加载失败：${getErrorMessage(inquiryCountQuery.error, "请稍后重试")}`
+                                    : undefined
+                                const badgeLabel =
+                                    item.badge === "inquiry-feedback-count"
+                                        ? `${badgeCount} 张询价单有新反馈待处理`
+                                        : item.badge ===
+                                            "procurement-inquiry-count"
+                                          ? `${badgeCount} 张采购询价待处理`
+                                          : `${badgeCount} 项待处理`
 
                                 return (
                                     <SidebarMenuItem
@@ -256,13 +295,22 @@ export function WorkspaceSidebarNav() {
                                         >
                                             <Icon aria-hidden="true" />
                                             <span>{item.label}</span>
-                                            {badgeCount && badgeCount > 0 ? (
+                                            {badgeError ||
+                                            (badgeCount !== undefined &&
+                                                badgeCount > 0) ? (
                                                 <span
                                                     data-workspace-nav-badge=""
-                                                    aria-label={`${badgeCount} 本待处理`}
+                                                    aria-label={
+                                                        badgeError ?? badgeLabel
+                                                    }
+                                                    title={
+                                                        badgeError ?? badgeLabel
+                                                    }
                                                     className="ml-auto flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-destructive-foreground tabular-nums group-data-[collapsible=icon]:hidden"
                                                 >
-                                                    {badgeCount}
+                                                    {badgeError
+                                                        ? "!"
+                                                        : badgeCount}
                                                 </span>
                                             ) : null}
                                         </SidebarMenuButton>

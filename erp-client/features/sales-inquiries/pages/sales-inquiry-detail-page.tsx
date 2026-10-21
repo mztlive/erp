@@ -28,11 +28,10 @@ import { InquiryDetailTabs } from "../components/inquiry-detail-tabs"
 import { InquiryFeedbackResults } from "../components/inquiry-feedback-results"
 import { InquiryDemandEditor } from "../components/inquiry-demand-editor"
 import { InquiryFeedbackEditor } from "../components/inquiry-feedback-editor"
-import { InquiryProgress } from "../components/inquiry-progress"
 import { InquiryActions } from "../components/inquiry-actions"
 import { InquiryInternalQuotes } from "../components/inquiry-internal-quotes"
 import { InquiryFeesPanel } from "../components/inquiry-fees-panel"
-import { InquiryRequirementSummary } from "../components/inquiry-history"
+import { InquiryRequirementTable } from "../components/inquiry-requirement-table"
 import {
     InquiryImportDialog,
     InquiryCustomerTemplateButton,
@@ -189,9 +188,11 @@ function InquiryDetailContent({
     )
         ? chosenRound
         : inquiry.feedback_round
+    const claimActions =
+        procurement && inquiry.status === "awaiting_procurement"
     const demandActions =
         ["draft", "awaiting_sales_supplement"].includes(inquiry.status) ||
-        (procurement && inquiry.status === "awaiting_procurement")
+        claimActions
     const command = useInquiryCommand(userId, inquiry.id)
     const task =
         "work_items" in inquiry
@@ -219,6 +220,15 @@ function InquiryDetailContent({
         accepted != null &&
         hasPermission(permissions, "sales_inquiry:convert_sales") &&
         hasPermission(permissions, "sales_order:create")
+    const feeOwner = inquiry.shared_fee_owner_user_id ? (
+        <p className="text-sm text-muted-foreground">
+            整单费用责任：
+            {inquiry.shared_fee_owner_name ||
+                (inquiry.shared_fee_owner_user_id === userId
+                    ? "由我维护"
+                    : "已指定责任采购")}
+        </p>
+    ) : null
     const safeTemplate = useMutation({
         mutationFn: () =>
             apiPost<InquiryCustomerWorkbookProduct[]>(
@@ -287,7 +297,7 @@ function InquiryDetailContent({
             disabled={dirty || feedbackDirty}
             feedbackRound={selectedRound}
             renderActions={(primaryActions, secondaryActions) => (
-                <div className="space-y-6">
+                <div className="space-y-5">
                     <DetailPageHeader
                         title={inquiry.customer_name}
                         documentNumber={inquiry.inquiry_no}
@@ -349,12 +359,17 @@ function InquiryDetailContent({
                             canEdit ? (
                                 <div ref={setDemandDetailsContainer} />
                             ) : (
-                                <p className="flex gap-2 text-sm text-muted-foreground">
-                                    <span className="shrink-0">需求说明</span>
-                                    <span className="min-w-0 whitespace-pre-wrap wrap-anywhere">
-                                        {inquiry.draft.note || "未填写"}
-                                    </span>
-                                </p>
+                                <div className="flex flex-wrap items-start gap-x-8 gap-y-2 rounded-lg bg-muted/40 px-4 py-3">
+                                    <p className="flex min-w-0 gap-2 text-sm text-muted-foreground">
+                                        <span className="shrink-0">
+                                            需求说明
+                                        </span>
+                                        <span className="min-w-0 whitespace-pre-wrap wrap-anywhere">
+                                            {inquiry.draft.note || "未填写"}
+                                        </span>
+                                    </p>
+                                    {feeOwner}
+                                </div>
                             )
                         }
                     />
@@ -396,32 +411,13 @@ function InquiryDetailContent({
                             </AlertDescription>
                         </Alert>
                     )}
-                    {inquiry.shared_fee_owner_user_id && (
-                        <p className="text-sm text-muted-foreground">
-                            整单费用责任：
-                            {inquiry.shared_fee_owner_name ||
-                                (inquiry.shared_fee_owner_user_id === userId
-                                    ? "由我维护"
-                                    : "已指定责任采购")}
-                        </p>
-                    )}
+                    {canEdit && feeOwner}
                     <InquiryDetailTabs
                         inquiry={inquiry}
                         procurement={procurement}
+                        actions={claimActions ? primaryActions : undefined}
                         demand={
                             <div className="space-y-6">
-                                {!canEdit && (
-                                    <div className="flex flex-wrap justify-end gap-2">
-                                        {productActions}
-                                    </div>
-                                )}
-                                {!canEdit &&
-                                    !procurement &&
-                                    "sales_progress" in inquiry && (
-                                        <InquiryProgress
-                                            progress={inquiry.sales_progress}
-                                        />
-                                    )}
                                 {canEdit && "sales_owner_user_id" in inquiry ? (
                                     <InquiryDemandEditor
                                         key={`editor-${editorEpoch}`}
@@ -444,14 +440,15 @@ function InquiryDetailContent({
                                         }
                                     />
                                 ) : (
-                                    <InquiryRequirementSummary
+                                    <InquiryRequirementTable
+                                        idPrefix="sales-inquiry-requirement"
                                         requirement={inquiry.draft}
                                         procurement={procurement}
-                                        showNote={false}
                                     />
                                 )}
 
                                 {!canEdit &&
+                                    !claimActions &&
                                     demandActions &&
                                     React.Children.count(primaryActions) >
                                         0 && (

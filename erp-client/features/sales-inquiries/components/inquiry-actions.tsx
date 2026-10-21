@@ -78,6 +78,11 @@ export function InquiryActions({
     const [action, setAction] = React.useState<InquiryAction | null>(null)
     const [error, setError] = React.useState<string | null>(null)
     const [editingRequirement, setEditingRequirement] = React.useState(false)
+    const requiresReason =
+        action === "submit"
+            ? inquiry.requirement_version > 0
+            : action != null &&
+              ["reinquire", "close", "supplement", "reassign"].includes(action)
     const command = useInquiryCommand(userId, inquiry.id)
     const storageKey = `erp.sales-inquiry-action:${encodeURIComponent(userId)}:${encodeURIComponent(inquiry.id)}`
     const form = useAppForm({
@@ -117,18 +122,10 @@ export function InquiryActions({
                 const data: Record<string, unknown> = {
                     expected_version: inquiry.version,
                 }
-                if (
-                    [
-                        "submit",
-                        "reinquire",
-                        "close",
-                        "supplement",
-                        "reassign",
-                    ].includes(action) &&
-                    !value.reason.trim()
-                )
+                if (requiresReason && !value.reason.trim())
                     throw new Error("请填写本次操作原因。")
-                if (action === "submit") data.reason = value.reason.trim()
+                if (action === "submit")
+                    data.reason = requiresReason ? value.reason.trim() : ""
                 if (action === "accept")
                     data.feedback_round = inquiry.feedback_round
                 if (action === "reinquire")
@@ -213,11 +210,6 @@ export function InquiryActions({
               : inquiry.status !== "closed"
                 ? ["close"]
                 : []
-    const requiresReason =
-        action != null &&
-        ["submit", "reinquire", "close", "supplement", "reassign"].includes(
-            action,
-        )
     const renderButton = (item: InquiryAction) => (
         <Button
             key={item}
@@ -430,7 +422,7 @@ export function InquiryActions({
                                             id="sales-inquiry-action-reason"
                                             label={
                                                 action === "submit"
-                                                    ? "本次提交说明"
+                                                    ? "需求变更原因"
                                                     : "操作原因"
                                             }
                                             required

@@ -6,6 +6,8 @@ import { inquirySaleScope } from "../lib/inquiry-sales-storage"
 import type { CreateSalesOrderFormValues } from "../lib/sales-order-create-model"
 import type { InquirySalesBasis } from "../api/inquiry-basis"
 import { SalesOrderInquirySource } from "./sales-order-inquiry-source"
+import { SalesOrderInquiryPickerDialog } from "./sales-order-inquiry-picker-dialog"
+import { hasPermission } from "@/lib/permissions"
 import type { SalesOrderSelectionBasis } from "@/features/sales-orders/api/selection-basis"
 import { SalesOrderSelectionSource } from "./sales-order-selection-source"
 import { useRouter } from "next/navigation"
@@ -104,6 +106,7 @@ export function SalesOrderCreateForm({
         (source ? initialDraft?.customerId : undefined)
     const router = useRouter()
     const [leaveConfirmOpen, setLeaveConfirmOpen] = React.useState(false)
+    const [inquiryPickerOpen, setInquiryPickerOpen] = React.useState(false)
     const [negativeProfit, setNegativeProfit] = React.useState<string | null>(
         null,
     )
@@ -630,8 +633,60 @@ export function SalesOrderCreateForm({
             )
         ) : null
 
+    const canChooseInquiry =
+        purpose === "create" &&
+        nature === "physical_service" &&
+        !initialDraft &&
+        !submission.draftIdentity &&
+        !source &&
+        !inquirySource &&
+        !uploadOpen &&
+        [
+            "sales_inquiry:list",
+            "sales_inquiry:convert_sales",
+            "sales_order:create",
+        ].every((permission) =>
+            hasPermission(profileQuery.data?.permissions ?? [], permission),
+        )
+    const inquirySwitchDisabled =
+        submission.isSubmitting || Boolean(submission.formalFailure?.unknown)
+
     const editor = (
         <>
+            {canChooseInquiry && !entryOpen && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
+                    <p className="text-sm text-muted-foreground">
+                        已有采购反馈？可从已接受的询价结果带入开单信息。
+                    </p>
+                    <Button
+                        id="sales-orders-create-from-inquiry"
+                        type="button"
+                        variant="outline"
+                        disabled={inquirySwitchDisabled}
+                        onClick={() => setInquiryPickerOpen(true)}
+                    >
+                        从询价单带入
+                    </Button>
+                </div>
+            )}
+            {inquiryPickerOpen && (
+                <SalesOrderInquiryPickerDialog
+                    key={selectedCustomerId}
+                    customerId={selectedCustomerId}
+                    discardsChanges={
+                        dirty ||
+                        Boolean(uploadFile) ||
+                        Boolean(selectedContractId)
+                    }
+                    onClose={() => setInquiryPickerOpen(false)}
+                    onConfirm={(inquiryId, round) => {
+                        setInquiryPickerOpen(false)
+                        router.push(
+                            `/sales/orders?mode=create&inquiryId=${encodeURIComponent(inquiryId)}&round=${round}`,
+                        )
+                    }}
+                />
+            )}
             {source && <SalesOrderSelectionSource source={source} />}
             {inquirySource && (
                 <SalesOrderInquirySource source={inquirySource} />
@@ -648,6 +703,12 @@ export function SalesOrderCreateForm({
             <div className={uploadOpen ? "hidden" : "contents"}>
                 {entryOpen ? (
                     <SalesOrderCreateEntry
+                        onSelectInquiry={
+                            canChooseInquiry
+                                ? () => setInquiryPickerOpen(true)
+                                : undefined
+                        }
+                        inquiryDisabled={inquirySwitchDisabled}
                         selectedFileName={uploadFile?.name}
                         onResumeImport={() => setUploadOpen(true)}
                         onUpload={(file) => {
