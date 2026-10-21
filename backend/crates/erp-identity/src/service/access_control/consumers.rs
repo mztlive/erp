@@ -200,9 +200,52 @@ pub fn configurable_registration(resource: &str, action: &str) -> Result<Consume
     Ok(consumer)
 }
 
+/// 运行时范围来源接受人员范围及岗位共享，任务和来源继承必须由业务提供真实来源。
+/// # 参数
+/// `resource` 与 `action` 为本次授权的实际范围来源。
+/// # 返回
+/// 已登记且能直接解析的消费者。
+/// # 错误
+/// 未登记、任务、角色或间接来源策略拒绝，不以共享范围兜底。
+pub(super) fn scope_registration(resource: &str, action: &str) -> Result<ConsumerRegistration> {
+    let consumer = registration(resource, action)?;
+    let policy = AuthorizationPolicy::for_action(resource, action)?;
+    if policy != AuthorizationPolicy::Shared {
+        policy.ensure_configurable()?;
+    }
+    Ok(consumer)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shared_businesses_are_runtime_sources_but_never_person_configuration() {
+        for resource in [
+            "product",
+            "supplier",
+            "supplier_offering",
+            "purchase_order",
+            "supplier_fulfillment_order",
+            "supplier_settlement_statement",
+        ] {
+            let registration = scope_registration(resource, "list").unwrap();
+            assert!(!registration.default_self);
+            assert!(configurable_registration(resource, "list").is_err());
+        }
+        for (resource, action) in [
+            ("approval_instance", "decide"),
+            ("supplier_settlement_statement", "confirm"),
+            ("purchase_payment_request", "pay"),
+            ("invoice", "list"),
+            ("product", "unknown"),
+        ] {
+            assert!(scope_registration(resource, action).is_err());
+        }
+        assert!(configurable_registration("sales_order", "list").unwrap().default_self);
+        assert!(configurable_registration("stock_balance", "list").is_ok());
+    }
 
     #[test]
     fn wired_runtime_catalog_does_not_admit_retired_scope_configuration() {
@@ -247,9 +290,9 @@ mod tests {
 
     /// 维持原采购沿采购责任范围授权，不从历史参与取得写权限。
     #[test]
-    fn purchase_source_maintain_uses_current_purchase_scope() {
+    fn purchase_source_maintain_uses_shared_policy_without_history() {
         let registered = registration("purchase_order", "maintain_source").unwrap();
-        assert!(registered.default_self);
+        assert!(!registered.default_self);
         assert!(!registered.allows_history);
         assert_eq!(registered.supported_dimensions, &[ScopeDimension::InternalOrg]);
         assert_eq!(registered.required_dimensions, &[ScopeDimension::InternalOrg]);
@@ -403,7 +446,7 @@ mod tests {
         ] {
             assert!(!registration(resource, action).unwrap().default_self);
         }
-        assert!(registration("product", "list").unwrap().default_self);
+        assert!(!registration("product", "list").unwrap().default_self);
         assert!(!registration("supplier_payment", "detail").unwrap().default_self);
         assert!(registration("integration_error_task", "list").unwrap().default_self);
     }

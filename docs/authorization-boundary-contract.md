@@ -1,15 +1,15 @@
 # 数据授权边界与改造执行合同
 
-版本：1.0
-日期：2026-09-30
-状态：代码改造及本地编译、库单测已完成；未部署、未应用存量迁移、未执行真实业务验收。
+版本：1.1
+日期：2026-10-21
+状态：执行合同；本次岗位共享切换须按第 6 节发布，真实业务验收另行登记。
 
 ## 1. 适用范围与现行合同关系
 
 1. 本合同规定人员数据范围的准入边界、流程任务授权、来源对象继承、治理与目录访问，以及分阶段改造要求。
 2. 审查基线为 `WIRED_CONSUMERS` 登记的 37 个资源，并核对代表性读取和写入调用链。登记不等于每个动作均已执行范围检查；业务表、范围配置项与可执行操作不得视为同一集合。
 3. 本次交付包含代码、配置接口、受限材料读取及对应库单元测试。保留人员范围旧记录；不执行数据库迁移、服务重启或真实业务验收。
-4. [人员配置合同](identity-access-workflow-contract.md)及[组织数据范围合同](organization-data-scope-contract.md)同步采用本合同的策略准入、来源继承和任务授权。消费者登记仅证明资源动作已知，不等于可编辑人员范围。退休策略的独立配置写入与运行解析均拒绝。
+4. [人员配置合同](identity-access-workflow-contract.md)及[组织数据范围合同](organization-data-scope-contract.md)同步采用本合同的策略准入、来源继承和任务授权。消费者登记仅证明资源动作已知，不等于可编辑人员范围。退役策略的独立配置写入拒绝；运行时按当前岗位共享、来源继承或任务政策解析，不再读取退役人员范围。
 5. 审批授权及材料读取执行[审批工作流合同](approval-workflow-contract.md)；静态审查基线与现行实现分开登记。
 6. 有效内建超级管理员固定拥有全部操作权限和全公司数据范围，执行[人员配置合同第 4 节](identity-access-workflow-contract.md#4-人员数据范围接口)的身份、角色与完整动作资格检查；人员范围配置不收窄该固定范围。来源继承沿真实来源取得公司范围，审批节点、当前处理人、职责分离及业务状态仍按本合同检查。
 7. 客户多人负责及合同独立责任执行[客户多人负责与资料并发维护合同](customer-shared-sales-contract.md)。客户列表保持既有数据范围；合同复用客户范围条款的配置入口，但须按合同自身责任映射，不继承同一客户的其他业务访问权。
@@ -23,7 +23,7 @@
 | 流程或任务授权 | 当前实例、节点及任务已明确指定具体处理人 | 用精确指派关系授予该任务的必要读取与操作资格；保留账号、角色、状态、版本和岗位分离检查 |
 | 治理委派 | 操作他人组织、资格、任务或系统管理对象 | 明确管理资格和管理对象边界；不得因移出普通业务范围页面而变成全公司管理权 |
 | 目录可见 | 为选择器、人员目录或对象目录提供有限候选 | 独立校验目录资格和最小可见边界；目录可见不授予对象的业务操作权，业务不可见也不自动等于候选不可见 |
-| 共享配置 | 公司内共享字典、规则或配置，无已确认的逐对象隔离需求 | 以查看、维护等操作权限控制；仍保留企业边界及敏感字段规则；新增隔离需求须重新登记 |
+| 岗位共享 | 公司商品、供应商、供给、集中采购、供应履约及结算，无逐人员或部门隔离要求 | 有效后台账号经同角色完整动作权限证明后共享；不接受独立人员范围，维护权限、敏感信息、任务责任及状态分别校验 |
 
 1. 授权策略按“资源 + 动作 + 访问场景”登记，不以资源名称、存在数据库集合或已接入通用解析器作为独立范围准入理由。
 2. “本人”必须引用业务当前负责人。创建人、录入人、付款经办人或历史参与者不得统一推定为对象负责人。
@@ -31,6 +31,17 @@
 4. 新增动作必须检查拟写入对象的归属及目标约束；不得仅复制列表范围配置。只有实际消费者需要的动作才能进入范围编辑器。
 5. 多来源对象必须逐来源授权。部分来源可见不得直接授权整单、整户余额、完整发票或全部附件；需采用完整对象全部来源可见或经明确设计的裁剪视图，禁止静默截断金额而显示为整单。
 6. 所有派生查询的列表、详情、统计、导出和名称回显须采用同一授权政策；任务读取例外必须限定在专门的任务上下文。
+
+### 2.1 销售范围与岗位共享
+
+1. `customer`、`sales_order`、`sales_selection_booklet` 保留本人、团队、部门及明确附加范围。合同按自身销售责任解释客户范围条款，选品方案沿选品册授权；共同客户不授予其他销售的合同或订单读取权。
+2. `purchase_order`、`supplier`、`product`、`supplier_offering`、`supplier_fulfillment_order`、`supplier_settlement_statement` 采用岗位共享。结算确认及其他已登记任务动作继续采用任务政策；技术异常及对账差异保留现有监督范围和任务处理责任，不随采购共享放开。
+3. 岗位共享仅适用于当前公司后台业务空间。不得绕过后台账号种类、启用状态、当前有效角色、完整动作权限和策略版本检查；不得扩张供应商门户身份绑定或外部访问范围。当前实现不新增多租户或多法人隔离模型。
+4. 共享资源的 `maintainer_user_id`、采购负责人、跟进人和 `business_org_unit_id` 保留用于责任、组织筛选、交接和审计。“我负责的”属于筛选；列表、详情、统计及来源授权均使用岗位共享政策。已有草稿制单人、提交撤回、审批、付款、任务、版本和状态校验继续执行。
+5. 商品资料共享不授予修改和上下架权限，供应商资料共享不授予银行资料、合同附件或供给成本读取权。具体敏感字段和附件继续执行原专项权限。
+6. 采购共享不授予普通销售单、销售合同或销售附件访问权。采购单关联销售资料继续限定在第 3 节及第一期基线允许的版本、字段和材料；销售人员按本人业务查看履约进度，不以采购读取权限替代销售范围。
+7. 库存按仓库范围，组织管理按治理委派，目录按候选资格执行；不得因收缩销售以外的人员业务范围而放开仓库操作或组织管理。
+8. 共享资源的旧人员范围和个人上限不参与新授权；保留原始记录并返回退役说明。保存、导入、迁移和种子不得新建此类人员范围；导出仅说明退役记录，不生成可重新应用的范围项。若需撤销共享资源访问，必须撤销相应动作权限或停用账号。
 
 ## 3. 审批与任务授权
 
@@ -86,13 +97,13 @@
 | `customer` | 客户全部有效负责销售及各自所属组织；list/detail/create/update/delete | 保留独立客户范围，允许多人同时负责；列表不得向全员公开。联系人等资料继承客户，不增加附属范围；历史参与仅补充原有读取资格 |
 | `contract` | 合同自身 `sales_owner_user_id`、所属组织、明确共享及合法历史参与；list/detail/create/update | 范围条款沿用客户范围配置，按合同独立责任映射，保留合同动作权限；不得按共同客户扩大合同范围。明确共享只授予读取和合法选用；合同修订和 PDF 沿合同主对象授权 |
 | `sales_order` | 自身 sales_owner_user_id、business_org_unit_id；list/detail/create/update/delete/submit/cancel_approval | 保留销售范围，不因关联客户而继承客户当前负责人；写入引用客户和合同的合法性继续校验 |
-| `purchase_order` | 自身当前采购负责人及业务组织；与销售相同的七类登记动作 | 保留采购范围，不沿来源销售单或供应商维护人推定；采购变更及采购退货沿主单继承。详情中的关联销售只读资料和文件仅沿该采购单上下文提供，按[第一期基线第 7.4.1 节](erp-phase-1.md#741-采购单关联销售资料)限定销售版本、字段及材料；不授予普通销售单或合同详情权限 |
+| `purchase_order` | 自身当前采购负责人及业务组织；与销售相同的七类登记动作 | 按岗位操作权限共享公司采购业务，不配置采购员或部门范围；采购变更及采购退货沿主单政策继承。草稿制单人、撤回及任务责任继续校验。详情中的关联销售只读资料和文件仅沿该采购单上下文提供，按[第一期基线第 7.4.1 节](erp-phase-1.md#741-采购单关联销售资料)限定销售版本、字段及材料；不授予普通销售单或合同详情权限 |
 | `sales_selection_booklet` | 自身销售负责人及业务组织；读取、维护、准备、发布及链接生命周期动作 | 保留选品业务范围；客户公开链接继续按公开会话资格和生命周期控制，不套管理端范围 |
 | `sales_selection_proposal` | 创建时从所属选品册复制责任，但 list/get 独立解析范围 | 继承所属选品册当前业务责任，取消独立配置；提交快照不改写，列表、详情及转换入口同步 |
-| `supplier` | 自身维护人及业务组织，支持独立交接；list/detail/create/update/delete | 保留供应商维护范围；只读名称目录与完整资质、银行及商业资料分离 |
-| `product` | 自身维护人及业务组织，支持独立交接；list/detail/create/update | 保留商品维护范围；SKU、修订继承商品；公司商品池采用独立的最小销售投影 |
-| `supplier_offering` | 供给关系自身维护人及组织，支持独立交接；list/create/update | 保留供给维护范围，不从商品或供应商维护人直接继承；价格修订和可供状态继承供给 |
-| `supplier_fulfillment_order` | 自身跟进负责人及组织；普通查询、调查、完成、提交、取消、退款、拒绝及交接 | 普通订单访问保留独立范围；W26 正式任务的必要读取及执行按精确任务授权。不得把所有 complete/investigate 入口一并放开 |
+| `supplier` | 自身维护人及业务组织，支持独立交接；list/detail/create/update/delete | 按岗位操作权限共享；维护人及业务组织用于分工、交接和审计，不限制读取集合；只读名称目录与完整资质、银行及商业资料分离 |
+| `product` | 自身维护人及业务组织，支持独立交接；list/detail/create/update | 按岗位操作权限共享；SKU、修订沿商品政策，维护、上下架和价格调整分别授权；公司商品池继续采用最小销售投影 |
+| `supplier_offering` | 供给关系自身维护人及组织，支持独立交接；list/create/update | 按岗位操作权限共享；价格修订和可供状态沿供给政策，采购成本和税率仍单独脱敏，不授予商品或供应商维护权限 |
+| `supplier_fulfillment_order` | 自身跟进负责人及组织；普通查询、调查、完成、提交、取消、退款、拒绝及交接 | 普通订单按岗位权限共享；W26 任务必要读取及执行仍按精确任务授权，完成、调查等动作必须保留各自资格、状态和任务校验 |
 | `stock_adjustment` | 实际仓库归属；list/detail/create/update/submit，提交另校验经办人 | 保留库存仓库业务边界和调整操作资格；本人创建不意味着可以操作整仓。统一库存配置时保留写与读的必要差异 |
 | `stock_balance` | 余额的 warehouse_id；list/detail | 作为库存只读投影复用统一库存仓库政策，保留余额读取操作权限，不维护一份镜像仓库集合 |
 | `stock_movement` | 流水的 warehouse_id；list | 继承统一库存仓库政策，保留流水操作权限；来源单据钻取另验授权，不因库存可见开放销售／采购详情 |
@@ -106,7 +117,7 @@
 | --- | --- | --- |
 | `customer_refund` | submit 按客户账户对应结算主体，与审批读取范围求交 | 继承原回款或原应收分录的精确来源，保留退款发起资格和经办复核分离。发起时尚无审批任务，不得依赖未来指派；同步解除审批 read 范围耦合 |
 | `supplier_refund` | submit 按供应商账户对应结算主体，与审批读取范围求交 | 继承原付款或原应付分录；区分采购与供应商结算来源，保留退款发起资格；不提供独立的同义主体范围 |
-| `supplier_settlement_statement` | 独立对账负责人、业务部门及交接；list/detail/create/update/submit/confirm | 保留结算业务独立范围。confirm 的具体执行按复核任务、岗位及经办复核分离证明；可见范围不授予任意复核资格 |
+| `supplier_settlement_statement` | 独立对账负责人、业务部门及交接；list/detail/create/update/submit/confirm | 结算业务按岗位权限共享，不配置负责人或部门范围。confirm 的具体执行按复核任务、岗位及经办复核分离证明；可见范围不授予任意复核资格 |
 | `cost_entry` | list/detail 用分配所关联销售的负责人、部门，与销售范围求交 | 移除镜像部门配置；按获授权的分配份额继承来源。整笔成本和未分配成本另有明确财务查账资格，不得因可见一个份额开放整笔 |
 | `cost_allocation` | list 用分配目标销售单／明细，无独立负责人 | 继承分配目标，取消独立范围；无归属分配按财务查账资格处理 |
 | `receivable_account` | list/detail 的子账归属完全来自销售单，额外检查应收范围 | 继承销售单范围，保留应收读取操作权限；任务办理所需内容按任务上下文授予 |
@@ -149,22 +160,24 @@
 
 1. 计量单位与来源系统设置当前以操作权限控制，不新增“本人／部门”范围。
 2. 角色维护保留只能授予自身权限子集、系统角色及账号保护；没有独立数据范围不等于没有授权委派约束。
-3. 公司商品池与商品维护后台采用不同目的：商品池按销售资格返回可售内容、一件代发价、集采价、市场价三种含税销售参考价和 SKU 集采起订数量；维护后台仍有真实维护人边界。禁止将两者合并成同一“商品范围”。
-4. 公司商品池列表、轻预览及内部导出允许返回该 SKU 全部有效且当前可供供给所对应的供应商业务编号，编号按值去重并稳定排序。该字段属于最小销售投影，不授予供应商完整资料、资质、银行资料或供给条款读取权限；不得返回供应商采购成本、进项税率或供应商 MOQ。编号不得以供应商内部 ID、订货编码或统一社会信用代码替代；关联资料入口继续独立校验目标动作与数据范围。
+3. 公司商品池与商品维护后台采用不同目的：商品池按销售资格返回可售内容、一件代发价、集采价、市场价三种含税销售参考价和 SKU 集采起订数量；维护后台按对应岗位权限共享，维护人继续用于分工和交接。禁止将两者合并成同一“商品范围”。
+4. 公司商品池列表、轻预览及内部导出允许返回该 SKU 全部有效且当前可供供给所对应的供应商业务编号，编号按值去重并稳定排序。该字段属于最小销售投影，不授予供应商完整资料、资质、银行资料或供给条款读取权限；不得返回供应商采购成本、进项税率或供应商 MOQ。编号不得以供应商内部 ID、订货编码或统一社会信用代码替代；关联资料入口继续独立校验目标动作、敏感信息及对象资格。
 5. SKU 三价及数量门槛属于销售参考资料，不构成供应商成本读取资格；自动成交价按锁定的 SKU 修订和销售数量计算，不得扩大商品维护、供应商维护或供给维护范围。选品册及客户公开会话只展示发布时冻结的一件代发报价，不得暴露内部三价、SKU 集采起订数量或供应商编号。
 6. 商品审核入库不授予销售资格。新建 SKU 必须显式未上架；商品池、销售及选品新增候选、相关导出和销售写命令同时校验已上架、启用、一件代发价及有效可供来源。新品匹配已有 SKU 只建立或修订本供应商供给，不改变原 SKU 上架状态。
-7. 供应商门户使用独立外部身份和服务端绑定归属，不配置内部角色、组织或全公司数据范围。定向开放 SKU 仅授予报价必要资料读取；申请确认仍分别校验内部操作权限、供应商或供给自身范围、共享商品对象资格及具体任务责任。接口与任务合同执行 [供应商门户接口执行合同](supplier-portal-api-contract.md)。
+7. 供应商门户使用独立外部身份和服务端绑定归属，不配置内部角色、组织或全公司数据范围。定向开放 SKU 仅授予报价必要资料读取；申请确认仍分别校验内部操作权限、供应商或供给对象操作资格、共享商品对象资格及具体任务责任。接口与任务合同执行 [供应商门户接口执行合同](supplier-portal-api-contract.md)。
 
 ## 5. 配置与访问检查入口
 
 1. 人员页面的“业务数据范围”仅返回允许独立配置的业务授权政策。治理委派和目录可见使用明确的独立分区；继承、流程和共享配置不得继续显示可编辑的部门／仓库授权弹窗。
 2. 运行时消费者登记与人员可配置政策必须分离。`person_business_options` 不得直接把所有 `WIRED_CONSUMERS` 转为配置项；配置保存也须验证该资源动作允许人工配置。
-3. 被移出配置的资源仍可在只读权限说明中标记“由来源业务决定”“由流程指派决定”或“由操作权限控制”；不得标为“无数据范围，请添加授权”。
+3. 被移出配置的资源仍可在只读权限说明中标记“由来源业务决定”“由流程指派决定”或“按岗位权限共享”；不得标为“无数据范围，请添加授权”。
 4. 访问检查须报告实际授权依据：业务范围、来源对象、当前任务、治理委派或目录资格。任务和来源授权检查必须要求必要对象上下文；没有对象时不得断言具体单据可处理。
-5. 权限汇总不得把已退役的范围记录误标为“当前无操作权限”；角色动作撤销和范围政策退役必须分别说明。默认本人记录不得为继承或任务政策生成。
+5. 权限汇总不得把已退役的范围记录误标为“当前无操作权限”；角色动作撤销和范围政策退役必须分别说明。默认本人记录不得为共享、继承或任务政策生成。
 6. 普通管理员不得通过移除组织管理范围检查获得范围配置权。当前公司组织管理资格、同角色权限组合、策略版本和授权审计在替代治理政策完成前保持有效。
 
 ## 6. 存量处理与切换
+
+岗位共享发布要求：前后端必须同时发布；发布前核对共享资源的现有角色动作权限，原本人或部门范围不再作为限制。保留全部人员范围及责任字段，不执行数据库批量更新。回滚须成套恢复前后端，并核对旧范围重新生效导致的可见集合变化；发布后的撤权继续以当前角色、账号及任务事实为准。
 
 1. 实施前只读盘点受影响资源的人员范围、动作、旧表达式、历史读取、显式拒绝、交集、跨维组合和版本；本次静态审查不提供数据库记录数。
 2. 为每类政策建立当前结果与目标结果对照，列明新增访问、收窄访问和无法自动映射的配置。不能将旧审批或派生对象的范围机械复制到来源业务，否则可能扩大普通业务访问权。
@@ -229,7 +242,7 @@
 1. [资金读取授权](../backend/crates/erp-read-models/src/finance/funds_scope/authorization.rs)的 `restrict_links` 将资金条件与销售／采购来源求交；`owner_is` 依据来源负责人，不是录入经办人。[成本快照](../backend/crates/erp-read-models/src/finance/cost/snapshot.rs)也同时解析成本与销售范围。
 2. [应付来源](../backend/crates/erp-read-models/src/finance/funds_scope/payable.rs)及[进项分配](../backend/crates/erp-read-models/src/finance/funds_scope/allocation.rs)存在非采购来源按空来源处理的路径。目标来源分发必须包含供应商结算。
 3. [退款发起授权](../backend/crates/erp-processes/src/reverse_flow/start_approval/authorization.rs)将退款 submit 与审批 read 求交；初始提交无法依赖尚未产生的审批任务。
-4. [付款任务](../backend/crates/erp-processes/src/finance_posting/payable/payment_task.rs)、[开票任务](../backend/crates/erp-processes/src/finance_posting/receivable/invoice_task.rs)及[结算复核人员](../backend/crates/erp-processes/src/supply_settlement/reviewers.rs)保留精确责任和岗位分离；[结算单范围](../backend/crates/erp-supply/src/service/supplier_settlement/access.rs)有真实独立归属。
+4. [付款任务](../backend/crates/erp-processes/src/finance_posting/payable/payment_task.rs)、[开票任务](../backend/crates/erp-processes/src/finance_posting/receivable/invoice_task.rs)及[结算复核人员](../backend/crates/erp-processes/src/supply_settlement/reviewers.rs)保留精确责任和岗位分离；[结算单访问](../backend/crates/erp-supply/src/service/supplier_settlement/access.rs)沿岗位共享政策，复核任务责任不变。
 5. [当前 S3 合同](organization-data-scope-s3.md)明确要求成本与销售范围求交，并规定整笔与份额可见。实施 C 阶段必须替换重复授权条款，同时保留金额裁剪要求，不得默默以新设计覆盖旧合同。
 
 ### 8.3 治理与目录
@@ -241,10 +254,10 @@
 
 ### 8.4 业务根对象与投影
 
-1. [合同访问](../backend/crates/erp-contract/src/service/contract/access.rs)的 `object_facts` 采用客户当前主负责人及组织；[销售访问](../backend/crates/erp-read-models/src/sales_center/access.rs)与[采购访问](../backend/crates/erp-procurement/src/service/purchase_order/access.rs)分别采用订单自己的责任，不能统一沿客户或供应商继承。
+1. [合同访问](../backend/crates/erp-contract/src/service/contract/access.rs)的 `object_facts` 采用客户当前主负责人及组织；[销售访问](../backend/crates/erp-read-models/src/sales_center/access.rs)与[采购访问](../backend/crates/erp-procurement/src/service/purchase_order/access.rs)分别执行销售责任范围和采购岗位共享政策，不能统一沿客户或供应商继承。
 2. [选品方案创建](../backend/crates/erp-sales/src/service/sales_selection/session.rs)复制所属册的责任信息；[选品范围](../backend/crates/erp-processes/src/sales_selection/scope_checks.rs)和[选品访问](../backend/crates/erp-sales/src/service/sales_selection/access.rs)仍分别解析册与方案范围。
-3. [供应商访问](../backend/crates/erp-supplier/src/service/supplier/access.rs)、[商品维护范围](../backend/crates/erp-read-models/src/catalog_center/scope.rs)与[供给访问](../backend/crates/erp-supply/src/service/supplier_offering/access.rs)有各自维护责任；[公司商品池 Handler](../backend/apps/web-api/src/core/handler/catalog/product.rs)及[目录读取](../backend/crates/erp-read-models/src/catalog_center/mod.rs)采用不同的销售资格投影。投影可返回四种含税销售参考价、SKU 集采起订数量和有效供给所对应的供应商业务编号，不含采购成本与完整供应商档案；编号可见不得扩大供应商及供给对象的访问范围。
-4. [供应商订单对象访问](../backend/crates/erp-supply/src/service/supplier_fulfillment/access.rs)使用跟进负责人和当前任务事实；[W26 完成命令](../backend/crates/erp-processes/src/supply_execution/complete.rs)先检查订单 complete 范围，再检查正式任务，须分入口处理。
+3. [供应商访问](../backend/crates/erp-supplier/src/service/supplier/access.rs)、[商品维护范围](../backend/crates/erp-read-models/src/catalog_center/scope.rs)与[供给访问](../backend/crates/erp-supply/src/service/supplier_offering/access.rs)保留各自维护责任，读取及维护资格按岗位权限共享；[公司商品池 Handler](../backend/apps/web-api/src/core/handler/catalog/product.rs)及[目录读取](../backend/crates/erp-read-models/src/catalog_center/mod.rs)采用不同的销售资格投影。投影可返回四种含税销售参考价、SKU 集采起订数量和有效供给所对应的供应商业务编号，不含采购成本与完整供应商档案；编号可见不得扩大供应商及供给对象的访问范围。
+4. [供应商订单对象访问](../backend/crates/erp-supply/src/service/supplier_fulfillment/access.rs)使用跟进负责人和当前任务事实；[W26 完成命令](../backend/crates/erp-processes/src/supply_execution/complete.rs)先检查订单 complete 操作资格，再检查正式任务，不因岗位共享跳过任务责任。
 5. [库存适配](../backend/crates/erp-processes/src/adapters/inventory.rs)为多个动作分别解析范围；[余额](../backend/crates/erp-inventory/src/service/inventory/balance.rs)、[流水](../backend/crates/erp-inventory/src/service/inventory/movement.rs)、[预占](../backend/crates/erp-inventory/src/service/inventory/reservation.rs)均以仓库作为边界。
 
 ## 9. 交付与完成判定

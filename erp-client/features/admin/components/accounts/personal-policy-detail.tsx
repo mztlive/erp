@@ -120,7 +120,7 @@ export function PersonalPolicyDetail({
                             ))}
                         </ul>
                         <p className="text-xs leading-5 text-muted-foreground">
-                            操作权限由角色授予，执行时仍须符合数据范围及业务规则。
+                            操作权限由角色授予，执行时仍须符合本业务的访问方式和处理规则。
                         </p>
                     </div>
                 </details>

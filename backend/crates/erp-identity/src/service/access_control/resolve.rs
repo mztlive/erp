@@ -11,7 +11,7 @@ use mongodb::Database;
 use persistence_core::Executor;
 
 use self::batch::scope_version;
-use super::consumers::configurable_registration;
+use super::consumers::scope_registration;
 use crate::access_control::{ResolvedScope, ScopeClause};
 use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
 use crate::entity::access_control::governance::root_scope;
@@ -207,7 +207,7 @@ impl DataScopeService {
     ) -> Result<AuthorizedDataScope> {
         let (resource, action) = target;
         ensure_resource(resource, action)?;
-        configurable_registration(source.0, source.1)?;
+        scope_registration(source.0, source.1)?;
         let mut required = permissions.to_vec();
         required.push(Permission::parse(format!("{resource}:{action}"))?);
         let account = self
@@ -286,7 +286,8 @@ impl DataScopeService {
         let registration = super::consumers::registration(resource, action)?;
         let qualifications =
             roles.iter().map(|role| (role.base.id.clone(), ScopeClause::default())).collect();
-        let scope = resolve_scope(roles, async {
+        let policy = AuthorizationPolicy::for_action(resource, action)?;
+        let scope = resolve_policy_scope(policy, roles, async {
             state.own_org(user, at)?;
             let configs =
                 self.db.person_data_scopes().for_person(user, Some(resource), Some(action), executor).await?;
@@ -303,6 +304,24 @@ impl DataScopeService {
         // 此映射只证明同角色完整动作资格，不以全公司范围替代审批角色或节点责任。
         Ok((scope, qualifications))
     }
+}
+
+/// 仅在账号与同角色完整动作已取证后应用共享政策；旧人员配置不再限制共享业务。
+async fn resolve_policy_scope(
+    policy: AuthorizationPolicy,
+    qualified_roles: &[Role],
+    person_scope: impl Future<Output = Result<ResolvedScope>>,
+) -> Result<ResolvedScope> {
+    if !qualified_roles.iter().any(|role| !role.disabled && !role.base.is_deleted()) {
+        return Err(Error::Forbidden("没有启用角色提供本操作的完整权限".into()));
+    }
+    if policy == AuthorizationPolicy::Shared {
+        return Ok(ResolvedScope {
+            role_clauses: vec![ScopeClause { company: true, ..Default::default() }],
+            user_limit: None,
+        });
+    }
+    resolve_scope(qualified_roles, person_scope).await
 }
 
 /// 超管范围直接生效；其他角色才执行人员范围读取，读取失败不得退化为公司范围。
@@ -352,9 +371,67 @@ mod tests {
     use entity_core::BaseModel;
 
     use super::*;
+    use crate::access_control::ScopedObject;
     use crate::entity::organization::{OrgManagementAssignment, OrgMembership, OrgValidity};
     use crate::entity::role::{ROOT_ROLE_ID, RoleData};
     use crate::service::access_control::consumers::registration;
+
+    /// 岗位共享不读取旧的撤权、本人或部门配置，且不会变成销售授权。
+    #[tokio::test]
+    async fn shared_scope_ignores_person_limits_but_sales_keeps_them() {
+        let roles = [Role::new("role-buyer".into(), RoleData::new("采购")).unwrap()];
+        for resource in [
+            "product",
+            "supplier",
+            "supplier_offering",
+            "purchase_order",
+            "supplier_fulfillment_order",
+            "supplier_settlement_statement",
+        ] {
+            let policy = AuthorizationPolicy::for_action(resource, "list").unwrap();
+            let scope = resolve_policy_scope(policy, &roles, async {
+                panic!("共享资源不得读取旧人员范围或要求主属部门");
+            })
+            .await
+            .unwrap();
+            assert!(scope.user_limit.is_none());
+            assert!(scope.allows(
+                &ScopedObject {
+                    owned: false,
+                    org_unit_id: Some("other-team"),
+                    collaborating: false,
+                    historical_read_participant: false,
+                    settlement_party_id: None,
+                    warehouse_id: None,
+                },
+                false
+            ));
+        }
+        let sales = AuthorizationPolicy::for_action("sales_order", "list").unwrap();
+        let denied =
+            resolve_policy_scope(sales, &roles, async { Ok(PersonDataScope::denied()) }).await.unwrap();
+        assert!(!denied.has_role_scope());
+        let failed =
+            resolve_policy_scope(sales, &roles, async { Err(Error::Forbidden("人员范围失效".into())) }).await;
+        assert!(matches!(failed, Err(Error::Forbidden(_))));
+    }
+
+    /// 共享政策不补授动作资格，失效角色和空资格均拒绝。
+    #[tokio::test]
+    async fn shared_scope_requires_current_qualified_role() {
+        let mut disabled = Role::new("role-buyer".into(), RoleData::new("采购")).unwrap();
+        disabled.disabled = true;
+        let mut deleted = disabled.clone();
+        deleted.disabled = false;
+        deleted.base.deleted_at = 1;
+        for roles in [vec![], vec![disabled], vec![deleted]] {
+            let result = resolve_policy_scope(AuthorizationPolicy::Shared, &roles, async {
+                panic!("无动作资格不得读取人员范围");
+            })
+            .await;
+            assert!(matches!(result, Err(Error::Forbidden(_))));
+        }
+    }
 
     /// 已有超管不读人员配置；缺配置、旧撤权或读取错误均不改变固定范围。
     #[tokio::test]

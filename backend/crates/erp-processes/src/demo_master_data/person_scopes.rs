@@ -50,10 +50,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn task_and_inherited_resources_never_get_independent_scopes() {
-        for (resource, action) in
-            [("approval_instance", "decide"), ("contract", "list"), ("customer_receipt", "list")]
-        {
+    fn task_inherited_and_shared_resources_never_get_independent_scopes() {
+        for (resource, action) in [
+            ("approval_instance", "decide"),
+            ("contract", "list"),
+            ("customer_receipt", "list"),
+            ("product", "list"),
+            ("supplier", "update"),
+            ("purchase_order", "create"),
+            ("supplier_offering", "list"),
+            ("supplier_settlement_statement", "list"),
+        ] {
             let business = PersonBusinessOption::from_granted(resource, vec![action.into()], &[]).unwrap();
             assert!(DemoPersonScope::request("fukuan", &business, &[], 7).unwrap().is_none());
         }
@@ -61,9 +68,7 @@ mod tests {
 
     #[test]
     fn explicit_cross_department_reads_and_directories_have_valid_initial_scopes() {
-        for (login, resource) in
-            [("caigou", "sales_order"), ("yunying", "product"), ("xiaoshou", "business_person")]
-        {
+        for (login, resource) in [("caigou", "sales_order"), ("xiaoshou", "business_person")] {
             let business = PersonBusinessOption::from_granted(
                 resource,
                 vec!["list".into()],
@@ -78,14 +83,14 @@ mod tests {
     }
 
     #[test]
-    fn existing_revocation_is_preserved_and_mixed_task_actions_are_excluded() {
+    fn existing_sales_revocation_is_preserved_and_shared_actions_are_excluded() {
         let business = PersonBusinessOption::from_granted(
-            "supplier_settlement_statement",
-            vec!["list".into(), "detail".into(), "confirm".into()],
+            "sales_order",
+            vec!["list".into(), "detail".into()],
             &[ScopeDimension::InternalOrg],
         )
         .unwrap();
-        let mut existing = PersonDataScope::default_for("finance", "supplier_settlement_statement", "list");
+        let mut existing = PersonDataScope::default_for("finance", "sales_order", "list");
         existing.expression.alternatives.clear();
         let request = DemoPersonScope::request("caiwu", &business, &[existing], 3).unwrap().unwrap();
         assert_eq!(request.actions, ["detail"]);
@@ -99,9 +104,9 @@ mod tests {
         assert!(DemoPersonScope::request("caigou", &product, &[], 3).unwrap().is_none());
     }
     #[test]
-    fn procurement_product_starts_at_self_without_role_scope() {
+    fn sales_starts_at_self_and_inventory_keeps_warehouse_scope() {
         assert_eq!(
-            DemoPersonScope::term("caigou", "product", true, &[ScopeDimension::InternalOrg])
+            DemoPersonScope::term("xiaoshou", "sales_order", true, &[ScopeDimension::InternalOrg])
                 .unwrap()
                 .scope_type,
             DataScopeType::SelfOwned

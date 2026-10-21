@@ -70,6 +70,15 @@ impl AccessInspectionView {
     pub fn contextual(policy: AuthorizationPolicy) -> Self {
         let mut view = Self::default();
         view.push("操作权限", "passed", "账号有效，启用角色提供了本操作权限。");
+        if policy == AuthorizationPolicy::Shared {
+            view.push("岗位共享", "passed", policy.description());
+            view.push(
+                "对象资格",
+                "review",
+                "尚未检查具体对象；维护权限、敏感信息、单据状态及任务责任仍须在业务操作时校验。",
+            );
+            return view;
+        }
         view.push("业务授权", "review", policy.description());
         view.push(
             "对象上下文",
@@ -130,6 +139,15 @@ impl AccessInspectionView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shared_policy_explains_company_access_without_claiming_task_eligibility() {
+        let view = AccessInspectionView::contextual(AuthorizationPolicy::Shared);
+        assert_eq!(view.steps[1].layer, "岗位共享");
+        assert_eq!(view.steps[1].status, "passed");
+        assert_eq!(view.steps[2].status, "review");
+        assert!(view.scope_version.is_none());
+    }
 
     #[test]
     fn contextual_policies_never_report_object_access_as_passed_or_blocked() {

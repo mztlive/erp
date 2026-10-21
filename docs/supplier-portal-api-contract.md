@@ -148,7 +148,7 @@
 | `GET /admin/supplier-portal/applications/{id}/files/{file_id}/download` | `supplier_portal_request:detail`，另验原稿或历史明确引用 |
 | `GET /admin/supplier-portal/offerings/{id}/impacts` | `supplier_portal_request:detail`，另验供给及采购对象范围 |
 
-1. 上述权限不替代供应商及商品对象的 DataScope、维护责任、创建或修改资格和任务处理资格。供给审核只要求本次供给动作所需资格，不统一附加 `supplier:update`；合作条款修改供应商商务档案时才检查相应供应商修改资格。
+1. 上述权限不替代供应商及商品对象的维护责任、创建或修改资格和任务处理资格；内部资料按岗位权限共享，不配置人员范围。供给审核只要求本次供给动作所需资格，不统一附加 `supplier:update`；合作条款修改供应商商务档案时才检查相应供应商修改资格。
 2. 新品的字典补建沿用各字典维护入口及权限；商品审核权限不授予字典创建权。
 3. 账号开通必须绑定已存在且启用的供应商，不赋内部角色或组织。
 4. 目录开放仅授予所选 SKU 的必要资料读取与首次报价资格；不授予销售资料或商品修改权。

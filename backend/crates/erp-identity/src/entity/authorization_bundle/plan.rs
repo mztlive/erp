@@ -593,4 +593,28 @@ mod tests {
         assert!(!PersonScopeExpression::default_self(&scope.resource));
         assert!(plan(exported.document, &facts).unwrap().preview.changes.is_empty());
     }
+
+    #[test]
+    fn shared_scope_export_keeps_role_permissions_and_retires_old_limits() {
+        let mut facts = facts();
+        facts.roles.insert(
+            "reader".into(),
+            role("reader", &["product:list", "purchase_order:list", "sales_order:list"]),
+        );
+        let mut legacy = PersonDataScope::default_for("alice", "product", "list");
+        legacy.expression.additive = false;
+        legacy.expression.alternatives.clear();
+        facts.scopes.push(legacy);
+        let exported = facts.export(4).unwrap();
+        assert_eq!(exported.document.data_scopes.len(), 1);
+        assert_eq!(exported.document.data_scopes[0].resource, "sales_order");
+        assert!(exported.policy_notes.iter().any(|note| note.contains("alice/product/list")));
+        assert!(exported.document.roles[0].permissions.contains(&Permission::parse("product:list").unwrap()));
+        assert!(plan(exported.document, &facts).unwrap().preview.changes.is_empty());
+        let mut invalid = document();
+        let mut shared = scope(&["list"]);
+        shared.resource = "product".into();
+        invalid.data_scopes.push(shared);
+        assert!(matches!(plan(invalid, &facts), Err(Error::ValidationError(_))));
+    }
 }

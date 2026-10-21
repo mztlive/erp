@@ -30,6 +30,7 @@ export type PersonDataScope = {
 }
 export type AuthorizationPolicy =
     | "business"
+    | "shared"
     | "source_inherited"
     | "task"
     | "governance"
@@ -38,6 +39,7 @@ export type AuthorizationPolicy =
 
 export const AUTHORIZATION_POLICY_LABEL: Record<AuthorizationPolicy, string> = {
     business: "业务数据范围",
+    shared: "按岗位权限共享",
     source_inherited: "由来源业务决定",
     task: "由流程或任务指派决定",
     governance: "治理委派",

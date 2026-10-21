@@ -24,8 +24,8 @@ function mockApi(t, businesses, initial = []) {
   return writes;
 }
 
-test("采购保留本人商品范围，销售单追加公司查看，不为审批和财务来源写范围", async t => {
-  const writes = mockApi(t, [business("product", ["list"]), business("sales_order", ["list", "detail"]), business("approval_instance", [], false), business("customer_receipt", [], false)]);
+test("采购商品按岗位共享，销售单追加公司查看，不为审批和财务来源写范围", async t => {
+  const writes = mockApi(t, [business("product", [], false), business("sales_order", ["list", "detail"]), business("approval_instance", [], false), business("customer_receipt", [], false)]);
   await seedPersonDataScopes("test-token", { procurement: { id: "buyer" } });
   assert.equal(writes.length, 1);
   assert.equal(writes[0].resource, "sales_order");

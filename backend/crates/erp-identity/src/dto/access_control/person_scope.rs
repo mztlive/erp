@@ -54,7 +54,13 @@ impl PersonBusinessOption {
     /// 空动作或未登记策略返回校验错误。
     pub fn from_granted(resource: &str, actions: Vec<String>, dimensions: &[ScopeDimension]) -> Result<Self> {
         let first = actions.first().ok_or_else(|| Error::ValidationError("缺少操作权限".into()))?;
-        let authorization_policy = AuthorizationPolicy::for_action(resource, first)?;
+        let authorization_policy = actions.iter().try_fold(
+            AuthorizationPolicy::for_action(resource, first)?,
+            |policy, action| {
+                let candidate = AuthorizationPolicy::for_action(resource, action)?;
+                Ok::<_, Error>(if candidate == AuthorizationPolicy::Shared { candidate } else { policy })
+            },
+        )?;
         let configurable_actions = actions
             .iter()
             .filter(|action| configurable_registration(resource, action).is_ok())
@@ -259,8 +265,9 @@ mod tests {
         )
         .unwrap();
         assert_eq!(option.actions, vec!["list", "confirm"]);
-        assert_eq!(option.configurable_actions, vec!["list"]);
-        assert!(option.default_self);
+        assert!(option.configurable_actions.is_empty());
+        assert!(!option.default_self);
+        assert_eq!(option.authorization_policy, AuthorizationPolicy::Shared);
         let task = PersonBusinessOption::from_granted(
             "approval_instance",
             vec!["read".into(), "decide".into()],
@@ -276,6 +283,10 @@ mod tests {
     #[test]
     fn retired_resource_or_mixed_retired_action_cannot_be_saved() {
         for (resource, actions) in [
+            ("product", vec!["list", "create", "update"]),
+            ("supplier", vec!["list", "update"]),
+            ("supplier_offering", vec!["list", "update"]),
+            ("purchase_order", vec!["list", "submit"]),
             ("settlement_party", vec!["list"]),
             ("approval_instance", vec!["decide"]),
             ("contract", vec!["list"]),
@@ -294,6 +305,8 @@ mod tests {
         assert!(!retired.reason.is_empty());
         let active = PersonDataScope::default_for("alice", "customer", "list");
         assert!(RetiredPersonScope::from_scope(&active).is_none());
+        let shared = PersonDataScope::default_for("alice", "product", "list");
+        assert!(RetiredPersonScope::from_scope(&shared).unwrap().reason.contains("岗位共享"));
     }
 
     #[test]

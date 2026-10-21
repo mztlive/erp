@@ -39,7 +39,7 @@ export function AccountPermissionsSheet({
             }}
             size="preview"
             title={`${account?.name ?? "人员"}的权限`}
-            description="角色提供操作权限，数据访问按业务范围、来源关系或任务指派确定。"
+            description="角色提供操作权限；销售按业务范围访问，采购和公共资料按岗位共享，仓库、来源及任务另行校验。"
             footer={
                 <>
                     <Button

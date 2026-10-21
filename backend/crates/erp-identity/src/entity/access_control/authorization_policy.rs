@@ -8,6 +8,7 @@ use crate::{Error, Result};
 #[serde(rename_all = "snake_case")]
 pub enum AuthorizationPolicy {
     Business,
+    Shared,
     SourceInherited,
     Task,
     Governance,
@@ -30,6 +31,7 @@ impl AuthorizationPolicy {
             | ("supplier_settlement_statement", "confirm")
             | ("reconciliation_difference", "decide") => Self::Task,
             ("integration_error_task" | "reconciliation_difference", "create") => Self::Role,
+            (resource, _) if Self::shared_resource(resource) => Self::Shared,
             (
                 "contract"
                 | "sales_selection_proposal"
@@ -52,17 +54,11 @@ impl AuthorizationPolicy {
             (
                 "customer"
                 | "sales_order"
-                | "purchase_order"
                 | "sales_selection_booklet"
-                | "supplier"
-                | "product"
-                | "supplier_offering"
-                | "supplier_fulfillment_order"
                 | "stock_adjustment"
                 | "stock_balance"
                 | "stock_movement"
                 | "stock_reservation"
-                | "supplier_settlement_statement"
                 | "integration_error_task"
                 | "reconciliation_difference",
                 _,
@@ -70,6 +66,19 @@ impl AuthorizationPolicy {
             _ => return Err(Error::ValidationError(format!("{resource} 未登记授权策略"))),
         };
         Ok(policy)
+    }
+
+    /// 公司共享业务清单；具体任务动作在资源匹配前优先判定。
+    fn shared_resource(resource: &str) -> bool {
+        matches!(
+            resource,
+            "purchase_order"
+                | "supplier"
+                | "product"
+                | "supplier_offering"
+                | "supplier_fulfillment_order"
+                | "supplier_settlement_statement"
+        )
     }
 
     /// 资源的范围条款配置来源；动作权限及实际对象归属仍由目标资源证明。
@@ -109,6 +118,9 @@ impl AuthorizationPolicy {
     pub fn description(self) -> &'static str {
         match self {
             Self::Business => "按业务责任和附加范围授权；仍需具备对应操作权限。",
+            Self::Shared => {
+                "具备对应操作权限的岗位共享公司业务，不按人员或部门配置范围；维护权限、敏感信息、单据状态及任务责任分别校验。"
+            },
             Self::SourceInherited => {
                 "继承来源业务的可见范围；来源、财务职责或关联任务由业务核验，不单独配置范围。"
             },
@@ -178,13 +190,7 @@ mod tests {
                 AuthorizationPolicy::for_action(resource, action).unwrap().ensure_configurable().is_err()
             );
         }
-        for (resource, action) in [
-            ("customer", "list"),
-            ("org_unit", "manage"),
-            ("warehouse", "list"),
-            ("supplier_settlement_statement", "submit"),
-            ("reconciliation_difference", "detail"),
-        ] {
+        for (resource, action) in [("customer", "list"), ("org_unit", "manage"), ("warehouse", "list")] {
             assert!(AuthorizationPolicy::for_action(resource, action).unwrap().ensure_configurable().is_ok());
         }
         assert!(AuthorizationPolicy::for_action("unknown", "list").is_err());

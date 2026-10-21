@@ -141,7 +141,8 @@ export function PersonalPolicyWorkspace({
                                 id="person-scope-group-rules"
                                 className="group flex w-full cursor-pointer items-center gap-1 rounded-sm px-2 py-2 text-xs text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring"
                             >
-                                按业务规则访问 <span>{automatic.length}</span>
+                                岗位共享与业务规则{" "}
+                                <span>{automatic.length}</span>
                                 <ChevronDownIcon
                                     className="ml-auto size-3.5 transition-transform group-aria-expanded:rotate-180"
                                     aria-hidden

@@ -16,7 +16,7 @@ use crate::entity::access_control::authorization_policy::AuthorizationPolicy;
 use crate::entity::organization_change::OrganizationState;
 use crate::entity::role::Role;
 use crate::repository::prelude::*;
-use crate::service::access_control::consumers::configurable_registration;
+use crate::service::access_control::consumers::scope_registration;
 use crate::{AccessControlExt, Error, Permission, Result, RolePermissionSnapshot};
 
 /// 一次事务读取阶段的范围解析批次；持有原执行器以阻止夹入业务写入。
@@ -197,7 +197,7 @@ impl<'a> DataScopeBatch<'a> {
         permissions: &[Permission],
     ) -> Result<AuthorizedDataScope> {
         ensure_resource(target.0, target.1)?;
-        configurable_registration(source.0, source.1)?;
+        scope_registration(source.0, source.1)?;
         let mut required = permissions.to_vec();
         required.push(Permission::parse(format!("{}:{}", target.0, target.1))?);
         self.ensure_declared(&required)?;
@@ -357,7 +357,7 @@ pub(super) fn scope_version(
 ) -> String {
     let (account_version, policy_revision) = versions;
     let fingerprint = format!(
-        "{account_version}:{policy_revision}:{}:{}:{}:{source:?}:{:?}:{scope:?}",
+        "shared-policy-v1:{account_version}:{policy_revision}:{}:{}:{}:{source:?}:{:?}:{scope:?}",
         state.version,
         target.0,
         target.1,

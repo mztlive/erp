@@ -30,7 +30,7 @@
   "person_scope_defaults": {
     "self_accounts": ["xiaoshou", "caigou", "yunying"],
     "department_accounts": ["lisiyong", "caigoushenpi"],
-    "company_resources": {"caigou": ["sales_order"], "yunying": ["product"]}
+    "company_resources": {"caigou": ["sales_order"]}
   },
   "accounts": [
     {"key": "sales", "account": "xiaoshou", "name": "周晓彤", "role_id": "role-sales", "label": "周晓彤"},
