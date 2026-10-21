@@ -13,6 +13,7 @@ use erp_procurement::service::purchase_order::void_order::{
     ensure_current_submission_is_draft, ensure_void_target, load_purchase_order, persist_voided_order,
 };
 use erp_sales::repository::SalesOrderExt;
+use erp_supply::inquiry::InquirySupplyService;
 use id_generator::next_id;
 use persistence_core::{Executor, NoTransaction};
 use validator::Validate;
@@ -21,6 +22,7 @@ use super::PurchaseOrderProcess;
 use super::authorization::{PurchaseOrderAuthorization, ensure_purchase_order_actor_account};
 use super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 use crate::audit::{persist_log, recover_command};
+use crate::sales_inquiry_expense::release_purchase;
 use crate::{Error, Result};
 
 const VOID_PERMISSION: &str = "purchase_order:delete";
@@ -260,6 +262,10 @@ impl VoidSteps for VoidPosting<'_, '_> {
             },
             VoidStep::Order => {
                 persist_voided_order(self.db, self.order, self.command.actor.id(), executor).await?;
+                release_purchase(self.db, &self.order.base.id, executor).await?;
+                InquirySupplyService::new(self.db.clone())
+                    .release_order_quotes(&self.order.base.id, executor)
+                    .await?;
             },
             VoidStep::Tasks => {
                 sync_procurement_tasks_for_sales_order(self.db, &self.order.sales_order_id, executor).await?;

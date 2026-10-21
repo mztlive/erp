@@ -502,6 +502,13 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                 },
                 {
                     routeId: "W05",
+                    href: "/sales/inquiries",
+                    label: "销售询价",
+                    icon: ClipboardListIcon,
+                    requiredPermissions: ["sales_inquiry:list"],
+                },
+                {
+                    routeId: "W05",
                     href: "/sales/selection",
                     label: "选品册",
                     icon: PackageSearchIcon,
@@ -520,6 +527,13 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                 {
                     routeId: "W08",
                     icon: ClipboardListIcon,
+                },
+                {
+                    routeId: "W08",
+                    href: "/procurement/inquiries",
+                    label: "采购询价",
+                    icon: PackageSearchIcon,
+                    requiredPermissions: ["procurement_inquiry:list"],
                 },
                 {
                     routeId: "W21",

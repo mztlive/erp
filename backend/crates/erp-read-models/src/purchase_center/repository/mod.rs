@@ -5,6 +5,8 @@ mod coverage;
 mod coverage_history;
 mod coverage_service;
 mod creation_basis;
+mod inquiry_quotes;
+pub use inquiry_quotes::inquiry_quote_source;
 pub(super) mod list_facts;
 pub(crate) mod mapping;
 pub mod supplier_names;

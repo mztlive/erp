@@ -120,14 +120,19 @@ fn append_line_supplies(
         }
         for &(fulfillment_responsibility, price_basis) in purchase_options(line.product_kind)? {
             let scope = BasisScope {
+                inquiry_quote_revision_id: None,
                 supplier_id: supplier_id.clone(),
                 purchase_type,
                 payment_term_code: terms.payment_term_code.clone(),
                 fulfillment_responsibility,
                 price_basis,
             };
-            let basis_line =
-                BasisLine { coverage: line.clone(), supply: supply.clone(), max_create_quantity };
+            let basis_line = BasisLine {
+                inquiry_quote: None,
+                coverage: line.clone(),
+                supply: supply.clone(),
+                max_create_quantity,
+            };
             if let Some(group) = groups.iter_mut().find(|group| group.scope == scope) {
                 group.lines.push(basis_line);
             } else {

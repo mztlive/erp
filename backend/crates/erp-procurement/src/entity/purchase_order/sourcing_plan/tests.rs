@@ -226,6 +226,7 @@ fn basis_group(
     let lines = lines
         .iter()
         .map(|(line_id, total, covered)| BasisLine {
+            inquiry_quote: None,
             coverage: coverage_line(line_id, total, covered),
             supply: line_supply("offering-1", supplier_id, supply_available),
             max_create_quantity: remaining(total, covered),
@@ -234,6 +235,7 @@ fn basis_group(
     BasisGroup {
         revision: revision("1"),
         scope: BasisScope {
+            inquiry_quote_revision_id: None,
             supplier_id: SupplierAccountId::new(supplier_id),
             purchase_type: PurchaseType::Physical,
             payment_term_code: payment_term_code.to_string(),
@@ -286,6 +288,7 @@ fn assignment(
     quantity: &str,
 ) -> SourcingAssignment {
     SourcingAssignment {
+        reselection_reason: None,
         delivery_allocations: Vec::new(),
 
         sales_order_line_id: line_id.to_string(),

@@ -3,6 +3,7 @@
 import * as React from "react"
 
 import { FormalCommandKeyLedger } from "@/lib/formal-command"
+import { InquirySalesCommandLedger } from "../lib/inquiry-sales-storage"
 
 /**
  * 页面生命周期内为当前销售单范围维护一份命令账本。
@@ -11,15 +12,21 @@ import { FormalCommandKeyLedger } from "@/lib/formal-command"
 export function useSalesOrderCreateCommandLedger(
     scope: string,
     commandLedgerProp?: FormalCommandKeyLedger,
+    persistentUserId?: string,
 ): FormalCommandKeyLedger {
     const ledgerRef = React.useRef<{
         scope: string
         ledger: FormalCommandKeyLedger
     } | null>(null)
-    if (ledgerRef.current?.scope !== scope) {
+    const identity =
+        persistentUserId !== undefined ? `${scope}:${persistentUserId}` : scope
+    if (ledgerRef.current?.scope !== identity) {
         ledgerRef.current = {
-            scope,
-            ledger: new FormalCommandKeyLedger(),
+            scope: identity,
+            ledger:
+                persistentUserId !== undefined
+                    ? new InquirySalesCommandLedger(persistentUserId, scope)
+                    : new FormalCommandKeyLedger(),
         }
     }
     return commandLedgerProp ?? ledgerRef.current.ledger

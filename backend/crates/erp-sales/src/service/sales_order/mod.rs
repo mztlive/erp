@@ -4,6 +4,7 @@ pub mod command;
 pub mod contract_binding;
 pub mod draft_working_copy;
 pub mod formalize;
+pub mod inquiry;
 pub mod lifecycle;
 mod list;
 pub mod mapper;

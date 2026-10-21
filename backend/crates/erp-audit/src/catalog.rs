@@ -262,6 +262,23 @@ const REGISTERED_ACTIONS: &[AuditAction] = &[
     action("sales_invoice_request.approve", "sales_invoice_request", "审批通过开票申请"),
     action("sales_invoice_request.cancel", "sales_invoice_request", "撤回开票申请"),
     action("sales_invoice_request.submit", "sales_invoice_request", "提交开票申请"),
+    action("sales_inquiry.create", "sales_inquiry", "创建销售询价"),
+    action("sales_inquiry.save", "sales_inquiry", "保存询价需求"),
+    action("sales_inquiry.submit", "sales_inquiry", "提交询价需求"),
+    action("sales_inquiry.claim", "sales_inquiry", "接手采购询价"),
+    action("sales_inquiry.supplement", "sales_inquiry", "要求补充询价需求"),
+    action("sales_inquiry.reassign", "sales_inquiry", "改派询价责任"),
+    action("sales_inquiry.save_feedback", "sales_inquiry", "保存询价反馈草稿"),
+    action("sales_inquiry.publish", "sales_inquiry", "发布询价反馈"),
+    action("sales_inquiry.accept", "sales_inquiry", "接受询价反馈"),
+    action("sales_inquiry.reinquire", "sales_inquiry", "要求重新询价"),
+    action("sales_inquiry.close", "sales_inquiry", "关闭销售询价"),
+    action("sales_inquiry.import", "sales_inquiry", "确认询价选品导入"),
+    action("sales_inquiry.convert_sales", "sales_inquiry", "询价转销售草稿"),
+    action("sales_inquiry.convert_expenses", "sales_inquiry", "询价费用转采购"),
+    action("sales_inquiry.allocate_fees", "sales_inquiry", "分配询价费用归属"),
+    action("sales_inquiry.internal_quote", "sales_inquiry", "维护询价内部报价"),
+    action("sales_inquiry.fee_basis", "sales_inquiry", "维护询价费用内部依据"),
     action("sales_order.bind_contract", "sales_order", "绑定销售合同"),
     action("sales_order.cancel_approval", "sales_order", "撤回审批销售单"),
     action("sales_order.create", "sales_order", "创建销售单"),
@@ -431,6 +448,21 @@ mod tests {
     use std::collections::HashSet;
 
     use super::{registered_action, registered_actions};
+
+    #[test]
+    fn inquiry_events_accept_only_the_inquiry_resource_and_no_sensitive_fields() {
+        for code in [
+            "sales_inquiry.submit",
+            "sales_inquiry.publish",
+            "sales_inquiry.accept",
+            "sales_inquiry.internal_quote",
+            "sales_inquiry.convert_sales",
+            "sales_inquiry.convert_expenses",
+        ] {
+            assert!(registered_action(code, "sales_inquiry").unwrap().allowed_fields.is_empty());
+            assert!(registered_action(code, "sales_order").is_err());
+        }
+    }
 
     #[test]
     fn registered_pairs_are_unique_valid_and_use_chinese_labels() {

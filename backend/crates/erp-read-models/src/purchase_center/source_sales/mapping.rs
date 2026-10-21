@@ -148,6 +148,7 @@ mod tests {
     /// 构造采购商品行引用；金额字段不参与销售价选择。
     fn purchase_line(revision_line: &str, stable: &str) -> PurchaseOrderLineView {
         PurchaseOrderLineView {
+            inquiry_quote_source: None,
             delivery_allocations: Vec::new(),
 
             line_id: "purchase-line".into(),

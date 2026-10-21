@@ -37,6 +37,39 @@ pub(crate) const WIRED_CONSUMERS: &[(&str, &[&str], &[ScopeDimension])] = &[
         &[ScopeDimension::InternalOrg],
     ),
     (
+        "sales_inquiry",
+        &[
+            "list",
+            "detail",
+            "create",
+            "update",
+            "submit",
+            "accept",
+            "reinquire",
+            "close",
+            "import",
+            "convert_sales",
+            "recover",
+        ],
+        &[ScopeDimension::InternalOrg],
+    ),
+    (
+        "procurement_inquiry",
+        &[
+            "list",
+            "detail",
+            "claim",
+            "supplement",
+            "reassign",
+            "internal_quote",
+            "save_feedback",
+            "publish",
+            "convert_expenses",
+            "recover",
+        ],
+        &[ScopeDimension::InternalOrg],
+    ),
+    (
         "purchase_order",
         &["list", "detail", "create", "update", "delete", "submit", "cancel_approval", "maintain_source"],
         &[ScopeDimension::InternalOrg],
@@ -219,6 +252,23 @@ pub(super) fn scope_registration(resource: &str, action: &str) -> Result<Consume
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn inquiry_sales_scope_and_procurement_task_grants_remain_separate() {
+        let sales = configurable_registration("sales_inquiry", "detail").unwrap();
+        assert!(sales.default_self);
+        assert!(!sales.allows_history);
+        assert_eq!(sales.required_dimensions, &[ScopeDimension::InternalOrg]);
+        for action in ["detail", "publish", "internal_quote", "convert_expenses"] {
+            let task = registration("procurement_inquiry", action).unwrap();
+            assert!(!task.default_self);
+            assert!(!task.allows_history);
+            assert!(configurable_registration("procurement_inquiry", action).is_err());
+            assert!(scope_registration("procurement_inquiry", action).is_err());
+        }
+        assert!(registration("sales_inquiry", "internal_quote").is_err());
+        assert!(registration("procurement_inquiry", "accept").is_err());
+    }
 
     #[test]
     fn shared_businesses_are_runtime_sources_but_never_person_configuration() {

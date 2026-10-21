@@ -67,6 +67,7 @@ pub(crate) fn usable_impact_summary(stored: Option<&str>, work_item_type: WorkIt
 /// 无。
 pub(crate) fn next_action_hint(work_item_type: WorkItemType) -> String {
     match work_item_type {
+        WorkItemType::SalesInquiryProcessing => "核对责任商品的供给、价格和交期，保存结果后统一发布反馈。",
         WorkItemType::ProcurementOrderCreation => "进入采购单创建页，按冻结销售行建立采购单并提交。",
         WorkItemType::PurchasePaymentArrangement => "核对付款条件后申请采购付款，或登记下次跟进日期。",
         WorkItemType::PurchaseSourceUpdate => {
@@ -197,6 +198,7 @@ fn mapped_reason_label(code: &str) -> Option<&'static str> {
 
 fn default_reason_label(work_item_type: WorkItemType) -> &'static str {
     match work_item_type {
+        WorkItemType::SalesInquiryProcessing => "销售已提交询价，需要采购反馈供给结果",
         WorkItemType::ProcurementOrderCreation => "销售单已生效，需要分配供给",
         WorkItemType::PurchasePaymentArrangement => "采购已审批通过，请安排付款申请或后续跟进",
         WorkItemType::PurchaseSourceUpdate => "销售单已变更，需要更新采购依据",
@@ -226,6 +228,7 @@ fn default_reason_label(work_item_type: WorkItemType) -> &'static str {
 
 fn default_impact_summary(work_item_type: WorkItemType) -> &'static str {
     match work_item_type {
+        WorkItemType::SalesInquiryProcessing => "反馈发布前销售无法确认本轮供给或开单依据",
         WorkItemType::ProcurementOrderCreation => "不建单则对应销售行无法进入采购执行",
         WorkItemType::PurchasePaymentArrangement => "未提交付款申请的金额尚未进入财务审核，请按付款约定跟进",
         WorkItemType::PurchaseSourceUpdate => "不处理则采购仍按变更前的销售数量或交付要求执行",

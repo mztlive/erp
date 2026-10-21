@@ -6,13 +6,14 @@ use erp_core::common::time::BusinessDate;
 use erp_core::ids::{
     SkuId, SkuRevisionId, SupplierAccountId, SupplierOfferingId, SupplierOfferingRevisionId,
 };
-use erp_core::money::Quantity;
+use erp_core::money::{Quantity, Rate, UnitPrice};
 use erp_core::{Error, Result};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    LineSupply, PurchaseLineInput, PurchaseLineType, PurchaseOrderRevisionLine, PurchaseOrderSubmissionLine,
+    LineSupply, PurchaseInquiryQuoteSource, PurchaseLineInput, PurchaseLineType, PurchaseOrderRevisionLine,
+    PurchaseOrderSubmissionLine,
 };
 use crate::entity::facts::AvailabilityStatus;
 
@@ -29,6 +30,9 @@ pub struct PurchaseOfferingSource {
     pub revision_version: u64,
     /// 创建时可供投影乐观锁版本。
     pub availability_version: u64,
+    /// 询价专项条款；空值沿用既有通用供给版本。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inquiry_quote: Option<PurchaseInquiryQuoteSource>,
 }
 
 impl PurchaseOfferingSource {
@@ -53,6 +57,7 @@ impl PurchaseOfferingSource {
             supplier_offering_revision_id: supply.revision.base.id.clone().into(),
             revision_version: supply.revision.version,
             availability_version: supply.availability.base.version,
+            inquiry_quote: None,
         };
         source.ensure_valid()?;
         Ok(source)
@@ -79,6 +84,9 @@ impl PurchaseOfferingSource {
         on_date: BusinessDate,
     ) -> Result<()> {
         self.ensure_valid()?;
+        if self.inquiry_quote.is_some() {
+            return Err(Error::from("专项报价必须按冻结专项条款重验，不得采用通用供给价格"));
+        }
         if Self::from_supply(supply)? != *self
             || supply.offering.supplier_id != *supplier_id
             || supply.offering.sku_id != *sku_id
@@ -97,6 +105,9 @@ impl PurchaseOfferingSource {
 
     /// 校验来源身份及三种版本均可追溯。
     fn ensure_valid(&self) -> Result<()> {
+        if let Some(quote) = &self.inquiry_quote {
+            quote.validate()?;
+        }
         if self.supplier_offering_id.as_ref().trim().is_empty()
             || self.supplier_offering_revision_id.as_ref().trim().is_empty()
             || self.offering_version == 0
@@ -123,12 +134,21 @@ impl PurchaseOfferingSource {
 pub(super) fn ensure_offering_source(
     kind: PurchaseLineType,
     source: Option<&PurchaseOfferingSource>,
+    price: Option<UnitPrice>,
+    tax: Option<Rate>,
 ) -> Result<()> {
     if let Some(source) = source {
         if kind != PurchaseLineType::ItemService {
             return Err(Error::from("物流费用行不得携带供给选源事实"));
         }
         source.ensure_valid()?;
+        if source
+            .inquiry_quote
+            .as_ref()
+            .is_some_and(|quote| price != Some(quote.unit_cost_gross) || tax != Some(quote.input_tax_rate))
+        {
+            return Err(Error::from("专项采购单价及税率必须等于原始报价，禁止任意覆盖"));
+        }
     }
     Ok(())
 }
@@ -313,8 +333,8 @@ mod tests {
         let mut wrong_availability = supply();
         wrong_availability.availability.supplier_offering_id = SupplierOfferingId::new("foreign");
         assert!(PurchaseOfferingSource::from_supply(&wrong_availability).is_err());
-        assert!(ensure_offering_source(PurchaseLineType::LogisticsFee, Some(&source)).is_err());
-        assert!(ensure_offering_source(PurchaseLineType::ItemService, None).is_ok());
+        assert!(ensure_offering_source(PurchaseLineType::LogisticsFee, Some(&source), None, None).is_err());
+        assert!(ensure_offering_source(PurchaseLineType::ItemService, None, None, None).is_ok());
     }
 
     #[test]

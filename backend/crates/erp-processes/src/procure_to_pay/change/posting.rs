@@ -24,6 +24,7 @@ use super::effect::EffectiveChangePosting;
 use super::guard::check_effective_lines;
 use crate::audit::persist_log;
 use crate::reverse_flow::direct_return_completion::complete_direct_returns;
+use crate::sales_inquiry_expense::PurchaseExpenseTarget;
 use crate::{Error, Result};
 
 /// 原事务中的真实跨域操作；没有成本构造或成本写入步骤，因为原差额成本恒空。
@@ -163,6 +164,13 @@ async fn guard_quantities(
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<()> {
+    super::super::inquiry_supply::resize_revision_quotes(
+        db,
+        &purchase.order,
+        &purchase.revision_lines,
+        executor,
+    )
+    .await?;
     if let Some(progress) =
         check_effective_lines(db, &purchase.order, &purchase.revision_lines, executor).await?
     {
@@ -215,6 +223,20 @@ pub(super) async fn persist_effective_writes(
     actor_id: &str,
     executor: &mut dyn Executor,
 ) -> Result<u64> {
+    let fees = write
+        .purchase
+        .revision_lines
+        .iter()
+        .filter_map(|line| {
+            line.expense.as_ref().map(|fee| PurchaseExpenseTarget {
+                detail: fee,
+                amount: line.gross_amount,
+                rate: line.input_tax_rate,
+            })
+        })
+        .collect::<Vec<_>>();
+    crate::sales_inquiry_expense::resize_purchase(db, &write.purchase.order, &fees, actor_id, executor)
+        .await?;
     let mut steps = MongoEffect { db, write, audit, actor_id, allocations: None };
     execute(&mut steps, executor).await?;
     Ok(steps.write.purchase.order.base.version)

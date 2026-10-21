@@ -6,6 +6,7 @@ use erp_core::money::{Amount, Rate};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+use super::inquiry_fee::InquiryFeeReference;
 use crate::entity::cost::{
     CostAllocation, CostEntry, ExtraCostCategory, ExtraCostInput, ExtraCostReductionInput, ReducedAmounts,
     is_registered_extra_cost,
@@ -32,6 +33,9 @@ pub struct RegisterExtraCostRequest {
     /// 归属销售明细（可空，空表示整张销售单）。
     #[serde(default)]
     pub sales_order_line_id: Option<SalesOrderLineId>,
+    /// ERP 外办理的询价费用；登记与来源额度在同一事务消费。
+    #[serde(default)]
+    pub inquiry_source: Option<InquiryFeeReference>,
     /// 凭证文件；本次上传时为 `pending-file:` 临时引用。
     pub evidence_attachment_id: FileAssetId,
     /// 幂等键。

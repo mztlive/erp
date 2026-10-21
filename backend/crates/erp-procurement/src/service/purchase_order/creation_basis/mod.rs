@@ -1,6 +1,8 @@
 //! 采购依据资格、库存分组和创建规则。
 pub mod create;
+mod inquiry;
 mod mapping;
+pub use inquiry::{InquiryBasisCandidate, inquiry_basis_groups};
 mod stock;
 mod submission;
 pub use create::{

@@ -1,6 +1,6 @@
 //! 采购提交行、版本行与汇总视图映射。
 
-use super::{PurchaseOrderLineView, TotalsView};
+use super::{InquiryQuoteSourceView, PurchaseOrderLineView, TotalsView};
 use crate::entity::purchase_order::{
     PurchaseDeliveryAllocation, PurchaseExpenseDetail, PurchaseLineType, PurchaseOrderRevision,
     PurchaseOrderRevisionLine, PurchaseOrderSubmissionLine,
@@ -11,6 +11,7 @@ use crate::entity::purchase_order::{
 /// 两类行实体除提交行多 `sales_order_submission_line_id` 外字段同形；
 /// 本 trait 收敛公共字段读取，单个泛型函数承载视图组装。
 trait PurchaseLineViewSource {
+    fn view_inquiry_quote_source(&self) -> Option<InquiryQuoteSourceView>;
     fn view_delivery_allocations(&self) -> Vec<PurchaseDeliveryAllocation>;
     /// 行实体主键。
     fn view_line_id(&self) -> String;
@@ -60,6 +61,12 @@ trait PurchaseLineViewSource {
 /// 为同形行实体生成视图字段读取。
 macro_rules! common_view_methods {
     () => {
+        fn view_inquiry_quote_source(&self) -> Option<InquiryQuoteSourceView> {
+            self.supplier_offering_source
+                .as_ref()
+                .and_then(|source| source.inquiry_quote.as_ref())
+                .map(|source| InquiryQuoteSourceView::from_source(source, self.quantity))
+        }
         fn view_delivery_allocations(&self) -> Vec<PurchaseDeliveryAllocation> {
             self.delivery_allocations.clone()
         }
@@ -160,6 +167,7 @@ impl PurchaseLineViewSource for PurchaseOrderSubmissionLine {
 /// 由统一行数据源组装采购行视图。
 fn line_to_view(line: &impl PurchaseLineViewSource) -> PurchaseOrderLineView {
     PurchaseOrderLineView {
+        inquiry_quote_source: line.view_inquiry_quote_source(),
         delivery_allocations: line.view_delivery_allocations(),
         line_id: line.view_line_id(),
         line_no: line.view_line_no(),

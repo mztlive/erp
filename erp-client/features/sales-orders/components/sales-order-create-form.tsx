@@ -1,6 +1,11 @@
 "use client"
 
 import * as React from "react"
+import { useInquirySalesDraftPersistence } from "../hooks/use-inquiry-sales-draft-persistence"
+import { inquirySaleScope } from "../lib/inquiry-sales-storage"
+import type { CreateSalesOrderFormValues } from "../lib/sales-order-create-model"
+import type { InquirySalesBasis } from "../api/inquiry-basis"
+import { SalesOrderInquirySource } from "./sales-order-inquiry-source"
 import type { SalesOrderSelectionBasis } from "@/features/sales-orders/api/selection-basis"
 import { SalesOrderSelectionSource } from "./sales-order-selection-source"
 import { useRouter } from "next/navigation"
@@ -60,6 +65,8 @@ import type { SalesOrderEditorPurpose } from "@/features/sales-orders/lib/sales-
 export type { SalesOrderEditorPurpose } from "@/features/sales-orders/lib/sales-order-create-form-types"
 
 export function SalesOrderCreateForm({
+    initialInquiryValues,
+    initialInquiryBasis,
     initialSelectionBasis,
     initialCustomerId = "",
     initialContractId = "",
@@ -71,6 +78,8 @@ export function SalesOrderCreateForm({
     onSubmitted,
     commandLedger: commandLedgerProp,
 }: {
+    initialInquiryValues?: CreateSalesOrderFormValues
+    initialInquiryBasis?: InquirySalesBasis
     initialSelectionBasis?: SalesOrderSelectionBasis
     initialCustomerId?: string
     initialContractId?: string
@@ -87,7 +96,10 @@ export function SalesOrderCreateForm({
     const embeddedDraft = chrome === "none" && purpose === "draft"
     const source =
         initialDraft?.selectionSource ?? initialSelectionBasis?.source
+    const inquirySource = initialDraft?.inquirySource ?? initialInquiryBasis
     const sourceCustomerId =
+        initialInquiryBasis?.customerId ??
+        initialDraft?.inquirySource?.customer_id ??
         initialSelectionBasis?.customerId ??
         (source ? initialDraft?.customerId : undefined)
     const router = useRouter()
@@ -98,7 +110,9 @@ export function SalesOrderCreateForm({
     const queryClient = useQueryClient()
     const profileQuery = useAccountProfileQuery()
     const [selectedContractId, setSelectedContractId] = React.useState(
-        initialDraft?.contractId || initialContractId,
+        initialDraft?.contractId ||
+            initialInquiryValues?.contractId ||
+            initialContractId,
     )
     const [readyContractId, setReadyContractId] = React.useState("")
     const [contractPickerOpen, setContractPickerOpen] = React.useState(false)
@@ -114,7 +128,8 @@ export function SalesOrderCreateForm({
         purpose === "create" &&
             !initialDraft &&
             !initialContractId &&
-            !initialSelectionBasis,
+            !initialSelectionBasis &&
+            !initialInquiryBasis,
     )
     const wasImportOpen = React.useRef(false)
     React.useEffect(() => {
@@ -134,19 +149,29 @@ export function SalesOrderCreateForm({
         return () => cancelAnimationFrame(frame)
     }, [uploadOpen, entryOpen])
     const preferredRevisionRef = React.useRef(
-        initialDraft?.requestedContractRevisionId || initialContractRevisionId,
+        initialDraft?.requestedContractRevisionId ||
+            initialInquiryValues?.requestedContractRevisionId ||
+            initialContractRevisionId,
     )
     /** 已同步的合同不会因后台刷新覆盖用户修改的结算主体。 */
     const synchronizedContractRef = React.useRef("")
-    const keepDraftTermsRef = React.useRef(initialDraft != null)
+    const keepDraftTermsRef = React.useRef(
+        initialDraft != null || initialInquiryValues != null,
+    )
     const contractQuery = useContractCenterQuery(selectedContractId)
 
     const commandLedger = useSalesOrderCreateCommandLedger(
         initialDraft?.salesOrderId ??
-            (source ? `selection-${source.proposal_id}` : "new-sales-order"),
+            (inquirySource
+                ? `inquiry-${inquirySource.inquiry_id}-${inquirySource.feedback_round}`
+                : source
+                  ? `selection-${source.proposal_id}`
+                  : "new-sales-order"),
         commandLedgerProp,
+        initialInquiryBasis ? (profileQuery.data?.userid ?? "") : undefined,
     )
     const submission = useSalesOrderCreateSubmission({
+        inquiryBasis: initialInquiryBasis,
         selectionProposalId: source?.proposal_id,
         initialDraft,
         commandLedger,
@@ -154,6 +179,8 @@ export function SalesOrderCreateForm({
     })
     const { setDraftSaved } = submission
     const defaultValues = useSalesOrderCreateDefaults({
+        initialInquiryValues,
+        initialInquiryBasis,
         initialSelectionBasis,
         initialCustomerId,
         initialContractId,
@@ -161,7 +188,8 @@ export function SalesOrderCreateForm({
         initialNature,
         initialDraft,
     })
-    const natureLocked = purpose !== "create" || Boolean(source)
+    const natureLocked =
+        purpose !== "create" || Boolean(source) || Boolean(inquirySource)
     const [pendingNature, setPendingNature] =
         React.useState<SalesOrderNature | null>(null)
     const procurementResponsibilityRef = React.useRef<{
@@ -228,6 +256,17 @@ export function SalesOrderCreateForm({
             await submission.handleSubmit(value, form)
         },
     })
+
+    useInquirySalesDraftPersistence(
+        form,
+        initialInquiryBasis ? profileQuery.data?.userid : undefined,
+        initialInquiryBasis
+            ? inquirySaleScope(
+                  initialInquiryBasis.inquiry_id,
+                  initialInquiryBasis.feedback_round,
+              )
+            : "",
+    )
 
     /** 负毛利在提交预览后再确认一次；待完善或非负毛利直接提交。 */
     const handleSubmitConfirm = () => {
@@ -594,6 +633,9 @@ export function SalesOrderCreateForm({
     const editor = (
         <>
             {source && <SalesOrderSelectionSource source={source} />}
+            {inquirySource && (
+                <SalesOrderInquirySource source={inquirySource} />
+            )}
             <SalesOrderCreateAlerts
                 profileError={profileQuery.error ?? null}
                 formalFailure={submission.formalFailure}

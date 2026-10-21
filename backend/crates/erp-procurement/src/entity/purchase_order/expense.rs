@@ -14,6 +14,7 @@ use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
+use super::InquiryExpenseSource;
 use super::types::status_display;
 
 /// 费用说明最大长度。
@@ -63,6 +64,9 @@ pub struct PurchaseExpenseDetail {
     /// 归属销售明细；空表示整张销售单。
     #[serde(default)]
     pub sales_order_line_id: Option<SalesOrderLineId>,
+    /// 经服务端确认的询价费用来源；历史与直接费用采购为空。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inquiry_source: Option<InquiryExpenseSource>,
 }
 
 impl PurchaseExpenseDetail {
@@ -85,7 +89,8 @@ impl PurchaseExpenseDetail {
         description: String,
         sales_order_line_id: Option<SalesOrderLineId>,
     ) -> Result<Self> {
-        let detail = Self { expense_line_id, category, description, sales_order_line_id };
+        let detail =
+            Self { expense_line_id, category, description, sales_order_line_id, inquiry_source: None };
         detail.normalized()
     }
 
@@ -115,6 +120,7 @@ impl PurchaseExpenseDetail {
                 "费用说明不能超过 200 字",
             )?,
             sales_order_line_id: self.sales_order_line_id.clone(),
+            inquiry_source: self.inquiry_source.as_ref().map(InquiryExpenseSource::normalized).transpose()?,
         })
     }
 }
@@ -248,6 +254,7 @@ impl ExpenseLineState<'_> {
             || self.input_tax_rate != other.input_tax_rate
             || left.description != right.description
             || left.sales_order_line_id != right.sales_order_line_id
+            || left.inquiry_source != right.inquiry_source
     }
 }
 
@@ -283,6 +290,10 @@ pub fn validate_change_expenses(
         if original.expense.map(|value| value.category) != Some(expense.category) {
             return Err(Error::from("费用类别不能修改；需要其他类别请移除本行后另建费用采购单"));
         }
+        let original_source = original.expense.and_then(|value| value.inquiry_source.as_ref());
+        if !same_inquiry_source(original_source, expense.inquiry_source.as_ref()) {
+            return Err(Error::from("采购改单不能更换询价费用来源"));
+        }
         if occurred.contains(id) && line.differs_from(original) {
             return Err(Error::from("已确认发生的费用行不能修改"));
         }
@@ -291,6 +302,14 @@ pub fn validate_change_expenses(
         return Err(Error::from("原费用行须保留记录；不再需要的费用请把金额改为 0"));
     }
     Ok(())
+}
+
+fn same_inquiry_source(left: Option<&InquiryExpenseSource>, right: Option<&InquiryExpenseSource>) -> bool {
+    match (left, right) {
+        (None, None) => true,
+        (Some(left), Some(right)) => left.same_identity(right),
+        _ => false,
+    }
 }
 
 #[cfg(test)]
@@ -407,5 +426,28 @@ mod tests {
         assert!(
             PurchaseExpenseOccurrence::new("o".into(), data("106.00", "99.64", "6.36"), early_today).is_err()
         );
+    }
+
+    #[test]
+    fn change_can_explicitly_adopt_a_new_fee_round_but_keeps_stable_identity_and_occurred_history() {
+        let original = PurchaseExpenseDetail {
+            inquiry_source: Some(InquiryExpenseSource {
+                inquiry_id: "inquiry".into(),
+                feedback_round: 1,
+                fee_id: "fee".into(),
+                allocation_id: "allocation".into(),
+            }),
+            ..detail()
+        };
+        let mut revised = original.clone();
+        revised.inquiry_source.as_mut().unwrap().feedback_round = 2;
+        let base = [state(&original, "100.00")];
+        assert!(validate_change_expenses(&base, &[state(&revised, "110.00")], &Default::default()).is_ok());
+        let occurred = std::collections::HashSet::from([original.expense_line_id.clone()]);
+        assert!(validate_change_expenses(&base, &[state(&revised, "100.00")], &occurred).is_err());
+        revised.inquiry_source.as_mut().unwrap().allocation_id = "other".into();
+        assert!(validate_change_expenses(&base, &[state(&revised, "100.00")], &Default::default()).is_err());
+        revised.inquiry_source = None;
+        assert!(validate_change_expenses(&base, &[state(&revised, "100.00")], &Default::default()).is_err());
     }
 }

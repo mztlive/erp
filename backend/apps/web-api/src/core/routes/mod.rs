@@ -43,6 +43,7 @@ mod purchase_order;
 mod purchase_payment_request;
 mod receivable;
 mod returns;
+mod sales_inquiry;
 mod sales_order;
 mod sales_review;
 mod sales_selection;

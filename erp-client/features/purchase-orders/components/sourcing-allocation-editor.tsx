@@ -127,6 +127,24 @@ export function SourcingAllocationEditor({
                     showDeliverySummary={false}
                 />
                 <SourcingOptionFacts option={option} product={product} />
+                {option?.sourceType === "PURCHASE" &&
+                    !option.inquirySource &&
+                    (option.inquiryReselectionRequired ||
+                        product.options.some(
+                            (candidate) => candidate.inquirySource,
+                        )) && (
+                        <form.AppField
+                            name={`lines[${index}].reselectionReason`}
+                            children={(field) => (
+                                <field.TextareaField
+                                    id={`${id}-reselection-reason`}
+                                    label="改选原因"
+                                    required
+                                    placeholder="说明本次改用其他供应商或通用供给的原因"
+                                />
+                            )}
+                        />
+                    )}
             </div>
             <div
                 className={cn(
@@ -276,6 +294,9 @@ function SourcingOptionFacts({
         <div className="rounded-lg border border-border/70 bg-muted/25 px-3 py-2.5">
             <div className="flex items-start justify-between gap-3">
                 <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                    <Badge variant="outline">
+                        {option.inquirySource ? "询价专项报价" : "通用供给"}
+                    </Badge>
                     <Badge variant="secondary">
                         {sourcingRouteLabel(option)}
                     </Badge>
@@ -308,6 +329,19 @@ function SourcingOptionFacts({
                     </p>
                 </div>
             </div>
+            {option.inquirySource && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                    沿用询价第 {option.inquirySource.feedback_round} 轮 ·
+                    内部报价第 {option.inquirySource.quote_revision_no} 版 ·
+                    失效日期 {option.inquirySource.valid_to} · 起订量{" "}
+                    {option.inquirySource.minimum_order_quantity}
+                </p>
+            )}
+            {option.recommendationReason && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                    {option.recommendationReason}
+                </p>
+            )}
             {deliveryException || option.delivery?.bulkMinimumOrderQuantity ? (
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     {deliveryException ? (

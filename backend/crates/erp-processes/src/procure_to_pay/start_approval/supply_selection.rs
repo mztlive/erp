@@ -17,6 +17,7 @@ use erp_supply::repository::{
 use mongodb::Database;
 use persistence_core::Executor;
 
+use super::super::inquiry_supply::revalidate_quote;
 use crate::{Error, Result};
 
 /// 最终提交事务读取的启用供给、当前条款和独立可供事实。
@@ -37,6 +38,7 @@ struct SelectedSupplyFacts {
 pub(super) async fn revalidate_selected_supply(
     db: &Database,
     supplier_id: &SupplierAccountId,
+    order_id: &str,
     lines: &[PurchaseOrderSubmissionLine],
     executor: &mut dyn Executor,
 ) -> Result<()> {
@@ -51,6 +53,10 @@ pub(super) async fn revalidate_selected_supply(
     let facts = load_selected_facts(db, &ids, executor).await?;
     for line in lines {
         let Some(source) = &line.supplier_offering_source else { continue };
+        if let Some(quote) = &source.inquiry_quote {
+            revalidate_quote(db, order_id, supplier_id, line, quote, executor).await?;
+            continue;
+        }
         let offering = facts.offerings.get(source.supplier_offering_id.as_ref()).ok_or_else(changed)?;
         let revision_id = offering.stable.current_revision_id.as_deref().ok_or_else(changed)?;
         let revision = facts.revisions.get(revision_id).ok_or_else(changed)?;

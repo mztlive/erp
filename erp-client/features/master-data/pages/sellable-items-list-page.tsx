@@ -13,6 +13,7 @@ import {
     PageScaffold,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { InquiryCustomerTemplateButton } from "@/components/business/inquiry-customer-template-button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { toast } from "@/components/ui/toast"
 import {
@@ -37,6 +38,7 @@ import { SellablePreviewSheet } from "@/features/master-data/components/list/sel
 import { useCreatePermission } from "@/features/master-data/hooks/use-create-permission"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
 import { useSellableExcelExport } from "@/features/master-data/hooks/use-sellable-excel-export"
+import { useInquiryTemplateProductsMutation } from "@/features/master-data/hooks/queries"
 import { useSellableGallerySelection } from "@/features/master-data/hooks/use-sellable-gallery-selection"
 import { useSellableListColumns } from "@/features/master-data/hooks/use-sellable-list-columns"
 import { useSellableListState } from "@/features/master-data/hooks/use-sellable-list-state"
@@ -60,6 +62,7 @@ export function SellableItemsListPage() {
         state.selectionResetKey,
     )
     const excelExport = useSellableExcelExport()
+    const templateProducts = useInquiryTemplateProductsMutation()
     const csvExportPending =
         useIsMutating({
             predicate: (mutation) => {
@@ -98,6 +101,9 @@ export function SellableItemsListPage() {
     const launchButtonRef = React.useRef<HTMLSpanElement>(null)
     const { canCreate: canLaunchSelection } = useCreatePermission(
         "sales_selection_booklet:create",
+    )
+    const { canCreate: canDownloadCustomerTemplate } = useCreatePermission(
+        "sales_inquiry:create",
     )
     const sourceKind = resolvePoolSourceKind(selection.selectedCount)
     const sourceSummary = describePoolSource({
@@ -222,6 +228,26 @@ export function SellableItemsListPage() {
                           ? `${masterDataCopy.sellableExportSelected}${selection.selectedCount > 0 ? ` ${selection.selectedCount}` : ""}`
                           : "导出当前结果"}
                 </LoadingButton>
+                {canDownloadCustomerTemplate && (
+                    <InquiryCustomerTemplateButton
+                        id="master-data-sellable-items-customer-template"
+                        products={selection.selectedRows.map((row) => ({
+                            sku_code: row.stableNo,
+                            product_name: row.name,
+                            specification:
+                                row.sellableItem?.specificationLabel ?? "",
+                            unit: row.sellableItem?.baseUnit ?? "",
+                        }))}
+                        onLoadProducts={() =>
+                            templateProducts.mutateAsync([
+                                ...selection.selectedIds,
+                            ])
+                        }
+                        disabled={
+                            listLoadFailed || selection.selectedCount === 0
+                        }
+                    />
+                )}
             </ListWorkspaceHeader>
 
             {exportMeta ? (

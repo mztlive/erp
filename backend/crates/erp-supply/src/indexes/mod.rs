@@ -1,5 +1,6 @@
 //! 按原顺序登记四组供应链索引。
 
+use crate::inquiry::indexes as inquiry_indexes;
 use crate::portal::indexes as portal_indexes;
 
 mod command_receipt;
@@ -25,5 +26,6 @@ pub async fn ensure(db: &mongodb::Database) -> persistence_core::Result<()> {
     command_receipt::ensure(db).await?;
     handover_receipt::ensure(db).await?;
     portal_indexes::ensure(db).await?;
+    inquiry_indexes::ensure(db).await?;
     Ok(())
 }

@@ -1,6 +1,9 @@
 //! 销售集合索引注册。
 
 mod command_receipt;
+mod inquiry_source;
+mod sales_inquiry;
+mod sales_inquiry_import;
 mod sales_order;
 mod sales_review;
 mod sales_selection;
@@ -16,8 +19,11 @@ mod sales_selection;
 /// # 错误
 /// 已有数据违反唯一索引或 MongoDB 创建索引失败时返回存储错误。
 pub async fn ensure(db: &mongodb::Database) -> persistence_core::Result<()> {
+    sales_inquiry_import::ensure(db).await?;
     sales_order::ensure(db).await?;
     sales_review::ensure(db).await?;
     sales_selection::ensure(db).await?;
-    command_receipt::ensure(db).await
+    inquiry_source::ensure(db).await?;
+    command_receipt::ensure(db).await?;
+    sales_inquiry::ensure(db).await
 }

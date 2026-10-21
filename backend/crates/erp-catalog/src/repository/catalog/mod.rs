@@ -27,6 +27,7 @@ mod sellable;
 pub mod sellable_projection;
 mod shared;
 mod sku;
+mod sku_exact;
 mod sku_lookup;
 mod sku_revision;
 mod specification_audit;

@@ -34,6 +34,12 @@ export type HandlerRegistration = Readonly<{
  * 不接受服务端下发的任意 URL。
  */
 export const HANDLER_REGISTRY: Readonly<Record<string, HandlerRegistration>> = {
+    sales_inquiry_processing: {
+        workItemTypeLabel: "询价处理",
+        family: "procurement",
+        destinationWorkspaceId: "W08",
+        baseHref: "/procurement/inquiries",
+    },
     fulfillment_operation: {
         workItemTypeLabel: "履约处理",
         family: "fulfillment",
@@ -344,6 +350,14 @@ export function buildHandlerHref(item: HandlerNavigationInput): string | null {
                 salesOrderId: businessObjectId,
                 workItemId,
             }),
+        )
+    }
+
+    if (item.handlerKey === "sales_inquiry_processing") {
+        if (item.businessObjectType !== "sales_inquiry") return null
+        return withParams(
+            `${registration.baseHref}/${encodeURIComponent(businessObjectId)}`,
+            new URLSearchParams({ from: "workspace", workItemId }),
         )
     }
 

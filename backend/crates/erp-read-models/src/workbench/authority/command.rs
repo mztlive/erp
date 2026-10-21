@@ -65,7 +65,9 @@ impl super::WorkItemFactsReader {
         keys: &HashSet<(ObjectKind, String)>,
         executor: &mut dyn Executor,
     ) -> Result<ObjectFactMap> {
-        super::recipe::load(self, keys, executor).await
+        let mut facts = super::recipe::load(self, keys, executor).await?;
+        self.load_inquiry_facts(keys, &mut facts, executor).await?;
+        Ok(facts)
     }
 
     /// 装载仍有效的旧数据导入批次事实；创建人固定为系统对象。
@@ -163,6 +165,7 @@ impl super::WorkItemFactsReader {
             facts.insert(
                 (ObjectKind::SupplierFulfillmentOrder, order.base.id.clone()),
                 ObjectFact {
+                    responsibility_scope_ids: None,
                     order_scope_source: None,
                     root_document_id: order.base.id.clone(),
                     label: format!("供应商履约订单 {}", order.fulfillment_order_no),
@@ -231,6 +234,7 @@ impl super::WorkItemFactsReader {
             facts.insert(
                 (ObjectKind::SupplierOffering, offering.base.id.clone()),
                 ObjectFact {
+                    responsibility_scope_ids: None,
                     order_scope_source: None,
                     root_document_id: offering.base.id.clone(),
                     label: format!("供应商供给 {}", offering.supplier_sku_code),

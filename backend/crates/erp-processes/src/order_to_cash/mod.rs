@@ -12,6 +12,7 @@ mod formalization_posting;
 mod formalization_root;
 mod formalize;
 mod handover;
+mod inquiry;
 mod procurement;
 pub mod progress;
 mod start_approval;

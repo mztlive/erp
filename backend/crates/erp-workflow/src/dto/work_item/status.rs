@@ -2,7 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::entity::work_item::WorkItemType;
 
-pub const WORK_ITEM_TYPES: [WorkItemType; 15] = [
+pub const WORK_ITEM_TYPES: [WorkItemType; 16] = [
+    WorkItemType::SalesInquiryProcessing,
     WorkItemType::DocumentApproval,
     WorkItemType::ProcurementOrderCreation,
     WorkItemType::PurchaseSourceUpdate,
@@ -147,7 +148,8 @@ pub enum WorkItemAllowedAction {
 /// 不返回错误。
 pub fn family_of(work_item_type: WorkItemType) -> WorkItemFamily {
     match work_item_type {
-        WorkItemType::ProcurementOrderCreation
+        WorkItemType::SalesInquiryProcessing
+        | WorkItemType::ProcurementOrderCreation
         | WorkItemType::PurchaseSourceUpdate
         | WorkItemType::PurchasePaymentArrangement => WorkItemFamily::Procurement,
         WorkItemType::FulfillmentOperation | WorkItemType::CustomerAcceptanceRegistration => {

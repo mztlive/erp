@@ -6,6 +6,7 @@ pub(in crate::workbench) mod command;
 mod counterparties;
 pub(in crate::workbench) mod fulfillment;
 pub(in crate::workbench) mod funds;
+mod inquiry;
 pub(in crate::workbench) mod inventory;
 pub(in crate::workbench) mod purchase;
 mod recipe;

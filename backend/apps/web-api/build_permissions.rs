@@ -32,6 +32,7 @@ pub(crate) const DOMAIN_MODULES: &[&str] = &[
     "warehouse",
     "contract",
     "sales_order",
+    "sales_inquiry",
     "sales_review",
     "sales_selection",
     "purchase_order",

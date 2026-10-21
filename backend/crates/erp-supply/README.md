@@ -36,6 +36,7 @@
 | 入口 | 用途 |
 | --- | --- |
 | [src/service/supplier_offering/mod.rs](src/service/supplier_offering/mod.rs) | 供给创建、商业修订与可供状态 |
+| [src/inquiry/mod.rs](src/inquiry/mod.rs) | 采购内部询价报价、反馈轮次作用域、专项采用余额与费用收款依据 |
 | [src/portal/mod.rs](src/portal/mod.rs) | 门户商业申请、定向报价资格、供应商归属步骤、正式确认与独立回执 |
 | [src/service/supplier_api/mod.rs](src/service/supplier_api/mod.rs) | 连接、能力和命令意图 |
 | [src/service/supplier_fulfillment/mod.rs](src/service/supplier_fulfillment/mod.rs) | 供应商侧订单与结果回执 |
@@ -57,6 +58,8 @@
 6. 供应链命令去重与原结果恢复只读取本域命令回执。`supply_command_receipts` 以稳定命令 ID 唯一保护；供给交接使用 `supplier_offering_handover_command_receipts`。回执必须与业务事实及对应业务事件共用事务；审计展示删除或归档不得影响回执，不得从展示消息解析请求指纹、版本或结果。未知 schema、缺失引用及软删除回执必须失败关闭，不得当作未执行命令重跑。
 7. 门户申请保存在 `supplier_portal_offering_applications`，与正式条款分离。提交历史与决定历史只追加；待确认原稿不得修改。门户供给访问按服务器已验证的供应商绑定执行，不得伪造管理员或补授公司 DataScope。API 来源只读；可供命令只接受数量、有货或临时缺货及必填版本，不修改登记来源和关系状态。
 8. 门户正式确认、可供写入及 `supplier_portal_command_receipts` 必须使用调用方事务执行器。确认用例负责同事务重验当前会话、对象访问、具体工作项及单位数量精度，并原子保存正式结果、申请、任务、审计和成功回执。新品相同供给和相同条款返回原正式版本；实质条款变化才追加修订。
+
+9. 询价内部报价只追加不可变版本，必须固定询价、需求版本、反馈轮次、需求行、供应商及供给身份。发布询价不得写入通用供给条款；正式采购通过精确报价及稳定报价余额 CAS 采用。采购变更提交保留原数量和地址范围，正式减少或作废成立后才能释放；采用调整保留原数量与地址历史。费用内部工作依据只允许在 Process 已证明未发布的准确轮次内按同一稳定 ID 更新。
 
 ## 验证要求
 

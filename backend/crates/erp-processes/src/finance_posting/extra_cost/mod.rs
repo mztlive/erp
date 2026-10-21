@@ -4,24 +4,27 @@
 //! 登记凭证文件、写入成本事实与分配并写审计。成本事实主键由操作人、动作和幂等键
 //! 派生，重试命中原事实；冲减来源行按序号编排，并发冲减由成本唯一索引串行化。
 
+mod receipt;
 pub mod sales_line;
 
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use application_core::AuditActor;
+use application_core::{AuditActor, CommandReceipt};
 use erp_audit::AuditActorLogs;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{CostEntryId, FileAssetId, SalesOrderId, SupplierAccountId};
 use erp_finance::dto::extra_cost::{
     ExtraCostCommandResult, ReduceExtraCostRequest, RegisterExtraCostRequest,
 };
+use erp_finance::dto::inquiry_fee::InquiryFeeReference;
 use erp_finance::entity::cost::{
     CostAllocation, CostEntry, ExtraCostReduction, ExtraCostRegistration, ReducedAmounts,
     SALES_EXTRA_COST_FACT, SALES_EXTRA_COST_REDUCTION_FACT, extra_cost_entry_id, is_registered_extra_cost,
 };
 use erp_finance::repository::CostExt;
 use erp_finance::repository::cost::CostAllocationRepositoryExt;
+use erp_finance::service::command_receipt::FinanceCommandReceiptService;
 use erp_finance::service::cost::{PreparedCostEntry, persist_cost_entry};
 use erp_identity::SharedRbacService;
 use erp_read_models::finance::extra_cost::order_costs;
@@ -33,6 +36,7 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
+use self::receipt::registration_receipt;
 use self::sales_line::{ensure_attributable_line, ensure_extra_cost_order};
 use crate::attachments::PendingFileAssets;
 use crate::audit::{persist_log, recover_command};
@@ -84,18 +88,25 @@ impl SalesExtraCostProcess {
         assets: Vec<PendingFileAssetRequest>,
         actor: &AuditActor,
     ) -> Result<ExtraCostCommandResult> {
+        req.idempotency_key = req.idempotency_key.trim().to_string();
         req.validate()?;
         let pending = PendingFileAssets::prepare(assets, actor)?.shared();
         resolve_evidence(&mut req.evidence_attachment_id, pending.as_ref())?;
+        let receipt = registration_receipt(actor, sales_order_id, &req, pending.as_ref())?;
         let registration = ExtraCostRegistration::new(req.input(), BusinessDate::today())?;
         let entry_id = extra_cost_entry_id(actor.id(), REGISTER_ACTION, &req.idempotency_key);
         let order_id = SalesOrderId::new(sales_order_id.to_string());
-        let expected = Expected::registration(&req, &order_id);
+        let expected = Expected::registration(&req, &order_id, receipt.clone());
         if let Some(replayed) = replay(&self.db, &entry_id, &expected, &mut NoTransaction).await? {
             return Ok(replayed);
         }
-        let command =
-            Command::Register(RegisterCommand { order_id, entry_id: entry_id.clone(), registration });
+        let command = Command::Register(Box::new(RegisterCommand {
+            order_id,
+            entry_id: entry_id.clone(),
+            registration,
+            receipt,
+            inquiry_source: req.inquiry_source.clone(),
+        }));
         match self.transact(actor, pending, command).await {
             Ok(()) => Ok(ExtraCostCommandResult { cost_entry_id: entry_id.to_string(), replayed: false }),
             Err(error) => {
@@ -170,7 +181,7 @@ impl SalesExtraCostProcess {
 
 /// 事务内执行的附加费用命令。
 enum Command {
-    Register(RegisterCommand),
+    Register(Box<RegisterCommand>),
     Reduce(ReduceCommand),
 }
 
@@ -195,6 +206,8 @@ struct RegisterCommand {
     order_id: SalesOrderId,
     entry_id: CostEntryId,
     registration: ExtraCostRegistration,
+    receipt: CommandReceipt,
+    inquiry_source: Option<InquiryFeeReference>,
 }
 
 impl RegisterCommand {
@@ -211,7 +224,13 @@ impl RegisterCommand {
         ensure_supplier(db, self.registration.supplier_id(), executor).await?;
         let (entry, allocation) =
             self.registration.clone().into_facts(self.entry_id.clone(), self.order_id.clone())?;
-        write(db, entry, allocation, REGISTER_ACTION, actor, pending, executor).await
+        crate::sales_inquiry_expense::register_finance(db, self.inquiry_source.as_ref(), &entry, executor)
+            .await?;
+        let audit_id = write(db, entry, allocation, REGISTER_ACTION, actor, pending, executor).await?;
+        FinanceCommandReceiptService::new(db.clone())
+            .save_resource(&self.receipt, self.entry_id.to_string(), audit_id, executor)
+            .await?;
+        Ok(())
     }
 }
 
@@ -238,7 +257,7 @@ impl ReduceCommand {
         let reduced = ReducedAmounts::of(&original, entries.iter());
         let (entry, allocation) =
             self.reduction.clone().into_facts(self.entry_id.clone(), &original, &allocation, reduced)?;
-        write(db, entry, allocation, REDUCE_ACTION, actor, pending, executor).await
+        write(db, entry, allocation, REDUCE_ACTION, actor, pending, executor).await.map(|_| ())
     }
 }
 
@@ -302,12 +321,12 @@ async fn write(
     actor: &AuditActor,
     pending: &dyn PendingAttachmentBatch,
     executor: &mut dyn Executor,
-) -> Result<()> {
+) -> Result<String> {
     let audit = actor.clone().resource_log(action, "cost_entry", entry.base.id.clone())?;
     pending.persist(db, executor).await?;
     persist_cost_entry(db, PreparedCostEntry { entry, allocations: vec![allocation] }, executor).await?;
     persist_log(db, &audit, executor).await?;
-    Ok(())
+    Ok(audit.base.id)
 }
 
 /// 把凭证临时引用替换为正式资产；附加费用凭证必须随命令上传。
@@ -327,16 +346,24 @@ struct Expected {
     adjusts: Option<String>,
     gross: erp_core::money::Amount,
     description: String,
+    inquiry_source: Option<InquiryFeeReference>,
+    receipt: Option<CommandReceipt>,
 }
 
 impl Expected {
-    fn registration(req: &RegisterExtraCostRequest, order_id: &SalesOrderId) -> Self {
+    fn registration(
+        req: &RegisterExtraCostRequest,
+        order_id: &SalesOrderId,
+        receipt: CommandReceipt,
+    ) -> Self {
         Self {
             fact_type: SALES_EXTRA_COST_FACT,
             order_id: order_id.to_string(),
             adjusts: None,
             gross: req.gross_amount,
             description: req.description.trim().to_string(),
+            inquiry_source: req.inquiry_source.clone(),
+            receipt: Some(receipt),
         }
     }
 
@@ -347,6 +374,8 @@ impl Expected {
             adjusts: Some(original.to_string()),
             gross: req.gross_amount,
             description: req.description.trim().to_string(),
+            inquiry_source: None,
+            receipt: None,
         }
     }
 
@@ -366,11 +395,32 @@ async fn replay(
     expected: &Expected,
     executor: &mut dyn Executor,
 ) -> Result<Option<ExtraCostCommandResult>> {
+    let committed = match &expected.receipt {
+        Some(command) => {
+            FinanceCommandReceiptService::new(db.clone()).committed_resource_id(command, executor).await?
+        },
+        None => None,
+    };
     let Some(entry) = db.cost_entries().find_by_id(entry_id.as_ref(), executor).await? else {
+        if committed.is_some() {
+            return Err(Error::Internal("财务登记回执缺少成本事实".into()));
+        }
         return Ok(None);
     };
+    if expected.receipt.is_some() && committed.as_deref() != Some(entry_id.as_ref()) {
+        return Err(Error::Internal("财务登记缺少完整命令回执，请核对原办理结果".into()));
+    }
     if !expected.matches(&entry) {
         return Err(Error::ConflictError("幂等键已用于不同的附加费用命令".into()));
+    }
+    if expected.fact_type == SALES_EXTRA_COST_FACT {
+        crate::sales_inquiry_expense::check_finance_source(
+            db,
+            entry_id.as_ref(),
+            expected.inquiry_source.as_ref(),
+            executor,
+        )
+        .await?;
     }
     Ok(Some(ExtraCostCommandResult { cost_entry_id: entry.base.id, replayed: true }))
 }
@@ -418,6 +468,8 @@ mod tests {
             adjusts: adjusts.map(Into::into),
             gross: Amount::from_str("10.00").unwrap(),
             description: "运费".into(),
+            inquiry_source: None,
+            receipt: None,
         }
     }
 

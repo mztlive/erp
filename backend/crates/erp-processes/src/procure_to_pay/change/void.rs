@@ -62,6 +62,12 @@ impl PurchaseOrderProcess {
                         Error::ConflictError("数据已被其他请求修改，请刷新后重试".to_string())
                     })?;
                     void_purchase_change(&mut change, &actor_id)?;
+                    super::super::inquiry_supply::restore_current_quotes(
+                        &db,
+                        change.purchase_order_id.as_ref(),
+                        executor,
+                    )
+                    .await?;
                     db.purchase_change_orders().update(&mut change, executor).await?;
                     persist_log(&db, &audit, executor).await?;
                     Ok::<(), Error>(())

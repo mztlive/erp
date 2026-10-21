@@ -39,6 +39,8 @@ export default async function SalesOrdersPage({
         contractId?: string
         contractRevisionId?: string
         selectionProposalId?: string
+        inquiryId?: string
+        round?: string
         salesOrderId?: string
     }>
 }) {
@@ -66,6 +68,12 @@ export default async function SalesOrdersPage({
                 }
                 initialSalesOrderId={params.salesOrderId}
                 initialSelectionProposalId={params.selectionProposalId}
+                initialInquiryId={params.inquiryId}
+                initialInquiryRound={
+                    params.round && /^\d+$/.test(params.round)
+                        ? parseInt(params.round, 10)
+                        : undefined
+                }
             />
         )
     }

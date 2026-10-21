@@ -71,6 +71,7 @@ export type SalesOrderContractInput = {
 
 /** 销售建单输入；无合同时必须提供客户和开单凭证。 */
 export type CreateSalesOrderInput = {
+    inquirySource?: import("./api/inquiry-basis").InquirySalesSource
     selectionProposalId?: string
     /** 页面生命周期内冻结；结果未知时与原幂等键一起重用。 */
     orderNo: string

@@ -24,6 +24,7 @@ import {
 import { getErrorMessage } from "@/lib/api/errors"
 import { SUPPLIER_PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
 import { compareDecimal, divideFixed, sumFixed } from "@/lib/fixed-decimal"
+import { InquiryExpenseSourceSection } from "./inquiry-expense-source-section"
 
 const CATEGORY_OPTIONS = (
     Object.keys(PURCHASE_EXPENSE_CATEGORY_LABEL) as PurchaseExpenseCategory[]
@@ -236,6 +237,14 @@ export function ExpensePurchaseCreateDialog({
                         ) : null}
                     </div>
                 ) : null}
+                <InquiryExpenseSourceSection
+                    salesOrderId={salesOrderId}
+                    sourceLabel={sourceLabel}
+                    onCreated={(created) => {
+                        onOpenChange(false)
+                        onCreated?.(created)
+                    }}
+                />
                 <form
                     className="flex flex-col gap-5"
                     onSubmit={(event) => {

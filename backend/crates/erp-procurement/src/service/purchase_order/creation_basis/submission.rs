@@ -145,6 +145,7 @@ mod tests {
     }
     fn scope(code: &str) -> BasisScope {
         BasisScope {
+            inquiry_quote_revision_id: None,
             supplier_id: SupplierAccountId::new("supplier-1"),
             purchase_type: PurchaseType::Physical,
             payment_term_code: code.to_string(),

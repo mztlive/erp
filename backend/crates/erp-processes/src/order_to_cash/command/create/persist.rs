@@ -4,8 +4,9 @@ use std::sync::Arc;
 
 use application_core::AuditActor;
 use erp_identity::SharedRbacService;
-use erp_sales::entity::sales_order::SalesOrder;
+use erp_sales::entity::sales_order::inquiry_source::InquirySalesSourceRequest;
 use erp_sales::entity::sales_order::selection_source::SalesSelectionSource;
+use erp_sales::entity::sales_order::{SalesOrder, SalesOrderWorkingCopyLine};
 use erp_sales::service::sales_order::SalesOrderService;
 use erp_workflow::entity::document_registry::BusinessDocument;
 use erp_workflow::entity::document_registry::business_document::ApprovalDefinitionBinding;
@@ -24,6 +25,7 @@ use crate::order_to_cash::SalesOrderCommandProcess;
 use crate::order_to_cash::adapters::catalog::CatalogQualificationAdapter;
 use crate::order_to_cash::authorization::SalesCommandAccess;
 use crate::order_to_cash::command::identity::{persist_bound_sales_document, sales_create_bind_command};
+use crate::order_to_cash::inquiry::reserve_inquiry_creation;
 use crate::order_to_cash::start_approval::{
     SalesOrderRuntimeWriteInput, SalesOrderStartInput, build_sales_order_start_input,
     load_bound_definition_graph_with_executor, persist_runtime_writes,
@@ -38,6 +40,8 @@ pub(super) struct CreationWriteContext {
     access: SalesCommandAccess,
     bind_command: BindPublishedDefinitionCommand,
     sellable_refs: Vec<(String, String)>,
+    inquiry_source: Option<InquirySalesSourceRequest>,
+    inquiry_lines: Vec<SalesOrderWorkingCopyLine>,
 }
 
 impl SalesOrderCommandProcess {
@@ -53,6 +57,7 @@ impl SalesOrderCommandProcess {
         plan: &CreationPlan,
         actor: &AuditActor,
         access: &SalesCommandAccess,
+        inquiry_source: Option<InquirySalesSourceRequest>,
     ) -> Result<CreationWriteContext> {
         let bind_command = sales_create_bind_command(plan.order(), actor)?;
         let rbac = self.require_rbac().cloned()?;
@@ -66,6 +71,8 @@ impl SalesOrderCommandProcess {
             access: access.clone(),
             bind_command,
             sellable_refs,
+            inquiry_source,
+            inquiry_lines: plan.working_copy_lines().to_vec(),
         })
     }
 }
@@ -89,6 +96,16 @@ pub(super) async fn persist_creation(
     {
         return Ok(Some(order_id));
     }
+    reserve_inquiry_creation(
+        &context.db,
+        &context.rbac,
+        context.inquiry_source.as_ref(),
+        plan.order(),
+        &context.inquiry_lines,
+        &context.actor,
+        executor,
+    )
+    .await?;
     match plan {
         CreationPlan::Draft(draft) => persist_created_draft(&context, *draft, executor).await?,
         CreationPlan::Submit(submission) => {

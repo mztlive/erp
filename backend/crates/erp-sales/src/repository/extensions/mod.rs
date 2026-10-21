@@ -9,3 +9,9 @@ pub use command_receipt::SalesCommandExt;
 pub use sales_order::SalesOrderExt;
 pub use sales_review::SalesReviewExt;
 pub use sales_selection::SalesSelectionExt;
+
+mod sales_inquiry_import;
+pub use sales_inquiry_import::SalesInquiryImportExt;
+
+pub mod sales_inquiry;
+pub use sales_inquiry::SalesInquiryExt;

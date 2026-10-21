@@ -1,7 +1,7 @@
 //! 采购创建依据查询参数与行视图。
 
 use erp_core::delivery_policy::DeliveryTerm;
-use erp_procurement::entity::purchase_order::PurchaseDeliveryAllocation;
+use erp_procurement::entity::purchase_order::{PurchaseDeliveryAllocation, PurchaseInquiryQuoteSource};
 
 use super::*;
 
@@ -268,9 +268,28 @@ impl CreationBasisLineView {
     }
 }
 
+/// 仅采购依据视图可见的明确专项来源，不向销售轻预览透出。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct InquiryBasisSourceView {
+    pub inquiry_id: String,
+    pub requirement_version: u32,
+    pub feedback_round: u32,
+    pub inquiry_line_id: String,
+    pub quote_revision_id: String,
+    pub quote_revision_no: u32,
+    pub minimum_order_quantity: String,
+    pub valid_to: String,
+    pub expected_delivery_date: String,
+}
 /// 采购创建依据视图（已生效销售单 × 合格供给供应商，§7.4 选源建单入口）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CreationBasisView {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inquiry_reselection_required: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inquiry_source: Option<InquiryBasisSourceView>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recommendation_reason: Option<String>,
     /// 当前账号拥有且冻结本依据销售行范围的开放供给分配任务。
     pub work_item_id: String,
     /// 精确创建依据（任务、销售当前版本、供应商、采购类型、付款条件、履约责任及剩余量指纹）。
@@ -355,6 +374,9 @@ impl CreationBasisView {
         estimated_gross: String,
     ) -> Self {
         Self {
+            inquiry_source: None,
+            inquiry_reselection_required: None,
+            recommendation_reason: None,
             work_item_id,
             basis_id,
             source_type: SupplySourceType::Purchase,
@@ -378,6 +400,42 @@ impl CreationBasisView {
             estimated_gross,
             price_basis: None,
         }
+    }
+
+    /// 标记当前询价来源采用通用条款时必须给出改选原因。
+    /// # 参数
+    /// `required`由正式销售来源与当前候选共同确定。
+    /// # 返回
+    /// 返回明确采购确认要求的依据。
+    /// # 错误
+    /// 无。
+    pub fn with_inquiry_reselection_required(mut self, required: bool) -> Self {
+        self.inquiry_reselection_required = required.then_some(true);
+        self
+    }
+
+    /// 标记沿用询价的精确专项版本，供采购显式识别并确认条件。
+    /// # 参数
+    /// `source`为服务器已核验的专项采用链，通用供给为空。
+    /// # 返回
+    /// 返回补齐来源标记的采购依据。
+    /// # 错误
+    /// 无。
+    pub fn with_inquiry_source(mut self, source: Option<&PurchaseInquiryQuoteSource>) -> Self {
+        self.inquiry_source = source.map(|source| InquiryBasisSourceView {
+            inquiry_id: source.inquiry_id.clone(),
+            requirement_version: source.requirement_version,
+            feedback_round: source.feedback_round,
+            inquiry_line_id: source.inquiry_line_id.clone(),
+            quote_revision_id: source.quote_revision_id.clone(),
+            quote_revision_no: source.quote_revision_no,
+            minimum_order_quantity: source.minimum_order_quantity.to_string(),
+            valid_to: source.valid_to.to_string(),
+            expected_delivery_date: source.expected_delivery_date.to_string(),
+        });
+        self.recommendation_reason =
+            source.map(|_| "沿用已接受询价的专项条款；仍须确认当前数量、地址、交期及供应资格".into());
+        self
     }
 
     /// 设置价格依据。

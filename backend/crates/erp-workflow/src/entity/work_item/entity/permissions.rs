@@ -184,6 +184,7 @@ impl WorkItemType {
         matches!(
             self,
             Self::FulfillmentOperation
+                | Self::SalesInquiryProcessing
                 | Self::SupplierPortalReview
                 | Self::CustomerAcceptanceRegistration
                 | Self::PurchaseReturnRefund
@@ -326,6 +327,13 @@ impl WorkItemType {
             self.supplier_payment_execution_permissions(business_object_type)
         } else if self.is_sales_invoice_execution() {
             self.sales_invoice_execution_permissions(business_object_type)
+        } else if self == Self::SalesInquiryProcessing {
+            (business_object_type == "sales_inquiry").then_some(&[
+                "procurement_inquiry:detail",
+                "procurement_inquiry:claim",
+                "procurement_inquiry:save_feedback",
+                "procurement_inquiry:publish",
+            ] as &[&str])
         } else if self == Self::ProcurementOrderCreation {
             (business_object_type == "sales_order").then_some(&["purchase_order:create"] as &[&str])
         } else if self == Self::PurchasePaymentArrangement {
@@ -374,6 +382,7 @@ impl WorkItemType {
         matches!(
             self,
             Self::DocumentApproval
+                | Self::SalesInquiryProcessing
                 | Self::SupplierPortalReview
                 | Self::ImportBusinessConfirmation
                 | Self::ProcurementOrderCreation

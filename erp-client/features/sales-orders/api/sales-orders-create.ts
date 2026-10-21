@@ -217,6 +217,7 @@ export async function createSalesOrder(
     )
 
     const body = {
+        ...(input.inquirySource ? { inquiry_source: input.inquirySource } : {}),
         ...(input.selectionProposalId
             ? { selection_proposal_id: input.selectionProposalId }
             : {}),
@@ -314,6 +315,7 @@ export async function submitSalesOrder(
 }
 
 export type SalesOrderDraftResumeData = {
+    inquirySource?: import("./inquiry-basis").InquirySalesSourceSnapshot | null
     selectionSource?: import("./selection-basis").SalesSelectionSource | null
     salesOrderId: string
     documentNumber: string
@@ -432,6 +434,7 @@ export async function fetchSalesOrderDraftForResume(
         "CONTRACT"
 
     return {
+        inquirySource: detail.inquiry_source,
         selectionSource: detail.selection_source,
         salesOrderId: detail.id,
         documentNumber: detail.order_no,

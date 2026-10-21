@@ -738,6 +738,21 @@ mod tests {
     }
 
     #[test]
+    fn inquiry_position_permissions_separate_sales_results_and_internal_procurement() {
+        let sales = PermissionSet::new(parse_permissions(SALES_PERMISSIONS).unwrap());
+        let procurement = PermissionSet::new(parse_permissions(PROCUREMENT_PERMISSIONS).unwrap());
+        for action in ["create", "submit", "accept", "reinquire", "import", "convert_sales", "recover"] {
+            assert!(sales.covers_one(&Permission::parse(format!("sales_inquiry:{action}")).unwrap()));
+            assert!(!procurement.covers_one(&Permission::parse(format!("sales_inquiry:{action}")).unwrap()));
+        }
+        for action in ["detail", "claim", "save_feedback", "publish", "internal_quote", "convert_expenses"] {
+            let permission = Permission::parse(format!("procurement_inquiry:{action}")).unwrap();
+            assert!(procurement.covers_one(&permission));
+            assert!(!sales.covers_one(&permission));
+        }
+    }
+
+    #[test]
     fn sales_permissions_include_core_sales_capabilities() {
         let permissions = parse_permissions(SALES_PERMISSIONS).unwrap();
         assert!(permissions.iter().any(|p| p.covers(&Permission::parse("sales_order:create").unwrap())));

@@ -6,6 +6,7 @@ use application_core::AuditActor;
 use erp_core::ids::{SalesOrderId, SalesOrderRevisionId, SalesOrderSubmissionId};
 use erp_sales::entity::sales_order::SalesOrder;
 use erp_sales::repository::prelude::*;
+use erp_sales::repository::sales_order::inquiry_source::inquiry_sources;
 use erp_sales::repository::{SalesOrderExt, SalesReviewExt};
 use erp_support::FileAssetExt;
 use erp_support::repository::prelude::*;
@@ -61,8 +62,11 @@ impl SalesOrderReadService {
         let (order, access_version) = self.detail_order(id, actor).await?;
         let facts = self.load_detail_facts(&order).await?;
         let presentation = self.detail_presentation(&order, &facts, actor).await?;
+        let inquiry_source = inquiry_sources(&self.db).find_by_id(id, &mut NoTransaction).await?;
         self.recheck_detail_access(id, actor, access_version).await?;
-        Ok(SalesOrderDetailView::from_facts(order, facts, presentation))
+        let mut view = SalesOrderDetailView::from_facts(order, facts, presentation);
+        view.inquiry_source = inquiry_source;
+        Ok(view)
     }
 
     /// 有操作人时取得授权单据与范围版本；内部调用保留原有直接读取入口。
@@ -220,6 +224,7 @@ impl SalesOrderDetailView {
             facts.receivable_summary.gross_total,
         ));
         Self {
+            inquiry_source: None,
             selection_source: order.selection_source,
             id: order.base.id,
             order_no: order.order_no,

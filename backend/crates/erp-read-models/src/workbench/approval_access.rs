@@ -148,7 +148,10 @@ fn assemble_queue(
     let ordinary_facts = facts.clone();
     let mut result = Vec::new();
     for (row, fields) in rows.into_iter().zip(ordinary) {
-        if row.work_item_type == WorkItemType::ProcurementOrderCreation {
+        if matches!(
+            row.work_item_type,
+            WorkItemType::ProcurementOrderCreation | WorkItemType::SalesInquiryProcessing
+        ) {
             let Some(item) = tasks.get(&row.id).filter(|item| item.base.version == row.version) else {
                 continue;
             };
@@ -203,7 +206,8 @@ fn task_facts_for_rows(rows: &[WorkItemRow], facts: &WorkbenchObjectFactMap) -> 
 }
 
 fn task_scoped(kind: WorkItemType) -> bool {
-    kind.is_document_approval() || kind == WorkItemType::ProcurementOrderCreation
+    kind.is_document_approval()
+        || matches!(kind, WorkItemType::ProcurementOrderCreation | WorkItemType::SalesInquiryProcessing)
 }
 
 /// 本人供给任务不消费普通销售范围；同对象其他任务仍独立证明来源读取。
@@ -217,7 +221,9 @@ fn retain_ordinary_facts(
         .iter()
         .filter(|row| {
             !tasks.get(&row.id).is_some_and(|item| {
-                item.base.version == row.version && item.owns_procurement_task(&access.actor_id)
+                item.base.version == row.version
+                    && (item.owns_procurement_task(&access.actor_id)
+                        || item.work_item_type == WorkItemType::SalesInquiryProcessing)
             })
         })
         .filter_map(|row| {

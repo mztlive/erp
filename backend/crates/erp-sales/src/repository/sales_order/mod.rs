@@ -88,3 +88,5 @@ impl<'a> SalesOrderDomainRepository<'a> {
         Self { db }
     }
 }
+
+pub mod inquiry_source;

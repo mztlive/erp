@@ -7,7 +7,6 @@ use erp_procurement::entity::facts::SalesOrderBasisFact;
 use erp_procurement::entity::purchase_order::{
     BasisGroup, BasisLine, BasisScope, CreationBasisFacts, FulfillmentResponsibility, PurchaseType,
     StockBasisGroup, StockBasisLine, SupplyPriceBasis, basis_id_for, stable_line_id, stock_basis_id_for,
-    supply_cost,
 };
 use erp_procurement::service::purchase_order::creation_basis::business_date_of;
 use erp_procurement::service::purchase_order::shared::zero_amount;
@@ -49,8 +48,8 @@ pub(super) fn build_basis_view(
     let mut estimated = zero_amount();
     let mut lines = Vec::with_capacity(group.lines.len());
     for line in &group.lines {
-        let cost = supply_cost(&line.supply.revision, group.scope.price_basis);
-        let (gross, _, _) = line_amounts(cost, line.max_create_quantity, line.supply.revision.input_tax_rate);
+        let cost = line.unit_cost(group.scope.price_basis);
+        let (gross, _, _) = line_amounts(cost, line.max_create_quantity, line.tax_rate());
         estimated = estimated.checked_add(gross);
         let delivery = delivery_view(line, &group.scope, warehouses);
         lines
@@ -74,6 +73,10 @@ pub(super) fn build_basis_view(
     .with_sales_owner_name(sales_owner_name)
     .with_business_category(group.business_category.clone())
     .with_price_basis(group.scope.price_basis.as_str())
+    .with_inquiry_source(group.lines.first().and_then(|line| line.inquiry_quote.as_ref()))
+    .with_inquiry_reselection_required(
+        facts.source_inquiry_id.is_some() && group.scope.inquiry_quote_revision_id.is_none(),
+    )
     .with_lines(lines))
 }
 
@@ -133,7 +136,13 @@ fn delivery_view(
     if scope.fulfillment_responsibility == FulfillmentResponsibility::SupplierDirect
         && scope.price_basis == SupplyPriceBasis::Bulk
     {
-        view.bulk_minimum_order_quantity = Some(line.supply.revision.bulk_minimum_order_quantity.to_string());
+        view.bulk_minimum_order_quantity = Some(
+            line.inquiry_quote
+                .as_ref()
+                .map(|quote| quote.minimum_order_quantity)
+                .unwrap_or(line.supply.revision.bulk_minimum_order_quantity)
+                .to_string(),
+        );
     }
     view
 }
@@ -201,7 +210,7 @@ fn basis_line_view(
         line.max_create_quantity.to_string(),
         line.max_create_quantity.to_string(),
         cost.to_string(),
-        line.supply.revision.input_tax_rate.to_string(),
+        line.tax_rate().to_string(),
         sales_delivery_deadline.clone(),
         sales_delivery_deadline,
         gross.to_string(),

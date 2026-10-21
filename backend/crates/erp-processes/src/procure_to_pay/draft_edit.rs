@@ -30,6 +30,7 @@ use super::authorization::{PurchaseOrderAuthorization, ensure_purchase_order_act
 use super::delivery_plan::validate_submission_delivery;
 use super::procurement_task_sync::sync_procurement_tasks_for_sales_order;
 use crate::audit::{persist_log, recover_command};
+use crate::sales_inquiry_expense::PurchaseExpenseTarget;
 use crate::{Error, Result};
 
 const SAVE_PERMISSION: &str = "purchase_order:update";
@@ -229,6 +230,7 @@ async fn replace_current_draft(
     let replacement =
         build_draft_replacement(order, &old_draft, &old_lines, &requested_lines, payment_subject)?;
     validate_submission_delivery(db, order, &replacement.lines, &old_lines, executor).await?;
+    super::inquiry_supply::resize_draft_quotes(db, order, &replacement.lines, executor).await?;
     order.update(Default::default(), command.actor.id(), super::adapters::payment_term::parse)?;
     old_draft.mark_superseded()?;
     order.current_submission_id = Some(replacement.submission.base.id.clone());
@@ -334,6 +336,18 @@ async fn persist_draft_replacement(
     command: &SaveDraftCommand<'_>,
     executor: &mut dyn Executor,
 ) -> Result<SavePurchaseOrderDraftResult> {
+    let fees = replacement
+        .lines
+        .iter()
+        .filter_map(|line| {
+            line.expense.as_ref().map(|fee| PurchaseExpenseTarget {
+                detail: fee,
+                amount: line.gross_amount,
+                rate: line.input_tax_rate,
+            })
+        })
+        .collect::<Vec<_>>();
+    crate::sales_inquiry_expense::resize_purchase(db, order, &fees, command.actor.id(), executor).await?;
     persist_replacement(db, order, old_draft, replacement, executor).await?;
     sync_procurement_tasks_for_sales_order(db, &order.sales_order_id, executor).await?;
     let receipt = SaveDraftReceipt::from_saved(

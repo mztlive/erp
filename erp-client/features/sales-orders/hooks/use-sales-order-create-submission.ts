@@ -1,6 +1,14 @@
 "use client"
 
 import * as React from "react"
+import {
+    inquirySaleDraftKey,
+    inquirySaleScope,
+} from "../lib/inquiry-sales-storage"
+import {
+    inquirySourceForLines,
+    type InquirySalesBasis,
+} from "../api/inquiry-basis"
 
 import { useRouter } from "next/navigation"
 
@@ -39,6 +47,7 @@ type FormalFailure = {
 }
 
 export type UseSalesOrderCreateSubmissionOptions = {
+    inquiryBasis?: InquirySalesBasis
     selectionProposalId?: string
     initialDraft: SalesOrderDraftResumeData | null
     commandLedger: FormalCommandKeyLedger
@@ -51,6 +60,7 @@ export type UseSalesOrderCreateSubmissionOptions = {
  */
 export function useSalesOrderCreateSubmission({
     initialDraft,
+    inquiryBasis,
     selectionProposalId,
     commandLedger,
     onSubmitted,
@@ -193,6 +203,9 @@ export function useSalesOrderCreateSubmission({
             command = commandLedger.acquire("create", "sales:create", {
                 orderNo: localOrderNo(),
                 selectionProposalId,
+                inquirySource: inquiryBasis
+                    ? inquirySourceForLines(inquiryBasis, value.lineItems)
+                    : undefined,
                 contract: {
                     contractId: value.contractId,
                     requestedContractRevisionId:
@@ -223,6 +236,21 @@ export function useSalesOrderCreateSubmission({
                         : getErrorMessage(error, "销售单未创建，请重试。"),
             })
             throw error
+        }
+        if (inquiryBasis) {
+            localStorage.removeItem(
+                inquirySaleDraftKey(
+                    command.payload.ownerUserId,
+                    inquirySaleScope(
+                        inquiryBasis.inquiry_id,
+                        inquiryBasis.feedback_round,
+                    ),
+                ),
+            )
+            onSubmitted?.(result.salesOrderId)
+            if (!onSubmitted)
+                router.replace(`/sales/orders/${result.salesOrderId}`)
+            return
         }
         if (command.payload.intent === "SAVE_DRAFT") {
             // 重试可能提交先前保留的内容；只有本次输入与实际保存内容一致时才更新基线。

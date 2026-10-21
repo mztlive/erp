@@ -36,6 +36,8 @@ export type PurchaseOrderCreateBatchBarProps = {
     onApply: (basisId: string) => void
     onSetParticipation?: (included: boolean) => void
     onMatchBest: () => void
+    onReuseInquiry?: () => void
+    inquiryDisabled?: boolean
 }
 
 /** 批量设置只在确认后应用，取消不会修改分配草稿。 */
@@ -50,6 +52,8 @@ export function PurchaseOrderCreateBatchBar({
     onApply,
     onMatchBest,
     onSetParticipation,
+    onReuseInquiry,
+    inquiryDisabled,
 }: PurchaseOrderCreateBatchBarProps) {
     const onRefresh = React.useContext(SourcingOptionsRefreshContext)
     const [open, setOpen] = React.useState(false)
@@ -68,6 +72,18 @@ export function PurchaseOrderCreateBatchBar({
                 !compact && "rounded-md bg-muted/40 px-3 py-2",
             )}
         >
+            {onReuseInquiry && (
+                <Button
+                    id="procurement-orders-create-reuse-inquiry"
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={disabled || inquiryDisabled}
+                    onClick={onReuseInquiry}
+                >
+                    沿用询价结果
+                </Button>
+            )}
             {onSetParticipation && selectedCount > 0 ? (
                 <label
                     htmlFor="procurement-orders-create-batch-participation"

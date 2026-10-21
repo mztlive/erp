@@ -7,6 +7,7 @@ use erp_procurement::entity::purchase_order::{
     ProgressStatus, PurchaseChangeOrder, PurchaseLineSalesAllocation, PurchaseOrder,
 };
 use erp_procurement::repository::purchase_expense::occurrences_by_orders;
+use erp_sales::repository::sales_order::inquiry_source::inquiry_sources;
 use erp_warehouse::repository::WarehouseExt;
 use erp_workflow::service::document_registry::find_approval_binding;
 use mongodb::Database;
@@ -64,6 +65,7 @@ impl PurchaseOrderReadService {
         let order = facts.order.take().ok_or_else(|| Error::NotFound("采购单不存在或无权查看".into()))?;
         let identity = center_identity(&order, &facts)?;
         let mut content = center_content(&facts);
+        attach_inquiry_number(&self.db, &order, &mut content.lines).await?;
         let occurrences =
             occurrences_by_orders(&self.db, std::slice::from_ref(&order.base.id), &mut NoTransaction).await?;
         PurchaseOrderLineView::attach_occurrences(&mut content.lines, &occurrences);
@@ -91,6 +93,27 @@ impl PurchaseOrderReadService {
         view.delivery = delivery_summary(&self.db, &order).await?;
         Ok(view)
     }
+}
+
+async fn attach_inquiry_number(
+    db: &Database,
+    order: &PurchaseOrder,
+    lines: &mut [PurchaseOrderLineView],
+) -> Result<()> {
+    if !lines.iter().any(|line| line.inquiry_quote_source.is_some()) {
+        return Ok(());
+    }
+    let source = inquiry_sources(db).find_by_id(order.sales_order_id.as_ref(), &mut NoTransaction).await?;
+    if let Some(source) = source {
+        for line in lines {
+            if let Some(quote) = &mut line.inquiry_quote_source
+                && quote.inquiry_id == source.inquiry_id
+            {
+                quote.inquiry_no = Some(source.inquiry_no.clone());
+            }
+        }
+    }
+    Ok(())
 }
 
 /// 汇总采购单冻结的配送判定，并标出仍待追加运费的商品。

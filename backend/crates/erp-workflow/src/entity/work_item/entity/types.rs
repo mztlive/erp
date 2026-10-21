@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum WorkItemType {
+    /// 销售询价当前需求版本的采购责任行处理。
+    SalesInquiryProcessing,
     /// 销售单生效后的供给分配（现有库存优先，缺口采购）。
     ProcurementOrderCreation,
     /// 销售变更影响采购后，由采购负责人更新采购依据。
@@ -60,6 +62,8 @@ pub enum WorkItemType {
 /// 工作项简报关联的权威业务对象种类。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum WorkItemBriefObjectKind {
+    /// 销售询价，仅读取当前任务必要身份。
+    SalesInquiry,
     /// 销售单。
     SalesOrder,
     /// 采购确认。
@@ -142,6 +146,12 @@ pub enum WorkItemAssignmentSeparationPolicy {
 }
 
 const WORK_ITEM_BRIEF_RELATIONS: &[WorkItemBriefRelation] = &[
+    WorkItemBriefRelation {
+        work_item_type: WorkItemType::SalesInquiryProcessing,
+        object_kind: WorkItemBriefObjectKind::SalesInquiry,
+        business_object_type: "sales_inquiry",
+        read_permission: "procurement_inquiry:detail",
+    },
     WorkItemBriefRelation {
         work_item_type: WorkItemType::PurchasePaymentArrangement,
         object_kind: WorkItemBriefObjectKind::PurchaseOrder,
@@ -367,6 +377,7 @@ impl WorkItemType {
     /// 不返回错误。
     pub fn label(&self) -> &'static str {
         match self {
+            Self::SalesInquiryProcessing => "询价采购处理",
             Self::ProcurementOrderCreation => "供给分配",
             Self::PurchaseSourceUpdate => "采购依据更新",
             Self::PurchasePaymentArrangement => "采购付款待安排",
@@ -406,6 +417,7 @@ impl WorkItemType {
     /// 不返回错误。
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::SalesInquiryProcessing => "SALES_INQUIRY_PROCESSING",
             Self::ProcurementOrderCreation => "PROCUREMENT_ORDER_CREATION",
             Self::PurchaseSourceUpdate => "PURCHASE_SOURCE_UPDATE",
             Self::PurchasePaymentArrangement => "PURCHASE_PAYMENT_ARRANGEMENT",
@@ -476,7 +488,8 @@ impl WorkItemType {
     pub fn assignment_separation_policy(self) -> WorkItemAssignmentSeparationPolicy {
         match self {
             Self::DocumentApproval => WorkItemAssignmentSeparationPolicy::ApprovalHistory,
-            Self::ProcurementOrderCreation
+            Self::SalesInquiryProcessing
+            | Self::ProcurementOrderCreation
             | Self::PurchaseSourceUpdate
             | Self::PurchasePaymentArrangement
             | Self::SupplierPortalReview => WorkItemAssignmentSeparationPolicy::RoleAndParticipation,

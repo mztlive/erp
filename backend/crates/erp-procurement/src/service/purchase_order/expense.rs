@@ -61,13 +61,15 @@ fn expense_line(
     if rate.is_sign_negative() || rate >= rust_decimal::Decimal::ONE {
         return Err(Error::ValidationError(format!("第 {} 行税率必须在 0 到 1 之间", index + 1)));
     }
-    let expense = PurchaseExpenseDetail::new(
+    let mut expense = PurchaseExpenseDetail::new(
         next_id(),
         line.category,
         line.description.clone(),
         line.sales_order_line_id.clone(),
     )
     .map_err(|error| Error::ValidationError(format!("第 {} 行{error}", index + 1)))?;
+    expense.inquiry_source = line.inquiry_source.clone();
+    let expense = expense.normalized()?;
     let (gross, net, tax) = fee_amounts(line.gross_amount, line.input_tax_rate);
     let line_no = u32::try_from(index + 1).map_err(|_| Error::ValidationError("费用行数溢出".into()))?;
     PurchaseOrderSubmissionLine::new(
@@ -139,6 +141,7 @@ mod tests {
             gross_amount: Amount::from_str(gross).unwrap(),
             input_tax_rate: Rate::from_str(rate).unwrap(),
             sales_order_line_id: Some(SalesOrderLineId::new("sol-1")),
+            inquiry_source: None,
         }
     }
 

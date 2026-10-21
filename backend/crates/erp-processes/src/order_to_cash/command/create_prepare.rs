@@ -40,12 +40,13 @@ impl SalesOrderCommandProcess {
         actor: &AuditActor,
         access: &SalesCommandAccess,
     ) -> Result<PreparedSalesCreation> {
+        let editable = self.inquiry_sales_draft(req, actor, &mut NoTransaction).await?;
         let (customer_id, settlement_party_id, draft) = self
             .resolve_sales_command_draft(
                 access,
                 &req.contract_id,
                 &req.customer_id,
-                req.draft.clone(),
+                editable,
                 &mut NoTransaction,
             )
             .await?;

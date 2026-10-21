@@ -11,6 +11,7 @@ import type {
 // ─── 导出视图类型（保持 queries 契约） ───────────────────────────────────────
 
 export type SalesOrderDetailView = SalesOrderListItem & {
+    inquirySource?: import("./inquiry-basis").InquirySalesSourceSnapshot | null
     loadWarnings?: string[]
     selectionSource?: import("./selection-basis").SalesSelectionSource | null
     /** 详情内原地登记票款时使用的经营客户与结算主体稳定身份。 */
@@ -322,6 +323,7 @@ export type BackendRevisionCommercial = Omit<BackendRevision, "lines"> & {
 }
 
 export type BackendSalesOrderDetail = {
+    inquiry_source?: import("./inquiry-basis").InquirySalesSourceSnapshot | null
     selection_source?: import("./selection-basis").SalesSelectionSource | null
     id: string
     order_no: string

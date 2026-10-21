@@ -35,7 +35,7 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 
 use super::change_adapter::purchase_change_order_object_readable;
-use crate::adapters::{freeze_approval_materials, persist_approval_snapshot};
+use crate::adapters::{freeze_approval_materials, persist_approval_snapshot, purchase_access};
 use crate::audit::persist_log;
 use crate::{Error, Result};
 
@@ -269,22 +269,7 @@ pub(super) fn build_purchase_change_start_input(
     let actor =
         ParticipantId::new(actor_id).map_err(|_| Error::ValidationError("提交人引用无效".to_string()))?;
     let timestamp = Timestamp::from_utc(now.as_utc());
-    let binding_inputs = graph
-        .nodes
-        .iter()
-        .map(|node| {
-            Ok(StartBindingInput {
-                node_key: node.node_key.clone(),
-                assignee_id: ApprovalInstanceAssigneeId::new(next_id()),
-                eligibility: converge_node_eligibility(node, |assignee| {
-                    match purchase_change_order_object_readable(organization_id, assignee) {
-                        Ok(_) => None,
-                        Err(_) => Some(AuthorizationFailure::CannotReadSubject),
-                    }
-                })?,
-            })
-        })
-        .collect::<Result<Vec<_>>>()?;
+    let binding_inputs = change_start_bindings(&graph, organization_id)?;
     let plan = plan_start(StartPlanInput {
         graph: &graph,
         expected_definition_version: binding.approval_definition_version,
@@ -311,6 +296,25 @@ pub(super) fn build_purchase_change_start_input(
         receipt_id: ApprovalCommandReceiptId::new(next_id()),
         bindings: plan.bindings,
     })
+}
+
+fn change_start_bindings(graph: &DefinitionGraph, organization_id: &str) -> Result<Vec<StartBindingInput>> {
+    graph
+        .nodes
+        .iter()
+        .map(|node| {
+            Ok(StartBindingInput {
+                node_key: node.node_key.clone(),
+                assignee_id: ApprovalInstanceAssigneeId::new(next_id()),
+                eligibility: converge_node_eligibility(node, |assignee| {
+                    match purchase_change_order_object_readable(organization_id, assignee) {
+                        Ok(_) => None,
+                        Err(_) => Some(AuthorizationFailure::CannotReadSubject),
+                    }
+                })?,
+            })
+        })
+        .collect::<Result<Vec<_>>>()
 }
 
 /// 将启动计划错误映射为服务错误；计划前置条件保持冲突语义。
@@ -391,64 +395,65 @@ pub(super) async fn persist_purchase_change_start(
 ) -> Result<()> {
     let db = db.clone();
     let client = db.client().clone();
-    let PurchaseChangeStartPersistInput {
-        mut change_order,
-        submission,
-        submission_lines,
-        snapshot_payload,
-        prepared,
-        owner_role,
-        organization_id,
-        now,
-        audit,
-        actor,
-        rbac,
-    } = input;
-    let PreparedExecution::Apply(writes) = prepared else {
-        return Ok(());
-    };
     client
         .with_transaction(move |executor| {
-            Box::pin(async move {
-                crate::adapters::purchase_access(db.clone(), rbac.clone())
-                    .require_object(&actor, "submit", change_order.purchase_order_id.as_ref(), &[], executor)
-                    .await?;
-                db.bpm_workflow()
-                    .insert_command_receipt(&writes.receipt, executor)
-                    .await
-                    .map_err(map_receipt_first_write_error)?;
-                let guarded = db
-                    .business_documents()
-                    .mark_approval_started(
-                        writes.instance.subject.subject_id(),
-                        DocumentType::PurchaseChangeOrder,
-                        &writes.instance.process_definition_id,
-                        writes.instance.definition_version,
-                        now,
-                        executor,
-                    )
-                    .await?;
-                if guarded.is_none() {
-                    return Err(Error::ConflictError("采购变更单审批启动守卫冲突，请刷新后重试".to_string()));
-                }
-                db.purchase_order()
-                    .create_change_submission(&mut change_order, &submission, &submission_lines, executor)
-                    .await?;
-                persist_runtime_writes(
-                    &db,
-                    &writes,
-                    &snapshot_payload,
-                    owner_role,
-                    &organization_id,
-                    now,
-                    executor,
-                )
-                .await?;
-                persist_log(&db, &audit, executor).await?;
-                Ok::<(), crate::Error>(())
-            })
+            Box::pin(async move { apply_change_start(&db, input, executor).await })
         })
         .await
+}
+async fn apply_change_start(
+    db: &Database,
+    mut input: PurchaseChangeStartPersistInput,
+    executor: &mut dyn Executor,
+) -> Result<()> {
+    let PreparedExecution::Apply(writes) = input.prepared else { return Ok(()) };
+    purchase_access(db.clone(), input.rbac.clone())
+        .require_object(&input.actor, "submit", input.change_order.purchase_order_id.as_ref(), &[], executor)
+        .await?;
+    db.bpm_workflow()
+        .insert_command_receipt(&writes.receipt, executor)
+        .await
+        .map_err(map_receipt_first_write_error)?;
+    let guarded = db
+        .business_documents()
+        .mark_approval_started(
+            writes.instance.subject.subject_id(),
+            DocumentType::PurchaseChangeOrder,
+            &writes.instance.process_definition_id,
+            writes.instance.definition_version,
+            input.now,
+            executor,
+        )
+        .await?;
+    if guarded.is_none() {
+        return Err(Error::ConflictError("采购变更单审批启动守卫冲突，请刷新后重试".into()));
+    }
+    let order = db
+        .purchase_orders()
+        .find_by_id(&input.change_order.purchase_order_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("原采购单不存在".into()))?;
+    super::inquiry_supply::resize_change_quotes(db, &order, &input.submission_lines, executor).await?;
+    db.purchase_order()
+        .create_change_submission(
+            &mut input.change_order,
+            &input.submission,
+            &input.submission_lines,
+            executor,
+        )
+        .await?;
+    persist_runtime_writes(
+        db,
+        &writes,
+        &input.snapshot_payload,
+        input.owner_role,
+        &input.organization_id,
+        input.now,
+        executor,
+    )
+    .await?;
+    persist_log(db, &input.audit, executor).await?;
+    Ok(())
 }
 
 /// 将启动计划写入 BPM 集合、不可变快照和入口 WorkItem。

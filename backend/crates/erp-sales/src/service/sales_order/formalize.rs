@@ -5,6 +5,7 @@ use id_generator::next_id;
 use mongodb::Database;
 use persistence_core::Executor;
 
+use super::inquiry::consume as consume_inquiry;
 use crate::entity::sales_order::{
     FormalRevisionContext, FormalRevisionIdentities, FormalRevisionLineIdentity,
     FormalRevisionSubtypeIdentity, LineType, RevisionSource, SalesOrder, SalesOrderRevisionAggregate,
@@ -148,6 +149,7 @@ pub async fn persist_revision(
     aggregate: &SalesOrderRevisionAggregate,
     executor: &mut dyn Executor,
 ) -> Result<()> {
+    consume_inquiry(db, &order.base.id, executor).await?;
     Ok(db
         .sales_order()
         .formalize_submission(

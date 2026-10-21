@@ -30,6 +30,8 @@ mod delivery_capacity;
 mod delivery_judgement;
 mod draft_edit;
 mod expense;
+mod inquiry_expense;
+pub use inquiry_expense::InquiryExpenseSource;
 mod line_amounts;
 mod line_common;
 pub use delivery_allocation::PurchaseDeliveryAllocation;
@@ -38,9 +40,11 @@ pub use delivery_capacity::{
 };
 pub use delivery_judgement::{
     BulkOrderQuantity, OfferingDeliveryFact, PurchaseDeliveryJudgement, PurchaseFreightWaiver,
-    PurchaseSourcingDelivery, ensure_bulk_direct_minimum, judge_line_delivery,
+    PurchaseSourcingDelivery, PurchaseSourcingReason, ensure_bulk_direct_minimum, judge_line_delivery,
 };
+mod inquiry_quote;
 mod offering_source;
+pub use inquiry_quote::{PurchaseInquiryAddress, PurchaseInquiryQuoteSource};
 mod order;
 mod payment_subject;
 mod purchase_revision;

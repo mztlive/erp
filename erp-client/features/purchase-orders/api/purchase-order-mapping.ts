@@ -183,6 +183,7 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
                     : ("ITEM_SERVICE" as const),
             procurementConfirmationLineId:
                 line.procurement_confirmation_line_id ?? undefined,
+            inquiryQuoteSource: line.inquiry_quote_source ?? undefined,
             itemName:
                 line.product_name ??
                 (line.line_type === "LOGISTICS_FEE"
@@ -429,6 +430,9 @@ export function mapBasis(basis: BackendBasis): PurchaseCreationBasis {
     return {
         basisId: basis.basis_id,
         sourceType,
+        inquirySource: basis.inquiry_source ?? undefined,
+        inquiryReselectionRequired: basis.inquiry_reselection_required ?? false,
+        recommendationReason: basis.recommendation_reason ?? undefined,
         workItemId: basis.work_item_id,
         salesOrderId: basis.sales_order_id,
         salesOrderNo: basis.sales_order_no,

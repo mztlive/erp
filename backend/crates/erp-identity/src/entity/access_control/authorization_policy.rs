@@ -27,6 +27,7 @@ impl AuthorizationPolicy {
     pub fn for_action(resource: &str, action: &str) -> Result<Self> {
         let policy = match (resource, action) {
             ("approval_instance", _)
+            | ("procurement_inquiry", _)
             | ("purchase_payment_request", "pay")
             | ("supplier_settlement_statement", "confirm")
             | ("reconciliation_difference", "decide") => Self::Task,
@@ -54,6 +55,7 @@ impl AuthorizationPolicy {
             (
                 "customer"
                 | "sales_order"
+                | "sales_inquiry"
                 | "sales_selection_booklet"
                 | "stock_adjustment"
                 | "stock_balance"

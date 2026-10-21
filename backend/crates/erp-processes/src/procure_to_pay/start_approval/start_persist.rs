@@ -310,6 +310,7 @@ impl StartPosting<'_> {
         revalidate_selected_supply(
             self.db,
             &self.input.submission.supplier_id,
+            &self.input.order.base.id,
             &self.input.submission_lines,
             executor,
         )

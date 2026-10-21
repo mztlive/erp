@@ -419,6 +419,13 @@ type FixedRoute = (WorkItemType, &'static [&'static str], &'static str, &'static
 
 const FIXED_TASK_ROUTES: &[FixedRoute] = &[
     (
+        WorkItemType::SalesInquiryProcessing,
+        &["sales_inquiry"],
+        "sales_inquiry_processing",
+        "W08",
+        "询价任务业务对象未注册",
+    ),
+    (
         WorkItemType::PurchasePaymentArrangement,
         &["purchase_order"],
         "purchase_payment_arrangement",
@@ -743,6 +750,7 @@ pub(crate) fn role_label(role: &str) -> String {
         "role-sales-leader" | "sales_leader" => "销售领导",
         "role-procurement" | "procurement" => "采购",
         "supplier_portal_reviewer" => "采购确认人",
+        "inquiry_buyer" => "询价采购",
         "role-operations" | "operations" => "运营",
         "role-warehouse" | "warehouse" => "仓储",
         "role-sysadmin" | "sysadmin" | "integration-operator" => "系统管理员",

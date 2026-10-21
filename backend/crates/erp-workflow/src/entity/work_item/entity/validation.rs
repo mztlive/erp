@@ -435,11 +435,7 @@ impl NormalizedWorkItemData {
         {
             return Err(Error::from("付款安排任务必须冻结采购单身份和责任键"));
         }
-        if self.work_item_type == WorkItemType::ProcurementOrderCreation
-            && (responsibility_key.is_none() || scope_ids.is_empty())
-        {
-            return Err(Error::from("供给分配任务必须冻结责任键和责任行范围"));
-        }
+        self.ensure_scope_contract(responsibility_key, scope_ids)?;
         if matches!(
             self.work_item_type,
             WorkItemType::FulfillmentOperation
@@ -452,8 +448,24 @@ impl NormalizedWorkItemData {
         {
             return Err(Error::from("执行任务必须冻结责任键"));
         }
-        if self.work_item_type != WorkItemType::ProcurementOrderCreation && !scope_ids.is_empty() {
-            return Err(Error::from("只有供给分配任务可以冻结责任行范围"));
+
+        Ok(())
+    }
+    fn ensure_scope_contract(&self, responsibility_key: Option<&str>, scope_ids: &[String]) -> Result<()> {
+        let scoped = matches!(
+            self.work_item_type,
+            WorkItemType::ProcurementOrderCreation | WorkItemType::SalesInquiryProcessing
+        );
+        if scoped && (responsibility_key.is_none() || scope_ids.is_empty()) {
+            return Err(Error::from("采购责任任务必须冻结责任键和责任行范围"));
+        }
+        if !scoped && !scope_ids.is_empty() {
+            return Err(Error::from("只有已注册采购责任任务可以冻结责任行范围"));
+        }
+        if self.work_item_type == WorkItemType::SalesInquiryProcessing
+            && self.business_object_type != "sales_inquiry"
+        {
+            return Err(Error::from("询价责任任务必须绑定销售询价"));
         }
         Ok(())
     }

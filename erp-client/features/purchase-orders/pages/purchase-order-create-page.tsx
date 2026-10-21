@@ -36,7 +36,10 @@ import {
     useCreateFromSourcingMutation,
     useCreationBasesQuery,
 } from "@/features/purchase-orders/hooks/queries"
-import type { PurchaseOrderCreateFormApi } from "@/features/purchase-orders/lib/purchase-order-create-form-types"
+import type {
+    PurchaseOrderCreateFormApi,
+    PurchaseOrderCreateFormValues,
+} from "@/features/purchase-orders/lib/purchase-order-create-form-types"
 import {
     assignBestSourcingOptions,
     buildDefaultSourcingLines,
@@ -45,6 +48,7 @@ import {
     buildSourcingWorkspace,
     commonSourcingOptionsForSelected,
     findSourcingOption,
+    pickBestSourcingOption,
     sourcingFormLinesReady,
     sumPreviewTotals,
     type SourcingLineInput,
@@ -58,6 +62,18 @@ import { buildSourcingEditorRows } from "../lib/sourcing/editor-rows"
 import { sourcingDeliveryAllocations } from "../lib/sourcing/delivery"
 import { useSourcingParticipation } from "../hooks/use-sourcing-participation"
 import { canSplitSourcingProduct } from "../lib/sourcing-quantity"
+import { compareDecimal } from "@/lib/fixed-decimal"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { getErrorMessage } from "@/lib/api/errors"
+import {
+    readInquiryLocalValue,
+    writeInquiryLocalValue,
+} from "@/lib/inquiry-local"
+import {
+    sourcingDraftKey,
+    useSourcingCommand,
+    type SavedSourcingCommand,
+} from "../hooks/use-sourcing-command"
 
 /**
  * 新建采购单页面：按销售明细选源，预览拆单结果后确认创建并提交审批；成功后回到列表。
@@ -96,8 +112,14 @@ export function PurchaseOrderCreatePage({
         workItemId: initialWorkItemId || undefined,
     })
     const createMutation = useCreateFromSourcingMutation()
-    const [submissionUnknown, setSubmissionUnknown] = React.useState(false)
-    const retrySubmissionRef = React.useRef<(() => Promise<void>) | null>(null)
+    const profile = useAccountProfileQuery()
+    const userId = profile.data?.userid ?? ""
+    const sourcingCommand = useSourcingCommand(
+        userId,
+        createMutation.mutateAsync,
+    )
+    const submissionUnknown =
+        sourcingCommand.pending !== null && !createMutation.isPending
     const [previewOpen, setPreviewOpen] = React.useState(false)
     const [batchSelection, setBatchSelection] = React.useState<{
         orderId: string
@@ -116,6 +138,7 @@ export function PurchaseOrderCreatePage({
         fingerprint: string
         idempotencyKey: string
     } | null>(null)
+    const draftScopeRef = React.useRef("")
 
     const workspace = React.useMemo(
         () => buildSourcingWorkspace(basesQuery.data ?? []),
@@ -124,10 +147,107 @@ export function PurchaseOrderCreatePage({
     const workspaceRef = React.useRef(workspace)
     workspaceRef.current = workspace
 
+    const submitSourcing = async (prepared?: SavedSourcingCommand) => {
+        try {
+            const { result, original } = await sourcingCommand.run(prepared)
+            const order = {
+                salesOrderId: original.input.salesOrderId,
+                workItemId: original.input.workItemId,
+            }
+
+            if (result.status === "succeeded") {
+                setPreviewOpen(false)
+                createIntentRef.current = null
+                const count = result.data.orders.length
+                const stockCount = result.data.stockReservations.length
+                const taskCompleted = result.data.workItemStatus === "COMPLETED"
+                toast.add({
+                    title: taskCompleted
+                        ? "供给分配已完成"
+                        : "本次供给分配已保存",
+                    description: !taskCompleted
+                        ? "当前责任范围仍有未分配数量，任务继续保留在工作台，请完成剩余供给分配。"
+                        : count === 0
+                          ? `已从现有库存建立 ${stockCount} 条销售预留并生成仓发草稿，无需采购。`
+                          : stockCount > 0
+                            ? `已建立 ${stockCount} 条库存预留，并将缺口拆成 ${count} 张采购单提交审批。`
+                            : count > 1
+                              ? `已将缺口拆成 ${count} 张采购单并提交审批。`
+                              : "已创建 1 张采购单并提交审批。",
+                    type: "success",
+                    timeout: 4000,
+                })
+                if (embedded && order.workItemId && taskCompleted) {
+                    onTaskCompleted?.(order.workItemId)
+                } else if (taskCompleted) {
+                    router.replace("/procurement/orders")
+                } else {
+                    await basesQuery.refetch()
+                    setLinesResetToken((token) => token + 1)
+                }
+                return
+            }
+            if (result.status === "failed") {
+                createIntentRef.current = null
+                if (result.code === "CONFLICT") {
+                    await basesQuery.refetch()
+                }
+                setActionError({
+                    title: original.hasUnknown
+                        ? "原操作仍待核对"
+                        : "供给分配失败",
+                    description: original.hasUnknown
+                        ? `${result.message} 本次未能完成核对，已保留原操作，请继续核对或联系管理员。`
+                        : result.code === "CONFLICT"
+                          ? `${result.message} 创建依据已刷新，请核对后重试。`
+                          : result.message,
+                })
+                return
+            }
+            setActionError({
+                title: "供给分配结果待确认",
+                description: `${result.message} 原操作已保留，请核对上次供给分配结果，刷新后仍可继续核对。`,
+            })
+        } catch (error) {
+            setActionError({
+                title: "供给分配结果待核对",
+                description: getErrorMessage(
+                    error,
+                    "原操作已保留，请核对上次供给分配结果。",
+                ),
+            })
+        }
+    }
+
     const form = useAppForm({
         defaultValues: {
             salesOrderId: initialSalesOrderId,
             lines: [] as SourcingLineInput[],
+        },
+        listeners: {
+            onChange: ({ formApi }) => {
+                const order = workspaceRef.current.find(
+                    (candidate) =>
+                        candidate.salesOrderId ===
+                        formApi.state.values.salesOrderId,
+                )
+                if (!userId || !order) return
+                const key = sourcingDraftKey(
+                    userId,
+                    order.salesOrderId,
+                    order.workItemId,
+                )
+                if (draftScopeRef.current !== key) return
+                try {
+                    writeInquiryLocalValue(key, formApi.state.values)
+                } catch {
+                    setActionError({
+                        title: "本地输入未保存",
+                        description:
+                            "浏览器无法保存当前分配，请先完成本次办理再离开页面。",
+                    })
+                }
+            },
         },
         validators: {
             onChange: ({ value }) => {
@@ -139,6 +259,10 @@ export function PurchaseOrderCreatePage({
             },
         },
         onSubmit: async ({ value }) => {
+            if (sourcingCommand.pending) {
+                await submitSourcing()
+                return
+            }
             const order = workspaceRef.current.find(
                 (candidate) => candidate.salesOrderId === value.salesOrderId,
             )
@@ -163,6 +287,8 @@ export function PurchaseOrderCreatePage({
                     targetWarehouseId: line.targetWarehouseId || undefined,
                     quantity: line.quantity.trim(),
                     expectedDeliveryDate: line.expectedDeliveryDate,
+                    reselectionReason:
+                        line.reselectionReason?.trim() || undefined,
                     deliveryAllocations: sourcingDeliveryAllocations(
                         product,
                         line,
@@ -185,6 +311,8 @@ export function PurchaseOrderCreatePage({
                     targetWarehouseId: line.targetWarehouseId || undefined,
                     quantity: line.quantity.trim(),
                     expectedDeliveryDate: line.expectedDeliveryDate,
+                    reselectionReason:
+                        line.reselectionReason?.trim() || undefined,
                     deliveryAllocations: sourcingDeliveryAllocations(
                         product,
                         line,
@@ -192,69 +320,11 @@ export function PurchaseOrderCreatePage({
                 })),
                 idempotencyKey: createIntentRef.current.idempotencyKey,
             }
-            const submitPrepared = async () => {
-                const result = await createMutation.mutateAsync(input)
-
-                if (result.status === "succeeded") {
-                    setSubmissionUnknown(false)
-                    retrySubmissionRef.current = null
-                    setPreviewOpen(false)
-                    createIntentRef.current = null
-                    const count = result.data.orders.length
-                    const stockCount = result.data.stockReservations.length
-                    const taskCompleted =
-                        result.data.workItemStatus === "COMPLETED"
-                    toast.add({
-                        title: taskCompleted
-                            ? "供给分配已完成"
-                            : "本次供给分配已保存",
-                        description: !taskCompleted
-                            ? "当前责任范围仍有未分配数量，任务继续保留在工作台，请完成剩余供给分配。"
-                            : count === 0
-                              ? `已从现有库存建立 ${stockCount} 条销售预留并生成仓发草稿，无需采购。`
-                              : stockCount > 0
-                                ? `已建立 ${stockCount} 条库存预留，并将缺口拆成 ${count} 张采购单提交审批。`
-                                : count > 1
-                                  ? `已将缺口拆成 ${count} 张采购单并提交审批。`
-                                  : "已创建 1 张采购单并提交审批。",
-                        type: "success",
-                        timeout: 4000,
-                    })
-                    if (embedded && order.workItemId && taskCompleted) {
-                        onTaskCompleted?.(order.workItemId)
-                    } else if (taskCompleted) {
-                        router.replace("/procurement/orders")
-                    } else {
-                        await basesQuery.refetch()
-                        setLinesResetToken((token) => token + 1)
-                    }
-                    return
-                }
-                if (result.status === "failed") {
-                    setSubmissionUnknown(false)
-                    retrySubmissionRef.current = null
-                    createIntentRef.current = null
-                    if (result.code === "CONFLICT") {
-                        await basesQuery.refetch()
-                        setLinesResetToken((token) => token + 1)
-                    }
-                    setActionError({
-                        title: "供给分配失败",
-                        description:
-                            result.code === "CONFLICT"
-                                ? `${result.message} 创建依据已刷新，请核对后重试。`
-                                : result.message,
-                    })
-                    return
-                }
-                setSubmissionUnknown(true)
-                retrySubmissionRef.current = submitPrepared
-                setActionError({
-                    title: "供给分配结果待确认",
-                    description: `${result.message} 请保留当前页面并使用同一操作重试，系统已记录本次提交，刷新后查看结果。`,
-                })
-            }
-            await submitPrepared()
+            await submitSourcing({
+                input,
+                salesOrderNo: order.salesOrderNo,
+                formValues: value,
+            })
         },
     })
 
@@ -313,11 +383,23 @@ export function PurchaseOrderCreatePage({
         // URL 已带 salesOrderId 时选中项首屏就是最终值，必须等创建依据到达后再写默认明细。
         // 只在切换单据或本页主动重取（部分保存、冲突）后重写；后台重取（窗口聚焦、缓存失效）
         // 不得冲掉用户已填的分配，也不得关掉打开中的预览。
-        if (basesQuery.isPending || !selectedOrderRef.current) return
-        const key = `${selectedSalesOrderId}:${linesResetToken}`
+        if (basesQuery.isPending || !selectedOrderRef.current || !userId) return
+        const key = `${userId}:${selectedOrderKey}:${linesResetToken}`
         if (initializedLinesKey.current === key) return
         initializedLinesKey.current = key
-        writeLines(buildDefaultSourcingLines(selectedOrderRef.current))
+        const draftKey = sourcingDraftKey(
+            userId,
+            selectedOrderRef.current.salesOrderId,
+            selectedOrderRef.current.workItemId,
+        )
+        const saved =
+            readInquiryLocalValue<PurchaseOrderCreateFormValues>(draftKey)
+        draftScopeRef.current = draftKey
+        writeLines(
+            saved?.salesOrderId === selectedSalesOrderId
+                ? saved.lines
+                : buildDefaultSourcingLines(selectedOrderRef.current),
+        )
         setPreviewOpen(false)
     }, [
         basesQuery.isPending,
@@ -325,6 +407,7 @@ export function PurchaseOrderCreatePage({
         selectedSalesOrderId,
         linesResetToken,
         writeLines,
+        userId,
     ])
 
     const lines = useStore(form.store, (state) => state.values.lines)
@@ -546,6 +629,78 @@ export function PurchaseOrderCreatePage({
         })
     }, [selectedOrder, lines, writeLines])
 
+    const applyInquirySourcing = React.useCallback(() => {
+        if (!selectedOrder) return
+        let matched = 0
+        const next = lines.map((line) => {
+            if (!line.selected) return line
+            const product = selectedOrder.lines.find(
+                (item) => item.salesOrderLineId === line.salesOrderLineId,
+            )
+            if (
+                !product ||
+                findSourcingOption(product, line.basisId)?.sourceType ===
+                    "EXISTING_STOCK"
+            )
+                return line
+            const candidates = product.options.filter((option) => {
+                if (
+                    !option.inquirySource ||
+                    (option.priceBasis === "BULK" &&
+                        option.fulfillmentResponsibility === "SUPPLIER_DIRECT")
+                )
+                    return false
+                try {
+                    return (
+                        compareDecimal(
+                            option.maxCreateQuantity,
+                            line.quantity,
+                            6,
+                        ) >= 0 &&
+                        compareDecimal(
+                            line.quantity,
+                            option.inquirySource.minimum_order_quantity,
+                            6,
+                        ) >= 0
+                    )
+                } catch {
+                    return false
+                }
+            })
+            const option = pickBestSourcingOption(
+                candidates,
+                line.quantity,
+                product,
+            )
+            if (!option) return line
+            matched += 1
+            return {
+                ...line,
+                basisId: option.basisId,
+                expectedDeliveryDate: option.expectedDeliveryDate,
+                reselectionReason: "",
+                targetWarehouseId:
+                    option.fulfillmentResponsibility === "WAREHOUSE"
+                        ? line.targetWarehouseId
+                        : "",
+                targetWarehouseName:
+                    option.fulfillmentResponsibility === "WAREHOUSE"
+                        ? line.targetWarehouseName
+                        : "",
+            }
+        })
+        writeLines(next)
+        toast.add({
+            title: matched
+                ? `已带入 ${matched} 条询价报价候选`
+                : "当前没有可沿用的询价报价",
+            description: matched
+                ? "现有库存分配已保留。请继续核对供应商、数量、配送范围、交期及付款条件；集采直发在明细中明确选择。"
+                : "报价可能已失效、数量不满足条件或需明确选择集采直发。请在明细中核对其他供给，并填写改选原因。",
+            type: matched ? "success" : "warning",
+        })
+    }, [selectedOrder, lines, writeLines])
+
     const addSplitLine = React.useCallback(
         (salesOrderLineId: string) => {
             if (!selectedOrder) return
@@ -623,6 +778,10 @@ export function PurchaseOrderCreatePage({
     )
 
     const openPreview = React.useCallback(async () => {
+        if (sourcingCommand.pending) {
+            setPreviewOpen(true)
+            return
+        }
         for (const field of Object.values(form.fieldInfo)) {
             const instance = field?.instance
             if (!instance || instance.store.state.meta.isTouched) continue
@@ -647,7 +806,32 @@ export function PurchaseOrderCreatePage({
             type: "error",
             timeout: 6000,
         })
-    }, [form])
+    }, [form, sourcingCommand.pending])
+
+    const pendingRecovery = sourcingCommand.pending ? (
+        <Alert variant="warning">
+            <AlertTitle>上次供给分配结果待核对</AlertTitle>
+            <AlertDescription>
+                <p>
+                    {sourcingCommand.pending.salesOrderNo} ·{" "}
+                    {sourcingCommand.pending.input.lines.length}{" "}
+                    条分配已保留。请先核对原操作，再继续其他供给分配。
+                </p>
+                <Button
+                    id="procurement-sourcing-recover-saved-command"
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={createMutation.isPending}
+                    onClick={() => void submitSourcing()}
+                >
+                    {createMutation.isPending
+                        ? "正在核对…"
+                        : "核对上次供给分配"}
+                </Button>
+            </AlertDescription>
+        </Alert>
+    ) : null
 
     if (basesQuery.isPending) {
         return (
@@ -668,6 +852,7 @@ export function PurchaseOrderCreatePage({
                     aria-busy="true"
                     aria-label="加载中"
                 >
+                    {pendingRecovery}
                     <Skeleton className="h-16" />
                     <Skeleton className="h-40" />
                 </div>
@@ -689,6 +874,7 @@ export function PurchaseOrderCreatePage({
                         description="供给依据加载失败"
                     />
                 )}
+                {pendingRecovery}
                 <BusinessFailureState
                     error={basesQuery.error}
                     action={
@@ -739,6 +925,20 @@ export function PurchaseOrderCreatePage({
             onApply={applyBatchSupplier}
             matchDisabled={!canMatchBest}
             onMatchBest={applyBestSourcingOptions}
+            onReuseInquiry={
+                selectedOrder?.lines.some((line) =>
+                    line.options.some(
+                        (option) =>
+                            option.inquirySource ||
+                            option.inquiryReselectionRequired,
+                    ),
+                )
+                    ? applyInquirySourcing
+                    : undefined
+            }
+            inquiryDisabled={
+                !selectedOrder || !lines.some((line) => line.selected)
+            }
             onSetParticipation={
                 embedded
                     ? (included) =>
@@ -826,6 +1026,7 @@ export function PurchaseOrderCreatePage({
                             : undefined
                     }
                 >
+                    {pendingRecovery}
                     {actionError ? (
                         <Alert
                             variant="destructive"
@@ -1041,8 +1242,7 @@ export function PurchaseOrderCreatePage({
                     description={confirmationDescription}
                     onOpenChange={setPreviewOpen}
                     onConfirm={() => {
-                        if (retrySubmissionRef.current)
-                            void retrySubmissionRef.current()
+                        if (sourcingCommand.pending) void submitSourcing()
                         else void form.handleSubmit()
                     }}
                 />

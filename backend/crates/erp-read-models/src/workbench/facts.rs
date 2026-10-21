@@ -3,6 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use erp_workflow::entity::work_item::{WorkItemBriefRelation, WorkItemType};
+use erp_workflow::ports::ObjectFactMap;
 pub(crate) use erp_workflow::ports::ObjectKind;
 use erp_workflow::service::work_item::order_access::filter_order_facts;
 use erp_workflow::{WorkItemRow, WorkflowAuthorizationPort};
@@ -460,6 +461,11 @@ impl<A: erp_workflow::WorkflowAuthorizationPort> WorkbenchReadService<A> {
         executor: &mut dyn Executor,
     ) -> Result<WorkbenchObjectFactMap> {
         let mut facts = WorkbenchObjectFactMap::new();
+        let mut inquiries = ObjectFactMap::new();
+        self.facts_reader().load_inquiry_facts(keys, &mut inquiries, executor).await?;
+        facts.extend(
+            inquiries.into_iter().map(|(key, fact)| (key, WorkbenchObjectFact::from_authority(fact))),
+        );
         self.load_sales_order_facts(keys, &mut facts, executor).await?;
         self.load_purchase_order_facts(keys, &mut facts, executor).await?;
         self.load_fulfillment_operation_facts(keys, &mut facts, executor).await?;

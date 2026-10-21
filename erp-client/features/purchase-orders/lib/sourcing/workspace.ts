@@ -97,6 +97,9 @@ function optionFromBasis(
 ): SourcingSupplierOption {
     return {
         sourceType: basis.sourceType,
+        inquirySource: basis.inquirySource,
+        inquiryReselectionRequired: basis.inquiryReselectionRequired,
+        recommendationReason: basis.recommendationReason,
         supplierId: basis.supplierId,
         supplierName: basis.supplierName,
         basisId: basis.basisId,

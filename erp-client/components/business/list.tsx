@@ -279,6 +279,9 @@ interface QuickPreviewSheetProps extends Omit<
      * preview：窄栏 + 整区滚动，适合轻摘要。
      * detail：半屏 + 正文区由子树自管滚动，适合双栏读主记录。
      */
+    readonly finalFocus?: React.ComponentProps<
+        typeof SheetContent
+    >["finalFocus"]
     readonly size?: QuickPreviewSheetSize
     readonly id?: string
     readonly idPrefix?: string
@@ -298,6 +301,7 @@ function QuickPreviewSheet({
     contentClassName,
     overlayClassName,
     size = "preview",
+    finalFocus,
     id,
     idPrefix,
     ...props
@@ -315,6 +319,7 @@ function QuickPreviewSheet({
                 className={contentClassName}
                 overlayClassName={overlayClassName}
                 closeButtonId={closeButtonId}
+                finalFocus={finalFocus}
             >
                 <SheetHeader className="border-b border-border">
                     {identity ? (

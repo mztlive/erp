@@ -1,6 +1,11 @@
 "use client"
 
 import * as React from "react"
+import type {
+    InquirySalesBasis,
+    InquirySalesSourceSnapshot,
+} from "../api/inquiry-basis"
+import { InquiryDeliveryAllocationEditor } from "./inquiry-delivery-allocation-editor"
 import { SalesDeliveryAllocationEditor } from "./sales-delivery-allocation-editor"
 
 import { PlusIcon, PackageSearchIcon, ChevronDownIcon } from "lucide-react"
@@ -23,6 +28,8 @@ import type { SalesLineProcurementResponsibility } from "@/features/sales-orders
 
 export type SalesOrderCreateLineItemsSectionProps = {
     form: SalesOrderCreateFormApi
+    inquirySource?: InquirySalesBasis | InquirySalesSourceSnapshot
+    inquiryLocked?: boolean
     compact?: boolean
     procurementOwners?: ReadonlyMap<string, SalesLineProcurementResponsibility>
     procurementFetching?: boolean
@@ -34,6 +41,8 @@ type SkuPickerState = { mode: "add" } | { mode: "replace"; rowIndex: number }
 export function SalesOrderCreateLineItemsSection({
     form,
     compact = false,
+    inquirySource,
+    inquiryLocked = false,
     procurementOwners,
     procurementFetching = false,
     procurementError = false,
@@ -125,7 +134,8 @@ export function SalesOrderCreateLineItemsSection({
                                         )}
                                     </span>
                                 </div>
-                                {nature === "physical_service" ? (
+                                {nature === "physical_service" &&
+                                !inquiryLocked ? (
                                     <div
                                         role="group"
                                         aria-label="销售明细操作"
@@ -186,6 +196,7 @@ export function SalesOrderCreateLineItemsSection({
                 </form.Subscribe>
                 <SalesOrderCreateLineItemTable
                     form={form}
+                    inquiryLocked={inquiryLocked}
                     procurementOwners={procurementOwners}
                     procurementFetching={procurementFetching}
                     procurementError={procurementError}
@@ -206,7 +217,14 @@ export function SalesOrderCreateLineItemsSection({
                     onConfirm={handleConfirmPicks}
                 />
             </section>
-            <SalesDeliveryAllocationEditor form={form} />
+            {inquirySource ? (
+                <InquiryDeliveryAllocationEditor
+                    form={form}
+                    source={inquirySource}
+                />
+            ) : (
+                <SalesDeliveryAllocationEditor form={form} />
+            )}
             <form.AppField name="remark">
                 {(field) => (
                     <Collapsible

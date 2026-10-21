@@ -16,3 +16,5 @@ pub struct PageParams {
     /// 排序方向。
     pub sort_dir: SortDir,
 }
+
+pub mod sales_inquiry;

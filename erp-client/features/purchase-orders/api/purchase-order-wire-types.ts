@@ -45,6 +45,7 @@ export type BackendListItem = {
 }
 
 export type BackendLine = {
+    inquiry_quote_source?: import("../types").PurchaseInquiryQuoteSource | null
     delivery_allocations?: PurchaseDeliveryAllocation[]
     line_id: string
     line_no: number
@@ -228,6 +229,9 @@ export type BackendBasisLine = {
 export type BackendBasis = {
     basis_id: string
     source_type?: "PURCHASE" | "EXISTING_STOCK" | string
+    inquiry_source?: import("../types").InquirySourcingSource | null
+    inquiry_reselection_required?: boolean
+    recommendation_reason?: string | null
     work_item_id: string
     sales_order_id: string
     sales_order_no: string

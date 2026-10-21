@@ -113,6 +113,8 @@ async fn apply_confirm(
     )?;
     pending.persist(db, executor).await?;
     purchase_expense_occurrences(db).create(&occurrence, executor).await?;
+    crate::sales_inquiry_expense::mark_occurred(db, &order.base.id, &occurrence.expense_line_id, executor)
+        .await?;
     persist_cost_entry(db, PreparedCostEntry { entry, allocations: vec![allocation] }, executor).await?;
     refresh_expense_progress(db, &mut order, &lines, command.actor.id(), executor).await?;
     persist_log(db, &audit, executor).await?;

@@ -28,3 +28,9 @@ pub use prelude::{
 
 #[cfg(test)]
 mod serialization_contract;
+
+pub mod sales_inquiry;
+
+pub use extensions::SalesInquiryExt;
+
+pub mod sales_inquiry_import;

@@ -38,6 +38,8 @@ use crate::adapters::purchase_access;
 use crate::audit::{persist_log, recover_command};
 use crate::business_ownership::required_business_org;
 use crate::finance_posting::extra_cost::sales_line::{ensure_attributable_line, ensure_extra_cost_order};
+use crate::sales_inquiry::access::SalesInquiryAccess;
+use crate::sales_inquiry_expense::reserve_purchase;
 use crate::{Error, Result};
 
 const CREATE_PERMISSION: &str = "purchase_order:create";
@@ -138,6 +140,12 @@ async fn apply_expense_create(
     ensure_purchase_order_actor_account(db, &command.actor, executor).await?;
     let sales_order = load_expense_source(db, rbac, command, executor).await?;
     let (order, submission, lines) = prepare_expense_draft(db, rbac, &sales_order, command, executor).await?;
+    if lines.iter().any(|line| line.expense.as_ref().is_some_and(|fee| fee.inquiry_source.is_some())) {
+        SalesInquiryAccess::new(db.clone(), rbac.clone())
+            .ensure_procurement_permission(&command.actor, "convert_expenses", executor)
+            .await?;
+    }
+    reserve_purchase(db, &order, &lines, &command.actor, executor).await?;
     let write =
         PreparedDraftWrite { order: &order, submission: &submission, lines: &lines, actor: &command.actor };
     let document = write_prepared_draft(db, rbac, object_read, &write, executor).await?;
@@ -203,6 +211,7 @@ async fn prepare_expense_draft(
         fulfillment_responsibility: FulfillmentResponsibility::NotApplicable,
         // 费用采购单不选择供给；价格依据只为满足依据范围结构，不写入采购单。
         price_basis: SupplyPriceBasis::Dropship,
+        inquiry_quote_revision_id: None,
     };
     let supplier_name = supplier_name(db, &command.req, executor).await?;
     let payment_subject =

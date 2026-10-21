@@ -1,0 +1,278 @@
+//! 销售及采购询价命令的 HTTP 适配，分别执行对应操作权限。
+
+use application_core::AuditActor;
+use axum::Extension;
+use axum::extract::{Path, State};
+use erp_processes::sales_inquiry::dto::{
+    AcceptInquiryCommand, CreateInquiryCommand, InquiryMutationView, InquiryReasonCommand,
+    InquiryTaskCommand, InquiryTaskReasonCommand, PublishInquiryCommand, ReassignInquiryCommand,
+    ReinquireInquiryCommand, SaveInquiryCommand, SaveInquiryFeedbackCommand, SubmitInquiryCommand,
+};
+
+use crate::app_state::AppState;
+use crate::core::errors::Result;
+use crate::core::extractor::Json;
+use crate::core::response::ApiResponse;
+
+#[permission_macros::permission(
+    group = "销售询价",
+    group_desc = "询价需求与采购反馈协作",
+    desc = "创建销售询价",
+    resource = "sales_inquiry",
+    action = "create"
+)]
+/// 创建销售询价。
+/// # 参数
+/// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
+/// # 返回
+/// 返回已提交状态及当前责任任务。
+/// # 错误
+/// 权限、当前责任、版本、状态或业务校验失败时拒绝。
+pub async fn sales_create(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(request): Json<CreateInquiryCommand>,
+) -> Result<InquiryMutationView> {
+    let result = state.sales_inquiry_process().create(&actor, request).await?;
+    Ok(ApiResponse::ok_with_data(result))
+}
+
+#[permission_macros::permission(
+    group = "销售询价",
+    group_desc = "询价需求与采购反馈协作",
+    desc = "保存询价需求",
+    resource = "sales_inquiry",
+    action = "update"
+)]
+/// 保存询价需求。
+/// # 参数
+/// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
+/// # 返回
+/// 返回已提交状态及当前责任任务。
+/// # 错误
+/// 权限、当前责任、版本、状态或业务校验失败时拒绝。
+pub async fn sales_save(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(request): Json<SaveInquiryCommand>,
+) -> Result<InquiryMutationView> {
+    let result = state.sales_inquiry_process().save(&actor, &id, request).await?;
+    Ok(ApiResponse::ok_with_data(result))
+}
+
+#[permission_macros::permission(
+    group = "销售询价",
+    group_desc = "询价需求与采购反馈协作",
+    desc = "提交询价需求",
+    resource = "sales_inquiry",
+    action = "submit"
+)]
+/// 提交询价需求。
+/// # 参数
+/// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
+/// # 返回
+/// 返回已提交状态及当前责任任务。
+/// # 错误
+/// 权限、当前责任、版本、状态或业务校验失败时拒绝。
+pub async fn sales_submit(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(request): Json<SubmitInquiryCommand>,
+) -> Result<InquiryMutationView> {
+    let result = state.sales_inquiry_process().submit(&actor, &id, request).await?;
+    Ok(ApiResponse::ok_with_data(result))
+}
+
+#[permission_macros::permission(
+    group = "销售询价",
+    group_desc = "询价需求与采购反馈协作",
+    desc = "接受询价反馈",
+    resource = "sales_inquiry",
+    action = "accept"
+)]
+/// 接受询价反馈。
+/// # 参数
+/// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
+/// # 返回
+/// 返回已提交状态及当前责任任务。
+/// # 错误
+/// 权限、当前责任、版本、状态或业务校验失败时拒绝。
+pub async fn sales_accept(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(request): Json<AcceptInquiryCommand>,
+) -> Result<InquiryMutationView> {
+    let result = state.sales_inquiry_process().accept(&actor, &id, request).await?;
+    Ok(ApiResponse::ok_with_data(result))
+}
+
+#[permission_macros::permission(
+    group = "销售询价",
+    group_desc = "询价需求与采购反馈协作",
+    desc = "要求重新询价",
+    resource = "sales_inquiry",
+    action = "reinquire"
+)]
+/// 要求重新询价。
+/// # 参数
+/// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
+/// # 返回
+/// 返回已提交状态及当前责任任务。
+/// # 错误
+/// 权限、当前责任、版本、状态或业务校验失败时拒绝。
+pub async fn sales_reinquire(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(request): Json<ReinquireInquiryCommand>,
+) -> Result<InquiryMutationView> {
+    let result = state.sales_inquiry_process().reinquire(&actor, &id, request).await?;
+    Ok(ApiResponse::ok_with_data(result))
+}
+
+#[permission_macros::permission(
+    group = "销售询价",
+    group_desc = "询价需求与采购反馈协作",
+    desc = "关闭销售询价",
+    resource = "sales_inquiry",
+    action = "close"
+)]
+/// 关闭销售询价。
+/// # 参数
+/// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
+/// # 返回
+/// 返回已提交状态及当前责任任务。
+/// # 错误
+/// 权限、当前责任、版本、状态或业务校验失败时拒绝。
+pub async fn sales_close(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(request): Json<InquiryReasonCommand>,
+) -> Result<InquiryMutationView> {
+    let result = state.sales_inquiry_process().close(&actor, &id, request).await?;
+    Ok(ApiResponse::ok_with_data(result))
+}
+
+#[permission_macros::permission(
+    group = "采购询价",
+    group_desc = "询价需求与采购反馈协作",
+    desc = "接手采购询价",
+    resource = "procurement_inquiry",
+    action = "claim"
+)]
+/// 接手采购询价。
+/// # 参数
+/// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
+/// # 返回
+/// 返回已提交状态及当前责任任务。
+/// # 错误
+/// 权限、当前责任、版本、状态或业务校验失败时拒绝。
+pub async fn procurement_claim(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(request): Json<InquiryTaskCommand>,
+) -> Result<InquiryMutationView> {
+    let result = state.sales_inquiry_process().claim(&actor, &id, request).await?;
+    Ok(ApiResponse::ok_with_data(result))
+}
+
+#[permission_macros::permission(
+    group = "采购询价",
+    group_desc = "询价需求与采购反馈协作",
+    desc = "要求补充询价需求",
+    resource = "procurement_inquiry",
+    action = "supplement"
+)]
+/// 要求补充询价需求。
+/// # 参数
+/// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
+/// # 返回
+/// 返回已提交状态及当前责任任务。
+/// # 错误
+/// 权限、当前责任、版本、状态或业务校验失败时拒绝。
+pub async fn procurement_supplement(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(request): Json<InquiryTaskReasonCommand>,
+) -> Result<InquiryMutationView> {
+    let result = state.sales_inquiry_process().request_supplement(&actor, &id, request).await?;
+    Ok(ApiResponse::ok_with_data(result))
+}
+
+#[permission_macros::permission(
+    group = "采购询价",
+    group_desc = "询价需求与采购反馈协作",
+    desc = "改派询价责任",
+    resource = "procurement_inquiry",
+    action = "reassign"
+)]
+/// 改派询价责任。
+/// # 参数
+/// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
+/// # 返回
+/// 返回已提交状态及当前责任任务。
+/// # 错误
+/// 权限、当前责任、版本、状态或业务校验失败时拒绝。
+pub async fn procurement_reassign(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(request): Json<ReassignInquiryCommand>,
+) -> Result<InquiryMutationView> {
+    let result = state.sales_inquiry_process().reassign(&actor, &id, request).await?;
+    Ok(ApiResponse::ok_with_data(result))
+}
+
+#[permission_macros::permission(
+    group = "采购询价",
+    group_desc = "询价需求与采购反馈协作",
+    desc = "保存询价反馈草稿",
+    resource = "procurement_inquiry",
+    action = "save_feedback"
+)]
+/// 保存询价反馈草稿。
+/// # 参数
+/// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
+/// # 返回
+/// 返回已提交状态及当前责任任务。
+/// # 错误
+/// 权限、当前责任、版本、状态或业务校验失败时拒绝。
+pub async fn procurement_save_feedback(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(request): Json<SaveInquiryFeedbackCommand>,
+) -> Result<InquiryMutationView> {
+    let result = state.sales_inquiry_process().save_feedback(&actor, &id, request).await?;
+    Ok(ApiResponse::ok_with_data(result))
+}
+
+#[permission_macros::permission(
+    group = "采购询价",
+    group_desc = "询价需求与采购反馈协作",
+    desc = "发布询价完整反馈",
+    resource = "procurement_inquiry",
+    action = "publish"
+)]
+/// 发布询价完整反馈。
+/// # 参数
+/// `state` 为应用，`actor` 为认证账号，`request` 为带命令身份及版本的请求。
+/// # 返回
+/// 返回已提交状态及当前责任任务。
+/// # 错误
+/// 权限、当前责任、版本、状态或业务校验失败时拒绝。
+pub async fn procurement_publish(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(request): Json<PublishInquiryCommand>,
+) -> Result<InquiryMutationView> {
+    let result = state.sales_inquiry_process().publish(&actor, &id, request).await?;
+    Ok(ApiResponse::ok_with_data(result))
+}

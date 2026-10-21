@@ -62,6 +62,40 @@ function buildPurchaseOrderLinesColumns(
                                     `确认分行 · ${line.itemName}`}
                             </div>
                         ) : null}
+                        {line.inquiryQuoteSource ? (
+                            <div className="mt-1 space-y-1 text-xs text-muted-foreground">
+                                <p>
+                                    {line.inquiryQuoteSource.inquiry_no
+                                        ? `询价 ${line.inquiryQuoteSource.inquiry_no}`
+                                        : "来源询价"}{" "}
+                                    · 需求 v
+                                    {
+                                        line.inquiryQuoteSource
+                                            .requirement_version
+                                    }{" "}
+                                    · 反馈第{" "}
+                                    {line.inquiryQuoteSource.feedback_round} 轮
+                                </p>
+                                <p>
+                                    实际报价 v
+                                    {line.inquiryQuoteSource.quote_revision_no}
+                                    {line.inquiryQuoteSource
+                                        .adopted_quantity ? (
+                                        <>
+                                            {" "}
+                                            · 本次采用{" "}
+                                            <QuantityValue
+                                                value={
+                                                    line.inquiryQuoteSource
+                                                        .adopted_quantity
+                                                }
+                                                unit={line.unit}
+                                            />
+                                        </>
+                                    ) : null}
+                                </p>
+                            </div>
+                        ) : null}
                     </div>
                 )
             },

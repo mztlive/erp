@@ -90,6 +90,31 @@ export type RegisterSalesExtraCostInput = {
     salesOrderLineId?: string
     evidence: File
     idempotencyKey: string
+    inquirySource?: SalesExtraCostInquirySource
+}
+
+export type SalesExtraCostInquirySource = {
+    inquiry_id: string
+    feedback_round: number
+    fee_id: string
+    allocation_id: string
+}
+
+export type SalesInquiryFeeCandidate = SalesExtraCostInquirySource & {
+    inquiry_no: string
+    name: string
+    category: string
+    tax_rate: string
+    available_amount: string
+    valid_until: number
+    valid_conditions: string
+    unavailable_reason: string | null
+}
+
+export function fetchSalesInquiryFeeCandidates(salesOrderId: string) {
+    return apiGet<{ items: SalesInquiryFeeCandidate[] }>(
+        `/admin/sales-orders/${encodeURIComponent(salesOrderId)}/inquiry-fees`,
+    )
 }
 
 export type ReduceSalesExtraCostInput = {
@@ -175,6 +200,7 @@ export function registerSalesExtraCost(
                 supplier_id: input.supplierId || null,
                 sales_order_line_id: input.salesOrderLineId || null,
                 idempotency_key: input.idempotencyKey,
+                inquiry_source: input.inquirySource ?? null,
             },
             input.evidence,
         ),

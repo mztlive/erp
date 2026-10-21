@@ -121,6 +121,7 @@ impl PersonScopeExpression {
             "customer"
                 | "contract"
                 | "sales_order"
+                | "sales_inquiry"
                 | "purchase_order"
                 | "cost_entry"
                 | "cost_allocation"

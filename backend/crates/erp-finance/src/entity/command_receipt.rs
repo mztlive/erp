@@ -3,7 +3,7 @@
 use application_core::{CommandReceipt, StructuredCommandReceipt, StructuredReceiptMatch};
 use entity_core::BaseModel;
 use entity_macros::Entity;
-use erp_core::ids::{CustomerReceiptId, InvoiceId, SalesInvoiceRequestId, SupplierPaymentId};
+use erp_core::ids::{CostEntryId, CustomerReceiptId, InvoiceId, SalesInvoiceRequestId, SupplierPaymentId};
 use serde::{Deserialize, Serialize};
 
 use crate::entity::payable::PurchasePaymentRequestId;
@@ -44,6 +44,8 @@ pub enum FinanceCommandResource {
     SalesInvoiceRequest(SalesInvoiceRequestId),
     /// 采购付款申请。
     PurchasePaymentRequest(PurchasePaymentRequestId),
+    /// 财务附加费用登记的实际成本事实。
+    CostEntry(CostEntryId),
 }
 
 impl FinanceCommandResource {
@@ -55,6 +57,7 @@ impl FinanceCommandResource {
             Self::Invoice(id) => id.as_ref(),
             Self::SalesInvoiceRequest(id) => id.as_ref(),
             Self::PurchasePaymentRequest(id) => id.as_ref(),
+            Self::CostEntry(id) => id.as_ref(),
         }
     }
 }
@@ -256,6 +259,9 @@ fn resource_for_command(action: &str, resource_type: &str, id: String) -> Result
     let result = match (action, resource_type) {
         ("supplier_payment.commit", "supplier_payment") => {
             FinanceCommandResource::SupplierPayment(SupplierPaymentId::new(id))
+        },
+        ("sales_extra_cost.register", "cost_entry") => {
+            FinanceCommandResource::CostEntry(CostEntryId::new(id))
         },
         (
             "customer_receipt.commit" | "customer_receipt.submit" | "customer_receipt.save_draft",

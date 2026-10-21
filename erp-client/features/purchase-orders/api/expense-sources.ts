@@ -22,6 +22,29 @@ export type ExpenseSourceList = {
     scope_version: string
     empty_reason?: string | null
 }
+/** 仅费用来源范围内可读取的询价费用，不依赖已经结束的询价处理任务。 */
+export type InquiryExpenseCandidate = {
+    inquiry_id: string
+    inquiry_no: string
+    feedback_round: number
+    fee_id: string
+    allocation_id: string
+    name: string
+    category: string
+    tax_rate: string
+    available_amount: string
+    valid_until: number
+    valid_conditions: string
+    unavailable_reason: string | null
+    payee_supplier_id: string | null
+    payment_term_code: string | null
+}
+
+export function fetchInquiryExpenseCandidates(salesOrderId: string) {
+    return apiGet<{ items: InquiryExpenseCandidate[] }>(
+        `/admin/purchase-orders/expense-sources/${encodeURIComponent(salesOrderId)}/inquiry-fees`,
+    )
+}
 export function fetchExpenseSources(input: ExpenseSourceQuery) {
     const params = new URLSearchParams({ q: input.q, page: String(input.page) })
     if (input.scopeVersion) params.set("scope_version", input.scopeVersion)

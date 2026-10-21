@@ -1,4 +1,4 @@
-# erp-sales：销售订单与销售变更
+# erp-sales：销售订单、销售变更与询价
 
 管理卖给客户的订单及后续变更，保存可编辑草稿、每次提交内容和正式生效版本。
 
@@ -17,6 +17,9 @@
 
 - 销售单草稿工作副本、冻结提交、正式修订和生命周期规则。
 - 销售变更、变更提交及生效和作废规则。
+- 询价草稿、冻结需求、逐行供给反馈、销售接受、多轮重询及关闭。
+- 稳定需求/地址/费用身份和跨版本转单数量、费用归属及办理额度。
+- 询价独立命令回执，以及销售与当前任务采购的独立安全投影。
 
 ## 依赖与协作边界
 
@@ -31,6 +34,7 @@
 
 | 入口 | 用途 |
 | --- | --- |
+| [src/service/sales_inquiry/mod.rs](src/service/sales_inquiry/mod.rs) | SalesInquiryService；同 Executor 持久化和来源反查 |
 | [src/service/sales_order/mod.rs](src/service/sales_order/mod.rs) | SalesOrderService |
 | [src/service/sales_review/mod.rs](src/service/sales_review/mod.rs) | SalesReviewService |
 | [src/ports/mod.rs](src/ports/mod.rs) | 销售及变更消费方合同 |

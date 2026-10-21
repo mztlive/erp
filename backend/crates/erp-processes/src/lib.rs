@@ -65,6 +65,8 @@ pub mod order_to_cash;
 pub mod procure_to_pay;
 pub mod reverse_flow;
 pub mod sales_change;
+pub mod sales_inquiry;
+pub(crate) mod sales_inquiry_expense;
 pub mod sales_selection;
 pub mod sellable_projection_refresh;
 
@@ -84,3 +86,5 @@ pub mod connectors;
 pub mod contract_import;
 
 pub mod purchase_correspondence;
+
+pub mod sales_inquiry_import;

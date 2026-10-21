@@ -27,6 +27,7 @@ pub mod contract_terms;
 mod draft_working_copy;
 mod entity;
 pub(crate) mod formal_revision;
+pub mod inquiry_source;
 mod pricing_mode;
 mod procurement;
 pub mod selection_source;

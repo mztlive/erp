@@ -2,6 +2,7 @@
 use erp_core::money::{Amount, Quantity, Rate};
 use erp_procurement::entity::purchase_order::SourceImpactReason;
 use erp_sales::dto::sales_order::{RevisionView, SalesOrderLineView, SubmissionView, WorkingCopyView};
+use erp_sales::entity::sales_order::inquiry_source::SalesOrderInquirySource;
 use erp_sales::entity::sales_order::selection_source::SalesSelectionSource;
 use erp_sales::entity::sales_order::{BusinessType, CommercialStatus, OriginSystem};
 use erp_workflow::service::work_item::{ProcessingBlockerView, ProcessingState, WorkItemPartyView};
@@ -262,6 +263,8 @@ pub struct SalesOrderEvidenceFileView {
 /// 销售单详情视图（订单 + 稳定明细 + 草稿 + 提交历史 + 版本历史）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct SalesOrderDetailView {
+    /// 创建时冻结的询价需求与公开反馈来源，不包含采购内部身份。
+    pub inquiry_source: Option<SalesOrderInquirySource>,
     /// 创建时冻结的销售方案来源。
     pub selection_source: Option<SalesSelectionSource>,
     /// 实体主键。

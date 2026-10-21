@@ -7,6 +7,7 @@ use persistence_core::{Executor, NoTransaction};
 
 use super::SalesOrderService;
 use super::draft_working_copy::DraftStableLines;
+use super::inquiry::{reconcile as reconcile_inquiry, release as release_inquiry};
 use super::mapper::{build_working_copy_lines, header_snapshot};
 use super::working_copy_persistence::replace_working_copy_lines;
 use crate::dto::sales_order::{CreateSalesOrderRequest, SalesOrderDraftRequest};
@@ -180,6 +181,14 @@ impl SalesOrderService {
         lines: &[SalesOrderWorkingCopyLine],
         executor: &mut dyn Executor,
     ) -> Result<()> {
+        reconcile_inquiry(
+            &self.db,
+            copy.sales_order_id.as_ref(),
+            &copy.customer_id,
+            &lines.iter().map(Into::into).collect::<Vec<_>>(),
+            executor,
+        )
+        .await?;
         for line in stable {
             self.db.sales_order_lines().create(line, executor).await?;
         }
@@ -243,6 +252,14 @@ impl SalesOrderService {
         for line in stable {
             self.db.sales_order_lines().create(line, executor).await?;
         }
+        reconcile_inquiry(
+            &self.db,
+            copy.sales_order_id.as_ref(),
+            &copy.customer_id,
+            &lines.iter().map(Into::into).collect::<Vec<_>>(),
+            executor,
+        )
+        .await?;
         replace_working_copy_lines(&self.db, &copy.base.id.clone().into(), &old_lines, lines, executor)
             .await?;
         self.db.sales_order_working_copies().update(copy, executor).await?;
@@ -276,6 +293,14 @@ impl SalesOrderService {
         plan: SalesOrderWorkingCopyPersistPlan,
         executor: &mut dyn Executor,
     ) -> Result<()> {
+        reconcile_inquiry(
+            &self.db,
+            &order.base.id,
+            &order.customer_id,
+            &lines.iter().map(Into::into).collect::<Vec<_>>(),
+            executor,
+        )
+        .await?;
         match plan {
             SalesOrderWorkingCopyPersistPlan::ReplaceExisting {
                 created_stable_lines,
@@ -323,6 +348,7 @@ impl SalesOrderService {
         copy: Option<&mut SalesOrderWorkingCopy>,
         executor: &mut dyn Executor,
     ) -> Result<()> {
+        release_inquiry(&self.db, &order.base.id, executor).await?;
         self.db.sales_orders().update(order, executor).await?;
         if let Some(copy) = copy {
             self.db.sales_order_working_copies().update(copy, executor).await?;

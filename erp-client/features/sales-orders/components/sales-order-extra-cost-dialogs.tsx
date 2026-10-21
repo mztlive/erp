@@ -35,6 +35,7 @@ import {
     todayDate,
 } from "@/features/sales-orders/lib/extra-cost"
 import { getErrorMessage } from "@/lib/api/errors"
+import { InquiryFeeRegisterSection } from "./inquiry-fee-register-section"
 
 /** 财务按凭证登记附加费用。 */
 export function RegisterExtraCostDialog({
@@ -112,6 +113,11 @@ export function RegisterExtraCostDialog({
                         向供应商付款的费用请由采购追加费用采购，不要在这里重复登记。
                     </DialogDescription>
                 </DialogHeader>
+                <InquiryFeeRegisterSection
+                    salesOrderId={order.id}
+                    salesOrderNo={order.documentNumber}
+                    onRegistered={() => onOpenChange(false)}
+                />
                 <form
                     className="flex flex-col gap-4"
                     onSubmit={(event) => {

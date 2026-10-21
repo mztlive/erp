@@ -1,0 +1,456 @@
+"use client"
+
+import * as React from "react"
+import Link from "next/link"
+import { useSearchParams } from "next/navigation"
+import { useMutation } from "@tanstack/react-query"
+import {
+    BusinessFailureState,
+    DetailPageHeader,
+    PageScaffold,
+} from "@/components/business"
+import { Button, buttonVariants } from "@/components/ui/button"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useAccountProfileQuery } from "@/features/auth/queries"
+import { apiPost, apiPostForm } from "@/lib/api"
+import { hasPermission } from "@/lib/permissions"
+import { inquiryPath } from "../api"
+import { useInquiry } from "../hooks/queries"
+import { useInquiryCommand } from "../hooks/use-inquiry-command"
+import { inquiryDate } from "../lib/format"
+import { inquiryStorageKey } from "../lib/local-draft"
+import {
+    downloadInquiryCustomerWorkbook,
+    type InquiryCustomerWorkbookProduct,
+} from "../lib/customer-workbook"
+import { InquiryDemandEditor } from "../components/inquiry-demand-editor"
+import { InquiryFeedbackEditor } from "../components/inquiry-feedback-editor"
+import { InquiryProgress } from "../components/inquiry-progress"
+import { InquiryActions } from "../components/inquiry-actions"
+import { InquiryInternalQuotes } from "../components/inquiry-internal-quotes"
+import { InquiryFeesPanel } from "../components/inquiry-fees-panel"
+import {
+    InquiryHistory,
+    InquiryRequirementSummary,
+} from "../components/inquiry-history"
+import {
+    InquiryImportDialog,
+    InquiryCustomerTemplateButton,
+    type InquiryImportPreview,
+} from "../components/inquiry-import-dialog"
+import {
+    INQUIRY_STATUS_LABEL,
+    type ProcurementInquiry,
+    type SalesInquiry,
+} from "../types"
+
+export function SalesInquiryDetailPage({
+    inquiryId = "",
+    procurement = false,
+    workItemId,
+    embedded = false,
+}: {
+    inquiryId?: string
+    procurement?: boolean
+    workItemId?: string
+    embedded?: boolean
+}) {
+    const search = useSearchParams()
+    const taskId =
+        workItemId ??
+        search.get("task_id") ??
+        search.get("workItemId") ??
+        undefined
+    const copyFromId = !inquiryId ? (search.get("copyFrom") ?? "") : ""
+    const profile = useAccountProfileQuery()
+    const query = useInquiry(inquiryId || copyFromId, procurement, taskId)
+    if (!profile.data)
+        return (
+            <p className="p-6" role="status">
+                正在核对账号权限…
+            </p>
+        )
+    if (!inquiryId && copyFromId && !query.data)
+        return (
+            <PageScaffold>
+                {query.isError ? (
+                    <BusinessFailureState
+                        id="sales-inquiry-copy-retry"
+                        title="原询价读取失败"
+                        error={query.error}
+                        onRetry={() => void query.refetch()}
+                    />
+                ) : (
+                    <p role="status">正在读取原询价…</p>
+                )}
+            </PageScaffold>
+        )
+    if (
+        !inquiryId &&
+        (!hasPermission(profile.data.permissions, "sales_inquiry:create") ||
+            !hasPermission(profile.data.permissions, "sellable_sku:list"))
+    )
+        return (
+            <PageScaffold>
+                <p>当前账号没有新建询价或选择商品权限。</p>
+            </PageScaffold>
+        )
+    if (!inquiryId)
+        return (
+            <PageScaffold className="mx-auto max-w-7xl gap-6">
+                <DetailPageHeader
+                    title={copyFromId ? "复制为新询价" : "新建销售询价"}
+                    back={{
+                        id: "sales-inquiry-new-back",
+                        href: "/sales/inquiries",
+                        label: "返回询价列表",
+                    }}
+                />
+                {copyFromId && (
+                    <Alert variant="info">
+                        <AlertDescription>
+                            从原询价复制需求；请核对交付日期并填写新的询价截止日期。原报价、接受结果和转单占用不会带入。
+                        </AlertDescription>
+                    </Alert>
+                )}
+                <InquiryDemandEditor
+                    copyFrom={
+                        copyFromId &&
+                        query.data &&
+                        "sales_owner_user_id" in query.data
+                            ? query.data
+                            : undefined
+                    }
+                    userId={profile.data.userid}
+                    permissions={profile.data.permissions}
+                    onSaved={() => undefined}
+                />
+            </PageScaffold>
+        )
+    if (query.isError)
+        return (
+            <div className="p-6">
+                <BusinessFailureState
+                    id="sales-inquiry-detail-retry"
+                    title="询价资料加载失败"
+                    error={query.error}
+                    onRetry={() => void query.refetch()}
+                />
+            </div>
+        )
+    if (!query.data)
+        return (
+            <p className="p-6" role="status">
+                正在读取询价资料…
+            </p>
+        )
+    return (
+        <InquiryDetailContent
+            key={`${procurement}:${inquiryId}:${taskId ?? "sales"}`}
+            inquiry={query.data}
+            procurement={procurement}
+            taskId={taskId}
+            embedded={embedded}
+            userId={profile.data.userid}
+            permissions={profile.data.permissions}
+            onSaved={() => void query.refetch()}
+        />
+    )
+}
+
+function InquiryDetailContent({
+    inquiry,
+    procurement,
+    taskId,
+    embedded,
+    userId,
+    permissions,
+    onSaved,
+}: {
+    inquiry: SalesInquiry | ProcurementInquiry
+    procurement: boolean
+    taskId?: string
+    embedded: boolean
+    userId: string
+    permissions: readonly string[]
+    onSaved: () => void
+}) {
+    const [importOpen, setImportOpen] = React.useState(false)
+    const [dirty, setDirty] = React.useState(false)
+    const [feedbackDirty, setFeedbackDirty] = React.useState(false)
+    const [editorEpoch, setEditorEpoch] = React.useState(0)
+    const command = useInquiryCommand(userId, inquiry.id)
+    const task =
+        "work_items" in inquiry
+            ? (inquiry.work_items.find((item) => item.id === taskId) ??
+              inquiry.work_items[0])
+            : undefined
+    const canEdit =
+        !procurement &&
+        ["draft", "awaiting_sales_supplement"].includes(inquiry.status) &&
+        hasPermission(permissions, "sales_inquiry:update") &&
+        hasPermission(permissions, "sellable_sku:list")
+    const canImport =
+        canEdit && hasPermission(permissions, "sales_inquiry:import")
+    const canProcess =
+        procurement &&
+        task &&
+        inquiry.status === "procurement_processing" &&
+        hasPermission(permissions, "procurement_inquiry:save_feedback")
+    const accepted =
+        "acceptances" in inquiry ? inquiry.acceptances.at(-1) : undefined
+    const canOpenSales =
+        !procurement &&
+        "sales_progress" in inquiry &&
+        inquiry.sales_progress.can_create_sales &&
+        accepted != null &&
+        hasPermission(permissions, "sales_inquiry:convert_sales") &&
+        hasPermission(permissions, "sales_order:create")
+    const safeTemplate = useMutation({
+        mutationFn: () =>
+            apiPost<InquiryCustomerWorkbookProduct[]>(
+                `${inquiryPath()}/template-products`,
+                {
+                    sku_ids: [
+                        ...new Set(
+                            inquiry.draft.lines.map((line) => line.sku_id),
+                        ),
+                    ],
+                },
+            ),
+    })
+    const preview = useMutation({
+        mutationFn: (file: File) => {
+            const data = new FormData()
+            data.append("file", file)
+            data.append("expected_version", String(inquiry.version))
+            return apiPostForm<InquiryImportPreview>(
+                `${inquiryPath(false, inquiry.id)}/import-preview`,
+                data,
+            )
+        },
+        meta: { suppressErrorToast: true },
+    })
+    const body = (
+        <div className="space-y-8">
+            <DetailPageHeader
+                title={inquiry.customer_name}
+                documentNumber={inquiry.inquiry_no}
+                numberLabel="询价单号"
+                version={`需求第 ${inquiry.requirement_version} 版 · 反馈第 ${inquiry.feedback_round} 轮`}
+                primaryStatus={{
+                    label: INQUIRY_STATUS_LABEL[inquiry.status],
+                    tone:
+                        inquiry.status === "confirmed"
+                            ? "success"
+                            : inquiry.status === "closed"
+                              ? "neutral"
+                              : "info",
+                }}
+                back={
+                    embedded
+                        ? undefined
+                        : {
+                              id: "sales-inquiry-detail-back",
+                              href: procurement
+                                  ? "/procurement/inquiries"
+                                  : "/sales/inquiries",
+                              label: "返回询价列表",
+                          }
+                }
+                meta={<span>询价截止：{inquiryDate(inquiry.deadline_at)}</span>}
+            />
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <InquiryActions
+                    inquiry={inquiry}
+                    procurement={procurement}
+                    task={task}
+                    userId={userId}
+                    permissions={permissions}
+                    onSaved={onSaved}
+                    disabled={dirty || feedbackDirty}
+                />
+                <div className="flex flex-wrap gap-2">
+                    {!procurement &&
+                        inquiry.status === "closed" &&
+                        hasPermission(permissions, "sales_inquiry:create") &&
+                        hasPermission(permissions, "sellable_sku:list") && (
+                            <Link
+                                id="sales-inquiry-copy-new"
+                                href={`/sales/inquiries/new?copyFrom=${encodeURIComponent(inquiry.id)}`}
+                                className={buttonVariants({ size: "sm" })}
+                            >
+                                复制为新询价
+                            </Link>
+                        )}
+                    {!procurement &&
+                        inquiry.draft.lines.length > 0 &&
+                        hasPermission(permissions, "sales_inquiry:create") &&
+                        hasPermission(permissions, "sellable_sku:list") && (
+                            <InquiryCustomerTemplateButton
+                                id="sales-inquiry-download-template"
+                                products={inquiry.draft.lines.map((line) => ({
+                                    sku_code: line.sku_code,
+                                    product_name: line.product_name,
+                                    specification: line.specification,
+                                    unit: line.unit_code,
+                                }))}
+                                onLoadProducts={() =>
+                                    safeTemplate.mutateAsync()
+                                }
+                                inquiry_no={inquiry.inquiry_no}
+                                disabled={inquiry.status === "closed"}
+                            />
+                        )}
+                    {canImport && (
+                        <Button
+                            id="sales-inquiry-detail-import"
+                            variant="outline"
+                            type="button"
+                            onClick={() => setImportOpen(true)}
+                        >
+                            导入客户选品文件
+                        </Button>
+                    )}
+                    {canOpenSales && (
+                        <Link
+                            id="sales-inquiry-create-sale"
+                            href={`/sales/orders?mode=create&inquiryId=${encodeURIComponent(inquiry.id)}&round=${accepted.feedback_round}`}
+                            className={buttonVariants({ size: "sm" })}
+                        >
+                            按已接受结果开单
+                        </Link>
+                    )}
+                </div>
+            </div>
+            {canOpenSales && inquiry.status !== "confirmed" && (
+                <Alert variant="info">
+                    <AlertDescription>
+                        {inquiry.feedback_round > accepted.feedback_round
+                            ? `第 ${inquiry.feedback_round} 轮新反馈尚未接受。`
+                            : "当前正在重新询价。"}
+                        开单沿用第 {accepted.feedback_round}{" "}
+                        轮已接受结果，仅列出仍有效、未受本次重询影响且有剩余数量的商品与地址。
+                    </AlertDescription>
+                </Alert>
+            )}
+            {!procurement &&
+                "copied_from_inquiry_id" in inquiry &&
+                inquiry.copied_from_inquiry_id &&
+                hasPermission(permissions, "sales_inquiry:detail") && (
+                    <Link
+                        id="sales-inquiry-copy-source"
+                        href={`/sales/inquiries/${encodeURIComponent(inquiry.copied_from_inquiry_id)}`}
+                        className="text-sm underline underline-offset-4"
+                    >
+                        查看原询价
+                    </Link>
+                )}
+            {!procurement && "sales_progress" in inquiry && (
+                <InquiryProgress progress={inquiry.sales_progress} />
+            )}
+            {feedbackDirty && (
+                <Alert variant="info">
+                    <AlertDescription>
+                        采购反馈有未保存的修改，请先保存处理进度，再发布或退回补充。
+                    </AlertDescription>
+                </Alert>
+            )}
+            {dirty && (
+                <Alert variant="info">
+                    <AlertDescription>
+                        当前需求有未保存的修改，请先保存后提交采购。
+                    </AlertDescription>
+                </Alert>
+            )}
+            {inquiry.shared_fee_owner_user_id && (
+                <p className="text-sm text-muted-foreground">
+                    整单费用责任：
+                    {inquiry.shared_fee_owner_name ||
+                        (inquiry.shared_fee_owner_user_id === userId
+                            ? "由我维护"
+                            : "已指定责任采购")}
+                </p>
+            )}
+            {canEdit && "sales_owner_user_id" in inquiry ? (
+                <InquiryDemandEditor
+                    key={`editor-${editorEpoch}`}
+                    inquiry={inquiry}
+                    userId={userId}
+                    permissions={permissions}
+                    onSaved={onSaved}
+                    onDirtyChange={setDirty}
+                />
+            ) : (
+                <InquiryRequirementSummary
+                    requirement={inquiry.draft}
+                    procurement={procurement}
+                />
+            )}
+            {canProcess && "work_items" in inquiry && (
+                <>
+                    <InquiryFeedbackEditor
+                        onDirtyChange={setFeedbackDirty}
+                        inquiry={inquiry}
+                        task={task}
+                        userId={userId}
+                        onSaved={onSaved}
+                    />
+                    <InquiryInternalQuotes
+                        inquiry={inquiry}
+                        task={task}
+                        userId={userId}
+                        permissions={permissions}
+                        onSaved={onSaved}
+                    />
+                </>
+            )}
+            <InquiryHistory inquiry={inquiry} />
+            <InquiryFeesPanel
+                inquiry={inquiry}
+                userId={userId}
+                permissions={permissions}
+                procurement={procurement}
+                onChanged={onSaved}
+            />
+            <InquiryImportDialog
+                key={inquiry.id}
+                open={importOpen}
+                onOpenChange={setImportOpen}
+                onPreview={(file) => preview.mutateAsync(file)}
+                busy={preview.isPending || command.isPending}
+                disabled={command.unresolved}
+                onDownloadTemplate={async () => {
+                    const products = await safeTemplate.mutateAsync()
+                    await downloadInquiryCustomerWorkbook(
+                        products,
+                        inquiry.inquiry_no,
+                    )
+                }}
+                templateBusy={safeTemplate.isPending}
+                onConfirm={async (result, confirm_merge_duplicates) => {
+                    await command.run(
+                        `${inquiryPath(false, inquiry.id)}/import-confirm`,
+                        {
+                            expected_version: result.expected_version,
+                            preview_id: result.preview_id,
+                            input_fingerprint: result.input_fingerprint,
+                            confirm_merge_duplicates,
+                        },
+                    )
+                    localStorage.removeItem(
+                        inquiryStorageKey(userId, `${inquiry.id}:demand`),
+                    )
+                    setDirty(false)
+                    setEditorEpoch((value) => value + 1)
+                    onSaved()
+                }}
+            />
+        </div>
+    )
+    return embedded ? (
+        <div className="min-w-0 p-6">{body}</div>
+    ) : (
+        <PageScaffold className="mx-auto max-w-7xl gap-6">{body}</PageScaffold>
+    )
+}

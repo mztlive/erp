@@ -451,6 +451,17 @@ pub(super) fn authorized_item_fields(
     }
     let policy = object_policy(item.work_item_type, &item.business_object_type)?;
     let fact = facts.get(&(policy.object_kind, item.business_object_id.clone()))?;
+    if item.work_item_type == WorkItemType::SalesInquiryProcessing {
+        let scope = fact.authority.responsibility_scope_ids.as_ref()?;
+        if !item.owns_inquiry_task(
+            &access.actor_id,
+            &item.business_object_id,
+            inquiry_version(&item.subject_version)?,
+            scope,
+        ) {
+            return None;
+        }
+    }
     if !has_permission(access, policy.read_permission)
         || !has_item_participation(
             item.work_item_type,
@@ -467,6 +478,10 @@ pub(super) fn authorized_item_fields(
     let mut fields = dto::WorkItemFields::from(item);
     apply_object_display(&mut fields, fact);
     Some(fields)
+}
+
+fn inquiry_version(value: &str) -> Option<u32> {
+    value.strip_prefix("requirement-")?.parse().ok()
 }
 
 /// 返回执行任务的完整权限；普通任务返回空集，未注册执行对象失败关闭。
@@ -669,6 +684,7 @@ pub(super) fn allowed_actions(
         && covers_owner(access, item.owner_user_id.as_deref())
         && scope == WorkItemScope::Managed
         && !is_approval_responsibility
+        && item.work_item_type != WorkItemType::SalesInquiryProcessing
     {
         if has_permission(access, REASSIGN_PERMISSION) {
             actions.push(WorkItemAllowedAction::Reassign);

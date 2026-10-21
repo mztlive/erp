@@ -9,6 +9,7 @@ import type { SalesLineProcurementResponsibility } from "@/features/sales-orders
 import { buildSalesOrderCreateLineItemColumns } from "@/features/sales-orders/components/sales-order-create-line-item-columns"
 
 export type SalesOrderCreateLineItemTableProps = {
+    inquiryLocked?: boolean
     form: SalesOrderCreateFormApi
     procurementOwners?: ReadonlyMap<string, SalesLineProcurementResponsibility>
     onPickSku?: (rowIndex: number) => void
@@ -18,6 +19,7 @@ export type SalesOrderCreateLineItemTableProps = {
 
 export function SalesOrderCreateLineItemTable({
     form,
+    inquiryLocked = false,
     procurementOwners,
     onPickSku,
     procurementFetching = false,
@@ -51,6 +53,7 @@ export function SalesOrderCreateLineItemTable({
                             fetching: procurementFetching,
                             error: procurementError,
                         },
+                        inquiryLocked,
                     )
                     return (
                         <>

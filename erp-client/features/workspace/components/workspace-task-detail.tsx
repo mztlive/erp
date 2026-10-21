@@ -1,6 +1,7 @@
 "use client"
 
 import { PurchasePaymentArrangement } from "@/features/purchase-orders/components/purchase-payment-arrangement"
+import { SalesInquiryDetailPage } from "@/features/sales-inquiries/pages/sales-inquiry-detail-page"
 import { useEffect, useState, type ReactNode } from "react"
 import { useMutation } from "@tanstack/react-query"
 import { downloadFileAsset } from "@/features/file-assets/api"
@@ -130,6 +131,20 @@ function WorkspaceTaskSurface({
     grantedPermissions = [],
     onTaskCompleted,
 }: WorkspaceTaskDetailProps) {
+    if (
+        item.workItemType === "SALES_INQUIRY_PROCESSING" &&
+        item.handlerKey === "sales_inquiry_processing" &&
+        item.businessObjectType === "sales_inquiry"
+    ) {
+        return (
+            <SalesInquiryDetailPage
+                inquiryId={item.businessObjectId}
+                procurement
+                workItemId={item.workItemId}
+                embedded
+            />
+        )
+    }
     if (
         item.businessObjectType === "purchase_payment_request" &&
         ((item.workItemType === "SUPPLIER_PAYMENT_EXECUTION" &&

@@ -1,4 +1,5 @@
 "use client"
+import { SalesOrderInquirySource } from "./sales-order-inquiry-source"
 
 import { Badge } from "@/components/ui/badge"
 import * as React from "react"
@@ -196,6 +197,9 @@ export function OverviewPanel({
                     />
                 </div>
             </section>
+            {order.inquirySource && (
+                <SalesOrderInquirySource source={order.inquirySource} />
+            )}
             {order.selectionSource && (
                 <SalesOrderSelectionSource source={order.selectionSource} />
             )}

@@ -434,7 +434,12 @@ impl PurchaseOrderRevisionLine {
     pub fn new(id: PurchaseOrderRevisionLineId, mut data: PurchaseOrderRevisionLineData) -> Result<Self> {
         ensure_line_no(data.line_no)?;
         let (product_name, specification, base_unit_code) = normalize_and_validate_line(&data)?;
-        ensure_offering_source(data.line_type, data.supplier_offering_source.as_ref())?;
+        ensure_offering_source(
+            data.line_type,
+            data.supplier_offering_source.as_ref(),
+            data.unit_cost_gross,
+            data.input_tax_rate,
+        )?;
         PurchaseDeliveryAllocation::validate(&mut data.delivery_allocations, data.line_type, data.quantity)?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),

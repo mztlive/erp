@@ -20,6 +20,7 @@ use erp_processes::contract_import::openai::OpenAiContractExtractor;
 use erp_processes::contract_import::{ContractImportProcess, RecognitionProviders};
 use erp_processes::integration_resolution::IntegrationResolutionProcess;
 use erp_processes::integration_resolution::evidence_adapter::MongoIntegrationEvidenceAuthority;
+use erp_processes::sales_inquiry::SalesInquiryProcess;
 use erp_read_models::integration_center::IntegrationCenterReadService;
 use erp_supply::ports::connector::common::ConnectorResult;
 use erp_supply::ports::supplier_api_gateway::SupplierApiGateway;
@@ -264,6 +265,17 @@ impl AppState {
     /// 返回共享 RBAC 服务。
     pub fn rbac(&self) -> SharedRbacService {
         Arc::clone(&self.rbac)
+    }
+
+    /// 装配询价命令及当前授权依赖。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 返回共享业务库与当前权限服务的询价流程。
+    /// # 错误
+    /// 不执行 I/O，不返回错误。
+    pub fn sales_inquiry_process(&self) -> SalesInquiryProcess {
+        SalesInquiryProcess::new(self.db(), self.rbac())
     }
 
     /// Support-domain file asset service with audit and document-registry adapters.

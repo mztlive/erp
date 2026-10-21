@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { InquirySalesOrderCreate } from "../components/inquiry-sales-order-create"
 import { useSelectionOrderBasis } from "@/features/sales-orders/hooks/use-selection-order-basis"
 
 import {
@@ -19,6 +20,8 @@ import type { SalesOrderNature } from "@/features/sales-orders/types"
  * 挂载时生效一次）。
  */
 export function SalesOrderCreatePage({
+    initialInquiryId = "",
+    initialInquiryRound = 0,
     initialSelectionProposalId = "",
     initialCustomerId = "",
     initialContractId = "",
@@ -26,6 +29,8 @@ export function SalesOrderCreatePage({
     initialNature = "physical_service",
     initialSalesOrderId = "",
 }: {
+    initialInquiryId?: string
+    initialInquiryRound?: number
     initialSelectionProposalId?: string
     initialCustomerId?: string
     initialContractId?: string
@@ -116,6 +121,15 @@ export function SalesOrderCreatePage({
                 initialContractRevisionId={initialContractRevisionId}
                 initialNature={initialNature}
                 initialDraft={resumeQuery.data}
+            />
+        )
+    }
+
+    if (initialInquiryId && initialInquiryRound > 0) {
+        return (
+            <InquirySalesOrderCreate
+                inquiryId={initialInquiryId}
+                round={initialInquiryRound}
             />
         )
     }

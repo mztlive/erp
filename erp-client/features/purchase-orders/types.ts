@@ -112,11 +112,24 @@ export type BasisLineDelivery = Readonly<{
     supplierOfferingId?: string
 }>
 
+export type PurchaseInquiryQuoteSource = Readonly<{
+    inquiry_id: string
+    inquiry_no?: string | null
+    requirement_version: number
+    feedback_round: number
+    inquiry_line_id: string
+    quote_id: string
+    quote_revision_id: string
+    quote_revision_no: number
+    adopted_quantity: string | null
+}>
+
 type PurchaseOrderLineView = Readonly<{
     deliveryAllocations?: PurchaseDeliveryAllocation[]
     lineId: string
     lineType: "ITEM_SERVICE" | "LOGISTICS_FEE"
     procurementConfirmationLineId?: string
+    inquiryQuoteSource?: PurchaseInquiryQuoteSource
     itemName: string
     itemSku?: string
     quantity?: string
@@ -420,9 +433,24 @@ export type PurchaseOrderCenterView = Readonly<{
 
 export type SupplySourceType = "PURCHASE" | "EXISTING_STOCK"
 
+export type InquirySourcingSource = Readonly<{
+    inquiry_id: string
+    requirement_version: number
+    feedback_round: number
+    inquiry_line_id: string
+    quote_revision_id: string
+    quote_revision_no: number
+    minimum_order_quantity: string
+    valid_to: string
+    expected_delivery_date: string
+}>
+
 export type PurchaseCreationBasis = Readonly<{
     basisId: string
     sourceType: SupplySourceType
+    inquirySource?: InquirySourcingSource
+    inquiryReselectionRequired?: boolean
+    recommendationReason?: string
     workItemId: string
     salesOrderId: string
     salesOrderNo: string
@@ -524,6 +552,7 @@ export type CreatePurchaseOrdersFromSourcingInput = {
         quantity: string
         expectedDeliveryDate: string
         deliveryAllocations?: PurchaseDeliveryAllocation[]
+        reselectionReason?: string
     }>
     idempotencyKey: string
 }

@@ -8,6 +8,8 @@
 //! 契约来源：erp-client `features/sales-orders`（W05）；本域接口按后端实体字段
 //! 形状提供，与前端 mock 视图的差异见批次报告「契约变更」。
 
+mod inquiry;
+pub mod inquiry_basis;
 mod no_contract;
 mod revision_lines;
 pub mod selection_basis;
@@ -22,6 +24,7 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::Result;
+use crate::entity::sales_order::inquiry_source::InquirySalesSourceRequest;
 use crate::entity::sales_order::{
     BusinessType, CardForm, CommercialStatus, GoodsLineFields, LineStatus, LineType, OriginSystem,
     SalesDeliveryAllocation, SalesPricingMode, VoucherLineDraft, WelfareScenario,
@@ -201,6 +204,9 @@ pub struct BindSalesOrderContractRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct CreateSalesOrderRequest {
+    /// 已接受询价来源；服务端按冻结需求生成来源快照并在建单事务内占用数量。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inquiry_source: Option<InquirySalesSourceRequest>,
     /// 可选按份采购方案来源；服务端重验访问、模式及客户，禁止客户端指定来源编号。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selection_proposal_id: Option<SalesSelectionProposalId>,

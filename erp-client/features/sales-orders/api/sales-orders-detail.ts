@@ -250,6 +250,7 @@ export async function fetchSalesOrderDetail(
     return {
         ...order,
         loadWarnings: loadWarnings.sort(),
+        inquirySource: detail.inquiry_source,
         selectionSource: detail.selection_source,
         customerId: detail.customer_id,
         settlementPartyId: detail.settlement_party_id,

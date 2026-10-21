@@ -7,3 +7,4 @@ pub mod payment_merge;
 pub mod receivable;
 
 mod cost_scope;
+pub mod inquiry_fee;

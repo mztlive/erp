@@ -44,6 +44,7 @@ mod expense_create;
 mod formalization_posting;
 mod formalization_root;
 mod freight_waiver;
+mod inquiry_supply;
 mod payment_subject;
 mod procurement_task_sync;
 pub mod responsibility;

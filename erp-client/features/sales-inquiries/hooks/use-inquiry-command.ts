@@ -1,0 +1,155 @@
+"use client"
+
+import * as React from "react"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { apiPost, apiPut } from "@/lib/api"
+import { classifyFormalCommandError } from "@/lib/formal-command"
+import { queryKeyRoots } from "@/lib/query-key-roots"
+import {
+    inquiryStorageKey,
+    readInquiryLocalValue,
+    writeInquiryLocalValue,
+} from "../lib/local-draft"
+
+type SavedInquiryCommand = {
+    path: string
+    method: "POST" | "PUT"
+    body: Record<string, unknown>
+    recovery?: boolean
+    uncertain?: boolean
+}
+type InquiryCommandResolution = {
+    path: string
+    result: unknown
+    replayed: boolean
+    body: Record<string, unknown>
+}
+
+/** 在发送前保存原命令；响应未知时跨刷新保留，恢复时只重发原载荷。 */
+export function useInquiryCommand(userId: string, scope: string) {
+    const client = useQueryClient()
+    const key = inquiryStorageKey(userId, `${scope}:command`)
+    const [pending, setPending] = React.useState<SavedInquiryCommand | null>(
+        null,
+    )
+    const [ready, setReady] = React.useState(false)
+    const [resolution, setResolution] =
+        React.useState<InquiryCommandResolution | null>(null)
+    React.useEffect(() => {
+        const restore = () =>
+            setPending(readInquiryLocalValue<SavedInquiryCommand>(key) ?? null)
+        restore()
+        setReady(true)
+        window.addEventListener("inquiry-command-changed", restore)
+        window.addEventListener("storage", restore)
+        const resolved = (event: Event) => {
+            if (event instanceof CustomEvent && event.detail?.key === key)
+                setResolution(event.detail.resolution)
+        }
+        window.addEventListener("inquiry-command-resolved", resolved)
+        return () => {
+            window.removeEventListener("inquiry-command-changed", restore)
+            window.removeEventListener("storage", restore)
+            window.removeEventListener("inquiry-command-resolved", resolved)
+        }
+    }, [key])
+    const mutation = useMutation({
+        mutationFn: async (command: SavedInquiryCommand) => {
+            writeInquiryLocalValue(key, command)
+            setPending(command)
+            window.dispatchEvent(new Event("inquiry-command-changed"))
+            return command.method === "PUT"
+                ? apiPut<unknown>(command.path, command.body)
+                : apiPost<unknown>(command.path, command.body)
+        },
+        meta: { suppressErrorToast: true },
+        onSuccess: async (result, command) => {
+            try {
+                localStorage.removeItem(key)
+            } catch {
+                /* 业务成功；清理失败时仍可按原命令安全回放。 */
+            }
+            setPending(null)
+            window.dispatchEvent(new Event("inquiry-command-changed"))
+            const resolved = {
+                path: command.path,
+                result,
+                replayed: command.recovery === true,
+                body: command.body,
+            }
+            setResolution(resolved)
+            window.dispatchEvent(
+                new CustomEvent("inquiry-command-resolved", {
+                    detail: { key, resolution: resolved },
+                }),
+            )
+            await Promise.all([
+                client.invalidateQueries({ queryKey: ["sales-inquiries"] }),
+                client.invalidateQueries({
+                    queryKey: queryKeyRoots.workspaceHome,
+                }),
+                client.invalidateQueries({
+                    queryKey: queryKeyRoots.salesOrders,
+                }),
+                client.invalidateQueries({
+                    queryKey: queryKeyRoots.purchaseOrders,
+                }),
+            ])
+        },
+        onError: async (error, command) => {
+            if (
+                classifyFormalCommandError(error) === "failed" &&
+                !command.recovery &&
+                !command.uncertain
+            ) {
+                try {
+                    localStorage.removeItem(key)
+                } catch {
+                    /* 保留原记录比更换命令安全。 */
+                }
+                setPending(null)
+                window.dispatchEvent(new Event("inquiry-command-changed"))
+                await client.invalidateQueries({
+                    queryKey: ["sales-inquiries"],
+                })
+            } else {
+                const uncertain = { ...command, uncertain: true }
+                try {
+                    writeInquiryLocalValue(key, uncertain)
+                } catch {
+                    /* 发送前已持久化原命令。 */
+                }
+                setPending(uncertain)
+                window.dispatchEvent(new Event("inquiry-command-changed"))
+            }
+        },
+    })
+    return {
+        ...mutation,
+        ready,
+        resolution,
+        unresolved: pending !== null && !mutation.isPending,
+        async run<T>(
+            path: string,
+            body: Record<string, unknown>,
+            method: "POST" | "PUT" = "POST",
+            keyField: "command_key" | "idempotency_key" = "command_key",
+        ): Promise<T> {
+            if (!ready) throw new Error("正在恢复上次操作，请稍候。")
+            if (pending || readInquiryLocalValue(key))
+                throw new Error("请先核对上次提交结果，再继续操作。")
+            return (await mutation.mutateAsync({
+                path,
+                method,
+                body: { ...body, [keyField]: `inquiry:${crypto.randomUUID()}` },
+            })) as T
+        },
+        async recover<T>(): Promise<T | undefined> {
+            if (!pending) return undefined
+            return (await mutation.mutateAsync({
+                ...pending,
+                recovery: true,
+            })) as T
+        },
+    }
+}

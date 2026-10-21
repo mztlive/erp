@@ -90,6 +90,7 @@ pub async fn load_creation_basis_facts(
         super::supplier_names::current_legal_names_by_account_ids(db, &supplier_ids, executor).await?;
     let deliveries = delivery_facts(db, &offerings, &supplier_ids, executor).await?;
     Ok(CreationBasisFacts {
+        source_inquiry_id: None,
         deliveries,
         revisions: revisions
             .into_iter()

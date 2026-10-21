@@ -2,7 +2,7 @@ use application_core::{normalized_text, page_or_default, page_size_or_default};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use super::{SortDir, normalize_sort};
+use super::{InquiryQuoteSourceView, SortDir, normalize_sort};
 use crate::Result;
 use crate::entity::purchase_order::{
     PurchaseDeliveryAllocation, PurchaseExpenseDetail, PurchaseExpenseOccurrence, PurchaseLineType,
@@ -115,6 +115,9 @@ impl PurchaseOrderListParams {
 /// 采购单明细行视图（草稿/提交/版本三类内容共用形状）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct PurchaseOrderLineView {
+    /// 仅采购接口返回的实际专项报价采用链。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inquiry_quote_source: Option<InquiryQuoteSourceView>,
     /// 本采购行冻结的交付安排。
     pub delivery_allocations: Vec<PurchaseDeliveryAllocation>,
     /// 行实体主键。

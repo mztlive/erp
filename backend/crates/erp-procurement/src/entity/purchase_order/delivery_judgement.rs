@@ -47,6 +47,9 @@ pub struct PurchaseDeliveryJudgement {
 /// 采购单冻结的价格依据、逐行配送判定与"供应商不收运费"标记。
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PurchaseSourcingDelivery {
+    /// 采购显式确认改选的逐销售行原因，独立于原询价历史。
+    #[serde(default)]
+    pub reselection_reasons: Vec<PurchaseSourcingReason>,
     /// 价格依据；费用采购单为空。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub supply_price_basis: Option<SupplyPriceBasis>,
@@ -56,6 +59,13 @@ pub struct PurchaseSourcingDelivery {
     /// "供应商不收运费"标记。
     #[serde(default)]
     pub freight_waivers: Vec<PurchaseFreightWaiver>,
+}
+
+/// 正式采购创建时冻结的改选解释。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PurchaseSourcingReason {
+    pub sales_order_line_id: SalesOrderLineId,
+    pub reason: String,
 }
 
 /// 采购标记"供应商不收运费"的记录。

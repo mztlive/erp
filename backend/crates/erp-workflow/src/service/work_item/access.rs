@@ -606,6 +606,13 @@ pub fn authorized_item_fields(
 ) -> Option<dto::WorkItemFields> {
     let policy = object_policy(item.work_item_type, &item.business_object_type)?;
     let fact = facts.get(&(policy.object_kind, item.business_object_id.clone()))?;
+    if item.work_item_type == WorkItemType::SalesInquiryProcessing {
+        let ids = fact.responsibility_scope_ids.as_ref()?;
+        let version = item.subject_version.strip_prefix("requirement-")?.parse().ok()?;
+        if !item.owns_inquiry_task(&access.actor_id, &item.business_object_id, version, ids) {
+            return None;
+        }
+    }
     if !has_permission(access, policy.read_permission)
         || !(supplier_fulfillment_owner(
             item.work_item_type,
@@ -651,6 +658,14 @@ pub fn has_assignment_candidate_access(item: &WorkItem, access: &ActorAccess, fa
     let Some(fact) = facts.get(&(policy.object_kind, item.business_object_id.clone())) else {
         return false;
     };
+    if item.work_item_type == WorkItemType::SalesInquiryProcessing
+        && !fact.responsibility_scope_ids.as_ref().is_some_and(|ids| {
+            !item.responsibility_scope_ids().is_empty()
+                && item.responsibility_scope_ids().iter().all(|id| ids.contains(id))
+        })
+    {
+        return false;
+    }
     has_permission(access, policy.read_permission)
         && has_execution_permissions(item.work_item_type, &item.business_object_type, access)
         && (item.work_item_type.uses_explicit_owner_authorization()
@@ -868,6 +883,7 @@ pub fn allowed_actions(
         && covers_owner(access, item.owner_user_id.as_deref())
         && scope == WorkItemScope::Managed
         && !is_approval_responsibility
+        && item.work_item_type != WorkItemType::SalesInquiryProcessing
     {
         if has_permission(access, REASSIGN_PERMISSION) {
             actions.push(WorkItemAllowedAction::Reassign);
@@ -890,6 +906,9 @@ pub fn allowed_actions(
 /// # 错误
 /// 实体拒绝时返回 `ApprovalGenericWorkItemMutationForbidden`。
 pub fn ensure_generic_work_item_mutation(item: &WorkItem) -> Result<()> {
+    if item.work_item_type == WorkItemType::SalesInquiryProcessing {
+        return Err(Error::Forbidden("询价责任变更必须使用询价专用命令".into()));
+    }
     item.ensure_generic_responsibility_mutation()
         .map_err(|_| Error::from_approval_code(ErrorCode::ApprovalGenericWorkItemMutationForbidden))
 }

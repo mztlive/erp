@@ -8,6 +8,7 @@ mod entity;
 mod finance_responsibility;
 mod finance_task;
 mod fulfillment_responsibility;
+mod inquiry;
 mod payment_execution_merge;
 mod queue_context;
 
@@ -35,6 +36,7 @@ pub use finance_task::{
     sales_invoice_impact_summary, supplier_payment_impact_summary,
 };
 pub use fulfillment_responsibility::FulfillmentResponsibilityKey;
+pub use inquiry::{InquiryTaskAssignment, InquiryTaskAssignments, inquiry_subject_version};
 pub use payment_execution_merge::{
     MAX_PAYMENT_EXECUTION_MERGE, PaymentExecutionMergeMember, PaymentExecutionMergeSet,
 };

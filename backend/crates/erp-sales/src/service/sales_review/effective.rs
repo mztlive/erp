@@ -10,6 +10,7 @@ use super::formalization::{build_change_revision, revision_gross};
 use crate::entity::sales_review::{SalesChangeOrder, SalesChangeSubmission, SalesChangeSubmissionLine};
 use crate::repository::prelude::*;
 use crate::repository::{SalesOrderExt, SalesReviewExt};
+use crate::service::sales_order::inquiry::ensure_formal_change;
 use crate::{Error, Result};
 
 impl SalesReviewService {
@@ -182,6 +183,15 @@ impl EffectiveChangeWrite {
         db: &mongodb::Database,
         session: &mut dyn persistence_core::Executor,
     ) -> Result<()> {
+        ensure_formal_change(
+            db,
+            &self.order.base.id,
+            &self.order.customer_id,
+            &self.revision.lines,
+            &self.revision.goods_lines,
+            session,
+        )
+        .await?;
         db.sales_order()
             .formalize_submission(
                 &mut self.order,

@@ -127,6 +127,7 @@ mod tests {
     #[test]
     fn printed_line_uses_purchase_amounts_and_excludes_internal_references() {
         let mut line = PurchaseOrderLineView {
+            inquiry_quote_source: None,
             delivery_allocations: Vec::new(),
 
             line_id: "internal-line".into(),

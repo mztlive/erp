@@ -2,6 +2,7 @@
 
 use std::collections::HashSet;
 
+use erp_workflow::entity::work_item::WorkItemType;
 use erp_workflow::{WorkItem, WorkItemRow, WorkflowAuthorizationPort};
 use persistence_core::Executor;
 
@@ -26,7 +27,10 @@ pub(super) fn procurement_item_fields(
     access: &ActorAccess,
     facts: &WorkbenchObjectFactMap,
 ) -> Option<WorkItemFields> {
-    if !item.owns_procurement_task(&access.actor_id) {
+    if !item.owns_procurement_task(&access.actor_id)
+        && !(item.work_item_type == WorkItemType::SalesInquiryProcessing
+            && item.is_owned_by(&access.actor_id))
+    {
         return None;
     }
     authorized_item_fields(item.clone(), access, facts)
@@ -90,7 +94,10 @@ impl<A: WorkflowAuthorizationPort + Clone + Send + Sync + 'static> WorkbenchRead
         let original = facts.clone();
         let ordinary_keys = items
             .iter()
-            .filter(|item| !item.owns_procurement_task(&access.actor_id))
+            .filter(|item| {
+                !item.owns_procurement_task(&access.actor_id)
+                    && item.work_item_type != WorkItemType::SalesInquiryProcessing
+            })
             .filter_map(|item| {
                 object_policy(item.work_item_type, &item.business_object_type)
                     .map(|policy| (policy.object_kind, item.business_object_id.clone()))

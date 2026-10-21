@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query"
 import {
     fetchExpenseSource,
     fetchExpenseSources,
+    fetchInquiryExpenseCandidates,
     type ExpenseSourceQuery,
 } from "../api/expense-sources"
 
@@ -16,6 +17,18 @@ export function useExpenseSourcesQuery(
         queryKey: [...expenseSourceKeys, "list", input],
         queryFn: () => fetchExpenseSources(input),
         enabled,
+        staleTime: 0,
+    })
+}
+
+export function useInquiryExpenseCandidatesQuery(
+    salesOrderId: string,
+    enabled: boolean,
+) {
+    return useQuery({
+        queryKey: [...expenseSourceKeys, "inquiry-fees", salesOrderId],
+        queryFn: () => fetchInquiryExpenseCandidates(salesOrderId),
+        enabled: enabled && Boolean(salesOrderId),
         staleTime: 0,
     })
 }

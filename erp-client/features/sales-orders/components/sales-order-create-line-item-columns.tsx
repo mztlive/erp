@@ -66,6 +66,7 @@ export function buildSalesOrderCreateLineItemColumns(
     > = new Map(),
     onPickSku?: (rowIndex: number) => void,
     procurementStatus = { fetching: false, error: false },
+    inquiryLocked = false,
 ): EditableLineItemColumn<SalesOrderDraftLineInput>[] {
     const nature = values.nature
     return [
@@ -74,15 +75,25 @@ export function buildSalesOrderCreateLineItemColumns(
             header: "销售项目",
             required: true,
             renderValue: ({ item }) => item.name,
-            renderEditor: ({ rowIndex }) => (
-                <SalesOrderCreateLineSkuEditor
-                    form={form}
-                    values={values}
-                    nature={nature}
-                    rowIndex={rowIndex}
-                    onPickSku={onPickSku}
-                />
-            ),
+            renderEditor: ({ rowIndex }) =>
+                inquiryLocked ? (
+                    <div className="min-w-36 py-2 text-sm">
+                        <p className="font-medium">
+                            {values.lineItems[rowIndex]?.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                            {values.lineItems[rowIndex]?.specification}
+                        </p>
+                    </div>
+                ) : (
+                    <SalesOrderCreateLineSkuEditor
+                        form={form}
+                        values={values}
+                        nature={nature}
+                        rowIndex={rowIndex}
+                        onPickSku={onPickSku}
+                    />
+                ),
         },
         {
             id: "quantity",
@@ -207,6 +218,7 @@ export function buildSalesOrderCreateLineItemColumns(
                                               type="number"
                                               step="any"
                                               placeholder="请填写"
+                                              readOnly={inquiryLocked}
                                               className="gap-0"
                                               inputClassName="num text-right"
                                           />
@@ -336,6 +348,7 @@ export function buildSalesOrderCreateLineItemColumns(
                                           <field.DateField
                                               id={`sales-orders-create-line-${toAutomationIdSegment(lineKey)}-due-date`}
                                               label="期望交付日"
+                                              disabled={inquiryLocked}
                                               required
                                               size="default"
                                               hideLabel

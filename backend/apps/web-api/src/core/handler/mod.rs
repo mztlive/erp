@@ -26,6 +26,7 @@ pub mod purchase_payment_request;
 pub mod receivable;
 pub mod region;
 pub mod returns;
+pub mod sales_inquiry;
 pub mod sales_order;
 pub mod sales_review;
 pub mod sales_selection;

@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import type { InquirySalesBasis } from "../api/inquiry-basis"
 import type { SalesOrderSelectionBasis } from "@/features/sales-orders/api/selection-basis"
 
 import type { SalesOrderDraftResumeData } from "@/features/sales-orders/api/sales-orders"
@@ -11,6 +12,8 @@ import {
 } from "@/features/sales-orders/lib/sales-order-create-model"
 
 export type SalesOrderCreateDefaultsInput = {
+    initialInquiryValues?: CreateSalesOrderFormValues
+    initialInquiryBasis?: InquirySalesBasis
     initialSelectionBasis?: SalesOrderSelectionBasis
     initialCustomerId: string
     initialContractId: string
@@ -27,6 +30,8 @@ export type SalesOrderCreateDefaultsInput = {
  *（Maximum update depth exceeded @ Field）。
  */
 export function useSalesOrderCreateDefaults({
+    initialInquiryValues,
+    initialInquiryBasis,
     initialSelectionBasis,
     initialCustomerId,
     initialContractId,
@@ -35,11 +40,15 @@ export function useSalesOrderCreateDefaults({
     initialDraft,
 }: SalesOrderCreateDefaultsInput): CreateSalesOrderFormValues {
     return React.useMemo(() => {
+        if (initialInquiryValues) return initialInquiryValues
         const nature = initialDraft?.nature ?? initialNature
         const contractId = initialDraft?.contractId || initialContractId
         return {
             orderBasis:
-                (initialDraft || initialSelectionBasis) && !contractId
+                (initialDraft ||
+                    initialSelectionBasis ||
+                    initialInquiryBasis) &&
+                !contractId
                     ? "evidence"
                     : "contract",
             contractId,
@@ -49,6 +58,7 @@ export function useSalesOrderCreateDefaults({
             contractRevisionLabel: "",
             customerId:
                 initialDraft?.customerId ||
+                initialInquiryBasis?.customerId ||
                 initialSelectionBasis?.customerId ||
                 initialCustomerId,
             evidenceUploadPending: false,
@@ -60,6 +70,7 @@ export function useSalesOrderCreateDefaults({
                   })) ?? []),
             customerName:
                 initialDraft?.customerName ??
+                initialInquiryBasis?.customerName ??
                 initialSelectionBasis?.customerName ??
                 "",
             settlementPartyId: initialDraft?.settlementPartyId ?? "",
@@ -79,11 +90,13 @@ export function useSalesOrderCreateDefaults({
             lineItems:
                 initialDraft && initialDraft.lineItems.length > 0
                     ? initialDraft.lineItems
-                    : initialSelectionBasis
-                      ? initialSelectionBasis.lineItems
-                      : nature === "card_voucher"
-                        ? [createEmptyLine(nature)]
-                        : [],
+                    : initialInquiryBasis
+                      ? initialInquiryBasis.lineItems
+                      : initialSelectionBasis
+                        ? initialSelectionBasis.lineItems
+                        : nature === "card_voucher"
+                          ? [createEmptyLine(nature)]
+                          : [],
         } satisfies CreateSalesOrderFormValues
         // initialDraft 由外层等查询完成后才挂载本组件，渲染期间引用稳定，可以放心入依赖数组。
     }, [
@@ -91,6 +104,8 @@ export function useSalesOrderCreateDefaults({
         initialContractRevisionId,
         initialCustomerId,
         initialNature,
+        initialInquiryValues,
+        initialInquiryBasis,
         initialSelectionBasis,
         initialDraft,
     ])

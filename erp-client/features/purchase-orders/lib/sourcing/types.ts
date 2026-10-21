@@ -5,11 +5,15 @@ import type {
     PurchaseDeliveryAllocation,
     SupplyPriceBasis,
     SupplySourceType,
+    InquirySourcingSource,
 } from "@/features/purchase-orders/types"
 
 /** 一条销售明细可选的合格履约方案。 */
 export type SourcingSupplierOption = Readonly<{
     sourceType: SupplySourceType
+    inquirySource?: InquirySourcingSource
+    inquiryReselectionRequired?: boolean
+    recommendationReason?: string
     supplierId: string
     supplierName: string
     basisId: string
@@ -64,6 +68,7 @@ export type SourcingSalesOrder = Readonly<{
 
 /** 建单表单中一条可编辑选源行。 */
 export type SourcingLineInput = {
+    reselectionReason?: string
     deliveryAllocations?: PurchaseDeliveryAllocation[]
     rowKey: string
     salesOrderLineId: string

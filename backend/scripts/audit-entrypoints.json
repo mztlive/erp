@@ -3865,20 +3865,6 @@
       "reason": "用例 persist_purchase_change_cancel 在自身事务或已声明 run_audited 边界通过 persist_log 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
     },
     {
-      "path": "crates/erp-processes/src/procure_to_pay/change_start.rs",
-      "function": "persist_purchase_change_start",
-      "policy": "Audited",
-      "stage": "Transaction",
-      "boundaries": [
-        "persist_log"
-      ],
-      "call_counts": {
-        "persist_log": 1
-      },
-      "location_count": 1,
-      "reason": "用例 persist_purchase_change_start 在自身事务或已声明 run_audited 边界通过 persist_log 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
-    },
-    {
       "path": "crates/erp-processes/src/procure_to_pay/create_submit.rs",
       "function": "create_submit_audit",
       "policy": "Audited",
@@ -6793,6 +6779,80 @@
       },
       "location_count": 1,
       "reason": "沿调用方 Executor 重验任务身份、负责人、版本及跟进资格；原回执重放直接返回，首次写入任务后通过 persist_log 记录同事务成功审计并保存独立回执。"
+    },
+    {
+      "path": "crates/erp-processes/src/sales_inquiry/execution.rs",
+      "function": "execute",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".run_authorized_policy_transaction"
+      ],
+      "call_counts": {
+        ".run_authorized_policy_transaction": 1
+      },
+      "location_count": 1,
+      "reason": "询价命令在当前授权策略版本事务内执行；业务状态、责任任务、审计及独立回执原子提交，提交结果未知仅查询原回执，不重放写入。"
+    },
+    {
+      "path": "crates/erp-processes/src/sales_inquiry/execution.rs",
+      "function": "persist_command",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "询价首次命令在原执行器内保存安全成功审计及强类型回执，已完成命令回放不产生第二次成功事件。"
+    },
+    {
+      "path": "crates/erp-processes/src/sales_inquiry_import/confirm.rs",
+      "function": "confirm_transaction",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".run_authorized_policy_transaction"
+      ],
+      "call_counts": {
+        ".run_authorized_policy_transaction": 1
+      },
+      "location_count": 1,
+      "reason": "导入确认绑定当前授权策略版本，原事务内核对询价、预览、版本、输入和商品资格；不确定提交仅核对同一命令永久回执。"
+    },
+    {
+      "path": "crates/erp-processes/src/sales_inquiry_import/confirm.rs",
+      "function": "apply_preview",
+      "policy": "Audited",
+      "stage": "Command",
+      "boundaries": [
+        ".resource_log",
+        "persist_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1,
+        "persist_log": 1
+      },
+      "location_count": 1,
+      "reason": "整份无错误预览在同一执行器写入询价草稿、预览结果、独立永久回执和安全成功审计，任一步失败整体回滚。"
+    },
+    {
+      "path": "crates/erp-processes/src/procure_to_pay/change_start.rs",
+      "function": "apply_change_start",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "reason": "采购变更启动在原事务内完成来源及专项采用校验、冻结变更提交、单据和审批绑定以及成功审计；源码拆分不改变授权、写入顺序或原执行器。",
+      "boundaries": [
+        "persist_log"
+      ],
+      "call_counts": {
+        "persist_log": 1
+      },
+      "location_count": 1
     }
   ]
 }

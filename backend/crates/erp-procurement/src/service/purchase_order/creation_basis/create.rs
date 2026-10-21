@@ -10,9 +10,9 @@ use crate::dto::purchase_order::CreatePurchaseOrderFromBasisRequest;
 use crate::entity::facts::SalesOrderBasisFact;
 use crate::entity::purchase_order::{
     BasisGroup, BasisLine, BasisScope, BulkOrderQuantity, FulfillmentResponsibility,
-    PurchaseDeliveryAllocation, PurchaseDeliveryJudgement, PurchaseLineType, PurchaseOfferingSource,
-    PurchaseOrderSubmissionLine, PurchaseOrderSubmissionLineData, RequestedLine, SupplyPriceBasis,
-    basis_id_for, ensure_bulk_direct_minimum, judge_line_delivery, stable_line_id, supply_cost,
+    PurchaseDeliveryAllocation, PurchaseDeliveryJudgement, PurchaseLineType, PurchaseOrderSubmissionLine,
+    PurchaseOrderSubmissionLineData, RequestedLine, SupplyPriceBasis, basis_id_for,
+    ensure_bulk_direct_minimum, judge_line_delivery, stable_line_id,
 };
 use crate::{Error, Result};
 
@@ -73,9 +73,8 @@ pub fn compute_selected_lines(
     let mut tax_total = zero_amount();
     let mut lines = Vec::with_capacity(selected_lines.len());
     for selected in selected_lines {
-        let cost = supply_cost(&selected.basis.supply.revision, price_basis);
-        let (gross, net, tax) =
-            line_amounts(cost, selected.quantity, selected.basis.supply.revision.input_tax_rate);
+        let cost = selected.basis.unit_cost(price_basis);
+        let (gross, net, tax) = line_amounts(cost, selected.quantity, selected.basis.tax_rate());
         gross_total = gross_total.checked_add(gross);
         net_total = net_total.checked_add(net);
         tax_total = tax_total.checked_add(tax);
@@ -119,7 +118,7 @@ pub fn build_submission_line(
             )),
             sku_id: Some(basis.coverage.goods_line.sku_id.clone()),
             sku_revision_id: Some(basis.coverage.goods_line.sku_revision_id.clone()),
-            supplier_offering_source: Some(PurchaseOfferingSource::from_supply(&basis.supply)?),
+            supplier_offering_source: Some(basis.offering_source()?),
             delivery_allocations: line.selected.delivery_allocations.clone(),
             product_name_snapshot: Some(basis.coverage.revision_line.item_name_snapshot.clone()),
             specification_snapshot: basis.coverage.revision_line.spec_snapshot.clone(),
@@ -129,7 +128,7 @@ pub fn build_submission_line(
             gross_amount: line.gross,
             net_amount: line.net,
             tax_amount: line.tax,
-            input_tax_rate: Some(basis.supply.revision.input_tax_rate),
+            input_tax_rate: Some(basis.tax_rate()),
             expected_delivery_date: Some(line.selected.expected_delivery_date),
             sales_order_line_id: Some(basis.coverage.revision_line.sales_order_line_id.clone()),
             sales_order_revision_line_id: Some(erp_core::ids::SalesOrderRevisionLineId::new(
@@ -300,7 +299,12 @@ pub fn judge_selected_delivery(
             .map(|line| BulkOrderQuantity {
                 offering_id: line.basis.supply.offering.base.id.as_str(),
                 quantity: line.quantity,
-                minimum: line.basis.supply.revision.bulk_minimum_order_quantity,
+                minimum: line
+                    .basis
+                    .inquiry_quote
+                    .as_ref()
+                    .map(|quote| quote.minimum_order_quantity)
+                    .unwrap_or(line.basis.supply.revision.bulk_minimum_order_quantity),
             })
             .collect::<Vec<_>>();
         ensure_bulk_direct_minimum(&quantities).map_err(|error| Error::ValidationError(error.to_string()))?;

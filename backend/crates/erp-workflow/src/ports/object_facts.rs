@@ -144,6 +144,8 @@ pub struct SubjectBrief {
 /// Minimum object fact used by work-item authorization and labels.
 #[derive(Debug, Clone)]
 pub struct ObjectFact {
+    /// 任务专用对象当前有效业务行，存在时责任范围必须是其非空子集。
+    pub responsibility_scope_ids: Option<Vec<String>>,
     /// 由业务实体外键提供的订单授权来源；不复用展示根节点或历史参与根节点。
     pub order_scope_source: Option<OrderTaskSource>,
     /// Work-surface root object id.
@@ -181,6 +183,7 @@ impl ObjectFact {
         created_by: impl Into<String>,
     ) -> Self {
         Self {
+            responsibility_scope_ids: None,
             order_scope_source: None,
             root_document_id: root_document_id.into(),
             label: label.into(),

@@ -12,7 +12,7 @@ use std::str::FromStr;
 
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::{SupplierAccountId, WarehouseId};
-use erp_core::money::{Quantity, UnitPrice};
+use erp_core::money::{Quantity, Rate, UnitPrice};
 use erp_core::{Error, Result};
 
 use super::command_receipt::digest_parts;
@@ -25,7 +25,7 @@ use crate::entity::facts::{
     SalesRevisionFact as SalesOrderRevision, SupplierCommercialFact as SupplierCommercialProfileRevision,
     SupplierRoleFact as SupplierAccount,
 };
-use crate::entity::purchase_order::PurchaseDeliveryAllocation;
+use crate::entity::purchase_order::{PurchaseDeliveryAllocation, PurchaseInquiryQuoteSource};
 
 /// 单条销售当前版本明细的合格供应商供给。
 #[derive(Debug, Clone)]
@@ -43,6 +43,8 @@ pub struct LineSupply {
 /// 一条可进入精确创建依据的销售当前版本行。
 #[derive(Debug, Clone)]
 pub struct BasisLine {
+    /// 服务器核验的专项条款；空值使用通用供给。
+    pub inquiry_quote: Option<PurchaseInquiryQuoteSource>,
     /// 当前销售版本行及采购覆盖摘要。
     pub coverage: SalesProcurementCoverageLine,
     /// 本供应商被确定选用的供给。
@@ -51,9 +53,55 @@ pub struct BasisLine {
     pub max_create_quantity: Quantity,
 }
 
+impl BasisLine {
+    /// 读取本依据实际采购成本，专项条款独立于通用价。
+    /// # 参数
+    /// `basis` 为通用采购价格口径。
+    /// # 返回
+    /// 返回专项原始采购价或通用供给价。
+    /// # 错误
+    /// 无。
+    pub fn unit_cost(&self, basis: SupplyPriceBasis) -> UnitPrice {
+        self.inquiry_quote
+            .as_ref()
+            .map(|quote| quote.unit_cost_gross)
+            .unwrap_or_else(|| supply_cost(&self.supply.revision, basis))
+    }
+    /// 读取实际采用条款税率。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 返回专项税率或通用供给税率。
+    /// # 错误
+    /// 无。
+    pub fn tax_rate(&self) -> Rate {
+        self.inquiry_quote
+            .as_ref()
+            .map(|quote| quote.input_tax_rate)
+            .unwrap_or(self.supply.revision.input_tax_rate)
+    }
+    /// 冻结通用供给身份与独立专项采用链。
+    /// # 参数
+    /// 无。
+    /// # 返回
+    /// 返回可持久化的实际采用来源。
+    /// # 错误
+    /// 供给归属或专项身份非法时拒绝。
+    pub fn offering_source(&self) -> Result<super::PurchaseOfferingSource> {
+        let mut source = super::PurchaseOfferingSource::from_supply(&self.supply)?;
+        if let Some(quote) = &self.inquiry_quote {
+            quote.validate()?;
+            source.inquiry_quote = Some(quote.clone());
+        }
+        Ok(source)
+    }
+}
+
 /// 一张采购单的精确拆分维度。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BasisScope {
+    /// 专项报价版本参与拆单；与通用供给保持独立。
+    pub inquiry_quote_revision_id: Option<String>,
     /// 唯一供应商。
     pub supplier_id: SupplierAccountId,
     /// 采购类型。
@@ -82,6 +130,8 @@ pub struct BasisGroup {
 /// 已规范化的本次采购行请求。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RequestedLine {
+    /// 采购显式改选通用供给时的原因。
+    pub reselection_reason: Option<String>,
     /// 稳定销售行。
     pub sales_order_line_id: String,
     /// 本次采购数量。
@@ -99,6 +149,8 @@ pub struct RequestedLine {
 /// 与拆单分组由 Service 在事务内基于本事实解释完成。
 #[derive(Debug, Clone, Default)]
 pub struct CreationBasisFacts {
+    /// 正式销售存在冻结询价来源时，通用候选须显式改选。
+    pub source_inquiry_id: Option<String>,
     /// ACTIVE 且未删除的供给；Repository 已按 SKU、供应商与供给 ID 稳定排序。
     pub offerings: Vec<SupplierOffering>,
     /// 供给当前商业条款修订，按修订主键。
@@ -140,7 +192,13 @@ impl RequestedLine {
         if quantity <= zero_quantity() {
             return Err(Error::from("本次数量必须大于 0"));
         }
-        Ok(Self { sales_order_line_id, quantity, expected_delivery_date, delivery_allocations: Vec::new() })
+        Ok(Self {
+            reselection_reason: None,
+            sales_order_line_id,
+            quantity,
+            expected_delivery_date,
+            delivery_allocations: Vec::new(),
+        })
     }
 }
 
@@ -244,7 +302,7 @@ pub fn compose_basis_id(
 /// 可供投影版本变化会使旧依据失效。
 fn basis_line_fingerprint(line: &BasisLine) -> String {
     format!(
-        "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
+        "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
         stable_line_id(line),
         line.coverage.revision_line.base.id,
         line.coverage.summary.remaining_quantity,
@@ -256,6 +314,10 @@ fn basis_line_fingerprint(line: &BasisLine) -> String {
         line.supply.availability.base.id,
         line.supply.availability.base.version,
         line.supply.availability.source_revision_token.as_deref().unwrap_or("-"),
+        line.inquiry_quote
+            .as_ref()
+            .map(|quote| format!("{}:{}", quote.quote_revision_id, quote.quote_version))
+            .unwrap_or_default(),
     )
 }
 
@@ -274,12 +336,13 @@ fn basis_line_fingerprint(line: &BasisLine) -> String {
 /// 该键只用于分组和指纹，不作为数据库自然键。
 pub fn basis_scope_key(scope: &BasisScope) -> String {
     format!(
-        "{}|{}|{}|{}|{}",
+        "{}|{}|{}|{}|{}{}",
         scope.supplier_id,
         scope.purchase_type.as_str(),
         scope.payment_term_code,
         scope.fulfillment_responsibility.as_str(),
         scope.price_basis.as_str(),
+        scope.inquiry_quote_revision_id.as_ref().map(|id| format!("|INQUIRY:{id}")).unwrap_or_default(),
     )
 }
 
@@ -562,6 +625,7 @@ mod tests {
     fn basis_group(supplier_id: &str, payment_term_code: &str) -> BasisGroup {
         let supply = line_supply("offering-1", supplier_id);
         let line = BasisLine {
+            inquiry_quote: None,
             coverage: coverage_line("sol-1", "10", "2"),
             supply,
             max_create_quantity: Quantity::from_str("8").unwrap(),
@@ -569,6 +633,7 @@ mod tests {
         BasisGroup {
             revision: revision("1"),
             scope: BasisScope {
+                inquiry_quote_revision_id: None,
                 supplier_id: SupplierAccountId::new(supplier_id),
                 purchase_type: PurchaseType::Physical,
                 payment_term_code: payment_term_code.to_string(),
@@ -624,6 +689,7 @@ mod tests {
     #[test]
     fn basis_scope_key_contains_exact_split_dimensions() {
         let scope = BasisScope {
+            inquiry_quote_revision_id: None,
             supplier_id: SupplierAccountId::new("sup-1"),
             purchase_type: PurchaseType::Physical,
             payment_term_code: "NET-30".to_string(),
@@ -759,5 +825,102 @@ mod tests {
         assert_eq!(parts[0], "so-1");
         assert_eq!(parts[1].len(), 64);
         assert!(parts[1].bytes().all(|value| value.is_ascii_hexdigit()));
+    }
+    fn special_source() -> super::PurchaseInquiryQuoteSource {
+        super::PurchaseInquiryQuoteSource {
+            inquiry_id: "inquiry".into(),
+            requirement_version: 1,
+            feedback_round: 2,
+            inquiry_line_id: "demand".into(),
+            quote_id: "quote".into(),
+            quote_revision_id: "quote-v1".into(),
+            quote_revision_no: 1,
+            quote_version: 1,
+            unit_cost_gross: "8.80".parse().unwrap(),
+            input_tax_rate: "0.06".parse().unwrap(),
+            minimum_order_quantity: "1".parse().unwrap(),
+            available_quantity: "20".parse().unwrap(),
+            address_limits: vec![],
+            expected_delivery_date: "2026-10-22".parse().unwrap(),
+            valid_from: "2026-10-01".parse().unwrap(),
+            valid_to: "2026-11-01".parse().unwrap(),
+            payment_term_code: "NET-30".into(),
+            allow_cumulative_batches: false,
+        }
+    }
+
+    #[test]
+    fn special_cost_tax_and_source_are_frozen_separately_from_general_offering() {
+        let mut group = basis_group("supplier", "NET-30");
+        let general_price = group.lines[0].supply.revision.bulk_supply_price_gross;
+        group.lines[0].supply.offering.stable.current_revision_id =
+            Some(group.lines[0].supply.revision.base.id.clone());
+        let source = special_source();
+        group.lines[0].inquiry_quote = Some(source.clone());
+        assert_eq!(group.lines[0].unit_cost(SupplyPriceBasis::Bulk), source.unit_cost_gross);
+        assert_eq!(group.lines[0].tax_rate(), source.input_tax_rate);
+        let frozen = group.lines[0].offering_source().unwrap();
+        assert_eq!(frozen.inquiry_quote, Some(source));
+        assert_eq!(group.lines[0].supply.revision.bulk_supply_price_gross, general_price);
+        assert!(
+            frozen
+                .ensure_current_supply(
+                    &group.lines[0].supply,
+                    &SupplierAccountId::new("supplier"),
+                    &SkuId::new("sku-1"),
+                    "1".parse().unwrap(),
+                    "2026-10-23".parse().unwrap()
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn special_quote_revision_is_an_exact_split_and_basis_identity_dimension() {
+        let order = sales_order("sales");
+        let mut group = basis_group("supplier", "NET-30");
+        let general = basis_id_for(&order, &group, "task", None);
+        group.lines[0].inquiry_quote = Some(special_source());
+        group.scope.inquiry_quote_revision_id = Some("quote-v1".into());
+        assert_ne!(general, basis_id_for(&order, &group, "task", None));
+        assert!(basis_scope_key(&group.scope).ends_with("|INQUIRY:quote-v1"));
+        let first = basis_id_for(&order, &group, "task", None);
+        group.lines[0].inquiry_quote.as_mut().unwrap().quote_revision_id = "quote-v2".into();
+        group.scope.inquiry_quote_revision_id = Some("quote-v2".into());
+        assert_ne!(first, basis_id_for(&order, &group, "task", None));
+    }
+    #[test]
+    fn special_price_and_tax_cannot_be_overridden_in_any_purchase_line_constructor() {
+        let mut group = basis_group("supplier", "NET-30");
+        group.lines[0].supply.offering.stable.current_revision_id =
+            Some(group.lines[0].supply.revision.base.id.clone());
+        let quote = special_source();
+        group.lines[0].inquiry_quote = Some(quote.clone());
+        let source = group.lines[0].offering_source().unwrap();
+        super::super::offering_source::ensure_offering_source(
+            super::super::PurchaseLineType::ItemService,
+            Some(&source),
+            Some(quote.unit_cost_gross),
+            Some(quote.input_tax_rate),
+        )
+        .unwrap();
+        assert!(
+            super::super::offering_source::ensure_offering_source(
+                super::super::PurchaseLineType::ItemService,
+                Some(&source),
+                Some("1".parse().unwrap()),
+                Some(quote.input_tax_rate)
+            )
+            .is_err()
+        );
+        assert!(
+            super::super::offering_source::ensure_offering_source(
+                super::super::PurchaseLineType::ItemService,
+                Some(&source),
+                Some(quote.unit_cost_gross),
+                Some("0".parse().unwrap())
+            )
+            .is_err()
+        );
     }
 }

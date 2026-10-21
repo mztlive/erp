@@ -207,6 +207,11 @@ export function SourcingOptionField({
                                     ? `${option.warehouseName || option.supplierName} · 可用 ${option.sourceAvailableQuantity ?? option.maxCreateQuantity}`
                                     : [
                                           option.supplierName,
+                                          option.inquirySource
+                                              ? "询价专项报价"
+                                              : option.inquiryReselectionRequired
+                                                ? "另选通用供给"
+                                                : "通用供给",
                                           sourcingRouteLabel(option),
                                           minimum.label,
                                           showDeliverySummary
@@ -221,6 +226,11 @@ export function SourcingOptionField({
                     onValueChange={(value: string) => {
                         const option = findSourcingOption(product, value)
                         if (!option) return
+                        if (option.inquirySource)
+                            form.setFieldValue(
+                                `lines[${index}].reselectionReason`,
+                                "",
+                            )
                         const lines = form.state.values.lines
                         const current = lines[index]?.quantity ?? ""
                         if (!current || current === product.remainingQuantity) {

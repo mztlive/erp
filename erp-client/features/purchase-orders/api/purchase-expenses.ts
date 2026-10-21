@@ -4,12 +4,20 @@ import { apiPost, apiPostForm } from "@/lib/api"
 import type { PurchaseExpenseCategory } from "@/features/purchase-orders/types"
 import type { BackendCreateResult } from "./purchase-order-wire-types"
 
+export type InquiryExpenseSourceInput = {
+    inquiry_id: string
+    feedback_round: number
+    fee_id: string
+    allocation_id: string
+}
+
 export type CreateExpensePurchaseLineInput = {
     category: PurchaseExpenseCategory
     description: string
     grossAmount: string
     inputTaxRate: string
     salesOrderLineId?: string
+    inquirySource?: InquiryExpenseSourceInput
 }
 
 export type CreateExpensePurchaseInput = {
@@ -27,6 +35,24 @@ export type ConfirmExpenseOccurrenceInput = {
 /** 凭证在 multipart 中的临时引用名。 */
 const EVIDENCE_REFERENCE = "pending-file:expense-occurrence-evidence"
 
+/** 复用费用建单字段映射，询价转换只追加受控来源引用。 */
+export function expensePurchaseCommandBody(
+    input: Omit<CreateExpensePurchaseInput, "idempotencyKey">,
+) {
+    return {
+        supplier_id: input.supplierId,
+        payment_term_code: input.paymentTermCode,
+        lines: input.lines.map((line) => ({
+            category: line.category,
+            description: line.description,
+            gross_amount: line.grossAmount,
+            input_tax_rate: line.inputTaxRate,
+            sales_order_line_id: line.salesOrderLineId || null,
+            inquiry_source: line.inquirySource ?? null,
+        })),
+    }
+}
+
 export function createExpensePurchase(
     salesOrderId: string,
     input: CreateExpensePurchaseInput,
@@ -34,15 +60,7 @@ export function createExpensePurchase(
     return apiPost<BackendCreateResult>(
         `/admin/sales-orders/${encodeURIComponent(salesOrderId)}/expense-purchases`,
         {
-            supplier_id: input.supplierId,
-            payment_term_code: input.paymentTermCode,
-            lines: input.lines.map((line) => ({
-                category: line.category,
-                description: line.description,
-                gross_amount: line.grossAmount,
-                input_tax_rate: line.inputTaxRate,
-                sales_order_line_id: line.salesOrderLineId || null,
-            })),
+            ...expensePurchaseCommandBody(input),
             idempotency_key: input.idempotencyKey,
         },
     )

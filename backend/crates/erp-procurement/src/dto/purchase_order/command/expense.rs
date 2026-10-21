@@ -6,7 +6,7 @@ use erp_core::money::{Amount, Rate};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use crate::entity::purchase_order::{PurchaseExpenseCategory, payload_fingerprint};
+use crate::entity::purchase_order::{InquiryExpenseSource, PurchaseExpenseCategory, payload_fingerprint};
 use crate::{Error, Result};
 
 /// 费用采购单创建命令的稳定动作。
@@ -31,6 +31,9 @@ pub struct CreateExpenseLineRequest {
     /// 归属销售明细；空表示整张销售单。
     #[serde(default)]
     pub sales_order_line_id: Option<SalesOrderLineId>,
+    /// 可选询价费用来源；服务端在建单事务内重验，不信任客户端声明。
+    #[serde(default)]
+    pub inquiry_source: Option<InquiryExpenseSource>,
 }
 
 /// 从销售单追加费用采购单的命令；创建后立即提交审批。

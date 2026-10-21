@@ -226,7 +226,7 @@ impl SalesOrderCommandProcess {
         let creation = self.prepare_sales_creation(&req, actor, &access).await?;
         let plan = self.prepare_creation_plan(creation, req.intent, &identity, actor).await?;
         let detail_id = plan.order().base.id.clone();
-        let context = self.creation_write_context(&plan, actor, &access)?;
+        let context = self.creation_write_context(&plan, actor, &access, req.inquiry_source.clone())?;
         let transaction_result = self
             .db
             .client()
