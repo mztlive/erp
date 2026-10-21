@@ -15,6 +15,12 @@ export const SELLABLE_EXCEL_HEADERS = [
     "商品类型",
     "基础单位",
     "条码",
+    "需求数量",
+    "销售参考价",
+    "需求备注",
+    "询价说明",
+    "单位编码",
+    "配送关联",
 ] as const
 
 export type SellableExcelImageExtension = "jpeg" | "png" | "gif"

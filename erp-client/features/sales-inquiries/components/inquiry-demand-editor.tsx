@@ -2,19 +2,18 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
+import { PlusIcon, UploadIcon } from "lucide-react"
+import type { DemandFormValues } from "../lib/demand-form"
+import { deliveryProgress } from "../lib/delivery-progress"
+import { InquiryDemandLines } from "./inquiry-demand-lines"
 import { useAppForm } from "@/components/form"
-import { MoneyValue, QuantityValue } from "@/components/business"
-import { OptionCombobox } from "@/components/business/option-combobox"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { DatePicker } from "@/components/ui/date-picker"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { CustomerSearchCombobox } from "@/features/entity-selectors/components/customer-search-combobox"
-import { RegionCascadeSelect } from "@/features/regions"
 import { SellableSkuSelectDialog } from "@/features/sales-orders/components/sellable-sku-select-dialog"
 import type { SellableSkuPick } from "@/features/sales-orders/lib/sellable-sku-pick"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 import { hasPermission } from "@/lib/permissions"
 import { getErrorMessage } from "@/lib/api/errors"
 import { inquiryPath } from "../api"
@@ -25,22 +24,7 @@ import {
     readInquiryLocalValue,
     writeInquiryLocalValue,
 } from "../lib/local-draft"
-import type {
-    InquiryAllocation,
-    InquiryLine,
-    InquiryRequirement,
-    SalesInquiry,
-} from "../types"
-
-type DemandFormValues = {
-    customer_id: string
-    customer_name: string
-    sales_owner_user_id: string
-    business_org_unit_id: string
-    deadline_at: number
-    copied_from_inquiry_id?: string | null
-    draft: InquiryRequirement
-}
+import type { InquiryLine, InquiryRequirement, SalesInquiry } from "../types"
 
 function fromPick(pick: SellableSkuPick): InquiryLine {
     return {
@@ -63,18 +47,6 @@ function fromPick(pick: SellableSkuPick): InquiryLine {
         delivery_terms: "",
         sales_reference_price_gross: null,
         allocations: [],
-    }
-}
-
-function newAllocation(): InquiryAllocation {
-    return {
-        allocation_id: crypto.randomUUID(),
-        recipient: "",
-        phone: "",
-        region_code: "",
-        region_name: "",
-        address: "",
-        quantity: "1",
     }
 }
 
@@ -299,7 +271,7 @@ function DemandEditorContent({
     }, [command.resolution])
     return (
         <form
-            className="space-y-6"
+            className="min-w-0 space-y-6"
             onSubmit={(event) => {
                 event.preventDefault()
                 void form.handleSubmit()
@@ -341,73 +313,101 @@ function DemandEditorContent({
                         </AlertDescription>
                     </Alert>
                 )}
-                <div className="grid gap-4 md:grid-cols-2">
-                    <form.Field
-                        name="customer_id"
-                        children={(field) => (
-                            <div className="space-y-2">
-                                <Label htmlFor="sales-inquiry-customer">
-                                    客户
-                                </Label>
-                                <CustomerSearchCombobox
-                                    id="sales-inquiry-customer"
-                                    value={field.state.value || undefined}
-                                    disabled={Boolean(inquiry)}
-                                    onValueChange={(id) =>
-                                        field.handleChange(id ?? "")
-                                    }
-                                    onItemChange={(item) =>
-                                        form.setFieldValue(
-                                            "customer_name",
-                                            item?.legalName ?? "",
-                                        )
-                                    }
-                                />
-                            </div>
-                        )}
-                    />
-                    <form.Field
-                        name="deadline_at"
-                        children={(field) => (
-                            <div className="space-y-2">
-                                <Label htmlFor="sales-inquiry-deadline">
-                                    询价截止日期
-                                </Label>
-                                <DatePicker
-                                    id="sales-inquiry-deadline"
-                                    value={inquiryDateInput(field.state.value)}
-                                    onValueChange={(value) =>
-                                        field.handleChange(
-                                            inquiryDateSeconds(value ?? ""),
-                                        )
-                                    }
-                                    disabled={Boolean(inquiry)}
-                                />
-                            </div>
-                        )}
-                    />
-                    {!inquiry && (
-                        <p className="text-xs text-muted-foreground md:col-span-2">
-                            销售负责人及业务组织按当前账号确定。
-                        </p>
-                    )}
-                </div>
-                <form.AppField
-                    name="draft.note"
-                    children={(field) => (
-                        <field.TextareaField
-                            id="sales-inquiry-demand-note"
-                            label="需求说明"
-                            placeholder="客户交付要求及需要采购确认的事项"
+                <section
+                    className="space-y-4 rounded-lg border p-5"
+                    aria-label="基本信息"
+                >
+                    <h2 className="text-sm font-semibold">基本信息</h2>
+                    <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_260px]">
+                        <form.Field
+                            name="customer_id"
+                            children={(field) => (
+                                <div className="space-y-2">
+                                    <Label htmlFor="sales-inquiry-customer">
+                                        客户{" "}
+                                        <span className="text-destructive">
+                                            *
+                                        </span>
+                                    </Label>
+                                    <CustomerSearchCombobox
+                                        id="sales-inquiry-customer"
+                                        value={field.state.value || undefined}
+                                        disabled={Boolean(inquiry)}
+                                        onValueChange={(id) =>
+                                            field.handleChange(id ?? "")
+                                        }
+                                        onItemChange={(item) =>
+                                            form.setFieldValue(
+                                                "customer_name",
+                                                item?.legalName ?? "",
+                                            )
+                                        }
+                                    />
+                                </div>
+                            )}
                         />
-                    )}
-                />
-                <section className="space-y-4" aria-label="商品与配送需求">
+                        <form.Field
+                            name="deadline_at"
+                            children={(field) => (
+                                <div className="space-y-2">
+                                    <Label htmlFor="sales-inquiry-deadline">
+                                        询价截止日期
+                                    </Label>
+                                    <DatePicker
+                                        id="sales-inquiry-deadline"
+                                        size="default"
+                                        value={inquiryDateInput(
+                                            field.state.value,
+                                        )}
+                                        onValueChange={(value) =>
+                                            field.handleChange(
+                                                inquiryDateSeconds(value ?? ""),
+                                            )
+                                        }
+                                        disabled={Boolean(inquiry)}
+                                    />
+                                </div>
+                            )}
+                        />
+                        {!inquiry && (
+                            <p className="text-xs text-muted-foreground md:col-span-2">
+                                销售负责人及业务组织按当前账号确定。
+                            </p>
+                        )}
+                    </div>
+                    <form.AppField
+                        name="draft.note"
+                        children={(field) => (
+                            <field.TextareaField
+                                id="sales-inquiry-demand-note"
+                                label="需求说明（选填）"
+                                rows={2}
+                                textareaClassName="min-h-16"
+                                placeholder="客户交付要求及需要采购确认的事项"
+                            />
+                        )}
+                    />
+                </section>
+                <section
+                    className="min-w-0 space-y-4"
+                    aria-label="商品与配送需求"
+                >
                     <div className="flex flex-wrap items-center justify-between gap-3">
                         <h2 className="text-base font-medium">
-                            商品与配送需求
+                            商品需求{" "}
+                            <form.Subscribe
+                                selector={(state) =>
+                                    state.values.draft.lines.length
+                                }
+                            >
+                                {(count) => (
+                                    <span className="ml-2 text-sm font-normal text-muted-foreground">
+                                        {count} 项
+                                    </span>
+                                )}
+                            </form.Subscribe>
                         </h2>
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                             {onImport && (
                                 <Button
                                     id="sales-inquiry-import-open"
@@ -415,7 +415,11 @@ function DemandEditorContent({
                                     type="button"
                                     onClick={onImport}
                                 >
-                                    导入客户选品文件
+                                    <UploadIcon
+                                        aria-hidden="true"
+                                        data-icon="inline-start"
+                                    />
+                                    导入选品文件
                                 </Button>
                             )}
                             <Button
@@ -424,439 +428,50 @@ function DemandEditorContent({
                                 type="button"
                                 onClick={() => setPickerOpen(true)}
                             >
+                                <PlusIcon
+                                    aria-hidden="true"
+                                    data-icon="inline-start"
+                                />
                                 添加商品
                             </Button>
                         </div>
                     </div>
-                    <form.Field
-                        name="draft.lines"
-                        mode="array"
-                        children={(linesField) => (
-                            <div className="space-y-4">
-                                {linesField.state.value.length === 0 && (
-                                    <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-                                        先保存客户信息，再导入选品文件；也可从公司商品池添加商品。
-                                    </p>
-                                )}
-                                {linesField.state.value.map((line, index) => {
-                                    const prefix = `sales-inquiry-line-${toAutomationIdSegment(line.line_id)}`
-                                    return (
-                                        <article
-                                            key={line.line_id}
-                                            className="space-y-4 rounded-lg border p-4"
-                                        >
-                                            <div className="flex items-start justify-between gap-3">
-                                                <div>
-                                                    <h3 className="font-medium">
-                                                        {line.product_name}
-                                                    </h3>
-                                                    <p className="mt-1 text-xs text-muted-foreground">
-                                                        SKU {line.sku_code} ·{" "}
-                                                        {line.specification ||
-                                                            "未标注规格"}{" "}
-                                                        · {line.unit_code}
-                                                    </p>
-                                                </div>
-                                                <Button
-                                                    id={`${prefix}-remove`}
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        linesField.removeValue(
-                                                            index,
-                                                        )
-                                                    }
-                                                >
-                                                    移除商品
-                                                </Button>
-                                            </div>
-                                            <div className="grid gap-4 md:grid-cols-4">
-                                                <form.AppField
-                                                    name={`draft.lines[${index}].quantity`}
-                                                    children={(field) => (
-                                                        <field.TextField
-                                                            id={`${prefix}-quantity`}
-                                                            label="需求数量"
-                                                            inputMode="decimal"
-                                                            required
-                                                        />
-                                                    )}
-                                                />
-                                                <form.Field
-                                                    name={`draft.lines[${index}].sales_reference_price_gross`}
-                                                    children={(field) => (
-                                                        <div className="space-y-2">
-                                                            <Label
-                                                                htmlFor={`${prefix}-reference-price`}
-                                                            >
-                                                                销售参考价（可不填）
-                                                            </Label>
-                                                            <Input
-                                                                id={`${prefix}-reference-price`}
-                                                                inputMode="decimal"
-                                                                value={
-                                                                    field.state
-                                                                        .value ??
-                                                                    ""
-                                                                }
-                                                                onChange={(
-                                                                    event,
-                                                                ) =>
-                                                                    field.handleChange(
-                                                                        event
-                                                                            .target
-                                                                            .value ||
-                                                                            null,
-                                                                    )
-                                                                }
-                                                            />
-                                                        </div>
-                                                    )}
-                                                />
-                                                <form.Field
-                                                    name={`draft.lines[${index}].delivery_due_at`}
-                                                    children={(field) => (
-                                                        <div className="space-y-2">
-                                                            <Label
-                                                                htmlFor={`${prefix}-due-date`}
-                                                            >
-                                                                要求交付日期
-                                                            </Label>
-                                                            <DatePicker
-                                                                id={`${prefix}-due-date`}
-                                                                value={inquiryDateInput(
-                                                                    field.state
-                                                                        .value,
-                                                                )}
-                                                                onValueChange={(
-                                                                    value,
-                                                                ) =>
-                                                                    field.handleChange(
-                                                                        inquiryDateSeconds(
-                                                                            value ??
-                                                                                "",
-                                                                        ),
-                                                                    )
-                                                                }
-                                                            />
-                                                        </div>
-                                                    )}
-                                                />
-                                                <form.Field
-                                                    name={`draft.lines[${index}].fulfillment_kind`}
-                                                    children={(field) => (
-                                                        <div className="space-y-2">
-                                                            <Label
-                                                                htmlFor={`${prefix}-fulfillment-kind`}
-                                                            >
-                                                                交付类型
-                                                            </Label>
-                                                            <OptionCombobox
-                                                                id={`${prefix}-fulfillment-kind`}
-                                                                aria-label="交付类型"
-                                                                allowClear={
-                                                                    false
-                                                                }
-                                                                options={[
-                                                                    {
-                                                                        value: "physical",
-                                                                        label: "实物配送",
-                                                                    },
-                                                                    {
-                                                                        value: "virtual",
-                                                                        label: "虚拟交付",
-                                                                    },
-                                                                    {
-                                                                        value: "service",
-                                                                        label: "服务交付",
-                                                                    },
-                                                                ]}
-                                                                value={
-                                                                    field.state
-                                                                        .value
-                                                                }
-                                                                onValueChange={(
-                                                                    value,
-                                                                ) =>
-                                                                    field.handleChange(
-                                                                        value as InquiryLine["fulfillment_kind"],
-                                                                    )
-                                                                }
-                                                            />
-                                                        </div>
-                                                    )}
-                                                />
-                                            </div>
-                                            <form.AppField
-                                                name={`draft.lines[${index}].delivery_terms`}
-                                                children={(field) => (
-                                                    <field.TextField
-                                                        id={`${prefix}-delivery-terms`}
-                                                        label="交付条件"
-                                                    />
-                                                )}
-                                            />
-                                            <form.Field
-                                                name={`draft.lines[${index}].allocations`}
-                                                mode="array"
-                                                children={(
-                                                    allocationsField,
-                                                ) => (
-                                                    <section className="space-y-3">
-                                                        <div className="flex items-center justify-between gap-3">
-                                                            <h4 className="text-sm font-medium">
-                                                                配送地址{" "}
-                                                                <span className="font-normal text-muted-foreground">
-                                                                    （实物地址数量合计须等于需求数量）
-                                                                </span>
-                                                            </h4>
-                                                            <Button
-                                                                id={`${prefix}-add-address`}
-                                                                type="button"
-                                                                size="sm"
-                                                                variant="outline"
-                                                                disabled={
-                                                                    allocationsField
-                                                                        .state
-                                                                        .value
-                                                                        .length >=
-                                                                    100
-                                                                }
-                                                                onClick={() =>
-                                                                    allocationsField.pushValue(
-                                                                        newAllocation(),
-                                                                    )
-                                                                }
-                                                            >
-                                                                添加地址
-                                                            </Button>
-                                                        </div>
-                                                        {allocationsField.state.value.map(
-                                                            (
-                                                                allocation,
-                                                                allocationIndex,
-                                                            ) => {
-                                                                const frozenAddress =
-                                                                    inquiry?.requirements.some(
-                                                                        (
-                                                                            snapshot,
-                                                                        ) =>
-                                                                            snapshot.data.lines.some(
-                                                                                (
-                                                                                    row,
-                                                                                ) =>
-                                                                                    row.allocations.some(
-                                                                                        (
-                                                                                            address,
-                                                                                        ) =>
-                                                                                            address.allocation_id ===
-                                                                                            allocation.allocation_id,
-                                                                                    ),
-                                                                            ),
-                                                                    ) ?? false
-                                                                const occupiedAddress =
-                                                                    inquiry?.quantity_ledger.some(
-                                                                        (row) =>
-                                                                            row.state !==
-                                                                                "released" &&
-                                                                            row.selections.some(
-                                                                                (
-                                                                                    selection,
-                                                                                ) =>
-                                                                                    selection.allocation_id ===
-                                                                                    allocation.allocation_id,
-                                                                            ),
-                                                                    ) ?? false
-                                                                const allocationPrefix = `${prefix}-address-${toAutomationIdSegment(allocation.allocation_id)}`
-                                                                return (
-                                                                    <div
-                                                                        key={
-                                                                            allocation.allocation_id
-                                                                        }
-                                                                        className="grid gap-3 rounded-md bg-muted/40 p-3 md:grid-cols-4"
-                                                                    >
-                                                                        {frozenAddress && (
-                                                                            <div className="md:col-span-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                                                                <span>
-                                                                                    {occupiedAddress
-                                                                                        ? "该地址已有销售占用；请先处理下游，或添加新地址分配未转数量。"
-                                                                                        : "已提交的收件资料保留原记录，修改时请替换地址。"}
-                                                                                </span>
-                                                                                <Button
-                                                                                    id={`${allocationPrefix}-replace`}
-                                                                                    type="button"
-                                                                                    variant="outline"
-                                                                                    size="sm"
-                                                                                    disabled={
-                                                                                        occupiedAddress
-                                                                                    }
-                                                                                    onClick={() =>
-                                                                                        allocationsField.handleChange(
-                                                                                            allocationsField.state.value.map(
-                                                                                                (
-                                                                                                    item,
-                                                                                                    position,
-                                                                                                ) =>
-                                                                                                    position ===
-                                                                                                    allocationIndex
-                                                                                                        ? {
-                                                                                                              ...item,
-                                                                                                              allocation_id:
-                                                                                                                  crypto.randomUUID(),
-                                                                                                          }
-                                                                                                        : item,
-                                                                                            ),
-                                                                                        )
-                                                                                    }
-                                                                                >
-                                                                                    替换地址
-                                                                                </Button>
-                                                                            </div>
-                                                                        )}
-                                                                        <form.AppField
-                                                                            name={`draft.lines[${index}].allocations[${allocationIndex}].recipient`}
-                                                                            children={(
-                                                                                field,
-                                                                            ) => (
-                                                                                <field.TextField
-                                                                                    id={`${allocationPrefix}-recipient`}
-                                                                                    disabled={
-                                                                                        frozenAddress
-                                                                                    }
-                                                                                    label="收货人"
-                                                                                />
-                                                                            )}
-                                                                        />
-                                                                        <form.AppField
-                                                                            name={`draft.lines[${index}].allocations[${allocationIndex}].phone`}
-                                                                            children={(
-                                                                                field,
-                                                                            ) => (
-                                                                                <field.TextField
-                                                                                    id={`${allocationPrefix}-phone`}
-                                                                                    disabled={
-                                                                                        frozenAddress
-                                                                                    }
-                                                                                    label="联系电话"
-                                                                                    type="tel"
-                                                                                />
-                                                                            )}
-                                                                        />
-                                                                        <form.AppField
-                                                                            name={`draft.lines[${index}].allocations[${allocationIndex}].quantity`}
-                                                                            children={(
-                                                                                field,
-                                                                            ) => (
-                                                                                <field.TextField
-                                                                                    id={`${allocationPrefix}-quantity`}
-                                                                                    label="配送数量"
-                                                                                    inputMode="decimal"
-                                                                                />
-                                                                            )}
-                                                                        />
-                                                                        <div className="flex items-end justify-end">
-                                                                            <Button
-                                                                                id={`${allocationPrefix}-remove`}
-                                                                                disabled={
-                                                                                    occupiedAddress
-                                                                                }
-                                                                                type="button"
-                                                                                variant="ghost"
-                                                                                size="sm"
-                                                                                onClick={() =>
-                                                                                    allocationsField.removeValue(
-                                                                                        allocationIndex,
-                                                                                    )
-                                                                                }
-                                                                            >
-                                                                                移除地址
-                                                                            </Button>
-                                                                        </div>
-                                                                        <form.Field
-                                                                            name={`draft.lines[${index}].allocations[${allocationIndex}].region_code`}
-                                                                            children={(
-                                                                                field,
-                                                                            ) => (
-                                                                                <div className="space-y-2 md:col-span-2">
-                                                                                    <Label>
-                                                                                        省
-                                                                                        /
-                                                                                        市
-                                                                                        /
-                                                                                        区县
-                                                                                    </Label>
-                                                                                    <RegionCascadeSelect
-                                                                                        idPrefix={`${allocationPrefix}-region`}
-                                                                                        disabled={
-                                                                                            frozenAddress
-                                                                                        }
-                                                                                        leafOnly
-                                                                                        value={
-                                                                                            field
-                                                                                                .state
-                                                                                                .value
-                                                                                        }
-                                                                                        onValueChange={
-                                                                                            field.handleChange
-                                                                                        }
-                                                                                    />
-                                                                                </div>
-                                                                            )}
-                                                                        />
-                                                                        <form.AppField
-                                                                            name={`draft.lines[${index}].allocations[${allocationIndex}].address`}
-                                                                            children={(
-                                                                                field,
-                                                                            ) => (
-                                                                                <field.TextField
-                                                                                    id={`${allocationPrefix}-detail`}
-                                                                                    disabled={
-                                                                                        frozenAddress
-                                                                                    }
-                                                                                    className="md:col-span-2"
-                                                                                    label="详细地址"
-                                                                                />
-                                                                            )}
-                                                                        />
-                                                                    </div>
-                                                                )
-                                                            },
-                                                        )}
-                                                    </section>
-                                                )}
-                                            />
-                                            <div className="text-xs text-muted-foreground">
-                                                需求{" "}
-                                                <QuantityValue
-                                                    value={line.quantity}
-                                                    unit={line.unit_code}
-                                                />
-                                                {line.sales_reference_price_gross ? (
-                                                    <>
-                                                        {" "}
-                                                        · 销售参考价{" "}
-                                                        <MoneyValue
-                                                            value={
-                                                                line.sales_reference_price_gross
-                                                            }
-                                                        />
-                                                    </>
-                                                ) : null}
-                                            </div>
-                                        </article>
-                                    )
-                                })}
-                            </div>
-                        )}
+                    <InquiryDemandLines
+                        form={form}
+                        inquiry={inquiry}
+                        disabled={command.isPending}
                     />
                 </section>
-                <div className="flex flex-wrap items-center justify-end gap-3">
-                    <p className="mr-auto text-xs text-muted-foreground">
-                        {saved
-                            ? "需求已保存。"
-                            : "输入会在当前账号的浏览器中保留；后台刷新不会覆盖。"}
-                    </p>
+                <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-end gap-3 border-t bg-background px-1 py-4">
+                    <div className="mr-auto space-y-1">
+                        <form.Subscribe
+                            selector={(state) => state.values.draft.lines}
+                        >
+                            {(lines) => {
+                                const pending = lines.filter(
+                                    (line) => !deliveryProgress(line).complete,
+                                ).length
+                                return (
+                                    <p className="text-sm font-medium">
+                                        已选 {lines.length} 项商品
+                                        {pending > 0
+                                            ? ` · ${pending} 项待完善配送`
+                                            : ""}
+                                    </p>
+                                )
+                            }}
+                        </form.Subscribe>
+                        <p
+                            className="text-xs text-muted-foreground"
+                            role="status"
+                        >
+                            {saved
+                                ? "需求已保存。"
+                                : localFailure
+                                  ? "本机保留失败，请保存需求后再离开。"
+                                  : "输入已在当前浏览器保留，保存后同步到询价草稿。"}
+                        </p>
+                    </div>
                     <Button
                         id="sales-inquiry-save-demand"
                         type="submit"

@@ -36,7 +36,6 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { InquiryRequirement } from "../types"
 import {
     INQUIRY_IMPORT_MAX_BYTES,
-    INQUIRY_TEMPLATE_VERSION,
     INQUIRY_WORKBOOK_MIME,
 } from "../lib/customer-workbook"
 import { inquiryDateInput } from "../lib/format"
@@ -165,8 +164,8 @@ export function InquiryImportDialog({
                 <DialogHeader>
                     <DialogTitle>导入客户选品</DialogTitle>
                     <DialogDescription>
-                        使用 {INQUIRY_TEMPLATE_VERSION}{" "}
-                        模板。先核对商品、地址和合并结果，再写入询价草稿。
+                        上传公司商品池导出的选品
+                        Excel，或询价详情下载的客户模板。先核对商品、地址和合并结果，再写入询价草稿。
                     </DialogDescription>
                 </DialogHeader>
                 <form

@@ -7,8 +7,8 @@ use erp_identity::Permission;
 use erp_identity::service::access_control::resolve::DataScopeService;
 use erp_sales::entity::sales_inquiry::SalesInquiry;
 use erp_sales::entity::sales_inquiry_import::{
-    INQUIRY_IMPORT_MAX_BYTES, InquiryImportDelivery, InquiryImportPreview, InquiryImportProduct,
-    InquiryImportValidation,
+    INQUIRY_IMPORT_MAX_BYTES, InquiryImportDelivery, InquiryImportIssue, InquiryImportPreview,
+    InquiryImportProduct, InquiryImportValidation,
 };
 use erp_sales::repository::extensions::SalesInquiryImportExt;
 use erp_sales::service::sales_inquiry::SalesInquiryService;
@@ -102,7 +102,12 @@ impl SalesInquiryImportProcess {
         let validated =
             InquiryImportValidation::build(&products, &deliveries, &facts, &inquiry.draft, next_id);
         let mut errors = workbook.errors;
-        errors.extend(validated.errors);
+        errors.extend(
+            validated
+                .errors
+                .into_iter()
+                .map(|issue| locate_issue(issue, workbook.product_sheet, workbook.automatic_delivery)),
+        );
         let expires_at = Instant::now().unix_secs() + 3600;
         let preview = InquiryImportPreview {
             base: BaseModel::new(next_id()),
@@ -157,4 +162,19 @@ fn delivery_rows(workbook: &Workbook) -> Vec<InquiryImportDelivery> {
             terms: row.cells[9].value.clone(),
         })
         .collect()
+}
+
+fn locate_issue(mut issue: InquiryImportIssue, sheet: &str, automatic_delivery: bool) -> InquiryImportIssue {
+    if issue.sheet == parse::PRODUCT_SHEET && sheet != parse::PRODUCT_SHEET {
+        issue.sheet = sheet.into();
+        issue.column = match issue.column.as_str() {
+            "SKU编码" => "SKU 编号".into(),
+            "单位" => "单位编码".into(),
+            _ => issue.column,
+        };
+    }
+    if automatic_delivery && issue.sheet == parse::DELIVERY_SHEET && issue.column == "SKU编码" {
+        issue.column = "SKU 编号".into();
+    }
+    issue
 }

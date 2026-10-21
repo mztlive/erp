@@ -222,7 +222,7 @@ export function SellableExportConfirmDialog({
                         <span className="num font-medium text-foreground">
                             {rows.length}
                         </span>{" "}
-                        件已选商品，单元格含主图。请核对后确认。
+                        件已选商品，保留原有全部列和主图，并附客户选品及配送地址填写页。发送客户前请自行处理供应商等内部信息；卡券可导出查看，但不参与询价。
                     </DialogDescription>
                 </DialogHeader>
                 <DialogScrollBody>

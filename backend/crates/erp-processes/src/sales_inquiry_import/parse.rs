@@ -10,6 +10,9 @@ use erp_sales::entity::sales_inquiry_import::{
 use regex::Regex;
 use zip::ZipArchive;
 
+use super::pool::{POOL_SHEET, POOL_VERSION, pool_rows};
+use super::pool_delivery::{self, AUTO_POOL_VERSION};
+use super::pool_delivery_checks::{CHECKED_POOL_VERSION, SCALAR_POOL_VERSION, strip_checks};
 use crate::{Error, Result};
 
 pub(super) const PRODUCT_SHEET: &str = "商品清单";
@@ -36,6 +39,7 @@ pub(super) struct Cell {
     pub value: String,
     pub text: bool,
     pub formula: bool,
+    pub formula_text: Option<String>,
 }
 
 #[derive(Clone)]
@@ -45,6 +49,8 @@ pub(super) struct Row {
 }
 
 pub(super) struct Workbook {
+    pub product_sheet: &'static str,
+    pub automatic_delivery: bool,
     pub products: Vec<Row>,
     pub deliveries: Vec<Row>,
     pub errors: Vec<InquiryImportIssue>,
@@ -62,28 +68,46 @@ pub(super) fn parse(bytes: &[u8]) -> Result<Workbook> {
     for (name, path) in paths {
         sheets.insert(name, rows(&read_text(&mut archive, &path)?, &shared)?);
     }
-    check_version(&sheets)?;
+    parse_sheets(sheets)
+}
+
+fn parse_sheets(mut sheets: HashMap<String, Vec<Row>>) -> Result<Workbook> {
+    let automatic = check_version(&sheets)?;
+    let version = sheets
+        .get(INSTRUCTIONS)
+        .and_then(|rows| rows.iter().find(|row| row.number == 1))
+        .and_then(|row| row.cells.get(1))
+        .map(|cell| cell.value.as_str());
+    let scalar = version == Some(SCALAR_POOL_VERSION);
+    let checked = scalar || version == Some(CHECKED_POOL_VERSION);
     let mut errors = Vec::new();
-    let products = data_rows(
-        sheets.remove(PRODUCT_SHEET).unwrap_or_default(),
-        PRODUCT_SHEET,
-        &PRODUCT_HEADERS,
-        &mut errors,
-    );
-    let deliveries = data_rows(
-        sheets.remove(DELIVERY_SHEET).unwrap_or_default(),
-        DELIVERY_SHEET,
-        &DELIVERY_HEADERS,
-        &mut errors,
-    );
-    if products.len() > INQUIRY_IMPORT_MAX_ROWS || deliveries.len() > INQUIRY_IMPORT_MAX_ROWS {
-        return Err(invalid("商品行及配送行每次均不得超过 2000 行"));
+    let product_sheet = if sheets.contains_key(POOL_SHEET) { POOL_SHEET } else { PRODUCT_SHEET };
+    let product_rows = sheets.remove(product_sheet).unwrap_or_default();
+    let products = if product_sheet == POOL_SHEET {
+        pool_rows(product_rows.clone(), &mut errors)?
+    } else {
+        data_rows(product_rows.clone(), PRODUCT_SHEET, &PRODUCT_HEADERS, &mut errors)
+    };
+    let mut delivery_rows = sheets.remove(DELIVERY_SHEET).unwrap_or_default();
+    if checked {
+        strip_checks(&mut delivery_rows, scalar, &mut errors);
     }
-    Ok(Workbook { products, deliveries, errors })
+    let mut deliveries = if automatic {
+        pool_delivery::delivery_rows(&product_rows, delivery_rows, &mut errors)?
+    } else {
+        data_rows(delivery_rows, DELIVERY_SHEET, &DELIVERY_HEADERS, &mut errors)
+    };
+    if product_sheet == POOL_SHEET {
+        deliveries.retain(|row| row.cells.iter().skip(1).any(|cell| !cell.value.is_empty() || cell.formula));
+    }
+    if products.len() > INQUIRY_IMPORT_MAX_ROWS || deliveries.len() > INQUIRY_IMPORT_MAX_ROWS {
+        return Err(invalid("商品行及实际填写的配送行每次均不得超过 2000 行"));
+    }
+    Ok(Workbook { product_sheet, automatic_delivery: automatic, products, deliveries, errors })
 }
 
 fn check_archive(archive: &mut ZipArchive<Cursor<&[u8]>>) -> Result<()> {
-    if archive.len() > 128 {
+    if archive.len() > 4096 {
         return Err(invalid("工作簿压缩条目过多"));
     }
     let mut expanded = 0_u64;
@@ -129,29 +153,37 @@ fn sheet_paths(archive: &mut ZipArchive<Cursor<&[u8]>>) -> Result<Vec<(String, S
     for tag in tags(&workbook, "sheet") {
         let name = attribute(tag, "name").ok_or_else(|| invalid("工作表名称无效"))?;
         let id = attribute(tag, "r:id").ok_or_else(|| invalid("工作表引用无效"))?;
-        if ![PRODUCT_SHEET, DELIVERY_SHEET, INSTRUCTIONS].contains(&name.as_str())
+        if ![PRODUCT_SHEET, POOL_SHEET, DELIVERY_SHEET, INSTRUCTIONS].contains(&name.as_str())
             || result.iter().any(|(existing, _)| existing == &name)
         {
-            return Err(invalid("只接受商品清单、配送需求、填写说明三个工作表"));
+            return Err(invalid("只接受选品（或商品清单）、配送需求、填写说明三个工作表"));
         }
         result.push((name, paths.get(&id).cloned().ok_or_else(|| invalid("工作表路径缺失"))?));
     }
-    if result.len() != 3 {
-        return Err(invalid("须包含商品清单、配送需求及填写说明三个工作表"));
+    if result.len() != 3
+        || !result.iter().any(|(name, _)| name == DELIVERY_SHEET)
+        || !result.iter().any(|(name, _)| name == INSTRUCTIONS)
+    {
+        return Err(invalid("须包含选品（或商品清单）、配送需求及填写说明三个工作表"));
     }
     Ok(result)
 }
 
-fn check_version(sheets: &HashMap<String, Vec<Row>>) -> Result<()> {
+fn check_version(sheets: &HashMap<String, Vec<Row>>) -> Result<bool> {
     let row = sheets.get(INSTRUCTIONS).and_then(|rows| rows.iter().find(|row| row.number == 1));
+    let versions = if sheets.contains_key(POOL_SHEET) {
+        &[POOL_VERSION, AUTO_POOL_VERSION, CHECKED_POOL_VERSION, SCALAR_POOL_VERSION][..]
+    } else {
+        &[INQUIRY_TEMPLATE_VERSION][..]
+    };
     let valid = row.is_some_and(|row| {
         row.cells.len() >= 2
             && row.cells[0].value == "模板版本"
-            && row.cells[1].value == INQUIRY_TEMPLATE_VERSION
+            && versions.contains(&row.cells[1].value.as_str())
             && !row.cells.iter().any(|cell| cell.formula)
     });
     if !valid {
-        return Err(invalid("填写说明第 1 行须标注模板版本 sales-inquiry-v1"));
+        return Err(invalid("填写说明第 1 行模板版本与工作表不匹配，请使用当前导出文件"));
     }
     if sheets.values().flatten().any(|row| row.cells.iter().any(|cell| cell.formula)) {
         // 明细公式在 data_rows 中定位；说明页公式不参与业务，但仍须先转值。
@@ -162,10 +194,12 @@ fn check_version(sheets: &HashMap<String, Vec<Row>>) -> Result<()> {
             return Err(invalid("填写说明含公式，请先转换为值"));
         }
     }
-    Ok(())
+    Ok(row.is_some_and(|row| {
+        [AUTO_POOL_VERSION, CHECKED_POOL_VERSION, SCALAR_POOL_VERSION].contains(&row.cells[1].value.as_str())
+    }))
 }
 
-fn data_rows(
+pub(super) fn data_rows(
     mut rows: Vec<Row>,
     sheet: &str,
     headers: &[&str],
@@ -247,7 +281,8 @@ fn read_cell(attrs: &str, inner: &str, shared: &[String]) -> Result<Cell> {
             raw
         }
     };
-    Ok(Cell { value: value.trim().to_string(), text, formula })
+    let formula_text = element_text(inner, "f")?;
+    Ok(Cell { value: value.trim().to_string(), text, formula, formula_text })
 }
 
 fn coordinate(address: &str) -> Result<(usize, u32)> {
@@ -375,16 +410,30 @@ mod tests {
     }
 
     fn package(version: &str, product_data: &str, delivery_data: &str) -> Vec<u8> {
+        package_sheet(version, PRODUCT_SHEET, sheet(&PRODUCT_HEADERS, product_data), delivery_data)
+    }
+
+    fn package_sheet(version: &str, name: &str, product_xml: String, delivery_data: &str) -> Vec<u8> {
         let workbook = r#"<workbook><sheets><sheet name="商品清单" r:id="r1"/><sheet name="配送需求" r:id="r2"/><sheet name="填写说明" r:id="r3"/></sheets></workbook>"#;
         let rels = r#"<Relationships><Relationship Target="worksheets/sheet1.xml" Id="r1"/><Relationship Id="r2" Target="worksheets/sheet2.xml"/><Relationship Id="r3" Target="worksheets/sheet3.xml"/></Relationships>"#;
         let instructions = format!(
             r#"<worksheet><sheetData><c r="A1" t="inlineStr"><is><t>模板版本</t></is></c><c r="B1" t="inlineStr"><is><t>{version}</t></is></c></sheetData></worksheet>"#
         );
         let files = [
-            ("xl/workbook.xml", workbook.to_string()),
+            ("xl/workbook.xml", workbook.replace(PRODUCT_SHEET, name)),
             ("xl/_rels/workbook.xml.rels", rels.to_string()),
-            ("xl/worksheets/sheet1.xml", sheet(&PRODUCT_HEADERS, product_data)),
-            ("xl/worksheets/sheet2.xml", sheet(&DELIVERY_HEADERS, delivery_data)),
+            ("xl/worksheets/sheet1.xml", product_xml),
+            (
+                "xl/worksheets/sheet2.xml",
+                sheet(
+                    if version == AUTO_POOL_VERSION {
+                        &pool_delivery::HEADERS[..]
+                    } else {
+                        &DELIVERY_HEADERS[..]
+                    },
+                    delivery_data,
+                ),
+            ),
             ("xl/worksheets/sheet3.xml", instructions),
         ];
         let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
@@ -409,6 +458,112 @@ mod tests {
             && error.row_number == 9
             && error.column == "配送数量"));
         assert!(parse(&package("future-v2", "", "")).is_err());
+    }
+
+    #[test]
+    fn pool_workbook_preserves_selection_rows_and_ignores_unused_delivery_placeholders() {
+        let headers = ["SKU 编号", "单位编码", "需求数量", "销售参考价", "需求备注", "供应商编号"];
+        let xml = sheet(&headers, "").replace("1\"", "2\"").replace("</sheetData>", r#"<c r="A4" t="inlineStr"><is><t>001</t></is></c><c r="B4" t="inlineStr"><is><t>PCS</t></is></c><c r="C4" t="inlineStr"><is><t>2</t></is></c><c r="F4" t="inlineStr"><is><t>private</t></is></c><c r="A5" t="inlineStr"><is><t>unused</t></is></c></sheetData>"#);
+        let delivery = r#"<c r="A2" t="inlineStr"><is><t>unused</t></is></c><c r="A8" t="inlineStr"><is><t>001</t></is></c><c r="C8" t="inlineStr"><is><t>0012345</t></is></c><c r="H8" t="inlineStr"><is><t>2</t></is></c>"#;
+        let parsed = parse(&package_sheet(POOL_VERSION, POOL_SHEET, xml.clone(), delivery)).unwrap();
+        assert!(parsed.errors.is_empty());
+        assert_eq!(parsed.product_sheet, POOL_SHEET);
+        assert_eq!(parsed.products.len(), 1);
+        assert_eq!(parsed.products[0].number, 4);
+        assert_eq!(parsed.products[0].cells[0].value, "001");
+        assert!(!parsed.products[0].cells.iter().any(|cell| cell.value == "private"));
+        assert_eq!(parsed.deliveries.len(), 1);
+        assert_eq!(parsed.deliveries[0].number, 8);
+        assert_eq!(parsed.deliveries[0].cells[2].value, "0012345");
+        assert!(parsed.deliveries[0].cells[2].text);
+        assert!(parse(&package_sheet(INQUIRY_TEMPLATE_VERSION, POOL_SHEET, xml, delivery)).is_err());
+    }
+
+    #[test]
+    fn automatic_pool_formula_is_recomputed_from_file_cells_without_using_cache() {
+        let headers = [
+            "配送关联",
+            "商品名称",
+            "SKU 编号",
+            "SPU 编号",
+            "需求数量",
+            "单位编码",
+            "销售参考价",
+            "需求备注",
+        ];
+        let data = ["line-1", "礼盒", "00123", "000-SPU", "2.5", "PCS", "", ""]
+            .iter()
+            .enumerate()
+            .map(|(index, value)| {
+                let column = char::from(b'A' + u8::try_from(index).unwrap());
+                format!(r#"<c r="{column}3" t="inlineStr"><is><t>{value}</t></is></c>"#)
+            })
+            .collect::<String>();
+        let xml =
+            sheet(&headers, "").replace("1\"", "2\"").replace("</sheetData>", &format!("{data}</sheetData>"));
+        let delivery = [("A", "商品名称"), ("B", "SKU 编号"), ("C", "SPU 编号"), ("J", "需求数量")]
+            .iter().map(|(column, field)| format!(r#"<c r="{column}2" t="str"><f>IF(INDEX(InquirySelection[需求数量],MATCH("line-1",InquirySelection[配送关联],0))="","",INDEX(InquirySelection[{field}],MATCH("line-1",InquirySelection[配送关联],0)))</f><v>stale-cache</v></c>"#)).collect::<String>();
+        let parsed = parse(&package_sheet(AUTO_POOL_VERSION, POOL_SHEET, xml, &delivery)).unwrap();
+        assert!(parsed.errors.is_empty());
+        assert_eq!(parsed.products[0].cells[0].value, "00123");
+        assert_eq!(parsed.deliveries[0].cells[0].value, "00123");
+        assert_eq!(parsed.deliveries[0].cells[7].value, "2.5");
+        assert!(parsed.deliveries[0].cells[0].text);
+        assert!(!parsed.deliveries[0].cells.iter().any(|cell| cell.formula));
+    }
+
+    #[test]
+    fn exported_v3_workbook_imports_split_addresses_without_using_check_caches() {
+        // 由生产 ExcelJS 导出器生成，填写 60 + 40；自动公式缓存仍为空。
+        let parsed = parse(include_bytes!("fixtures/pool-v3.xlsx.fixture")).unwrap();
+        assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
+        assert_eq!(parsed.products.len(), 1);
+        assert_eq!(parsed.products[0].cells[0].value, "00123");
+        assert_eq!(parsed.products[0].cells[4].value, "100");
+        assert_eq!(parsed.deliveries.len(), 2);
+        assert_eq!(parsed.deliveries[0].cells[1].value, "张三");
+        assert_eq!(parsed.deliveries[1].cells[1].value, "李四");
+        assert_eq!(parsed.deliveries[0].cells[2].value, "0013800000000");
+        assert_eq!(parsed.deliveries[0].cells[7].value, "60");
+        assert_eq!(parsed.deliveries[1].cells[7].value, "40");
+        assert!(parsed.deliveries.iter().all(|row| row.cells.len() == 10));
+    }
+
+    #[test]
+    fn v4_copied_rows_keep_both_quantities_without_trusting_summary_cells() {
+        let parsed = parse(include_bytes!("fixtures/pool-v4.xlsx.fixture")).unwrap();
+        assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
+        assert_eq!(parsed.products[0].cells[4].value, "100");
+        assert_eq!(parsed.deliveries.len(), 2);
+        for row in parsed.deliveries {
+            assert_eq!(row.cells.len(), 10);
+            assert_eq!(row.cells[0].value, "00123");
+            assert_eq!(row.cells[7].value, "100");
+        }
+    }
+
+    #[test]
+    fn unused_address_slots_do_not_count_towards_the_delivery_limit() {
+        let bytes = include_bytes!("fixtures/pool-v3.xlsx.fixture");
+        let mut archive = ZipArchive::new(Cursor::new(bytes.as_slice())).unwrap();
+        let shared = shared_strings(&mut archive).unwrap();
+        let mut sheets = HashMap::new();
+        for (name, path) in sheet_paths(&mut archive).unwrap() {
+            sheets.insert(name, rows(&read_text(&mut archive, &path).unwrap(), &shared).unwrap());
+        }
+        let deliveries = sheets.get_mut(DELIVERY_SHEET).unwrap();
+        let mut spare = deliveries.last().unwrap().clone();
+        // 核对列即使转值也不参与实际地址计数。
+        for cell in spare.cells.iter_mut().skip(12) {
+            *cell = Cell::default();
+        }
+        for number in 5..=6001 {
+            spare.number = number;
+            deliveries.push(spare.clone());
+        }
+        let parsed = parse_sheets(sheets).unwrap();
+        assert!(parsed.errors.is_empty());
+        assert_eq!(parsed.deliveries.len(), 2);
     }
 
     #[test]

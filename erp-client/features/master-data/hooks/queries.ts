@@ -21,7 +21,6 @@ import {
     updateProductListingStatus,
 } from "@/features/master-data/api"
 import { fetchFileAsset } from "@/features/master-data/api/media-assets"
-import { fetchInquiryTemplateProducts } from "@/features/master-data/api/inquiry-template"
 import { updateVoucherCategoryRevision } from "@/features/master-data/api/mutations/voucher"
 import {
     fetchWarehouseFulfillmentHandlerOptions,
@@ -158,14 +157,6 @@ export function useProductFilterOptionsQuery(enabled: boolean) {
 export function useMasterDataExportMutation() {
     return useMutation({
         mutationFn: (query: MasterDataListQuery) => fetchMasterDataList(query),
-    })
-}
-
-/** 下载客户模板前重验已勾选商品的当前资格和权限。 */
-export function useInquiryTemplateProductsMutation() {
-    return useMutation({
-        mutationFn: (skuIds: readonly string[]) =>
-            fetchInquiryTemplateProducts(skuIds),
     })
 }
 

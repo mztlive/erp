@@ -3,6 +3,9 @@
 mod confirm;
 mod facts;
 mod parse;
+mod pool;
+mod pool_delivery;
+mod pool_delivery_checks;
 mod preview;
 mod views;
 

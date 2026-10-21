@@ -6,7 +6,6 @@ import { toast } from "@/components/ui/toast"
 import { useMasterDataExportMutation } from "@/features/master-data/hooks/queries"
 import type { ListExportMeta } from "@/features/master-data/hooks/use-master-data-list-export"
 import { selectSellableRows } from "@/features/master-data/lib/sellable-excel-rows"
-import type { MasterDataListItem } from "@/features/master-data/types"
 import { getErrorPresentation } from "@/lib/api/errors"
 
 export function useSellableExcelExport() {
@@ -19,24 +18,21 @@ export function useSellableExcelExport() {
     const handleExcelExport = React.useCallback(
         async (input: {
             query: Parameters<typeof exportMutation.mutateAsync>[0]
-            selectedIds: ReadonlySet<string>
-            fallbackRows: readonly MasterDataListItem[]
+            selectedIds?: ReadonlySet<string>
             filterSnapshotLabel: string
             fileLabel: string
         }) => {
-            if (input.selectedIds.size === 0) return false
+            if (input.selectedIds?.size === 0) return false
             setPending(true)
             try {
-                let source = input.fallbackRows
-                try {
-                    const refreshed = await exportMutation.mutateAsync(
-                        input.query,
+                const refreshed = await exportMutation.mutateAsync(input.query)
+                const rows = input.selectedIds
+                    ? selectSellableRows(refreshed.rows, input.selectedIds)
+                    : [...refreshed.rows]
+                if (input.selectedIds && rows.length !== input.selectedIds.size)
+                    throw new Error(
+                        "部分勾选商品已不可导出，请刷新商品池后重新选择",
                     )
-                    source = refreshed.rows
-                } catch {
-                    // 重新核对失败时仍按当前列表勾选导出，避免选品中断。
-                }
-                const rows = selectSellableRows(source, input.selectedIds)
                 if (rows.length === 0) {
                     toast.add({
                         title: "没有可导出的商品",

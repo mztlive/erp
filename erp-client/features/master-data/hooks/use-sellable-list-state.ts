@@ -7,12 +7,10 @@ import { PRICE_FILTER_LABELS } from "@/lib/price-filter"
 import { useSellableListFilters } from "@/features/master-data/hooks/use-sellable-list-filters"
 import { useProductFilterOptionsQuery } from "@/features/master-data/hooks/queries"
 import { useSellableListData } from "@/features/master-data/hooks/use-sellable-list-data"
-import { useMasterDataListExport } from "@/features/master-data/hooks/use-master-data-list-export"
 import {
     buildSellableFilterSnapshotLabel,
     buildSellableTableDescription,
 } from "@/features/master-data/lib/master-data-list-summaries"
-import { resourceLabel } from "@/features/master-data/lib/data"
 import {
     directorySelectionLabel,
     productFilterDirectoryState,
@@ -80,7 +78,6 @@ export function useSellableListState(
           )
         : undefined
     const productFilterOptionsQuery = useProductFilterOptionsQuery(true)
-    const { exportMeta, handleExport } = useMasterDataListExport()
     const [previewId, setPreviewId] = React.useState<string | null>(null)
 
     const rows = list.rows
@@ -204,27 +201,6 @@ export function useSellableListState(
         ],
     )
 
-    const onExport = React.useCallback(() => {
-        if (!list.loaded || list.total === 0) return
-        void handleExport(
-            {
-                resource: "sellable-items",
-                q: filters.q.trim() || undefined,
-                productKind: filters.productKind,
-                productCategoryId: filters.productCategoryId,
-                productBrandId: filters.productBrandId,
-                deliveryRegion: filters.deliveryRegion,
-                deliveryExtent: filters.deliveryExtent,
-                includeFreightExtra: filters.includeFreightExtra,
-                productPriceKind: filters.productPriceKind,
-                productSalesPriceMin: filters.productSalesPriceMin,
-                productSalesPriceMax: filters.productSalesPriceMax,
-            },
-            filterSnapshotLabel,
-            resourceLabel("sellable-items"),
-        )
-    }, [filterSnapshotLabel, filters, handleExport, list.loaded, list.total])
-
     return {
         filters,
         /** 筛选条件标识；变化时清空勾选。 */
@@ -233,7 +209,7 @@ export function useSellableListState(
         sorting,
         changeSorting,
         productFilterOptionsQuery,
-        exportMeta,
+        exportQuery: { ...filterQuery, ...sellableSortFromTable(sorting) },
         previewId,
         setPreviewId,
         rows,
@@ -241,6 +217,5 @@ export function useSellableListState(
         appliedChips,
         filterSnapshotLabel,
         sellableTableDescription,
-        onExport,
     }
 }

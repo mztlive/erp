@@ -1,6 +1,8 @@
-import type { Worksheet } from "exceljs"
+import type { Workbook, Worksheet } from "exceljs"
+import { appendPoolDeliverySheet } from "@/lib/inquiry-pool-delivery"
 
 export const INQUIRY_TEMPLATE_VERSION = "sales-inquiry-v1"
+export const INQUIRY_POOL_TEMPLATE_VERSION = "sales-inquiry-pool-v4"
 export const INQUIRY_IMPORT_MAX_BYTES = 5 * 1024 * 1024
 export const INQUIRY_IMPORT_MAX_DELIVERY_ROWS = 2000
 export const INQUIRY_IMPORT_MAX_REQUIREMENT_ROWS = 200
@@ -37,6 +39,8 @@ export type InquiryCustomerWorkbookProduct = Readonly<{
     product_name: string
     specification: string
     unit: string
+    delivery_key?: string
+    inquiry_supported?: boolean
     quantity?: string | null
     sales_reference_price?: string | null
     remark?: string | null
@@ -110,45 +114,64 @@ export async function buildInquiryCustomerWorkbook(
             product.remark ?? "",
         ])
 
-    const deliverySheet = workbook.addWorksheet("配送需求", {
-        views: [{ state: "frozen", ySplit: 1 }],
+    appendInquiryDeliverySheets(workbook, products)
+
+    const buffer = await workbook.xlsx.writeBuffer()
+    const blob = new Blob([new Uint8Array(buffer as ArrayBuffer)], {
+        type: INQUIRY_WORKBOOK_MIME,
     })
-    configureSheet(
-        deliverySheet,
-        INQUIRY_DELIVERY_HEADERS,
-        [24, 18, 22, 18, 18, 18, 42, 16, 20, 38],
-    )
-    for (const product of products)
-        addTextRow(deliverySheet, [
-            product.sku_code,
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-        ])
+    if (blob.size > INQUIRY_IMPORT_MAX_BYTES)
+        throw new Error("生成的模板超过 5 MiB，请减少商品数量后重新下载")
+    return blob
+}
+
+export async function downloadInquiryCustomerWorkbook(
+    products: readonly InquiryCustomerWorkbookProduct[],
+    inquiry_no?: string,
+): Promise<void> {
+    const blob = await buildInquiryCustomerWorkbook(products)
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.id = "sales-inquiry-customer-workbook-download"
+    link.href = url
+    link.download = `客户选品-${inquiry_no?.replace(/[\\/:*?"<>|]/g, "-") || "询价"}.xlsx`
+    link.click()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+/** 为原商品池导出和询价模板追加同一套配送填写页。 */
+export function appendInquiryDeliverySheets(
+    workbook: Workbook,
+    products: readonly InquiryCustomerWorkbookProduct[],
+    pool = false,
+) {
+    if (pool) appendPoolDeliverySheet(workbook, products)
+    else appendStaticDeliverySheet(workbook, products)
 
     const notes = workbook.addWorksheet("填写说明")
     notes.getColumn(1).width = 22
     notes.getColumn(2).width = 112
     const instructions: readonly (readonly [string, string])[] = [
-        ["模板版本", INQUIRY_TEMPLATE_VERSION],
+        [
+            "模板版本",
+            pool ? INQUIRY_POOL_TEMPLATE_VERSION : INQUIRY_TEMPLATE_VERSION,
+        ],
         ["文件限制", "仅支持 XLSX 文件，大小不超过 5 MiB（5,242,880 字节）。"],
         [
             "行数限制",
             "配送需求最多 2,000 行；按 SKU、交期及交付条件分组后最多 200 条需求，每条需求最多 100 个地址。超限须拆分后重新询价。",
         ],
         [
-            "商品清单",
-            "每个 SKU 仅填写一行。保留 SKU 编码、商品名称、规格和单位；不得新增列或填写供应商、内部报价、采购责任等资料。",
+            pool ? "选品" : "商品清单",
+            pool
+                ? "在选品页填写需求数量即表示选中；未填数量的商品不导入询价。需求数量、销售参考价和需求备注由客户或销售填写，原有三种展示价格不会自动作为询价参考价。"
+                : "每个 SKU 仅填写一行。保留 SKU 编码、商品名称、规格和单位；不得新增列或填写供应商、内部报价、采购责任等资料。",
         ],
         [
             "配送需求",
-            "每行填写一个 SKU、一个收件地址和一组交付要求。省、市、区县分别填写完整名称，不要合并单元格。",
+            pool
+                ? "每个商品默认一个配送行。选品页填写需求数量后，自动带出商品信息，配送数量默认等于需求数量。一个地址填一行；省、市、区县分别填写完整名称。"
+                : "每行填写一个 SKU、一个收件地址和一组交付要求。省、市、区县分别填写完整名称，不要合并单元格。",
         ],
         [
             "编号与电话",
@@ -172,7 +195,9 @@ export async function buildInquiryCustomerWorkbook(
         ],
         [
             "公式处理",
-            "不接受公式单元格。请先复制公式计算结果，再选择性粘贴为值；不得只保留公式缓存值。",
+            pool
+                ? "系统自动带出的商品资料和配送数量可直接导入，无须转值。请勿修改自动公式；自行添加的其他公式须先选择性粘贴为值。"
+                : "不接受公式单元格。请先复制公式计算结果，再选择性粘贴为值；不得只保留公式缓存值。",
         ],
         [
             "导入确认",
@@ -180,27 +205,54 @@ export async function buildInquiryCustomerWorkbook(
         ],
     ]
     for (const instruction of instructions) addTextRow(notes, instruction)
+    if (pool) {
+        addTextRow(notes, [
+            "多个收货地址",
+            "点击左侧行号复制该商品整行到配送页末尾，保留隐藏核对列，分别填写地址，并将原行和新增行的数量都改为实际分配值。例如需求 100，原行填 60、新增行填 40。各行合计须等于需求数量；修改选品数量后须重新核对分配。",
+        ])
+        addTextRow(notes, [
+            "数量核对与颜色",
+            "配送数量和右侧核对区：超量标红并显示超出数量，不足标黄并显示尚差数量，数量一致标绿。需求数量、已分配数量、剩余数量按 SKU 汇总，包括复制追加的地址行。绿色仅表示数量一致，不表示地址完整或通过导入校验；格式错误须修正。核对列无需修改。",
+        ])
+        addTextRow(notes, [
+            "筛选与取消选品",
+            "可在配送页筛选 SKU 编号非空的行。取消选品后，已填地址仍保留，须核对并清空该行配送内容；系统不会静默删除已填资料。",
+        ])
+        addTextRow(notes, [
+            "发送客户前",
+            "本文件保留公司商品池原有全部列，包括供应商编号及供应保障；销售须自行删除不对客的信息后再发送。可删除供应商等展示列，但须保留商品名称、SKU 编号、SPU 编号、需求数量、销售参考价、需求备注及隐藏的单位编码、配送关联列。",
+        ])
+        addTextRow(notes, [
+            "卡券",
+            "卡券保留在选品清单中供查看，但不适用销售询价；请勿填写其需求数量或配送需求。",
+        ])
+    }
     notes.getRow(1).font = { bold: true }
-
-    const buffer = await workbook.xlsx.writeBuffer()
-    const blob = new Blob([new Uint8Array(buffer as ArrayBuffer)], {
-        type: INQUIRY_WORKBOOK_MIME,
-    })
-    if (blob.size > INQUIRY_IMPORT_MAX_BYTES)
-        throw new Error("生成的模板超过 5 MiB，请减少商品数量后重新下载")
-    return blob
 }
 
-export async function downloadInquiryCustomerWorkbook(
+function appendStaticDeliverySheet(
+    workbook: Workbook,
     products: readonly InquiryCustomerWorkbookProduct[],
-    inquiry_no?: string,
-): Promise<void> {
-    const blob = await buildInquiryCustomerWorkbook(products)
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.id = "sales-inquiry-customer-workbook-download"
-    link.href = url
-    link.download = `客户选品-${inquiry_no?.replace(/[\\/:*?"<>|]/g, "-") || "询价"}.xlsx`
-    link.click()
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+) {
+    const deliverySheet = workbook.addWorksheet("配送需求", {
+        views: [{ state: "frozen", ySplit: 1 }],
+    })
+    configureSheet(
+        deliverySheet,
+        INQUIRY_DELIVERY_HEADERS,
+        [24, 18, 22, 18, 18, 18, 42, 16, 20, 38],
+    )
+    for (const product of products)
+        addTextRow(deliverySheet, [
+            product.sku_code,
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+        ])
 }

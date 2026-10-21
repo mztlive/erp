@@ -11,6 +11,15 @@ import {
     type SellableExcelImageExtension,
 } from "@/features/master-data/lib/sellable-excel-rows"
 
+import {
+    appendInquiryDeliverySheets,
+    INQUIRY_IMPORT_MAX_BYTES,
+    INQUIRY_POOL_TEMPLATE_VERSION,
+    INQUIRY_WORKBOOK_MIME,
+} from "@/lib/inquiry-workbook"
+
+import { INQUIRY_POOL_TABLE } from "@/lib/inquiry-pool-delivery"
+
 const IMAGE_COL_WIDTH = 14
 const IMAGE_SIZE_PX = 76
 const DATA_ROW_HEIGHT = 62
@@ -30,6 +39,11 @@ const COLUMN_WIDTHS = [
     14,
     12,
     10,
+    16,
+    16,
+    16,
+    32,
+    26,
     16,
 ] as const
 
@@ -51,14 +65,17 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 async function rasterizeToJpeg(blob: Blob): Promise<ExcelImagePayload> {
     const bitmap = await createImageBitmap(blob)
     const canvas = document.createElement("canvas")
-    canvas.width = bitmap.width
-    canvas.height = bitmap.height
+    const scale = Math.min(1, 152 / Math.max(bitmap.width, bitmap.height))
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale))
     const context = canvas.getContext("2d")
     if (!context) {
         bitmap.close()
         throw new Error("无法转换商品主图")
     }
-    context.drawImage(bitmap, 0, 0)
+    context.fillStyle = "#ffffff"
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
     bitmap.close()
     return {
         base64: canvas.toDataURL("image/jpeg", 0.86),
@@ -71,7 +88,7 @@ async function toExcelImage(
     fileName?: string,
 ): Promise<ExcelImagePayload> {
     const extension = excelImageExtension(blob.type, fileName)
-    if (extension) {
+    if (extension && blob.size <= 12 * 1024) {
         return { base64: await blobToDataUrl(blob), extension }
     }
     return rasterizeToJpeg(blob)
@@ -89,19 +106,22 @@ async function loadRowImage(
     }
 }
 
-export async function buildSellableItemsExcelFile(input: {
+export async function buildSellableItemsWorkbook(input: {
     rows: readonly MasterDataListItem[]
     filterSnapshotLabel: string
     fileLabel: string
-}): Promise<void> {
+}): Promise<Blob> {
+    if (input.rows.length > 2000)
+        throw new Error("一次最多导出 2000 件商品，请缩小筛选范围后重试")
     const workbook = new ExcelJS.Workbook()
     workbook.creator = "公司商品池"
+    workbook.subject = INQUIRY_POOL_TEMPLATE_VERSION
     const sheet = workbook.addWorksheet("选品", {
         views: [{ state: "frozen", ySplit: 2, xSplit: 0 }],
     })
     sheet.mergeCells(1, 1, 1, SELLABLE_EXCEL_HEADERS.length)
     sheet.getCell(1, 1).value =
-        `筛选条件=${input.filterSnapshotLabel}。说明=按勾选导出；主图在单元格内；不含无权查看的敏感信息。`
+        `筛选条件=${input.filterSnapshotLabel}。填写需求数量即表示选中商品，并在配送需求页填写数量及地址。发送客户前请自行处理内部信息。`
     sheet.getCell(1, 1).alignment = { wrapText: true, vertical: "middle" }
     sheet.getRow(1).height = 28
 
@@ -110,11 +130,19 @@ export async function buildSellableItemsExcelFile(input: {
         const cell = headerRow.getCell(index + 1)
         cell.value = header
         cell.font = { bold: true }
+        if (index >= 14 && index <= 16)
+            cell.fill = {
+                type: "pattern",
+                pattern: "solid",
+                fgColor: { argb: "FFFFF2CC" },
+            }
     })
     COLUMN_WIDTHS.forEach((width, index) => {
         sheet.getColumn(index + 1).width = width
     })
 
+    sheet.getColumn(19).hidden = true
+    sheet.getColumn(20).hidden = true
     const mapped = input.rows.map(toSellableExcelRow)
     const images = await mapWithConcurrency(
         mapped,
@@ -142,9 +170,19 @@ export async function buildSellableItemsExcelFile(input: {
             item.productKind,
             item.baseUnit,
             item.barcode,
+            "",
+            "",
+            "",
+            input.rows[index]?.productKind === "VOUCHER"
+                ? "卡券不适用销售询价"
+                : "填写需求数量后参与询价",
+            input.rows[index]?.sellableItem?.baseUnitCode ?? "",
+            `line-${index + 1}`,
         ]
         values.forEach((value, columnIndex) => {
-            excelRow.getCell(columnIndex + 1).value = value
+            const cell = excelRow.getCell(columnIndex + 1)
+            cell.numFmt = "@"
+            cell.value = value
         })
         const image = images[index]
         if (!image) return
@@ -159,12 +197,52 @@ export async function buildSellableItemsExcelFile(input: {
         })
     })
 
+    sheet.addTable({
+        name: INQUIRY_POOL_TABLE,
+        ref: "A2",
+        headerRow: true,
+        totalsRow: false,
+        style: { theme: "TableStyleLight1", showRowStripes: false },
+        columns: SELLABLE_EXCEL_HEADERS.map((name) => ({
+            name,
+            filterButton: true,
+        })),
+        rows: input.rows.map((_, index) =>
+            SELLABLE_EXCEL_HEADERS.map(
+                (_, column) =>
+                    sheet.getRow(index + 3).getCell(column + 1).value,
+            ),
+        ),
+    })
+
+    appendInquiryDeliverySheets(
+        workbook,
+        input.rows.map((row, index) => ({
+            sku_code: row.stableNo,
+            delivery_key: `line-${index + 1}`,
+            inquiry_supported: row.productKind !== "VOUCHER",
+            product_name: row.name,
+            specification: row.sellableItem?.specificationLabel ?? "",
+            unit: row.sellableItem?.baseUnitCode ?? "",
+        })),
+        true,
+    )
     const buffer = await workbook.xlsx.writeBuffer()
-    const bytes = new Uint8Array(buffer as ArrayBuffer)
+    const blob = new Blob([new Uint8Array(buffer as ArrayBuffer)], {
+        type: INQUIRY_WORKBOOK_MIME,
+    })
+    if (blob.size > INQUIRY_IMPORT_MAX_BYTES)
+        throw new Error("导出文件超过询价可导入的 5 MiB，请减少商品数量后重试")
+    return blob
+}
+
+export async function buildSellableItemsExcelFile(input: {
+    rows: readonly MasterDataListItem[]
+    filterSnapshotLabel: string
+    fileLabel: string
+}): Promise<void> {
     downloadBlob(
-        new Blob([bytes], {
-            type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        }),
+        await buildSellableItemsWorkbook(input),
         `基础资料-${input.fileLabel}.xlsx`,
     )
 }

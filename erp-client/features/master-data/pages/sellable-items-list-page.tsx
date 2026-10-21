@@ -3,7 +3,6 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { CircleHelpIcon, DownloadIcon, PackageSearchIcon } from "lucide-react"
-import { useIsMutating } from "@tanstack/react-query"
 
 import {
     BackgroundJobProgress,
@@ -13,7 +12,6 @@ import {
     PageScaffold,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { InquiryCustomerTemplateButton } from "@/components/business/inquiry-customer-template-button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { toast } from "@/components/ui/toast"
 import {
@@ -38,7 +36,6 @@ import { SellablePreviewSheet } from "@/features/master-data/components/list/sel
 import { useCreatePermission } from "@/features/master-data/hooks/use-create-permission"
 import { useListPageChrome } from "@/features/master-data/hooks/use-list-page-chrome"
 import { useSellableExcelExport } from "@/features/master-data/hooks/use-sellable-excel-export"
-import { useInquiryTemplateProductsMutation } from "@/features/master-data/hooks/queries"
 import { useSellableGallerySelection } from "@/features/master-data/hooks/use-sellable-gallery-selection"
 import { useSellableListColumns } from "@/features/master-data/hooks/use-sellable-list-columns"
 import { useSellableListState } from "@/features/master-data/hooks/use-sellable-list-state"
@@ -62,20 +59,6 @@ export function SellableItemsListPage() {
         state.selectionResetKey,
     )
     const excelExport = useSellableExcelExport()
-    const templateProducts = useInquiryTemplateProductsMutation()
-    const csvExportPending =
-        useIsMutating({
-            predicate: (mutation) => {
-                const variables = mutation.state.variables
-                return (
-                    typeof variables === "object" &&
-                    variables !== null &&
-                    "resource" in variables &&
-                    variables.resource === "sellable-items" &&
-                    !("idempotencyKey" in variables)
-                )
-            },
-        }) > 0
     const { filters } = state
     const layout = filters.layout
     const isGallery = layout === "gallery"
@@ -84,14 +67,8 @@ export function SellableItemsListPage() {
         filters.q.trim() !== "" || filters.hasStructuredSellableFilters
     const listLoadFailed = state.list.isError
     const exportsSelection = isGallery || selection.selectedCount > 0
-    const exportPending = excelExport.pending || csvExportPending
-    const [lastExportKind, setLastExportKind] = React.useState<
-        "selection" | "filter"
-    >("filter")
-    const exportMeta =
-        lastExportKind === "selection"
-            ? excelExport.exportMeta
-            : state.exportMeta
+    const exportPending = excelExport.pending
+    const exportMeta = excelExport.exportMeta
     const exportDisabled = exportsSelection
         ? exportPending || selection.selectedCount === 0
         : exportPending || state.list.total === 0
@@ -101,9 +78,6 @@ export function SellableItemsListPage() {
     const launchButtonRef = React.useRef<HTMLSpanElement>(null)
     const { canCreate: canLaunchSelection } = useCreatePermission(
         "sales_selection_booklet:create",
-    )
-    const { canCreate: canDownloadCustomerTemplate } = useCreatePermission(
-        "sales_inquiry:create",
     )
     const sourceKind = resolvePoolSourceKind(selection.selectedCount)
     const sourceSummary = describePoolSource({
@@ -135,7 +109,6 @@ export function SellableItemsListPage() {
     }, [selection.selectedCount])
 
     const onConfirmSelectionExport = React.useCallback(() => {
-        setLastExportKind("selection")
         void excelExport
             .handleExcelExport({
                 query: {
@@ -154,20 +127,13 @@ export function SellableItemsListPage() {
                     skuIds: [...selection.selectedIds],
                 },
                 selectedIds: selection.selectedIds,
-                fallbackRows: selection.selectedRows,
                 filterSnapshotLabel: state.filterSnapshotLabel,
                 fileLabel: resourceLabel("sellable-items"),
             })
             .then((ok) => {
                 if (ok) setExportConfirmOpen(false)
             })
-    }, [
-        excelExport,
-        filters,
-        selection.selectedIds,
-        selection.selectedRows,
-        state,
-    ])
+    }, [excelExport, filters, selection.selectedIds, state])
 
     return (
         <PageScaffold density="compact" className={styles.page}>
@@ -196,7 +162,8 @@ export function SellableItemsListPage() {
                             {masterDataCopy.sellableItemsHint}
                         </p>
                         <p className="text-sm leading-6 text-muted-foreground">
-                            表格和卡片模式均可勾选商品，导出带主图的表格，或把已勾选商品做成选品册。表格未勾选时导出当前筛选结果；发起选品时，已勾选则按勾选，未勾选则按当前筛选。
+                            表格和卡片模式均可勾选商品，导出带主图、客户选品和配送地址填写页的
+                            Excel，或把已勾选商品做成选品册。表格未勾选时导出当前筛选结果；发起选品时，已勾选则按勾选，未勾选则按当前筛选。
                         </p>
                     </PopoverContent>
                 </Popover>
@@ -210,10 +177,12 @@ export function SellableItemsListPage() {
                     disabled={exportDisabled}
                     onClick={() => {
                         if (exportsSelection) onSelectionExport()
-                        else {
-                            setLastExportKind("filter")
-                            state.onExport()
-                        }
+                        else
+                            void excelExport.handleExcelExport({
+                                query: state.exportQuery,
+                                filterSnapshotLabel: state.filterSnapshotLabel,
+                                fileLabel: resourceLabel("sellable-items"),
+                            })
                     }}
                 >
                     {!exportPending ? (
@@ -228,26 +197,6 @@ export function SellableItemsListPage() {
                           ? `${masterDataCopy.sellableExportSelected}${selection.selectedCount > 0 ? ` ${selection.selectedCount}` : ""}`
                           : "导出当前结果"}
                 </LoadingButton>
-                {canDownloadCustomerTemplate && (
-                    <InquiryCustomerTemplateButton
-                        id="master-data-sellable-items-customer-template"
-                        products={selection.selectedRows.map((row) => ({
-                            sku_code: row.stableNo,
-                            product_name: row.name,
-                            specification:
-                                row.sellableItem?.specificationLabel ?? "",
-                            unit: row.sellableItem?.baseUnit ?? "",
-                        }))}
-                        onLoadProducts={() =>
-                            templateProducts.mutateAsync([
-                                ...selection.selectedIds,
-                            ])
-                        }
-                        disabled={
-                            listLoadFailed || selection.selectedCount === 0
-                        }
-                    />
-                )}
             </ListWorkspaceHeader>
 
             {exportMeta ? (
@@ -259,20 +208,12 @@ export function SellableItemsListPage() {
                     succeeded={exportMeta.rowCount}
                     label={masterDataCopy.exportDone}
                     description={
-                        lastExportKind === "selection" ? (
-                            <>
-                                已按勾选导出 {exportMeta.rowCount}{" "}
-                                条，单元格含商品主图。任务号{" "}
-                                <span className="num">{exportMeta.jobId}</span>
-                                。不含无权限查看的敏感信息。
-                            </>
-                        ) : (
-                            <>
-                                按当前筛选导出 {exportMeta.rowCount} 条。任务号{" "}
-                                <span className="num">{exportMeta.jobId}</span>
-                                。不含无权限查看的敏感信息。
-                            </>
-                        )
+                        <>
+                            已导出 {exportMeta.rowCount}{" "}
+                            件商品，文件含主图、客户选品及配送地址填写页。
+                            发送客户前请自行处理内部信息。任务号{" "}
+                            <span className="num">{exportMeta.jobId}</span>。
+                        </>
                     }
                 />
             ) : null}

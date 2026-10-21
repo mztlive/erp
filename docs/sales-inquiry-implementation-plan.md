@@ -16,7 +16,7 @@
 
 | 能力 | 当前入口 | 执行动作 |
 | --- | --- | --- |
-| 商品池 Excel | `erp-client/features/master-data/lib/export-sellable-excel.ts` | 复用文件生成能力，新增客户安全模板及回传解析 |
+| 商品池 Excel | `erp-client/features/master-data/lib/export-sellable-excel.ts` | 沿用原导出入口与全部既有列，合并客户选品、配送填写及回传解析 |
 | 销售地址分配 | `backend/crates/erp-sales/src/entity/sales_order/delivery_allocation.rs` | 复用数量守恒，补稳定来源分配关联 |
 | 销售来源模式 | `backend/crates/erp-sales/src/entity/sales_order/selection_source.rs` | 增加询价来源与逐行数量占用，不混用选品方案身份 |
 | 供应商条款 | `backend/crates/erp-supply/src/entity/supplier_offering/offering.rs` | 保留通用条款，新增限定范围的询价报价依据 |
@@ -67,7 +67,7 @@
 依赖：P0。
 
 - [ ] 实现询价草稿、需求版本、商品及地址分配、销售维护范围和索引。
-- [ ] 增加客户选品 Excel 导出，与内部商品池导出明确分开；保留 SKU 文本身份。
+- [x] 公司商品池只保留原导出，统一提供带图选品、配送需求和填写说明；原列全部保留，销售发送客户前自行处理内部信息。导入保留 SKU 文本身份，仅消费明确填写的需求字段。
 - [ ] 实现文件解析、精确匹配、逐行错误、重复行预览、确认写入及幂等回执。
 - [ ] 实现销售询价列表、创建/编辑页、导入预览与错误修正；保持后台刷新时的编辑草稿。
 - [ ] 实现提交采购、责任分派及待办，不以普通销售详情读取权替代任务授权。

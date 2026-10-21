@@ -104,6 +104,7 @@ export type MasterDataListItem = Readonly<{
         specificationLabel: string
         barcode?: string
         baseUnit: string
+        baseUnitCode?: string
         productKindLabel: string
         salesVisiblePriceGross: string
         bulkPriceGross?: string
