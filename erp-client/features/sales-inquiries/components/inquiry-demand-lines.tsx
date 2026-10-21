@@ -1,9 +1,14 @@
 "use client"
 
 import * as React from "react"
+import { useStore } from "@tanstack/react-form"
 import { PackageIcon, Trash2Icon, TruckIcon } from "lucide-react"
 import { withForm } from "@/components/form"
+import { SkuThumbnail } from "@/features/sales-orders/components/sku-thumbnail"
 import { TableRowActions } from "@/components/business/table-row-actions"
+import { TableToolbarScope } from "@/components/business/table-toolbar"
+import { NativeCheckbox } from "@/components/ui/checkbox"
+import { toast } from "@/components/ui/toast"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,16 +30,27 @@ import {
     TableCell,
 } from "@/components/ui/table"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { useUnitOptionsQuery } from "@/hooks/use-options"
 import { demandFormDefaults } from "../lib/demand-form"
 import { deliveryProgress } from "../lib/delivery-progress"
 import { inquiryDateInput, inquiryDateSeconds } from "../lib/format"
 import type { InquiryLine, SalesInquiry } from "../types"
 import { InquiryDeliveryEditor } from "./inquiry-delivery-editor"
+import { InquiryDueDateBatchBar } from "./inquiry-due-date-batch-bar"
+import { useInquirySkuImages } from "../hooks/queries"
 
 export const InquiryDemandLines = withForm({
     defaultValues: demandFormDefaults,
     props: { inquiry: undefined as SalesInquiry | undefined, disabled: false },
     render: function DemandLines({ form, inquiry, disabled }) {
+        const demandLines = useStore(
+            form.store,
+            (state) => state.values.draft.lines,
+        )
+        const skuImages = useInquirySkuImages(
+            demandLines.map((line) => line.sku_id),
+        )
+        const units = useUnitOptionsQuery()
         const [activeLineId, setActiveLineId] = React.useState<string | null>(
             null,
         )
@@ -43,15 +59,68 @@ export const InquiryDemandLines = withForm({
             index: number
         } | null>(null)
         const returnFocus = React.useRef<HTMLButtonElement | null>(null)
+        const [selectedIds, setSelectedIds] = React.useState<Set<string>>(
+            new Set(),
+        )
         return (
-            <form.Subscribe selector={(state) => state.values.draft.lines}>
-                {(lines) => {
+            <form.Field name="draft.lines" mode="array">
+                {(field) => {
+                    const lines = field.state.value
                     const activeIndex = lines.findIndex(
                         (line) => line.line_id === activeLineId,
                     )
                     const activeLine = lines[activeIndex]
+                    const selectedCount = lines.filter((line) =>
+                        selectedIds.has(line.line_id),
+                    ).length
                     return (
-                        <>
+                        <TableToolbarScope>
+                            {lines.length > 0 && (
+                                <InquiryDueDateBatchBar
+                                    count={selectedCount}
+                                    total={lines.length}
+                                    disabled={disabled}
+                                    onSelectAll={() =>
+                                        setSelectedIds(
+                                            new Set(
+                                                lines.map(
+                                                    (line) => line.line_id,
+                                                ),
+                                            ),
+                                        )
+                                    }
+                                    onClear={() => setSelectedIds(new Set())}
+                                    onApply={(date) => {
+                                        if (disabled) return
+                                        const dueAt = inquiryDateSeconds(date)
+                                        if (!Number.isFinite(dueAt)) return
+                                        const current =
+                                            form.getFieldValue("draft.lines")
+                                        const count = current.filter((line) =>
+                                            selectedIds.has(line.line_id),
+                                        ).length
+                                        if (!count) return
+                                        form.setFieldValue(
+                                            "draft.lines",
+                                            current.map((line) =>
+                                                selectedIds.has(line.line_id)
+                                                    ? {
+                                                          ...line,
+                                                          delivery_due_at:
+                                                              dueAt,
+                                                      }
+                                                    : line,
+                                            ),
+                                        )
+                                        setSelectedIds(new Set())
+                                        toast.add({
+                                            title: "已批量设置交付日",
+                                            description: `已将 ${count} 项商品设为 ${date}，请保存需求。`,
+                                            type: "success",
+                                        })
+                                    }}
+                                />
+                            )}
                             {removed && (
                                 <div
                                     className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-4 py-2 text-sm"
@@ -97,9 +166,44 @@ export const InquiryDemandLines = withForm({
                                 </div>
                             ) : (
                                 <div className="min-w-0 overflow-hidden rounded-lg border [&>[data-slot=table-container]]:max-h-[65vh]">
-                                    <Table className="min-w-[1280px] table-fixed">
+                                    <Table className="min-w-[1360px] table-fixed">
                                         <TableHeader className="sticky top-0 z-10">
                                             <TableRow>
+                                                <TableHead className="w-12">
+                                                    <NativeCheckbox
+                                                        id="sales-inquiry-lines-select-all"
+                                                        aria-label="全选商品"
+                                                        checked={
+                                                            selectedCount ===
+                                                            lines.length
+                                                        }
+                                                        indeterminate={
+                                                            selectedCount > 0 &&
+                                                            selectedCount <
+                                                                lines.length
+                                                        }
+                                                        disabled={disabled}
+                                                        onCheckedChange={(
+                                                            checked,
+                                                        ) =>
+                                                            setSelectedIds(
+                                                                checked
+                                                                    ? new Set(
+                                                                          lines.map(
+                                                                              (
+                                                                                  line,
+                                                                              ) =>
+                                                                                  line.line_id,
+                                                                          ),
+                                                                      )
+                                                                    : new Set(),
+                                                            )
+                                                        }
+                                                    />
+                                                </TableHead>
+                                                <TableHead className="w-20">
+                                                    图片
+                                                </TableHead>
                                                 <TableHead>
                                                     商品 / 规格
                                                 </TableHead>
@@ -126,12 +230,78 @@ export const InquiryDemandLines = withForm({
                                         <TableBody>
                                             {lines.map((line, index) => {
                                                 const prefix = `sales-inquiry-line-${toAutomationIdSegment(line.line_id)}`
+                                                const unit = units.data?.find(
+                                                    (item) =>
+                                                        item.code ===
+                                                            line.unit_code ||
+                                                        item.id ===
+                                                            line.unit_code ||
+                                                        item.label ===
+                                                            line.unit_code,
+                                                )?.label
                                                 const progress =
-                                                    deliveryProgress(line)
+                                                    deliveryProgress({
+                                                        ...line,
+                                                        unit_code: unit ?? "",
+                                                    })
                                                 return (
                                                     <TableRow
                                                         key={line.line_id}
+                                                        data-state={
+                                                            selectedIds.has(
+                                                                line.line_id,
+                                                            )
+                                                                ? "selected"
+                                                                : undefined
+                                                        }
                                                     >
+                                                        <TableCell>
+                                                            <NativeCheckbox
+                                                                id={`${prefix}-select`}
+                                                                aria-label={`选择${line.product_name}`}
+                                                                checked={selectedIds.has(
+                                                                    line.line_id,
+                                                                )}
+                                                                disabled={
+                                                                    disabled
+                                                                }
+                                                                onCheckedChange={(
+                                                                    checked,
+                                                                ) =>
+                                                                    setSelectedIds(
+                                                                        (
+                                                                            current,
+                                                                        ) => {
+                                                                            const next =
+                                                                                new Set(
+                                                                                    current,
+                                                                                )
+                                                                            if (
+                                                                                checked
+                                                                            )
+                                                                                next.add(
+                                                                                    line.line_id,
+                                                                                )
+                                                                            else
+                                                                                next.delete(
+                                                                                    line.line_id,
+                                                                                )
+                                                                            return next
+                                                                        },
+                                                                    )
+                                                                }
+                                                            />
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <SkuThumbnail
+                                                                assetId={skuImages.get(
+                                                                    line.sku_id,
+                                                                )}
+                                                                label={
+                                                                    line.product_name
+                                                                }
+                                                            />
+                                                        </TableCell>
                                                         <TableCell className="whitespace-normal py-4">
                                                             <p className="font-medium leading-5">
                                                                 {
@@ -229,10 +399,12 @@ export const InquiryDemandLines = withForm({
                                                             </form.Field>
                                                         </TableCell>
                                                         <TableCell>
-                                                            <div className="space-y-1.5">
+                                                            <div className="min-w-0 max-w-full space-y-1.5 whitespace-normal">
                                                                 <Badge
+                                                                    className="h-auto min-h-5 max-w-full justify-start text-left leading-5 whitespace-normal wrap-anywhere"
                                                                     variant={
-                                                                        progress.complete
+                                                                        progress.complete &&
+                                                                        !progress.overAllocated
                                                                             ? "secondary"
                                                                             : "warning"
                                                                     }
@@ -243,7 +415,7 @@ export const InquiryDemandLines = withForm({
                                                                 </Badge>
                                                                 {line.delivery_terms && (
                                                                     <p
-                                                                        className="max-w-48 truncate text-xs text-muted-foreground"
+                                                                        className="text-xs text-muted-foreground wrap-anywhere"
                                                                         title={
                                                                             line.delivery_terms
                                                                         }
@@ -330,7 +502,7 @@ export const InquiryDemandLines = withForm({
                                                 "配送与交付"}
                                         </SheetTitle>
                                         <SheetDescription>
-                                            设置交付条件与配送地址，填写内容会保留在当前表单中。
+                                            浏览、添加或批量移除本商品的配送地址。
                                         </SheetDescription>
                                     </SheetHeader>
                                     <div className="min-h-0 flex-1 overflow-y-auto px-7 pb-6">
@@ -356,15 +528,15 @@ export const InquiryDemandLines = withForm({
                                                 setActiveLineId(null)
                                             }
                                         >
-                                            完成编辑
+                                            完成
                                         </Button>
                                     </SheetFooter>
                                 </SheetContent>
                             </Sheet>
-                        </>
+                        </TableToolbarScope>
                     )
                 }}
-            </form.Subscribe>
+            </form.Field>
         )
     },
 })

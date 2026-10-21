@@ -65,9 +65,10 @@ pub struct InquiryDeliveryAllocation {
 }
 
 impl InquiryRequirementData {
-    /// 规范化需求并校验稳定身份、单位精度和数量守恒。
+    /// 规范化需求并校验稳定身份、单位精度；提交时校验配送数量覆盖需求。
     /// # 参数
-    /// `submitted` 为真时要求至少一行且实物地址完整。
+    /// `submitted` 为真时要求至少一行、实物地址完整且分配合计不少于需求。
+    /// 草稿允许分配不足或超量，保留销售填写的原数量。
     /// # 返回
     /// 原位保留规范化资料和服务端地区名称快照。
     /// # 错误
@@ -179,11 +180,12 @@ impl InquiryRequirementLine {
         for allocation in &mut self.allocations {
             allocation.normalize(self.quantity_scale)?;
         }
-        if !self.allocations.is_empty()
+        if submitted
+            && !self.allocations.is_empty()
             && sum_decimal(self.allocations.iter().map(|row| row.quantity.to_decimal()))?
-                != self.quantity.to_decimal()
+                < self.quantity.to_decimal()
         {
-            return Err(Error::ValidationError("地址数量合计必须等于需求数量".into()));
+            return Err(Error::ValidationError("地址数量合计不得少于需求数量".into()));
         }
         self.unit_code = self.unit_code.trim().to_string();
         Ok(())

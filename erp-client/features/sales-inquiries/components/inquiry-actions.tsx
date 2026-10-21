@@ -19,7 +19,6 @@ import { Label } from "@/components/ui/label"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import { hasPermission } from "@/lib/permissions"
 import { getErrorMessage } from "@/lib/api/errors"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 import { inquiryPath } from "../api"
 import { useInquiryCommand } from "../hooks/use-inquiry-command"
 import { inquiryStorageKey } from "../lib/local-draft"
@@ -88,12 +87,7 @@ export function InquiryActions({
             line_ids: [] as string[],
             fee_ids: [] as string[],
             buyer_user_id: "",
-            shared_fee_owner_user_id: inquiry.shared_fee_owner_user_id ?? "",
             requirement: null as InquiryRequirement | null,
-            assignments: inquiry.draft.lines.map((line) => ({
-                line_id: line.line_id,
-                owner_user_id: "",
-            })),
         },
         listeners: {
             onChange: ({ formApi }) => {
@@ -134,43 +128,6 @@ export function InquiryActions({
                     !value.reason.trim()
                 )
                     throw new Error("请填写本次操作原因。")
-                if (["submit", "reinquire"].includes(action)) {
-                    const assignments = new Map<string, string[]>()
-                    for (const line of (value.requirement ?? inquiry.draft)
-                        .lines) {
-                        const owner =
-                            value.assignments.find(
-                                (assignment) =>
-                                    assignment.line_id === line.line_id,
-                            )?.owner_user_id || value.buyer_user_id
-                        if (!owner)
-                            throw new Error(
-                                `请为「${line.product_name}」选择责任采购。`,
-                            )
-                        assignments.set(owner, [
-                            ...(assignments.get(owner) ?? []),
-                            line.line_id,
-                        ])
-                    }
-                    data.assignments = [...assignments].map(
-                        ([owner_user_id, line_ids]) => ({
-                            owner_user_id,
-                            line_ids,
-                        }),
-                    )
-                    const feeOwner = assignments.has(
-                        value.shared_fee_owner_user_id,
-                    )
-                        ? value.shared_fee_owner_user_id
-                        : assignments.size === 1
-                          ? [...assignments.keys()][0]
-                          : ""
-                    if (!feeOwner || !assignments.has(feeOwner))
-                        throw new Error(
-                            "请从本轮责任采购中明确选择整单费用负责人。",
-                        )
-                    data.shared_fee_owner_user_id = feeOwner
-                }
                 if (action === "submit") data.reason = value.reason.trim()
                 if (action === "accept")
                     data.feedback_round = inquiry.feedback_round
@@ -237,7 +194,7 @@ export function InquiryActions({
                 /* 损坏记录保留初值。 */
             }
         }
-        // 仅切换询价时恢复；后台刷新不清除填写中的原因和责任分派。
+        // 仅切换询价时恢复；后台刷新不清除填写中的原因和重询内容。
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [storageKey])
     const actions: InquiryAction[] = procurement
@@ -256,7 +213,6 @@ export function InquiryActions({
               : inquiry.status !== "closed"
                 ? ["close"]
                 : []
-    const needAssignments = action === "submit" || action === "reinquire"
     const requiresReason =
         action != null &&
         ["submit", "reinquire", "close", "supplement", "reassign"].includes(
@@ -416,11 +372,13 @@ export function InquiryActions({
                         <DialogDescription>
                             {action === "accept"
                                 ? "接受当前完整反馈。商品供给价仅作成本参考，实际成交价在销售开单时明确确认。"
-                                : action === "publish"
-                                  ? "发布前请先保存处理进度；所有责任商品必须有最终供给结论。已发布内容冻结为本轮完整结果。"
-                                  : action === "close"
-                                    ? "关闭后不能新增询价或转单，已生成销售与采购继续按各自流程办理。"
-                                    : "核对当前需求和责任范围后执行。"}
+                                : action === "submit" || action === "reinquire"
+                                  ? "提交后按采购责任规则自动分派，无需选择采购人员。"
+                                  : action === "publish"
+                                    ? "发布前请先保存处理进度；所有责任商品必须有最终供给结论。已发布内容冻结为本轮完整结果。"
+                                    : action === "close"
+                                      ? "关闭后不能新增询价或转单，已生成销售与采购继续按各自流程办理。"
+                                      : "核对当前需求和责任范围后执行。"}
                         </DialogDescription>
                     </DialogHeader>
                     {editingRequirement && "sales_owner_user_id" in inquiry ? (
@@ -446,18 +404,6 @@ export function InquiryActions({
                                     form.setFieldValue(
                                         "requirement",
                                         requirement,
-                                    )
-                                    form.setFieldValue(
-                                        "assignments",
-                                        requirement.lines.map((line) => ({
-                                            line_id: line.line_id,
-                                            owner_user_id:
-                                                form.state.values.assignments.find(
-                                                    (item) =>
-                                                        item.line_id ===
-                                                        line.line_id,
-                                                )?.owner_user_id ?? "",
-                                        })),
                                     )
                                     setEditingRequirement(false)
                                 }}
@@ -492,7 +438,7 @@ export function InquiryActions({
                                     )}
                                 />
                             )}
-                            {(needAssignments || action === "reassign") && (
+                            {action === "reassign" && (
                                 <form.Field
                                     name="buyer_user_id"
                                     children={(field) => (
@@ -502,55 +448,10 @@ export function InquiryActions({
                                             value={field.state.value}
                                             onChange={field.handleChange}
                                             selectionMode="single"
-                                            label={
-                                                action === "reassign"
-                                                    ? "新的责任采购"
-                                                    : "默认责任采购"
-                                            }
+                                            label="新的责任采购"
                                         />
                                     )}
                                 />
-                            )}
-                            {needAssignments && (
-                                <div className="space-y-3">
-                                    <h3 className="text-sm font-medium">
-                                        逐商品责任采购
-                                    </h3>
-                                    <p className="text-xs text-muted-foreground">
-                                        未单独选择时使用默认责任采购。
-                                    </p>
-                                    {demandLines.map((line, index) => (
-                                        <form.Field
-                                            key={line.line_id}
-                                            name={`assignments[${index}].owner_user_id`}
-                                            children={(field) => (
-                                                <PersonDirectoryFilter
-                                                    id={`sales-inquiry-assignment-${toAutomationIdSegment(line.line_id)}`}
-                                                    category="procurement"
-                                                    value={field.state.value}
-                                                    onChange={
-                                                        field.handleChange
-                                                    }
-                                                    selectionMode="single"
-                                                    label={line.product_name}
-                                                />
-                                            )}
-                                        />
-                                    ))}
-                                    <form.Field
-                                        name="shared_fee_owner_user_id"
-                                        children={(field) => (
-                                            <PersonDirectoryFilter
-                                                id="sales-inquiry-shared-fee-owner"
-                                                category="procurement"
-                                                selectionMode="single"
-                                                value={field.state.value}
-                                                onChange={field.handleChange}
-                                                label="整单费用责任采购（多人处理时必选）"
-                                            />
-                                        )}
-                                    />
-                                </div>
                             )}
                             {action === "reinquire" && (
                                 <>

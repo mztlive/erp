@@ -68,22 +68,27 @@ impl SalesInquiry {
         Ok(result)
     }
 
-    /// 设置本轮明确整单费用责任人，不从任务排列顺序推断。
+    /// 设置整单费用责任人；自动分派优先沿用仍参与本轮的负责人。
     /// # 参数
-    /// `requested` 为显式责任人；`owners` 为本轮责任采购账号集合。
+    /// `requested` 为采购侧明确责任人；`owners` 按首个负责需求行的顺序排列。
     /// # 返回
-    /// 单人可默认选定，多人必须显式指定责任组内账号。
+    /// 未明确指定且原负责人已不在本轮时，使用首个需求商品的责任采购。
     /// # 错误
-    /// 无责任人、多采购未指定或指定账号不在责任组内时拒绝。
+    /// 无有效责任人或明确指定账号不在责任组内时拒绝。
     pub fn assign_shared_fee_owner(&mut self, requested: Option<String>, owners: &[String]) -> Result<()> {
         let unique: HashSet<_> = owners.iter().filter(|owner| !owner.trim().is_empty()).cloned().collect();
         let owner = match requested {
             Some(owner) if unique.contains(&owner) => owner,
-            None if unique.len() == 1 => unique
-                .into_iter()
-                .next()
-                .ok_or_else(|| Error::ValidationError("须指定费用责任采购".into()))?,
-            _ => return Err(Error::ValidationError("多采购须明确指定责任组内的整单费用责任人".into())),
+            None => self
+                .shared_fee_owner_user_id
+                .as_ref()
+                .filter(|owner| unique.contains(*owner))
+                .or_else(|| owners.iter().find(|owner| unique.contains(*owner)))
+                .cloned()
+                .ok_or_else(|| {
+                    Error::ValidationError("未能确定整单费用责任采购，请检查采购责任配置".into())
+                })?,
+            _ => return Err(Error::ValidationError("整单费用责任人须属于本轮责任采购".into())),
         };
         self.shared_fee_owner_user_id = Some(owner);
         Ok(())

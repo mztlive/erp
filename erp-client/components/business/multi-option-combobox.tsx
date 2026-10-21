@@ -154,8 +154,8 @@ export function MultiOptionCombobox({
                         render={
                             <Button
                                 type="button"
-                                variant="outline"
-                                className="h-control w-full min-w-0 justify-start gap-1 rounded-lg bg-surface-control px-2.5 font-normal shadow-none"
+                                variant="control"
+                                className="w-full min-w-0 justify-start gap-1 px-2.5"
                             />
                         }
                     >

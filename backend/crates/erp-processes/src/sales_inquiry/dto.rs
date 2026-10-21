@@ -4,7 +4,6 @@ use erp_core::common::time::Instant;
 use erp_sales::entity::sales_inquiry::{
     InquiryCreateData, InquiryFeedbackData, InquiryReinquiryData, InquiryRequirementData, InquiryStatus,
 };
-pub use erp_workflow::entity::work_item::InquiryTaskAssignment as InquiryAssignment;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -30,9 +29,6 @@ pub struct SubmitInquiryCommand {
     pub command_key: String,
     pub expected_version: u64,
     pub reason: String,
-    pub assignments: Vec<InquiryAssignment>,
-    #[serde(default)]
-    pub shared_fee_owner_user_id: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -81,9 +77,6 @@ pub struct ReinquireInquiryCommand {
     pub command_key: String,
     pub expected_version: u64,
     pub data: InquiryReinquiryData,
-    pub assignments: Vec<InquiryAssignment>,
-    #[serde(default)]
-    pub shared_fee_owner_user_id: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

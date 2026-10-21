@@ -286,6 +286,47 @@ mod tests {
 
     use super::*;
 
+    fn json_request(payload: Value) -> Request<Body> {
+        Request::builder()
+            .header("content-type", "application/json")
+            .body(Body::from(payload.to_string()))
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn submit_and_reinquire_accept_requests_without_buyer_selection() {
+        let submit = json!({"command_key": "submit", "expected_version": 1, "reason": "客户需求"});
+        let Json(request) =
+            Json::<SubmitInquiryCommand>::from_request(json_request(submit), &()).await.unwrap();
+        assert_eq!(request.reason, "客户需求");
+        let reinquire = json!({
+            "command_key": "reinquire", "expected_version": 2,
+            "data": {"reason": "调整交期", "line_ids": ["line"]}
+        });
+        let Json(request) =
+            Json::<ReinquireInquiryCommand>::from_request(json_request(reinquire), &()).await.unwrap();
+        assert_eq!(request.data.line_ids, vec!["line"]);
+    }
+
+    #[tokio::test]
+    async fn sales_submit_and_reinquire_reject_client_supplied_responsibility() {
+        for (field, value) in [
+            ("assignments", json!([{"owner_user_id": "forged", "line_ids": ["line"]}])),
+            ("shared_fee_owner_user_id", json!("forged")),
+        ] {
+            let mut submit = json!({"command_key": "submit", "expected_version": 1, "reason": "提交"});
+            submit[field] = value.clone();
+            assert!(Json::<SubmitInquiryCommand>::from_request(json_request(submit), &()).await.is_err());
+            let mut reinquire = json!({
+                "command_key": "reinquire", "expected_version": 2, "data": {"reason": "重询"}
+            });
+            reinquire[field] = value;
+            assert!(
+                Json::<ReinquireInquiryCommand>::from_request(json_request(reinquire), &()).await.is_err()
+            );
+        }
+    }
+
     #[tokio::test]
     async fn save_request_accepts_deadline_and_keeps_omitted_field_out_of_receipt_payload() {
         let original = json!({

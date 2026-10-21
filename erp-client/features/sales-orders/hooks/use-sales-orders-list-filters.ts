@@ -195,11 +195,8 @@ export function useSalesOrdersListFilters(
     const resetMoreFilters = React.useCallback(() => {
         setFilterDraft((draft) => ({
             ...EMPTY_SALES_ORDERS_LIST_FILTER_DRAFT,
-            nature: draft.nature,
             ownerUserIds: draft.ownerUserIds,
             commercialStatus: draft.commercialStatus,
-            createdFrom: draft.createdFrom,
-            createdTo: draft.createdTo,
         }))
     }, [])
 
@@ -207,11 +204,8 @@ export function useSalesOrdersListFilters(
     const cancelMoreFilters = React.useCallback(() => {
         setFilterDraft((draft) => ({
             ...filterDraftFromUrl(url),
-            nature: draft.nature,
             ownerUserIds: draft.ownerUserIds,
             commercialStatus: draft.commercialStatus,
-            createdFrom: draft.createdFrom,
-            createdTo: draft.createdTo,
         }))
         setFilterPanelOpen(false)
     }, [url])

@@ -146,9 +146,9 @@ function DatePicker({
                         <Button
                             id={id}
                             type="button"
-                            variant="outline"
+                            variant="control"
                             size={size}
-                            className="min-w-0 flex-1 justify-start rounded-lg bg-surface-control shadow-xs hover:border-foreground/25 hover:bg-card"
+                            className="min-w-0 flex-1 justify-start"
                             disabled={disabled}
                             aria-invalid={ariaInvalid}
                             aria-describedby={ariaDescribedby}
@@ -283,9 +283,9 @@ function DateRangePicker({
                         <Button
                             id={id}
                             type="button"
-                            variant="outline"
+                            variant="control"
                             size="lg"
-                            className="min-w-0 flex-1 justify-start rounded-lg bg-surface-control shadow-xs hover:border-foreground/25 hover:bg-card"
+                            className="min-w-0 flex-1 justify-start"
                             disabled={disabled}
                             aria-invalid={ariaInvalid}
                             aria-describedby={ariaDescribedby}
@@ -405,9 +405,9 @@ function DateTimePicker({
                         <Button
                             id={id}
                             type="button"
-                            variant="outline"
+                            variant="control"
                             size="lg"
-                            className="min-w-0 flex-1 justify-start rounded-lg bg-surface-control shadow-xs hover:border-foreground/25 hover:bg-card"
+                            className="min-w-0 flex-1 justify-start"
                             disabled={disabled}
                             aria-invalid={ariaInvalid}
                             aria-describedby={ariaDescribedby}
@@ -646,9 +646,9 @@ function DateTimeRangePicker({
                         <Button
                             id={id}
                             type="button"
-                            variant="outline"
+                            variant="control"
                             size="lg"
-                            className="min-w-0 flex-1 justify-start rounded-lg bg-surface-control shadow-xs hover:border-foreground/25 hover:bg-card"
+                            className="min-w-0 flex-1 justify-start"
                             disabled={disabled}
                             aria-invalid={ariaInvalid}
                             aria-describedby={ariaDescribedby}

@@ -17,7 +17,7 @@ import {
 import { paymentTermLabel, welfareScenarioLabel } from "@/lib/business-options"
 import type { SalesOrderDetailView } from "@/features/sales-orders/api/sales-orders"
 import { cn } from "@/lib/utils"
-import { fullDeliveryAddress } from "@/lib/delivery-address"
+import { SalesOrderDeliverySummary } from "./sales-order-delivery-summary"
 
 function OverviewField({
     label,
@@ -45,15 +45,16 @@ function OverviewField({
 
 export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
     const isCard = order.nature === "card_voucher"
+    const showDelivery =
+        !isCard ||
+        order.lineItems.some((line) => line.deliveryAllocations?.length)
     return (
         <div className="overflow-hidden rounded-lg border-b border-border">
-            <Table
-                data-density="comfortable"
-                className={isCard ? "min-w-[54rem]" : "min-w-[46rem]"}
-            >
+            <Table data-density="comfortable" className="min-w-[54rem]">
                 <TableHeader>
                     <TableRow>
                         <TableHead>项目</TableHead>
+                        {showDelivery ? <TableHead>交付地址</TableHead> : null}
                         <TableHead data-align="end">数量 / 单位</TableHead>
                         <TableHead data-align="end">含税单价</TableHead>
                         {isCard ? (
@@ -83,26 +84,17 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
                                         <Badge variant="secondary">赠品</Badge>
                                     ) : null}
                                 </div>
-                                {line.deliveryAllocations?.map(
-                                    (allocation, index) => (
-                                        <div
-                                            key={index}
-                                            className="mt-2 text-xs text-muted-foreground"
-                                        >
-                                            {allocation.quantity} {line.unit} →{" "}
-                                            {allocation.recipient} ·{" "}
-                                            {allocation.phone}
-                                            <br />
-                                            {fullDeliveryAddress(allocation)}
-                                        </div>
-                                    ),
-                                )}
-                                {line.sku ? (
+                                {line.sku && line.sku !== "无规格" ? (
                                     <div className="num text-xs text-muted-foreground">
                                         {line.sku}
                                     </div>
                                 ) : null}
                             </TableCell>
+                            {showDelivery ? (
+                                <TableCell className="min-w-44 whitespace-normal">
+                                    <SalesOrderDeliverySummary line={line} />
+                                </TableCell>
+                            ) : null}
                             <TableCell data-align="end">
                                 {line.quantity} {line.unit}
                             </TableCell>

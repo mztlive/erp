@@ -1,6 +1,7 @@
 //! 询价跨领域原子命令；需求和反馈规则由销售域拥有。
 
 pub mod access;
+mod assignment;
 mod commands;
 pub mod dto;
 pub mod eligibility;

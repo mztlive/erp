@@ -21,8 +21,8 @@ import {
 import { SalesOrderCustomerFinancePanel } from "./sales-order-detail-receivable-panel"
 import { SalesOrderDocumentsPanel } from "./sales-order-documents-panel"
 import { ExtraCostPanel } from "@/features/sales-orders/components/sales-order-extra-cost-panel"
-import { SalesOrderProcurementProgress } from "@/features/sales-orders/components/sales-order-procurement-progress"
-import { compareDecimal } from "@/lib/fixed-decimal"
+import { SalesOrderProcurementAlert } from "@/features/sales-orders/components/sales-order-procurement-alert"
+import { getProcurementAttention } from "@/features/sales-orders/lib/procurement-attention"
 import {
     isSalesOrderApprovalInProgress,
     isWorkSection,
@@ -62,6 +62,10 @@ export function SalesOrderDetailTabs({
     sidebar?: ReactNode
     beforeContent?: ReactNode
 }) {
+    const purchaseNeedsAttention =
+        order.nature === "physical_service" &&
+        getProcurementAttention(order.related.procurementProgress)
+            .needsAttention
     const items = visibleNav.map((item) => {
         const todoOnAcceptance = item.id === "acceptance" && Boolean(canAccept)
         const changeOnVersions =
@@ -71,14 +75,8 @@ export function SalesOrderDetailTabs({
         const purchaseCount =
             item.id === "fulfillment" ? order.related.purchaseOrders : 0
 
-        const purchaseNeedsAttention =
-            item.id === "fulfillment" &&
-            (compareDecimal(
-                order.related.procurementProgress.remainingQuantity,
-                "0",
-                6,
-            ) > 0 ||
-                order.related.procurementProgress.sourceChanged)
+        const showPurchaseAttention =
+            item.id === "fulfillment" && purchaseNeedsAttention
 
         return {
             id: item.id,
@@ -96,14 +94,19 @@ export function SalesOrderDetailTabs({
                               ? "进行中"
                               : "待办"}
                     </Badge>
-                ) : purchaseCount > 0 || purchaseNeedsAttention ? (
+                ) : showPurchaseAttention ? (
                     <Badge
-                        variant={
-                            purchaseNeedsAttention ? "warning" : "secondary"
-                        }
+                        variant="warning"
                         className="h-5 px-1.5 text-2xs font-normal"
                     >
-                        {purchaseCount > 0 ? purchaseCount : "待覆盖"}
+                        异常
+                    </Badge>
+                ) : purchaseCount > 0 ? (
+                    <Badge
+                        variant="secondary"
+                        className="h-5 px-1.5 text-2xs font-normal"
+                    >
+                        {purchaseCount}
                     </Badge>
                 ) : undefined,
         }
@@ -124,20 +127,24 @@ export function SalesOrderDetailTabs({
             listClassName="border-border/70"
             sidebar={sidebar}
             scrollMode="panels"
-            beforeContent={beforeContent}
+            beforeContent={
+                <>
+                    {beforeContent}
+                    {purchaseNeedsAttention && navSection !== "fulfillment" ? (
+                        <div className="mb-4">
+                            <SalesOrderProcurementAlert
+                                progress={order.related.procurementProgress}
+                                onOpenPurchase={() =>
+                                    onSelectSection("fulfillment")
+                                }
+                            />
+                        </div>
+                    ) : null}
+                </>
+            }
         >
             <ObjectSectionTabsPanel value="overview" className="py-5">
-                <OverviewPanel
-                    order={order}
-                    related={
-                        order.nature === "physical_service" ? (
-                            <SalesOrderProcurementProgress
-                                order={order}
-                                surface="overview"
-                            />
-                        ) : undefined
-                    }
-                />
+                <OverviewPanel order={order} />
                 {navSection === "overview" && (
                     <div className="mt-6 border-t pt-5">
                         <SalesTimeline

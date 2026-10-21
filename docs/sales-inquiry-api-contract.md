@@ -25,7 +25,7 @@
 | 询价费用采购 | `purchase_order:create` 及 `procurement_inquiry:convert_expenses` | 保留既有生效销售费用来源范围，再校验明确费用归属和来源额度；不复活已完成任务 |
 | 财务直接登记 | `cost_entry:create` 及既有销售读取范围 | 只消费明确分摊的 ERP 外费用来源；不授予供应商及内部付款依据读取 |
 
-1. 采购任务不授予普通销售订单、客户档案或内部文件的完整读取权。分派必须完整覆盖当前需求行，每条需求行恰有一位责任采购。
+1. 采购任务不授予普通销售订单、客户档案或内部文件的完整读取权。提交、补充后重提及重询均由服务端按采购责任配置自动分派，销售无需人员目录权限。分派必须完整覆盖当前需求行，每条需求行恰有一位责任采购。
 2. 任务改派、终态、需求版本变化、责任范围损坏、账号或角色失效时，原任务读写立即失败关闭。
 3. 销售响应使用独立 `InquirySalesView`。允许需求、已发布反馈、接受、重询、事件、数量来源及公开费用进度；禁止供应商、供给身份、原始采购价、内部附件、未发布采购工作和内部费用收款依据。
 4. 采购响应使用独立 `InquiryProcurementView`，只保留当前任务责任行及必要客户和配送事实，剔除销售参考价。部分责任任务不得读取整单无明确行归属的费用。
@@ -64,9 +64,9 @@
 | `CreateInquiryImportCommand` | `command_key`、`customer_id`、`preview_id`、`input_fingerprint`、`confirm_merge_duplicates` |
 | `InquiryCreateData` | `customer_id`、`customer_name`、`sales_owner_user_id`、`business_org_unit_id`、`deadline_at`、可空 `copied_from_inquiry_id`、`draft: InquiryRequirementData` |
 | `SaveInquiryCommand` | `command_key`、`expected_version`、可空 `deadline_at`、`data: InquiryRequirementData` |
-| `SubmitInquiryCommand` | `command_key`、`expected_version`、`reason`、`assignments:[{owner_user_id,line_ids}]` |
+| `SubmitInquiryCommand` | `command_key`、`expected_version`、`reason` |
 | `AcceptInquiryCommand` | `command_key`、`expected_version`、`feedback_round` |
-| `ReinquireInquiryCommand` | `command_key`、`expected_version`、`data`、`assignments` |
+| `ReinquireInquiryCommand` | `command_key`、`expected_version`、`data` |
 | 重询 `data` | `reason`、`line_ids`、`fee_ids`、`concerns`、可空完整 `requirement`；不传新版需求表示仅重询条件 |
 | `InquiryReasonCommand` | `command_key`、`expected_version`、`reason` |
 | `AllocateInquiryFeesCommand` | `command_key`、`expected_version`、1 至 100 项 `allocations` |
@@ -75,6 +75,10 @@
 
 `customer_name`、负责人组织及商品字段必须由命令服务按当前主数据证明；请求带有显示快照不代表客户端可以任意改写主数据身份。
 
+提交和重询命令不得携带 `assignments` 或 `shared_fee_owner_user_id`，传入即按未知字段拒绝。服务端在原写事务内按 SKU、商品分类（从当前分类逐级到父分类）、商品类型、默认调度人的优先级解析当前完整需求，再核验命中账号、主属组织及询价处理权限。同一采购的商品合并为一个任务，禁止漏行或重复责任。规则缺失、冲突或负责人失效时拒绝整个提交，不创建无主任务，不向销售开放人员目录作为补救。
+
+整单费用优先沿用仍在本轮责任组内的原负责人；没有有效原负责人时，由首个需求商品的责任采购负责。该顺序取自当前需求行，不使用数据库返回顺序或任务创建顺序。采购侧改派仍核验目标资格，并按原规则同步费用责任。
+
 ### 3.2 需求字段
 
 1. `InquiryRequirementData` 包含 `lines` 和 `note`。需求说明最多 4000 字；提交时至少 1 条需求，最多 200 条。
@@ -82,7 +86,7 @@
 2. 每条需求包含 `line_id`、`sku_id`、`sku_revision_id`、`sku_code`、`product_name`、`specification`、`unit_code`、`quantity_scale`、十进制 `quantity`、`fulfillment_kind`、`delivery_due_at`、`delivery_terms`、可空 `sales_reference_price_gross`、`allocations`。
 3. `fulfillment_kind` 为 `physical`、`virtual`、`service`。同 SKU 不同交期或交付条件必须保存为不同稳定需求行；不得只按 SKU 合并。
 4. 配送项包含 `allocation_id`、`recipient`、`phone`、`region_code`、`region_name`、`address`、十进制 `quantity`。地区必须落到有效叶节点，名称由服务端冻结。每条需求最多 100 个地址。
-5. 实物提交时必须有完整地址，地址数量合计等于需求数量；草稿允许暂未录入地址。已存在地址时即使保存草稿也校验数量守恒。
+5. 实物提交时必须有完整地址，地址数量合计不得少于商品需求数量，允许超量提交；创建或保存草稿允许暂未录入地址，也允许地址分配合计不足或超过需求数量。创建、保存、提交及需求重询均保留销售填写的需求与分配数量，不自动调整。草稿仍校验已填地址的完整性、数量正值、单位精度、地址上限及既有占用下限；提交时重新校验地址完整性和分配下限。超量不扩大报价供量及转单的商品需求额度。
 6. 换 SKU 必须新建稳定需求行。已有来源占用或已办理事实下，不得通过重写行或地址身份重置余额。
 7. 询价聚合持久化 BSON 上限为 14 MiB，保留 MongoDB 16 MiB 文档限制的安全空间。仓储在创建、CAS 更新前按实际 BSON 编码大小检查；超限时拒绝本次写入并提示复制新询价继续，不截断已发布历史、来源或台账。
 

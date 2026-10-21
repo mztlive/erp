@@ -31,7 +31,7 @@ export const listWorkspaceStyles = {
     viewHint:
         "text-xs whitespace-nowrap text-muted-foreground max-[1200px]:hidden",
     toolbar:
-        "flex shrink-0 items-start gap-0 py-workspace-toolbar-block md:gap-3 [&_[data-slot=button]]:shadow-none [&_[data-slot=input-group]]:bg-background [&_[data-slot=input-group]]:text-body-compact [&_[data-slot=input-group]]:shadow-none [&_[data-slot=input-group]:focus-within]:outline-2 [&_[data-slot=input-group]:focus-within]:outline-offset-2 [&_[data-slot=input-group]:focus-within]:outline-foreground",
+        "flex shrink-0 items-start gap-0 py-workspace-toolbar-block md:gap-3 [&_[data-slot=button]]:shadow-none [&_[data-slot=input-group]]:text-body-compact [&_[data-slot=input-group]]:shadow-none [&_[data-slot=input-group]:focus-within]:outline-2 [&_[data-slot=input-group]:focus-within]:outline-offset-2 [&_[data-slot=input-group]:focus-within]:outline-foreground",
     filters: "min-w-0 flex-1",
     table: [
         "min-h-0 flex-1",

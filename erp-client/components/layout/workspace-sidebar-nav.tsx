@@ -260,7 +260,7 @@ export function WorkspaceSidebarNav() {
                                                 <span
                                                     data-workspace-nav-badge=""
                                                     aria-label={`${badgeCount} 本待处理`}
-                                                    className="ml-auto flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-sidebar-accent px-1.5 text-[10px] font-semibold text-sidebar-accent-foreground tabular-nums group-data-[collapsible=icon]:hidden"
+                                                    className="ml-auto flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-destructive-foreground tabular-nums group-data-[collapsible=icon]:hidden"
                                                 >
                                                     {badgeCount}
                                                 </span>

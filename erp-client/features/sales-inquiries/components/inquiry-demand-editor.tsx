@@ -17,6 +17,7 @@ import { SellableSkuSelectDialog } from "@/features/sales-orders/components/sell
 import type { SellableSkuPick } from "@/features/sales-orders/lib/sellable-sku-pick"
 import { hasPermission } from "@/lib/permissions"
 import { getErrorMessage } from "@/lib/api/errors"
+import { compactFixed, sumFixed } from "@/lib/fixed-decimal"
 import { inquiryPath } from "../api"
 import { useInquiryCommand } from "../hooks/use-inquiry-command"
 import {
@@ -48,6 +49,37 @@ function fromPick(pick: SellableSkuPick): InquiryLine {
         sales_reference_price_gross: null,
         allocations: [],
     }
+}
+
+function addPicks(
+    lines: readonly InquiryLine[],
+    picks: readonly SellableSkuPick[],
+): InquiryLine[] {
+    const next = [...lines]
+    for (const pick of picks) {
+        const matches = next.filter((line) => line.sku_id === pick.skuId)
+        // 同一 SKU 有多条需求时，不能替销售选择交期或商业条件。
+        if (matches.length !== 1) {
+            next.push(fromPick(pick))
+            continue
+        }
+        const line = matches[0]!
+        let quantity: string
+        try {
+            quantity = compactFixed(
+                sumFixed([line.quantity, "1"], {
+                    maxScale: line.quantity_scale,
+                    outputScale: line.quantity_scale,
+                }),
+            )
+        } catch {
+            throw new Error(
+                `请先修正「${line.product_name}」的需求数量，再添加商品。`,
+            )
+        }
+        next[next.indexOf(line)] = { ...line, quantity }
+    }
+    return next
 }
 
 export function InquiryDemandEditor({
@@ -292,7 +324,7 @@ function DemandEditorContent({
     }, [command.resolution])
     return (
         <form
-            className="flex min-w-0 flex-col gap-6"
+            className="flex min-w-0 flex-col gap-6 pb-4"
             onSubmit={(event) => {
                 event.preventDefault()
                 void form.handleSubmit()
@@ -415,7 +447,7 @@ function DemandEditorContent({
                         disabled={command.isPending}
                     />
                 </section>
-                <div className="sticky bottom-0 z-20 -mt-6 flex flex-wrap items-center justify-end gap-3 border-t bg-card px-1 py-4">
+                <div className="sticky bottom-[calc(1rem+env(safe-area-inset-bottom))] z-20 flex flex-wrap items-center justify-end gap-3 rounded-lg border bg-card px-4 py-3 shadow-sm">
                     <div className="mr-auto space-y-1">
                         <form.Subscribe
                             selector={(state) => state.values.draft.lines}
@@ -468,11 +500,19 @@ function DemandEditorContent({
                     onOpenChange={setPickerOpen}
                     excludeProductKind="VOUCHER"
                     title="选择询价商品"
-                    description="按公司 SKU 添加客户需求；销售参考价由销售确认，不作为采购报价。"
+                    description="每次选中增加 1 个需求单位。已有唯一需求行的商品累加数量；同一商品有多条需求行时另加一行。销售参考价不作为采购报价。"
                     onConfirm={(picks) => {
-                        for (const pick of picks)
-                            form.pushFieldValue("draft.lines", fromPick(pick))
-                        setPickerOpen(false)
+                        setFailure(null)
+                        try {
+                            const lines = addPicks(
+                                form.state.values.draft.lines,
+                                picks,
+                            )
+                            form.setFieldValue("draft.lines", lines)
+                            setPickerOpen(false)
+                        } catch (error) {
+                            setFailure(getErrorMessage(error))
+                        }
                     }}
                 />
             </fieldset>

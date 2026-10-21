@@ -2,6 +2,7 @@
 
 import type { Dispatch, SetStateAction } from "react"
 import { OptionCombobox } from "@/components/business"
+import { DateRangePicker } from "@/components/ui/date-picker"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import { ListWorkspaceFilterField } from "@/components/business/list-workspace"
 import {
@@ -86,6 +87,7 @@ export function SalesOrdersListFilterPanel({
         options,
     }: {
         key:
+            | "nature"
             | "fulfillment"
             | "collection"
             | "invoice"
@@ -127,6 +129,45 @@ export function SalesOrdersListFilterPanel({
     return (
         <div className="space-y-5">
             <fieldset className="min-w-0 space-y-3">
+                <legend className="mb-1 text-sm font-medium">基本条件</legend>
+                <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                    {renderEnum({
+                        key: "nature",
+                        id: "nature",
+                        label: "业务性质",
+                        options: [
+                            { value: "physical_service", label: "实物与服务" },
+                            { value: "card_voucher", label: "卡券" },
+                        ],
+                    })}
+                    <ListWorkspaceFilterField
+                        htmlFor="sales-orders-list-filter-created-date"
+                        label="创建日期"
+                    >
+                        <DateRangePicker
+                            id="sales-orders-list-filter-created-date"
+                            className="w-full [&_button]:h-control"
+                            value={
+                                draft.createdFrom || draft.createdTo
+                                    ? {
+                                          from: draft.createdFrom || undefined,
+                                          to: draft.createdTo || undefined,
+                                      }
+                                    : undefined
+                            }
+                            onValueChange={(range) =>
+                                onDraftChange((current) => ({
+                                    ...current,
+                                    createdFrom: range?.from ?? "",
+                                    createdTo: range?.to ?? "",
+                                }))
+                            }
+                            placeholder="全部"
+                        />
+                    </ListWorkspaceFilterField>
+                </div>
+            </fieldset>
+            <fieldset className="min-w-0 space-y-3">
                 <legend className="mb-1 text-sm font-medium">组织与关联</legend>
                 <OrganizationUnitFilter
                     id="sales-orders-list-filter-org"
@@ -151,7 +192,6 @@ export function SalesOrdersListFilterPanel({
                         <CustomerSearchCombobox
                             id="sales-orders-list-filter-customer"
                             purpose="filter"
-                            scope="all_authorized"
                             value={draft.customerId || undefined}
                             onValueChange={(customerId) =>
                                 onDraftChange((current) => ({

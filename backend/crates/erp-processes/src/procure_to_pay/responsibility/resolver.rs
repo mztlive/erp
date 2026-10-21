@@ -172,8 +172,15 @@ impl ProcurementResponsibilityProcess {
         Err(Error::Rbac("采购负责人授权策略持续变化，无法形成稳定快照".to_string()))
     }
 
-    /// 由采购领域执行真实候选解析，并显式注入目录与身份事实适配器。
-    async fn resolve_candidates(
+    /// 在调用方事务中按采购规则解析候选；不授予采购任务或普通单据访问权。
+    ///
+    /// # 参数
+    /// `inputs` 为稳定需求行和 SKU；`executor` 为调用方事务。
+    /// # 返回
+    /// 按输入顺序返回通过账号资格校验的候选。调用方必须另验其业务执行权限。
+    /// # 错误
+    /// 目录、规则、账号缺失或存在冲突时失败关闭。
+    pub(crate) async fn resolve_candidates(
         &self,
         inputs: &[ResolutionInput],
         executor: &mut dyn Executor,

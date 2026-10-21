@@ -1,15 +1,32 @@
 "use client"
 
+import * as React from "react"
 import { withForm } from "@/components/form"
 import { OptionCombobox } from "@/components/business/option-combobox"
 import { QuantityValue } from "@/components/business"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { RegionCascadeSelect } from "@/features/regions"
+import { useUnitOptionsQuery } from "@/hooks/use-options"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { compareDecimal, sumFixed } from "@/lib/fixed-decimal"
+import type { AddressImportChanges } from "../lib/address-import-plan"
 import { demandFormDefaults } from "../lib/demand-form"
-import { deliveryProgress, newAllocation } from "../lib/delivery-progress"
-import type { InquiryLine, SalesInquiry } from "../types"
+import {
+    allocationRestrictions,
+    deliveryProgress,
+    newAllocation,
+} from "../lib/delivery-progress"
+import type { InquiryAllocation, InquiryLine, SalesInquiry } from "../types"
+import { InquiryDeliveryAddressDialog } from "./inquiry-delivery-address-form"
+import { InquiryAddressImportDialog } from "./inquiry-address-import-dialog"
+import { InquiryDeliveryAddressList } from "./inquiry-delivery-address-list"
+
+const DELIVERY_KINDS = [
+    { value: "physical", label: "实物配送" },
+    { value: "virtual", label: "虚拟交付" },
+    { value: "service", label: "服务交付" },
+]
 
 export const InquiryDeliveryEditor = withForm({
     defaultValues: demandFormDefaults,
@@ -20,270 +37,437 @@ export const InquiryDeliveryEditor = withForm({
         disabled: false,
     },
     render: function DeliveryEditor({ form, index, line, inquiry, disabled }) {
+        const [editing, setEditing] = React.useState<{
+            initial: InquiryAllocation
+            sourceId?: string
+            replace: boolean
+            title: string
+        } | null>(null)
+        const [importOpen, setImportOpen] = React.useState(false)
+        const [editingTerms, setEditingTerms] = React.useState(false)
+        const [selectedIds, setSelectedIds] = React.useState<Set<string>>(
+            new Set(),
+        )
+        const [removed, setRemoved] = React.useState<
+            { allocation: InquiryAllocation; index: number }[]
+        >([])
+        const units = useUnitOptionsQuery()
+        const prefix = `sales-inquiry-line-${toAutomationIdSegment(line?.line_id ?? "")}`
         if (!line) return null
-        const prefix = `sales-inquiry-line-${toAutomationIdSegment(line.line_id)}`
-        const progress = deliveryProgress(line)
+        const unit = units.data?.find(
+            (item) =>
+                item.code === line.unit_code ||
+                item.id === line.unit_code ||
+                item.label === line.unit_code,
+        )?.label
+        const progress = deliveryProgress({ ...line, unit_code: unit ?? "" })
+        const allocationsPath = `draft.lines[${index}].allocations` as const
+
+        const editAddress = (
+            allocation: InquiryAllocation,
+            replace = false,
+        ) => {
+            if (disabled) return
+            const current = form.getFieldValue(allocationsPath)
+            const existing = current.find(
+                (item) => item.allocation_id === allocation.allocation_id,
+            )
+            if (
+                !existing ||
+                (replace &&
+                    allocationRestrictions(inquiry, existing.allocation_id)
+                        .occupied)
+            )
+                return
+            const next = replace
+                ? { ...existing, allocation_id: crypto.randomUUID() }
+                : existing
+            setEditing({
+                initial: next,
+                sourceId: existing.allocation_id,
+                replace,
+                title: replace ? "替换收件地址" : "编辑配送地址",
+            })
+        }
+
+        const appendAddresses = (allocations: InquiryAllocation[]) => {
+            if (disabled) throw new Error("当前需求不可编辑，请稍后重试。")
+            const current = form.getFieldValue(allocationsPath)
+            if (current.length + allocations.length > 100)
+                throw new Error("加入后超过 100 个地址，请减少新增地址。")
+            if (
+                allocations.some((entry) =>
+                    current.some(
+                        (item) => item.allocation_id === entry.allocation_id,
+                    ),
+                )
+            )
+                throw new Error("本次地址已添加，请重新解析后核对。")
+            form.setFieldValue(allocationsPath, [...current, ...allocations])
+        }
+
+        const applyAddress = (value: InquiryAllocation) => {
+            if (!editing || disabled)
+                throw new Error("当前需求不可编辑，请稍后重试。")
+            if (!editing.sourceId) {
+                appendAddresses([value])
+                return
+            }
+            const current = form.getFieldValue(allocationsPath)
+            const source = current.find(
+                (item) => item.allocation_id === editing.sourceId,
+            )
+            if (!source) throw new Error("原地址已移除，请关闭后重新添加。")
+            const access = allocationRestrictions(inquiry, source.allocation_id)
+            if (editing.replace && access.occupied)
+                throw new Error("该地址已有销售占用，不可替换。")
+            const next = editing.replace
+                ? value
+                : access.frozen
+                  ? { ...source, quantity: value.quantity }
+                  : { ...value, allocation_id: source.allocation_id }
+            form.setFieldValue(
+                allocationsPath,
+                current.map((item) =>
+                    item.allocation_id === source.allocation_id ? next : item,
+                ),
+            )
+            setSelectedIds(new Set())
+        }
+
+        const applyImportedAddresses = (changes: AddressImportChanges) => {
+            if (disabled) throw new Error("当前需求不可编辑，请稍后重试。")
+            const currentLine = form.getFieldValue(`draft.lines[${index}]`)
+            const current = currentLine.allocations
+            if (JSON.stringify(current) !== changes.base)
+                throw new Error("地址已发生变化，请重新核对预览后确认。")
+            if (current.length + changes.additions.length > 100)
+                throw new Error("处理后超过 100 个地址，请减少新增地址。")
+            for (const update of changes.updates) {
+                if (
+                    !current.some(
+                        (item) => item.allocation_id === update.allocation_id,
+                    )
+                )
+                    throw new Error("待更新的地址已移除，请重新核对预览。")
+                const occupied = sumFixed(
+                    (inquiry?.quantity_ledger ?? [])
+                        .filter((entry) => entry.state !== "released")
+                        .flatMap((entry) =>
+                            entry.selections
+                                .filter(
+                                    (item) =>
+                                        item.line_id === currentLine.line_id &&
+                                        item.allocation_id ===
+                                            update.allocation_id,
+                                )
+                                .map((item) => item.quantity),
+                        ),
+                    {
+                        maxScale: currentLine.quantity_scale,
+                        outputScale: currentLine.quantity_scale,
+                    },
+                )
+                if (
+                    compareDecimal(
+                        update.quantity,
+                        occupied,
+                        currentLine.quantity_scale,
+                    ) < 0
+                )
+                    throw new Error(
+                        "结果数量不能少于地址已占用数量，请重新核对。",
+                    )
+            }
+            const quantities = new Map(
+                changes.updates.map((item) => [
+                    item.allocation_id,
+                    item.quantity,
+                ]),
+            )
+            form.setFieldValue(allocationsPath, [
+                ...current.map((item) =>
+                    quantities.has(item.allocation_id)
+                        ? {
+                              ...item,
+                              quantity: quantities.get(item.allocation_id)!,
+                          }
+                        : item,
+                ),
+                ...changes.additions,
+            ])
+        }
+
+        const removeAddresses = (ids: ReadonlySet<string>) => {
+            if (disabled) return
+            const current = form.getFieldValue(allocationsPath)
+            const entries = current.flatMap((allocation, position) =>
+                ids.has(allocation.allocation_id) &&
+                !allocationRestrictions(inquiry, allocation.allocation_id)
+                    .occupied
+                    ? [{ allocation, index: position }]
+                    : [],
+            )
+            if (!entries.length) return
+            const removedIds = new Set(
+                entries.map(({ allocation }) => allocation.allocation_id),
+            )
+            form.setFieldValue(
+                allocationsPath,
+                current.filter((item) => !removedIds.has(item.allocation_id)),
+            )
+            setRemoved(entries)
+            setSelectedIds(new Set())
+        }
+
         return (
-            <fieldset disabled={disabled} className="min-w-0 space-y-6">
-                <div className="rounded-lg border bg-muted/30 p-4">
-                    <p className="text-sm font-medium">
-                        需求{" "}
-                        <QuantityValue
-                            value={line.quantity}
-                            unit={line.unit_code}
-                        />
-                    </p>
-                    <p
-                        className="mt-1 text-sm text-muted-foreground"
-                        role="status"
-                    >
-                        {progress.label}
-                    </p>
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                    <form.Field
-                        name={`draft.lines[${index}].fulfillment_kind`}
-                        children={(field) => (
-                            <div className="space-y-2">
-                                <Label htmlFor={`${prefix}-fulfillment-kind`}>
-                                    交付类型
-                                </Label>
-                                <OptionCombobox
-                                    id={`${prefix}-fulfillment-kind`}
-                                    aria-label="交付类型"
-                                    allowClear={false}
-                                    options={[
-                                        {
-                                            value: "physical",
-                                            label: "实物配送",
-                                        },
-                                        {
-                                            value: "virtual",
-                                            label: "虚拟交付",
-                                        },
-                                        {
-                                            value: "service",
-                                            label: "服务交付",
-                                        },
-                                    ]}
-                                    value={field.state.value}
-                                    onValueChange={(value) =>
-                                        field.handleChange(
-                                            value as InquiryLine["fulfillment_kind"],
-                                        )
-                                    }
-                                />
-                            </div>
-                        )}
-                    />
-                    <form.AppField
-                        name={`draft.lines[${index}].delivery_terms`}
-                        children={(field) => (
-                            <field.TextField
-                                id={`${prefix}-delivery-terms`}
-                                label="交付条件"
-                            />
-                        )}
-                    />
-                </div>
-                <form.Field
-                    name={`draft.lines[${index}].allocations`}
-                    mode="array"
-                    children={(allocationsField) => (
-                        <section className="space-y-3">
-                            <div className="flex items-center justify-between gap-3">
-                                <h4 className="text-sm font-medium">
-                                    配送地址{" "}
-                                    <span className="font-normal text-muted-foreground">
-                                        （最多 100 个地址）
-                                    </span>
-                                </h4>
-                                <Button
-                                    id={`${prefix}-add-address`}
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={
-                                        allocationsField.state.value.length >=
-                                        100
-                                    }
-                                    onClick={() =>
-                                        allocationsField.pushValue(
-                                            newAllocation(line),
-                                        )
-                                    }
-                                >
-                                    添加地址
-                                </Button>
-                            </div>
-                            {allocationsField.state.value.map(
-                                (allocation, allocationIndex) => {
-                                    const frozenAddress =
-                                        inquiry?.requirements.some((snapshot) =>
-                                            snapshot.data.lines.some((row) =>
-                                                row.allocations.some(
-                                                    (address) =>
-                                                        address.allocation_id ===
-                                                        allocation.allocation_id,
-                                                ),
-                                            ),
-                                        ) ?? false
-                                    const occupiedAddress =
-                                        inquiry?.quantity_ledger.some(
-                                            (row) =>
-                                                row.state !== "released" &&
-                                                row.selections.some(
-                                                    (selection) =>
-                                                        selection.allocation_id ===
-                                                        allocation.allocation_id,
-                                                ),
-                                        ) ?? false
-                                    const allocationPrefix = `${prefix}-address-${toAutomationIdSegment(allocation.allocation_id)}`
-                                    return (
-                                        <div
-                                            key={allocation.allocation_id}
-                                            className="grid gap-3 rounded-md bg-muted/40 p-3 sm:grid-cols-2"
+            <>
+                <fieldset disabled={disabled} className="min-w-0 space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
+                        <span className="text-sm font-medium">
+                            需求{" "}
+                            <QuantityValue value={line.quantity} unit={unit} />
+                        </span>
+                        <Badge
+                            variant={
+                                progress.complete && !progress.overAllocated
+                                    ? "secondary"
+                                    : "warning"
+                            }
+                        >
+                            {progress.label}
+                        </Badge>
+                    </div>
+                    <form.Field name={allocationsPath} mode="array">
+                        {() => (
+                            <>
+                                <div className="space-y-3 border-b pb-3">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <p className="min-w-0 text-sm leading-6">
+                                            <span className="font-medium">
+                                                {
+                                                    DELIVERY_KINDS.find(
+                                                        (kind) =>
+                                                            kind.value ===
+                                                            line.fulfillment_kind,
+                                                    )?.label
+                                                }
+                                            </span>
+                                            <span className="ml-3 text-muted-foreground">
+                                                {line.delivery_terms ||
+                                                    "未填写交付条件"}
+                                            </span>
+                                        </p>
+                                        <Button
+                                            id={`${prefix}-edit-delivery-terms`}
+                                            type="button"
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() =>
+                                                setEditingTerms(
+                                                    (value) => !value,
+                                                )
+                                            }
                                         >
-                                            {frozenAddress && (
-                                                <div className="sm:col-span-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                                    <span>
-                                                        {occupiedAddress
-                                                            ? "该地址已有销售占用；请先处理下游，或添加新地址分配未转数量。"
-                                                            : "已提交的收件资料保留原记录，修改时请替换地址。"}
-                                                    </span>
-                                                    <Button
-                                                        id={`${allocationPrefix}-replace`}
-                                                        type="button"
-                                                        variant="outline"
-                                                        size="sm"
-                                                        disabled={
-                                                            occupiedAddress
-                                                        }
-                                                        onClick={() =>
-                                                            allocationsField.handleChange(
-                                                                allocationsField.state.value.map(
-                                                                    (
-                                                                        item,
-                                                                        position,
-                                                                    ) =>
-                                                                        position ===
-                                                                        allocationIndex
-                                                                            ? {
-                                                                                  ...item,
-                                                                                  allocation_id:
-                                                                                      crypto.randomUUID(),
-                                                                              }
-                                                                            : item,
-                                                                ),
-                                                            )
-                                                        }
-                                                    >
-                                                        替换地址
-                                                    </Button>
-                                                </div>
-                                            )}
-                                            <form.AppField
-                                                name={`draft.lines[${index}].allocations[${allocationIndex}].recipient`}
-                                                children={(field) => (
-                                                    <field.TextField
-                                                        id={`${allocationPrefix}-recipient`}
-                                                        disabled={frozenAddress}
-                                                        label="收货人"
-                                                    />
-                                                )}
-                                            />
-                                            <form.AppField
-                                                name={`draft.lines[${index}].allocations[${allocationIndex}].phone`}
-                                                children={(field) => (
-                                                    <field.TextField
-                                                        id={`${allocationPrefix}-phone`}
-                                                        disabled={frozenAddress}
-                                                        label="联系电话"
-                                                        type="tel"
-                                                    />
-                                                )}
-                                            />
-                                            <form.AppField
-                                                name={`draft.lines[${index}].allocations[${allocationIndex}].quantity`}
-                                                children={(field) => (
-                                                    <field.TextField
-                                                        id={`${allocationPrefix}-quantity`}
-                                                        label="配送数量"
-                                                        inputMode="decimal"
-                                                    />
-                                                )}
-                                            />
-                                            <div className="flex items-end justify-end">
-                                                <Button
-                                                    id={`${allocationPrefix}-remove`}
-                                                    disabled={occupiedAddress}
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        allocationsField.removeValue(
-                                                            allocationIndex,
-                                                        )
-                                                    }
-                                                >
-                                                    移除地址
-                                                </Button>
-                                            </div>
+                                            {editingTerms
+                                                ? "收起"
+                                                : "编辑交付条件"}
+                                        </Button>
+                                    </div>
+                                    {editingTerms && (
+                                        <div className="grid gap-3 sm:grid-cols-2">
                                             <form.Field
-                                                name={`draft.lines[${index}].allocations[${allocationIndex}].region_code`}
-                                                children={(field) => (
-                                                    <div className="space-y-2 sm:col-span-2">
+                                                name={`draft.lines[${index}].fulfillment_kind`}
+                                            >
+                                                {(field) => (
+                                                    <div className="space-y-1.5">
                                                         <Label
-                                                            htmlFor={`${allocationPrefix}-region-province`}
+                                                            htmlFor={`${prefix}-fulfillment-kind`}
                                                         >
-                                                            省 / 市 / 区县
+                                                            交付类型
                                                         </Label>
-                                                        <RegionCascadeSelect
-                                                            idPrefix={`${allocationPrefix}-region`}
-                                                            disabled={
-                                                                frozenAddress
+                                                        <OptionCombobox
+                                                            id={`${prefix}-fulfillment-kind`}
+                                                            aria-label="交付类型"
+                                                            allowClear={false}
+                                                            options={
+                                                                DELIVERY_KINDS
                                                             }
-                                                            leafOnly
                                                             value={
                                                                 field.state
                                                                     .value
                                                             }
-                                                            onValueChange={
-                                                                field.handleChange
+                                                            onValueChange={(
+                                                                value,
+                                                            ) =>
+                                                                field.handleChange(
+                                                                    value as InquiryLine["fulfillment_kind"],
+                                                                )
                                                             }
                                                         />
                                                     </div>
                                                 )}
-                                            />
+                                            </form.Field>
                                             <form.AppField
-                                                name={`draft.lines[${index}].allocations[${allocationIndex}].address`}
-                                                children={(field) => (
+                                                name={`draft.lines[${index}].delivery_terms`}
+                                            >
+                                                {(field) => (
                                                     <field.TextField
-                                                        id={`${allocationPrefix}-detail`}
-                                                        disabled={frozenAddress}
-                                                        className="sm:col-span-2"
-                                                        label="详细地址"
+                                                        id={`${prefix}-delivery-terms`}
+                                                        label="交付条件"
+                                                        className="gap-1.5"
                                                     />
                                                 )}
-                                            />
+                                            </form.AppField>
                                         </div>
-                                    )
-                                },
-                            )}
-                        </section>
-                    )}
+                                    )}
+                                </div>
+                                {removed.length > 0 && (
+                                    <div
+                                        className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/40 px-3 py-2 text-sm"
+                                        role="status"
+                                    >
+                                        <span>
+                                            已移除 {removed.length} 个地址
+                                        </span>
+                                        <Button
+                                            id={`${prefix}-undo-remove-addresses`}
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            disabled={
+                                                disabled ||
+                                                line.allocations.length +
+                                                    removed.length >
+                                                    100
+                                            }
+                                            title={
+                                                line.allocations.length +
+                                                    removed.length >
+                                                100
+                                                    ? "恢复后超过 100 个地址，请先移除其他地址"
+                                                    : undefined
+                                            }
+                                            onClick={() => {
+                                                const current = [
+                                                    ...form.getFieldValue(
+                                                        allocationsPath,
+                                                    ),
+                                                ]
+                                                const pending = removed.filter(
+                                                    ({ allocation }) =>
+                                                        !current.some(
+                                                            (item) =>
+                                                                item.allocation_id ===
+                                                                allocation.allocation_id,
+                                                        ),
+                                                )
+                                                if (
+                                                    current.length +
+                                                        pending.length >
+                                                    100
+                                                )
+                                                    return
+                                                for (const entry of pending)
+                                                    current.splice(
+                                                        Math.min(
+                                                            entry.index,
+                                                            current.length,
+                                                        ),
+                                                        0,
+                                                        entry.allocation,
+                                                    )
+                                                form.setFieldValue(
+                                                    allocationsPath,
+                                                    current,
+                                                )
+                                                setRemoved([])
+                                            }}
+                                        >
+                                            撤销
+                                        </Button>
+                                    </div>
+                                )}
+                                <InquiryDeliveryAddressList
+                                    prefix={prefix}
+                                    allocations={line.allocations}
+                                    unit={unit}
+                                    inquiry={inquiry}
+                                    selectedIds={selectedIds}
+                                    disabled={disabled}
+                                    onSelectionChange={setSelectedIds}
+                                    onEdit={editAddress}
+                                    onRemove={removeAddresses}
+                                    onImport={() => setImportOpen(true)}
+                                    onAdd={() => {
+                                        const currentLine = form.getFieldValue(
+                                            `draft.lines[${index}]`,
+                                        )
+                                        if (
+                                            disabled ||
+                                            currentLine.allocations.length >=
+                                                100
+                                        )
+                                            return
+                                        const allocation =
+                                            newAllocation(currentLine)
+                                        setEditing({
+                                            initial: allocation,
+                                            replace: false,
+                                            title: "添加配送地址",
+                                        })
+                                    }}
+                                />
+                                {line.fulfillment_kind === "physical" && (
+                                    <p className="text-xs leading-5 text-muted-foreground">
+                                        提交采购前，收件资料须完整，配送数量合计不得少于需求数量；超量允许保存和提交。
+                                    </p>
+                                )}
+                            </>
+                        )}
+                    </form.Field>
+                </fieldset>
+                {editing && (
+                    <InquiryDeliveryAddressDialog
+                        key={editing.initial.allocation_id}
+                        prefix={prefix}
+                        initial={editing.initial}
+                        title={editing.title}
+                        quantityScale={line.quantity_scale}
+                        frozen={
+                            !editing.replace &&
+                            allocationRestrictions(
+                                inquiry,
+                                editing.sourceId ?? "",
+                            ).frozen
+                        }
+                        occupied={
+                            allocationRestrictions(
+                                inquiry,
+                                editing.sourceId ?? "",
+                            ).occupied
+                        }
+                        disabled={disabled}
+                        returnFocusId={
+                            editing.sourceId
+                                ? `${prefix}-address-${toAutomationIdSegment(editing.initial.allocation_id)}-edit`
+                                : `${prefix}-add-address`
+                        }
+                        onClose={() => setEditing(null)}
+                        onApply={applyAddress}
+                    />
+                )}
+                <InquiryAddressImportDialog
+                    prefix={prefix}
+                    open={importOpen}
+                    onOpenChange={setImportOpen}
+                    line={line}
+                    inquiry={inquiry}
+                    unit={unit}
+                    disabled={disabled}
+                    onApply={applyImportedAddresses}
                 />
-
-                {line.fulfillment_kind === "physical" &&
-                    line.allocations.length === 0 && (
-                        <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                            尚未添加配送地址。首个地址默认分配全部需求数量。
-                        </p>
-                    )}
-                <p className="text-xs leading-5 text-muted-foreground">
-                    实物商品提交采购前须补齐收件资料，且地址分配数量须与需求数量一致。
-                </p>
-            </fieldset>
+            </>
         )
     },
 })

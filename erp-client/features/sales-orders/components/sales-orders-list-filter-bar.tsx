@@ -3,7 +3,6 @@
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 
 import { OptionCombobox } from "@/components/business"
-import { DateRangePicker } from "@/components/ui/date-picker"
 import {
     SALES_ORDER_COMMERCIAL_STATUS_OPTIONS,
     type SalesOrderCommercialStatusFilter,
@@ -23,6 +22,8 @@ import type {
 const prefix = "sales-orders-list-filter"
 const panelId = `${prefix}-panel`
 const MORE_CHIP_KEYS: readonly SalesOrdersListFilterKey[] = [
+    "nature",
+    "createdDate",
     "origin",
     "reviewStatus",
     "fulfillment",
@@ -131,58 +132,7 @@ export function SalesOrdersListFilterBar({
                         }
                         placeholder="全部"
                     />
-                    <DateRangePicker
-                        id="sales-orders-list-filter-created-date"
-                        className="w-56 max-w-full [&_button]:h-control"
-                        value={
-                            f.filterDraft.createdFrom || f.filterDraft.createdTo
-                                ? {
-                                      from:
-                                          f.filterDraft.createdFrom ||
-                                          undefined,
-                                      to: f.filterDraft.createdTo || undefined,
-                                  }
-                                : undefined
-                        }
-                        onValueChange={(range) =>
-                            f.setFilterDraft((draft) => ({
-                                ...draft,
-                                createdFrom: range?.from ?? "",
-                                createdTo: range?.to ?? "",
-                            }))
-                        }
-                        filterLabel="创建日期"
-                        placeholder="全部"
-                    />
                 </>
-            }
-            commonFilters={
-                <OptionCombobox
-                    id={`${prefix}-nature`}
-                    className="w-56 max-w-full min-w-0"
-                    filterLabel="业务性质"
-                    aria-label="业务性质"
-                    value={
-                        f.filterDraft.nature === "all"
-                            ? null
-                            : f.filterDraft.nature
-                    }
-                    options={[
-                        { value: "physical_service", label: "实物与服务" },
-                        { value: "card_voucher", label: "卡券" },
-                    ]}
-                    placeholder="全部"
-                    onValueChange={(value) =>
-                        f.setFilterDraft((draft) => ({
-                            ...draft,
-                            nature:
-                                value === "physical_service" ||
-                                value === "card_voucher"
-                                    ? value
-                                    : "all",
-                        }))
-                    }
-                />
             }
             morePanel={
                 <SalesOrdersListFilterPanel

@@ -78,7 +78,7 @@ function ComboboxInput({
                         nativeButton
                         render={<ComboboxTrigger id={triggerId} />}
                         data-slot="input-group-button"
-                        className="group-has-data-[slot=combobox-clear]/input-group:hidden data-pressed:bg-transparent"
+                        className="group-has-data-[slot=combobox-clear]/input-group:hidden hover:bg-transparent aria-expanded:bg-transparent data-pressed:bg-transparent dark:hover:bg-transparent"
                         disabled={disabled}
                     />
                 )}
@@ -237,7 +237,7 @@ function ComboboxChips({
         <ComboboxPrimitive.Chips
             data-slot="combobox-chips"
             className={cn(
-                "flex min-h-control flex-wrap items-center gap-1 rounded-lg border border-input bg-surface-control bg-clip-padding px-2.5 py-1 text-sm transition-[color,box-shadow] duration-200 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30 has-aria-invalid:border-destructive has-aria-invalid:ring-3 has-aria-invalid:ring-destructive/20 has-data-[slot=combobox-chip]:px-1 dark:has-aria-invalid:border-destructive/50 dark:has-aria-invalid:ring-destructive/40",
+                "flex min-h-control flex-wrap items-center gap-1 rounded-lg border border-input bg-surface-control has-[input:disabled]:bg-muted bg-clip-padding px-2.5 py-1 text-sm transition-[color,box-shadow] duration-200 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30 has-aria-invalid:border-destructive has-aria-invalid:ring-3 has-aria-invalid:ring-destructive/20 has-data-[slot=combobox-chip]:px-1 dark:has-aria-invalid:border-destructive/50 dark:has-aria-invalid:ring-destructive/40",
                 className,
             )}
             {...props}

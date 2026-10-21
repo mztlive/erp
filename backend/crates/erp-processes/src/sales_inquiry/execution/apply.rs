@@ -55,15 +55,7 @@ impl SalesInquiryProcess {
                 self.require_customer(actor, &inquiry.customer_id, executor).await?;
                 normalize_requirement(&self.db, &mut inquiry.draft, executor).await?;
                 inquiry.submit(req.expected_version, actor.id(), req.reason.clone(), now)?;
-                return self
-                    .replace_tasks(
-                        actor,
-                        inquiry,
-                        req.assignments.clone(),
-                        req.shared_fee_owner_user_id.clone(),
-                        executor,
-                    )
-                    .await;
+                return self.replace_tasks(actor, inquiry, executor).await;
             },
             InquiryCommand::Accept(req) => {
                 inquiry.accept(req.expected_version, actor.id(), req.feedback_round, now)?
@@ -75,15 +67,7 @@ impl SalesInquiryProcess {
                     normalize_requirement(&self.db, requirement, executor).await?;
                 }
                 inquiry.reinquire(req.expected_version, actor.id(), data, now)?;
-                return self
-                    .replace_tasks(
-                        actor,
-                        inquiry,
-                        req.assignments.clone(),
-                        req.shared_fee_owner_user_id.clone(),
-                        executor,
-                    )
-                    .await;
+                return self.replace_tasks(actor, inquiry, executor).await;
             },
             InquiryCommand::Close(req) => {
                 inquiry.close(req.expected_version, actor.id(), req.reason.clone(), now)?;

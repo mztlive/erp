@@ -173,6 +173,53 @@ fn physical_address_quantity_and_unit_precision_are_strict() {
 }
 
 #[test]
+fn draft_and_submission_preserve_excess_allocation_quantities() {
+    for quantity in ["10", "30"] {
+        let mut inquiry = inquiry();
+        let mut data = inquiry.draft.clone();
+        data.lines[0].allocations[0].quantity = qty(quantity);
+        inquiry.save_draft(1, data.clone(), None).unwrap();
+        assert_eq!(inquiry.draft, data);
+        assert_eq!(inquiry.draft.lines[0].quantity, qty("10"));
+        inquiry.submit(1, "sales", String::new(), now()).unwrap();
+        assert_eq!(inquiry.status, InquiryStatus::AwaitingProcurement);
+        assert_eq!(inquiry.requirements[0].data, data);
+    }
+}
+
+#[test]
+fn draft_saves_short_allocation_but_submission_requires_full_coverage() {
+    let mut inquiry = inquiry();
+    let mut data = inquiry.draft.clone();
+    data.lines[0].allocations[0].quantity = qty("6");
+    inquiry.save_draft(1, data.clone(), None).unwrap();
+    let error = inquiry.submit(1, "sales", String::new(), now()).unwrap_err();
+    assert!(matches!(error, Error::ValidationError(message) if message == "地址数量合计不得少于需求数量"));
+    assert_eq!(inquiry.status, InquiryStatus::Draft);
+    assert!(inquiry.requirements.is_empty());
+    assert_eq!(inquiry.draft, data);
+    data.lines[0].allocations[0].quantity = qty("10");
+    inquiry.save_draft(1, data, None).unwrap();
+    inquiry.submit(1, "sales", String::new(), now()).unwrap();
+    assert_eq!(inquiry.status, InquiryStatus::AwaitingProcurement);
+}
+
+#[test]
+fn draft_still_rejects_invalid_allocation_quantities_without_changing_saved_data() {
+    for quantity in ["0", "10.001"] {
+        let mut inquiry = inquiry();
+        let original = inquiry.draft.clone();
+        let mut data = original.clone();
+        data.lines[0].allocations[0].quantity = qty(quantity);
+        let error = inquiry.save_draft(1, data, None).unwrap_err();
+        assert!(
+            matches!(error, Error::ValidationError(message) if message == "地址数量必须为正且符合单位精度")
+        );
+        assert_eq!(inquiry.draft, original);
+    }
+}
+
+#[test]
 fn three_feedback_rounds_preserve_accepted_and_submitted_history() {
     let mut inquiry = accepted();
     let original = inquiry.feedbacks[0].clone();
@@ -547,7 +594,14 @@ fn reducing_old_draft_still_respects_frozen_unit_precision() {
 #[test]
 fn shared_fee_owner_is_explicit_and_moves_with_responsibility() {
     let mut inquiry = inquiry();
-    assert!(inquiry.assign_shared_fee_owner(None, &["buyer1".into(), "buyer2".into()]).is_err());
+    inquiry.assign_shared_fee_owner(None, &["buyer1".into(), "buyer2".into()]).unwrap();
+    assert_eq!(inquiry.shared_fee_owner_user_id.as_deref(), Some("buyer1"));
+    inquiry.assign_shared_fee_owner(None, &["buyer2".into(), "buyer1".into()]).unwrap();
+    assert_eq!(inquiry.shared_fee_owner_user_id.as_deref(), Some("buyer1"));
+    inquiry.assign_shared_fee_owner(None, &["buyer2".into()]).unwrap();
+    assert_eq!(inquiry.shared_fee_owner_user_id.as_deref(), Some("buyer2"));
+    assert!(inquiry.assign_shared_fee_owner(None, &[]).is_err());
+    assert_eq!(inquiry.shared_fee_owner_user_id.as_deref(), Some("buyer2"));
     assert!(inquiry.assign_shared_fee_owner(Some("outside".into()), &["buyer1".into()]).is_err());
     inquiry.assign_shared_fee_owner(None, &["buyer1".into()]).unwrap();
     assert_eq!(inquiry.shared_fee_owner_user_id.as_deref(), Some("buyer1"));

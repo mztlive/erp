@@ -5,7 +5,7 @@ use erp_core::common::time::Instant;
 use erp_core::ids::WorkItemId;
 use erp_sales::entity::sales_inquiry::SalesInquiry;
 use erp_workflow::entity::work_item::{
-    AssignmentSource, InquiryTaskAssignments, WorkItem, WorkItemCloseData, WorkItemData, WorkItemPriority,
+    AssignmentSource, InquiryTaskAssignment, WorkItem, WorkItemCloseData, WorkItemData, WorkItemPriority,
     WorkItemType, inquiry_subject_version,
 };
 use erp_workflow::repository::{WorkItemExt, WorkItemRepositoryExt};
@@ -13,7 +13,6 @@ use id_generator::next_id;
 use persistence_core::Executor;
 
 use super::SalesInquiryProcess;
-use super::dto::InquiryAssignment;
 use crate::{Error, Result};
 
 impl SalesInquiryProcess {
@@ -54,25 +53,15 @@ impl SalesInquiryProcess {
         &self,
         actor: &AuditActor,
         inquiry: &mut SalesInquiry,
-        assignments: Vec<InquiryAssignment>,
-        shared_fee_owner: Option<String>,
         executor: &mut dyn Executor,
     ) -> Result<Vec<String>> {
-        let line_ids = inquiry
-            .current_requirement()?
-            .data
-            .lines
-            .iter()
-            .map(|line| line.line_id.clone())
-            .collect::<Vec<_>>();
-        let assignments = InquiryTaskAssignments::new(assignments, &line_ids)?.into_values();
+        let assignments = self.resolve_assignments(inquiry, executor).await?;
         let owners =
-            assignments.iter().map(|assignment| assignment.owner_user_id.clone()).collect::<Vec<_>>();
-        inquiry.assign_shared_fee_owner(shared_fee_owner, &owners)?;
+            assignments.iter().map(|(assignment, _)| assignment.owner_user_id.clone()).collect::<Vec<_>>();
+        inquiry.assign_shared_fee_owner(None, &owners)?;
         self.close_tasks(actor, &inquiry.base.id, "询价需求重新提交或重询，旧任务冻结", executor).await?;
         let mut ids = Vec::new();
-        for assignment in assignments {
-            let organization = self.access().assignment_owner(&assignment.owner_user_id, executor).await?;
+        for (assignment, organization) in assignments {
             let item = new_task(inquiry, assignment, organization)?;
             self.db.work_items().create(&item, executor).await?;
             ids.push(item.base.id);
@@ -105,7 +94,11 @@ impl SalesInquiryProcess {
     }
 }
 
-fn new_task(inquiry: &SalesInquiry, assignment: InquiryAssignment, organization: String) -> Result<WorkItem> {
+fn new_task(
+    inquiry: &SalesInquiry,
+    assignment: InquiryTaskAssignment,
+    organization: String,
+) -> Result<WorkItem> {
     let key = format!("inquiry:{}:{}", inquiry.requirement_version, assignment.owner_user_id);
     Ok(WorkItem::new_with_responsibility_scope(
         WorkItemId::new(next_id()),

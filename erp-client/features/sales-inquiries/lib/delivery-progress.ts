@@ -4,10 +4,39 @@ import {
     subtractFixed,
     sumFixed,
 } from "@/lib/fixed-decimal"
-import type { InquiryAllocation, InquiryLine } from "../types"
+import type { InquiryAllocation, InquiryLine, SalesInquiry } from "../types"
+
+/** 已提交的收件资料不可原地改写，销售占用中的地址不可移除或替换。 */
+export function allocationRestrictions(
+    inquiry: SalesInquiry | undefined,
+    allocationId: string,
+) {
+    const frozen =
+        inquiry?.requirements.some((snapshot) =>
+            snapshot.data.lines.some((line) =>
+                line.allocations.some(
+                    (address) => address.allocation_id === allocationId,
+                ),
+            ),
+        ) ?? false
+    const occupied =
+        inquiry?.quantity_ledger.some(
+            (entry) =>
+                entry.state !== "released" &&
+                entry.selections.some(
+                    (selection) => selection.allocation_id === allocationId,
+                ),
+        ) ?? false
+    return { frozen: frozen || occupied, occupied }
+}
 
 /** Draft inputs can be incomplete; report their state without coercing quantities. */
-export function deliveryProgress(line: InquiryLine) {
+export function deliveryProgress(line: InquiryLine): {
+    complete: boolean
+    remaining: string
+    label: string
+    overAllocated?: boolean
+} {
     if (line.fulfillment_kind !== "physical") {
         return {
             complete: true,
@@ -43,12 +72,6 @@ export function deliveryProgress(line: InquiryLine) {
                 remaining: quantity,
                 label: `待分配 ${quantity} ${line.unit_code}`,
             }
-        if (comparison < 0)
-            return {
-                complete: false,
-                remaining: "0",
-                label: `超出需求 ${quantity.slice(1)} ${line.unit_code}`,
-            }
         const missing = line.allocations.some(
             (address) =>
                 !address.recipient.trim() ||
@@ -59,9 +82,12 @@ export function deliveryProgress(line: InquiryLine) {
         return {
             complete: !missing,
             remaining: "0",
+            overAllocated: comparison < 0,
             label: missing
                 ? "数量已分配，待补收件资料"
-                : `已分配 · ${line.allocations.length} 个地址`,
+                : comparison < 0
+                  ? `超出需求 ${quantity.slice(1)} ${line.unit_code}`.trim()
+                  : `已分配 · ${line.allocations.length} 个地址`,
         }
     } catch {
         return { complete: false, remaining: "0", label: "请填写有效数量" }
