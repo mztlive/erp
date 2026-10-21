@@ -210,7 +210,9 @@ impl ContractAccess {
         if !scope.allows_customer(customer_id)
             || self.customers.find_by_ids(&[CustomerAccountId::new(customer_id)], executor).await?.is_empty()
         {
-            return Err(Error::Forbidden("当前没有该客户的合同归档资格，请先分配负责销售".into()));
+            return Err(Error::Forbidden(
+                "当前账号无法为该客户归档合同。请由具备该客户归档权限的销售处理；如需由你办理，请联系管理员核对客户档案、负责销售关系及合同归档授权。".into(),
+            ));
         }
         let object = ContractScopeObject {
             owned: true,
@@ -218,7 +220,9 @@ impl ContractAccess {
             ..Default::default()
         };
         if !self.scope.allows(&access, &object)? {
-            return Err(Error::Forbidden("当前账号无权在授权范围内归档合同".into()));
+            return Err(Error::Forbidden(
+                "该客户已通过归档资格核对，但当前账号的组织归属或个人授权范围不符合合同归档要求。请联系管理员核对账号所属组织及合同归档授权。".into(),
+            ));
         }
         Ok(access)
     }

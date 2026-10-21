@@ -18,7 +18,7 @@ import {
     IMPORT_REVIEW_STEPS,
     type ImportReviewStep,
 } from "../lib/import-review"
-import { getErrorMessage } from "@/lib/api/errors"
+import { getErrorCode, getErrorMessage } from "@/lib/api/errors"
 import {
     useContractUploadForm,
     type UseContractUploadFormOptions,
@@ -155,7 +155,12 @@ export function ContractImportWorkspace(props: Props) {
                 >
                     {error ? (
                         <Alert variant="destructive">
-                            <AlertTitle>操作未完成</AlertTitle>
+                            <AlertTitle>
+                                {getErrorCode(state.confirmMutation.error) ===
+                                "PERMISSION_DENIED"
+                                    ? "合同未归档：当前账号无归档权限"
+                                    : "操作未完成"}
+                            </AlertTitle>
                             <AlertDescription>
                                 {getErrorMessage(error, "请查看任务结果后重试")}
                             </AlertDescription>
