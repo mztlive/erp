@@ -276,3 +276,53 @@ pub async fn procurement_publish(
     let result = state.sales_inquiry_process().publish(&actor, &id, request).await?;
     Ok(ApiResponse::ok_with_data(result))
 }
+
+#[cfg(test)]
+mod tests {
+    use axum::body::Body;
+    use axum::extract::FromRequest;
+    use axum::http::Request;
+    use serde_json::{Value, json};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn save_request_accepts_deadline_and_keeps_omitted_field_out_of_receipt_payload() {
+        let original = json!({
+            "command_key": "save", "expected_version": 1,
+            "data": {"lines": [], "note": "需求说明"}
+        });
+        for deadline in [None, Some(json!(0)), Some(json!(1900000000))] {
+            let mut payload = original.clone();
+            if let Some(value) = &deadline {
+                payload["deadline_at"] = value.clone();
+            }
+            let request = Request::builder()
+                .header("content-type", "application/json")
+                .body(Body::from(payload.to_string()))
+                .unwrap();
+            let Json(command) = Json::<SaveInquiryCommand>::from_request(request, &()).await.unwrap();
+            assert_eq!(
+                command.deadline_at.map(|value| value.unix_secs()),
+                deadline.and_then(|value| value.as_i64())
+            );
+            assert_eq!(serde_json::to_value(command).unwrap(), payload);
+        }
+    }
+
+    #[tokio::test]
+    async fn save_request_rejects_invalid_deadline_and_unknown_fields() {
+        for (key, value) in [("deadline_at", json!("tomorrow")), ("status", Value::from("confirmed"))] {
+            let mut payload = json!({
+                "command_key": "save", "expected_version": 1,
+                "data": {"lines": [], "note": "需求说明"}
+            });
+            payload[key] = value;
+            let request = Request::builder()
+                .header("content-type", "application/json")
+                .body(Body::from(payload.to_string()))
+                .unwrap();
+            assert!(Json::<SaveInquiryCommand>::from_request(request, &()).await.is_err());
+        }
+    }
+}

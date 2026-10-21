@@ -106,7 +106,7 @@ impl SalesInquiryProcess {
         let mut data = request.data.clone();
         normalize_requirement(&self.db, &mut data, executor).await?;
         self.require_customer(actor, &inquiry.customer_id, executor).await?;
-        Ok(inquiry.save_draft(request.expected_version, data)?)
+        Ok(inquiry.save_draft(request.expected_version, data, request.deadline_at)?)
     }
 
     async fn apply_procurement(

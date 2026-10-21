@@ -60,6 +60,8 @@ export function InquiryActions({
     permissions,
     onSaved,
     disabled = false,
+    renderActions,
+    feedbackRound,
 }: {
     inquiry: SalesInquiry | ProcurementInquiry
     procurement: boolean
@@ -68,6 +70,11 @@ export function InquiryActions({
     permissions: readonly string[]
     onSaved: () => void
     disabled?: boolean
+    feedbackRound?: number
+    renderActions?: (
+        primaryActions: React.ReactNode,
+        secondaryActions: React.ReactNode,
+    ) => React.ReactNode
 }) {
     const [action, setAction] = React.useState<InquiryAction | null>(null)
     const [error, setError] = React.useState<string | null>(null)
@@ -104,6 +111,12 @@ export function InquiryActions({
             if (!action || disabled) return
             setError(null)
             try {
+                if (
+                    (action === "accept" || action === "reinquire") &&
+                    feedbackRound != null &&
+                    feedbackRound !== inquiry.feedback_round
+                )
+                    throw new Error("请切回最新一轮反馈后再接受或重新询价。")
                 const taskBody = task
                     ? { task_id: task.id, task_version: task.version }
                     : {}
@@ -237,7 +250,7 @@ export function InquiryActions({
             inquiry.status === "awaiting_sales_supplement"
           ? ["submit", "close"]
           : inquiry.status === "awaiting_sales"
-            ? ["accept", "reinquire", "close"]
+            ? ["reinquire", "accept", "close"]
             : inquiry.status === "confirmed"
               ? ["reinquire", "close"]
               : inquiry.status !== "closed"
@@ -249,6 +262,47 @@ export function InquiryActions({
         ["submit", "reinquire", "close", "supplement", "reassign"].includes(
             action,
         )
+    const renderButton = (item: InquiryAction) => (
+        <Button
+            key={item}
+            id={`sales-inquiry-action-${item}`}
+            type="button"
+            variant={
+                ["close", "reassign", "supplement", "reinquire"].includes(item)
+                    ? "outline"
+                    : "default"
+            }
+            disabled={
+                disabled ||
+                ((item === "accept" || item === "reinquire") &&
+                    feedbackRound != null &&
+                    feedbackRound !== inquiry.feedback_round) ||
+                command.isPending ||
+                command.unresolved ||
+                !command.ready ||
+                (procurement && !task) ||
+                !hasPermission(
+                    permissions,
+                    `${procurement ? "procurement_inquiry" : "sales_inquiry"}:${item}`,
+                )
+            }
+            title={
+                disabled
+                    ? "请先保存当前修改后再操作"
+                    : (item === "accept" || item === "reinquire") &&
+                        feedbackRound != null &&
+                        feedbackRound !== inquiry.feedback_round
+                      ? "请切回最新一轮反馈后再操作"
+                      : undefined
+            }
+            onClick={() => {
+                setAction(item)
+                setError(null)
+            }}
+        >
+            {ACTION_LABEL[item]}
+        </Button>
+    )
     return (
         <div className="space-y-3">
             {command.unresolved && (
@@ -279,39 +333,20 @@ export function InquiryActions({
                     <AlertDescription>{error}</AlertDescription>
                 </Alert>
             )}
-            <div className="flex flex-wrap gap-2">
-                {actions.map((item) => (
-                    <Button
-                        key={item}
-                        id={`sales-inquiry-action-${item}`}
-                        type="button"
-                        variant={
-                            item === "close" ||
-                            item === "reassign" ||
-                            item === "supplement"
-                                ? "outline"
-                                : "default"
-                        }
-                        disabled={
-                            disabled ||
-                            command.isPending ||
-                            command.unresolved ||
-                            !command.ready ||
-                            (procurement && !task) ||
-                            !hasPermission(
-                                permissions,
-                                `${procurement ? "procurement_inquiry" : "sales_inquiry"}:${item}`,
-                            )
-                        }
-                        onClick={() => {
-                            setAction(item)
-                            setError(null)
-                        }}
-                    >
-                        {ACTION_LABEL[item]}
-                    </Button>
-                ))}
-            </div>
+            {renderActions ? (
+                renderActions(
+                    actions
+                        .filter((item) => item !== "close")
+                        .map(renderButton),
+                    actions
+                        .filter((item) => item === "close")
+                        .map(renderButton),
+                )
+            ) : (
+                <div className="flex flex-wrap gap-2">
+                    {actions.map(renderButton)}
+                </div>
+            )}
             <FormalActionConfirmDialog
                 idPrefix="sales-inquiry-close-confirm"
                 open={action === "close"}

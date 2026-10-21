@@ -1,5 +1,6 @@
 //! 询价命令输入与安全回执；不接受供应商或内部报价字段。
 
+use erp_core::common::time::Instant;
 use erp_sales::entity::sales_inquiry::{
     InquiryCreateData, InquiryFeedbackData, InquiryReinquiryData, InquiryRequirementData, InquiryStatus,
 };
@@ -18,6 +19,8 @@ pub struct CreateInquiryCommand {
 pub struct SaveInquiryCommand {
     pub command_key: String,
     pub expected_version: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deadline_at: Option<Instant>,
     pub data: InquiryRequirementData,
 }
 

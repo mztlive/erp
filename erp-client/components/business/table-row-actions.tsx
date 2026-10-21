@@ -36,7 +36,7 @@ export type TableRowAction = {
     /** 同时作为 title。禁用时再包一层，保证悬停能看到原因。 */
     disabledReason?: string
     hidden?: boolean
-    /** 同行还有其它动作时收进菜单底部；仅此一个动作时仍直接露出。 */
+    /** 默认收进菜单底部；可用 placement="inline" 显式露出。 */
     destructive?: boolean
     placement?: "inline" | "menu"
     /** 同行最多一个描边按钮，且只作用于露出的动作。 */
@@ -64,6 +64,7 @@ function ActionLabel({ action }: { action: TableRowAction }) {
 }
 
 function isMenuBound(action: TableRowAction, soleVisible: boolean) {
+    if (action.placement === "inline") return false
     return (
         action.placement === "menu" ||
         (action.destructive === true && !soleVisible)
@@ -77,6 +78,12 @@ function ActionControl({
     action: TableRowAction
     variant: "ghost" | "outline"
 }) {
+    const className = cn(
+        actionButtonClassName,
+        action.destructive &&
+            action.placement === "inline" &&
+            "text-destructive hover:bg-destructive/10 hover:text-destructive [&_svg]:text-destructive hover:[&_svg]:text-destructive focus-visible:[&_svg]:text-destructive",
+    )
     const button =
         action.href && !action.disabled && !action.loading ? (
             <Button
@@ -84,7 +91,7 @@ function ActionControl({
                 type="button"
                 size="sm"
                 variant={variant}
-                className={actionButtonClassName}
+                className={className}
                 title={action.disabledReason}
                 render={<Link href={action.href} />}
                 onClick={(event) => {
@@ -100,7 +107,7 @@ function ActionControl({
                 type="button"
                 size="sm"
                 variant={variant}
-                className={actionButtonClassName}
+                className={className}
                 ref={action.buttonRef}
                 disabled={action.disabled}
                 loading={action.loading}
@@ -160,7 +167,7 @@ function MenuAction({ action }: { action: TableRowAction }) {
 
 /**
  * 列表行操作：图标文字按钮，最多露出 2 个，其余进带文字的更多菜单。
- * 破坏性动作在还有其它动作时放到菜单底部，并用分隔线隔开。
+ * 破坏性动作默认放到菜单底部；显式 placement="inline" 时直接露出。
  */
 export function TableRowActions({
     actions,

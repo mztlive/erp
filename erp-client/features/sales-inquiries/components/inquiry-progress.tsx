@@ -15,9 +15,24 @@ export const VALIDITY_LABEL = {
 
 export function InquiryProgress({
     progress,
+    compact = false,
 }: {
     progress: InquirySalesProgress
+    compact?: boolean
 }) {
+    if (compact)
+        return (
+            <p
+                className="text-sm text-muted-foreground"
+                aria-label="转单进度与商品报价有效性"
+            >
+                已全部转单 {progress.completed_lines} 项（含销售草稿占用）
+                <span className="mx-2" aria-hidden="true">
+                    ·
+                </span>
+                {VALIDITY_LABEL[progress.quote_validity]}
+            </p>
+        )
     return (
         <div
             className="flex flex-wrap items-center gap-3 text-sm"

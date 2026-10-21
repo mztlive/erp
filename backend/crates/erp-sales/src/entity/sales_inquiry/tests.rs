@@ -591,7 +591,11 @@ fn mutation_state_matrix_matches_the_contract() {
         let mut initial = accepted();
         initial.status = state;
         let editable = matches!(state, InquiryStatus::Draft | InquiryStatus::AwaitingSalesSupplement);
-        assert_eq!(initial.clone().save_draft(1, initial.draft.clone()).is_ok(), editable, "save {state:?}");
+        assert_eq!(
+            initial.clone().save_draft(1, initial.draft.clone(), Some(now())).is_ok(),
+            editable,
+            "save {state:?}"
+        );
         assert_eq!(
             initial.clone().submit(1, "sales", "改版".into(), now()).is_ok(),
             editable,
@@ -893,4 +897,38 @@ fn unoccurred_fee_can_decrease_but_occurred_fee_remains_protected() {
     inquiry.register_fee("expense").unwrap();
     assert!(inquiry.adjust_fee("expense", amount("50"), now()).is_err());
     assert!(inquiry.release_fee("expense").is_err());
+}
+
+#[test]
+fn save_draft_updates_deadline_and_note_without_changing_submitted_history() {
+    let mut inquiry = accepted();
+    inquiry.status = InquiryStatus::AwaitingSalesSupplement;
+    let snapshots = inquiry.requirements.clone();
+    let mut data = inquiry.draft.clone();
+    data.note = "更新后的交付说明".into();
+    inquiry.save_draft(1, data.clone(), Some(now())).unwrap();
+    assert_eq!(inquiry.deadline_at, now());
+    assert_eq!(inquiry.draft, data);
+    assert_eq!(inquiry.requirements, snapshots);
+    inquiry.save_draft(1, data.clone(), None).unwrap();
+    assert_eq!(inquiry.deadline_at, now());
+    inquiry.save_draft(1, data, Some(Instant::from_unix_secs(0))).unwrap();
+    assert_eq!(inquiry.deadline_at.unix_secs(), 0);
+}
+
+#[test]
+fn save_draft_failure_preserves_deadline_and_note() {
+    let initial = inquiry();
+    let mut invalid = initial.draft.clone();
+    invalid.note = "字".repeat(4001);
+    for (version, data) in [(99, initial.draft.clone()), (1, invalid)] {
+        let mut inquiry = initial.clone();
+        assert!(inquiry.save_draft(version, data, Some(now())).is_err());
+        assert_eq!(inquiry, initial);
+    }
+    let mut closed = initial;
+    closed.status = InquiryStatus::Closed;
+    let original = closed.clone();
+    assert!(closed.save_draft(1, demand(), Some(now())).is_err());
+    assert_eq!(closed, original);
 }

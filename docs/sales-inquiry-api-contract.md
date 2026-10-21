@@ -63,7 +63,7 @@
 | `CreateInquiryCommand` | `command_key`、`data: InquiryCreateData` |
 | `CreateInquiryImportCommand` | `command_key`、`customer_id`、`preview_id`、`input_fingerprint`、`confirm_merge_duplicates` |
 | `InquiryCreateData` | `customer_id`、`customer_name`、`sales_owner_user_id`、`business_org_unit_id`、`deadline_at`、可空 `copied_from_inquiry_id`、`draft: InquiryRequirementData` |
-| `SaveInquiryCommand` | `command_key`、`expected_version`、`data: InquiryRequirementData` |
+| `SaveInquiryCommand` | `command_key`、`expected_version`、可空 `deadline_at`、`data: InquiryRequirementData` |
 | `SubmitInquiryCommand` | `command_key`、`expected_version`、`reason`、`assignments:[{owner_user_id,line_ids}]` |
 | `AcceptInquiryCommand` | `command_key`、`expected_version`、`feedback_round` |
 | `ReinquireInquiryCommand` | `command_key`、`expected_version`、`data`、`assignments` |
@@ -78,6 +78,7 @@
 ### 3.2 需求字段
 
 1. `InquiryRequirementData` 包含 `lines` 和 `note`。需求说明最多 4000 字；提交时至少 1 条需求，最多 200 条。
+   草稿及待销售补充状态允许同时修改询价截止时间和需求说明。`SaveInquiryCommand.deadline_at` 未传或为 `null` 时保留原值，传 `0` 时清空；传入值与需求草稿同事务保存，版本冲突或需求校验失败时均不修改。已提交需求快照保持不变。页面通过页头“修改需求说明”弹窗编辑这两个字段，“应用修改”仅更新本地草稿，随“保存需求”提交；取消弹窗不修改草稿。
 2. 每条需求包含 `line_id`、`sku_id`、`sku_revision_id`、`sku_code`、`product_name`、`specification`、`unit_code`、`quantity_scale`、十进制 `quantity`、`fulfillment_kind`、`delivery_due_at`、`delivery_terms`、可空 `sales_reference_price_gross`、`allocations`。
 3. `fulfillment_kind` 为 `physical`、`virtual`、`service`。同 SKU 不同交期或交付条件必须保存为不同稳定需求行；不得只按 SKU 合并。
 4. 配送项包含 `allocation_id`、`recipient`、`phone`、`region_code`、`region_name`、`address`、十进制 `quantity`。地区必须落到有效叶节点，名称由服务端冻结。每条需求最多 100 个地址。

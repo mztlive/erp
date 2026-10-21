@@ -10,17 +10,25 @@ use crate::{Error, Result};
 impl SalesInquiry {
     /// 保存工作副本；已提交快照保持不变。
     /// # 参数
-    /// `expected_version` 为聚合版本；`data` 为完整需求草稿。
+    /// `expected_version` 为聚合版本；`data` 为完整需求草稿；`deadline_at` 未传时保留原截止时间。
     /// # 返回
-    /// 成功后只替换草稿。
+    /// 成功后原子替换草稿及传入的截止时间，已提交快照保持不变。
     /// # 错误
     /// 版本、状态、稳定身份或占用下限不满足时拒绝。
-    pub fn save_draft(&mut self, expected_version: u64, mut data: InquiryRequirementData) -> Result<()> {
+    pub fn save_draft(
+        &mut self,
+        expected_version: u64,
+        mut data: InquiryRequirementData,
+        deadline_at: Option<Instant>,
+    ) -> Result<()> {
         self.ensure_version(expected_version)?;
         self.ensure_state(&[InquiryStatus::Draft, InquiryStatus::AwaitingSalesSupplement])?;
         data.normalize(false)?;
         self.validate_requirement_history(&data)?;
         self.draft = data;
+        if let Some(deadline_at) = deadline_at {
+            self.deadline_at = deadline_at;
+        }
         Ok(())
     }
 

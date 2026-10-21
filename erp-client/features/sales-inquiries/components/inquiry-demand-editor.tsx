@@ -1,24 +1,24 @@
 "use client"
 
 import * as React from "react"
+import { createPortal } from "react-dom"
 import { useRouter } from "next/navigation"
 import { PlusIcon, UploadIcon } from "lucide-react"
 import type { DemandFormValues } from "../lib/demand-form"
 import { deliveryProgress } from "../lib/delivery-progress"
+import { InquiryDemandDetails } from "./inquiry-demand-details"
+import { InquiryDemandHeader } from "./inquiry-demand-header"
+import { InquiryProgress } from "./inquiry-progress"
 import { InquiryDemandLines } from "./inquiry-demand-lines"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { DatePicker } from "@/components/ui/date-picker"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { CustomerSearchCombobox } from "@/features/entity-selectors/components/customer-search-combobox"
 import { SellableSkuSelectDialog } from "@/features/sales-orders/components/sellable-sku-select-dialog"
 import type { SellableSkuPick } from "@/features/sales-orders/lib/sellable-sku-pick"
 import { hasPermission } from "@/lib/permissions"
 import { getErrorMessage } from "@/lib/api/errors"
 import { inquiryPath } from "../api"
 import { useInquiryCommand } from "../hooks/use-inquiry-command"
-import { inquiryDateInput, inquiryDateSeconds } from "../lib/format"
 import {
     inquiryStorageKey,
     readInquiryLocalValue,
@@ -57,6 +57,10 @@ export function InquiryDemandEditor({
     permissions,
     onSaved,
     onImport,
+    productActions,
+    footerActions,
+    detailsContainer,
+    headerActionsContainer,
     onDirtyChange,
     onConfirmRequirement,
     storageScope,
@@ -67,6 +71,10 @@ export function InquiryDemandEditor({
     permissions: readonly string[]
     onSaved: () => void
     onImport?: () => void
+    productActions?: React.ReactNode
+    footerActions?: React.ReactNode
+    detailsContainer?: HTMLElement | null
+    headerActionsContainer?: HTMLElement | null
     onDirtyChange?: (dirty: boolean) => void
     onConfirmRequirement?: (requirement: InquiryRequirement) => void
     storageScope?: string
@@ -133,6 +141,10 @@ export function InquiryDemandEditor({
             storageKey={storageKey}
             onSaved={onSaved}
             onImport={onImport}
+            productActions={productActions}
+            footerActions={footerActions}
+            detailsContainer={detailsContainer}
+            headerActionsContainer={headerActionsContainer}
             onDirtyChange={onDirtyChange}
             onConfirmRequirement={onConfirmRequirement}
         />
@@ -150,6 +162,10 @@ function DemandEditorContent({
     storageKey,
     onSaved,
     onImport,
+    productActions,
+    footerActions,
+    detailsContainer,
+    headerActionsContainer,
     onDirtyChange,
     onConfirmRequirement,
 }: {
@@ -161,6 +177,10 @@ function DemandEditorContent({
     storageKey: string
     onSaved: () => void
     onImport?: () => void
+    productActions?: React.ReactNode
+    footerActions?: React.ReactNode
+    detailsContainer?: HTMLElement | null
+    headerActionsContainer?: HTMLElement | null
     onDirtyChange?: (dirty: boolean) => void
     onConfirmRequirement?: (requirement: InquiryRequirement) => void
 }) {
@@ -221,6 +241,7 @@ function DemandEditorContent({
                     inquiry
                         ? {
                               expected_version: versionRef.current,
+                              deadline_at: value.deadline_at,
                               data: value.draft,
                           }
                         : { data: value },
@@ -271,7 +292,7 @@ function DemandEditorContent({
     }, [command.resolution])
     return (
         <form
-            className="min-w-0 space-y-6"
+            className="flex min-w-0 flex-col gap-6"
             onSubmit={(event) => {
                 event.preventDefault()
                 void form.handleSubmit()
@@ -313,101 +334,53 @@ function DemandEditorContent({
                         </AlertDescription>
                     </Alert>
                 )}
-                <section
-                    className="space-y-4 rounded-lg border p-5"
-                    aria-label="基本信息"
-                >
-                    <h2 className="text-sm font-semibold">基本信息</h2>
-                    <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_260px]">
-                        <form.Field
-                            name="customer_id"
-                            children={(field) => (
-                                <div className="space-y-2">
-                                    <Label htmlFor="sales-inquiry-customer">
-                                        客户{" "}
-                                        <span className="text-destructive">
-                                            *
-                                        </span>
-                                    </Label>
-                                    <CustomerSearchCombobox
-                                        id="sales-inquiry-customer"
-                                        value={field.state.value || undefined}
-                                        disabled={Boolean(inquiry)}
-                                        onValueChange={(id) =>
-                                            field.handleChange(id ?? "")
-                                        }
-                                        onItemChange={(item) =>
-                                            form.setFieldValue(
-                                                "customer_name",
-                                                item?.legalName ?? "",
-                                            )
-                                        }
-                                    />
-                                </div>
-                            )}
-                        />
-                        <form.Field
-                            name="deadline_at"
-                            children={(field) => (
-                                <div className="space-y-2">
-                                    <Label htmlFor="sales-inquiry-deadline">
-                                        询价截止日期
-                                    </Label>
-                                    <DatePicker
-                                        id="sales-inquiry-deadline"
-                                        size="default"
-                                        value={inquiryDateInput(
-                                            field.state.value,
-                                        )}
-                                        onValueChange={(value) =>
-                                            field.handleChange(
-                                                inquiryDateSeconds(value ?? ""),
-                                            )
-                                        }
-                                        disabled={Boolean(inquiry)}
-                                    />
-                                </div>
-                            )}
-                        />
-                        {!inquiry && (
-                            <p className="text-xs text-muted-foreground md:col-span-2">
-                                销售负责人及业务组织按当前账号确定。
-                            </p>
-                        )}
-                    </div>
-                    <form.AppField
-                        name="draft.note"
-                        children={(field) => (
-                            <field.TextareaField
-                                id="sales-inquiry-demand-note"
-                                label="需求说明（选填）"
-                                rows={2}
-                                textareaClassName="min-h-16"
-                                placeholder="客户交付要求及需要采购确认的事项"
-                            />
-                        )}
-                    />
-                </section>
+                {detailsContainer === undefined ? (
+                    <InquiryDemandDetails form={form} inquiry={inquiry} />
+                ) : detailsContainer ? (
+                    createPortal(
+                        <InquiryDemandHeader
+                            form={form}
+                            actionsContainer={headerActionsContainer ?? null}
+                            disabled={busy}
+                        />,
+                        detailsContainer,
+                    )
+                ) : null}
                 <section
                     className="min-w-0 space-y-4"
                     aria-label="商品与配送需求"
                 >
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                        <h2 className="text-base font-medium">
-                            商品需求{" "}
+                        <div className="space-y-2">
                             <form.Subscribe
                                 selector={(state) =>
                                     state.values.draft.lines.length
                                 }
                             >
-                                {(count) => (
-                                    <span className="ml-2 text-sm font-normal text-muted-foreground">
-                                        {count} 项
-                                    </span>
-                                )}
+                                {(count) =>
+                                    inquiry ? (
+                                        <p className="text-sm font-medium">
+                                            共 {count} 项商品
+                                        </p>
+                                    ) : (
+                                        <h2 className="text-xl font-semibold">
+                                            商品需求
+                                            <span className="ml-2 text-sm font-normal text-muted-foreground">
+                                                {count} 项
+                                            </span>
+                                        </h2>
+                                    )
+                                }
                             </form.Subscribe>
-                        </h2>
-                        <div className="flex flex-wrap gap-2">
+                            {inquiry && (
+                                <InquiryProgress
+                                    progress={inquiry.sales_progress}
+                                    compact
+                                />
+                            )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            {productActions}
                             {onImport && (
                                 <Button
                                     id="sales-inquiry-import-open"
@@ -442,7 +415,7 @@ function DemandEditorContent({
                         disabled={command.isPending}
                     />
                 </section>
-                <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-end gap-3 border-t bg-background px-1 py-4">
+                <div className="sticky bottom-0 z-20 -mt-6 flex flex-wrap items-center justify-end gap-3 border-t bg-card px-1 py-4">
                     <div className="mr-auto space-y-1">
                         <form.Subscribe
                             selector={(state) => state.values.draft.lines}
@@ -472,19 +445,23 @@ function DemandEditorContent({
                                   : "输入已在当前浏览器保留，保存后同步到询价草稿。"}
                         </p>
                     </div>
-                    <Button
-                        id="sales-inquiry-save-demand"
-                        type="submit"
-                        disabled={busy || !canSave}
-                    >
-                        {command.isPending
-                            ? "正在保存…"
-                            : onConfirmRequirement
-                              ? "确认本次需求调整"
-                              : inquiry
-                                ? "保存需求"
-                                : "创建询价草稿"}
-                    </Button>
+                    <div className="flex shrink-0 items-center gap-3">
+                        <Button
+                            id="sales-inquiry-save-demand"
+                            type="submit"
+                            variant={footerActions ? "outline" : "default"}
+                            disabled={busy || !canSave}
+                        >
+                            {command.isPending
+                                ? "正在保存…"
+                                : onConfirmRequirement
+                                  ? "确认本次需求调整"
+                                  : inquiry
+                                    ? "保存需求"
+                                    : "创建询价草稿"}
+                        </Button>
+                        {footerActions}
+                    </div>
                 </div>
                 <SellableSkuSelectDialog
                     open={pickerOpen}

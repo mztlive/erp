@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { PackageIcon, TruckIcon } from "lucide-react"
+import { PackageIcon, Trash2Icon, TruckIcon } from "lucide-react"
 import { withForm } from "@/components/form"
 import { TableRowActions } from "@/components/business/table-row-actions"
 import { Badge } from "@/components/ui/badge"
@@ -96,29 +96,29 @@ export const InquiryDemandLines = withForm({
                                     </p>
                                 </div>
                             ) : (
-                                <div className="min-w-0 overflow-hidden rounded-lg border">
-                                    <Table className="min-w-[1000px]">
-                                        <TableHeader>
+                                <div className="min-w-0 overflow-hidden rounded-lg border [&>[data-slot=table-container]]:max-h-[65vh]">
+                                    <Table className="min-w-[1280px] table-fixed">
+                                        <TableHeader className="sticky top-0 z-10">
                                             <TableRow>
-                                                <TableHead className="w-[26%]">
+                                                <TableHead>
                                                     商品 / 规格
                                                 </TableHead>
-                                                <TableHead className="w-32 text-right">
+                                                <TableHead className="w-36">
                                                     需求数量{" "}
                                                     <span className="text-destructive">
                                                         *
                                                     </span>
                                                 </TableHead>
-                                                <TableHead className="w-32 text-right">
+                                                <TableHead className="w-40 text-right">
                                                     参考单价（选填）
                                                 </TableHead>
-                                                <TableHead className="w-48">
+                                                <TableHead className="w-52">
                                                     要求交付日
                                                 </TableHead>
-                                                <TableHead>
+                                                <TableHead className="w-48">
                                                     配送 / 交付
                                                 </TableHead>
-                                                <TableHead className="w-28 text-right">
+                                                <TableHead className="sticky right-0 z-20 w-52 border-l text-right">
                                                     操作
                                                 </TableHead>
                                             </TableRow>
@@ -149,29 +149,22 @@ export const InquiryDemandLines = withForm({
                                                             </p>
                                                         </TableCell>
                                                         <TableCell>
-                                                            <div className="flex items-center gap-1.5">
-                                                                <form.AppField
-                                                                    name={`draft.lines[${index}].quantity`}
-                                                                >
-                                                                    {(
-                                                                        field,
-                                                                    ) => (
-                                                                        <field.TextField
-                                                                            id={`${prefix}-quantity`}
-                                                                            label={`${line.product_name}需求数量`}
-                                                                            hideLabel
-                                                                            inputMode="decimal"
-                                                                            inputClassName="text-right tabular-nums"
-                                                                            required
-                                                                        />
-                                                                    )}
-                                                                </form.AppField>
-                                                                <span className="shrink-0 text-xs text-muted-foreground">
-                                                                    {
-                                                                        line.unit_code
-                                                                    }
-                                                                </span>
-                                                            </div>
+                                                            <form.AppField
+                                                                name={`draft.lines[${index}].quantity`}
+                                                            >
+                                                                {(field) => (
+                                                                    <field.TextField
+                                                                        id={`${prefix}-quantity`}
+                                                                        label={`${line.product_name}需求数量`}
+                                                                        hideLabel
+                                                                        placeholder="请输入数量"
+                                                                        inputMode="decimal"
+                                                                        className="w-24 shrink-0"
+                                                                        inputClassName="text-right tabular-nums"
+                                                                        required
+                                                                    />
+                                                                )}
+                                                            </form.AppField>
                                                         </TableCell>
                                                         <TableCell>
                                                             <form.Field
@@ -262,7 +255,7 @@ export const InquiryDemandLines = withForm({
                                                                 )}
                                                             </div>
                                                         </TableCell>
-                                                        <TableCell>
+                                                        <TableCell className="sticky right-0 z-1 border-l bg-card group-hover/row:bg-row-hover">
                                                             <TableRowActions
                                                                 moreId={`${prefix}-more`}
                                                                 moreLabel={`${line.product_name}更多操作`}
@@ -291,6 +284,9 @@ export const InquiryDemandLines = withForm({
                                                                     {
                                                                         id: `${prefix}-remove`,
                                                                         label: "移除商品",
+                                                                        icon: Trash2Icon,
+                                                                        placement:
+                                                                            "inline",
                                                                         destructive: true,
                                                                         disabled,
                                                                         onClick:

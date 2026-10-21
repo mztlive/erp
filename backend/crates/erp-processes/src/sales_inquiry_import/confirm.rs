@@ -148,7 +148,7 @@ impl SalesInquiryImportProcess {
         fingerprint: String,
         executor: &mut dyn Executor,
     ) -> Result<InquiryImportResult> {
-        inquiry.save_draft(preview.expected_version, preview.data.clone())?;
+        inquiry.save_draft(preview.expected_version, preview.data.clone(), None)?;
         SalesInquiryService::new(self.db.clone()).save(inquiry, executor).await?;
         self.record_preview(actor, inquiry, preview, command_id, fingerprint, executor).await
     }

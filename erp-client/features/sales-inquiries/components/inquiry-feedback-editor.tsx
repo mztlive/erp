@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { InquiryHistory } from "./inquiry-history"
+import { InquiryFeedbackResults } from "./inquiry-feedback-results"
 import { MoneyValue } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { OptionCombobox } from "@/components/business/option-combobox"
@@ -391,7 +391,7 @@ function FeedbackEditorContent({
                                     >
                                         查看完整已保存内容
                                     </summary>
-                                    <InquiryHistory
+                                    <InquiryFeedbackResults
                                         idPrefix="procurement-inquiry-feedback-conflict"
                                         inquiry={{
                                             ...inquiry,

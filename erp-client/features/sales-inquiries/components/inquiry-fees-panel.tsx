@@ -9,10 +9,19 @@ import {
     FormalActionConfirmDialog,
     MoneyValue,
     RateValue,
+    TableRowActions,
 } from "@/components/business"
 import { useAppForm, toFieldErrors } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+} from "@/components/ui/dialog"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { StatusBadge } from "@/components/ui/status-badge"
 import {
@@ -230,7 +239,8 @@ function InquiryFeesContent({
         userId,
         `${inquiry.id}:fee-expense`,
     )
-    const canAllocate = hasPermission(permissions, "sales_inquiry:update")
+    const canAllocate =
+        !procurement && hasPermission(permissions, "sales_inquiry:update")
     const canCreateExpense =
         procurement && hasPermission(permissions, "purchase_order:create")
     const sales = useQuery({
@@ -349,6 +359,10 @@ function InquiryFeesContent({
     })
     const [confirmation, setConfirmation] =
         React.useState<FeeConfirmation | null>(null)
+    const [editor, setEditor] = React.useState<"allocate" | "expense" | null>(
+        null,
+    )
+    const editorTrigger = React.useRef<HTMLButtonElement | null>(null)
     const [storageFailure, setStorageFailure] = React.useState(false)
     const [success, setSuccess] = React.useState<string | null>(null)
     const form = useAppForm({
@@ -466,6 +480,7 @@ function InquiryFeesContent({
                         ],
                     },
                 })
+                setEditor(null)
             } else {
                 if (!canCreateExpense || expenseCommand.unresolved) return
                 const row = allocationRows.find(
@@ -501,6 +516,7 @@ function InquiryFeesContent({
                         ],
                     }),
                 })
+                setEditor(null)
             }
         },
     })
@@ -527,13 +543,18 @@ function InquiryFeesContent({
     return (
         <section className="space-y-5" aria-label="询价费用归属与办理">
             <div>
-                <h2 className="font-semibold">额外成本与费用办理</h2>
+                <h2 className="text-lg font-semibold">费用与办理</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
                     先按金额明确费用归属，再由采购办理。暂估费用仅供定价参考；收款对象和付款条件不同的费用分别建单。
                 </p>
                 {round > 0 && (
                     <p className="mt-1 text-xs text-muted-foreground">
-                        费用依据：第 {round} 轮反馈。
+                        费用依据：第 {round} 轮
+                        {acceptedRound != null
+                            ? "已接受反馈。"
+                            : procurement
+                              ? "反馈，办理资格以各项费用为准。"
+                              : "反馈（尚未接受，仅供查看）。"}
                         {acceptedRound != null &&
                         inquiry.feedback_round > acceptedRound
                             ? "新反馈尚未接受，继续按已接受结果办理未受影响的费用；暂停办理的费用会显示具体原因。"
@@ -543,7 +564,7 @@ function InquiryFeesContent({
             </div>
             {!summaries.length ? (
                 <p className="text-sm text-muted-foreground">
-                    本轮尚无费用结果。
+                    暂无可展示的费用结果。采购发布额外费用后，可在此查看分摊与办理进度。
                 </p>
             ) : (
                 <>
@@ -557,6 +578,11 @@ function InquiryFeesContent({
                                     <TableHead>办理中</TableHead>
                                     <TableHead>已办理</TableHead>
                                     <TableHead>可用余额</TableHead>
+                                    {canAllocate && (
+                                        <TableHead className="text-right">
+                                            操作
+                                        </TableHead>
+                                    )}
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -645,6 +671,75 @@ function InquiryFeesContent({
                                                 display="exact"
                                             />
                                         </TableCell>
+                                        {canAllocate && (
+                                            <TableCell>
+                                                <TableRowActions
+                                                    moreId={`inquiry-fee-${toAutomationIdSegment(summary.fee.fee_id)}-more`}
+                                                    moreLabel={`${summary.fee.name}操作`}
+                                                    actions={[
+                                                        {
+                                                            id: `inquiry-fee-${toAutomationIdSegment(summary.fee.fee_id)}-allocate`,
+                                                            label: "分摊归属",
+                                                            disabled:
+                                                                locked ||
+                                                                sourceLoading ||
+                                                                Boolean(
+                                                                    actionFailure,
+                                                                ) ||
+                                                                Boolean(
+                                                                    summary.reason,
+                                                                ) ||
+                                                                compareDecimal(
+                                                                    summary.unallocated,
+                                                                    "0",
+                                                                    2,
+                                                                ) <= 0,
+                                                            disabledReason:
+                                                                summary.reason ??
+                                                                actionFailure ??
+                                                                (compareDecimal(
+                                                                    summary.unallocated,
+                                                                    "0",
+                                                                    2,
+                                                                ) <= 0
+                                                                    ? "本项费用已全部分摊"
+                                                                    : undefined),
+                                                            onClick: (
+                                                                event,
+                                                            ) => {
+                                                                editorTrigger.current =
+                                                                    event.currentTarget as HTMLButtonElement
+                                                                form.setFieldValue(
+                                                                    "action",
+                                                                    "allocate",
+                                                                )
+                                                                if (
+                                                                    form.state
+                                                                        .values
+                                                                        .fee_id !==
+                                                                    summary.fee
+                                                                        .fee_id
+                                                                ) {
+                                                                    form.setFieldValue(
+                                                                        "fee_id",
+                                                                        summary
+                                                                            .fee
+                                                                            .fee_id,
+                                                                    )
+                                                                    form.setFieldValue(
+                                                                        "allocation_amount",
+                                                                        "",
+                                                                    )
+                                                                }
+                                                                setEditor(
+                                                                    "allocate",
+                                                                )
+                                                            },
+                                                        },
+                                                    ]}
+                                                />
+                                            </TableCell>
+                                        )}
                                     </TableRow>
                                 ))}
                             </TableBody>
@@ -738,92 +833,123 @@ function InquiryFeesContent({
                             </div>
                         </Alert>
                     ) : null}
-                    <form
-                        className="space-y-4 rounded-lg border p-4"
-                        onSubmit={(event) => {
-                            event.preventDefault()
-                            form.setFieldValue("action", "allocate")
-                            void form.handleSubmit()
+                    <Dialog
+                        open={editor === "allocate"}
+                        onOpenChange={(open) => {
+                            if (!open && !pending) setEditor(null)
                         }}
                     >
-                        <h3 className="font-medium">明确费用归属</h3>
-                        <div className="grid gap-4 lg:grid-cols-3">
-                            <form.AppField name="fee_id">
-                                {(field) => (
-                                    <field.SelectField
-                                        id="inquiry-fees-allocation-fee"
-                                        label="费用"
-                                        disabled={locked || !canAllocate}
-                                        options={summaries.map((summary) => ({
-                                            value: summary.fee.fee_id,
-                                            label: `${summary.fee.name}${summary.reason ? ` · ${summary.reason}` : ""}`,
-                                            disabled:
-                                                Boolean(summary.reason) ||
-                                                compareDecimal(
-                                                    summary.unallocated,
-                                                    "0",
-                                                    2,
-                                                ) <= 0,
-                                        }))}
-                                    />
-                                )}
-                            </form.AppField>
-                            <form.AppField name="sales_order_id">
-                                {(field) => (
-                                    <field.SelectField
-                                        id="inquiry-fees-allocation-sales"
-                                        label="归属销售单"
-                                        disabled={locked || !canAllocate}
-                                        loading={sourceLoading}
-                                        options={sources.map((source) => ({
-                                            value: source.id,
-                                            label: `${source.order_no} · ${source.status_label}`,
-                                            disabled:
-                                                !source.eligible_for_fee_allocation,
-                                        }))}
-                                    />
-                                )}
-                            </form.AppField>
-                            <form.AppField name="allocation_amount">
-                                {(field) => (
-                                    <field.TextField
-                                        id="inquiry-fees-allocation-amount"
-                                        label="分摊含税金额"
-                                        inputMode="decimal"
-                                        disabled={locked || !canAllocate}
-                                        placeholder="0.00"
-                                    />
-                                )}
-                            </form.AppField>
-                        </div>
-                        {selectedFee ? (
-                            <p className="text-sm text-muted-foreground">
-                                本项尚未分摊：
-                                <MoneyValue
-                                    value={selectedFee.unallocated}
-                                    display="exact"
-                                />
-                                。{selectedFee.reason}
-                            </p>
-                        ) : null}
-                        {actionFailure ? (
-                            <p className="text-sm text-muted-foreground">
-                                {actionFailure}
-                            </p>
-                        ) : null}
-                        <Button
-                            id="inquiry-fees-allocation-preview"
-                            type="submit"
-                            disabled={
-                                locked ||
-                                !canAllocate ||
-                                sourceLoading ||
-                                Boolean(actionFailure)
-                            }
+                        <DialogContent
+                            closeButtonId="inquiry-fees-allocation-close"
+                            finalFocus={editorTrigger}
+                            className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl"
                         >
-                            预览费用归属
-                        </Button>
-                    </form>
+                            <DialogHeader>
+                                <DialogTitle>分摊费用归属</DialogTitle>
+                                <DialogDescription>
+                                    选择归属销售单并填写本次分摊金额，预览核对后保存。
+                                </DialogDescription>
+                            </DialogHeader>
+                            <form
+                                className="space-y-4"
+                                onSubmit={(event) => {
+                                    event.preventDefault()
+                                    form.setFieldValue("action", "allocate")
+                                    void form.handleSubmit()
+                                }}
+                            >
+                                <div className="grid gap-4 lg:grid-cols-3">
+                                    <form.AppField name="fee_id">
+                                        {(field) => (
+                                            <field.SelectField
+                                                id="inquiry-fees-allocation-fee"
+                                                label="费用"
+                                                disabled={
+                                                    locked || !canAllocate
+                                                }
+                                                options={summaries.map(
+                                                    (summary) => ({
+                                                        value: summary.fee
+                                                            .fee_id,
+                                                        label: `${summary.fee.name}${summary.reason ? ` · ${summary.reason}` : ""}`,
+                                                        disabled:
+                                                            Boolean(
+                                                                summary.reason,
+                                                            ) ||
+                                                            compareDecimal(
+                                                                summary.unallocated,
+                                                                "0",
+                                                                2,
+                                                            ) <= 0,
+                                                    }),
+                                                )}
+                                            />
+                                        )}
+                                    </form.AppField>
+                                    <form.AppField name="sales_order_id">
+                                        {(field) => (
+                                            <field.SelectField
+                                                id="inquiry-fees-allocation-sales"
+                                                label="归属销售单"
+                                                disabled={
+                                                    locked || !canAllocate
+                                                }
+                                                loading={sourceLoading}
+                                                options={sources.map(
+                                                    (source) => ({
+                                                        value: source.id,
+                                                        label: `${source.order_no} · ${source.status_label}`,
+                                                        disabled:
+                                                            !source.eligible_for_fee_allocation,
+                                                    }),
+                                                )}
+                                            />
+                                        )}
+                                    </form.AppField>
+                                    <form.AppField name="allocation_amount">
+                                        {(field) => (
+                                            <field.TextField
+                                                id="inquiry-fees-allocation-amount"
+                                                label="分摊含税金额"
+                                                inputMode="decimal"
+                                                disabled={
+                                                    locked || !canAllocate
+                                                }
+                                                placeholder="0.00"
+                                            />
+                                        )}
+                                    </form.AppField>
+                                </div>
+                                {selectedFee ? (
+                                    <p className="text-sm text-muted-foreground">
+                                        本项尚未分摊：
+                                        <MoneyValue
+                                            value={selectedFee.unallocated}
+                                            display="exact"
+                                        />
+                                        。{selectedFee.reason}
+                                    </p>
+                                ) : null}
+                                {actionFailure ? (
+                                    <p className="text-sm text-muted-foreground">
+                                        {actionFailure}
+                                    </p>
+                                ) : null}
+                                <Button
+                                    id="inquiry-fees-allocation-preview"
+                                    type="submit"
+                                    disabled={
+                                        locked ||
+                                        !canAllocate ||
+                                        sourceLoading ||
+                                        Boolean(actionFailure)
+                                    }
+                                >
+                                    预览费用归属
+                                </Button>
+                            </form>
+                        </DialogContent>
+                    </Dialog>
                     {allocationRows.length ? (
                         <div className="overflow-x-auto rounded-lg border">
                             <Table>
@@ -834,6 +960,11 @@ function InquiryFeesContent({
                                         <TableHead>已分摊金额</TableHead>
                                         <TableHead>本笔可用</TableHead>
                                         <TableHead>办理条件</TableHead>
+                                        {canCreateExpense && (
+                                            <TableHead className="text-right">
+                                                操作
+                                            </TableHead>
+                                        )}
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -868,6 +999,73 @@ function InquiryFeesContent({
                                             <TableCell className="whitespace-normal">
                                                 {row.reason ?? "可转费用采购"}
                                             </TableCell>
+                                            {canCreateExpense && (
+                                                <TableCell>
+                                                    <TableRowActions
+                                                        moreId={`inquiry-fee-allocation-${toAutomationIdSegment(row.allocation.allocation_id)}-more`}
+                                                        moreLabel={`${row.fee.name}办理操作`}
+                                                        actions={[
+                                                            {
+                                                                id: `inquiry-fee-allocation-${toAutomationIdSegment(row.allocation.allocation_id)}-expense`,
+                                                                label: "办理费用采购",
+                                                                disabled:
+                                                                    locked ||
+                                                                    sourceLoading ||
+                                                                    Boolean(
+                                                                        row.reason,
+                                                                    ),
+                                                                disabledReason:
+                                                                    row.reason,
+                                                                onClick: (
+                                                                    event,
+                                                                ) => {
+                                                                    editorTrigger.current =
+                                                                        event.currentTarget as HTMLButtonElement
+                                                                    form.setFieldValue(
+                                                                        "action",
+                                                                        "expense",
+                                                                    )
+                                                                    if (
+                                                                        form
+                                                                            .state
+                                                                            .values
+                                                                            .expense_allocation_id !==
+                                                                        row
+                                                                            .allocation
+                                                                            .allocation_id
+                                                                    ) {
+                                                                        form.setFieldValue(
+                                                                            "expense_allocation_id",
+                                                                            row
+                                                                                .allocation
+                                                                                .allocation_id,
+                                                                        )
+                                                                        form.setFieldValue(
+                                                                            "expense_amount",
+                                                                            "",
+                                                                        )
+                                                                        form.setFieldValue(
+                                                                            "supplier_id",
+                                                                            "",
+                                                                        )
+                                                                        form.setFieldValue(
+                                                                            "supplier_name",
+                                                                            "",
+                                                                        )
+                                                                        form.setFieldValue(
+                                                                            "payment_term_code",
+                                                                            "",
+                                                                        )
+                                                                    }
+                                                                    setEditor(
+                                                                        "expense",
+                                                                    )
+                                                                },
+                                                            },
+                                                        ]}
+                                                    />
+                                                </TableCell>
+                                            )}
                                         </TableRow>
                                     ))}
                                 </TableBody>
@@ -875,147 +1073,180 @@ function InquiryFeesContent({
                         </div>
                     ) : null}
                     {procurement ? (
-                        <form
-                            className="space-y-4 rounded-lg border p-4"
-                            onSubmit={(event) => {
-                                event.preventDefault()
-                                form.setFieldValue("action", "expense")
-                                void form.handleSubmit()
+                        <Dialog
+                            open={editor === "expense"}
+                            onOpenChange={(open) => {
+                                if (!open && !pending) setEditor(null)
                             }}
                         >
-                            <h3 className="font-medium">转换为费用采购</h3>
-                            <p className="text-sm text-muted-foreground">
-                                每次为一笔费用分摊创建费用采购；收款供应商和付款条件须与本轮采购确认的费用依据一致。创建后立即提交审批。
-                            </p>
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                <form.AppField name="expense_allocation_id">
-                                    {(field) => (
-                                        <field.SelectField
-                                            id="inquiry-fees-expense-source"
-                                            label="选择费用及销售归属"
-                                            disabled={
-                                                locked || !canCreateExpense
-                                            }
-                                            loading={sourceLoading}
-                                            options={allocationRows.map(
-                                                (row) => ({
-                                                    value: row.allocation
-                                                        .allocation_id,
-                                                    label: `${row.fee.name} · ${sourceById.get(row.allocation.sales_order_id)?.order_no ?? "销售单待核对"}${row.reason ? ` · ${row.reason}` : ""}`,
-                                                    disabled: Boolean(
-                                                        row.reason,
-                                                    ),
-                                                }),
-                                            )}
-                                        />
-                                    )}
-                                </form.AppField>
-                                <form.AppField name="expense_amount">
-                                    {(field) => (
-                                        <field.TextField
-                                            id="inquiry-fees-expense-amount"
-                                            label="本次转换含税金额"
-                                            inputMode="decimal"
-                                            disabled={
-                                                locked || !canCreateExpense
-                                            }
-                                            placeholder="0.00"
-                                        />
-                                    )}
-                                </form.AppField>
-                                <form.AppField name="supplier_id">
-                                    {(field) => (
-                                        <Field>
-                                            <FieldLabel htmlFor="inquiry-fees-expense-supplier">
-                                                收款供应商
-                                            </FieldLabel>
-                                            <SupplierSearchCombobox
-                                                id="inquiry-fees-expense-supplier"
-                                                value={
-                                                    field.state.value ||
-                                                    undefined
-                                                }
-                                                disabled={
-                                                    locked || !canCreateExpense
-                                                }
-                                                onValueChange={(id) => {
-                                                    field.handleChange(id ?? "")
-                                                    field.handleBlur()
-                                                    form.setFieldValue(
-                                                        "supplier_name",
-                                                        "",
-                                                    )
-                                                }}
-                                                onItemChange={(supplier) =>
-                                                    form.setFieldValue(
-                                                        "supplier_name",
-                                                        supplier?.supplierName ??
-                                                            "",
-                                                    )
-                                                }
-                                            />
-                                            <FieldError
-                                                errors={toFieldErrors(
-                                                    field.state.meta.errors,
-                                                )}
-                                            />
-                                        </Field>
-                                    )}
-                                </form.AppField>
-                                <form.AppField name="payment_term_code">
-                                    {(field) => (
-                                        <field.SelectField
-                                            id="inquiry-fees-expense-payment-term"
-                                            label="付款条件"
-                                            options={
-                                                SUPPLIER_PAYMENT_TERM_OPTIONS
-                                            }
-                                            disabled={
-                                                locked || !canCreateExpense
-                                            }
-                                        />
-                                    )}
-                                </form.AppField>
-                            </div>
-                            {selectedAllocation ? (
-                                <p className="text-sm text-muted-foreground">
-                                    本笔可转：
-                                    <MoneyValue
-                                        value={selectedAllocation.balance}
-                                        display="exact"
-                                    />
-                                    ；税率沿用已接受费用{" "}
-                                    <RateValue
-                                        value={taxPercent(
-                                            selectedAllocation.fee.tax_rate,
-                                        )}
-                                        precision={2}
-                                    />
-                                    。{selectedAllocation.reason}
-                                </p>
-                            ) : null}
-                            {!canCreateExpense ? (
-                                <p className="text-sm text-muted-foreground">
-                                    当前账号没有创建费用采购的权限，请由有权限的采购同事办理。
-                                </p>
-                            ) : !allocationRows.length ? (
-                                <p className="text-sm text-muted-foreground">
-                                    请先由销售明确费用归属和分摊金额。
-                                </p>
-                            ) : null}
-                            <Button
-                                id="inquiry-fees-expense-preview"
-                                type="submit"
-                                disabled={
-                                    locked ||
-                                    !canCreateExpense ||
-                                    sourceLoading ||
-                                    !allocationRows.some((row) => !row.reason)
-                                }
+                            <DialogContent
+                                closeButtonId="inquiry-fees-expense-close"
+                                finalFocus={editorTrigger}
+                                className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl"
                             >
-                                预览费用采购
-                            </Button>
-                        </form>
+                                <DialogHeader>
+                                    <DialogTitle>办理费用采购</DialogTitle>
+                                    <DialogDescription>
+                                        核对销售归属、收款供应商和付款条件，预览后提交审批。
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <form
+                                    className="space-y-4"
+                                    onSubmit={(event) => {
+                                        event.preventDefault()
+                                        form.setFieldValue("action", "expense")
+                                        void form.handleSubmit()
+                                    }}
+                                >
+                                    <p className="text-sm text-muted-foreground">
+                                        每次为一笔费用分摊创建费用采购；收款供应商和付款条件须与本轮采购确认的费用依据一致。创建后立即提交审批。
+                                    </p>
+                                    <div className="grid gap-4 sm:grid-cols-2">
+                                        <form.AppField name="expense_allocation_id">
+                                            {(field) => (
+                                                <field.SelectField
+                                                    id="inquiry-fees-expense-source"
+                                                    label="选择费用及销售归属"
+                                                    disabled={
+                                                        locked ||
+                                                        !canCreateExpense
+                                                    }
+                                                    loading={sourceLoading}
+                                                    options={allocationRows.map(
+                                                        (row) => ({
+                                                            value: row
+                                                                .allocation
+                                                                .allocation_id,
+                                                            label: `${row.fee.name} · ${sourceById.get(row.allocation.sales_order_id)?.order_no ?? "销售单待核对"}${row.reason ? ` · ${row.reason}` : ""}`,
+                                                            disabled: Boolean(
+                                                                row.reason,
+                                                            ),
+                                                        }),
+                                                    )}
+                                                />
+                                            )}
+                                        </form.AppField>
+                                        <form.AppField name="expense_amount">
+                                            {(field) => (
+                                                <field.TextField
+                                                    id="inquiry-fees-expense-amount"
+                                                    label="本次转换含税金额"
+                                                    inputMode="decimal"
+                                                    disabled={
+                                                        locked ||
+                                                        !canCreateExpense
+                                                    }
+                                                    placeholder="0.00"
+                                                />
+                                            )}
+                                        </form.AppField>
+                                        <form.AppField name="supplier_id">
+                                            {(field) => (
+                                                <Field>
+                                                    <FieldLabel htmlFor="inquiry-fees-expense-supplier">
+                                                        收款供应商
+                                                    </FieldLabel>
+                                                    <SupplierSearchCombobox
+                                                        id="inquiry-fees-expense-supplier"
+                                                        value={
+                                                            field.state.value ||
+                                                            undefined
+                                                        }
+                                                        disabled={
+                                                            locked ||
+                                                            !canCreateExpense
+                                                        }
+                                                        onValueChange={(id) => {
+                                                            field.handleChange(
+                                                                id ?? "",
+                                                            )
+                                                            field.handleBlur()
+                                                            form.setFieldValue(
+                                                                "supplier_name",
+                                                                "",
+                                                            )
+                                                        }}
+                                                        onItemChange={(
+                                                            supplier,
+                                                        ) =>
+                                                            form.setFieldValue(
+                                                                "supplier_name",
+                                                                supplier?.supplierName ??
+                                                                    "",
+                                                            )
+                                                        }
+                                                    />
+                                                    <FieldError
+                                                        errors={toFieldErrors(
+                                                            field.state.meta
+                                                                .errors,
+                                                        )}
+                                                    />
+                                                </Field>
+                                            )}
+                                        </form.AppField>
+                                        <form.AppField name="payment_term_code">
+                                            {(field) => (
+                                                <field.SelectField
+                                                    id="inquiry-fees-expense-payment-term"
+                                                    label="付款条件"
+                                                    options={
+                                                        SUPPLIER_PAYMENT_TERM_OPTIONS
+                                                    }
+                                                    disabled={
+                                                        locked ||
+                                                        !canCreateExpense
+                                                    }
+                                                />
+                                            )}
+                                        </form.AppField>
+                                    </div>
+                                    {selectedAllocation ? (
+                                        <p className="text-sm text-muted-foreground">
+                                            本笔可转：
+                                            <MoneyValue
+                                                value={
+                                                    selectedAllocation.balance
+                                                }
+                                                display="exact"
+                                            />
+                                            ；税率沿用已接受费用{" "}
+                                            <RateValue
+                                                value={taxPercent(
+                                                    selectedAllocation.fee
+                                                        .tax_rate,
+                                                )}
+                                                precision={2}
+                                            />
+                                            。{selectedAllocation.reason}
+                                        </p>
+                                    ) : null}
+                                    {!canCreateExpense ? (
+                                        <p className="text-sm text-muted-foreground">
+                                            当前账号没有创建费用采购的权限，请由有权限的采购同事办理。
+                                        </p>
+                                    ) : !allocationRows.length ? (
+                                        <p className="text-sm text-muted-foreground">
+                                            请先由销售明确费用归属和分摊金额。
+                                        </p>
+                                    ) : null}
+                                    <Button
+                                        id="inquiry-fees-expense-preview"
+                                        type="submit"
+                                        disabled={
+                                            locked ||
+                                            !canCreateExpense ||
+                                            sourceLoading ||
+                                            !allocationRows.some(
+                                                (row) => !row.reason,
+                                            )
+                                        }
+                                    >
+                                        预览费用采购
+                                    </Button>
+                                </form>
+                            </DialogContent>
+                        </Dialog>
                     ) : null}
                 </>
             )}
@@ -1025,6 +1256,8 @@ function InquiryFeesContent({
                 onOpenChange={(open) => {
                     if (!open && !pending) setConfirmation(null)
                 }}
+                cancelLabel="返回修改"
+                onCancel={() => setEditor(confirmation?.kind ?? null)}
                 title={
                     confirmation?.kind === "expense"
                         ? "核对费用采购"
@@ -1117,6 +1350,7 @@ function InquiryFeesContent({
                         form.setFieldValue("allocation_amount", "")
                     }
                     setConfirmation(null)
+                    setEditor(null)
                     onChanged?.()
                 }}
             />
