@@ -13,11 +13,11 @@ use erp_sales::repository::SalesOrderExt;
 use erp_sales::service::sales_order::command::identity::{
     sales_handover_audit_id, sales_handover_fingerprint,
 };
-use erp_workflow::WorkItemExt;
 use erp_workflow::entity::work_item::{WorkItem, WorkItemType};
 use erp_workflow::repository::prelude::*;
 use erp_workflow::service::approval::business_adapter::ensure_separation_of_duties;
-use erp_workflow::service::approval::policy::SeparationOfDutiesPolicy;
+use erp_workflow::service::approval::policy::require_process_required;
+use erp_workflow::{DocumentType, WorkItemExt};
 use mongodb::Database;
 use persistence_core::{NoTransaction, Transactional};
 use validator::Validate;
@@ -133,7 +133,7 @@ impl SalesOrderCommandProcess {
     ///
     /// # 关键业务约束
     /// 不按部门相同与否过滤；同部门无资格不得接收，跨部门有资格正常接收；
-    /// 该单开放审批任务的审批人不得列为候选（提交与审批分离）。
+    /// 销售单允许负责人兼任已配置的审批人，审批任务保持原指派。
     pub async fn handover_candidates(
         &self,
         id: &str,
@@ -145,11 +145,17 @@ impl SalesOrderCommandProcess {
         let approvers = open_approval_assignees(&self.db, &order.base.id, &mut NoTransaction).await?;
         let accounts =
             self.db.accounts().list_by_kind(erp_core::AccountKind::Admin, &mut NoTransaction).await?;
+        let policy = require_process_required(DocumentType::SalesOrder)?;
         let mut candidates = Vec::new();
         for account in accounts {
             if account.base.id == order.sales_owner_user_id
                 || !account.is_active_backoffice()
-                || approvers.iter().any(|approver| approver == &account.base.id)
+                || ensure_separation_of_duties(
+                    policy.separation_of_duties_policy,
+                    &account.base.id,
+                    &approvers,
+                )
+                .is_err()
             {
                 continue;
             }
@@ -450,7 +456,7 @@ async fn ensure_target_qualified(
     Err(Error::Forbidden("目标账号不存在、已失效或不具备销售验收读取与执行资格".to_string()))
 }
 
-/// 强制交接目标与开放审批任务的提交—审批岗位分离。
+/// 按销售审批政策校验交接目标与开放审批任务的人员关系。
 ///
 /// # 参数
 /// * `db` - 目标数据库
@@ -459,13 +465,13 @@ async fn ensure_target_qualified(
 /// * `executor` - 调用方执行器（事务外预检与原事务重验共用）
 ///
 /// # 返回
-/// 目标未兼任该单开放审批人时成功。
+/// 目标满足销售审批政策时成功，允许兼任已配置审批人。
 ///
 /// # 错误
-/// 目标是该单开放审批任务的当前审批人时拒绝；失败不产生任何写入。
+/// 政策读取或审批任务查询失败时返回错误；失败不产生任何写入。
 ///
 /// # 关键业务约束
-/// 复用审批域 `ForbidSubmitterAsApprover` 纯规则；开放审批任务本身保持不变。
+/// 复用销售单类型审批政策；开放审批任务本身保持不变。
 async fn ensure_handover_separation(
     db: &mongodb::Database,
     sales_order_id: &str,
@@ -473,7 +479,8 @@ async fn ensure_handover_separation(
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<()> {
     let approvers = open_approval_assignees(db, sales_order_id, executor).await?;
-    ensure_separation_of_duties(SeparationOfDutiesPolicy::ForbidSubmitterAsApprover, target, &approvers)
+    let policy = require_process_required(DocumentType::SalesOrder)?;
+    ensure_separation_of_duties(policy.separation_of_duties_policy, target, &approvers)
         .map_err(|error| Error::Forbidden(format!("目标交接人违反销售审批岗位分离约束: {error}")))?;
     Ok(())
 }
@@ -611,7 +618,9 @@ mod tests {
         BusinessType, CommercialStatus, OriginSystem, SalesOrder, SalesOrderData,
     };
 
-    use super::{SeparationOfDutiesPolicy, ensure_separation_of_duties, is_handover_transferable_type};
+    use super::{
+        DocumentType, ensure_separation_of_duties, is_handover_transferable_type, require_process_required,
+    };
 
     fn sales_order_owned_by(owner: &str, org: &str) -> SalesOrder {
         SalesOrder::new(
@@ -687,10 +696,10 @@ mod tests {
         assert_eq!(order.commercial_status, CommercialStatus::Draft);
     }
 
-    /// 交接目标不得兼任该单开放审批人；无审批或非审批人时放行。
+    /// 销售交接按同一审批政策允许目标兼任该单已配置审批人。
     #[test]
-    fn handover_target_separated_from_open_approvers() {
-        let policy = SeparationOfDutiesPolicy::ForbidSubmitterAsApprover;
+    fn handover_target_may_be_a_configured_approver() {
+        let policy = require_process_required(DocumentType::SalesOrder).unwrap().separation_of_duties_policy;
         assert!(ensure_separation_of_duties(policy, "sales-b", &[]).is_ok());
         assert!(ensure_separation_of_duties(policy, "sales-b", &["approver-1".to_string()]).is_ok());
         assert!(
@@ -699,7 +708,7 @@ mod tests {
                 "approver-1",
                 &["approver-1".to_string(), "approver-2".to_string()]
             )
-            .is_err()
+            .is_ok()
         );
     }
     #[test]

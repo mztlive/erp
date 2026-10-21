@@ -289,7 +289,7 @@ pub fn execute_policy_domain_action(document_type: DocumentType, action: Approva
     Err(Error::BusinessLogicError(format!("审批领域动作 {} 尚未绑定，已按安全策略拒绝推进", action.as_str())))
 }
 
-/// 岗位分离：禁止创建人/提交人担任指定审批人。
+/// 按单据政策校验创建人/提交人与指定审批人的岗位分离。
 ///
 /// # 参数
 /// * `policy` - 岗位分离策略
@@ -297,16 +297,17 @@ pub fn execute_policy_domain_action(document_type: DocumentType, action: Approva
 /// * `assignee_ids` - 指定审批人
 ///
 /// # 返回
-/// 创建人不在审批人集合中时无返回值。
+/// 政策允许重合或创建人不在审批人集合中时无返回值。
 ///
 /// # 错误
-/// 创建人出现在审批人集合时返回校验错误。
+/// 政策禁止重合且创建人出现在审批人集合时返回校验错误。
 pub fn ensure_separation_of_duties(
     policy: SeparationOfDutiesPolicy,
     creator_id: &str,
     assignee_ids: &[String],
 ) -> Result<()> {
     match policy {
+        SeparationOfDutiesPolicy::AllowSubmitterAsApprover => return Ok(()),
         SeparationOfDutiesPolicy::ForbidSubmitterAsApprover => {},
     }
     if assignee_ids.iter().any(|assignee| assignee == creator_id) {
@@ -499,6 +500,34 @@ mod tests {
         assert!(ensure_separation_of_duties(policy, "u1", &["u1".into()]).is_err());
         assert!(ensure_object_readable(true).is_ok());
         assert!(ensure_object_readable(false).is_err());
+    }
+
+    /// 销售类单据允许提交人位于单人或或签审批集合；其他审批类型继续拒绝。
+    #[test]
+    fn registered_policies_enforce_submitter_separation() {
+        for document_type in ALL_DOCUMENT_TYPES {
+            let DocumentApprovalPolicy::ProcessRequired(policy) = policy_of(document_type).unwrap() else {
+                continue;
+            };
+            let allows_submitter = matches!(
+                document_type,
+                DocumentType::SalesOrder | DocumentType::VoucherSalesOrder | DocumentType::SalesChangeOrder
+            );
+            for assignees in [vec!["leader".into()], vec!["other".into(), "leader".into()]] {
+                let result =
+                    ensure_separation_of_duties(policy.separation_of_duties_policy, "leader", &assignees);
+                if allows_submitter {
+                    result.expect("销售领导可以审批自己提交的销售单");
+                } else {
+                    assert!(matches!(result, Err(Error::ValidationError(message))
+                        if message == "提交人不得审批自己的单据"));
+                }
+            }
+            assert!(
+                ensure_separation_of_duties(policy.separation_of_duties_policy, "sales", &["leader".into()],)
+                    .is_ok()
+            );
+        }
     }
 
     /// 读取权未接线或显式拒绝必须失败关闭。

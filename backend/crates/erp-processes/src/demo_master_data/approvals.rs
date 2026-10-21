@@ -1,6 +1,9 @@
 //! 发布规格中的审批链。已发布且节点一致时跳过；节点不一致时说明原因，不覆盖。
 
+use std::slice;
+
 use application_core::AuditActor;
+use erp_workflow::service::approval::business_adapter::ensure_separation_of_duties;
 use erp_workflow::service::approval::definition::{
     ApprovalDefinitionService, DefinitionManagementVisibility,
 };
@@ -8,6 +11,7 @@ use erp_workflow::service::approval::definition_dto::{
     CreateDefinitionDraftRequest, DefinitionConfigurationStatus, DefinitionDetailView, DefinitionNodeRequest,
     DraftSource, PublishDefinitionRequest, ReplaceDefinitionNodesRequest,
 };
+use erp_workflow::service::approval::policy::require_process_required;
 use erp_workflow::service::approval::{
     approval_participant_permissions_with_executor, definition_management_visibility_with_executor,
 };
@@ -207,6 +211,7 @@ fn approval_nodes(spec: &ApprovalSpec, accounts: &PreparedAccounts) -> Result<Ve
         .by_key
         .get(&spec.submitter)
         .ok_or_else(|| Error::NotFound(format!("提交人 {} 尚未建号", spec.submitter)))?;
+    let policy = require_process_required(spec::document_type(&spec.document_type)?)?;
     spec.nodes
         .iter()
         .enumerate()
@@ -216,12 +221,11 @@ fn approval_nodes(spec: &ApprovalSpec, accounts: &PreparedAccounts) -> Result<Ve
                 .get(&node.assignee)
                 .cloned()
                 .ok_or_else(|| Error::NotFound(format!("审批人 {} 尚未建号", node.assignee)))?;
-            if &assignee == submitter {
-                return Err(Error::ValidationError(format!(
-                    "{} 提交人不得审批自己的单据",
-                    spec.document_type
-                )));
-            }
+            ensure_separation_of_duties(
+                policy.separation_of_duties_policy,
+                submitter,
+                slice::from_ref(&assignee),
+            )?;
             Ok(DefinitionNodeRequest {
                 additional_assignee_user_ids: Vec::new(),
                 node_id: None,
@@ -253,7 +257,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn approval_nodes_resolve_real_accounts_and_reject_alias_collision() {
+    fn approval_nodes_resolve_accounts_and_allow_sales_alias_collision() {
         let spec = &spec::foundation_spec().approvals[0];
         let mut accounts = PreparedAccounts {
             by_key: HashMap::from([
@@ -267,8 +271,43 @@ mod tests {
         assert_eq!(nodes[0].display_order, 1);
         assert!(nodes[0].node_id.is_none());
         accounts.by_key.insert("procurement".into(), "seller-id".into());
-        assert!(approval_nodes(spec, &accounts).is_err());
+        assert_eq!(approval_nodes(spec, &accounts).unwrap()[0].assignee_user_id, "seller-id");
         accounts.by_key.remove("sales");
         assert!(approval_nodes(spec, &accounts).is_err());
+    }
+
+    #[test]
+    fn approval_nodes_check_resolved_account_identity_by_policy() {
+        let accounts = PreparedAccounts {
+            by_key: HashMap::from([
+                ("submitter".into(), "leader".into()),
+                ("approver".into(), "leader".into()),
+            ]),
+            by_login: HashMap::new(),
+        };
+        for (kind, allowed) in [
+            ("sales_order", true),
+            ("voucher_sales_order", true),
+            ("sales_change_order", true),
+            ("purchase_order", false),
+            ("customer_receipt", false),
+        ] {
+            let spec = ApprovalSpec {
+                document_type: kind.into(),
+                name: "审批".into(),
+                submitter: "submitter".into(),
+                nodes: vec![spec::ApprovalNodeSpec {
+                    name: "领导审批".into(), assignee: "approver".into()
+                }],
+            };
+            let result = approval_nodes(&spec, &accounts);
+            if allowed {
+                let nodes = result.unwrap();
+                assert_eq!(nodes.len(), 1);
+                assert_eq!(nodes[0].assignee_user_id, "leader");
+            } else {
+                assert!(result.is_err(), "{kind}");
+            }
+        }
     }
 }

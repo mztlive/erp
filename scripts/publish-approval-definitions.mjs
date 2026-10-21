@@ -10,9 +10,10 @@
  * 登记并过账，不得为 supplier_payment 创建或发布审批定义。
  *
  * 节点与审批人按下列来源确定（文档有部门时序则照文档；未指定审批人时按岗位分离
- * 与资金/库存内控）。提交人不得审批自己的单据（ForbidSubmitterAsApprover）。
+ * 与资金/库存内控）。销售单、卡券销售单及销售变更单允许提交人担任已配置审批人；
+ * 其他必须审批类型禁止提交人审批自己的单据（ForbidSubmitterAsApprover）。
  * 财务三人分别绑定总监、出纳、开票岗位角色；资金单由出纳 fukuan 提交、总监 caiwu 只审批；
- * 总监自己提交会在运行时失败。本脚本在发布前后校验约定提交人不在任何审批节点。
+ * 总监自己提交会在运行时失败。本脚本在发布前后按单据类型校验提交人与审批人的分离要求。
  *
  * | 类型 | 提交人 | 审批链 | 来源 |
  * | --- | --- | --- | --- |
@@ -32,7 +33,7 @@
  * 审批人选择约束（代码事实）：
  *   - 审批人账号必须 active 且具备 approval_instance:decide（全部业务角色都有）；
  *   - 主体读取校验按类型实现但当前均放行（organization/assignee 非空即可）；
- *   - 岗位分离：提交人不得审批自己的单据；发布期只校验节点间约定，提交人隔离在运行时生效。
+ *   - 岗位分离：销售类允许提交人担任已配置审批人，其他类型执行提交人隔离。
  *
  * 幂等策略：
  *   - 已发布 -> 核验节点审批人与约定提交人后跳过；不一致则失败，需 reset 后重发；
@@ -43,6 +44,8 @@
  * 环境变量: API_BASE（默认 http://127.0.0.1:10001）
  */
 import { ACCOUNTS, ADMIN, FOUNDATION, call, ensureDevAccounts, login } from "./dev-seed-lib.mjs";
+
+const SELF_APPROVAL_TYPES = new Set(["sales_order", "voucher_sales_order", "sales_change_order"]);
 
 const DEFINITIONS = FOUNDATION.approvals.map((definition) => ({
   type: definition.document_type,
@@ -104,7 +107,7 @@ function describeDefinition(definition) {
 }
 
 /**
- * 约定提交人不得出现在任何审批节点，否则运行时 ForbidSubmitterAsApprover 会拒绝提交。
+ * 按审批合同核对提交人；销售类允许重合，其他类型执行 ForbidSubmitterAsApprover。
  */
 function ensureSubmitterSeparation(definition) {
   if (!definition.submitter) {
@@ -114,7 +117,7 @@ function ensureSubmitterSeparation(definition) {
     throw new Error(`${definition.type} 提交人 ${definition.submitter} 不在开发账号目录`);
   }
   const collision = definition.nodes.find((node) => node.assignee === definition.submitter);
-  if (collision) {
+  if (collision && !SELF_APPROVAL_TYPES.has(definition.type)) {
     throw new Error(
       `${definition.type} 约定提交人 ${accountLabel(definition.submitter)} 担任节点「${collision.node_name}」，违反 ForbidSubmitterAsApprover`,
     );
@@ -136,7 +139,7 @@ function resolveAssigneeId(userIds, assignee) {
 }
 
 /**
- * 核对已发布节点的审批人与种子一致，且不含约定提交人。
+ * 核对已发布节点与种子一致，并按单据类型校验提交人分离要求。
  */
 async function assertPublishedNodesMatchSeed(adminToken, definition, userIds) {
   const definitionId = await findVersionId(adminToken, definition.type, "PUBLISHED");
@@ -163,7 +166,7 @@ async function assertPublishedNodesMatchSeed(adminToken, definition, userIds) {
         `${definition.type} 第 ${index + 1} 节点审批人与种子不一致：期望 ${accountLabel(expected.assignee)}`,
       );
     }
-    if (live.assignee_user_id === submitterId) {
+    if (live.assignee_user_id === submitterId && !SELF_APPROVAL_TYPES.has(definition.type)) {
       throw new Error(
         `${definition.type} 已发布节点含约定提交人 ${accountLabel(definition.submitter)}，岗位分离不成立`,
       );

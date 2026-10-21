@@ -167,6 +167,8 @@ pub enum ApproverEligibilityPolicy {
 /// 提交人、经办人与审批人之间的岗位分离。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SeparationOfDutiesPolicy {
+    /// 允许提交人担任已配置的审批人；仍须满足审批资格并执行节点决定。
+    AllowSubmitterAsApprover,
     /// 禁止提交人审批自己的提交；节点间允许同一审批人。
     ForbidSubmitterAsApprover,
 }
@@ -525,7 +527,12 @@ fn process_required(
         definition_admin_permission: type_permission(document_type, "approval_definition_admin")?,
         runtime_admin_permission: type_permission(document_type, "approval_runtime_admin")?,
         approver_eligibility_policy: ApproverEligibilityPolicy::ActiveBackofficeWithDecidePermission,
-        separation_of_duties_policy: SeparationOfDutiesPolicy::ForbidSubmitterAsApprover,
+        separation_of_duties_policy: match document_type {
+            DocumentType::SalesOrder | DocumentType::VoucherSalesOrder | DocumentType::SalesChangeOrder => {
+                SeparationOfDutiesPolicy::AllowSubmitterAsApprover
+            },
+            _ => SeparationOfDutiesPolicy::ForbidSubmitterAsApprover,
+        },
         required_node_purposes,
         subject_version_source,
         subject_snapshot_fields,
@@ -904,7 +911,13 @@ mod tests {
             policy.approver_eligibility_policy,
             ApproverEligibilityPolicy::ActiveBackofficeWithDecidePermission
         );
-        assert_eq!(policy.separation_of_duties_policy, SeparationOfDutiesPolicy::ForbidSubmitterAsApprover);
+        let separation = match document_type {
+            DocumentType::SalesOrder | DocumentType::VoucherSalesOrder | DocumentType::SalesChangeOrder => {
+                SeparationOfDutiesPolicy::AllowSubmitterAsApprover
+            },
+            _ => SeparationOfDutiesPolicy::ForbidSubmitterAsApprover,
+        };
+        assert_eq!(policy.separation_of_duties_policy, separation);
         assert_eq!(policy.required_node_purposes, expected.purposes);
         assert_eq!(policy.subject_version_source, expected.version);
         assert_eq!(policy.subject_snapshot_fields, expected.snapshot);

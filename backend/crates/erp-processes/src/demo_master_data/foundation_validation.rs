@@ -4,7 +4,10 @@ use std::collections::HashSet;
 use erp_core::AccountKind;
 use erp_identity::repository::prelude::RoleRepositoryExt;
 use erp_identity::{AccessControlExt, Permission};
-use erp_workflow::service::approval::policy::{ALL_DOCUMENT_TYPES, ApprovalRequirement, policy_of};
+use erp_workflow::service::approval::business_adapter::ensure_separation_of_duties;
+use erp_workflow::service::approval::policy::{
+    ALL_DOCUMENT_TYPES, ApprovalRequirement, policy_of, require_process_required,
+};
 use persistence_core::NoTransaction;
 
 use super::accounts::PreparedAccounts;
@@ -19,7 +22,7 @@ impl FoundationFile {
     /// # 返回
     /// 岗位、部门、责任和全部必须审批类型一致时成功。
     /// # 错误
-    /// 重复身份、缺失引用、错误审批类型或提交人参与审批时拒绝。
+    /// 重复身份、缺失引用、错误审批类型或违反该类型岗位分离政策时拒绝。
     pub(super) fn validate(&self) -> Result<()> {
         let keys = self.accounts.iter().map(|row| row.key.as_str()).collect::<HashSet<_>>();
         let logins = self.accounts.iter().map(|row| row.account.as_str()).collect::<HashSet<_>>();
@@ -49,16 +52,16 @@ impl FoundationFile {
             }
             if !keys.contains(approval.submitter.as_str())
                 || approval.nodes.is_empty()
-                || approval
-                    .nodes
-                    .iter()
-                    .any(|node| !keys.contains(node.assignee.as_str()) || node.assignee == approval.submitter)
+                || approval.nodes.iter().any(|node| !keys.contains(node.assignee.as_str()))
             {
                 return Err(Error::ValidationError(format!(
-                    "演示审批岗位缺失或未分离：{}",
+                    "演示审批岗位缺失或审批链为空：{}",
                     approval.document_type
                 )));
             }
+            let policy = require_process_required(kind)?;
+            let assignees = approval.nodes.iter().map(|node| node.assignee.clone()).collect::<Vec<_>>();
+            ensure_separation_of_duties(policy.separation_of_duties_policy, &approval.submitter, &assignees)?;
         }
         for kind in ALL_DOCUMENT_TYPES {
             if policy_of(kind)?.requirement() == ApprovalRequirement::ProcessRequired
@@ -149,6 +152,8 @@ impl DemoMasterDataService {
 
 #[cfg(test)]
 mod tests {
+    use erp_workflow::DocumentType;
+
     use super::*;
 
     /// 每例重新解析声明，避免修改全局规格。
@@ -180,10 +185,29 @@ mod tests {
         missing.procurement_responsibility_owner = "missing".into();
         assert!(missing.validate().is_err());
         let mut collision = spec();
-        collision.approvals[0].nodes[0].assignee = collision.approvals[0].submitter.clone();
+        let approval =
+            collision.approvals.iter_mut().find(|row| row.document_type == "purchase_order").unwrap();
+        approval.nodes[0].assignee = approval.submitter.clone();
         assert!(collision.validate().is_err());
         let mut missing_department = spec();
         missing_department.departments.clear();
         assert!(missing_department.validate().is_err());
+    }
+
+    #[test]
+    fn foundation_uses_document_submitter_policy() {
+        for kind in ALL_DOCUMENT_TYPES {
+            if policy_of(kind).unwrap().requirement() != ApprovalRequirement::ProcessRequired {
+                continue;
+            }
+            let mut spec = spec();
+            let approval = spec.approvals.iter_mut().find(|row| row.document_type == kind.as_str()).unwrap();
+            approval.submitter = approval.nodes[0].assignee.clone();
+            let allows_submitter = matches!(
+                kind,
+                DocumentType::SalesOrder | DocumentType::VoucherSalesOrder | DocumentType::SalesChangeOrder
+            );
+            assert_eq!(spec.validate().is_ok(), allows_submitter, "{kind:?}");
+        }
     }
 }

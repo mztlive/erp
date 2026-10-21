@@ -504,7 +504,7 @@ async fn ensure_static_eligibility(
 /// * `_user_ids` - 审批人 ID；当前策略不使用
 ///
 /// # 返回
-/// `ForbidSubmitterAsApprover` 下无返回值。
+/// 两类政策均允许节点间复用审批人，通过时无返回值。
 ///
 /// # 错误
 /// 当前策略不会失败。
@@ -513,7 +513,8 @@ pub(super) fn validate_static_separation(
     _user_ids: &[String],
 ) -> Result<()> {
     match policy {
-        SeparationOfDutiesPolicy::ForbidSubmitterAsApprover => Ok(()),
+        SeparationOfDutiesPolicy::AllowSubmitterAsApprover
+        | SeparationOfDutiesPolicy::ForbidSubmitterAsApprover => Ok(()),
     }
 }
 
