@@ -1,8 +1,8 @@
 //! 客户退款 HTTP 协议适配。
 
 use application_core::AuditActor;
-use axum::extract::{Path, Query, State};
-use axum::{Extension, Json};
+use axum::Extension;
+use axum::extract::{Path, State};
 use erp_processes::reverse_flow::ReturnsProcess;
 use erp_read_models::returns_center::ReturnsReadService;
 use erp_read_models::returns_center::dto::{CustomerRefundListParams, CustomerRefundView, PageView};
@@ -14,6 +14,7 @@ use erp_returns::service::ReturnsService;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

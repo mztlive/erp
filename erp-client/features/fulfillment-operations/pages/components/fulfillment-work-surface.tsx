@@ -14,6 +14,7 @@ import {
 
 import {
     BusinessStatusBadge,
+    BusinessFailureState,
     SequentialProcessBar,
     ValidationSummary,
     WorkspaceTaskFooter,
@@ -147,55 +148,73 @@ export function FulfillmentWorkSurface({
         (draft.type === "SUPPLIER_DIRECT" || draft.type === "WAREHOUSE_SHIP")
     ) {
         return (
-            <FulfillmentDeliveryDialogSurface
-                operation={operation}
-                draft={draft}
-                responsibleLabel={deliveryDialog.responsibleLabel}
-                currentUrl={currentUrl}
-                snapshotUpdatedAt={snapshotUpdatedAt}
-                validationIssues={validationIssues}
-                showValidation={dirty}
-                saveMessage={saveMessage}
-                disabled={formalPending || !canExecute || resultUnknown}
-                readOnlyNote={!canExecute ? readOnlyNote : undefined}
-                headingRef={headingRef}
-                onDraftChange={onDraftChange}
-                actions={
-                    <>
-                        <Button
-                            id="fulfillment-operations-dialog-cancel"
-                            type="button"
-                            variant="outline"
-                            disabled={formalPending}
-                            onClick={deliveryDialog.onClose}
-                        >
-                            取消
-                        </Button>
-                        {canExecute ? (
-                            <FulfillmentExecuteActions
-                                operation={operation}
-                                singleOperation
-                                compact
-                                dirty={dirty}
-                                supportsSave={supportsSave}
-                                formalPending={formalPending}
-                                savePending={savePending}
-                                canPost={canPost}
-                                autoNext={autoNext}
-                                onSkip={onSkip}
-                                onDiscard={onDiscard}
-                                onSave={onSave}
-                                onConfirm={onConfirm}
-                            />
-                        ) : null}
-                    </>
-                }
-            />
+            <>
+                {operation.loadWarnings?.map((message) => (
+                    <BusinessFailureState
+                        key={message}
+                        kind="business"
+                        title="部分关联资料读取失败"
+                        description={message}
+                    />
+                ))}
+                <FulfillmentDeliveryDialogSurface
+                    operation={operation}
+                    draft={draft}
+                    responsibleLabel={deliveryDialog.responsibleLabel}
+                    currentUrl={currentUrl}
+                    snapshotUpdatedAt={snapshotUpdatedAt}
+                    validationIssues={validationIssues}
+                    showValidation={dirty}
+                    saveMessage={saveMessage}
+                    disabled={formalPending || !canExecute || resultUnknown}
+                    readOnlyNote={!canExecute ? readOnlyNote : undefined}
+                    headingRef={headingRef}
+                    onDraftChange={onDraftChange}
+                    actions={
+                        <>
+                            <Button
+                                id="fulfillment-operations-dialog-cancel"
+                                type="button"
+                                variant="outline"
+                                disabled={formalPending}
+                                onClick={deliveryDialog.onClose}
+                            >
+                                取消
+                            </Button>
+                            {canExecute ? (
+                                <FulfillmentExecuteActions
+                                    operation={operation}
+                                    singleOperation
+                                    compact
+                                    dirty={dirty}
+                                    supportsSave={supportsSave}
+                                    formalPending={formalPending}
+                                    savePending={savePending}
+                                    canPost={canPost}
+                                    autoNext={autoNext}
+                                    onSkip={onSkip}
+                                    onDiscard={onDiscard}
+                                    onSave={onSave}
+                                    onConfirm={onConfirm}
+                                />
+                            ) : null}
+                        </>
+                    }
+                />
+            </>
         )
     }
 
     return (
         <div className={singleOperation ? "min-w-0" : "min-w-0 space-y-3"}>
+            {operation.loadWarnings?.map((message) => (
+                <BusinessFailureState
+                    key={message}
+                    kind="business"
+                    title="部分关联资料读取失败"
+                    description={message}
+                />
+            ))}
             {!singleOperation ? (
                 <SequentialProcessBar
                     id="fulfillment-operations-work-surface-process-bar"

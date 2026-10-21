@@ -5,10 +5,10 @@
 use std::result::Result as StdResult;
 
 use application_core::AuditActor;
-use axum::extract::{Path, Query, State};
+use axum::Extension;
+use axum::extract::{Path, State};
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
-use axum::{Extension, Json};
 use erp_processes::Error as ProcessError;
 use erp_processes::adapters::workflow::{work_item_service, workflow_auth};
 use erp_read_models::{
@@ -26,6 +26,7 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::core::errors::{Error as HttpError, Result};
+use crate::core::extractor::{Json, Query};
 use crate::core::handler::approval_instance::error::{ApprovalHttpError, correlation_id};
 use crate::core::response::ApiResponse;
 

@@ -4,9 +4,9 @@
 //! 其余字段复用 `erp_inventory` 类型；禁止在 Handler 承载业务规则或直连数据库。
 
 use application_core::AuditActor;
-use axum::extract::{Path, Query, State};
+use axum::Extension;
+use axum::extract::{Path, State};
 use axum::http::HeaderMap;
-use axum::{Extension, Json};
 use erp_core::ids::WarehouseId;
 use erp_inventory::{
     AdjustmentReasonType, CancelStockAdjustmentApprovalRequest, CreateStockAdjustmentRequest,
@@ -20,6 +20,7 @@ use serde::Deserialize;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::{Json, Query};
 use crate::core::handler::approval_instance::error::{
     ApprovalHttpError, parse_optional_version, parse_version,
 };

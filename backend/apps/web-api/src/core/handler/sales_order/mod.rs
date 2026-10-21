@@ -8,8 +8,8 @@ pub mod evidence;
 pub mod selection;
 
 use application_core::AuditActor;
-use axum::extract::{Path, Query, State};
-use axum::{Extension, Json};
+use axum::Extension;
+use axum::extract::{Path, State};
 use erp_processes::order_to_cash::SalesOrderCommandProcess;
 use erp_read_models::sales_center::order::dto::SalesOrderDetailView;
 use erp_read_models::sales_center::order::{SalesListParams, SalesListView, SalesOrderReadService};
@@ -21,6 +21,7 @@ use erp_sales::dto::sales_order::{
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::{Json, Query};
 use crate::core::handler::contract::ensure_contract_access;
 use crate::core::handler::customer::ensure_customer_access;
 use crate::core::response::ApiResponse;
@@ -330,12 +331,13 @@ pub async fn sales_order_handover_candidates(
 
 #[cfg(test)]
 mod owner_query_tests {
-    use axum::extract::Query;
     use axum::http::Uri;
     use erp_contract::dto::contract::ContractListParams;
     use erp_customer::CustomerListParams;
     use erp_procurement::dto::purchase_order::PurchaseOrderListParams;
     use erp_sales::dto::sales_order::SalesOrderListParams;
+
+    use crate::core::extractor::Query;
 
     /// 实际 Query 解码器支持去重 ID，拒绝旧姓名；客户、合同、销售已接入组织筛选，采购仍拒绝。
     #[test]

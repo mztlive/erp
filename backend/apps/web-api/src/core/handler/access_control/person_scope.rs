@@ -1,12 +1,13 @@
 //! 人员唯一业务范围接口。
 use application_core::AuditActor;
+use axum::Extension;
 use axum::extract::{Path, State};
-use axum::{Extension, Json};
 use erp_identity::dto::person_scope::{PersonScopeView, SavePersonScopeRequest};
 use erp_processes::adapters::scope_configuration;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

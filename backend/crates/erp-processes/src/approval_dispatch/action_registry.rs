@@ -388,6 +388,7 @@ fn validate_context(
 fn map_service_error(error: ServiceError) -> erp_workflow::Error {
     match error {
         ServiceError::ValidationError(message) => erp_workflow::Error::ValidationError(message),
+        ServiceError::InvalidInput(message) => erp_workflow::Error::InvalidInput(message),
         ServiceError::NotFound(message) => erp_workflow::Error::NotFound(message),
         ServiceError::BusinessLogicError(message) => erp_workflow::Error::BusinessLogicError(message),
         ServiceError::ConflictError(message) => erp_workflow::Error::ConflictError(message),

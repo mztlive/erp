@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 
-import { useAppForm } from "@/components/form"
+import { useAppForm, applyApiFormError } from "@/components/form"
 import { toast } from "@/components/ui/toast"
 import {
     createProductDefaults,
@@ -174,6 +174,7 @@ export function useProductEditor(stableId: string) {
                         return
                     }
                     setResult(response)
+                    if (response.error) applyApiFormError(form, response.error)
                     return
                 }
 
@@ -199,6 +200,7 @@ export function useProductEditor(stableId: string) {
                     return
                 }
                 setResult(response)
+                if (response.error) applyApiFormError(form, response.error)
             } catch (error) {
                 const failure = getErrorPresentation(
                     error,

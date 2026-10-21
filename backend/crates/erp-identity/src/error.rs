@@ -1,6 +1,6 @@
 //! 身份领域应用错误，保留原来的 IAM、认证与访问控制映射。
 
-use application_core::ErrorClass;
+use application_core::{ErrorClass, ValidationIssues};
 
 /// Identity-domain result alias.
 pub type Result<T> = std::result::Result<T, Error>;
@@ -11,6 +11,7 @@ impl From<application_core::Error> for Error {
         match error {
             application_core::Error::Internal(message) => Self::Internal(message),
             application_core::Error::ValidationError(message) => Self::ValidationError(message),
+            application_core::Error::InvalidInput(message) => Self::InvalidInput(message),
         }
     }
 }
@@ -26,6 +27,10 @@ pub enum Error {
 
     #[error("参数验证失败: {0}")]
     ValidationError(String),
+
+    /// 字段校验明细，跨边界不得压成字符串。
+    #[error(transparent)]
+    InvalidInput(#[from] ValidationIssues),
 
     #[error("业务逻辑错误: {0}")]
     BusinessLogicError(String),
@@ -77,9 +82,10 @@ impl Error {
             Self::ConflictError(_) | Self::ReceiptDuplicate(_) | Self::TransientTransaction(_) => {
                 ErrorClass::Conflict
             },
-            Self::BusinessLogicError(_) | Self::ValidationError(_) | Self::NotFound(_) => {
-                ErrorClass::BusinessRule
-            },
+            Self::BusinessLogicError(_)
+            | Self::ValidationError(_)
+            | Self::InvalidInput(_)
+            | Self::NotFound(_) => ErrorClass::BusinessRule,
             Self::Forbidden(_) | Self::Unauthenticated(_) => ErrorClass::Forbidden,
             Self::OutcomeUnknown(_) => ErrorClass::Internal,
         }
@@ -116,6 +122,6 @@ fn duplicate_key_conflict_message(_error: &persistence_core::Error) -> String {
 impl From<validator::ValidationErrors> for Error {
     /// 从校验错误构建身份领域错误。
     fn from(err: validator::ValidationErrors) -> Self {
-        Error::ValidationError(err.to_string())
+        Error::InvalidInput(err.into())
     }
 }

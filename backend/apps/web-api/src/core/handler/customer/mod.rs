@@ -4,8 +4,8 @@
 //! 直接复用 `erp_customer` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
 use application_core::AuditActor;
-use axum::extract::{Path, Query, State};
-use axum::{Extension, Json};
+use axum::Extension;
+use axum::extract::{Path, State};
 use erp_core::common::time::Instant;
 use erp_customer::{
     CreateCustomerRequest, CustomerAssignmentListParams, CustomerAssignmentRequest, CustomerAssignmentView,
@@ -19,6 +19,7 @@ use erp_read_models::{CustomerCenterReadService, CustomerCenterReceivableView, C
 
 use crate::app_state::AppState;
 use crate::core::errors::{Error, Result};
+use crate::core::extractor::{Json, Query};
 use crate::core::middleware::RbacSubject;
 use crate::core::response::ApiResponse;
 
@@ -538,12 +539,13 @@ pub(crate) async fn ensure_customer_access(
 #[cfg(test)]
 mod tests {
     use axum::body::Body;
-    use axum::extract::{FromRequest, Query};
+    use axum::extract::FromRequest;
     use axum::http::{Request, StatusCode, Uri};
     use erp_customer::{CustomerProfileOperation, Error as CustomerError};
     use serde_json::json;
 
     use super::*;
+    use crate::core::extractor::Query;
 
     #[tokio::test]
     async fn customer_profile_http_requires_explicit_boolean_reuse_consent() {

@@ -1,5 +1,6 @@
 //! 应用边界拥有的错误类型；领域错误载荷与命令恢复分类保持冻结合同。
 
+use application_core::ValidationIssues;
 use erp_workflow::ErrorCode as WorkflowErrorCode;
 
 /// 应用边界结果，不通过旧 services 或另一应用边界定义别名。
@@ -15,6 +16,10 @@ pub enum Error {
 
     #[error("参数验证失败: {0}")]
     ValidationError(String),
+
+    /// 字段校验明细，跨边界不得压成字符串。
+    #[error(transparent)]
+    InvalidInput(#[from] ValidationIssues),
 
     #[error("业务逻辑错误: {0}")]
     BusinessLogicError(String),
@@ -56,6 +61,7 @@ impl From<application_core::Error> for Error {
         match error {
             application_core::Error::Internal(message) => Self::Internal(message),
             application_core::Error::ValidationError(message) => Self::ValidationError(message),
+            application_core::Error::InvalidInput(message) => Self::InvalidInput(message),
         }
     }
 }
@@ -69,6 +75,7 @@ macro_rules! from_domain {
                     $provider::Error::Internal(payload) => Self::Internal(payload),
                     $provider::Error::NotFound(payload) => Self::NotFound(payload),
                     $provider::Error::ValidationError(payload) => Self::ValidationError(payload),
+                    $provider::Error::InvalidInput(payload) => Self::InvalidInput(payload),
                     $provider::Error::BusinessLogicError(payload) => Self::BusinessLogicError(payload),
                     $provider::Error::ConflictError(payload) => Self::ConflictError(payload),
                     $provider::Error::ReceiptDuplicate(payload) => Self::ReceiptDuplicate(payload),
@@ -109,6 +116,7 @@ impl From<erp_fulfillment::Error> for Error {
             erp_fulfillment::Error::Internal(payload) => Self::Internal(payload),
             erp_fulfillment::Error::NotFound(payload) => Self::NotFound(payload),
             erp_fulfillment::Error::ValidationError(payload) => Self::ValidationError(payload),
+            erp_fulfillment::Error::InvalidInput(payload) => Self::InvalidInput(payload),
             erp_fulfillment::Error::BusinessLogicError(payload) => Self::BusinessLogicError(payload),
             erp_fulfillment::Error::ConflictError(payload) => Self::ConflictError(payload),
             erp_fulfillment::Error::TransientTransaction(payload) => Self::TransientTransaction(payload),
@@ -132,6 +140,7 @@ impl From<erp_sales::Error> for Error {
             erp_sales::Error::Internal(payload) => Self::Internal(payload),
             erp_sales::Error::NotFound(payload) => Self::NotFound(payload),
             erp_sales::Error::ValidationError(payload) => Self::ValidationError(payload),
+            erp_sales::Error::InvalidInput(payload) => Self::InvalidInput(payload),
             erp_sales::Error::BusinessLogicError(payload) => Self::BusinessLogicError(payload),
             erp_sales::Error::ConflictError(payload) => Self::ConflictError(payload),
             erp_sales::Error::SelectionConflict(payload) => Self::ConflictError(payload),
@@ -213,7 +222,7 @@ impl From<validator::ValidationErrors> for Error {
     /// # 返回
     /// 返回创建的实例。
     fn from(err: validator::ValidationErrors) -> Self {
-        Error::ValidationError(err.to_string())
+        Error::InvalidInput(err.into())
     }
 }
 
@@ -416,11 +425,12 @@ mod tests {
     }
 
     #[test]
-    fn validator_conversion_stays_plain_validation_message() {
+    fn validator_conversion_preserves_field_path() {
         let mut source = validator::ValidationErrors::new();
         source.add("field", validator::ValidationError::new("invalid"));
-        let expected = source.to_string();
-        assert!(matches!(Error::from(source), Error::ValidationError(message) if message == expected));
+        assert!(
+            matches!(Error::from(source), Error::InvalidInput(issues) if issues.fields().contains_key("field"))
+        );
     }
 
     #[test]

@@ -1,14 +1,15 @@
 //! 作废采购改单草稿的协议入口。
 
 use application_core::AuditActor;
+use axum::Extension;
 use axum::extract::{Path, State};
-use axum::{Extension, Json};
 use erp_processes::procure_to_pay::PurchaseOrderProcess;
 use erp_procurement::dto::purchase_order::VoidPurchaseChangeRequest;
 use erp_read_models::purchase_center::dto::PurchaseChangeOrderView;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

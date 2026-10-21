@@ -1,11 +1,12 @@
 //! 导入沿用供应商创建权限，每行仍由服务端执行全部根命令校验。
 use application_core::AuditActor;
+use axum::Extension;
 use axum::extract::State;
-use axum::{Extension, Json};
 use erp_supplier::dto::import::{SupplierImportRequest, SupplierImportResult};
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

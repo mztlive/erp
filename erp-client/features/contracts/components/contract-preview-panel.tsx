@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 
-import { MoneyValue } from "@/components/business"
+import { BusinessFailureState, MoneyValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type {
@@ -41,6 +41,13 @@ export function ContractPreviewPanel({
                 data-slot="contract-detail-preview"
                 className="flex flex-col gap-6 px-7 py-6"
             >
+                {detail?.loadWarnings?.map((message) => (
+                    <BusinessFailureState
+                        key={message}
+                        title="部分关联资料未能读取"
+                        description={message}
+                    />
+                ))}
                 <section
                     className="space-y-3 border-b border-border pb-6 last:border-b-0 last:pb-0"
                     aria-label="基本信息"

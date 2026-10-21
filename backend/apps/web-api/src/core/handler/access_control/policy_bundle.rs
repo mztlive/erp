@@ -1,7 +1,7 @@
 //! 授权 JSON 配置入口，领域用例负责全部授权与事务。
 use application_core::AuditActor;
+use axum::Extension;
 use axum::extract::State;
-use axum::{Extension, Json};
 use erp_identity::dto::authorization_bundle::{
     ApplyPolicyRequest, ExportPolicyRequest, PolicyApplyResult, PolicyExport, PolicyPreview,
 };
@@ -12,6 +12,7 @@ use erp_processes::adapters::scope_configuration;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
 include!(concat!(env!("OUT_DIR"), "/policy_permissions.rs"));

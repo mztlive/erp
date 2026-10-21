@@ -1,7 +1,7 @@
 //! 采购文件下载与邮件发送协议入口。
 use application_core::AuditActor;
+use axum::Extension;
 use axum::extract::{Path, State};
-use axum::{Extension, Json};
 use erp_processes::purchase_correspondence::{
     self, PurchaseEmailHistory, PurchaseEmailResult, PurchasePaper,
 };
@@ -9,6 +9,7 @@ use erp_procurement::entity::purchase_email::SendPurchaseEmail;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

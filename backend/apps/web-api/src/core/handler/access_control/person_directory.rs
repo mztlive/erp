@@ -2,7 +2,7 @@
 
 use application_core::AuditActor;
 use axum::Extension;
-use axum::extract::{Query, State};
+use axum::extract::State;
 use erp_identity::service::person_directory::PersonDirectoryService;
 use erp_identity::{
     PersonDirectoryCategory, PersonDirectoryPage, PersonDirectoryQuery, PersonDirectorySelectedQuery,
@@ -10,6 +10,7 @@ use erp_identity::{
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::Query;
 use crate::core::response::ApiResponse;
 
 /// 查询销售人员目录。
@@ -230,7 +231,9 @@ pub async fn change_qualification(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
     axum::extract::Path((category, account_id)): axum::extract::Path<(PersonDirectoryCategory, String)>,
-    axum::Json(change): axum::Json<erp_identity::service::person_directory::management::QualificationChange>,
+    crate::core::extractor::Json(change): crate::core::extractor::Json<
+        erp_identity::service::person_directory::management::QualificationChange,
+    >,
 ) -> Result<Option<erp_identity::entity::person_directory::PersonQueryQualification>> {
     let row = service(&state).qualification(actor, category, account_id, Some(change)).await?;
     Ok(ApiResponse::ok_with_data(row))

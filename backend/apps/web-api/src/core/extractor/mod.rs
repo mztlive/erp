@@ -1,4 +1,6 @@
+mod request;
 pub use erp_core::AccountKind;
+pub use request::{Json, Query};
 use serde::Deserialize;
 
 /// ERP 操作人员 ID 包装类型。

@@ -128,6 +128,7 @@ fn map_audit_error(error: erp_audit::Error) -> erp_identity::Error {
         erp_audit::Error::Internal(message) => erp_identity::Error::Internal(message),
         erp_audit::Error::NotFound(message) => erp_identity::Error::NotFound(message),
         erp_audit::Error::ValidationError(message) => erp_identity::Error::ValidationError(message),
+        erp_audit::Error::InvalidInput(message) => erp_identity::Error::InvalidInput(message),
         erp_audit::Error::BusinessLogicError(message) => erp_identity::Error::BusinessLogicError(message),
         erp_audit::Error::ConflictError(message) => erp_identity::Error::ConflictError(message),
         erp_audit::Error::ReceiptDuplicate(error) => erp_identity::Error::ReceiptDuplicate(error),

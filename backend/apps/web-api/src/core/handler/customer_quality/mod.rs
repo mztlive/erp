@@ -3,8 +3,8 @@
 //! 当前负责与历史贡献各自独立路由、独立授权重验；响应只含服务端投影，
 //! 不返回内部授权证明或不可见人员集合。
 
-use axum::extract::{Query, State};
-use axum::{Extension, Json};
+use axum::Extension;
+use axum::extract::State;
 use erp_read_models::customer_quality::{
     CurrentQualityQuery, CurrentQualityView, CustomerQualityReadModel, HistoryQualityQuery,
     HistoryQualityView, QualityExport,
@@ -12,6 +12,7 @@ use erp_read_models::customer_quality::{
 
 use crate::app_state::AppState;
 use crate::core::errors::{Error, Result};
+use crate::core::extractor::{Json, Query};
 use crate::core::handler::customer::has_permission;
 use crate::core::middleware::RbacSubject;
 use crate::core::response::ApiResponse;

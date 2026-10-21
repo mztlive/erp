@@ -14,8 +14,8 @@ pub mod payments;
 pub mod sales_material;
 
 use application_core::AuditActor;
-use axum::extract::{Path, Query, State};
-use axum::{Extension, Json};
+use axum::Extension;
+use axum::extract::{Path, State};
 use erp_processes::adapters::MongoPurchaseDataScope;
 use erp_processes::procure_to_pay::PurchaseOrderProcess;
 use erp_procurement::dto::purchase_order::{
@@ -35,6 +35,7 @@ use erp_read_models::purchase_center::{PurchaseChangeListView, PurchaseListView,
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
 /// 构造已注入采购范围 Port 的只读服务。
@@ -542,9 +543,10 @@ pub async fn purchase_change_detail(
 
 #[cfg(test)]
 mod scope_query_tests {
-    use axum::extract::Query;
     use axum::http::Uri;
     use erp_procurement::dto::purchase_order::PurchaseOrderListParams;
+
+    use crate::core::extractor::Query;
 
     /// 跨页必须能解码范围版本，且不得把组织筛选静默当成全量。
     ///

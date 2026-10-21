@@ -305,6 +305,7 @@ fn map_audit_to_warehouse(error: erp_audit::Error) -> erp_warehouse::Error {
         erp_audit::Error::Internal(message) => erp_warehouse::Error::Internal(message),
         erp_audit::Error::NotFound(message) => erp_warehouse::Error::NotFound(message),
         erp_audit::Error::ValidationError(message) => erp_warehouse::Error::ValidationError(message),
+        erp_audit::Error::InvalidInput(message) => erp_warehouse::Error::InvalidInput(message),
         erp_audit::Error::BusinessLogicError(message) => erp_warehouse::Error::BusinessLogicError(message),
         erp_audit::Error::ConflictError(message) => erp_warehouse::Error::ConflictError(message),
         erp_audit::Error::ReceiptDuplicate(error) => erp_warehouse::Error::ReceiptDuplicate(error),

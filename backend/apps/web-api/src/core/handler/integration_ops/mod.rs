@@ -6,8 +6,8 @@
 //! 关闭由 W02 责任 API 承担。
 
 use application_core::AuditActor;
-use axum::extract::{Path, Query, State};
-use axum::{Extension, Json};
+use axum::Extension;
+use axum::extract::{Path, State};
 use erp_integration::dto::{
     CreateDifferenceRequest, CreateErrorTaskRequest, DifferenceDetailView, DifferenceListParams,
     DifferenceListView, DifferenceView, DirectReconciliationCommand, DirectReconciliationResult,
@@ -20,6 +20,7 @@ use erp_integration::service::IntegrationOpsService;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

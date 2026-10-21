@@ -1,10 +1,10 @@
 use application_core::AuditActor;
-use axum::Json;
 use axum::extract::{Extension, Path, State};
 use erp_identity::{AdminItem, AdminService, CreateAdminParams, UpdateAdminParams, UpdateAdminRoleParams};
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

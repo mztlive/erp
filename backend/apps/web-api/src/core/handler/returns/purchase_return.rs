@@ -1,8 +1,8 @@
 //! 采购退货 HTTP 协议适配。
 
 use application_core::AuditActor;
-use axum::extract::{Path, Query, State};
-use axum::{Extension, Json};
+use axum::Extension;
+use axum::extract::{Path, State};
 use erp_processes::adapters::MongoPurchaseDataScope;
 use erp_processes::reverse_flow::ReturnsProcess;
 use erp_procurement::entity::purchase_order::ReturnSettlementDecision;
@@ -13,6 +13,7 @@ use erp_returns::entity::returns::DirectReturnRequest;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

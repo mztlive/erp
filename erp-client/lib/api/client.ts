@@ -113,7 +113,7 @@ const sendRequest = async (
             cache: options.cache,
         })
     } catch (cause) {
-        throw fromFetchError(cause)
+        throw fromFetchError(cause, options.method ?? "GET")
     }
 }
 
@@ -142,13 +142,24 @@ const apiFetch = async <T>(
     const requestToken = getToken(options.session)
     const res = await sendRequest(path, options)
 
-    const bodyText = await res.text()
+    let bodyText: string
+    try {
+        bodyText = await res.text()
+    } catch (cause) {
+        throw fromFetchError(cause, options.method ?? "GET")
+    }
     let parsed: unknown
     if (bodyText) {
         try {
             parsed = JSON.parse(bodyText) as unknown
         } catch (cause) {
-            if (res.ok) throw fromParse(cause, bodyText)
+            if (res.ok)
+                throw fromParse(
+                    cause,
+                    bodyText,
+                    options.method ?? "GET",
+                    res.headers.get("X-Trace-Id") ?? undefined,
+                )
         }
     }
 
@@ -163,13 +174,23 @@ const apiFetch = async <T>(
 
     // HTTP 非 2xx（403 / 404 / 500 ...）
     if (!res.ok) {
-        throw fromHttpResponse(res.status, parsed, requestId)
+        throw fromHttpResponse(
+            res.status,
+            parsed,
+            requestId,
+            options.method ?? "GET",
+        )
     }
 
     // 业务失败（信封 success=false，携带后端 errorMessage）
     if (envelope && envelope.success === false) {
         if (typeof envelope.status === "number" && envelope.status >= 400) {
-            throw fromHttpResponse(envelope.status, parsed, requestId)
+            throw fromHttpResponse(
+                envelope.status,
+                parsed,
+                requestId,
+                options.method ?? "GET",
+            )
         }
         throw createApiError({
             kind: "Validation",

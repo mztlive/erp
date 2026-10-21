@@ -6,7 +6,7 @@
  */
 
 import { apiGet, apiGetBlob, apiPost } from "@/lib/api"
-import type { ApiError } from "@/lib/api/errors"
+import { getErrorMessage, type ApiError } from "@/lib/api/errors"
 import {
     PERMISSION_VERSION,
     type BackendContractDetail,
@@ -98,7 +98,10 @@ async function loadDetailExtras(
     }
 }
 
-async function loadCustomerDisplay(customerId: string): Promise<{
+async function loadCustomerDisplay(
+    customerId: string,
+    warnings: string[],
+): Promise<{
     customerName?: string
     customerContact?: string
 }> {
@@ -115,7 +118,10 @@ async function loadCustomerDisplay(customerId: string): Promise<{
                 sort_by: "created_at",
                 sort_dir: "desc",
             },
-        ).catch(() => null)
+        ).catch((error: unknown) => {
+            warnings.push(`客户联系人读取失败：${getErrorMessage(error)}`)
+            return null
+        })
         const contact =
             contacts?.items.find((item) => item.is_default) ??
             contacts?.items[0]
@@ -124,7 +130,8 @@ async function loadCustomerDisplay(customerId: string): Promise<{
             customerName: customer.legal_name || customer.customer_no,
             customerContact: contact?.contact_name,
         }
-    } catch {
+    } catch (error) {
+        warnings.push(`客户资料读取失败：${getErrorMessage(error)}`)
         return {}
     }
 }
@@ -132,6 +139,7 @@ async function loadCustomerDisplay(customerId: string): Promise<{
 async function loadContractDisplay(
     contractId: string | null | undefined,
     contractRevisionId: string | null | undefined,
+    warnings: string[],
 ): Promise<{
     contractNumber?: string
     contractRevisionLabel?: string
@@ -154,7 +162,8 @@ async function loadContractDisplay(
                 : contract.contract_no,
             customerName: revision?.customer_name,
         }
-    } catch {
+    } catch (error) {
+        warnings.push(`合同资料读取失败：${getErrorMessage(error)}`)
         return {}
     }
 }
@@ -174,12 +183,14 @@ export async function fetchSalesOrderDetail(
         throw err
     }
 
+    const loadWarnings: string[] = []
     const commercialSource = pickSalesOrderCommercialSource(detail)
     const [customerDisplay, contractDisplay, extras] = await Promise.all([
-        loadCustomerDisplay(detail.customer_id),
+        loadCustomerDisplay(detail.customer_id, loadWarnings),
         loadContractDisplay(
             detail.contract_id,
             commercialSource?.contract_revision_id,
+            loadWarnings,
         ),
         loadDetailExtras(
             id,
@@ -231,13 +242,14 @@ export async function fetchSalesOrderDetail(
                 postedAt: formatInstant(latest.accepted_at),
             }
         }
-    } catch {
-        // 验收域失败不阻塞详情
+    } catch (error) {
+        loadWarnings.push(`验收摘要读取失败：${getErrorMessage(error)}`)
     }
 
     const queriedAt = formatIsoNow()
     return {
         ...order,
+        loadWarnings: loadWarnings.sort(),
         selectionSource: detail.selection_source,
         customerId: detail.customer_id,
         settlementPartyId: detail.settlement_party_id,

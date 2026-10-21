@@ -523,6 +523,7 @@ fn map_audit_to_contract(error: erp_audit::Error) -> erp_contract::Error {
         erp_audit::Error::Internal(message) => erp_contract::Error::Internal(message),
         erp_audit::Error::NotFound(message) => erp_contract::Error::NotFound(message),
         erp_audit::Error::ValidationError(message) => erp_contract::Error::ValidationError(message),
+        erp_audit::Error::InvalidInput(message) => erp_contract::Error::InvalidInput(message),
         erp_audit::Error::BusinessLogicError(message) => erp_contract::Error::BusinessLogicError(message),
         erp_audit::Error::ConflictError(message) => erp_contract::Error::ConflictError(message),
         erp_audit::Error::ReceiptDuplicate(error) => erp_contract::Error::ReceiptDuplicate(error),

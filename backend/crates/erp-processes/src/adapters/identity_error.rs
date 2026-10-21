@@ -37,6 +37,7 @@ macro_rules! map_identity_error {
                 erp_identity::Error::Internal(payload) => $domain::Error::Internal(payload),
                 erp_identity::Error::NotFound(payload) => $domain::Error::NotFound(payload),
                 erp_identity::Error::ValidationError(payload) => $domain::Error::ValidationError(payload),
+                erp_identity::Error::InvalidInput(payload) => $domain::Error::InvalidInput(payload),
                 erp_identity::Error::BusinessLogicError(payload) => {
                     $domain::Error::BusinessLogicError(payload)
                 },

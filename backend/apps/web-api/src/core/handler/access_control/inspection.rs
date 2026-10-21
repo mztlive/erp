@@ -1,12 +1,13 @@
 //! 权限检查协议入口，检查权及对象可见性由服务端重新证明。
 use application_core::AuditActor;
+use axum::Extension;
 use axum::extract::State;
-use axum::{Extension, Json};
 use erp_identity::dto::inspection::{AccessInspectionRequest, AccessInspectionView};
 use erp_read_models::access_inspection::AccessInspectionReadService;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
 /// 只读检查指定人员的业务访问条件。

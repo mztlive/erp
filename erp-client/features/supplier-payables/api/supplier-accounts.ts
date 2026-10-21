@@ -1,3 +1,4 @@
+import { isApiError } from "@/lib/api/errors"
 /**
  * W12 供应商往来 · 应付台账相关请求（列表、详情、核销会话）。
  * 会话共享状态见 api/shared；DTO 映射见 api/mappers。
@@ -251,57 +252,54 @@ export async function fetchSupplierInvoice(
 export async function fetchPayableDetail(
     payableAccountId: string,
 ): Promise<PayableDetailView | null> {
-    try {
-        const a = await apiGet<BackendPayableAccount>(
-            `/admin/payable-accounts/${encodeURIComponent(payableAccountId)}`,
-        )
-        const payable = projectPayable(a)
-        let invoiceAllocs: PayableDetailView["invoiceAllocations"] = []
-        try {
-            const allocPage = await apiGet<
-                Page<BackendPurchaseInvoiceAllocation>
-            >("/admin/purchase-invoice-allocations", {
-                payable_account_id: payableAccountId,
-                page: 1,
-                page_size: LIST_PAGE_SIZE,
-            })
-            invoiceAllocs = (allocPage.items ?? []).map((row) => ({
-                allocationId: row.id,
-                action:
-                    row.allocation_action === "reverse" ? "REVERSE" : "APPLY",
-                payableAccountId: row.payable_account_id,
-                sourceType: payable.sourceType,
-                sourceDocumentNo: payable.sourceDocumentNo,
-                amountGross: row.allocated_gross_amount,
-                occurredAt: "",
-                reverseOfAllocationId: row.reverses_allocation_id ?? undefined,
-            }))
-        } catch {
-            invoiceAllocs = []
-        }
+    const a = await apiGet<BackendPayableAccount>(
+        `/admin/payable-accounts/${encodeURIComponent(payableAccountId)}`,
+    ).catch((error: unknown) => {
+        if (isApiError(error) && error.status === 404) return null
+        throw error
+    })
+    if (!a) return null
+    const payable = projectPayable(a)
+    const allocPage = await apiGet<Page<BackendPurchaseInvoiceAllocation>>(
+        "/admin/purchase-invoice-allocations",
+        {
+            payable_account_id: payableAccountId,
+            page: 1,
+            page_size: LIST_PAGE_SIZE,
+        },
+    )
+    const invoiceAllocs: PayableDetailView["invoiceAllocations"] = (
+        allocPage.items ?? []
+    ).map((row) => ({
+        allocationId: row.id,
+        action: row.allocation_action === "reverse" ? "REVERSE" : "APPLY",
+        payableAccountId: row.payable_account_id,
+        sourceType: payable.sourceType,
+        sourceDocumentNo: payable.sourceDocumentNo,
+        amountGross: row.allocated_gross_amount,
+        occurredAt: "",
+        reverseOfAllocationId: row.reverses_allocation_id ?? undefined,
+    }))
 
-        return {
-            payable,
-            entries: (a.entries ?? []).map((e) => ({
-                entryId: e.id,
-                entryTypeLabel: payableEntryTypeLabel(e.entry_type),
-                direction: e.direction,
-                amount: e.amount,
-                sourceLabel: businessLabelOrPlaceholder(
-                    e.source_document_no,
-                    e.source_document_id,
-                    missingSourceDocumentNo(payable.sourceType),
-                ),
-                dueDate: e.due_date,
-                occurredAt: instantToIso(e.posted_at),
-            })),
-            paymentAllocations: [],
-            invoiceAllocations: invoiceAllocs,
-            dataWatermark: `wm-pa-${a.version}`,
-            queriedAt: new Date().toISOString(),
-        }
-    } catch {
-        return null
+    return {
+        payable,
+        entries: (a.entries ?? []).map((e) => ({
+            entryId: e.id,
+            entryTypeLabel: payableEntryTypeLabel(e.entry_type),
+            direction: e.direction,
+            amount: e.amount,
+            sourceLabel: businessLabelOrPlaceholder(
+                e.source_document_no,
+                e.source_document_id,
+                missingSourceDocumentNo(payable.sourceType),
+            ),
+            dueDate: e.due_date,
+            occurredAt: instantToIso(e.posted_at),
+        })),
+        paymentAllocations: [],
+        invoiceAllocations: invoiceAllocs,
+        dataWatermark: `wm-pa-${a.version}`,
+        queriedAt: new Date().toISOString(),
     }
 }
 
@@ -354,8 +352,9 @@ export async function fetchSupplierPayment(
             `/admin/supplier-payments/${encodeURIComponent(paymentId)}`,
         )
         return projectPayment(payment)
-    } catch {
-        return null
+    } catch (error) {
+        if (isApiError(error) && error.status === 404) return null
+        throw error
     }
 }
 

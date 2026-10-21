@@ -1,13 +1,14 @@
 //! 已批准采购付款申请内的留抵查询与使用。
 use application_core::AuditActor;
+use axum::Extension;
 use axum::extract::{Path, State};
-use axum::{Extension, Json};
 use erp_finance::dto::payable::credit::UseSupplierCreditRequest;
 use erp_finance::entity::payable::supplier_credit::SupplierCredit;
 
 use super::process;
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

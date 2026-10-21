@@ -27,7 +27,8 @@ export function buildSalesOrdersListCsv(
         [
             order.documentNumber,
             order.customerName,
-            order.contractNumber,
+            order.contractNumber ||
+                (order.contractLoadError ? "合同资料读取失败" : ""),
             NATURE_LABEL[order.nature],
             order.primaryStatus.label,
             ORIGIN_LABEL[order.originSystem],

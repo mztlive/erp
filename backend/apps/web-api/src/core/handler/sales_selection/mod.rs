@@ -6,12 +6,12 @@ pub mod protection;
 use std::net::SocketAddr;
 
 use application_core::AuditActor;
+use axum::Extension;
 use axum::body::Body;
-use axum::extract::{ConnectInfo, Path, Query, State};
+use axum::extract::{ConnectInfo, Path, State};
 use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, REFERRER_POLICY, X_CONTENT_TYPE_OPTIONS};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::Response;
-use axum::{Extension, Json};
 use erp_processes::sales_selection::{
     SalesSelectionProcess, SelectionBookletListView, SelectionProposalListView,
 };
@@ -26,7 +26,7 @@ use serde::Deserialize;
 
 use crate::app_state::AppState;
 use crate::core::errors::{Error, Result};
-use crate::core::extractor::UserID;
+use crate::core::extractor::{Json, Query, UserID};
 use crate::core::handler::customer::ensure_customer_access;
 use crate::core::middleware::RbacSubject;
 use crate::core::response::ApiResponse;

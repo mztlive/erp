@@ -7,8 +7,8 @@ pub mod extra_cost;
 pub mod profit_loss;
 
 use application_core::AuditActor;
-use axum::extract::{Path, Query, State};
-use axum::{Extension, Json};
+use axum::Extension;
+use axum::extract::{Path, State};
 use erp_finance::dto::cost::{
     CostAllocationView, CostEntryView, CreateCostEntryRequest, PageView, ScopedCostEntryView,
 };
@@ -16,6 +16,7 @@ use erp_read_models::finance::cost::{AllocationReadParams, CostReadModel, CostRe
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

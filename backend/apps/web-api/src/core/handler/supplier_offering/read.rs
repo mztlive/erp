@@ -2,7 +2,7 @@
 
 use application_core::AuditActor;
 use axum::Extension;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, State};
 use erp_processes::adapters::MongoOfferingDataScope;
 use erp_read_models::supplier_center::offering::SupplierOfferingView;
 use erp_read_models::supplier_center::{MongoOfferingProcurementOwners, SupplierOfferingReadService};
@@ -12,6 +12,7 @@ use erp_supply::dto::offering_history::{OfferingHistoryPage, OfferingHistoryPara
 use super::can_view_costs;
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::Query;
 use crate::core::middleware::RbacSubject;
 use crate::core::response::ApiResponse;
 

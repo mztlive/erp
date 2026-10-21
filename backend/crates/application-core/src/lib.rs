@@ -21,3 +21,6 @@ pub use query_ids::{FilterOption, OwnershipPage, QueryIds};
 pub use structured_receipt::{StructuredCommandReceipt, StructuredReceiptMatch};
 
 pub mod directory;
+
+mod validation;
+pub use validation::ValidationIssues;

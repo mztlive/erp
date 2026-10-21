@@ -1,3 +1,4 @@
+import type { ApiError } from "@/lib/api/errors"
 /** W14 基础资料 · 变更命令输入输出契约类型。 */
 
 import type { MasterDataResource } from "@/features/master-data/api/types-core"
@@ -65,18 +66,21 @@ export type MasterDataMutationResult =
     | {
           outcome: "blocked"
           code: string
+          error?: ApiError
           message: string
           detail?: string
           drillHref?: string
       }
     | {
           outcome: "conflict"
+          error?: ApiError
           message: string
           serverLockVersion: number
           serverRevisionNo: number
       }
     | {
           outcome: "unknown"
+          error?: ApiError
           message: string
           idempotencyKey: string
       }

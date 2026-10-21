@@ -657,6 +657,7 @@ fn map_svc(error: crate::Error) -> erp_inventory::Error {
         crate::Error::Internal(message) => erp_inventory::Error::Internal(message),
         crate::Error::NotFound(message) => erp_inventory::Error::NotFound(message),
         crate::Error::ValidationError(message) => erp_inventory::Error::ValidationError(message),
+        crate::Error::InvalidInput(message) => erp_inventory::Error::InvalidInput(message),
         crate::Error::BusinessLogicError(message) => erp_inventory::Error::BusinessLogicError(message),
         crate::Error::ConflictError(message) => erp_inventory::Error::ConflictError(message),
         crate::Error::ReceiptDuplicate(error) => erp_inventory::Error::ReceiptDuplicate(error),

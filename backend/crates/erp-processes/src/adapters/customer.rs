@@ -276,6 +276,7 @@ fn map_audit_to_customer(error: erp_audit::Error) -> erp_customer::Error {
         erp_audit::Error::Internal(message) => erp_customer::Error::Internal(message),
         erp_audit::Error::NotFound(message) => erp_customer::Error::NotFound(message),
         erp_audit::Error::ValidationError(message) => erp_customer::Error::ValidationError(message),
+        erp_audit::Error::InvalidInput(message) => erp_customer::Error::InvalidInput(message),
         erp_audit::Error::BusinessLogicError(message) => erp_customer::Error::BusinessLogicError(message),
         erp_audit::Error::ConflictError(message) => erp_customer::Error::ConflictError(message),
         erp_audit::Error::ReceiptDuplicate(error) => erp_customer::Error::ReceiptDuplicate(error),

@@ -1,8 +1,8 @@
 //! 线下服务履约 HTTP 协议适配。
 
 use application_core::AuditActor;
-use axum::extract::{Multipart, Path, Query, State};
-use axum::{Extension, Json};
+use axum::Extension;
+use axum::extract::{Multipart, Path, State};
 use erp_fulfillment::dto::{
     ConfirmServiceFulfillmentRequest, CreateServiceFulfillmentRequest, PageView,
     ServiceFulfillmentListParams, ServiceFulfillmentView,
@@ -14,6 +14,7 @@ use super::evidence_upload::validate_evidence_upload;
 use super::{process, service};
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::{Json, Query};
 use crate::core::handler::file_asset::{
     delete_pending_asset_objects, extract_command_with_asset_files, should_compensate_pending_assets,
     store_pending_asset_files,

@@ -10,8 +10,8 @@ pub mod import;
 pub mod product;
 
 use application_core::AuditActor;
-use axum::extract::{Multipart, Path, Query, State};
-use axum::{Extension, Json};
+use axum::Extension;
+use axum::extract::{Multipart, Path, State};
 use erp_catalog::{
     CreateProductBrandRequest, CreateProductCategoryRequest, CreateSkuAttributeRequest,
     CreateSkuAttributeValueRequest, CreateUnitOfMeasureRequest, MoveProductCategoryRequest, PageView,
@@ -29,6 +29,7 @@ use erp_support::SensitivityClass;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::{Json, Query};
 use crate::core::handler::file_asset::{
     extract_command_with_asset_files, finish_asset_command, store_pending_asset_files,
 };

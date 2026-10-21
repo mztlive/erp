@@ -19,17 +19,9 @@ import type {
 export const fetchRoles = (): Promise<AdminRole[]> =>
     apiGet<AdminRole[]>("/admin/roles")
 
-/**
- * 可分配角色列表（仅当前操作者可分配的角色）。
- * 后端无 assignable_list 权限时回落到全部角色，保证账号表单仍可用。
- */
-export const fetchAssignableRoles = async (): Promise<AdminRole[]> => {
-    try {
-        return await apiGet<AdminRole[]>("/admin/roles/assignable")
-    } catch {
-        return fetchRoles()
-    }
-}
+/** 可分配角色列表；读取失败必须保留错误，不得扩大为全部角色。 */
+export const fetchAssignableRoles = (): Promise<AdminRole[]> =>
+    apiGet<AdminRole[]>("/admin/roles/assignable")
 
 /** 管理员账号列表：后端一次返回全部账号。 */
 export const fetchAdmins = (): Promise<AdminAccount[]> =>

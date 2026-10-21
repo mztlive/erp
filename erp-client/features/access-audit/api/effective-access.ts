@@ -84,14 +84,9 @@ export async function fetchEffectiveAccess(
 
     const roles = await apiGet<BackendRole[]>("/admin/roles")
     const roleNameById = new Map(roles.map((role) => [role.id, role.name]))
-    let userRoles: BackendUserRole[] = []
-    try {
-        userRoles = await apiGet<BackendUserRole[]>("/admin/user-roles", {
-            user_id: subjectId,
-        })
-    } catch {
-        userRoles = []
-    }
+    const userRoles = await apiGet<BackendUserRole[]>("/admin/user-roles", {
+        user_id: subjectId,
+    })
 
     const scopes = await fetchPersonScopes(subjectId)
     const asOf = instantToIso(admin.created_at) ?? ""

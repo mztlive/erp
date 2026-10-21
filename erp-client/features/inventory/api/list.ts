@@ -264,22 +264,17 @@ export async function fetchInventoryList(
         // hydrate lines for quantity/sku when possible (N+1 limited to page)
         adjustments = await Promise.all(
             res.items.map(async (a) => {
-                try {
-                    const detail = await apiGet<BackendStockAdjustmentDetail>(
-                        `/admin/stock-adjustments/${encodeURIComponent(a.id)}`,
-                    )
-                    const line =
-                        detail.lines.find(
-                            (line) => line.sku_id === query.skuId,
-                        ) ?? detail.lines[0]
-                    return mapAdjustment(
-                        detail.adjustment,
-                        line,
-                        mapAdjustmentApproval(detail.approval),
-                    )
-                } catch {
-                    return mapAdjustment(a)
-                }
+                const detail = await apiGet<BackendStockAdjustmentDetail>(
+                    `/admin/stock-adjustments/${encodeURIComponent(a.id)}`,
+                )
+                const line =
+                    detail.lines.find((line) => line.sku_id === query.skuId) ??
+                    detail.lines[0]
+                return mapAdjustment(
+                    detail.adjustment,
+                    line,
+                    mapAdjustmentApproval(detail.approval),
+                )
             }),
         )
         total = res.total

@@ -1,8 +1,8 @@
 //! 供应商配送模板与供给指定 HTTP Handler。
 
 use application_core::AuditActor;
+use axum::Extension;
 use axum::extract::{Path, State};
-use axum::{Extension, Json};
 use erp_supply::dto::delivery_template::{
     AssignDeliveryTemplateRequest, AssignDeliveryTemplateResult, DeleteDeliveryTemplateRequest,
     DeliveryTemplateView, SaveDeliveryTemplateRequest,
@@ -10,6 +10,7 @@ use erp_supply::dto::delivery_template::{
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

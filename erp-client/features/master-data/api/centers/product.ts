@@ -1,3 +1,4 @@
+import { getErrorMessage } from "@/lib/api/errors"
 /**
  * 商品对象中心：SPU 当前修订 + SKU 行 + 媒体回显，组装可编辑详情。
  * 历史修订禁止回填当前主档；SKU 行必须能对上当前修订，否则抛错拒绝编辑。
@@ -83,17 +84,31 @@ export async function centerProduct(
         {},
     )
 
-    // Units / categories / brands for labels；只读角色可能没有字典 list 权限，缺失时降级为空（名称回落显示 ID）。
+    const loadWarnings: string[] = []
+    const optional = async <T>(
+        request: Promise<T[]>,
+        label: string,
+    ): Promise<T[]> => {
+        try {
+            return await request
+        } catch (error) {
+            loadWarnings.push(`${label}读取失败：${getErrorMessage(error)}`)
+            return []
+        }
+    }
+    // 辅助字典可局部失败，页面必须展示原因；编辑所需的 SKU 修订仍必须成功。
     const [units, categories, brands] = await Promise.all([
-        fetchAllPages<UnitOfMeasureDto>("/admin/unit-of-measures", {}).catch(
-            () => [] as UnitOfMeasureDto[],
+        optional(
+            fetchAllPages<UnitOfMeasureDto>("/admin/unit-of-measures", {}),
+            "单位资料",
         ),
-        fetchAllPages<ProductCategoryDto>(
-            "/admin/product-categories",
-            {},
-        ).catch(() => [] as ProductCategoryDto[]),
-        fetchAllPages<ProductBrandDto>("/admin/product-brands", {}).catch(
-            () => [] as ProductBrandDto[],
+        optional(
+            fetchAllPages<ProductCategoryDto>("/admin/product-categories", {}),
+            "分类资料",
+        ),
+        optional(
+            fetchAllPages<ProductBrandDto>("/admin/product-brands", {}),
+            "品牌资料",
         ),
     ])
     const unitById = new Map(units.map((u) => [u.id, u]))
@@ -159,7 +174,7 @@ export async function centerProduct(
     const allSkuRevisions = await fetchAllPages<SkuRevisionDto>(
         `/admin/products/${encodedId}/sku-revisions`,
         {},
-    ).catch(() => [] as SkuRevisionDto[])
+    )
     const revisionsBySku = new Map<string, SkuRevisionDto[]>()
     for (const revision of allSkuRevisions) {
         const rows = revisionsBySku.get(revision.sku_id) ?? []
@@ -277,6 +292,7 @@ export async function centerProduct(
 
     return baseCenter("products", row, {
         productKind: product.product_kind,
+        loadWarnings: loadWarnings.sort(),
         productDetail,
         productConstraints: {
             baseUnit: productDetail.baseUnit,

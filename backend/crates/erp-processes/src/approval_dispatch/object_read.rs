@@ -140,6 +140,7 @@ pub fn require_wired_object_read(decision: Option<bool>) -> Result<bool> {
 fn map_workflow_error(error: crate::Error) -> Error {
     match error {
         crate::Error::ValidationError(message) => Error::ValidationError(message),
+        crate::Error::InvalidInput(message) => Error::InvalidInput(message),
         crate::Error::BusinessLogicError(message) => Error::BusinessLogicError(message),
         other => Error::Internal(other.to_string()),
     }

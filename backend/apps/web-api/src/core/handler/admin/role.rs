@@ -1,11 +1,11 @@
 use application_core::AuditActor;
-use axum::Json;
 use axum::extract::{Extension, Path, State};
 use erp_identity::{CreateRoleParams, RoleItem, UpdateRoleParams};
 use validator::Validate;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
 /// 创建角色并写入 Casbin 权限策略，返回角色身份用于继续配置范围。

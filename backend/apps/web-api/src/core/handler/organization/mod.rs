@@ -1,14 +1,15 @@
 //! 内部组织协议适配；组织授权和变更校验由身份域执行。
 
 use application_core::AuditActor;
+use axum::Extension;
 use axum::extract::State;
-use axum::{Extension, Json};
 use erp_identity::OrganizationStateView;
 use erp_identity::entity::organization_change::{OrganizationChangeReceipt, OrganizationChangeRequest};
 use erp_processes::adapters::organization_service;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
 /// 查询组织管理范围内的组织和关系。

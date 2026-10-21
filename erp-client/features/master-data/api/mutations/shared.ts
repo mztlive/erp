@@ -29,6 +29,7 @@ export function mapMutationError(
     if (error.status === 409) {
         return {
             outcome: "conflict",
+            error,
             // 后端冲突码自带具体原因，前端透传不再改写
             message: getErrorMessage(
                 error,
@@ -45,7 +46,8 @@ export function mapMutationError(
     ) {
         return {
             outcome: "blocked",
-            code: "VALIDATION",
+            code: error.code ?? "VALIDATION",
+            error,
             message: getErrorMessage(
                 error,
                 "请求未通过业务校验，请检查后重试。",

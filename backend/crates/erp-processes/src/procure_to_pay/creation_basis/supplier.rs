@@ -114,6 +114,7 @@ fn map_supplier_error(error: erp_supplier::Error) -> erp_procurement::Error {
         Source::Internal(message) => Target::Internal(message),
         Source::NotFound(message) => Target::NotFound(message),
         Source::ValidationError(message) => Target::ValidationError(message),
+        Source::InvalidInput(message) => Target::InvalidInput(message),
         Source::BusinessLogicError(message) => Target::BusinessLogicError(message),
         Source::ConflictError(message) => Target::ConflictError(message),
         Source::ReceiptDuplicate(error) => Target::ReceiptDuplicate(error),

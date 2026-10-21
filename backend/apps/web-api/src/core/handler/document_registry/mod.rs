@@ -4,8 +4,8 @@
 //! 直接复用 `erp_workflow` 单据注册 DTO，禁止重复定义同构类型、禁止直连数据库。
 
 use application_core::AuditActor;
-use axum::extract::{Path, Query, State};
-use axum::{Extension, Json};
+use axum::Extension;
+use axum::extract::{Path, State};
 use erp_processes::adapters::workflow::{workflow_audit, workflow_object_facts};
 use erp_workflow::service::document_registry::{
     AppendWorkflowActionRequest, BusinessDocumentListParams, BusinessDocumentView,
@@ -16,6 +16,7 @@ use erp_workflow::service::document_registry::{
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
 fn document_registry_service(state: &AppState) -> DocumentRegistryService {

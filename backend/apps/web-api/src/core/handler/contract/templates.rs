@@ -1,12 +1,12 @@
 //! 模板目录、管理员维护和销售领号的 HTTP 适配。
 
 use application_core::AuditActor;
+use axum::Extension;
 use axum::body::Body;
-use axum::extract::{Multipart, Path, Query, State};
+use axum::extract::{Multipart, Path, State};
 use axum::http::HeaderValue;
 use axum::http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS};
 use axum::response::Response;
-use axum::{Extension, Json};
 use erp_contract::dto::template::{
     ApplicationView, ApplyTemplateRequest, ConfigureCounterRequest, CounterView, TemplateListParams,
     TemplateStatusRequest, TemplateView,
@@ -19,6 +19,7 @@ use tracing::error;
 use super::template_upload;
 use crate::app_state::AppState;
 use crate::core::errors::{Error, Result};
+use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

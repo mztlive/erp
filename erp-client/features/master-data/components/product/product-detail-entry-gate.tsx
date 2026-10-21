@@ -21,7 +21,9 @@ type QueryLike = {
 type ProductDetailEntryGateProps = {
     isCreate: boolean
     hasDetailData: boolean
-    detailQuery: QueryLike
+    detailQuery: QueryLike & {
+        data?: { loadWarnings?: readonly string[] } | null
+    }
     accountQuery: QueryLike
     canCreate: boolean
     listHref: string
@@ -134,7 +136,19 @@ function ProductDetailEntryGate({
         )
     }
 
-    return <>{children}</>
+    return (
+        <>
+            {detailQuery.data?.loadWarnings?.map((message) => (
+                <BusinessFailureState
+                    key={message}
+                    kind="business"
+                    title="部分资料读取失败"
+                    description={message}
+                />
+            ))}
+            {children}
+        </>
+    )
 }
 
 export { ProductDetailEntryGate }

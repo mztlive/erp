@@ -1,6 +1,6 @@
 //! 门户命令只进入跨域过程，响应再次采用外部字段允许列表。
+use axum::Extension;
 use axum::extract::{Path, State};
-use axum::{Extension, Json};
 use erp_identity::PortalActor;
 use erp_processes::supplier_portal::{
     CooperationSave, NewProductSave, PortalBatchInput, PortalBatchResult, PortalTransition,
@@ -12,6 +12,7 @@ use serde_json::{Value, to_value};
 use super::process;
 use crate::app_state::AppState;
 use crate::core::errors::{Error, Result};
+use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
 /// 直接维护自己的人工供给可供事实。

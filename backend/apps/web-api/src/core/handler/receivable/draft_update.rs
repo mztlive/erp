@@ -1,14 +1,15 @@
 //! 财务驳回原单的草稿编辑 HTTP 适配；沿用本单 submit 静态资格。
 
 use application_core::AuditActor;
+use axum::Extension;
 use axum::extract::{Path, State};
-use axum::{Extension, Json};
 use erp_finance::dto::receivable::{SaveCustomerReceiptDraftRequest, UpdateCustomerReceiptRequest};
 use erp_processes::finance_posting::receivable::ReceivableProcess;
 use erp_read_models::finance::dto::CustomerReceiptView;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

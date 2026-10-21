@@ -1,4 +1,4 @@
-use application_core::non_blank;
+use application_core::{ValidationIssues, non_blank};
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::FileAssetId;
 use erp_core::money::Rate;
@@ -198,7 +198,7 @@ impl SaveSupplierProfileRequest {
     ///
     /// # 错误
     /// 根字段格式非法、同一资料同时请求替换与清空，或嵌套输入非法时返回
-    /// `ValidationError`；校验顺序固定为根字段、互斥意图、联系人、地址、
+    /// 字段错误 `InvalidInput` 或意图冲突 `ValidationError`；顺序为根字段、互斥意图、联系人、地址、
     /// 银行账户、资质。
     pub fn validate_contract(&self) -> Result<()> {
         self.validate()?;
@@ -215,16 +215,18 @@ impl SaveSupplierProfileRequest {
             return Err(Error::ValidationError("银行账户不能同时替换和清空".to_string()));
         }
         if let Some(contact) = &self.contact {
-            contact.validate()?;
+            contact.validate().map_err(|error| ValidationIssues::from(error).at("contact"))?;
         }
         if let Some(address) = &self.address {
-            address.validate()?;
+            address.validate().map_err(|error| ValidationIssues::from(error).at("address"))?;
         }
         if let Some(bank_account) = &self.bank_account {
-            bank_account.validate()?;
+            bank_account.validate().map_err(|error| ValidationIssues::from(error).at("bank_account"))?;
         }
-        for qualification in &self.qualifications {
-            qualification.validate()?;
+        for (index, qualification) in self.qualifications.iter().enumerate() {
+            qualification
+                .validate()
+                .map_err(|error| ValidationIssues::from(error).at(&format!("qualifications[{index}]")))?;
         }
         Ok(())
     }
@@ -532,9 +534,9 @@ mod tests {
 
         let error = request.validate_contract().unwrap_err();
         match error {
-            Error::ValidationError(message) => {
-                assert!(message.contains("幂等键不能为空"));
-                assert!(!message.contains("联系人不能同时替换和清空"));
+            Error::InvalidInput(issues) => {
+                assert_eq!(issues.fields().len(), 1);
+                assert_eq!(issues.fields()["idempotency_key"], "幂等键不能为空");
             },
             other => panic!("unexpected error: {other:?}"),
         }
@@ -563,9 +565,9 @@ mod tests {
 
         let error = request.validate_contract().unwrap_err();
         match error {
-            Error::ValidationError(message) => {
-                assert!(message.contains("联系人姓名不能为空"));
-                assert!(!message.contains("地址不能为空"));
+            Error::InvalidInput(issues) => {
+                assert_eq!(issues.fields().len(), 1);
+                assert_eq!(issues.fields()["contact.contact_name"], "联系人姓名不能为空");
             },
             other => panic!("unexpected error: {other:?}"),
         }

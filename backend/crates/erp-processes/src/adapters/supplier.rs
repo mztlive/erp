@@ -400,6 +400,7 @@ fn map_party_to_supplier(error: erp_party::Error) -> erp_supplier::Error {
         erp_party::Error::Internal(message) => erp_supplier::Error::Internal(message),
         erp_party::Error::NotFound(message) => erp_supplier::Error::NotFound(message),
         erp_party::Error::ValidationError(message) => erp_supplier::Error::ValidationError(message),
+        erp_party::Error::InvalidInput(message) => erp_supplier::Error::InvalidInput(message),
         erp_party::Error::BusinessLogicError(message) => erp_supplier::Error::BusinessLogicError(message),
         erp_party::Error::ConflictError(message) => erp_supplier::Error::ConflictError(message),
         erp_party::Error::ReceiptDuplicate(error) => erp_supplier::Error::ReceiptDuplicate(error),

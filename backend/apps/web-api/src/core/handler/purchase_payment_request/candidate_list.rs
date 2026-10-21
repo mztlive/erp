@@ -2,12 +2,13 @@
 
 use application_core::{AuditActor, PageView};
 use axum::Extension;
-use axum::extract::{Query, State};
+use axum::extract::State;
 use erp_read_models::finance::payment_request::{PaymentCandidateQuery, PurchasePaymentRequestCandidate};
 
 use super::reads;
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::Query;
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

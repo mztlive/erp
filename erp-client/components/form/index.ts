@@ -1,5 +1,11 @@
 "use client"
 
+import {
+    applyApiFormError,
+    clearApiFieldError,
+    clearApiFormError,
+    preserveApiFieldErrors,
+} from "./api-errors"
 import { createFormHook } from "@tanstack/react-form"
 import {
     fieldContext,
@@ -24,7 +30,11 @@ import { DateField, DateTimeField } from "@/components/form/date-field"
  *
  * 所有业务表单必须通过本模块，禁止 react-hook-form / 非受控原生状态机。
  */
-export const { useAppForm, withForm, withFieldGroup } = createFormHook({
+const {
+    useAppForm: useBaseAppForm,
+    withForm,
+    withFieldGroup,
+} = createFormHook({
     fieldContext,
     formContext,
     fieldComponents: {
@@ -59,3 +69,27 @@ export {
 } from "@/components/form/evidence-upload-field"
 export { DateField, DateTimeField } from "@/components/form/date-field"
 export { toFieldErrors } from "@/components/form/utils"
+
+/** 保留表单泛型推导，统一承接未被业务流程处理的提交错误。 */
+export const useAppForm: typeof useBaseAppForm = (options) =>
+    useBaseAppForm({
+        ...options,
+        validationLogic: preserveApiFieldErrors(options.validationLogic),
+        listeners: {
+            ...options.listeners,
+            onChange: (context) => {
+                clearApiFieldError(context.formApi, context.fieldApi.name)
+                options.listeners?.onChange?.(context)
+            },
+        },
+        onSubmit: async (context) => {
+            clearApiFormError(context.formApi)
+            try {
+                await options.onSubmit?.(context)
+            } catch (error) {
+                applyApiFormError(context.formApi, error)
+                throw error
+            }
+        },
+    })
+export { withForm, withFieldGroup, applyApiFormError }

@@ -1,3 +1,4 @@
+import { getErrorMessage } from "@/lib/api/errors"
 /**
  * 履约作业面补全来源单号、往来方和品名。
  * 列表投影只有对象 id；这里按销售单 / 采购单 / 仓库再取一层可读字段。
@@ -151,36 +152,24 @@ function purchaseLineName(
 async function loadSalesOrder(
     salesOrderId: string,
 ): Promise<SalesOrderDisplay | null> {
-    try {
-        return await apiGet<SalesOrderDisplay>(
-            `/admin/sales-orders/${encodeURIComponent(salesOrderId)}`,
-        )
-    } catch {
-        return null
-    }
+    return await apiGet<SalesOrderDisplay>(
+        `/admin/sales-orders/${encodeURIComponent(salesOrderId)}`,
+    )
 }
 
 async function loadPurchaseOrder(
     purchaseOrderId: string,
 ): Promise<PurchaseOrderDisplay | null> {
-    try {
-        return await apiGet<PurchaseOrderDisplay>(
-            `/admin/purchase-orders/${encodeURIComponent(purchaseOrderId)}`,
-        )
-    } catch {
-        return null
-    }
+    return await apiGet<PurchaseOrderDisplay>(
+        `/admin/purchase-orders/${encodeURIComponent(purchaseOrderId)}`,
+    )
 }
 
 async function loadWarehouse(warehouseId: string): Promise<string | undefined> {
-    try {
-        const warehouse = await apiGet<WarehouseDisplay>(
-            `/admin/warehouses/${encodeURIComponent(warehouseId)}`,
-        )
-        return displayText(warehouse.warehouse_code, warehouse.id) || undefined
-    } catch {
-        return undefined
-    }
+    const warehouse = await apiGet<WarehouseDisplay>(
+        `/admin/warehouses/${encodeURIComponent(warehouseId)}`,
+    )
+    return displayText(warehouse.warehouse_code, warehouse.id) || undefined
 }
 
 /**
@@ -189,18 +178,32 @@ async function loadWarehouse(warehouseId: string): Promise<string | undefined> {
 export async function enrichOperationDisplay(
     operation: FulfillmentOperation,
 ): Promise<FulfillmentOperation> {
+    const loadWarnings: string[] = []
+    const optional = async <T>(
+        request: Promise<T>,
+        label: string,
+    ): Promise<T | null> => {
+        try {
+            return await request
+        } catch (error) {
+            loadWarnings.push(`${label}读取失败：${getErrorMessage(error)}`)
+            return null
+        }
+    }
     const salesOrderId = operation.source.salesOrderId.trim()
     const purchaseOrderId = operation.source.purchaseOrderId?.trim() ?? ""
     const warehouseId = operation.source.warehouseId?.trim() ?? ""
 
     const [initialSalesOrder, purchaseOrder, warehouseLabel] =
         await Promise.all([
-            salesOrderId ? loadSalesOrder(salesOrderId) : Promise.resolve(null),
+            salesOrderId
+                ? optional(loadSalesOrder(salesOrderId), "销售单资料")
+                : Promise.resolve(null),
             purchaseOrderId
-                ? loadPurchaseOrder(purchaseOrderId)
+                ? optional(loadPurchaseOrder(purchaseOrderId), "采购单资料")
                 : Promise.resolve(null),
             warehouseId
-                ? loadWarehouse(warehouseId)
+                ? optional(loadWarehouse(warehouseId), "仓库资料")
                 : Promise.resolve(undefined),
         ])
     const linkedSalesOrderId =
@@ -208,7 +211,7 @@ export async function enrichOperationDisplay(
     const salesOrder =
         initialSalesOrder ??
         (!salesOrderId && linkedSalesOrderId
-            ? await loadSalesOrder(linkedSalesOrderId)
+            ? await optional(loadSalesOrder(linkedSalesOrderId), "销售单资料")
             : null)
 
     const salesOrderNo = firstText(
@@ -266,6 +269,7 @@ export async function enrichOperationDisplay(
 
     return {
         ...operation,
+        loadWarnings: loadWarnings.sort(),
         source: {
             ...operation.source,
             salesOrderId: linkedSalesOrderId || operation.source.salesOrderId,

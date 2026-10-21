@@ -306,6 +306,7 @@ impl ProcessUpgradeSubject {
 fn map_upgrade_error(error: Error) -> erp_workflow::Error {
     match error {
         Error::ValidationError(message) => erp_workflow::Error::ValidationError(message),
+        Error::InvalidInput(message) => erp_workflow::Error::InvalidInput(message),
         Error::NotFound(message) => erp_workflow::Error::NotFound(message),
         Error::BusinessLogicError(message) => erp_workflow::Error::BusinessLogicError(message),
         Error::ConflictError(message) => erp_workflow::Error::ConflictError(message),

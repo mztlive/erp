@@ -39,6 +39,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { fieldErrorMessages } from "@/lib/api/field-errors"
 import { getErrorPresentation } from "@/lib/api/errors"
 import { freshnessText, versionText, workspaceLabel } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
@@ -418,6 +419,17 @@ function BusinessFailureState({
                                 </div>
                             ) : null}
                         </dl>
+                    ) : null}
+                    {presentation?.fieldErrors ? (
+                        <ul className="list-disc space-y-1 pl-5">
+                            {fieldErrorMessages(presentation.fieldErrors).map(
+                                (message, index) => (
+                                    <li key={`${index}-${message}`}>
+                                        {message}
+                                    </li>
+                                ),
+                            )}
+                        </ul>
                     ) : null}
                     {details}
                     {resolvedAction ? (

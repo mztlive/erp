@@ -1,5 +1,6 @@
 //! 客户资料输入的协议适配与结构校验。
 
+use application_core::ValidationIssues;
 use validator::Validate;
 
 use crate::dto::customer::{
@@ -87,14 +88,20 @@ impl SaveCustomerProfileRequest {
     /// 根请求或任一嵌套输入违反 DTO 注解时返回校验错误。
     pub fn validate_protocol(&self) -> Result<()> {
         self.validate()?;
-        for contact in self.contacts.as_deref().unwrap_or_default() {
-            contact.validate()?;
+        for (index, contact) in self.contacts.as_deref().unwrap_or_default().iter().enumerate() {
+            contact
+                .validate()
+                .map_err(|errors| ValidationIssues::from(errors).at(&format!("contacts[{index}]")))?;
         }
-        for address in self.addresses.as_deref().unwrap_or_default() {
-            address.validate()?;
+        for (index, address) in self.addresses.as_deref().unwrap_or_default().iter().enumerate() {
+            address
+                .validate()
+                .map_err(|errors| ValidationIssues::from(errors).at(&format!("addresses[{index}]")))?;
         }
-        for account in self.bank_accounts.as_deref().unwrap_or_default() {
-            account.validate()?;
+        for (index, account) in self.bank_accounts.as_deref().unwrap_or_default().iter().enumerate() {
+            account
+                .validate()
+                .map_err(|errors| ValidationIssues::from(errors).at(&format!("bank_accounts[{index}]")))?;
         }
         Ok(())
     }

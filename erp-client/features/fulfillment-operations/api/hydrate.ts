@@ -142,33 +142,27 @@ export async function deliveryDetailToOperation(
  * 按作业类型补全当前单据明细。所有履约单据均为 NO_APPROVAL，明细不得携带审批绑定。
  *
  * @param operation 队列列表投影。
- * @returns 可编辑草稿；补全失败时保留原投影。
+ * @returns 可编辑草稿；补全失败时返回查询错误，禁止把列表摘要当成可编辑草稿。
  */
 export async function hydrateOperationDetail(
     operation: FulfillmentOperation,
 ): Promise<FulfillmentOperation> {
-    try {
-        if (operation.operationType === "RECEIPT") {
-            const detail = await apiGet<BackendPurchaseReceiptDetail>(
-                `/admin/purchase-receipts/${encodeURIComponent(operation.operationId)}`,
-            )
-            return enrichOperationDisplay(
-                applyPurchaseReceiptDetail(operation, detail),
-            )
-        }
-        if (
-            operation.operationType === "WAREHOUSE_SHIP" ||
-            operation.operationType === "SUPPLIER_DIRECT"
-        ) {
-            const detail = await apiGet<BackendDeliveryDetail>(
-                `/admin/deliveries/${encodeURIComponent(operation.operationId)}`,
-            )
-            return enrichOperationDisplay(
-                applyDeliveryDetail(operation, detail),
-            )
-        }
-    } catch {
-        // 保留列表投影，队列仍可继续展示。
+    if (operation.operationType === "RECEIPT") {
+        const detail = await apiGet<BackendPurchaseReceiptDetail>(
+            `/admin/purchase-receipts/${encodeURIComponent(operation.operationId)}`,
+        )
+        return enrichOperationDisplay(
+            applyPurchaseReceiptDetail(operation, detail),
+        )
+    }
+    if (
+        operation.operationType === "WAREHOUSE_SHIP" ||
+        operation.operationType === "SUPPLIER_DIRECT"
+    ) {
+        const detail = await apiGet<BackendDeliveryDetail>(
+            `/admin/deliveries/${encodeURIComponent(operation.operationId)}`,
+        )
+        return enrichOperationDisplay(applyDeliveryDetail(operation, detail))
     }
     return enrichOperationDisplay(operation)
 }

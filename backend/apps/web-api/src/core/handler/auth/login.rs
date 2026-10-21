@@ -1,6 +1,5 @@
 use std::net::SocketAddr;
 
-use axum::Json;
 use axum::extract::{ConnectInfo, Extension, State};
 use erp_audit::{AuditLogData, AuditLogService};
 use erp_identity::{AuthRequest, AuthResponse, BackofficeAuthResult, BackofficeAuthService};
@@ -9,6 +8,7 @@ use tracing::{info, instrument, warn};
 use crate::app_state::AppState;
 use crate::core::auth::jwt::TokenPayload;
 use crate::core::errors::{Error, Result};
+use crate::core::extractor::Json;
 use crate::core::rate_limit::RateLimiter;
 use crate::core::response::ApiResponse;
 

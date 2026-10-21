@@ -1,3 +1,4 @@
+import type { ApiError } from "@/lib/api/errors"
 import type { StatusTone } from "@/components/ui/status-badge"
 
 /** Directory scope (URL and backend contract). */
@@ -292,14 +293,17 @@ export type CustomerMutationResult =
       }
     | {
           outcome: "conflict"
+          error?: ApiError
           message: string
       }
     | {
           outcome: "unknown"
+          error?: ApiError
           message: string
           idempotencyKey: string
       }
     | {
           outcome: "rejected"
+          error?: ApiError
           message: string
       }

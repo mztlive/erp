@@ -1,13 +1,14 @@
 //! 采购付款安排的协议适配，不直接读写业务集合。
 use application_core::AuditActor;
+use axum::Extension;
 use axum::extract::{Path, State};
-use axum::{Extension, Json};
 use erp_processes::procure_to_pay::{PurchaseOrderProcess, SchedulePaymentFollowUp};
 use erp_read_models::purchase_center::payment_arrangement::PaymentArrangementView;
 
 use super::purchase_reads;
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

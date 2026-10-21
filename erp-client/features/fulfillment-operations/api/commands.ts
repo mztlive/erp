@@ -313,6 +313,7 @@ export async function postFulfillmentOperation(
 export async function resolveUnknownFulfillmentResult(
     input: ResolveFulfillmentOperationCommand,
 ): Promise<FormalActionResponse> {
+    const probeErrors: string[] = []
     // Probe document status for posted outcomes
     const probes: Array<() => Promise<FormalActionResponse | null>> = [
         async () => {
@@ -354,8 +355,10 @@ export async function resolveUnknownFulfillmentResult(
                         },
                     }
                 }
-            } catch {
-                /* continue */
+            } catch (error) {
+                if (!isApiError(error) || error.status !== 404) {
+                    probeErrors.push(getErrorMessage(error))
+                }
             }
             return null
         },
@@ -404,8 +407,10 @@ export async function resolveUnknownFulfillmentResult(
                         },
                     }
                 }
-            } catch {
-                /* continue */
+            } catch (error) {
+                if (!isApiError(error) || error.status !== 404) {
+                    probeErrors.push(getErrorMessage(error))
+                }
             }
             return null
         },
@@ -417,8 +422,10 @@ export async function resolveUnknownFulfillmentResult(
     }
 
     return {
-        status: "failed",
-        code: "NO_PENDING",
-        message: "未找到该单据对应的处理中请求",
+        status: "unknown",
+        idempotencyKey: input.idempotencyKey,
+        message: probeErrors.length
+            ? `处理结果暂无法查证：${[...new Set(probeErrors)].join("；")}`
+            : "尚未查到已完成的处理记录，请保留当前操作并稍后再次查询。",
     }
 }

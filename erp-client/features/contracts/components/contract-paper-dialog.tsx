@@ -1,6 +1,6 @@
 "use client"
 
-import { PaperDocument } from "@/components/business"
+import { BusinessFailureState, PaperDocument } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -46,6 +46,14 @@ export function ContractPaperDialog({
                 </DialogHeader>
 
                 <div className="min-h-0 flex-1 overflow-y-auto bg-surface-sunken px-3 py-4 sm:px-6">
+                    {contract?.loadWarnings?.map((message) => (
+                        <div key={message} className="print:hidden">
+                            <BusinessFailureState
+                                title="部分关联资料未能读取"
+                                description={message}
+                            />
+                        </div>
+                    ))}
                     {contract ? (
                         <ContractPaperDocument contract={contract} />
                     ) : null}

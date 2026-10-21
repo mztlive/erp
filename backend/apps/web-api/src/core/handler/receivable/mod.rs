@@ -9,8 +9,8 @@ pub mod draft_read;
 pub mod draft_update;
 
 use application_core::AuditActor;
-use axum::extract::{Path, Query, State};
-use axum::{Extension, Json};
+use axum::Extension;
+use axum::extract::{Path, State};
 use erp_finance::dto::receivable::{
     CancelCustomerReceiptApprovalRequest, CommitCustomerReceiptRequest, CommitInvoiceRequest,
     CommitRedInvoiceRequest, CreateCustomerReceiptRequest, CreateInvoiceRequest,
@@ -27,6 +27,7 @@ use erp_read_models::finance::funds_scope::{
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

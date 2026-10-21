@@ -1,3 +1,4 @@
+import { isApiError } from "@/lib/api/errors"
 /**
  * W18 导入与期初 · 真实 HTTP API（P4 F8）。
  * 后端域：legacy_import（/admin/legacy-import-*）。
@@ -94,8 +95,9 @@ export async function fetchImportBatchDetail(
         batch = await apiGet<BackendBatchDetail>(
             `/admin/legacy-import-batches/${input.batchId}`,
         )
-    } catch {
-        return null
+    } catch (error) {
+        if (isApiError(error) && error.status === 404) return null
+        throw error
     }
 
     const confPage = await apiGet<Page<BackendConfirmation>>(

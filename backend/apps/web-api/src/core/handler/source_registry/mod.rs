@@ -4,8 +4,8 @@
 //! 直接复用 支撑领域的 DTO，禁止重复定义同构类型、禁止直连数据库。
 
 use application_core::AuditActor;
-use axum::extract::{Path, Query, State};
-use axum::{Extension, Json};
+use axum::Extension;
+use axum::extract::{Path, State};
 use erp_support::{
     CreateExternalIdentityMapRequest, CreateSourceSystemRequest, ExternalIdentityMapListParams,
     ExternalIdentityMapView, PageView, SourceSystemListParams, SourceSystemView, UpdateSourceSystemRequest,
@@ -13,6 +13,7 @@ use erp_support::{
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

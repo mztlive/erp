@@ -1,7 +1,6 @@
 //! 财务责任规则 HTTP 适配层。
 
 use application_core::AuditActor;
-use axum::Json;
 use axum::extract::{Extension, Path, State};
 use erp_processes::adapters::workflow::work_item_service;
 use erp_workflow::service::work_item::{
@@ -12,6 +11,7 @@ use validator::Validate;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
 /// 查询财务责任规则。

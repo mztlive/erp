@@ -8,8 +8,8 @@ pub mod person_directory;
 pub mod policy_bundle;
 
 use application_core::AuditActor;
-use axum::extract::{Path, Query, State};
-use axum::{Extension, Json};
+use axum::Extension;
+use axum::extract::{Path, State};
 use erp_identity::{
     AssignUserRoleRequest, AuditEventListParams, AuditEventView, CreatePermissionRequest, PageView,
     PermissionListParams, PermissionView, RevokeUserRoleRequest, UpdatePermissionRequest, UserRoleListParams,
@@ -19,6 +19,7 @@ use erp_processes::adapters::scope_configuration;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

@@ -2,7 +2,7 @@
 //!
 //! 写请求使用 `deny_unknown_fields`，拒绝 instance/execution/definition/next 等禁用字段。
 
-use axum::extract::{FromRequestParts, Query};
+use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 use erp_workflow::service::approval::execution::{
     RuntimeInstanceListCursor, RuntimeInstanceListQuery, RuntimeInstanceListView, RuntimeInstanceStatusFilter,
@@ -10,6 +10,7 @@ use erp_workflow::service::approval::execution::{
 use serde::Deserialize;
 
 use super::error::ApprovalHttpError;
+use crate::core::extractor::Query;
 
 /// 历史默认页大小。
 pub const DEFAULT_HISTORY_LIMIT: u32 = 50;

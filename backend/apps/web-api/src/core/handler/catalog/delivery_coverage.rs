@@ -1,6 +1,5 @@
 //! 销售录入收货地址时的配送提示 Handler。
 
-use axum::Json;
 use axum::extract::State;
 use erp_read_models::catalog_center::delivery_coverage::{
     DeliveryCoverageRequest, DeliveryCoverageView, sellable_delivery_coverage,
@@ -8,6 +7,7 @@ use erp_read_models::catalog_center::delivery_coverage::{
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

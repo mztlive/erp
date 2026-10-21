@@ -28,22 +28,17 @@ export async function listWarehouses(
     })
     const rows: MasterDataListItem[] = []
     for (const wh of warehouses) {
-        let revision: WarehouseRevisionDto | undefined
-        try {
-            const revPage = await apiGet<BackendPage<WarehouseRevisionDto>>(
-                "/admin/warehouse-revisions",
-                {
-                    warehouse_id: wh.id,
-                    page: 1,
-                    page_size: 1,
-                    sort_by: "revision_no",
-                    sort_dir: "desc",
-                },
-            )
-            revision = revPage.items[0]
-        } catch {
-            // ignore
-        }
+        const revPage = await apiGet<BackendPage<WarehouseRevisionDto>>(
+            "/admin/warehouse-revisions",
+            {
+                warehouse_id: wh.id,
+                page: 1,
+                page_size: 1,
+                sort_by: "revision_no",
+                sort_dir: "desc",
+            },
+        )
+        const revision = revPage.items[0]
         rows.push(mapWarehouseRow(wh, revision))
     }
     return rows

@@ -246,6 +246,7 @@ export type FulfillmentDraft =
       }
 
 export type FulfillmentOperation = Readonly<{
+    loadWarnings?: readonly string[]
     operationId: string
     operationType: FulfillmentOperationType
     priority: number

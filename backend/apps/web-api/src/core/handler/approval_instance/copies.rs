@@ -1,10 +1,10 @@
 //! 个人抄送收件箱；有效内部账号凭本人精确收件记录读取。
 use application_core::AuditActor;
-use axum::extract::{Path, Query, State};
+use axum::Extension;
+use axum::extract::{Path, State};
 use axum::http::HeaderValue;
 use axum::http::header::CACHE_CONTROL;
 use axum::response::{IntoResponse, Response};
-use axum::{Extension, Json};
 use erp_processes::approval_materials::ApprovalMaterialTarget;
 use erp_read_models::sales_center::approval_materials::copy_detail;
 use erp_workflow::repository::approval_copy::CopyListQuery;
@@ -13,6 +13,7 @@ use serde::Deserialize;
 
 use crate::app_state::AppState;
 use crate::core::errors::Error;
+use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
 #[derive(Default, Deserialize)]

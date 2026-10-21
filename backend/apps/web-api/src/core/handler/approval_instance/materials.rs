@@ -3,7 +3,7 @@
 use application_core::AuditActor;
 use axum::Extension;
 use axum::body::Body;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, State};
 use axum::http::HeaderValue;
 use axum::http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS};
 use axum::response::{IntoResponse, Response};
@@ -14,6 +14,7 @@ use serde::Deserialize;
 
 use crate::app_state::AppState;
 use crate::core::errors::Error;
+use crate::core::extractor::Query;
 use crate::core::handler::file_asset::verify_content;
 use crate::core::response::ApiResponse;
 

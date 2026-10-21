@@ -115,6 +115,13 @@ export function ContractDetailPage({
 
     return (
         <PageScaffold density="compact">
+            {contract.loadWarnings?.map((message) => (
+                <BusinessFailureState
+                    key={message}
+                    title="部分关联资料未能读取"
+                    description={message}
+                />
+            ))}
             <ContractDetailHeader
                 contract={contract}
                 onPaperOpen={() => setPaperOpen(true)}

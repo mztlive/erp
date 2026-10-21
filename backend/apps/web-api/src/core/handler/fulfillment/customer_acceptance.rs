@@ -1,8 +1,8 @@
 //! 客户验收 HTTP 协议适配。
 
 use application_core::AuditActor;
-use axum::extract::{Path, Query, State};
-use axum::{Extension, Json};
+use axum::Extension;
+use axum::extract::{Path, State};
 use erp_fulfillment::dto::{
     CommitCustomerAcceptanceRequest, CreateCustomerAcceptanceRequest, CustomerAcceptanceDetailView,
     CustomerAcceptanceListParams, CustomerAcceptanceView, PageView, PostCustomerAcceptanceRequest,
@@ -16,6 +16,7 @@ use erp_read_models::fulfillment_center::dto::{AcceptanceEligibilityView, Commit
 use super::service;
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
 /// 装配客户验收命令入口，沿用对象读取授权与 RBAC 服务。

@@ -8,12 +8,12 @@ mod template_upload;
 pub mod templates;
 
 use application_core::AuditActor;
+use axum::Extension;
 use axum::body::Body;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, State};
 use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS};
 use axum::http::{HeaderValue, StatusCode};
 use axum::response::Response;
-use axum::{Extension, Json};
 use erp_contract::{
     ArchiveContractRevisionRequest, ContractDetailView, ContractListParams, ContractListView,
     ContractSalesAccessRequest, ContractView, CreateContractRequest, TerminateContractRequest,
@@ -24,6 +24,7 @@ use tracing::error;
 use super::file_asset::prepare_asset_response;
 use crate::app_state::AppState;
 use crate::core::errors::{Error, Result};
+use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(
@@ -276,11 +277,12 @@ pub(crate) async fn ensure_contract_access(
 #[cfg(test)]
 mod tests {
     use axum::body::Body;
-    use axum::extract::{FromRequest, Query};
+    use axum::extract::FromRequest;
     use axum::http::{Request, StatusCode, Uri};
     use serde_json::json;
 
     use super::*;
+    use crate::core::extractor::Query;
 
     /// 合同 Query 解码必须消费范围版本与组织筛选，并拒绝旧姓名参数。
     ///

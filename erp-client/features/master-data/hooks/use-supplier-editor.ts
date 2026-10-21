@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 
-import { useAppForm } from "@/components/form"
+import { useAppForm, applyApiFormError } from "@/components/form"
 import { toast } from "@/components/ui/toast"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
@@ -32,6 +32,15 @@ import { hasPermission } from "@/lib/permissions"
 
 function newIdempotencyKey(prefix: string): string {
     return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+const supplierFieldAliases = {
+    legal_name: "company",
+    "contact.contact_name": "contactName",
+    "contact.mobile": "contactPhone",
+    "address.address": "address",
+    "bank_account.bank_name": "bankName",
+    "bank_account.account_number": "bankAccount",
 }
 
 export function useSupplierEditor(stableId: string) {
@@ -157,6 +166,7 @@ export function useSupplierEditor(stableId: string) {
                         data?.supplierQualificationCapabilityCodes,
                 } as SupplierFields
             } catch (error) {
+                applyApiFormError(form, error, supplierFieldAliases)
                 const failure = getErrorPresentation(
                     error,
                     "资质文件上传失败，请检查文件后重试。",
@@ -195,6 +205,12 @@ export function useSupplierEditor(stableId: string) {
                         return
                     }
                     setResult(response)
+                    if (response.error)
+                        applyApiFormError(
+                            form,
+                            response.error,
+                            supplierFieldAliases,
+                        )
                     return
                 }
 
@@ -220,6 +236,12 @@ export function useSupplierEditor(stableId: string) {
                     return
                 }
                 setResult(response)
+                if (response.error)
+                    applyApiFormError(
+                        form,
+                        response.error,
+                        supplierFieldAliases,
+                    )
             } catch (error) {
                 const failure = getErrorPresentation(
                     error,

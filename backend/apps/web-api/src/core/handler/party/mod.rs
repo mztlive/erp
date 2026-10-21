@@ -6,8 +6,8 @@
 pub mod company;
 
 use application_core::AuditActor;
-use axum::extract::{Path, Query, State};
-use axum::{Extension, Json};
+use axum::Extension;
+use axum::extract::{Path, State};
 use erp_party::{
     CreatePartyAddressRequest, CreatePartyBankAccountRequest, CreatePartyContactRequest, CreatePartyRequest,
     CreatePartyTaxProfileRequest, PageView, PartyAddressListParams, PartyAddressView,
@@ -19,6 +19,7 @@ use erp_party::{
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

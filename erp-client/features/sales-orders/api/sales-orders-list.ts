@@ -1,3 +1,4 @@
+import { getErrorMessage } from "@/lib/api/errors"
 /**
  * W05 销售单列表查询（queryFn 纯函数）。
  *
@@ -105,12 +106,17 @@ export async function fetchSalesOrders(
         const display = row.contract_id
             ? contractDisplays.get(row.contract_id)
             : undefined
-        return mapListItemFromBackend(row, {
-            contractNumber: display?.contractNumber,
-            contractCompanyName: display?.companyName,
-            customerName:
-                row.customer_name || display?.companyName || "客户资料未标注",
-        })
+        return {
+            ...mapListItemFromBackend(row, {
+                contractNumber: display?.contractNumber,
+                contractCompanyName: display?.companyName,
+                customerName:
+                    row.customer_name ||
+                    display?.companyName ||
+                    "客户资料未标注",
+            }),
+            contractLoadError: display?.loadError,
+        }
     })
 
     return {
@@ -132,6 +138,7 @@ export async function fetchSalesOrders(
 type ContractDisplay = {
     contractNumber: string
     companyName: string
+    loadError?: string
 }
 
 /**
@@ -163,10 +170,14 @@ async function loadContractDisplays(
                             companyName: revision?.customer_name ?? "",
                         },
                     ] as const
-                } catch {
+                } catch (error) {
                     return [
                         contractId,
-                        { contractNumber: "", companyName: "" },
+                        {
+                            contractNumber: "",
+                            loadError: getErrorMessage(error),
+                            companyName: "",
+                        },
                     ] as const
                 }
             }),

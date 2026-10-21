@@ -2,11 +2,12 @@
 use application_core::AuditActor;
 use application_core::directory::{DirectoryPage, DirectoryQuery, DirectorySelectedQuery};
 use axum::Extension;
-use axum::extract::{Query, State};
+use axum::extract::State;
 use erp_processes::adapters::warehouse_directory;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::Query;
 use crate::core::response::ApiResponse;
 
 /// 查询独立目录。

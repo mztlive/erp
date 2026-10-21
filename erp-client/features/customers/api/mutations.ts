@@ -42,9 +42,11 @@ function unknownFromError(
     const message = apiErrorMessage(error)
     if (
         error.kind === "Network" ||
+        error.kind === "Parse" ||
+        error.status === 408 ||
         (error.status != null && error.status >= 500)
     ) {
-        return { outcome: "unknown", message, idempotencyKey }
+        return { outcome: "unknown", message, idempotencyKey, error }
     }
     return null
 }
@@ -91,10 +93,10 @@ function mapCreateFailure(
     const unknown = unknownFromError(error, input.idempotencyKey)
     if (unknown) return unknown
     if (error.status === 409) {
-        return { outcome: "conflict", message: apiErrorMessage(error) }
+        return { outcome: "conflict", error, message: apiErrorMessage(error) }
     }
     if (error.status === 400 || error.status === 403 || error.status === 422) {
-        return { outcome: "rejected", message: apiErrorMessage(error) }
+        return { outcome: "rejected", error, message: apiErrorMessage(error) }
     }
     return null
 }
@@ -130,7 +132,11 @@ export async function saveCustomerDetails(
             const unknown = unknownFromError(error, input.idempotencyKey)
             if (unknown) return unknown
             if (error.status === 409) {
-                return { outcome: "conflict", message: apiErrorMessage(error) }
+                return {
+                    outcome: "conflict",
+                    error,
+                    message: apiErrorMessage(error),
+                }
             }
             if (
                 error.status === 400 ||
@@ -139,6 +145,7 @@ export async function saveCustomerDetails(
             ) {
                 return {
                     outcome: "rejected",
+                    error,
                     message: apiErrorMessage(error),
                 }
             }

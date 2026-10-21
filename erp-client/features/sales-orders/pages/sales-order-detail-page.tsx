@@ -214,6 +214,13 @@ export function SalesOrderDetailPage({
 
     return (
         <PageScaffold density="compact" className="min-h-0 overflow-hidden">
+            {order.loadWarnings?.map((warning) => (
+                <BusinessFailureState
+                    key={warning}
+                    title="部分关联资料未能读取"
+                    description={warning}
+                />
+            ))}
             <div className="shrink-0">
                 <SalesOrderIdentityHeader
                     back={{

@@ -318,6 +318,8 @@ export type SalesOrderListItem = {
     contractNumber: string
     /** 合同上的公司名称（修订快照中的客户法定名称）。 */
     contractCompanyName: string
+    /** 关联合同读取失败，不能作为空合同资料处理。 */
+    contractLoadError?: string
     /** 合同精确修订（快照），创建后随版本固定 */
     contractRevisionLabel: string
     nature: SalesOrderNature

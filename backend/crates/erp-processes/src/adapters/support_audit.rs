@@ -138,6 +138,7 @@ pub(crate) fn map_audit_error(error: erp_audit::Error) -> erp_support::Error {
         erp_audit::Error::Internal(message) => erp_support::Error::Internal(message),
         erp_audit::Error::NotFound(message) => erp_support::Error::NotFound(message),
         erp_audit::Error::ValidationError(message) => erp_support::Error::ValidationError(message),
+        erp_audit::Error::InvalidInput(message) => erp_support::Error::InvalidInput(message),
         erp_audit::Error::BusinessLogicError(message) => erp_support::Error::BusinessLogicError(message),
         erp_audit::Error::ConflictError(message) => erp_support::Error::ConflictError(message),
         erp_audit::Error::ReceiptDuplicate(error) => erp_support::Error::ReceiptDuplicate(error),

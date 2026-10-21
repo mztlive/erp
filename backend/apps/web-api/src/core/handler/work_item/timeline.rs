@@ -1,7 +1,7 @@
 //! 工作台动态仅沿当前任务资格读取。
 use application_core::AuditActor;
 use axum::Extension;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, State};
 use erp_processes::adapters::sales_timeline_service;
 use erp_processes::adapters::workflow::workflow_auth;
 use erp_read_models::WorkbenchReadService;
@@ -9,6 +9,7 @@ use erp_read_models::sales_timeline::{TaskTimeline, TimelineQuery};
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::Query;
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

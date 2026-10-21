@@ -31,6 +31,7 @@ fn map_service(error: Error) -> WorkflowError {
         Error::Internal(message) => WorkflowError::Internal(message),
         Error::NotFound(message) => WorkflowError::NotFound(message),
         Error::ValidationError(message) => WorkflowError::ValidationError(message),
+        Error::InvalidInput(message) => WorkflowError::InvalidInput(message),
         Error::BusinessLogicError(message) => WorkflowError::BusinessLogicError(message),
         Error::ConflictError(message) => WorkflowError::ConflictError(message),
         Error::ReceiptDuplicate(error) => WorkflowError::ReceiptDuplicate(error),

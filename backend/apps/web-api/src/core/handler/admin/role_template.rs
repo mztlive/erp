@@ -1,11 +1,11 @@
 //! 内建岗位角色的预览和显式生成入口。
 use application_core::AuditActor;
-use axum::Json;
 use axum::extract::{Extension, State};
 use erp_identity::{BuiltinRoleCatalog, GenerateBuiltinRolesRequest, GeneratedBuiltinRole};
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
 /// 查询岗位模板及生成条件。

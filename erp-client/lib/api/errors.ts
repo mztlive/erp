@@ -1,3 +1,4 @@
+import { fieldErrorMessages } from "./field-errors"
 import { PERMISSION_GROUPS } from "@/lib/permissions.generated"
 
 /** 错误分类：网络 / HTTP / 鉴权 / 解析 / 业务校验 / 未知。 */
@@ -118,7 +119,7 @@ const asFieldErrors = (
 }
 
 const TECHNICAL_MESSAGE_PATTERN =
-    /(?:\[object Object\]|(?:Type|Reference|Syntax|Network|Validation)Error|Validation error|\bat\s+\S+\s*\(|https?:\/\/|\b(?:GET|POST|PUT|PATCH|DELETE)\s+\/|\b(?!(?:SKU|ERP|PDF|CSV)\b)[A-Z][A-Z0-9_]{2,}\b|\b(?:id|payload|canonical|handler|blocker|view|status|dto|enum|rbac)\b|work_item|idempotency|lockVersion|stack trace|数据库|服务端|客户端|前端|后端|堆栈|唯一索引|内部错误|状态机接口|接口未交付|接口|事务|幂等|投影|水位|快照|指纹|锁版本|JSON|SQL|Mongo)/i
+    /(?:\[object Object\]|(?:Type|Reference|Syntax|Network|Validation)Error|Validation error|\bat\s+\S+\s*\(|https?:\/\/|\b(?:GET|POST|PUT|PATCH|DELETE)\s+\/|\b(?:id|payload|canonical|handler|blocker|view|status|dto|enum|rbac)\b|work_item|idempotency|lockVersion|stack trace|数据库|服务端|客户端|前端|后端|堆栈|唯一索引|内部错误|状态机接口|接口未交付|接口|事务|幂等|投影|水位|快照|指纹|锁版本|JSON|SQL|Mongo)/i
 
 /** 判断原始原因能否直接给业务用户阅读，拦截英文和实现细节。 */
 const userReadableMessage = (value: unknown): string | undefined => {
@@ -174,11 +175,14 @@ const defaultRetryable = (status: number): boolean =>
     status === 408 || status === 429 || status >= 500
 
 /** 网络层失败（断网、连接拒绝、超时或取消）。 */
-export const fromFetchError = (cause: unknown): ApiError =>
+export const fromFetchError = (cause: unknown, method = "GET"): ApiError =>
     createApiError({
         kind: "Network",
-        message: "网络连接失败或请求超时，请检查网络后重试。",
-        retryable: true,
+        message:
+            method === "GET"
+                ? "网络连接失败或请求超时，请检查网络后重新加载。"
+                : "网络连接中断或请求超时，提交结果尚未确认，请先查询处理结果。",
+        retryable: method === "GET",
         cause,
     })
 
@@ -192,6 +196,7 @@ export const fromHttpResponse = (
     status: number,
     responseData?: unknown,
     responseRequestId?: string,
+    method = "GET",
 ): ApiError => {
     const {
         backendMessage,
@@ -201,7 +206,10 @@ export const fromHttpResponse = (
         retryable,
         requestId,
     } = envelopeDetails(responseData)
-    const message = backendMessage ?? fallbackMessage(status)
+    const resultUnknown = method !== "GET" && (status >= 500 || status === 408)
+    const message =
+        (backendMessage ?? fallbackMessage(status)) +
+        (resultUnknown ? " 提交结果尚未确认，请先查询当前状态。" : "")
 
     return createApiError({
         kind: status === 400 || status === 422 ? "Validation" : "Http",
@@ -210,7 +218,9 @@ export const fromHttpResponse = (
         status,
         code,
         fieldErrors,
-        retryable: retryable ?? defaultRetryable(status),
+        retryable: resultUnknown
+            ? false
+            : (retryable ?? defaultRetryable(status)),
         requestId: requestId ?? responseRequestId,
         responseData,
     })
@@ -235,11 +245,20 @@ export const fromAuth = (
 }
 
 /** 响应体 JSON 解析失败。 */
-export const fromParse = (cause: unknown, responseData?: unknown): ApiError =>
+export const fromParse = (
+    cause: unknown,
+    responseData?: unknown,
+    method = "GET",
+    requestId?: string,
+): ApiError =>
     createApiError({
         kind: "Parse",
-        message: "系统返回的数据无法读取，请稍后重试。",
-        retryable: true,
+        message:
+            method === "GET"
+                ? "返回资料无法读取，请重新加载；如仍失败，请联系支持人员。"
+                : "返回结果无法读取，提交结果尚未确认，请先查询处理结果。",
+        retryable: method === "GET",
+        requestId,
         responseData,
         cause,
     })
@@ -289,7 +308,9 @@ const presentationFromApiError = (
     const status = error.status
     const description =
         missingPermissionMessage(error) ??
-        userReadableMessage(error.message) ??
+        (asEnvelope(error.responseData)?.success === false && error.code
+            ? nonEmptyString(error.message)
+            : userReadableMessage(error.message)) ??
         (typeof status === "number" ? fallbackMessage(status) : fallback)
     const retryable =
         error.retryable ??
@@ -325,6 +346,20 @@ const presentationFromApiError = (
             fieldErrors: error.fieldErrors,
             requestId: error.requestId,
             retryable,
+        }
+    }
+    if (
+        status === 422 &&
+        error.code !== "REQUEST_FIELD_INVALID" &&
+        !error.fieldErrors
+    ) {
+        return {
+            kind: "business",
+            title: "当前条件暂不允许此操作",
+            description,
+            code: error.code,
+            requestId: error.requestId,
+            retryable: false,
         }
     }
     if (status === 400 || status === 422 || error.kind === "Validation") {
@@ -413,5 +448,13 @@ export const getErrorPresentation = (
 }
 
 /** 提取用户可读错误原因，供仍使用局部 Alert 的页面复用。 */
-export const getErrorMessage = (error: unknown, fallback?: string): string =>
-    getErrorPresentation(error, fallback).description
+export const getErrorMessage = (error: unknown, fallback?: string): string => {
+    const failure = getErrorPresentation(error, fallback)
+    return [
+        failure.description,
+        ...fieldErrorMessages(failure.fieldErrors),
+        failure.requestId ? `请求编号：${failure.requestId}` : undefined,
+    ]
+        .filter(Boolean)
+        .join("\n")
+}

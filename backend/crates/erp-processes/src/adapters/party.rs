@@ -178,6 +178,7 @@ fn map_audit_to_party(error: erp_audit::Error) -> erp_party::Error {
         erp_audit::Error::Internal(message) => erp_party::Error::Internal(message),
         erp_audit::Error::NotFound(message) => erp_party::Error::NotFound(message),
         erp_audit::Error::ValidationError(message) => erp_party::Error::ValidationError(message),
+        erp_audit::Error::InvalidInput(message) => erp_party::Error::InvalidInput(message),
         erp_audit::Error::BusinessLogicError(message) => erp_party::Error::BusinessLogicError(message),
         erp_audit::Error::ConflictError(message) => erp_party::Error::ConflictError(message),
         erp_audit::Error::ReceiptDuplicate(error) => erp_party::Error::ReceiptDuplicate(error),

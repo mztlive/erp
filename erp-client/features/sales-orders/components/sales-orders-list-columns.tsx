@@ -118,6 +118,14 @@ export function buildSalesOrdersListColumns(
                                 {contractNo || "—"}
                             </span>
                         )}
+                        {order.contractLoadError ? (
+                            <p
+                                role="status"
+                                className="max-w-[20rem] text-xs text-destructive"
+                            >
+                                合同资料读取失败：{order.contractLoadError}
+                            </p>
+                        ) : null}
                         <div className="max-w-[14rem] truncate text-xs text-muted-foreground">
                             {companyName || "—"}
                         </div>

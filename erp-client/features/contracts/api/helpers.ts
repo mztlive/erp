@@ -1,3 +1,4 @@
+import { isApiError } from "@/lib/api/errors"
 import type {
     BackendCustomerDetail,
     BackendFileAsset,
@@ -126,8 +127,9 @@ export async function loadCustomerBrief(customerId: string): Promise<{
             ownerLabel:
                 c.owner_user_name?.trim() || c.owner_user_id?.trim() || "—",
         }
-    } catch {
-        return null
+    } catch (error) {
+        if (isApiError(error) && error.status === 404) return null
+        throw error
     }
 }
 
@@ -139,7 +141,8 @@ export async function loadFileAsset(
         return await apiGet<BackendFileAsset>(
             `/admin/contracts/${encodeURIComponent(contractId)}/files/${encodeURIComponent(fileId)}`,
         )
-    } catch {
-        return null
+    } catch (error) {
+        if (isApiError(error) && error.status === 404) return null
+        throw error
     }
 }

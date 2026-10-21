@@ -13,22 +13,20 @@ use super::Error;
 const INTERNAL_MESSAGE: &str = "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员";
 const UNKNOWN_MESSAGE: &str = "操作结果暂无法确认，请先查询当前状态，确认未处理后再决定是否重试";
 const CONFLICT_MESSAGE: &str = "当前资料状态不允许继续操作，请刷新后核对";
-const BUSINESS_MESSAGE: &str = "当前业务条件不允许继续操作，请核对相关资料后重试";
-const FORBIDDEN_MESSAGE: &str = "当前账号没有执行此操作的权限，请联系管理员或有权限的同事";
 const DUPLICATE_MESSAGE: &str = "数据已存在，请勿重复提交";
 
 struct Expected {
     status: u16,
     code: &'static str,
-    message: &'static str,
+    message: String,
     retryable: bool,
     field_errors: Option<Value>,
     retry_after: Option<&'static str>,
 }
 
 impl Expected {
-    fn new(status: u16, code: &'static str, message: &'static str, retryable: bool) -> Self {
-        Self { status, code, message, retryable, field_errors: None, retry_after: None }
+    fn new(status: u16, code: &'static str, message: &str, retryable: bool) -> Self {
+        Self { status, code, message: message.into(), retryable, field_errors: None, retry_after: None }
     }
 
     fn internal() -> Self {
@@ -279,13 +277,15 @@ const APPROVAL_CODES: [(ErrorCode, &str, u16, bool); 21] = [
 #[tokio::test]
 async fn all_workflow_codes_keep_http_contract_across_three_boundaries() {
     for (code, text, status, retryable) in APPROVAL_CODES {
-        let message = match status {
-            500 => INTERNAL_MESSAGE,
-            409 => CONFLICT_MESSAGE,
-            422 => BUSINESS_MESSAGE,
-            403 => FORBIDDEN_MESSAGE,
-            _ => unreachable!("golden HTTP status"),
-        };
+        let dedicated = crate::core::handler::approval_instance::error::ApprovalHttpError::coded(
+            code,
+            "test".into(),
+            None,
+        )
+        .into_response();
+        let bytes = to_bytes(dedicated.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&bytes).unwrap();
+        let message = body["errorMessage"].as_str().unwrap();
         for (boundary, error) in [
             ("workflow", Error::from(erp_workflow::Error::Coded(code))),
             ("process", Error::from(erp_processes::Error::Coded(code))),
@@ -479,22 +479,50 @@ fn validation_errors() -> validator::ValidationErrors {
 }
 
 #[tokio::test]
-async fn validator_fields_are_only_exposed_for_direct_http_validation() {
-    let mut direct =
-        Expected::new(400, "INVALID_REQUEST", "提交内容不符合要求，请根据字段提示修改后重试", false);
-    direct.field_errors = Some(json!({"name":"名称不能为空，请填写后重试","secret":"该字段填写不符合要求"}));
-    assert_response("direct_validator", Error::from(validation_errors()), direct).await;
-    for (label, error) in [
-        ("process_validator", Error::from(erp_processes::Error::from(validation_errors()))),
-        ("read_model_validator", Error::from(erp_read_models::Error::from(validation_errors()))),
-    ] {
+async fn validator_fields_survive_domain_and_application_boundaries() {
+    let sources = [
+        ("direct", Error::from(validation_errors())),
+        ("customer", Error::from(erp_customer::Error::from(validation_errors()))),
+        ("process", Error::from(erp_processes::Error::from(erp_customer::Error::from(validation_errors())))),
+        (
+            "read_model",
+            Error::from(erp_read_models::Error::from(erp_sales::Error::from(validation_errors()))),
+        ),
+    ];
+    for (label, error) in sources {
+        let mut expected = Expected::new(400, "INVALID_REQUEST", "请修改标记的字段后重新提交", false);
+        expected.field_errors =
+            Some(json!({"name":"名称不能为空，请填写后重试","secret":"该字段填写不符合要求"}));
+        assert_response(label, error, expected).await;
+    }
+}
+
+#[tokio::test]
+async fn ordinary_file_formats_and_specific_approval_reason_are_preserved() {
+    for message in ["请上传 .xlsx 产品报价表", "银行回单仅支持 JPG、PNG 或 WebP 图片"] {
+        let expected = if message.starts_with("请") {
+            message.to_string()
+        } else {
+            format!("{message}，请修改后重试")
+        };
         assert_response(
-            label,
-            error,
-            Expected::new(400, "INVALID_REQUEST", "提交内容不符合要求，请检查后重试", false),
+            "file_format",
+            Error::BadRequest(message.into()),
+            Expected::new(400, "INVALID_REQUEST", &expected, false),
         )
         .await;
     }
+    assert_response(
+        "approval_setup",
+        Error::Coded(ErrorCode::ApprovalProcessNotConfigured),
+        Expected::new(
+            409,
+            "APPROVAL_PROCESS_NOT_CONFIGURED",
+            "该单据类型尚未配置可用的审批流程，请联系管理员发布流程后重试",
+            false,
+        ),
+    )
+    .await;
 }
 
 #[tokio::test]

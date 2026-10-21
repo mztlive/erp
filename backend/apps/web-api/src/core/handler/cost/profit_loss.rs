@@ -1,6 +1,6 @@
 //! 实际盈亏协议入口；资源范围及同角色权限在报表读取事务内重验。
-use axum::extract::{Query, State};
-use axum::{Extension, Json};
+use axum::Extension;
+use axum::extract::State;
 use erp_read_models::finance::actual_profit_loss::dto::{
     PeriodBasisConfig, ProfitLossExport, ProfitLossQuery, ProfitLossView,
 };
@@ -8,6 +8,7 @@ use erp_read_models::finance::actual_profit_loss::{ActualProfitLossReadModel, Pr
 
 use crate::app_state::AppState;
 use crate::core::errors::{Error, Result};
+use crate::core::extractor::{Json, Query};
 use crate::core::handler::customer::has_permission;
 use crate::core::middleware::RbacSubject;
 use crate::core::response::ApiResponse;

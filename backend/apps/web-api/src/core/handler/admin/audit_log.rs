@@ -1,9 +1,10 @@
 use application_core::Page;
-use axum::extract::{Query, State};
+use axum::extract::State;
 use erp_audit::{AuditLogItem, AuditLogListParams, AuditLogService};
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::Query;
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

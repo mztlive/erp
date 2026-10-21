@@ -5,8 +5,8 @@
 
 use application_core::AuditActor;
 use application_core::directory::ScopedPage;
-use axum::extract::{Path, Query, State};
-use axum::{Extension, Json};
+use axum::Extension;
+use axum::extract::{Path, State};
 use erp_processes::adapters::warehouse_directory;
 use erp_warehouse::{
     CreateWarehouseRequest, CreateWarehouseSkuPolicyRequest, PageView,
@@ -17,6 +17,7 @@ use erp_warehouse::{
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

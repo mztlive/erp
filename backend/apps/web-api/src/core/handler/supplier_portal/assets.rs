@@ -5,7 +5,7 @@ use std::result::Result as StdResult;
 
 use application_core::AuditActor;
 use axum::Extension;
-use axum::extract::{Multipart, Path, Query, State};
+use axum::extract::{Multipart, Path, State};
 use axum::response::Response;
 use erp_identity::PortalActor;
 use erp_processes::supplier_portal::{PortalAssetView, PreparedPortalAsset, SupplierPortalProcess};
@@ -28,6 +28,7 @@ use super::asset_pdf::inspect_pdf;
 use super::process;
 use crate::app_state::AppState;
 use crate::core::errors::{Error, Result};
+use crate::core::extractor::Query;
 use crate::core::handler::file_asset::{
     asset_download_response, finish_asset_command, read_asset, revalidate_asset,
 };

@@ -44,7 +44,7 @@ export function useRolesQuery() {
     })
 }
 
-/** 可分配角色（账号表单角色选项）；失败时 API 层已回落到全部角色。 */
+/** 可分配角色（账号表单角色选项）；失败交由页面展示。 */
 export function useAssignableRolesQuery(enabled = true) {
     return useQuery({
         queryKey: adminKeys.assignableRoles(),

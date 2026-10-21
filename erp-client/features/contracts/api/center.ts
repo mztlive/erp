@@ -1,5 +1,5 @@
 import { apiGet } from "@/lib/api"
-import { isApiError } from "@/lib/api/errors"
+import { getErrorMessage, isApiError } from "@/lib/api/errors"
 import { paymentTermLabel } from "@/lib/business-options"
 
 import {
@@ -49,7 +49,13 @@ export async function fetchContractCenter(
     const current =
         detail.revisions.find((r) => r.id === detail.current_revision_id) ??
         detail.revisions[0]
-    const customer = await loadCustomerBrief(detail.customer_id)
+    const loadWarnings: string[] = []
+    const customer = await loadCustomerBrief(detail.customer_id).catch(
+        (error: unknown) => {
+            loadWarnings.push(`客户补充资料读取失败：${getErrorMessage(error)}`)
+            return null
+        },
+    )
 
     const attachments: ContractAttachmentView[] = []
     for (const rev of detail.revisions) {
@@ -101,6 +107,7 @@ export async function fetchContractCenter(
 
     return {
         contractId: detail.id,
+        loadWarnings,
         contractNo: detail.contract_no,
         status,
         statusLabel: CONTRACT_STATUS_LABEL[status],

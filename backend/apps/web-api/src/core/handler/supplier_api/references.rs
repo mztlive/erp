@@ -1,6 +1,6 @@
 use application_core::AuditActor;
 use axum::Extension;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, State};
 use axum::http::HeaderValue;
 use axum::http::header::CACHE_CONTROL;
 use axum::response::{IntoResponse, Response};
@@ -10,6 +10,7 @@ use erp_supply::ports::supplier_reference_registry::{
 
 use crate::app_state::AppState;
 use crate::core::errors::Error;
+use crate::core::extractor::Query;
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

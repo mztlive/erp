@@ -1,7 +1,7 @@
 //! 批量供给协议入口；权限与对应单条动作保持一致。
 use application_core::AuditActor;
+use axum::Extension;
 use axum::extract::State;
-use axum::{Extension, Json};
 use erp_processes::adapters::scoped_offering_process;
 use erp_processes::supply_governance::offering::batch::{BatchRequest, BatchResult, Targeted};
 use erp_supply::dto::supplier_offering::{
@@ -10,6 +10,7 @@ use erp_supply::dto::supplier_offering::{
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

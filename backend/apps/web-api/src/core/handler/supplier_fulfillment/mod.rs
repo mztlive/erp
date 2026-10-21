@@ -5,8 +5,8 @@
 //! 禁止直连数据库。Connector 由启动组合根注入，Handler 不选择实现。
 
 use application_core::AuditActor;
-use axum::extract::{Path, Query, State};
-use axum::{Extension, Json};
+use axum::Extension;
+use axum::extract::{Path, State};
 use erp_processes::supply_execution::dto::{
     SupplierOrderInvestigationResultView, SupplierOrderTaskCompletionResultView,
 };
@@ -23,6 +23,7 @@ use persistence_core::NoTransaction;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

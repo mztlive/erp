@@ -1,7 +1,6 @@
 //! 演示主数据接口。
 
 use application_core::AuditActor;
-use axum::Json;
 use axum::extract::{Extension, State};
 use erp_processes::demo_master_data::{
     ApplyDemoMasterDataRequest, DemoChunkReport, DemoFoundationReport, DemoResetReport, DemoStatus,
@@ -9,6 +8,7 @@ use erp_processes::demo_master_data::{
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::Json;
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

@@ -33,6 +33,7 @@ export type RevisionTimelineEntry = Readonly<{
 }>
 
 export type MasterDataCenterView = Readonly<{
+    loadWarnings?: readonly string[]
     resource: MasterDataResource
     stableId: string
     stableNo: string

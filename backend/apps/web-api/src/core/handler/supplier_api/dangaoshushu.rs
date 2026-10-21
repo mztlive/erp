@@ -1,6 +1,6 @@
 use application_core::AuditActor;
 use axum::Extension;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, State};
 use erp_core::common::time::Instant;
 use erp_processes::connectors::dangaoshushu::{DangaoshushuReadQuery, SupplierReferenceTickets};
 use persistence_core::NoTransaction;
@@ -8,6 +8,7 @@ use serde_json::Value;
 
 use crate::app_state::AppState;
 use crate::core::errors::{Error, Result};
+use crate::core::extractor::Query;
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

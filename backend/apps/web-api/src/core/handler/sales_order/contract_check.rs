@@ -1,13 +1,14 @@
 //! 后补合同只读预检；实际补录仍在事务内重新核对。
 use application_core::AuditActor;
 use axum::Extension;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, State};
 use erp_processes::order_to_cash::SalesOrderCommandProcess;
 use erp_sales::dto::sales_order::BindSalesOrderContractRequest;
 use erp_sales::entity::sales_order::contract_terms::ContractBindingCheck;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::Query;
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

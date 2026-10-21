@@ -3,7 +3,7 @@
 import * as React from "react"
 
 import { DiscardConfirmDialog } from "@/components/business"
-import { useAppForm } from "@/components/form"
+import { useAppForm, applyApiFormError } from "@/components/form"
 import { useSelector } from "@tanstack/react-form"
 import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
 import {
@@ -141,6 +141,13 @@ export function CustomerForm({
                       )
 
             setResult(response)
+            if (response.outcome !== "succeeded" && response.error) {
+                applyApiFormError(form, response.error, {
+                    mobile: "phone",
+                    bank_branch_name: "branchName",
+                    default_payment_term_id: "defaultPaymentTerm",
+                })
+            }
             if (response.outcome === "conflict") {
                 setConflictDraft(structuredClone(value))
                 setConflictOpen(true)

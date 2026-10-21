@@ -28,9 +28,7 @@ export async function listVoucherCategories(
             latestBySku.set(profile.sku_id, profile)
         }
     }
-    const skus = await fetchAllPages<SkuDto>("/admin/skus", {}).catch(
-        () => [] as SkuDto[],
-    )
+    const skus = await fetchAllPages<SkuDto>("/admin/skus", {})
     const skuById = new Map(skus.map((s) => [s.id, s]))
     let rows = Array.from(latestBySku.values()).map((p) =>
         mapVoucherRow(p, skuById.get(p.sku_id)),

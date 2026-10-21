@@ -1,5 +1,6 @@
 //! 稳定应用错误分类与不含领域实现依赖的应用错误。
 
+use crate::validation::ValidationIssues;
 /// 服务层错误分类。协议层仅按该分类决定传输语义，不解析错误文案。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorClass {
@@ -30,6 +31,10 @@ pub enum Error {
     /// 请求参数或查询合同不合法。
     #[error("参数验证失败: {0}")]
     ValidationError(String),
+
+    /// 字段校验明细，跨边界不得压成字符串。
+    #[error(transparent)]
+    InvalidInput(#[from] ValidationIssues),
 }
 
 impl Error {
@@ -46,7 +51,7 @@ impl Error {
     pub fn class(&self) -> ErrorClass {
         match self {
             Self::Internal(_) => ErrorClass::Internal,
-            Self::ValidationError(_) => ErrorClass::BusinessRule,
+            Self::ValidationError(_) | Self::InvalidInput(_) => ErrorClass::BusinessRule,
         }
     }
 }
@@ -63,7 +68,7 @@ impl From<validator::ValidationErrors> for Error {
     /// # 错误
     /// 无。
     fn from(errors: validator::ValidationErrors) -> Self {
-        Self::ValidationError(errors.to_string())
+        Self::InvalidInput(errors.into())
     }
 }
 

@@ -1,3 +1,4 @@
+import { isApiError } from "@/lib/api/errors"
 /**
  * W12 供应商往来 · 供应商退款草稿创建与提交审批。
  * 过账只由最终通过动作内部消费，本文件不得调用 /post。
@@ -44,8 +45,9 @@ export async function fetchSupplierRefund(
             `/admin/supplier-refunds/${encodeURIComponent(refundId)}`,
         )
         return projectSupplierRefund(refund)
-    } catch {
-        return null
+    } catch (error) {
+        if (isApiError(error) && error.status === 404) return null
+        throw error
     }
 }
 

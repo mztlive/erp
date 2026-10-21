@@ -1,12 +1,13 @@
 //! 我方公司专用权限边界。
 use application_core::AuditActor;
-use axum::extract::{Path, Query, State};
-use axum::{Extension, Json};
+use axum::Extension;
+use axum::extract::{Path, State};
 use erp_party::PageView;
 use erp_party::dto::company::{CompanyListParams, CompanyView, SaveCompanyRequest};
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

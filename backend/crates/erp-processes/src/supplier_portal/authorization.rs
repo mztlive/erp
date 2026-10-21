@@ -80,6 +80,7 @@ fn map_read_error(error: Error) -> ReadError {
         Error::Internal(v) => ReadError::Internal(v),
         Error::NotFound(v) => ReadError::NotFound(v),
         Error::ValidationError(v) => ReadError::ValidationError(v),
+        Error::InvalidInput(v) => ReadError::InvalidInput(v),
         Error::BusinessLogicError(v) => ReadError::BusinessLogicError(v),
         Error::ConflictError(v) => ReadError::ConflictError(v),
         Error::Forbidden(v) => ReadError::Forbidden(v),

@@ -1,7 +1,7 @@
 //! 门户读接口复用允许列表投影，不调用内部商品目录。
 use application_core::PageView;
 use axum::Extension;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, State};
 use erp_catalog::ProductKind;
 use erp_catalog::portal::{
     CatalogPortalService, CategoryMappingSuggestion, DictionaryCandidate, DictionaryKind,
@@ -17,6 +17,7 @@ use serde_json::{Value, to_value};
 
 use crate::app_state::AppState;
 use crate::core::errors::{Error, Result};
+use crate::core::extractor::Query;
 use crate::core::response::ApiResponse;
 
 /// 读取当前门户身份的必要展示资料。

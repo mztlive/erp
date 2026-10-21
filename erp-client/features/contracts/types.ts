@@ -112,6 +112,7 @@ export type ContractListRow = {
 }
 
 export type ContractCenterView = {
+    loadWarnings?: string[]
     sharedSalesUserIds: string[]
     contractId: string
     contractNo: string

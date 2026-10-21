@@ -4,12 +4,12 @@
 //! 直接复用 `erp_finance::dto::payable` 的 DTO。
 
 use application_core::AuditActor;
+use axum::Extension;
 use axum::body::Body;
-use axum::extract::{Multipart, Path, Query, State};
+use axum::extract::{Multipart, Path, State};
 use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS};
 use axum::http::{HeaderValue, StatusCode};
 use axum::response::Response;
-use axum::{Extension, Json};
 use erp_finance::dto::payable::{
     CommitSupplierPaymentRequest, CreatePayableAccountRequest, PayableAccountListParams, PayableAccountView,
     PaymentRecipientRevealView, PurchaseInvoiceAllocationListParams, PurchaseInvoiceRegisteredView,
@@ -29,6 +29,7 @@ use tracing::error;
 
 use crate::app_state::AppState;
 use crate::core::errors::{Error, Result};
+use crate::core::extractor::{Json, Query};
 use crate::core::handler::file_asset::{
     PendingAssetFile, extract_command_with_asset_files, finish_asset_command, store_pending_asset_files,
 };

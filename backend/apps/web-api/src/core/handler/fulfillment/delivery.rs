@@ -1,8 +1,8 @@
 //! 实物发货 HTTP 协议适配。
 
 use application_core::AuditActor;
-use axum::extract::{Path, Query, State};
-use axum::{Extension, Json};
+use axum::Extension;
+use axum::extract::{Path, State};
 use erp_fulfillment::dto::{
     CreateDeliveryRequest, DeliveryDetailView, DeliveryListParams, DeliveryView, PageView,
     PostDeliveryRequest, UpdateDeliveryRequest,
@@ -11,6 +11,7 @@ use erp_fulfillment::dto::{
 use super::{process, service};
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
 #[permission_macros::permission(

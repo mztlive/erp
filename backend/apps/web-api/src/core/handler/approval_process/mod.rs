@@ -5,9 +5,9 @@
 mod http;
 
 use application_core::AuditActor;
-use axum::extract::{Path, Query, State};
+use axum::Extension;
+use axum::extract::{Path, State};
 use axum::http::HeaderMap;
-use axum::{Extension, Json};
 use erp_processes::adapters::workflow::{WorkflowAuth, workflow_audit, workflow_auth};
 use erp_workflow::entity::document_registry::DocumentType;
 use erp_workflow::service::approval::definition::{
@@ -20,6 +20,7 @@ use erp_workflow::service::approval::definition_dto::{
 
 use self::http::{DefinitionLockHttpRequest, EligibleAssigneesQuery, ReplaceNodesHttpRequest};
 use crate::app_state::AppState;
+use crate::core::extractor::{Json, Query};
 use crate::core::handler::approval_instance::error::{ApprovalHttpError, parse_version};
 use crate::core::response::ApiResponse;
 

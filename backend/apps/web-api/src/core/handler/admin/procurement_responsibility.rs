@@ -1,6 +1,5 @@
 use application_core::AuditActor;
-use axum::Json;
-use axum::extract::{Extension, Path, Query, State};
+use axum::extract::{Extension, Path, State};
 use erp_processes::procure_to_pay::responsibility::ProcurementResponsibilityProcess;
 use erp_procurement::dto::procurement_responsibility::{
     CreateProcurementResponsibilityRuleRequest, ProcurementResponsibilityResolveRequest,
@@ -15,6 +14,7 @@ use validator::Validate;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::{Json, Query};
 use crate::core::response::ApiResponse;
 
 /// 分页查询采购责任规则。

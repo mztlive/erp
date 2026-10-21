@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { QueryClientProvider } from "@tanstack/react-query"
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools"
 import { toast } from "@/components/ui/toast"
+import { fieldErrorMessages } from "@/lib/api/field-errors"
 import { getErrorPresentation } from "@/lib/api/errors"
 import { subscribeScopeCache } from "@/features/data-scope/cache"
 import { makeQueryClient } from "@/lib/query-client"
@@ -13,9 +14,13 @@ const notifyMutationError = (error: unknown) => {
     const failure = getErrorPresentation(error)
     toast.add({
         title: failure.title,
-        description: failure.requestId
-            ? `${failure.description} 请求编号：${failure.requestId}`
-            : failure.description,
+        description: [
+            failure.description,
+            ...fieldErrorMessages(failure.fieldErrors),
+            failure.requestId ? `请求编号：${failure.requestId}` : undefined,
+        ]
+            .filter(Boolean)
+            .join("\n"),
         type: "error",
         timeout: 6000,
     })

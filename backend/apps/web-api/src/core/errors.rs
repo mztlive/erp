@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use application_core::ValidationIssues;
 use axum::Json;
 use axum::http::header::RETRY_AFTER;
 use axum::http::{HeaderValue, StatusCode};
@@ -77,7 +78,10 @@ pub enum Error {
     Logic(#[from] erp_core::Error),
 
     #[error(transparent)]
-    Validation(#[from] validator::ValidationErrors),
+    Validation(validator::ValidationErrors),
+
+    #[error(transparent)]
+    InvalidInput(#[from] ValidationIssues),
 
     #[error("{0}")]
     Coded(erp_workflow::ErrorCode),
@@ -149,6 +153,7 @@ macro_rules! boundary_error {
     ($error:expr, $provider:ident; $($extra:tt)*) => {
         match $error {
             $provider::Error::ValidationError(msg) => Error::BadRequest(msg),
+            $provider::Error::InvalidInput(issues) => Error::InvalidInput(issues),
             $provider::Error::NotFound(msg) => Error::NotFound(msg),
             $provider::Error::ConflictError(msg) => Error::Conflict(msg),
             $provider::Error::ReceiptDuplicate(_) => Error::Conflict("数据已存在，请勿重复提交".to_string()),
@@ -308,6 +313,7 @@ impl From<erp_fulfillment::Error> for Error {
     fn from(err: erp_fulfillment::Error) -> Self {
         match err {
             erp_fulfillment::Error::ValidationError(msg) => Error::BadRequest(msg),
+            erp_fulfillment::Error::InvalidInput(issues) => Error::InvalidInput(issues),
             erp_fulfillment::Error::NotFound(msg) => Error::NotFound(msg),
             erp_fulfillment::Error::ConflictError(msg) => Error::Conflict(msg),
             erp_fulfillment::Error::TransientTransaction(_) => {
@@ -414,6 +420,11 @@ impl IntoResponse for Error {
         let code = self.error_code().to_string();
         let field_errors = self.field_errors();
         let retryable = self.retryable();
+        tracing::warn!(
+            target: "http_error", code = %code, status = http_status.as_u16(),
+            public_message = %message, fields = ?field_errors.as_ref().map(|fields| fields.keys().collect::<Vec<_>>()),
+            "Request rejected"
+        );
 
         let body = ApiResponse::<()> {
             status: http_status.as_u16(),
@@ -454,7 +465,7 @@ impl Error {
     pub(crate) fn http_status(&self) -> StatusCode {
         match self {
             Error::Internal(_) | Error::OutcomeUnknown(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::BadRequest(_) | Error::Validation(_) => StatusCode::BAD_REQUEST,
+            Error::BadRequest(_) | Error::Validation(_) | Error::InvalidInput(_) => StatusCode::BAD_REQUEST,
             Error::NotFound(_) => StatusCode::NOT_FOUND,
             Error::Conflict(_) => StatusCode::CONFLICT,
             Error::Unprocessable(_) | Error::Logic(_) => StatusCode::UNPROCESSABLE_ENTITY,
@@ -475,7 +486,7 @@ impl Error {
     pub(crate) fn error_code(&self) -> &'static str {
         match self {
             Error::Internal(_) => "INTERNAL_ERROR",
-            Error::BadRequest(_) | Error::Validation(_) => "INVALID_REQUEST",
+            Error::BadRequest(_) | Error::Validation(_) | Error::InvalidInput(_) => "INVALID_REQUEST",
             Error::NotFound(_) => "NOT_FOUND",
             Error::Conflict(message) if data_scope_changed_user_message(message).is_some() => {
                 "DATA_SCOPE_CHANGED"
@@ -506,7 +517,7 @@ impl Error {
             Error::BadRequest(message) => {
                 user_message_or(message, "提交内容不符合要求，请检查后重试", "请修改后重试")
             },
-            Error::Validation(_) => "提交内容不符合要求，请根据字段提示修改后重试".to_string(),
+            Error::Validation(_) | Error::InvalidInput(_) => "请修改标记的字段后重新提交".to_string(),
             Error::NotFound(message) => {
                 user_message_or(message, "没有找到所需资料，请刷新后重新选择", "请刷新后重新选择")
             },
@@ -535,43 +546,31 @@ impl Error {
                 "请求过于频繁，请稍后重试".to_string()
             },
             Error::RateLimited(_) => "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员".to_string(),
-            Error::Coded(code) => match code.class() {
-                application_core::ErrorClass::Internal => {
-                    "系统暂时无法完成操作，请稍后重试；如仍失败，请联系支持人员".to_string()
-                },
-                application_core::ErrorClass::Conflict => {
-                    "当前资料状态不允许继续操作，请刷新后核对".to_string()
-                },
-                application_core::ErrorClass::BusinessRule => {
-                    "当前业务条件不允许继续操作，请核对相关资料后重试".to_string()
-                },
-                application_core::ErrorClass::Forbidden => {
-                    "当前账号没有执行此操作的权限，请联系管理员或有权限的同事".to_string()
-                },
-            },
+            Error::Coded(code) => approval_message(*code).to_string(),
         }
     }
 
     /// 返回字段级校验说明。
     ///
     /// # 返回
-    /// 仅直接持有 `validator::ValidationErrors` 时返回字段与用户提示；
+    /// 字段校验错误返回完整字段路径与公开提示；
     /// 其它错误返回 `None`。
     pub(crate) fn field_errors(&self) -> Option<BTreeMap<String, String>> {
-        let Error::Validation(errors) = self else {
-            return None;
+        let issues = match self {
+            Self::InvalidInput(issues) => issues.clone(),
+            Self::Validation(errors) => ValidationIssues::from(errors.clone()),
+            _ => return None,
         };
-        let fields = errors
-            .field_errors()
+        let fields = issues
+            .fields()
             .iter()
-            .map(|(field, errors)| {
-                let message = errors
-                    .iter()
-                    .filter_map(|error| error.message.as_deref())
-                    .find(|message| user_message_is_safe(message))
-                    .unwrap_or("该字段填写不符合要求")
-                    .to_string();
-                ((*field).to_string(), message)
+            .map(|(path, message)| {
+                let safe = if user_message_is_safe(message) {
+                    message.as_str()
+                } else {
+                    "该字段填写不符合要求"
+                };
+                (path.clone(), safe.to_string())
             })
             .collect::<BTreeMap<_, _>>();
         (!fields.is_empty()).then_some(fields)
@@ -644,13 +643,41 @@ fn user_message_is_safe(message: &str) -> bool {
 
 /// 判断一个 ASCII 词是否为不应展示的内部稳定码或枚举值。
 fn is_internal_code_token(token: &str) -> bool {
-    if matches!(token, "SKU" | "ERP" | "PDF" | "CSV") || token.len() < 2 {
+    if matches!(
+        token,
+        "SKU"
+            | "ERP"
+            | "PDF"
+            | "CSV"
+            | "JPG"
+            | "JPEG"
+            | "PNG"
+            | "WEBP"
+            | "GIF"
+            | "BMP"
+            | "SVG"
+            | "XLS"
+            | "XLSX"
+            | "DOC"
+            | "DOCX"
+            | "ZIP"
+    ) || token.len() < 2
+    {
         return false;
     }
     token.chars().any(|character| character.is_ascii_uppercase())
         && token
             .chars()
             .all(|character| character.is_ascii_uppercase() || character.is_ascii_digit() || character == '_')
+}
+
+pub(crate) mod approval;
+use approval::approval_message;
+
+impl From<validator::ValidationErrors> for Error {
+    fn from(errors: validator::ValidationErrors) -> Self {
+        Self::Validation(errors)
+    }
 }
 
 pub type Result<T> = std::result::Result<ApiResponse<T>, Error>;

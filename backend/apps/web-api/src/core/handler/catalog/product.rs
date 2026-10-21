@@ -5,8 +5,8 @@
 //! 商品字典接口见同目录 `mod.rs`。
 
 use application_core::AuditActor;
-use axum::extract::{Multipart, Path, Query, State};
-use axum::{Extension, Json};
+use axum::Extension;
+use axum::extract::{Multipart, Path, State};
 use erp_catalog::{
     CreateProductRequest, CreateVoucherCategoryRequest, DisableProductRequest, HandoverCandidateView,
     HandoverProductRequest, HandoverProductView, PageView, ProductListParams, ProductListView,
@@ -25,6 +25,7 @@ use serde::Deserialize;
 
 use crate::app_state::AppState;
 use crate::core::errors::Result;
+use crate::core::extractor::{Json, Query};
 use crate::core::handler::file_asset::{
     extract_command_with_asset_files, finish_asset_command, store_pending_asset_files,
 };
@@ -603,12 +604,12 @@ pub async fn product_detail_sku_revisions(
 
 #[cfg(test)]
 mod tests {
-    use axum::extract::Query;
     use axum::http::Uri;
     use erp_catalog::entity::catalog::SellablePriceKind;
     use erp_core::delivery_coverage::DeliveryExtent;
 
     use super::SellableSkuListParams;
+    use crate::core::extractor::Query;
 
     #[test]
     fn price_filter_query_accepts_one_kind_and_rejects_invalid_or_repeated_values() {
