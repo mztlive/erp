@@ -321,7 +321,7 @@ export function buildSalesOrderCreateLineItemColumns(
             : ([
                   {
                       id: "fulfillment",
-                      header: "承诺交付日",
+                      header: "期望交付日",
                       required: true,
                       renderValue: ({ item }) => item.dueDate || "—",
                       renderEditor: ({ rowIndex }) => {
@@ -335,7 +335,7 @@ export function buildSalesOrderCreateLineItemColumns(
                                       {(field) => (
                                           <field.DateField
                                               id={`sales-orders-create-line-${toAutomationIdSegment(lineKey)}-due-date`}
-                                              label="承诺交付日"
+                                              label="期望交付日"
                                               required
                                               size="default"
                                               hideLabel

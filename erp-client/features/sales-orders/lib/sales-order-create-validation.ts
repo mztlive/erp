@@ -315,7 +315,7 @@ const createSalesOrderSchema = z
                     context.addIssue({
                         code: "custom",
                         path: ["lineItems", index, "dueDate"],
-                        message: "请选择承诺交付日",
+                        message: "请选择期望交付日",
                     })
                 }
             }

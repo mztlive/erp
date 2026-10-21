@@ -44,11 +44,11 @@ export function SalesOrderCreateDueDateBatchBar({
                 <PopoverDescription>
                     将覆盖全部{" "}
                     <QuantityValue unit="" value={String(lineCount)} />{" "}
-                    条明细的承诺交付日，应用后仍可逐行调整。
+                    条明细的期望交付日，应用后仍可逐行调整。
                 </PopoverDescription>
                 <Field>
                     <FieldLabel htmlFor="sales-orders-create-batch-due-date">
-                        承诺交付日
+                        期望交付日
                     </FieldLabel>
                     <DatePicker
                         id="sales-orders-create-batch-due-date"

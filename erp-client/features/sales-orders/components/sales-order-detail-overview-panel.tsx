@@ -66,7 +66,7 @@ export function LineItemsTable({ order }: { order: SalesOrderDetailView }) {
                                 <TableHead data-align="end">
                                     采购供给价
                                 </TableHead>
-                                <TableHead>承诺交付日</TableHead>
+                                <TableHead>期望交付日</TableHead>
                             </>
                         )}
                         <TableHead data-align="end">含税小计</TableHead>

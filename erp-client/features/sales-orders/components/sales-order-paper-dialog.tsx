@@ -190,7 +190,7 @@ export function SalesOrderPaperDocument({
                           },
                           {
                               id: "due",
-                              header: "承诺交付日",
+                              header: "期望交付日",
                               numeric: true,
                               cell: (row) => row.dueDate ?? "—",
                           },

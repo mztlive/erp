@@ -68,7 +68,7 @@ export function SalesOrderCreateLineItemsSection({
             form.setFieldValue("lineItems", next)
             toast.add({
                 title: "已批量设置交期",
-                description: `已将 ${next.length} 条明细的承诺交付日设为 ${dueDate}。`,
+                description: `已将 ${next.length} 条明细的期望交付日设为 ${dueDate}。`,
                 type: "success",
                 timeout: 3000,
             })
