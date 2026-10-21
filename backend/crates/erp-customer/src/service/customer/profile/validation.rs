@@ -10,7 +10,7 @@ use crate::entity::customer::{
     CustomerProfileFactInput, CustomerProfileFactKind, CustomerProfileFactSet, CustomerProfileOperation,
     CustomerProfileReplayContext, CustomerProfileRequestFingerprint, CustomerProfileRequestShape,
 };
-use crate::error::Result;
+use crate::error::{Error, Result};
 
 /// 三个资料输入共用的字段访问实现（erp-customer-011）。
 ///
@@ -115,7 +115,9 @@ impl SaveCustomerProfileRequest {
             self.expected_party_version,
             self.expected_customer_version,
             self.owner_user_id.is_some(),
-        )?;
+            self.reuse_existing_party,
+        )
+        .map_err(|error| Error::ValidationError(error.to_string()))?;
         CustomerProfileFactSet::new(CustomerProfileFactKind::Contact, self.contacts.as_deref())
             .validate(shape.operation())?;
         CustomerProfileFactSet::new(CustomerProfileFactKind::Address, self.addresses.as_deref())
@@ -132,6 +134,22 @@ mod tests {
 
     use super::SaveCustomerProfileRequest;
     use crate::entity::customer::CustomerProfileOperation;
+
+    #[test]
+    fn reuse_consent_changes_fingerprint_and_is_create_only() {
+        let mut request: SaveCustomerProfileRequest =
+            serde_json::from_value(base_request("13800000000")).unwrap();
+        assert!(!request.reuse_existing_party);
+        assert!(serde_json::to_value(&request).unwrap().get("reuse_existing_party").is_none());
+        let original = request.replay_context(CustomerProfileOperation::Create, None, "admin").unwrap();
+        request.reuse_existing_party = true;
+        assert!(request.validate_structure(CustomerProfileOperation::Create).is_ok());
+        let confirmed = request.replay_context(CustomerProfileOperation::Create, None, "admin").unwrap();
+        assert_ne!(original.request_fingerprint(), confirmed.request_fingerprint());
+        request.expected_party_version = Some(1);
+        request.expected_customer_version = Some(1);
+        assert!(request.validate_structure(CustomerProfileOperation::Update).is_err());
+    }
 
     #[test]
     fn request_builds_stable_versioned_context_without_retaining_sensitive_body() {

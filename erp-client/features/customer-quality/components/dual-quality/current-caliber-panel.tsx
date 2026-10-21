@@ -65,7 +65,7 @@ export function CurrentCaliberPanel({
     return (
         <div className="flex min-w-0 flex-col gap-3">
             <p className="text-xs text-muted-foreground">
-                当前负责口径：按客户现任主责与主责所属组织分组汇总；只看现任归属，不读取历史冻结快照。
+                当前负责口径：按销售单当前负责销售和业务组织汇总，同一客户的不同业务分别归属；历史贡献使用生效时的归属。
             </p>
 
             <CurrentCaliberFilters filters={filters} patchDual={patchDual} />

@@ -5,7 +5,10 @@ import { useRouter } from "next/navigation"
 
 import { toast } from "@/components/ui/toast"
 import { useCustomerCenterQuery } from "@/features/customers/hooks/queries"
-import type { CustomerSectionId } from "@/features/customers/types"
+import type {
+    CustomerCenterView,
+    CustomerSectionId,
+} from "@/features/customers/types"
 import { resolveSection } from "@/features/customers/pages/customer-detail-helpers"
 
 /**
@@ -17,11 +20,16 @@ export function useCustomerDetailState(customerId: string, section?: string) {
     const router = useRouter()
     const activeSection = resolveSection(section)
     const [editing, setEditing] = React.useState(false)
+    const [editingCustomer, setEditingCustomer] =
+        React.useState<CustomerCenterView | null>(null)
     const [formDirty, setFormDirty] = React.useState(false)
     const [pendingSection, setPendingSection] = React.useState<
         CustomerSectionId | "back" | null
     >(null)
-    const customer = query.data
+    const customer =
+        editing && editingCustomer?.customerId === customerId
+            ? editingCustomer
+            : query.data
 
     const selectSection = React.useCallback(
         (next: CustomerSectionId) => {
@@ -56,7 +64,11 @@ export function useCustomerDetailState(customerId: string, section?: string) {
         router.push("/sales/customers")
     }, [editing, formDirty, router])
 
-    const startEditing = React.useCallback(() => setEditing(true), [])
+    const startEditing = React.useCallback(() => {
+        if (!query.data) return
+        setEditingCustomer(query.data)
+        setEditing(true)
+    }, [query.data])
     const cancelEditing = React.useCallback(() => {
         setEditing(false)
         setFormDirty(false)

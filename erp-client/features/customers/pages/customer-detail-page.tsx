@@ -52,7 +52,7 @@ export function CustomerDetailPage({
         state
     const [assignmentOpen, setAssignmentOpen] = React.useState(false)
 
-    if (query.isPending) {
+    if (query.isPending && !customer) {
         return (
             <PageScaffold>
                 <PageHeader title="客户详情" description="正在加载客户…" />
@@ -65,7 +65,7 @@ export function CustomerDetailPage({
         )
     }
 
-    if (query.isError) {
+    if (query.isError && !customer) {
         return (
             <PageScaffold>
                 <PageHeader title="客户详情" />
@@ -166,6 +166,24 @@ export function CustomerDetailPage({
                 }
             />
 
+            {editing && (query.isError || !query.data) ? (
+                <Alert variant="warning">
+                    <AlertTitle>最新客户资料暂时不可用</AlertTitle>
+                    <AlertDescription>
+                        当前输入仍然保留。资料可能已变更或访问权限已调整，保存时会重新校验权限及版本。
+                        <Button
+                            id="customers-detail-edit-retry"
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void query.refetch()}
+                        >
+                            重试读取
+                        </Button>
+                    </AlertDescription>
+                </Alert>
+            ) : null}
+
             {isDisabled ? (
                 <Alert variant="warning">
                     <AlertTitle>客户已停用</AlertTitle>
@@ -261,6 +279,7 @@ export function CustomerDetailPage({
 
             <CustomerAssignmentDialog
                 customerId={customer.customerId}
+                assignments={customer.assignments}
                 open={assignmentOpen}
                 onOpenChange={setAssignmentOpen}
             />

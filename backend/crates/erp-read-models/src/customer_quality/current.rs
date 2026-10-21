@@ -227,17 +227,7 @@ fn apply_request_filters(
     query: &CurrentQualityQuery,
     expanded: Option<&BTreeSet<String>>,
 ) {
-    if let Some(owners) = &query.owner_user_ids {
-        sources
-            .customers
-            .retain(|c| c.owner_user_id.as_ref().is_some_and(|id| owners.as_slice().contains(id)));
-    }
-    if let Some(orgs) = expanded {
-        sources.customers.retain(|c| c.owner_org_unit_id.as_ref().is_some_and(|id| orgs.contains(id)));
-    }
-    if let Some(group) = &query.owner_group {
-        sources.customers.retain(|c| matches_owner_group(c, Some(group)));
-    }
+    filter_current_owners(sources, query, expanded);
     if let Some(requested) = &query.customer_id {
         sources.customers.retain(|c| &c.id == requested);
     }
@@ -262,18 +252,40 @@ fn apply_request_filters(
     }
 }
 
-/// 现任分组下钻匹配当前主责或主责所属组织；空后缀仅匹配未知组织。
-fn matches_owner_group(customer: &CustomerFact, group: Option<&str>) -> bool {
-    let Some(group) = group else {
-        return true;
-    };
-    let Some((dimension, id)) = group.split_once(':') else {
-        return false;
-    };
-    match dimension {
-        "user" => customer.owner_user_id.as_deref().unwrap_or_default() == id,
-        "org" => customer.owner_org_unit_id.as_deref().unwrap_or_default() == id,
-        _ => false,
+/// 人员、组织和下钻条件同时匹配单据责任；客户名单只保留沉默客户。
+fn matches_current_owner(
+    user: &str,
+    org: Option<&str>,
+    query: &CurrentQualityQuery,
+    expanded: Option<&BTreeSet<String>>,
+) -> bool {
+    query.owner_user_ids.as_ref().is_none_or(|ids| ids.as_slice().iter().any(|id| id == user))
+        && expanded.is_none_or(|orgs| org.is_some_and(|id| orgs.contains(id)))
+        && query.owner_group.as_deref().is_none_or(|group| match group.split_once(':') {
+            Some(("user", id)) => user == id,
+            Some(("org", id)) => org.unwrap_or_default() == id,
+            _ => false,
+        })
+}
+
+fn filter_current_owners(
+    sources: &mut super::source::CurrentSnapshot,
+    query: &CurrentQualityQuery,
+    expanded: Option<&BTreeSet<String>>,
+) {
+    sources.orders.retain(|order| {
+        matches_current_owner(&order.sales_owner_user_id, Some(&order.business_org_unit_id), query, expanded)
+    });
+    sources.customers.retain(|customer| {
+        sources.orders.iter().any(|order| order.customer_id == customer.id)
+            || customer
+                .owners
+                .iter()
+                .any(|(user, org)| matches_current_owner(user, org.as_deref(), query, expanded))
+            || (customer.owners.is_empty() && matches_current_owner("", None, query, expanded))
+    });
+    for customer in &mut sources.customers {
+        customer.owners.retain(|(user, org)| matches_current_owner(user, org.as_deref(), query, expanded));
     }
 }
 
@@ -287,31 +299,7 @@ fn project_current(
     let mut rows = Vec::new();
     for customer in &sources.customers {
         let orders = orders_by_customer.get(&customer.id).map(Vec::as_slice).unwrap_or(&[]);
-        let (order_count, gross_total, unpriced, first, latest) =
-            summarize_orders(orders, &sources.revision_gross);
-        rows.push(
-            CurrentQualityRow::new(
-                format!("customer:{}", customer.id),
-                "customer".into(),
-                money(gross_total),
-            )
-            .with_customer(
-                Some(customer.id.clone()),
-                Some(customer.customer_no.clone()),
-                Some(customer.name.clone()),
-            )
-            .with_ownership(
-                customer.owner_user_id.clone(),
-                customer.owner_user_id.as_ref().and_then(|id| sources.account_names.get(id).cloned()),
-                customer.owner_org_unit_id.clone(),
-                customer.owner_org_unit_id.as_ref().and_then(|id| sources.org_names.get(id).cloned()),
-            )
-            .with_counts(order_count, unpriced)
-            .with_effective_range(
-                first.and_then(|at| effective_label(Some(at))),
-                latest.and_then(|at| effective_label(Some(at))),
-            ),
-        );
+        rows.extend(current_customer_rows(customer, orders, &sources, &query.dimension));
     }
     let grouped = group_current_rows(rows, &query.dimension, &sources);
     let totals = totals_for(&grouped);
@@ -320,6 +308,93 @@ fn project_current(
         view.empty_reason = Some(if has_period_orders { "filtered_empty" } else { "no_data" }.into());
     }
     view
+}
+
+/// 按单据负责销售和业务组织分摊客户业务；客户明细总额只计算一次。
+fn current_customer_rows(
+    customer: &CustomerFact,
+    orders: &[&QualityOrder],
+    sources: &super::source::CurrentSnapshot,
+    dimension: &str,
+) -> Vec<CurrentQualityRow> {
+    let groups = customer_order_groups(customer, orders, dimension);
+    groups
+        .into_iter()
+        .map(|((user, org), orders)| {
+            let (count, gross, unpriced, first, latest) = summarize_orders(&orders, &sources.revision_gross);
+            CurrentQualityRow::new(
+                format!(
+                    "customer:{}:{}:{}",
+                    customer.id,
+                    user.as_deref().unwrap_or(""),
+                    org.as_deref().unwrap_or("")
+                ),
+                "customer".into(),
+                money(gross),
+            )
+            .with_customer(
+                Some(customer.id.clone()),
+                Some(customer.customer_no.clone()),
+                Some(customer.name.clone()),
+            )
+            .with_ownership(
+                user.clone(),
+                user.as_ref().and_then(|id| sources.account_names.get(id).cloned()),
+                org.clone(),
+                org.as_ref().and_then(|id| sources.org_names.get(id).cloned()),
+            )
+            .with_counts(count, unpriced)
+            .with_effective_range(
+                first.and_then(|at| effective_label(Some(at))),
+                latest.and_then(|at| effective_label(Some(at))),
+            )
+        })
+        .collect()
+}
+
+type CurrentOwnerKey = (Option<String>, Option<String>);
+
+fn customer_order_groups<'a>(
+    customer: &CustomerFact,
+    orders: &[&'a QualityOrder],
+    dimension: &str,
+) -> BTreeMap<CurrentOwnerKey, Vec<&'a QualityOrder>> {
+    let mut groups: BTreeMap<CurrentOwnerKey, Vec<&QualityOrder>> = BTreeMap::new();
+    if dimension == "customer" {
+        let owners = orders.iter().map(|order| order.sales_owner_user_id.clone()).collect::<BTreeSet<_>>();
+        let orgs = orders.iter().map(|order| order.business_org_unit_id.clone()).collect::<BTreeSet<_>>();
+        let user = if orders.is_empty() {
+            customer.owner_user_id.clone()
+        } else if owners.len() == 1 {
+            owners.into_iter().next()
+        } else {
+            None
+        };
+        let org = if orders.is_empty() {
+            customer.owner_org_unit_id.clone()
+        } else if orgs.len() == 1 {
+            orgs.into_iter().next()
+        } else {
+            None
+        };
+        groups.insert((user, org), orders.to_vec());
+    } else {
+        for order in orders {
+            groups
+                .entry((Some(order.sales_owner_user_id.clone()), Some(order.business_org_unit_id.clone())))
+                .or_default()
+                .push(order);
+        }
+        if orders.is_empty() {
+            for (user, org) in &customer.owners {
+                groups.entry((Some(user.clone()), org.clone())).or_default();
+            }
+            if groups.is_empty() {
+                groups.insert((None, None), Vec::new());
+            }
+        }
+    }
+    groups
 }
 
 /// 按客户聚合订单引用；同一订单只归属其当前客户一次。
@@ -410,7 +485,12 @@ fn aggregate_group(rows: &[CurrentQualityRow]) -> (usize, Decimal, usize, usize)
             gross = gross.checked_add(amount).unwrap_or(Decimal::MAX);
         }
     }
-    (orders, gross, unpriced, rows.len())
+    (
+        orders,
+        gross,
+        unpriced,
+        rows.iter().filter_map(|row| row.customer_id.as_ref()).collect::<BTreeSet<_>>().len(),
+    )
 }
 
 /// 分组标签只用现任名称；未知分组单列，不用其他分组回填。
@@ -513,7 +593,7 @@ fn assemble_current(
             basis_label: BASIS_LABEL.into(),
             timezone: "Asia/Shanghai".into(),
         },
-        ownership_basis: "customer_current_assignment".into(),
+        ownership_basis: "sales_order_current_responsibility".into(),
         totals,
         rows: QualityRows { dimension: query.dimension.clone(), items: rows, total },
         filter_summary: current_filter_summary(query),
@@ -561,4 +641,86 @@ fn combined_version(customer_version: &str, sales_version: &str, view: &CurrentQ
     view.rows.items.iter().map(|r| &r.row_id).collect::<Vec<_>>().hash(&mut fingerprint);
     view.totals.order_count.hash(&mut fingerprint);
     format!("{customer_version}:{sales_version}:{:x}", fingerprint.finish())
+}
+
+#[cfg(test)]
+mod shared_sales_tests {
+    use super::super::source::CurrentSnapshot;
+    use super::*;
+
+    fn snapshot() -> CurrentSnapshot {
+        let orders = [("a", "sales-a", "org-a"), ("b", "sales-b", "org-b"), ("c", "sales-a", "org-a")]
+            .into_iter()
+            .map(|(id, owner, org)| QualityOrder {
+                id: id.into(),
+                order_no: id.into(),
+                version: 1,
+                customer_id: "customer".into(),
+                sales_owner_user_id: owner.into(),
+                business_org_unit_id: org.into(),
+                current_revision_id: Some(id.into()),
+                effective_at: Some(1),
+                attribution: None,
+            })
+            .collect();
+        CurrentSnapshot {
+            customers: vec![CustomerFact {
+                id: "customer".into(),
+                customer_no: "KH-1".into(),
+                name: "共用客户".into(),
+                owner_user_id: None,
+                owner_org_unit_id: None,
+                owners: vec![
+                    ("sales-a".into(), Some("org-a".into())),
+                    ("sales-b".into(), Some("org-b".into())),
+                ],
+            }],
+            orders,
+            revision_gross: BTreeMap::from([
+                ("a".into(), Decimal::from(10)),
+                ("b".into(), Decimal::from(20)),
+                ("c".into(), Decimal::from(5)),
+            ]),
+            org_names: BTreeMap::new(),
+            account_names: BTreeMap::new(),
+        }
+    }
+
+    fn query(dimension: &str) -> CurrentQualityQuery {
+        CurrentQualityQuery {
+            dimension: dimension.into(),
+            page: 1,
+            page_size: 20,
+            sort: "grossTotal:desc".into(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn customer_is_counted_once_and_business_amounts_follow_each_sales_owner() {
+        let customer = project_current(&query("customer"), snapshot());
+        assert_eq!(customer.rows.total, 1);
+        assert_eq!(customer.totals.order_count, 3);
+        assert_eq!(customer.totals.gross_total, "35.00");
+        assert!(customer.rows.items[0].owner_user_id.is_none());
+        let grouped = project_current(&query("owner_user"), snapshot());
+        assert_eq!(grouped.rows.total, 2);
+        assert_eq!(grouped.totals.gross_total, "35.00");
+        let sales_a =
+            grouped.rows.items.iter().find(|row| row.owner_user_id.as_deref() == Some("sales-a")).unwrap();
+        assert_eq!(sales_a.order_count, 2);
+        assert_eq!(sales_a.gross_total, "15.00");
+    }
+
+    #[test]
+    fn selecting_sales_owner_filters_orders_even_when_customer_is_shared() {
+        let mut sources = snapshot();
+        let mut selected = query("customer");
+        selected.owner_user_ids = Some(serde_json::from_str("\"sales-a\"").unwrap());
+        apply_request_filters(&mut sources, &selected, None);
+        let view = project_current(&selected, sources);
+        assert_eq!(view.totals.order_count, 2);
+        assert_eq!(view.totals.gross_total, "15.00");
+        assert_eq!(view.rows.items[0].owner_user_id.as_deref(), Some("sales-a"));
+    }
 }

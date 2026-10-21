@@ -163,8 +163,38 @@ impl CustomerAccess {
             return Err(deny_object(action));
         }
         let object = self.object_facts(customer_id, &access, &scope, executor).await?;
-        if !self.scope.allows(&access, &object)? {
+        if !self.allows_member_objects(&access, &object)? {
             return Err(deny_object(action));
+        }
+        Ok(access)
+    }
+
+    /// 证明当前客户资格；历史参与不授予新建业务资格。
+    ///
+    /// # 参数
+    /// * `actor` - 当前认证操作人
+    /// * `customer_id` - 新业务选择的客户
+    /// * `executor` - 原业务写入执行器
+    /// # 返回
+    /// 当前负责关系或明确的组织、公司范围允许时返回授权上下文。
+    /// # 错误
+    /// 仅有历史读取资格或客户不可见时拒绝。
+    pub async fn require_current(
+        &self,
+        actor: &AuditActor,
+        customer_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<CustomerResolvedScope> {
+        let (access, scope) = self.resolve(actor, "detail", executor).await?;
+        if self.db.customer_accounts().find_authorized(customer_id, &scope, executor).await?.is_none() {
+            return Err(Error::Forbidden("当前没有该客户的业务资格，请先分配负责销售".into()));
+        }
+        let mut objects = self.object_facts(customer_id, &access, &scope, executor).await?;
+        for object in &mut objects {
+            object.historical_read_participant = false;
+        }
+        if !self.allows_member_objects(&access, &objects)? {
+            return Err(Error::Forbidden("当前没有该客户的业务资格，请先分配负责销售".into()));
         }
         Ok(access)
     }
@@ -233,22 +263,57 @@ impl CustomerAccess {
         access: &CustomerResolvedScope,
         scope: &CustomerReadScope,
         executor: &mut dyn Executor,
-    ) -> Result<CustomerScopeObject> {
+    ) -> Result<Vec<CustomerScopeObject>> {
         let owners = self
             .db
             .customer_assignments()
             .current_owners(Some(&[id.to_string()]), None, business_date(access.as_of)?, executor)
             .await?;
-        let mut org_unit_id = None;
-        if let Some(owner) = owners.first() {
-            org_unit_id = self.scope.own_org(&owner.user_id, access.as_of, executor).await?;
+        let mut objects = Vec::new();
+        for owner in owners {
+            objects.push(CustomerScopeObject {
+                owned: scope.owned_customer_ids.iter().any(|value| value == id),
+                collaborating: false,
+                historical_read_participant: scope.historical_customer_ids.iter().any(|value| value == id),
+                org_unit_id: self.scope.own_org(&owner.user_id, access.as_of, executor).await?,
+            });
         }
-        Ok(CustomerScopeObject {
-            owned: scope.owned_customer_ids.iter().any(|value| value == id),
-            collaborating: scope.collaborative_customer_ids.iter().any(|value| value == id),
-            historical_read_participant: scope.historical_customer_ids.iter().any(|value| value == id),
-            org_unit_id,
-        })
+        if objects.is_empty() {
+            objects.push(CustomerScopeObject {
+                historical_read_participant: scope.historical_customer_ids.iter().any(|value| value == id),
+                ..Default::default()
+            });
+        }
+        Ok(objects)
+    }
+
+    /// 多名负责销售分别解释组织范围，角色并集与个人上限独立求交。
+    fn allows_member_objects(
+        &self,
+        access: &CustomerResolvedScope,
+        objects: &[CustomerScopeObject],
+    ) -> Result<bool> {
+        let mut role_scope = access.clone();
+        role_scope.user_limit = None;
+        let permitted = objects
+            .iter()
+            .map(|object| self.scope.allows(&role_scope, object))
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .any(|allowed| allowed);
+        if !permitted {
+            return Ok(false);
+        }
+        let Some(limit) = &access.user_limit else {
+            return Ok(true);
+        };
+        role_scope.role_clauses = vec![limit.clone()];
+        Ok(objects
+            .iter()
+            .map(|object| self.scope.allows(&role_scope, object))
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .any(|allowed| allowed))
     }
 
     /// 读取动作已由身份域证明后，补充该账号全部历史归属客户。

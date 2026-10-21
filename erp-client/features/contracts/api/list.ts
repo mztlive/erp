@@ -51,7 +51,7 @@ function mapListRow(row: BackendContractView): ContractListRow {
         salesOrderCount: 0,
         activeSalesOrderCount: 0,
         ownerLabel: row.owner_user_name?.trim() || "未指定",
-        ownerKind: "current_customer_owner",
+        ownerKind: "contract_sales_owner",
         allowedActions: actions.allowedActions,
         actionBlockers: actions.actionBlockers,
     }

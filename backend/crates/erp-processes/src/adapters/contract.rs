@@ -11,7 +11,8 @@ use erp_audit::{AuditActorLogs, AuditLog, AuditLogData, prepare_business_log};
 use erp_contract::{
     AccountNamePort, ContractAssignmentFact, ContractAuditPort, ContractParticipantPort, ContractScopePorts,
     ContractService, CustomerAccountFact, CustomerAssignmentFactsPort, CustomerFactsPort,
-    FailClosedContractDataScopePort, FailClosedContractParticipantPort, PreparedContractAudit,
+    Error as ContractError, FailClosedContractDataScopePort, FailClosedContractParticipantPort,
+    PreparedContractAudit,
 };
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::CustomerAccountId;
@@ -352,6 +353,24 @@ impl MongoContractAccounts {
 
 #[async_trait]
 impl AccountNamePort for MongoContractAccounts {
+    async fn ensure_enabled(
+        &self,
+        account_ids: &[String],
+        executor: &mut dyn Executor,
+    ) -> erp_contract::Result<()> {
+        for id in account_ids {
+            let account = self
+                .db
+                .accounts()
+                .find_account(id, executor)
+                .await
+                .map_err(map_identity_to_contract)?
+                .ok_or_else(|| ContractError::NotFound("共享销售账号不存在".into()))?;
+            account.ensure_can_login().map_err(|error| ContractError::ValidationError(error.to_string()))?;
+        }
+        Ok(())
+    }
+
     async fn names_by_ids(&self, account_ids: &[String]) -> erp_contract::Result<HashMap<String, String>> {
         self.db
             .accounts()

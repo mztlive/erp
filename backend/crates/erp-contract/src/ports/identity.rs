@@ -3,12 +3,26 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+use persistence_core::Executor;
 
 use crate::error::{Error, Result};
 
 /// Port contract uses to resolve owner display names without depending on `erp-identity`.
 #[async_trait]
 pub trait AccountNamePort: Send + Sync {
+    /// 在原写入事务中证明共享目标账号存在且启用。
+    ///
+    /// # 参数
+    /// * `account_ids` - 共享人员账号
+    /// * `executor` - 调用方事务执行器
+    /// # 返回
+    /// 所有账号均存在且可登录时成功。
+    /// # 错误
+    /// 未接线或任一账号失效时拒绝。
+    async fn ensure_enabled(&self, _account_ids: &[String], _executor: &mut dyn Executor) -> Result<()> {
+        Err(Error::Internal("共享账号校验端口未接线".into()))
+    }
+
     /// 按账号 ID 返回显示名。缺失的账号省略。
     ///
     /// # 参数

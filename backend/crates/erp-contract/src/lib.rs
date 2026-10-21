@@ -11,8 +11,8 @@ pub mod service;
 pub use application_core::PageView;
 pub use dto::contract::{
     ArchiveContractRevisionRequest, ContractDetailView, ContractListParams, ContractListScope,
-    ContractListView, ContractRevisionView, ContractView, CreateContractRequest, TerminateContractRequest,
-    UploadContractRequest, UploadContractView,
+    ContractListView, ContractRevisionView, ContractSalesAccessRequest, ContractView, CreateContractRequest,
+    TerminateContractRequest, UploadContractRequest, UploadContractView,
 };
 pub use entity::contract::snapshot::ContractSnapshot;
 pub use entity::contract::{

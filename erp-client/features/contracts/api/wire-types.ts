@@ -44,6 +44,7 @@ export type BackendContractRevision = {
 }
 
 export type BackendContractDetail = BackendContractView & {
+    shared_sales_user_ids?: string[]
     revisions: BackendContractRevision[]
 }
 

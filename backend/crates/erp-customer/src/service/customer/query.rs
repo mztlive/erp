@@ -1,14 +1,21 @@
 //! 客户列表与详情：统一消费 DataScope 快照。
 
+use std::slice;
+
 use application_core::AuditActor;
+use erp_core::common::time::BusinessDate;
+use persistence_core::NoTransaction;
 use validator::Validate;
 
 use super::CustomerService;
 use super::scope::{
     CustomerListView, CustomerSnapshot, ensure_page, ensure_scope_version, ensure_stable_snapshot,
 };
-use crate::dto::customer::{CustomerDetailView, CustomerListParams, CustomerView};
+use crate::dto::customer::{CustomerDetailView, CustomerListParams, CustomerOwnerView, CustomerView};
+use crate::entity::customer::CustomerAssignment;
 use crate::error::Result;
+use crate::repository::CustomerExt;
+use crate::repository::prelude::*;
 
 impl CustomerService {
     /// 分页查询客户角色列表。
@@ -94,16 +101,27 @@ impl CustomerService {
             self.party.identities_by_ids(std::slice::from_ref(&account.party_id)).await?.into_iter().next();
         let party_no = identity.as_ref().map(|fact| fact.party_no.clone());
         let legal_name = identity.as_ref().and_then(|fact| fact.legal_name.clone());
-        let owner_user_id = self.current_owner_user_id(&account.base.id).await?;
-        let owner_user_name = match owner_user_id.as_deref() {
-            Some(user_id) => self.accounts.names_by_ids(&[user_id.to_string()]).await?.remove(user_id),
-            None => None,
-        };
+        let assignments = self
+            .db
+            .customer_assignments()
+            .list_active_for_customers(
+                slice::from_ref(&account.base.id),
+                BusinessDate::today(),
+                &mut NoTransaction,
+            )
+            .await?;
+        let owner_ids = CustomerAssignment::owner_ids(&assignments);
+        let names = self.accounts.names_by_ids(&owner_ids).await?;
+        let owner_user_id = owner_ids.first().cloned();
         let mut view: CustomerView = account.into();
         view.party_no = party_no.clone();
         view.legal_name = legal_name.clone();
         view.owner_user_id = owner_user_id.clone();
-        view.owner_user_name = owner_user_name;
+        view.owner_user_name = owner_user_id.as_ref().and_then(|id| names.get(id).cloned());
+        view.owners = owner_ids
+            .into_iter()
+            .map(|user_id| CustomerOwnerView { user_name: names.get(&user_id).cloned(), user_id })
+            .collect();
         Ok(CustomerDetailView { account: view, party_no, legal_name, owner_user_id })
     }
 }
@@ -191,6 +209,7 @@ mod tests {
                 status: CustomerAccountStatus::Active,
                 owner_user_id: Some("sales-1".to_string()),
                 owner_user_name: Some("张三".to_string()),
+                owners: Vec::new(),
                 collaborator_count: 0,
                 scope_tags: vec![CustomerScope::AllAuthorized],
                 version: 1,

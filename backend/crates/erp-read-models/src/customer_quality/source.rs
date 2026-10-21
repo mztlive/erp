@@ -32,6 +32,8 @@ pub(super) const QUALITY_ORDER_LIMIT: usize =
 pub(super) struct QualityOrder {
     pub id: String,
     pub order_no: String,
+    pub sales_owner_user_id: String,
+    pub business_org_unit_id: String,
     pub version: u64,
     pub customer_id: String,
     pub current_revision_id: Option<String>,
@@ -103,7 +105,7 @@ impl CurrentSources {
     ) -> Result<CurrentSnapshot> {
         let customers = load_customer_facts(db, Some(&customer_ids), executor).await?;
         let revision_gross = load_revision_gross(db, orders, executor).await?;
-        let (org_names, account_names) = names_for_current(db, &customers, executor).await?;
+        let (org_names, account_names) = names_for_current(db, &customers, orders, executor).await?;
         Ok(CurrentSnapshot { customers, orders: orders.to_vec(), revision_gross, org_names, account_names })
     }
 }
@@ -159,6 +161,7 @@ pub(super) struct CustomerFact {
     pub customer_no: String,
     pub name: String,
     pub owner_user_id: Option<String>,
+    pub owners: Vec<(String, Option<String>)>,
     pub owner_org_unit_id: Option<String>,
 }
 
@@ -186,17 +189,21 @@ async fn load_customer_facts(
     let names = db.party().current_legal_names_by_party_ids(&party_ids, executor).await?;
     let active =
         db.customer_assignments().list_active_for_customers(&unique, today_shanghai(), executor).await?;
-    let owners = active
-        .iter()
-        .filter(|a| a.assignment_role == AssignmentRole::Owner)
-        .map(|a| (a.customer_id.to_string(), a.user_id.clone()))
-        .collect::<BTreeMap<_, _>>();
-    let orgs = owner_orgs(db, owners.values().cloned().collect(), executor).await?;
+    let mut owners: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for assignment in active.iter().filter(|item| item.assignment_role == AssignmentRole::Owner) {
+        owners.entry(assignment.customer_id.to_string()).or_default().insert(assignment.user_id.clone());
+    }
+    let users = owners.values().flat_map(|ids| ids.iter().cloned()).collect();
+    let orgs = owner_orgs(db, users, executor).await?;
     Ok(accounts
         .into_iter()
         .map(|account| {
             let id = account.base.id.clone();
-            let owner = owners.get(&id).cloned();
+            let members = owners
+                .get(&id)
+                .map(|ids| ids.iter().map(|user| (user.clone(), orgs.get(user).cloned())).collect::<Vec<_>>())
+                .unwrap_or_default();
+            let owner = (members.len() == 1).then(|| members[0].0.clone());
             let org = owner.as_ref().and_then(|user| orgs.get(user).cloned());
             CustomerFact {
                 name: names
@@ -207,6 +214,7 @@ async fn load_customer_facts(
                 id,
                 owner_org_unit_id: org,
                 owner_user_id: owner,
+                owners: members,
             }
         })
         .collect())
@@ -244,6 +252,7 @@ async fn load_customer_names(
 async fn names_for_current(
     db: &Database,
     customers: &[CustomerFact],
+    orders: &[QualityOrder],
     executor: &mut dyn Executor,
 ) -> Result<(BTreeMap<String, String>, BTreeMap<String, String>)> {
     let mut org_ids = BTreeSet::new();
@@ -255,6 +264,18 @@ async fn names_for_current(
         if let Some(user) = &customer.owner_user_id {
             user_ids.insert(user.clone());
         }
+    }
+    for customer in customers {
+        for (user, org) in &customer.owners {
+            user_ids.insert(user.clone());
+            if let Some(org) = org {
+                org_ids.insert(org.clone());
+            }
+        }
+    }
+    for order in orders {
+        user_ids.insert(order.sales_owner_user_id.clone());
+        org_ids.insert(order.business_org_unit_id.clone());
     }
     let org_names = org_names_by_ids(db, &org_ids.into_iter().collect::<Vec<_>>(), executor).await?;
     let account_names = names_by_ids(db, &user_ids.into_iter().collect::<Vec<_>>(), executor).await?;
@@ -326,6 +347,8 @@ async fn load_orders(
             id: order.base.id.clone(),
             version: order.base.version,
             order_no: order.order_no.clone(),
+            sales_owner_user_id: order.sales_owner_user_id.clone(),
+            business_org_unit_id: order.business_org_unit_id.clone(),
             customer_id: order.customer_id.to_string(),
             current_revision_id: order.stable.current_revision_id.clone(),
             attribution: order.attribution.clone(),

@@ -35,6 +35,7 @@ pub mod access;
 mod archive;
 mod company;
 mod query;
+mod sales_access;
 mod scope;
 
 pub use access::ContractAccess;
@@ -298,12 +299,16 @@ impl ContractService {
             .contract_revisions()
             .list_by_contract(&contract.base.id.clone().into(), &mut NoTransaction)
             .await?;
+        let shared_sales_user_ids = contract.shared_sales_user_ids.clone();
         let view: ContractView = contract.into();
-        let owner =
-            self.list_customer_facts(std::slice::from_ref(&view.customer_id)).await?.into_iter().next();
+        let names = match &view.owner_user_id {
+            Some(id) => self.accounts.names_by_ids(std::slice::from_ref(id)).await?,
+            None => Default::default(),
+        };
         Ok(ContractDetailView {
-            owner_user_id: owner.as_ref().and_then(|c| c.owner_id.clone()),
-            owner_user_name: owner.filter(|c| c.owner_id.is_some()).map(|c| c.owner),
+            shared_sales_user_ids,
+            owner_user_name: view.owner_user_id.as_ref().and_then(|id| names.get(id).cloned()),
+            owner_user_id: view.owner_user_id,
             id: view.id,
             contract_no: view.contract_no,
             customer_id: view.customer_id,

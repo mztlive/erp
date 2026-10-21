@@ -6,6 +6,7 @@
 mod create;
 mod facts;
 mod idempotency;
+mod identity;
 mod numbering;
 mod query;
 mod sensitive;
@@ -20,6 +21,7 @@ use mongodb::Database;
 use crate::{Error, Result};
 
 /// 完整客户资料的根级服务。
+#[derive(Clone)]
 pub struct CustomerProfileService {
     db: Database,
     sensitive_data: Arc<SensitiveDataCodec>,

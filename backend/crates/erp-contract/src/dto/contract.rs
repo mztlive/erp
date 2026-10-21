@@ -350,9 +350,9 @@ pub struct ContractView {
     pub current_revision: Option<ContractRevisionView>,
     /// 客户编号。
     pub customer_no: Option<String>,
-    /// 当前客户负责人账号。
+    /// 合同独立负责销售账号。
     pub owner_user_id: Option<String>,
-    /// 当前客户负责人显示名。
+    /// 合同独立负责销售显示名。
     pub owner_user_name: Option<String>,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
@@ -395,10 +395,27 @@ pub struct ContractRevisionView {
     pub created_at: u64,
 }
 
+/// 本合同明确共享销售的版本化更新命令。
+#[derive(Debug, Clone, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+pub struct ContractSalesAccessRequest {
+    /// 打开名单时的合同版本。
+    #[validate(range(min = 1))]
+    pub version: u64,
+    /// 完整共享名单；空数组表示取消全部共享。
+    #[validate(length(max = 100))]
+    pub shared_sales_user_ids: Vec<String>,
+    /// 本次调整原因。
+    #[validate(custom(function = "non_blank", message = "请填写调整原因"))]
+    pub change_reason: String,
+}
+
 /// 合同详情视图（合同 + 全部版本时间线，W04 对象中心）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ContractDetailView {
-    /// 当前客户跟进负责人。
+    /// 明确授予本合同读取与选用资格的销售。
+    pub shared_sales_user_ids: Vec<String>,
+    /// 合同独立负责销售。
     pub owner_user_id: Option<String>,
     pub owner_user_name: Option<String>,
     /// 实体主键。
@@ -439,7 +456,7 @@ impl From<crate::entity::contract::Contract> for ContractView {
             current_revision_id: contract.stable.current_revision_id,
             current_revision: None,
             customer_no: None,
-            owner_user_id: None,
+            owner_user_id: (!contract.sales_owner_user_id.is_empty()).then_some(contract.sales_owner_user_id),
             owner_user_name: None,
             created_at: contract.base.created_at,
             version: contract.base.version,
@@ -692,4 +709,19 @@ pub struct ContractListView {
     #[serde(flatten)]
     pub page: PageView<ContractView>,
     pub metrics: ContractMetrics,
+}
+
+#[cfg(test)]
+mod sales_access_tests {
+    use super::*;
+    #[test]
+    fn sharing_request_rejects_forged_owner_and_missing_reason() {
+        let forged = serde_json::json!({"version":1,"shared_sales_user_ids":["sales-b"],"change_reason":"框架合同共用","sales_owner_user_id":"sales-b"});
+        assert!(serde_json::from_value::<ContractSalesAccessRequest>(forged).is_err());
+        let request: ContractSalesAccessRequest = serde_json::from_value(
+            serde_json::json!({"version":1,"shared_sales_user_ids":["sales-b"],"change_reason":" "}),
+        )
+        .unwrap();
+        assert!(request.validate().is_err());
+    }
 }

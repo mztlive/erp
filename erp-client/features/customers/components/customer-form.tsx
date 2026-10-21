@@ -2,10 +2,7 @@
 
 import * as React from "react"
 
-import {
-    ConflictResolutionDialog,
-    DiscardConfirmDialog,
-} from "@/components/business"
+import { DiscardConfirmDialog } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { useSelector } from "@tanstack/react-form"
 import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
@@ -30,6 +27,7 @@ import {
     buildDefaults,
     buildFormSubmission,
     newIdempotencyKey,
+    type FormValues,
 } from "@/features/customers/components/customer-form-values"
 import {
     AddressRowsSection,
@@ -41,6 +39,10 @@ import {
     CustomerFormActionBar,
     CustomerFormResultPanel,
 } from "@/features/customers/components/customer-form-feedback"
+import { CustomerConflictDialog } from "./customer-conflict-dialog"
+import { Button } from "@/components/ui/button"
+import { NativeCheckbox } from "@/components/ui/checkbox"
+import { Label } from "@/components/ui/label"
 import { useCustomerFormDirtyGuard } from "@/features/customers/hooks/use-customer-form-dirty-guard"
 
 /**
@@ -109,16 +111,20 @@ export function CustomerForm({
     )
     const [conflictOpen, setConflictOpen] = React.useState(false)
 
+    const [baseline, setBaseline] = React.useState(customer)
+    const [conflictDraft, setConflictDraft] = React.useState<FormValues | null>(
+        null,
+    )
     const defaults = React.useMemo(
-        () => buildDefaults(mode, customer),
-        [customer, mode],
+        () => buildDefaults(mode, baseline),
+        [baseline, mode],
     )
 
     const form = useAppForm({
         defaultValues: defaults,
         validators: { onChange: mode === "create" ? createSchema : editSchema },
         onSubmit: async ({ value }) => {
-            const input = buildFormSubmission(mode, value, customer, {
+            const input = buildFormSubmission(mode, value, baseline, {
                 canWriteContacts,
                 canWriteAddresses,
                 canWriteBanks,
@@ -136,6 +142,7 @@ export function CustomerForm({
 
             setResult(response)
             if (response.outcome === "conflict") {
+                setConflictDraft(structuredClone(value))
                 setConflictOpen(true)
             }
             if (response.outcome === "succeeded") {
@@ -309,6 +316,35 @@ export function CustomerForm({
                 </div>
             )}
 
+            {mode === "create" ? (
+                <form.AppField
+                    name="reuseExistingParty"
+                    children={(field) => (
+                        <div className="space-y-2 rounded-lg border p-3">
+                            <div className="flex items-center gap-2">
+                                <NativeCheckbox
+                                    id="customers-form-reuse-party"
+                                    checked={field.state.value}
+                                    onCheckedChange={field.handleChange}
+                                    onBlur={field.handleBlur}
+                                    disabled={isPending}
+                                    aria-describedby="customers-form-reuse-party-help"
+                                />
+                                <Label htmlFor="customers-form-reuse-party">
+                                    复用已有企业资料
+                                </Label>
+                            </div>
+                            <p
+                                id="customers-form-reuse-party-help"
+                                className="text-sm text-muted-foreground"
+                            >
+                                同一企业已登记为供应商等主体时，沿用已有名称、简称、信用代码、联系人、地址和银行账户，只新增客户档案及付款条件；尚未建档时按本次填写内容创建。
+                            </p>
+                        </div>
+                    )}
+                />
+            ) : null}
+
             {canWriteContacts ? (
                 <ContactRowsSection form={form} mode={mode} grouped={grouped} />
             ) : null}
@@ -350,60 +386,37 @@ export function CustomerForm({
                 onResetSession={resetSession}
             />
 
-            {result?.outcome === "conflict" ? (
-                <ConflictResolutionDialog
+            {mode === "edit" && result?.outcome === "conflict" ? (
+                <Button
+                    id="customers-form-review-conflict"
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                        setConflictDraft(structuredClone(form.state.values))
+                        setConflictOpen(true)
+                    }}
+                >
+                    核对最新资料
+                </Button>
+            ) : null}
+            {mode === "edit" && baseline && conflictDraft ? (
+                <CustomerConflictDialog
                     open={conflictOpen}
                     onOpenChange={setConflictOpen}
-                    title={mode === "create" ? "存在重复候选" : undefined}
-                    description={result.message}
-                    currentVersion={
-                        mode === "create"
-                            ? "既有主体候选"
-                            : `v${result.serverRevisionNo} · 数据版本 ${result.serverLockVersion}`
-                    }
-                    localBaseline={
-                        mode === "create"
-                            ? "本次输入"
-                            : `v${customer!.currentRevision.revisionNo} · 数据版本 ${customer!.lockVersion}`
-                    }
-                    actor={result.actor}
-                    changedAt={result.changedAt}
-                    diff={
-                        mode === "create" ? (
-                            <p className="text-sm">
-                                法定名称：{result.serverLegalName || "（候选）"}
-                                。系统不会自动合并主体。
-                            </p>
-                        ) : (
-                            <ul className="list-inside list-disc space-y-1 text-sm">
-                                <li>
-                                    系统现有法定名称：{result.serverLegalName}
-                                </li>
-                                <li>
-                                    系统现有简称：
-                                    {result.serverShortName ?? "—"}
-                                </li>
-                                <li>
-                                    系统现有信用代码：
-                                    {result.serverUnifiedCreditCode ?? "—"}
-                                </li>
-                                <li>
-                                    你输入的内容仍保留在表单中，未写入业务记录。
-                                </li>
-                            </ul>
-                        )
-                    }
-                    onReload={() => {
-                        setConflictOpen(false)
-                        setIdempotencyKey(
-                            newIdempotencyKey(
-                                mode === "create" ? "create" : "revise",
-                            ),
-                        )
+                    baseline={baseline}
+                    draft={conflictDraft}
+                    onResolved={(latest, values) => {
+                        setBaseline(latest)
+                        setIdempotencyKey(newIdempotencyKey("revise"))
+                        form.reset(buildDefaults("edit", latest))
+                        for (const key of Object.keys(
+                            values,
+                        ) as (keyof FormValues)[]) {
+                            form.setFieldValue(key, values[key])
+                        }
                         setResult(null)
+                        setConflictOpen(false)
                     }}
-                    onSaveCopy={() => setConflictOpen(false)}
-                    onCompare={() => setConflictOpen(false)}
                 />
             ) : null}
 

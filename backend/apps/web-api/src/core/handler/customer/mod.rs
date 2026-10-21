@@ -14,6 +14,7 @@ use erp_customer::{
     RevealCustomerSensitiveRequest, SaveCustomerProfileRequest, SensitiveFieldKind, UpdateCustomerRequest,
 };
 use erp_identity::Permission;
+use erp_processes::adapters::{contract_access, customer_access, funds_access_with_rbac};
 use erp_read_models::{CustomerCenterReadService, CustomerCenterReceivableView, CustomerCenterRelatedView};
 
 use crate::app_state::AppState;
@@ -145,7 +146,15 @@ pub async fn customer_center_related(
     ensure_customer_access(&state, &actor, "detail", &id).await?;
     ensure_permission(&state, &subject, "contract:list").await?;
     ensure_permission(&state, &subject, "sales_order:list").await?;
-    let view = CustomerCenterReadService::new(state.db()).related(&id, &actor).await?;
+    let view = CustomerCenterReadService::new(
+        state.db(),
+        state.rbac(),
+        contract_access(state.db(), state.rbac()),
+        customer_access(state.db(), state.rbac()),
+        funds_access_with_rbac(state.db(), state.rbac()),
+    )
+    .related(&id, &actor)
+    .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -165,7 +174,15 @@ pub async fn customer_center_receivable(
 ) -> Result<CustomerCenterReceivableView> {
     ensure_customer_access(&state, &actor, "detail", &id).await?;
     ensure_permission(&state, &subject, "receivable_account:list").await?;
-    let view = CustomerCenterReadService::new(state.db()).receivable(&id, &actor).await?;
+    let view = CustomerCenterReadService::new(
+        state.db(),
+        state.rbac(),
+        contract_access(state.db(), state.rbac()),
+        customer_access(state.db(), state.rbac()),
+        funds_access_with_rbac(state.db(), state.rbac()),
+    )
+    .receivable(&id, &actor)
+    .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -520,10 +537,47 @@ pub(crate) async fn ensure_customer_access(
 
 #[cfg(test)]
 mod tests {
-    use axum::extract::Query;
-    use axum::http::Uri;
+    use axum::body::Body;
+    use axum::extract::{FromRequest, Query};
+    use axum::http::{Request, StatusCode, Uri};
+    use erp_customer::{CustomerProfileOperation, Error as CustomerError};
+    use serde_json::json;
 
     use super::*;
+
+    #[tokio::test]
+    async fn customer_profile_http_requires_explicit_boolean_reuse_consent() {
+        let body = json!({
+            "idempotency_key": "customer-http-reuse", "legal_name": "已有供应商",
+            "effective_from": "2026-10-21", "change_reason": "建立客户角色"
+        });
+        for consent in [None, Some(json!(false)), Some(json!(true)), Some(json!("true"))] {
+            let mut payload = body.clone();
+            if let Some(value) = &consent {
+                payload["reuse_existing_party"] = value.clone();
+            }
+            let request = Request::builder()
+                .header("content-type", "application/json")
+                .body(Body::from(payload.to_string()))
+                .unwrap();
+            let decoded = Json::<SaveCustomerProfileRequest>::from_request(request, &()).await;
+            if consent == Some(json!("true")) {
+                assert_eq!(decoded.unwrap_err().status(), StatusCode::UNPROCESSABLE_ENTITY);
+                continue;
+            }
+            let Json(mut request) = decoded.unwrap();
+            assert_eq!(request.reuse_existing_party, consent == Some(json!(true)));
+            assert!(request.validate_structure(CustomerProfileOperation::Create).is_ok());
+            if request.reuse_existing_party {
+                request.expected_customer_version = Some(1);
+                request.expected_party_version = Some(1);
+                assert!(matches!(
+                    request.validate_structure(CustomerProfileOperation::Update),
+                    Err(CustomerError::ValidationError(_))
+                ));
+            }
+        }
+    }
 
     /// 客户 Query 解码必须消费范围版本与组织筛选，并拒绝旧姓名参数。
     ///

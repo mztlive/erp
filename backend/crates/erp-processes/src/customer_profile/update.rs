@@ -10,6 +10,7 @@ use erp_customer::{
     CustomerProfileReplayContext, SaveCustomerProfileRequest,
 };
 use erp_party::repository::prelude::*;
+use erp_party::service::party::identity::ensure_identity_available;
 use erp_party::{Party, PartyExt, PartyRevision, PartyRevisionData, PartyUpdate};
 use id_generator::next_id;
 use mongodb::Database;
@@ -53,7 +54,7 @@ impl CustomerProfileService {
         let prepared = self.prepare_update(customer_id, req, replay.clone(), actor).await?;
         let intended = prepared.result.clone();
         let transaction = self.commit_update(customer_id, prepared, actor).await;
-        self.resolve_transaction(transaction, intended, &replay).await
+        self.resolve_transaction(transaction.map(|()| intended), &replay).await
     }
 
     /// 在同一写入事务内重验对象范围并持久化修订。
@@ -181,6 +182,7 @@ impl PreparedUpdate {
 
     /// 将根修订、事实差异、幂等结果与审计写入同一事务。
     async fn persist(mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
+        ensure_identity_available(db, &self.party, &self.revision, executor).await?;
         db.party_revisions().create(&self.revision, executor).await?;
         db.parties().update(&mut self.party, executor).await?;
         db.customer_accounts().update(&mut self.account, executor).await?;

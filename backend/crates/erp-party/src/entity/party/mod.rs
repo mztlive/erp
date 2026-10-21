@@ -18,6 +18,7 @@ mod close;
 pub mod company;
 mod content_match;
 mod entity;
+mod identity;
 pub mod party_address;
 pub mod party_bank_account;
 pub mod party_contact;

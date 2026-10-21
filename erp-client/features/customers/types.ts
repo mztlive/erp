@@ -268,6 +268,7 @@ export type CreateCustomerBankAccountInput = Readonly<{
 }>
 
 export type CreateCustomerInput = Readonly<{
+    reuseExistingParty?: boolean
     legalName: string
     shortName?: string
     unifiedCreditCode?: string
@@ -292,13 +293,6 @@ export type CustomerMutationResult =
     | {
           outcome: "conflict"
           message: string
-          serverLockVersion: number
-          serverRevisionNo: number
-          serverLegalName: string
-          serverShortName?: string
-          serverUnifiedCreditCode?: string
-          actor: string
-          changedAt: string
       }
     | {
           outcome: "unknown"

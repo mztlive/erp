@@ -138,6 +138,9 @@ async fn load_list_filter_and_search(
     let (customer_ids, historical_contract_ids) =
         apply_list_filters(db, data_scope, assignments, context, scope, query, executor).await?;
     let mut filter = list_filter(query, customer_ids, historical_contract_ids);
+    filter.authorized_contract_ids = scope.authorized_contract_ids.clone();
+    filter.assigned_user_id = (query.scope == ContractListScope::Assigned).then(|| context.user_id.clone());
+    filter.owner_user_ids = requested_contract_owners(data_scope, context, query, executor).await?;
     let versions = db.contract().query_versions(&filter, executor).await?;
     if versions.len() > 10_000 {
         return Err(Error::ValidationError(
@@ -149,12 +152,15 @@ async fn load_list_filter_and_search(
         super::query::list_customer_facts_with(customers, assignments, accounts, &ids, as_of, executor)
             .await?;
     filter.require_existing_customers(customer_facts.iter().map(|fact| fact.id.clone()).collect());
+    let owner_ids = db.contract().list_owner_ids(&filter, executor).await?;
+    let owner_names = accounts.names_by_ids(&owner_ids).await?;
     let search = ContractSearch {
         q: query.q.clone(),
         metric: query.metric,
         settlement_party_id: query.settlement_party_id.clone(),
         owner_user_ids: query.owner_user_ids.clone(),
         customers: customer_facts,
+        owners: owner_names,
     };
     Ok((filter, search, versions))
 }
@@ -195,15 +201,16 @@ async fn finish_list_snapshot(
     context.scope_version =
         format!("{}:{:x}", context.scope_version, super::access::stable_fingerprint(&fingerprint));
     let total = result.total();
-    let items = super::query::contract_rows(db, result.items, &search.customers, executor).await?;
+    let items =
+        super::query::contract_rows(db, result.items, &search.customers, &search.owners, executor).await?;
     let view = ContractListView {
-        ownership_basis: "current_customer_owner",
+        ownership_basis: "contract_sales_owner",
         scope_version: String::new(),
         policy_version: 0,
         organization_version: 0,
         as_of: String::new(),
         empty_reason: None,
-        scope_summary: "合同当前客户主负责人、负责人所属组织及合法单据参与",
+        scope_summary: "合同负责销售、其所属组织、明确共享及合法单据参与",
         page: PageView { items, total, page: filter.page, page_size: filter.page_size },
         metrics: result.metrics.into_iter().next().unwrap_or_default(),
     };
@@ -338,6 +345,9 @@ fn list_filter(
         customer_id: None,
         customer_ids,
         historical_contract_ids,
+        authorized_contract_ids: None,
+        assigned_user_id: None,
+        owner_user_ids: None,
         status: query.status,
         page: query.paging.page,
         page_size: query.paging.page_size,
@@ -378,9 +388,7 @@ async fn apply_list_filters(
     let as_of = super::access::business_date(context.as_of)?;
     let mut ids = scope.authorized_customer_ids.clone();
     let mut constraint: Option<Vec<String>> = None;
-    constraint = intersect_ids(constraint, assignment_filter(scope, query.scope));
-    constraint =
-        apply_org_unit_filter(data_scope, assignments, context, constraint, query, as_of, executor).await?;
+    let _ = (data_scope, assignments, as_of);
     if let Some(customer_id) = &query.customer_id {
         constraint = intersect_ids(constraint, Some(vec![customer_id.clone()]));
     }
@@ -437,36 +445,15 @@ async fn narrow_history(
         .collect())
 }
 
-/// 按请求中的组织筛选收窄已授权客户集合。
-///
-/// # 参数
-/// * `data_scope` - 组织展开与成员事实 Port
-/// * `assignments` - 当前主责事实
-/// * `context` - 已解析的合同范围事实
-/// * `ids` - 当前授权客户集合
-/// * `query` - 归一化查询
-/// * `as_of` - 客户归属自然日
-/// * `executor` - 调用方执行器
-///
-/// # 返回
-/// 无组织筛选时原样返回；否则返回主负责人属于筛选组织的客户。
-///
-/// # 错误
-/// 包含下级但未提供组织、展开失败或成员超限时拒绝。
-///
-/// # 关键业务约束
-/// 组织筛选只看当前主负责人所属组织，不得用协作人员或签约经办组织代替。
-async fn apply_org_unit_filter(
+/// 请求组织只按合同独立负责销售收窄，不按客户负责名单解释。
+async fn requested_contract_owners(
     data_scope: &dyn ContractDataScopePort,
-    assignments: &dyn crate::ports::CustomerAssignmentFactsPort,
     context: &ContractResolvedScope,
-    ids: Option<Vec<String>>,
     query: &ContractListQuery,
-    as_of: erp_core::common::time::BusinessDate,
     executor: &mut dyn persistence_core::Executor,
 ) -> Result<Option<Vec<String>>> {
     let Some(org_ids) = &query.org_unit_ids else {
-        return Ok(ids);
+        return Ok(None);
     };
     if query.include_descendants == Some(true) && org_ids.as_slice().is_empty() {
         return Err(Error::ValidationError("包含下级时必须提供组织筛选".into()));
@@ -478,37 +465,7 @@ async fn apply_org_unit_filter(
     if members.len() > 10_000 {
         return Err(Error::ValidationError("组织成员超过查询上限，请收窄组织筛选".into()));
     }
-    if members.is_empty() {
-        return Ok(Some(Vec::new()));
-    }
-    Ok(Some(assignments.current_owner_customer_ids(ids.as_deref(), Some(&members), as_of, executor).await?))
-}
-
-/// 目录范围标签转换为授权集合上的额外收窄。
-///
-/// # 参数
-/// * `scope` - 已证明的合同范围
-/// * `requested` - 页面请求的目录范围
-///
-/// # 返回
-/// All 不额外收窄；Assigned 返回当前主责与协作客户。
-///
-/// # 错误
-/// 无。
-///
-/// # 关键业务约束
-/// 目录范围不是授权来源，不能把 All 解释为公司范围。
-fn assignment_filter(scope: &ContractReadScope, requested: ContractListScope) -> Option<Vec<String>> {
-    match requested {
-        ContractListScope::All => None,
-        ContractListScope::Assigned => {
-            let mut ids = scope.owned_customer_ids.clone();
-            ids.extend(scope.collaborative_customer_ids.iter().cloned());
-            ids.sort();
-            ids.dedup();
-            Some(ids)
-        },
-    }
+    Ok(Some(members))
 }
 
 #[cfg(test)]
@@ -546,22 +503,5 @@ mod tests {
             other => panic!("expected DATA_SCOPE_CHANGED, got {other:?}"),
         }
         assert!(ensure_stable_snapshot("v1", "v1").is_ok());
-    }
-
-    #[test]
-    fn directory_scope_does_not_grant_company_access() {
-        let scope = ContractReadScope {
-            roles: vec![],
-            user_limit: None,
-            historical_contract_ids: vec![],
-            owned_customer_ids: vec!["c-own".into()],
-            collaborative_customer_ids: vec!["c-collab".into()],
-            authorized_customer_ids: Some(vec!["c-1".into()]),
-        };
-        assert!(assignment_filter(&scope, ContractListScope::All).is_none());
-        assert_eq!(
-            assignment_filter(&scope, ContractListScope::Assigned),
-            Some(vec!["c-collab".into(), "c-own".into()])
-        );
     }
 }

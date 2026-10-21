@@ -1,7 +1,10 @@
 //! 客户资料详情查询与视图映射。
 
+use std::collections::HashMap;
+
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::PartyId;
+use erp_customer::dto::customer::CustomerOwnerView;
 use erp_customer::repository::prelude::*;
 use erp_customer::{
     AssignmentRole, CustomerAccount, CustomerAccountId, CustomerAccountStatus, CustomerActionBlockerView,
@@ -49,22 +52,21 @@ impl CustomerProfileService {
             .load_current_facts(&account.party_id, BusinessDate::today(), &mut NoTransaction)
             .await?;
         let sensitive_fields = self.sensitive_fields(customer_id, &contacts, &addresses, &bank_accounts)?;
-        let mut detail = build_detail(ProfileDetailParts {
-            account,
-            party,
-            current_revision,
-            revisions,
-            assignments,
-            contacts,
-            addresses,
-            tax_profiles,
-            bank_accounts,
-            sensitive_fields,
-        });
-        for assignment in &mut detail.assignments {
-            assignment.user_name =
-                account_names.get(&assignment.user_id).cloned().unwrap_or_else(|| assignment.user_id.clone());
-        }
+        let detail = build_detail(
+            ProfileDetailParts {
+                account,
+                party,
+                current_revision,
+                revisions,
+                assignments,
+                contacts,
+                addresses,
+                tax_profiles,
+                bank_accounts,
+                sensitive_fields,
+            },
+            &account_names,
+        );
         Ok(detail)
     }
 
@@ -120,7 +122,7 @@ struct ProfileDetailParts {
 }
 
 /// 构造客户资料完整详情视图。
-fn build_detail(parts: ProfileDetailParts) -> CustomerProfileDetailView {
+fn build_detail(parts: ProfileDetailParts, names: &HashMap<String, String>) -> CustomerProfileDetailView {
     let ProfileDetailParts {
         account,
         party,
@@ -133,21 +135,11 @@ fn build_detail(parts: ProfileDetailParts) -> CustomerProfileDetailView {
         bank_accounts,
         sensitive_fields,
     } = parts;
-    let today = BusinessDate::today();
-    let owner_user_id = assignments
-        .iter()
-        .find(|item| item.assignment_role == AssignmentRole::Owner && item.is_active_on(today))
-        .map(|item| item.user_id.clone());
-    let collaborator_count = assignments
-        .iter()
-        .filter(|item| item.assignment_role == AssignmentRole::Collaborator && item.is_active_on(today))
-        .count() as u32;
     let mut customer = CustomerView::from(account);
     customer.party_no = Some(party.party_no.clone());
     customer.legal_name = Some(current_revision.legal_name.clone());
     customer.short_name = current_revision.short_name.clone();
-    customer.owner_user_id = owner_user_id;
-    customer.collaborator_count = collaborator_count;
+    populate_owners(&mut customer, &assignments, names, BusinessDate::today());
     revisions.sort_by_key(|item| std::cmp::Reverse(item.revision.revision_no));
     let action_blockers = customer_status_blockers(customer.status);
     CustomerProfileDetailView {
@@ -157,7 +149,14 @@ fn build_detail(parts: ProfileDetailParts) -> CustomerProfileDetailView {
         unified_credit_code: party.unified_credit_code,
         current_revision: super::views::party_revision_view(current_revision),
         revisions: revisions.into_iter().map(super::views::party_revision_view).collect(),
-        assignments: assignments.into_iter().map(CustomerAssignmentView::from).collect(),
+        assignments: assignments
+            .into_iter()
+            .map(|assignment| {
+                let mut view = CustomerAssignmentView::from(assignment);
+                view.user_name = names.get(&view.user_id).cloned().unwrap_or_else(|| view.user_id.clone());
+                view
+            })
+            .collect(),
         contacts: contacts.into_iter().map(super::views::party_contact_view).collect(),
         addresses: addresses.into_iter().map(super::views::party_address_view).collect(),
         tax_profiles: tax_profiles.into_iter().map(super::views::party_tax_profile_view).collect(),
@@ -166,6 +165,28 @@ fn build_detail(parts: ProfileDetailParts) -> CustomerProfileDetailView {
         allowed_actions: Vec::new(),
         action_blockers,
     }
+}
+
+/// 所有当前负责销售与单负责人兼容字段共享同一有效期口径。
+fn populate_owners(
+    customer: &mut CustomerView,
+    assignments: &[CustomerAssignment],
+    names: &HashMap<String, String>,
+    today: BusinessDate,
+) {
+    let active = assignments
+        .iter()
+        .filter(|item| !item.base.is_deleted() && item.is_active_on(today))
+        .cloned()
+        .collect::<Vec<_>>();
+    customer.owners = CustomerAssignment::owner_ids(&active)
+        .into_iter()
+        .map(|user_id| CustomerOwnerView { user_name: names.get(&user_id).cloned(), user_id })
+        .collect();
+    customer.owner_user_id = customer.owners.first().map(|owner| owner.user_id.clone());
+    customer.owner_user_name = customer.owners.first().and_then(|owner| owner.user_name.clone());
+    customer.collaborator_count =
+        active.iter().filter(|item| item.assignment_role == AssignmentRole::Collaborator).count() as u32;
 }
 
 /// 返回客户状态产生的业务动作阻断原因。
@@ -190,4 +211,109 @@ pub(super) fn customer_status_blockers(status: CustomerAccountStatus) -> Vec<Cus
             message: "客户已停用，请先恢复客户后再发起新业务".to_string(),
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use erp_core::ids::{CustomerAssignmentId, PartyRevisionId};
+    use erp_customer::{CustomerAccountData, CustomerAssignmentData};
+    use erp_party::{PartyData, PartyKind, PartyRevisionData, PartyStatus};
+
+    use super::*;
+
+    #[test]
+    fn canonical_profile_detail_includes_every_current_owner_and_display_name() {
+        let party_id = PartyId::new("shared-party");
+        let account = CustomerAccount::new(
+            CustomerAccountId::new("customer"),
+            CustomerAccountData {
+                party_id: party_id.clone(),
+                customer_no: "KH-1".into(),
+                default_payment_term_id: None,
+                status: CustomerAccountStatus::Active,
+            },
+            "admin",
+        )
+        .unwrap();
+        let party = Party::new(
+            party_id.clone(),
+            PartyData {
+                party_no: "P-1".into(),
+                party_kind: PartyKind::Enterprise,
+                unified_credit_code: None,
+                status: PartyStatus::Active,
+            },
+            "admin",
+        )
+        .unwrap();
+        let revision = PartyRevision::new(
+            PartyRevisionId::new("revision"),
+            PartyRevisionData {
+                party_id,
+                revision_no: 1,
+                legal_name: "共享客户".into(),
+                short_name: None,
+                change_reason: "建档".into(),
+            },
+        )
+        .unwrap();
+        let today = BusinessDate::today();
+        let start = BusinessDate::from_ymd(2000, 1, 1).unwrap();
+        let assignments = ["sales-b", "sales-a", "future", "ended", "deleted", "collaborator"]
+            .into_iter()
+            .map(|id| {
+                let mut assignment = CustomerAssignment::new(
+                    CustomerAssignmentId::new(id),
+                    CustomerAssignmentData {
+                        customer_id: CustomerAccountId::new("customer"),
+                        user_id: id.into(),
+                        assignment_role: if id == "collaborator" {
+                            AssignmentRole::Collaborator
+                        } else {
+                            AssignmentRole::Owner
+                        },
+                        valid_from: if id == "future" {
+                            BusinessDate::from_ymd(9999, 1, 1).unwrap()
+                        } else {
+                            start
+                        },
+                        valid_to: (id == "ended").then_some(today),
+                        change_reason: "分配".into(),
+                    },
+                )
+                .unwrap();
+                if id == "deleted" {
+                    assignment.base.deleted_at = 1;
+                }
+                assignment
+            })
+            .collect();
+        let names =
+            [("sales-a".into(), "张三".into()), ("sales-b".into(), "李四".into())].into_iter().collect();
+        let detail = build_detail(
+            ProfileDetailParts {
+                account,
+                party,
+                current_revision: revision.clone(),
+                revisions: vec![revision],
+                assignments,
+                contacts: vec![],
+                addresses: vec![],
+                tax_profiles: vec![],
+                bank_accounts: vec![],
+                sensitive_fields: vec![],
+            },
+            &names,
+        );
+        assert_eq!(
+            detail.account.owners.iter().map(|owner| owner.user_id.as_str()).collect::<Vec<_>>(),
+            vec!["sales-a", "sales-b"]
+        );
+        assert_eq!(detail.account.owners[1].user_name.as_deref(), Some("李四"));
+        assert_eq!(detail.account.owner_user_name.as_deref(), Some("张三"));
+        assert_eq!(detail.account.collaborator_count, 1);
+        let wire = serde_json::to_value(detail).unwrap();
+        assert_eq!(wire["owners"].as_array().unwrap().len(), 2);
+        assert_eq!(wire["owners"][0]["user_name"], "张三");
+    }
 }

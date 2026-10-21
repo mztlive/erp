@@ -7,6 +7,7 @@ import {
     fetchContractCenter,
     fetchContracts,
     uploadContractPdf,
+    setContractSalesAccess,
 } from "@/features/contracts/api/contracts"
 import type { UploadContractPdfInput } from "@/features/contracts/types"
 import { previewContractFile } from "../api/preview"
@@ -93,5 +94,16 @@ export function useCreateContractExportJobMutation() {
     return useMutation({
         meta: { affectsDataScope: true },
         mutationFn: createContractExportJob,
+    })
+}
+
+export function useContractSalesAccessMutation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        meta: { affectsDataScope: true },
+        mutationFn: setContractSalesAccess,
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({ queryKey: contractKeys.all })
+        },
     })
 }

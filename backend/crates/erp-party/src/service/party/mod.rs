@@ -8,6 +8,7 @@
 
 mod builtin;
 pub mod company;
+pub mod identity;
 
 use std::sync::Arc;
 
@@ -20,6 +21,7 @@ use persistence_core::{Executor, NoTransaction, Transactional};
 use serde::Serialize;
 use validator::Validate;
 
+use self::identity::ensure_identity_available;
 use crate::entity::party::{
     Party, PartyData, PartyId, PartyKind, PartyRevision, PartyRevisionData, PartyRevisionId, PartyStatus,
     PartyUpdate,
@@ -165,6 +167,7 @@ impl PartyService {
         let created = client
             .with_transaction(move |executor| {
                 Box::pin(async move {
+                    ensure_identity_available(&db, &party_for_tx, &revision_for_tx, executor).await?;
                     db.party_revisions().create(&revision_for_tx, executor).await?;
                     db.parties().create(&party_for_tx, executor).await?;
                     audit_port.persist(&audit, executor).await?;
@@ -311,6 +314,7 @@ impl PartyService {
                     let (mut party, revision_for_tx, party_update) = prepared.into_parts();
                     let revision = PartyRevision { revision: RevisionBase::new(next_no), ..revision_for_tx };
                     party.update(party_update, &updated_by)?;
+                    ensure_identity_available(&db, &party, &revision, executor).await?;
                     db.party().append_party_revision(&mut party, &revision, &updated_by, executor).await?;
                     audit_port.persist(&audit, executor).await?;
                     Ok::<Party, crate::error::Error>(party)

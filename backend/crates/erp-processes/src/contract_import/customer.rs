@@ -13,7 +13,7 @@ use erp_customer::{
 };
 use erp_identity::AccessControlExt;
 use erp_identity::repository::prelude::*;
-use erp_party::repository::exact_identity::contract_identity_candidates;
+use erp_party::repository::identity_guard::guarded_candidates;
 use erp_party::{Party, PartyData, PartyExt, PartyKind, PartyRevision, PartyRevisionData, PartyStatus};
 use id_generator::next_id;
 use persistence_core::Executor;
@@ -48,7 +48,7 @@ impl ContractImportProcess {
             .map(|value| value.trim())
             .filter(|value| !value.is_empty())
             .map(str::to_ascii_uppercase);
-        let candidates = contract_identity_candidates(&self.db, name, credit.as_deref(), executor).await?;
+        let candidates = guarded_candidates(&self.db, name, credit.as_deref(), executor).await?;
         let identity = identity_from_candidates(name, credit.as_deref(), &candidates)?;
         if let Some(identity) = identity {
             let existing = self

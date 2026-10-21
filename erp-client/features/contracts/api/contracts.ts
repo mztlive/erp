@@ -15,3 +15,22 @@ export { fetchContracts } from "./list"
 export { fetchContractCenter } from "./center"
 export { uploadContractPdf } from "./upload"
 export { createContractExportJob } from "./export"
+
+import { apiPut } from "@/lib/api"
+
+/** 仅调整本合同的明确共享销售，不交接客户或销售单。 */
+export async function setContractSalesAccess(input: {
+    contractId: string
+    version: number
+    sharedSalesUserIds: string[]
+    changeReason: string
+}) {
+    await apiPut(
+        `/admin/contracts/${encodeURIComponent(input.contractId)}/sales-access`,
+        {
+            version: input.version,
+            shared_sales_user_ids: input.sharedSalesUserIds,
+            change_reason: input.changeReason,
+        },
+    )
+}

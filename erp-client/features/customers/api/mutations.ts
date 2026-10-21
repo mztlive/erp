@@ -18,6 +18,7 @@ import type { BackendProfileMutation } from "./wire-types"
 
 type BackendProfileRequest = {
     idempotency_key: string
+    reuse_existing_party?: boolean
     expected_party_version?: number
     expected_customer_version?: number
     legal_name: string
@@ -48,33 +49,13 @@ function unknownFromError(
     return null
 }
 
-/** 从本次提交快照构造乐观锁冲突结果。 */
-function conflictResult(
-    error: ApiError,
-    fallback: Pick<
-        SaveCustomerDetailsInput,
-        "expectedLockVersion" | "legalName" | "shortName" | "unifiedCreditCode"
-    >,
-): CustomerMutationResult {
-    return {
-        outcome: "conflict",
-        message: apiErrorMessage(error),
-        serverLockVersion: fallback.expectedLockVersion,
-        serverRevisionNo: 0,
-        serverLegalName: fallback.legalName,
-        serverShortName: fallback.shortName,
-        serverUnifiedCreditCode: fallback.unifiedCreditCode,
-        actor: "系统",
-        changedAt: new Date().toISOString(),
-    }
-}
-
 /** 原子创建完整客户资料。 */
 export async function createCustomer(
     input: CreateCustomerInput,
 ): Promise<CustomerMutationResult> {
     const request: BackendProfileRequest = {
         idempotency_key: input.idempotencyKey,
+        reuse_existing_party: input.reuseExistingParty || undefined,
         legal_name: input.legalName.trim(),
         short_name: input.shortName?.trim() || undefined,
         unified_credit_code: input.unifiedCreditCode?.trim() || undefined,
@@ -110,15 +91,7 @@ function mapCreateFailure(
     const unknown = unknownFromError(error, input.idempotencyKey)
     if (unknown) return unknown
     if (error.status === 409) {
-        return {
-            outcome: "conflict",
-            message: apiErrorMessage(error),
-            serverLockVersion: 0,
-            serverRevisionNo: 0,
-            serverLegalName: input.legalName,
-            actor: "系统",
-            changedAt: new Date().toISOString(),
-        }
+        return { outcome: "conflict", message: apiErrorMessage(error) }
     }
     if (error.status === 400 || error.status === 403 || error.status === 422) {
         return { outcome: "rejected", message: apiErrorMessage(error) }
@@ -157,7 +130,7 @@ export async function saveCustomerDetails(
             const unknown = unknownFromError(error, input.idempotencyKey)
             if (unknown) return unknown
             if (error.status === 409) {
-                return conflictResult(error, input)
+                return { outcome: "conflict", message: apiErrorMessage(error) }
             }
             if (
                 error.status === 400 ||

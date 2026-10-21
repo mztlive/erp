@@ -38,6 +38,7 @@ export type BankAccountRow = {
 }
 
 export type FormValues = {
+    reuseExistingParty: boolean
     legalName: string
     shortName: string
     unifiedCreditCode: string
@@ -108,6 +109,7 @@ export function buildDefaults(
 ): FormValues {
     if (mode === "create") {
         return {
+            reuseExistingParty: false,
             legalName: "",
             shortName: "",
             unifiedCreditCode: "",
@@ -120,6 +122,7 @@ export function buildDefaults(
         }
     }
     return {
+        reuseExistingParty: false,
         legalName: customer!.currentRevision.legalName,
         shortName: customer!.currentRevision.shortName ?? "",
         unifiedCreditCode: customer!.currentRevision.unifiedCreditCode ?? "",
@@ -203,6 +206,7 @@ export function buildFormSubmission(
 
     if (mode === "create") {
         return {
+            reuseExistingParty: value.reuseExistingParty,
             legalName: value.legalName.trim(),
             shortName: value.shortName.trim() || undefined,
             unifiedCreditCode: value.unifiedCreditCode.trim() || undefined,

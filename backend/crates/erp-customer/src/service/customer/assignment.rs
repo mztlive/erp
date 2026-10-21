@@ -1,9 +1,9 @@
 //! 域 D08 `customer_assignment` 服务编排。
 //!
-//! 归属变化按「结束旧归属并建立新归属」维护（W03），不原地修改人员/角色；
+//! 归属变化按「分别新增或结束人员关系」维护（W03），不原地修改人员/角色；
 //! 归属是新单据参与权的来源（§6.2）。Service 在事务内加载冲突候选并
 //! 持久化，窗口、角色冲突与负责人结束限制由 `CustomerAssignment` 判定：
-//! - 同一客户同一时点恰好一个 `OWNER`；
+//! - 同一客户允许多名有效 `OWNER`；
 //! - 同一客户、用户、角色的有效期不得重叠。
 
 use std::sync::Arc;
@@ -140,10 +140,9 @@ impl CustomerAssignmentService {
         Ok(PageView { items, total: page.total, page: filter.page, page_size: filter.page_size })
     }
 
-    /// 应用归属变更（跨行事务：结束旧归属 + 建立新归属 + 审计原子写入）。
+    /// 应用归属变更（跨行事务：维护独立人员关系 + 审计原子写入）。
     ///
-    /// - `Assign`：结束同一客户同一角色的重叠旧归属（OWNER 唯一，换负责人时
-    ///   结束既有 OWNER 有效期并建立新 OWNER）；新窗口与剩余归属不得重叠。
+    /// - `Assign`：增加负责销售，不结束其他人员关系；同人同角色不得重叠。
     /// - `End`：提前结束既有归属的有效期（版本 CAS）。
     ///
     /// # 参数
@@ -173,7 +172,7 @@ impl CustomerAssignmentService {
         }
     }
 
-    /// 在调用方 Executor 上建立新归属并结束重叠旧归属。
+    /// 在调用方 Executor 上新增人员关系并校验重复区间。
     ///
     /// # 参数
     /// * `customer_id` - 客户角色 ID
@@ -181,7 +180,7 @@ impl CustomerAssignmentService {
     /// * `executor` - 调用方执行器，必须位于事务中
     ///
     /// # 返回
-    /// 返回被结束的旧归属与新建归属。
+    /// 返回新建归属。
     ///
     /// # 错误
     /// 窗口冲突或底层写入失败。
@@ -194,7 +193,7 @@ impl CustomerAssignmentService {
         persist_assign(&self.db, customer_id, new_assignment, executor).await
     }
 
-    /// 建立新归属（结束重叠旧归属）。
+    /// 建立新归属（拒绝同人重叠区间）。
     async fn assign(
         &self,
         customer_id: &str,
@@ -244,32 +243,16 @@ impl CustomerAssignmentService {
         command: EndCustomerAssignment,
         actor: &AuditActor,
     ) -> Result<Vec<CustomerAssignmentView>> {
-        let mut assignment = self
-            .db
-            .customer_assignments()
-            .find_assignment(command.assignment_id(), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("归属不存在".to_string()))?;
-        assignment
-            .ensure_customer(&CustomerAccountId::new(customer_id))
-            .map_err(|error| Error::NotFound(error.to_string()))?;
-        assignment
-            .ensure_version(command.version())
-            .map_err(|error| Error::ConflictError(error.to_string()))?;
-        assignment
-            .end_directly(command.valid_to())
-            .map_err(|error| Error::ValidationError(error.to_string()))?;
         let audit = self.audit.resource_log(
             actor.clone(),
             "customer_assignment.end",
             "customer_assignment",
-            assignment.base.id.clone(),
+            command.assignment_id().to_string(),
         )?;
 
         let db = self.db.clone();
         let client = db.client().clone();
         let audit_port = self.audit.clone();
-        let mut assignment_for_tx = assignment;
         let access = self.access();
         let actor_for_tx = actor.clone();
         let customer_id_for_tx = customer_id.to_string();
@@ -277,9 +260,9 @@ impl CustomerAssignmentService {
             .with_transaction(move |executor| {
                 Box::pin(async move {
                     access.require_with(actor_for_tx, "update", &customer_id_for_tx, executor).await?;
-                    db.customer_assignments().update(&mut assignment_for_tx, executor).await?;
+                    let ended = persist_end(&db, &customer_id_for_tx, &command, executor).await?;
                     audit_port.persist(&audit, executor).await?;
-                    Ok::<CustomerAssignment, crate::error::Error>(assignment_for_tx)
+                    Ok::<CustomerAssignment, crate::error::Error>(ended)
                 })
             })
             .await?;
@@ -288,7 +271,7 @@ impl CustomerAssignmentService {
     }
 }
 
-/// 结束重叠旧归属并写入新归属。**必须收到事务执行器**。
+/// 锁定客户根记录后校验并写入人员关系；必须收到事务执行器。
 async fn persist_assign(
     db: &Database,
     customer_id: &str,
@@ -296,37 +279,47 @@ async fn persist_assign(
     executor: &mut dyn Executor,
 ) -> Result<Vec<CustomerAssignment>> {
     let customer_id = CustomerAccountId::new(customer_id);
-    let mut ended = end_overlapping(db, &customer_id, new_assignment, executor).await?;
+    let mut customer = db
+        .customer_accounts()
+        .find_customer(customer_id.as_ref(), executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("客户不存在".into()))?;
+    let existing = db.customer_assignments().list_for_customer(&customer_id, executor).await?;
+    new_assignment.ensure_no_overlap(&existing).map_err(|error| Error::ConflictError(error.to_string()))?;
+    db.customer_accounts().update(&mut customer, executor).await?;
     db.customer_assignments().create(new_assignment, executor).await?;
-    ended.push(new_assignment.clone());
-    Ok(ended)
+    Ok(vec![new_assignment.clone()])
 }
 
-/// 结束与 `new_assignment` 重叠的旧归属（§6.2 跨行约束）。
-///
-/// - `OWNER`：同一客户任一其他 OWNER 与新区间重叠时结束其有效期
-///   （换负责人：`new.valid_from` 必须晚于旧归属 `valid_from`）；
-/// - `COLLABORATOR`：同一客户、同一用户、同一角色的重叠区间被结束。
-///
-/// 结束方式：把旧归属 `valid_to` 置为 `new.valid_from`（结束日为开区间，
-/// 新旧归属无空档）。**必须收到事务执行器**。
-async fn end_overlapping(
+/// 在原事务校验目标版本与区间覆盖，串行化同一客户的全部人员调整。
+async fn persist_end(
     db: &Database,
-    customer_id: &CustomerAccountId,
-    new_assignment: &CustomerAssignment,
+    customer_id: &str,
+    command: &EndCustomerAssignment,
     executor: &mut dyn Executor,
-) -> Result<Vec<CustomerAssignment>> {
-    let mut ended = Vec::new();
-    let existing = db.customer_assignments().list_for_customer(customer_id, executor).await?;
-    for mut old in existing {
-        let changed = old
-            .end_for_replacement(new_assignment)
-            .map_err(|error| Error::ConflictError(error.to_string()))?;
-        if !changed {
-            continue;
-        }
-        db.customer_assignments().update(&mut old, executor).await?;
-        ended.push(old);
-    }
-    Ok(ended)
+) -> Result<CustomerAssignment> {
+    let mut customer = db
+        .customer_accounts()
+        .find_customer(customer_id, executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("客户不存在".into()))?;
+    let mut assignment = db
+        .customer_assignments()
+        .find_assignment(command.assignment_id(), executor)
+        .await?
+        .ok_or_else(|| Error::NotFound("归属不存在".into()))?;
+    assignment
+        .ensure_customer(&CustomerAccountId::new(customer_id))
+        .map_err(|error| Error::NotFound(error.to_string()))?;
+    assignment.ensure_version(command.version()).map_err(|error| Error::ConflictError(error.to_string()))?;
+    let assignments =
+        db.customer_assignments().list_for_customer(&CustomerAccountId::new(customer_id), executor).await?;
+    assignment
+        .ensure_owner_retained(&assignments, command.valid_to())
+        .map_err(|error| Error::ValidationError(error.to_string()))?;
+    assignment.end_directly(command.valid_to()).map_err(|error| Error::ValidationError(error.to_string()))?;
+    assignment.change_reason = command.change_reason().to_string();
+    db.customer_accounts().update(&mut customer, executor).await?;
+    db.customer_assignments().update(&mut assignment, executor).await?;
+    Ok(assignment)
 }

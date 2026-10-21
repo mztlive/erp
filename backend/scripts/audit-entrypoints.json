@@ -715,6 +715,20 @@
       "reason": "用例 set_status 在自身事务或已声明 run_audited 边界通过 .resource_log、audit.persist 构造/委托审计；事务内业务和审计沿原 Executor 执行，原命令重放由拥有领域控制，不在此登记推断真实回滚或并发结果。"
     },
     {
+      "path": "crates/erp-contract/src/service/contract/sales_access.rs",
+      "function": "set_sales_access",
+      "policy": "Audited",
+      "stage": "MetadataFactory",
+      "boundaries": [
+        ".resource_log"
+      ],
+      "call_counts": {
+        ".resource_log": 1
+      },
+      "location_count": 1,
+      "reason": "合同共享销售命令构造明确的 contract.share 审计上下文；复用 execute_authorized_transaction 在原 Executor 重验合同更新范围、期望版本和共享账号，原子写入名单与审计，不读取审计恢复业务。"
+    },
+    {
       "path": "crates/erp-customer/src/service/customer/assignment.rs",
       "function": "assign",
       "policy": "Audited",

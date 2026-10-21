@@ -65,6 +65,7 @@ const unifiedCreditCodeSchema = z
     })
 
 const createSchema = z.object({
+    reuseExistingParty: z.boolean(),
     legalName: z.string().trim().min(2, "请填写法定名称"),
     shortName: z.string(),
     unifiedCreditCode: unifiedCreditCodeSchema,
@@ -77,6 +78,7 @@ const createSchema = z.object({
 })
 
 const editSchema = z.object({
+    reuseExistingParty: z.boolean(),
     legalName: z.string().trim().min(2, "请填写法定名称"),
     shortName: z.string(),
     unifiedCreditCode: unifiedCreditCodeSchema,

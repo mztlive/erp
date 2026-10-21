@@ -20,3 +20,5 @@ pub use party::{
 pub(crate) mod directory;
 
 pub mod exact_identity;
+
+pub mod identity_guard;

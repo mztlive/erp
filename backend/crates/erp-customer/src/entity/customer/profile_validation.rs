@@ -42,6 +42,7 @@ pub struct CustomerProfileRequestShape {
     expected_party_version: Option<u64>,
     expected_customer_version: Option<u64>,
     owner_user_id_present: bool,
+    reuse_existing_party: bool,
 }
 
 impl CustomerProfileRequestShape {
@@ -56,6 +57,7 @@ impl CustomerProfileRequestShape {
     /// * `expected_party_version` - 客户端期望的 Party 版本
     /// * `expected_customer_version` - 客户端期望的客户版本
     /// * `owner_user_id_present` - 请求是否携带负责人字段
+    /// * `reuse_existing_party` - 创建时是否明确允许复用已有主体
     ///
     /// # 返回
     /// 结构合法时返回已校验的值对象。
@@ -67,9 +69,15 @@ impl CustomerProfileRequestShape {
         expected_party_version: Option<u64>,
         expected_customer_version: Option<u64>,
         owner_user_id_present: bool,
+        reuse_existing_party: bool,
     ) -> Result<Self> {
-        let shape =
-            Self { operation, expected_party_version, expected_customer_version, owner_user_id_present };
+        let shape = Self {
+            operation,
+            expected_party_version,
+            expected_customer_version,
+            owner_user_id_present,
+            reuse_existing_party,
+        };
         shape.validate()?;
         Ok(shape)
     }
@@ -103,6 +111,9 @@ impl CustomerProfileRequestShape {
                 }
             },
             CustomerProfileOperation::Update => {
+                if self.reuse_existing_party {
+                    return Err(Error::from("修订客户不得选择复用其他主体"));
+                }
                 if self.owner_user_id_present {
                     return Err(Error::from("负责人变更必须通过客户归属操作提交"));
                 }
@@ -313,26 +324,39 @@ mod tests {
     #[test]
     fn request_shape_accepts_valid_create_and_update() {
         assert!(
-            CustomerProfileRequestShape::new(CustomerProfileOperation::Create, None, None, true,).is_ok()
+            CustomerProfileRequestShape::new(CustomerProfileOperation::Create, None, None, true, false,)
+                .is_ok()
         );
         assert!(
-            CustomerProfileRequestShape::new(CustomerProfileOperation::Update, Some(1), Some(1), false,)
-                .is_ok()
+            CustomerProfileRequestShape::new(
+                CustomerProfileOperation::Update,
+                Some(1),
+                Some(1),
+                false,
+                false,
+            )
+            .is_ok()
         );
     }
 
     #[test]
     fn request_shape_rejects_invalid_versions_and_update_owner() {
         assert!(
-            CustomerProfileRequestShape::new(CustomerProfileOperation::Create, Some(1), None, false,)
+            CustomerProfileRequestShape::new(CustomerProfileOperation::Create, Some(1), None, false, false,)
                 .is_err()
         );
         assert!(
-            CustomerProfileRequestShape::new(CustomerProfileOperation::Update, Some(0), Some(1), false,)
-                .is_err()
+            CustomerProfileRequestShape::new(
+                CustomerProfileOperation::Update,
+                Some(0),
+                Some(1),
+                false,
+                false,
+            )
+            .is_err()
         );
         assert!(
-            CustomerProfileRequestShape::new(CustomerProfileOperation::Update, Some(1), Some(1), true,)
+            CustomerProfileRequestShape::new(CustomerProfileOperation::Update, Some(1), Some(1), true, false,)
                 .is_err()
         );
     }

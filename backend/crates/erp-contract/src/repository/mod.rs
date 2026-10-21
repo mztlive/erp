@@ -4,6 +4,7 @@ pub mod contract;
 pub mod extensions;
 pub mod owned;
 pub mod prelude;
+pub mod responsibility;
 pub mod scope;
 pub mod templates;
 

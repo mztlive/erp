@@ -18,6 +18,7 @@ import { ContractUploadDialog } from "@/features/contracts/contract-upload-dialo
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { ContractPaperDialog } from "@/features/contracts/components/contract-paper-dialog"
+import { ContractSalesAccessDialog } from "@/features/contracts/components/contract-sales-access-dialog"
 import { ContractDetailAttachments } from "@/features/contracts/components/contract-detail-attachments"
 import { ContractDetailHeader } from "@/features/contracts/components/contract-detail-header"
 import { ContractDetailOverview } from "@/features/contracts/components/contract-detail-overview"
@@ -50,6 +51,7 @@ export function ContractDetailPage({
 
     const activeSection = resolveSection(section)
     const [paperOpen, setPaperOpen] = React.useState(false)
+    const [salesAccessOpen, setSalesAccessOpen] = React.useState(false)
 
     const handleSectionChange = React.useCallback(
         (next: string) => {
@@ -116,6 +118,18 @@ export function ContractDetailPage({
             <ContractDetailHeader
                 contract={contract}
                 onPaperOpen={() => setPaperOpen(true)}
+                onManageSalesAccess={
+                    hasPermission(
+                        profile.data?.permissions,
+                        "contract:update",
+                    ) &&
+                    hasPermission(
+                        profile.data?.permissions,
+                        "customer_assignment:create",
+                    )
+                        ? () => setSalesAccessOpen(true)
+                        : undefined
+                }
                 onImportRevision={
                     hasPermission(
                         profile.data?.permissions,
@@ -184,6 +198,11 @@ export function ContractDetailPage({
                 onSuccess={() => {
                     void query.refetch()
                 }}
+            />
+            <ContractSalesAccessDialog
+                contract={contract}
+                open={salesAccessOpen}
+                onOpenChange={setSalesAccessOpen}
             />
             <ContractPaperDialog
                 contract={contract}

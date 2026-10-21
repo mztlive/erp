@@ -14,6 +14,7 @@ type ContractDetailHeaderProps = {
     contract: ContractCenterView
     onPaperOpen: () => void
     onImportRevision?: () => void
+    onManageSalesAccess?: () => void
 }
 
 /**
@@ -23,6 +24,7 @@ export function ContractDetailHeader({
     contract,
     onPaperOpen,
     onImportRevision,
+    onManageSalesAccess,
 }: ContractDetailHeaderProps) {
     const canCreateSo = contract.allowedActions.includes("CREATE_SALES_ORDER")
     const canPrint = contract.allowedActions.includes("PRINT")
@@ -103,6 +105,17 @@ export function ContractDetailHeader({
             }
             secondaryActions={
                 <>
+                    {onManageSalesAccess ? (
+                        <Button
+                            id="contracts-detail-manage-sales-access"
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={onManageSalesAccess}
+                        >
+                            共享销售
+                        </Button>
+                    ) : null}
                     {onImportRevision ? (
                         <Button
                             id="contract-detail-import-revision"

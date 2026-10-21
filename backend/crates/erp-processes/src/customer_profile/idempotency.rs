@@ -49,22 +49,20 @@ impl CustomerProfileService {
     ///
     /// # 参数
     /// * `transaction` - 本次事务结果。
-    /// * `intended` - 事务成功时返回的稳定视图。
     /// * `context` - 幂等核对字段。
     ///
     /// # 返回
-    /// 事务成功时返回 `intended`；事务失败但并发请求已提交相同命令时返回已提交结果。
+    /// 事务成功时返回已保存的稳定视图；事务失败但并发请求已提交相同命令时返回已提交结果。
     ///
     /// # 错误
     /// 查询幂等记录失败、记录与请求上下文冲突，或原事务失败且没有已提交记录时返回错误。
     pub(super) async fn resolve_transaction(
         &self,
-        transaction: Result<()>,
-        intended: CustomerProfileMutationView,
+        transaction: Result<CustomerProfileMutationView>,
         context: &CustomerProfileReplayContext,
     ) -> Result<CustomerProfileMutationView> {
         match transaction {
-            Ok(()) => Ok(intended),
+            Ok(view) => Ok(view),
             Err(error) => match self.command_record(context.idempotency_key()).await? {
                 Some(command) => checked_command_view(command, context),
                 None => Err(error),

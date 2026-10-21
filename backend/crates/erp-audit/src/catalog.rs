@@ -99,6 +99,7 @@ const REGISTERED_ACTIONS: &[AuditAction] = &[
     action("contract.import.create", "contract_import", "创建合同识别任务"),
     action("contract.import.archive", "contract", "归档识别合同"),
     action("contract.terminate", "contract", "终止合同"),
+    action("contract.share", "contract", "调整合同共享销售"),
     action("contract_application.apply", "contract_application", "应用合同申请"),
     action("contract_application.download", "contract_application", "下载合同申请"),
     action("contract_number_counter.configure", "contract_number_counter", "配置合同编号规则"),
@@ -455,6 +456,7 @@ mod tests {
     #[test]
     fn explicit_resource_pairs_keep_business_namespace_and_target_semantics() {
         assert_eq!(registered_action("customer.create", "customer").unwrap().label, "创建客户");
+        assert_eq!(registered_action("contract.share", "contract").unwrap().label, "调整合同共享销售");
         assert_eq!(registered_action("product.update", "product").unwrap().label, "修改商品");
         assert_eq!(
             registered_action("sales_order.submit", "sales_order_submission").unwrap().label,

@@ -106,6 +106,7 @@ export async function fetchContractCenter(
         statusLabel: CONTRACT_STATUS_LABEL[status],
         statusTone: CONTRACT_STATUS_TONE[status],
         lockVersion: detail.version,
+        sharedSalesUserIds: detail.shared_sales_user_ids ?? [],
         customer: {
             id: detail.customer_id,
             displayName:
@@ -115,7 +116,7 @@ export async function fetchContractCenter(
             reference: customer?.customerNo,
         },
         ownerLabel: detail.owner_user_name ?? "未指定",
-        ownerKind: "current_customer_owner",
+        ownerKind: "contract_sales_owner",
         currentRevision: {
             signingCompanyPartyId: current?.recognition?.company.id,
             signingCompanyName: current?.recognition?.company.legal_name,

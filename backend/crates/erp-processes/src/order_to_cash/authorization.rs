@@ -141,6 +141,9 @@ impl SalesCommandAccess {
     /// # 错误
     /// 责任不在动作范围内，或权限码无法解析时返回错误。
     pub(super) async fn creation(&self, order: &SalesOrder, executor: &mut dyn Executor) -> Result<()> {
+        customer_access(self.db.clone(), self.rbac.clone())
+            .require_current(&self.actor, order.customer_id.as_ref(), executor)
+            .await?;
         self.require_creation_action(order, self.action, &self.permissions, executor).await?;
         if !self.permissions.is_empty() {
             self.require_creation_action(

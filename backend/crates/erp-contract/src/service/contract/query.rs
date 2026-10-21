@@ -6,7 +6,7 @@ use application_core::AuditActor;
 use erp_core::common::time::BusinessDate;
 use erp_core::ids::CustomerAccountId;
 use mongodb::Database;
-use persistence_core::{Executor, NoTransaction};
+use persistence_core::Executor;
 use validator::Validate;
 
 use super::ContractService;
@@ -47,31 +47,6 @@ impl ContractService {
         ensure_stable_snapshot(&snapshot.context.scope_version, &current.context.scope_version)?;
         Ok(to_list_view(snapshot))
     }
-
-    /// 按客户批量取得编号与当前负责人，同一批事实供搜索、排序与显示使用。
-    ///
-    /// # 参数
-    /// * `ids` - 可见合同引用的客户
-    ///
-    /// # 返回
-    /// 返回客户编号与当前主负责人。
-    ///
-    /// # 错误
-    /// 外域事实读取失败。
-    ///
-    /// # 关键业务约束
-    /// 当前负责人只取客户当前主负责人，不得用签约经办兜底。
-    pub(super) async fn list_customer_facts(&self, ids: &[String]) -> Result<Vec<ContractCustomer>> {
-        list_customer_facts_with(
-            self.customers.as_ref(),
-            self.assignments.as_ref(),
-            self.accounts.as_ref(),
-            ids,
-            BusinessDate::today(),
-            &mut NoTransaction,
-        )
-        .await
-    }
 }
 
 /// 在指定执行器上读取客户编号与当前主负责人。
@@ -102,8 +77,9 @@ pub(super) async fn list_customer_facts_with(
 ) -> Result<Vec<ContractCustomer>> {
     let customer_ids = ids.iter().cloned().map(CustomerAccountId::new).collect::<Vec<_>>();
     let facts = customers.find_by_ids(&customer_ids, executor).await?;
-    let owners = assignments.owner_user_ids_by_customer(ids, as_of, executor).await?;
-    let names = accounts.names_by_ids(&owners.values().cloned().collect::<Vec<_>>()).await?;
+    let _ = (assignments, accounts, as_of);
+    let owners = HashMap::<String, String>::new();
+    let names = HashMap::new();
     let numbers = facts.into_iter().map(|c| (c.id, c.customer_no)).collect::<HashMap<_, _>>();
     Ok(ids
         .iter()
@@ -132,11 +108,12 @@ pub(super) async fn list_customer_facts_with(
 /// 修订读取失败。
 ///
 /// # 关键业务约束
-/// 当前负责人来自客户事实，不读取合同创建人或签订日期作为负责人。
+/// 当前负责人来自合同独立责任字段，客户事实只补齐编号。
 pub(super) async fn contract_rows(
     db: &Database,
     rows: Vec<ContractRow>,
     customers: &[ContractCustomer],
+    owners: &HashMap<String, String>,
     executor: &mut dyn Executor,
 ) -> Result<Vec<ContractView>> {
     let revision_ids = rows.iter().filter_map(|row| row.current_revision_id.clone()).collect::<Vec<_>>();
@@ -151,7 +128,7 @@ pub(super) async fn contract_rows(
         .map(|row| {
             let customer = customers.get(row.customer_id.as_str()).copied();
             let revision = row.current_revision_id.as_ref().and_then(|id| revisions.remove(id));
-            row.into_view(revision, customer)
+            row.into_view(revision, customer, owners)
         })
         .collect())
 }

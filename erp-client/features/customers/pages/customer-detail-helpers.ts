@@ -31,8 +31,8 @@ export function blocker(
 }
 
 export function ownerLabel(customer: CustomerCenterView): string {
-    const owner = customer.assignments.find(
-        (a) => a.role === "OWNER" && a.isCurrent,
+    const owners = customer.assignments.filter(
+        (assignment) => assignment.role === "OWNER" && assignment.isCurrent,
     )
-    return owner?.userName ?? "—"
+    return owners.map((assignment) => assignment.userName).join("、") || "—"
 }

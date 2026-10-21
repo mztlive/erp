@@ -28,6 +28,9 @@ const CONTRACT_REVISIONS: &str = <mongodb::Database as ContractExt>::CONTRACT_RE
 /// 合同列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ContractRow {
+    /// 合同独立负责销售；历史缺失不得由客户归属补写。
+    #[serde(default)]
+    pub sales_owner_user_id: String,
     /// 实体主键。
     pub id: String,
     /// 合同编号。
@@ -66,6 +69,12 @@ pub struct ContractFilter {
     pub customer_ids: Option<Vec<String>>,
     /// 合法历史参与合同；与授权客户按并集读取。
     pub historical_contract_ids: Vec<String>,
+    /// 已证明合同身份的强制交集，不得由共同客户替代。
+    pub authorized_contract_ids: Option<Vec<String>>,
+    /// 目录“我负责”按合同负责或明确共享人员收窄。
+    pub assigned_user_id: Option<String>,
+    /// 请求中的负责销售组织条件，始终只收窄授权合同。
+    pub owner_user_ids: Option<Vec<String>>,
     /// 合同状态；`None` 表示不筛选。
     pub status: Option<ContractStatus>,
     /// 页码（1 起）。
@@ -115,6 +124,9 @@ impl Default for ContractFilter {
             customer_id: None,
             customer_ids: None,
             historical_contract_ids: Vec::new(),
+            authorized_contract_ids: None,
+            assigned_user_id: None,
+            owner_user_ids: None,
             status: None,
             page: 1,
             page_size: 20,
@@ -147,6 +159,17 @@ impl QueryFilter for ContractFilter {
             self.customer_ids.as_deref(),
             &self.historical_contract_ids,
         );
+        if let Some(user) = &self.assigned_user_id {
+            filter = doc! { "$and": [filter, { "$or": [
+                { "sales_owner_user_id": user }, { "shared_sales_user_ids": user }
+            ] }] };
+        }
+        if let Some(ids) = &self.authorized_contract_ids {
+            filter.insert("id", doc! { "$in": ids });
+        }
+        if let Some(ids) = &self.owner_user_ids {
+            filter.insert("sales_owner_user_id", doc! { "$in": ids });
+        }
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
         }
@@ -548,6 +571,7 @@ fn insert_authorization_filter(
 /// 返回投影条件文档。
 fn contract_projection() -> Document {
     doc! {
+        "sales_owner_user_id": 1,
         "id": 1,
         "contract_no": 1,
         "customer_id": 1,
@@ -759,5 +783,42 @@ mod tests {
         let mut missing = ContractFilter::default();
         missing.require_existing_customers(Vec::new());
         assert_eq!(missing.customer_ids, Some(Vec::new()));
+    }
+}
+
+#[cfg(test)]
+mod shared_sales_scope_tests {
+    use mongodb::bson::doc;
+    use persistence_core::QueryFilter;
+
+    use super::ContractFilter;
+
+    #[test]
+    fn existing_customer_hydration_does_not_expand_contract_identity_scope() {
+        let mut filter = ContractFilter {
+            authorized_contract_ids: Some(vec!["contract-a".into()]),
+            assigned_user_id: Some("sales-a".into()),
+            ..Default::default()
+        };
+        filter.require_existing_customers(vec!["shared-customer".into()]);
+        let document = filter.to_doc();
+        assert_eq!(document.get_document("id").unwrap(), &doc! { "$in": ["contract-a"] });
+        let assigned = document.get_array("$and").unwrap().last().unwrap().as_document().unwrap();
+        assert_eq!(
+            assigned,
+            &doc! { "$or": [
+                { "sales_owner_user_id": "sales-a" }, { "shared_sales_user_ids": "sales-a" }
+            ] }
+        );
+    }
+
+    #[test]
+    fn empty_contract_scope_stays_empty_despite_shared_customer() {
+        let filter = ContractFilter {
+            customer_ids: Some(vec!["shared-customer".into()]),
+            authorized_contract_ids: Some(Vec::new()),
+            ..Default::default()
+        };
+        assert!(filter.to_doc().get_document("id").unwrap().get_array("$in").unwrap().is_empty());
     }
 }

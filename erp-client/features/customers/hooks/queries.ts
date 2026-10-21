@@ -120,3 +120,14 @@ export function useApplyCustomerAssignmentMutation() {
         },
     })
 }
+
+/** 冲突核对独立读取最新资料，不替换编辑页面的草稿或打开时基线。 */
+export function useCustomerConflictQuery(customerId: string, enabled: boolean) {
+    return useQuery({
+        queryKey: [...customerKeys.detail(customerId), "conflict"],
+        queryFn: () => fetchCustomerCenter(customerId, { profileOnly: true }),
+        enabled,
+        staleTime: 0,
+        refetchOnWindowFocus: false,
+    })
+}

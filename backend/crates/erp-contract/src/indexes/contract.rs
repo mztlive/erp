@@ -47,6 +47,8 @@ async fn create_indexes(db: &Database, collection: &str, indexes: Vec<IndexModel
 /// 返回 `contract` 的身份约束和列表查询索引。
 fn contract_indexes() -> Vec<IndexModel> {
     vec![
+        named_index("idx_contracts_sales_owner", doc! { "sales_owner_user_id": 1, "deleted_at": 1 }),
+        named_index("idx_contracts_sales_shared", doc! { "shared_sales_user_ids": 1, "deleted_at": 1 }),
         unique_index("uk_contracts_id", doc! { "id": 1 }),
         unique_index("uk_contracts_contract_no", doc! { "contract_no": 1 }),
         named_index("idx_contracts_customer_status", doc! { "customer_id": 1, "status": 1 }),

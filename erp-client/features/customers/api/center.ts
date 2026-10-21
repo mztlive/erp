@@ -66,6 +66,7 @@ async function loadCustomerQualitySummary(customerId: string) {
 /** 查询客户对象中心；客户正式资料只来自统一 profile 读模型。 */
 export async function fetchCustomerCenter(
     customerId: string,
+    options?: { profileOnly?: boolean },
 ): Promise<CustomerCenterView | null> {
     if (!customerId) return null
     let profile: BackendCustomerProfile
@@ -85,13 +86,19 @@ export async function fetchCustomerCenter(
 
     const [relatedResult, receivableResult, qualityResult] =
         await Promise.allSettled([
-            apiGet<unknown>(
-                `/admin/customer-profiles/${encodeURIComponent(customerId)}/related-summary`,
-            ).then(decodeCustomerCenterRelated),
-            apiGet<unknown>(
-                `/admin/customer-profiles/${encodeURIComponent(customerId)}/receivable-summary`,
-            ).then(decodeCustomerCenterReceivable),
-            loadCustomerQualitySummary(customerId),
+            options?.profileOnly
+                ? Promise.reject(new Error("未请求业务摘要"))
+                : apiGet<unknown>(
+                      `/admin/customer-profiles/${encodeURIComponent(customerId)}/related-summary`,
+                  ).then(decodeCustomerCenterRelated),
+            options?.profileOnly
+                ? Promise.reject(new Error("未请求业务摘要"))
+                : apiGet<unknown>(
+                      `/admin/customer-profiles/${encodeURIComponent(customerId)}/receivable-summary`,
+                  ).then(decodeCustomerCenterReceivable),
+            options?.profileOnly
+                ? Promise.resolve(undefined)
+                : loadCustomerQualitySummary(customerId),
         ])
 
     const fields = sensitiveIndex(profile.sensitive_fields)

@@ -106,12 +106,13 @@ export type ContractListRow = {
     salesOrderCount: number
     activeSalesOrderCount: number
     ownerLabel: string
-    ownerKind: "current_customer_owner" | "historical_participant"
+    ownerKind: "contract_sales_owner" | "historical_participant"
     allowedActions: ContractAction[]
     actionBlockers: ActionBlocker[]
 }
 
 export type ContractCenterView = {
+    sharedSalesUserIds: string[]
     contractId: string
     contractNo: string
     status: ContractStatus
@@ -120,7 +121,7 @@ export type ContractCenterView = {
     lockVersion: number
     customer: ObjectReference
     ownerLabel: string
-    ownerKind: "current_customer_owner" | "historical_participant"
+    ownerKind: "contract_sales_owner" | "historical_participant"
     currentRevision: {
         signingCompanyPartyId?: string
         signingCompanyName?: string

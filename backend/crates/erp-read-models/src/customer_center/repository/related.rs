@@ -91,13 +91,15 @@ impl<'a> CustomerCenterRepository<'a> {
         &self,
         customer_id: &str,
         recent_limit: u32,
+        contract_scope: &Document,
+        sales_scope: &Document,
         executor: &mut dyn Executor,
     ) -> Result<Option<CustomerCenterRelatedRow>> {
         let recent_limit = i64::from(recent_limit);
         if recent_limit == 0 {
             return Err(Error::EntityMetadataOutOfRange("customer_center_recent_limit"));
         }
-        let pipeline = related_pipeline(customer_id, recent_limit);
+        let pipeline = related_pipeline(customer_id, recent_limit, contract_scope, sales_scope);
         let collection = self.collection();
         let rows = match executor.session() {
             Some(session) => {
@@ -123,161 +125,81 @@ impl<'a> CustomerCenterRepository<'a> {
     }
 }
 
-fn related_pipeline(customer_id: &str, recent_limit: i64) -> Vec<Document> {
+fn related_pipeline(
+    customer_id: &str,
+    recent_limit: i64,
+    contract_scope: &Document,
+    sales_scope: &Document,
+) -> Vec<Document> {
     vec![
-        doc! {
-            "$match": {
-                "id": customer_id,
-                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            }
-        },
-        doc! {
-            "$lookup": {
-                "from": CONTRACTS,
-                "let": { "customer_id": "$id" },
-                "pipeline": [
-                    {
-                        "$match": {
-                            "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-                            "$expr": { "$eq": ["$customer_id", "$$customer_id"] },
-                        }
-                    },
-                    {
-                        "$facet": {
-                            "recent": [
-                                { "$sort": { "created_at": -1, "id": -1 } },
-                                { "$limit": recent_limit },
-                                {
-                                    "$project": {
-                                        "_id": 0,
-                                        "id": 1,
-                                        "contract_no": 1,
-                                        "status": 1,
-                                    }
-                                },
-                            ],
-                            "active": [
-                                { "$match": { "status": ContractStatus::Effective.as_str() } },
-                                { "$count": "count" },
-                            ],
-                        }
-                    },
-                    {
-                        "$project": {
-                            "_id": 0,
-                            "recent": 1,
-                            "active_count": {
-                                "$ifNull": [
-                                    { "$arrayElemAt": ["$active.count", 0] },
-                                    0,
-                                ]
-                            },
-                        }
-                    },
-                ],
-                "as": "_contracts",
-            }
-        },
-        doc! {
-            "$lookup": {
-                "from": SALES_ORDERS,
-                "let": { "customer_id": "$id" },
-                "pipeline": [
-                    {
-                        "$match": {
-                            "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-                            "$expr": { "$eq": ["$customer_id", "$$customer_id"] },
-                        }
-                    },
-                    {
-                        "$facet": {
-                            "recent": [
-                                { "$sort": { "created_at": -1, "id": -1 } },
-                                { "$limit": recent_limit },
-                                {
-                                    "$project": {
-                                        "_id": 0,
-                                        "id": 1,
-                                        "order_no": 1,
-                                        "commercial_status": 1,
-                                        "close_status": 1,
-                                        "created_at": 1,
-                                    }
-                                },
-                            ],
-                            "in_progress": [
-                                {
-                                    "$match": {
-                                        "commercial_status": {
-                                            "$ne": CommercialStatus::Voided.as_str(),
-                                        },
-                                        "close_status": { "$ne": CloseStatus::Closed.as_str() },
-                                    }
-                                },
-                                { "$count": "count" },
-                            ],
-                        }
-                    },
-                    {
-                        "$project": {
-                            "_id": 0,
-                            "recent": 1,
-                            "in_progress_count": {
-                                "$ifNull": [
-                                    { "$arrayElemAt": ["$in_progress.count", 0] },
-                                    0,
-                                ]
-                            },
-                        }
-                    },
-                ],
-                "as": "_sales_orders",
-            }
-        },
-        doc! {
-            "$project": {
-                "_id": 0,
-                "active_contract_count": {
-                    "$ifNull": [
-                        { "$arrayElemAt": ["$_contracts.active_count", 0] },
-                        0,
-                    ]
-                },
-                "in_progress_sales_order_count": {
-                    "$ifNull": [
-                        { "$arrayElemAt": ["$_sales_orders.in_progress_count", 0] },
-                        0,
-                    ]
-                },
-                "contracts": {
-                    "$ifNull": [
-                        { "$arrayElemAt": ["$_contracts.recent", 0] },
-                        [],
-                    ]
-                },
-                "sales_orders": {
-                    "$ifNull": [
-                        { "$arrayElemAt": ["$_sales_orders.recent", 0] },
-                        [],
-                    ]
-                },
-            }
-        },
+        doc! { "$match": { "id": customer_id, "deleted_at": NOT_DELETED_TIMESTAMP_BSON } },
+        related_lookup(
+            CONTRACTS,
+            "_contracts",
+            contract_scope,
+            recent_limit,
+            doc! { "_id": 0, "id": 1, "contract_no": 1, "status": 1 },
+            doc! { "status": ContractStatus::Effective.as_str() },
+        ),
+        related_lookup(
+            SALES_ORDERS,
+            "_sales_orders",
+            sales_scope,
+            recent_limit,
+            doc! { "_id": 0, "id": 1, "order_no": 1, "commercial_status": 1, "close_status": 1, "created_at": 1 },
+            doc! { "commercial_status": { "$ne": CommercialStatus::Voided.as_str() }, "close_status": { "$ne": CloseStatus::Closed.as_str() } },
+        ),
+        doc! { "$project": { "_id": 0,
+            "active_contract_count": { "$ifNull": [{ "$arrayElemAt": ["$_contracts.count", 0] }, 0] },
+            "in_progress_sales_order_count": { "$ifNull": [{ "$arrayElemAt": ["$_sales_orders.count", 0] }, 0] },
+            "contracts": { "$ifNull": [{ "$arrayElemAt": ["$_contracts.recent", 0] }, []] },
+            "sales_orders": { "$ifNull": [{ "$arrayElemAt": ["$_sales_orders.recent", 0] }, []] },
+        } },
     ]
+}
+
+/// 最近业务及数量在同一资源范围内计算，分页不得影响总数。
+fn related_lookup(
+    collection: &str,
+    output: &str,
+    scope: &Document,
+    recent_limit: i64,
+    projection: Document,
+    condition: Document,
+) -> Document {
+    doc! { "$lookup": { "from": collection, "let": { "customer_id": "$id" }, "as": output,
+        "pipeline": [
+            { "$match": { "deleted_at": NOT_DELETED_TIMESTAMP_BSON, "$expr": { "$eq": ["$customer_id", "$$customer_id"] }, "$and": [scope] } },
+            { "$facet": {
+                "recent": [{ "$sort": { "created_at": -1, "id": -1 } }, { "$limit": recent_limit }, { "$project": projection }],
+                "matched": [{ "$match": condition }, { "$count": "count" }],
+            } },
+            { "$project": { "_id": 0, "recent": 1, "count": { "$ifNull": [{ "$arrayElemAt": ["$matched.count", 0] }, 0] } } },
+        ]
+    } }
 }
 
 #[cfg(test)]
 mod tests {
+    use mongodb::bson::{Bson, doc};
+
     use super::related_pipeline;
 
     #[test]
-    fn related_pipeline_is_bounded_and_counts_across_pages() {
-        let rendered = format!("{:?}", related_pipeline("customer-1", 5));
-        assert!(rendered.contains("customer-1"));
-        assert!(rendered.contains("contracts"));
-        assert!(rendered.contains("sales_orders"));
-        assert!(rendered.contains("active_count"));
-        assert!(rendered.contains("in_progress_count"));
-        assert!(rendered.contains("Int64(5)"));
+    fn related_totals_and_recent_rows_use_each_business_scope() {
+        let contract_scope = doc! { "id": "contract-a" };
+        let sales_scope = doc! { "sales_owner_user_id": "sales-a" };
+        let pipeline = related_pipeline("customer-1", 5, &contract_scope, &sales_scope);
+        assert_eq!(pipeline[0].get_document("$match").unwrap().get_str("id").unwrap(), "customer-1");
+        for (stage, scope) in [(1, contract_scope), (2, sales_scope)] {
+            let lookup = pipeline[stage].get_document("$lookup").unwrap();
+            let stages = lookup.get_array("pipeline").unwrap();
+            let filter = stages[0].as_document().unwrap().get_document("$match").unwrap();
+            assert_eq!(filter.get_array("$and").unwrap()[0], Bson::Document(scope));
+            let facet = stages[1].as_document().unwrap().get_document("$facet").unwrap();
+            let recent = facet.get_array("recent").unwrap();
+            assert_eq!(recent[1].as_document().unwrap().get_i64("$limit").unwrap(), 5);
+            assert_eq!(facet.get_array("matched").unwrap().len(), 2);
+        }
     }
 }

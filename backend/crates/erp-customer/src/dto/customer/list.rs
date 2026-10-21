@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::{SortDir, normalize_sort};
-use crate::entity::customer::{CustomerAccount, CustomerAccountStatus, CustomerAssignment};
+use crate::entity::customer::{AssignmentRole, CustomerAccount, CustomerAccountStatus, CustomerAssignment};
 use crate::error::{Error, Result};
 
 /// 客户角色列表允许的排序字段白名单（api-contract §4：Service 层校验）。
@@ -43,13 +43,17 @@ impl CustomerScope {
     /// # 错误
     /// 不返回错误。
     pub(crate) fn tags_for(
-        _assignments: &[CustomerAssignment],
+        assignments: &[CustomerAssignment],
         owner_user_id: Option<&str>,
         actor_user_id: &str,
         requested: Self,
     ) -> Vec<Self> {
         let mut scope_tags = Vec::new();
-        if owner_user_id == Some(actor_user_id) {
+        if owner_user_id == Some(actor_user_id)
+            || assignments
+                .iter()
+                .any(|item| item.assignment_role == AssignmentRole::Owner && item.user_id == actor_user_id)
+        {
             scope_tags.push(Self::Mine);
         }
         if !scope_tags.contains(&requested) {
@@ -131,7 +135,16 @@ pub struct UpdateCustomerRequest {
     pub status: Option<CustomerAccountStatus>,
 }
 
-/// 客户角色响应视图（列表用，契约形状对齐 `customer_account` 投影行）。
+/// 一名当前有效负责销售的公开资料。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CustomerOwnerView {
+    /// 负责销售账号。
+    pub user_id: String,
+    /// 账号展示名。
+    pub user_name: Option<String>,
+}
+
+/// 客户角色响应视图，包含全部有效负责销售。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CustomerView {
     /// 实体主键。
@@ -154,6 +167,8 @@ pub struct CustomerView {
     pub owner_user_id: Option<String>,
     /// 当前负责销售展示名。
     pub owner_user_name: Option<String>,
+    /// 全部当前有效负责销售；单人字段只用于旧客户端兼容。
+    pub owners: Vec<CustomerOwnerView>,
     /// 当前协作销售人数。
     pub collaborator_count: u32,
     /// 当前结果行命中的服务端范围标签。
@@ -225,6 +240,7 @@ impl CustomerView {
             status,
             owner_user_id: None,
             owner_user_name: None,
+            owners: Vec::new(),
             collaborator_count: 0,
             scope_tags: Vec::new(),
             version,

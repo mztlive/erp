@@ -37,6 +37,8 @@ pub struct ContractReadScope {
     pub collaborative_customer_ids: Vec<String>,
     /// 已转换成仓储条件的授权客户集合；`None` 表示公司范围。
     pub authorized_customer_ids: Option<Vec<String>>,
+    /// 合同独立销售责任形成的强制身份交集；None 仅用于明确公司范围。
+    pub authorized_contract_ids: Option<Vec<String>>,
 }
 
 impl Default for ContractReadScope {
@@ -61,6 +63,7 @@ impl Default for ContractReadScope {
             owned_customer_ids: Vec::new(),
             collaborative_customer_ids: Vec::new(),
             authorized_customer_ids: Some(Vec::new()),
+            authorized_contract_ids: None,
         }
     }
 }
@@ -172,7 +175,7 @@ impl ContractReadScope {
     /// # 关键业务约束
     /// 公司范围仍受个人上限约束，不得用其补齐缺范围角色。
     pub fn is_company(&self) -> bool {
-        self.authorized_customer_ids.is_none()
+        self.authorized_contract_ids.is_none() && self.authorized_customer_ids.is_none()
     }
 
     /// 判断授权规则是否确定不产生可见对象。
@@ -189,8 +192,9 @@ impl ContractReadScope {
     /// # 关键业务约束
     /// 缺范围必须保持空集，不得退化为全量查询。
     pub fn is_empty(&self) -> bool {
-        self.authorized_customer_ids.as_ref().is_some_and(Vec::is_empty)
-            && self.historical_contract_ids.is_empty()
+        self.authorized_contract_ids.as_ref().is_some_and(Vec::is_empty)
+            || (self.authorized_customer_ids.as_ref().is_some_and(Vec::is_empty)
+                && self.historical_contract_ids.is_empty())
     }
 
     /// 生成合同集合上的授权条件。
@@ -207,7 +211,12 @@ impl ContractReadScope {
     /// # 关键业务约束
     /// MongoDB 不接受空 `$in` 作为全量；空授权必须拒绝匹配。
     pub fn document(&self) -> Document {
-        authorization_document(self.authorized_customer_ids.as_deref(), &self.historical_contract_ids)
+        let customers =
+            authorization_document(self.authorized_customer_ids.as_deref(), &self.historical_contract_ids);
+        match &self.authorized_contract_ids {
+            Some(ids) => doc! { "$and": [customers, { "id": { "$in": ids } }] },
+            None => customers,
+        }
     }
 }
 
@@ -422,6 +431,7 @@ mod tests {
         assert_eq!(empty.document(), doc! { "$expr": false });
         let company = ContractReadScope {
             authorized_customer_ids: None,
+            authorized_contract_ids: None,
             roles: vec![ContractScopeClause { company: true, ..Default::default() }],
             user_limit: None,
             historical_contract_ids: vec![],
@@ -442,6 +452,7 @@ mod tests {
             owned_customer_ids: vec![],
             collaborative_customer_ids: vec![],
             authorized_customer_ids: Some(Vec::new()),
+            authorized_contract_ids: None,
         };
         assert!(!scope.allows_creation("cust-1"));
         assert_eq!(scope.document(), doc! { "id": { "$in": ["ht-old"] } });
@@ -469,6 +480,7 @@ mod tests {
             owned_customer_ids: vec!["c-own".into()],
             collaborative_customer_ids: vec![],
             authorized_customer_ids: Some(vec!["c-own".into()]),
+            authorized_contract_ids: None,
         };
         assert!(!limited.is_company());
         assert!(limited.allows_creation("c-own"));

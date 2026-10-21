@@ -18,12 +18,21 @@ export function CustomerFormResultPanel({
     isQueryingIdempotency: boolean
     onQueryFinalResult: (idempotencyKey: string) => void
 }) {
-    if (result?.outcome === "rejected") {
+    if (
+        result?.outcome === "rejected" ||
+        (mode === "create" && result?.outcome === "conflict")
+    ) {
         return (
             <div id={`customers-form-${mode}-rejected`}>
                 <FormalActionResult
                     status="rejected"
-                    title={mode === "create" ? "无法创建客户" : "无法保存修订"}
+                    title={
+                        result.outcome === "conflict"
+                            ? "请核对已有企业资料"
+                            : mode === "create"
+                              ? "无法创建客户"
+                              : "无法保存修订"
+                    }
                     description={result.message}
                 />
             </div>

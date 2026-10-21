@@ -22,7 +22,9 @@ use mongodb::Database;
 use persistence_core::{Executor, NoTransaction, Transactional};
 use validator::Validate;
 
-use crate::dto::customer::{CreateCustomerRequest, CustomerScope, CustomerView, UpdateCustomerRequest};
+use crate::dto::customer::{
+    CreateCustomerRequest, CustomerOwnerView, CustomerScope, CustomerView, UpdateCustomerRequest,
+};
 use crate::entity::customer::{
     AssignmentRole, CustomerAccount, CustomerAccountData, CustomerAccountId, CustomerAccountStatus,
     CustomerAccountUpdate, CustomerAssignment, CustomerAssignmentData, CustomerAssignmentId,
@@ -288,26 +290,6 @@ impl CustomerService {
             .await?
             .ok_or_else(|| Error::NotFound("客户不存在".to_string()))
     }
-
-    /// 查询客户当前生效的负责销售（§6.2：同一时点恰好一个 OWNER）。
-    ///
-    /// # 参数
-    /// * `customer_id` - 客户角色 ID
-    ///
-    /// # 返回
-    /// 返回当前生效 OWNER 的销售人员；无生效归属时返回 `None`。
-    async fn current_owner_user_id(&self, customer_id: &str) -> Result<Option<String>> {
-        Ok(self
-            .db
-            .customer_assignments()
-            .find_current_owner(
-                &CustomerAccountId::new(customer_id),
-                BusinessDate::today(),
-                &mut NoTransaction,
-            )
-            .await?
-            .map(|assignment| assignment.user_id))
-    }
 }
 
 /// 构造客户角色与首条 OWNER 归属；忽略请求中的 `owner_user_id`。
@@ -408,6 +390,10 @@ pub(super) fn assemble_customer_views(
             view.party_no = identity.map(|fact| fact.party_no.clone());
             view.legal_name = identity.and_then(|fact| fact.legal_name.clone());
             view.short_name = identity.and_then(|fact| fact.short_name.clone());
+            view.owners = CustomerAssignment::owner_ids(assignments)
+                .into_iter()
+                .map(|user_id| CustomerOwnerView { user_name: account_names.get(&user_id).cloned(), user_id })
+                .collect();
             view.owner_user_id = owner_user_id;
             view.owner_user_name = owner_user_name;
             view.collaborator_count = collaborator_count;

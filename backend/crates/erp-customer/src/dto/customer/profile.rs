@@ -115,6 +115,9 @@ pub struct SaveCustomerProfileRequest {
     /// 客户端幂等键。
     #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
     pub idempotency_key: String,
+    /// 创建时明确确认复用尚无客户角色的主体，保留其全部既有基础资料。
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub reuse_existing_party: bool,
     /// 修订时必填的 Party 乐观锁版本。
     pub expected_party_version: Option<u64>,
     /// 修订时必填的客户乐观锁版本。

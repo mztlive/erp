@@ -1,5 +1,7 @@
 "use client"
 
+import type { CustomerAssignmentView } from "@/features/customers/types"
+import { toAutomationIdSegment } from "@/lib/automation-id"
 import { RequiredMark } from "@/components/ui/required-mark"
 
 import * as React from "react"
@@ -31,30 +33,37 @@ import { getErrorMessage } from "@/lib/api/errors"
 const mutationMessage = (error: unknown): string =>
     getErrorMessage(error, "归属调整失败，请重试。")
 
-/** 换任当前负责销售。 */
+/** 增加或结束客户负责销售关系。 */
 export function CustomerAssignmentDialog({
     customerId,
+    assignments,
     open,
     onOpenChange,
 }: {
     customerId: string
+    assignments: readonly CustomerAssignmentView[]
     open: boolean
     onOpenChange: (open: boolean) => void
 }) {
+    const [target, setTarget] = React.useState<
+        CustomerAssignmentView | undefined
+    >()
     const mutation = useApplyCustomerAssignmentMutation()
     const resetMutation = mutation.reset
     const owners = useOwnerOptionsQuery()
 
     const form = useAppForm({
         defaultValues: customerAssignmentDefaults(),
-        validators: { onChange: customerAssignmentSchema() },
+        validators: { onChange: customerAssignmentSchema(target) },
         onSubmit: async ({ value }) => {
             await mutation.mutateAsync({
                 customerId,
-                action: "assign",
-                userId: value.userId,
-                role: "OWNER",
-                effectiveFrom: value.effectiveFrom,
+                action: target ? "end" : "assign",
+                userId: target ? undefined : value.userId,
+                role: target ? undefined : "OWNER",
+                effectiveFrom: target ? undefined : value.effectiveFrom,
+                assignmentId: target?.id,
+                version: target?.version,
                 effectiveTo: value.effectiveTo || undefined,
                 changeReason: value.reason,
             })
@@ -65,6 +74,7 @@ export function CustomerAssignmentDialog({
 
     React.useEffect(() => {
         if (!open) return
+        setTarget(undefined)
         form.reset(customerAssignmentDefaults())
         resetMutation()
     }, [form, open, resetMutation])
@@ -83,11 +93,67 @@ export function CustomerAssignmentDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent closeButtonId="customers-assignment-dialog-close">
                 <DialogHeader>
-                    <DialogTitle>调整客户归属</DialogTitle>
+                    <DialogTitle>
+                        {target
+                            ? `结束${target.userName}的负责关系`
+                            : "管理负责销售"}
+                    </DialogTitle>
                     <DialogDescription>
-                        换任后结束重叠的旧负责人归属，历史责任保留。
+                        增加销售不影响其他负责人员。结束负责关系后保留已有业务责任，客户至少保留一名有效负责销售。
                     </DialogDescription>
                 </DialogHeader>
+                {!target ? (
+                    <div className="space-y-2">
+                        {assignments
+                            .filter(
+                                (item) =>
+                                    item.role === "OWNER" && item.isCurrent,
+                            )
+                            .map((item) => (
+                                <div
+                                    key={item.id}
+                                    className="flex items-center justify-between gap-2 text-sm"
+                                >
+                                    <span>
+                                        {item.userName} · {item.effectiveFrom}{" "}
+                                        起
+                                    </span>
+                                    <Button
+                                        id={`customers-assignment-end-${toAutomationIdSegment(item.id)}`}
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={mutation.isPending}
+                                        onClick={() => {
+                                            setTarget(item)
+                                            form.reset(
+                                                customerAssignmentDefaults(
+                                                    item,
+                                                ),
+                                            )
+                                            resetMutation()
+                                        }}
+                                    >
+                                        结束负责
+                                    </Button>
+                                </div>
+                            ))}
+                    </div>
+                ) : (
+                    <Button
+                        id="customers-assignment-back-add"
+                        type="button"
+                        variant="outline"
+                        disabled={mutation.isPending}
+                        onClick={() => {
+                            setTarget(undefined)
+                            form.reset(customerAssignmentDefaults())
+                            resetMutation()
+                        }}
+                    >
+                        返回人员名单
+                    </Button>
+                )}
                 <form
                     className="space-y-4"
                     onSubmit={(event) => {
@@ -95,60 +161,66 @@ export function CustomerAssignmentDialog({
                         void form.handleSubmit()
                     }}
                 >
-                    <form.AppField
-                        name="userId"
-                        children={(field) => {
-                            const invalid =
-                                field.state.meta.isTouched &&
-                                !field.state.meta.isValid
-                            return (
-                                <Field data-invalid={invalid || undefined}>
-                                    <FieldLabel>
-                                        销售人员
-                                        <RequiredMark />
-                                    </FieldLabel>
-                                    <OwnerCombobox
-                                        id="customers-assignment-dialog-owner"
-                                        owners={owners.data ?? []}
-                                        value={field.state.value || undefined}
-                                        onValueChange={(value) =>
-                                            field.handleChange(value ?? "")
-                                        }
-                                    />
-                                    {invalid ? (
-                                        <FieldError
-                                            errors={toFieldErrors(
-                                                field.state.meta.errors,
-                                            )}
-                                        />
-                                    ) : null}
-                                </Field>
-                            )
-                        }}
-                    />
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    {!target ? (
                         <form.AppField
-                            name="effectiveFrom"
-                            children={(field) => (
-                                <div className="space-y-2">
-                                    <Label htmlFor="customer-assignment-from">
-                                        生效日期
-                                        <RequiredMark />
-                                    </Label>
-                                    <Input
-                                        id="customer-assignment-from"
-                                        type="date"
-                                        value={field.state.value}
-                                        onBlur={field.handleBlur}
-                                        onChange={(event) =>
-                                            field.handleChange(
-                                                event.target.value,
-                                            )
-                                        }
-                                    />
-                                </div>
-                            )}
+                            name="userId"
+                            children={(field) => {
+                                const invalid =
+                                    field.state.meta.isTouched &&
+                                    !field.state.meta.isValid
+                                return (
+                                    <Field data-invalid={invalid || undefined}>
+                                        <FieldLabel>
+                                            销售人员
+                                            <RequiredMark />
+                                        </FieldLabel>
+                                        <OwnerCombobox
+                                            id="customers-assignment-dialog-owner"
+                                            owners={owners.data ?? []}
+                                            value={
+                                                field.state.value || undefined
+                                            }
+                                            onValueChange={(value) =>
+                                                field.handleChange(value ?? "")
+                                            }
+                                        />
+                                        {invalid ? (
+                                            <FieldError
+                                                errors={toFieldErrors(
+                                                    field.state.meta.errors,
+                                                )}
+                                            />
+                                        ) : null}
+                                    </Field>
+                                )
+                            }}
                         />
+                    ) : null}
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        {!target ? (
+                            <form.AppField
+                                name="effectiveFrom"
+                                children={(field) => (
+                                    <div className="space-y-2">
+                                        <Label htmlFor="customer-assignment-from">
+                                            生效日期
+                                            <RequiredMark />
+                                        </Label>
+                                        <Input
+                                            id="customer-assignment-from"
+                                            type="date"
+                                            value={field.state.value}
+                                            onBlur={field.handleBlur}
+                                            onChange={(event) =>
+                                                field.handleChange(
+                                                    event.target.value,
+                                                )
+                                            }
+                                        />
+                                    </div>
+                                )}
+                            />
+                        ) : null}
                         <form.AppField
                             name="effectiveTo"
                             children={(field) => {
@@ -191,7 +263,7 @@ export function CustomerAssignmentDialog({
                                 label="调整原因"
                                 required
                                 disabled={mutation.isPending}
-                                placeholder="说明换任原因"
+                                placeholder="说明新增或结束负责的原因"
                             />
                         )}
                     />
@@ -213,7 +285,7 @@ export function CustomerAssignmentDialog({
                         <form.AppForm>
                             <form.SubmitButton
                                 id="customers-assignment-dialog-submit"
-                                label="确认调整"
+                                label={target ? "确认结束负责" : "添加负责销售"}
                                 disabled={mutation.isPending}
                                 loading={mutation.isPending}
                             />

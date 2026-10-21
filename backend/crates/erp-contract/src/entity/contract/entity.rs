@@ -9,6 +9,7 @@ use entity_macros::Entity;
 use erp_core::common::stable::StableBase;
 use erp_core::common::state::{DocumentState, ensure_transition};
 use erp_core::ids::{ContractId, CustomerAccountId, PartyId};
+use erp_core::validation::normalize_required_text;
 use erp_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
@@ -119,6 +120,15 @@ pub struct Contract {
     pub customer_id: CustomerAccountId,
     /// 结算主体。
     pub settlement_party_id: PartyId,
+    /// 合同独立负责销售；历史缺失时不得按客户名单猜测。
+    #[serde(default)]
+    pub sales_owner_user_id: String,
+    /// 明确授予此合同读取与选用资格的销售。
+    #[serde(default)]
+    pub shared_sales_user_ids: Vec<String>,
+    /// 最近一次共享名单调整原因。
+    #[serde(default)]
+    pub sales_access_change_reason: Option<String>,
 }
 
 impl PartialEq for Contract {
@@ -131,6 +141,9 @@ impl PartialEq for Contract {
             && self.stable.updated_by == other.stable.updated_by
             && self.contract_no == other.contract_no
             && self.customer_id == other.customer_id
+            && self.sales_owner_user_id == other.sales_owner_user_id
+            && self.shared_sales_user_ids == other.shared_sales_user_ids
+            && self.sales_access_change_reason == other.sales_access_change_reason
             && self.settlement_party_id == other.settlement_party_id
     }
 }
@@ -154,14 +167,50 @@ impl Contract {
     /// 当 contract_no 为空或超长时返回错误。
     pub fn new(id: ContractId, data: ContractData, created_by: impl Into<String>) -> Result<Self> {
         let contract_no = ContractSnapshot::new(data.contract_no)?.contract_no;
+        let sales_owner_user_id =
+            normalize_required_text(created_by.into(), "合同负责销售不能为空", 128, "负责销售账号过长")?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
-            stable: StableBase::new(ContractStatus::Effective, created_by),
+            stable: StableBase::new(ContractStatus::Effective, sales_owner_user_id.clone()),
             contract_no,
+            sales_owner_user_id,
+            shared_sales_user_ids: Vec::new(),
+            sales_access_change_reason: None,
             customer_id: data.customer_id,
             settlement_party_id: data.settlement_party_id,
         })
+    }
+
+    /// 设置本合同明确共享的销售，保留单据负责销售。
+    ///
+    /// # 参数
+    /// * `users` - 共享账号，最多一百人
+    /// # 返回
+    /// 规范化并去重后保存共享账号。
+    /// # 错误
+    /// 人数过多、账号为空或过长时返回错误。
+    pub fn set_shared_sales(&mut self, users: Vec<String>) -> Result<()> {
+        if self.sales_owner_user_id.is_empty() {
+            return Err(Error::from("请先核对并补齐合同负责销售，再调整共享人员"));
+        }
+        if users.len() > 100 {
+            return Err(Error::from("一份合同最多共享给100名销售"));
+        }
+        let mut normalized = Vec::new();
+        for user in users {
+            let user = user.trim();
+            if user.is_empty() || user.len() > 128 {
+                return Err(Error::from("共享销售账号无效"));
+            }
+            if user != self.sales_owner_user_id {
+                normalized.push(user.to_string());
+            }
+        }
+        normalized.sort();
+        normalized.dedup();
+        self.shared_sales_user_ids = normalized;
+        Ok(())
     }
 
     /// 更新合同（复用 `new` 的校验规则）。

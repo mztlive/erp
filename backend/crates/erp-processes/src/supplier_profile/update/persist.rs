@@ -8,6 +8,7 @@ use std::sync::Arc;
 use application_core::AuditActor;
 use erp_audit::AuditActorLogs;
 use erp_core::ids::{SupplierCapabilityId, SupplierQualificationId};
+use erp_party::service::party::identity::ensure_identity_available;
 use erp_party::{
     Party, PartyAddress, PartyBankAccount, PartyContact, PartyExt, PartyRevision, PartyTaxProfile,
 };
@@ -218,6 +219,7 @@ impl PreparedUpdate {
 
     /// 写入 Party/Supplier 根及新修订。
     async fn persist_roots(&mut self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
+        ensure_identity_available(db, &self.party, &self.party_revision, executor).await?;
         db.party_revisions().create(&self.party_revision, executor).await?;
         db.parties().update(&mut self.party, executor).await?;
         db.supplier_commercial_profile_revisions().create(&self.commercial_profile, executor).await?;

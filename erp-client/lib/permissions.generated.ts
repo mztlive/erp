@@ -2723,6 +2723,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         permissions: [
             {
                 module: "admin",
+                method: "PUT",
+                path: "/admin/contracts/{id}/sales-access",
+                description: "管理合同共享销售",
+                permission: {
+                    resource: "contract",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/contracts",
                 description: "查询合同列表",

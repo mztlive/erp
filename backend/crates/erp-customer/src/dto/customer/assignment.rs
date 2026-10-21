@@ -18,7 +18,7 @@ pub(crate) const CUSTOMER_ASSIGNMENT_SORT_FIELDS: &[&str] = &["created_at", "val
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AssignmentAction {
-    /// 建立新归属（同时结束同一客户同一角色的重叠旧归属；OWNER 恰好一人）。
+    /// 增加人员关系（保留其他负责销售；拒绝同人同角色重叠）。
     Assign,
     /// 提前结束既有归属（只允许结束有效期）。
     End,
@@ -27,7 +27,7 @@ pub enum AssignmentAction {
 /// 归属写入请求。
 ///
 /// - `Assign`：`user_id`/`assignment_role`/`valid_from`/`valid_to` 必填；
-///   同一客户同一角色、同一客户的 OWNER 均不允许重叠区间（§6.2）。
+///   同一客户、同一用户、同一角色均不允许重叠区间（§6.2）。
 /// - `End`：`assignment_id` 必填，`valid_to` 必填（晚于该归属 `valid_from`）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CustomerAssignmentRequest {

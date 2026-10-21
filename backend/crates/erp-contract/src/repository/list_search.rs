@@ -69,11 +69,12 @@ impl ContractRow {
     /// 不返回错误。
     ///
     /// # 关键业务约束
-    /// `owner_user_id` 只来自客户当前主负责人。
+    /// `owner_user_id` 只来自合同独立负责销售。
     pub(crate) fn into_view(
         self,
         current_revision: Option<ContractRevisionView>,
         customer: Option<&ContractCustomer>,
+        owners: &HashMap<String, String>,
     ) -> ContractView {
         ContractView {
             id: self.id,
@@ -84,8 +85,8 @@ impl ContractRow {
             current_revision_id: self.current_revision_id,
             current_revision,
             customer_no: customer.map(|c| c.number.clone()).filter(|number| !number.is_empty()),
-            owner_user_id: customer.and_then(|c| c.owner_id.clone()),
-            owner_user_name: customer.filter(|c| c.owner_id.is_some()).map(|c| c.owner.clone()),
+            owner_user_name: owners.get(&self.sales_owner_user_id).cloned(),
+            owner_user_id: (!self.sales_owner_user_id.is_empty()).then_some(self.sales_owner_user_id),
             created_at: self.created_at,
             version: self.version,
         }
@@ -99,6 +100,7 @@ pub struct ContractSearch {
     pub settlement_party_id: Option<String>,
     pub owner_user_ids: Option<application_core::QueryIds>,
     pub customers: Vec<ContractCustomer>,
+    pub owners: HashMap<String, String>,
 }
 
 impl ContractSearch {
@@ -109,13 +111,7 @@ impl ContractSearch {
             filter.insert("settlement_party_id", id);
         }
         if let Some(ids) = &self.owner_user_ids {
-            let customer_ids = self
-                .customers
-                .iter()
-                .filter(|c| c.owner_id.as_ref().is_some_and(|id| ids.as_slice().contains(id)))
-                .map(|c| c.id.clone())
-                .collect::<Vec<_>>();
-            filter.insert("customer_id", doc! { "$in": customer_ids });
+            filter.insert("sales_owner_user_id", doc! { "$in": ids.as_slice() });
         }
         apply_metric(&mut filter, self.metric);
         if let Some(q) = &self.q {
@@ -142,7 +138,7 @@ impl ContractSearch {
 
     /// MongoDB 排序与关键词使用相同当前负责人显示值。
     fn owner_expression(&self) -> Document {
-        let branches = self.customers.iter().map(|c| doc! { "case": { "$eq": ["$customer_id", { "$literal": &c.id }] }, "then": { "$literal": &c.owner } }).collect::<Vec<_>>();
+        let branches = self.owners.iter().map(|(id, name)| doc! { "case": { "$eq": ["$sales_owner_user_id", { "$literal": id }] }, "then": { "$literal": name } }).collect::<Vec<_>>();
         if branches.is_empty() {
             return doc! { "$literal": "—" };
         }
@@ -200,6 +196,32 @@ impl ContractDomainRepository<'_> {
             query = query.session(session);
         }
         Ok(query.await?.into_iter().filter_map(|id| id.as_str().map(str::to_owned)).collect())
+    }
+
+    /// 读取已授权合同的独立负责销售，用于显示与筛选。
+    ///
+    /// # 参数
+    /// * `filter` - 已与合同责任求交的筛选
+    /// * `executor` - 同一读取执行器
+    /// # 返回
+    /// 返回去重负责销售账号。
+    /// # 错误
+    /// 数据库读取失败时返回错误。
+    pub async fn list_owner_ids(
+        &self,
+        filter: &ContractFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<String>> {
+        let collection = self.db.collection::<Document>(<mongodb::Database as ContractExt>::CONTRACTS);
+        let mut query = collection.distinct("sales_owner_user_id", filter.to_doc());
+        if let Some(session) = executor.session() {
+            query = query.session(session);
+        }
+        Ok(query
+            .await?
+            .into_iter()
+            .filter_map(|id| id.as_str().filter(|id| !id.is_empty()).map(str::to_owned))
+            .collect())
     }
 
     /// 在拥有的合同与修订集合内完成分页；元数据基于同一可见范围。
@@ -373,6 +395,9 @@ mod tests {
             customer_id: None,
             customer_ids: Some(vec![]),
             historical_contract_ids: vec![],
+            authorized_contract_ids: None,
+            assigned_user_id: None,
+            owner_user_ids: None,
             status: None,
             page: 3,
             page_size: 20,
@@ -385,6 +410,7 @@ mod tests {
             settlement_party_id: Some("party-1".into()),
             owner_user_ids: None,
             customers: vec![],
+            owners: HashMap::new(),
         };
         let pipeline = list_pipeline(&filter, &search, BusinessDate::from_ymd(2026, 9, 8).unwrap());
         assert_eq!(
@@ -413,6 +439,7 @@ mod tests {
             metric: None,
             settlement_party_id: None,
             owner_user_ids: Some(serde_json::from_str("\"user-1\"").unwrap()),
+            owners: HashMap::new(),
             customers: vec![
                 ContractCustomer {
                     owner_id: Some("user-1".into()),
@@ -433,7 +460,7 @@ mod tests {
             search.filter().get_array("$or").unwrap().last().unwrap().as_document().unwrap(),
             &doc! { "customer_id": { "$in": ["customer-101"] } }
         );
-        assert_eq!(search.filter().get_document("customer_id").unwrap(), &doc! { "$in": ["customer-101"] });
+        assert_eq!(search.filter().get_document("sales_owner_user_id").unwrap(), &doc! { "$in": ["user-1"] });
     }
 
     /// 到期边界使用业务日并保留空页计数。
@@ -445,6 +472,7 @@ mod tests {
             settlement_party_id: None,
             owner_user_ids: None,
             customers: vec![],
+            owners: HashMap::new(),
         };
         let fields = display_fields(&search, BusinessDate::from_ymd(2026, 9, 8).unwrap());
         let expression = fields.get_document("search_expiring").unwrap().get_array("$and").unwrap();
@@ -473,8 +501,9 @@ mod tests {
     }
 
     #[test]
-    fn row_into_view_keeps_owner_only_with_assignment() {
+    fn row_into_view_uses_contract_owner_without_customer_assignment() {
         let row = ContractRow {
+            sales_owner_user_id: "user-1".into(),
             id: "c-1".into(),
             contract_no: "HT-1".into(),
             customer_id: "cust-1".into(),
@@ -491,7 +520,8 @@ mod tests {
             number: "C-1".into(),
             owner: "张三".into(),
         };
-        let view = row.clone().into_view(None, Some(&assigned));
+        let view =
+            row.clone().into_view(None, Some(&assigned), &HashMap::from([("user-1".into(), "张三".into())]));
         assert_eq!(view.customer_no.as_deref(), Some("C-1"));
         assert_eq!(view.owner_user_id.as_deref(), Some("user-1"));
         assert_eq!(view.owner_user_name.as_deref(), Some("张三"));
@@ -502,9 +532,9 @@ mod tests {
             number: String::new(),
             owner: "—".into(),
         };
-        let bare = row.into_view(None, Some(&unassigned));
+        let bare = row.into_view(None, Some(&unassigned), &HashMap::new());
         assert_eq!(bare.customer_no, None);
-        assert_eq!(bare.owner_user_id, None);
+        assert_eq!(bare.owner_user_id.as_deref(), Some("user-1"));
         assert_eq!(bare.owner_user_name, None);
     }
 }

@@ -6,6 +6,7 @@ use super::{ACTOR, BuiltinCompany, PartyService};
 use crate::entity::party::company::CompanyProfile;
 use crate::entity::party::{Party, PartyId, PartyRevision, PartyRevisionData, PartyRevisionId, PartyUpdate};
 use crate::repository::PartyExt;
+use crate::repository::identity_guard::lock_name;
 use crate::repository::prelude::*;
 use crate::{Error, Result};
 
@@ -38,6 +39,7 @@ impl PartyService {
         seed: &BuiltinCompany,
         executor: &mut dyn Executor,
     ) -> Result<(Party, bool)> {
+        lock_name(&self.db, &seed.legal_name, executor).await?;
         let existing = self.builtin_candidate(seed, executor).await?;
         let is_new = existing.is_none();
         let mut party = match existing {

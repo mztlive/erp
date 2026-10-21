@@ -1,8 +1,12 @@
 //! 应收子账范围查询。
 
 use application_core::AuditActor;
+use erp_core::common::time::BusinessDate;
+use erp_core::ids::CustomerAccountId;
 use erp_core::money::Amount;
-use erp_finance::repository::ReceivableExt;
+use erp_finance::dto::receivable::ReceivableAccountListParams;
+use erp_finance::repository::prelude::*;
+use erp_finance::repository::{CustomerCenterReceivableRow, ReceivableExt};
 use erp_sales::repository::SalesOrderExt;
 use persistence_core::{Executor, Transactional};
 use validator::Validate;
@@ -18,6 +22,43 @@ use list::{receivable_page_rows, receivable_summary};
 
 /// M07 应收子账范围查询：负责销售与登记经办人分别查询，同一事务内解析与取数。
 impl FundsAccess {
+    /// 在同一事务按正式应收来源范围读取客户汇总。
+    ///
+    /// # 参数
+    /// * `customer_id` - 已证明可读的客户
+    /// * `actor` - 当前认证操作人
+    /// * `executor` - 客户资料与资金授权共用的执行器
+    /// # 返回
+    /// 仅汇总当前资金动作允许读取的子账。
+    /// # 错误
+    /// 授权、查询超限或汇总读取失败时返回错误。
+    pub async fn customer_receivable_summary(
+        &self,
+        customer_id: &str,
+        actor: &AuditActor,
+        executor: &mut dyn Executor,
+    ) -> Result<CustomerCenterReceivableRow> {
+        let (_, authorization) = self.resolve(actor, "receivable_account", "list", executor).await?;
+        if authorization.empty() {
+            return Err(Error::Forbidden("当前没有可查看的应收范围".into()));
+        }
+        let params = ReceivableAccountListParams {
+            customer_id: Some(CustomerAccountId::new(customer_id)),
+            ..Default::default()
+        };
+        let query = params.normalized()?;
+        let condition = self.receivable_condition(&query, executor).await?;
+        let snapshot =
+            self.receivable_database_snapshot(&query, &authorization, &condition, false, executor).await?;
+        let _ = snapshot.version(&authorization)?;
+        let ids = snapshot.versions.into_iter().map(|row| row.id).collect::<Vec<_>>();
+        Ok(self
+            .db
+            .receivable_accounts()
+            .customer_center_receivable(customer_id, &ids, BusinessDate::today(), executor)
+            .await?)
+    }
+
     /// 分页查询应收往来子账范围行。
     ///
     /// # 参数

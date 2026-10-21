@@ -26,6 +26,7 @@ export type BackendCustomerView = {
     default_payment_term_id?: string | null
     status: BackendCustomerStatus
     owner_user_id?: string | null
+    owners?: { user_id: string; user_name?: string | null }[]
     owner_user_name?: string | null
     collaborator_count: number
     scope_tags: BackendCustomerScope[]

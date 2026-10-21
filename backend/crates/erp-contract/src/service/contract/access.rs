@@ -1,4 +1,6 @@
-//! 合同对象读取与写入范围；当前客户主责、协作与负责人组织分别解释。
+//! 合同对象按独立负责销售、明确共享及负责销售组织授权；客户关系只用于建档资格。
+
+mod responsibility;
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -70,7 +72,7 @@ impl ContractAccess {
     /// 无动作权限返回 Forbidden；查询超限或组织关系非法时拒绝。
     ///
     /// # 关键业务约束
-    /// 当前跟进按客户当前主负责人解释；历史参与只补充读取。
+    /// 合同读取和修改按合同独立负责销售解释；历史参与只补充读取。
     pub async fn resolve(
         &self,
         actor: &AuditActor,
@@ -95,15 +97,23 @@ impl ContractAccess {
         ensure_limit(collaborating.len(), "协作范围超过查询上限")?;
         let org_owned = self.org_owned_customers(&access, as_of, executor).await?;
         let current = contract_scope(&access, actor.id(), &owned, &collaborating, Vec::new(), &org_owned);
-        let limit_customers = current.authorized_customer_ids;
+        let _limit_customers = current.authorized_customer_ids;
         let history = if allows_history(action) {
-            self.historical_contracts(actor.id(), limit_customers.as_deref(), executor).await?
+            self.historical_contracts(actor.id(), None, executor).await?
         } else {
             Vec::new()
         };
         let fingerprint = scope_fingerprint_input(&owned, &collaborating, history.as_slice(), &org_owned);
         access.scope_version = format!("{}:{:x}", access.scope_version, stable_fingerprint(&fingerprint));
-        let scope = contract_scope(&access, actor.id(), &owned, &collaborating, history, &org_owned);
+        let mut scope = contract_scope(&access, actor.id(), &owned, &collaborating, history, &org_owned);
+        scope.authorized_contract_ids = if action == "create" {
+            Some(Vec::new())
+        } else {
+            self.responsible_ids(&access, &scope.historical_contract_ids, executor).await?
+        };
+        if action != "create" {
+            scope.authorized_customer_ids = None;
+        }
         Ok((access, scope))
     }
 
@@ -167,7 +177,7 @@ impl ContractAccess {
         let (access, scope) = self.resolve(&actor, action, executor).await?;
         let found = self.db.contracts().find_authorized(contract_id, &scope, executor).await?;
         let contract = found.ok_or_else(|| deny_object(action))?;
-        let mut object = self.object_facts(contract.customer_id.as_ref(), &access, &scope, executor).await?;
+        let mut object = self.contract_object(&contract, &access, executor).await?;
         object.historical_read_participant = scope.historical_contract_ids.iter().any(|id| id == contract_id);
         if !self.scope.allows(&access, &object)? {
             return Err(deny_object(action));
@@ -197,38 +207,20 @@ impl ContractAccess {
         executor: &mut dyn Executor,
     ) -> Result<ContractResolvedScope> {
         let (access, scope) = self.resolve(actor, "create", executor).await?;
-        let object = self.object_facts(customer_id, &access, &scope, executor).await?;
+        if !scope.allows_customer(customer_id)
+            || self.customers.find_by_ids(&[CustomerAccountId::new(customer_id)], executor).await?.is_empty()
+        {
+            return Err(Error::Forbidden("当前没有该客户的合同归档资格，请先分配负责销售".into()));
+        }
+        let object = ContractScopeObject {
+            owned: true,
+            org_unit_id: self.scope.own_org(actor.id(), access.as_of, executor).await?,
+            ..Default::default()
+        };
         if !self.scope.allows(&access, &object)? {
             return Err(Error::Forbidden("当前账号无权在授权范围内归档合同".into()));
         }
         Ok(access)
-    }
-
-    /// 合同对象使用客户当前主负责人组织，不以签约人或上传人作为责任兜底。
-    async fn object_facts(
-        &self,
-        id: &str,
-        access: &ContractResolvedScope,
-        scope: &ContractReadScope,
-        executor: &mut dyn Executor,
-    ) -> Result<ContractScopeObject> {
-        if self.customers.find_by_ids(&[CustomerAccountId::new(id)], executor).await?.is_empty() {
-            return Err(deny_object(&access.action));
-        }
-        let owners = self
-            .assignments
-            .owner_user_ids_by_customer(&[id.to_string()], business_date(access.as_of)?, executor)
-            .await?;
-        let mut org_unit_id = None;
-        if let Some(owner) = owners.get(id) {
-            org_unit_id = self.scope.own_org(owner, access.as_of, executor).await?;
-        }
-        Ok(ContractScopeObject {
-            owned: scope.owned_customer_ids.iter().any(|value| value == id),
-            collaborating: scope.collaborative_customer_ids.iter().any(|value| value == id),
-            historical_read_participant: false,
-            org_unit_id,
-        })
     }
 
     /// 读取动作已由身份域证明后，补充该账号合法参与且仍存在的合同。
@@ -415,6 +407,7 @@ pub fn contract_scope(
         owned_customer_ids: owned.to_vec(),
         collaborative_customer_ids: collaborating.to_vec(),
         authorized_customer_ids: authorized,
+        authorized_contract_ids: None,
     }
 }
 

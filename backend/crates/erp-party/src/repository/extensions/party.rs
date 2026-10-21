@@ -18,6 +18,8 @@ use crate::repository::owned::{
 
 /// 域 D07 仓储访问器。
 pub trait PartyExt {
+    /// 企业名称写入互斥记录，按 `_id` 保持唯一。
+    const PARTY_IDENTITY_GUARDS: &'static str = "party_identity_guards";
     /// `party` 集合名。
     const PARTIES: &'static str = "parties";
     /// `party_revision` 集合名。

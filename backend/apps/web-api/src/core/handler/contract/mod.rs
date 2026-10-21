@@ -15,8 +15,8 @@ use axum::http::{HeaderValue, StatusCode};
 use axum::response::Response;
 use axum::{Extension, Json};
 use erp_contract::{
-    ArchiveContractRevisionRequest, ContractDetailView, ContractListParams, ContractListView, ContractView,
-    CreateContractRequest, TerminateContractRequest,
+    ArchiveContractRevisionRequest, ContractDetailView, ContractListParams, ContractListView,
+    ContractSalesAccessRequest, ContractView, CreateContractRequest, TerminateContractRequest,
 };
 use erp_support::FileAssetView;
 use tracing::error;
@@ -25,6 +25,24 @@ use super::file_asset::prepare_asset_response;
 use crate::app_state::AppState;
 use crate::core::errors::{Error, Result};
 use crate::core::response::ApiResponse;
+
+#[permission_macros::permission(
+    group = "合同",
+    group_desc = "合同 PDF 档案管理",
+    desc = "管理合同共享销售",
+    resource = "contract",
+    action = "update"
+)]
+/// 维护本合同的明确共享名单，路由同时要求客户人员分配权限。
+pub async fn contract_sales_access(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(request): Json<ContractSalesAccessRequest>,
+) -> Result<ContractDetailView> {
+    let view = state.contract_service().set_sales_access(&id, request, &actor).await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
 
 #[permission_macros::permission(
     group = "合同",
@@ -257,8 +275,10 @@ pub(crate) async fn ensure_contract_access(
 
 #[cfg(test)]
 mod tests {
-    use axum::extract::Query;
-    use axum::http::Uri;
+    use axum::body::Body;
+    use axum::extract::{FromRequest, Query};
+    use axum::http::{Request, StatusCode, Uri};
+    use serde_json::json;
 
     use super::*;
 
@@ -289,5 +309,31 @@ mod tests {
         assert_eq!(params.include_descendants, Some(true));
         let legacy: Uri = "/?owner=张三".parse().unwrap();
         assert!(Query::<ContractListParams>::try_from_uri(&legacy).is_err());
+    }
+
+    #[tokio::test]
+    async fn contract_sales_access_body_accepts_shares_and_rejects_owner_forgery() {
+        for (forged_owner, expected) in [(false, StatusCode::OK), (true, StatusCode::UNPROCESSABLE_ENTITY)] {
+            let mut body = json!({
+                "version": 1,
+                "shared_sales_user_ids": ["sales-b"],
+                "change_reason": "共享年度框架合同"
+            });
+            if forged_owner {
+                body["sales_owner_user_id"] = json!("sales-b");
+            }
+            let request = Request::builder()
+                .method("PUT")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap();
+            match Json::<ContractSalesAccessRequest>::from_request(request, &()).await {
+                Ok(Json(input)) => {
+                    assert_eq!(expected, StatusCode::OK);
+                    assert_eq!(input.shared_sales_user_ids, ["sales-b"]);
+                },
+                Err(error) => assert_eq!(error.status(), expected),
+            }
+        }
     }
 }

@@ -4,11 +4,11 @@
 //! 走 JWT + RBAC（`with_permission`），handler 标注 `#[permission_macros::permission]`。
 
 use axum::Router;
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use erp_identity::SharedRbacService;
 
 use crate::app_state::AppState;
-use crate::core::handler::contract;
+use crate::core::handler::{contract, customer};
 use crate::core::middleware::with_permission;
 use crate::core::upload;
 
@@ -21,9 +21,25 @@ use crate::core::upload;
 /// 返回挂载了权限校验层的路由集合。
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     archived_routes(rbac)
+        .merge(sales_access_routes(rbac))
         .merge(template_routes(rbac))
         .merge(application_routes(rbac))
         .merge(import_routes(rbac))
+}
+
+fn sales_access_routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new().route(
+        "/contracts/{id}/sales-access",
+        with_permission(
+            with_permission(
+                put(contract::contract_sales_access),
+                rbac,
+                contract::contract_sales_access_permission_key(),
+            ),
+            rbac,
+            customer::customer_assignment_apply_permission_key(),
+        ),
+    )
 }
 
 fn archived_routes(rbac: &SharedRbacService) -> Router<AppState> {

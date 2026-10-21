@@ -1,6 +1,6 @@
 //! `customer_assignment`：客户归属（数据模型 §6.2，页面：W03）。
 //!
-//! 同一客户同一时点恰好一个 `OWNER`、同一客户/用户/角色的有效期不得
+//! 同一客户允许多个 `OWNER`，同一客户/用户/角色的有效期不得
 //! 重叠；区间与角色冲突由实体判定，P3 只负责事务内加载并持久化冲突行
 //! （§6.2）。负责人变化后只影响新增单据权限，不删除历史参与权（W03 / §11.1）。
 
@@ -146,10 +146,9 @@ impl CustomerAssignment {
         })
     }
 
-    /// 直接结束协作归属。
+    /// 结束指定人员的负责或协作关系。
     ///
-    /// 负责人归属必须通过换任建立新的负责人后结束，不能被独立结束；
-    /// 协作归属允许直接设置结束日期。
+    /// 本方法只维护单行有效期；最后一名负责销售的限制由事务用例校验。
     ///
     /// # 参数
     /// * `valid_to` - 生效结束日期
@@ -158,10 +157,10 @@ impl CustomerAssignment {
     /// 结束成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 负责人归属被直接结束，或结束日期不晚于开始日期时返回错误。
+    /// 结束日期不晚于开始日期，或晚于既有结束日期时返回错误。
     pub fn end_directly(&mut self, valid_to: BusinessDate) -> Result<()> {
-        if self.assignment_role == AssignmentRole::Owner {
-            return Err(Error::from("负责人不能直接结束，请通过换任建立新的负责人归属"));
+        if self.valid_to.is_some_and(|current| valid_to > current) {
+            return Err(Error::from("结束负责关系只能缩短有效期，不能延后原结束日期"));
         }
         self.set_valid_to(valid_to)
     }
@@ -169,7 +168,7 @@ impl CustomerAssignment {
     /// 兼容归属生命周期更新入口。
     ///
     /// 该入口与 [`Self::end_directly`] 使用相同领域规则，只允许直接结束
-    /// 协作归属；负责人换任必须使用 [`Self::end_for_replacement`]。
+    /// 负责或协作归属；其他人员的关系不受影响。
     ///
     /// # 参数
     /// * `update` - 结束日期更新意图
@@ -178,7 +177,7 @@ impl CustomerAssignment {
     /// 更新成功返回 `Ok(())`。
     ///
     /// # 错误
-    /// 负责人归属被直接结束，或结束日期不晚于开始日期时返回错误。
+    /// 结束日期不晚于开始日期时返回错误。
     pub fn update(&mut self, update: CustomerAssignmentUpdate) -> Result<()> {
         if let Some(valid_to) = update.valid_to.into_option() {
             self.end_directly(valid_to)?;
@@ -188,8 +187,7 @@ impl CustomerAssignment {
 
     /// 在新归属冲突时结束当前归属。
     ///
-    /// OWNER 与同一客户任一 OWNER 冲突；COLLABORATOR 只与同一客户、
-    /// 同一用户的 COLLABORATOR 冲突。结束日为新区间开始日，保持开区间
+    /// 同一客户、同一用户、同一角色的重叠关系才冲突。结束日为新区间开始日，保持开区间
     /// 无重叠且无空档。
     ///
     /// # 参数
@@ -225,8 +223,60 @@ impl CustomerAssignment {
         if self.customer_id != other.customer_id || self.assignment_role != other.assignment_role {
             return false;
         }
-        let role_conflicts = other.assignment_role == AssignmentRole::Owner || self.user_id == other.user_id;
+        let role_conflicts = self.user_id == other.user_id;
         role_conflicts && windows_overlap(self.valid_from, self.valid_to, other.valid_from, other.valid_to)
+    }
+
+    /// 拒绝同客户、同人员、同角色的重叠负责区间。
+    ///
+    /// # 参数
+    /// * `existing` - 原写入事务读取的人员关系
+    /// # 返回
+    /// 没有重叠区间时返回成功。
+    /// # 错误
+    /// 同人同角色已有重叠关系时返回错误。
+    pub fn ensure_no_overlap(&self, existing: &[Self]) -> Result<()> {
+        if existing.iter().any(|item| !item.base.is_deleted() && self.conflicts_with(item)) {
+            return Err(Error::from("该销售在此期间已负责该客户，请调整有效期"));
+        }
+        Ok(())
+    }
+
+    /// 校验被缩短的整个区间仍由其他有效负责销售连续覆盖。
+    ///
+    /// # 参数
+    /// * `remaining` - 同一事务读取的客户全部人员关系
+    /// * `at` - 拟提前结束日期
+    /// # 返回
+    /// 从新结束日到原结束日连续有人负责时返回成功。
+    /// # 错误
+    /// 被移除的任意区间无人负责时返回错误。
+    pub fn ensure_owner_retained(&self, remaining: &[Self], at: BusinessDate) -> Result<()> {
+        if self.assignment_role != AssignmentRole::Owner || self.valid_to.is_some_and(|end| at >= end) {
+            return Ok(());
+        }
+        let mut owners = remaining
+            .iter()
+            .filter(|item| {
+                !item.base.is_deleted()
+                    && item.base.id != self.base.id
+                    && item.customer_id == self.customer_id
+                    && item.assignment_role == AssignmentRole::Owner
+            })
+            .collect::<Vec<_>>();
+        owners.sort_by_key(|item| item.valid_from);
+        let mut covered_until = at;
+        for owner in owners {
+            if owner.valid_from > covered_until {
+                break;
+            }
+            let Some(end) = owner.valid_to else { return Ok(()) };
+            covered_until = covered_until.max(end);
+            if self.valid_to.is_some_and(|end| covered_until >= end) {
+                return Ok(());
+            }
+        }
+        Err(Error::from("至少保留一名有效负责销售，请先添加接任人员"))
     }
 
     /// 校验归属属于指定客户。
@@ -292,6 +342,25 @@ impl CustomerAssignment {
 }
 
 impl CustomerAssignment {
+    /// 返回去重并稳定排序的负责销售账号。
+    ///
+    /// # 参数
+    /// * `assignments` - 已按有效期读取的客户人员关系
+    /// # 返回
+    /// 返回全部未删除负责销售账号。
+    /// # 错误
+    /// 无。
+    pub fn owner_ids(assignments: &[Self]) -> Vec<String> {
+        let mut ids = assignments
+            .iter()
+            .filter(|item| !item.base.is_deleted() && item.assignment_role == AssignmentRole::Owner)
+            .map(|item| item.user_id.clone())
+            .collect::<Vec<_>>();
+        ids.sort();
+        ids.dedup();
+        ids
+    }
+
     /// 解析同一客户归属行的主负责人与协作计数。
     ///
     /// # 参数
@@ -408,6 +477,8 @@ pub(crate) fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<Bus
 
 #[cfg(test)]
 mod tests {
+    use std::slice;
+
     use erp_core::common::time::BusinessDate;
     use erp_core::field_update::FieldUpdate;
     use erp_core::ids::{CustomerAccountId, CustomerAssignmentId};
@@ -487,12 +558,12 @@ mod tests {
         assert_eq!(assignment.assignment_role, AssignmentRole::Collaborator);
     }
 
-    /// 失败路径：负责人不能直接结束，倒挂结束日期也被拒绝。
+    /// 负责销售可以结束单行关系，倒挂结束日期被拒绝。
     #[test]
-    fn direct_end_rejects_owner_and_reversed_window() {
+    fn direct_end_allows_owner_and_rejects_reversed_window() {
         let mut owner =
             CustomerAssignment::new(CustomerAssignmentId::new("assign-owner"), assignment_data()).unwrap();
-        assert!(owner.end_directly(BusinessDate::from_ymd(2026, 3, 31).unwrap()).is_err());
+        assert!(owner.end_directly(BusinessDate::from_ymd(2026, 3, 31).unwrap()).is_ok());
 
         let data =
             CustomerAssignmentData { assignment_role: AssignmentRole::Collaborator, ..assignment_data() };
@@ -501,7 +572,7 @@ mod tests {
         assert!(collaborator.end_directly(BusinessDate::from_ymd(2025, 1, 1).unwrap()).is_err());
     }
 
-    /// 冲突规则：负责人跨用户冲突，协作者只与同用户冲突。
+    /// 不同负责销售可以同时有效；同人同角色仍拒绝重叠。
     #[test]
     fn replacement_conflicts_follow_role_and_user_rules() {
         let mut owner =
@@ -514,9 +585,14 @@ mod tests {
         };
         let new_owner =
             CustomerAssignment::new(CustomerAssignmentId::new("owner-new"), new_owner_data).unwrap();
-        assert!(owner.conflicts_with(&new_owner));
-        assert!(owner.end_for_replacement(&new_owner).unwrap());
-        assert_eq!(owner.valid_to, Some(new_owner.valid_from));
+        assert!(!owner.conflicts_with(&new_owner));
+        assert!(!owner.end_for_replacement(&new_owner).unwrap());
+        assert_eq!(owner.valid_to, assignment_data().valid_to);
+        assert!(new_owner.ensure_no_overlap(&[owner.clone()]).is_ok());
+        assert!(owner.ensure_no_overlap(&[owner.clone()]).is_err());
+        let at = BusinessDate::from_ymd(2026, 6, 1).unwrap();
+        assert!(owner.ensure_owner_retained(&[new_owner], at).is_ok());
+        assert!(owner.ensure_owner_retained(&[], at).is_err());
 
         let collaborator_data =
             CustomerAssignmentData { assignment_role: AssignmentRole::Collaborator, ..assignment_data() };
@@ -598,5 +674,87 @@ mod tests {
         let (empty_id, _, empty_count) = CustomerAssignment::owner_summary(&[], &names);
         assert_eq!(empty_id, None);
         assert_eq!(empty_count, 0);
+    }
+    #[test]
+    fn multiple_owners_are_listed_and_last_owner_cannot_end() {
+        let first = CustomerAssignment::new(CustomerAssignmentId::new("a"), assignment_data()).unwrap();
+        let second = CustomerAssignment::new(
+            CustomerAssignmentId::new("b"),
+            CustomerAssignmentData { user_id: "sales-other".into(), valid_to: None, ..assignment_data() },
+        )
+        .unwrap();
+        let at = BusinessDate::from_ymd(2026, 6, 1).unwrap();
+        assert_eq!(CustomerAssignment::owner_ids(&[first.clone(), second.clone()]).len(), 2);
+        assert!(second.ensure_no_overlap(slice::from_ref(&first)).is_ok());
+        assert!(first.ensure_owner_retained(&[second], at).is_ok());
+        assert!(first.ensure_owner_retained(&[], at).is_err());
+    }
+
+    fn date(day: u32) -> BusinessDate {
+        BusinessDate::from_ymd(2026, 10, day).unwrap()
+    }
+
+    fn window(id: &str, from: u32, to: Option<u32>) -> CustomerAssignment {
+        CustomerAssignment::new(
+            CustomerAssignmentId::new(id),
+            CustomerAssignmentData {
+                user_id: id.into(),
+                valid_from: date(from),
+                valid_to: to.map(date),
+                ..assignment_data()
+            },
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn staggered_ends_cannot_leave_a_future_owner_gap() {
+        let a = window("a", 1, None);
+        let mut b = window("b", 1, None);
+        assert!(b.ensure_owner_retained(slice::from_ref(&a), date(25)).is_ok());
+        b.end_directly(date(25)).unwrap();
+        assert!(a.ensure_owner_retained(&[b], date(24)).is_err());
+    }
+
+    #[test]
+    fn remaining_owners_must_cover_the_entire_removed_interval() {
+        let a = window("a", 1, None);
+        let b = window("b", 1, Some(25));
+        let c = window("c", 25, None);
+        assert!(a.ensure_owner_retained(&[c.clone(), b.clone()], date(24)).is_ok());
+        let late = window("late", 26, None);
+        assert!(a.ensure_owner_retained(&[b.clone(), late], date(24)).is_err());
+        let finite = window("finite", 1, Some(25));
+        assert!(finite.ensure_owner_retained(&[b], date(24)).is_ok());
+        assert!(finite.ensure_owner_retained(&[c], date(24)).is_err());
+    }
+
+    #[test]
+    fn retained_owner_excludes_self_deleted_other_customer_and_collaborator() {
+        let a = window("a", 1, None);
+        let mut deleted = window("deleted", 1, None);
+        deleted.base.deleted_at = 1;
+        let mut foreign = window("foreign", 1, None);
+        foreign.customer_id = CustomerAccountId::new("other");
+        let mut collaborator = window("collaborator", 1, None);
+        collaborator.assignment_role = AssignmentRole::Collaborator;
+        assert!(
+            a.ensure_owner_retained(&[a.clone(), deleted, foreign, collaborator.clone()], date(24)).is_err()
+        );
+        assert!(collaborator.ensure_owner_retained(&[], date(24)).is_ok());
+    }
+
+    #[test]
+    fn ending_never_extends_a_previously_closed_interval() {
+        for role in [AssignmentRole::Owner, AssignmentRole::Collaborator] {
+            let mut assignment = window("a", 1, Some(25));
+            assignment.assignment_role = role;
+            assert!(assignment.end_directly(date(26)).is_err());
+            assert_eq!(assignment.valid_to, Some(date(25)));
+            assert!(assignment.end_directly(date(25)).is_ok());
+            assert!(assignment.end_directly(date(24)).is_ok());
+            assert!(assignment.end_directly(date(1)).is_err());
+            assert_eq!(assignment.valid_to, Some(date(24)));
+        }
     }
 }

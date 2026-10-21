@@ -103,7 +103,11 @@ export function mapDirectoryItem(
         shortName: row.short_name ?? undefined,
         status,
         statusLabel,
-        ownerName: row.owner_user_name ?? "未指定",
+        ownerName: row.owners?.length
+            ? row.owners
+                  .map((owner) => owner.user_name || "未命名销售")
+                  .join("、")
+            : (row.owner_user_name ?? "未指定"),
         collaboratorCount: row.collaborator_count,
         scopeTags: row.scope_tags,
         metrics: emptyMetrics(),

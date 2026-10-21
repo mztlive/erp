@@ -10,6 +10,7 @@ use erp_core::ids::{
     SupplierCommercialProfileRevisionId, SupplierQualificationCapabilityId, SupplierQualificationId,
     SupplierQualificationRevisionId, SupplierRatingRevisionId,
 };
+use erp_party::service::party::identity::ensure_identity_available;
 use erp_party::{
     AddressType, EffectiveRecordStatus, Party, PartyAddress, PartyAddressData, PartyBankAccount,
     PartyBankAccountData, PartyContact, PartyContactData, PartyData, PartyExt, PartyKind, PartyRevision,
@@ -364,6 +365,7 @@ impl PreparedCreate {
     /// 将完整供应商资料与幂等结果写入同一事务。
     async fn persist(self, db: &Database, executor: &mut dyn Executor) -> Result<()> {
         self.pending_assets.persist(db, executor).await?;
+        ensure_identity_available(db, &self.party, &self.party_revision, executor).await?;
         db.party_revisions().create(&self.party_revision, executor).await?;
         db.parties().create(&self.party, executor).await?;
         db.supplier()

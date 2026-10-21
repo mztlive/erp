@@ -144,7 +144,7 @@ export function CustomerDetailAuditTab({
         <DocumentSection
             className={detailSectionClassName}
             title="归属与审计"
-            description="每位客户只有一位负责销售"
+            description="多名销售共用客户资料，各自业务分别授权"
             action={
                 can(customer, "MANAGE_ASSIGNMENTS") ? (
                     <Button
@@ -154,7 +154,7 @@ export function CustomerDetailAuditTab({
                         variant="outline"
                         onClick={onManageAssignments}
                     >
-                        调整归属
+                        管理负责销售
                     </Button>
                 ) : undefined
             }
