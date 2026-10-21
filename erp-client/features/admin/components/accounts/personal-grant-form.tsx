@@ -339,17 +339,17 @@ export function PersonalGrantForm({
                 id="person-scope-dialog"
                 closeButtonId="person-scope-dialog-close"
                 showCloseButton={!save.isPending}
-                className="flex max-h-[85dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
+                className="flex max-h-[85dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl"
                 finalFocus={() =>
                     document.getElementById(
                         `person-scope-${toAutomationIdSegment(resource)}-edit`,
                     )
                 }
             >
-                <DialogHeader className="shrink-0 px-6 pt-6 pb-5">
-                    <DialogTitle>管理数据范围</DialogTitle>
+                <DialogHeader className="shrink-0 border-b border-grid px-5 py-4 pr-16">
+                    <DialogTitle>配置{resourceLabel(resource)}范围</DialogTitle>
                     <DialogDescription>
-                        {name} · {resourceLabel(resource)}
+                        {name} · 设置可访问的数据及适用操作
                     </DialogDescription>
                 </DialogHeader>
                 <form
@@ -360,157 +360,169 @@ export function PersonalGrantForm({
                         void form.handleSubmit()
                     }}
                 >
-                    <fieldset
-                        disabled={save.isPending}
-                        className="min-h-0 space-y-5 overflow-y-auto px-6 pb-5"
-                    >
-                        {stale && (
-                            <div role="status" className="text-xs text-warning">
-                                配置已变化，当前草稿不能直接保存。
-                                <Button
-                                    id="person-scope-reload"
-                                    type="button"
-                                    variant="link"
-                                    onClick={() => {
-                                        if (
-                                            window.confirm(
-                                                "放弃当前草稿并刷新配置？",
-                                            )
-                                        ) {
-                                            onDone()
-                                            onReload()
-                                        }
-                                    }}
+                    <div className="grid min-h-0 gap-5 overflow-y-auto p-5 md:grid-cols-[minmax(0,1fr)_13rem]">
+                        <fieldset
+                            disabled={save.isPending}
+                            className="min-w-0 space-y-4"
+                        >
+                            {stale && (
+                                <div
+                                    role="status"
+                                    className="text-xs text-warning"
                                 >
-                                    刷新配置
-                                </Button>
-                            </div>
-                        )}
-                        {business && (
-                            <>
-                                <div className="flex items-start gap-2 border-b pb-4 text-xs leading-5 text-muted-foreground">
-                                    <LockKeyholeIcon
-                                        className="mt-0.5 size-4 shrink-0"
-                                        aria-hidden
-                                    />
-                                    <p>
-                                        {business.default_self ? (
-                                            <>
-                                                <span className="font-medium text-foreground">
-                                                    默认包含{name}负责的数据
-                                                </span>{" "}
-                                                ·
-                                                按当前负责人判断，适用于下列可配置操作
-                                                {legacy.length
-                                                    ? "（转换后生效）"
-                                                    : ""}
-                                            </>
-                                        ) : (
-                                            "此业务没有默认本人范围，请添加授权。"
-                                        )}
-                                    </p>
+                                    配置已变化，当前草稿不能直接保存。
+                                    <Button
+                                        id="person-scope-reload"
+                                        type="button"
+                                        variant="link"
+                                        onClick={() => {
+                                            if (
+                                                window.confirm(
+                                                    "放弃当前草稿并刷新配置？",
+                                                )
+                                            ) {
+                                                onDone()
+                                                onReload()
+                                            }
+                                        }}
+                                    >
+                                        刷新配置
+                                    </Button>
                                 </div>
-                                {legacy.length > 0 && (
-                                    <section className="space-y-3 rounded-md border border-warning-border bg-warning-soft p-3">
-                                        <h3 className="font-medium">
-                                            原授权仍按原条件生效
-                                        </h3>
-                                        {legacy.map((scope) => (
-                                            <p
-                                                key={scope.id}
-                                                className="text-xs leading-6"
-                                            >
-                                                {actionLabel(scope.action)}：
-                                                {personScopeDescription(
-                                                    scope,
-                                                    labels,
-                                                )}
-                                            </p>
-                                        ))}
-                                        <p className="text-xs text-muted-foreground">
-                                            可直接转换的范围已列为追加授权。
-                                            {business.default_self &&
-                                                "默认本人已归入基础范围。"}
-                                            保存将把以上操作统一转换为新方式。
-                                        </p>
-                                        {complexLegacy.length > 0 && (
-                                            <p className="text-xs text-warning-soft-foreground">
-                                                {complexLegacy
-                                                    .map((scope) =>
-                                                        actionLabel(
-                                                            scope.action,
-                                                        ),
-                                                    )
-                                                    .join("、")}
-                                                包含历史参与读取或附加限制，不能直接转换。转换后这些原条件将被移除，请在下面重新添加所需范围，并核对最终结果。
-                                            </p>
-                                        )}
-                                        <form.Field name="replace_legacy">
-                                            {(field) => (
-                                                <label
-                                                    htmlFor="person-scope-convert-legacy"
-                                                    className="flex items-start gap-2 text-xs leading-5"
-                                                >
-                                                    <Checkbox
-                                                        id="person-scope-convert-legacy"
-                                                        checked={
-                                                            field.state.value
-                                                        }
-                                                        onCheckedChange={(
-                                                            checked,
-                                                        ) =>
-                                                            field.handleChange(
-                                                                checked ===
-                                                                    true,
-                                                            )
-                                                        }
-                                                    />
-                                                    我已核对原授权与最终范围，确认转换并替换原授权条件。
-                                                </label>
+                            )}
+                            {business && (
+                                <>
+                                    <div className="flex items-start gap-2 rounded-lg bg-muted/40 px-3 py-2.5 text-xs leading-5 text-muted-foreground">
+                                        <LockKeyholeIcon
+                                            className="mt-0.5 size-4 shrink-0"
+                                            aria-hidden
+                                        />
+                                        <p>
+                                            {business.default_self ? (
+                                                <>
+                                                    <span className="font-medium text-foreground">
+                                                        默认包含本人负责的数据
+                                                    </span>{" "}
+                                                    · 按当前负责人判断
+                                                    {legacy.length
+                                                        ? "（转换后生效）"
+                                                        : ""}
+                                                </>
+                                            ) : (
+                                                "此业务没有默认本人范围，请添加授权。"
                                             )}
-                                        </form.Field>
-                                    </section>
-                                )}
-                                <PersonalGrantList
-                                    value={value}
-                                    business={business}
-                                    units={units}
-                                    name={name}
-                                    incompleteKeys={incompleteKeys}
-                                    onAdd={addGrant}
-                                    onEdit={editGrant}
-                                    onRemove={removeGrant}
-                                    onActionsChange={changeActions}
-                                    onEditorChange={updateEditor}
-                                />
+                                        </p>
+                                    </div>
+                                    {legacy.length > 0 && (
+                                        <section className="space-y-3 rounded-md border border-warning-border bg-warning-soft p-3">
+                                            <h3 className="font-medium">
+                                                原授权仍按原条件生效
+                                            </h3>
+                                            {legacy.map((scope) => (
+                                                <p
+                                                    key={scope.id}
+                                                    className="text-xs leading-6"
+                                                >
+                                                    {actionLabel(scope.action)}
+                                                    ：
+                                                    {personScopeDescription(
+                                                        scope,
+                                                        labels,
+                                                    )}
+                                                </p>
+                                            ))}
+                                            <p className="text-xs text-muted-foreground">
+                                                可直接转换的范围已列为追加授权。
+                                                {business.default_self &&
+                                                    "默认本人已归入基础范围。"}
+                                                保存将把以上操作统一转换为新方式。
+                                            </p>
+                                            {complexLegacy.length > 0 && (
+                                                <p className="text-xs text-warning-soft-foreground">
+                                                    {complexLegacy
+                                                        .map((scope) =>
+                                                            actionLabel(
+                                                                scope.action,
+                                                            ),
+                                                        )
+                                                        .join("、")}
+                                                    包含历史参与读取或附加限制，不能直接转换。转换后这些原条件将被移除，请在下面重新添加所需范围，并核对最终结果。
+                                                </p>
+                                            )}
+                                            <form.Field name="replace_legacy">
+                                                {(field) => (
+                                                    <label
+                                                        htmlFor="person-scope-convert-legacy"
+                                                        className="flex items-start gap-2 text-xs leading-5"
+                                                    >
+                                                        <Checkbox
+                                                            id="person-scope-convert-legacy"
+                                                            checked={
+                                                                field.state
+                                                                    .value
+                                                            }
+                                                            onCheckedChange={(
+                                                                checked,
+                                                            ) =>
+                                                                field.handleChange(
+                                                                    checked ===
+                                                                        true,
+                                                                )
+                                                            }
+                                                        />
+                                                        我已核对原授权与最终范围，确认转换并替换原授权条件。
+                                                    </label>
+                                                )}
+                                            </form.Field>
+                                        </section>
+                                    )}
+                                    <PersonalGrantList
+                                        value={value}
+                                        business={business}
+                                        units={units}
+                                        name={name}
+                                        incompleteKeys={incompleteKeys}
+                                        onAdd={addGrant}
+                                        onEdit={editGrant}
+                                        onRemove={removeGrant}
+                                        onActionsChange={changeActions}
+                                        onEditorChange={updateEditor}
+                                    />
+                                </>
+                            )}
+                            {error && (
+                                <p
+                                    role="alert"
+                                    className="text-xs text-destructive"
+                                >
+                                    {error}
+                                </p>
+                            )}
+                        </fieldset>
+                        {business && (
+                            <aside className="self-start rounded-lg bg-muted/40 p-4 md:sticky md:top-0">
                                 <ProposedScopeSummary
                                     value={value}
                                     incompleteKeys={incompleteKeys}
                                     business={business}
                                     units={units}
                                 />
-                            </>
+                            </aside>
                         )}
-                        {!validation.success && (
-                            <p
-                                role="status"
-                                className="text-xs text-muted-foreground"
-                            >
-                                {validation.error.issues[0]?.message}
-                            </p>
-                        )}
-                        {error && (
-                            <p
-                                role="alert"
-                                className="text-xs text-destructive"
-                            >
-                                {error}
-                            </p>
-                        )}
-                    </fieldset>
-                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t bg-popover px-6 py-4">
-                        <p className="mr-auto text-xs text-muted-foreground">
-                            所有修改将在保存后生效
+                    </div>
+                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-grid bg-popover px-5 py-3">
+                        <p
+                            id="person-scope-save-hint"
+                            role="status"
+                            className="mr-auto min-w-0 basis-full text-xs leading-5 text-muted-foreground sm:flex-1 sm:basis-auto"
+                        >
+                            {stale
+                                ? "请先刷新并核对配置"
+                                : !validation.success
+                                  ? incompleteKeys.size > 0
+                                      ? `${incompleteKeys.size} 条范围待完善，请补充或移除后保存`
+                                      : validation.error.issues[0]?.message
+                                  : "保存后统一生效"}
                         </p>
                         <Button
                             id="person-scope-cancel"
@@ -527,6 +539,7 @@ export function PersonalGrantForm({
                             id="person-scope-save"
                             size="sm"
                             type="submit"
+                            aria-describedby="person-scope-save-hint"
                             disabled={
                                 save.isPending || stale || !validation.success
                             }

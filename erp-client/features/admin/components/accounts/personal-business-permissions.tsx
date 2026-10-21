@@ -1,13 +1,12 @@
 "use client"
 import * as React from "react"
 import { BusinessFailureState } from "@/components/business"
-import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { actionLabel, resourceLabel } from "@/lib/permission-catalog"
 import type { OrgUnit } from "@/features/organization/types"
 import { usePersonScopes } from "../../hooks/use-person-data-scopes"
 import type { PersonalGrantDraft } from "../../hooks/use-personal-grant-draft"
-import { PersonalPolicyTable } from "./personal-policy-table"
+import { PersonalPolicyWorkspace } from "./personal-policy-workspace"
 import { PersonalGrantForm } from "./personal-grant-form"
 
 export function PersonalBusinessPermissions({
@@ -30,7 +29,6 @@ export function PersonalBusinessPermissions({
     onDraftChange: (draft: PersonalGrantDraft | null) => void
 }) {
     const query = usePersonScopes(userId, canRead)
-    const [search, setSearch] = React.useState("")
     const [editing, setEditing] = React.useState<string | null>(
         draft?.values.resource ?? null,
     )
@@ -53,50 +51,11 @@ export function PersonalBusinessPermissions({
                         business.configurable_actions.length > 0,
                 )))
 
-    const businesses =
-        query.data?.businesses.filter(
-            (business) =>
-                business.resource === editing ||
-                resourceLabel(business.resource).includes(search.trim()),
-        ) ?? []
     return (
-        <section className="min-w-0 space-y-5 text-sm">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="space-y-1">
-                    <h2 className="font-semibold">
-                        数据范围
-                        {query.isSuccess && (
-                            <span className="ml-2 text-xs font-normal text-muted-foreground">
-                                {query.data.businesses.length} 项业务
-                            </span>
-                        )}
-                    </h2>
-                    <p className="text-xs text-muted-foreground">
-                        设置该人员可访问的数据；可执行的操作由角色决定。
-                    </p>
-                    <details className="text-xs text-muted-foreground">
-                        <summary
-                            id="person-scope-help"
-                            className="w-fit cursor-pointer rounded-sm leading-6 focus-visible:outline-2 focus-visible:outline-ring"
-                        >
-                            范围说明
-                        </summary>
-                        <p className="mt-1 max-w-2xl leading-5">
-                            仅列出{name}
-                            通过有效角色获得的操作。业务范围、治理委派和目录可见分别配置；来源继承及流程指派由对应业务规则决定。
-                        </p>
-                    </details>
-                </div>
-                <Input
-                    id="person-scope-search"
-                    type="search"
-                    aria-label="搜索业务"
-                    placeholder="搜索业务"
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    className="h-control-sm w-full sm:w-60"
-                />
-            </div>
+        <section
+            className="min-w-0 space-y-4 text-sm"
+            aria-label="人员数据范围"
+        >
             {notice && (
                 <p role="status" className="rounded-md bg-muted p-3">
                     {notice}
@@ -161,13 +120,11 @@ export function PersonalBusinessPermissions({
                             ，请先保存或取消，再调整其他业务。
                         </p>
                     )}
-                    <PersonalPolicyTable
-                        businesses={businesses}
+                    <PersonalPolicyWorkspace
                         data={query.data}
                         labels={labels}
                         canEdit={canCreate && ready}
                         editing={editing}
-                        search={search.trim()}
                         onEdit={(resource) => {
                             setNotice(null)
                             setEditing(resource)

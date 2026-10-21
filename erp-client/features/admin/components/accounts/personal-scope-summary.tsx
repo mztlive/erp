@@ -76,25 +76,25 @@ export function ProposedScopeSummary({
         groups.set(key, group)
     }
     return (
-        <section className="space-y-2 border-t pt-4" aria-live="polite">
-            <h3 className="text-xs font-medium text-muted-foreground">
-                {incompleteKeys.size ? "已完善范围的预览" : "保存后可访问"}
+        <section className="space-y-4" aria-live="polite" aria-atomic="true">
+            <h3 className="text-sm font-medium">
+                {incompleteKeys.size ? "已完成部分的预览" : "保存后范围"}
             </h3>
             {[...groups.entries()].map(([key, group]) => (
-                <p key={key} className="text-xs leading-6">
-                    <span className="font-medium">
+                <div key={key} className="space-y-1">
+                    <p className="text-xs leading-5 text-muted-foreground">
                         {group.actions.length === value.actions.length
-                            ? "所有已有操作"
+                            ? "全部可配置操作"
                             : group.actions.map(actionLabel).join("、")}
-                        ：
-                    </span>
-                    {group.description}
-                </p>
+                    </p>
+                    <p className="text-sm leading-6 wrap-anywhere">
+                        {group.description}
+                    </p>
+                </div>
             ))}
             {incompleteKeys.size > 0 && (
-                <p className="text-xs text-warning">
-                    还有 {incompleteKeys.size}{" "}
-                    条范围未完善，暂不计入预览，填写完整后才能保存。
+                <p className="text-xs leading-5 text-muted-foreground">
+                    待完善范围尚未计入。
                 </p>
             )}
             {value.resource === "approval_instance" && (

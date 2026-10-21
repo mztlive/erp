@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { OptionCombobox } from "@/components/business/option-combobox"
 import { ScopeTargetPicker } from "@/features/organization/components/scope-target-picker"
+import { cn } from "@/lib/utils"
 import type { OrgUnit } from "@/features/organization/types"
 import {
     type PersonGrantEditorInput,
@@ -223,7 +224,7 @@ export function PersonalGrantEditor({
     return (
         <section
             id={`${idPrefix}-fields`}
-            className="grid gap-4 bg-muted/35 p-4 sm:grid-cols-2"
+            className="space-y-4"
             aria-label="编辑追加授权"
         >
             {business.resource === "approval_instance" && (
@@ -263,9 +264,10 @@ export function PersonalGrantEditor({
                             id={`${idPrefix}-mode-label`}
                             className="mb-2 font-medium"
                         >
-                            追加哪些数据？
+                            数据范围
                         </legend>
                         <RadioGroup
+                            className="flex flex-wrap gap-2"
                             id={`${idPrefix}-mode`}
                             name={`${idPrefix}-mode`}
                             aria-labelledby={`${idPrefix}-mode-label`}
@@ -292,7 +294,7 @@ export function PersonalGrantEditor({
                                           ]
                                         : []),
                                     ...(dimensions.includes("internal_org")
-                                        ? [["own_org", `${name}所属部门的数据`]]
+                                        ? [["own_org", "所属部门"]]
                                         : []),
                                     [
                                         "explicit",
@@ -304,7 +306,12 @@ export function PersonalGrantEditor({
                                 <label
                                     key={mode}
                                     htmlFor={`${idPrefix}-mode-${mode}`}
-                                    className="flex items-center gap-2"
+                                    className={cn(
+                                        "flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors",
+                                        value.mode === mode
+                                            ? "border-foreground/50 bg-accent text-accent-foreground"
+                                            : "border-input bg-background hover:bg-muted/50",
+                                    )}
                                 >
                                     <RadioGroupItem
                                         id={`${idPrefix}-mode-${mode}`}
@@ -342,7 +349,9 @@ export function PersonalGrantEditor({
                         <form.Field key={key} name={key}>
                             {(field) => (
                                 <div className="space-y-2">
-                                    <p>{scopeDimensionLabel(dimension)}</p>
+                                    <p className="text-xs font-medium text-muted-foreground">
+                                        选择{scopeDimensionLabel(dimension)}
+                                    </p>
                                     <ScopeTargetPicker
                                         id={`${idPrefix}-target-${dimension}`}
                                         dimension={dimension}
@@ -362,7 +371,7 @@ export function PersonalGrantEditor({
                         {(field) => (
                             <label
                                 htmlFor={`${idPrefix}-descendants`}
-                                className="flex items-center gap-2"
+                                className="flex items-center gap-2 text-sm"
                             >
                                 <Checkbox
                                     id={`${idPrefix}-descendants`}
@@ -382,10 +391,7 @@ export function PersonalGrantEditor({
                 </p>
             )}
             {!validation.success && (
-                <p
-                    role="status"
-                    className="text-xs text-muted-foreground sm:col-span-2"
-                >
+                <p role="status" className="text-xs text-muted-foreground">
                     {validation.error.issues[0]?.message}
                 </p>
             )}
