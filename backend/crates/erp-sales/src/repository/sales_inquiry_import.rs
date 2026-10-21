@@ -101,6 +101,7 @@ mod tests {
             base: BaseModel::new("preview".into()),
             inquiry_id: "inquiry".into(),
             actor_id: "actor".into(),
+            creation_customer_id: None,
             expected_version: 1,
             input_fingerprint: "a".repeat(64),
             errors: vec![],

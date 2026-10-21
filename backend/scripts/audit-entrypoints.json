@@ -6826,7 +6826,7 @@
     },
     {
       "path": "crates/erp-processes/src/sales_inquiry_import/confirm.rs",
-      "function": "apply_preview",
+      "function": "record_preview",
       "policy": "Audited",
       "stage": "Command",
       "boundaries": [
@@ -6839,6 +6839,20 @@
       },
       "location_count": 1,
       "reason": "整份无错误预览在同一执行器写入询价草稿、预览结果、独立永久回执和安全成功审计，任一步失败整体回滚。"
+    },
+    {
+      "path": "crates/erp-processes/src/sales_inquiry_import/creation.rs",
+      "function": "create_from_preview",
+      "policy": "Audited",
+      "stage": "Transaction",
+      "boundaries": [
+        ".run_authorized_policy_transaction"
+      ],
+      "call_counts": {
+        ".run_authorized_policy_transaction": 1
+      },
+      "location_count": 1,
+      "reason": "导入新建绑定当前授权策略版本，客户、商品、预览和新草稿在原事务内校验及写入；共用 record_preview 保存结果、永久回执与成功审计，未知提交只核对原回执。"
     },
     {
       "path": "crates/erp-processes/src/procure_to_pay/change_start.rs",

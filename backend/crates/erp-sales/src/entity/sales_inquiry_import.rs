@@ -516,6 +516,9 @@ pub struct InquiryImportPreview {
     pub base: BaseModel,
     pub inquiry_id: String,
     pub actor_id: String,
+    /// 新建导入绑定的客户；旧预览缺省为已有询价导入。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub creation_customer_id: Option<String>,
     pub expected_version: u64,
     pub input_fingerprint: String,
     pub errors: Vec<InquiryImportIssue>,
@@ -579,6 +582,31 @@ impl InquiryImportReceipt {
 }
 
 impl InquiryImportPreview {
+    /// 核对未创建询价的客户专用预览。
+    /// # 参数
+    /// `actor`、`customer`、`fingerprint` 为请求绑定，`merge` 为合并确认，`now` 为当前秒。
+    /// # 返回
+    /// 返回可一次性创建的已校验需求。
+    /// # 错误
+    /// 客户或用途不符、已处理、过期、文件错误及未确认合并时拒绝。
+    pub fn ensure_creatable(
+        &self,
+        actor: &str,
+        customer: &str,
+        fingerprint: &str,
+        merge: bool,
+        now: i64,
+    ) -> Result<()> {
+        if self.creation_customer_id.as_deref() != Some(customer) || !self.inquiry_id.is_empty() {
+            return Err(Error::NotFound("客户导入预览不存在或不可用".into()));
+        }
+        self.ensure_confirmable(actor, "", 0, fingerprint, merge, now)?;
+        if self.result.is_some() {
+            return Err(Error::ConflictError("该文件预览已创建询价，请打开原询价".into()));
+        }
+        Ok(())
+    }
+
     /// 核对预览绑定及确认前置条件。
     /// # 参数
     /// `actor_id`、`inquiry_id`、`version` 和 `fingerprint` 为当前请求上下文，
@@ -773,6 +801,7 @@ mod tests {
         InquiryImportPreview {
             base: BaseModel::new("preview".into()),
             actor_id: "actor".into(),
+            creation_customer_id: None,
             inquiry_id: "inquiry".into(),
             expected_version: 1,
             input_fingerprint: "a".repeat(64),
@@ -832,5 +861,43 @@ mod tests {
         invalid.result.inquiry_id = "inquiry".into();
         invalid.base.deleted_at = 1;
         assert!(invalid.recover("command", "actor", "inquiry", "preview", &"a".repeat(64)).is_err());
+    }
+
+    #[test]
+    fn creation_preview_binds_customer_actor_input_and_single_use() {
+        let mut preview = preview();
+        let fingerprint = "a".repeat(64);
+        assert!(preview.ensure_creatable("actor", "customer", &fingerprint, true, 100).is_err());
+        preview.creation_customer_id = Some("customer".into());
+        preview.inquiry_id.clear();
+        preview.expected_version = 0;
+        assert!(preview.ensure_creatable("actor", "customer", &fingerprint, true, 100).is_ok());
+        assert!(preview.ensure_creatable("actor", "other", &fingerprint, true, 100).is_err());
+        assert!(preview.ensure_creatable("other", "customer", &fingerprint, true, 100).is_err());
+        assert!(preview.ensure_creatable("actor", "customer", &"b".repeat(64), true, 100).is_err());
+        assert!(preview.ensure_creatable("actor", "customer", &fingerprint, false, 100).is_err());
+        assert!(preview.ensure_creatable("actor", "customer", &fingerprint, true, 200).is_err());
+        assert!(preview.ensure_confirmable("actor", "inquiry", 1, &fingerprint, true, 100).is_err());
+        preview.result = Some(InquiryImportResult {
+            inquiry_id: "created".into(),
+            preview_id: preview.base.id.clone(),
+            version: 1,
+            line_count: 1,
+            allocation_count: 1,
+        });
+        assert!(preview.ensure_creatable("actor", "customer", &fingerprint, true, 100).is_err());
+        preview.result = None;
+        push_issue(&mut preview.errors, "配送需求", 2, "配送数量", "数量非法");
+        assert!(preview.ensure_creatable("actor", "customer", &fingerprint, true, 100).is_err());
+    }
+
+    #[test]
+    fn existing_preview_without_creation_customer_stays_an_existing_inquiry_import() {
+        let value = serde_json::to_value(preview()).unwrap();
+        assert!(value.get("creation_customer_id").is_none());
+        let loaded: InquiryImportPreview = serde_json::from_value(value).unwrap();
+        assert!(loaded.creation_customer_id.is_none());
+        assert!(loaded.ensure_confirmable("actor", "inquiry", 1, &"a".repeat(64), true, 100).is_ok());
+        assert!(loaded.ensure_creatable("actor", "customer", &"a".repeat(64), true, 100).is_err());
     }
 }

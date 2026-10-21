@@ -44,3 +44,14 @@ pub struct ConfirmInquiryImportCommand {
     pub input_fingerprint: String,
     pub confirm_merge_duplicates: bool,
 }
+
+/// 新建导入只接受客户和已校验预览引用，不接受客户端替换需求明细。
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CreateInquiryImportCommand {
+    pub command_key: String,
+    pub customer_id: String,
+    pub preview_id: String,
+    pub input_fingerprint: String,
+    pub confirm_merge_duplicates: bool,
+}

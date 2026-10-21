@@ -45,6 +45,8 @@
 | `POST /sales-inquiries/{id}/reinquire` | `sales_inquiry:reinquire` | `ReinquireInquiryCommand` | `InquiryMutationView` |
 | `POST /sales-inquiries/{id}/close` | `sales_inquiry:close` | `InquiryReasonCommand` | `InquiryMutationView` |
 | `POST /sales-inquiries/template-products` | `sales_inquiry:create` | `{sku_ids: string[]}`，1 至 1000 个唯一 ID | 客户安全商品数组 |
+| `POST /sales-inquiries/imports/preview` | `sales_inquiry:create`、`sales_inquiry:import`、`sellable_sku:list` | §7.3 客户及文件 multipart | `InquiryImportPreviewView` |
+| `POST /sales-inquiries/imports/create` | 同上 | `CreateInquiryImportCommand` | `InquiryImportResult` |
 | `POST /sales-inquiries/{id}/imports/preview` | `sales_inquiry:import` | §7 multipart | `InquiryImportPreviewView` |
 | `POST /sales-inquiries/{id}/imports/confirm` | `sales_inquiry:import` | §7 确认命令 | `InquiryImportResult` |
 | `GET /sales-inquiries/{id}/sales-basis?round=...` | `sales_inquiry:convert_sales` | 已接受反馈轮次 | `InquirySalesBasis` |
@@ -59,6 +61,7 @@
 | DTO | 字段 |
 | --- | --- |
 | `CreateInquiryCommand` | `command_key`、`data: InquiryCreateData` |
+| `CreateInquiryImportCommand` | `command_key`、`customer_id`、`preview_id`、`input_fingerprint`、`confirm_merge_duplicates` |
 | `InquiryCreateData` | `customer_id`、`customer_name`、`sales_owner_user_id`、`business_org_unit_id`、`deadline_at`、可空 `copied_from_inquiry_id`、`draft: InquiryRequirementData` |
 | `SaveInquiryCommand` | `command_key`、`expected_version`、`data: InquiryRequirementData` |
 | `SubmitInquiryCommand` | `command_key`、`expected_version`、`reason`、`assignments:[{owner_user_id,line_ids}]` |
@@ -157,7 +160,7 @@
 | 模板版本 | `填写说明!A1=模板版本`；询价详情模板 `B1=sales-inquiry-v1`，公司商品池导出 `B1=sales-inquiry-pool-v4`；已发出的 `sales-inquiry-pool-v1`、`sales-inquiry-pool-v2`、`sales-inquiry-pool-v3` 文件继续按各自版本读取 |
 | 工作表 | 询价详情模板为 `商品清单`、`配送需求`、`填写说明`；公司商品池导出为 `选品`、`配送需求`、`填写说明`，均恰好三张，版本必须匹配 |
 | 数量限制 | 商品清单最多 2000 数据行、配送需求最多 2000 实际填写行（不计未使用的备用行）；分组后的需求最多 200 条，每条需求最多 100 个地址 |
-| 文本身份 | SKU 编码、电话必须为文本单元格，保留前导零；除 v2 及以后版本的系统商品联动公式及 v3/v4 数量核对公式外，其他公式须先转换为值 |
+| 文本身份 | SKU 编码、电话必须为文本单元格，保留前导零；业务字段除 v2 及以后版本的系统商品联动公式外，其他公式须先转换为值；v3/v4 数量核对辅助列按第 12 项直接丢弃 |
 
 公司商品池导出合同：
 
@@ -174,7 +177,7 @@
 10. 导出设置打开时重新计算；未填写数量的商品在对应配送行留空，固定行不随选品动态压缩。销售可筛选配送页 SKU 编号非空的行填写。删除供应商等展示列不得破坏自动引用；保留自动列依赖的必需列。
 
 11. v3/v4 配送页追加需求数量、已分配数量、剩余数量、分配状态四列。按 SKU 汇总全部地址分配，核对范围至第 10000 行，数量按六位小数核对；超量标红并显示超出数量，不足标黄并显示尚差数量，一致标绿并显示数量一致。颜色同时作用于配送数量与核对区，不得只靠颜色传递结果。绿色只表示数量一致，不表示地址完整或通过导入校验。非法数量须显示错误，不得默认为零。
-12. v3/v4 核对列只作填写提示。导入校验系统公式格式后丢弃核对值及缓存，仍由领域规则按当前商品数量精度、配送明细执行守恒和地址完整性校验。不得用表内绿色状态作为确认依据。
+12. v3/v4 核对列只作填写提示。导入保留表头和列范围校验，直接丢弃辅助列中的值、公式及缓存，不解析或执行其表达式，不要求公式文本与导出时逐字一致；普通公式、共享公式及 WPS/Excel 保存改写不得影响业务导入。商品、SKU、配送数量等业务字段仍执行既有公式与数据校验，并由领域规则按当前商品数量精度、配送明细执行守恒和地址完整性校验。不得用表内绿色状态作为确认依据。
 
 13. v4 在配送页增加隐藏的核对数量、核对商品列。每行先将本行配送数量转换为数字并校验正数及最多六位小数，再用 `SUMIF`、`COUNTIFS` 普通条件汇总；不得依赖跨行 `IF` 数组求值。汇总键须保留 SKU 前导零并按字面匹配通配符。复制地址须通过行号复制整行，连同隐藏核对列一起保留。复制两行各 100、需求 100 时，已分配须为 200、剩余须为 -100，并显示红色超出 100。
 
@@ -193,7 +196,7 @@ v2 配送需求列顺序：`商品名称`、`SKU 编号`、`SPU 编号`、`收�
    卡券不属于首版询价范围；即使商品池中可售，也不进入导入资格事实，预览与确认均不能将其转换为普通虚拟商品。
 7. 导出对文本使用字符串单元格，禁止把客户文字作为公式写出。
 
-### 7.2 预览和确认
+### 7.2 已有询价的预览和确认
 
 1. 预览 multipart 只提交 `expected_version` 与一个 `file`。服务器先证明当前询价访问资格及版本，再有界解析文件。
 2. 返回 `{preview_id,template_version,expected_version,input_fingerprint,errors,merges,data,expires_at}`。`errors` 项为 `{sheet,row_number,column,message}`，`merges` 项为 `{sheet,row_numbers,sku_code,merged_quantity}`。
@@ -203,6 +206,16 @@ v2 配送需求列顺序：`商品名称`、`SKU 编号`、`SPU 编号`、`收�
 6. 在写事务内重新校验当前授权、预览绑定、过期、需求版本、SKU 当前修订、单位及可售资格，再保存草稿、确认结果、永久回执和审计。
 7. 成功返回 `{inquiry_id,preview_id,version,line_count,allocation_count}`。同一命令键重复确认在当前询价权限内恢复原结果，不依赖预览仍存在。
 8. 确认使用当前权限政策版本绑定的写事务。提交未知、回执唯一竞争或瞬态事务冲突后只读取原回执并重新核对身份、指纹和当前访问资格，不自动重放写事务；软删除或损坏回执拒绝恢复，不当作可重新建单的空结果。
+
+### 7.3 导入创建询价草稿
+
+1. 销售询价列表的“导入客户选品”弹窗仅要求选择客户并上传一个工作簿。调用 `POST /sales-inquiries/imports/preview`，multipart 恰好包含 `customer_id` 和 `file`；拒绝缺失、重复或额外字段。客户字段为非空 UTF-8 文本，最多 128 字节；文件限制同 §7.1。
+2. 预览前及确认事务内均证明当前账号的创建、导入与商品池读取权限，同一角色须同时承载三项权限；客户须在当前访问范围内且有效。询价负责人及业务组织由当前账号确定，客户名称取当前主体修订，不接受客户端覆盖。
+3. 预览返回结构同 §7.2，`expected_version=0`，绑定当前账号、客户、文件 SHA-256 及新建用途，有效期 1 小时。该阶段只保存临时预览，不创建询价。切换客户或修改文件必须重新预览；新建预览与已有询价预览不得混用。
+4. 用户点击“创建询价草稿”后，客户端先生成预览；无错误且无重复配送行时自动调用 `POST /sales-inquiries/imports/create`。存在错误时展示逐行问题，存在重复配送行时先展示合并结果并要求用户明确确认。创建只提交 `CreateInquiryImportCommand`。服务端重验预览、当前权限及客户、商品修订与资格；错误未清除、重复配送行未经明确确认、预览过期或已用于其他创建命令时整份拒绝。
+5. 询价草稿、完整需求与地址、预览处理结果、永久命令回执及审计必须在同一授权事务内写入。询价截止时间采用既有未设置值 `0`，不得以客户商品交期推断询价截止时间。成功返回 `InquiryImportResult`，客户端打开对应草稿详情。
+6. 同键同载荷重试在当前客户及询价访问资格内返回首次结果，预览过期或清理后仍可恢复；同键异客户、异文件、异预览或异合并确认必须拒绝。结果未知时保留原命令并按原载荷核对，不生成新命令键绕过恢复。事务异常及回执恢复规则同 §7.2。
+7. 临时预览新增可选 `creation_customer_id`，旧记录缺省为已有询价预览。无需批量迁移存量数据或变更索引；回滚时移除新建入口与接口，待新建预览按现有 TTL 清理，保留已创建询价及永久回执。
 
 ## 8. 销售、采购与费用来源
 

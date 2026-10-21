@@ -225,7 +225,7 @@ function InquiryDetailContent({
             data.append("file", file)
             data.append("expected_version", String(inquiry.version))
             return apiPostForm<InquiryImportPreview>(
-                `${inquiryPath(false, inquiry.id)}/import-preview`,
+                `${inquiryPath(false, inquiry.id)}/imports/preview`,
                 data,
             )
         },
@@ -430,7 +430,7 @@ function InquiryDetailContent({
                 templateBusy={safeTemplate.isPending}
                 onConfirm={async (result, confirm_merge_duplicates) => {
                     await command.run(
-                        `${inquiryPath(false, inquiry.id)}/import-confirm`,
+                        `${inquiryPath(false, inquiry.id)}/imports/confirm`,
                         {
                             expected_version: result.expected_version,
                             preview_id: result.preview_id,

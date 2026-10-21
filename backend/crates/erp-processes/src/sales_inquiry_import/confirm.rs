@@ -114,7 +114,11 @@ impl SalesInquiryImportProcess {
         self.apply_preview(actor, &mut inquiry, &mut preview, &command_id, fingerprint, executor).await
     }
 
-    async fn revalidate(&self, preview: &InquiryImportPreview, executor: &mut dyn Executor) -> Result<()> {
+    pub(super) async fn revalidate(
+        &self,
+        preview: &InquiryImportPreview,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
         let codes = preview.data.lines.iter().map(|line| line.sku_code.clone()).collect::<Vec<_>>();
         let facts = sku_facts(&self.db, &codes, executor).await?;
         for line in &preview.data.lines {
@@ -146,6 +150,18 @@ impl SalesInquiryImportProcess {
     ) -> Result<InquiryImportResult> {
         inquiry.save_draft(preview.expected_version, preview.data.clone())?;
         SalesInquiryService::new(self.db.clone()).save(inquiry, executor).await?;
+        self.record_preview(actor, inquiry, preview, command_id, fingerprint, executor).await
+    }
+
+    pub(super) async fn record_preview(
+        &self,
+        actor: &AuditActor,
+        inquiry: &SalesInquiry,
+        preview: &mut InquiryImportPreview,
+        command_id: &str,
+        fingerprint: String,
+        executor: &mut dyn Executor,
+    ) -> Result<InquiryImportResult> {
         let result = InquiryImportResult {
             inquiry_id: inquiry.base.id.clone(),
             preview_id: preview.base.id.clone(),

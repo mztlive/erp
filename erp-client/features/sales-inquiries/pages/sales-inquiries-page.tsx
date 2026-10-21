@@ -36,6 +36,7 @@ import {
     type ProcurementInquiry,
 } from "../types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { InquiryCreateImport } from "../components/inquiry-create-import"
 
 export function SalesInquiriesPage({
     procurement = false,
@@ -192,6 +193,13 @@ export function SalesInquiriesPage({
                     </Link>
                 )}
                 {!procurement &&
+                    profile.data &&
+                    hasPermission(permissions, "sales_inquiry:create") &&
+                    hasPermission(permissions, "sales_inquiry:import") &&
+                    hasPermission(permissions, "sellable_sku:list") && (
+                        <InquiryCreateImport userId={profile.data.userid} />
+                    )}
+                {!procurement &&
                     hasPermission(permissions, "sales_inquiry:create") &&
                     hasPermission(permissions, "sellable_sku:list") && (
                         <Link
@@ -305,7 +313,7 @@ export function SalesInquiriesPage({
                         emptyDescription={
                             procurement
                                 ? "有新的责任需求后会显示在这里。"
-                                : "新建询价后导入客户选品文件，或从商品池添加需求。"
+                                : "导入客户选品文件创建草稿，或新建询价后手动添加商品。"
                         }
                         errorState={
                             list.isError ? (

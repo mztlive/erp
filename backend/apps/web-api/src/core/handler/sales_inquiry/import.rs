@@ -105,7 +105,7 @@ async fn read_upload(mut multipart: Multipart) -> std::result::Result<WorkbookUp
     })
 }
 
-async fn read_field(
+pub(super) async fn read_field(
     field: &mut axum::extract::multipart::Field<'_>,
     limit: usize,
 ) -> std::result::Result<Vec<u8>, Error> {
@@ -122,7 +122,10 @@ async fn read_field(
     Ok(bytes)
 }
 
-fn validate_workbook_type(name: &str, content_type: Option<&str>) -> std::result::Result<(), Error> {
+pub(super) fn validate_workbook_type(
+    name: &str,
+    content_type: Option<&str>,
+) -> std::result::Result<(), Error> {
     if name.chars().count() > 255
         || !name.to_ascii_lowercase().ends_with(".xlsx")
         || !matches!(
@@ -138,7 +141,7 @@ fn validate_workbook_type(name: &str, content_type: Option<&str>) -> std::result
     }
     Ok(())
 }
-fn upload_error(_: axum::extract::multipart::MultipartError) -> Error {
+pub(super) fn upload_error(_: axum::extract::multipart::MultipartError) -> Error {
     Error::BadRequest("上传内容无法读取，请重新选择工作簿".into())
 }
 

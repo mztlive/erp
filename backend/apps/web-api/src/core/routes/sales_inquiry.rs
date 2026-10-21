@@ -129,6 +129,23 @@ fn sales_feedback(rbac: &SharedRbacService) -> Router<AppState> {
 fn sales_imports(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
+            "/sales-inquiries/imports/preview",
+            with_permission(
+                post(sales_inquiry::import_creation::creation_preview),
+                rbac,
+                sales_inquiry::import_creation::creation_preview_permission_key(),
+            )
+            .layer(DefaultBodyLimit::max(5 * 1024 * 1024 + 64 * 1024)),
+        )
+        .route(
+            "/sales-inquiries/imports/create",
+            with_permission(
+                post(sales_inquiry::import_creation::creation_confirm),
+                rbac,
+                sales_inquiry::import_creation::creation_confirm_permission_key(),
+            ),
+        )
+        .route(
             "/sales-inquiries/{id}/imports/preview",
             with_permission(
                 post(sales_inquiry::import::sales_import_preview),

@@ -14,73 +14,23 @@ const HEADERS: [&str; 6] = ["需求数量", "已分配数量", "剩余数量", "
 /// # 返回
 /// 原地保留既有十二列配送明细。
 /// # 错误
-/// 非约定表头、额外字段或非系统公式登记逐行错误，阻止后续确认。
+/// 非约定表头或额外字段登记逐行错误，阻止后续确认；辅助公式不参与校验。
 pub(super) fn strip_checks(rows: &mut [Row], scalar: bool, errors: &mut Vec<InquiryImportIssue>) {
     let headers = if scalar { &HEADERS[..] } else { &HEADERS[..4] };
     for row in rows {
         if row.cells.len() > 12 + headers.len() {
             issue(errors, DELIVERY_SHEET, row.number, "附加列", "配送页不得添加字段");
         }
-        if row.number == 1 {
-            if !headers.iter().enumerate().all(|(index, name)| {
+        if row.number == 1
+            && !headers.iter().enumerate().all(|(index, name)| {
                 row.cells.get(index + 12).is_some_and(|cell| cell.value == *name && !cell.formula)
-            }) {
-                issue(errors, DELIVERY_SHEET, 1, "表头", "请保留数量核对列及原导出的隐藏核对列");
-            }
-        } else {
-            for (index, expected) in formulas(row.number, scalar).iter().enumerate() {
-                if row.cells.get(index + 12).is_some_and(|cell| {
-                    cell.formula && cell.formula_text.as_deref() != Some(expected.as_str())
-                }) {
-                    issue(
-                        errors,
-                        DELIVERY_SHEET,
-                        row.number,
-                        HEADERS[index],
-                        "数量核对公式已修改，请重新导出或先转换为值",
-                    );
-                }
-            }
+            })
+        {
+            issue(errors, DELIVERY_SHEET, 1, "表头", "请保留数量核对列及原导出的隐藏核对列");
         }
+        // 辅助列不进入业务数据；共享公式、软件改写和缓存均直接丢弃，不执行表达式。
         row.cells.truncate(12);
     }
-}
-
-fn formulas(row: u32, scalar: bool) -> Vec<String> {
-    let mut values = check_formulas(row).to_vec();
-    if scalar {
-        let sku = format!("$B{row}");
-        let quantities = "$Q$2:$Q$10000";
-        let keys = "$R$2:$R$10000";
-        let criterion = format!(
-            "SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(\"sku:\"&{sku},\"~\",\"~~\"),\"*\",\"~*\"),\"?\",\"~?\")"
-        );
-        values[1] = format!(
-            "IF({sku}=\"\",\"\",IF(COUNTIFS({keys},{criterion},{quantities},\"数量格式错误\")>0,\"数量格式错误\",ROUND(SUMIF({keys},{criterion},{quantities}),6)))"
-        );
-        values.push(format!("IF({sku}=\"\",\"\",IF(LEN(J{row}&\"\")=0,\"\",IFERROR(IF(AND(1*J{row}>0,ROUND(1*J{row},6)=1*J{row}),1*J{row},\"数量格式错误\"),\"数量格式错误\")))"));
-        values.push(format!("IF({sku}=\"\",\"\",\"sku:\"&{sku})"));
-    }
-    values
-}
-
-fn check_formulas(row: u32) -> [String; 4] {
-    let sku = format!("$B{row}");
-    let quantities = "$J$2:$J$10000";
-    let same_sku = format!("$B$2:$B$10000={sku}");
-    let positive = format!("IF({quantities}=\"\",0,IF(1*{quantities}>0,1*{quantities},NA()))");
-    [
-        format!(
-            "IF({sku}=\"\",\"\",INDEX(InquirySelection[需求数量],MATCH({sku},InquirySelection[SKU 编号],0)))"
-        ),
-        format!(
-            "IF({sku}=\"\",\"\",IFERROR(ROUND(SUMPRODUCT(IF({same_sku},{positive},0)),6),\"数量格式错误\"))"
-        ),
-        format!("IF({sku}=\"\",\"\",IFERROR(ROUND(M{row}-N{row},6),\"数量格式错误\"))"),
-        format!(
-            "IF({sku}=\"\",\"\",IFERROR(IF(1*M{row}<=0,\"需求数量错误\",IF(NOT(ISNUMBER(O{row})),\"数量格式错误\",IF(O{row}<0,\"超出 \"&TEXT(-O{row},\"General\"),IF(O{row}>0,\"尚差 \"&TEXT(O{row},\"General\"),\"数量一致\")))),\"数量格式错误\"))"
-        ),
-    ]
 }
 
 #[cfg(test)]
@@ -90,9 +40,9 @@ mod tests {
 
     fn row(number: u32) -> Row {
         let mut cells = vec![Cell::default(); 12];
-        cells.extend(check_formulas(number).map(|formula| Cell {
+        cells.extend((0..4).map(|_| Cell {
             formula: true,
-            formula_text: Some(formula),
+            formula_text: Some("IFERROR(1,0)".into()),
             value: "untrusted cache".into(),
             ..Default::default()
         }));
@@ -113,36 +63,31 @@ mod tests {
     }
 
     #[test]
-    fn changed_formula_and_extra_columns_fail_closed() {
+    fn changed_advisory_formula_is_ignored_but_extra_columns_are_rejected() {
         let mut rows = vec![row(2)];
         rows[0].cells[13].formula_text = Some("1+1".into());
         rows[0].cells.push(Cell::default());
         let mut errors = vec![];
         strip_checks(&mut rows, false, &mut errors);
-        assert_eq!(errors.len(), 2);
-        assert!(errors.iter().any(|error| error.column == "已分配数量"));
+        assert_eq!(errors.len(), 1);
         assert!(errors.iter().any(|error| error.column == "附加列"));
     }
 
     #[test]
-    fn scalar_helpers_are_checked_and_discarded_without_hiding_changed_formulas() {
-        let mut cells = vec![Cell::default(); 12];
-        cells.extend(formulas(3, true).into_iter().map(|formula| Cell {
-            formula: true,
-            formula_text: Some(formula),
-            value: "cached".into(),
-            ..Default::default()
-        }));
-        let mut rows = vec![Row { number: 3, cells }];
-        let mut valid = rows.clone();
-        let mut errors = vec![];
-        strip_checks(&mut valid, true, &mut errors);
-        assert!(errors.is_empty());
-        assert_eq!(valid[0].cells.len(), 12);
+    fn scalar_helpers_discard_shared_formulas_rewritten_formulas_and_cached_values() {
+        let mut rows = vec![row(3)];
+        rows[0].cells.extend([Cell::default(), Cell::default()]);
+        for cell in rows[0].cells.iter_mut().skip(12) {
+            cell.formula = true;
+            cell.formula_text = None;
+            cell.value = "数量一致".into();
+        }
         rows[0].cells[16].formula_text = Some("1+1".into());
+        let mut errors = vec![];
         strip_checks(&mut rows, true, &mut errors);
-        assert_eq!(errors.len(), 1);
-        assert_eq!(errors[0].column, "核对数量");
+        assert!(errors.is_empty());
+        assert_eq!(rows[0].cells.len(), 12);
+        assert!(rows[0].cells.iter().all(|cell| !cell.formula && cell.value.is_empty()));
     }
 
     #[test]

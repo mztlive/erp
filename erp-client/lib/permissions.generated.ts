@@ -3208,6 +3208,26 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
+                path: "/admin/sales-inquiries/imports/preview",
+                description: "预览导入新建询价",
+                permission: {
+                    resource: "sales_inquiry",
+                    action: "import",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-inquiries/imports/create",
+                description: "导入新建询价",
+                permission: {
+                    resource: "sales_inquiry",
+                    action: "import",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
                 path: "/admin/sales-inquiries/{id}/imports/preview",
                 description: "预览客户选品导入",
                 permission: {

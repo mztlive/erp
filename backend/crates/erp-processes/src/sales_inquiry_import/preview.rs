@@ -113,6 +113,7 @@ impl SalesInquiryImportProcess {
             base: BaseModel::new(next_id()),
             inquiry_id: id.into(),
             actor_id: actor.id().into(),
+            creation_customer_id: None,
             expected_version,
             input_fingerprint: fingerprint,
             errors,
@@ -126,7 +127,7 @@ impl SalesInquiryImportProcess {
     }
 }
 
-fn product_rows(workbook: &Workbook) -> Vec<InquiryImportProduct> {
+pub(super) fn product_rows(workbook: &Workbook) -> Vec<InquiryImportProduct> {
     workbook
         .products
         .iter()
@@ -142,7 +143,7 @@ fn product_rows(workbook: &Workbook) -> Vec<InquiryImportProduct> {
         .collect()
 }
 
-fn delivery_rows(workbook: &Workbook) -> Vec<InquiryImportDelivery> {
+pub(super) fn delivery_rows(workbook: &Workbook) -> Vec<InquiryImportDelivery> {
     workbook
         .deliveries
         .iter()
@@ -164,7 +165,11 @@ fn delivery_rows(workbook: &Workbook) -> Vec<InquiryImportDelivery> {
         .collect()
 }
 
-fn locate_issue(mut issue: InquiryImportIssue, sheet: &str, automatic_delivery: bool) -> InquiryImportIssue {
+pub(super) fn locate_issue(
+    mut issue: InquiryImportIssue,
+    sheet: &str,
+    automatic_delivery: bool,
+) -> InquiryImportIssue {
     if issue.sheet == parse::PRODUCT_SHEET && sheet != parse::PRODUCT_SHEET {
         issue.sheet = sheet.into();
         issue.column = match issue.column.as_str() {

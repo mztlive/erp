@@ -3,6 +3,8 @@
 import { useStore } from "@tanstack/react-form"
 import { useMutation } from "@tanstack/react-query"
 import { DownloadIcon } from "lucide-react"
+import type { ReactNode } from "react"
+import { CustomerSearchCombobox } from "@/features/entity-selectors/components/customer-search-combobox"
 
 import {
     ImportIssueTable,
@@ -72,16 +74,19 @@ export type InquiryImportConfirmResult = {
 type InquiryImportDialogProps = {
     open: boolean
     onOpenChange: (open: boolean) => void
-    onPreview: (file: File) => Promise<InquiryImportPreview>
+    onPreview: (file: File, customerId: string) => Promise<InquiryImportPreview>
     onConfirm: (
         preview: InquiryImportPreview,
         confirm_merge_duplicates: boolean,
+        customerId: string,
     ) => Promise<unknown>
     busy?: boolean
     disabled?: boolean
     error?: unknown
     onDownloadTemplate?: () => Promise<void>
     templateBusy?: boolean
+    creation?: boolean
+    recovery?: ReactNode
 }
 
 export function InquiryImportDialog({
@@ -94,18 +99,23 @@ export function InquiryImportDialog({
     error,
     onDownloadTemplate,
     templateBusy = false,
+    creation = false,
+    recovery,
 }: InquiryImportDialogProps) {
     const downloadTemplate = useMutation({
         mutationFn: async () => onDownloadTemplate?.(),
     })
     const form = useAppForm({
         defaultValues: {
+            customer_id: "",
             file: null as File | null,
             preview: null as InquiryImportPreview | null,
             confirm_merge_duplicates: false,
         },
         validators: {
             onSubmit: ({ value }) => {
+                if (creation && !value.customer_id)
+                    return { fields: { customer_id: "请选择客户" } }
                 if (!value.file || !/\.xlsx$/i.test(value.file.name))
                     return { fields: { file: "请选择客户选品 XLSX 文件" } }
                 if (
@@ -133,12 +143,25 @@ export function InquiryImportDialog({
         onSubmit: async ({ value }) => {
             if (busy || disabled || !value.file) return
             if (!value.preview) {
-                const preview = await onPreview(value.file)
+                const preview = await onPreview(value.file, value.customer_id)
                 form.setFieldValue("preview", preview)
                 form.setFieldValue("confirm_merge_duplicates", false)
+                if (
+                    creation &&
+                    !preview.errors.length &&
+                    !preview.merges.length
+                ) {
+                    await onConfirm(preview, false, value.customer_id)
+                    form.reset()
+                    onOpenChange(false)
+                }
                 return
             }
-            await onConfirm(value.preview, value.confirm_merge_duplicates)
+            await onConfirm(
+                value.preview,
+                value.confirm_merge_duplicates,
+                value.customer_id,
+            )
             form.reset()
             onOpenChange(false)
         },
@@ -160,12 +183,21 @@ export function InquiryImportDialog({
                 id="sales-inquiry-import-dialog"
                 closeButtonId="sales-inquiry-import-dismiss"
                 className="flex max-h-[90dvh] flex-col sm:max-w-4xl"
+                finalFocus={
+                    creation
+                        ? () =>
+                              document.getElementById(
+                                  "sales-inquiries-import-create",
+                              )
+                        : undefined
+                }
             >
                 <DialogHeader>
                     <DialogTitle>导入客户选品</DialogTitle>
                     <DialogDescription>
-                        上传公司商品池导出的选品
-                        Excel，或询价详情下载的客户模板。先核对商品、地址和合并结果，再写入询价草稿。
+                        {creation
+                            ? "选择客户并上传填写好的选品 Excel，校验通过后自动创建询价草稿。存在重复配送行时需先核对合并结果。"
+                            : "上传公司商品池导出的选品 Excel，或询价详情下载的客户模板。先核对商品、地址和合并结果，再写入询价草稿。"}
                     </DialogDescription>
                 </DialogHeader>
                 <form
@@ -177,6 +209,40 @@ export function InquiryImportDialog({
                     }}
                 >
                     <div className="min-h-0 space-y-5 overflow-y-auto pr-1">
+                        {creation && (
+                            <form.AppField name="customer_id">
+                                {(field) => (
+                                    <Field>
+                                        <FieldLabel htmlFor="sales-inquiry-import-customer">
+                                            客户
+                                        </FieldLabel>
+                                        <CustomerSearchCombobox
+                                            id="sales-inquiry-import-customer"
+                                            value={
+                                                field.state.value || undefined
+                                            }
+                                            disabled={locked}
+                                            onValueChange={(id) => {
+                                                field.handleChange(id ?? "")
+                                                form.setFieldValue(
+                                                    "preview",
+                                                    null,
+                                                )
+                                                form.setFieldValue(
+                                                    "confirm_merge_duplicates",
+                                                    false,
+                                                )
+                                            }}
+                                        />
+                                        <FieldError
+                                            errors={toFieldErrors(
+                                                field.state.meta.errors,
+                                            )}
+                                        />
+                                    </Field>
+                                )}
+                            </form.AppField>
+                        )}
                         <form.AppField name="file">
                             {(field) => (
                                 <Field>
@@ -190,7 +256,7 @@ export function InquiryImportDialog({
                                         disabled={locked}
                                         maxFileSize={INQUIRY_IMPORT_MAX_BYTES}
                                         label="上传客户填写的工作簿"
-                                        description="仅支持 XLSX，最大 5 MiB、2,000 条配送行，分组后最多 200 条需求。编码和电话按文本填写，公式请先粘贴为值。"
+                                        description="仅支持 XLSX，最大 5 MiB、2,000 条配送行，分组后最多 200 条需求。系统自动公式可直接导入，自行添加的公式须先粘贴为值。"
                                         selectedFiles={
                                             field.state.value
                                                 ? [field.state.value]
@@ -269,6 +335,7 @@ export function InquiryImportDialog({
                                 </AlertDescription>
                             </Alert>
                         ) : null}
+                        {recovery}
                     </div>
                     <DialogFooter className="shrink-0">
                         {onDownloadTemplate ? (
@@ -313,15 +380,25 @@ export function InquiryImportDialog({
                                     void form.handleSubmit()
                                 }}
                             >
-                                重新预览
+                                {creation ? "重新校验并创建" : "重新预览"}
                             </Button>
                         ) : null}
                         <form.AppForm>
                             <form.SubmitButton
                                 id="sales-inquiry-import-submit"
-                                label={preview ? "确认写入草稿" : "校验并预览"}
+                                label={
+                                    creation
+                                        ? "创建询价草稿"
+                                        : preview
+                                          ? "确认写入草稿"
+                                          : "校验并预览"
+                                }
                                 pendingLabel={
-                                    preview ? "正在写入…" : "正在校验…"
+                                    preview
+                                        ? creation
+                                            ? "正在创建…"
+                                            : "正在写入…"
+                                        : "正在校验…"
                                 }
                                 loading={busy}
                                 disabled={disabled || hasErrors}

@@ -566,6 +566,95 @@ mod tests {
         assert_eq!(parsed.deliveries.len(), 2);
     }
 
+    fn shared_check_workbook() -> Vec<u8> {
+        let bytes = include_bytes!("fixtures/pool-v4.xlsx.fixture");
+        let mut archive = ZipArchive::new(Cursor::new(bytes.as_slice())).unwrap();
+        let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
+        for index in 0..archive.len() {
+            let mut entry = archive.by_index(index).unwrap();
+            let name = entry.name().to_string();
+            let mut content = Vec::new();
+            entry.read_to_end(&mut content).unwrap();
+            if name == "xl/worksheets/sheet2.xml" {
+                let mut xml = String::from_utf8(content).unwrap();
+                for (id, column) in ["N", "O", "P", "Q", "R"].iter().enumerate() {
+                    let anchor =
+                        Regex::new(&format!(r#"(<c\b[^>]*r="{column}2"[^>]*>)<f>(.*?)</f>"#)).unwrap();
+                    xml = anchor
+                        .replace(
+                            &xml,
+                            format!(r#"${{1}}<f t="shared" ref="{column}2:{column}3" si="{id}">${{2}}</f>"#),
+                        )
+                        .into_owned();
+                    let follower =
+                        Regex::new(&format!(r#"(<c\b[^>]*r="{column}3"[^>]*>)<f>.*?</f>"#)).unwrap();
+                    xml = follower.replace(&xml, format!(r#"${{1}}<f t="shared" si="{id}"/>"#)).into_owned();
+                }
+                content = xml.into_bytes();
+            }
+            writer.start_file(name, SimpleFileOptions::default()).unwrap();
+            writer.write_all(&content).unwrap();
+        }
+        writer.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn shared_check_formulas_are_ignored_but_overallocation_is_still_rejected() {
+        use erp_sales::entity::sales_inquiry::{InquiryFulfillmentKind, InquiryRequirementData};
+        use erp_sales::entity::sales_inquiry_import::{InquiryImportSku, InquiryImportValidation};
+
+        use crate::sales_inquiry_import::preview::{delivery_rows, product_rows};
+
+        let parsed = parse(&shared_check_workbook()).unwrap();
+        assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
+        let products = product_rows(&parsed);
+        let mut deliveries = delivery_rows(&parsed);
+        assert_eq!(deliveries.len(), 2);
+        assert_eq!(deliveries[0].quantity, "100");
+        assert_eq!(deliveries[1].quantity, "100");
+        for delivery in &mut deliveries {
+            delivery.due_date = "2026-11-01".into();
+        }
+        let sku = InquiryImportSku {
+            sku_id: "sku".into(),
+            sku_revision_id: "revision".into(),
+            sku_code: products[0].sku_code.clone(),
+            name: "商品".into(),
+            specification: "".into(),
+            unit_code: products[0].unit.clone(),
+            quantity_scale: 0,
+            fulfillment_kind: InquiryFulfillmentKind::Physical,
+        };
+        let mut identity = 0;
+        let result = InquiryImportValidation::build(
+            &products,
+            &deliveries,
+            std::slice::from_ref(&sku),
+            &InquiryRequirementData::default(),
+            || {
+                identity += 1;
+                identity.to_string()
+            },
+        );
+        assert_eq!(result.errors.len(), 1, "{:?}", result.errors);
+        assert!(result.errors.iter().any(|error| error.column == "需求数量"), "{:?}", result.errors);
+        deliveries[0].quantity = "60".into();
+        deliveries[1].quantity = "40".into();
+        let mut identity = 0;
+        let valid = InquiryImportValidation::build(
+            &products,
+            &deliveries,
+            &[sku],
+            &InquiryRequirementData::default(),
+            || {
+                identity += 1;
+                identity.to_string()
+            },
+        );
+        assert!(valid.errors.is_empty(), "{:?}", valid.errors);
+        assert_eq!(valid.data.lines[0].quantity.to_string(), "100");
+    }
+
     #[test]
     fn refuses_archives_with_excessive_expanded_entry_size() {
         let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
