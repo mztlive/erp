@@ -135,13 +135,11 @@ fn validate_attribution(inquiry: &SalesInquiry, allocation: &InquiryFeeAllocatio
         .flat_map(|row| row.selections.iter())
         .collect::<Vec<_>>();
     if selections.is_empty()
-        || !selections.iter().any(|selection| {
-            (fee.line_ids.is_empty() || fee.line_ids.contains(&selection.line_id))
-                && (fee.allocation_ids.is_empty()
-                    || selection.allocation_id.as_ref().is_some_and(|id| fee.allocation_ids.contains(id)))
-        })
+        || !selections
+            .iter()
+            .any(|selection| fee.line_ids.is_empty() || fee.line_ids.contains(&selection.line_id))
     {
-        return Err(Error::BusinessLogicError("销售单不在本费用关联的商品或地址范围内".into()));
+        return Err(Error::BusinessLogicError("销售单不在本费用关联的商品范围内".into()));
     }
     Ok(())
 }

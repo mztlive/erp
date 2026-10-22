@@ -51,20 +51,8 @@ import {
 } from "../types"
 import type { ExpensePurchaseCreated } from "./expense-purchase-create-dialog"
 
-function categoryCode(category: string): PurchaseExpenseCategory | undefined {
-    const code = category === "warehousing" ? "storage" : category
-    return Object.hasOwn(PURCHASE_EXPENSE_CATEGORY_LABEL, code)
-        ? (code as PurchaseExpenseCategory)
-        : undefined
-}
-
 function candidateReason(candidate: InquiryExpenseCandidate): string | null {
-    return (
-        candidate.unavailable_reason ??
-        (!categoryCode(candidate.category)
-            ? "费用类别暂不支持，请重新确认费用"
-            : null)
-    )
+    return candidate.unavailable_reason ?? null
 }
 
 /** 在费用来源授权内办理已接受询价费用，不读取已经结束的询价任务。 */
@@ -219,7 +207,7 @@ export function InquiryExpenseSourceSection({
                                         </TableCell>
                                         <TableCell className="whitespace-normal">
                                             {reason ??
-                                                (candidate.valid_conditions ||
+                                                (candidate.public_note ||
                                                     "按本轮已确认费用条件办理")}
                                             <p className="mt-1 text-xs text-muted-foreground">
                                                 有效至{" "}
@@ -279,6 +267,14 @@ export function InquiryExpenseSourceSection({
 }
 
 const inputSchema = z.object({
+    category: z
+        .enum(
+            Object.keys(PURCHASE_EXPENSE_CATEGORY_LABEL) as [
+                PurchaseExpenseCategory,
+                ...PurchaseExpenseCategory[],
+            ],
+        )
+        .default("other"),
     amount: z.string(),
     supplier_id: z.string(),
     supplier_name: z.string(),
@@ -309,6 +305,7 @@ function InquiryExpenseSourceDialog({
     const [initial, setInitial] = React.useState<SourceFormValues | null>(null)
     React.useEffect(() => {
         const fallback = {
+            category: "other" as PurchaseExpenseCategory,
             amount: candidate.available_amount,
             supplier_id: candidate.payee_supplier_id ?? "",
             supplier_name: "",
@@ -450,7 +447,7 @@ function InquiryExpenseSourceForm({
                     idempotencyKey: `inquiry-expense:${crypto.randomUUID()}`,
                     lines: [
                         {
-                            category: categoryCode(candidate.category)!,
+                            category: value.category,
                             description: candidate.name,
                             grossAmount: value.amount,
                             inputTaxRate: candidate.tax_rate,
@@ -507,6 +504,21 @@ function InquiryExpenseSourceForm({
                             void form.handleSubmit()
                         }}
                     >
+                        <form.AppField
+                            name="category"
+                            children={(field) => (
+                                <field.SelectField
+                                    id="inquiry-expense-source-category"
+                                    label="费用类别"
+                                    options={Object.entries(
+                                        PURCHASE_EXPENSE_CATEGORY_LABEL,
+                                    ).map(([value, label]) => ({
+                                        value,
+                                        label,
+                                    }))}
+                                />
+                            )}
+                        />
                         <form.AppField name="amount">
                             {(field) => (
                                 <field.TextField
@@ -561,7 +573,7 @@ function InquiryExpenseSourceForm({
                             )}
                         </form.AppField>
                         <p className="text-sm text-muted-foreground">
-                            {candidate.valid_conditions ||
+                            {candidate.public_note ||
                                 "按本轮确认的费用条件办理。"}{" "}
                             收款对象和付款条件不同的费用分别建单。
                         </p>

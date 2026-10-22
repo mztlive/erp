@@ -14,7 +14,7 @@ use erp_procurement::entity::purchase_order::{
     InquiryExpenseSource, PurchaseExpenseDetail, PurchaseOrder, PurchaseOrderSubmissionLine,
 };
 use erp_sales::entity::sales_inquiry::{
-    InquiryFee, InquiryFeeCategory, InquiryFeeReservation, InquiryReservationState, SalesInquiry,
+    InquiryFee, InquiryFeeReservation, InquiryReservationState, SalesInquiry,
 };
 use erp_sales::service::sales_inquiry::SalesInquiryService;
 use erp_supply::inquiry::{InquiryFeeBasis, InquiryFeeBasisData, InquirySupplyService};
@@ -44,13 +44,7 @@ pub(crate) async fn reserve_purchase(
         let Some(source) = detail.inquiry_source.as_ref() else { continue };
         let source = source.normalized()?;
         let mut inquiry = service.require(&source.inquiry_id, executor).await?;
-        let fee = require_fee(&inquiry, &source, line.gross_amount, line.input_tax_rate)?;
-        if !fee.requires_erp_payment {
-            return Err(Error::BusinessLogicError("本费用应按财务凭证登记，不生成费用采购".into()));
-        }
-        if category_code(fee) != detail.category.as_str() {
-            return Err(Error::ValidationError("费用类别与已接受询价结果不一致".into()));
-        }
+        require_fee(&inquiry, &source, line.gross_amount, line.input_tax_rate)?;
         confirm_conversion_payee(db, &inquiry, &source, order, actor.id(), executor).await?;
         let reservation = reservation(
             &source,
@@ -106,25 +100,6 @@ fn require_fee<'a>(
         return Err(Error::ValidationError("费用税率或金额不符合已接受结果，请先重新询价".into()));
     }
     Ok(fee)
-}
-
-/// 返回询价费用与正式采购、财务费用共用的类别代码。
-/// # 参数
-/// `fee` 为领域已校验的费用快照。
-/// # 返回
-/// 返回正式费用合同中的稳定类别代码。
-/// # 错误
-/// 不执行 I/O，不返回错误。
-pub(crate) fn category_code(fee: &InquiryFee) -> &'static str {
-    match fee.category {
-        InquiryFeeCategory::Logistics => "logistics",
-        InquiryFeeCategory::Printing => "printing",
-        InquiryFeeCategory::Warehousing => "storage",
-        InquiryFeeCategory::Delivery => "delivery",
-        InquiryFeeCategory::PlatformTech => "platform_tech",
-        InquiryFeeCategory::OfflineService => "offline_service",
-        InquiryFeeCategory::Other => "other",
-    }
 }
 
 async fn validate_payee(
@@ -312,10 +287,7 @@ async fn resize_inquiry(
             .ok_or_else(|| Error::ValidationError("询价费用来源不能移除".into()))?
             .normalized()?;
         validate_target_identity(inquiry, order, &row, &source)?;
-        let fee = require_fee(inquiry, &source, target.amount, target.rate)?;
-        if !fee.requires_erp_payment || category_code(fee) != target.detail.category.as_str() {
-            return Err(Error::ValidationError("目标费用类别或办理方式与采用的询价反馈不一致".into()));
-        }
+        require_fee(inquiry, &source, target.amount, target.rate)?;
         if source.feedback_round != row.feedback_round || target.amount > row.amount {
             confirm_conversion_payee(db, inquiry, &source, order, actor_id, executor).await?;
         } else {
@@ -418,7 +390,7 @@ pub(crate) async fn mark_occurred(
 /// # 返回
 /// 来源占用并登记为已办理，和成本事实共用事务。
 /// # 错误
-/// 费用仍要求 ERP 付款、来源金额或类别非法、重复办理时拒绝。
+/// 来源金额、税率或额度非法、重复办理时拒绝。
 pub(crate) async fn register_finance(
     db: &Database,
     reference: Option<&InquiryFeeReference>,
@@ -435,10 +407,7 @@ pub(crate) async fn register_finance(
     .normalized()?;
     let service = SalesInquiryService::new(db.clone());
     let mut inquiry = service.require(&source.inquiry_id, executor).await?;
-    let fee = require_fee(&inquiry, &source, entry.gross_amount, Some(entry.input_tax_rate))?;
-    if fee.requires_erp_payment || category_code(fee) != entry.cost_type.as_str() {
-        return Err(Error::BusinessLogicError("费用办理方式或类别不符合已接受询价，请先重新确认费用".into()));
-    }
+    require_fee(&inquiry, &source, entry.gross_amount, Some(entry.input_tax_rate))?;
     let reserved =
         reservation(&source, &entry.source_document_id, &entry.base.id, &entry.base.id, entry.gross_amount);
     let reservation_id = reserved.reservation_id.clone();

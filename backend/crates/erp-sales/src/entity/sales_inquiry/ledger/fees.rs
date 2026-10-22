@@ -4,8 +4,8 @@ use erp_core::money::Amount;
 use rust_decimal::Decimal;
 
 use super::super::{
-    InquiryFee, InquiryFeeAllocation, InquiryFeeConfirmation, InquiryFeeReservation, InquiryReservationState,
-    InquiryStatus, SalesInquiry, sum_decimal, validate_text,
+    InquiryFee, InquiryFeeAllocation, InquiryFeeReservation, InquiryReservationState, InquiryStatus,
+    SalesInquiry, sum_decimal, validate_text,
 };
 use crate::{Error, Result};
 
@@ -263,16 +263,13 @@ impl SalesInquiry {
     /// # 参数
     /// `round`、`fee_id` 为明确公开来源；`now` 为当前时刻。
     /// # 返回
-    /// 当前已接受、有效、已确认且未含商品价时通过。
+    /// 当前已接受、有效、金额大于零时通过。
     /// # 错误
-    /// 未接受、过期、重询、关闭、暂估、含价或零额时返回公开业务原因。
+    /// 未接受、过期、重询、关闭、零额时返回公开业务原因。
     pub fn ensure_fee_available(&self, round: u32, fee_id: &str, now: Instant) -> Result<()> {
         let fee = self.accepted_fee(round, fee_id, now)?;
-        if fee.confirmation != InquiryFeeConfirmation::Confirmed
-            || fee.included_in_goods_price
-            || fee.amount_gross.to_decimal() <= Decimal::ZERO
-        {
-            return Err(Error::BusinessLogicError("暂估、已含商品价或零额费用不能新增办理".into()));
+        if fee.amount_gross.to_decimal() <= Decimal::ZERO {
+            return Err(Error::BusinessLogicError("零额费用不能新增办理".into()));
         }
         Ok(())
     }
@@ -357,9 +354,6 @@ impl SalesInquiry {
         now: Instant,
     ) -> Result<()> {
         let fee = self.accepted_fee(reservation.feedback_round, &reservation.fee_id, now)?;
-        if fee.confirmation != InquiryFeeConfirmation::Confirmed || fee.included_in_goods_price {
-            return Err(Error::BusinessLogicError("暂估或已含商品价费用不能办理费用来源".into()));
-        }
         let allocation = self
             .fee_allocations
             .iter()

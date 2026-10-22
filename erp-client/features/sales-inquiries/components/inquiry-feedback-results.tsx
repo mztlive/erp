@@ -279,20 +279,9 @@ function FeedbackFees({ feedback }: { feedback: InquiryFeedback }) {
                             <div className="flex flex-wrap items-center gap-3">
                                 <span className="font-medium">{fee.name}</span>
                                 <MoneyValue value={fee.amount_gross} />
-                                <Badge variant="outline">
-                                    {fee.confirmation === "estimated"
-                                        ? "暂估"
-                                        : "已确认"}
-                                </Badge>
-                                {fee.included_in_goods_price && (
-                                    <Badge variant="outline">已含商品价</Badge>
-                                )}
                             </div>
                             <p className="text-xs text-muted-foreground">
                                 有效至 {inquiryDate(fee.valid_until)}
-                                {fee.valid_conditions
-                                    ? ` · ${fee.valid_conditions}`
-                                    : ""}
                             </p>
                             {fee.public_note && (
                                 <p className="whitespace-pre-wrap text-sm text-muted-foreground">

@@ -30,11 +30,10 @@ export type InquiryExpenseCandidate = {
     fee_id: string
     allocation_id: string
     name: string
-    category: string
     tax_rate: string
     available_amount: string
     valid_until: number
-    valid_conditions: string
+    public_note: string
     unavailable_reason: string | null
     payee_supplier_id: string | null
     payment_term_code: string | null

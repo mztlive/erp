@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { ReceiptTextIcon } from "lucide-react"
 import { BusinessFailureState } from "@/components/business"
 import {
     TableToolbar,
@@ -228,7 +229,7 @@ export function InquiryFeedbackTable({
                                     报价有效至
                                 </TableHead>
                                 <TableHead className="w-32">交付日期</TableHead>
-                                <TableHead className="w-32 text-right">
+                                <TableHead className="w-40 text-right">
                                     操作
                                 </TableHead>
                             </TableRow>
@@ -496,7 +497,7 @@ export function InquiryFeedbackTable({
                                                             id={`${prefix}-internal-quotes`}
                                                             type="button"
                                                             size="sm"
-                                                            variant="ghost"
+                                                            variant="outline"
                                                             disabled={disabled}
                                                             onClick={() =>
                                                                 onInternalQuote(
@@ -504,6 +505,10 @@ export function InquiryFeedbackTable({
                                                                 )
                                                             }
                                                         >
+                                                            <ReceiptTextIcon
+                                                                data-icon="inline-start"
+                                                                aria-hidden="true"
+                                                            />
                                                             供应商报价
                                                         </Button>
                                                     )}

@@ -87,17 +87,11 @@ fn feedback(quantity: &str, conclusion: InquirySupplyConclusion) -> InquiryFeedb
         }],
         fees: vec![InquiryFee {
             fee_id: "fee".into(),
-            category: InquiryFeeCategory::Logistics,
             name: "运费".into(),
             amount_gross: amount("100"),
             tax_rate: "0.06".parse().unwrap(),
             line_ids: vec!["line".into()],
-            allocation_ids: vec!["address".into()],
-            included_in_goods_price: false,
-            confirmation: InquiryFeeConfirmation::Confirmed,
-            requires_erp_payment: true,
             valid_until: later(),
-            valid_conditions: "本次配送".into(),
             public_note: "物流成本".into(),
         }],
     }
@@ -352,19 +346,11 @@ fn fees_cannot_be_duplicated_or_release_registered_facts() {
 }
 
 #[test]
-fn estimated_or_included_fee_is_reference_only() {
-    for included in [false, true] {
-        let mut inquiry = accepted();
-        inquiry.feedbacks[0].data.fees[0].included_in_goods_price = included;
-        if !included {
-            inquiry.feedbacks[0].data.fees[0].confirmation = InquiryFeeConfirmation::Estimated;
-        }
-        inquiry.allocate_fee("allocation", "sales-order", 1, "fee", amount("100"), now()).unwrap();
-        assert!(inquiry.reserve_fee(fee_reservation("f1", "1"), now()).is_err());
-        if included {
-            assert_eq!(inquiry.feedbacks[0].data.extra_cost_total().unwrap(), amount("0"));
-        }
-    }
+fn extra_costs_are_independent_and_zero_cannot_be_handled() {
+    let mut inquiry = accepted();
+    assert_eq!(inquiry.feedbacks[0].data.extra_cost_total().unwrap(), amount("100"));
+    inquiry.feedbacks[0].data.fees[0].amount_gross = amount("0");
+    assert!(inquiry.ensure_fee_available(1, "fee", now()).is_err());
 }
 
 #[test]
@@ -583,7 +569,6 @@ fn shared_fee_owner_is_explicit_and_moves_with_responsibility() {
     inquiry.submit(1, "sales", String::new(), now()).unwrap();
     let mut whole_fee = feedback("10", InquirySupplyConclusion::Available);
     whole_fee.fees[0].line_ids.clear();
-    whole_fee.fees[0].allocation_ids.clear();
     inquiry.save_feedback_work(1, "buyer1", vec!["line".into()], whole_fee.clone(), now()).unwrap();
     assert!(inquiry.merge_feedback_work(&[("buyer1".into(), vec!["line".into()])]).is_ok());
     inquiry.shared_fee_owner_user_id = Some("buyer2".into());
@@ -767,7 +752,6 @@ fn two_line_accepted_inquiry() -> (SalesInquiry, InquiryFeedbackData) {
     let mut second_fee = complete.fees[0].clone();
     second_fee.fee_id = "fee-b".into();
     second_fee.line_ids = vec!["line-b".into()];
-    second_fee.allocation_ids = vec!["address-b".into()];
     complete.fees.push(second_fee);
     inquiry.publish(1, "buyer", complete.clone(), now()).unwrap();
     inquiry.accept(1, "sales", 1, now()).unwrap();
@@ -1096,4 +1080,63 @@ fn feedback_draft_rejects_multiple_prices_without_mutation() {
     data.lines[0].prices.push(extra);
     assert!(inquiry.save_feedback_work(1, "buyer", vec!["line".into()], data, now()).is_err());
     assert_eq!(inquiry, before);
+}
+
+#[test]
+fn fee_scope_and_expiry_are_derived_and_cannot_be_overridden() {
+    let mut inquiry = inquiry();
+    inquiry.submit(1, "sales", String::new(), now()).unwrap();
+    let mut data = feedback("10", InquirySupplyConclusion::Available);
+    data.fees[0].line_ids = vec!["outside".into()];
+    data.fees[0].valid_until = Instant::from_unix_secs(99999);
+    inquiry.save_feedback_work(1, "buyer", vec!["line".into()], data.clone(), now()).unwrap();
+    let fee = &inquiry.feedback_work.last().unwrap().data.fees[0];
+    assert_eq!(fee.line_ids, vec!["line"]);
+    assert_eq!(fee.valid_until, later());
+    data.lines[0].prices[0].valid_until = Instant::from_unix_secs(0);
+    inquiry.save_feedback_work(1, "buyer", vec!["line".into()], data, now()).unwrap();
+    let saved = &inquiry.feedback_work.last().unwrap().data;
+    assert_eq!(saved.fees[0].valid_until, Instant::from_unix_secs(0));
+    assert!(saved.validate(&demand(), now()).is_err());
+}
+
+#[test]
+fn feedback_work_rejects_reusing_another_buyers_fee_and_duplicate_ids() {
+    let (mut inquiry, mut data) = two_line_accepted_inquiry();
+    inquiry
+        .reinquire(
+            1,
+            "sales",
+            InquiryReinquiryData {
+                reason: "重新报价".into(),
+                line_ids: vec![],
+                fee_ids: vec![],
+                concerns: "费用".into(),
+                requirement: None,
+            },
+            now(),
+        )
+        .unwrap();
+    data.lines.retain(|line| line.line_id == "line-b");
+    data.fees.retain(|fee| fee.fee_id == "fee");
+    let before = inquiry.clone();
+    assert!(inquiry.save_feedback_work(1, "buyer-b", vec!["line-b".into()], data.clone(), now()).is_err());
+    assert_eq!(inquiry, before);
+    data.fees[0].fee_id = "new".into();
+    data.fees.push(data.fees[0].clone());
+    assert!(inquiry.save_feedback_work(1, "buyer-b", vec!["line-b".into()], data, now()).is_err());
+    assert_eq!(inquiry, before);
+}
+
+#[test]
+fn whole_order_fee_uses_earliest_quote_after_combining_buyers() {
+    let (_, mut data) = two_line_accepted_inquiry();
+    data.fees[0].line_ids.clear();
+    data.lines[1].prices[0].valid_until = Instant::from_unix_secs(200);
+    data.refresh_fee_validity();
+    assert_eq!(data.fees[0].valid_until, Instant::from_unix_secs(200));
+    assert_eq!(data.fees[1].valid_until, Instant::from_unix_secs(200));
+    data.fees[0].line_ids = vec!["line".into()];
+    data.refresh_fee_validity();
+    assert_eq!(data.fees[0].valid_until, later());
 }

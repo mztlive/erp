@@ -255,9 +255,10 @@ pub async fn procurement_publish(
 
 #[cfg(test)]
 mod tests {
-    use axum::body::Body;
+    use axum::body::{Body, to_bytes};
     use axum::extract::FromRequest;
-    use axum::http::Request;
+    use axum::http::{Request, StatusCode};
+    use axum::response::IntoResponse;
     use serde_json::{Value, json};
 
     use super::*;
@@ -348,6 +349,56 @@ mod tests {
             "data": {"lines": [{"line_id": "line", "conclusion": "available", "available_quantity": "10",
                 "prices": [{"price_id": "price", "unit_price_gross": null, "tax_rate": null, "valid_until": 0}]}]}
         })
+    }
+
+    #[tokio::test]
+    async fn feedback_fee_empty_amount_reports_exact_path_and_zero_remains_explicit() {
+        let mut payload = feedback_draft_request();
+        payload["data"]["fees"] = json!([{
+            "fee_id": "fee", "name": "", "amount_gross": "",
+            "tax_rate": "0", "line_ids": ["line"],
+            "valid_until": 1792684799, "public_note": ""
+        }]);
+        let response = Json::<SaveInquiryFeedbackCommand>::from_request(json_request(payload.clone()), &())
+            .await
+            .err()
+            .expect("empty fee amount must be rejected")
+            .into_response();
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(body["code"], "REQUEST_FIELD_INVALID");
+        assert!(body["fieldErrors"]["data.fees[0].amount_gross"].is_string());
+        payload["data"]["fees"][0]["name"] = json!("配送费用");
+        payload["data"]["fees"][0]["amount_gross"] = json!("0");
+        let Json(request) =
+            Json::<SaveInquiryFeedbackCommand>::from_request(json_request(payload), &()).await.unwrap();
+        assert_eq!(serde_json::to_value(request.data.fees[0].amount_gross).unwrap(), "0");
+        assert_eq!(request.data.lines[0].prices[0].unit_price_gross, None);
+    }
+
+    #[tokio::test]
+    async fn feedback_rejects_removed_fee_fields() {
+        for field in [
+            "category",
+            "allocation_ids",
+            "included_in_goods_price",
+            "confirmation",
+            "requires_erp_payment",
+            "valid_conditions",
+        ] {
+            let mut payload = feedback_draft_request();
+            payload["data"]["fees"] = json!([{
+                "fee_id": "fee", "name": "运费", "amount_gross": "10", "tax_rate": "0",
+                "line_ids": [], "valid_until": 0, "public_note": ""
+            }]);
+            payload["data"]["fees"][0][field] = Value::Null;
+            let rejection = Json::<SaveInquiryFeedbackCommand>::from_request(json_request(payload), &())
+                .await
+                .err()
+                .expect("removed fee fields must be rejected");
+            assert_eq!(rejection.into_response().status(), StatusCode::UNPROCESSABLE_ENTITY);
+        }
     }
 
     #[tokio::test]

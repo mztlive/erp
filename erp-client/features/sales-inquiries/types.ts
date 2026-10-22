@@ -54,17 +54,11 @@ export type InquiryFeedbackLine = {
 }
 export type InquiryFee = {
     fee_id: string
-    category: string
     name: string
     amount_gross: string
     tax_rate: string
     line_ids: string[]
-    allocation_ids: string[]
-    included_in_goods_price: boolean
-    confirmation: "estimated" | "confirmed"
-    requires_erp_payment: boolean
     valid_until: number
-    valid_conditions: string
     public_note: string
 }
 export type InquiryFeedbackData = {

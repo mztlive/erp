@@ -7,6 +7,51 @@ use super::{InquiryFeedbackData, InquiryReassignmentData, InquiryStatus, SalesIn
 use crate::{Error, Result};
 
 impl SalesInquiry {
+    /// 费用范围由责任归属确定，有效期采用关联商品最早到期的报价。
+    /// # 参数
+    /// `actor`、`scope` 为已授权责任人和范围，`data` 为当前反馈草稿。
+    /// # 返回
+    /// 覆盖客户端传入的范围及有效期，保留既有费用归属。
+    /// # 错误
+    /// 费用过多、身份重复或既有费用超出责任范围时拒绝。
+    pub(super) fn prepare_feedback_fees(
+        &self,
+        actor: &str,
+        scope: &[String],
+        data: &mut InquiryFeedbackData,
+    ) -> Result<()> {
+        let mut ids = HashSet::new();
+        if data.fees.len() > 100 {
+            return Err(Error::ValidationError("费用不得超过 100 项".into()));
+        }
+        for fee in &mut data.fees {
+            validate_text(&fee.fee_id, "费用身份", 128)?;
+            if !ids.insert(&fee.fee_id) {
+                return Err(Error::ValidationError("费用来源身份重复".into()));
+            }
+            let previous = self
+                .feedback_work
+                .iter()
+                .rev()
+                .filter(|work| work.actor_id == actor)
+                .flat_map(|work| &work.data.fees)
+                .chain(self.feedbacks.iter().rev().flat_map(|snapshot| &snapshot.data.fees))
+                .find(|previous| previous.fee_id == fee.fee_id);
+            fee.line_ids = match previous {
+                Some(previous) => previous.line_ids.clone(),
+                None if self.shared_fee_owner_user_id.as_deref() == Some(actor) => vec![],
+                None => scope.to_vec(),
+            };
+            if fee.line_ids.iter().any(|id| !scope.contains(id))
+                || (fee.line_ids.is_empty() && self.shared_fee_owner_user_id.as_deref() != Some(actor))
+            {
+                return Err(Error::Forbidden("费用超出当前采购责任范围".into()));
+            }
+        }
+        data.refresh_fee_validity();
+        Ok(())
+    }
+
     /// 按当前任务责任合并本轮工作，不能复用旧任务或旧需求版本。
     /// # 参数
     /// `responsibilities` 为事务内重验的当前责任采购及稳定需求行。
@@ -65,6 +110,7 @@ impl SalesInquiry {
         {
             return Err(Error::BusinessLogicError("尚有需求未分派当前责任采购".into()));
         }
+        result.refresh_fee_validity();
         Ok(result)
     }
 

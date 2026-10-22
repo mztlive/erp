@@ -2,15 +2,17 @@
 
 import * as React from "react"
 import { createPortal } from "react-dom"
-import { ReceiptTextIcon } from "lucide-react"
+import { PlusIcon, ReceiptTextIcon, Trash2Icon } from "lucide-react"
 import { useStore } from "@tanstack/react-form"
 import { InquiryFeedbackTable } from "./inquiry-feedback-table"
 import { feedbackIssues, feedbackRequestData } from "../lib/feedback-editing"
+import {
+    feedbackFeeIssues,
+    validateFeedbackFees,
+} from "../lib/feedback-fee-validation"
 import { InquiryFeedbackResults } from "./inquiry-feedback-results"
 import { MoneyValue } from "@/components/business"
 import { useAppForm } from "@/components/form"
-import { OptionCombobox } from "@/components/business/option-combobox"
-import { MultiOptionCombobox } from "@/components/business/multi-option-combobox"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -20,15 +22,12 @@ import {
     DialogDescription,
     DialogFooter,
 } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
-import { Checkbox } from "@/components/ui/checkbox"
-import { DatePicker } from "@/components/ui/date-picker"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { inquiryPath } from "../api"
+import { inquiryDateInput } from "../lib/format"
 import { useInquiryCommand } from "../hooks/use-inquiry-command"
-import { inquiryDateInput, inquiryDateSeconds } from "../lib/format"
 import {
     inquiryStorageKey,
     readInquiryLocalValue,
@@ -47,30 +46,14 @@ export type InquiryTask = {
     owner_user_id?: string
     responsibility_scope_ids?: string[]
 }
-const FEE_CATEGORIES = {
-    logistics: "物流",
-    printing: "印刷",
-    warehousing: "仓储",
-    delivery: "配送",
-    platform_tech: "平台技术",
-    offline_service: "线下服务",
-    other: "其他",
-}
-
-function newFee(lineIds: string[]): InquiryFee {
+function newFee(): InquiryFee {
     return {
         fee_id: crypto.randomUUID(),
-        category: "other",
         name: "",
         amount_gross: "",
         tax_rate: "0",
-        line_ids: lineIds,
-        allocation_ids: [],
-        included_in_goods_price: false,
-        confirmation: "estimated",
-        requires_erp_payment: true,
+        line_ids: [],
         valid_until: 0,
-        valid_conditions: "",
         public_note: "",
     }
 }
@@ -205,6 +188,8 @@ function FeedbackEditorContent({
     const [saved, setSaved] = React.useState(false)
     const [feesOpen, setFeesOpen] = React.useState(false)
     const feesTrigger = React.useRef<HTMLButtonElement>(null)
+    const feeFocus = React.useRef<string | null>(null)
+    const [feeValidationRequest, setFeeValidationRequest] = React.useState(0)
     const [validationRequest, setValidationRequest] = React.useState(0)
     const [ownCommandRevision, setOwnCommandRevision] = React.useState(0)
     const baseline = React.useRef(
@@ -218,9 +203,38 @@ function FeedbackEditorContent({
     const taskVersion = React.useRef(initial.task_version)
     const form = useAppForm({
         defaultValues: initial.data,
+        validators: {
+            onChange: ({ value }) => validateFeedbackFees(value),
+            onSubmit: ({ value }) => validateFeedbackFees(value),
+        },
+        onSubmitInvalid: ({ value, formApi }) => {
+            const issues = feedbackFeeIssues(value.fees)
+            const first = issues[0]
+            if (!first) return
+            for (const issue of issues)
+                formApi.setFieldMeta(
+                    `fees[${issue.index}].${issue.field}`,
+                    (meta) => ({
+                        ...meta,
+                        isTouched: true,
+                    }),
+                )
+            const suffix = {
+                name: "name",
+                amount_gross: "gross",
+                tax_rate: "tax",
+            }[first.field]
+            feeFocus.current = `procurement-inquiry-fee-${toAutomationIdSegment(value.fees[first.index].fee_id)}-${suffix}`
+            setError(
+                `第 ${first.index + 1} 项额外成本未填写完整或格式有误，请补齐标记字段，或移除该费用。`,
+            )
+            setFeesOpen(true)
+            setFeeValidationRequest((request) => request + 1)
+        },
         listeners: {
             onChange: ({ formApi }) => {
                 setSaved(false)
+                if (feeFocus.current) setError(null)
                 onDirtyChange(true)
                 try {
                     writeInquiryLocalValue(storageKey, {
@@ -266,6 +280,15 @@ function FeedbackEditorContent({
             }
         },
     })
+    React.useEffect(() => {
+        if (!feesOpen || !feeFocus.current) return
+        const frame = requestAnimationFrame(() => {
+            const field = document.getElementById(feeFocus.current ?? "")
+            field?.focus()
+            field?.scrollIntoView({ block: "nearest" })
+        })
+        return () => cancelAnimationFrame(frame)
+    }, [feesOpen, feeValidationRequest])
     React.useEffect(() => {
         const current = feedbackBaseline(inquiry, task, userId)
         const same =
@@ -581,15 +604,21 @@ function FeedbackEditorContent({
                         id="procurement-feedback-fees-dialog"
                         closeButtonId="procurement-feedback-fees-close"
                         finalFocus={feesTrigger}
-                        className="flex max-h-[85svh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
+                        initialFocus={() =>
+                            feeFocus.current
+                                ? (document.getElementById(feeFocus.current) ??
+                                  true)
+                                : true
+                        }
+                        className="flex max-h-[85svh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
                     >
                         <DialogHeader className="shrink-0 border-b px-6 py-5 pr-14">
                             <DialogTitle>登记额外成本</DialogTitle>
                             <DialogDescription>
-                                费用随本次采购反馈一起保存。关闭弹窗会保留当前输入。
+                                填写商品价格之外的费用，备注可选。
                             </DialogDescription>
                         </DialogHeader>
-                        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
+                        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-muted/20 px-6 py-5">
                             {error && (
                                 <Alert variant="destructive">
                                     <AlertDescription>{error}</AlertDescription>
@@ -619,17 +648,16 @@ function FeedbackEditorContent({
                                         type="button"
                                         variant="outline"
                                         size="sm"
-                                        onClick={() =>
-                                            form.pushFieldValue(
-                                                "fees",
-                                                newFee(
-                                                    inquiry.draft.lines.map(
-                                                        (line) => line.line_id,
-                                                    ),
-                                                ),
+                                        onClick={() => {
+                                            const fee = newFee()
+                                            form.pushFieldValue("fees", fee)
+                                            feeFocus.current = `procurement-inquiry-fee-${toAutomationIdSegment(fee.fee_id)}-name`
+                                            setFeeValidationRequest(
+                                                (request) => request + 1,
                                             )
-                                        }
+                                        }}
                                     >
+                                        <PlusIcon aria-hidden="true" />
                                         添加费用
                                     </Button>
                                 </div>
@@ -649,170 +677,43 @@ function FeedbackEditorContent({
                                                     return (
                                                         <div
                                                             key={fee.fee_id}
-                                                            className="space-y-3 rounded-lg border p-4"
+                                                            className="space-y-4 rounded-xl border bg-background p-4 sm:p-5"
                                                         >
-                                                            <div className="grid gap-3 md:grid-cols-2">
-                                                                <form.Field
-                                                                    name={`fees[${index}].line_ids`}
-                                                                    children={(
-                                                                        field,
-                                                                    ) => (
-                                                                        <div className="space-y-2">
-                                                                            <Label
-                                                                                htmlFor={`${prefix}-lines`}
-                                                                            >
-                                                                                关联商品
-                                                                                {inquiry.shared_fee_owner_user_id ===
-                                                                                userId
-                                                                                    ? "（清空表示整单费用）"
-                                                                                    : ""}
-                                                                            </Label>
-                                                                            <MultiOptionCombobox
-                                                                                id={`${prefix}-lines`}
-                                                                                aria-label="费用关联商品"
-                                                                                value={
-                                                                                    field
-                                                                                        .state
-                                                                                        .value
-                                                                                }
-                                                                                options={inquiry.draft.lines.map(
-                                                                                    (
-                                                                                        line,
-                                                                                    ) => ({
-                                                                                        value: line.line_id,
-                                                                                        label: line.product_name,
-                                                                                    }),
-                                                                                )}
-                                                                                onValueChange={(
-                                                                                    values,
-                                                                                ) => {
-                                                                                    if (
-                                                                                        !values.length &&
-                                                                                        inquiry.shared_fee_owner_user_id !==
-                                                                                            userId
-                                                                                    )
-                                                                                        return
-                                                                                    field.handleChange(
-                                                                                        values,
-                                                                                    )
-                                                                                    form.setFieldValue(
-                                                                                        `fees[${index}].allocation_ids`,
-                                                                                        [],
-                                                                                    )
-                                                                                }}
-                                                                            />
-                                                                        </div>
-                                                                    )}
-                                                                />
-                                                                <form.Field
-                                                                    name={`fees[${index}].allocation_ids`}
-                                                                    children={(
-                                                                        field,
-                                                                    ) => (
-                                                                        <div className="space-y-2">
-                                                                            <Label
-                                                                                htmlFor={`${prefix}-addresses`}
-                                                                            >
-                                                                                关联地址（不选表示关联范围全部地址）
-                                                                            </Label>
-                                                                            <MultiOptionCombobox
-                                                                                id={`${prefix}-addresses`}
-                                                                                aria-label="费用关联地址"
-                                                                                value={
-                                                                                    field
-                                                                                        .state
-                                                                                        .value
-                                                                                }
-                                                                                options={inquiry.draft.lines
-                                                                                    .filter(
-                                                                                        (
-                                                                                            line,
-                                                                                        ) =>
-                                                                                            !fee
-                                                                                                .line_ids
-                                                                                                .length ||
-                                                                                            fee.line_ids.includes(
-                                                                                                line.line_id,
-                                                                                            ),
-                                                                                    )
-                                                                                    .flatMap(
-                                                                                        (
-                                                                                            line,
-                                                                                        ) =>
-                                                                                            line.allocations.map(
-                                                                                                (
-                                                                                                    allocation,
-                                                                                                ) => ({
-                                                                                                    value: allocation.allocation_id,
-                                                                                                    label: `${line.product_name} · ${allocation.recipient} · ${allocation.region_name} ${allocation.address}`,
-                                                                                                }),
-                                                                                            ),
-                                                                                    )}
-                                                                                onValueChange={
-                                                                                    field.handleChange
-                                                                                }
-                                                                            />
-                                                                        </div>
-                                                                    )}
-                                                                />
+                                                            <div className="flex items-center justify-between gap-3 border-b pb-3">
+                                                                <p className="text-sm font-medium">
+                                                                    费用{" "}
+                                                                    {index + 1}
+                                                                </p>
+                                                                <Button
+                                                                    id={`${prefix}-remove`}
+                                                                    type="button"
+                                                                    size="sm"
+                                                                    variant="ghost"
+                                                                    className="text-muted-foreground hover:text-destructive"
+                                                                    onClick={() =>
+                                                                        feesField.removeValue(
+                                                                            index,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    <Trash2Icon aria-hidden="true" />
+                                                                    移除
+                                                                </Button>
                                                             </div>
-                                                            <div className="grid gap-3 md:grid-cols-4">
-                                                                <form.AppField
-                                                                    name={`fees[${index}].name`}
-                                                                    children={(
-                                                                        field,
-                                                                    ) => (
-                                                                        <field.TextField
-                                                                            id={`${prefix}-name`}
-                                                                            label="费用名称"
-                                                                        />
-                                                                    )}
-                                                                />
-                                                                <form.Field
-                                                                    name={`fees[${index}].category`}
-                                                                    children={(
-                                                                        field,
-                                                                    ) => (
-                                                                        <div className="space-y-2">
-                                                                            <Label
-                                                                                htmlFor={`${prefix}-category`}
-                                                                            >
-                                                                                费用类别
-                                                                            </Label>
-                                                                            <OptionCombobox
-                                                                                id={`${prefix}-category`}
-                                                                                aria-label="费用类别"
-                                                                                allowClear={
-                                                                                    false
-                                                                                }
-                                                                                value={
-                                                                                    field
-                                                                                        .state
-                                                                                        .value
-                                                                                }
-                                                                                onValueChange={(
-                                                                                    value,
-                                                                                ) =>
-                                                                                    field.handleChange(
-                                                                                        value ??
-                                                                                            "other",
-                                                                                    )
-                                                                                }
-                                                                                options={Object.entries(
-                                                                                    FEE_CATEGORIES,
-                                                                                ).map(
-                                                                                    ([
-                                                                                        value,
-                                                                                        label,
-                                                                                    ]) => ({
-                                                                                        value,
-                                                                                        label,
-                                                                                    }),
-                                                                                )}
-                                                                            />
-                                                                        </div>
-                                                                    )}
-                                                                />
+                                                            <form.AppField
+                                                                name={`fees[${index}].name`}
+                                                                children={(
+                                                                    field,
+                                                                ) => (
+                                                                    <field.TextField
+                                                                        id={`${prefix}-name`}
+                                                                        label="费用名称"
+                                                                        placeholder="例如：运费、包装费、印刷费"
+                                                                        required
+                                                                    />
+                                                                )}
+                                                            />
+                                                            <div className="grid gap-4 sm:grid-cols-2">
                                                                 <form.AppField
                                                                     name={`fees[${index}].amount_gross`}
                                                                     children={(
@@ -820,7 +721,9 @@ function FeedbackEditorContent({
                                                                     ) => (
                                                                         <field.TextField
                                                                             id={`${prefix}-gross`}
-                                                                            label="含税金额"
+                                                                            label="含税金额（元）"
+                                                                            placeholder="填写金额"
+                                                                            required
                                                                             inputMode="decimal"
                                                                             money
                                                                         />
@@ -833,186 +736,27 @@ function FeedbackEditorContent({
                                                                     ) => (
                                                                         <field.TextField
                                                                             id={`${prefix}-tax`}
-                                                                            label="税率（0.13 表示 13%）"
+                                                                            label="税率"
+                                                                            description="0.13 表示 13%，无税额填 0"
+                                                                            required
                                                                             inputMode="decimal"
                                                                         />
                                                                     )}
                                                                 />
-                                                                <form.Field
-                                                                    name={`fees[${index}].confirmation`}
-                                                                    children={(
-                                                                        field,
-                                                                    ) => (
-                                                                        <div className="space-y-2">
-                                                                            <Label
-                                                                                htmlFor={`${prefix}-confirmation`}
-                                                                            >
-                                                                                费用确认
-                                                                            </Label>
-                                                                            <OptionCombobox
-                                                                                id={`${prefix}-confirmation`}
-                                                                                aria-label="费用确认"
-                                                                                allowClear={
-                                                                                    false
-                                                                                }
-                                                                                options={[
-                                                                                    {
-                                                                                        value: "estimated",
-                                                                                        label: "暂估",
-                                                                                    },
-                                                                                    {
-                                                                                        value: "confirmed",
-                                                                                        label: "已确认",
-                                                                                    },
-                                                                                ]}
-                                                                                value={
-                                                                                    field
-                                                                                        .state
-                                                                                        .value
-                                                                                }
-                                                                                onValueChange={(
-                                                                                    value,
-                                                                                ) =>
-                                                                                    field.handleChange(
-                                                                                        value as
-                                                                                            | "estimated"
-                                                                                            | "confirmed",
-                                                                                    )
-                                                                                }
-                                                                            />
-                                                                        </div>
-                                                                    )}
-                                                                />
-                                                                <form.Field
-                                                                    name={`fees[${index}].valid_until`}
-                                                                    children={(
-                                                                        field,
-                                                                    ) => (
-                                                                        <div className="space-y-2">
-                                                                            <Label
-                                                                                htmlFor={`${prefix}-valid`}
-                                                                            >
-                                                                                费用有效日期
-                                                                            </Label>
-                                                                            <DatePicker
-                                                                                id={`${prefix}-valid`}
-                                                                                value={inquiryDateInput(
-                                                                                    field
-                                                                                        .state
-                                                                                        .value,
-                                                                                )}
-                                                                                onValueChange={(
-                                                                                    value,
-                                                                                ) =>
-                                                                                    field.handleChange(
-                                                                                        inquiryDateSeconds(
-                                                                                            value ??
-                                                                                                "",
-                                                                                        ),
-                                                                                    )
-                                                                                }
-                                                                            />
-                                                                        </div>
-                                                                    )}
-                                                                />
-                                                                <form.Field
-                                                                    name={`fees[${index}].included_in_goods_price`}
-                                                                    children={(
-                                                                        field,
-                                                                    ) => (
-                                                                        <label
-                                                                            htmlFor={`${prefix}-included`}
-                                                                            className="flex items-center gap-2 text-sm"
-                                                                        >
-                                                                            <Checkbox
-                                                                                id={`${prefix}-included`}
-                                                                                checked={
-                                                                                    field
-                                                                                        .state
-                                                                                        .value
-                                                                                }
-                                                                                onCheckedChange={(
-                                                                                    value,
-                                                                                ) =>
-                                                                                    field.handleChange(
-                                                                                        value ===
-                                                                                            true,
-                                                                                    )
-                                                                                }
-                                                                            />
-                                                                            已含商品供给价
-                                                                        </label>
-                                                                    )}
-                                                                />
-                                                                <form.Field
-                                                                    name={`fees[${index}].requires_erp_payment`}
-                                                                    children={(
-                                                                        field,
-                                                                    ) => (
-                                                                        <label
-                                                                            htmlFor={`${prefix}-erp-payment`}
-                                                                            className="flex items-center gap-2 text-sm"
-                                                                        >
-                                                                            <Checkbox
-                                                                                id={`${prefix}-erp-payment`}
-                                                                                checked={
-                                                                                    field
-                                                                                        .state
-                                                                                        .value
-                                                                                }
-                                                                                onCheckedChange={(
-                                                                                    value,
-                                                                                ) =>
-                                                                                    field.handleChange(
-                                                                                        value ===
-                                                                                            true,
-                                                                                    )
-                                                                                }
-                                                                            />
-                                                                            需要
-                                                                            ERP
-                                                                            付款
-                                                                        </label>
-                                                                    )}
-                                                                />
                                                             </div>
-                                                            <form.AppField
-                                                                name={`fees[${index}].valid_conditions`}
-                                                                children={(
-                                                                    field,
-                                                                ) => (
-                                                                    <field.TextField
-                                                                        id={`${prefix}-conditions`}
-                                                                        label="有效条件"
-                                                                    />
-                                                                )}
-                                                            />
                                                             <form.AppField
                                                                 name={`fees[${index}].public_note`}
                                                                 children={(
                                                                     field,
                                                                 ) => (
-                                                                    <field.TextField
+                                                                    <field.TextareaField
                                                                         id={`${prefix}-note`}
-                                                                        label="对销售说明"
+                                                                        label="备注（选填）"
+                                                                        placeholder="补充费用说明，销售可见"
+                                                                        rows={2}
                                                                     />
                                                                 )}
                                                             />
-                                                            <div className="flex justify-end">
-                                                                <Button
-                                                                    id={`${prefix}-remove`}
-                                                                    type="button"
-                                                                    size="sm"
-                                                                    variant="ghost"
-                                                                    onClick={() =>
-                                                                        feesField.removeValue(
-                                                                            index,
-                                                                        )
-                                                                    }
-                                                                >
-                                                                    移除费用
-                                                                </Button>
-                                                            </div>
                                                         </div>
                                                     )
                                                 },
@@ -1022,7 +766,10 @@ function FeedbackEditorContent({
                                 />
                             </fieldset>
                         </div>
-                        <DialogFooter className="shrink-0 border-t px-6 py-4">
+                        <DialogFooter className="shrink-0 flex-wrap items-center gap-3 border-t px-6 py-4">
+                            <p className="mr-auto text-xs text-muted-foreground">
+                                随商品反馈一起保存；关闭保留输入。
+                            </p>
                             <Button
                                 id="procurement-feedback-fees-dismiss"
                                 type="button"

@@ -92,7 +92,7 @@ impl SalesInquiry {
         expected_version: u64,
         actor: &str,
         line_ids: Vec<String>,
-        data: InquiryFeedbackData,
+        mut data: InquiryFeedbackData,
         now: Instant,
     ) -> Result<()> {
         self.ensure_processing(expected_version)?;
@@ -105,12 +105,7 @@ impl SalesInquiry {
         {
             return Err(Error::Forbidden("采购工作包含当前责任范围外的需求".into()));
         }
-        if data.fees.iter().any(|fee| {
-            fee.line_ids.iter().any(|id| !line_ids.contains(id))
-                || (fee.line_ids.is_empty() && self.shared_fee_owner_user_id.as_deref() != Some(actor))
-        }) {
-            return Err(Error::Forbidden("费用超出当前采购责任范围".into()));
-        }
+        self.prepare_feedback_fees(actor, &line_ids, &mut data)?;
         if data.lines.iter().any(|line| line.prices.len() > 1) {
             return Err(Error::ValidationError("每件商品最多保存一条报价".into()));
         }
@@ -384,13 +379,7 @@ impl SalesInquiry {
                 .iter()
                 .find(|fee| fee.fee_id == old.fee_id)
                 .ok_or_else(|| Error::BusinessLogicError("已分摊或已占用费用不得删除".into()))?;
-            if current.amount_gross.to_decimal() < used.max(allocated)
-                || old.category != current.category
-                || old.line_ids != current.line_ids
-                || old.allocation_ids != current.allocation_ids
-                || old.included_in_goods_price != current.included_in_goods_price
-                || old.requires_erp_payment != current.requires_erp_payment
-            {
+            if current.amount_gross.to_decimal() < used.max(allocated) || old.line_ids != current.line_ids {
                 return Err(Error::BusinessLogicError("费用新结果低于来源占用或改写已有办理身份".into()));
             }
         }

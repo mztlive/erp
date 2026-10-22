@@ -61,20 +61,8 @@ type StoredRegistration = {
     draft_key: string
 }
 
-function categoryCode(value: string): ExtraCostCategory | undefined {
-    const code = value === "warehousing" ? "storage" : value
-    return Object.hasOwn(EXTRA_COST_CATEGORY_LABEL, code)
-        ? (code as ExtraCostCategory)
-        : undefined
-}
-
 function candidateReason(candidate: SalesInquiryFeeCandidate): string | null {
-    return (
-        candidate.unavailable_reason ??
-        (!categoryCode(candidate.category)
-            ? "费用类别暂不支持，请重新确认费用"
-            : null)
-    )
+    return candidate.unavailable_reason ?? null
 }
 
 function sourceKey(userId: string, salesOrderId: string): string {
@@ -237,7 +225,7 @@ export function InquiryFeeRegisterSection({
                                     </TableCell>
                                     <TableCell className="whitespace-normal">
                                         {reason ??
-                                            (candidate.valid_conditions ||
+                                            (candidate.public_note ||
                                                 "按本轮确认的 ERP 外费用办理")}
                                         <p className="mt-1 text-xs text-muted-foreground">
                                             有效至{" "}
@@ -323,7 +311,7 @@ function InquiryFeeRegistration({
                 if (!active) return
                 const defaults = {
                     ...registerDefaults(),
-                    category: categoryCode(candidate.category) ?? "",
+                    category: "other" as ExtraCostCategory,
                     description: candidate.name,
                     grossAmount: candidate.available_amount,
                     taxRatePercent: multiplyFixed(candidate.tax_rate, "100", {
@@ -336,7 +324,6 @@ function InquiryFeeRegistration({
                     stored
                         ? {
                               ...stored,
-                              category: defaults.category,
                               taxRatePercent: defaults.taxRatePercent,
                           }
                         : defaults,
@@ -441,7 +428,7 @@ function InquiryFeeRegistrationForm({
             setPreview({
                 draft_key: draftKey,
                 input: {
-                    category: categoryCode(candidate.category)!,
+                    category: value.category as ExtraCostCategory,
                     description: value.description.trim(),
                     grossAmount: value.grossAmount.trim(),
                     inputTaxRate: candidate.tax_rate,
@@ -483,13 +470,7 @@ function InquiryFeeRegistrationForm({
                         </DialogDescription>
                     </DialogHeader>
                     <p className="text-sm">
-                        类别：
-                        {
-                            EXTRA_COST_CATEGORY_LABEL[
-                                categoryCode(candidate.category)!
-                            ]
-                        }
-                        ；可登记：
+                        可登记：
                         <MoneyValue
                             value={candidate.available_amount}
                             display="exact"
@@ -507,6 +488,21 @@ function InquiryFeeRegistrationForm({
                             void form.handleSubmit()
                         }}
                     >
+                        <form.AppField
+                            name="category"
+                            children={(field) => (
+                                <field.SelectField
+                                    id="finance-inquiry-register-category"
+                                    label="费用类别"
+                                    options={Object.entries(
+                                        EXTRA_COST_CATEGORY_LABEL,
+                                    ).map(([value, label]) => ({
+                                        value,
+                                        label,
+                                    }))}
+                                />
+                            )}
+                        />
                         <form.AppField name="description">
                             {(field) => (
                                 <field.TextField
@@ -559,8 +555,7 @@ function InquiryFeeRegistrationForm({
                             )}
                         </form.AppField>
                         <p className="text-sm text-muted-foreground">
-                            {candidate.valid_conditions ||
-                                "按已接受费用条件登记。"}{" "}
+                            {candidate.public_note || "按已接受费用条件登记。"}{" "}
                             原来源会与费用事实一并保存，后续冲减不自动恢复询价费用可用额。
                         </p>
                         {storageFailure ? (

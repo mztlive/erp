@@ -23,7 +23,6 @@ import {
 } from "@/components/ui/dialog"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
-import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Table,
     TableBody,
@@ -81,6 +80,7 @@ type FeeDraft = {
     supplier_id: string
     supplier_name: string
     payment_term_code: string
+    category: PurchaseExpenseCategory
 }
 
 const EMPTY_DRAFT: FeeDraft = {
@@ -93,6 +93,7 @@ const EMPTY_DRAFT: FeeDraft = {
     supplier_id: "",
     supplier_name: "",
     payment_term_code: "",
+    category: "other",
 }
 const DECIMAL_OPTIONS = { maxScale: 2, outputScale: 2 } as const
 
@@ -123,13 +124,6 @@ function taxPercent(value: string): string {
     })
 }
 
-function feeCategory(category: string): PurchaseExpenseCategory | undefined {
-    const code = category === "warehousing" ? "storage" : category
-    return Object.hasOwn(PURCHASE_EXPENSE_CATEGORY_LABEL, code)
-        ? (code as PurchaseExpenseCategory)
-        : undefined
-}
-
 function feeUnavailable(
     inquiry: FeeInquiry,
     fee: InquiryFee,
@@ -144,10 +138,6 @@ function feeUnavailable(
     if (status.unavailable_reason) return status.unavailable_reason
     if (fee.valid_until <= Math.floor(Date.now() / 1000))
         return "费用结果已过期，请重新询价"
-    if (fee.included_in_goods_price)
-        return "已含在商品供给价中，不重复计入额外费用"
-    if (fee.confirmation !== "confirmed")
-        return "暂估费用仅供定价参考，确认后再办理"
     return undefined
 }
 
@@ -196,7 +186,10 @@ export function InquiryFeesPanel({
     )
     const [initial, setInitial] = React.useState<FeeDraft | null>(null)
     React.useEffect(() => {
-        setInitial(readInquiryLocalValue<FeeDraft>(storageKey) ?? EMPTY_DRAFT)
+        setInitial({
+            ...EMPTY_DRAFT,
+            ...readInquiryLocalValue<FeeDraft>(storageKey),
+        })
     }, [storageKey])
     return initial ? (
         <InquiryFeesContent
@@ -343,12 +336,6 @@ function InquiryFeesContent({
         )
         const reason =
             summary.reason ??
-            (!summary.fee.requires_erp_payment
-                ? "按财务凭证登记办理，不生成费用采购"
-                : undefined) ??
-            (!feeCategory(summary.fee.category)
-                ? "费用类别暂不支持，请重新确认费用"
-                : undefined) ??
             (compareDecimal(balance, "0", 2) <= 0
                 ? "本笔分摊已无可转余额"
                 : undefined) ??
@@ -502,7 +489,7 @@ function InquiryFeesContent({
                         paymentTermCode: value.payment_term_code,
                         lines: [
                             {
-                                category: feeCategory(row.fee.category)!,
+                                category: value.category,
                                 description: row.fee.name,
                                 grossAmount: value.expense_amount.trim(),
                                 inputTaxRate: row.fee.tax_rate,
@@ -591,35 +578,9 @@ function InquiryFeesContent({
                                         <TableCell className="min-w-64 whitespace-normal">
                                             <p className="font-medium">
                                                 {summary.fee.name}{" "}
-                                                <StatusBadge
-                                                    label={
-                                                        summary.fee
-                                                            .confirmation ===
-                                                        "confirmed"
-                                                            ? "已确认"
-                                                            : "暂估"
-                                                    }
-                                                    tone={
-                                                        summary.fee
-                                                            .confirmation ===
-                                                        "confirmed"
-                                                            ? "success"
-                                                            : "warning"
-                                                    }
-                                                />
                                             </p>
                                             <p className="mt-1 text-xs text-muted-foreground">
-                                                {feeCategory(
-                                                    summary.fee.category,
-                                                )
-                                                    ? PURCHASE_EXPENSE_CATEGORY_LABEL[
-                                                          feeCategory(
-                                                              summary.fee
-                                                                  .category,
-                                                          )!
-                                                      ]
-                                                    : "其他"}{" "}
-                                                · 税率{" "}
+                                                税率{" "}
                                                 <RateValue
                                                     value={taxPercent(
                                                         summary.fee.tax_rate,
@@ -632,12 +593,7 @@ function InquiryFeesContent({
                                                 )}
                                             </p>
                                             <p className="mt-1 text-xs text-muted-foreground">
-                                                {summary.reason ??
-                                                    (!summary.fee
-                                                        .requires_erp_payment
-                                                        ? "按财务登记办理"
-                                                        : "需通过 ERP 付款")}{" "}
-                                                {summary.fee.valid_conditions}{" "}
+                                                {summary.reason}{" "}
                                                 {summary.fee.public_note}
                                             </p>
                                         </TableCell>
@@ -1185,6 +1141,21 @@ function InquiryFeesContent({
                                                 </Field>
                                             )}
                                         </form.AppField>
+                                        <form.AppField
+                                            name="category"
+                                            children={(field) => (
+                                                <field.SelectField
+                                                    id="inquiry-fee-expense-category"
+                                                    label="费用类别"
+                                                    options={Object.entries(
+                                                        PURCHASE_EXPENSE_CATEGORY_LABEL,
+                                                    ).map(([value, label]) => ({
+                                                        value,
+                                                        label,
+                                                    }))}
+                                                />
+                                            )}
+                                        />
                                         <form.AppField name="payment_term_code">
                                             {(field) => (
                                                 <field.SelectField

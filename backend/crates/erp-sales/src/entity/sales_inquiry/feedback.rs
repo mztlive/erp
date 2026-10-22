@@ -18,25 +18,6 @@ pub enum InquirySupplyConclusion {
     Pending,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum InquiryFeeConfirmation {
-    Estimated,
-    Confirmed,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum InquiryFeeCategory {
-    Logistics,
-    Printing,
-    Warehousing,
-    Delivery,
-    PlatformTech,
-    OfflineService,
-    Other,
-}
-
 /// 商品供给单价、税率及有效期；数量与配送要求由所属反馈行和需求确定。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -65,20 +46,12 @@ pub struct InquiryFeedbackLine {
 #[serde(deny_unknown_fields)]
 pub struct InquiryFee {
     pub fee_id: String,
-    pub category: InquiryFeeCategory,
     pub name: String,
     pub amount_gross: Amount,
     pub tax_rate: Rate,
     #[serde(default)]
     pub line_ids: Vec<String>,
-    #[serde(default)]
-    pub allocation_ids: Vec<String>,
-    pub included_in_goods_price: bool,
-    pub confirmation: InquiryFeeConfirmation,
-    pub requires_erp_payment: bool,
     pub valid_until: Instant,
-    #[serde(default)]
-    pub valid_conditions: String,
     #[serde(default)]
     pub public_note: String,
 }
@@ -112,6 +85,26 @@ pub struct InquiryFeedbackWork {
 }
 
 impl InquiryFeedbackData {
+    /// 按费用商品归属刷新有效期；整单费用采用全部商品报价中最早的到期时间。
+    /// # 参数
+    /// 无，使用当前反馈中的商品报价。
+    /// # 返回
+    /// 更新费用有效期；未报价时保留零值，等待发布校验。
+    /// # 错误
+    /// 不返回错误，不改变费用金额及身份。
+    pub(super) fn refresh_fee_validity(&mut self) {
+        for fee in &mut self.fees {
+            fee.valid_until = self
+                .lines
+                .iter()
+                .filter(|line| fee.line_ids.is_empty() || fee.line_ids.contains(&line.line_id))
+                .flat_map(|line| &line.prices)
+                .map(|price| price.valid_until)
+                .min()
+                .unwrap_or(Instant::from_unix_secs(0));
+        }
+    }
+
     /// 校验完整反馈，逐需求行和地址保留明确最终供给结论。
     /// # 参数
     /// `requirement` 为当前冻结需求；`now` 为发布时刻。
@@ -145,20 +138,15 @@ impl InquiryFeedbackData {
         Ok(())
     }
 
-    /// 汇总尚未含入商品价格的额外成本。
+    /// 汇总独立于商品价格的额外成本。
     /// # 参数
     /// 无。
     /// # 返回
-    /// 返回包含暂估项的含税额外成本，暂估标记仍由逐费用返回。
+    /// 返回本轮反馈的含税额外成本。
     /// # 错误
     /// 金额溢出时拒绝。
     pub fn extra_cost_total(&self) -> Result<Amount> {
-        Ok(Amount::try_from(sum_decimal(
-            self.fees
-                .iter()
-                .filter(|fee| !fee.included_in_goods_price)
-                .map(|fee| fee.amount_gross.to_decimal()),
-        )?)?)
+        Ok(Amount::try_from(sum_decimal(self.fees.iter().map(|fee| fee.amount_gross.to_decimal()))?)?)
     }
 }
 
@@ -228,19 +216,7 @@ impl InquiryFee {
                 return Err(Error::ValidationError("费用商品范围无效或重复".into()));
             }
         }
-        ids.clear();
-        for id in &self.allocation_ids {
-            if !ids.insert(id)
-                || !requirement
-                    .lines
-                    .iter()
-                    .filter(|line| self.line_ids.is_empty() || self.line_ids.contains(&line.line_id))
-                    .any(|line| line.allocations.iter().any(|allocation| &allocation.allocation_id == id))
-            {
-                return Err(Error::ValidationError("费用地址范围无效或不属于费用商品范围".into()));
-            }
-        }
-        if self.public_note.chars().count() > 4000 || self.valid_conditions.chars().count() > 2000 {
+        if self.public_note.chars().count() > 4000 {
             return Err(Error::ValidationError("费用说明过长".into()));
         }
         Ok(())

@@ -103,11 +103,10 @@ export type SalesExtraCostInquirySource = {
 export type SalesInquiryFeeCandidate = SalesExtraCostInquirySource & {
     inquiry_no: string
     name: string
-    category: string
     tax_rate: string
     available_amount: string
     valid_until: number
-    valid_conditions: string
+    public_note: string
     unavailable_reason: string | null
 }
 

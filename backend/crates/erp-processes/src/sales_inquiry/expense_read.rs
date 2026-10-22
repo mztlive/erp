@@ -6,9 +6,7 @@ use erp_identity::{Permission, SharedRbacService};
 use erp_read_models::purchase_center::expense_source::ExpenseSourceReadService;
 use erp_read_models::sales_center::access::SalesAccess;
 use erp_sales::Result as SalesResult;
-use erp_sales::entity::sales_inquiry::{
-    InquiryFee, InquiryFeeAllocation, InquiryFeeConfirmation, SalesInquiry,
-};
+use erp_sales::entity::sales_inquiry::{InquiryFee, InquiryFeeAllocation, SalesInquiry};
 use erp_sales::repository::sales_order::inquiry_source::inquiry_sources;
 use erp_sales::service::sales_inquiry::SalesInquiryService;
 use erp_supply::inquiry::{InquiryFeeBasis, InquirySupplyService};
@@ -17,7 +15,6 @@ use persistence_core::NoTransaction;
 use serde::Serialize;
 
 use super::access::SalesInquiryAccess;
-use crate::sales_inquiry_expense::category_code;
 use crate::{Error, Result};
 
 /// 已授权采购为一张生效销售选择询价费用时的最小候选。
@@ -29,11 +26,10 @@ pub struct InquiryExpenseCandidate {
     pub fee_id: String,
     pub allocation_id: String,
     pub name: String,
-    pub category: &'static str,
     pub tax_rate: Rate,
     pub available_amount: Amount,
     pub valid_until: Instant,
-    pub valid_conditions: String,
+    pub public_note: String,
     pub unavailable_reason: Option<String>,
     pub payee_supplier_id: Option<String>,
     pub payment_term_code: Option<String>,
@@ -97,14 +93,7 @@ impl InquiryExpenseReadService {
         let bases = InquirySupplyService::new(self.db.clone())
             .fee_bases(&inquiry.base.id, feedback.requirement_version, round, &mut NoTransaction)
             .await?;
-        let items = build_candidates(
-            &inquiry,
-            sales_id,
-            round,
-            &bases,
-            Instant::now(),
-            FeeHandlingMode::Procurement,
-        )?;
+        let items = build_candidates(&inquiry, sales_id, round, &bases, Instant::now())?;
         sources.require_order(sales_id, actor, &mut NoTransaction).await?;
         access.ensure_procurement_permission(actor, "convert_expenses", &mut NoTransaction).await?;
         let latest =
@@ -146,11 +135,10 @@ impl InquiryExpenseReadService {
         let Some(round) = inquiry.acceptances.last().map(|acceptance| acceptance.feedback_round) else {
             return Ok(FinancialInquiryExpenseCandidates { items: vec![] });
         };
-        let items =
-            build_candidates(&inquiry, sales_id, round, &[], Instant::now(), FeeHandlingMode::Finance)?
-                .into_iter()
-                .map(FinancialInquiryExpenseCandidate::from)
-                .collect();
+        let items = build_candidates(&inquiry, sales_id, round, &[], Instant::now())?
+            .into_iter()
+            .map(FinancialInquiryExpenseCandidate::from)
+            .collect();
         access.require_object(actor, "detail", sales_id, &permissions, &mut NoTransaction).await?;
         let latest =
             SalesInquiryService::new(self.db.clone()).require(&source.inquiry_id, &mut NoTransaction).await?;
@@ -161,19 +149,12 @@ impl InquiryExpenseReadService {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum FeeHandlingMode {
-    Procurement,
-    Finance,
-}
-
 fn build_candidates(
     inquiry: &SalesInquiry,
     sales_id: &str,
     round: u32,
     bases: &[InquiryFeeBasis],
     now: Instant,
-    mode: FeeHandlingMode,
 ) -> Result<Vec<InquiryExpenseCandidate>> {
     let feedback = inquiry
         .feedbacks
@@ -188,7 +169,7 @@ fn build_candidates(
             continue;
         };
         let basis = bases.iter().find(|basis| basis.data.fee_id == fee.fee_id);
-        items.push(fee_candidate(inquiry, allocation, fee, round, basis, now, mode));
+        items.push(fee_candidate(inquiry, allocation, fee, round, basis, now));
     }
     Ok(items)
 }
@@ -200,10 +181,9 @@ fn fee_candidate(
     round: u32,
     basis: Option<&InquiryFeeBasis>,
     now: Instant,
-    mode: FeeHandlingMode,
 ) -> InquiryExpenseCandidate {
     let balance = inquiry.fee_available_amount(&fee.fee_id, &allocation.allocation_id, round, now);
-    let reason = candidate_reason(fee, &balance, mode);
+    let reason = candidate_reason(&balance);
     InquiryExpenseCandidate {
         inquiry_id: inquiry.base.id.clone(),
         inquiry_no: inquiry.inquiry_no.clone(),
@@ -211,34 +191,17 @@ fn fee_candidate(
         fee_id: fee.fee_id.clone(),
         allocation_id: allocation.allocation_id.clone(),
         name: fee.name.clone(),
-        category: category_code(fee),
         tax_rate: fee.tax_rate,
         available_amount: balance.unwrap_or_else(|_| Amount::zero()),
         valid_until: fee.valid_until,
-        valid_conditions: fee.valid_conditions.clone(),
+        public_note: fee.public_note.clone(),
         unavailable_reason: reason,
         payee_supplier_id: basis.map(|basis| basis.data.payee_supplier_id.to_string()),
         payment_term_code: basis.map(|basis| basis.data.payment_term_code.clone()),
     }
 }
 
-fn candidate_reason(
-    fee: &InquiryFee,
-    balance: &SalesResult<Amount>,
-    mode: FeeHandlingMode,
-) -> Option<String> {
-    if fee.confirmation != InquiryFeeConfirmation::Confirmed {
-        return Some("费用仍为暂估，请先确认费用并由销售接受".into());
-    }
-    if fee.included_in_goods_price {
-        return Some("本费用已含商品供给价，不能重复办理".into());
-    }
-    if mode == FeeHandlingMode::Procurement && !fee.requires_erp_payment {
-        return Some("本费用应按财务凭证登记，不生成费用采购".into());
-    }
-    if mode == FeeHandlingMode::Finance && fee.requires_erp_payment {
-        return Some("本费用须通过 ERP 费用采购办理，不能直接登记".into());
-    }
+fn candidate_reason(balance: &SalesResult<Amount>) -> Option<String> {
     match balance {
         Err(error) => Some(error.to_string()),
         Ok(amount) if *amount <= Amount::zero() => Some("本费用分摊已无可转额度".into()),
@@ -255,11 +218,10 @@ pub struct FinancialInquiryExpenseCandidate {
     pub fee_id: String,
     pub allocation_id: String,
     pub name: String,
-    pub category: &'static str,
     pub tax_rate: Rate,
     pub available_amount: Amount,
     pub valid_until: Instant,
-    pub valid_conditions: String,
+    pub public_note: String,
     pub unavailable_reason: Option<String>,
 }
 impl From<InquiryExpenseCandidate> for FinancialInquiryExpenseCandidate {
@@ -271,11 +233,10 @@ impl From<InquiryExpenseCandidate> for FinancialInquiryExpenseCandidate {
             fee_id: value.fee_id,
             allocation_id: value.allocation_id,
             name: value.name,
-            category: value.category,
             tax_rate: value.tax_rate,
             available_amount: value.available_amount,
             valid_until: value.valid_until,
-            valid_conditions: value.valid_conditions,
+            public_note: value.public_note,
             unavailable_reason: value.unavailable_reason,
         }
     }
@@ -287,37 +248,14 @@ pub struct FinancialInquiryExpenseCandidates {
 
 #[cfg(test)]
 mod tests {
-    use erp_sales::entity::sales_inquiry::InquiryFeeCategory;
+    use erp_sales::Error as SalesError;
 
     use super::*;
-    fn fee() -> InquiryFee {
-        InquiryFee {
-            fee_id: "fee".into(),
-            category: InquiryFeeCategory::Logistics,
-            name: "运费".into(),
-            amount_gross: "10.00".parse().unwrap(),
-            tax_rate: "0.06".parse().unwrap(),
-            line_ids: vec![],
-            allocation_ids: vec![],
-            included_in_goods_price: false,
-            confirmation: InquiryFeeConfirmation::Confirmed,
-            requires_erp_payment: true,
-            valid_until: Instant::from_unix_secs(100),
-            valid_conditions: String::new(),
-            public_note: String::new(),
-        }
-    }
     #[test]
-    fn candidate_channels_keep_procurement_and_finance_handling_exclusive() {
-        let mut fee = fee();
-        let balance = Ok("10.00".parse().unwrap());
-        assert!(candidate_reason(&fee, &balance, FeeHandlingMode::Procurement).is_none());
-        assert!(candidate_reason(&fee, &balance, FeeHandlingMode::Finance).is_some());
-        fee.requires_erp_payment = false;
-        assert!(candidate_reason(&fee, &balance, FeeHandlingMode::Finance).is_none());
-        assert!(candidate_reason(&fee, &balance, FeeHandlingMode::Procurement).is_some());
-        fee.confirmation = InquiryFeeConfirmation::Estimated;
-        assert!(candidate_reason(&fee, &balance, FeeHandlingMode::Finance).is_some());
+    fn candidate_rejects_used_and_unavailable_balances() {
+        assert!(candidate_reason(&Ok("10".parse().unwrap())).is_none());
+        assert!(candidate_reason(&Ok(Amount::zero())).is_some());
+        assert!(candidate_reason(&Err(SalesError::BusinessLogicError("已占用".into()))).is_some());
     }
     #[test]
     fn financial_response_does_not_serialize_internal_payment_basis() {
@@ -328,11 +266,10 @@ mod tests {
             fee_id: "f".into(),
             allocation_id: "a".into(),
             name: "运费".into(),
-            category: "logistics",
             tax_rate: "0.06".parse().unwrap(),
             available_amount: "10.00".parse().unwrap(),
             valid_until: Instant::from_unix_secs(100),
-            valid_conditions: String::new(),
+            public_note: String::new(),
             unavailable_reason: None,
             payee_supplier_id: Some("internal-supplier".into()),
             payment_term_code: Some("internal-payment".into()),

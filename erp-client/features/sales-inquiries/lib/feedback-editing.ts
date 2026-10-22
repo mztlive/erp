@@ -180,6 +180,15 @@ export function feedbackRequestData(
 ): InquiryFeedbackData {
     return {
         ...value,
+        fees: value.fees.map((fee) => ({
+            fee_id: fee.fee_id,
+            line_ids: fee.line_ids,
+            valid_until: fee.valid_until,
+            public_note: fee.public_note,
+            name: fee.name.trim(),
+            amount_gross: fee.amount_gross.trim(),
+            tax_rate: fee.tax_rate.trim(),
+        })),
         lines: value.lines.map((line) => ({
             ...line,
             prices: line.prices.map((price) => ({
