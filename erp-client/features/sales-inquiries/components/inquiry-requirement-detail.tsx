@@ -2,8 +2,7 @@ import type { ReactNode } from "react"
 import { TriangleAlertIcon } from "lucide-react"
 import { MoneyValue, QuantityValue } from "@/components/business"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { sumFixed } from "@/lib/fixed-decimal"
-import { deliveryProgress } from "../lib/delivery-progress"
+import { deliveryAttention, deliveryProgress } from "../lib/delivery-progress"
 import { inquiryDate } from "../lib/format"
 import type { InquiryLine } from "../types"
 
@@ -19,15 +18,7 @@ export function InquiryRequirementDetail({
     image: ReactNode
 }) {
     const progress = deliveryProgress({ ...line, unit_code: unit })
-    let allocated: string | null = null
-    try {
-        allocated = sumFixed(
-            line.allocations.map((allocation) => allocation.quantity),
-            { maxScale: line.quantity_scale, outputScale: line.quantity_scale },
-        )
-    } catch {
-        // 无效数量不能作为零展示；保留明细并提示核对。
-    }
+    const attention = deliveryAttention({ ...line, unit_code: unit })
     return (
         <>
             {image}
@@ -84,30 +75,11 @@ export function InquiryRequirementDetail({
                         </span>
                     )}
                 </div>
-                {(!progress.complete || progress.overAllocated) && (
+                {attention && (
                     <Alert variant="warning" className="rounded-lg px-3 py-2">
                         <TriangleAlertIcon aria-hidden="true" />
                         <AlertDescription>
-                            {allocated === null ? (
-                                "分配数量格式有误，请核对收货明细。"
-                            ) : (
-                                <>
-                                    需求{" "}
-                                    <QuantityValue
-                                        value={line.quantity}
-                                        unit={unit}
-                                    />
-                                    ， 已分配{" "}
-                                    <QuantityValue
-                                        value={allocated}
-                                        unit={unit}
-                                    />
-                                    。
-                                    {progress.overAllocated
-                                        ? "分配数量超出需求，请核对。"
-                                        : `${progress.label}。`}
-                                </>
-                            )}
+                            {attention}。请核对收货明细。
                         </AlertDescription>
                     </Alert>
                 )}

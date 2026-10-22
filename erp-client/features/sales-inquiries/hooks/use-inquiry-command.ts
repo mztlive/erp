@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { apiPost, apiPut } from "@/lib/api"
 import { classifyFormalCommandError } from "@/lib/formal-command"
 import { queryKeyRoots } from "@/lib/query-key-roots"
+import { inquiryTaskCompletion } from "../lib/task-completion"
 import {
     inquiryStorageKey,
     readInquiryLocalValue,
@@ -18,11 +19,29 @@ type SavedInquiryCommand = {
     recovery?: boolean
     uncertain?: boolean
 }
-type InquiryCommandResolution = {
+export type InquiryCommandResolution = {
     path: string
     result: unknown
     replayed: boolean
     body: Record<string, unknown>
+}
+
+/** 在查询失效前通知当前页面，普通提交与原命令恢复共用同一成功出口。 */
+export function useInquiryCommandResolution(
+    userId: string,
+    scope: string,
+    onResolved: (resolution: InquiryCommandResolution) => void,
+) {
+    const key = inquiryStorageKey(userId, `${scope}:command`)
+    React.useEffect(() => {
+        const resolved = (event: Event) => {
+            if (event instanceof CustomEvent && event.detail?.key === key)
+                onResolved(event.detail.resolution)
+        }
+        window.addEventListener("inquiry-command-resolved", resolved)
+        return () =>
+            window.removeEventListener("inquiry-command-resolved", resolved)
+    }, [key, onResolved])
 }
 
 /** 在发送前保存原命令；响应未知时跨刷新保留，恢复时只重发原载荷。 */
@@ -35,6 +54,7 @@ export function useInquiryCommand(userId: string, scope: string) {
     const [ready, setReady] = React.useState(false)
     const [resolution, setResolution] =
         React.useState<InquiryCommandResolution | null>(null)
+    useInquiryCommandResolution(userId, scope, setResolution)
     React.useEffect(() => {
         const restore = () =>
             setPending(readInquiryLocalValue<SavedInquiryCommand>(key) ?? null)
@@ -42,15 +62,9 @@ export function useInquiryCommand(userId: string, scope: string) {
         setReady(true)
         window.addEventListener("inquiry-command-changed", restore)
         window.addEventListener("storage", restore)
-        const resolved = (event: Event) => {
-            if (event instanceof CustomEvent && event.detail?.key === key)
-                setResolution(event.detail.resolution)
-        }
-        window.addEventListener("inquiry-command-resolved", resolved)
         return () => {
             window.removeEventListener("inquiry-command-changed", restore)
             window.removeEventListener("storage", restore)
-            window.removeEventListener("inquiry-command-resolved", resolved)
         }
     }, [key])
     const mutation = useMutation({
@@ -83,8 +97,26 @@ export function useInquiryCommand(userId: string, scope: string) {
                     detail: { key, resolution: resolved },
                 }),
             )
+            const completion = inquiryTaskCompletion(scope, command)
+            const endedTaskQuery = (queryKey: readonly unknown[]) =>
+                completion != null &&
+                ((queryKey[1] === "detail" &&
+                    queryKey[2] === true &&
+                    queryKey[3] === scope &&
+                    queryKey[4] === completion.taskId) ||
+                    (queryKey[1] === "internal-quotes" &&
+                        queryKey[2] === scope &&
+                        queryKey[3] === completion.taskId))
+            if (completion)
+                await client.cancelQueries({
+                    queryKey: ["sales-inquiries"],
+                    predicate: (query) => endedTaskQuery(query.queryKey),
+                })
             await Promise.all([
-                client.invalidateQueries({ queryKey: ["sales-inquiries"] }),
+                client.invalidateQueries({
+                    queryKey: ["sales-inquiries"],
+                    predicate: (query) => !endedTaskQuery(query.queryKey),
+                }),
                 client.invalidateQueries({
                     queryKey: queryKeyRoots.workspaceHome,
                 }),

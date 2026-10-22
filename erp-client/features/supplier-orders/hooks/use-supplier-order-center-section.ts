@@ -1,6 +1,6 @@
 "use client"
 
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "@/lib/navigation"
 
 import type { OrderSection } from "@/features/supplier-orders/types"
 import { SECTIONS } from "@/features/supplier-orders/types"

@@ -10,7 +10,7 @@ import {
     type InquirySalesBasis,
 } from "../api/inquiry-basis"
 
-import { useRouter } from "next/navigation"
+import { useRouter } from "@/lib/navigation"
 
 import {
     classifyFormalCommandError,

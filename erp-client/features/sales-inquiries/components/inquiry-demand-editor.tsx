@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { createPortal } from "react-dom"
-import { useRouter } from "next/navigation"
+import { useRouter } from "@/lib/navigation"
 import { PlusIcon, UploadIcon } from "lucide-react"
 import type { DemandFormValues } from "../lib/demand-form"
 import { deliveryProgress } from "../lib/delivery-progress"
@@ -256,7 +256,7 @@ function DemandEditorContent({
                 }
             },
         },
-        onSubmit: async ({ value }) => {
+        onSubmit: async ({ value, formApi }) => {
             setFailure(null)
             try {
                 if (onConfirmRequirement) {
@@ -282,6 +282,7 @@ function DemandEditorContent({
                 localStorage.removeItem(storageKey)
                 if (result.version != null) versionRef.current = result.version
                 setSaved(true)
+                if (formApi.state.values === value) formApi.reset(value)
                 onDirtyChange?.(false)
                 const createdId = result.inquiry_id ?? result.id
                 if (!inquiry && createdId)

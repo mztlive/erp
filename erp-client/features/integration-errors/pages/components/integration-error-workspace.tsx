@@ -1,6 +1,6 @@
 "use client"
 
-import { useRouter } from "next/navigation"
+import { useRouter } from "@/lib/navigation"
 import type { InterfaceErrorClass } from "@/components/business"
 import { cn } from "@/lib/utils"
 

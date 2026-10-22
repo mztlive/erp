@@ -18,19 +18,26 @@ import {
     DialogTitle,
     DialogDescription,
 } from "@/components/ui/dialog"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { apiPost, apiPostForm } from "@/lib/api"
 import { hasPermission } from "@/lib/permissions"
 import { inquiryPath } from "../api"
 import { useInquiry } from "../hooks/queries"
-import { useInquiryCommand } from "../hooks/use-inquiry-command"
+import {
+    useInquiryCommand,
+    useInquiryCommandResolution,
+    type InquiryCommandResolution,
+} from "../hooks/use-inquiry-command"
+import { inquiryTaskCompletion } from "../lib/task-completion"
 import { inquiryDate } from "../lib/format"
 import { inquiryStorageKey } from "../lib/local-draft"
 import {
     downloadInquiryCustomerWorkbook,
     type InquiryCustomerWorkbookProduct,
 } from "../lib/customer-workbook"
+import { SalesInquiryProducts } from "../components/sales-inquiry-products"
+import { salesInquiryFeedback } from "../lib/feedback-view"
 import { InquiryDetailTabs } from "../components/inquiry-detail-tabs"
 import { InquiryFeedbackResults } from "../components/inquiry-feedback-results"
 import { InquiryDemandEditor } from "../components/inquiry-demand-editor"
@@ -56,11 +63,13 @@ export function SalesInquiryDetailPage({
     procurement = false,
     workItemId,
     embedded = false,
+    onTaskCompleted,
 }: {
     inquiryId?: string
     procurement?: boolean
     workItemId?: string
     embedded?: boolean
+    onTaskCompleted?: () => void
 }) {
     const search = useSearchParams()
     const taskId =
@@ -70,7 +79,35 @@ export function SalesInquiryDetailPage({
         undefined
     const copyFromId = !inquiryId ? (search.get("copyFrom") ?? "") : ""
     const profile = useAccountProfileQuery()
-    const query = useInquiry(inquiryId || copyFromId, procurement, taskId)
+    const taskKey = `${inquiryId}:${taskId ?? ""}`
+    const [completion, setCompletion] = React.useState<{
+        key: string
+        message: string
+    } | null>(null)
+    const completedTask = React.useRef<string | null>(null)
+    const onResolved = React.useCallback(
+        (resolution: InquiryCommandResolution) => {
+            if (!procurement) return
+            const result = inquiryTaskCompletion(inquiryId, resolution)
+            if (!result || result.taskId !== taskId) return
+            // 同步阻止提交回调中的手动刷新，不依赖 React 提交状态更新的时机。
+            completedTask.current = taskKey
+            setCompletion({ key: taskKey, message: result.message })
+        },
+        [inquiryId, procurement, taskId, taskKey],
+    )
+    useInquiryCommandResolution(
+        profile.data?.userid ?? "",
+        inquiryId,
+        onResolved,
+    )
+    const taskFinished = procurement && completion?.key === taskKey
+    const query = useInquiry(
+        inquiryId || copyFromId,
+        procurement,
+        taskId,
+        !taskFinished,
+    )
     if (!profile.data)
         return (
             <p className="p-6" role="status">
@@ -134,15 +171,54 @@ export function SalesInquiryDetailPage({
                 />
             </PageScaffold>
         )
+    if (taskFinished)
+        return (
+            <div className="space-y-4 p-6">
+                <Alert
+                    id="procurement-inquiry-task-completed"
+                    variant="success"
+                >
+                    <AlertTitle>操作已完成</AlertTitle>
+                    <AlertDescription>{completion.message}</AlertDescription>
+                </Alert>
+                {embedded && onTaskCompleted ? (
+                    <Button
+                        id="procurement-inquiry-task-continue"
+                        onClick={onTaskCompleted}
+                    >
+                        继续处理其他任务
+                    </Button>
+                ) : (
+                    <Link
+                        id="procurement-inquiry-completed-back"
+                        href="/procurement/inquiries"
+                        className={buttonVariants({ variant: "outline" })}
+                    >
+                        返回询价列表
+                    </Link>
+                )}
+            </div>
+        )
     if (query.isError)
         return (
-            <div className="p-6">
+            <div className="space-y-4 p-6">
                 <BusinessFailureState
                     id="sales-inquiry-detail-retry"
                     title="询价资料加载失败"
                     error={query.error}
                     onRetry={() => void query.refetch()}
                 />
+                <Link
+                    id="sales-inquiry-error-back"
+                    href={
+                        procurement
+                            ? "/procurement/inquiries"
+                            : "/sales/inquiries"
+                    }
+                    className={buttonVariants({ variant: "outline" })}
+                >
+                    返回询价列表
+                </Link>
             </div>
         )
     if (!query.data)
@@ -160,7 +236,9 @@ export function SalesInquiryDetailPage({
             embedded={embedded}
             userId={profile.data.userid}
             permissions={profile.data.permissions}
-            onSaved={() => void query.refetch()}
+            onSaved={() => {
+                if (completedTask.current !== taskKey) void query.refetch()
+            }}
         />
     )
 }
@@ -196,12 +274,26 @@ function InquiryDetailContent({
         React.useState<HTMLDivElement | null>(null)
     const [demandActionsContainer, setDemandActionsContainer] =
         React.useState<HTMLDivElement | null>(null)
-    const [chosenRound, setChosenRound] = React.useState(inquiry.feedback_round)
-    const selectedRound = inquiry.feedbacks.some(
-        (item) => item.round === chosenRound,
-    )
-        ? chosenRound
-        : inquiry.feedback_round
+    const roundContext = `${inquiry.requirement_version}:${inquiry.feedback_round}:${inquiry.status}`
+    const [roundSelection, setRoundSelection] = React.useState<{
+        context: string
+        round: number | null
+    } | null>(null)
+    const chosenRound =
+        roundSelection?.context === roundContext ? roundSelection.round : null
+    const setChosenRound = (round: number | null) =>
+        setRoundSelection({ context: roundContext, round })
+    const selectedFeedback =
+        inquiry.feedbacks.find((item) => item.round === chosenRound) ??
+        [...inquiry.feedbacks].sort(
+            (left, right) => right.round - left.round,
+        )[0]
+    const selectedRound = selectedFeedback?.round ?? inquiry.feedback_round
+    const productFeedback =
+        "sales_owner_user_id" in inquiry
+            ? salesInquiryFeedback(inquiry, chosenRound)
+            : selectedFeedback
+    const actionRound = productFeedback?.round ?? inquiry.feedback_round
     const demandActions = ["draft", "awaiting_sales_supplement"].includes(
         inquiry.status,
     )
@@ -300,6 +392,64 @@ function InquiryDetailContent({
             )}
         </>
     )
+    const renderDemand = (primaryActions: React.ReactNode) => (
+        <div className="space-y-6">
+            {canEdit && "sales_owner_user_id" in inquiry ? (
+                <InquiryDemandEditor
+                    key={`editor-${editorEpoch}`}
+                    inquiry={inquiry}
+                    userId={userId}
+                    permissions={permissions}
+                    onSaved={onSaved}
+                    onDirtyChange={setDirty}
+                    productActions={productActions}
+                    detailsContainer={demandDetailsContainer}
+                    headerActionsContainer={demandActionsContainer}
+                    footerActions={demandActions ? primaryActions : undefined}
+                />
+            ) : (
+                <InquiryRequirementTable
+                    idPrefix="sales-inquiry-requirement"
+                    requirement={inquiry.draft}
+                    procurement={procurement}
+                />
+            )}
+
+            {!canEdit &&
+                demandActions &&
+                React.Children.count(primaryActions) > 0 && (
+                    <div className="sticky bottom-0 flex flex-wrap justify-end gap-3 border-t bg-card py-4">
+                        {primaryActions}
+                    </div>
+                )}
+        </div>
+    )
+    const renderSalesActions = (primaryActions: React.ReactNode) => (
+        <>
+            {!demandActions &&
+                (React.Children.count(primaryActions) > 0 || canOpenSales) && (
+                    <div className="flex flex-wrap items-center justify-end gap-3">
+                        {actionRound !== inquiry.feedback_round && (
+                            <p className="mr-auto text-sm text-muted-foreground">
+                                正在查看历史轮次，请切回最新一轮后接受或重询。
+                            </p>
+                        )}
+                        {primaryActions}
+                        {canOpenSales && (
+                            <Link
+                                id="sales-inquiry-create-sale"
+                                href={`/sales/orders?mode=create&inquiryId=${encodeURIComponent(inquiry.id)}&round=${accepted.feedback_round}`}
+                                className={buttonVariants({
+                                    size: "sm",
+                                })}
+                            >
+                                按第 {accepted.feedback_round} 轮已接受结果开单
+                            </Link>
+                        )}
+                    </div>
+                )}
+        </>
+    )
     const body = (
         <InquiryActions
             inquiry={inquiry}
@@ -309,7 +459,7 @@ function InquiryDetailContent({
             permissions={permissions}
             onSaved={onSaved}
             disabled={dirty || feedbackDirty}
-            feedbackRound={selectedRound}
+            feedbackRound={actionRound}
             renderActions={(
                 primaryActions,
                 secondaryActions,
@@ -413,7 +563,11 @@ function InquiryDetailContent({
                                     <div className="flex flex-wrap items-start gap-x-8 gap-y-2 rounded-lg bg-muted/40 px-4 py-3">
                                         <p className="flex min-w-0 gap-2 text-sm text-muted-foreground">
                                             <span className="shrink-0">
-                                                需求说明
+                                                {productFeedback &&
+                                                productFeedback.requirement_version !==
+                                                    inquiry.requirement_version
+                                                    ? "当前需求说明"
+                                                    : "需求说明"}
                                             </span>
                                             <span className="min-w-0 whitespace-pre-wrap wrap-anywhere">
                                                 {inquiry.draft.note || "未填写"}
@@ -472,46 +626,22 @@ function InquiryDetailContent({
                         inquiry={inquiry}
                         procurement={procurement}
                         actionsContainer={historyActionsContainer}
+                        feeCount={selectedFeedback?.data.fees.length ?? 0}
                         demand={
-                            <div className="space-y-6">
-                                {canEdit && "sales_owner_user_id" in inquiry ? (
-                                    <InquiryDemandEditor
-                                        key={`editor-${editorEpoch}`}
-                                        inquiry={inquiry}
-                                        userId={userId}
-                                        permissions={permissions}
-                                        onSaved={onSaved}
-                                        onDirtyChange={setDirty}
-                                        productActions={productActions}
-                                        detailsContainer={
-                                            demandDetailsContainer
-                                        }
-                                        headerActionsContainer={
-                                            demandActionsContainer
-                                        }
-                                        footerActions={
-                                            demandActions
-                                                ? primaryActions
-                                                : undefined
-                                        }
-                                    />
-                                ) : (
-                                    <InquiryRequirementTable
-                                        idPrefix="sales-inquiry-requirement"
-                                        requirement={inquiry.draft}
-                                        procurement={procurement}
-                                    />
-                                )}
-
-                                {!canEdit &&
-                                    demandActions &&
-                                    React.Children.count(primaryActions) >
-                                        0 && (
-                                        <div className="sticky bottom-0 flex flex-wrap justify-end gap-3 border-t bg-card py-4">
-                                            {primaryActions}
-                                        </div>
-                                    )}
-                            </div>
+                            procurement
+                                ? renderDemand(primaryActions)
+                                : undefined
+                        }
+                        salesProducts={
+                            !procurement && "sales_owner_user_id" in inquiry ? (
+                                <SalesInquiryProducts
+                                    inquiry={inquiry}
+                                    chosenRound={chosenRound}
+                                    onRoundChange={setChosenRound}
+                                    demand={renderDemand(primaryActions)}
+                                    footer={renderSalesActions(primaryActions)}
+                                />
+                            ) : undefined
                         }
                         feedback={
                             <div className="space-y-6">
@@ -582,43 +712,18 @@ function InquiryDetailContent({
 
                                 {!canProcess && (
                                     <InquiryFeedbackResults
+                                        content="products"
                                         inquiry={inquiry}
                                         selectedRound={selectedRound}
                                         onRoundChange={setChosenRound}
                                     />
                                 )}
-                                {!canProcess &&
-                                    !demandActions &&
-                                    (React.Children.count(primaryActions) > 0 ||
-                                        canOpenSales) && (
-                                        <div className="sticky bottom-0 flex flex-wrap items-center justify-end gap-3 border-t bg-card py-4">
-                                            {selectedRound !==
-                                                inquiry.feedback_round && (
-                                                <p className="mr-auto text-sm text-muted-foreground">
-                                                    正在查看历史轮次，请切回最新一轮后接受或重询。
-                                                </p>
-                                            )}
-                                            {primaryActions}
-                                            {canOpenSales && (
-                                                <Link
-                                                    id="sales-inquiry-create-sale"
-                                                    href={`/sales/orders?mode=create&inquiryId=${encodeURIComponent(inquiry.id)}&round=${accepted.feedback_round}`}
-                                                    className={buttonVariants({
-                                                        size: "sm",
-                                                    })}
-                                                >
-                                                    按第{" "}
-                                                    {accepted.feedback_round}{" "}
-                                                    轮已接受结果开单
-                                                </Link>
-                                            )}
-                                        </div>
-                                    )}
                             </div>
                         }
                         publishedFeedback={
                             canProcess && inquiry.feedbacks.length > 0 ? (
                                 <InquiryFeedbackResults
+                                    content="products"
                                     inquiry={inquiry}
                                     selectedRound={selectedRound}
                                     onRoundChange={setChosenRound}
@@ -627,13 +732,24 @@ function InquiryDetailContent({
                             ) : undefined
                         }
                         fees={
-                            <InquiryFeesPanel
-                                inquiry={inquiry}
-                                userId={userId}
-                                permissions={permissions}
-                                procurement={procurement}
-                                onChanged={onSaved}
-                            />
+                            <div className="space-y-6">
+                                <InquiryFeedbackResults
+                                    inquiry={inquiry}
+                                    selectedRound={selectedRound}
+                                    onRoundChange={setChosenRound}
+                                    idPrefix="sales-inquiry-fees"
+                                    content="fees"
+                                />
+                                <div className="border-t pt-6">
+                                    <InquiryFeesPanel
+                                        inquiry={inquiry}
+                                        userId={userId}
+                                        permissions={permissions}
+                                        procurement={procurement}
+                                        onChanged={onSaved}
+                                    />
+                                </div>
+                            </div>
                         }
                     />
                     <InquiryImportDialog

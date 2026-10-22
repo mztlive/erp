@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "@/lib/navigation"
 import type { ColumnDef } from "@tanstack/react-table"
 import { PlusIcon, ShieldCheckIcon } from "lucide-react"
 

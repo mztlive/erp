@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 import type { PaginationState, SortingState } from "@tanstack/react-table"
 
 import { useAccountProfileQuery } from "@/features/auth/queries"

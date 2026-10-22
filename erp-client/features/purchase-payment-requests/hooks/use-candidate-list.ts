@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo } from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 import type { SortingState } from "@tanstack/react-table"
 import {
     candidateListCodec,

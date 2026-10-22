@@ -7,7 +7,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 import { PackageSearchIcon } from "lucide-react"
 import type { PaginationState } from "@tanstack/react-table"
 

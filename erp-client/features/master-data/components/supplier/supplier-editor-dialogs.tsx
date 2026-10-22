@@ -1,6 +1,6 @@
 "use client"
 
-import { useRouter } from "next/navigation"
+import { useRouter } from "@/lib/navigation"
 
 import { DiscardConfirmDialog } from "@/components/business"
 import { SupplierDisableDialog } from "@/features/master-data/components/shared/disable-action-dialog"

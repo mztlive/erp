@@ -1,7 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "@/lib/navigation"
 import { DownloadIcon, ShieldCheckIcon, TriangleAlertIcon } from "lucide-react"
 
 import {

@@ -5,7 +5,7 @@ import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { BatchSupplyDialog } from "@/features/supplier-offerings/components/batch/batch-supply-dialog"
 import type { FixedSku } from "@/features/supplier-offerings/types"
-import { useRouter } from "next/navigation"
+import { useRouter } from "@/lib/navigation"
 import { DownloadIcon, PlusIcon, UploadIcon } from "lucide-react"
 import { useIsMutating } from "@tanstack/react-query"
 

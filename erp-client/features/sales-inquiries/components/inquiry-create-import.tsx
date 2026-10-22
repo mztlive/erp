@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import { useRouter } from "@/lib/navigation"
 import { useMutation } from "@tanstack/react-query"
 import { UploadIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"

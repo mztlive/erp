@@ -62,13 +62,15 @@ export function SalesInquiriesPage({
     const prefix = procurement ? "procurement-inquiries" : "sales-inquiries"
     const form = useAppForm({
         defaultValues: { q: "", status: "" },
-        onSubmit: ({ value }) =>
+        onSubmit: ({ value, formApi }) => {
             setQuery({
                 q: value.q.trim() || undefined,
                 status: value.status || undefined,
                 page: 1,
                 page_size: 20,
-            }),
+            })
+            formApi.reset(value)
+        },
     })
     const href = (row: SalesInquiry | ProcurementInquiry) =>
         `${root}/${encodeURIComponent(row.id)}${procurement && "work_items" in row && row.work_items[0] ? `?task_id=${encodeURIComponent(row.work_items[0].id)}` : ""}`
@@ -316,7 +318,7 @@ export function SalesInquiriesPage({
                             type="button"
                             variant="ghost"
                             onClick={() => {
-                                form.reset()
+                                form.reset({ q: "", status: "" })
                                 setQuery({ page: 1, page_size: 20 })
                             }}
                         >

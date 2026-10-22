@@ -36,6 +36,7 @@ export function deliveryProgress(line: InquiryLine): {
     remaining: string
     label: string
     overAllocated?: boolean
+    invalidQuantity?: boolean
 } {
     if (line.fulfillment_kind !== "physical") {
         return {
@@ -54,7 +55,12 @@ export function deliveryProgress(line: InquiryLine): {
                 (address) => compareDecimal(address.quantity, "0", scale) <= 0,
             )
         ) {
-            return { complete: false, remaining: "0", label: "请填写有效数量" }
+            return {
+                complete: false,
+                remaining: "0",
+                label: "请填写有效数量",
+                invalidQuantity: true,
+            }
         }
         const assigned = sumFixed(
             line.allocations.map((address) => address.quantity),
@@ -90,7 +96,41 @@ export function deliveryProgress(line: InquiryLine): {
                   : `已分配 · ${line.allocations.length} 个地址`,
         }
     } catch {
-        return { complete: false, remaining: "0", label: "请填写有效数量" }
+        return {
+            complete: false,
+            remaining: "0",
+            label: "请填写有效数量",
+            invalidQuantity: true,
+        }
+    }
+}
+
+/** 表格、汇总及详情共用配送提醒；超量仍按原规则视为数量已分配。 */
+export function deliveryAttention(line: InquiryLine): string | null {
+    const progress = deliveryProgress(line)
+    if (progress.complete && !progress.overAllocated) return null
+    if (progress.invalidQuantity) return "配送数量无效，请核对需求及分配数量"
+    try {
+        const options = {
+            maxScale: line.quantity_scale,
+            outputScale: line.quantity_scale,
+        }
+        const allocated = sumFixed(
+            line.allocations.map((address) => address.quantity),
+            options,
+        )
+        const quantity = (value: string) =>
+            `${formatFixedDisplay(value, { maxScale: line.quantity_scale })} ${line.unit_code}`.trim()
+        const issues: string[] = []
+        if (progress.overAllocated) {
+            issues.push(
+                `超出 ${quantity(subtractFixed(allocated, line.quantity, options))}`,
+            )
+        }
+        if (!progress.complete) issues.push(progress.label)
+        return `配送已分配 ${quantity(allocated)} · ${issues.join(" · ")}`
+    } catch {
+        return "配送数量无效，请核对需求及分配数量"
     }
 }
 

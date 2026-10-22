@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 
 import type { PurchaseOrderListQuery } from "@/features/purchase-orders/api/purchase-orders"
 import {

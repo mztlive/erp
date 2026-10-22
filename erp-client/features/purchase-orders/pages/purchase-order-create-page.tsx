@@ -5,7 +5,7 @@ import { SourcingOptionsRefreshContext } from "@/features/purchase-orders/compon
 import * as React from "react"
 import type { ReactNode } from "react"
 import Link from "next/link"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 import { useStore } from "@tanstack/react-form"
 import { ArrowLeftIcon } from "lucide-react"
 

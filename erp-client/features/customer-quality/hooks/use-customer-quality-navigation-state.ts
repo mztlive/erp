@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import type { PaginationState, SortingState } from "@tanstack/react-table"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import { buildReturnTo } from "../lib/links"

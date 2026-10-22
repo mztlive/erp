@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query"
 import { selectedObjectDirectory } from "@/lib/object-directory"
 
 import * as React from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 import type { PaginationState, SortingState } from "@tanstack/react-table"
 
 import {

@@ -1,5 +1,5 @@
 import * as React from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 
 import {
     mergeSalesOrdersSearchParams,

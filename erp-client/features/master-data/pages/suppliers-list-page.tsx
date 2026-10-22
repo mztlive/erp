@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { SupplierImportDialog } from "@/features/master-data/components/supplier/supplier-import-dialog"
-import { useRouter } from "next/navigation"
+import { useRouter } from "@/lib/navigation"
 import { DownloadIcon, PlusIcon, UploadIcon } from "lucide-react"
 import { useIsMutating } from "@tanstack/react-query"
 

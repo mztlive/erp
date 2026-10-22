@@ -2,7 +2,7 @@
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
-import { useRouter } from "next/navigation"
+import { useRouter } from "@/lib/navigation"
 import { OptionCombobox } from "@/components/business/option-combobox"
 import { DataTable } from "@/components/business"
 import { ListToolbar } from "@/components/business/list"

@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useCustomerDirectoryExport } from "../hooks/use-customer-directory-export"
 import type { CustomerDirectoryQuery } from "../types"
-import { useRouter } from "next/navigation"
+import { useRouter } from "@/lib/navigation"
 import { PlusIcon } from "lucide-react"
 
 import {

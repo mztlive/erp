@@ -51,7 +51,12 @@ export function launchNavDelivery(
     const origin = element
         ? rectCenter(element.getBoundingClientRect())
         : fallbackOrigin()
-    for (const listener of listeners) listener({ kind, origin })
+    dispatchNavDelivery({ kind, origin })
+}
+
+/** Deliver a request whose coordinates are already relative to this document. */
+export function dispatchNavDelivery(request: NavDeliveryRequest): void {
+    for (const listener of listeners) listener(request)
 }
 
 /**

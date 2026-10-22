@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import { useRouter } from "@/lib/navigation"
 import type { CustomerAccountPreviewTarget } from "@/features/customer-receivables/components/column-types"
 
 import type { ColumnDef, PaginationState } from "@tanstack/react-table"

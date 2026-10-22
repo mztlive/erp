@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "@/lib/navigation"
 
 import { CategoryDisableDialog } from "@/features/master-data/components/shared/disable-action-dialog"
 import { CategoryReviseDialog } from "@/features/master-data/components/category/category-form-dialogs"

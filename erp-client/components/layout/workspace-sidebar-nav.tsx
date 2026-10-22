@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 import { useQueryClient } from "@tanstack/react-query"
 import { ChevronsUpDownIcon, LogOutIcon } from "lucide-react"
 

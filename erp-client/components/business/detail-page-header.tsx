@@ -5,6 +5,7 @@ import Link from "next/link"
 import { ArrowLeftIcon } from "lucide-react"
 
 import type { DocumentHeaderProps } from "./document"
+import { useWorkspaceTab } from "@/components/layout/workspace-tab-context"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { cn } from "@/lib/utils"
@@ -27,12 +28,13 @@ export type DetailPageHeaderProps = Omit<
 
 /**
  * 详情页共用的返回行、对象身份行与操作条。
- * 返回行只放导航；全部操作在标题行右侧排成一组：
+ * 工作页签内不显示返回按钮；无导航说明时同时收起导航行。
+ * 全部操作在标题行右侧排成一组：
  * `secondaryActions`（描边，含停用、作废等破坏性操作）在左，`primaryAction` 在最右。
  */
 export function DetailPageHeader({
     title,
-    back,
+    back: backNavigation,
     navigationMeta,
     media,
     headingProps,
@@ -50,6 +52,9 @@ export function DetailPageHeader({
     className,
     ...props
 }: DetailPageHeaderProps) {
+    const inWorkspaceTab = useWorkspaceTab()
+    const back = inWorkspaceTab ? undefined : backNavigation
+
     return (
         <header
             data-slot="detail-page-header"
@@ -114,7 +119,11 @@ export function DetailPageHeader({
                     {documentNumber != null || version != null || meta ? (
                         <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground [&>*]:min-w-0 [&>*]:wrap-anywhere">
                             {documentNumber != null ? (
-                                <span>
+                                <span
+                                    data-workspace-document-number={
+                                        documentNumber
+                                    }
+                                >
                                     {numberLabel}：{documentNumber}
                                 </span>
                             ) : null}

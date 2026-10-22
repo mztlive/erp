@@ -6,7 +6,7 @@ import { ExpensePurchaseStartDialog } from "./expense-purchase-start-dialog"
 
 import * as React from "react"
 import { PurchaseOrderCorrespondence } from "./purchase-order-correspondence"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "@/lib/navigation"
 import { FilePenLineIcon, SendIcon, Trash2Icon } from "lucide-react"
 
 import {

@@ -21,6 +21,7 @@ import { MultiSelectField } from "@/components/form/multi-select-field"
 import { PdfUploadField } from "@/components/form/pdf-upload-field"
 import { EvidenceUploadField } from "@/components/form/evidence-upload-field"
 import { DateField, DateTimeField } from "@/components/form/date-field"
+import { useWorkspaceFormGuard } from "@/lib/workspace-form-guard"
 
 /**
  * 应用统一表单入口：
@@ -71,8 +72,8 @@ export { DateField, DateTimeField } from "@/components/form/date-field"
 export { toFieldErrors } from "@/components/form/utils"
 
 /** 保留表单泛型推导，统一承接未被业务流程处理的提交错误。 */
-export const useAppForm: typeof useBaseAppForm = (options) =>
-    useBaseAppForm({
+export const useAppForm: typeof useBaseAppForm = (options) => {
+    const form = useBaseAppForm({
         ...options,
         validationLogic: preserveApiFieldErrors(options.validationLogic),
         listeners: {
@@ -92,4 +93,7 @@ export const useAppForm: typeof useBaseAppForm = (options) =>
             }
         },
     })
+    useWorkspaceFormGuard(form)
+    return form
+}
 export { withForm, withFieldGroup, applyApiFormError }

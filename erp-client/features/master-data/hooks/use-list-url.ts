@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 import type { PaginationState } from "@tanstack/react-table"
 
 /** 列表筛选 / 分页写入 URL（刷新、后退、分享一致）。 */

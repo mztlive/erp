@@ -4,6 +4,7 @@ import * as React from "react"
 import { createPortal } from "react-dom"
 import { HistoryIcon } from "lucide-react"
 import { QuickPreviewSheet } from "@/components/business"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { InquiryHistory } from "./inquiry-history"
@@ -16,35 +17,42 @@ export function InquiryDetailTabs({
     inquiry,
     procurement,
     demand,
+    salesProducts,
     feedback,
     publishedFeedback,
     fees,
+    feeCount,
     actionsContainer,
     onFeedbackVisibilityChange,
 }: {
     inquiry: SalesInquiry | ProcurementInquiry
     procurement: boolean
     demand: React.ReactNode
+    salesProducts?: React.ReactNode
     feedback: React.ReactNode
     publishedFeedback?: React.ReactNode
     fees: React.ReactNode
+    feeCount: number
     actionsContainer?: HTMLElement | null
     onFeedbackVisibilityChange?: (visible: boolean) => void
 }) {
     const [active, setActive] = React.useState<InquiryTab>(() =>
-        inquiry.status === "awaiting_sales" ||
-        (procurement &&
-            ["awaiting_procurement", "procurement_processing"].includes(
-                inquiry.status,
-            ))
+        procurement &&
+        [
+            "awaiting_sales",
+            "awaiting_procurement",
+            "procurement_processing",
+        ].includes(inquiry.status)
             ? "feedback"
             : "demand",
     )
     const activeTab =
         active === "published" && !publishedFeedback ? "feedback" : active
-    const tabs: InquiryTab[] = publishedFeedback
-        ? ["demand", "feedback", "published", "fees"]
-        : ["demand", "feedback", "fees"]
+    const tabs: InquiryTab[] = !procurement
+        ? ["demand", "fees"]
+        : publishedFeedback
+          ? ["demand", "feedback", "published", "fees"]
+          : ["demand", "feedback", "fees"]
     const [historyOpen, setHistoryOpen] = React.useState(false)
     const historyTrigger = React.useRef<HTMLButtonElement>(null)
     const panels = React.useRef<Partial<Record<InquiryTab, HTMLDivElement>>>({})
@@ -103,25 +111,33 @@ export function InquiryDetailTabs({
                     className="max-w-full flex-wrap gap-x-5"
                 >
                     <TabsTrigger id="sales-inquiry-tab-demand" value="demand">
-                        商品需求
+                        {procurement ? "商品需求" : "商品与报价"}
+                        {!procurement &&
+                            inquiry.status === "awaiting_sales" && (
+                                <span className="text-xs text-muted-foreground">
+                                    待确认
+                                </span>
+                            )}
                     </TabsTrigger>
-                    <TabsTrigger
-                        id="sales-inquiry-tab-feedback"
-                        value="feedback"
-                    >
-                        采购反馈
-                        {inquiry.status === "awaiting_sales" ? (
-                            <span className="text-xs text-muted-foreground">
-                                待确认
-                            </span>
-                        ) : !publishedFeedback &&
-                          inquiry.feedbacks.length > 0 ? (
-                            <span className="text-xs text-muted-foreground">
-                                {inquiry.feedbacks.length} 轮
-                            </span>
-                        ) : null}
-                    </TabsTrigger>
-                    {publishedFeedback && (
+                    {procurement && (
+                        <TabsTrigger
+                            id="sales-inquiry-tab-feedback"
+                            value="feedback"
+                        >
+                            采购反馈
+                            {inquiry.status === "awaiting_sales" ? (
+                                <span className="text-xs text-muted-foreground">
+                                    待确认
+                                </span>
+                            ) : !publishedFeedback &&
+                              inquiry.feedbacks.length > 0 ? (
+                                <span className="text-xs text-muted-foreground">
+                                    {inquiry.feedbacks.length} 轮
+                                </span>
+                            ) : null}
+                        </TabsTrigger>
+                    )}
+                    {procurement && publishedFeedback && (
                         <TabsTrigger
                             id="sales-inquiry-tab-published"
                             value="published"
@@ -134,6 +150,11 @@ export function InquiryDetailTabs({
                     )}
                     <TabsTrigger id="sales-inquiry-tab-fees" value="fees">
                         费用与办理
+                        {feeCount > 0 && (
+                            <Badge variant="warning">
+                                额外费用 {feeCount} 项
+                            </Badge>
+                        )}
                     </TabsTrigger>
                 </TabsList>
             </div>
@@ -162,10 +183,16 @@ export function InquiryDetailTabs({
                     ref={(element) => {
                         panels.current[tab] = element ?? undefined
                     }}
-                    className="min-h-0 min-w-0 overflow-auto overscroll-contain"
+                    className={
+                        !procurement && tab === "demand"
+                            ? "min-h-0 min-w-0 overflow-hidden"
+                            : "min-h-0 min-w-0 overflow-auto overscroll-contain"
+                    }
                 >
                     {tab === "demand"
-                        ? demand
+                        ? procurement
+                            ? demand
+                            : salesProducts
                         : tab === "feedback"
                           ? feedback
                           : tab === "published"

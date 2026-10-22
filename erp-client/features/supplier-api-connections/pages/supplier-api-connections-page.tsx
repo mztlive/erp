@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 
 import { ConnectionCenter } from "@/features/supplier-api-connections/components/connection-center"
 import { ConnectionList } from "@/features/supplier-api-connections/components/connection-list"

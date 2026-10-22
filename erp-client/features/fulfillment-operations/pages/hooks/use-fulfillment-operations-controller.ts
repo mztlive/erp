@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 import { useSelector } from "@tanstack/react-form"
 
 import type { ResultState as SharedResultState } from "@/components/business/feedback"

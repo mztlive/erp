@@ -10,7 +10,7 @@ import { SalesOrderInquiryPickerDialog } from "./sales-order-inquiry-picker-dial
 import { hasPermission } from "@/lib/permissions"
 import type { SalesOrderSelectionBasis } from "@/features/sales-orders/api/selection-basis"
 import { SalesOrderSelectionSource } from "./sales-order-selection-source"
-import { useRouter } from "next/navigation"
+import { useRouter } from "@/lib/navigation"
 
 import { revalidateLogic, useSelector } from "@tanstack/react-form"
 import { useQueryClient } from "@tanstack/react-query"

@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import { useRouter } from "@/lib/navigation"
 
 import { useAppForm, applyApiFormError } from "@/components/form"
 import { toast } from "@/components/ui/toast"

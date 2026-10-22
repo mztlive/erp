@@ -142,6 +142,7 @@ function WorkspaceTaskSurface({
                 procurement
                 workItemId={item.workItemId}
                 embedded
+                onTaskCompleted={() => onTaskCompleted?.(item.workItemId)}
             />
         )
     }

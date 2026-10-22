@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 import type { PaginationState } from "@tanstack/react-table"
 
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"

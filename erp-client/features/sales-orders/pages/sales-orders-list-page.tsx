@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import { useRouter } from "@/lib/navigation"
 import type { PaginationState, SortingState } from "@tanstack/react-table"
 
 import { PageScaffold } from "@/components/business"

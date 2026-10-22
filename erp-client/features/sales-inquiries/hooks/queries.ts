@@ -131,10 +131,11 @@ export function useInquiry(
     inquiryId: string,
     procurement = false,
     taskId?: string,
+    enabled = true,
 ) {
     return useQuery({
         queryKey: inquiryKeys.detail(inquiryId, procurement, taskId),
         queryFn: () => fetchInquiry(inquiryId, procurement, taskId),
-        enabled: Boolean(inquiryId),
+        enabled: Boolean(inquiryId) && enabled,
     })
 }

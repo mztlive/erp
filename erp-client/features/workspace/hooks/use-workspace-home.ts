@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 import { approvalKeys } from "@/features/approval-workflow/queries"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 

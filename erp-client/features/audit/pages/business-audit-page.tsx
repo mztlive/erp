@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useMemo, useRef, useState, type ReactNode } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "@/lib/navigation"
 import {
     BusinessFailureState,
     BusinessStatusBadge,

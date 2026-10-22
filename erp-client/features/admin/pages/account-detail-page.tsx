@@ -12,7 +12,7 @@ import {
     type AccountProfileSnapshot,
 } from "../components/accounts/account-profile-editor"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter } from "@/lib/navigation"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { DeleteAdminDialog } from "../components/accounts/delete-admin-dialog"
 import {

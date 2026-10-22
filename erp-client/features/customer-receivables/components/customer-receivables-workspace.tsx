@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { writeReceiptSession } from "../lib/receipt-session-storage"
-import { useRouter } from "next/navigation"
+import { useRouter } from "@/lib/navigation"
 
 import { FormalActionResult, PageScaffold } from "@/components/business"
 import { listWorkspaceStyles } from "@/components/business/list-workspace"

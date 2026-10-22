@@ -140,7 +140,7 @@
     --spacing-page-block: 1.25rem; /* 20px 内容区纵向边距 */
     --spacing-page-block-lg: 1.5rem; /* 24px 桌面内容区纵向边距 */
     --spacing-workspace-inline: 1rem; /* 列表工作面窄窗口边距 */
-    --spacing-workspace-block-start-lg: 1.75rem; /* 列表工作面页头上边距 */
+    --spacing-workspace-block-start-lg: 1.25rem; /* 列表页签栏下方页头间距 20px */
     --spacing-workspace-header-block-end: 1.875rem;
     --spacing-workspace-toolbar-block: 1.125rem;
     --spacing-workspace-view: 2.875rem;

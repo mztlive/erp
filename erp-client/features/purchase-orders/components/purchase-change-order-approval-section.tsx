@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 import { ChangeOrderVoidButton } from "@/components/business/change-order-void-button"
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
 import { ChangeOrderPendingCard } from "@/features/approval-workflow/components/change-order-pending-card"

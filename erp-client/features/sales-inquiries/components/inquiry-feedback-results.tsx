@@ -29,11 +29,13 @@ export function InquiryFeedbackResults({
     selectedRound,
     onRoundChange,
     idPrefix = "sales-inquiry",
+    content = "all",
 }: {
     inquiry: SalesInquiry | ProcurementInquiry
     selectedRound?: number
     onRoundChange?: (round: number) => void
     idPrefix?: string
+    content?: "all" | "products" | "fees"
 }) {
     const rounds = [...inquiry.feedbacks].sort(
         (left, right) => right.round - left.round,
@@ -43,7 +45,7 @@ export function InquiryFeedbackResults({
     if (!feedback)
         return (
             <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-                采购尚未发布反馈。发布后可在此核对商品供给和当轮费用。
+                采购尚未发布反馈。发布后可查看商品报价及当轮费用。
             </p>
         )
     const requirement = inquiry.requirements.find(
@@ -55,7 +57,10 @@ export function InquiryFeedbackResults({
             (item) => item.feedback_round === feedback.round,
         )
     return (
-        <section className="space-y-5" aria-label="采购反馈结果">
+        <section
+            className="space-y-5"
+            aria-label={content === "fees" ? "反馈费用结果" : "采购反馈结果"}
+        >
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-3">
@@ -107,44 +112,51 @@ export function InquiryFeedbackResults({
                     </div>
                 )}
             </div>
-            {!requirement && (
-                <p className="text-sm text-muted-foreground">
-                    本轮需求快照暂不可用，需求数量及地址不以当前草稿替代。
-                </p>
+            {content === "fees" ? (
+                <FeedbackFees feedback={feedback} />
+            ) : (
+                <>
+                    {!requirement && (
+                        <p className="text-sm text-muted-foreground">
+                            本轮需求快照暂不可用，需求数量及地址不以当前草稿替代。
+                        </p>
+                    )}
+                    <div className="overflow-hidden rounded-lg border">
+                        <Table className="min-w-[1120px]">
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>商品 / 供给结论</TableHead>
+                                    <TableHead className="text-right">
+                                        需求数量
+                                    </TableHead>
+                                    <TableHead className="text-right">
+                                        可供数量
+                                    </TableHead>
+                                    <TableHead className="text-right">
+                                        含税供给单价
+                                    </TableHead>
+                                    <TableHead>税率</TableHead>
+                                    <TableHead>交付日期</TableHead>
+                                    <TableHead>有效期</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {feedback.data.lines.map((result) => (
+                                    <FeedbackRows
+                                        key={result.line_id}
+                                        result={result}
+                                        line={requirement?.lines.find(
+                                            (line) =>
+                                                line.line_id === result.line_id,
+                                        )}
+                                    />
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </>
             )}
-            <div className="overflow-hidden rounded-lg border">
-                <Table className="min-w-[1120px]">
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>商品 / 供给结论</TableHead>
-                            <TableHead className="text-right">
-                                需求数量
-                            </TableHead>
-                            <TableHead className="text-right">
-                                可供数量
-                            </TableHead>
-                            <TableHead className="text-right">
-                                含税供给单价
-                            </TableHead>
-                            <TableHead>税率</TableHead>
-                            <TableHead>交付日期</TableHead>
-                            <TableHead>有效期</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {feedback.data.lines.map((result) => (
-                            <FeedbackRows
-                                key={result.line_id}
-                                result={result}
-                                line={requirement?.lines.find(
-                                    (line) => line.line_id === result.line_id,
-                                )}
-                            />
-                        ))}
-                    </TableBody>
-                </Table>
-            </div>
-            <FeedbackFees feedback={feedback} />
+            {content === "all" && <FeedbackFees feedback={feedback} />}
         </section>
     )
 }

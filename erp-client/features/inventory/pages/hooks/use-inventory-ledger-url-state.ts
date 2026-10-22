@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import { decodeInventoryCursor } from "@/features/inventory/lib/cursor"

@@ -1,6 +1,6 @@
 "use client"
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "@/lib/navigation"
 
 import { BusinessEmptyState } from "@/components/business"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"

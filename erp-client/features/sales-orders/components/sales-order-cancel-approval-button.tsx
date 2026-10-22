@@ -3,7 +3,7 @@
 import { RequiredMark } from "@/components/ui/required-mark"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import { useRouter } from "@/lib/navigation"
 
 import {
     AlertDialog,
