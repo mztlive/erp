@@ -442,8 +442,8 @@ export const InquiryDemandLines = withForm({
                                                                         label:
                                                                             line.fulfillment_kind ===
                                                                             "physical"
-                                                                                ? "配送"
-                                                                                : "交付",
+                                                                                ? "编辑配送"
+                                                                                : "编辑交付",
                                                                         icon: TruckIcon,
                                                                         disabled,
                                                                         onClick:
@@ -506,7 +506,7 @@ export const InquiryDemandLines = withForm({
                                                 "配送与交付"}
                                         </SheetTitle>
                                         <SheetDescription>
-                                            浏览、添加或批量移除本商品的配送地址。
+                                            调整配送数量，新增或替换收件地址；已有销售占用的地址不能替换或移除。
                                         </SheetDescription>
                                     </SheetHeader>
                                     <div className="min-h-0 flex-1 overflow-y-auto px-7 pb-6">

@@ -63,6 +63,50 @@ pub struct InquiryProcurementView {
 }
 
 impl InquiryProcurementView {
+    /// 生成已完成任务的历史只读结果，不带入后续需求、报价或费用办理资料。
+    /// # 参数
+    /// `requirement_version`、`line_ids` 与起止时间须来自已核验的本人完成任务。
+    /// # 返回
+    /// 返回该任务期间发布的最后一轮反馈及其需求快照。
+    /// # 错误
+    /// 需求或发布记录缺失时返回 `None`，不得用当前需求补齐。
+    pub fn from_completed_task(
+        inquiry: &SalesInquiry,
+        line_ids: &[String],
+        actor: &str,
+        requirement_version: u32,
+        started_at: Instant,
+        completed_at: Instant,
+    ) -> Option<Self> {
+        let requirement = inquiry.requirements.iter().find(|row| row.version == requirement_version)?;
+        let feedback = completed_feedback(inquiry, line_ids, actor, requirement, started_at, completed_at)?;
+        let draft = requirement_view(&requirement.data, line_ids);
+        Some(Self {
+            base: inquiry.base.clone(),
+            inquiry_no: inquiry.inquiry_no.clone(),
+            customer_id: inquiry.customer_id.clone(),
+            customer_name: inquiry.customer_name.clone(),
+            deadline_at: inquiry.deadline_at,
+            status: inquiry.status,
+            requirement_version,
+            feedback_round: feedback.round,
+            shared_fee_owner_user_id: None,
+            draft: draft.clone(),
+            requirements: vec![InquiryProcurementSnapshot {
+                version: requirement.version,
+                submitted_by: requirement.submitted_by.clone(),
+                submitted_at: requirement.submitted_at,
+                change_reason: requirement.change_reason.clone(),
+                data: draft,
+            }],
+            feedbacks: vec![feedback],
+            feedback_work: vec![],
+            fee_ledger: vec![],
+            fee_allocations: vec![],
+            fee_statuses: vec![],
+        })
+    }
+
     /// 生成拥有完整询价任务范围时的采购投影。
     /// # 参数
     /// `inquiry` 必须已通过独立完整范围授权。
@@ -159,6 +203,54 @@ impl InquiryProcurementView {
                 .collect(),
         }
     }
+}
+
+fn completed_feedback(
+    inquiry: &SalesInquiry,
+    line_ids: &[String],
+    actor: &str,
+    requirement: &InquiryRequirementSnapshot,
+    started_at: Instant,
+    completed_at: Instant,
+) -> Option<InquiryFeedbackSnapshot> {
+    let mut feedback = inquiry
+        .feedbacks
+        .iter()
+        .rev()
+        .find(|row| {
+            row.requirement_version == requirement.version
+                && row.published_at >= started_at
+                && row.published_at <= completed_at
+        })?
+        .clone();
+    let full =
+        !line_ids.is_empty() && requirement.data.lines.iter().all(|line| line_ids.contains(&line.line_id));
+    let own_shared_fees = inquiry
+        .feedback_work
+        .iter()
+        .filter(|work| {
+            !line_ids.is_empty()
+                && !work.line_ids.is_empty()
+                && work.frozen
+                && work.actor_id == actor
+                && work.requirement_version == requirement.version
+                && work.saved_at >= started_at
+                && work.saved_at <= feedback.published_at
+                && work.line_ids.iter().all(|id| line_ids.contains(id))
+        })
+        .flat_map(|work| &work.data.fees)
+        .filter(|fee| fee.line_ids.is_empty())
+        .map(|fee| &fee.fee_id)
+        .collect::<HashSet<_>>();
+    feedback.data.lines.retain(|line| line_ids.contains(&line.line_id));
+    feedback.data.fees.retain(|fee| {
+        if fee.line_ids.is_empty() {
+            full || own_shared_fees.contains(&fee.fee_id)
+        } else {
+            fee.line_ids.iter().all(|id| line_ids.contains(id))
+        }
+    });
+    Some(feedback)
 }
 
 fn requirement_view(data: &InquiryRequirementData, line_ids: &[String]) -> InquiryProcurementRequirement {

@@ -19,17 +19,15 @@ import { Label } from "@/components/ui/label"
 import { PersonDirectoryFilter } from "@/features/entity-selectors/components/person-directory-filter"
 import { hasPermission } from "@/lib/permissions"
 import { getErrorMessage } from "@/lib/api/errors"
+import { classifyFormalCommandError } from "@/lib/formal-command"
 import { inquiryPath } from "../api"
 import { useInquiryCommand } from "../hooks/use-inquiry-command"
-import { inquiryStorageKey } from "../lib/local-draft"
+import type { ProcurementInquiry, SalesInquiry } from "../types"
 import type {
-    InquiryRequirement,
-    ProcurementInquiry,
-    SalesInquiry,
-} from "../types"
-import type { InquiryTask } from "./inquiry-feedback-editor"
+    InquiryPublishContext,
+    InquiryTask,
+} from "./inquiry-feedback-editor"
 import { INQUIRY_STATUS_LABEL } from "../types"
-import { InquiryDemandEditor } from "./inquiry-demand-editor"
 
 type InquiryAction =
     | "submit"
@@ -57,8 +55,12 @@ export function InquiryActions({
     permissions,
     onSaved,
     disabled = false,
+    disabledReason,
     renderActions,
     feedbackRound,
+    feedbackDirty = false,
+    beforePublish,
+    onPublishingChange,
 }: {
     inquiry: SalesInquiry | ProcurementInquiry
     procurement: boolean
@@ -67,7 +69,11 @@ export function InquiryActions({
     permissions: readonly string[]
     onSaved: () => void
     disabled?: boolean
+    disabledReason?: string
     feedbackRound?: number
+    feedbackDirty?: boolean
+    beforePublish?: () => Promise<InquiryPublishContext | null>
+    onPublishingChange?: (publishing: boolean) => void
     renderActions?: (
         primaryActions: React.ReactNode,
         secondaryActions: React.ReactNode,
@@ -76,7 +82,7 @@ export function InquiryActions({
 }) {
     const [action, setAction] = React.useState<InquiryAction | null>(null)
     const [error, setError] = React.useState<string | null>(null)
-    const [editingRequirement, setEditingRequirement] = React.useState(false)
+    const submitting = React.useRef(false)
     const requiresReason =
         action === "submit"
             ? inquiry.requirement_version > 0
@@ -91,7 +97,6 @@ export function InquiryActions({
             line_ids: [] as string[],
             fee_ids: [] as string[],
             buyer_user_id: "",
-            requirement: null as InquiryRequirement | null,
         },
         listeners: {
             onChange: ({ formApi }) => {
@@ -106,8 +111,16 @@ export function InquiryActions({
             },
         },
         onSubmit: async ({ value }) => {
-            if (!action || disabled) return
+            if (
+                !action ||
+                disabled ||
+                submitting.current ||
+                (feedbackDirty && action !== "publish")
+            )
+                return
+            submitting.current = true
             setError(null)
+            let feedbackSaved = false
             try {
                 if (
                     (action === "accept" || action === "reinquire") &&
@@ -133,12 +146,24 @@ export function InquiryActions({
                         line_ids: value.line_ids,
                         fee_ids: value.fee_ids,
                         concerns: value.concerns.trim(),
-                        requirement: value.requirement,
+                        requirement: null,
                     }
                 if (["close", "supplement", "reassign"].includes(action))
                     data.reason = value.reason.trim()
                 if (["supplement", "publish", "reassign"].includes(action))
                     Object.assign(data, taskBody)
+                if (action === "publish") {
+                    if (!beforePublish)
+                        throw new Error("采购反馈尚未准备好，请稍候再发布。")
+                    onPublishingChange?.(true)
+                    const context = await beforePublish()
+                    if (!context) {
+                        setAction(null)
+                        return
+                    }
+                    feedbackSaved = true
+                    Object.assign(data, context)
+                }
                 if (action === "reassign") {
                     if (!value.buyer_user_id)
                         throw new Error("请选择新的责任采购。")
@@ -149,34 +174,39 @@ export function InquiryActions({
                     data,
                 )
                 setAction(null)
-                setEditingRequirement(false)
                 form.reset({
                     ...value,
                     reason: "",
                     concerns: "",
                     line_ids: [],
                     fee_ids: [],
-                    requirement: null,
                 })
                 localStorage.removeItem(storageKey)
-                localStorage.removeItem(
-                    inquiryStorageKey(userId, `${inquiry.id}:reinquiry-demand`),
-                )
                 onSaved()
             } catch (failure) {
+                const reason = getErrorMessage(
+                    failure,
+                    "操作失败，请保留输入并重试。",
+                )
+                const outcome =
+                    classifyFormalCommandError(failure) === "unknown"
+                        ? "发布结果尚待核对，请核对上次提交结果后继续。"
+                        : "本轮尚未发布。"
                 setError(
-                    getErrorMessage(failure, "操作失败，请保留输入并重试。"),
+                    feedbackSaved
+                        ? `你的反馈已保存，${outcome}${reason}`
+                        : reason,
                 )
                 if (action === "close") throw failure
+            } finally {
+                submitting.current = false
+                onPublishingChange?.(false)
             }
         },
     })
     const closeReason = useStore(form.store, (state) => state.values.reason)
-    const revisedRequirement = useStore(
-        form.store,
-        (state) => state.values.requirement,
-    )
-    const demandLines = (revisedRequirement ?? inquiry.draft).lines
+    const isSubmitting = useStore(form.store, (state) => state.isSubmitting)
+    const demandLines = inquiry.draft.lines
     React.useEffect(() => {
         const saved = localStorage.getItem(storageKey)
         if (saved) {
@@ -190,7 +220,8 @@ export function InquiryActions({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [storageKey])
     const actions: InquiryAction[] = procurement
-        ? ["awaiting_procurement", "procurement_processing"].includes(
+        ? task &&
+          ["awaiting_procurement", "procurement_processing"].includes(
               inquiry.status,
           )
             ? ["publish", "supplement", "reassign"]
@@ -217,6 +248,9 @@ export function InquiryActions({
             }
             disabled={
                 disabled ||
+                (feedbackDirty && item !== "publish") ||
+                (item === "publish" && !beforePublish) ||
+                isSubmitting ||
                 ((item === "accept" || item === "reinquire") &&
                     feedbackRound != null &&
                     feedbackRound !== inquiry.feedback_round) ||
@@ -230,8 +264,8 @@ export function InquiryActions({
                 )
             }
             title={
-                disabled
-                    ? "请先保存当前修改后再操作"
+                disabled || (feedbackDirty && item !== "publish")
+                    ? (disabledReason ?? "请先保存当前修改后再操作")
                     : (item === "accept" || item === "reinquire") &&
                         feedbackRound != null &&
                         feedbackRound !== inquiry.feedback_round
@@ -331,7 +365,7 @@ export function InquiryActions({
                 irreversibleEffects={[
                     "本询价不能继续处理或新增转单；再次采购须复制为新询价",
                 ]}
-                pending={command.isPending}
+                pending={command.isPending || isSubmitting}
                 confirmDisabled={
                     disabled ||
                     !closeReason.trim() ||
@@ -362,7 +396,7 @@ export function InquiryActions({
             <Dialog
                 open={action != null && action !== "close"}
                 onOpenChange={(open) => {
-                    if (!open) setAction(null)
+                    if (!open && !submitting.current) setAction(null)
                 }}
             >
                 <DialogContent
@@ -376,196 +410,158 @@ export function InquiryActions({
                         <DialogDescription>
                             {action === "accept"
                                 ? "接受当前完整反馈。商品供给价仅作成本参考，实际成交价在销售开单时明确确认。"
-                                : action === "submit" || action === "reinquire"
-                                  ? "提交后按采购责任规则自动分派，无需选择采购人员。"
-                                  : action === "publish"
-                                    ? "发布当前已保存的商品结论、供给价、交期、费用及对销售说明。内部供应商报价不会公开；所有责任商品齐备后统一发布。"
-                                    : action === "close"
-                                      ? "关闭后不能新增询价或转单，已生成销售与采购继续按各自流程办理。"
-                                      : "核对当前需求和责任范围后执行。"}
+                                : action === "reinquire"
+                                  ? "沿用当前商品、数量、地址及交期，仅要求采购重新报价。需要变更需求时，请返回商品与报价，点击“修改需求”。"
+                                  : action === "submit"
+                                    ? "提交后按采购责任规则自动分派，无需选择采购人员。"
+                                    : action === "publish"
+                                      ? "确认后自动保存当前商品反馈与费用，再统一发布给销售，无需先点保存。内部供应商报价不会公开；其他责任采购尚未完成时，你的内容会保留为已保存进度。"
+                                      : action === "close"
+                                        ? "关闭后不能新增询价或转单，已生成销售与采购继续按各自流程办理。"
+                                        : "核对当前需求和责任范围后执行。"}
                         </DialogDescription>
                     </DialogHeader>
-                    {editingRequirement && "sales_owner_user_id" in inquiry ? (
-                        <div className="space-y-4">
-                            <Button
-                                id="sales-inquiry-revision-back"
-                                type="button"
-                                variant="outline"
-                                onClick={() => setEditingRequirement(false)}
-                            >
-                                返回重询说明
-                            </Button>
-                            <InquiryDemandEditor
-                                inquiry={{
-                                    ...inquiry,
-                                    draft: revisedRequirement ?? inquiry.draft,
-                                }}
-                                userId={userId}
-                                permissions={permissions}
-                                storageScope={`${inquiry.id}:reinquiry-demand`}
-                                onSaved={() => undefined}
-                                onConfirmRequirement={(requirement) => {
-                                    form.setFieldValue(
-                                        "requirement",
-                                        requirement,
-                                    )
-                                    setEditingRequirement(false)
-                                }}
+                    <form
+                        className="space-y-4"
+                        onSubmit={(event) => {
+                            event.preventDefault()
+                            void form.handleSubmit()
+                        }}
+                    >
+                        {error && (
+                            <Alert variant="destructive">
+                                <AlertDescription>{error}</AlertDescription>
+                            </Alert>
+                        )}
+                        {requiresReason && (
+                            <form.AppField
+                                name="reason"
+                                children={(field) => (
+                                    <field.TextareaField
+                                        id="sales-inquiry-action-reason"
+                                        label={
+                                            action === "submit"
+                                                ? "需求变更原因"
+                                                : "操作原因"
+                                        }
+                                        required
+                                    />
+                                )}
                             />
-                        </div>
-                    ) : (
-                        <form
-                            className="space-y-4"
-                            onSubmit={(event) => {
-                                event.preventDefault()
-                                void form.handleSubmit()
-                            }}
-                        >
-                            {error && (
-                                <Alert variant="destructive">
-                                    <AlertDescription>{error}</AlertDescription>
-                                </Alert>
-                            )}
-                            {requiresReason && (
+                        )}
+                        {action === "reassign" && (
+                            <form.Field
+                                name="buyer_user_id"
+                                children={(field) => (
+                                    <PersonDirectoryFilter
+                                        id="sales-inquiry-action-buyer"
+                                        category="procurement"
+                                        value={field.state.value}
+                                        onChange={field.handleChange}
+                                        selectionMode="single"
+                                        label="新的责任采购"
+                                    />
+                                )}
+                            />
+                        )}
+                        {action === "reinquire" && (
+                            <>
+                                <form.Field
+                                    name="line_ids"
+                                    children={(field) => (
+                                        <div className="space-y-2">
+                                            <Label htmlFor="sales-inquiry-reinquire-lines">
+                                                关注商品（不选表示全部）
+                                            </Label>
+                                            <MultiOptionCombobox
+                                                id="sales-inquiry-reinquire-lines"
+                                                aria-label="关注商品"
+                                                value={field.state.value}
+                                                onValueChange={(values) =>
+                                                    field.handleChange([
+                                                        ...values,
+                                                    ])
+                                                }
+                                                options={demandLines.map(
+                                                    (line) => ({
+                                                        value: line.line_id,
+                                                        label: line.product_name,
+                                                    }),
+                                                )}
+                                            />
+                                        </div>
+                                    )}
+                                />
+                                <form.Field
+                                    name="fee_ids"
+                                    children={(field) => (
+                                        <div className="space-y-2">
+                                            <Label htmlFor="sales-inquiry-reinquire-fees">
+                                                关注费用（不选表示全部）
+                                            </Label>
+                                            <MultiOptionCombobox
+                                                id="sales-inquiry-reinquire-fees"
+                                                aria-label="关注费用"
+                                                value={field.state.value}
+                                                onValueChange={(values) =>
+                                                    field.handleChange([
+                                                        ...values,
+                                                    ])
+                                                }
+                                                options={(
+                                                    inquiry.feedbacks.at(-1)
+                                                        ?.data.fees ?? []
+                                                ).map((fee) => ({
+                                                    value: fee.fee_id,
+                                                    label: fee.name,
+                                                }))}
+                                            />
+                                        </div>
+                                    )}
+                                />
                                 <form.AppField
-                                    name="reason"
+                                    name="concerns"
                                     children={(field) => (
                                         <field.TextareaField
-                                            id="sales-inquiry-action-reason"
-                                            label={
-                                                action === "submit"
-                                                    ? "需求变更原因"
-                                                    : "操作原因"
-                                            }
-                                            required
+                                            id="sales-inquiry-reinquire-concerns"
+                                            label="需要调整的事项"
+                                            placeholder="价格、交期、供给数量或费用等"
                                         />
                                     )}
                                 />
-                            )}
-                            {action === "reassign" && (
-                                <form.Field
-                                    name="buyer_user_id"
-                                    children={(field) => (
-                                        <PersonDirectoryFilter
-                                            id="sales-inquiry-action-buyer"
-                                            category="procurement"
-                                            value={field.state.value}
-                                            onChange={field.handleChange}
-                                            selectionMode="single"
-                                            label="新的责任采购"
-                                        />
-                                    )}
-                                />
-                            )}
-                            {action === "reinquire" && (
-                                <>
-                                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
-                                        <p className="text-sm">
-                                            {revisedRequirement
-                                                ? "本次将提交调整后的需求，并建立新的需求版本。"
-                                                : "商品、数量、地址或交期变化时，先调整需求。"}
-                                        </p>
-                                        <Button
-                                            id="sales-inquiry-reinquire-edit-demand"
-                                            type="button"
-                                            variant="outline"
-                                            onClick={() =>
-                                                setEditingRequirement(true)
-                                            }
-                                        >
-                                            调整商品、数量及地址
-                                        </Button>
-                                    </div>
-                                    <form.Field
-                                        name="line_ids"
-                                        children={(field) => (
-                                            <div className="space-y-2">
-                                                <Label htmlFor="sales-inquiry-reinquire-lines">
-                                                    关注商品（不选表示全部）
-                                                </Label>
-                                                <MultiOptionCombobox
-                                                    id="sales-inquiry-reinquire-lines"
-                                                    aria-label="关注商品"
-                                                    value={field.state.value}
-                                                    onValueChange={(values) =>
-                                                        field.handleChange([
-                                                            ...values,
-                                                        ])
-                                                    }
-                                                    options={demandLines.map(
-                                                        (line) => ({
-                                                            value: line.line_id,
-                                                            label: line.product_name,
-                                                        }),
-                                                    )}
-                                                />
-                                            </div>
-                                        )}
-                                    />
-                                    <form.Field
-                                        name="fee_ids"
-                                        children={(field) => (
-                                            <div className="space-y-2">
-                                                <Label htmlFor="sales-inquiry-reinquire-fees">
-                                                    关注费用（不选表示全部）
-                                                </Label>
-                                                <MultiOptionCombobox
-                                                    id="sales-inquiry-reinquire-fees"
-                                                    aria-label="关注费用"
-                                                    value={field.state.value}
-                                                    onValueChange={(values) =>
-                                                        field.handleChange([
-                                                            ...values,
-                                                        ])
-                                                    }
-                                                    options={(
-                                                        inquiry.feedbacks.at(-1)
-                                                            ?.data.fees ?? []
-                                                    ).map((fee) => ({
-                                                        value: fee.fee_id,
-                                                        label: fee.name,
-                                                    }))}
-                                                />
-                                            </div>
-                                        )}
-                                    />
-                                    <form.AppField
-                                        name="concerns"
-                                        children={(field) => (
-                                            <field.TextareaField
-                                                id="sales-inquiry-reinquire-concerns"
-                                                label="需要调整的事项"
-                                                placeholder="价格、交期、供给数量或费用等"
-                                            />
-                                        )}
-                                    />
-                                </>
-                            )}
-                            <DialogFooter>
-                                <Button
-                                    id="sales-inquiry-action-cancel"
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => setAction(null)}
-                                >
-                                    取消
-                                </Button>
-                                <Button
-                                    id="sales-inquiry-action-confirm"
-                                    type="submit"
-                                    disabled={
-                                        command.isPending || command.unresolved
-                                    }
-                                >
-                                    {command.isPending
-                                        ? "正在提交…"
-                                        : action
-                                          ? ACTION_LABEL[action]
-                                          : "确认"}
-                                </Button>
-                            </DialogFooter>
-                        </form>
-                    )}
+                            </>
+                        )}
+                        <DialogFooter>
+                            <Button
+                                id="sales-inquiry-action-cancel"
+                                type="button"
+                                variant="outline"
+                                onClick={() => setAction(null)}
+                                disabled={isSubmitting || command.isPending}
+                            >
+                                取消
+                            </Button>
+                            <Button
+                                id="sales-inquiry-action-confirm"
+                                type="submit"
+                                disabled={
+                                    disabled ||
+                                    isSubmitting ||
+                                    command.isPending ||
+                                    command.unresolved ||
+                                    !command.ready
+                                }
+                            >
+                                {isSubmitting || command.isPending
+                                    ? action === "publish"
+                                        ? "正在保存并发布…"
+                                        : "正在提交…"
+                                    : action
+                                      ? ACTION_LABEL[action]
+                                      : "确认"}
+                            </Button>
+                        </DialogFooter>
+                    </form>
                 </DialogContent>
             </Dialog>
         </div>

@@ -9,12 +9,12 @@ use erp_identity::access_control::{ResolvedScope, ScopeClause};
 use erp_identity::service::access_control::resolve::DataScopeService;
 use erp_identity::{Permission, SharedRbacService};
 use erp_sales::dto::sales_inquiry::{InquiryProcurementView, InquirySalesView};
-use erp_sales::entity::sales_inquiry::InquiryStatus;
+use erp_sales::entity::sales_inquiry::{InquiryStatus, SalesInquiry};
 use erp_sales::repository::sales_inquiry::{InquiryListFilter, InquiryReadScope, InquiryScopeClause};
 use erp_sales::service::sales_inquiry::SalesInquiryService;
 use erp_supply::inquiry::{InquiryFeeBasis, InquiryQuote, InquirySupplyService};
 use erp_support::repository::{DocumentAttachmentRepositoryExt, FileAssetExt};
-use erp_workflow::entity::work_item::{WorkItem, WorkItemType};
+use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, WorkItemType, inquiry_subject_version};
 use erp_workflow::repository::{WorkItemExt, WorkItemRepositoryExt};
 use mongodb::Database;
 use persistence_core::NoTransaction;
@@ -33,9 +33,28 @@ pub struct InquiryListParams {
     pub status: Option<InquiryStatus>,
     pub page: Option<u64>,
     pub scope_version: Option<String>,
+    pub task_status: Option<InquiryTaskFilter>,
 }
 
-/// 采购详情必须引用一个当前责任任务。
+/// 采购列表的任务范围；缺省同时显示待处理与本人已完成记录。
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InquiryTaskFilter {
+    Open,
+    Completed,
+}
+
+impl InquiryTaskFilter {
+    fn statuses(filter: Option<Self>) -> &'static [WorkItemStatus] {
+        match filter {
+            None => &[WorkItemStatus::Open, WorkItemStatus::Completed],
+            Some(Self::Open) => &[WorkItemStatus::Open],
+            Some(Self::Completed) => &[WorkItemStatus::Completed],
+        }
+    }
+}
+
+/// 采购详情必须引用当前责任任务或本人已完成任务。
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct InquiryTaskParams {
@@ -58,6 +77,7 @@ pub struct InquiryTaskView {
     pub owner_user_id: Option<String>,
     pub line_ids: Vec<String>,
     pub subject_version: String,
+    pub status: WorkItemStatus,
 }
 
 impl From<&WorkItem> for InquiryTaskView {
@@ -68,6 +88,7 @@ impl From<&WorkItem> for InquiryTaskView {
             owner_user_id: task.owner_user_id.clone(),
             line_ids: task.responsibility_scope_ids().to_vec(),
             subject_version: task.subject_version.clone(),
+            status: task.status,
         }
     }
 }
@@ -88,6 +109,37 @@ pub struct ProcurementInquiryDetail {
     #[serde(flatten)]
     pub inquiry: InquiryProcurementView,
     pub work_items: Vec<InquiryTaskView>,
+}
+
+impl ProcurementInquiryDetail {
+    fn from_task(inquiry: &SalesInquiry, task: &WorkItem, actor: &str) -> Result<Self> {
+        let view = if task.status == WorkItemStatus::Open {
+            InquiryProcurementView::from_responsibility(
+                inquiry,
+                task.responsibility_scope_ids(),
+                actor,
+                Instant::now(),
+            )
+        } else {
+            let requirement = inquiry
+                .requirements
+                .iter()
+                .find(|row| task.subject_version == inquiry_subject_version(row.version))
+                .ok_or_else(scope_changed)?;
+            InquiryProcurementView::from_completed_task(
+                inquiry,
+                task.responsibility_scope_ids(),
+                actor,
+                requirement.version,
+                Instant::try_from_unix_secs(
+                    i64::try_from(task.base.created_at).map_err(|_| scope_changed())?,
+                )?,
+                task.completed_at.ok_or_else(scope_changed)?,
+            )
+            .ok_or_else(|| Error::NotFound("已处理询价的需求或反馈记录缺失，请联系管理员核对".into()))?
+        };
+        Ok(Self { inquiry: view, work_items: vec![InquiryTaskView::from(task)] })
+    }
 }
 
 /// 仅传入公司 SKU 稳定身份，不接受商品快照或价格。
@@ -167,11 +219,11 @@ impl InquiryReadService {
         Ok(InquirySalesView::from_inquiry(&inquiry))
     }
 
-    /// 分页读取当前开放询价任务，不授予普通销售数据读取。
+    /// 分页读取当前及本人已完成询价任务，不授予普通销售数据读取。
     /// # 参数
     /// `actor` 为当前采购，`params` 为业务筛选和范围版本。
     /// # 返回
-    /// 每张询价仅包含当前责任行和对应任务。
+    /// 每张询价优先展示当前任务，否则展示最近完成任务的历史只读结果。
     /// # 错误
     /// 权限、任务或范围版本变化时拒绝。
     pub async fn procurement_list(
@@ -180,7 +232,7 @@ impl InquiryReadService {
         params: &InquiryListParams,
     ) -> Result<InquiryListView<ProcurementInquiryDetail>> {
         self.access.ensure_procurement_permission(actor, "list", &mut NoTransaction).await?;
-        let tasks = self.owned_tasks(actor).await?;
+        let tasks = self.owned_tasks(actor, params.task_status).await?;
         let version = self.procurement_version(actor, &tasks).await?;
         validate_page(params, &version)?;
         let mut filter = list_filter(params);
@@ -190,47 +242,32 @@ impl InquiryReadService {
             SalesInquiryService::new(self.db.clone()).inquiry_list(&filter, &mut NoTransaction).await?;
         let mut items = Vec::with_capacity(page.items.len());
         for inquiry in page.items {
-            let scoped =
-                tasks.iter().filter(|task| task.business_object_id == inquiry.base.id).collect::<Vec<_>>();
-            let line_ids = scoped
+            let task = tasks
                 .iter()
-                .flat_map(|task| task.responsibility_scope_ids().iter().cloned())
-                .collect::<Vec<_>>();
-            for task in &scoped {
-                self.access
-                    .require_task(
-                        actor,
-                        "list",
-                        &inquiry.base.id,
-                        &task.base.id,
-                        Some(task.base.version),
-                        &mut NoTransaction,
-                    )
-                    .await?;
-            }
-            items.push(ProcurementInquiryDetail {
-                inquiry: InquiryProcurementView::from_responsibility(
-                    &inquiry,
-                    &line_ids,
-                    actor.id(),
-                    Instant::now(),
-                ),
-                work_items: scoped.into_iter().map(InquiryTaskView::from).collect(),
-            });
+                .filter(|task| task.business_object_id == inquiry.base.id)
+                .max_by_key(|task| (task.status == WorkItemStatus::Open, task.base.created_at, &task.base.id))
+                .ok_or_else(scope_changed)?;
+            let (current, task) = self
+                .access
+                .require_read_task(actor, "list", &inquiry.base.id, &task.base.id, &mut NoTransaction)
+                .await?;
+            items.push(ProcurementInquiryDetail::from_task(&current, &task, actor.id())?);
         }
-        if self.procurement_version(actor, &self.owned_tasks(actor).await?).await? != version {
+        if self.procurement_version(actor, &self.owned_tasks(actor, params.task_status).await?).await?
+            != version
+        {
             return Err(scope_changed());
         }
         Ok(list_view(items, page.total, params, version))
     }
 
-    /// 按精确开放任务读取采购必要资料。
+    /// 按精确责任任务读取当前资料或本人完成的历史结果。
     /// # 参数
     /// `actor` 为当前采购，`id` 为询价，`task_id` 为当前责任任务。
     /// # 返回
     /// 返回责任行白名单与当前任务版本，不返回销售参考价。
     /// # 错误
-    /// 任务完成、关闭、改派、账号或权限失效时拒绝。
+    /// 关闭、改派、历史证据缺失、账号或权限失效时拒绝。
     pub async fn procurement_detail(
         &self,
         actor: &AuditActor,
@@ -238,16 +275,8 @@ impl InquiryReadService {
         task_id: &str,
     ) -> Result<ProcurementInquiryDetail> {
         let (inquiry, task) =
-            self.access.require_task(actor, "detail", id, task_id, None, &mut NoTransaction).await?;
-        Ok(ProcurementInquiryDetail {
-            inquiry: InquiryProcurementView::from_responsibility(
-                &inquiry,
-                task.responsibility_scope_ids(),
-                actor.id(),
-                Instant::now(),
-            ),
-            work_items: vec![InquiryTaskView::from(&task)],
-        })
+            self.access.require_read_task(actor, "detail", id, task_id, &mut NoTransaction).await?;
+        ProcurementInquiryDetail::from_task(&inquiry, &task, actor.id())
     }
 
     /// 内部报价只按当前责任行和独立采购权限返回。
@@ -383,14 +412,19 @@ impl InquiryReadService {
         InquiryTemplateProduct::from_selection(ids, rows)
     }
 
-    async fn owned_tasks(&self, actor: &AuditActor) -> Result<Vec<WorkItem>> {
+    async fn owned_tasks(
+        &self,
+        actor: &AuditActor,
+        filter: Option<InquiryTaskFilter>,
+    ) -> Result<Vec<WorkItem>> {
         Ok(self
             .db
             .work_items()
-            .list_open_by_type_owners(
+            .list_by_type_owners_statuses(
                 WorkItemType::SalesInquiryProcessing,
                 "sales_inquiry",
                 &[actor.id().into()],
+                InquiryTaskFilter::statuses(filter),
                 &mut NoTransaction,
             )
             .await?)
@@ -479,6 +513,15 @@ fn read_clause(clause: &ScopeClause, user: &str) -> InquiryScopeClause {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn procurement_history_and_pending_count_use_distinct_task_scopes() {
+        assert_eq!(InquiryTaskFilter::statuses(None), &[WorkItemStatus::Open, WorkItemStatus::Completed]);
+        assert_eq!(InquiryTaskFilter::statuses(Some(InquiryTaskFilter::Open)), &[WorkItemStatus::Open]);
+        assert_eq!(
+            InquiryTaskFilter::statuses(Some(InquiryTaskFilter::Completed)),
+            &[WorkItemStatus::Completed]
+        );
+    }
     #[test]
     fn list_scope_preserves_role_union_and_personal_upper_bound() {
         let scope = ResolvedScope {

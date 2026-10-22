@@ -7,6 +7,7 @@ export type DemandFormValues = {
     business_org_unit_id: string
     deadline_at: number
     copied_from_inquiry_id?: string | null
+    revision_reason?: string
     draft: InquiryRequirement
 }
 
@@ -16,5 +17,6 @@ export const demandFormDefaults: DemandFormValues = {
     sales_owner_user_id: "",
     business_org_unit_id: "",
     deadline_at: 0,
+    revision_reason: "",
     draft: { lines: [], note: "" },
 }

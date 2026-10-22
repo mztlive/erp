@@ -28,6 +28,7 @@ export function fetchInquiries(query: InquiryListQuery, procurement = false) {
     return apiGet<InquiryList>(inquiryPath(procurement), {
         q: query.q,
         status: query.status,
+        task_status: procurement ? query.task_status : undefined,
         page: query.page,
         scope_version: query.scope_version,
     })

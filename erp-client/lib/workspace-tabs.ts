@@ -9,7 +9,7 @@ export type WorkspaceFrameState = {
 }
 
 export type WorkspaceHost = {
-    closeCurrent: (source: Window | null) => void
+    closeCurrent: (source: Window | null, fallbackHref?: string) => void
     navigate: (source: Window | null, href: string, replace?: boolean) => void
     report: (source: Window, state: WorkspaceFrameState) => void
     changed: (source: Window) => void

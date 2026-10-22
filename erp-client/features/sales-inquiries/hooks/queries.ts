@@ -41,13 +41,13 @@ export function useInquiryFeedbackCountQuery(enabled = true) {
     })
 }
 
-/** 采购接口只返回本人开放任务对应的询价，包含新分派、重询和补充后重提。 */
+/** 待处理角标只统计本人开放任务，已发布的历史记录不计入。 */
 export function useProcurementInquiryCountQuery(enabled = true) {
     return useQuery({
         queryKey: inquiryKeys.procurementCount(),
         queryFn: async () => {
             const result = await fetchInquiries(
-                { page: 1, page_size: 20 },
+                { page: 1, page_size: 20, task_status: "open" },
                 true,
             )
             return result.total

@@ -195,10 +195,12 @@ export type ProcurementInquiry = Omit<
         version: number
         owner_user_id: string
         line_ids: string[]
+        status: "OPEN" | "COMPLETED"
         subject_version: string
     }[]
 }
 export type InquiryListQuery = {
+    task_status?: "open" | "completed"
     q?: string
     status?: string
     page: number

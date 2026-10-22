@@ -4,6 +4,7 @@ import * as React from "react"
 import { createPortal } from "react-dom"
 import { CheckIcon, PlusIcon, ReceiptTextIcon, Trash2Icon } from "lucide-react"
 import { useStore } from "@tanstack/react-form"
+import { useQueryClient } from "@tanstack/react-query"
 import { InquiryFeeSummary } from "./inquiry-fee-summary"
 import { InquiryFeedbackTable } from "./inquiry-feedback-table"
 import { feedbackIssues, feedbackRequestData } from "../lib/feedback-editing"
@@ -26,7 +27,8 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { inquiryPath } from "../api"
+import { fetchInquiry, inquiryPath } from "../api"
+import { inquiryKeys } from "../hooks/queries"
 import { inquiryDateInput } from "../lib/format"
 import { useInquiryCommand } from "../hooks/use-inquiry-command"
 import {
@@ -46,6 +48,14 @@ export type InquiryTask = {
     version: number
     owner_user_id?: string
     responsibility_scope_ids?: string[]
+}
+export type InquiryPublishContext = {
+    expected_version: number
+    task_id: string
+    task_version: number
+}
+export type InquiryFeedbackEditorHandle = {
+    saveForPublish: () => Promise<InquiryPublishContext | null>
 }
 function newFee(): InquiryFee {
     return {
@@ -82,6 +92,8 @@ function feedbackBaseline(
 }
 
 export function InquiryFeedbackEditor({
+    ref,
+    publishing = false,
     inquiry,
     task,
     userId,
@@ -91,6 +103,8 @@ export function InquiryFeedbackEditor({
     onInternalQuote,
     footerContainer,
 }: {
+    ref?: React.Ref<InquiryFeedbackEditorHandle>
+    publishing?: boolean
     inquiry: ProcurementInquiry
     task: InquiryTask
     userId: string
@@ -139,6 +153,8 @@ export function InquiryFeedbackEditor({
     }, [key])
     return initial ? (
         <FeedbackEditorContent
+            ref={ref}
+            publishing={publishing}
             key={key}
             storageKey={key}
             initial={initial}
@@ -157,6 +173,8 @@ export function InquiryFeedbackEditor({
 }
 
 function FeedbackEditorContent({
+    ref,
+    publishing,
     storageKey,
     initial,
     inquiry,
@@ -168,6 +186,8 @@ function FeedbackEditorContent({
     onInternalQuote,
     footerContainer,
 }: {
+    ref?: React.Ref<InquiryFeedbackEditorHandle>
+    publishing: boolean
     storageKey: string
     initial: {
         data: InquiryFeedbackData
@@ -184,9 +204,25 @@ function FeedbackEditorContent({
     onInternalQuote?: (lineId: string) => void
     footerContainer?: HTMLElement | null
 }) {
+    const client = useQueryClient()
     const command = useInquiryCommand(userId, inquiry.id)
+    const publishSave = React.useRef(false)
+    const savedVersion = React.useRef<number | null>(null)
     const [error, setError] = React.useState<string | null>(null)
-    const [saved, setSaved] = React.useState(false)
+    const [saved, setSaved] = React.useState(() => {
+        const work = inquiry.feedback_work.find(
+            (item) =>
+                !item.frozen &&
+                item.actor_id === userId &&
+                item.requirement_version === inquiry.requirement_version,
+        )
+        return (
+            work != null &&
+            initial.version === inquiry.version &&
+            JSON.stringify(feedbackRequestData(initial.data)) ===
+                JSON.stringify(feedbackRequestData(work.data))
+        )
+    })
     const [feesOpen, setFeesOpen] = React.useState(false)
     const [editingFeeId, setEditingFeeId] = React.useState<string | null>(null)
     const feesTrigger = React.useRef<HTMLButtonElement>(null)
@@ -255,6 +291,7 @@ function FeedbackEditorContent({
         },
         onSubmit: async ({ value }) => {
             setError(null)
+            savedVersion.current = null
             if (conflict) return
             try {
                 const result = await command.run<{ version: number }>(
@@ -268,12 +305,17 @@ function FeedbackEditorContent({
                     "PUT",
                 )
                 version.current = result.version
-                localStorage.removeItem(storageKey)
+                savedVersion.current = result.version
+                try {
+                    localStorage.removeItem(storageKey)
+                } catch {
+                    // 服务端保存已成功，本地清理失败不改变提交结果。
+                }
                 setSaved(true)
                 setFeesOpen(false)
                 setEditingFeeId(null)
                 onDirtyChange(false)
-                onSaved()
+                if (!publishSave.current) onSaved()
             } catch (failure) {
                 setError(
                     getErrorMessage(
@@ -405,38 +447,70 @@ function FeedbackEditorContent({
         return demand && feedbackIssues(line, demand).length === 0
     }).length
     const disabled =
-        conflict || command.isPending || !command.ready || command.unresolved
+        publishing ||
+        conflict ||
+        command.isPending ||
+        !command.ready ||
+        command.unresolved
+    React.useImperativeHandle(ref, () => ({
+        async saveForPublish() {
+            if (disabled || publishSave.current) return null
+            const first = form.state.values.lines.find((line) => {
+                const demand = inquiry.draft.lines.find(
+                    (item) => item.line_id === line.line_id,
+                )
+                return !demand || feedbackIssues(line, demand).length > 0
+            })
+            if (first) {
+                setValidationRequest((value) => value + 1)
+                setError("请先完善标出的商品反馈，再发布；发布时会自动保存。")
+                return null
+            }
+            publishSave.current = true
+            savedVersion.current = null
+            try {
+                await form.handleSubmit()
+                if (savedVersion.current == null) return null
+                // 保存会更新询价和任务版本，必须从服务端取得新版本再发布。
+                const latest = await client.fetchQuery({
+                    queryKey: inquiryKeys.detail(inquiry.id, true, task.id),
+                    queryFn: () => fetchInquiry(inquiry.id, true, task.id),
+                    staleTime: 0,
+                })
+                const latestTask =
+                    "work_items" in latest
+                        ? latest.work_items.find((item) => item.id === task.id)
+                        : undefined
+                if (!latestTask || latest.version !== savedVersion.current) {
+                    throw new Error(
+                        "询价或采购分工已发生变化，请核对最新内容后重新发布。",
+                    )
+                }
+                return {
+                    expected_version: savedVersion.current,
+                    task_id: latestTask.id,
+                    task_version: latestTask.version,
+                }
+            } catch (failure) {
+                if (savedVersion.current == null) throw failure
+                throw new Error(
+                    `你的反馈已保存，尚未发起发布。${getErrorMessage(failure)}`,
+                )
+            } finally {
+                publishSave.current = false
+            }
+        },
+    }))
     const currentWork = inquiry.feedback_work.find(
         (work) => !work.frozen && work.actor_id === userId,
     )?.data
     const footer = (
-        <div
-            className="flex flex-wrap items-center justify-end gap-3 border-t bg-background py-4"
-            onClickCapture={(event) => {
-                if (
-                    !(event.target instanceof Element) ||
-                    !event.target.closest("#sales-inquiry-action-publish")
-                )
-                    return
-                const first = values.lines.find((line) => {
-                    const demand = inquiry.draft.lines.find(
-                        (item) => item.line_id === line.line_id,
-                    )
-                    return demand && feedbackIssues(line, demand).length > 0
-                })
-                if (first) {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    setValidationRequest((value) => value + 1)
-                    setError("请先完善标出的商品反馈，再保存并发布。")
-                }
-            }}
-        >
+        <div className="flex flex-wrap items-center justify-end gap-3 border-t bg-background py-4">
             <p className="mr-auto text-xs text-muted-foreground">
-                已完成 {completeCount} / {values.lines.length} 项 ·{" "}
+                已填写完整 {completeCount} / {values.lines.length} 项 ·{" "}
                 {saved
                     ? "处理进度已保存，发布后销售可见"
-                    : "修改后请保存处理进度"}
+                    : "尚未保存，发布时自动保存"}
             </p>
             <Button
                 id="procurement-inquiry-save-feedback"
@@ -459,7 +533,10 @@ function FeedbackEditorContent({
                 void form.handleSubmit()
             }}
         >
-            <fieldset disabled={command.isPending} className="contents">
+            <fieldset
+                disabled={command.isPending || publishing}
+                className="contents"
+            >
                 {conflict && (
                     <Alert variant="warning">
                         <AlertDescription className="space-y-3">

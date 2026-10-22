@@ -107,11 +107,17 @@ export function useInquiryCommand(userId: string, scope: string) {
                     (queryKey[1] === "internal-quotes" &&
                         queryKey[2] === scope &&
                         queryKey[3] === completion.taskId))
-            if (completion)
+            if (completion) {
                 await client.cancelQueries({
                     queryKey: ["sales-inquiries"],
                     predicate: (query) => endedTaskQuery(query.queryKey),
                 })
+                // 再次从已处理列表打开时必须读取只读结果，不能复用旧的可编辑任务。
+                client.removeQueries({
+                    queryKey: ["sales-inquiries"],
+                    predicate: (query) => endedTaskQuery(query.queryKey),
+                })
+            }
             await Promise.all([
                 client.invalidateQueries({
                     queryKey: ["sales-inquiries"],

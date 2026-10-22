@@ -119,6 +119,23 @@ pub trait WorkItemRepositoryExt {
         executor: &mut dyn Executor,
     ) -> Result<Vec<WorkItem>>;
 
+    /// 按任务类型、当前责任人和明确状态读取任务，用于受控历史查询。
+    /// # 参数
+    /// `work_item_type`、`business_object_type`、`owner_user_ids` 与 `statuses` 限定查询，
+    /// `executor` 为调用方执行器。
+    /// # 返回
+    /// 返回未删除的匹配任务；空责任人或状态集合返回空集合。
+    /// # 错误
+    /// 数据库查询或反序列化失败时返回错误。
+    async fn list_by_type_owners_statuses(
+        &self,
+        work_item_type: WorkItemType,
+        business_object_type: &str,
+        owner_user_ids: &[String],
+        statuses: &[WorkItemStatus],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>>;
+
     /// 按稳定 ID 读取任意已注册工作项。
     ///
     /// # 参数
@@ -264,14 +281,32 @@ impl WorkItemRepositoryExt for Repository<'_, WorkItem> {
         owner_user_ids: &[String],
         executor: &mut dyn Executor,
     ) -> Result<Vec<WorkItem>> {
-        if owner_user_ids.is_empty() {
+        self.list_by_type_owners_statuses(
+            work_item_type,
+            business_object_type,
+            owner_user_ids,
+            &[WorkItemStatus::Open],
+            executor,
+        )
+        .await
+    }
+
+    async fn list_by_type_owners_statuses(
+        &self,
+        work_item_type: WorkItemType,
+        business_object_type: &str,
+        owner_user_ids: &[String],
+        statuses: &[WorkItemStatus],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkItem>> {
+        if owner_user_ids.is_empty() || statuses.is_empty() {
             return Ok(Vec::new());
         }
         self.find_many_sorted(
             doc! {
                 "work_item_type": work_item_type.as_str(),
                 "business_object_type": business_object_type,
-                "status": WorkItemStatus::Open.as_str(),
+                "status": { "$in": statuses.iter().copied().map(WorkItemStatus::as_str).collect::<Vec<_>>() },
                 "owner_user_id": { "$in": owner_user_ids },
             },
             doc! { "created_at": 1 },

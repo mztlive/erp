@@ -97,12 +97,44 @@ impl WorkItem {
         requirement_version: u32,
         line_ids: &[String],
     ) -> bool {
+        self.status == WorkItemStatus::Open
+            && self.inquiry_responsibility_matches(actor_id, inquiry_id, requirement_version, line_ids)
+    }
+
+    /// 校验本人完成的询价任务及其冻结需求范围，只授予历史只读资格。
+    /// # 参数
+    /// `actor_id` 为当前账号，其余为任务对应的历史需求身份与有效行。
+    /// # 返回
+    /// 本人完成且责任范围完整匹配时为真。
+    /// # 错误
+    /// 不返回错误；关闭、改派、删除及缺失完成证据均拒绝。
+    pub fn owns_completed_inquiry(
+        &self,
+        actor_id: &str,
+        inquiry_id: &str,
+        requirement_version: u32,
+        line_ids: &[String],
+    ) -> bool {
+        self.status == WorkItemStatus::Completed
+            && self.completed_by.as_deref() == Some(actor_id)
+            && self
+                .completed_at
+                .is_some_and(|at| u64::try_from(at.unix_secs()).is_ok_and(|at| at >= self.base.created_at))
+            && self.inquiry_responsibility_matches(actor_id, inquiry_id, requirement_version, line_ids)
+    }
+
+    fn inquiry_responsibility_matches(
+        &self,
+        actor_id: &str,
+        inquiry_id: &str,
+        requirement_version: u32,
+        line_ids: &[String],
+    ) -> bool {
         !self.base.is_deleted()
             && self.work_item_type == WorkItemType::SalesInquiryProcessing
             && self.business_object_type == "sales_inquiry"
             && self.business_object_id == inquiry_id
             && self.subject_version == inquiry_subject_version(requirement_version)
-            && self.status == WorkItemStatus::Open
             && self.owner_user_id.as_deref() == Some(actor_id)
             && self.responsibility_key().is_some_and(|key| !key.trim().is_empty())
             && !self.responsibility_scope_ids().is_empty()
@@ -170,5 +202,18 @@ mod tests {
         assert!(!item.owns_inquiry_task("buyer", "inquiry", 2, &lines));
         item.complete_by_domain_command("next", Instant::now()).unwrap();
         assert!(!item.owns_inquiry_task("next", "inquiry", 2, &lines));
+        assert!(item.owns_completed_inquiry("next", "inquiry", 2, &lines));
+        assert!(!item.owns_completed_inquiry("buyer", "inquiry", 2, &lines));
+        assert!(!item.owns_completed_inquiry("next", "other", 2, &lines));
+        assert!(!item.owns_completed_inquiry("next", "inquiry", 3, &lines));
+        assert!(!item.owns_completed_inquiry("next", "inquiry", 2, &["b".into()]));
+        item.status = WorkItemStatus::Closed;
+        assert!(!item.owns_completed_inquiry("next", "inquiry", 2, &lines));
+        item.status = WorkItemStatus::Completed;
+        item.completed_by = Some("other".into());
+        assert!(!item.owns_completed_inquiry("next", "inquiry", 2, &lines));
+        item.completed_by = Some("next".into());
+        item.completed_at = None;
+        assert!(!item.owns_completed_inquiry("next", "inquiry", 2, &lines));
     }
 }

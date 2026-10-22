@@ -61,11 +61,16 @@ export function SalesInquiriesPage({
     const root = procurement ? "/procurement/inquiries" : "/sales/inquiries"
     const prefix = procurement ? "procurement-inquiries" : "sales-inquiries"
     const form = useAppForm({
-        defaultValues: { q: "", status: "" },
+        defaultValues: { q: "", status: "", taskStatus: "" },
         onSubmit: ({ value, formApi }) => {
             setQuery({
                 q: value.q.trim() || undefined,
                 status: value.status || undefined,
+                task_status:
+                    value.taskStatus === "open" ||
+                    value.taskStatus === "completed"
+                        ? value.taskStatus
+                        : undefined,
                 page: 1,
                 page_size: 20,
             })
@@ -143,6 +148,25 @@ export function SalesInquiriesPage({
             cell: ({ row }) => inquiryDate(row.original.deadline_at),
         },
     ]
+    if (procurement)
+        columns.splice(3, 0, {
+            id: "task_status",
+            header: "我的处理进度",
+            meta: { label: "我的处理进度", width: "status" },
+            cell: ({ row }) => {
+                const pending =
+                    "work_items" in row.original &&
+                    row.original.work_items.some(
+                        (task) => task.status === "OPEN",
+                    )
+                return (
+                    <StatusBadge
+                        label={pending ? "待我处理" : "已处理"}
+                        tone={pending ? "info" : "success"}
+                    />
+                )
+            },
+        })
     if (!procurement)
         columns.splice(
             3,
@@ -203,7 +227,7 @@ export function SalesInquiriesPage({
                 title={procurement ? "采购询价" : "销售询价"}
                 description={
                     procurement
-                        ? "按责任需求处理供给结果与额外成本。"
+                        ? "处理本人询价需求，查看已发布的反馈记录。"
                         : "维护客户需求，跟进采购反馈并按已接受结果开单。"
                 }
             >
@@ -280,6 +304,32 @@ export function SalesInquiriesPage({
                                 </div>
                             )}
                         />
+                        {procurement && (
+                            <form.Field
+                                name="taskStatus"
+                                children={(field) => (
+                                    <OptionCombobox
+                                        id={`${prefix}-task-status`}
+                                        aria-label="我的处理进度"
+                                        placeholder="全部处理进度"
+                                        value={field.state.value || undefined}
+                                        options={[
+                                            {
+                                                value: "open",
+                                                label: "待我处理",
+                                            },
+                                            {
+                                                value: "completed",
+                                                label: "已处理",
+                                            },
+                                        ]}
+                                        onValueChange={(value) =>
+                                            field.handleChange(value ?? "")
+                                        }
+                                    />
+                                )}
+                            />
+                        )}
                         <form.Field
                             name="status"
                             children={(field) => (
@@ -318,7 +368,11 @@ export function SalesInquiriesPage({
                             type="button"
                             variant="ghost"
                             onClick={() => {
-                                form.reset({ q: "", status: "" })
+                                form.reset({
+                                    q: "",
+                                    status: "",
+                                    taskStatus: "",
+                                })
                                 setQuery({ page: 1, page_size: 20 })
                             }}
                         >
@@ -354,7 +408,7 @@ export function SalesInquiriesPage({
                         emptyTitle="当前没有询价"
                         emptyDescription={
                             procurement
-                                ? "有新的责任需求后会显示在这里。"
+                                ? "没有符合当前筛选条件的询价，可调整处理进度或状态筛选。"
                                 : "导入客户选品文件创建草稿，或新建询价后手动添加商品。"
                         }
                         errorState={

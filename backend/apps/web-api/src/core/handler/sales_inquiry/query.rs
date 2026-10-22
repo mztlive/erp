@@ -156,6 +156,14 @@ pub async fn sales_template_products(
 mod tests {
     use super::*;
     #[test]
+    fn procurement_list_accepts_only_known_task_filters() {
+        for value in [r#"{}"#, r#"{"task_status":"open"}"#, r#"{"task_status":"completed"}"#] {
+            assert!(serde_json::from_str::<InquiryListParams>(value).is_ok());
+        }
+        assert!(serde_json::from_str::<InquiryListParams>(r#"{"task_status":"closed"}"#).is_err());
+        assert!(serde_json::from_str::<InquiryListParams>(r#"{"owner_user_id":"other"}"#).is_err());
+    }
+    #[test]
     fn sales_and_internal_quote_routes_use_independent_permissions() {
         assert_eq!(sales_detail_permission_key().to_string(), "sales_inquiry:detail");
         assert_eq!(procurement_detail_permission_key().to_string(), "procurement_inquiry:detail");

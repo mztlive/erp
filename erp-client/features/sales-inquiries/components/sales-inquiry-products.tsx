@@ -17,12 +17,14 @@ export function SalesInquiryProducts({
     chosenRound,
     onRoundChange,
     demand,
+    revision,
     footer,
 }: {
     inquiry: SalesInquiry
     chosenRound: number | null
     onRoundChange: (round: number | null) => void
     demand: ReactNode
+    revision?: ReactNode
     footer: ReactNode
 }) {
     const editing = ["draft", "awaiting_sales_supplement"].includes(
@@ -55,6 +57,7 @@ export function SalesInquiryProducts({
         inquiry.acceptances.some(
             (item) => item.feedback_round === feedback.round,
         )
+    if (revision) return revision
     return (
         <div className="flex h-full min-h-0 min-w-0 flex-col gap-3">
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">

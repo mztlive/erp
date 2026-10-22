@@ -1140,3 +1140,66 @@ fn whole_order_fee_uses_earliest_quote_after_combining_buyers() {
     data.refresh_fee_validity();
     assert_eq!(data.fees[0].valid_until, later());
 }
+
+#[test]
+fn completed_procurement_view_keeps_task_snapshot_and_excludes_later_rounds() {
+    let mut inquiry = accepted();
+    let mut later_feedback = inquiry.feedbacks[0].clone();
+    later_feedback.round = 2;
+    later_feedback.published_at = later();
+    later_feedback.data.lines[0].public_note = "后续报价".into();
+    inquiry.feedbacks.push(later_feedback);
+    inquiry.draft.lines[0].product_name = "后续需求".into();
+    let lines = vec!["line".into()];
+    let view =
+        InquiryProcurementView::from_completed_task(&inquiry, &lines, "buyer", 1, now(), now()).unwrap();
+    assert_eq!(view.draft.lines[0].product_name, "测试商品");
+    assert_eq!(view.feedbacks.len(), 1);
+    assert_eq!(view.feedback_round, 1);
+    assert_eq!(view.requirements.len(), 1);
+    assert!(view.feedback_work.is_empty());
+    assert!(view.fee_allocations.is_empty());
+    assert!(view.fee_ledger.is_empty());
+    assert!(view.fee_statuses.is_empty());
+    let json = serde_json::to_value(view).unwrap();
+    assert!(json["draft"]["lines"][0].get("sales_reference_price_gross").is_none());
+    assert!(
+        InquiryProcurementView::from_completed_task(&inquiry, &lines, "buyer", 2, now(), now()).is_none()
+    );
+    assert!(
+        InquiryProcurementView::from_completed_task(&inquiry, &lines, "buyer", 1, later(), now()).is_none()
+    );
+    let empty = InquiryProcurementView::from_completed_task(&inquiry, &[], "buyer", 1, now(), now()).unwrap();
+    assert!(empty.draft.lines.is_empty());
+    assert!(empty.feedbacks[0].data.lines.is_empty());
+    assert!(empty.feedbacks[0].data.fees.is_empty());
+}
+
+#[test]
+fn completed_procurement_shared_fees_require_own_frozen_work() {
+    let mut inquiry = accepted();
+    let mut other_line = inquiry.requirements[0].data.lines[0].clone();
+    other_line.line_id = "other".into();
+    inquiry.requirements[0].data.lines.push(other_line);
+    inquiry.feedbacks[0].data.fees[0].line_ids.clear();
+    inquiry.feedback_work.push(InquiryFeedbackWork {
+        requirement_version: 1,
+        actor_id: "buyer".into(),
+        line_ids: vec!["line".into()],
+        data: inquiry.feedbacks[0].data.clone(),
+        saved_at: now(),
+        frozen: true,
+    });
+    let lines = vec!["line".into()];
+    let view =
+        InquiryProcurementView::from_completed_task(&inquiry, &lines, "buyer", 1, now(), now()).unwrap();
+    assert_eq!(view.feedbacks[0].data.fees.len(), 1);
+    assert_eq!(view.draft.lines.len(), 1);
+    let other =
+        InquiryProcurementView::from_completed_task(&inquiry, &lines, "another", 1, now(), now()).unwrap();
+    assert!(other.feedbacks[0].data.fees.is_empty());
+    inquiry.feedback_work[0].saved_at = later();
+    let later_work =
+        InquiryProcurementView::from_completed_task(&inquiry, &lines, "buyer", 1, now(), now()).unwrap();
+    assert!(later_work.feedbacks[0].data.fees.is_empty());
+}

@@ -170,7 +170,7 @@ export function InquiryDeliveryAddressList({
                                     <TableHead className="w-24 text-right">
                                         数量
                                     </TableHead>
-                                    <TableHead className="w-28 text-right">
+                                    <TableHead className="w-56 text-right">
                                         操作
                                     </TableHead>
                                 </TableRow>
@@ -274,7 +274,7 @@ export function InquiryDeliveryAddressList({
                                                         {
                                                             id: `${rowPrefix}-edit`,
                                                             label: frozen
-                                                                ? "调数量"
+                                                                ? "调整数量"
                                                                 : "编辑",
                                                             icon: PencilIcon,
                                                             disabled,
@@ -295,7 +295,7 @@ export function InquiryDeliveryAddressList({
                                                                 occupied
                                                                     ? "已有销售占用，不可替换地址"
                                                                     : undefined,
-                                                            placement: "menu",
+                                                            placement: "inline",
                                                             onClick: () =>
                                                                 onEdit(
                                                                     allocation,

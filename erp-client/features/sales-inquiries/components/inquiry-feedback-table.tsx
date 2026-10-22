@@ -37,6 +37,7 @@ import {
     type InquiryLine,
     type InquiryPrice,
 } from "../types"
+import { InquiryFeedbackDemand } from "./inquiry-feedback-demand"
 import { InquiryProductImage } from "./inquiry-product-image"
 import { InquiryFeedbackLineIssues } from "./inquiry-feedback-line-issues"
 import { InquiryTaxRateInput } from "./inquiry-tax-rate-input"
@@ -186,7 +187,7 @@ export function InquiryFeedbackTable({
                     </p>
                 )}
                 <div className="overflow-hidden rounded-lg border">
-                    <Table className="min-w-[1360px] table-fixed">
+                    <Table className="min-w-[1232px] table-fixed">
                         <TableHeader className="sticky top-0 z-10 bg-muted">
                             <TableRow>
                                 <TableHead className="w-12">
@@ -229,7 +230,6 @@ export function InquiryFeedbackTable({
                                 <TableHead className="w-44">
                                     报价有效至
                                 </TableHead>
-                                <TableHead className="w-32">交付日期</TableHead>
                                 <TableHead className="w-40 text-right">
                                     操作
                                 </TableHead>
@@ -239,7 +239,7 @@ export function InquiryFeedbackTable({
                             {rows.length === 0 && (
                                 <TableRow>
                                     <TableCell
-                                        colSpan={9}
+                                        colSpan={8}
                                         className="py-12 text-center text-muted-foreground"
                                     >
                                         暂无商品需求
@@ -482,15 +482,13 @@ export function InquiryFeedbackTable({
                                                     />
                                                 )}
                                             </TableCell>
-                                            <TableCell>
-                                                {unavailable
-                                                    ? "—"
-                                                    : inquiryDateInput(
-                                                          line.delivery_due_at,
-                                                      )}
-                                            </TableCell>
                                             <TableCell className="text-right">
                                                 <div className="flex flex-wrap items-center justify-end gap-1">
+                                                    <InquiryFeedbackDemand
+                                                        line={line}
+                                                        unit={unit}
+                                                        idPrefix={prefix}
+                                                    />
                                                     {onInternalQuote && (
                                                         <Button
                                                             id={`${prefix}-internal-quotes`}
@@ -519,7 +517,7 @@ export function InquiryFeedbackTable({
                                                 issues.length > 0)) && (
                                             <TableRow>
                                                 <TableCell
-                                                    colSpan={9}
+                                                    colSpan={8}
                                                     className="whitespace-normal bg-muted/20 px-4 py-2"
                                                 >
                                                     <InquiryFeedbackLineIssues

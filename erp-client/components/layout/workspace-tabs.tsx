@@ -30,6 +30,7 @@ export type WorkspaceTab = WorkspaceFrameState & {
     src: string
     ready: boolean
     instance: number
+    openerId?: string
 }
 
 let nextInstance = 0
@@ -103,7 +104,10 @@ export function WorkspaceTabs({
             const existing = current.tabs.find(
                 (tab) => tab.key === workspaceTabKey(url),
             )
-            const target = existing ?? newTab(url)
+            const target = existing ?? {
+                ...newTab(url),
+                openerId: origin?.id ?? current.active,
+            }
             let next = existing ? current.tabs : [...current.tabs, target]
             if (replace && source) {
                 const previous = sourceTab(source)
@@ -131,11 +135,20 @@ export function WorkspaceTabs({
             } else select(target, replace || fromHistory)
         }
         window.erpWorkspaceHost = {
-            closeCurrent: (source) => {
+            closeCurrent: (source, fallbackHref) => {
                 const current = snapshot.current
-                if (source && sourceTab(source)?.id !== current.active) return
-                if (current.pendingClose.length > 0) return
-                closeRequest.current([current.active])
+                const target = source ? sourceTab(source)?.id : current.active
+                if (!target || current.pendingClose.length > 0) return
+                const tab = current.tabs.find((item) => item.id === target)
+                if (
+                    source &&
+                    fallbackHref &&
+                    !current.tabs.some((item) => item.id === tab?.openerId)
+                ) {
+                    navigate(source, fallbackHref, true)
+                    return
+                }
+                closeRequest.current([target])
             },
             navigate,
             deliver: (source, request) => {
@@ -256,15 +269,19 @@ export function WorkspaceTabs({
         snapshot.current.tabs = next
         setTabs(next)
         if (ids.includes(current.active)) {
+            const openerId = current.tabs.find(
+                (tab) => tab.id === current.active,
+            )?.openerId
             select(
-                next[
-                    Math.min(
-                        current.tabs.findIndex(
-                            (tab) => tab.id === current.active,
-                        ),
-                        next.length - 1,
-                    )
-                ],
+                next.find((tab) => tab.id === openerId) ??
+                    next[
+                        Math.min(
+                            current.tabs.findIndex(
+                                (tab) => tab.id === current.active,
+                            ),
+                            next.length - 1,
+                        )
+                    ],
                 true,
             )
             requestAnimationFrame(() => {

@@ -8,7 +8,7 @@ use erp_identity::service::access_control::resolve::{AuthorizedDataScope, DataSc
 use erp_identity::{AccessControlExt, Permission, SharedRbacService};
 use erp_sales::entity::sales_inquiry::SalesInquiry;
 use erp_sales::service::sales_inquiry::SalesInquiryService;
-use erp_workflow::entity::work_item::WorkItem;
+use erp_workflow::entity::work_item::{WorkItem, WorkItemStatus, inquiry_subject_version};
 use erp_workflow::repository::{WorkItemExt, WorkItemRepositoryExt};
 use mongodb::Database;
 use persistence_core::Executor;
@@ -176,6 +176,42 @@ impl SalesInquiryAccess {
             return Err(Error::ConflictError("询价任务责任或版本已变化，请刷新".into()));
         }
         Ok((inquiry, item))
+    }
+
+    /// 读取当前责任任务或本人已完成任务；完成任务只能交给历史投影使用。
+    /// # 参数
+    /// `actor`、`action` 为读取动作，`id`、`task_id` 为精确对象身份。
+    /// # 返回
+    /// 已核验的询价与任务；写动作及内部资料仍须使用 `require_task`。
+    /// # 错误
+    /// 非读取动作、非本人完成、关闭、改派、快照缺失或权限失效时拒绝。
+    pub async fn require_read_task(
+        &self,
+        actor: &AuditActor,
+        action: &str,
+        id: &str,
+        task_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<(SalesInquiry, WorkItem)> {
+        if !matches!(action, "list" | "detail") {
+            return Err(task_missing());
+        }
+        self.ensure_procurement_permission(actor, action, executor).await?;
+        let task = self.db.work_items().find_work_item(task_id, executor).await?.ok_or_else(task_missing)?;
+        if task.status == WorkItemStatus::Open {
+            return self.require_task(actor, action, id, task_id, None, executor).await;
+        }
+        let inquiry = SalesInquiryService::new(self.db.clone()).require(id, executor).await?;
+        let requirement = inquiry
+            .requirements
+            .iter()
+            .find(|row| task.subject_version == inquiry_subject_version(row.version))
+            .ok_or_else(task_missing)?;
+        let lines = requirement.data.lines.iter().map(|line| line.line_id.clone()).collect::<Vec<_>>();
+        if !task.owns_completed_inquiry(actor.id(), id, requirement.version, &lines) {
+            return Err(task_missing());
+        }
+        Ok((inquiry, task))
     }
 
     /// 重新证明目标采购账号、组织与全部询价处理权限。

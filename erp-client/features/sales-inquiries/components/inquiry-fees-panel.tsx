@@ -135,7 +135,8 @@ function feeUnavailable(
             status.fee_id === fee.fee_id && status.feedback_round === round,
     )
     if (!status) return "费用办理资格尚未核对，请刷新后重试"
-    if (status.unavailable_reason) return status.unavailable_reason
+    if (status.unavailable_reason)
+        return status.unavailable_reason.replace(/^业务逻辑错误[:：]\s*/, "")
     if (fee.valid_until <= Math.floor(Date.now() / 1000))
         return "费用结果已过期，请重新询价"
     return undefined
@@ -173,12 +174,14 @@ export function InquiryFeesPanel({
     permissions,
     procurement = false,
     onChanged,
+    showHeading = true,
 }: {
     inquiry: FeeInquiry
     userId: string
     permissions: readonly string[]
     procurement?: boolean
     onChanged?: () => void
+    showHeading?: boolean
 }) {
     const storageKey = inquiryStorageKey(
         userId,
@@ -199,6 +202,7 @@ export function InquiryFeesPanel({
             permissions={permissions}
             procurement={procurement}
             onChanged={onChanged}
+            showHeading={showHeading}
             storageKey={storageKey}
             initial={initial}
         />
@@ -213,6 +217,7 @@ function InquiryFeesContent({
     permissions,
     procurement,
     onChanged,
+    showHeading,
     storageKey,
     initial,
 }: {
@@ -221,6 +226,7 @@ function InquiryFeesContent({
     permissions: readonly string[]
     procurement: boolean
     onChanged?: () => void
+    showHeading: boolean
     storageKey: string
     initial: FeeDraft
 }) {
@@ -529,26 +535,28 @@ function InquiryFeesContent({
 
     return (
         <section className="space-y-5" aria-label="询价费用归属与办理">
-            <div>
-                <h2 className="text-lg font-semibold">费用与办理</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                    先按金额明确费用归属，再由采购办理。暂估费用仅供定价参考；收款对象和付款条件不同的费用分别建单。
-                </p>
-                {round > 0 && (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                        费用依据：第 {round} 轮
-                        {acceptedRound != null
-                            ? "已接受反馈。"
-                            : procurement
-                              ? "反馈，办理资格以各项费用为准。"
-                              : "反馈（尚未接受，仅供查看）。"}
-                        {acceptedRound != null &&
-                        inquiry.feedback_round > acceptedRound
-                            ? "新反馈尚未接受，继续按已接受结果办理未受影响的费用；暂停办理的费用会显示具体原因。"
-                            : ""}
+            {showHeading && (
+                <div>
+                    <h2 className="text-lg font-semibold">费用与办理</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                        先按金额明确费用归属，再由采购办理。暂估费用仅供定价参考；收款对象和付款条件不同的费用分别建单。
                     </p>
-                )}
-            </div>
+                    {round > 0 && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            费用依据：第 {round} 轮
+                            {acceptedRound != null
+                                ? "已接受反馈。"
+                                : procurement
+                                  ? "反馈，办理资格以各项费用为准。"
+                                  : "反馈（尚未接受，仅供查看）。"}
+                            {acceptedRound != null &&
+                            inquiry.feedback_round > acceptedRound
+                                ? "新反馈尚未接受，继续按已接受结果办理未受影响的费用；暂停办理的费用会显示具体原因。"
+                                : ""}
+                        </p>
+                    )}
+                </div>
+            )}
             {!summaries.length ? (
                 <p className="text-sm text-muted-foreground">
                     暂无可展示的费用结果。采购发布额外费用后，可在此查看分摊与办理进度。

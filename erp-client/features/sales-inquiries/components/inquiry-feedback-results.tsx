@@ -1,6 +1,11 @@
 "use client"
 
-import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
+import {
+    BusinessFailureState,
+    MoneyValue,
+    QuantityValue,
+    RateValue,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
@@ -14,6 +19,9 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import { multiplyFixed } from "@/lib/fixed-decimal"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+import { useInquirySkuDetailsQuery } from "../hooks/queries"
+import { InquiryFeedbackDemand } from "./inquiry-feedback-demand"
 import { inquiryDate } from "../lib/format"
 import {
     INQUIRY_CONCLUSION_LABEL,
@@ -42,15 +50,20 @@ export function InquiryFeedbackResults({
     )
     const feedback =
         rounds.find((item) => item.round === selectedRound) ?? rounds[0]
+    const requirement = inquiry.requirements.find(
+        (item) => item.version === feedback?.requirement_version,
+    )?.data
+    const sku = useInquirySkuDetailsQuery(
+        content === "fees"
+            ? []
+            : (requirement?.lines.map((line) => line.sku_id) ?? []),
+    )
     if (!feedback)
         return (
             <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
                 采购尚未发布反馈。发布后可查看商品报价及当轮费用。
             </p>
         )
-    const requirement = inquiry.requirements.find(
-        (item) => item.version === feedback.requirement_version,
-    )?.data
     const accepted =
         "acceptances" in inquiry &&
         inquiry.acceptances.some(
@@ -121,6 +134,14 @@ export function InquiryFeedbackResults({
                             本轮需求快照暂不可用，需求数量及地址不以当前草稿替代。
                         </p>
                     )}
+                    {sku.error && (
+                        <BusinessFailureState
+                            id={`${idPrefix}-feedback-sku-retry`}
+                            title="商品单位资料读取失败"
+                            error={sku.error}
+                            onRetry={() => void sku.refetch()}
+                        />
+                    )}
                     <div className="overflow-hidden rounded-lg border">
                         <Table className="min-w-[1120px]">
                             <TableHeader>
@@ -136,8 +157,10 @@ export function InquiryFeedbackResults({
                                         含税供给单价
                                     </TableHead>
                                     <TableHead>税率</TableHead>
-                                    <TableHead>交付日期</TableHead>
                                     <TableHead>有效期</TableHead>
+                                    <TableHead className="text-right">
+                                        操作
+                                    </TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -145,6 +168,9 @@ export function InquiryFeedbackResults({
                                     <FeedbackRows
                                         key={result.line_id}
                                         result={result}
+                                        idPrefix={`${idPrefix}-feedback-${feedback.round}-line-${toAutomationIdSegment(result.line_id)}`}
+                                        units={sku.units}
+                                        unitsPending={sku.isPending}
                                         line={requirement?.lines.find(
                                             (line) =>
                                                 line.line_id === result.line_id,
@@ -164,10 +190,20 @@ export function InquiryFeedbackResults({
 function FeedbackRows({
     result,
     line,
+    idPrefix,
+    units,
+    unitsPending,
 }: {
     result: InquiryFeedbackLine
     line?: InquiryLine
+    idPrefix: string
+    units: Map<string, string>
+    unitsPending: boolean
 }) {
+    const unit = line
+        ? (units.get(line.unit_code) ??
+          (unitsPending ? "单位加载中" : "单位未匹配"))
+        : ""
     const prices = result.prices.length ? result.prices : [null]
     return (
         <>
@@ -185,6 +221,13 @@ function FeedbackRows({
                                 {line && (
                                     <p className="mt-1 text-xs text-muted-foreground">
                                         SKU {line.sku_code}
+                                        {line.specification
+                                            ? ` · ${line.specification}`
+                                            : ""}
+                                        <span className="mt-1 block">
+                                            要求{" "}
+                                            {inquiryDate(line.delivery_due_at)}
+                                        </span>
                                     </p>
                                 )}
                                 <div className="mt-2">
@@ -216,7 +259,7 @@ function FeedbackRows({
                             >
                                 {line ? (
                                     <QuantityValue
-                                        unit=""
+                                        unit={unit}
                                         value={line.quantity}
                                     />
                                 ) : (
@@ -228,7 +271,7 @@ function FeedbackRows({
                                 className="text-right align-top py-4"
                             >
                                 <QuantityValue
-                                    unit=""
+                                    unit={unit}
                                     value={result.available_quantity}
                                 />
                             </TableCell>
@@ -258,13 +301,24 @@ function FeedbackRows({
                         )}
                     </TableCell>
                     <TableCell className="align-top py-4">
-                        {price && line
-                            ? inquiryDate(line.delivery_due_at)
-                            : "—"}
-                    </TableCell>
-                    <TableCell className="align-top py-4">
                         {price ? inquiryDate(price.valid_until) : "—"}
                     </TableCell>
+                    {index === 0 && (
+                        <TableCell
+                            rowSpan={prices.length}
+                            className="text-right align-top py-4"
+                        >
+                            {line ? (
+                                <InquiryFeedbackDemand
+                                    line={line}
+                                    unit={unit}
+                                    idPrefix={idPrefix}
+                                />
+                            ) : (
+                                "需求快照不可用"
+                            )}
+                        </TableCell>
+                    )}
                 </TableRow>
             ))}
         </>
