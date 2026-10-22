@@ -209,8 +209,6 @@ fn quote_usage<L: InquiryPurchaseLine>(
         addresses,
         expected_delivery_date: line.delivery_date().ok_or_else(changed)?,
         on_date: BusinessDate::today(),
-        // 只确认本次采购；尚无独立累计承诺事实时，不把整条销售数量当作同一供应商承诺。
-        committed_quantity: quantity,
         consumed_quantity: Quantity::try_from(Decimal::ZERO)?,
     })
 }

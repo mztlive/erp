@@ -25,11 +25,10 @@ const HEADERS = [
     "承诺交付日",
     "运费（元）",
     "报价有效期至",
-    "付款条件",
     "报价备注",
 ]
 const WIDTHS = [
-    14, 28, 24, 19, 22, 10, 15, 16, 30, 24, 18, 13, 15, 16, 16, 18, 22, 30,
+    14, 28, 24, 19, 22, 10, 15, 16, 30, 24, 18, 13, 15, 16, 16, 18, 30,
 ]
 const ARCHIVE_MAX_BYTES = 50 * 1024 * 1024
 
@@ -177,7 +176,7 @@ export async function buildSupplierQuoteWorkbook(
                         ? `${line.regions.length} 个地区，${addresses} 个地址；详见配送需求`
                         : "按交付要求"
                 }`,
-                ...Array.from({ length: 8 }, () => null),
+                ...Array.from({ length: 7 }, () => null),
             ],
             66,
             11,

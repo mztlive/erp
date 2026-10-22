@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useStore } from "@tanstack/react-form"
 import { InquiryFeedbackTable } from "./inquiry-feedback-table"
-import { feedbackIssues } from "../lib/feedback-editing"
+import { feedbackIssues, feedbackRequestData } from "../lib/feedback-editing"
 import { InquiryFeedbackResults } from "./inquiry-feedback-results"
 import { MoneyValue } from "@/components/business"
 import { useAppForm } from "@/components/form"
@@ -229,7 +229,7 @@ function FeedbackEditorContent({
                         expected_version: version.current,
                         task_id: task.id,
                         task_version: taskVersion.current,
-                        data: value,
+                        data: feedbackRequestData(value),
                     },
                     "PUT",
                 )
@@ -308,7 +308,7 @@ function FeedbackEditorContent({
         if (resolved?.path === `${inquiryPath(true, inquiry.id)}/feedback`) {
             // 恢复原命令后，只有当前输入与实际提交内容一致才算已保存。
             const unchanged =
-                JSON.stringify(form.state.values) ===
+                JSON.stringify(feedbackRequestData(form.state.values)) ===
                 JSON.stringify(resolved.body.data)
             onDirtyChange(!unchanged)
             setSaved(unchanged)
@@ -339,7 +339,7 @@ function FeedbackEditorContent({
         >
             <fieldset disabled={command.isPending} className="contents">
                 <p className="text-sm text-muted-foreground">
-                    直接填写商品报价，展开明细维护有效期与配送数量。保存进度后，发布给销售。
+                    统一设置税率和报价有效期后，逐项确认能否供货、填写含税单价。数量与交期沿用需求，有差异时再调整。
                 </p>
                 {conflict && (
                     <Alert variant="warning">

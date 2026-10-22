@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/table"
 import { OptionCombobox } from "@/components/business/option-combobox"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { inquiryDateInput, inquiryDateSeconds } from "../lib/format"
+import { inquiryDateInput } from "../lib/format"
 import { useInquirySkuDetailsQuery } from "../hooks/queries"
 import {
     feedbackIssues,
@@ -28,6 +28,8 @@ import {
     changeFeedbackQuantity,
     newFeedbackPrice,
     feedbackFieldTarget,
+    feedbackCommonTerms,
+    applyFeedbackTerms,
 } from "../lib/feedback-editing"
 import {
     INQUIRY_CONCLUSION_LABEL,
@@ -37,12 +39,8 @@ import {
 } from "../types"
 import { InquiryProductImage } from "./inquiry-product-image"
 import { InquiryFeedbackLineIssues } from "./inquiry-feedback-line-issues"
-import { InquiryFeedbackInlinePrice } from "./inquiry-feedback-inline-price"
+import { InquiryFeedbackCommonTerms } from "./inquiry-feedback-common-terms"
 import { InquiryFeedbackPriceDetails } from "./inquiry-feedback-price-details"
-import {
-    InquiryFeedbackBatch,
-    type FeedbackBatchValues,
-} from "./inquiry-feedback-batch"
 
 export function InquiryFeedbackTable({
     lines,
@@ -59,6 +57,12 @@ export function InquiryFeedbackTable({
     onInternalQuote?: (lineId: string) => void
     disabled: boolean
 }) {
+    const common = feedbackCommonTerms(lines)
+    const defaultTerms = {
+        tax_rate:
+            common.tax_rate === "" ? null : (common.tax_rate ?? undefined),
+        valid_until: common.valid_until ?? undefined,
+    }
     const sku = useInquirySkuDetailsQuery(demand.map((line) => line.sku_id))
     const [filter, setFilter] = React.useState("all")
     const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set())
@@ -89,14 +93,33 @@ export function InquiryFeedbackTable({
     const openLine = (id: string) =>
         setExpanded((current) => new Set(current).add(id))
     const focusIssue = (value: InquiryFeedbackLine, field: string) => {
+        const commonId =
+            field.endsWith("-valid-until") && common.valid_until !== null
+                ? "procurement-feedback-common-valid"
+                : field.endsWith("-tax-rate") && common.tax_rate !== null
+                  ? "procurement-feedback-common-tax"
+                  : undefined
         const target = feedbackFieldTarget(value, field)
         setActiveLineId(value.line_id)
-        if (target.expand) openLine(value.line_id)
+        if (target.expand && !commonId) openLine(value.line_id)
         const prefix = `procurement-inquiry-line-${toAutomationIdSegment(value.line_id)}`
         return requestAnimationFrame(() => {
             const element =
-                document.getElementById(`${prefix}-${target.field}`) ??
-                document.getElementById(`${prefix}-details`)
+                document.getElementById(
+                    commonId ?? `${prefix}-${target.field}`,
+                ) ?? document.getElementById(`${prefix}-details`)
+            if (target.field === "details")
+                document
+                    .getElementById(`${prefix}-details-panel`)
+                    ?.querySelectorAll("details")
+                    .forEach((detail) => {
+                        detail.open = true
+                    })
+            let parent = element?.parentElement
+            while (parent) {
+                if (parent instanceof HTMLDetailsElement) parent.open = true
+                parent = parent.parentElement
+            }
             element?.scrollIntoView({ block: "center" })
             element?.focus()
         })
@@ -111,67 +134,41 @@ export function InquiryFeedbackTable({
         // 仅发布校验触发定位；输入时不抢焦点。
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [validationRequest])
-    const batch = (values: FeedbackBatchValues) => {
+    const markSelectedAvailable = () => {
         let changed = 0
-        const nextLines = lines.map((original) => {
-            const line = demand.find(
-                (item) => item.line_id === original.line_id,
-            )
-            if (!selected.has(original.line_id) || !line) return original
-            let next = original
+        const nextLines = lines.map((value) => {
+            const line = demand.find((item) => item.line_id === value.line_id)
             if (
-                values.available &&
-                (values.overwrite || original.conclusion === "pending")
+                !selected.has(value.line_id) ||
+                value.conclusion !== "pending" ||
+                !line
             )
-                next = changeFeedbackConclusion(next, line, "available")
-            if (
-                next.conclusion !== "unavailable" &&
-                !next.prices.length &&
-                (values.due || values.valid || values.tax.trim())
+                return value
+            changed++
+            return changeFeedbackConclusion(
+                value,
+                line,
+                "available",
+                defaultTerms,
             )
-                next = {
-                    ...next,
-                    prices: [newFeedbackPrice(line, next.available_quantity)],
-                }
-            if (next.conclusion !== "unavailable")
-                next = {
-                    ...next,
-                    prices: next.prices.map((price) => ({
-                        ...price,
-                        delivery_due_at:
-                            values.due &&
-                            (values.overwrite ||
-                                !original.prices.length ||
-                                !price.delivery_due_at)
-                                ? inquiryDateSeconds(values.due)
-                                : price.delivery_due_at,
-                        valid_until:
-                            values.valid &&
-                            (values.overwrite || !price.valid_until)
-                                ? inquiryDateSeconds(values.valid)
-                                : price.valid_until,
-                        tax_rate:
-                            values.tax.trim() &&
-                            (values.overwrite ||
-                                !original.prices.length ||
-                                !price.tax_rate)
-                                ? values.tax.trim()
-                                : price.tax_rate,
-                    })),
-                }
-            if (JSON.stringify(original) !== JSON.stringify(next)) changed++
-            return next
         })
         if (changed > 0) onChange(nextLines)
         setBatchMessage(
             changed > 0
-                ? `已更新 ${changed} 件商品，请保存处理进度。`
-                : "未修改任何商品。已有填写内容已保留，需要替换时请勾选覆盖。",
+                ? `已将 ${changed} 件待确认商品设为可供，可供数量等于需求，请核对单价后保存。`
+                : "所选商品已有供给结论，已保留原内容。",
         )
     }
     return (
         <TableToolbarScope>
             <section className="min-w-0 space-y-3" aria-label="采购商品反馈">
+                <InquiryFeedbackCommonTerms
+                    lines={lines}
+                    disabled={disabled}
+                    onChange={(patch) =>
+                        onChange(applyFeedbackTerms(lines, demand, patch))
+                    }
+                />
                 <div
                     className="flex flex-wrap items-center gap-2"
                     aria-label="反馈筛选"
@@ -208,16 +205,20 @@ export function InquiryFeedbackTable({
                 )}
                 <TableToolbar
                     actions={
-                        <InquiryFeedbackBatch
-                            count={selected.size}
-                            disabled={disabled}
-                            onApply={batch}
-                        />
+                        <Button
+                            id="procurement-feedback-batch-available"
+                            type="button"
+                            variant="outline"
+                            disabled={disabled || selected.size === 0}
+                            onClick={markSelectedAvailable}
+                        >
+                            待确认项设为可供
+                        </Button>
                     }
                 >
                     {selected.size === 0 && (
                         <span className="text-xs text-muted-foreground">
-                            勾选商品可统一设置税率、报价有效期与交期
+                            勾选商品可批量设为可供
                         </span>
                     )}
                     {selected.size > 0 && (
@@ -241,7 +242,7 @@ export function InquiryFeedbackTable({
                     </p>
                 )}
                 <div className="overflow-hidden rounded-lg border [&>[data-slot=table-container]]:max-h-[60vh]">
-                    <Table className="min-w-[1220px] table-fixed">
+                    <Table className="min-w-[1160px] table-fixed">
                         <TableHeader className="sticky top-0 z-10 bg-muted">
                             <TableRow>
                                 <TableHead className="w-12">
@@ -279,16 +280,11 @@ export function InquiryFeedbackTable({
                                     需求数量
                                 </TableHead>
                                 <TableHead className="w-36">供给结论</TableHead>
-                                <TableHead className="w-28 text-right">
-                                    可供数量
-                                </TableHead>
                                 <TableHead className="w-40 text-right">
-                                    含税供给单价 / 税率
+                                    含税供给单价
                                 </TableHead>
-                                <TableHead className="w-44">
-                                    交期 / 报价有效期
-                                </TableHead>
-                                <TableHead className="w-32 text-right">
+                                <TableHead className="w-44">交付日期</TableHead>
+                                <TableHead className="w-56 text-right">
                                     操作
                                 </TableHead>
                             </TableRow>
@@ -297,7 +293,7 @@ export function InquiryFeedbackTable({
                             {visible.length === 0 && (
                                 <TableRow>
                                     <TableCell
-                                        colSpan={8}
+                                        colSpan={7}
                                         className="py-12 text-center text-muted-foreground"
                                     >
                                         当前筛选下没有商品
@@ -314,19 +310,19 @@ export function InquiryFeedbackTable({
                                 const unavailable =
                                     value.conclusion === "unavailable"
                                 const multiple = value.prices.length > 1
+                                const showIssues =
+                                    value.conclusion !== "pending" ||
+                                    validationRequest > 0
                                 const needsReason =
                                     unavailable ||
                                     value.conclusion === "partially_available"
                                 const conditionSummary = multiple
                                     ? `${value.prices.length} 条报价`
-                                    : price && line.allocations.length > 1
-                                      ? `${price.allocations.length} 个配送地址`
-                                      : price &&
-                                          (price.max_quantity ||
-                                              price.min_quantity !== "1" ||
-                                              price.allow_cumulative)
-                                        ? "已设数量条件"
-                                        : ""
+                                    : price &&
+                                        (common.tax_rate === null ||
+                                            common.valid_until === null)
+                                      ? "单独设置报价条件"
+                                      : ""
                                 const updatePrice = (
                                     patch: Partial<InquiryPrice>,
                                 ) => {
@@ -337,6 +333,7 @@ export function InquiryFeedbackTable({
                                             value.conclusion === "pending"
                                                 ? line.quantity
                                                 : value.available_quantity,
+                                            defaultTerms,
                                         )
                                     setLine({
                                         ...value,
@@ -450,6 +447,7 @@ export function InquiryFeedbackTable({
                                                                 value,
                                                                 line,
                                                                 conclusion as typeof value.conclusion,
+                                                                defaultTerms,
                                                             ),
                                                         )
                                                         if (
@@ -463,33 +461,38 @@ export function InquiryFeedbackTable({
                                                             )
                                                     }}
                                                 />
-                                            </TableCell>
-                                            <TableCell>
-                                                {unavailable ? (
-                                                    <span className="block text-right">
-                                                        —
-                                                    </span>
-                                                ) : (
-                                                    <Input
-                                                        id={`${prefix}-available-quantity`}
-                                                        className="text-right tabular-nums"
-                                                        aria-label={`${line.product_name}可供数量`}
-                                                        inputMode="decimal"
-                                                        value={
-                                                            value.available_quantity
-                                                        }
-                                                        onChange={(event) =>
-                                                            setLine(
-                                                                changeFeedbackQuantity(
-                                                                    value,
-                                                                    line,
-                                                                    event.target
-                                                                        .value,
-                                                                ),
-                                                            )
-                                                        }
-                                                    />
-                                                )}
+                                                {(value.conclusion ===
+                                                    "partially_available" ||
+                                                    multiple) &&
+                                                    !unavailable && (
+                                                        <div className="mt-2 flex items-center gap-2">
+                                                            <span className="shrink-0 text-xs text-muted-foreground">
+                                                                可供
+                                                            </span>
+                                                            <Input
+                                                                id={`${prefix}-available-quantity`}
+                                                                className="text-right tabular-nums"
+                                                                aria-label={`${line.product_name}可供数量`}
+                                                                inputMode="decimal"
+                                                                value={
+                                                                    value.available_quantity
+                                                                }
+                                                                onChange={(
+                                                                    event,
+                                                                ) =>
+                                                                    setLine(
+                                                                        changeFeedbackQuantity(
+                                                                            value,
+                                                                            line,
+                                                                            event
+                                                                                .target
+                                                                                .value,
+                                                                        ),
+                                                                    )
+                                                                }
+                                                            />
+                                                        </div>
+                                                    )}
                                             </TableCell>
                                             <TableCell>
                                                 {unavailable ? (
@@ -509,12 +512,24 @@ export function InquiryFeedbackTable({
                                                         条报价
                                                     </Button>
                                                 ) : (
-                                                    <InquiryFeedbackInlinePrice
-                                                        kind="price"
-                                                        prefix={prefix}
-                                                        demand={line}
-                                                        price={price}
-                                                        onChange={updatePrice}
+                                                    <Input
+                                                        id={`${prefix}-gross-price`}
+                                                        className="text-right tabular-nums"
+                                                        aria-label={`${line.product_name}含税供给单价`}
+                                                        inputMode="decimal"
+                                                        placeholder="填写单价"
+                                                        value={
+                                                            price?.unit_price_gross ??
+                                                            ""
+                                                        }
+                                                        onChange={(event) =>
+                                                            updatePrice({
+                                                                unit_price_gross:
+                                                                    event.target
+                                                                        .value ||
+                                                                    null,
+                                                            })
+                                                        }
                                                     />
                                                 )}
                                             </TableCell>
@@ -526,74 +541,97 @@ export function InquiryFeedbackTable({
                                                         按各条报价交付
                                                     </span>
                                                 ) : (
-                                                    <InquiryFeedbackInlinePrice
-                                                        kind="dates"
-                                                        prefix={prefix}
-                                                        demand={line}
-                                                        price={price}
-                                                        onChange={updatePrice}
-                                                    />
+                                                    <div className="text-sm">
+                                                        {inquiryDateInput(
+                                                            price?.delivery_due_at ??
+                                                                line.delivery_due_at,
+                                                        ) || "未设置"}
+                                                        <span className="block text-xs text-muted-foreground">
+                                                            {(price?.delivery_due_at ??
+                                                                line.delivery_due_at) ===
+                                                            line.delivery_due_at
+                                                                ? "按需求交付"
+                                                                : "已调整交期"}
+                                                        </span>
+                                                    </div>
                                                 )}
                                             </TableCell>
                                             <TableCell className="text-right">
-                                                {onInternalQuote && (
-                                                    <Button
-                                                        id={`${prefix}-internal-quotes`}
-                                                        type="button"
-                                                        size="sm"
-                                                        variant="outline"
-                                                        disabled={disabled}
-                                                        onClick={() =>
-                                                            onInternalQuote(
-                                                                line.line_id,
-                                                            )
-                                                        }
-                                                    >
-                                                        供应商报价
-                                                    </Button>
-                                                )}
-                                                {!unavailable && (
-                                                    <Button
-                                                        id={`${prefix}-details`}
-                                                        aria-expanded={isOpen}
-                                                        aria-controls={
-                                                            isOpen
-                                                                ? `${prefix}-details-panel`
-                                                                : undefined
-                                                        }
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() =>
-                                                            setExpanded(
-                                                                (current) => {
-                                                                    const next =
-                                                                        new Set(
-                                                                            current,
+                                                <div className="flex flex-wrap items-center justify-end gap-1">
+                                                    {onInternalQuote && (
+                                                        <Button
+                                                            id={`${prefix}-internal-quotes`}
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            disabled={disabled}
+                                                            onClick={() =>
+                                                                onInternalQuote(
+                                                                    line.line_id,
+                                                                )
+                                                            }
+                                                        >
+                                                            供应商报价
+                                                        </Button>
+                                                    )}
+                                                    {!unavailable && (
+                                                        <Button
+                                                            id={`${prefix}-details`}
+                                                            aria-expanded={
+                                                                isOpen
+                                                            }
+                                                            aria-controls={
+                                                                isOpen
+                                                                    ? `${prefix}-details-panel`
+                                                                    : undefined
+                                                            }
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => {
+                                                                if (
+                                                                    !isOpen &&
+                                                                    !value
+                                                                        .prices
+                                                                        .length
+                                                                )
+                                                                    updatePrice(
+                                                                        {},
+                                                                    )
+                                                                setExpanded(
+                                                                    (
+                                                                        current,
+                                                                    ) => {
+                                                                        const next =
+                                                                            new Set(
+                                                                                current,
+                                                                            )
+                                                                        if (
+                                                                            isOpen
                                                                         )
-                                                                    if (isOpen)
-                                                                        next.delete(
-                                                                            line.line_id,
-                                                                        )
-                                                                    else
-                                                                        next.add(
-                                                                            line.line_id,
-                                                                        )
-                                                                    return next
-                                                                },
-                                                            )
-                                                        }
-                                                    >
-                                                        {isOpen
-                                                            ? "收起条件"
-                                                            : "报价条件"}
-                                                        {isOpen ? (
-                                                            <ChevronUpIcon />
-                                                        ) : (
-                                                            <ChevronDownIcon />
-                                                        )}
-                                                    </Button>
-                                                )}
+                                                                            next.delete(
+                                                                                line.line_id,
+                                                                            )
+                                                                        else
+                                                                            next.add(
+                                                                                line.line_id,
+                                                                            )
+                                                                        return next
+                                                                    },
+                                                                )
+                                                            }}
+                                                        >
+                                                            {isOpen
+                                                                ? "收起"
+                                                                : "调整"}
+                                                            {isOpen ? (
+                                                                <ChevronUpIcon />
+                                                            ) : (
+                                                                <ChevronDownIcon />
+                                                            )}
+                                                        </Button>
+                                                    )}
+                                                </div>
                                                 {conditionSummary &&
                                                     !unavailable && (
                                                         <span className="block whitespace-normal text-xs text-muted-foreground">
@@ -602,7 +640,9 @@ export function InquiryFeedbackTable({
                                                     )}
                                             </TableCell>
                                         </TableRow>
-                                        {(needsReason || issues.length > 0) && (
+                                        {(needsReason ||
+                                            (showIssues &&
+                                                issues.length > 0)) && (
                                             <TableRow
                                                 onFocusCapture={() =>
                                                     setActiveLineId(
@@ -611,13 +651,17 @@ export function InquiryFeedbackTable({
                                                 }
                                             >
                                                 <TableCell
-                                                    colSpan={8}
+                                                    colSpan={7}
                                                     className="whitespace-normal bg-muted/20 px-4 py-2"
                                                 >
                                                     <InquiryFeedbackLineIssues
                                                         prefix={prefix}
                                                         value={value}
-                                                        issues={issues}
+                                                        issues={
+                                                            showIssues
+                                                                ? issues
+                                                                : []
+                                                        }
                                                         onChange={setLine}
                                                         onFocusIssue={(field) =>
                                                             focusIssue(
@@ -632,7 +676,7 @@ export function InquiryFeedbackTable({
                                         {isOpen && !unavailable && (
                                             <TableRow>
                                                 <TableCell
-                                                    colSpan={8}
+                                                    colSpan={7}
                                                     className="whitespace-normal bg-muted/30 p-0"
                                                 >
                                                     <InquiryFeedbackPriceDetails

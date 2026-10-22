@@ -306,14 +306,6 @@ fn procurement_quotes(rbac: &SharedRbacService) -> Router<AppState> {
                 sales_inquiry::internal::save_quote_permission_key(),
             ),
         )
-        .route(
-            "/procurement-inquiries/{id}/internal-quotes/{quote_id}/attachments/{asset_id}",
-            with_permission(
-                get(sales_inquiry::internal::quote_attachment),
-                rbac,
-                sales_inquiry::internal::quote_attachment_permission_key(),
-            ),
-        )
 }
 
 fn procurement_fees(rbac: &SharedRbacService) -> Router<AppState> {

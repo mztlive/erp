@@ -656,11 +656,6 @@ export function PurchaseOrderCreatePage({
                             option.maxCreateQuantity,
                             line.quantity,
                             6,
-                        ) >= 0 &&
-                        compareDecimal(
-                            line.quantity,
-                            option.inquirySource.minimum_order_quantity,
-                            6,
                         ) >= 0
                     )
                 } catch {

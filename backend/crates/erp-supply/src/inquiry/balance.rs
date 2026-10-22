@@ -295,7 +295,6 @@ fn held_usage(mut usage: InquiryQuoteUse, reservation: &InquiryQuoteReservation)
                 .ok_or_else(|| Error::ValidationError("专项报价待生效范围超出限制".into()))
         })?)?
     };
-    usage.committed_quantity = usage.quantity;
     Ok(usage)
 }
 

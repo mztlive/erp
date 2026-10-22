@@ -298,7 +298,7 @@ function FeedbackRows({
                         )}
                     </TableCell>
                     <TableCell className="align-top py-4">
-                        {price ? (
+                        {price?.tax_rate ? (
                             <RateValue
                                 value={multiplyFixed(price.tax_rate, "100", {
                                     leftMaxScale: 6,

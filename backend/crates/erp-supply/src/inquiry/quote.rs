@@ -10,16 +10,15 @@ use crate::{Error, Result};
 
 /// 内部报价适用的精确询价需求版本；需求变化必须建立新版本报价。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
 pub struct InquiryQuoteScope {
     pub inquiry_id: String,
     pub requirement_version: u32,
     pub line_id: String,
 }
 
-/// 内部报价输入；没有销售供给价字段。
+/// 内部报价持久化数据；没有销售供给价字段。
+/// 与基础信息展开为同一文档，读取时须容纳 MongoDB 的 `_id`；请求字段由独立命令严格校验。
 #[derive(Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct InquiryQuoteData {
     pub quote_id: String,
     pub revision_no: u32,
@@ -31,7 +30,6 @@ pub struct InquiryQuoteData {
     pub sku_id: SkuId,
     pub terms: QuoteTerms,
     pub internal_note: String,
-    pub attachment_ids: Vec<String>,
     pub recorded_by: String,
 }
 
@@ -74,11 +72,8 @@ impl InquiryQuote {
         }
         data.recorded_by =
             normalize_required_text(data.recorded_by, "报价登记人不能为空", 128, "报价登记人过长")?;
-        if data.internal_note.chars().count() > 4000
-            || data.attachment_ids.len() > 20
-            || data.attachment_ids.iter().any(|id| id.trim().is_empty() || id.len() > 128)
-        {
-            return Err(Error::ValidationError("询价报价内部备注或附件非法".into()));
+        if data.internal_note.chars().count() > 4000 {
+            return Err(Error::ValidationError("询价报价备注过长".into()));
         }
         data.terms = data.terms.validated()?;
         Ok(Self { base: BaseModel::new(id), data })

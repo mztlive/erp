@@ -327,41 +327,6 @@ impl InquiryReadService {
         Ok(bases.into_iter().filter(|basis| fee_ids.contains(&basis.data.fee_id)).collect())
     }
 
-    /// 内部报价附件必须同时属于精确版本、当前责任行及真实附件关系。
-    /// # 参数
-    /// `actor` 为当前采购，`id`、`task_id` 为询价任务；其余为不可变报价版本与文件身份。
-    /// # 返回
-    /// 全部关系及当前任务仍有效时允许调用方在事务外读取文件。
-    /// # 错误
-    /// 越权、错报价版本、错文件或附件关系失效统一拒绝。
-    pub async fn require_quote_attachment(
-        &self,
-        actor: &AuditActor,
-        id: &str,
-        task_id: &str,
-        quote_revision_id: &str,
-        asset_id: &str,
-    ) -> Result<()> {
-        let (inquiry, task) =
-            self.access.require_task(actor, "internal_quote", id, task_id, None, &mut NoTransaction).await?;
-        let quote =
-            InquirySupplyService::new(self.db.clone()).quote(quote_revision_id, &mut NoTransaction).await?;
-        let links = self
-            .db
-            .document_attachments()
-            .list_by_document(&BusinessDocumentId::new(quote_revision_id), &mut NoTransaction)
-            .await?;
-        if quote.data.scope.inquiry_id != id
-            || quote.data.scope.requirement_version != inquiry.requirement_version
-            || !task.responsibility_scope_ids().contains(&quote.data.scope.line_id)
-            || !quote.data.attachment_ids.iter().any(|reference| reference == asset_id)
-            || !links.iter().any(|link| link.file_asset_id.as_ref() == asset_id)
-        {
-            return Err(Error::NotFound("询价报价附件不存在或无权读取".into()));
-        }
-        Ok(())
-    }
-
     /// 当前费用任务只能读取本责任费用依据上实际登记的附件。
     /// # 参数
     /// `actor`、`id` 和 `params` 限定当前任务与反馈；其余为依据及文件稳定身份。

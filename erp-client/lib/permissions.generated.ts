@@ -3072,16 +3072,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "GET",
-                path: "/admin/procurement-inquiries/{id}/internal-quotes/{quote_id}/attachments/{asset_id}",
-                description: "下载当前责任报价附件",
-                permission: {
-                    resource: "procurement_inquiry",
-                    action: "internal_quote",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
                 path: "/admin/procurement-inquiries/{id}/fee-bases",
                 description: "读取询价费用内部依据",
                 permission: {

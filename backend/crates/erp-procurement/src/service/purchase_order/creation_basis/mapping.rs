@@ -16,11 +16,11 @@ use crate::{Error, Result};
 
 /// 供应商当前商务资料中的付款条件与经营类目。
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct SupplierSettlementTerms {
+pub(super) struct SupplierSettlementTerms {
     /// 不含经营类目编码的付款条件代码。
-    payment_term_code: String,
+    pub(super) payment_term_code: String,
     /// 经营类目；未登记时为空。
-    business_category: Option<String>,
+    pub(super) business_category: Option<String>,
 }
 
 impl SupplierSettlementTerms {
@@ -163,7 +163,7 @@ fn append_line_supplies(
 ///
 /// # 关键业务约束
 /// 付款条件是精确拆单维度的一部分；经营类目不得写入付款条件代码。
-fn settlement_terms_for(
+pub(super) fn settlement_terms_for(
     facts: &CreationBasisFacts,
     supplier_id: &SupplierAccountId,
 ) -> SupplierSettlementTerms {

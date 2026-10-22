@@ -4,6 +4,7 @@ use erp_core::ids::SupplierOfferingId;
 use erp_core::money::Quantity;
 use rust_decimal::Decimal;
 
+use super::mapping::settlement_terms_for;
 use crate::entity::facts::{AvailabilityStatus, SalesOrderBasisFact};
 use crate::entity::purchase_order::{
     BasisGroup, BasisLine, BasisScope, CreationBasisFacts, LineSupply, PurchaseInquiryAddress,
@@ -49,7 +50,7 @@ pub fn inquiry_basis_groups(
             continue;
         };
         if candidate.source.expected_delivery_date > business_date_of(line.goods_line.fulfillment_due_at)?
-            || !BusinessDate::today().is_within(candidate.source.valid_from, Some(candidate.source.valid_to))
+            || candidate.source.valid_to.is_some_and(|date| BusinessDate::today() >= date)
         {
             continue;
         }
@@ -66,7 +67,7 @@ pub fn inquiry_basis_groups(
         if max.to_decimal() <= Decimal::ZERO {
             continue;
         }
-        append_groups(coverage, line, &supply, candidate, max, &mut groups)?;
+        append_groups(coverage, line, &supply, candidate, max, facts, &mut groups)?;
     }
     Ok(groups)
 }
@@ -91,14 +92,16 @@ fn append_groups(
     supply: &LineSupply,
     candidate: &InquiryBasisCandidate,
     max: Quantity,
+    facts: &CreationBasisFacts,
     groups: &mut Vec<BasisGroup>,
 ) -> Result<()> {
+    let settlement = settlement_terms_for(facts, &supply.offering.supplier_id);
     for &(fulfillment_responsibility, price_basis) in purchase_options(line.product_kind)? {
         let scope = BasisScope {
             inquiry_quote_revision_id: Some(candidate.source.quote_revision_id.clone()),
             supplier_id: supply.offering.supplier_id.clone(),
             purchase_type: purchase_type_from_product_kind(line.product_kind)?,
-            payment_term_code: candidate.source.payment_term_code.clone(),
+            payment_term_code: settlement.payment_term_code.clone(),
             fulfillment_responsibility,
             price_basis,
         };
@@ -111,7 +114,7 @@ fn append_groups(
         groups.push(BasisGroup {
             revision: coverage.revision.clone(),
             scope,
-            business_category: None,
+            business_category: settlement.business_category.clone(),
             lines: vec![basis],
         });
     }

@@ -342,4 +342,45 @@ mod tests {
             assert!(Json::<SaveInquiryCommand>::from_request(request, &()).await.is_err());
         }
     }
+    fn feedback_draft_request() -> Value {
+        json!({
+            "command_key": "save-feedback", "expected_version": 1, "task_id": "task", "task_version": 1,
+            "data": {"lines": [{"line_id": "line", "conclusion": "available", "available_quantity": "10",
+                "prices": [{"price_id": "price", "quantity": "10", "unit_price_gross": null, "tax_rate": null,
+                    "delivery_due_at": 5000, "valid_until": 0, "min_quantity": "1"}]}]}
+        })
+    }
+
+    #[tokio::test]
+    async fn feedback_draft_request_accepts_missing_values_and_preserves_zero() {
+        for value in [Value::Null, json!("0"), json!("0.13")] {
+            let mut payload = feedback_draft_request();
+            payload["data"]["lines"][0]["prices"][0]["unit_price_gross"] = value.clone();
+            payload["data"]["lines"][0]["prices"][0]["tax_rate"] = value.clone();
+            let Json(request) =
+                Json::<SaveInquiryFeedbackCommand>::from_request(json_request(payload), &()).await.unwrap();
+            let price = &request.data.lines[0].prices[0];
+            assert_eq!(serde_json::to_value(price.unit_price_gross).unwrap(), value);
+            assert_eq!(serde_json::to_value(price.tax_rate).unwrap(), value);
+        }
+    }
+
+    #[tokio::test]
+    async fn feedback_draft_request_rejects_invalid_numbers_and_private_fields() {
+        for (field, value) in [
+            ("unit_price_gross", json!("abc")),
+            ("unit_price_gross", json!("1.23456")),
+            ("unit_price_gross", json!(1.23)),
+            ("tax_rate", json!("0.1234567")),
+            ("supplier_id", json!("private-supplier")),
+            ("internal_quote_id", json!("private-quote")),
+        ] {
+            let mut payload = feedback_draft_request();
+            payload["data"]["lines"][0]["prices"][0][field] = value;
+            assert!(
+                Json::<SaveInquiryFeedbackCommand>::from_request(json_request(payload), &()).await.is_err(),
+                "{field}"
+            );
+        }
+    }
 }

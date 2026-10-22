@@ -52,7 +52,11 @@ impl SalesOrderEditableDraftRequest {
             goods.quantity = selected.quantity;
             goods.base_unit_code.clone_from(&demand.unit_code);
             goods.fulfillment_due_at = demand.delivery_due_at;
-            goods.procurement_supply_price_gross = Some(price.unit_price_gross);
+            goods.procurement_supply_price_gross = Some(
+                price
+                    .unit_price_gross
+                    .ok_or_else(|| Error::ValidationError("询价供给单价未填写，不能转单".into()))?,
+            );
             goods.delivery_allocations = selected
                 .allocations
                 .iter()

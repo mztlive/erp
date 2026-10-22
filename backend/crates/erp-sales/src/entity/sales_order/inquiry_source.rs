@@ -558,8 +558,8 @@ mod tests {
         InquirySupplyPrice {
             price_id: "price".into(),
             quantity: "10".parse().unwrap(),
-            unit_price_gross: "8.00".parse().unwrap(),
-            tax_rate: "0.13".parse().unwrap(),
+            unit_price_gross: Some("8.00".parse().unwrap()),
+            tax_rate: Some("0.13".parse().unwrap()),
             delivery_due_at: Instant::from_unix_secs(2_000),
             valid_until: Instant::from_unix_secs(3_000),
             min_quantity: "2".parse().unwrap(),

@@ -141,7 +141,6 @@ pub fn inquiry_quote_source(quote: &InquiryQuote) -> PurchaseInquiryQuoteSource 
         quote_version: quote.base.version,
         unit_cost_gross: terms.unit_cost_gross,
         input_tax_rate: terms.input_tax_rate,
-        minimum_order_quantity: terms.minimum_order_quantity,
         available_quantity: terms.available_quantity,
         address_limits: terms
             .address_limits
@@ -153,10 +152,7 @@ pub fn inquiry_quote_source(quote: &InquiryQuote) -> PurchaseInquiryQuoteSource 
             })
             .collect(),
         expected_delivery_date: terms.expected_delivery_date,
-        valid_from: terms.valid_from,
         valid_to: terms.valid_to,
-        payment_term_code: terms.payment_term_code.clone(),
-        allow_cumulative_batches: terms.allow_cumulative_batches,
     }
 }
 
@@ -188,17 +184,12 @@ mod tests {
                 terms: QuoteTerms {
                     unit_cost_gross: "10".parse().unwrap(),
                     input_tax_rate: "0.13".parse().unwrap(),
-                    minimum_order_quantity: "1".parse().unwrap(),
                     available_quantity: "10".parse().unwrap(),
                     address_limits: vec![],
                     expected_delivery_date: "2026-10-25".parse().unwrap(),
-                    valid_from: "2026-10-01".parse().unwrap(),
-                    valid_to: "2026-11-01".parse().unwrap(),
-                    payment_term_code: "POSTPAY_NET30".into(),
-                    allow_cumulative_batches: false,
+                    valid_to: Some("2026-11-01".parse().unwrap()),
                 },
                 internal_note: String::new(),
-                attachment_ids: vec![],
                 recorded_by: "buyer".into(),
             },
         )
@@ -219,8 +210,8 @@ mod tests {
             price: InquirySupplyPrice {
                 price_id: "price-1".into(),
                 quantity: "5".parse().unwrap(),
-                unit_price_gross: "12".parse().unwrap(),
-                tax_rate: "0.13".parse().unwrap(),
+                unit_price_gross: Some("12".parse().unwrap()),
+                tax_rate: Some("0.13".parse().unwrap()),
                 delivery_due_at: Instant::from_unix_secs(1000),
                 valid_until: Instant::from_unix_secs(1000),
                 min_quantity: "1".parse().unwrap(),

@@ -440,8 +440,7 @@ export type InquirySourcingSource = Readonly<{
     inquiry_line_id: string
     quote_revision_id: string
     quote_revision_no: number
-    minimum_order_quantity: string
-    valid_to: string
+    valid_to: string | null
     expected_delivery_date: string
 }>
 

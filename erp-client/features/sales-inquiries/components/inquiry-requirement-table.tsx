@@ -80,8 +80,8 @@ export function InquiryRequirementTable({
                     <Table
                         className={
                             procurement
-                                ? "min-w-[1152px] table-fixed"
-                                : "min-w-[1312px] table-fixed"
+                                ? "min-w-[1072px] table-fixed"
+                                : "min-w-[1232px] table-fixed"
                         }
                     >
                         <TableHeader className="sticky top-0 z-10">
@@ -100,7 +100,7 @@ export function InquiryRequirementTable({
                                 <TableHead className="w-48">
                                     配送 / 交付
                                 </TableHead>
-                                <TableHead className="sticky right-0 z-20 w-52 border-l text-right">
+                                <TableHead className="sticky right-0 z-20 w-32 border-l text-right">
                                     操作
                                 </TableHead>
                             </TableRow>
@@ -206,7 +206,7 @@ export function InquiryRequirementTable({
                                                             label:
                                                                 line.fulfillment_kind ===
                                                                 "physical"
-                                                                    ? "配送"
+                                                                    ? "配送地址"
                                                                     : "交付",
                                                             icon: TruckIcon,
                                                             onClick: (

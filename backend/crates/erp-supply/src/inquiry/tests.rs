@@ -1,4 +1,6 @@
 use entity_core::BaseModel;
+use mongodb::bson::oid::ObjectId;
+use mongodb::bson::{deserialize_from_document, serialize_to_document};
 
 use super::*;
 
@@ -6,14 +8,10 @@ fn terms() -> QuoteTerms {
     QuoteTerms {
         unit_cost_gross: "9.90".parse().unwrap(),
         input_tax_rate: "0.13".parse().unwrap(),
-        minimum_order_quantity: "10".parse().unwrap(),
         available_quantity: "20".parse().unwrap(),
         address_limits: vec![address("20")],
         expected_delivery_date: "2026-10-22".parse().unwrap(),
-        valid_from: "2026-10-01".parse().unwrap(),
-        valid_to: "2026-11-01".parse().unwrap(),
-        payment_term_code: "POSTPAY_NET30".into(),
-        allow_cumulative_batches: false,
+        valid_to: Some("2026-11-01".parse().unwrap()),
     }
 }
 fn address(quantity: &str) -> QuoteAddressLimit {
@@ -34,7 +32,6 @@ fn usage(quantity: &str) -> InquiryQuoteUse {
         addresses: vec![address(quantity)],
         expected_delivery_date: "2026-10-25".parse().unwrap(),
         on_date: "2026-10-21".parse().unwrap(),
-        committed_quantity: "0".parse().unwrap(),
         consumed_quantity: "0".parse().unwrap(),
     }
 }
@@ -55,7 +52,6 @@ fn quote() -> InquiryQuote {
             sku_id: "sku-1".to_string().into(),
             terms: terms(),
             internal_note: "采购议价依据".into(),
-            attachment_ids: vec!["private-file".into()],
             recorded_by: "buyer-1".into(),
         },
     )
@@ -84,7 +80,7 @@ fn scope_supplier_sku_and_version_cannot_be_reused() {
     }
 }
 #[test]
-fn expired_quote_changed_address_and_insufficient_batch_are_rejected() {
+fn expired_quote_changed_address_and_early_delivery_are_rejected() {
     let quote = quote();
     let mut expired = usage("10");
     expired.on_date = "2026-11-01".parse().unwrap();
@@ -92,23 +88,39 @@ fn expired_quote_changed_address_and_insufficient_batch_are_rejected() {
     let mut changed = usage("10");
     changed.addresses[0].address_fingerprint = "b".repeat(64);
     assert!(quote.ensure_applicable(&changed).is_err());
-    assert!(quote.ensure_applicable(&usage("5")).is_err());
+    quote.ensure_applicable(&usage("5")).unwrap();
     let mut early = usage("10");
     early.expected_delivery_date = "2026-10-21".parse().unwrap();
     assert!(quote.ensure_applicable(&early).is_err());
 }
 #[test]
-fn cumulative_batches_require_explicit_terms_and_verified_commitment() {
+fn quote_without_expiry_allows_partial_adoption_but_rejects_overbooking() {
     let mut quote = quote();
+    quote.data.terms.valid_to = None;
     let mut value = usage("5");
-    value.committed_quantity = "10".parse().unwrap();
-    assert!(quote.ensure_applicable(&value).is_err());
-    quote.data.terms.allow_cumulative_batches = true;
+    value.on_date = "2030-01-01".parse().unwrap();
     quote.ensure_applicable(&value).unwrap();
-    value.committed_quantity = "5".parse().unwrap();
+    value.consumed_quantity = "16".parse().unwrap();
     assert!(quote.ensure_applicable(&value).is_err());
-    value.committed_quantity = "21".parse().unwrap();
-    assert!(quote.ensure_applicable(&value).is_err());
+}
+#[test]
+fn simplified_terms_reject_invalid_price_tax_quantity_and_retired_fields() {
+    let value = serde_json::to_value(terms()).unwrap();
+    for (key, invalid) in [("unit_cost_gross", "0"), ("available_quantity", "0"), ("input_tax_rate", "1.1")] {
+        let mut data = value.clone();
+        data[key] = invalid.into();
+        let terms: QuoteTerms = serde_json::from_value(data).unwrap();
+        assert!(terms.validated().is_err());
+    }
+    for key in ["minimum_order_quantity", "valid_from", "payment_term_code", "allow_cumulative_batches"] {
+        let mut data = value.clone();
+        data[key] = "legacy".into();
+        assert!(serde_json::from_value::<QuoteTerms>(data).is_err());
+    }
+    let mut data = value;
+    data.as_object_mut().unwrap().remove("valid_to");
+    let terms: QuoteTerms = serde_json::from_value(data).unwrap();
+    assert!(terms.validated().unwrap().valid_to.is_none());
 }
 #[test]
 fn aggregate_supply_and_address_quantity_are_conserved() {
@@ -136,7 +148,11 @@ fn internal_fee_basis_requires_precise_scope_and_payment_identity() {
         attachment_ids: vec![],
         recorded_by: "buyer-1".into(),
     };
-    InquiryFeeBasis::new("basis".into(), data.clone()).unwrap();
+    let basis = InquiryFeeBasis::new("basis".into(), data.clone()).unwrap();
+    let mut document = serialize_to_document(&basis).unwrap();
+    document.insert("_id", ObjectId::new());
+    let restored: InquiryFeeBasis = deserialize_from_document(document).unwrap();
+    assert_eq!(serde_json::to_value(&restored).unwrap(), serde_json::to_value(&basis).unwrap());
     let mut invalid = data.clone();
     invalid.feedback_round = 0;
     assert!(InquiryFeeBasis::new("basis".into(), invalid).is_err());
@@ -193,8 +209,7 @@ fn internal_quote_roundtrips_flattened_persistence_and_decimal_strings() {
 
 #[test]
 fn pending_change_does_not_release_original_supply_and_effective_change_resizes_it() {
-    let mut quote = quote();
-    quote.data.terms.minimum_order_quantity = "1".parse().unwrap();
+    let quote = quote();
     let mut balance = InquiryQuoteBalance::empty(quote.data.quote_id.clone()).unwrap();
     let first = usage("10");
     balance.reserve(&quote, &first).unwrap();
@@ -256,7 +271,7 @@ fn expired_quote_can_restore_only_existing_formal_exposure_without_new_eligibili
         history: vec![],
     };
     let held = balance.resized(&quote, &usage("15"), &original, true).unwrap();
-    quote.data.terms.valid_to = "2026-10-21".parse().unwrap();
+    quote.data.terms.valid_to = Some("2026-10-21".parse().unwrap());
     assert!(quote.ensure_applicable(&initial).is_err());
     let restored = balance.restore_existing_usage(&held, initial.quantity, &initial.addresses).unwrap();
     assert_eq!(restored.quantity.to_string(), "10");
@@ -289,4 +304,40 @@ fn restoration_rejects_increase_new_address_and_other_quote_without_mutating_bal
     other.quote_id = "other-quote".into();
     assert!(balance.restore_existing_usage(&other, initial.quantity, &initial.addresses).is_err());
     assert_eq!(serde_json::to_value(&balance).unwrap(), before);
+}
+
+#[test]
+fn partial_supply_covers_all_demand_addresses_without_expanding_total_balance() {
+    let mut data = quote().data;
+    data.terms.available_quantity = "5".parse().unwrap();
+    let mut second = address("10");
+    second.allocation_id = "address-2".into();
+    data.terms.address_limits = vec![address("10"), second.clone()];
+    let quote = InquiryQuote::new("partial".into(), data).unwrap();
+    let mut value = usage("5");
+    second.quantity = "5".parse().unwrap();
+    value.addresses = vec![second];
+    let mut balance = InquiryQuoteBalance::empty(quote.data.quote_id.clone()).unwrap();
+    balance.reserve(&quote, &value).unwrap();
+    assert!(balance.reserve(&quote, &usage("1")).is_err());
+    let mut invalid = quote.data.clone();
+    invalid.terms.address_limits = vec![address("4")];
+    assert!(InquiryQuote::new("invalid".into(), invalid).is_err());
+    value.addresses[0].quantity = "4".parse().unwrap();
+    assert!(quote.ensure_applicable(&value).is_err());
+}
+
+#[test]
+fn saved_quote_documents_can_be_read_with_mongo_metadata() {
+    let original = quote();
+    for with_mongo_id in [false, true] {
+        let mut document = serialize_to_document(&original).unwrap();
+        if with_mongo_id {
+            document.insert("_id", ObjectId::new());
+        }
+        let restored: InquiryQuote = deserialize_from_document(document.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&restored).unwrap(), serde_json::to_value(&original).unwrap());
+        document.get_document_mut("terms").unwrap().insert("input_tax_rate", "invalid");
+        assert!(deserialize_from_document::<InquiryQuote>(document).is_err());
+    }
 }

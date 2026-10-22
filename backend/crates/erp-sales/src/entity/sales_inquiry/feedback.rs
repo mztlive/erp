@@ -52,8 +52,10 @@ pub struct InquirySupplyAllocation {
 pub struct InquirySupplyPrice {
     pub price_id: String,
     pub quantity: Quantity,
-    pub unit_price_gross: UnitPrice,
-    pub tax_rate: Rate,
+    /// 草稿允许未报价；发布前必须填写，零价仍是明确报价。
+    pub unit_price_gross: Option<UnitPrice>,
+    /// 草稿允许尚未确认税率；发布前必须填写。
+    pub tax_rate: Option<Rate>,
     pub delivery_due_at: Instant,
     pub valid_until: Instant,
     pub min_quantity: Quantity,
@@ -248,13 +250,18 @@ fn validate_allocation_totals(
 impl InquirySupplyPrice {
     fn validate(&self, demand: &InquiryRequirementLine, now: Instant) -> Result<()> {
         validate_text(&self.price_id, "供给价格身份", 128)?;
+        let unit_price = self
+            .unit_price_gross
+            .ok_or_else(|| Error::ValidationError("请填写含税供给单价后再发布".into()))?;
+        let tax_rate =
+            self.tax_rate.ok_or_else(|| Error::ValidationError("请填写报价税率后再发布".into()))?;
         if self.quantity.to_decimal() <= Decimal::ZERO
             || self.quantity.to_decimal().normalize().scale() > demand.quantity_scale
-            || self.unit_price_gross.to_decimal() < Decimal::ZERO
+            || unit_price.to_decimal() < Decimal::ZERO
         {
             return Err(Error::ValidationError("供给价格或数量非法".into()));
         }
-        validate_rate(self.tax_rate)?;
+        validate_rate(tax_rate)?;
         if self.valid_until <= now || self.delivery_due_at > demand.delivery_due_at {
             return Err(Error::ValidationError("供给结果已过期或不能按要求交付".into()));
         }

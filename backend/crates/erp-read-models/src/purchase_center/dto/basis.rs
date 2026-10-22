@@ -277,8 +277,7 @@ pub struct InquiryBasisSourceView {
     pub inquiry_line_id: String,
     pub quote_revision_id: String,
     pub quote_revision_no: u32,
-    pub minimum_order_quantity: String,
-    pub valid_to: String,
+    pub valid_to: Option<String>,
     pub expected_delivery_date: String,
 }
 /// 采购创建依据视图（已生效销售单 × 合格供给供应商，§7.4 选源建单入口）。
@@ -429,8 +428,7 @@ impl CreationBasisView {
             inquiry_line_id: source.inquiry_line_id.clone(),
             quote_revision_id: source.quote_revision_id.clone(),
             quote_revision_no: source.quote_revision_no,
-            minimum_order_quantity: source.minimum_order_quantity.to_string(),
-            valid_to: source.valid_to.to_string(),
+            valid_to: source.valid_to.map(|date| date.to_string()),
             expected_delivery_date: source.expected_delivery_date.to_string(),
         });
         self.recommendation_reason =

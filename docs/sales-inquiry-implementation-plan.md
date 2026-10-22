@@ -112,7 +112,7 @@
 - [ ] 在现有采购依据中加入询价专项条款，并保留通用供给条款入口。
 - [ ] 实现“沿用询价结果”，只预填有效候选；条件失效时返回明确原因。
 - [ ] 保留手动选源和规则推荐；改选记录原因，推荐提供依据，不改变库存优先及集采直发规则。
-- [ ] 校验分批转单与采购是否满足数量档位、起订量、报价期限及地址条件。
+- [ ] 校验分批转单与采购是否满足对销售数量档位、内部报价剩余额度、报价期限及地址条件。
 - [ ] 在采购创建事务内重验责任、销售来源、专项条款、资格、可供量及最新覆盖。
 - [ ] 保持现有库存预占、仓发、商品采购拆单和审批的原子编排。
 - [ ] 保存需求来源链和实际报价采用链；采购详情及追溯按权限展示，销售详情不反向透出供应商。
@@ -193,9 +193,9 @@
 | --- | --- | --- | --- |
 | P0 | 本地实现及合同复核完成 | `sales-inquiry-api-contract.md`；状态、DTO、权限、分页、导入限制、集合、索引、来源及兼容回退；§9 IQ01–IQ24 映射 | 发布执行人确认权限授予、启动建索引及回退操作条件 |
 | P1 | 本地实现完成 | `erp-sales/entity/sales_inquiry`；`erp-processes/sales_inquiry_import`；`sales_inquiry/access.rs`、`tasks.rs`；前端客户工作簿、预览及需求编辑 | 真实导入确认、界面操作和责任任务业务验收 |
-| P2 | 本地实现完成 | 独立采销 DTO；不可变需求/反馈历史；任务范围、内部报价/附件；补充、接受、重询及关闭；公开费用确认状态 | 多责任人发布完整性、直接越权、文件流转及三轮往返业务验收 |
+| P2 | 本地实现完成 | 独立采销 DTO；不可变需求/反馈历史；任务范围、内部报价及费用依据附件；补充、接受、重询及关闭；公开费用确认状态 | 多责任人发布完整性、直接越权、文件流转及三轮往返业务验收 |
 | P3 | 本地实现完成 | `order_to_cash/inquiry.rs`；销售来源映射及草稿预留、生效消耗、作废释放；既有销售创建接入来源；前端按依据预填 | 跨轮次余额、销售正式变更、来源安全投影和异键并发防超转的运行验收 |
-| P4 | 本地实现完成 | `erp-supply/inquiry` 专项报价/费用依据/累计余额；现有采购 Basis、sourcing、重提及变更接入精确修订、原价税率、地址及额度；改选原因纳入指纹和采购来源 | 正式变更/作废变更的额度调整、三种选源界面及重提条件复验的业务验收；无可核验累计承诺的低起订量分批必须失败关闭 |
+| P4 | 本地实现完成 | `erp-supply/inquiry` 专项报价/费用依据/累计余额；现有采购 Basis、sourcing、重提及变更接入精确修订、原价税率、地址及额度；改选原因纳入指纹和采购来源 | 正式变更/作废变更的额度调整、三种选源界面及重提条件复验的业务验收；内部报价分批采用须核验稳定总量及地址余额 |
 | P5 | 本地实现完成 | 明确费用归属；既有费用采购及财务登记可空来源；`sales_inquiry_expense.rs` 占用、调整、发生和释放；采购与财务来源入口及原命令恢复 | 多销售分摊、采购生命周期、财务外部已支付来源防重及既有人员范围的业务验收 |
 | P6 | 本地检查已登记；业务验收未执行 | §9 证据矩阵、§10 检查结果及存量体积问题、API 合同发布回退要求 | IQ01–IQ24 实际业务验收；真实数据库并发、回滚和未知提交；提交、推送、部署及索引实际创建单独登记 |
 
@@ -234,7 +234,7 @@
 | IQ09 | `sales_inquiry/access.rs`、`tasks.rs`；任务规则；内部附件当前任务守卫 | 任务规则 `inquiry_grant_expires_with_owner_version_state_or_scope`；领域用例 `current_task_work_is_required_and_reassignment_does_not_revive_old_work` | 改派、补充、发布、关闭后的旧任务 URL、命令及附件立即失效 |
 | IQ10 | `ledger/quantities.rs`；`order_to_cash/inquiry.rs`；`service/sales_order/inquiry.rs`；`dto/sales_order/inquiry_basis.rs` | 领域用例 `quantity_ledger_survives_requery_and_rejects_new_version_reset`、`acceptance_rechecks_ledger_changed_after_feedback_publication`；开单依据 `partial_reinquiry_basis_keeps_unaffected_old_acceptance_until_new_round_is_accepted`、`requirement_revision_blocks_every_old_basis_even_for_unchanged_lines` | 多次部分转单与跨轮次、跨版本累计；真实数据库并发未验 |
 | IQ11 | `sales_inquiry/execution.rs`；导入确认永久回执；既有销售创建命令及来源 CAS | 领域用例 `stale_version_and_invalid_command_replay_fail_without_changes`；导入规则 `permanent_receipt_recovers_original_result_and_rejects_other_payload_or_scope` | 同键回放、异键并发防超量、未知提交恢复的真实事务行为 |
-| IQ12 | 销售来源；`erp-supply/inquiry/terms.rs`；采购专项 | 销售来源 `exact_price_scope_rejects_expiry_quantity_tiers_and_uncovered_address`；专项规则 `expired_quote_changed_address_and_insufficient_batch_are_rejected`、`cumulative_batches_require_explicit_terms_and_verified_commitment` | 报价过期、数量档位、起订量与当前修订在实际转单及重提路径一致 |
+| IQ12 | 销售来源；`erp-supply/inquiry/terms.rs`；采购专项 | 销售来源 `exact_price_scope_rejects_expiry_quantity_tiers_and_uncovered_address`；专项规则 `expired_quote_changed_address_and_early_delivery_are_rejected`、`quote_without_expiry_allows_partial_adoption_but_rejects_overbooking` | 报价过期、对销售数量档位、内部报价剩余额度与当前修订在实际转单及重提路径一致 |
 | IQ13 | `erp-read-models/purchase_center/creation_basis`；`procure_to_pay/inquiry_supply.rs`；采购选源界面 | 采购专项 `special_cost_tax_and_source_are_frozen_separately_from_general_offering`、`special_quote_revision_is_an_exact_split_and_basis_identity_dimension` | 沿用、改选、推荐三入口的最终校验；改选原因及两条来源链显示；未获证据不得判完成 |
 | IQ14 | 既有 sourcing 库存及仓库路径；`procure_to_pay/inquiry_supply.rs` 的仓库来源地址转换 | 复用既有采购地址/库存规则；本次专项仓发完整回归证据待登记 | 库存足额无商品采购；实际入仓采购行不携带客户收件人或地址 |
 | IQ15 | `feedback.rs` 费用含价标记；`ledger/fees.rs`；`sales_inquiry_expense.rs` | 领域用例 `estimated_or_included_fee_is_reference_only` | 已含运费与另计运费的界面、分配及采购应付结果 |

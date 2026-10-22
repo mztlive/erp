@@ -42,8 +42,8 @@ export type InquiryRequirement = { lines: InquiryLine[]; note: string }
 export type InquiryPrice = {
     price_id: string
     quantity: string
-    unit_price_gross: string
-    tax_rate: string
+    unit_price_gross: string | null
+    tax_rate: string | null
     delivery_due_at: number
     valid_until: number
     min_quantity: string

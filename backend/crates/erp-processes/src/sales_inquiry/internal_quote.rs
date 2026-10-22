@@ -1,15 +1,16 @@
 //! 采购内部资料按当前责任与精确需求版本保存，销售回执不包含内部字段。
 
 use application_core::AuditActor;
-use erp_core::common::time::Instant;
+use erp_core::common::time::{BusinessDate, Instant};
 use erp_core::ids::{
     BusinessDocumentId, DocumentAttachmentId, FileAssetId, SkuId, SupplierAccountId, SupplierOfferingId,
 };
+use erp_core::money::{Quantity, Rate, UnitPrice};
 use erp_procurement::entity::purchase_order::PurchaseInquiryAddress;
 use erp_sales::entity::sales_inquiry::{InquiryRequirementLine, SalesInquiry};
 use erp_supply::inquiry::{
     InquiryFeeBasis, InquiryFeeBasisData, InquiryQuote, InquiryQuoteData, InquiryQuoteScope,
-    InquirySupplyService, QuoteTerms,
+    InquirySupplyService, QuoteAddressLimit, QuoteTerms,
 };
 use erp_support::entity::file_asset::{AttachmentUsage, DocumentAttachment, DocumentAttachmentData};
 use erp_support::repository::{DocumentAttachmentRepositoryExt, FileAssetExt};
@@ -34,9 +35,48 @@ pub struct InquiryQuoteInput {
     pub line_id: String,
     pub supplier_id: SupplierAccountId,
     pub supplier_offering_id: SupplierOfferingId,
-    pub terms: QuoteTerms,
+    pub terms: InquiryQuoteTermsInput,
     pub internal_note: String,
-    pub attachment_ids: Vec<String>,
+}
+
+/// 采购可录入的报价条件；配送范围由需求生成，客户端不得指定。
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InquiryQuoteTermsInput {
+    pub unit_cost_gross: UnitPrice,
+    pub input_tax_rate: Rate,
+    pub available_quantity: Quantity,
+    pub expected_delivery_date: BusinessDate,
+    pub valid_to: Option<BusinessDate>,
+}
+
+impl InquiryQuoteTermsInput {
+    fn for_requirement(&self, line: &InquiryRequirementLine) -> Result<QuoteTerms> {
+        let allocation_ids = line.allocations.iter().map(|row| row.allocation_id.clone()).collect::<Vec<_>>();
+        line.validate_quote_scope(self.available_quantity, &allocation_ids)?;
+        let terms = QuoteTerms {
+            unit_cost_gross: self.unit_cost_gross,
+            input_tax_rate: self.input_tax_rate,
+            available_quantity: self.available_quantity,
+            expected_delivery_date: self.expected_delivery_date,
+            valid_to: self.valid_to,
+            address_limits: line
+                .allocations
+                .iter()
+                .map(|row| QuoteAddressLimit {
+                    allocation_id: row.allocation_id.clone(),
+                    address_fingerprint: PurchaseInquiryAddress::fingerprint(
+                        &row.recipient,
+                        &row.phone,
+                        row.region_code.as_str(),
+                        &row.address,
+                    ),
+                    quantity: row.quantity,
+                })
+                .collect(),
+        };
+        Ok(terms.validated()?)
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -78,7 +118,7 @@ impl SalesInquiryProcess {
     /// # 返回
     /// 同事务写入询价CAS、报价、任务活动、审计和安全回执后的结果。
     /// # 错误
-    /// 任务、SKU、地址、附件、供应身份或商业条件无效时拒绝。
+    /// 任务、SKU、地址、供应身份或商业条件无效时拒绝。
     pub async fn save_internal_quote(
         &self,
         actor: &AuditActor,
@@ -118,8 +158,7 @@ impl SalesInquiryProcess {
         supplier_access(self.db.clone(), self.rbac.clone())
             .require_with(actor, "detail", req.quote.supplier_id.as_ref(), executor)
             .await?;
-        let mut terms = req.quote.terms.clone();
-        normalize_addresses(line, &mut terms)?;
+        let terms = req.quote.terms.for_requirement(line)?;
         let id = next_id();
         let quote = InquiryQuote::new(
             id.clone(),
@@ -137,11 +176,9 @@ impl SalesInquiryProcess {
                 sku_id: SkuId::new(line.sku_id.clone()),
                 terms,
                 internal_note: req.quote.internal_note.clone(),
-                attachment_ids: req.quote.attachment_ids.clone(),
                 recorded_by: actor.id().to_string(),
             },
         )?;
-        self.attach_internal_files(actor, &id, &req.quote.attachment_ids, executor).await?;
         InquirySupplyService::new(self.db.clone())
             .append_quote(&quote, &MongoOfferingQualification::new(self.db.clone()), executor)
             .await
@@ -230,31 +267,6 @@ impl SalesInquiryProcess {
     }
 }
 
-fn normalize_addresses(line: &InquiryRequirementLine, terms: &mut QuoteTerms) -> Result<()> {
-    let allocation_ids =
-        terms.address_limits.iter().map(|limit| limit.allocation_id.clone()).collect::<Vec<_>>();
-    line.validate_quote_scope(terms.available_quantity, &allocation_ids)?;
-    line.validate_supply_quantity(terms.minimum_order_quantity)?;
-    for limit in &mut terms.address_limits {
-        line.validate_supply_quantity(limit.quantity)?;
-        let allocation = line
-            .allocations
-            .iter()
-            .find(|allocation| allocation.allocation_id == limit.allocation_id)
-            .ok_or_else(|| Error::ValidationError("专项报价地址不属于当前需求行".into()))?;
-        if limit.quantity > allocation.quantity {
-            return Err(Error::ValidationError("专项报价地址数量超出需求".into()));
-        }
-        limit.address_fingerprint = PurchaseInquiryAddress::fingerprint(
-            &allocation.recipient,
-            &allocation.phone,
-            allocation.region_code.as_str(),
-            &allocation.address,
-        );
-    }
-    Ok(())
-}
-
 fn next_round(inquiry: &SalesInquiry) -> Result<u32> {
     inquiry.feedback_round.checked_add(1).ok_or_else(|| Error::Internal("询价反馈轮次超出范围".into()))
 }
@@ -264,7 +276,6 @@ mod tests {
     use erp_core::common::time::BusinessDate;
     use erp_core::region::RegionCode;
     use erp_sales::entity::sales_inquiry::{InquiryDeliveryAllocation, InquiryFulfillmentKind};
-    use erp_supply::inquiry::QuoteAddressLimit;
 
     use super::*;
 
@@ -295,38 +306,43 @@ mod tests {
         }
     }
 
-    fn terms() -> QuoteTerms {
-        QuoteTerms {
+    fn terms() -> InquiryQuoteTermsInput {
+        InquiryQuoteTermsInput {
             unit_cost_gross: "1.2".parse().unwrap(),
             input_tax_rate: "0.13".parse().unwrap(),
-            minimum_order_quantity: "1".parse().unwrap(),
             available_quantity: "10".parse().unwrap(),
-            address_limits: vec![QuoteAddressLimit {
-                allocation_id: "address".into(),
-                address_fingerprint: "forged".into(),
-                quantity: "5".parse().unwrap(),
-            }],
             expected_delivery_date: BusinessDate::today(),
-            valid_from: BusinessDate::today(),
-            valid_to: "2030-01-01".parse().unwrap(),
-            payment_term_code: "net30".into(),
-            allow_cumulative_batches: false,
+            valid_to: None,
         }
     }
 
     #[test]
-    fn exact_address_is_server_fingerprinted_and_foreign_or_excess_scope_rejected() {
-        let line = line();
-        let mut terms = terms();
-        normalize_addresses(&line, &mut terms).unwrap();
+    fn quote_scope_is_all_demand_addresses_even_for_partial_supply() {
+        let mut line = line();
+        let mut second = line.allocations[0].clone();
+        second.allocation_id = "second".into();
+        second.address = "另一地址".into();
+        line.allocations.push(second);
+        let mut input = terms();
+        input.available_quantity = "5".parse().unwrap();
+        let quote = input.for_requirement(&line).unwrap();
+        assert_eq!(quote.available_quantity.to_string(), "5");
+        assert_eq!(quote.address_limits.len(), 2);
+        assert_eq!(quote.address_limits[0].quantity.to_string(), "10");
+        assert_eq!(quote.address_limits[1].quantity.to_string(), "10");
         assert_eq!(
-            terms.address_limits[0].address_fingerprint,
+            quote.address_limits[0].address_fingerprint,
             PurchaseInquiryAddress::fingerprint("收件人", "00138", "310115", "测试路")
         );
-        terms.address_limits[0].quantity = "11".parse().unwrap();
-        assert!(matches!(normalize_addresses(&line, &mut terms), Err(Error::ValidationError(_))));
-        terms.address_limits[0].quantity = "1".parse().unwrap();
-        terms.address_limits[0].allocation_id = "foreign".into();
-        assert!(matches!(normalize_addresses(&line, &mut terms), Err(Error::ValidationError(_))));
+    }
+
+    #[test]
+    fn quote_rejects_excess_supply_and_wrong_quantity_precision() {
+        let line = line();
+        let mut input = terms();
+        for quantity in ["11", "0", "1.5"] {
+            input.available_quantity = quantity.parse().unwrap();
+            assert!(input.for_requirement(&line).is_err());
+        }
     }
 }

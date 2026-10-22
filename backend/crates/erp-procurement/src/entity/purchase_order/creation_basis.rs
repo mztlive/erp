@@ -838,14 +838,10 @@ mod tests {
             quote_version: 1,
             unit_cost_gross: "8.80".parse().unwrap(),
             input_tax_rate: "0.06".parse().unwrap(),
-            minimum_order_quantity: "1".parse().unwrap(),
             available_quantity: "20".parse().unwrap(),
             address_limits: vec![],
             expected_delivery_date: "2026-10-22".parse().unwrap(),
-            valid_from: "2026-10-01".parse().unwrap(),
-            valid_to: "2026-11-01".parse().unwrap(),
-            payment_term_code: "NET-30".into(),
-            allow_cumulative_batches: false,
+            valid_to: Some("2026-11-01".parse().unwrap()),
         }
     }
 

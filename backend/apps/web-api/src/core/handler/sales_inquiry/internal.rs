@@ -5,7 +5,7 @@ use axum::extract::{Path, State};
 use axum::response::Response;
 use erp_processes::sales_inquiry::dto::InquiryMutationView;
 use erp_processes::sales_inquiry::internal_quote::{SaveInquiryFeeBasisCommand, SaveInquiryQuoteCommand};
-use erp_processes::sales_inquiry::read::{InquiryFeeBasisParams, InquiryReadService, InquiryTaskParams};
+use erp_processes::sales_inquiry::read::{InquiryFeeBasisParams, InquiryReadService};
 use erp_supply::inquiry::InquiryFeeBasis;
 
 use crate::app_state::AppState;
@@ -90,34 +90,6 @@ pub async fn fee_bases(
 #[permission_macros::permission(
     group = "采购询价",
     group_desc = "询价需求与采购反馈协作",
-    desc = "下载当前责任报价附件",
-    resource = "procurement_inquiry",
-    action = "internal_quote"
-)]
-/// 在存储读取前后复核当前任务、报价及精确附件关系。
-/// # 参数
-/// `state`、`actor` 为当前应用及采购，路径含询价、报价版本、文件；查询含任务身份。
-/// # 返回
-/// 返回禁止缓存及嗅探的原附件下载，不公开存储键。
-/// # 错误
-/// 当前任务、关系、文件治理状态或内容指纹失效时拒绝。
-pub async fn quote_attachment(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Path((id, quote_id, asset_id)): Path<(String, String, String)>,
-    Query(params): Query<InquiryTaskParams>,
-) -> std::result::Result<Response, Error> {
-    let service = InquiryReadService::new(state.db(), state.rbac());
-    service.require_quote_attachment(&actor, &id, &params.task_id, &quote_id, &asset_id).await?;
-    let (view, bytes) = read_asset(&state, &actor, &asset_id).await?;
-    service.require_quote_attachment(&actor, &id, &params.task_id, &quote_id, &asset_id).await?;
-    revalidate_asset(&state, &view).await?;
-    asset_download_response(&view, bytes)
-}
-
-#[permission_macros::permission(
-    group = "采购询价",
-    group_desc = "询价需求与采购反馈协作",
     desc = "下载当前责任费用依据附件",
     resource = "procurement_inquiry",
     action = "internal_quote"
@@ -141,4 +113,62 @@ pub async fn fee_basis_attachment(
     service.require_fee_basis_attachment(&actor, &id, &params, &basis_id, &asset_id).await?;
     revalidate_asset(&state, &view).await?;
     asset_download_response(&view, bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::body::Body;
+    use axum::extract::FromRequest;
+    use axum::http::Request;
+    use serde_json::{Value, json};
+
+    use super::*;
+
+    fn payload() -> Value {
+        json!({
+            "command_key": "quote", "expected_version": 1, "task_id": "task", "task_version": 1,
+            "quote": {"revision_no": 1, "line_id": "line", "supplier_id": "supplier",
+                "supplier_offering_id": "offering", "internal_note": "",
+                "terms": {"unit_cost_gross": "10", "input_tax_rate": "0.13", "available_quantity": "100",
+                    "expected_delivery_date": "2026-10-30"}}
+        })
+    }
+
+    async fn extract(value: Value) -> bool {
+        let request = Request::builder()
+            .header("content-type", "application/json")
+            .body(Body::from(value.to_string()))
+            .unwrap();
+        Json::<SaveInquiryQuoteCommand>::from_request(request, &()).await.is_ok()
+    }
+
+    #[tokio::test]
+    async fn internal_quote_accepts_optional_expiry_and_rejects_removed_fields() {
+        assert!(extract(payload()).await);
+        for expiry in [Value::Null, json!("2026-11-01")] {
+            let mut value = payload();
+            value["quote"]["terms"]["valid_to"] = expiry;
+            assert!(extract(value).await);
+        }
+        for field in [
+            "valid_from",
+            "minimum_order_quantity",
+            "payment_term_code",
+            "allow_cumulative_batches",
+            "address_limits",
+        ] {
+            let mut value = payload();
+            value["quote"]["terms"][field] = json!("legacy");
+            assert!(!extract(value).await, "{field}");
+        }
+        let mut value = payload();
+        value["quote"]["attachment_ids"] = json!([]);
+        assert!(!extract(value).await);
+        let mut value = payload();
+        value["quote"]["terms"]["address_limits"] = json!([]);
+        assert!(!extract(value).await);
+        let mut value = payload();
+        value["quote"]["terms"]["unit_cost_gross"] = json!(1.23);
+        assert!(!extract(value).await);
+    }
 }

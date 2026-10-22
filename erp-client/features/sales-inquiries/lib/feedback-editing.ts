@@ -3,6 +3,7 @@ import { compareDecimal, sumFixed } from "@/lib/fixed-decimal"
 import type {
     InquiryConclusion,
     InquiryFeedbackLine,
+    InquiryFeedbackData,
     InquiryLine,
     InquiryPrice,
 } from "../types"
@@ -10,14 +11,15 @@ import type {
 export function newFeedbackPrice(
     line: InquiryLine,
     quantity = line.quantity,
+    terms?: Partial<FeedbackTerms>,
 ): InquiryPrice {
     return {
         price_id: crypto.randomUUID(),
         quantity,
-        unit_price_gross: "",
-        tax_rate: "0.13",
+        unit_price_gross: null,
+        tax_rate: terms?.tax_rate === undefined ? "0.13" : terms.tax_rate,
         delivery_due_at: line.delivery_due_at,
-        valid_until: 0,
+        valid_until: terms?.valid_until ?? 0,
         min_quantity: "1",
         max_quantity: null,
         allow_cumulative: false,
@@ -33,12 +35,16 @@ export function changeFeedbackConclusion(
     value: InquiryFeedbackLine,
     demand: InquiryLine,
     conclusion: InquiryConclusion,
+    terms?: Partial<FeedbackTerms>,
 ): InquiryFeedbackLine {
     if (conclusion === "unavailable")
         return { ...value, conclusion, available_quantity: "0", prices: [] }
     const quantity =
         conclusion === "available" ? demand.quantity : value.available_quantity
-    const prices = value.prices
+    const prices =
+        value.prices.length || conclusion === "pending"
+            ? value.prices
+            : [newFeedbackPrice(demand, quantity, terms)]
     return changeFeedbackQuantity(
         { ...value, conclusion, prices },
         demand,
@@ -60,15 +66,21 @@ export function changeFeedbackQuantity(
                       ...price,
                       quantity,
                       allocations:
-                          demand.allocations.length === 1
-                              ? [
-                                    {
-                                        allocation_id:
-                                            demand.allocations[0].allocation_id,
-                                        quantity,
-                                    },
-                                ]
-                              : price.allocations,
+                          value.conclusion === "available"
+                              ? demand.allocations.map((item) => ({
+                                    allocation_id: item.allocation_id,
+                                    quantity: item.quantity,
+                                }))
+                              : demand.allocations.length === 1
+                                ? [
+                                      {
+                                          allocation_id:
+                                              demand.allocations[0]
+                                                  .allocation_id,
+                                          quantity,
+                                      },
+                                  ]
+                                : price.allocations,
                   }))
                 : value.prices,
     }
@@ -76,22 +88,74 @@ export function changeFeedbackQuantity(
 
 export type FeedbackIssue = { message: string; field: string }
 
+export type FeedbackTerms = Pick<InquiryPrice, "tax_rate" | "valid_until">
+
+/** 从已保存的逐商品条件汇总统一项；不同值保持混合状态，不覆盖商品例外。 */
+export function feedbackCommonTerms(lines: InquiryFeedbackLine[]) {
+    const prices = lines
+        .filter((line) => line.conclusion !== "unavailable")
+        .flatMap((line) => line.prices)
+    const first = prices[0]
+    return {
+        tax_rate: prices.every((price) => price.tax_rate === first?.tax_rate)
+            ? first
+                ? (first.tax_rate ?? "")
+                : "0.13"
+            : null,
+        valid_until: prices.every(
+            (price) => price.valid_until === first?.valid_until,
+        )
+            ? (first?.valid_until ?? 0)
+            : null,
+    }
+}
+
+/** 统一设置只改指定条件，不改变供给结论、单价、数量及其他商品条件。 */
+export function applyFeedbackTerms(
+    lines: InquiryFeedbackLine[],
+    demand: InquiryLine[],
+    patch: Partial<FeedbackTerms>,
+) {
+    const common = feedbackCommonTerms(lines)
+    return lines.map((value) => {
+        const line = demand.find((item) => item.line_id === value.line_id)
+        if (!line || value.conclusion === "unavailable") return value
+        const prices = value.prices.length
+            ? value.prices
+            : [
+                  newFeedbackPrice(
+                      line,
+                      value.conclusion === "pending"
+                          ? line.quantity
+                          : value.available_quantity,
+                      {
+                          tax_rate: common.tax_rate ?? undefined,
+                          valid_until: common.valid_until ?? undefined,
+                      },
+                  ),
+              ]
+        return {
+            ...value,
+            prices: prices.map((price) => ({ ...price, ...patch })),
+        }
+    })
+}
+
 /** 单条报价的常用字段在主表编辑，多条报价及特殊条件在展开区编辑。 */
 export function feedbackFieldTarget(value: InquiryFeedbackLine, field: string) {
     let target = field
     if (value.prices.length === 1) {
         const prefix = `price-${toAutomationIdSegment(value.prices[0].price_id)}-`
-        for (const suffix of ["gross-price", "due", "tax-rate", "valid-until"])
+        for (const suffix of ["gross-price"])
             if (field === `${prefix}${suffix}`) target = suffix
     }
-    const inline = [
-        "conclusion",
-        "available-quantity",
-        "gross-price",
-        "due",
-        "tax-rate",
-        "valid-until",
-    ]
+    const inline = ["conclusion", "available-quantity", "gross-price"]
+    if (
+        field === "available-quantity" &&
+        value.conclusion !== "partially_available" &&
+        value.prices.length <= 1
+    )
+        target = "conclusion"
     if (["unavailable", "partially_available"].includes(value.conclusion))
         inline.push("public-note")
     return { field: target, expand: !inline.includes(target) }
@@ -162,7 +226,7 @@ export function feedbackIssues(
     for (const price of value.prices) {
         const field = `price-${toAutomationIdSegment(price.price_id)}`
         try {
-            if (compareDecimal(price.unit_price_gross, "0", 4) < 0)
+            if (compareDecimal(price.unit_price_gross ?? "", "0", 4) < 0)
                 throw new Error()
         } catch {
             add("请填写有效的含税供给单价", `${field}-gross-price`)
@@ -176,8 +240,8 @@ export function feedbackIssues(
             add("请填写尚未到期的报价有效期", `${field}-valid-until`)
         try {
             if (
-                compareDecimal(price.tax_rate, "0", 6) < 0 ||
-                compareDecimal(price.tax_rate, "1", 6) > 0
+                compareDecimal(price.tax_rate ?? "", "0", 6) < 0 ||
+                compareDecimal(price.tax_rate ?? "", "1", 6) > 0
             )
                 add("税率须在 0 至 1 之间", `${field}-tax-rate`)
             if (compareDecimal(price.quantity, "0", demand.quantity_scale) <= 0)
@@ -242,4 +306,21 @@ export function feedbackIssues(
         }
     }
     return issues
+}
+
+/** 旧本地草稿的空字符串按未填写提交，非空金额仍由服务端定点数类型校验。 */
+export function feedbackRequestData(
+    value: InquiryFeedbackData,
+): InquiryFeedbackData {
+    return {
+        ...value,
+        lines: value.lines.map((line) => ({
+            ...line,
+            prices: line.prices.map((price) => ({
+                ...price,
+                unit_price_gross: price.unit_price_gross?.trim() || null,
+                tax_rate: price.tax_rate?.trim() || null,
+            })),
+        })),
+    }
 }

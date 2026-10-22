@@ -135,14 +135,9 @@ fn delivery_view(
     }
     if scope.fulfillment_responsibility == FulfillmentResponsibility::SupplierDirect
         && scope.price_basis == SupplyPriceBasis::Bulk
+        && line.inquiry_quote.is_none()
     {
-        view.bulk_minimum_order_quantity = Some(
-            line.inquiry_quote
-                .as_ref()
-                .map(|quote| quote.minimum_order_quantity)
-                .unwrap_or(line.supply.revision.bulk_minimum_order_quantity)
-                .to_string(),
-        );
+        view.bulk_minimum_order_quantity = Some(line.supply.revision.bulk_minimum_order_quantity.to_string());
     }
     view
 }

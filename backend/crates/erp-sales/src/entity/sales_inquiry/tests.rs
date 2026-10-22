@@ -73,8 +73,8 @@ fn feedback(quantity: &str, conclusion: InquirySupplyConclusion) -> InquiryFeedb
         vec![InquirySupplyPrice {
             price_id: "price".into(),
             quantity: qty(quantity),
-            unit_price_gross: "12.34".parse().unwrap(),
-            tax_rate: "0.13".parse().unwrap(),
+            unit_price_gross: Some("12.34".parse().unwrap()),
+            tax_rate: Some("0.13".parse().unwrap()),
             delivery_due_at: later(),
             valid_until: later(),
             min_quantity: qty("1"),
@@ -1016,4 +1016,69 @@ fn save_draft_failure_preserves_deadline_and_note() {
     let original = closed.clone();
     assert!(closed.save_draft(1, demand(), Some(now())).is_err());
     assert_eq!(closed, original);
+}
+
+#[test]
+fn feedback_draft_saves_missing_quote_values_and_blocks_publish_until_completed() {
+    let mut inquiry = inquiry();
+    inquiry.submit(1, "sales", String::new(), now()).unwrap();
+    let mut data = feedback("10", InquirySupplyConclusion::Available);
+    data.lines[0].prices[0].unit_price_gross = None;
+    data.lines[0].prices[0].tax_rate = None;
+    inquiry.save_feedback_work(1, "buyer", vec!["line".into()], data.clone(), now()).unwrap();
+    let encoded = serde_json::to_value(&inquiry).unwrap();
+    let mut inquiry: SalesInquiry = serde_json::from_value(encoded).unwrap();
+    assert_eq!(inquiry.feedback_work[0].data, data);
+    let merged = inquiry.merge_feedback_work(&[("buyer".into(), vec!["line".into()])]).unwrap();
+    let before = inquiry.clone();
+    assert!(
+        matches!(inquiry.publish(1, "buyer", merged, now()), Err(Error::ValidationError(message)) if message == "请填写含税供给单价后再发布")
+    );
+    assert_eq!(inquiry, before);
+
+    data.lines[0].prices[0].unit_price_gross = Some("12.34".parse().unwrap());
+    assert!(
+        matches!(inquiry.publish(1, "buyer", data.clone(), now()), Err(Error::ValidationError(message)) if message == "请填写报价税率后再发布")
+    );
+    assert_eq!(inquiry, before);
+    data.lines[0].prices[0].tax_rate = Some("0.13".parse().unwrap());
+    inquiry.save_feedback_work(1, "buyer", vec!["line".into()], data, now()).unwrap();
+    let merged = inquiry.merge_feedback_work(&[("buyer".into(), vec!["line".into()])]).unwrap();
+    inquiry.publish(1, "buyer", merged, now()).unwrap();
+    assert_eq!(inquiry.status, InquiryStatus::AwaitingSales);
+    inquiry.accept(1, "sales", 1, now()).unwrap();
+    inquiry.reserve_quantities("reserve", "order", 1, selected("10"), now()).unwrap();
+}
+
+#[test]
+fn feedback_draft_keeps_explicit_zero_distinct_from_missing_and_checks_expiry() {
+    let mut data = feedback("10", InquirySupplyConclusion::Available);
+    let old_json = serde_json::to_value(&data).unwrap();
+    assert_eq!(old_json["lines"][0]["prices"][0]["unit_price_gross"], "12.34");
+    assert_eq!(serde_json::from_value::<InquiryFeedbackData>(old_json).unwrap(), data);
+    data.lines[0].prices[0].unit_price_gross = Some("0".parse().unwrap());
+    data.lines[0].prices[0].tax_rate = Some("0".parse().unwrap());
+    data.validate(&demand(), now()).unwrap();
+    let encoded = serde_json::to_value(&data).unwrap();
+    assert_eq!(encoded["lines"][0]["prices"][0]["unit_price_gross"], "0");
+    data.lines[0].prices[0].valid_until = now();
+    assert!(
+        matches!(data.validate(&demand(), now()), Err(Error::ValidationError(message)) if message == "供给结果已过期或不能按要求交付")
+    );
+}
+
+#[test]
+fn feedback_draft_missing_prices_do_not_bypass_scope_or_version_guards() {
+    let mut inquiry = inquiry();
+    inquiry.submit(1, "sales", String::new(), now()).unwrap();
+    let mut data = feedback("10", InquirySupplyConclusion::Available);
+    data.lines[0].prices[0].unit_price_gross = None;
+    let before = inquiry.clone();
+    assert!(inquiry.save_feedback_work(2, "buyer", vec!["line".into()], data.clone(), now()).is_err());
+    assert_eq!(inquiry, before);
+    assert!(matches!(
+        inquiry.save_feedback_work(1, "buyer", vec!["outside".into()], data, now()),
+        Err(Error::Forbidden(_))
+    ));
+    assert_eq!(inquiry, before);
 }

@@ -296,15 +296,11 @@ pub fn judge_selected_delivery(
     {
         let quantities = selected
             .iter()
+            .filter(|line| line.basis.inquiry_quote.is_none())
             .map(|line| BulkOrderQuantity {
                 offering_id: line.basis.supply.offering.base.id.as_str(),
                 quantity: line.quantity,
-                minimum: line
-                    .basis
-                    .inquiry_quote
-                    .as_ref()
-                    .map(|quote| quote.minimum_order_quantity)
-                    .unwrap_or(line.basis.supply.revision.bulk_minimum_order_quantity),
+                minimum: line.basis.supply.revision.bulk_minimum_order_quantity,
             })
             .collect::<Vec<_>>();
         ensure_bulk_direct_minimum(&quantities).map_err(|error| Error::ValidationError(error.to_string()))?;

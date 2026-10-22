@@ -264,8 +264,8 @@ mod tests {
             prices: vec![InquirySupplyPrice {
                 price_id: price_id.into(),
                 quantity: quantity.parse().unwrap(),
-                unit_price_gross: "8".parse().unwrap(),
-                tax_rate: "0.13".parse().unwrap(),
+                unit_price_gross: Some("8".parse().unwrap()),
+                tax_rate: Some("0.13".parse().unwrap()),
                 delivery_due_at: Instant::from_unix_secs(1000),
                 valid_until: Instant::from_unix_secs(900),
                 min_quantity: "1".parse().unwrap(),
@@ -389,5 +389,18 @@ mod tests {
             .unwrap();
         assert_eq!(inquiry.requirement_version, 2);
         assert!(InquirySalesBasis::from_inquiry(&inquiry, 1, now()).is_err());
+    }
+    #[test]
+    fn feedback_draft_numbers_roundtrip_through_bson_without_zero_substitution() {
+        let mut data = feedback("10", "price-b");
+        data.lines[0].prices[0].unit_price_gross = None;
+        data.lines[0].prices[0].tax_rate = None;
+        data.lines[1].prices[0].unit_price_gross = Some("0".parse().unwrap());
+        data.lines[1].prices[0].tax_rate = Some("0".parse().unwrap());
+        let bytes = bson::serialize_to_vec(&data).unwrap();
+        let restored: InquiryFeedbackData = bson::deserialize_from_slice(&bytes).unwrap();
+        assert_eq!(restored, data);
+        assert_eq!(restored.lines[0].prices[0].unit_price_gross, None);
+        assert_eq!(restored.lines[1].prices[0].unit_price_gross, Some("0".parse().unwrap()));
     }
 }
