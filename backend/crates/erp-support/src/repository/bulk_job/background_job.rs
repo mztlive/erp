@@ -2,7 +2,7 @@
 
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use erp_core::ids::BackgroundJobId;
-use mongodb::bson::{Document, doc};
+use mongodb::bson::{Bson, Document, doc};
 use mongodb::options::FindOptions;
 use persistence_core::{Executor, PageResult, Pagination, QueryFilter, Result, insert_literal_regex_filter};
 use serde::{Deserialize, Serialize};
@@ -73,6 +73,8 @@ pub struct BackgroundJobFilter {
     pub domain_job_type: Option<String>,
     /// 任务状态；`None` 表示不筛选。
     pub status: Option<JobStatus>,
+    /// 仅查询未结束的待执行、执行中和部分成功任务。
+    pub active_only: bool,
     /// 发起人；`None` 表示不筛选。
     pub requested_by: Option<String>,
     /// 页码（1 起）。
@@ -102,6 +104,7 @@ impl Default for BackgroundJobFilter {
             job_type: None,
             domain_job_type: None,
             status: None,
+            active_only: false,
             requested_by: None,
             page: 1,
             page_size: 20,
@@ -137,6 +140,16 @@ impl QueryFilter for BackgroundJobFilter {
         }
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
+        }
+        if self.active_only {
+            filter.insert("finished_at", Bson::Null);
+            filter.insert(
+                "$and",
+                vec![doc! { "status": { "$in": [
+                    JobStatus::Pending.as_str(), JobStatus::Running.as_str(),
+                    JobStatus::PartiallySucceeded.as_str(),
+                ] } }],
+            );
         }
         if let Some(requested_by) = &self.requested_by {
             filter.insert("requested_by", requested_by);
@@ -335,10 +348,34 @@ fn background_job_projection() -> Document {
 
 #[cfg(test)]
 mod tests {
+    use mongodb::bson::Bson;
     use persistence_core::QueryFilter;
 
     use super::BackgroundJobFilter;
     use crate::entity::bulk_job::{JobStatus, JobType};
+
+    #[test]
+    fn active_filter_excludes_finished_jobs_and_preserves_owner_and_status() {
+        let filter = BackgroundJobFilter {
+            active_only: true,
+            requested_by: Some("actor-1".to_string()),
+            status: Some(JobStatus::PartiallySucceeded),
+            ..Default::default()
+        };
+        let document = filter.to_doc();
+        assert_eq!(document.get("finished_at"), Some(&Bson::Null));
+        assert_eq!(document.get_str("requested_by").unwrap(), "actor-1");
+        assert_eq!(document.get_str("status").unwrap(), "partially_succeeded");
+        let active = document.get_array("$and").unwrap()[0].as_document().unwrap();
+        let statuses = active.get_document("status").unwrap().get_array("$in").unwrap();
+        assert_eq!(
+            statuses.iter().map(Bson::as_str).collect::<Vec<_>>(),
+            vec![Some("pending"), Some("running"), Some("partially_succeeded")]
+        );
+        let all = BackgroundJobFilter::default().to_doc();
+        assert!(!all.contains_key("finished_at"));
+        assert!(!all.contains_key("$and"));
+    }
 
     #[test]
     fn background_job_filter_applies_no_regex_and_status() {

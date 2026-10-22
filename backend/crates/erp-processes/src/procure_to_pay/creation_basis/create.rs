@@ -38,7 +38,7 @@ use super::super::adapter::{purchase_order_object_readable, purchase_order_respo
 use super::super::adapters::payment_term::parse;
 use super::super::authorization::{PurchaseOrderAuthorization, ensure_purchase_order_actor_account};
 use super::super::create_submit::{CreatedDraftBundle, submit_created_draft};
-use super::super::inquiry_supply::{record_reselection, reserve_selected_quotes};
+use super::super::inquiry_supply::reserve_selected_quotes;
 use super::super::payment_subject::load_payment_subject;
 use super::super::procurement_task_sync::{
     load_owned_open_procurement_task, sync_procurement_tasks_for_sales_order,
@@ -390,8 +390,6 @@ async fn prepare_basis_draft(
     let judgements = judge_selected_delivery(input.selected_lines, &group.scope, warehouse_region.as_ref())?;
     let mut order = new_basis_order(db, input, command, target_warehouse_id, executor).await?;
     order.record_sourcing_delivery(group.scope.price_basis, judgements);
-    record_reselection(db, &input.sales_order.base.id, group, command.requested_lines, &mut order, executor)
-        .await?;
     let (submission, lines) = prepare_basis_submission(db, &order, input, executor).await?;
     order.attach_draft_submission(submission.base.id.clone().into())?;
     purchase_access(db.clone(), rbac.clone())

@@ -230,7 +230,7 @@ export type BackendBasis = {
     basis_id: string
     source_type?: "PURCHASE" | "EXISTING_STOCK" | string
     inquiry_source?: import("../types").InquirySourcingSource | null
-    inquiry_reselection_required?: boolean
+    has_source_inquiry?: boolean
     recommendation_reason?: string | null
     work_item_id: string
     sales_order_id: string

@@ -3,10 +3,9 @@ use erp_core::common::time::BusinessDate;
 use erp_core::ids::{SalesOrderLineId, SkuId, SupplierAccountId};
 use erp_core::money::{Quantity, Rate, UnitPrice};
 use erp_procurement::entity::purchase_order::{
-    BasisGroup, FulfillmentResponsibility, PurchaseChangeSubmissionLine, PurchaseDeliveryAllocation,
+    FulfillmentResponsibility, PurchaseChangeSubmissionLine, PurchaseDeliveryAllocation,
     PurchaseInquiryAddress, PurchaseInquiryQuoteSource, PurchaseOfferingSource, PurchaseOrder,
-    PurchaseOrderRevisionLine, PurchaseOrderSubmissionLine, PurchaseSourcingReason, RequestedLine,
-    stable_line_id,
+    PurchaseOrderRevisionLine, PurchaseOrderSubmissionLine,
 };
 use erp_read_models::purchase_center::repository::inquiry_quote_source;
 use erp_sales::repository::sales_order::inquiry_source::inquiry_sources;
@@ -49,49 +48,6 @@ macro_rules! quote_line {
     })*};
 }
 quote_line!(PurchaseOrderSubmissionLine, PurchaseOrderRevisionLine, PurchaseChangeSubmissionLine);
-
-/// 来源询价改选通用条款时必须明确原因，并在采购主表冻结逐行解释。
-pub(super) async fn record_reselection(
-    db: &Database,
-    sales_order_id: &str,
-    group: &BasisGroup,
-    requested: &[RequestedLine],
-    order: &mut PurchaseOrder,
-    executor: &mut dyn Executor,
-) -> Result<()> {
-    let source = inquiry_sources(db).find_by_id(sales_order_id, executor).await?;
-    if let Some(source) = source.filter(|source| !source.released) {
-        for line in requested {
-            if !source
-                .lines
-                .iter()
-                .any(|binding| binding.sales_order_line_id.as_ref() == line.sales_order_line_id)
-            {
-                continue;
-            }
-            let basis = group
-                .lines
-                .iter()
-                .find(|basis| stable_line_id(basis) == line.sales_order_line_id)
-                .ok_or_else(changed)?;
-            if basis.inquiry_quote.is_none()
-                && line.reselection_reason.as_deref().is_none_or(|reason| reason.trim().is_empty())
-            {
-                return Err(Error::ValidationError("来源询价改选通用供给须填写改选原因".into()));
-            }
-        }
-    }
-    order.sourcing_delivery.reselection_reasons = requested
-        .iter()
-        .filter_map(|line| {
-            line.reselection_reason.as_ref().map(|reason| PurchaseSourcingReason {
-                sales_order_line_id: line.sales_order_line_id.clone().into(),
-                reason: reason.clone(),
-            })
-        })
-        .collect();
-    Ok(())
-}
 
 /// 新采购采用和专项供应余额写入必须与订单、审批、命令回执共用原事务。
 pub(super) async fn reserve_selected_quotes(

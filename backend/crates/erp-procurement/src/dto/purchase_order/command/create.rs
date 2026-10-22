@@ -18,10 +18,6 @@ pub const CREATE_SOURCING_ACTION: &str = "purchase_order.create_from_sourcing";
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct CreatePurchaseOrderLineRequest {
-    /// 非询价报价选源的明确原因，来源询价时必须填写。
-    #[serde(default)]
-    #[validate(length(max = 1000, message = "改选原因不得超过1000字符"))]
-    pub reselection_reason: Option<String>,
     /// 销售稳定行身份。
     #[validate(custom(function = "non_blank", message = "销售行不能为空"))]
     pub sales_order_line_id: String,
@@ -85,11 +81,6 @@ impl CreatePurchaseOrderFromBasisRequest {
                 RequestedLine::parse(&line.sales_order_line_id, &line.quantity, &line.expected_delivery_date)
                     .map(|mut parsed| {
                         parsed.delivery_allocations = line.delivery_allocations.clone();
-                        parsed.reselection_reason = line
-                            .reselection_reason
-                            .clone()
-                            .map(|reason| reason.trim().to_string())
-                            .filter(|reason| !reason.is_empty());
                         parsed
                     })
                     .map_err(|error| Error::ValidationError(error.to_string()))?,
@@ -128,13 +119,6 @@ impl CreatePurchaseOrderFromBasisRequest {
                 serde_json::to_string(&("delivery", &line.sales_order_line_id, &line.delivery_allocations))
                     .expect("交付安排可序列化"),
             );
-        }
-        for line in lines.iter().filter(|line| line.reselection_reason.is_some()) {
-            parts.push(format!(
-                "reselection:{}:{}",
-                line.sales_order_line_id,
-                line.reselection_reason.as_deref().unwrap_or_default()
-            ));
         }
         digest_parts(parts)
     }
@@ -217,9 +201,6 @@ impl CreatePurchaseOrderResult {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 pub struct SourcingLineAssignment {
-    #[serde(default)]
-    #[validate(length(max = 1000, message = "改选原因不得超过1000字符"))]
-    pub reselection_reason: Option<String>,
     /// 销售稳定行身份。
     #[validate(custom(function = "non_blank", message = "销售行不能为空"))]
     pub sales_order_line_id: String,
@@ -268,7 +249,6 @@ impl SourcingLineAssignment {
             sales_order_line_id: sales_order_line_id.into(),
             basis_id: basis_id.into(),
             source_type: SupplySourceType::Purchase,
-            reselection_reason: None,
             target_warehouse_id: None,
             quantity: quantity.into(),
             expected_delivery_date: expected_delivery_date.into(),
@@ -355,7 +335,6 @@ impl CreatePurchaseOrdersFromSourcingRequest {
                 )
                 .map(|mut parsed| {
                     parsed.delivery_allocations = line.delivery_allocations.clone();
-                    parsed.reselection_reason = line.reselection_reason.clone();
                     parsed
                 })
                 .map_err(|error| Error::ValidationError(error.to_string()))?,
@@ -397,22 +376,6 @@ impl CreatePurchaseOrdersFromSourcingRequest {
             .filter(|line| !line.delivery_allocations.is_empty())
             .map(|line| (&line.sales_order_line_id, &line.basis_id, &line.delivery_allocations))
             .collect::<Vec<_>>();
-        let reasons = assignments
-            .iter()
-            .filter_map(|line| {
-                line.reselection_reason
-                    .as_ref()
-                    .map(|reason| (&line.sales_order_line_id, &line.basis_id, reason))
-            })
-            .collect::<Vec<_>>();
-        if !reasons.is_empty() {
-            return payload_fingerprint(
-                CREATE_SOURCING_ACTION,
-                self.sales_order_id.trim(),
-                &(self.work_item_id.trim(), payload, delivery, reasons),
-            )
-            .map_err(Into::into);
-        }
         if !delivery.is_empty() {
             return payload_fingerprint(
                 CREATE_SOURCING_ACTION,
@@ -538,23 +501,55 @@ mod delivery_tests {
 }
 
 #[cfg(test)]
-mod inquiry_reason_tests {
+mod sourcing_contract_tests {
+    use serde_json::json;
+
     use super::*;
+
     #[test]
-    fn explicit_reselection_reason_is_normalized_bounded_and_part_of_command_identity() {
-        let mut request = CreatePurchaseOrdersFromSourcingRequest {
-            work_item_id: "task".into(),
-            sales_order_id: "sales".into(),
-            lines: vec![SourcingLineAssignment::new("line", "basis", "1", "2026-10-23")],
-            idempotency_key: "key".into(),
-        };
-        let original = request.sourcing_assignments().unwrap();
-        let fingerprint = request.request_fingerprint(original.assignments()).unwrap();
-        request.lines[0].reselection_reason = Some(" 原供应商无法按期交付 ".into());
-        let revised = request.sourcing_assignments().unwrap();
-        assert_eq!(revised.assignments()[0].reselection_reason.as_deref(), Some("原供应商无法按期交付"));
-        assert_ne!(fingerprint, request.request_fingerprint(revised.assignments()).unwrap());
-        request.lines[0].reselection_reason = Some("a".repeat(1001));
-        assert!(request.sourcing_assignments().is_err());
+    fn split_sources_need_no_explanation_and_still_reject_zero_quantity() {
+        let mut request: CreatePurchaseOrdersFromSourcingRequest = serde_json::from_value(json!({
+            "work_item_id": "task", "sales_order_id": "sales", "idempotency_key": "key",
+            "lines": [
+                {"sales_order_line_id": "line", "basis_id": "general-a", "quantity": "60", "expected_delivery_date": "2026-10-30"},
+                {"sales_order_line_id": "line", "basis_id": "general-b", "quantity": "40", "expected_delivery_date": "2026-10-30"}
+            ]
+        })).unwrap();
+        request.validate().unwrap();
+        let assignments = request.sourcing_assignments().unwrap();
+        assert_eq!(assignments.assignments().len(), 2);
+        assert_eq!(assignments.assignments()[0].quantity.to_string(), "60");
+        let fingerprint = request.request_fingerprint(assignments.assignments()).unwrap();
+        request.lines.reverse();
+        assert_eq!(
+            fingerprint,
+            request.request_fingerprint(request.sourcing_assignments().unwrap().assignments()).unwrap()
+        );
+        request.lines[0].quantity = "0".into();
+        assert!(request.sourcing_assignments().unwrap_err().to_string().contains("必须大于 0"));
+    }
+
+    #[test]
+    fn basis_creation_accepts_no_explanation_and_keeps_quantity_validation() {
+        let mut request: CreatePurchaseOrderFromBasisRequest = serde_json::from_value(json!({
+            "work_item_id": "task", "basis_id": "general", "purchase_type": "PHYSICAL",
+            "payment_term_code": "PREPAY_50", "idempotency_key": "key",
+            "lines": [{"sales_order_line_id": "line", "quantity": "100", "expected_delivery_date": "2026-10-30"}]
+        })).unwrap();
+        request.validate().unwrap();
+        assert_eq!(request.normalized_lines().unwrap()[0].quantity.to_string(), "100");
+        request.lines[0].quantity = "0".into();
+        assert!(request.normalized_lines().unwrap_err().to_string().contains("必须大于 0"));
+    }
+
+    #[test]
+    fn removed_reason_is_rejected_by_both_command_contracts() {
+        let line = json!({"sales_order_line_id": "line", "quantity": "1", "expected_delivery_date": "2026-10-30", "reselection_reason": "旧客户端字段"});
+        let error = serde_json::from_value::<CreatePurchaseOrderLineRequest>(line.clone()).unwrap_err();
+        assert!(error.to_string().contains("unknown field `reselection_reason`"));
+        let mut assignment = line;
+        assignment["basis_id"] = json!("general");
+        let error = serde_json::from_value::<SourcingLineAssignment>(assignment).unwrap_err();
+        assert!(error.to_string().contains("unknown field `reselection_reason`"));
     }
 }

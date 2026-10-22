@@ -1,6 +1,8 @@
 "use client"
 
 import { MoneyValue, QuantityValue } from "@/components/business"
+import { Trash2Icon } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
@@ -18,23 +20,26 @@ export function SourcingSourceList({
     row,
     activeRowKey,
     onSelect,
+    onRemove,
     errors,
 }: Pick<SourcingEditorProps, "form"> & {
     row: SourcingEditorRow
     activeRowKey?: string
     onSelect: (rowKey: string) => void
+    onRemove: (rowKey: string) => void
     errors: ReadonlyMap<string, string[]>
 }) {
     return (
         <div className="min-w-0">
-            <div className="sticky top-0 z-10 flex items-center gap-2 border-b bg-background px-3 py-2 text-xs text-muted-foreground">
+            <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-l-2 border-l-transparent bg-background px-3 py-2 text-xs text-muted-foreground">
                 <span className="w-8 shrink-0 text-center">使用</span>
-                <div className={cn(columns, "flex-1 px-2")}>
+                <div className={cn(columns, "min-w-0 flex-1 px-2")}>
                     <span>供给来源</span>
                     <span className="text-right">含税单价</span>
                     <span className="text-right">分配数量</span>
                     <span className="text-right">预计交付</span>
                 </div>
+                <span className="w-16 shrink-0 text-center">操作</span>
             </div>
             <ul className="divide-y divide-border/60">
                 {row.allocations.map(({ line, index }) => {
@@ -136,6 +141,24 @@ export function SourcingSourceList({
                                         : line.expectedDeliveryDate || "待填写"}
                                 </span>
                             </button>
+                            <Button
+                                id={`procurement-orders-create-row-${toAutomationIdSegment(line.rowKey)}-split-remove`}
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="w-16 px-1 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                disabled={row.allocations.length <= 1}
+                                title={
+                                    row.allocations.length <= 1
+                                        ? "至少保留一个来源"
+                                        : undefined
+                                }
+                                aria-label={`移除 ${name} · ${route}`}
+                                onClick={() => onRemove(line.rowKey)}
+                            >
+                                <Trash2Icon />
+                                移除
+                            </Button>
                         </li>
                     )
                 })}

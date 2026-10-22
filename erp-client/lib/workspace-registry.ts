@@ -77,6 +77,7 @@ export type WorkspaceId =
 /** 侧栏角标键：由 Shell 映射到对应工作面的实时计数，无数据时隐藏。 */
 export type WorkspaceNavBadgeKey =
     | "todo-count"
+    | "background-job-active-count"
     | "delivery-count"
     | "warehouse-count"
     | "selection-actionable-count"
@@ -700,6 +701,7 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
                     routeId: "W18",
                     href: "/governance/background-jobs",
                     label: "后台任务",
+                    badge: "background-job-active-count",
                     icon: ListChecksIcon,
                     requiredPermissions: ["background_job:list"],
                 },

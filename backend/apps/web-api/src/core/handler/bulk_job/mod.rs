@@ -382,3 +382,23 @@ pub struct BackgroundJobItemListQuery {
     /// 单页条数。
     pub page_size: u32,
 }
+
+#[cfg(test)]
+mod tests {
+    use axum::extract::Query;
+    use axum::http::Uri;
+
+    use super::BackgroundJobListParams;
+
+    #[test]
+    fn background_job_active_filter_query_contract() {
+        let uri = Uri::from_static("/admin/background-jobs?active_only=true&page=1&page_size=1");
+        let Query(params) = Query::<BackgroundJobListParams>::try_from_uri(&uri).unwrap();
+        assert!(params.active_only);
+        assert_eq!(params.page_size, Some(1));
+        let uri = Uri::from_static("/admin/background-jobs");
+        assert!(!Query::<BackgroundJobListParams>::try_from_uri(&uri).unwrap().active_only);
+        let uri = Uri::from_static("/admin/background-jobs?active_only=invalid");
+        assert!(Query::<BackgroundJobListParams>::try_from_uri(&uri).is_err());
+    }
+}

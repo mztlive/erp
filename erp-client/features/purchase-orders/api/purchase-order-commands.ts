@@ -321,8 +321,6 @@ export async function createPurchaseOrdersFromSourcing(
                     quantity: line.quantity,
                     expected_delivery_date: line.expectedDeliveryDate,
                     delivery_allocations: line.deliveryAllocations ?? [],
-                    reselection_reason:
-                        line.reselectionReason?.trim() || undefined,
                 })),
                 idempotency_key: input.idempotencyKey,
             },

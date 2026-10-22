@@ -47,9 +47,6 @@ pub struct PurchaseDeliveryJudgement {
 /// 采购单冻结的价格依据、逐行配送判定与"供应商不收运费"标记。
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PurchaseSourcingDelivery {
-    /// 采购显式确认改选的逐销售行原因，独立于原询价历史。
-    #[serde(default)]
-    pub reselection_reasons: Vec<PurchaseSourcingReason>,
     /// 价格依据；费用采购单为空。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub supply_price_basis: Option<SupplyPriceBasis>,
@@ -59,13 +56,6 @@ pub struct PurchaseSourcingDelivery {
     /// "供应商不收运费"标记。
     #[serde(default)]
     pub freight_waivers: Vec<PurchaseFreightWaiver>,
-}
-
-/// 正式采购创建时冻结的改选解释。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PurchaseSourcingReason {
-    pub sales_order_line_id: SalesOrderLineId,
-    pub reason: String,
 }
 
 /// 采购标记"供应商不收运费"的记录。
@@ -214,6 +204,21 @@ mod tests {
     use erp_core::region::RegionCode;
 
     use super::*;
+
+    #[test]
+    fn legacy_sourcing_reason_does_not_block_loading_or_return_in_new_writes() {
+        let delivery: PurchaseSourcingDelivery = serde_json::from_value(serde_json::json!({
+            "reselection_reasons": [{"sales_order_line_id": "line", "reason": "历史说明"}],
+            "supply_price_basis": "DROPSHIP",
+            "delivery_judgements": [],
+            "freight_waivers": []
+        }))
+        .unwrap();
+        assert_eq!(delivery.supply_price_basis, Some(SupplyPriceBasis::Dropship));
+        let stored = serde_json::to_value(delivery).unwrap();
+        assert!(stored.get("reselection_reasons").is_none());
+        assert_eq!(stored["supply_price_basis"], "DROPSHIP");
+    }
 
     fn code(value: &str) -> RegionCode {
         RegionCode::parse(value).unwrap()

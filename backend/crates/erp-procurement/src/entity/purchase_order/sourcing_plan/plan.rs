@@ -257,7 +257,6 @@ fn plan_sourcing_drafts(
             target_warehouse_id.as_ref().map(ToString::to_string).unwrap_or_default()
         );
         let requested = RequestedLine {
-            reselection_reason: assignment.reselection_reason.clone(),
             sales_order_line_id: assignment.sales_order_line_id.clone(),
             quantity: assignment.quantity,
             expected_delivery_date: assignment.expected_delivery_date,

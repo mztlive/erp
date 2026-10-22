@@ -237,7 +237,11 @@ export function SourcingDeliveryEditor({
                 }
                 return (
                     <section
-                        className="space-y-2 border-t border-border pt-3"
+                        className={
+                            expandSummary
+                                ? "space-y-3 border-t border-border pt-4"
+                                : "space-y-2 border-t border-border pt-3"
+                        }
                         aria-label="交付地址"
                     >
                         <div className="flex min-h-8 items-center justify-between gap-2">
@@ -385,7 +389,7 @@ export function SourcingDeliveryEditor({
                         ) : condensed ? (
                             <CompactDeliverySummary
                                 key={line.basisId}
-                                defaultOpen={expandSummary}
+                                detailsOnly={expandSummary}
                                 idPrefix={id}
                                 rows={rows.filter((row) =>
                                     positive(row.quantity),
@@ -441,24 +445,58 @@ export function SourcingDeliveryEditor({
     )
 }
 
-/** 默认显示收件人与地址摘要，展开后核对电话、完整地址和逐地址数量。 */
+/** 分栏编辑直接展示地址明细；紧凑场景保留按需展开的摘要。 */
 function CompactDeliverySummary({
     idPrefix,
     rows,
     product,
     option,
-    defaultOpen = false,
+    detailsOnly = false,
 }: {
     idPrefix: string
     rows: (PurchaseDeliveryAllocation & { remaining?: string })[]
     product: SourcingProductLine
     option?: SourcingSupplierOption
-    defaultOpen?: boolean
+    detailsOnly?: boolean
 }) {
     const first = rows[0]
     if (!first) return null
+    const details = (
+        <ul className="divide-y divide-border/60 rounded-md bg-muted/40 px-3">
+            {rows.map((row) => (
+                <li
+                    key={JSON.stringify([
+                        row.recipient,
+                        row.phone,
+                        row.region_code,
+                        row.address,
+                    ])}
+                    className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 py-3"
+                >
+                    <DeliveryAddress row={row} option={option} />
+                    <span className="text-right text-xs leading-5">
+                        <QuantityValue
+                            value={row.quantity}
+                            unit={product.unit}
+                        />
+                        {row.remaining !== undefined &&
+                        row.remaining !== row.quantity ? (
+                            <span className="block text-muted-foreground">
+                                剩余{" "}
+                                <QuantityValue
+                                    value={row.remaining}
+                                    unit={product.unit}
+                                />
+                            </span>
+                        ) : null}
+                    </span>
+                </li>
+            ))}
+        </ul>
+    )
+    if (detailsOnly) return details
     return (
-        <Collapsible defaultOpen={defaultOpen}>
+        <Collapsible>
             <CollapsibleTrigger
                 id={`${idPrefix}-summary-toggle`}
                 render={
@@ -475,39 +513,7 @@ function CompactDeliverySummary({
                 </span>
                 <ChevronDownIcon className="size-3.5 shrink-0 group-data-[panel-open]:rotate-180" />
             </CollapsibleTrigger>
-            <CollapsibleContent>
-                <ul className="mt-2 space-y-3 rounded-md bg-muted/40 p-3">
-                    {rows.map((row) => (
-                        <li
-                            key={JSON.stringify([
-                                row.recipient,
-                                row.phone,
-                                row.region_code,
-                                row.address,
-                            ])}
-                            className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3"
-                        >
-                            <DeliveryAddress row={row} option={option} />
-                            <span className="text-right text-xs leading-5">
-                                <QuantityValue
-                                    value={row.quantity}
-                                    unit={product.unit}
-                                />
-                                {row.remaining !== undefined &&
-                                row.remaining !== row.quantity ? (
-                                    <span className="block text-muted-foreground">
-                                        剩余{" "}
-                                        <QuantityValue
-                                            value={row.remaining}
-                                            unit={product.unit}
-                                        />
-                                    </span>
-                                ) : null}
-                            </span>
-                        </li>
-                    ))}
-                </ul>
-            </CollapsibleContent>
+            <CollapsibleContent className="pt-2">{details}</CollapsibleContent>
         </Collapsible>
     )
 }

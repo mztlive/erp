@@ -134,24 +134,6 @@ export function SourcingAllocationEditor({
                 {!condensed ? (
                     <SourcingOptionFacts option={option} product={product} />
                 ) : null}
-                {option?.sourceType === "PURCHASE" &&
-                    !option.inquirySource &&
-                    (option.inquiryReselectionRequired ||
-                        product.options.some(
-                            (candidate) => candidate.inquirySource,
-                        )) && (
-                        <form.AppField
-                            name={`lines[${index}].reselectionReason`}
-                            children={(field) => (
-                                <field.TextareaField
-                                    id={`${id}-reselection-reason`}
-                                    label="改选原因"
-                                    required
-                                    placeholder="说明本次改用其他供应商或通用供给的原因"
-                                />
-                            )}
-                        />
-                    )}
             </div>
             <div
                 className={cn(

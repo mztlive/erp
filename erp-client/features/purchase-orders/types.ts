@@ -448,7 +448,7 @@ export type PurchaseCreationBasis = Readonly<{
     basisId: string
     sourceType: SupplySourceType
     inquirySource?: InquirySourcingSource
-    inquiryReselectionRequired?: boolean
+    hasSourceInquiry?: boolean
     recommendationReason?: string
     workItemId: string
     salesOrderId: string
@@ -551,7 +551,6 @@ export type CreatePurchaseOrdersFromSourcingInput = {
         quantity: string
         expectedDeliveryDate: string
         deliveryAllocations?: PurchaseDeliveryAllocation[]
-        reselectionReason?: string
     }>
     idempotencyKey: string
 }

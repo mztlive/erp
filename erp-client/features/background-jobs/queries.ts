@@ -21,6 +21,24 @@ export const backgroundJobKeys = {
         [...backgroundJobKeys.all, "items", id, page] as const,
 }
 
+/** 菜单角标使用服务端授权范围内的总数，不对当前页任务求和。 */
+export function useBackgroundJobActiveCountQuery(enabled: boolean) {
+    return useQuery({
+        queryKey: [...backgroundJobKeys.all, "active-count"],
+        queryFn: async () => {
+            const page = await fetchBackgroundJobs({
+                page: 1,
+                page_size: 1,
+                active_only: true,
+            })
+            return page.total
+        },
+        enabled,
+        refetchInterval: 2000,
+        refetchOnWindowFocus: "always",
+    })
+}
+
 export function useBackgroundJobsQuery(params: BackgroundJobListParams) {
     return useQuery({
         queryKey: backgroundJobKeys.list(params),

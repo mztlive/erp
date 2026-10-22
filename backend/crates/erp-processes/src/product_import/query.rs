@@ -43,6 +43,7 @@ impl ProductImportProcess {
             job_type: Some(JobType::Import),
             domain_job_type: Some(PRODUCT_IMPORT_DOMAIN_JOB_TYPE.to_string()),
             status: None,
+            active_only: false,
             requested_by: Some(actor.id().to_string()),
             page: paging.page,
             page_size: paging.page_size,

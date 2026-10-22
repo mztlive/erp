@@ -431,7 +431,7 @@ export function mapBasis(basis: BackendBasis): PurchaseCreationBasis {
         basisId: basis.basis_id,
         sourceType,
         inquirySource: basis.inquiry_source ?? undefined,
-        inquiryReselectionRequired: basis.inquiry_reselection_required ?? false,
+        hasSourceInquiry: basis.has_source_inquiry ?? false,
         recommendationReason: basis.recommendation_reason ?? undefined,
         workItemId: basis.work_item_id,
         salesOrderId: basis.sales_order_id,

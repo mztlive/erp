@@ -74,9 +74,7 @@ pub(super) fn build_basis_view(
     .with_business_category(group.business_category.clone())
     .with_price_basis(group.scope.price_basis.as_str())
     .with_inquiry_source(group.lines.first().and_then(|line| line.inquiry_quote.as_ref()))
-    .with_inquiry_reselection_required(
-        facts.source_inquiry_id.is_some() && group.scope.inquiry_quote_revision_id.is_none(),
-    )
+    .with_source_inquiry(facts.source_inquiry_id.is_some())
     .with_lines(lines))
 }
 

@@ -193,7 +193,6 @@ fn item_request(
             .requested_lines
             .iter()
             .map(|line| CreatePurchaseOrderLineRequest {
-                reselection_reason: line.reselection_reason.clone(),
                 sales_order_line_id: line.sales_order_line_id.clone(),
                 quantity: line.quantity.to_string(),
                 expected_delivery_date: line.expected_delivery_date.to_string(),

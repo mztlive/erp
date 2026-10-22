@@ -283,8 +283,6 @@ export function PurchaseOrderCreatePage({
                     targetWarehouseId: line.targetWarehouseId || undefined,
                     quantity: line.quantity.trim(),
                     expectedDeliveryDate: line.expectedDeliveryDate,
-                    reselectionReason:
-                        line.reselectionReason?.trim() || undefined,
                     deliveryAllocations: sourcingDeliveryAllocations(
                         product,
                         line,
@@ -307,8 +305,6 @@ export function PurchaseOrderCreatePage({
                     targetWarehouseId: line.targetWarehouseId || undefined,
                     quantity: line.quantity.trim(),
                     expectedDeliveryDate: line.expectedDeliveryDate,
-                    reselectionReason:
-                        line.reselectionReason?.trim() || undefined,
                     deliveryAllocations: sourcingDeliveryAllocations(
                         product,
                         line,
@@ -650,7 +646,6 @@ export function PurchaseOrderCreatePage({
                 ...line,
                 basisId: option.basisId,
                 expectedDeliveryDate: option.expectedDeliveryDate,
-                reselectionReason: "",
                 targetWarehouseId:
                     option.fulfillmentResponsibility === "WAREHOUSE"
                         ? line.targetWarehouseId
@@ -668,7 +663,7 @@ export function PurchaseOrderCreatePage({
                 : "当前没有可沿用的询价报价",
             description: matched
                 ? "现有库存分配已保留。请继续核对供应商、数量、配送范围、交期及付款条件；集采直发在明细中明确选择。"
-                : "报价可能已失效、数量不满足条件或需明确选择集采直发。请在明细中核对其他供给，并填写改选原因。",
+                : "报价可能已失效、数量不满足条件或需明确选择集采直发。请在明细中核对其他供给。",
             type: matched ? "success" : "warning",
         })
     }, [selectedOrder, lines, writeLines])
@@ -760,18 +755,14 @@ export function PurchaseOrderCreatePage({
             instance.setMeta((prev) => ({ ...prev, isTouched: true }))
         }
         await form.validate("submit")
+        setActionError(null)
         if (form.state.canSubmit) {
-            setActionError(null)
             setPreviewOpen(true)
             return
         }
         const description =
             collectSourcingErrorMessages(form.getAllErrors()).join("；") ||
             "请检查本次分配数量和供给方案后重试。"
-        setActionError({
-            title: "无法预览供给分配",
-            description,
-        })
         toast.add({
             title: "无法预览供给分配",
             description,
@@ -899,7 +890,7 @@ export function PurchaseOrderCreatePage({
                         )
                       ? selectedOrder.lines.some((line) =>
                             line.options.some(
-                                (option) => option.inquiryReselectionRequired,
+                                (option) => option.hasSourceInquiry,
                             ),
                         )
                           ? "销售单已关联询价，但当前没有可沿用的有效采购报价。请核对来源反馈轮次的内部报价、数量、有效期和供给状态。"

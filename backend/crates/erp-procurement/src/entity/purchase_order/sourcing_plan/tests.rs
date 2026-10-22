@@ -288,7 +288,6 @@ fn assignment(
     quantity: &str,
 ) -> SourcingAssignment {
     SourcingAssignment {
-        reselection_reason: None,
         delivery_allocations: Vec::new(),
 
         sales_order_line_id: line_id.to_string(),

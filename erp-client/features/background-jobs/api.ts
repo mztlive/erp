@@ -55,6 +55,7 @@ export type BackgroundJobListParams = {
     page_size: number
     job_no?: string
     status?: JobStatus | "active"
+    active_only?: boolean
     /** 业务类型（`PRODUCT_IMPORT`/`SALES_ORDER_EXPORT` 等）。 */
     domain_job_type?: string
     /** 任务类型（`import`/`export`…）；省略表示全部类型。 */
@@ -69,6 +70,7 @@ export async function fetchBackgroundJobs(
     return apiGet<Page<BackgroundJobView>>("/admin/background-jobs", {
         ...rest,
         status: status === "active" ? undefined : status,
+        active_only: status === "active" ? true : rest.active_only,
     })
 }
 

@@ -207,7 +207,7 @@ mod tests {
             .groups(&order(), &coverage(), &["sales-line".into()], &mut facts)
             .unwrap();
         assert_eq!(groups.len(), 1);
-        assert!(facts.source_inquiry_id.is_none(), "另一张无询价销售单不能继承上张单的改选标记");
+        assert!(facts.source_inquiry_id.is_none(), "另一张无询价销售单不能继承上张单的询价关联标记");
     }
 
     #[test]

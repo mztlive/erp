@@ -57,7 +57,6 @@ export function buildSourcingFormSchema(order?: SourcingSalesOrder) {
                     targetWarehouseId: textField.optional().default(""),
                     targetWarehouseName: textField.optional().default(""),
                     expectedDeliveryDate: textField,
-                    reselectionReason: textField.optional().default(""),
                     deliveryAllocations: z
                         .array(
                             z.object({
@@ -142,24 +141,6 @@ export function buildSourcingFormSchema(order?: SourcingSalesOrder) {
                 const requiresTargetWarehouse =
                     option.sourceType === "PURCHASE" &&
                     option.fulfillmentResponsibility === "WAREHOUSE"
-                if (
-                    option.sourceType === "PURCHASE" &&
-                    !option.inquirySource &&
-                    (option.inquiryReselectionRequired ||
-                        product?.options.some(
-                            (candidate) => candidate.inquirySource,
-                        ))
-                ) {
-                    if (
-                        !line.reselectionReason?.trim() ||
-                        line.reselectionReason.length > 1000
-                    )
-                        context.addIssue({
-                            code: "custom",
-                            path: ["lines", index, "reselectionReason"],
-                            message: "请填写改选原因，最多 1000 字",
-                        })
-                }
                 if (requiresTargetWarehouse && !line.targetWarehouseId) {
                     context.addIssue({
                         code: "custom",

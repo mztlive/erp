@@ -23,7 +23,6 @@ pub enum SupplySourceType {
 /// 已类型化的选源分配行。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourcingAssignment {
-    pub reselection_reason: Option<String>,
     /// 稳定销售行。
     pub sales_order_line_id: String,
     /// 本行选用的精确创建依据；现有库存来源绑定库存余额依据。
@@ -90,7 +89,6 @@ impl SourcingAssignment {
             return Err(Error::from("本次分配数量必须大于 0"));
         }
         Ok(Self {
-            reselection_reason: None,
             sales_order_line_id,
             basis_id,
             source_type,
@@ -137,15 +135,7 @@ impl SourcingAssignmentSet {
             {
                 return Err(Error::from("现有库存的客户地址在仓库发货时安排"));
             }
-            let mut assignment = assignment.clone();
-            assignment.reselection_reason = assignment
-                .reselection_reason
-                .map(|value| value.trim().to_string())
-                .filter(|value| !value.is_empty());
-            if assignment.reselection_reason.as_ref().is_some_and(|value| value.chars().count() > 1000) {
-                return Err(Error::from("改选原因不得超过1000字符"));
-            }
-            normalized.push(assignment);
+            normalized.push(assignment.clone());
         }
         normalized.sort_by(|left, right| {
             left.sales_order_line_id

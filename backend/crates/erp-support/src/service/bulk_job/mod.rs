@@ -299,6 +299,7 @@ impl BulkJobService {
             job_type: query.job_type,
             domain_job_type: query.domain_job_type,
             status: query.status,
+            active_only: query.active_only,
             requested_by: if is_admin { query.requested_by } else { Some(actor.id().to_string()) },
             page,
             page_size,

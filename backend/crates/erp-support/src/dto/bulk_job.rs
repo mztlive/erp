@@ -352,6 +352,9 @@ pub struct BackgroundJobListParams {
     pub domain_job_type: Option<String>,
     /// 任务状态筛选。
     pub status: Option<JobStatus>,
+    /// 仅查询尚未结束的待执行、执行中或部分成功任务。
+    #[serde(default)]
+    pub active_only: bool,
     /// 发起人筛选。
     pub requested_by: Option<String>,
     /// 页码（1 起）。
@@ -377,6 +380,8 @@ pub(crate) struct BackgroundJobListQuery {
     pub domain_job_type: Option<String>,
     /// 任务状态筛选。
     pub status: Option<JobStatus>,
+    /// 仅查询未完成任务。
+    pub active_only: bool,
     /// 发起人筛选。
     pub requested_by: Option<String>,
     /// 分页与排序参数。
@@ -402,6 +407,7 @@ impl BackgroundJobListParams {
             job_type: self.job_type,
             domain_job_type: normalized_text(self.domain_job_type.as_deref()),
             status: self.status,
+            active_only: self.active_only,
             requested_by: normalized_text(self.requested_by.as_deref()),
             paging: PageParams::resolve(
                 self.page,
@@ -614,11 +620,14 @@ mod tests {
     fn background_job_list_params_normalize_and_validate() {
         let params = BackgroundJobListParams {
             job_no: Some(" JOB-1 ".to_string()),
+            active_only: true,
             job_type: Some(JobType::Import),
             status: Some(JobStatus::Running),
             ..Default::default()
         };
         let query = params.normalized().unwrap();
+        assert!(query.active_only);
+        assert!(!BackgroundJobListParams::default().normalized().unwrap().active_only);
         assert_eq!(query.job_no.as_deref(), Some("JOB-1"));
         assert_eq!(query.job_type, Some(JobType::Import));
         assert_eq!(query.status, Some(JobStatus::Running));

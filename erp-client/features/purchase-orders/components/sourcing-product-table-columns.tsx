@@ -5,7 +5,11 @@ import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { NativeCheckbox } from "@/components/ui/checkbox"
 import { StatusBadge } from "@/components/ui/status-badge"
-import { ChevronDownIcon, ChevronRightIcon } from "lucide-react"
+import {
+    ChevronDownIcon,
+    ChevronRightIcon,
+    SlidersHorizontalIcon,
+} from "lucide-react"
 import { multiplyFixed } from "@/lib/fixed-decimal"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { findSourcingOption } from "../lib/purchase-order-create-model"
@@ -283,11 +287,15 @@ export function sourcingProductColumns({
                 <Button
                     id={`sourcing-list-${toAutomationIdSegment(row.product.salesOrderLineId)}-edit`}
                     type="button"
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
                     aria-label={`调整 ${row.product.itemName}`}
                     onClick={() => onEdit(row.product.salesOrderLineId)}
                 >
+                    <SlidersHorizontalIcon
+                        data-icon="inline-start"
+                        aria-hidden="true"
+                    />
                     调整
                 </Button>
             ),

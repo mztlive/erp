@@ -12,7 +12,7 @@ import type {
 export type SourcingSupplierOption = Readonly<{
     sourceType: SupplySourceType
     inquirySource?: InquirySourcingSource
-    inquiryReselectionRequired?: boolean
+    hasSourceInquiry?: boolean
     recommendationReason?: string
     supplierId: string
     supplierName: string
@@ -68,7 +68,6 @@ export type SourcingSalesOrder = Readonly<{
 
 /** 建单表单中一条可编辑选源行。 */
 export type SourcingLineInput = {
-    reselectionReason?: string
     deliveryAllocations?: PurchaseDeliveryAllocation[]
     rowKey: string
     salesOrderLineId: string

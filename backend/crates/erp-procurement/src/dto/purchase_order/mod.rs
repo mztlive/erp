@@ -171,7 +171,6 @@ mod tests {
             payment_term_code: "NET-30".to_string(),
             target_warehouse_id: Some("wh-1".to_string()),
             lines: vec![CreatePurchaseOrderLineRequest {
-                reselection_reason: None,
                 delivery_allocations: Vec::new(),
 
                 sales_order_line_id: "sol-1".to_string(),
@@ -181,7 +180,6 @@ mod tests {
             idempotency_key: "create-key-1".to_string(),
         };
         let lines = vec![RequestedLine {
-            reselection_reason: None,
             delivery_allocations: Vec::new(),
 
             sales_order_line_id: "sol-1".to_string(),
@@ -219,7 +217,6 @@ mod tests {
         };
         let assignments = vec![
             SourcingAssignment {
-                reselection_reason: None,
                 delivery_allocations: Vec::new(),
 
                 sales_order_line_id: "sol-1".to_string(),
@@ -230,7 +227,6 @@ mod tests {
                 expected_delivery_date: BusinessDate::from_str("2026-08-25").unwrap(),
             },
             SourcingAssignment {
-                reselection_reason: None,
                 delivery_allocations: Vec::new(),
 
                 sales_order_line_id: "sol-2".to_string(),

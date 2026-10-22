@@ -27,6 +27,8 @@ import {
 import { logoutAndRedirect } from "@/components/providers/auth-session-provider"
 import { isNavItemActive } from "@/lib/nav-active"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { cn } from "@/lib/utils"
+import { useBackgroundJobActiveCountQuery } from "@/features/background-jobs/queries"
 import { getErrorMessage } from "@/lib/api/errors"
 import { hasPermission } from "@/lib/permissions"
 import {
@@ -43,6 +45,7 @@ import { useActionableBookCountQuery } from "@/features/sales-selection/hooks/qu
 import { useWorkspaceInboxCountQuery } from "@/features/workspace/hooks/queries"
 
 type NavBadgeCounts = {
+    backgroundJobs: number | undefined
     todo: number
     selectionActionable: number
     inquiryFeedback: number | undefined
@@ -54,6 +57,8 @@ function badgeCountFor(
     counts: NavBadgeCounts,
 ): number | undefined {
     switch (key) {
+        case "background-job-active-count":
+            return counts.backgroundJobs
         case "todo-count":
             return counts.todo
         case "selection-actionable-count":
@@ -195,7 +200,13 @@ export function WorkspaceSidebarNav() {
     const procurementInquiryCountQuery = useProcurementInquiryCountQuery(
         hasPermission(permissions, "procurement_inquiry:list"),
     )
+    const backgroundJobCountQuery = useBackgroundJobActiveCountQuery(
+        hasPermission(permissions, "background_job:list"),
+    )
     const counts: NavBadgeCounts = {
+        backgroundJobs: backgroundJobCountQuery.isError
+            ? undefined
+            : backgroundJobCountQuery.data,
         todo: todoCountQuery.data?.mine ?? 0,
         selectionActionable: selectionCountQuery.data ?? 0,
         inquiryFeedback: inquiryFeedbackCountQuery.isError
@@ -270,15 +281,18 @@ export function WorkspaceSidebarNav() {
                                 const badgeCount = item.badge
                                     ? badgeCountFor(item.badge, counts)
                                     : undefined
-                                const inquiryCountQuery =
+                                const badgeQuery =
                                     item.badge === "inquiry-feedback-count"
                                         ? inquiryFeedbackCountQuery
                                         : item.badge ===
                                             "procurement-inquiry-count"
                                           ? procurementInquiryCountQuery
-                                          : undefined
-                                const badgeError = inquiryCountQuery?.isError
-                                    ? `询价待处理数量加载失败：${getErrorMessage(inquiryCountQuery.error, "请稍后重试")}`
+                                          : item.badge ===
+                                              "background-job-active-count"
+                                            ? backgroundJobCountQuery
+                                            : undefined
+                                const badgeError = badgeQuery?.isError
+                                    ? `${item.label}数量加载失败：${getErrorMessage(badgeQuery.error, "请稍后重试")}`
                                     : undefined
                                 const badgeLabel =
                                     item.badge === "inquiry-feedback-count"
@@ -286,7 +300,10 @@ export function WorkspaceSidebarNav() {
                                         : item.badge ===
                                             "procurement-inquiry-count"
                                           ? `${badgeCount} 张采购询价待处理`
-                                          : `${badgeCount} 项待处理`
+                                          : item.badge ===
+                                              "background-job-active-count"
+                                            ? `${badgeCount} 项后台任务尚未完成`
+                                            : `${badgeCount} 项待处理`
 
                                 return (
                                     <SidebarMenuItem
@@ -314,7 +331,14 @@ export function WorkspaceSidebarNav() {
                                                     title={
                                                         badgeError ?? badgeLabel
                                                     }
-                                                    className="ml-auto flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-destructive-foreground tabular-nums group-data-[collapsible=icon]:hidden"
+                                                    className={cn(
+                                                        "ml-auto flex h-4.5 min-w-4.5 items-center justify-center rounded-full px-1.5 text-[10px] font-semibold tabular-nums group-data-[collapsible=icon]:hidden",
+                                                        item.badge ===
+                                                            "background-job-active-count" &&
+                                                            !badgeError
+                                                            ? "bg-success text-success-foreground"
+                                                            : "bg-destructive text-destructive-foreground",
+                                                    )}
                                                 >
                                                     {badgeError
                                                         ? "!"

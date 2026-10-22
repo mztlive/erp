@@ -130,8 +130,6 @@ pub struct BasisGroup {
 /// 已规范化的本次采购行请求。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RequestedLine {
-    /// 采购显式改选通用供给时的原因。
-    pub reselection_reason: Option<String>,
     /// 稳定销售行。
     pub sales_order_line_id: String,
     /// 本次采购数量。
@@ -192,13 +190,7 @@ impl RequestedLine {
         if quantity <= zero_quantity() {
             return Err(Error::from("本次数量必须大于 0"));
         }
-        Ok(Self {
-            reselection_reason: None,
-            sales_order_line_id,
-            quantity,
-            expected_delivery_date,
-            delivery_allocations: Vec::new(),
-        })
+        Ok(Self { sales_order_line_id, quantity, expected_delivery_date, delivery_allocations: Vec::new() })
     }
 }
 

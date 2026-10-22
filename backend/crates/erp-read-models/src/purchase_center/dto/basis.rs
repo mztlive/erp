@@ -284,7 +284,7 @@ pub struct InquiryBasisSourceView {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CreationBasisView {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub inquiry_reselection_required: Option<bool>,
+    pub has_source_inquiry: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inquiry_source: Option<InquiryBasisSourceView>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -374,7 +374,7 @@ impl CreationBasisView {
     ) -> Self {
         Self {
             inquiry_source: None,
-            inquiry_reselection_required: None,
+            has_source_inquiry: None,
             recommendation_reason: None,
             work_item_id,
             basis_id,
@@ -401,15 +401,15 @@ impl CreationBasisView {
         }
     }
 
-    /// 标记当前询价来源采用通用条款时必须给出改选原因。
+    /// 标记销售需求是否关联来源询价，供界面提示报价可用性。
     /// # 参数
-    /// `required`由正式销售来源与当前候选共同确定。
+    /// `has_source_inquiry`由正式销售来源确定。
     /// # 返回
-    /// 返回明确采购确认要求的依据。
+    /// 返回包含销售询价关联标记的依据。
     /// # 错误
     /// 无。
-    pub fn with_inquiry_reselection_required(mut self, required: bool) -> Self {
-        self.inquiry_reselection_required = required.then_some(true);
+    pub fn with_source_inquiry(mut self, has_source_inquiry: bool) -> Self {
+        self.has_source_inquiry = has_source_inquiry.then_some(true);
         self
     }
 
@@ -579,6 +579,17 @@ mod tests {
             String::new(),
             "0".to_string(),
         )
+    }
+
+    #[test]
+    fn source_inquiry_link_is_available_even_without_an_adopted_quote() {
+        let basis = bare_basis("供应商").with_source_inquiry(true);
+        assert_eq!(basis.has_source_inquiry, Some(true));
+        assert!(basis.inquiry_source.is_none());
+        let response = serde_json::to_value(&basis).unwrap();
+        assert_eq!(response["has_source_inquiry"], true);
+        let response = serde_json::to_value(basis.with_source_inquiry(false)).unwrap();
+        assert!(response.get("has_source_inquiry").is_none());
     }
 
     #[test]

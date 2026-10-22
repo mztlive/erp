@@ -1,12 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import {
-    ArrowLeftIcon,
-    ArrowRightIcon,
-    PlusIcon,
-    Trash2Icon,
-} from "lucide-react"
+import { ArrowLeftIcon, ArrowRightIcon, PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -145,15 +140,26 @@ export function SourcingProductAdjustDialog({
         setSelectedRowKey(added.rowKey)
         focusEditor(added.rowKey)
     }
-    const removeActive = () => {
-        if (!row || !active || row.allocations.length <= 1) return
+    const removeSource = (rowKey: string) => {
+        if (!row || row.allocations.length <= 1) return
         const position = row.allocations.findIndex(
-            ({ line }) => line.rowKey === activeRowKey,
+            ({ line }) => line.rowKey === rowKey,
         )
+        if (position < 0) return
         const next =
             row.allocations[position + 1] ?? row.allocations[position - 1]
-        setSelectedRowKey(next?.line.rowKey ?? null)
-        props.onRemoveSplit(active.line.rowKey)
+        const nextRowKey =
+            rowKey === activeRowKey ? next?.line.rowKey : activeRowKey
+        if (rowKey === activeRowKey) setSelectedRowKey(nextRowKey ?? null)
+        props.onRemoveSplit(rowKey)
+        requestAnimationFrame(() => {
+            if (!nextRowKey) return
+            document
+                .getElementById(
+                    `sourcing-source-${toAutomationIdSegment(nextRowKey)}-edit`,
+                )
+                ?.focus({ preventScroll: true })
+        })
     }
     const finish = async (nextId?: string) => {
         if (!row) return
@@ -256,6 +262,7 @@ export function SourcingProductAdjustDialog({
                                         row={row}
                                         activeRowKey={activeRowKey}
                                         onSelect={setSelectedRowKey}
+                                        onRemove={removeSource}
                                         errors={errors}
                                     />
                                 </div>
@@ -287,18 +294,6 @@ export function SourcingProductAdjustDialog({
                                     <h3 className="text-sm font-medium">
                                         编辑当前来源
                                     </h3>
-                                    {active && row.allocations.length > 1 ? (
-                                        <Button
-                                            id={`procurement-orders-create-row-${toAutomationIdSegment(active.line.rowKey)}-split-remove`}
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={removeActive}
-                                        >
-                                            <Trash2Icon />
-                                            删除此来源
-                                        </Button>
-                                    ) : null}
                                 </div>
                                 <div
                                     id="sourcing-product-adjust-body"

@@ -40,7 +40,7 @@ pub use delivery_capacity::{
 };
 pub use delivery_judgement::{
     BulkOrderQuantity, OfferingDeliveryFact, PurchaseDeliveryJudgement, PurchaseFreightWaiver,
-    PurchaseSourcingDelivery, PurchaseSourcingReason, ensure_bulk_direct_minimum, judge_line_delivery,
+    PurchaseSourcingDelivery, ensure_bulk_direct_minimum, judge_line_delivery,
 };
 mod inquiry_quote;
 mod offering_source;
