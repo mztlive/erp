@@ -6,14 +6,42 @@ import {
     parseDecimal,
 } from "@/lib/fixed-decimal"
 import type { SupplierOfferingView } from "@/features/supplier-offerings/types"
-import type { ProcurementInquiry } from "../types"
+import type { InquiryLine, ProcurementInquiry } from "../types"
 import { inquiryDateInput } from "./format"
 import {
     latestSupplierQuotes,
     type InternalQuote,
     type QuoteTerms,
 } from "./internal-quotes"
-import { SUPPLIER_QUOTE_HEADERS } from "./supplier-quote-workbook"
+import {
+    SUPPLIER_QUOTE_HEADERS,
+    SUPPLIER_QUOTE_VERSION,
+} from "./supplier-quote-workbook"
+
+function quoteLayout(version: string) {
+    if (
+        version !== SUPPLIER_QUOTE_VERSION &&
+        version !== "supplier-inquiry-quote-v2"
+    )
+        throw new Error("该文件不支持回导，请重新生成新版报价表后填写")
+    const legacy = version === "supplier-inquiry-quote-v2"
+    const headers = legacy
+        ? [
+              ...SUPPLIER_QUOTE_HEADERS.slice(0, 13),
+              "承诺交付日",
+              ...SUPPLIER_QUOTE_HEADERS.slice(13),
+          ]
+        : SUPPLIER_QUOTE_HEADERS
+    return {
+        headers,
+        promisedDelivery: legacy ? 14 : null,
+        freight: headers.length - 2,
+        validTo: headers.length - 1,
+        note: headers.length,
+        identity: headers.length + 1,
+    }
+}
+type QuoteLayout = ReturnType<typeof quoteLayout>
 
 export type ImportedQuote = {
     source: string
@@ -99,7 +127,16 @@ function date(value: string, name: string, optional = false): string | null {
         throw new Error(`${name}须为有效日期 YYYY-MM-DD`)
     return value
 }
-function termsFor(row: ExcelJS.Row, quantityScale: number): QuoteTerms {
+function termsFor(
+    row: ExcelJS.Row,
+    line: InquiryLine,
+    layout: QuoteLayout,
+): QuoteTerms {
+    const quantityScale = line.quantity_scale
+    const requiredDelivery = date(
+        inquiryDateInput(line.delivery_due_at),
+        "要求交付日",
+    )!
     const quantity = decimal(
         cellText(row.getCell(13)),
         quantityScale,
@@ -111,10 +148,7 @@ function termsFor(row: ExcelJS.Row, quantityScale: number): QuoteTerms {
             unit_cost_gross: "0",
             input_tax_rate: "0",
             available_quantity: "0",
-            expected_delivery_date: date(
-                cellText(row.getCell(8)),
-                "要求交付日",
-            )!,
+            expected_delivery_date: requiredDelivery,
             valid_to: null,
             freight_gross: null,
         }
@@ -137,13 +171,22 @@ function termsFor(row: ExcelJS.Row, quantityScale: number): QuoteTerms {
             }),
         ),
         available_quantity: quantity,
-        expected_delivery_date: date(cellText(row.getCell(14)), "承诺交付日")!,
+        expected_delivery_date: layout.promisedDelivery
+            ? date(
+                  cellText(row.getCell(layout.promisedDelivery)),
+                  "承诺交付日",
+              )!
+            : requiredDelivery,
         freight_gross: decimal(
-            cellText(row.getCell(15)),
+            cellText(row.getCell(layout.freight)),
             2,
             "运费（已含运费填写 0）",
         ),
-        valid_to: date(cellText(row.getCell(16)), "报价失效日", true),
+        valid_to: date(
+            cellText(row.getCell(layout.validTo)),
+            "报价失效日",
+            true,
+        ),
     }
 }
 function sameTerms(a: QuoteTerms, b: QuoteTerms) {
@@ -173,14 +216,15 @@ function parseRow(
     offerings: readonly SupplierOfferingView[],
     prior: InternalQuote[],
     units: ReadonlyMap<string, string>,
+    layout: QuoteLayout,
 ): Omit<ImportedQuote, "source"> | null {
     if (
-        Array.from({ length: 7 }, (_, index) =>
+        Array.from({ length: layout.headers.length - 10 }, (_, index) =>
             cellText(row.getCell(11 + index)),
         ).every((value) => !value)
     )
         return null
-    const identity = JSON.parse(cellText(row.getCell(18))) as {
+    const identity = JSON.parse(cellText(row.getCell(layout.identity))) as {
         lineId: string
         skuId: string
     }
@@ -220,10 +264,10 @@ function parseRow(
         )
     const revision =
         previous?.supplier_offering_id === offering.id ? previous : undefined
-    const terms = termsFor(row, line.quantity_scale)
+    const terms = termsFor(row, line, layout)
     if (compareDecimal(terms.available_quantity, line.quantity, 6) > 0)
         throw new Error("可供数量不得超过本行需求数量")
-    const note = cellText(row.getCell(17))
+    const note = cellText(row.getCell(layout.note))
     if (terms.unavailable && !note)
         throw new Error("无法供货时请填写报价备注说明原因")
     if (note.length > 4000) throw new Error("报价备注不得超过 4000 字")
@@ -283,11 +327,9 @@ export async function parseSupplierQuoteFiles(
             const workbook = new ExcelJS.Workbook()
             await workbook.xlsx.load(buffer)
             const metadata = workbook.getWorksheet("回导信息")
-            if (
-                !metadata ||
-                cellText(metadata.getCell("A1")) !== "supplier-inquiry-quote-v2"
-            )
+            if (!metadata)
                 throw new Error("该文件不支持回导，请重新生成新版报价表后填写")
+            const layout = quoteLayout(cellText(metadata.getCell("A1")))
             if (
                 cellText(metadata.getCell("A2")) !== inquiry.id ||
                 cellText(metadata.getCell("A3")) !==
@@ -302,7 +344,7 @@ export async function parseSupplierQuoteFiles(
             const sheet = workbook.getWorksheet("报价表")
             if (!sheet || sheet.rowCount > 204)
                 throw new Error("报价表缺失或超过 200 条商品")
-            SUPPLIER_QUOTE_HEADERS.forEach((header, index) => {
+            layout.headers.forEach((header, index) => {
                 if (cellText(sheet.getCell(4, index + 1)) !== header)
                     throw new Error("报价表列已变化，请使用原模板")
             })
@@ -316,6 +358,7 @@ export async function parseSupplierQuoteFiles(
                         offerings,
                         prior,
                         units,
+                        layout,
                     )
                     if (!value) {
                         skipped++

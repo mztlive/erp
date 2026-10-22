@@ -43,8 +43,7 @@ import {
 } from "../components/inquiry-feedback-editor"
 import { InquiryActions } from "../components/inquiry-actions"
 import { InquiryInternalQuotes } from "../components/inquiry-internal-quotes"
-import { SalesInquiryFees } from "../components/sales-inquiry-fees"
-import { InquiryFeesPanel } from "../components/inquiry-fees-panel"
+import { InquiryFees } from "../components/inquiry-fees"
 import { InquiryRequirementTable } from "../components/inquiry-requirement-table"
 import { SupplierQuoteImportButton } from "../components/supplier-quote-import-dialog"
 import { SupplierQuoteExportButton } from "../components/supplier-quote-export-dialog"
@@ -671,13 +670,6 @@ function InquiryDetailContent({
                                     查看原询价
                                 </Link>
                             )}
-                        {feedbackDirty && (
-                            <Alert variant="info">
-                                <AlertDescription>
-                                    采购反馈有未保存的修改，发布时会自动保存；暂不发布可保存处理进度。
-                                </AlertDescription>
-                            </Alert>
-                        )}
                         {dirty && (
                             <Alert variant="info">
                                 <AlertDescription>
@@ -860,37 +852,16 @@ function InquiryDetailContent({
                             ) : undefined
                         }
                         fees={
-                            !procurement && "acceptances" in inquiry ? (
-                                <SalesInquiryFees
-                                    inquiry={inquiry}
-                                    selectedRound={selectedRound}
-                                    onRoundChange={setChosenRound}
-                                    userId={userId}
-                                    permissions={permissions}
-                                    onChanged={onSaved}
-                                />
-                            ) : (
-                                <div className="space-y-6">
-                                    <InquiryFeedbackResults
-                                        inquiry={inquiry}
-                                        selectedRound={selectedRound}
-                                        onRoundChange={setChosenRound}
-                                        idPrefix="sales-inquiry-fees"
-                                        content="fees"
-                                    />
-                                    {task && (
-                                        <div className="border-t pt-6">
-                                            <InquiryFeesPanel
-                                                inquiry={inquiry}
-                                                userId={userId}
-                                                permissions={permissions}
-                                                procurement={procurement}
-                                                onChanged={onSaved}
-                                            />
-                                        </div>
-                                    )}
-                                </div>
-                            )
+                            <InquiryFees
+                                inquiry={inquiry}
+                                selectedRound={selectedRound}
+                                onRoundChange={setChosenRound}
+                                userId={userId}
+                                permissions={permissions}
+                                procurement={procurement}
+                                handlingEnabled={!procurement || Boolean(task)}
+                                onChanged={onSaved}
+                            />
                         }
                     />
                     <InquiryImportDialog

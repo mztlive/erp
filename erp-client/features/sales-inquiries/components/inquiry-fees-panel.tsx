@@ -54,6 +54,7 @@ import {
 import { hasPermission } from "@/lib/permissions"
 import { fetchInquiryFeeSales, inquiryPath } from "../api"
 import { useInquiryCommand } from "../hooks/use-inquiry-command"
+import { inquiryFeeBasisRound } from "../lib/fee-basis"
 import { inquiryDate } from "../lib/format"
 import {
     inquiryStorageKey,
@@ -284,10 +285,7 @@ function InquiryFeesContent({
         "acceptances" in inquiry
             ? inquiry.acceptances.at(-1)?.feedback_round
             : undefined
-    const feeRound =
-        acceptedRound ??
-        inquiry.fee_statuses[0]?.feedback_round ??
-        inquiry.feedback_round
+    const feeRound = inquiryFeeBasisRound(inquiry)
     const feedback = inquiry.feedbacks.find((row) => row.round === feeRound)
     const round = feedback?.round ?? 0
     const summaries: FeeSummary[] = (feedback?.data.fees ?? []).map((fee) => {

@@ -1,33 +1,14 @@
 "use client"
 
-import {
-    BusinessFailureState,
-    MoneyValue,
-    QuantityValue,
-    RateValue,
-} from "@/components/business"
+import { MoneyValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { StatusBadge } from "@/components/ui/status-badge"
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table"
-import { multiplyFixed } from "@/lib/fixed-decimal"
-import { toAutomationIdSegment } from "@/lib/automation-id"
-import { useInquirySkuDetailsQuery } from "../hooks/queries"
-import { InquiryFeedbackDemand } from "./inquiry-feedback-demand"
+import { InquiryFeedbackTable } from "./inquiry-feedback-table"
 import { inquiryDate } from "../lib/format"
 import {
-    INQUIRY_CONCLUSION_LABEL,
     type InquiryFeedback,
-    type InquiryFeedbackLine,
-    type InquiryLine,
     type ProcurementInquiry,
     type SalesInquiry,
 } from "../types"
@@ -53,11 +34,6 @@ export function InquiryFeedbackResults({
     const requirement = inquiry.requirements.find(
         (item) => item.version === feedback?.requirement_version,
     )?.data
-    const sku = useInquirySkuDetailsQuery(
-        content === "fees"
-            ? []
-            : (requirement?.lines.map((line) => line.sku_id) ?? []),
-    )
     if (!feedback)
         return (
             <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
@@ -127,201 +103,27 @@ export function InquiryFeedbackResults({
             </div>
             {content === "fees" ? (
                 <FeedbackFees feedback={feedback} />
+            ) : !requirement ||
+              feedback.data.lines.some(
+                  (result) =>
+                      !requirement.lines.some(
+                          (line) => line.line_id === result.line_id,
+                      ),
+              ) ? (
+                <p className="text-sm text-muted-foreground">
+                    本轮需求资料缺失或不完整，暂无法展示完整反馈，请联系管理员核对。
+                </p>
             ) : (
-                <>
-                    {!requirement && (
-                        <p className="text-sm text-muted-foreground">
-                            本轮需求快照暂不可用，需求数量及地址不以当前草稿替代。
-                        </p>
-                    )}
-                    {sku.error && (
-                        <BusinessFailureState
-                            id={`${idPrefix}-feedback-sku-retry`}
-                            title="商品单位资料读取失败"
-                            error={sku.error}
-                            onRetry={() => void sku.refetch()}
-                        />
-                    )}
-                    <div className="overflow-hidden rounded-lg border">
-                        <Table className="min-w-[1120px]">
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>商品 / 供给结论</TableHead>
-                                    <TableHead className="text-right">
-                                        需求数量
-                                    </TableHead>
-                                    <TableHead className="text-right">
-                                        可供数量
-                                    </TableHead>
-                                    <TableHead className="text-right">
-                                        含税供给单价
-                                    </TableHead>
-                                    <TableHead>税率</TableHead>
-                                    <TableHead>有效期</TableHead>
-                                    <TableHead className="text-right">
-                                        操作
-                                    </TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {feedback.data.lines.map((result) => (
-                                    <FeedbackRows
-                                        key={result.line_id}
-                                        result={result}
-                                        idPrefix={`${idPrefix}-feedback-${feedback.round}-line-${toAutomationIdSegment(result.line_id)}`}
-                                        units={sku.units}
-                                        unitsPending={sku.isPending}
-                                        line={requirement?.lines.find(
-                                            (line) =>
-                                                line.line_id === result.line_id,
-                                        )}
-                                    />
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </div>
-                </>
+                <InquiryFeedbackTable
+                    key={`${feedback.round}-${feedback.requirement_version}`}
+                    readOnly
+                    idPrefix={`${idPrefix}-feedback-${feedback.round}`}
+                    lines={feedback.data.lines}
+                    demand={requirement.lines}
+                />
             )}
             {content === "all" && <FeedbackFees feedback={feedback} />}
         </section>
-    )
-}
-
-function FeedbackRows({
-    result,
-    line,
-    idPrefix,
-    units,
-    unitsPending,
-}: {
-    result: InquiryFeedbackLine
-    line?: InquiryLine
-    idPrefix: string
-    units: Map<string, string>
-    unitsPending: boolean
-}) {
-    const unit = line
-        ? (units.get(line.unit_code) ??
-          (unitsPending ? "单位加载中" : "单位未匹配"))
-        : ""
-    const prices = result.prices.length ? result.prices : [null]
-    return (
-        <>
-            {prices.map((price, index) => (
-                <TableRow key={price?.price_id ?? result.line_id}>
-                    {index === 0 && (
-                        <>
-                            <TableCell
-                                rowSpan={prices.length}
-                                className="min-w-56 max-w-80 whitespace-normal align-top py-4"
-                            >
-                                <p className="font-medium">
-                                    {line?.product_name ?? "商品需求"}
-                                </p>
-                                {line && (
-                                    <p className="mt-1 text-xs text-muted-foreground">
-                                        SKU {line.sku_code}
-                                        {line.specification
-                                            ? ` · ${line.specification}`
-                                            : ""}
-                                        <span className="mt-1 block">
-                                            要求{" "}
-                                            {inquiryDate(line.delivery_due_at)}
-                                        </span>
-                                    </p>
-                                )}
-                                <div className="mt-2">
-                                    <StatusBadge
-                                        label={
-                                            INQUIRY_CONCLUSION_LABEL[
-                                                result.conclusion
-                                            ]
-                                        }
-                                        tone={
-                                            result.conclusion === "unavailable"
-                                                ? "warning"
-                                                : result.conclusion ===
-                                                    "pending"
-                                                  ? "neutral"
-                                                  : "success"
-                                        }
-                                    />
-                                </div>
-                                {result.public_note && (
-                                    <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
-                                        {result.public_note}
-                                    </p>
-                                )}
-                            </TableCell>
-                            <TableCell
-                                rowSpan={prices.length}
-                                className="text-right align-top py-4"
-                            >
-                                {line ? (
-                                    <QuantityValue
-                                        unit={unit}
-                                        value={line.quantity}
-                                    />
-                                ) : (
-                                    "—"
-                                )}
-                            </TableCell>
-                            <TableCell
-                                rowSpan={prices.length}
-                                className="text-right align-top py-4"
-                            >
-                                <QuantityValue
-                                    unit={unit}
-                                    value={result.available_quantity}
-                                />
-                            </TableCell>
-                        </>
-                    )}
-                    <TableCell className="min-w-36 text-right align-top py-4">
-                        {price ? (
-                            <>
-                                <MoneyValue value={price.unit_price_gross} />
-                            </>
-                        ) : (
-                            "—"
-                        )}
-                    </TableCell>
-                    <TableCell className="align-top py-4">
-                        {price?.tax_rate ? (
-                            <RateValue
-                                value={multiplyFixed(price.tax_rate, "100", {
-                                    leftMaxScale: 6,
-                                    rightMaxScale: 0,
-                                    outputScale: 2,
-                                })}
-                                precision={2}
-                            />
-                        ) : (
-                            "—"
-                        )}
-                    </TableCell>
-                    <TableCell className="align-top py-4">
-                        {price ? inquiryDate(price.valid_until) : "—"}
-                    </TableCell>
-                    {index === 0 && (
-                        <TableCell
-                            rowSpan={prices.length}
-                            className="text-right align-top py-4"
-                        >
-                            {line ? (
-                                <InquiryFeedbackDemand
-                                    line={line}
-                                    unit={unit}
-                                    idPrefix={idPrefix}
-                                />
-                            ) : (
-                                "需求快照不可用"
-                            )}
-                        </TableCell>
-                    )}
-                </TableRow>
-            ))}
-        </>
     )
 }
 
