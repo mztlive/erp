@@ -72,19 +72,9 @@ fn feedback(quantity: &str, conclusion: InquirySupplyConclusion) -> InquiryFeedb
     } else {
         vec![InquirySupplyPrice {
             price_id: "price".into(),
-            quantity: qty(quantity),
             unit_price_gross: Some("12.34".parse().unwrap()),
             tax_rate: Some("0.13".parse().unwrap()),
-            delivery_due_at: later(),
             valid_until: later(),
-            min_quantity: qty("1"),
-            max_quantity: None,
-            allow_cumulative: false,
-            allocations: vec![InquirySupplyAllocation {
-                allocation_id: "address".into(),
-                quantity: qty(quantity),
-            }],
-            included_cost_note: "含包装".into(),
         }]
     };
     InquiryFeedbackData {
@@ -250,14 +240,14 @@ fn three_feedback_rounds_preserve_accepted_and_submitted_history() {
 }
 
 #[test]
-fn only_final_complete_and_address_specific_feedback_can_be_published() {
+fn only_final_complete_feedback_can_be_published() {
     let mut inquiry = inquiry();
     inquiry.submit(1, "sales", String::new(), now()).unwrap();
     let before = inquiry.clone();
     assert!(inquiry.publish(1, "buyer", feedback("10", InquirySupplyConclusion::Pending), now()).is_err());
     assert_eq!(inquiry, before);
     let mut incomplete = feedback("5", InquirySupplyConclusion::PartiallyAvailable);
-    incomplete.lines[0].prices[0].allocations.clear();
+    incomplete.lines[0].prices[0].tax_rate = None;
     assert!(inquiry.publish(1, "buyer", incomplete, now()).is_err());
     inquiry.publish(1, "buyer", feedback("5", InquirySupplyConclusion::PartiallyAvailable), now()).unwrap();
     inquiry.accept(1, "sales", 1, now()).unwrap();
@@ -556,21 +546,14 @@ fn unknown_receipt_schema_deleted_receipts_and_corrupt_results_fail_closed() {
 }
 
 #[test]
-fn single_price_address_capacity_cannot_be_bypassed_by_line_total() {
+fn each_product_rejects_multiple_prices() {
     let mut inquiry = inquiry();
     inquiry.submit(1, "sales", String::new(), now()).unwrap();
-    let mut split = feedback("10", InquirySupplyConclusion::Available);
-    let mut second = split.lines[0].prices[0].clone();
-    split.lines[0].prices[0].quantity = qty("1");
-    split.lines[0].prices[0].allocations[0].quantity = qty("1");
-    second.price_id = "price-two".into();
-    second.quantity = qty("9");
-    second.allocations[0].quantity = qty("9");
-    split.lines[0].prices.push(second);
-    inquiry.publish(1, "buyer", split, now()).unwrap();
-    inquiry.accept(1, "sales", 1, now()).unwrap();
-    assert!(inquiry.reserve_quantities("bad", "order", 1, selected("2"), now()).is_err());
-    inquiry.reserve_quantities("good", "order", 1, selected("1"), now()).unwrap();
+    let mut data = feedback("10", InquirySupplyConclusion::Available);
+    let mut second = data.lines[0].prices[0].clone();
+    second.price_id = "second-price".into();
+    data.lines[0].prices.push(second);
+    assert!(inquiry.publish(1, "buyer", data, now()).is_err());
 }
 
 #[test]
@@ -780,7 +763,6 @@ fn two_line_accepted_inquiry() -> (SalesInquiry, InquiryFeedbackData) {
     let mut second_line = complete.lines[0].clone();
     second_line.line_id = "line-b".into();
     second_line.prices[0].price_id = "price-b".into();
-    second_line.prices[0].allocations[0].allocation_id = "address-b".into();
     complete.lines.push(second_line);
     let mut second_fee = complete.fees[0].clone();
     second_fee.fee_id = "fee-b".into();
@@ -935,8 +917,6 @@ fn acceptance_rechecks_ledger_changed_after_feedback_publication() {
         .unwrap();
     complete.lines[1].conclusion = InquirySupplyConclusion::PartiallyAvailable;
     complete.lines[1].available_quantity = qty("5");
-    complete.lines[1].prices[0].quantity = qty("5");
-    complete.lines[1].prices[0].allocations[0].quantity = qty("5");
     inquiry.publish(1, "buyer", complete, now()).unwrap();
     inquiry.reserve_quantities("b", "order-b", 1, selected_b("6"), now()).unwrap();
     let before = inquiry.clone();
@@ -1063,7 +1043,7 @@ fn feedback_draft_keeps_explicit_zero_distinct_from_missing_and_checks_expiry() 
     assert_eq!(encoded["lines"][0]["prices"][0]["unit_price_gross"], "0");
     data.lines[0].prices[0].valid_until = now();
     assert!(
-        matches!(data.validate(&demand(), now()), Err(Error::ValidationError(message)) if message == "供给结果已过期或不能按要求交付")
+        matches!(data.validate(&demand(), now()), Err(Error::ValidationError(message)) if message == "供给报价已过期")
     );
 }
 
@@ -1080,5 +1060,40 @@ fn feedback_draft_missing_prices_do_not_bypass_scope_or_version_guards() {
         inquiry.save_feedback_work(1, "buyer", vec!["outside".into()], data, now()),
         Err(Error::Forbidden(_))
     ));
+    assert_eq!(inquiry, before);
+}
+
+#[test]
+fn partial_feedback_uses_demand_addresses_and_shared_available_balance() {
+    let mut inquiry = inquiry();
+    let first = &mut inquiry.draft.lines[0].allocations[0];
+    first.quantity = qty("6");
+    let mut second = first.clone();
+    second.allocation_id = "address-two".into();
+    second.quantity = qty("4");
+    inquiry.draft.lines[0].allocations.push(second);
+    inquiry.submit(1, "sales", String::new(), now()).unwrap();
+    inquiry.publish(1, "buyer", feedback("5", InquirySupplyConclusion::PartiallyAvailable), now()).unwrap();
+    inquiry.accept(1, "sales", 1, now()).unwrap();
+    let mut at_second = selected("5");
+    at_second[0].allocation_id = Some("address-two".into());
+    assert!(inquiry.reserve_quantities("address-over", "sale", 1, at_second.clone(), now()).is_err());
+    inquiry.reserve_quantities("first", "sale", 1, selected("4"), now()).unwrap();
+    at_second[0].quantity = qty("2");
+    assert!(inquiry.reserve_quantities("total-over", "sale", 1, at_second.clone(), now()).is_err());
+    at_second[0].quantity = qty("1");
+    inquiry.reserve_quantities("second", "sale", 1, at_second, now()).unwrap();
+    assert!(inquiry.reserve_quantities("exhausted", "sale", 1, selected("1"), now()).is_err());
+}
+
+#[test]
+fn feedback_draft_rejects_multiple_prices_without_mutation() {
+    let mut inquiry = inquiry();
+    inquiry.submit(1, "sales", String::new(), now()).unwrap();
+    let before = inquiry.clone();
+    let mut data = feedback("10", InquirySupplyConclusion::Available);
+    let extra = data.lines[0].prices[0].clone();
+    data.lines[0].prices.push(extra);
+    assert!(inquiry.save_feedback_work(1, "buyer", vec!["line".into()], data, now()).is_err());
     assert_eq!(inquiry, before);
 }

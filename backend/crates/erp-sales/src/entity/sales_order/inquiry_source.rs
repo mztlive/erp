@@ -353,34 +353,40 @@ impl InquirySalesLineSelection {
             .iter()
             .find(|line| line.line_id == self.inquiry_line_id)
             .ok_or_else(|| invalid("来源需求行不存在"))?;
-        let price = feedback
+        let result = feedback
             .data
             .lines
             .iter()
             .find(|line| line.line_id == self.inquiry_line_id)
-            .and_then(|line| line.prices.iter().find(|price| price.price_id == self.price_id))
+            .ok_or_else(|| invalid("已接受反馈缺少商品行"))?;
+        let price = result
+            .prices
+            .iter()
+            .find(|price| price.price_id == self.price_id)
             .ok_or_else(|| invalid("选中的供给价格不存在或该商品不供应"))?;
-        self.ensure_price_scope(price, now)?;
+        self.ensure_price_scope(price, demand, result.available_quantity, now)?;
         Ok((demand, price))
     }
 
-    fn ensure_price_scope(&self, price: &InquirySupplyPrice, now: Instant) -> Result<()> {
-        if price.valid_until <= now
-            || self.quantity > price.quantity
-            || (!price.allow_cumulative && self.quantity < price.min_quantity)
-            || price.max_quantity.is_some_and(|maximum| self.quantity > maximum)
-        {
-            return Err(invalid("询价价格已过期或本次数量不满足报价档位，请重新询价"));
+    fn ensure_price_scope(
+        &self,
+        price: &InquirySupplyPrice,
+        demand: &InquiryRequirementLine,
+        available: Quantity,
+        now: Instant,
+    ) -> Result<()> {
+        if price.valid_until <= now || self.quantity > available {
+            return Err(invalid("询价价格已过期或本次数量超过可供量，请重新询价"));
         }
-        if price.allocations.is_empty() != self.allocations.is_empty() {
-            return Err(invalid("询价价格配送范围不匹配"));
+        if demand.allocations.is_empty() != self.allocations.is_empty() {
+            return Err(invalid("询价需求配送范围不匹配"));
         }
         for allocation in &self.allocations {
-            if !price.allocations.iter().any(|available| {
+            if !demand.allocations.iter().any(|available| {
                 available.allocation_id == allocation.allocation_id
                     && available.quantity >= allocation.quantity
             }) {
-                return Err(invalid("询价价格不覆盖本次地址数量"));
+                return Err(invalid("询价需求不覆盖本次地址数量"));
             }
         }
         Ok(())
@@ -525,7 +531,6 @@ mod tests {
     use erp_core::region::RegionCode;
 
     use super::*;
-    use crate::entity::sales_inquiry::InquirySupplyAllocation;
 
     #[test]
     fn selection_requires_unique_stable_rows_and_conserved_addresses() {
@@ -557,19 +562,9 @@ mod tests {
     fn price() -> InquirySupplyPrice {
         InquirySupplyPrice {
             price_id: "price".into(),
-            quantity: "10".parse().unwrap(),
             unit_price_gross: Some("8.00".parse().unwrap()),
             tax_rate: Some("0.13".parse().unwrap()),
-            delivery_due_at: Instant::from_unix_secs(2_000),
             valid_until: Instant::from_unix_secs(3_000),
-            min_quantity: "2".parse().unwrap(),
-            max_quantity: Some("10".parse().unwrap()),
-            allow_cumulative: false,
-            allocations: vec![InquirySupplyAllocation {
-                allocation_id: "address".into(),
-                quantity: "10".parse().unwrap(),
-            }],
-            included_cost_note: String::new(),
         }
     }
     fn source() -> SalesOrderInquirySource {
@@ -648,7 +643,16 @@ mod tests {
         }
     }
     #[test]
-    fn exact_price_scope_rejects_expiry_quantity_tiers_and_uncovered_address() {
+    fn price_scope_checks_expiry_available_quantity_and_demand_addresses() {
+        let demand: InquiryRequirementLine = serde_json::from_value(serde_json::json!({
+            "line_id": "demand", "sku_id": "sku", "sku_revision_id": "revision",
+            "sku_code": "sku", "product_name": "商品", "specification": "盒", "unit_code": "盒",
+            "quantity_scale": 0, "quantity": "10", "fulfillment_kind": "physical", "delivery_due_at": 2000,
+            "allocations": [{"allocation_id": "address", "recipient": "收货人", "phone": "13800000000",
+                "region_code": "310115", "region_name": "上海市浦东新区", "address": "测试路", "quantity": "10"}]
+        }))
+        .unwrap();
+        let available = "10".parse().unwrap();
         let mut selection = InquirySalesLineSelection {
             line_no: 1,
             inquiry_line_id: "demand".into(),
@@ -659,15 +663,23 @@ mod tests {
                 quantity: "2".parse().unwrap(),
             }],
         };
-        selection.ensure_price_scope(&price(), Instant::from_unix_secs(2_999)).unwrap();
-        assert!(selection.ensure_price_scope(&price(), Instant::from_unix_secs(3_000)).is_err());
+        selection.ensure_price_scope(&price(), &demand, available, Instant::from_unix_secs(2_999)).unwrap();
+        assert!(
+            selection
+                .ensure_price_scope(&price(), &demand, available, Instant::from_unix_secs(3_000))
+                .is_err()
+        );
         selection.quantity = "1".parse().unwrap();
-        assert!(selection.ensure_price_scope(&price(), Instant::from_unix_secs(1)).is_err());
+        selection.ensure_price_scope(&price(), &demand, available, Instant::from_unix_secs(1)).unwrap();
         selection.quantity = "11".parse().unwrap();
-        assert!(selection.ensure_price_scope(&price(), Instant::from_unix_secs(1)).is_err());
+        assert!(
+            selection.ensure_price_scope(&price(), &demand, available, Instant::from_unix_secs(1)).is_err()
+        );
         selection.quantity = "2".parse().unwrap();
         selection.allocations[0].allocation_id = "foreign".into();
-        assert!(selection.ensure_price_scope(&price(), Instant::from_unix_secs(1)).is_err());
+        assert!(
+            selection.ensure_price_scope(&price(), &demand, available, Instant::from_unix_secs(1)).is_err()
+        );
     }
 
     #[test]

@@ -5,8 +5,7 @@ use rust_decimal::Decimal;
 use serde::Serialize;
 
 use crate::entity::sales_inquiry::{
-    InquiryQuantitySelection, InquiryRequirementData, InquiryRequirementLine, InquiryReservationState,
-    InquirySupplyPrice, SalesInquiry,
+    InquiryRequirementData, InquiryRequirementLine, InquiryReservationState, InquirySupplyPrice, SalesInquiry,
 };
 use crate::entity::sales_order::inquiry_source::{InquirySalesAllocation, InquirySalesLineSelection};
 use crate::{Error, Result};
@@ -30,7 +29,7 @@ pub struct InquirySalesBasis {
 }
 
 impl InquirySalesBasis {
-    /// 按当前已接受反馈生成可转数量及精确价格段，不返回采购内部身份。
+    /// 按当前已接受反馈生成可转数量及商品报价，不返回采购内部身份。
     /// # 参数
     /// `inquiry` 为当前已授权聚合；`round` 为明确轮次；`now` 为服务端时间。
     /// # 返回
@@ -54,13 +53,10 @@ impl InquirySalesBasis {
                 if price.valid_until <= now {
                     continue;
                 }
-                let mut selection =
-                    available_selection(inquiry, round, demand, price, result.available_quantity)?;
+                let mut selection = available_selection(inquiry, demand, price, result.available_quantity)?;
                 selection.line_no = u32::try_from(lines.len() + 1)
                     .map_err(|_| Error::ValidationError("销售行数超出范围".into()))?;
-                if selection.quantity.to_decimal() <= Decimal::ZERO
-                    || (!price.allow_cumulative && selection.quantity < price.min_quantity)
-                {
+                if selection.quantity.to_decimal() <= Decimal::ZERO {
                     continue;
                 }
                 lines.push(InquirySalesBasisLine {
@@ -104,32 +100,19 @@ fn transferable_line(inquiry: &SalesInquiry, line_id: &str) -> Result<bool> {
     }
 }
 
-fn used(
-    inquiry: &SalesInquiry,
-    line: &str,
-    price: Option<&str>,
-    allocation: Option<&str>,
-) -> Result<Decimal> {
+fn used(inquiry: &SalesInquiry, line: &str, allocation: Option<&str>) -> Result<Decimal> {
     inquiry
         .quantity_ledger
         .iter()
         .filter(|entry| entry.state != InquiryReservationState::Released)
         .flat_map(|entry| &entry.selections)
-        .filter(|entry| matches_selection(entry, line, price, allocation))
+        .filter(|entry| {
+            entry.line_id == line && allocation.is_none_or(|id| entry.allocation_id.as_deref() == Some(id))
+        })
         .try_fold(Decimal::ZERO, |sum, entry| {
             sum.checked_add(entry.quantity.to_decimal())
                 .ok_or_else(|| Error::ValidationError("询价占用数量超出范围".into()))
         })
-}
-fn matches_selection(
-    row: &InquiryQuantitySelection,
-    line: &str,
-    price: Option<&str>,
-    allocation: Option<&str>,
-) -> bool {
-    row.line_id == line
-        && price.is_none_or(|id| row.price_id.as_deref() == Some(id))
-        && allocation.is_none_or(|id| row.allocation_id.as_deref() == Some(id))
 }
 fn remaining(total: Quantity, used: Decimal) -> Decimal {
     (total.to_decimal() - used).max(Decimal::ZERO)
@@ -137,28 +120,16 @@ fn remaining(total: Quantity, used: Decimal) -> Decimal {
 
 fn available_selection(
     inquiry: &SalesInquiry,
-    round: u32,
     demand: &InquiryRequirementLine,
     price: &InquirySupplyPrice,
     line_available: Quantity,
 ) -> Result<InquirySalesLineSelection> {
-    let mut available = remaining(line_available, used(inquiry, &demand.line_id, None, None)?)
-        .min(remaining(price.quantity, used(inquiry, &demand.line_id, Some(&price.price_id), None)?));
-    if let Some(maximum) = price.max_quantity {
-        available = available.min(maximum.to_decimal());
-    }
+    let mut available = remaining(line_available, used(inquiry, &demand.line_id, None)?);
     let mut allocations = Vec::new();
-    for offered in &price.allocations {
-        let all_offered = address_offered(inquiry, round, &demand.line_id, &offered.allocation_id)?;
-        let all_remaining = (all_offered
-            - used(inquiry, &demand.line_id, None, Some(&offered.allocation_id))?)
-        .max(Decimal::ZERO);
-        let amount = remaining(
-            offered.quantity,
-            used(inquiry, &demand.line_id, Some(&price.price_id), Some(&offered.allocation_id))?,
-        )
-        .min(all_remaining)
-        .min(available);
+    for offered in &demand.allocations {
+        let amount =
+            remaining(offered.quantity, used(inquiry, &demand.line_id, Some(&offered.allocation_id))?)
+                .min(available);
         if amount > Decimal::ZERO {
             allocations.push(InquirySalesAllocation {
                 allocation_id: offered.allocation_id.clone(),
@@ -167,7 +138,7 @@ fn available_selection(
             available -= amount;
         }
     }
-    let quantity = if price.allocations.is_empty() {
+    let quantity = if demand.allocations.is_empty() {
         available
     } else {
         allocations.iter().try_fold(Decimal::ZERO, |sum, row| {
@@ -184,32 +155,6 @@ fn available_selection(
     })
 }
 
-fn address_offered(
-    inquiry: &SalesInquiry,
-    round: u32,
-    line_id: &str,
-    allocation_id: &str,
-) -> Result<Decimal> {
-    inquiry
-        .feedbacks
-        .iter()
-        .find(|feedback| feedback.round == round)
-        .and_then(|round| round.data.lines.iter().find(|line| line.line_id == line_id))
-        .map(|line| {
-            line.prices
-                .iter()
-                .flat_map(|price| &price.allocations)
-                .filter(|row| row.allocation_id == allocation_id)
-                .map(|row| row.quantity.to_decimal())
-                .try_fold(Decimal::ZERO, |sum, value| {
-                    sum.checked_add(value)
-                        .ok_or_else(|| Error::ValidationError("询价地址可供数量超出范围".into()))
-                })
-        })
-        .transpose()
-        .map(|total| total.unwrap_or(Decimal::ZERO))
-}
-
 #[cfg(test)]
 mod tests {
     use erp_core::region::RegionCode;
@@ -217,7 +162,7 @@ mod tests {
     use super::*;
     use crate::entity::sales_inquiry::{
         InquiryCreateData, InquiryDeliveryAllocation, InquiryFeedbackData, InquiryFeedbackLine,
-        InquiryFulfillmentKind, InquiryReinquiryData, InquiryRequirementData, InquirySupplyAllocation,
+        InquiryFulfillmentKind, InquiryQuantitySelection, InquiryReinquiryData, InquiryRequirementData,
         InquirySupplyConclusion,
     };
 
@@ -263,19 +208,9 @@ mod tests {
             available_quantity: quantity.parse().unwrap(),
             prices: vec![InquirySupplyPrice {
                 price_id: price_id.into(),
-                quantity: quantity.parse().unwrap(),
                 unit_price_gross: Some("8".parse().unwrap()),
                 tax_rate: Some("0.13".parse().unwrap()),
-                delivery_due_at: Instant::from_unix_secs(1000),
                 valid_until: Instant::from_unix_secs(900),
-                min_quantity: "1".parse().unwrap(),
-                max_quantity: None,
-                allow_cumulative: false,
-                allocations: vec![InquirySupplyAllocation {
-                    allocation_id: format!("address-{id}"),
-                    quantity: quantity.parse().unwrap(),
-                }],
-                included_cost_note: String::new(),
             }],
             public_note: "其余数量待确认".into(),
         }

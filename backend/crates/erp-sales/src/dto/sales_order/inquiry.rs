@@ -101,7 +101,7 @@ mod tests {
             data: inquiry.draft.clone(),
         });
         inquiry.feedbacks.push(InquiryFeedbackSnapshot {round:1, requirement_version:1, published_by:"buyer".into(), published_at:Instant::from_unix_secs(2),
-            data:serde_json::from_value(json!({"lines":[{"line_id":"line", "conclusion":"available", "available_quantity":"10", "prices":[{"price_id":"price", "quantity":"10", "unit_price_gross":"8", "tax_rate":"0.06", "delivery_due_at":2000, "valid_until":3000, "min_quantity":"1"}]}]})).unwrap()});
+            data:serde_json::from_value(json!({"lines":[{"line_id":"line", "conclusion":"available", "available_quantity":"10", "prices":[{"price_id":"price", "unit_price_gross":"8", "tax_rate":"0.06", "valid_until":3000}]}]})).unwrap()});
         inquiry.acceptances.push(InquiryAcceptance {
             requirement_version: 1,
             feedback_round: 1,

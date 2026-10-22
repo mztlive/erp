@@ -209,16 +209,9 @@ mod tests {
             allocations: vec![],
             price: InquirySupplyPrice {
                 price_id: "price-1".into(),
-                quantity: "5".parse().unwrap(),
                 unit_price_gross: Some("12".parse().unwrap()),
                 tax_rate: Some("0.13".parse().unwrap()),
-                delivery_due_at: Instant::from_unix_secs(1000),
                 valid_until: Instant::from_unix_secs(1000),
-                min_quantity: "1".parse().unwrap(),
-                max_quantity: None,
-                allow_cumulative: false,
-                allocations: vec![],
-                included_cost_note: String::new(),
             },
         };
         let mut second = first.clone();

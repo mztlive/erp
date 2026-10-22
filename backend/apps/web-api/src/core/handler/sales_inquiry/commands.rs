@@ -346,8 +346,7 @@ mod tests {
         json!({
             "command_key": "save-feedback", "expected_version": 1, "task_id": "task", "task_version": 1,
             "data": {"lines": [{"line_id": "line", "conclusion": "available", "available_quantity": "10",
-                "prices": [{"price_id": "price", "quantity": "10", "unit_price_gross": null, "tax_rate": null,
-                    "delivery_due_at": 5000, "valid_until": 0, "min_quantity": "1"}]}]}
+                "prices": [{"price_id": "price", "unit_price_gross": null, "tax_rate": null, "valid_until": 0}]}]}
         })
     }
 
@@ -374,6 +373,13 @@ mod tests {
             ("tax_rate", json!("0.1234567")),
             ("supplier_id", json!("private-supplier")),
             ("internal_quote_id", json!("private-quote")),
+            ("quantity", json!("10")),
+            ("delivery_due_at", json!(5000)),
+            ("allocations", json!([])),
+            ("min_quantity", json!("1")),
+            ("max_quantity", json!("10")),
+            ("allow_cumulative", json!(true)),
+            ("included_cost_note", json!("含配送")),
         ] {
             let mut payload = feedback_draft_request();
             payload["data"]["lines"][0]["prices"][0][field] = value;

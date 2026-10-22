@@ -1,14 +1,12 @@
 //! 对销售发布的独立反馈白名单，不含供应商及内部报价身份。
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use erp_core::common::time::Instant;
 use erp_core::money::{Amount, Quantity, Rate, UnitPrice};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-use super::{
-    InquiryFulfillmentKind, InquiryRequirementData, InquiryRequirementLine, sum_decimal, validate_text,
-};
+use super::{InquiryRequirementData, InquiryRequirementLine, sum_decimal, validate_text};
 use crate::{Error, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -39,34 +37,16 @@ pub enum InquiryFeeCategory {
     Other,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct InquirySupplyAllocation {
-    pub allocation_id: String,
-    pub quantity: Quantity,
-}
-
-/// 每个价格段独立表达数量、地址、税率、交期、有效期和起订量。
+/// 商品供给单价、税率及有效期；数量与配送要求由所属反馈行和需求确定。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct InquirySupplyPrice {
     pub price_id: String,
-    pub quantity: Quantity,
     /// 草稿允许未报价；发布前必须填写，零价仍是明确报价。
     pub unit_price_gross: Option<UnitPrice>,
     /// 草稿允许尚未确认税率；发布前必须填写。
     pub tax_rate: Option<Rate>,
-    pub delivery_due_at: Instant,
     pub valid_until: Instant,
-    pub min_quantity: Quantity,
-    #[serde(default)]
-    pub max_quantity: Option<Quantity>,
-    #[serde(default)]
-    pub allow_cumulative: bool,
-    #[serde(default)]
-    pub allocations: Vec<InquirySupplyAllocation>,
-    #[serde(default)]
-    pub included_cost_note: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -201,96 +181,34 @@ impl InquiryFeedbackLine {
                 "供给结论、可供数量或剩余说明不符合要求；待确认不得发布".into(),
             ));
         }
-        if self.public_note.chars().count() > 4000 || self.prices.len() > 100 {
-            return Err(Error::ValidationError("供给说明或价格分段超出限制".into()));
+        if self.public_note.chars().count() > 4000 {
+            return Err(Error::ValidationError("供给说明超出限制".into()));
         }
         if available == Decimal::ZERO {
             return Ok(());
         }
-        if self.prices.is_empty()
-            || sum_decimal(self.prices.iter().map(|price| price.quantity.to_decimal()))? != available
-        {
-            return Err(Error::ValidationError("价格分段数量合计必须等于可供数量".into()));
+        if self.prices.len() != 1 {
+            return Err(Error::ValidationError("每件可供商品必须填写一条报价".into()));
         }
-        let mut price_ids = HashSet::new();
-        let mut allocation_totals = HashMap::<String, Decimal>::new();
-        for price in &self.prices {
-            if !price_ids.insert(&price.price_id) {
-                return Err(Error::ValidationError("供给价格分段身份重复".into()));
-            }
-            price.validate(demand, now)?;
-            for allocation in &price.allocations {
-                let total = allocation_totals.entry(allocation.allocation_id.clone()).or_default();
-                *total = total
-                    .checked_add(allocation.quantity.to_decimal())
-                    .ok_or_else(|| Error::ValidationError("可供数量溢出".into()))?;
-            }
-        }
-        validate_allocation_totals(demand, allocation_totals)
+        demand.validate_supply_quantity(self.available_quantity)?;
+        self.prices[0].validate(now)
     }
-}
-
-fn validate_allocation_totals(
-    demand: &InquiryRequirementLine,
-    totals: HashMap<String, Decimal>,
-) -> Result<()> {
-    for (id, total) in totals {
-        let allocation = demand
-            .allocations
-            .iter()
-            .find(|row| row.allocation_id == id)
-            .ok_or_else(|| Error::ValidationError("反馈配送范围不属于需求".into()))?;
-        if total > allocation.quantity.to_decimal() {
-            return Err(Error::ValidationError("地址可供数量超过需求".into()));
-        }
-    }
-    Ok(())
 }
 
 impl InquirySupplyPrice {
-    fn validate(&self, demand: &InquiryRequirementLine, now: Instant) -> Result<()> {
+    fn validate(&self, now: Instant) -> Result<()> {
         validate_text(&self.price_id, "供给价格身份", 128)?;
         let unit_price = self
             .unit_price_gross
             .ok_or_else(|| Error::ValidationError("请填写含税供给单价后再发布".into()))?;
         let tax_rate =
             self.tax_rate.ok_or_else(|| Error::ValidationError("请填写报价税率后再发布".into()))?;
-        if self.quantity.to_decimal() <= Decimal::ZERO
-            || self.quantity.to_decimal().normalize().scale() > demand.quantity_scale
-            || unit_price.to_decimal() < Decimal::ZERO
-        {
-            return Err(Error::ValidationError("供给价格或数量非法".into()));
+        if unit_price.to_decimal() < Decimal::ZERO {
+            return Err(Error::ValidationError("含税供给单价不得为负数".into()));
         }
         validate_rate(tax_rate)?;
-        if self.valid_until <= now || self.delivery_due_at > demand.delivery_due_at {
-            return Err(Error::ValidationError("供给结果已过期或不能按要求交付".into()));
-        }
-        if self.min_quantity.to_decimal() <= Decimal::ZERO
-            || self.min_quantity > self.quantity
-            || self.max_quantity.is_some_and(|max| max < self.min_quantity || max < self.quantity)
-        {
-            return Err(Error::ValidationError("供给数量不满足报价数量档位".into()));
-        }
-        if self.allocations.len() > 100
-            || (demand.fulfillment_kind == InquiryFulfillmentKind::Physical && self.allocations.is_empty())
-        {
-            return Err(Error::ValidationError("实物供给必须明确至多 100 个配送地址及数量".into()));
-        }
-        let mut ids = HashSet::new();
-        for allocation in &self.allocations {
-            if !ids.insert(&allocation.allocation_id)
-                || allocation.quantity.to_decimal() <= Decimal::ZERO
-                || allocation.quantity.to_decimal().normalize().scale() > demand.quantity_scale
-                || !demand.allocations.iter().any(|row| row.allocation_id == allocation.allocation_id)
-            {
-                return Err(Error::ValidationError("供给配送地址重复、无效或数量非法".into()));
-            }
-        }
-        if !self.allocations.is_empty()
-            && sum_decimal(self.allocations.iter().map(|row| row.quantity.to_decimal()))?
-                != self.quantity.to_decimal()
-        {
-            return Err(Error::ValidationError("供给价格分段的地址数量不守恒".into()));
+        if self.valid_until <= now {
+            return Err(Error::ValidationError("供给报价已过期".into()));
         }
         Ok(())
     }

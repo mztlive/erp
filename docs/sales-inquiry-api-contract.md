@@ -118,8 +118,8 @@
 1. `InquiryTaskCommand` 为 `command_key`、`expected_version`、`task_id`、`task_version`。退回命令增加 `reason`，改派命令增加 `owner_user_id`、`reason`。
 2. 客户端保存本地反馈时同时保存当前需求责任及本人已保存工作内容作为编辑基准；他人独立责任更新仅同步命令版本，不覆盖输入。本人工作内容发生变化时必须展示当前保存内容并由用户确认后继续编辑。结果未知的命令继续使用原键及原载荷，禁止据新版本重写原命令。
 3. 保存反馈增加 `data: InquiryFeedbackData`，仅接受当前责任行。发布请求不得提交拼接后的整单反馈；服务端从仍有效的各责任采购工作片段合成并重验完整结果。
-4. 最终供给结论 `conclusion` 为 `available`、`partially_available`、`unavailable`、`pending`。存在 `pending`、遗漏需求行或地址供量不守恒时禁止发布。
-5. 每个公开价格段保存 `price_id`、可供 `quantity`、`unit_price_gross`、`tax_rate`、`delivery_due_at`、`valid_until`、`min_quantity`、可空 `max_quantity`、`allow_cumulative`、地址额度及 `included_cost_note`。公开价格段不等于实际采购采用报价。
+4. 最终供给结论 `conclusion` 为 `available`、`partially_available`、`unavailable`、`pending`。存在 `pending`、遗漏需求行或可供数量与供给结论不符时禁止发布。
+5. 每件商品的 `prices` 最多一条，可供商品发布时必须恰好一条；报价仅保存 `price_id`、`unit_price_gross`、`tax_rate` 和 `valid_until`。可供数量取反馈行 `available_quantity`；交期及配送范围取对应需求快照。报价请求携带独立数量、交期、地址分配、最低/最高数量、累计分批或费用包含说明时按未知字段拒绝。公开供给报价不等于实际采购采用报价。
 6. 费用保存稳定 `fee_id`、类别、名称、含税金额和税率、相关需求行/地址、`included_in_goods_price`、`confirmation`、`requires_erp_payment`、有效期、适用条件及公开说明。
 7. `confirmation` 为 `estimated` 或 `confirmed`。暂估、已含商品价和未接受费用不得直接形成费用采购。
 8. `SaveInquiryQuoteCommand` 包含通用任务命令字段及 `quote:{quote_id?,revision_no,line_id,supplier_id,supplier_offering_id,terms,internal_note}`。`terms` 仅包含 `unit_cost_gross`、`input_tax_rate`、`available_quantity`、`expected_delivery_date` 和可空 `valid_to`。`valid_to` 允许省略或 `null`，表示未限定失效日期；非空时自该日开始禁止新采用。删除 `minimum_order_quantity`、`valid_from`、`payment_term_code`、`allow_cumulative_batches`，请求携带这些字段时按未知字段拒绝。`attachment_ids` 和 `terms.address_limits` 不属于请求合同，携带时按未知字段拒绝。服务端按本行全部需求地址生成报价配送范围和原始地址额度；部分可供量不缩减范围，实际采用须同时满足总量及地址额度。询价/需求版本、SKU 和登记人由服务端赋值，不接受客户端注入。
@@ -128,9 +128,9 @@
 
 保存反馈的数值约束：商品报价的 `unit_price_gross`、`tax_rate` 允许 `null` 或省略，表示尚未填写；`"0"` 表示明确零价或零税率。客户端须将输入框和旧本地草稿的空字符串转换为 `null`，不得补零。非空值继续执行十进制字符串与原有精度校验；非法数字、JSON 浮点数及未知字段不得保存。已填写的数量、日期、说明和其他商品报价须原样保留。
 
-发布反馈必须拒绝缺少单价或税率的可供报价，并给出补填提示；有效期、交期、配送数量及转单额度继续执行现有规则。保存未完成报价不改变任务责任、权限和版本约束，也不向销售公开。
+发布反馈必须拒绝缺少单价或税率的可供报价，并给出补填提示；报价有效期须尚未到期；交期沿用需求，转单时校验本次配送数量守恒及商品、地址剩余额度。保存未完成报价不改变任务责任、权限和版本约束，也不向销售公开。
 
-兼容与回滚：旧报价中的十进制字符串继续兼容，无须改写历史文档。新增空值仅允许存在于未发布工作内容，已发布结果仍须完整。若回滚到不支持空值的旧服务，须先停止新的空值写入，将受影响工作内容的单价和税率补齐后再回滚；不得把空值批量改为零。
+兼容与回滚：保留字段中的十进制字符串继续兼容；已删除报价字段须按本文末尾迁移条款清理。新增空值仅允许存在于未发布工作内容，已发布结果仍须完整。若回滚到不支持空值的旧服务，须先停止新的空值写入，将受影响工作内容的单价和税率补齐后再回滚；不得把空值批量改为零。
 
 ### 4.1 供应商报价表 ZIP 导出
 
@@ -240,7 +240,7 @@ v2 配送需求列顺序：`商品名称`、`SKU 编号`、`SPU 编号`、`收�
 ## 8. 销售、采购与费用来源
 
 1. 实际转销售使用现有 `POST /sales-orders`，增加可空 `inquiry_source`；包含 `inquiry_id`、`feedback_round`、各销售行对应的 `inquiry_line_id`、`price_id`、数量及稳定地址分配。成交价由销售明确录入。
-2. 创建销售草稿与来源占用同事务。来源保存确切需求版本、反馈轮次、SKU 修订及原地址映射；已有销售改版不得反向覆盖询价历史。
+2. 创建销售草稿与来源占用同事务。来源保存确切需求版本、反馈轮次、SKU 修订及原地址映射；转单累计数量同时受反馈行可供总量和需求地址数量限制，不另设报价数量档位；已有销售改版不得反向覆盖询价历史。
 3. 草稿编辑按来源规则核对客户、SKU、交期及地址；减量调整预留。撤回、驳回保留占用，草稿作废释放，首次生效转为已消耗；已消耗事实不因正式销售变更而重置。
 4. 正式采购来源 `PurchaseOfferingSource.inquiry_quote` 为可空专项条款快照，精确保存询价、需求行、报价稳定身份和修订、供给成本税率、数量、地址、交期及可选失效日期。付款条件在采购主单按当前供应商商务资料确认。
 5. 实际选源继续使用现有采购创建依据及 sourcing 命令。库存足额、直发、入仓、手动选源和推荐沿用原流程；专项候选只能由服务端在精确来源范围生成，不进入其他客户通用推荐。
@@ -332,3 +332,9 @@ v2 配送需求列顺序：`商品名称`、`SKU 编号`、`SPU 编号`、`收�
 2. 迁移仅删除 `sales_inquiry_internal_quotes.attachment_ids`，受影响文档原件另存迁移备份集合；报价身份、版本、价格、数量、冻结地址及余额保持原值。文件实体、文件治理记录和费用依据不在迁移范围。
 3. 发布前验证旧凭证字段剩余数量为零；验证新请求无法指定配送范围或附件，并验证部分可供量仍覆盖全部需求地址。
 4. 回滚须停止写入，核对并导出上线后的新增业务，再恢复迁移前数据库及配套旧版前后端；禁止直接覆盖新增业务。
+
+### 对销售反馈报价字段精简
+
+1. 前后端同批发布；客户端按报价字段白名单提交本地草稿，仅保留报价身份、含税单价、税率和有效期。服务端拒绝已删除字段，不维护旧字段适配模型。
+2. 停写并备份后执行 `scripts/migrate-simplify-inquiry-feedback.js`，默认预览，`INQUIRY_FEEDBACK_MIGRATION=apply` 才写入。清理 `sales_inquiries` 的历史反馈及工作片段、`sales_order_inquiry_sources` 的报价快照；保留需求、可供总量、来源身份及数量台账。
+3. 存量商品存在多条报价时必须在写入前终止，先完成业务核对再迁移。回滚须停写并恢复完整备份及配套旧版代码；新业务发生后不得直接覆盖。

@@ -111,6 +111,9 @@ impl SalesInquiry {
         }) {
             return Err(Error::Forbidden("费用超出当前采购责任范围".into()));
         }
+        if data.lines.iter().any(|line| line.prices.len() > 1) {
+            return Err(Error::ValidationError("每件商品最多保存一条报价".into()));
+        }
         for work in &mut self.feedback_work {
             if work.actor_id == actor && !work.frozen && work.line_ids.iter().any(|id| line_ids.contains(id))
             {
@@ -359,13 +362,7 @@ impl SalesInquiry {
                 return Err(Error::BusinessLogicError("可供量不得低于已占用及已消耗量".into()));
             }
             for allocation in &demand.allocations {
-                let offered = sum_decimal(
-                    line.prices
-                        .iter()
-                        .flat_map(|price| &price.allocations)
-                        .filter(|row| row.allocation_id == allocation.allocation_id)
-                        .map(|row| row.quantity.to_decimal()),
-                )?;
+                let offered = allocation.quantity.to_decimal();
                 if self.used_quantity(&line.line_id, Some(&allocation.allocation_id), None)? > offered {
                     return Err(Error::BusinessLogicError("地址可供量不得低于已占用及已消耗量".into()));
                 }

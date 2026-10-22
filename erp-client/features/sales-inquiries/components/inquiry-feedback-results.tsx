@@ -14,7 +14,6 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import { multiplyFixed } from "@/lib/fixed-decimal"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 import { inquiryDate } from "../lib/format"
 import {
     INQUIRY_CONCLUSION_LABEL,
@@ -124,7 +123,6 @@ export function InquiryFeedbackResults({
                             <TableHead className="text-right">
                                 可供数量
                             </TableHead>
-                            <TableHead>报价适用量</TableHead>
                             <TableHead className="text-right">
                                 含税供给单价
                             </TableHead>
@@ -141,7 +139,6 @@ export function InquiryFeedbackResults({
                                 line={requirement?.lines.find(
                                     (line) => line.line_id === result.line_id,
                                 )}
-                                idPrefix={`${idPrefix}-round-${feedback.round}`}
                             />
                         ))}
                     </TableBody>
@@ -155,11 +152,9 @@ export function InquiryFeedbackResults({
 function FeedbackRows({
     result,
     line,
-    idPrefix,
 }: {
     result: InquiryFeedbackLine
     line?: InquiryLine
-    idPrefix: string
 }) {
     const prices = result.prices.length ? result.prices : [null]
     return (
@@ -227,71 +222,10 @@ function FeedbackRows({
                             </TableCell>
                         </>
                     )}
-                    <TableCell className="min-w-40 whitespace-normal align-top py-4">
-                        {price ? (
-                            <>
-                                <QuantityValue unit="" value={price.quantity} />
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                    最低 {price.min_quantity}
-                                    {price.max_quantity
-                                        ? `，最高 ${price.max_quantity}`
-                                        : ""}
-                                </p>
-                                {price.allocations.length > 0 && (
-                                    <details className="mt-2">
-                                        <summary
-                                            id={`${idPrefix}-price-${toAutomationIdSegment(price.price_id)}-allocations`}
-                                            className="cursor-pointer text-xs"
-                                        >
-                                            适用地址 ·{" "}
-                                            {price.allocations.length} 个
-                                        </summary>
-                                        <div className="mt-2 space-y-2 text-xs text-muted-foreground">
-                                            {price.allocations.map(
-                                                (allocation) => {
-                                                    const address =
-                                                        line?.allocations.find(
-                                                            (item) =>
-                                                                item.allocation_id ===
-                                                                allocation.allocation_id,
-                                                        )
-                                                    return (
-                                                        <p
-                                                            key={
-                                                                allocation.allocation_id
-                                                            }
-                                                        >
-                                                            {address
-                                                                ? `${address.recipient} · ${address.region_name} ${address.address}`
-                                                                : "地址资料暂不可用"}{" "}
-                                                            · 可供{" "}
-                                                            <QuantityValue
-                                                                unit=""
-                                                                value={
-                                                                    allocation.quantity
-                                                                }
-                                                            />
-                                                        </p>
-                                                    )
-                                                },
-                                            )}
-                                        </div>
-                                    </details>
-                                )}
-                            </>
-                        ) : (
-                            "—"
-                        )}
-                    </TableCell>
                     <TableCell className="min-w-36 text-right align-top py-4">
                         {price ? (
                             <>
                                 <MoneyValue value={price.unit_price_gross} />
-                                {price.included_cost_note && (
-                                    <p className="mt-1 max-w-48 whitespace-normal text-xs text-muted-foreground">
-                                        含：{price.included_cost_note}
-                                    </p>
-                                )}
                             </>
                         ) : (
                             "—"
@@ -312,7 +246,9 @@ function FeedbackRows({
                         )}
                     </TableCell>
                     <TableCell className="align-top py-4">
-                        {price ? inquiryDate(price.delivery_due_at) : "—"}
+                        {price && line
+                            ? inquiryDate(line.delivery_due_at)
+                            : "—"}
                     </TableCell>
                     <TableCell className="align-top py-4">
                         {price ? inquiryDate(price.valid_until) : "—"}

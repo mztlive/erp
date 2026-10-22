@@ -3,8 +3,8 @@ use erp_core::common::time::Instant;
 use rust_decimal::Decimal;
 
 use super::super::{
-    InquiryFeedbackLine, InquiryFeedbackSnapshot, InquiryQuantityReservation, InquiryQuantitySelection,
-    InquiryReservationState, InquiryStatus, InquirySupplyPrice, SalesInquiry, sum_decimal, validate_text,
+    InquiryFeedbackSnapshot, InquiryQuantityReservation, InquiryQuantitySelection, InquiryReservationState,
+    InquiryStatus, SalesInquiry, sum_decimal, validate_text,
 };
 use crate::{Error, Result};
 
@@ -38,7 +38,7 @@ impl SalesInquiry {
     /// # 返回
     /// 追加未消耗占用；完全相同重放无新增。
     /// # 错误
-    /// 过期、重询范围、价格条件、不供货、行/地址或分段余额不足时拒绝。
+    /// 过期、重询范围、价格条件、不供货、行或地址余额不足时拒绝。
     pub fn reserve_quantities(
         &mut self,
         reservation_id: &str,
@@ -198,25 +198,18 @@ impl SalesInquiry {
                 return Err(Error::BusinessLogicError("商品可转数量不足".into()));
             }
             if selection.price_id.is_none() && line.prices.len() != 1 {
-                return Err(Error::ValidationError("多个供给价格段必须明确价格身份".into()));
+                return Err(Error::ValidationError("转单必须明确有效的供给报价".into()));
             }
             self.validate_selection_precision(selection)?;
             let price = line
                 .prices
                 .iter()
-                .find(|price| {
-                    selection.price_id.as_ref().is_none_or(|id| &price.price_id == id)
-                        && selection
-                            .allocation_id
-                            .as_ref()
-                            .is_none_or(|id| price.allocations.iter().any(|row| &row.allocation_id == id))
-                })
+                .find(|price| selection.price_id.as_ref().is_none_or(|id| &price.price_id == id))
                 .ok_or_else(|| Error::BusinessLogicError("转单数量没有适用价格或配送范围".into()))?;
             if price.valid_until <= now {
                 return Err(Error::BusinessLogicError("询价供给价格已过期".into()));
             }
-            self.validate_allocation_selection(selections, selection, line, price, exclude)?;
-            self.validate_price_selection(selections, selection, price, exclude)?;
+            self.validate_allocation_selection(selections, selection, exclude)?;
         }
         Ok(())
     }
@@ -261,94 +254,35 @@ impl SalesInquiry {
         &self,
         selections: &[InquiryQuantitySelection],
         selection: &InquiryQuantitySelection,
-        line: &InquiryFeedbackLine,
-        price: &InquirySupplyPrice,
         exclude: Option<&str>,
     ) -> Result<()> {
+        let demand = self
+            .current_requirement()?
+            .data
+            .lines
+            .iter()
+            .find(|row| row.line_id == selection.line_id)
+            .ok_or_else(|| Error::ValidationError("需求行不存在".into()))?;
         let Some(id) = &selection.allocation_id else {
-            return if price.allocations.is_empty() {
+            return if demand.allocations.is_empty() {
                 Ok(())
             } else {
                 Err(Error::ValidationError("实物转单必须明确配送分配身份".into()))
             };
         };
-        let offered = sum_decimal(
-            line.prices
-                .iter()
-                .flat_map(|price| &price.allocations)
-                .filter(|row| &row.allocation_id == id)
-                .map(|row| row.quantity.to_decimal()),
-        )?;
+        let offered = demand
+            .allocations
+            .iter()
+            .find(|row| &row.allocation_id == id)
+            .ok_or_else(|| Error::ValidationError("配送地址不属于询价需求".into()))?
+            .quantity
+            .to_decimal();
         let selected = selected_quantity(selections, &selection.line_id, Some(id))?;
         if selected
             .checked_add(self.used_quantity(&selection.line_id, Some(id), exclude)?)
             .is_none_or(|sum| sum > offered)
         {
             return Err(Error::BusinessLogicError("配送地址可转数量不足".into()));
-        }
-        let price_offered = price
-            .allocations
-            .iter()
-            .find(|row| &row.allocation_id == id)
-            .ok_or_else(|| Error::BusinessLogicError("所选价格不覆盖该配送地址".into()))?
-            .quantity
-            .to_decimal();
-        let matches = |row: &&InquiryQuantitySelection| {
-            row.line_id == selection.line_id
-                && row.allocation_id == selection.allocation_id
-                && row.price_id == selection.price_id
-        };
-        let price_selected =
-            sum_decimal(selections.iter().filter(matches).map(|row| row.quantity.to_decimal()))?;
-        let price_used = sum_decimal(
-            self.quantity_ledger
-                .iter()
-                .filter(|entry| {
-                    entry.state != InquiryReservationState::Released
-                        && Some(entry.reservation_id.as_str()) != exclude
-                })
-                .flat_map(|entry| &entry.selections)
-                .filter(matches)
-                .map(|row| row.quantity.to_decimal()),
-        )?;
-        if price_selected.checked_add(price_used).is_none_or(|sum| sum > price_offered) {
-            return Err(Error::BusinessLogicError("所选价格的地址可转数量不足".into()));
-        }
-        Ok(())
-    }
-
-    fn validate_price_selection(
-        &self,
-        selections: &[InquiryQuantitySelection],
-        selection: &InquiryQuantitySelection,
-        price: &InquirySupplyPrice,
-        exclude: Option<&str>,
-    ) -> Result<()> {
-        let selected = sum_decimal(
-            selections
-                .iter()
-                .filter(|row| row.line_id == selection.line_id && row.price_id == selection.price_id)
-                .map(|row| row.quantity.to_decimal()),
-        )?;
-        let previous = sum_decimal(
-            self.quantity_ledger
-                .iter()
-                .filter(|entry| {
-                    entry.state != InquiryReservationState::Released
-                        && Some(entry.reservation_id.as_str()) != exclude
-                })
-                .flat_map(|entry| &entry.selections)
-                .filter(|row| row.line_id == selection.line_id && row.price_id == selection.price_id)
-                .map(|row| row.quantity.to_decimal()),
-        )?;
-        let total =
-            selected.checked_add(previous).ok_or_else(|| Error::ValidationError("来源数量溢出".into()))?;
-        let threshold = if price.allow_cumulative { total } else { selected };
-        if threshold < price.min_quantity.to_decimal()
-            || price.max_quantity.is_some_and(|max| threshold > max.to_decimal())
-            || total > price.quantity.to_decimal()
-        {
-            return Err(Error::BusinessLogicError("分批数量不满足报价数量档位或价格段余额".into()));
         }
         Ok(())
     }

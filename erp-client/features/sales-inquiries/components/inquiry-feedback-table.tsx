@@ -1,13 +1,13 @@
 "use client"
 
 import * as React from "react"
-import { ChevronDownIcon, ChevronUpIcon } from "lucide-react"
 import { BusinessFailureState } from "@/components/business"
 import {
     TableToolbar,
     TableToolbarScope,
 } from "@/components/business/table-toolbar"
 import { Button } from "@/components/ui/button"
+import { DatePicker } from "@/components/ui/date-picker"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -20,12 +20,11 @@ import {
 } from "@/components/ui/table"
 import { OptionCombobox } from "@/components/business/option-combobox"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { inquiryDateInput } from "../lib/format"
+import { inquiryDateInput, inquiryDateSeconds } from "../lib/format"
 import { useInquirySkuDetailsQuery } from "../hooks/queries"
 import {
     feedbackIssues,
     changeFeedbackConclusion,
-    changeFeedbackQuantity,
     newFeedbackPrice,
     feedbackFieldTarget,
     feedbackCommonTerms,
@@ -40,7 +39,6 @@ import {
 import { InquiryProductImage } from "./inquiry-product-image"
 import { InquiryFeedbackLineIssues } from "./inquiry-feedback-line-issues"
 import { InquiryFeedbackCommonTerms } from "./inquiry-feedback-common-terms"
-import { InquiryFeedbackPriceDetails } from "./inquiry-feedback-price-details"
 
 export function InquiryFeedbackTable({
     lines,
@@ -66,7 +64,6 @@ export function InquiryFeedbackTable({
         valid_until: common.valid_until ?? undefined,
     }
     const sku = useInquirySkuDetailsQuery(demand.map((line) => line.sku_id))
-    const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set())
     const [selected, setSelected] = React.useState<Set<string>>(() => new Set())
     const [batchMessage, setBatchMessage] = React.useState("")
     const rows = lines.flatMap((value) => {
@@ -81,35 +78,11 @@ export function InquiryFeedbackTable({
                 item.line_id === value.line_id ? value : item,
             ),
         )
-    const openLine = (id: string) =>
-        setExpanded((current) => new Set(current).add(id))
     const focusIssue = (value: InquiryFeedbackLine, field: string) => {
-        const commonId =
-            field.endsWith("-valid-until") && common.valid_until !== null
-                ? "procurement-feedback-common-valid"
-                : field.endsWith("-tax-rate") && common.tax_rate !== null
-                  ? "procurement-feedback-common-tax"
-                  : undefined
         const target = feedbackFieldTarget(value, field)
-        if (target.expand && !commonId) openLine(value.line_id)
         const prefix = `procurement-inquiry-line-${toAutomationIdSegment(value.line_id)}`
         return requestAnimationFrame(() => {
-            const element =
-                document.getElementById(
-                    commonId ?? `${prefix}-${target.field}`,
-                ) ?? document.getElementById(`${prefix}-details`)
-            if (target.field === "details")
-                document
-                    .getElementById(`${prefix}-details-panel`)
-                    ?.querySelectorAll("details")
-                    .forEach((detail) => {
-                        detail.open = true
-                    })
-            let parent = element?.parentElement
-            while (parent) {
-                if (parent instanceof HTMLDetailsElement) parent.open = true
-                parent = parent.parentElement
-            }
+            const element = document.getElementById(`${prefix}-${target}`)
             element?.scrollIntoView({ block: "center" })
             element?.focus()
         })
@@ -211,7 +184,7 @@ export function InquiryFeedbackTable({
                     </p>
                 )}
                 <div className="overflow-hidden rounded-lg border">
-                    <Table className="min-w-[1160px] table-fixed">
+                    <Table className="min-w-[1360px] table-fixed">
                         <TableHeader className="sticky top-0 z-10 bg-muted">
                             <TableRow>
                                 <TableHead className="w-12">
@@ -240,7 +213,7 @@ export function InquiryFeedbackTable({
                                         }
                                     />
                                 </TableHead>
-                                <TableHead className="w-72">
+                                <TableHead className="w-64">
                                     商品 / 规格
                                 </TableHead>
                                 <TableHead className="w-24 text-right">
@@ -250,8 +223,12 @@ export function InquiryFeedbackTable({
                                 <TableHead className="w-40 text-right">
                                     含税供给单价
                                 </TableHead>
-                                <TableHead className="w-44">交付日期</TableHead>
-                                <TableHead className="w-56 text-right">
+                                <TableHead className="w-28">税率</TableHead>
+                                <TableHead className="w-44">
+                                    报价有效至
+                                </TableHead>
+                                <TableHead className="w-32">交付日期</TableHead>
+                                <TableHead className="w-32 text-right">
                                     操作
                                 </TableHead>
                             </TableRow>
@@ -260,7 +237,7 @@ export function InquiryFeedbackTable({
                             {rows.length === 0 && (
                                 <TableRow>
                                     <TableCell
-                                        colSpan={7}
+                                        colSpan={9}
                                         className="py-12 text-center text-muted-foreground"
                                     >
                                         暂无商品需求
@@ -273,35 +250,19 @@ export function InquiryFeedbackTable({
                                     sku.units.get(line.unit_code) ??
                                     (sku.isPending ? "加载中" : "单位未匹配")
                                 const price = value.prices[0]
-                                const isOpen = expanded.has(line.line_id)
                                 const unavailable =
                                     value.conclusion === "unavailable"
-                                const multiple = value.prices.length > 1
                                 const showIssues =
                                     value.conclusion !== "pending" ||
                                     validationRequest > 0
                                 const needsReason =
                                     unavailable ||
                                     value.conclusion === "partially_available"
-                                const conditionSummary = multiple
-                                    ? `${value.prices.length} 条报价`
-                                    : price &&
-                                        (common.tax_rate === null ||
-                                            common.valid_until === null)
-                                      ? "单独设置报价条件"
-                                      : ""
                                 const updatePrice = (
                                     patch: Partial<InquiryPrice>,
                                 ) => {
                                     const next =
-                                        price ??
-                                        newFeedbackPrice(
-                                            line,
-                                            value.conclusion === "pending"
-                                                ? line.quantity
-                                                : value.available_quantity,
-                                            defaultTerms,
-                                        )
+                                        price ?? newFeedbackPrice(defaultTerms)
                                     setLine({
                                         ...value,
                                         prices: [{ ...next, ...patch }],
@@ -414,20 +375,10 @@ export function InquiryFeedbackTable({
                                                                 defaultTerms,
                                                             ),
                                                         )
-                                                        if (
-                                                            conclusion ===
-                                                                "partially_available" &&
-                                                            line.allocations
-                                                                .length > 1
-                                                        )
-                                                            openLine(
-                                                                line.line_id,
-                                                            )
                                                     }}
                                                 />
-                                                {(value.conclusion ===
-                                                    "partially_available" ||
-                                                    multiple) &&
+                                                {value.conclusion ===
+                                                    "partially_available" &&
                                                     !unavailable && (
                                                         <div className="mt-2 flex items-center gap-2">
                                                             <span className="shrink-0 text-xs text-muted-foreground">
@@ -444,15 +395,13 @@ export function InquiryFeedbackTable({
                                                                 onChange={(
                                                                     event,
                                                                 ) =>
-                                                                    setLine(
-                                                                        changeFeedbackQuantity(
-                                                                            value,
-                                                                            line,
+                                                                    setLine({
+                                                                        ...value,
+                                                                        available_quantity:
                                                                             event
                                                                                 .target
                                                                                 .value,
-                                                                        ),
-                                                                    )
+                                                                    })
                                                                 }
                                                             />
                                                         </div>
@@ -461,20 +410,6 @@ export function InquiryFeedbackTable({
                                             <TableCell>
                                                 {unavailable ? (
                                                     "—"
-                                                ) : multiple ? (
-                                                    <Button
-                                                        id={`${prefix}-prices-summary`}
-                                                        type="button"
-                                                        variant="ghost"
-                                                        onClick={() =>
-                                                            openLine(
-                                                                line.line_id,
-                                                            )
-                                                        }
-                                                    >
-                                                        {value.prices.length}{" "}
-                                                        条报价
-                                                    </Button>
                                                 ) : (
                                                     <Input
                                                         id={`${prefix}-gross-price`}
@@ -500,25 +435,59 @@ export function InquiryFeedbackTable({
                                             <TableCell>
                                                 {unavailable ? (
                                                     "—"
-                                                ) : multiple ? (
-                                                    <span className="text-sm text-muted-foreground">
-                                                        按各条报价交付
-                                                    </span>
                                                 ) : (
-                                                    <div className="text-sm">
-                                                        {inquiryDateInput(
-                                                            price?.delivery_due_at ??
-                                                                line.delivery_due_at,
-                                                        ) || "未设置"}
-                                                        <span className="block text-xs text-muted-foreground">
-                                                            {(price?.delivery_due_at ??
-                                                                line.delivery_due_at) ===
-                                                            line.delivery_due_at
-                                                                ? "按需求交付"
-                                                                : "已调整交期"}
-                                                        </span>
-                                                    </div>
+                                                    <Input
+                                                        id={`${prefix}-tax-rate`}
+                                                        aria-label={`${line.product_name}税率`}
+                                                        inputMode="decimal"
+                                                        placeholder="0.13"
+                                                        title="0.13 表示 13%"
+                                                        value={
+                                                            price?.tax_rate ??
+                                                            ""
+                                                        }
+                                                        onChange={(event) =>
+                                                            updatePrice({
+                                                                tax_rate:
+                                                                    event.target
+                                                                        .value ||
+                                                                    null,
+                                                            })
+                                                        }
+                                                    />
                                                 )}
+                                            </TableCell>
+                                            <TableCell>
+                                                {unavailable ? (
+                                                    "—"
+                                                ) : (
+                                                    <DatePicker
+                                                        id={`${prefix}-valid-until`}
+                                                        aria-label={`${line.product_name}报价有效至`}
+                                                        value={
+                                                            inquiryDateInput(
+                                                                price?.valid_until ??
+                                                                    0,
+                                                            ) || undefined
+                                                        }
+                                                        onValueChange={(date) =>
+                                                            updatePrice({
+                                                                valid_until:
+                                                                    inquiryDateSeconds(
+                                                                        date ??
+                                                                            "",
+                                                                    ),
+                                                            })
+                                                        }
+                                                    />
+                                                )}
+                                            </TableCell>
+                                            <TableCell>
+                                                {unavailable
+                                                    ? "—"
+                                                    : inquiryDateInput(
+                                                          line.delivery_due_at,
+                                                      )}
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <div className="flex flex-wrap items-center justify-end gap-1">
@@ -538,70 +507,7 @@ export function InquiryFeedbackTable({
                                                             供应商报价
                                                         </Button>
                                                     )}
-                                                    {!unavailable && (
-                                                        <Button
-                                                            id={`${prefix}-details`}
-                                                            aria-expanded={
-                                                                isOpen
-                                                            }
-                                                            aria-controls={
-                                                                isOpen
-                                                                    ? `${prefix}-details-panel`
-                                                                    : undefined
-                                                            }
-                                                            type="button"
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => {
-                                                                if (
-                                                                    !isOpen &&
-                                                                    !value
-                                                                        .prices
-                                                                        .length
-                                                                )
-                                                                    updatePrice(
-                                                                        {},
-                                                                    )
-                                                                setExpanded(
-                                                                    (
-                                                                        current,
-                                                                    ) => {
-                                                                        const next =
-                                                                            new Set(
-                                                                                current,
-                                                                            )
-                                                                        if (
-                                                                            isOpen
-                                                                        )
-                                                                            next.delete(
-                                                                                line.line_id,
-                                                                            )
-                                                                        else
-                                                                            next.add(
-                                                                                line.line_id,
-                                                                            )
-                                                                        return next
-                                                                    },
-                                                                )
-                                                            }}
-                                                        >
-                                                            {isOpen
-                                                                ? "收起"
-                                                                : "调整"}
-                                                            {isOpen ? (
-                                                                <ChevronUpIcon />
-                                                            ) : (
-                                                                <ChevronDownIcon />
-                                                            )}
-                                                        </Button>
-                                                    )}
                                                 </div>
-                                                {conditionSummary &&
-                                                    !unavailable && (
-                                                        <span className="block whitespace-normal text-xs text-muted-foreground">
-                                                            {conditionSummary}
-                                                        </span>
-                                                    )}
                                             </TableCell>
                                         </TableRow>
                                         {(needsReason ||
@@ -609,7 +515,7 @@ export function InquiryFeedbackTable({
                                                 issues.length > 0)) && (
                                             <TableRow>
                                                 <TableCell
-                                                    colSpan={7}
+                                                    colSpan={9}
                                                     className="whitespace-normal bg-muted/20 px-4 py-2"
                                                 >
                                                     <InquiryFeedbackLineIssues
@@ -627,22 +533,6 @@ export function InquiryFeedbackTable({
                                                                 field,
                                                             )
                                                         }
-                                                    />
-                                                </TableCell>
-                                            </TableRow>
-                                        )}
-                                        {isOpen && !unavailable && (
-                                            <TableRow>
-                                                <TableCell
-                                                    colSpan={7}
-                                                    className="whitespace-normal bg-muted/30 p-0"
-                                                >
-                                                    <InquiryFeedbackPriceDetails
-                                                        demand={line}
-                                                        value={value}
-                                                        unit={unit}
-                                                        prefix={prefix}
-                                                        onChange={setLine}
                                                     />
                                                 </TableCell>
                                             </TableRow>
