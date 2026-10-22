@@ -75,6 +75,27 @@ export function changeFeedbackQuantity(
 }
 
 export type FeedbackIssue = { message: string; field: string }
+
+/** 单条报价的常用字段在主表编辑，多条报价及特殊条件在展开区编辑。 */
+export function feedbackFieldTarget(value: InquiryFeedbackLine, field: string) {
+    let target = field
+    if (value.prices.length === 1) {
+        const prefix = `price-${toAutomationIdSegment(value.prices[0].price_id)}-`
+        for (const suffix of ["gross-price", "due", "tax-rate", "valid-until"])
+            if (field === `${prefix}${suffix}`) target = suffix
+    }
+    const inline = [
+        "conclusion",
+        "available-quantity",
+        "gross-price",
+        "due",
+        "tax-rate",
+        "valid-until",
+    ]
+    if (["unavailable", "partially_available"].includes(value.conclusion))
+        inline.push("public-note")
+    return { field: target, expand: !inline.includes(target) }
+}
 /** 发布前定位常见缺项；最终权限、跨商品及费用校验仍由发布接口执行。 */
 export function feedbackIssues(
     value: InquiryFeedbackLine,

@@ -39,6 +39,7 @@ import { InquiryActions } from "../components/inquiry-actions"
 import { InquiryInternalQuotes } from "../components/inquiry-internal-quotes"
 import { InquiryFeesPanel } from "../components/inquiry-fees-panel"
 import { InquiryRequirementTable } from "../components/inquiry-requirement-table"
+import { SupplierQuoteExportButton } from "../components/supplier-quote-export-dialog"
 import {
     InquiryImportDialog,
     InquiryCustomerTemplateButton,
@@ -337,6 +338,27 @@ function InquiryDetailContent({
                         }
                         secondaryActions={
                             <>
+                                {canProcess &&
+                                    task &&
+                                    hasPermission(
+                                        permissions,
+                                        "supplier_offering:list",
+                                    ) &&
+                                    hasPermission(
+                                        permissions,
+                                        "sellable_sku:list",
+                                    ) && (
+                                        <SupplierQuoteExportButton
+                                            request={{
+                                                inquiryId: inquiry.id,
+                                                taskId: task.id,
+                                                version: inquiry.version,
+                                                taskVersion: task.version,
+                                            }}
+                                            userId={userId}
+                                            onRefresh={onSaved}
+                                        />
+                                    )}
                                 {canEdit && (
                                     <div ref={setDemandActionsContainer} />
                                 )}

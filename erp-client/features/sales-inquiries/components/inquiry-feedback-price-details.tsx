@@ -16,14 +16,12 @@ export function InquiryFeedbackPriceDetails({
     prefix,
     unit,
     onChange,
-    onInternalQuote,
 }: {
     demand: InquiryLine
     value: InquiryFeedbackLine
     prefix: string
     unit: string
     onChange: (value: InquiryFeedbackLine) => void
-    onInternalQuote?: () => void
 }) {
     const update = (index: number, patch: Partial<InquiryPrice>) =>
         onChange({
@@ -34,37 +32,32 @@ export function InquiryFeedbackPriceDetails({
         })
     return (
         <div id={`${prefix}-details-panel`} className="space-y-4 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="space-y-1">
                 <p className="text-sm font-medium">
-                    {demand.product_name} · 对销售的报价明细
+                    {demand.product_name} · 对销售的报价条件
                 </p>
-                {onInternalQuote && (
-                    <Button
-                        id={`${prefix}-internal-quotes`}
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={onInternalQuote}
-                    >
-                        内部供应商报价
-                    </Button>
-                )}
+                <p className="text-xs text-muted-foreground">
+                    按需设置不同价格、交期、适用数量和配送范围。
+                </p>
             </div>
-            <div className="space-y-2">
-                <Label htmlFor={`${prefix}-public-note`}>
-                    {value.conclusion === "unavailable"
-                        ? "不可供原因"
-                        : "对销售说明"}
-                </Label>
-                <Input
-                    id={`${prefix}-public-note`}
-                    value={value.public_note}
-                    placeholder="部分供应说明缺口；不可供时填写原因"
-                    onChange={(event) =>
-                        onChange({ ...value, public_note: event.target.value })
-                    }
-                />
-            </div>
+            {!["unavailable", "partially_available"].includes(
+                value.conclusion,
+            ) && (
+                <div className="space-y-2">
+                    <Label htmlFor={`${prefix}-public-note`}>对销售说明</Label>
+                    <Input
+                        id={`${prefix}-public-note`}
+                        value={value.public_note}
+                        placeholder="补充说明报价条件（可不填）"
+                        onChange={(event) =>
+                            onChange({
+                                ...value,
+                                public_note: event.target.value,
+                            })
+                        }
+                    />
+                </div>
+            )}
             {value.conclusion !== "unavailable" &&
                 value.prices.map((price, index) => {
                     const id = `${prefix}-price-${toAutomationIdSegment(price.price_id)}`
@@ -131,53 +124,60 @@ export function InquiryFeedbackPriceDetails({
                                     "quantity",
                                     `适用数量（${unit}）`,
                                 )}
-                                {text(
-                                    "unit_price_gross",
-                                    "gross-price",
-                                    "含税供给单价",
-                                )}
-                                {text(
-                                    "tax_rate",
-                                    "tax-rate",
-                                    "税率（0.13 表示 13%）",
-                                )}
-                                <div className="space-y-2">
-                                    <Label htmlFor={`${id}-valid-until`}>
-                                        报价有效至
-                                    </Label>
-                                    <DatePicker
-                                        id={`${id}-valid-until`}
-                                        value={inquiryDateInput(
-                                            price.valid_until,
+                                {value.prices.length > 1 && (
+                                    <>
+                                        {text(
+                                            "unit_price_gross",
+                                            "gross-price",
+                                            "含税供给单价",
                                         )}
-                                        onValueChange={(date) =>
-                                            update(index, {
-                                                valid_until: inquiryDateSeconds(
-                                                    date ?? "",
-                                                ),
-                                            })
-                                        }
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor={`${id}-due`}>
-                                        承诺交付日
-                                    </Label>
-                                    <DatePicker
-                                        id={`${id}-due`}
-                                        value={inquiryDateInput(
-                                            price.delivery_due_at,
+                                        {text(
+                                            "tax_rate",
+                                            "tax-rate",
+                                            "税率（0.13 表示 13%）",
                                         )}
-                                        onValueChange={(date) =>
-                                            update(index, {
-                                                delivery_due_at:
-                                                    inquiryDateSeconds(
-                                                        date ?? "",
-                                                    ),
-                                            })
-                                        }
-                                    />
-                                </div>
+                                        <div className="space-y-2">
+                                            <Label
+                                                htmlFor={`${id}-valid-until`}
+                                            >
+                                                报价有效至
+                                            </Label>
+                                            <DatePicker
+                                                id={`${id}-valid-until`}
+                                                value={inquiryDateInput(
+                                                    price.valid_until,
+                                                )}
+                                                onValueChange={(date) =>
+                                                    update(index, {
+                                                        valid_until:
+                                                            inquiryDateSeconds(
+                                                                date ?? "",
+                                                            ),
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor={`${id}-due`}>
+                                                承诺交付日
+                                            </Label>
+                                            <DatePicker
+                                                id={`${id}-due`}
+                                                value={inquiryDateInput(
+                                                    price.delivery_due_at,
+                                                )}
+                                                onValueChange={(date) =>
+                                                    update(index, {
+                                                        delivery_due_at:
+                                                            inquiryDateSeconds(
+                                                                date ?? "",
+                                                            ),
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                    </>
+                                )}
                                 {text(
                                     "min_quantity",
                                     "minimum",
