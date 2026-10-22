@@ -23,20 +23,30 @@ export function InquiryFeedbackCommonTerms({
     const inactive =
         disabled || lines.every((line) => line.conclusion === "unavailable")
     return (
-        <div className="flex flex-wrap items-end gap-x-6 gap-y-3 rounded-lg border bg-muted/20 p-3">
-            <div className="space-y-1">
-                <p className="text-sm font-medium">统一报价条件</p>
-                <p className="text-xs text-muted-foreground">
-                    修改后应用到全部可供及待确认商品；个别差异在行内“调整”。
-                </p>
-            </div>
-            <div className="w-32 space-y-1.5">
-                <Label htmlFor="procurement-feedback-common-tax">税率</Label>
+        <div
+            role="group"
+            aria-label="统一报价条件"
+            aria-describedby="procurement-feedback-common-hint"
+            className="flex max-w-full flex-wrap items-center gap-x-4 gap-y-2"
+        >
+            <span id="procurement-feedback-common-hint" className="sr-only">
+                修改后应用到全部可供及待确认商品；个别差异在行内“调整”。
+            </span>
+            <div className="flex items-center gap-2">
+                <Label
+                    htmlFor="procurement-feedback-common-tax"
+                    className="shrink-0 text-xs text-muted-foreground"
+                    title="修改后统一应用到全部可供及待确认商品"
+                >
+                    统一税率
+                </Label>
                 <Input
                     id="procurement-feedback-common-tax"
+                    className="h-8 w-28 text-sm"
                     disabled={inactive}
                     inputMode="decimal"
-                    aria-describedby="procurement-feedback-common-tax-hint"
+                    aria-describedby="procurement-feedback-common-tax-hint procurement-feedback-common-hint"
+                    title="填写小数，例如 0.13 表示 13%"
                     value={common.tax_rate ?? ""}
                     placeholder={
                         common.tax_rate === null ? "各商品不同" : "如 0.13"
@@ -45,40 +55,42 @@ export function InquiryFeedbackCommonTerms({
                         onChange({ tax_rate: event.target.value || null })
                     }
                 />
-                <p
+                <span
                     id="procurement-feedback-common-tax-hint"
-                    className="text-xs text-muted-foreground"
+                    className="sr-only"
                 >
                     0.13 表示 13%
-                </p>
+                </span>
             </div>
-            <div className="w-52 space-y-1.5">
-                <Label htmlFor="procurement-feedback-common-valid">
+            <div className="flex items-center gap-2">
+                <Label
+                    htmlFor="procurement-feedback-common-valid"
+                    className="shrink-0 text-xs text-muted-foreground"
+                    title="修改后统一应用到全部可供及待确认商品"
+                >
                     报价有效至
                 </Label>
-                <DatePicker
-                    id="procurement-feedback-common-valid"
-                    disabled={inactive}
-                    size="default"
-                    value={
-                        inquiryDateInput(common.valid_until ?? 0) || undefined
-                    }
-                    placeholder={
-                        common.valid_until === null
-                            ? "各商品不同"
-                            : "统一选择一次"
-                    }
-                    onValueChange={(date) =>
-                        onChange({
-                            valid_until: inquiryDateSeconds(date ?? ""),
-                        })
-                    }
-                />
-                <p className="text-xs text-muted-foreground">
-                    {common.valid_until === null
-                        ? "已保留各商品的有效期"
-                        : "按供应商确认的有效期填写"}
-                </p>
+                <div className="w-44">
+                    <DatePicker
+                        id="procurement-feedback-common-valid"
+                        disabled={inactive}
+                        size="sm"
+                        value={
+                            inquiryDateInput(common.valid_until ?? 0) ||
+                            undefined
+                        }
+                        placeholder={
+                            common.valid_until === null
+                                ? "各商品不同"
+                                : "选择日期"
+                        }
+                        onValueChange={(date) =>
+                            onChange({
+                                valid_until: inquiryDateSeconds(date ?? ""),
+                            })
+                        }
+                    />
+                </div>
             </div>
         </div>
     )

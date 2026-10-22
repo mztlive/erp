@@ -49,6 +49,7 @@ export function InquiryFeedbackTable({
     validationRequest,
     onInternalQuote,
     disabled,
+    selectionActions,
 }: {
     lines: InquiryFeedbackLine[]
     demand: InquiryLine[]
@@ -56,6 +57,7 @@ export function InquiryFeedbackTable({
     validationRequest: number
     onInternalQuote?: (lineId: string) => void
     disabled: boolean
+    selectionActions?: React.ReactNode
 }) {
     const common = feedbackCommonTerms(lines)
     const defaultTerms = {
@@ -64,26 +66,15 @@ export function InquiryFeedbackTable({
         valid_until: common.valid_until ?? undefined,
     }
     const sku = useInquirySkuDetailsQuery(demand.map((line) => line.sku_id))
-    const [filter, setFilter] = React.useState("all")
     const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set())
     const [selected, setSelected] = React.useState<Set<string>>(() => new Set())
     const [batchMessage, setBatchMessage] = React.useState("")
-    const [activeLineId, setActiveLineId] = React.useState<string | null>(null)
     const rows = lines.flatMap((value) => {
         const line = demand.find((item) => item.line_id === value.line_id)
         return line
             ? [{ value, line, issues: feedbackIssues(value, line) }]
             : []
     })
-    const visible = rows.filter(
-        ({ value, issues }) =>
-            filter === "all" ||
-            value.line_id === activeLineId ||
-            expanded.has(value.line_id) ||
-            (filter === "pending"
-                ? issues.length > 0
-                : value.conclusion !== "pending" && issues.length > 0),
-    )
     const setLine = (value: InquiryFeedbackLine) =>
         onChange(
             lines.map((item) =>
@@ -100,7 +91,6 @@ export function InquiryFeedbackTable({
                   ? "procurement-feedback-common-tax"
                   : undefined
         const target = feedbackFieldTarget(value, field)
-        setActiveLineId(value.line_id)
         if (target.expand && !commonId) openLine(value.line_id)
         const prefix = `procurement-inquiry-line-${toAutomationIdSegment(value.line_id)}`
         return requestAnimationFrame(() => {
@@ -128,7 +118,6 @@ export function InquiryFeedbackTable({
         if (!validationRequest) return
         const first = rows.find((row) => row.issues.length)
         if (!first) return
-        setFilter(first.value.conclusion === "pending" ? "pending" : "issues")
         const frame = focusIssue(first.value, first.issues[0].field)
         return () => cancelAnimationFrame(frame)
         // 仅发布校验触发定位；输入时不抢焦点。
@@ -162,39 +151,6 @@ export function InquiryFeedbackTable({
     return (
         <TableToolbarScope>
             <section className="min-w-0 space-y-3" aria-label="采购商品反馈">
-                <InquiryFeedbackCommonTerms
-                    lines={lines}
-                    disabled={disabled}
-                    onChange={(patch) =>
-                        onChange(applyFeedbackTerms(lines, demand, patch))
-                    }
-                />
-                <div
-                    className="flex flex-wrap items-center gap-2"
-                    aria-label="反馈筛选"
-                >
-                    {[
-                        ["all", "全部"],
-                        ["pending", "待填写"],
-                        ["issues", "有问题"],
-                    ].map(([value, label]) => (
-                        <Button
-                            key={value}
-                            id={`procurement-feedback-filter-${value}`}
-                            type="button"
-                            size="sm"
-                            variant={filter === value ? "secondary" : "ghost"}
-                            aria-pressed={filter === value}
-                            onClick={() => {
-                                setFilter(value)
-                                setActiveLineId(null)
-                                setExpanded(new Set())
-                            }}
-                        >
-                            {label}
-                        </Button>
-                    ))}
-                </div>
                 {sku.error && (
                     <BusinessFailureState
                         id="procurement-feedback-sku-retry"
@@ -205,62 +161,73 @@ export function InquiryFeedbackTable({
                 )}
                 <TableToolbar
                     actions={
-                        <Button
-                            id="procurement-feedback-batch-available"
-                            type="button"
-                            variant="outline"
-                            disabled={disabled || selected.size === 0}
-                            onClick={markSelectedAvailable}
-                        >
-                            待确认项设为可供
-                        </Button>
+                        <>
+                            <InquiryFeedbackCommonTerms
+                                lines={lines}
+                                disabled={disabled}
+                                onChange={(patch) =>
+                                    onChange(
+                                        applyFeedbackTerms(
+                                            lines,
+                                            demand,
+                                            patch,
+                                        ),
+                                    )
+                                }
+                            />
+                            <Button
+                                id="procurement-feedback-batch-available"
+                                type="button"
+                                variant="outline"
+                                disabled={disabled || selected.size === 0}
+                                onClick={markSelectedAvailable}
+                            >
+                                待确认项设为可供
+                            </Button>
+                        </>
                     }
                 >
-                    {selected.size === 0 && (
-                        <span className="text-xs text-muted-foreground">
-                            勾选商品可批量设为可供
-                        </span>
-                    )}
-                    {selected.size > 0 && (
-                        <span>
-                            已选 {selected.size} 件
-                            <Button
-                                id="procurement-feedback-clear-selection"
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => setSelected(new Set())}
-                            >
-                                清空选择
-                            </Button>
-                        </span>
-                    )}
+                    <div className="flex flex-wrap items-center gap-3">
+                        {selectionActions}
+                        {selected.size > 0 && (
+                            <span>
+                                已选 {selected.size} 件
+                                <Button
+                                    id="procurement-feedback-clear-selection"
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => setSelected(new Set())}
+                                >
+                                    清空选择
+                                </Button>
+                            </span>
+                        )}
+                    </div>
                 </TableToolbar>
                 {batchMessage && (
                     <p role="status" className="text-sm text-muted-foreground">
                         {batchMessage}
                     </p>
                 )}
-                <div className="overflow-hidden rounded-lg border [&>[data-slot=table-container]]:max-h-[60vh]">
+                <div className="overflow-hidden rounded-lg border">
                     <Table className="min-w-[1160px] table-fixed">
                         <TableHeader className="sticky top-0 z-10 bg-muted">
                             <TableRow>
                                 <TableHead className="w-12">
                                     <Checkbox
                                         id="procurement-feedback-select-visible"
-                                        aria-label="选择当前显示商品"
+                                        aria-label="选择全部商品"
                                         checked={
-                                            visible.length > 0 &&
-                                            visible.every(({ value }) =>
+                                            rows.length > 0 &&
+                                            rows.every(({ value }) =>
                                                 selected.has(value.line_id),
                                             )
                                         }
                                         onCheckedChange={(checked) =>
                                             setSelected((current) => {
                                                 const next = new Set(current)
-                                                for (const {
-                                                    value,
-                                                } of visible) {
+                                                for (const { value } of rows) {
                                                     if (checked)
                                                         next.add(value.line_id)
                                                     else
@@ -290,17 +257,17 @@ export function InquiryFeedbackTable({
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {visible.length === 0 && (
+                            {rows.length === 0 && (
                                 <TableRow>
                                     <TableCell
                                         colSpan={7}
                                         className="py-12 text-center text-muted-foreground"
                                     >
-                                        当前筛选下没有商品
+                                        暂无商品需求
                                     </TableCell>
                                 </TableRow>
                             )}
-                            {visible.map(({ value, line, issues }) => {
+                            {rows.map(({ value, line, issues }) => {
                                 const prefix = `procurement-inquiry-line-${toAutomationIdSegment(line.line_id)}`
                                 const unit =
                                     sku.units.get(line.unit_code) ??
@@ -343,9 +310,6 @@ export function InquiryFeedbackTable({
                                 return (
                                     <React.Fragment key={line.line_id}>
                                         <TableRow
-                                            onFocusCapture={() =>
-                                                setActiveLineId(line.line_id)
-                                            }
                                             data-state={
                                                 selected.has(line.line_id)
                                                     ? "selected"
@@ -643,13 +607,7 @@ export function InquiryFeedbackTable({
                                         {(needsReason ||
                                             (showIssues &&
                                                 issues.length > 0)) && (
-                                            <TableRow
-                                                onFocusCapture={() =>
-                                                    setActiveLineId(
-                                                        line.line_id,
-                                                    )
-                                                }
-                                            >
+                                            <TableRow>
                                                 <TableCell
                                                     colSpan={7}
                                                     className="whitespace-normal bg-muted/20 px-4 py-2"

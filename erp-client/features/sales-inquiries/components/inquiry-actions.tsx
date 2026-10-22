@@ -247,9 +247,15 @@ export function InquiryActions({
         </Button>
     )
     return (
-        <div className="space-y-3">
+        <div
+            className={
+                renderActions
+                    ? "flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden"
+                    : "space-y-3"
+            }
+        >
             {command.unresolved && (
-                <Alert variant="warning">
+                <Alert variant="warning" className="shrink-0">
                     <AlertDescription>
                         上次提交结果尚待核对，当前操作暂停。
                         <Button
@@ -272,7 +278,7 @@ export function InquiryActions({
                 </Alert>
             )}
             {error && !action && (
-                <Alert variant="destructive">
+                <Alert variant="destructive" className="shrink-0">
                     <AlertDescription>{error}</AlertDescription>
                 </Alert>
             )}

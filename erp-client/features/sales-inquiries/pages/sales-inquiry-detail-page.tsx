@@ -186,6 +186,11 @@ function InquiryDetailContent({
     const [dirty, setDirty] = React.useState(false)
     const [feedbackDirty, setFeedbackDirty] = React.useState(false)
     const [quoteLineId, setQuoteLineId] = React.useState<string | null>(null)
+    const [feedbackFooterContainer, setFeedbackFooterContainer] =
+        React.useState<HTMLDivElement | null>(null)
+    const [feedbackVisible, setFeedbackVisible] = React.useState(false)
+    const [historyActionsContainer, setHistoryActionsContainer] =
+        React.useState<HTMLDivElement | null>(null)
     const [editorEpoch, setEditorEpoch] = React.useState(0)
     const [demandDetailsContainer, setDemandDetailsContainer] =
         React.useState<HTMLDivElement | null>(null)
@@ -310,146 +315,163 @@ function InquiryDetailContent({
                 secondaryActions,
                 assignmentActions,
             ) => (
-                <div className="space-y-5">
-                    <DetailPageHeader
-                        title={inquiry.customer_name}
-                        documentNumber={inquiry.inquiry_no}
-                        numberLabel="询价单号"
-                        version={`需求第 ${inquiry.requirement_version} 版 · 反馈第 ${inquiry.feedback_round} 轮`}
-                        primaryStatus={{
-                            label: INQUIRY_STATUS_LABEL[inquiry.status],
-                            tone:
-                                inquiry.status === "confirmed"
-                                    ? "success"
-                                    : inquiry.status === "closed"
-                                      ? "neutral"
-                                      : "info",
-                        }}
-                        back={
-                            embedded
-                                ? undefined
-                                : {
-                                      id: "sales-inquiry-detail-back",
-                                      href: procurement
-                                          ? "/procurement/inquiries"
-                                          : "/sales/inquiries",
-                                      label: "返回询价列表",
-                                  }
-                        }
-                        secondaryActions={
-                            <>
-                                {canProcess &&
-                                    task &&
-                                    hasPermission(
-                                        permissions,
-                                        "supplier_offering:list",
-                                    ) &&
-                                    hasPermission(
-                                        permissions,
-                                        "sellable_sku:list",
-                                    ) && (
-                                        <SupplierQuoteExportButton
-                                            request={{
-                                                inquiryId: inquiry.id,
-                                                taskId: task.id,
-                                                version: inquiry.version,
-                                                taskVersion: task.version,
-                                            }}
-                                            userId={userId}
-                                            onRefresh={onSaved}
-                                        />
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-hidden">
+                    <div className="shrink-0 space-y-5">
+                        <DetailPageHeader
+                            title={inquiry.customer_name}
+                            documentNumber={inquiry.inquiry_no}
+                            numberLabel="询价单号"
+                            version={`需求第 ${inquiry.requirement_version} 版 · 反馈第 ${inquiry.feedback_round} 轮`}
+                            primaryStatus={{
+                                label: INQUIRY_STATUS_LABEL[inquiry.status],
+                                tone:
+                                    inquiry.status === "confirmed"
+                                        ? "success"
+                                        : inquiry.status === "closed"
+                                          ? "neutral"
+                                          : "info",
+                            }}
+                            back={
+                                embedded
+                                    ? undefined
+                                    : {
+                                          id: "sales-inquiry-detail-back",
+                                          href: procurement
+                                              ? "/procurement/inquiries"
+                                              : "/sales/inquiries",
+                                          label: "返回询价列表",
+                                      }
+                            }
+                            secondaryActions={
+                                <>
+                                    <div
+                                        ref={setHistoryActionsContainer}
+                                        className="flex items-center"
+                                    />
+                                    {assignmentActions}
+                                    {canProcess &&
+                                        task &&
+                                        hasPermission(
+                                            permissions,
+                                            "supplier_offering:list",
+                                        ) &&
+                                        hasPermission(
+                                            permissions,
+                                            "sellable_sku:list",
+                                        ) && (
+                                            <SupplierQuoteExportButton
+                                                request={{
+                                                    inquiryId: inquiry.id,
+                                                    taskId: task.id,
+                                                    version: inquiry.version,
+                                                    taskVersion: task.version,
+                                                }}
+                                                userId={userId}
+                                                onRefresh={onSaved}
+                                            />
+                                        )}
+                                    {canEdit && (
+                                        <div ref={setDemandActionsContainer} />
                                     )}
-                                {canEdit && (
-                                    <div ref={setDemandActionsContainer} />
-                                )}
-                                {secondaryActions}
-                            </>
-                        }
-                        primaryAction={
-                            !procurement &&
-                            inquiry.status === "closed" &&
+                                    {secondaryActions}
+                                </>
+                            }
+                            primaryAction={
+                                !procurement &&
+                                inquiry.status === "closed" &&
+                                hasPermission(
+                                    permissions,
+                                    "sales_inquiry:create",
+                                ) &&
+                                hasPermission(
+                                    permissions,
+                                    "sellable_sku:list",
+                                ) ? (
+                                    <Link
+                                        id="sales-inquiry-copy-new"
+                                        href={`/sales/inquiries/new?copyFrom=${encodeURIComponent(inquiry.id)}`}
+                                        className={buttonVariants({
+                                            size: "sm",
+                                        })}
+                                    >
+                                        复制为新询价
+                                    </Link>
+                                ) : undefined
+                            }
+                            meta={
+                                canEdit ? undefined : (
+                                    <span>
+                                        询价截止：
+                                        {inquiryDate(inquiry.deadline_at)}
+                                    </span>
+                                )
+                            }
+                            summary={
+                                canEdit ? (
+                                    <div ref={setDemandDetailsContainer} />
+                                ) : (
+                                    <div className="flex flex-wrap items-start gap-x-8 gap-y-2 rounded-lg bg-muted/40 px-4 py-3">
+                                        <p className="flex min-w-0 gap-2 text-sm text-muted-foreground">
+                                            <span className="shrink-0">
+                                                需求说明
+                                            </span>
+                                            <span className="min-w-0 whitespace-pre-wrap wrap-anywhere">
+                                                {inquiry.draft.note || "未填写"}
+                                            </span>
+                                        </p>
+                                        {feeOwner}
+                                    </div>
+                                )
+                            }
+                        />
+                        {canOpenSales && inquiry.status !== "confirmed" && (
+                            <Alert variant="info">
+                                <AlertDescription>
+                                    {inquiry.feedback_round >
+                                    accepted.feedback_round
+                                        ? `第 ${inquiry.feedback_round} 轮新反馈尚未接受。`
+                                        : "当前正在重新询价。"}
+                                    开单沿用第 {accepted.feedback_round}{" "}
+                                    轮已接受结果，仅列出仍有效、未受本次重询影响且有剩余数量的商品与地址。
+                                </AlertDescription>
+                            </Alert>
+                        )}
+                        {!procurement &&
+                            "copied_from_inquiry_id" in inquiry &&
+                            inquiry.copied_from_inquiry_id &&
                             hasPermission(
                                 permissions,
-                                "sales_inquiry:create",
-                            ) &&
-                            hasPermission(permissions, "sellable_sku:list") ? (
+                                "sales_inquiry:detail",
+                            ) && (
                                 <Link
-                                    id="sales-inquiry-copy-new"
-                                    href={`/sales/inquiries/new?copyFrom=${encodeURIComponent(inquiry.id)}`}
-                                    className={buttonVariants({ size: "sm" })}
+                                    id="sales-inquiry-copy-source"
+                                    href={`/sales/inquiries/${encodeURIComponent(inquiry.copied_from_inquiry_id)}`}
+                                    className="text-sm underline underline-offset-4"
                                 >
-                                    复制为新询价
+                                    查看原询价
                                 </Link>
-                            ) : undefined
-                        }
-                        meta={
-                            canEdit ? undefined : (
-                                <span>
-                                    询价截止：{inquiryDate(inquiry.deadline_at)}
-                                </span>
-                            )
-                        }
-                        summary={
-                            canEdit ? (
-                                <div ref={setDemandDetailsContainer} />
-                            ) : (
-                                <div className="flex flex-wrap items-start gap-x-8 gap-y-2 rounded-lg bg-muted/40 px-4 py-3">
-                                    <p className="flex min-w-0 gap-2 text-sm text-muted-foreground">
-                                        <span className="shrink-0">
-                                            需求说明
-                                        </span>
-                                        <span className="min-w-0 whitespace-pre-wrap wrap-anywhere">
-                                            {inquiry.draft.note || "未填写"}
-                                        </span>
-                                    </p>
-                                    {feeOwner}
-                                </div>
-                            )
-                        }
-                    />
-                    {canOpenSales && inquiry.status !== "confirmed" && (
-                        <Alert variant="info">
-                            <AlertDescription>
-                                {inquiry.feedback_round >
-                                accepted.feedback_round
-                                    ? `第 ${inquiry.feedback_round} 轮新反馈尚未接受。`
-                                    : "当前正在重新询价。"}
-                                开单沿用第 {accepted.feedback_round}{" "}
-                                轮已接受结果，仅列出仍有效、未受本次重询影响且有剩余数量的商品与地址。
-                            </AlertDescription>
-                        </Alert>
-                    )}
-                    {!procurement &&
-                        "copied_from_inquiry_id" in inquiry &&
-                        inquiry.copied_from_inquiry_id &&
-                        hasPermission(permissions, "sales_inquiry:detail") && (
-                            <Link
-                                id="sales-inquiry-copy-source"
-                                href={`/sales/inquiries/${encodeURIComponent(inquiry.copied_from_inquiry_id)}`}
-                                className="text-sm underline underline-offset-4"
-                            >
-                                查看原询价
-                            </Link>
+                            )}
+                        {feedbackDirty && (
+                            <Alert variant="info">
+                                <AlertDescription>
+                                    采购反馈有未保存的修改，请先保存处理进度，再发布或退回补充。
+                                </AlertDescription>
+                            </Alert>
                         )}
-                    {feedbackDirty && (
-                        <Alert variant="info">
-                            <AlertDescription>
-                                采购反馈有未保存的修改，请先保存处理进度，再发布或退回补充。
-                            </AlertDescription>
-                        </Alert>
-                    )}
-                    {dirty && (
-                        <Alert variant="info">
-                            <AlertDescription>
-                                当前需求有未保存的修改，请先保存后提交采购。
-                            </AlertDescription>
-                        </Alert>
-                    )}
-                    {canEdit && feeOwner}
+                        {dirty && (
+                            <Alert variant="info">
+                                <AlertDescription>
+                                    当前需求有未保存的修改，请先保存后提交采购。
+                                </AlertDescription>
+                            </Alert>
+                        )}
+                        {canEdit && feeOwner}
+                    </div>
                     <InquiryDetailTabs
+                        onFeedbackVisibilityChange={setFeedbackVisible}
                         inquiry={inquiry}
                         procurement={procurement}
-                        actions={assignmentActions}
+                        actionsContainer={historyActionsContainer}
                         demand={
                             <div className="space-y-6">
                                 {canEdit && "sales_owner_user_id" in inquiry ? (
@@ -496,6 +518,9 @@ function InquiryDetailContent({
                                 {canProcess && "work_items" in inquiry && (
                                     <>
                                         <InquiryFeedbackEditor
+                                            footerContainer={
+                                                feedbackFooterContainer
+                                            }
                                             onDirtyChange={setFeedbackDirty}
                                             inquiry={inquiry}
                                             task={task}
@@ -555,11 +580,13 @@ function InquiryDetailContent({
                                     </>
                                 )}
 
-                                <InquiryFeedbackResults
-                                    inquiry={inquiry}
-                                    selectedRound={selectedRound}
-                                    onRoundChange={setChosenRound}
-                                />
+                                {!canProcess && (
+                                    <InquiryFeedbackResults
+                                        inquiry={inquiry}
+                                        selectedRound={selectedRound}
+                                        onRoundChange={setChosenRound}
+                                    />
+                                )}
                                 {!canProcess &&
                                     !demandActions &&
                                     (React.Children.count(primaryActions) > 0 ||
@@ -588,6 +615,16 @@ function InquiryDetailContent({
                                         </div>
                                     )}
                             </div>
+                        }
+                        publishedFeedback={
+                            canProcess && inquiry.feedbacks.length > 0 ? (
+                                <InquiryFeedbackResults
+                                    inquiry={inquiry}
+                                    selectedRound={selectedRound}
+                                    onRoundChange={setChosenRound}
+                                    idPrefix="procurement-inquiry-published"
+                                />
+                            ) : undefined
                         }
                         fees={
                             <InquiryFeesPanel
@@ -639,11 +676,26 @@ function InquiryDetailContent({
             )}
         />
     )
-    return embedded ? (
-        <div className="min-w-0 p-6">{body}</div>
-    ) : (
-        <PageScaffold className="mx-auto max-w-[1600px] gap-6">
+    const content = (
+        <>
             {body}
+            {canProcess && (
+                <div
+                    ref={setFeedbackFooterContainer}
+                    data-slot="inquiry-feedback-footer"
+                    hidden={!feedbackVisible}
+                    className="shrink-0"
+                />
+            )}
+        </>
+    )
+    return embedded ? (
+        <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden p-6">
+            {content}
+        </div>
+    ) : (
+        <PageScaffold className="mx-auto min-h-0 max-w-[1600px] gap-0 overflow-hidden">
+            {content}
         </PageScaffold>
     )
 }
